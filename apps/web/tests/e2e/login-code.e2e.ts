@@ -29,7 +29,7 @@ import { API_URL, expect, test } from "./fixtures";
 const addr = () => `e2e-login-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 
 test.describe("signing in with an emailed code", () => {
-	test("the card asks for an address or handle, states both doors, and offers no password field", async ({
+	test("the card asks for an address or handle, offers no password field, and detects what is typed", async ({
 		page,
 	}) => {
 		await page.goto("/login");
@@ -39,25 +39,53 @@ test.describe("signing in with an emailed code", () => {
 		await expect(page.locator('input[type="password"]')).toHaveCount(0);
 		await expect(page.locator('input[autocomplete="username"]')).toHaveCount(1);
 
-		// The label names both shapes with an example of each, and the hint under the
-		// field says what each one does (Parker, 2026-10-09) — the routing a person can
-		// learn before they press anything.
-		await expect(page.getByText(/email \(jane@doe\.com\) or handle/i)).toBeVisible();
+		// The Bluesky-style label — no examples, no doors spelled out in copy — because
+		// the field says both things as they become true: the icon turns, and the hint
+		// names the door the typed shape is headed for.
+		await expect(page.getByText(/^email or handle$/i)).toBeVisible();
+
+		const field = page.locator('input[autocomplete="username"]');
+		const drawing = page.locator("[data-form-icon]");
+		await expect(drawing).toHaveAttribute("data-form-icon", "idle");
 		await expect(
-			page.getByText(/enter your email or anthers handle to sign in with an emailed code/i),
+			page.getByText(/an email or anthers handle gets a sign-in code by mail/i),
 		).toBeVisible();
 		await expect(page.getByRole("button", { name: /^continue$/i })).toBeVisible();
+
+		// An address, typed: the envelope confirms the reading, the hint commits to it.
+		await field.fill("jane@doe.com");
+		await expect(drawing).toHaveAttribute("data-form-icon", "email");
+		await expect(page.getByText(/six-character sign-in code goes to this address/i)).toBeVisible();
 	});
 
-	test("typing an `@` switches the field to handle mode", async ({ page }) => {
+	test("the field recognizes a handle as it forms, including whose it is", async ({ page }) => {
 		await page.goto("/login");
+		const config = (await (await page.request.get(`${API_URL}/api/atproto/config`)).json()) as {
+			hostedHandleSuffix: string;
+		};
+		const suffix = config.hostedHandleSuffix;
 
-		// The recognition is the keyboard, not the routing: email keyboard first, then the
-		// moment a `@` leads the value the keyboard the rest of a handle wants — dots and
-		// letters, no `.com` suggestions (Parker, 2026-10-09).
 		const field = page.locator('input[autocomplete="username"]');
-		await expect(field).toHaveAttribute("inputmode", "email");
-		await field.fill("@");
+		const drawing = page.locator("[data-form-icon]");
+
+		// An `@` leads, and the drawing answers immediately — the half-formed state a
+		// handle-typist passes through and an address-typist never does (Parker, 2026-10-09).
+		await field.fill("@ja");
+		await expect(drawing).toHaveAttribute("data-form-icon", "handle");
+
+		// Complete it as an Anthers handle: the `@` turns ours, the hint commits.
+		await field.fill(`@jane.${suffix}`);
+		await expect(drawing).toHaveAttribute("data-form-icon", "anthers");
+		await expect(page.getByText(/goes to this account's email address/i)).toBeVisible();
+
+		// A foreign handle under the same `@`: the butterfly, only when the whole thing
+		// is there — never mid-word.
+		await field.fill("@alice.bsky.social");
+		await expect(drawing).toHaveAttribute("data-form-icon", "bluesky");
+		await expect(page.getByText(/bluesky confirms it's you/i)).toBeVisible();
+
+		// And the keyboard answer rides along: the moment an `@` leads, the keyboard is
+		// the handle's, not the email's.
 		await expect(field).toHaveAttribute("inputmode", "url");
 		await field.fill("jane@doe.com");
 		await expect(field).toHaveAttribute("inputmode", "email");
