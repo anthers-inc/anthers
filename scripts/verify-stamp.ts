@@ -67,7 +67,7 @@ export function stampFileFor(head: string, options: StampOptions = {}): string {
  * checkout's worktree gitdir — the same trap `scripts/pre-push-hook.test.ts` documents the
  * hook's own scrub for. A stamp read from the wrong tree would be worse than no stamp.
  */
-function gitEnv(): Record<string, string> {
+function gitEnv(): Record<string, string | undefined> {
 	return Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
 }
 
