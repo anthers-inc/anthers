@@ -170,6 +170,32 @@ export async function getSyncVariant(syncVariantId: number): Promise<PrintfulSyn
 }
 
 /**
+ * The store's Sync Products with their variants — the bind step's read-back. A product
+ * dashboard-created (Parker's store was built by hand, 2026-10-09's probe confirmed:
+ * dashboard variants carry auto-hash `external_id`s, not our patterns) is bound to a
+ * Work by matching its variants' names to color/size labels, and the Sync Variant ids
+ * discovered here are what order placement references.
+ */
+export async function listStoreProducts(): Promise<Array<{
+	id: number;
+	external_id: string | null;
+	name: string;
+	variants: number;
+}> | null> {
+	if (!printfulConfigured()) return null;
+	return call("GET", "/store/products");
+}
+
+/** One store product fully expanded — `sync_product` plus its `sync_variants`. */
+export async function getStoreProduct(storeProductId: number): Promise<{
+	sync_product: { id: number; external_id: string | null; name: string };
+	sync_variants: PrintfulSyncVariant[];
+} | null> {
+	if (!printfulConfigured()) return null;
+	return call("GET", `/store/products/${storeProductId}`);
+}
+
+/**
  * Shipping options for a recipient country + a set of catalog variants — the quote's
  * live source. Only country/state is required; Printful's US rates are flat per product
  * category, so the figure is real without the buyer's ZIP. Rates are dynamic and are not

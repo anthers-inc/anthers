@@ -486,11 +486,15 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 	const merchRows = stamped.filter(({ row }) => row.type === "physical");
 	if (shipping && merchRows.length > 0) {
 		const addr = shipping.address;
+		// The checkout's metadata — where the placement facts were resolved and stashed
+		// (see `resolveMerchCheckout`): merchandise goods price, shipping method, and
+		// Printful's Sync Variant id.
+		const meta = pi.metadata ?? {};
 		for (const { row } of merchRows) {
 			if (!row.workId) continue;
-			// The purchase recorded the size at checkout; the fulfillment names the
-			// Printful variant that size maps to.
-			const fulfillment = await resolveMerchCheckout(row, {
+			// The purchase recorded the size at checkout; the fulfillment is placed from
+			// the metadata's resolved facts and the session's shipping address.
+			const fulfillment = await resolveMerchCheckout(row, meta as Record<string, string>, {
 				name: shipping.name ?? "",
 				address1: addr.line1 ?? "",
 				address2: addr.line2 ?? undefined,
@@ -518,6 +522,7 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
  */
 async function resolveMerchCheckout(
 	row: typeof purchases.$inferSelect,
+	metadata: Record<string, string>,
 	recipient: NonNullable<
 		Awaited<ReturnType<typeof import("../services/printful.js").placeOrder>>
 	> extends never
@@ -534,32 +539,26 @@ async function resolveMerchCheckout(
 ) {
 	// Imported inside to keep the route's top imports Stripe-shaped; this whole block
 	// moves to its own route module when the merch checkout splits out of payments.ts.
-	const { merchVariants } = await import("@anthers/db/schema");
-	const { placeMerchOrder, printfulConfigured, getShippingRates } = await import(
-		"../services/printful.js"
-	);
+	const { placeMerchOrder, printfulConfigured } = await import("../services/printful.js");
 	if (!printfulConfigured()) return null;
 	if (!row.merchSize) return null;
-	const [variant] = await db
-		.select()
-		.from(merchVariants)
-		.where(and(eq(merchVariants.workId, row.workId!), eq(merchVariants.size, row.merchSize)))
-		.limit(1);
-	if (!variant) return null;
-	// The shipping method the session charged: the quote's choice, carried in the
-	// purchase's fulfillment metadata — STANDARD is Printful's default and the only
-	// method the launch flow quotes.
-	const rates = await getShippingRates(
-		{ country_code: recipient.country_code, state_code: recipient.state_code },
-		[{ catalogVariantId: variant.catalogVariantId, quantity: 1 }],
-	);
-	const method = rates?.[0]?.id ?? "STANDARD";
+	// The placement facts were resolved at checkout and ride the PaymentIntent's
+	// metadata: the shipping method the session actually charged, the discounted goods
+	// figure for the packing slip, and Printful's Sync Variant id the order names.
+	// Re-deriving any of them here could disagree with the charge (the 2026-10-09
+	// probe showed Printful returning two shipping rates — a re-quote's first entry
+	// is not guaranteed to be the one the buyer accepted).
+	const goodsPrice = metadata.merchGoodsPrice;
+	const syncVariantId = Number(metadata.merchSyncVariantId);
+	const shippingMethod = metadata.shippingMethod;
+	if (!goodsPrice || !Number.isFinite(syncVariantId) || syncVariantId <= 0 || !shippingMethod)
+		return null;
 	return placeMerchOrder({
 		purchaseId: row.id,
-		syncVariantId: variant.id,
+		syncVariantId,
 		quantity: 1,
-		retailPrice: row.amount,
-		shippingMethod: method,
+		retailPrice: goodsPrice,
+		shippingMethod,
 		recipient,
 	});
 }
@@ -653,7 +652,10 @@ async function resolveMerchPurchase(slug: string, userId: number) {
 }
 
 /** The body a merch checkout names: the size label, and nothing else. */
-const merchCheckoutSchema = z.object({ size: z.string().trim().min(1).max(10) });
+const merchCheckoutSchema = z.object({
+	color: z.string().trim().min(1).max(40),
+	size: z.string().trim().min(1).max(10),
+});
 
 const paymentRoutes = new Hono()
 	// ── Public config ────────────────────────────────────────────────────────
@@ -946,22 +948,31 @@ const paymentRoutes = new Hono()
 		} catch {
 			heldBadge = null; // unseeded ladder — prices answer undiscounted
 		}
+		const price = (v: typeof merchVariants.$inferSelect) => {
+			const list = new Decimal(v.listPrice);
+			const discountRate = heldBadge ? MERCH_BADGE_DISCOUNT_RATE[heldBadge] : "0";
+			const amount = list.minus(list.times(discountRate)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+			return {
+				listPrice: list.toFixed(2),
+				amount: amount.toFixed(2),
+				// The whole percent for copy ("25"), rendered "25% off" client-side.
+				discount: heldBadge ? MERCH_BADGE_DISCOUNT[heldBadge] : null,
+				inStock: true, // stock state is Printful's; the order creation reports it
+			};
+		};
+		// Group the (color, size) rows into the picker's shape: one row per color,
+		// its sizes in setup order. Sizes repeat across colors with no shared state —
+		// a 3XL can sell out in one color while another keeps selling — so each row
+		// carries its own priced list rather than a Work-wide one.
+		const colorGroups = [...new Set(rows.map((r) => r.color))].map((color) => ({
+			color,
+			sizes: rows.filter((r) => r.color === color).map((r) => ({ size: r.size, ...price(r) })),
+		}));
 		return c.json({
-			variants: rows.map((v) => {
-				const list = new Decimal(v.listPrice);
-				const discountRate = heldBadge ? MERCH_BADGE_DISCOUNT_RATE[heldBadge] : "0";
-				const amount = list
-					.minus(list.times(discountRate))
-					.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
-				return {
-					size: v.size,
-					listPrice: list.toFixed(2),
-					amount: amount.toFixed(2),
-					// The whole percent for copy ("25"), rendered "25% off" client-side.
-					discount: heldBadge ? MERCH_BADGE_DISCOUNT[heldBadge] : null,
-					inStock: true, // stock state is Printful's; the order creation reports it
-				};
-			}),
+			// Color is a dimension, not a label: the store's shirts each carry two —
+			// grouped for the picker as `{ color, sizes[] }` rows (Parker, 2026-10-09:
+			// one Work per shirt, a color picker beside the size picker).
+			colors: colorGroups,
 			merchConfigured: printfulConfigured(),
 		});
 	})
@@ -1001,24 +1012,39 @@ const paymentRoutes = new Hono()
 			if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 			if (!printfulConfigured()) return c.json({ error: "Merch isn't available right now." }, 503);
 
-			// The body names only the size label — never a price, never a variant id.
-			const { size } = c.req.valid("json");
+			// The body names only the color and size labels — never a price, never a
+			// variant id. The (color, size) pair must name exactly one row; a Work's
+			// picker shows a size per color, so two rows matching would be a data error
+			// refused here rather than an arbitrary pick.
+			const { color, size } = c.req.valid("json");
 
 			const { merchVariants } = await import("@anthers/db/schema");
-			const [variant] = await db
+			const matches = await db
 				.select()
 				.from(merchVariants)
-				.where(and(eq(merchVariants.workId, work.id), eq(merchVariants.size, size)))
-				.limit(1);
-			if (!variant) return c.json({ error: "Choose a size first." }, 400);
+				.where(
+					and(
+						eq(merchVariants.workId, work.id),
+						eq(merchVariants.color, color),
+						eq(merchVariants.size, size),
+					),
+				)
+				.limit(2);
+			if (matches.length === 0) return c.json({ error: "Choose a color and size first." }, 400);
+			if (matches.length > 1) return c.json({ error: "Merch isn't available right now." }, 503);
+			const [variant] = matches;
 
 			// The live shipping rate — quoted now, priced into the session as a fixed
 			// shipping option. Printful's US rates are flat per product category, so the
-			// figure is real without the buyer's ZIP yet.
+			// figure is real without the buyer's ZIP yet. **The offset rate is The
+			// choice** (Parker, 2026-10-09: "always do the co2 offset") — picked by id,
+			// falling back to the first rate only if Printful stops offering one, so a
+			// rate-list change degrades to shipping without the offset rather than
+			// failing the store.
 			const rates = await getShippingRates({ country_code: "US" }, [
 				{ catalogVariantId: variant.catalogVariantId, quantity: 1 },
 			]);
-			const rate = rates?.[0];
+			const rate = rates?.find((r) => r.id === "STANDARD_CARBON_OFFSET") ?? rates?.[0];
 			if (!rate) return c.json({ error: "Shipping is not available right now." }, 503);
 
 			// 🚨 **The list price is Printful's own retail price, stamped at setup** (Parker,
@@ -1084,7 +1110,7 @@ const paymentRoutes = new Hono()
 						price_data: {
 							currency: "usd",
 							tax_behavior: "exclusive",
-							unit_amount: Math.round(listPrice.toNumber() * 100),
+							unit_amount: Math.round(goodsPrice.toNumber() * 100),
 							product_data: {
 								name: work.title || `Work #${work.id}`,
 								tax_code: CLOTHING_TAX_CODE,
@@ -1129,7 +1155,19 @@ const paymentRoutes = new Hono()
 						workId: String(work.id),
 						buyerId: String(user.id),
 						merchVariantId: String(variant.id),
+						// The placement facts ride the metadata rather than being re-derived
+						// at completion: the session's own shipping option id is what the
+						// buyer was charged (re-quoting can diverge — Printful returned two
+						// rates in the 2026-10-09 probe), the discounted goods figure is
+						// what the packing slip's retail price names, and the Sync Variant
+						// id is what the Printful order's item must reference (`sync_variant_id`
+						// is Printful's id, not our row's — 2026-10-09's probe caught the
+						// mismatch before a real order could).
 						shippingMethod: rate.id,
+						merchGoodsPrice: goodsPrice.toFixed(2),
+						merchSyncVariantId: String(variant.syncVariantId),
+						// The offsetting posture (Parker, 2026-10-09: "always do the co2
+						// offset") is enforced at quote time below; no metadata for it.
 					},
 				},
 				// Where a redirect-based payment method sends the buyer back; cards don't

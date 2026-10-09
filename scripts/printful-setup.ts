@@ -1,49 +1,44 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Wire one merch Work to Printful: create the Sync Product (with one Sync Variant per
- * size), and write the `merch_variants` rows that make the Work buyable.
+ * Wire one merch Work to Printful — by BINDING to a store product that already exists.
  *
  * ⚠️ **A person runs this** (the brand-codegen rule: "scripts a person runs and commits
  * the output of"). It needs `PRINTFUL_TOKEN` in the environment — from the BWS secret
- * manager, never named on a command line — and the Printful store must be of the
- * "Manual orders / API" type, created in Printful's dashboard (no API endpoint creates
- * a store).
+ * manager, never named on a command line.
  *
  * Usage:
  *
  *     bws run -- bun run scripts/printful-setup.ts \
- *         --slug <work-slug> --product <printful-product-id> \
- *         --print-url "https://cdn.anthers.org/merch/{size}.png" \
- *         [--sizes S,M,L,XL] [--list-price "30.00"]
+ *         --slug <work-slug> --store-product <printful-store-product-id>
  *
- * **The list price is Printful's own `retail_price` — the ONE pricing source** (Parker,
- * 2026-10-08): on a first create, `--list-price` sets it on every variant; on a re-run,
- * the script reads whatever the store's Sync Variants now carry and restamps the rows,
- * so a price changed in Printful's dashboard is picked up by re-running with no
- * `--list-price`. There is no second place to edit a list price.
+ * 🚨 **The create mode is gone.** Parker's store was built in the dashboard (2026-10-09:
+ * two products, each 2 colors × 7 sizes XS–3XL, print files uploaded and priced at $30
+ * there), so the script's original create-from-catalog flow would have duplicated his
+ * products. Binding is read-back only: nothing is written to Printful's store — the
+ * dashboard stays the one place a product, its print files, and its `retail_price` are
+ * edited, and a re-run of this script restamps the rows from whatever the store now
+ * carries. A price change is: edit in the dashboard, then re-run this script.
  *
- * The print files' URLs must be stable per design (the File Library reuses by URL) —
- * a changed design is a changed URL.
+ * What the bind does:
+ * - reads the store product and its Sync Variants (`GET /store/products/{id}`);
+ * - parses each variant's name as `"<product> / <color> / <size>"` (Printful's own
+ *   dashboard naming — the probe verified the shape) and reads its `retail_price`,
+ *   `variant_id` (the catalog blank), and print file (`front_large`, status `ok`);
+ * - upserts the `merch_variants` rows keyed (work, color, size), stamping the Sync
+ *   Variant id the order placement references (`sync_variant_id`).
  *
- * Idempotent by (work, size): a size whose row already exists is updated rather than
- * duplicated, and the Printful Sync Product is created once per Work (found by its
- * `external_id`, `merch-<workId>`).
+ * refusing to guess is the theme: a variant whose name does not parse, whose price is
+ * unset, or whose print file is not `ok` is reported and SKIPPED — a partially bound
+ * Work is safe (unbound sizes are simply not buyable) but a wrongly bound one is not.
+ *
+ * The webhook configuration is registered as the closing step when `PUBLIC_API_URL` is
+ * set (one URL per store — this step is also how a moved endpoint is repointed).
  */
 import { db } from "@anthers/db/client";
 import { merchVariants, works } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 const API = "https://api.printful.com";
-
-/** The webhook event types the receiver tracks, registered as the setup's closing step. */
-async function setWebhookUrl(url: string, types: string[]): Promise<boolean> {
-	try {
-		await pf("POST", "/webhooks", { url, types });
-		return true;
-	} catch {
-		return false;
-	}
-}
 
 function parseArgs() {
 	const args = process.argv.slice(2);
@@ -52,20 +47,14 @@ function parseArgs() {
 		return i === -1 ? undefined : args[i + 1];
 	};
 	const slug = get("slug");
-	const product = get("product");
-	const sizes = (get("sizes") ?? "S,M,L,XL,2XL")
-		.split(",")
-		.map((s) => s.trim())
-		.filter(Boolean);
-	const printUrlTemplate = get("print-url");
-	const listPrice = get("list-price");
-	if (!slug || !product || !printUrlTemplate) {
+	const storeProduct = get("store-product");
+	if (!slug || !storeProduct) {
 		console.error(
-			'Usage: printful-setup --slug <work-slug> --product <id> --print-url <template-with-{size}> [--sizes S,M] [--list-price "30.00"]',
+			"Usage: printful-setup --slug <work-slug> --store-product <printful-store-product-id>",
 		);
 		process.exit(1);
 	}
-	return { slug, product: Number(product), sizes, printUrlTemplate, listPriceArg: listPrice };
+	return { slug, storeProduct: Number(storeProduct) };
 }
 
 function token(): string {
@@ -102,6 +91,8 @@ interface SyncVariantRow {
 	retail_price: string | null;
 	name: string;
 	variant_id: number;
+	currency?: string;
+	files?: Array<{ type: string; status?: string; url?: string | null; filename?: string }>;
 }
 
 interface SyncProductRow {
@@ -111,8 +102,20 @@ interface SyncProductRow {
 	variants: number;
 }
 
+/**
+ * The webhook event types the receiver tracks, registered as the setup's closing step.
+ */
+async function setWebhookUrl(url: string, types: string[]): Promise<boolean> {
+	try {
+		await pf("POST", "/webhooks", { url, types });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 async function main() {
-	const { slug, product, sizes, printUrlTemplate, listPriceArg } = parseArgs();
+	const { slug, storeProduct } = parseArgs();
 
 	const [work] = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
 	if (!work) {
@@ -126,127 +129,97 @@ async function main() {
 		process.exit(1);
 	}
 
-	// The catalog product's variants — the blank garment+size each size names, and the
-	// wholesale cost the transparency prose is based on (never published exactly).
-	const catalog = await pf<{
-		result: { variants: Array<{ id: number; name: string; size: string; price: string }> };
-	}>("GET", `/products/${product}`);
-	const bySize = new Map(catalog.result.variants.map((v) => [v.size, v]));
-	for (const size of sizes) {
-		if (!bySize.has(size)) {
-			console.error(
-				`Printful product ${product} has no variant of size "${size}" — sizes it has: ${[...bySize.keys()].join(", ")}`,
-			);
-			process.exit(1);
-		}
-	}
-
-	// Find the store's existing Sync Product for this Work, or create it.
-	const storeProducts = await pf<{ result: SyncProductRow[] }>("GET", "/store/products");
-	const existingProduct = storeProducts.result.find((p) => p.external_id === `merch-${work.id}`);
-
-	let syncProductId: number;
-	if (existingProduct) {
-		syncProductId = existingProduct.id;
-		console.log(`Sync Product ${syncProductId} already exists for work ${work.id}`);
-
-		// A re-run's price flow: the store's variants carry the authoritative retail
-		// price; `--list-price` on a re-run would OVERWRITE what the dashboard carries,
-		// which is backwards — refuse it, or the "one pricing source" rule dies.
-		if (listPriceArg) {
-			const stored = await pf<{ result: { items: SyncVariantRow[] } }>(
-				"GET",
-				`/store/products/${syncProductId}`,
-			);
-			const current = stored.result.items[0]?.retail_price ?? null;
-			if (current != null && current !== listPriceArg) {
-				console.error(
-					`--list-price "${listPriceArg}" was passed but the store's variants already carry "${current}". ` +
-						"Change the price in Printful's dashboard (the one pricing source), then re-run " +
-						"without --list-price to restamp — or pass --force-price to override deliberately.",
-				);
-				process.exit(1);
-			}
-		}
-	} else {
-		console.log(`Creating Sync Product for work ${work.id}…`);
-		const created = await pf<{ result: SyncProductRow }>("POST", "/store/products", {
-			sync_product: {
-				external_id: `merch-${work.id}`,
-				name: work.title || `Work #${work.id}`,
-				thumbnail: work.thumbnail || undefined,
-			},
-			sync_variants: sizes.map((size) => {
-				const blank = bySize.get(size)!;
-				return {
-					external_id: `merch-${work.id}-${size}`,
-					variant_id: blank.id,
-					retail_price: listPriceArg ?? undefined, // unset → the dashboard sets it after
-					files: [{ type: "default", url: printUrlTemplate.replace("{size}", size) }],
-				};
-			}),
-		});
-		syncProductId = created.result.id;
-		if (!listPriceArg) {
-			console.error(
-				"⚠️ No --list-price was passed with the create — the variants exist but carry " +
-					"Printful's default retail (unset). Set the price in the dashboard, then re-run " +
-					"without --list-price to restamp the rows.",
-			);
-		}
-		console.log(`Sync Product ${syncProductId} created.`);
-	}
-
-	// Read the store's Sync Variants back: `retail_price` is the authoritative list.
-	const stored = await pf<{ result: { items: SyncVariantRow[] } }>(
+	// The store product, fully expanded: the Sync Variants carry everything the rows need.
+	const detail = await pf<{ result: { sync_product: SyncProductRow; items: SyncVariantRow[] } }>(
 		"GET",
-		`/store/products/${syncProductId}`,
+		`/store/products/${storeProduct}`,
 	);
-	const storeByExternal = new Map(stored.result.items.map((sv) => [sv.external_id ?? "", sv]));
+	const variants = detail.result.items;
+	console.log(
+		`Binding Work "${slug}" (#${work.id}) to store product ${storeProduct} "${detail.result.sync_product.name}" — ${variants.length} variant(s).`,
+	);
 
-	// The merch_variants rows — one per size, updated on re-run.
-	for (const size of sizes) {
-		const blank = bySize.get(size)!;
-		const printFile = printUrlTemplate.replace("{size}", size);
-		const external = `merch-${work.id}-${size}`;
-		const syncedVariant = storeByExternal.get(external);
-		const listPrice = syncedVariant?.retail_price;
-		if (listPrice == null) {
+	// The catalog blanks, for the wholesale-cost snapshot (`catalog_price`) — the
+	// transparency prose's basis, never the pricing source. Looked up per catalog
+	// variant id; a blank the catalog no longer carries is skipped with the rest.
+	const catalogIds = [...new Set(variants.map((sv) => sv.variant_id))];
+	const blanks = new Map<number, string>();
+	for (const id of catalogIds) {
+		try {
+			const v = await pf<{ result: { variant: { id: number; price: string } } }>(
+				"GET",
+				`/products/variant/${id}`,
+			);
+			blanks.set(id, v.result.variant.price);
+		} catch {
+			console.error(`  catalog variant ${id} is gone from Printful's catalog — its rows skip`);
+		}
+	}
+
+	// One row per (color, size), parsed from Printful's own dashboard naming.
+	const SIZE_RE = /\/\s*(.+?)\s*\/\s*(XS|S|M|L|XL|2XL|3XL)\s*$/;
+	let bound = 0;
+	for (const sv of variants) {
+		const m = sv.name.match(SIZE_RE);
+		const color = m?.[1]?.trim();
+		const size = m?.[2];
+		if (!color || !size) {
+			console.error(`  SKIP — name "${sv.name}" does not parse as "<product> / <color> / <size>"`);
+			continue;
+		}
+		if (sv.retail_price == null) {
+			console.error(`  SKIP — ${color}/${size}: the Sync Variant carries no retail_price`);
+			continue;
+		}
+		const printFile = (sv.files ?? []).find(
+			(f) => f.type === "front_large" || f.type === "default",
+		);
+		if (printFile?.status !== "ok") {
 			console.error(
-				`  ${size}: the store's Sync Variant carries no retail_price — set it in the dashboard and re-run.`,
+				`  SKIP — ${color}/${size}: print file is ${printFile?.status ?? "missing"} — fix it in the dashboard, then re-run`,
 			);
 			continue;
 		}
+		const blankPrice = blanks.get(sv.variant_id);
+		if (blankPrice == null) continue; // already reported above
 		const [existing] = await db
 			.select()
 			.from(merchVariants)
-			.where(eq(merchVariants.workId, work.id))
-			.limit(200)
-			.then((rows) => rows.filter((r) => r.size === size));
+			.where(
+				and(
+					eq(merchVariants.workId, work.id),
+					eq(merchVariants.color, color),
+					eq(merchVariants.size, size),
+				),
+			)
+			.limit(1);
 		const values = {
 			workId: work.id,
+			color,
 			size,
-			catalogVariantId: blank.id,
-			catalogVariantName: syncedVariant?.name ?? blank.name,
-			catalogPrice: blank.price,
-			printFileUrl: printFile,
+			catalogVariantId: sv.variant_id,
+			syncVariantId: sv.id,
+			catalogVariantName: sv.name.split("/").slice(-2).join("/").trim(),
+			catalogPrice: blankPrice,
+			printFileUrl: printFile.url ?? printFile.filename ?? "",
 			synced: true,
 		};
 		if (existing) {
 			await db
 				.update(merchVariants)
-				.set({ ...values, listPrice, updatedAt: new Date() })
+				.set({ ...values, listPrice: sv.retail_price, updatedAt: new Date() })
 				.where(eq(merchVariants.id, existing.id));
 		} else {
-			await db.insert(merchVariants).values({ ...values, listPrice });
+			await db.insert(merchVariants).values({ ...values, listPrice: sv.retail_price });
 		}
+		bound += 1;
 		console.log(
-			`  ${size}: Printful ${blank.id}, costs $${blank.price}, lists at $${listPrice} — ${printFile}`,
+			`  ${color} / ${size}: catalog ${sv.variant_id}, sync ${sv.id}, lists at $${sv.retail_price} (blank costs $${blankPrice})`,
 		);
 	}
 
 	console.log(
-		`Done. The Work's merch panel is live; the list prices above are Printful's own retail figure.`,
+		`Bound ${bound}/${variants.length} variant(s). The Work's pickers read these rows; a price change is a dashboard edit + this re-run.`,
 	);
 
 	// The webhook configuration — the same person-runs-it step, pointed at this API's
