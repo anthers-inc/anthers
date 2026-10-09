@@ -5,10 +5,8 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { client } from "@anthers/web-shared/rpc";
 import FormField from "@anthers/web-shared/ui/FormField";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import BlueskyHandleModal from "../components/auth/BlueskyHandleModal";
-import BlueskyMark from "../components/auth/BlueskyMark";
 import EmailCodeModal from "../components/auth/EmailCodeModal";
 import { mergeIntoServerBasket } from "../lib/basket";
 
@@ -26,10 +24,10 @@ const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * Whether what was typed reads as a handle rather than an address.
  *
  * The same loose philosophy as `LOOKS_LIKE_EMAIL`: this is a routing question — *which
- * door does the typed thing belong to?* — not a validation one. A bare word is neither an
- * address nor a handle and gets the field's own sentence below, so the only thing this
- * has to recognize is a domain-shaped string (`alice.bsky.social`, `example.com`) or the
- * way people write one (`@alice`). A handle that doesn't resolve is refused by the
+ * door does the typed thing belong to?* — not a validation one. It is reached only with
+ * something that is not an Anthers handle (the hosted-suffix check in `handleSubmit` runs
+ * first), so the only thing this has to recognize is a domain-shaped string
+ * (`alice.bsky.social`, `example.com`). A handle that doesn't resolve is refused by the
  * ATProto flow itself, in its own words.
  */
 const LOOKS_LIKE_HANDLE = /^@?[a-z0-9.-]+\.[a-z0-9-]+$/i;
@@ -50,44 +48,49 @@ const LOOKS_LIKE_HANDLE = /^@?[a-z0-9.-]+\.[a-z0-9-]+$/i;
  * So: **do not add a signup form here.** If this page needs a way onward for someone
  * without an account, it is a link to `/signup`.
  *
- * 🚨 **Sign-in is the emailed code and nothing else (Parker, 2026-09-13).** No account
- * holds a password, so there is no password field on this page and no route it could post
- * to: the one form here asks for an email address, mails it a six-character code, and opens
- * the same code field `/signup` uses. A handle typed into that same form is not a fourth
- * way in — it is the Bluesky flow below, met where the person already typed.
- * - It posts to **`/auth/signin/*`, never `/auth/signup/*`.** The difference is the whole
- *   point: the signup pair *creates an account* for an address it doesn't know, which
- *   would make a mistyped address at the login page mint an account that never saw the
- *   terms. The signin pair refuses.
- * - It needs an **email address**, and the mailed-code half of this page asks for nothing
- *   else. The code is keyed on the address (`signup_codes.email`), and resolving a public
- *   handle to a private mailbox would let anyone mail anyone by guessing handles. ⚠️ **A
- *   handle typed into the same field routes to the Bluesky flow below, not to the mail**
- *   — for the same reason: it is the identity's own server that proves a handle, never
- *   Anthers' postbox.
+ * 🚨 **Sign-in is the emailed code, or the account's own identity brought back through
+ * OAuth — nothing else (Parker, 2026-09-13; handle routing Parker, 2026-10-09).** No
+ * account holds a password, so there is no password field on this page and no route it
+ * could post to. The one form asks for an identifier and routes on what it is:
+ * - An **email address** posts to **`/auth/signin/start`, never `/auth/signup/*`**, keyed
+ *   on the address. The difference is the whole point: the signup pair *creates an
+ *   account* for an address it doesn't know, which would make a mistyped address at the
+ *   login page mint an account that never saw the terms. The signin pair refuses.
+ * - An **Anthers handle** — one ending in the suffix Anthers' own node reports, like
+ *   `janedoe.anthers.social` — posts the same start route keyed on the handle, and the
+ *   route resolves it to the mailbox the holder gave at signup: the code lands in their
+ *   inbox with every throttle the address path already has. The resolution is
+ *   server-side, and the browser never learns the address — it spends the code keyed on
+ *   the handle, and `/signin/verify` re-resolves the same way.
+ * - Any **other handle** — a Bluesky handle most of all — takes the OAuth door.
  *
- * 🚨 **Bluesky is a third way IN and is not a third way to sign up either** (2026-08-22).
- * It signs in an account whose identity is a Bluesky one, resumes an unfinished signup started
- * with that identity, and answers `signup_disabled` for a handle no account holds rather than
- * minting anything. That refusal is the whole reason the affordance can live on this page at
- * all: the only people it works for are people who signed up with Bluesky. Offering it as a way
- * to *join* would be the second signup door this page spent a deletion getting rid of.
+ * The old objection to resolving handles to mailboxes stands for every handle Anthers
+ * did not issue: a public handle is never turned into an address by Anthers' machinery,
+ * because guessing one to trigger mail at its holder is a door this page should not make
+ * quiet. What the hosted case deliberately accepts is that handles are public — a typist
+ * can trigger one throttle-limited email to a hosted account without knowing its
+ * mailbox — and the per-IP send limit plus the per-address resend throttle are what
+ * bound that. The start route answers byte-identically either way, so there is nothing
+ * to enumerate in the response.
  *
- * ⚠️ **The same flow is reachable two ways, and both are the one door.** Typing a handle
- * into the main field and pressing "Log in with Bluesky" run the identical ceremony
- * (`signInWithBluesky`), so there is one Bluesky door with two handles on it — a person
- * who thinks of this page as "where I type my identifier" and a person who scans for a
- * button both find it, and neither learns a different rule from the other.
+ * 🚨 **Bluesky OAuth is a way IN and not a way to sign up** (2026-08-22). It signs in an
+ * account whose identity is a Bluesky one, resumes an unfinished signup started with that
+ * identity, and answers `signup_disabled` for a handle no account holds rather than
+ * minting anything. That refusal is the whole reason the affordance can live on this page
+ * at all: the only people it works for are people who signed up with Bluesky.
+ *
+ * ⚠️ **One field decides all three routes, so there is no second button** (2026-10-09). The
+ * separate "Log in with Bluesky" button and its modal are gone — a person who thinks of this
+ * page as "where I type my identifier" and a person who scans for a button are one person
+ * again, and what they type is the only thing the page had ever routed on anyway.
  *
  * 🚨 **The card's height is decoration, and it is load-bearing decoration.** The botanical
  * flourishes are positioned against the card box and each spray reaches roughly seven rems
  * in from its corner, so the empty space above and below the centered content is what keeps
- * a leaf off the buttons. At `h-[32rem]` the old content cleared the bottom pair by a
- * fraction of a rem — which is why adding the Bluesky row put a spray straight through it,
- * and why the handle prompt is a modal instead of an inline field. Two rules follow: the
- * height is a **minimum** now, because a card that cannot grow spills its content the
- * moment a form gains an error line; and anything added to the card body has to be paid
- * for in height, at twice its own, since the content is centered.
+ * a leaf off the buttons. Two rules follow: the height is a **minimum**, because a card that
+ * cannot grow spills its content the moment a form gains an error line; and anything added
+ * to the card body has to be paid for in height, at twice its own, since the content is
+ * centered.
  */
 export default function LoginPage() {
 	const { signInWithBluesky, refreshUser } = useAuth();
@@ -107,12 +110,44 @@ export default function LoginPage() {
 	);
 	const redirectTo = nextParam || from || "/feed";
 
-	const [email, setEmail] = useState("");
-	/** The address a code was just sent to, or null when no code is in flight. */
-	const [codeEmail, setCodeEmail] = useState<string | null>(null);
+	/** Whatever was typed — an address or a handle; the routing below decides which. */
+	const [identifier, setIdentifier] = useState("");
 
-	/** Whether the handle prompt is open. Closed until someone asks for it. */
-	const [blueskyOpen, setBlueskyOpen] = useState(false);
+	/**
+	 * The suffix a hosted handle hangs under, as the session's node reports it.
+	 *
+	 * Learned from `/api/atproto/config` and never hard-coded: it is `anthers.social` in
+	 * production and `.test` on a local network, and a second copy of that answer is how
+	 * an Anthers handle starts getting handed to the wrong door. Null means "not asked
+	 * yet" and "" means "the node did not answer" — either way the hosted-suffix check
+	 * below matches nothing and every handle falls through to the OAuth door, which is
+	 * where every handle went before this page knew about suffixes at all.
+	 */
+	const [hostedSuffix, setHostedSuffix] = useState<string | null>(null);
+
+	useEffect(() => {
+		let live = true;
+		client.api.atproto.config
+			.$get()
+			.then((res) => res.json())
+			.then((body) => {
+				if (live) setHostedSuffix(body.hostedHandleSuffix ?? "");
+			})
+			.catch(() => {
+				if (live) setHostedSuffix("");
+			});
+		return () => {
+			live = false;
+		};
+	}, []);
+
+	/** Where a code was just sent and how the browser will spend it, or null when none is in flight. */
+	const [sentCode, setSentCode] = useState<{
+		/** What the modal shows: the address typed, or the handle the code was asked for. */
+		shown: string;
+		/** The keys the verify route spends it by — the handle for a hosted-handle sign-in. */
+		verify: { email: string } | { handle: string };
+	} | null>(null);
 
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [loading, setLoading] = useState(false);
@@ -126,31 +161,38 @@ export default function LoginPage() {
 	 */
 	const [suspended, setSuspended] = useState<{ until: string | null } | null>(null);
 
-	/** Ask for a code. Answers the same whatever it found, so there is nothing to branch on. */
-	const sendCode = useCallback(async (address: string) => {
-		const res = await client.api.auth.signin.start.$post({ json: { email: address } });
-		if (!res.ok) throw new Error("That doesn't look like an email address we can reach.");
+	/** Ask for a code, keyed on an address or on the handle the route resolves. Answers the same whatever it found. */
+	const sendCode = useCallback(async (target: { email: string } | { handle: string }) => {
+		const res = await client.api.auth.signin.start.$post({ json: target });
+		if (!res.ok) throw new Error("That doesn't look like an address or handle we can reach.");
 	}, []);
 
 	/**
-	 * Ask for the code, or hand the browser to Bluesky — one field, two ways in.
+	 * Route the typed identifier — one field, three ways in.
 	 *
-	 * The typed thing decides which: an address gets the emailed code, and a handle is
-	 * handed to the Bluesky flow the button below runs, so both doors into that ceremony
-	 * stay one door (same `signInWithBluesky`, same refusals). Anything shaped like
-	 * neither is asked for here, in the page's own words rather than the browser's — the
-	 * same reason the input is `type="text"`.
+	 * An address gets the emailed code keyed on the address; a handle ending in the
+	 * hosted suffix gets the same emailed code, keyed on the handle for the route to
+	 * resolve; any other handle is handed to Bluesky OAuth, which never resolves in any
+	 * useful sense since it sets `window.location` and the page is already leaving when
+	 * it succeeds. Anything shaped like neither is asked for here, in the page's own
+	 * words rather than the browser's — the same reason the input is `type="text"`.
+	 *
+	 * ⚠️ **The hosted-suffix check runs before the shape check**, because an Anthers
+	 * handle is domain-shaped too and would otherwise take the Bluesky door. The suffix
+	 * may be unknown (config not loaded) or empty (the node is down), and then every
+	 * handle falls through to OAuth — which is where all handles went before this page
+	 * routed on the suffix, and a wrong guess there is refused in the flow's own words.
 	 */
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setErrors({});
-		const typed = email.trim();
+		const typed = identifier.trim();
 
 		if (LOOKS_LIKE_EMAIL.test(typed)) {
 			setLoading(true);
 			try {
-				await sendCode(typed);
-				setCodeEmail(typed);
+				await sendCode({ email: typed });
+				setSentCode({ shown: typed, verify: { email: typed } });
 			} catch (err) {
 				setErrors({
 					general: err instanceof Error ? err.message : "Couldn't send the code. Please try again.",
@@ -161,12 +203,28 @@ export default function LoginPage() {
 			return;
 		}
 
-		// A handle, however it was written. The leading `@` is how people write one, not
-		// part of it, and `signInWithBluesky` throws its message into the field below —
-		// never resolving in any useful sense, since it sets `window.location` and the
-		// page is already leaving when it succeeds.
+		// A handle, however it was written — the leading `@` is how people write one, not
+		// part of it.
+		const handle = typed.replace(/^@/, "");
+
+		if (hostedSuffix && handle.toLocaleLowerCase().endsWith(`.${hostedSuffix}`)) {
+			setLoading(true);
+			try {
+				await sendCode({ handle });
+				setSentCode({ shown: `@${handle}`, verify: { handle } });
+			} catch (err) {
+				setErrors({
+					general: err instanceof Error ? err.message : "Couldn't send the code. Please try again.",
+				});
+			} finally {
+				setLoading(false);
+			}
+			return;
+		}
+
 		if (LOOKS_LIKE_HANDLE.test(typed)) {
-			const handle = typed.replace(/^@/, "");
+			// The OAuth flow. Its refusals (`signInWithBluesky` throws its message into
+			// the field below) are the page's own words for a handle that leads nowhere.
 			setLoading(true);
 			try {
 				await signInWithBluesky(handle, redirectTo);
@@ -200,8 +258,9 @@ export default function LoginPage() {
 	 */
 	const verifyCode = useCallback(
 		async (code: string) => {
+			if (!sentCode) return;
 			const res = await client.api.auth.signin.verify.$post({
-				json: { email: codeEmail ?? "", code },
+				json: { ...sentCode.verify, code },
 			});
 			if (!res.ok) {
 				const body = (await res.json().catch(() => ({}))) as {
@@ -212,7 +271,7 @@ export default function LoginPage() {
 				// The code proved the mailbox and the account is suspended: the answer is
 				// the truth, told here, rather than a failure thrown back into the code field.
 				if (body.reason === "account_suspended") {
-					setCodeEmail(null);
+					setSentCode(null);
 					setSuspended({ until: body.suspendedUntil ?? null });
 					return;
 				}
@@ -220,7 +279,7 @@ export default function LoginPage() {
 			}
 			const body = (await res.json()) as { resume: boolean; needsOnboarding?: boolean };
 
-			setCodeEmail(null);
+			setSentCode(null);
 
 			// 🚨 **A signup somebody started elsewhere and never finished, and this door still
 			// created nothing.** The code proved the mailbox, which is the only thing
@@ -247,24 +306,12 @@ export default function LoginPage() {
 				replace: true,
 			});
 		},
-		[codeEmail, from, navigate, nextParam, redirectTo, refreshUser],
+		[sentCode, from, navigate, nextParam, redirectTo, refreshUser],
 	);
 
 	const resendCode = useCallback(async () => {
-		if (codeEmail) await sendCode(codeEmail);
-	}, [codeEmail, sendCode]);
-
-	/**
-	 * Hand the browser to Bluesky, carrying wherever this sign-in interrupted.
-	 *
-	 * ⚠️ It throws rather than reporting, because the modal shows the message in its own
-	 * field — and it never resolves in any useful sense, since `signInWithBluesky` sets
-	 * `window.location` and the page is already leaving.
-	 */
-	const startBluesky = useCallback(
-		(handle: string) => signInWithBluesky(handle, redirectTo),
-		[signInWithBluesky, redirectTo],
-	);
+		if (sentCode) await sendCode(sentCode.verify);
+	}, [sendCode, sentCode]);
 
 	return (
 		// Center the card in the main content area. flex-1 fills <main> (which is a
@@ -349,21 +396,27 @@ export default function LoginPage() {
 								)}
 								<form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-1" noValidate>
 									<FormField
-										label="Email or handle"
-										hint="An email address gets a six-character sign-in code by mail — that's how signing in works. A handle signs you in through Bluesky."
+										label="Email (jane@doe.com) or Handle (@janedoe.anthers.social)"
+										hint="Enter your email or Anthers handle to sign in with an emailed code. Enter your Bluesky handle to sign in with OAuth."
 									>
 										{/* 🚨 `type="text"`, and that is load-bearing: the browser's built-in
 								    email validation would fire *before* React sees the submit and say
 								    "please include an '@' in the email address", which is a message about
 								    syntax on a page whose real answer is about what signing in *is*. The
-								    loose shape check above is the one whose sentence shows. */}
+								    loose shape checks in `handleSubmit` are the ones whose sentences show.
+
+								    ⚠️ `inputMode` follows the `@` (2026-10-09): the moment the value starts
+								    with one, the person is typing a handle, and the keyboard suits it —
+								    dots and letters instead of the email address's autocompletions. It is
+								    a keyboard answer, not a routing one: what was typed still routes on
+								    submit, exactly as it always did. */}
 										<input
 											type="text"
-											inputMode="email"
+											inputMode={identifier.startsWith("@") ? "url" : "email"}
 											className="input input-bordered w-full"
 											autoComplete="username"
-											value={email}
-											onChange={(e) => setEmail(e.target.value)}
+											value={identifier}
+											onChange={(e) => setIdentifier(e.target.value)}
 											required
 										/>
 									</FormField>
@@ -371,50 +424,28 @@ export default function LoginPage() {
 										{loading ? <span className="loading loading-spinner loading-sm" /> : "Continue"}
 									</button>
 								</form>
-
-								{/* ── Bluesky ────────────────────────────────────────────────────
-						    Below the divider rather than beside the form, because it only
-						    works for an account that has already linked an identity — a
-						    prominent button that refuses most of the people who press it is
-						    worse than a quiet one. The divider says "or", not "or sign up
-						    with", deliberately. The handle itself is asked for in a modal;
-						    see `BlueskyHandleModal` for why it cannot be inline — typing a
-						    handle into the field above takes the same door without opening
-						    this one. */}
-								<div className="divider my-1 text-xs text-base-content/50">or</div>
-								<button
-									type="button"
-									className="btn btn-outline w-full"
-									onClick={() => setBlueskyOpen(true)}
-								>
-									<BlueskyMark className="h-4 w-4" />
-									Log in with Bluesky
-								</button>
 							</>
 						)}
 					</div>
 				</div>
 			</div>
 
-			{codeEmail && (
+			{sentCode && (
 				<EmailCodeModal
 					stepLabel="Sign in with an emailed code"
 					lede={
 						<>
-							If there's an Anthers account for <strong className="break-all">{codeEmail}</strong>,
-							a six-character code is on its way. Enter it and you're in.
+							If there's an Anthers account for{" "}
+							<strong className="break-all">{sentCode.shown}</strong>, a six-character code is on
+							its way. Enter it and you're in.
 						</>
 					}
 					cta="Sign me in"
 					busyLabel="Checking…"
 					onSubmit={verifyCode}
 					onResend={resendCode}
-					onClose={() => setCodeEmail(null)}
+					onClose={() => setSentCode(null)}
 				/>
-			)}
-
-			{blueskyOpen && (
-				<BlueskyHandleModal onSubmit={startBluesky} onClose={() => setBlueskyOpen(false)} />
 			)}
 		</div>
 	);

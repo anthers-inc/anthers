@@ -116,3 +116,54 @@ test("an emailed code signs an existing account in from /login", async ({ page }
 		})
 		.toBe(made.handle);
 });
+
+test("an Anthers handle signs in from /login, keyed on the handle alone", async ({ page }) => {
+	const name = `e2e-han-${stamp()}`.slice(0, 18);
+	const address = `e2e-handle-${stamp()}@example.com`;
+	const made = JSON.parse(
+		execFileSync("bun", ["run", "db:local-account", "--name", name, "--email", address], {
+			cwd: REPO_ROOT,
+			encoding: "utf8",
+		})
+			.trim()
+			.split("\n")
+			.at(-1) as string,
+	) as { handle: string };
+
+	await page.goto("/login");
+
+	// 🚨 **The browser never receives the handle's mailbox, and it must never ask for it.**
+	// A hosted handle is resolved into the code's address on the server, so a handoff to
+	// the OAuth door — where `signInWithBluesky` sends the typed handle — is precisely what
+	// must NOT fire. Recorded rather than blocked, so the routing still routes and the
+	// assertion reads the wire after the fact.
+	let handedOff = false;
+	await page.route("**/api/atproto/auth", () => {
+		handedOff = true;
+	});
+
+	// Typed with the leading `@`, and in the case somebody's profile shows it — the page
+	// strips and lowercases both before the API ever sees them.
+	await page.locator('input[autocomplete="username"]').fill(`@${made.handle.toUpperCase()}`);
+	await page.getByRole("button", { name: /^continue$/i }).click();
+
+	// The code modal opens IN PLACE — and tells the person it is their handle it asked for,
+	// never the address the server put the code in.
+	await expect(page.getByRole("heading", { name: /check your email/i })).toBeVisible();
+	await expect(
+		page.getByText(new RegExp(`anthers account for.*@${made.handle}`, "i")),
+	).toBeVisible();
+
+	await typeCode(page, await emailedCode(address));
+
+	await expect
+		.poll(async () => {
+			const me = (await (await page.request.get(`${API_URL}/api/auth/me`)).json()) as {
+				user: { handle: string } | null;
+			};
+			return me.user?.handle ?? null;
+		})
+		.toBe(made.handle);
+
+	expect(handedOff, "a hosted handle stays on the emailed-code door").toBe(false);
+});

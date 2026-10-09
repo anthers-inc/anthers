@@ -18,8 +18,9 @@
  * learn before a consent screen appears rather than from it.
  *
  * ⭐ **The handle is collected on the card itself since 2026-08-24**, where it used to open
- * `BlueskyHandleModal` — two presses and a layer for one short field. `/login` still uses
- * the modal, because its card has flourishes an inline field cannot clear.
+ * `BlueskyHandleModal` — two presses and a layer for one short field. That modal is gone
+ * everywhere now (2026-10-09): its last home, `/login`'s separate Bluesky button, was
+ * removed when sign-in began routing every handle from the one field.
  *
  * ⚠️ **The panel then lost its explanatory paragraph the same day**, because it made the
  * Bluesky tab twice the height of the other and switching tabs resized the card under

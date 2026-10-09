@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Bluesky door on `/login`.
+ * The Bluesky door on `/login` — which since 2026-10-09 is the field, and nothing else.
  *
  * 🚨 **This spec exists because of how the feature was broken before it shipped.** The
  * client function `signInWithBluesky` had been written, tested and merged — and **nothing
  * in the interface called it**, which is the only reason two canonical documents could
  * describe ATProto sign-in as absent while the API route sat open. A unit test cannot see
- * that: every piece passes on its own. Pressing the button and asserting something happens
- * is the assertion that would have caught it, so that is what this pins.
+ * that: every piece passes on its own. What pins it now is the field: type a Bluesky
+ * handle, press Continue, and something must leave for Bluesky.
  *
  * ⚠️ **What it cannot assert.** Completing a sign-in means authorizing on a real Bluesky
  * account at bsky.social, which no test may do — so the round trip stops at the handoff.
@@ -15,50 +15,33 @@
  * unlinked handle is refused rather than signed up, and a destination that leaves the
  * origin is dropped at both ends.
  *
- * The other half of what it pins is **copy**, and that is not incidental here. This door
- * signs in an account that has already linked a Bluesky identity; it cannot create one.
- * Someone who reads it as "sign up with Bluesky" finds out at the end of a round trip
- * through another website, so the modal has to say so before it sends them.
+ * ⚠️ **The hosted-handle half of the routing is asserted elsewhere**: `signup-ceremony.test.ts`
+ * pins the server's resolution, and `emailed-code.e2e.ts` walks a hosted handle to a real
+ * signed-in session. What is pinned here is that a handle typed at this page goes OUT to
+ * the identity's own server — and never that a hosted one stays in.
  */
 import { API_URL, expect, test } from "./fixtures";
 
-test.describe("logging in with Bluesky", () => {
-	test("the button is wired to something", async ({ page }) => {
+test.describe("a Bluesky handle signs in through OAuth, from the one field", () => {
+	test("the button and its modal are gone — the field is the door", async ({ page }) => {
 		await page.goto("/login");
 
-		await page.getByRole("button", { name: /log in with bluesky/i }).click();
+		// The routing a visitor can read before pressing anything: the field's own hint
+		// tells them what a Bluesky handle does (Parker, 2026-10-09).
+		await expect(page.getByText(/enter your bluesky handle to sign in with oauth/i)).toBeVisible();
 
-		// The modal opening IS the assertion: a button wired to nothing looks identical to
-		// one wired to something until you press it.
-		await expect(page.getByRole("heading", { name: /what's your handle/i })).toBeVisible();
-		await expect(page.getByLabel("Bluesky handle")).toBeFocused();
-	});
+		// 🚨 The old affordances stayed gone the day the field took the door over: a
+		// second button and a modal would be a second Bluesky door, and the two would
+		// drift exactly the way the login/signup split did.
+		await expect(page.getByRole("button", { name: /log in with bluesky/i })).toHaveCount(0);
+		await expect(page.getByRole("heading", { name: /what's your handle/i })).toHaveCount(0);
 
-	test("it says it cannot create an account, before sending anyone anywhere", async ({ page }) => {
-		await page.goto("/login");
-		await page.getByRole("button", { name: /log in with bluesky/i }).click();
-
-		await expect(page.getByText(/doesn't create one/i)).toBeVisible();
-
-		// And the card offers exactly one way to actually join, which is not this one.
-		//
-		// 🚨 **Scoped to the card, and `.first()` was the bug.** This read
-		// `getByRole("link", {name: /^sign up$/i}).first()` — and the first such link in the
-		// document is the one in the HEADER, so the assertion has been checking the navbar
-		// while claiming to check this page. Pointing the card's link at `/login` left it
-		// green. Two lessons, and the second is the one worth carrying: an anchored name
-		// (`/^sign up$/`) pins a call to action's *wording* while pretending to test where
-		// it goes, and `.first()` answers a question about document order that nobody asked.
+		// And the card still offers exactly one way to actually join, which is not this one.
 		const card = page.locator("[data-auth-fade]");
 		await expect(card.getByRole("link", { name: /sign up/i })).toHaveAttribute("href", "/signup");
 	});
 
-	// ⭐ **One Bluesky door, two handles on it** — typing a handle into the main field runs
-	// the same ceremony the button's modal does, and this is the pin. `signInWithBluesky`
-	// could regress to the modal-only path with nothing failing, because the button keeps
-	// working; only the field would silently stop routing, and nothing else in the suite
-	// exercises the field with a handle.
-	test("typing a handle takes the same door, without opening the modal", async ({ page }) => {
+	test("a Bluesky handle hands the browser to Bluesky, from the field", async ({ page }) => {
 		await page.goto("/login");
 
 		let payload: unknown = null;
@@ -82,35 +65,19 @@ test.describe("logging in with Bluesky", () => {
 
 		await expect.poll(() => payload).not.toBeNull();
 		expect(payload).toMatchObject({ handle: "alice.bsky.social", intent: "login" });
-
-		// The modal never opened: the field is the second handle on the door, not a
-		// redirect into the first one.
-		await expect(page.getByRole("heading", { name: /what's your handle/i })).toHaveCount(0);
 	});
 
-	test("a handle that resolves to nothing is refused in place", async ({ page }) => {
+	test("a handle that resolves to nothing is refused, in place, signed out", async ({ page }) => {
 		await page.goto("/login");
-		await page.getByRole("button", { name: /log in with bluesky/i }).click();
 
 		// Well-formed and unresolvable. `.invalid` is reserved by RFC 2606 so it can never
 		// resolve — which makes this deterministic whether or not the runner has a network,
-		// since both an answered lookup and an unreachable one end in a refusal.
-		//
-		// 🚨 Scoped to the modal because the card's own submit is ALSO "Continue" — the
-		// field behind the backdrop takes a handle now, so the modal's button lost the
-		// name it used to own alone. An unscoped role selector here would press whichever
-		// rendered first, which is the card's, and hand a blank field to the flow.
-		await page.getByLabel("Bluesky handle").fill("nobody.example.invalid");
-		await page
-			.locator(".modal-box")
-			.getByRole("button", { name: /^continue$/i })
-			.click();
+		// since both an answered lookup and an unreachable one end in a refusal. The page
+		// hands it to the OAuth door like any other foreign handle, and the refusal comes
+		// back to the card's own error line, where the modal used to put it.
+		await page.locator('input[autocomplete="username"]').fill("nobody.example.invalid");
+		await page.getByRole("button", { name: /^continue$/i }).click();
 
-		// 🚨 Scoped to the modal, and this is not tidiness. A bare `.text-error` also matches
-		// the red asterisk on the required field behind the backdrop — so the assertion
-		// passed on whichever element rendered first, which for one run was the asterisk. A
-		// selector that can match furniture is a selector that can pass without the feature.
-		//
 		// ⚠️ The 20s timeout is the fix for the "deterministically fails on main" version of
 		// this spec, and the number is the point, not sloppiness. The refusal is produced by
 		// the OAuth client's `authorize()` walking the SDK's full resolution chain for
@@ -121,24 +88,15 @@ test.describe("logging in with Bluesky", () => {
 		// was still legitimately in flight. The handle is not cached: `authorize()` resolves
 		// it fresh every time, so the cost repeats on every run. Anything materially over
 		// 20s is genuinely stuck, not merely slow.
-		await expect(page.locator(".modal-box .text-error")).toHaveText(/couldn't find that handle/i, {
-			timeout: 20_000,
-		});
+		await expect(page.locator("[data-auth-fade] .alert-error")).toHaveText(
+			/couldn't find that handle/i,
+			{ timeout: 20_000 },
+		);
+
 		// Still here, and still signed out. A failed handoff that navigated anyway would be
 		// a worse bug than the refusal it is reporting.
 		expect(new URL(page.url()).pathname).toBe("/login");
 		const me = await page.request.get(`${API_URL}/api/auth/me`);
 		expect((await me.json()).user, "a refused handle must not create a session").toBeNull();
-	});
-
-	test("canceling leaves the sign-in form exactly as it was", async ({ page }) => {
-		await page.goto("/login");
-		await page.locator('input[autocomplete="username"]').fill("alice@example.com");
-
-		await page.getByRole("button", { name: /log in with bluesky/i }).click();
-		await page.getByRole("button", { name: /^cancel$/i }).click();
-
-		await expect(page.getByRole("heading", { name: /what's your handle/i })).toHaveCount(0);
-		await expect(page.locator('input[autocomplete="username"]')).toHaveValue("alice@example.com");
 	});
 });
