@@ -23,8 +23,6 @@
 import { db } from "@anthers/db/client";
 import type { merchFulfillments as merchFulfillmentsTable } from "@anthers/db/schema";
 import { merchFulfillments, purchases } from "@anthers/db/schema";
-import { MERCH_MARGIN_DOLLARS } from "@anthers/shared/constants";
-import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
 
 const API_BASE = "https://api.printful.com";
@@ -317,11 +315,6 @@ export async function stampPrintfulCosts(
 			updatedAt: new Date(),
 		})
 		.where(eq(purchases.id, purchaseId));
-}
-
-/** The margin on a merch list price — print cost plus `MERCH_MARGIN_DOLLARS`, as Decimal ops. */
-export function merchListPrice(printCost: string | Decimal): Decimal {
-	return new Decimal(printCost).plus(MERCH_MARGIN_DOLLARS);
 }
 
 // ── Order placement (the completion path's write) ─────────────────────────────

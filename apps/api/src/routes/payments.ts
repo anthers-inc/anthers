@@ -36,10 +36,14 @@ import {
 	works,
 } from "@anthers/db/schema";
 import { cycleEnd, cycleStart } from "@anthers/shared/billing-cycle";
+import type { Badge, BadgeKey } from "@anthers/shared/constants";
 import {
 	CLOTHING_TAX_CODE,
+	heldBadgeName,
 	isChargeableAmount,
 	MAX_BASKET_ITEMS,
+	MERCH_BADGE_DISCOUNT,
+	MERCH_BADGE_DISCOUNT_RATE,
 	REFUND_AUTO_CAP,
 } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
@@ -66,6 +70,7 @@ import {
 import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
 import { resolveAccess } from "../services/access.js";
+import { heldAnthersBadgeAmount } from "../services/anthers-badges.js";
 import { addBasketItem, clearBasket, listBasket, removeBasketItem } from "../services/basket.js";
 import { syncSubscriptionToAccount } from "../services/billing.js";
 import { recordDisputeClosed, recordDisputeCreated } from "../services/disputes.js";
@@ -73,7 +78,7 @@ import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoice
 import { saveOnPurchase } from "../services/library.js";
 import { recordNettingForDispute, reverseNettingForWonDispute } from "../services/netting.js";
 import { stripeFlagPatchFromAccount } from "../services/payouts.js";
-import { getShippingRates, merchListPrice, printfulConfigured } from "../services/printful.js";
+import { getShippingRates, printfulConfigured } from "../services/printful.js";
 import {
 	sendPurchaseReceipts,
 	sendRefundReceipts,
@@ -915,6 +920,11 @@ const paymentRoutes = new Hono()
 	// Work the setup script has not pointed at a Printful product yet — it is not
 	// buyable, and the picker's absence is the honest answer (the checkout below
 	// refuses it with the same sentence the generic physical refusal gave).
+	//
+	// ⚠️ **The picker answers the buyer's OWN prices** — the list price each size
+	// carries, and, when this buyer holds a Badge, the discounted figure beside it.
+	// Never the print cost: that is the transparency prose's basis (never an exact
+	// published figure — Printful reprices), and the picker is a buyer surface.
 	.get("/merch/:slug/variants", requireAuth, async (c) => {
 		const user = c.get("user");
 		const q = await resolveMerchPurchase(c.req.param("slug") ?? "", user.id);
@@ -926,16 +936,31 @@ const paymentRoutes = new Hono()
 			.from(merchVariants)
 			.where(eq(merchVariants.workId, work.id))
 			.orderBy(merchVariants.id);
-		// The list price is derived here, per size: Printful's catalog price + margin.
-		// The margin is a published money figure and renders through the generator on
-		// the client; the quote's number comes from the arithmetic, not from a copy.
+		// The Badge resolves once; every row prices against it. `free` holds no
+		// discount — only Badge keys index the ladder.
+		let heldBadge: Badge | null = null;
+		try {
+			const badge = heldBadgeName(await heldAnthersBadgeAmount(user.id));
+			if (badge !== "free") heldBadge = badge;
+		} catch {
+			heldBadge = null; // unseeded ladder — prices answer undiscounted
+		}
 		return c.json({
-			variants: rows.map((v) => ({
-				size: v.size,
-				printCost: v.catalogPrice,
-				amount: merchListPrice(v.catalogPrice).toFixed(2),
-				inStock: true, // stock state is Printful's; the order creation reports it
-			})),
+			variants: rows.map((v) => {
+				const list = new Decimal(v.listPrice);
+				const discountRate = heldBadge ? MERCH_BADGE_DISCOUNT_RATE[heldBadge] : "0";
+				const amount = list
+					.minus(list.times(discountRate))
+					.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+				return {
+					size: v.size,
+					listPrice: list.toFixed(2),
+					amount: amount.toFixed(2),
+					// The whole percent for copy ("25"), rendered "25% off" client-side.
+					discount: heldBadge ? MERCH_BADGE_DISCOUNT[heldBadge] : null,
+					inStock: true, // stock state is Printful's; the order creation reports it
+				};
+			}),
 			merchConfigured: printfulConfigured(),
 		});
 	})
@@ -995,24 +1020,36 @@ const paymentRoutes = new Hono()
 			const rate = rates?.[0];
 			if (!rate) return c.json({ error: "Shipping is not available right now." }, 503);
 
-			// The list price, derived: print cost + margin. The variant row's catalog price
-			// is the snapshot for display; the LIVE catalog price is what the session charges
-			// — a price change between setup and checkout is caught here rather than by the
-			// buyer. A catalog read that answers null (unconfigured) was refused above.
-			const [live] = await db
-				.select()
-				.from(merchVariants)
-				.where(eq(merchVariants.id, variant.id))
-				.limit(1);
-			const printCost = live ? new Decimal(live.catalogPrice) : new Decimal(variant.catalogPrice);
-			const listPrice = merchListPrice(printCost);
+			// 🚨 **The list price is Printful's own retail price, stamped at setup** (Parker,
+			// 2026-10-08: the store uses what Printful carries — one pricing source, edited
+			// on the Printful side and restamped by the setup script's re-run). Printing
+			// costs nothing here. The Badge discount is the one adjustment the checkout
+			// makes to it, on the goods line alone: shipping is Printful's charge, which
+			// Anthers does not control and never discounts (the decision's own rule).
+			// The Badge held this cycle resolves via its threshold — the same read the
+			// subscription routes take (`heldAnthersBadgeAmount` → `heldBadgeName`).
+			// An unseeded ladder throws inside the service, so the discount resolution
+			// is guarded: no ladder, no discount, and the 503 the store deserves.
+			// `free` holds no discount — only Badge keys index the ladder.
+			let discountRate = "0";
+			let heldBadge: Badge | null = null;
+			try {
+				const badge = heldBadgeName(await heldAnthersBadgeAmount(user.id));
+				if (badge !== "free") {
+					heldBadge = badge;
+					discountRate = MERCH_BADGE_DISCOUNT_RATE[badge];
+				}
+			} catch {
+				return c.json({ error: "Merch isn't available right now." }, 503);
+			}
+			const listPrice = new Decimal(variant.listPrice);
+			const goodsPrice = listPrice
+				.minus(listPrice.times(discountRate))
+				.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
-			// The goods line carries its own card fee; the shipping line carries its own.
-			// `calculateFees` on the sum is what the buyer's card fee is — a purchase of N
-			// lines is one charge, and the processor charges once.
-			const goodsFee = calculateFees(listPrice, { type: "physical" });
-			const shippingFee = calculateFees(new Decimal(rate.rate), { type: "physical" });
-			const amount = listPrice.plus(shippingFee.buyerTotal); // goods + shipping, tax on top at the session
+			// The buyer's visible figure before tax: discounted goods + Printful's shipping.
+			const shipping = new Decimal(rate.rate);
+			const amount = goodsPrice.plus(shipping); // tax on top at the session
 
 			// The same sub-floor guard the generic checkout keeps, on the whole charge.
 			if (!isChargeableAmount(amount.toNumber())) {
@@ -1102,8 +1139,14 @@ const paymentRoutes = new Hono()
 
 			// Record the purchase pending, exactly as a digital one — completed by the
 			// webhook, which places the Printful order from the session's shipping details.
-			// The shipping and print costs are NOT known figures yet: Printful's costs are
-			// stamped at completion from the order's own costs object.
+			// The goods line's money is what the buyer was shown: the discounted price.
+			// Printful's costs are NOT known figures yet — stamped at completion from the
+			// order's own costs object.
+			//
+			// 🚨 **The earnings-shaped column carries the discount-adjusted margin** — the
+			// seller's share on a platform-side sale, charged on the goods line. The buyer
+			// sees the discount; the books record what Anthers actually kept, and Printful's
+			// stamped costs at completion are what the realized figure is computed from.
 			await db.insert(purchases).values({
 				buyerId: user.id,
 				workId: work.id,
@@ -1114,21 +1157,30 @@ const paymentRoutes = new Hono()
 				workPublicId: work.publicId,
 				type: "physical",
 				amount: amount.toFixed(2),
-				processingFee: goodsFee.processingFee.plus(shippingFee.processingFee).toFixed(2),
+				processingFee: calculateFees(amount, { type: "physical" }).processingFee.toFixed(2),
 				salesTax: "0.00",
-				// The margin: the list price less the print cost — the seller's share on a
-				// platform-side sale, in the earnings-shaped column.
-				creatorEarnings: listPrice.minus(printCost).toFixed(2),
+				// The margin on the goods line: discounted price less Printful's wholesale
+				// cost snapshot. The order's own costs object refines this at completion.
+				creatorEarnings: goodsPrice.minus(variant.catalogPrice).toFixed(2),
 				stripePaymentIntentId: session.id,
 				status: "pending",
 				merchSize: size,
+				// The Badge the discount resolved from — the receipt's discount line names it.
+				...(heldBadge ? { merchDiscountBadge: heldBadge } : {}),
 			});
 
 			return c.json({
 				amount: amount.toFixed(2),
-				printCost: printCost.toFixed(2),
-				margin: listPrice.minus(printCost).toFixed(2),
-				shipping: new Decimal(rate.rate).toFixed(2),
+				listPrice: listPrice.toFixed(2),
+				goodsPrice: goodsPrice.toFixed(2),
+				discount: heldBadge
+					? {
+							badge: heldBadge,
+							percent: MERCH_BADGE_DISCOUNT[heldBadge],
+							saved: listPrice.minus(goodsPrice).toFixed(2),
+						}
+					: null,
+				shipping: shipping.toFixed(2),
 				size,
 				salesTax: null,
 				buyerTotal: null,

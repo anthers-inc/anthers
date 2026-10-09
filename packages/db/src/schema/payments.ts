@@ -192,6 +192,12 @@ export const purchases = pgTable(
 		} | null>(),
 		/** The size the buyer chose, referencing `merch_variants.size` by value — a merch-only column. */
 		merchSize: text("merch_size"),
+		/**
+		 * The Badge whose merch discount this purchase was priced under — null on a
+		 * purchase with no discount (Free, or a pre-discount row). The receipt's
+		 * discount line names it; the value is a Badge name in `MERCH_BADGE_DISCOUNT`.
+		 */
+		merchDiscountBadge: text("merch_discount_badge"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},

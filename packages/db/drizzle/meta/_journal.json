@@ -883,6 +883,20 @@
       "when": 1791488248554,
       "tag": "0125_burly_the_executioner",
       "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1791517361709,
+      "tag": "0126_watery_hiroim",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1791517496170,
+      "tag": "0127_silent_cerise",
+      "breakpoints": true
     }
   ]
 }

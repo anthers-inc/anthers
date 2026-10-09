@@ -8,9 +8,12 @@
  * mounts the session on an in-page checkout surface that is the ONLY CheckoutElements
  * provider of the merch flow, rendering nothing of its own but the form.
  *
- * The price decomposition is the decision's transparency rule, verbatim: the print cost
- * is Printful's, the margin is Anthers', shipping is Printful's, tax is resolved at the
- * session. The quote renders the four.
+ * The price rows are the decision's transparency rule as the buyer sees it: the list
+ * price (Printful's own retail price for the variant), the Badge discount beside it when
+ * the buyer holds one, Printful's shipping added at checkout, and tax resolved at the
+ * session. **The print cost is never a buyer-visible figure** — the transparency prose
+ * ("about $20 to print, the rest funds Anthers' programs") lives in the wiki's copy, not
+ * in a checkout.
  */
 import { client } from "@anthers/web-shared/rpc";
 import type { AccessResult } from "@anthers/web-shared/types";
@@ -37,15 +40,17 @@ interface MerchBuyPanelProps {
 
 interface MerchVariant {
 	size: string;
-	printCost: string;
+	listPrice: string;
 	amount: string;
+	discount: string | null;
 	inStock: boolean;
 }
 
 interface MerchQuote {
 	amount: string;
-	printCost: string;
-	margin: string;
+	listPrice: string;
+	goodsPrice: string;
+	discount: { badge: string; percent: string; saved: string } | null;
 	shipping: string;
 	size: string;
 	salesTax: null;
@@ -126,7 +131,12 @@ export default function MerchBuyPanel({ slug, access }: MerchBuyPanelProps) {
 						options={{ clientSecret: session.clientSecret }}
 					>
 						<MerchCheckoutForm
-							quote={{ amount: session.amount, shipping: session.shipping }}
+							quote={{
+								size: pickedSize,
+								goodsPrice: session.goodsPrice,
+								discount: session.discount,
+								shipping: session.shipping,
+							}}
 							onCancel={() => setSession(null)}
 						/>
 					</CheckoutElementsProvider>
@@ -143,8 +153,9 @@ export default function MerchBuyPanel({ slug, access }: MerchBuyPanelProps) {
 						Pricing
 					</h2>
 					{/* The size picker IS the price display on a merch Work — each size's
-					    price is derived from Printful's print cost for that size, so the
-					    picker and the price are one control. */}
+					    price is Printful's own retail price for that variant (stamped at
+					    setup), discounted when this buyer holds a Badge, so the picker and
+					    the price are one control. */}
 					{variants ? (
 						variants.length > 0 ? (
 							<fieldset className="flex flex-wrap gap-2 border-0 p-0 m-0" aria-label="Size">
@@ -205,27 +216,31 @@ export default function MerchBuyPanel({ slug, access }: MerchBuyPanelProps) {
 }
 
 /**
- * The price rows for one chosen size. The margin is the SERVER's derived figure — the
- * client renders `amount − printCost` only because both are renders of one quote the
- * server computed with decimal arithmetic; no money figure is computed client-side.
+ * The price rows for one chosen size. Every figure is the server's own quote — the
+ * client renders the discount's arithmetic as dollars beside the undiscounted list,
+ * both of which the server computed with decimal arithmetic; no money is computed here.
  */
 function MerchPriceRows({ variant }: { variant: MerchVariant | undefined }) {
 	if (!variant) return null;
-	const margin = (Number(variant.amount) - Number(variant.printCost)).toFixed(2);
 	return (
 		<>
 			<div className="flex justify-between text-base-content/60">
-				<dt>
-					Print cost <span className="text-xs">(Printful's)</span>
-				</dt>
-				<dd className="tabular-nums">${variant.printCost}</dd>
+				<dt>List price</dt>
+				<dd className="tabular-nums">
+					{variant.discount ? <s>${variant.listPrice}</s> : `$${variant.listPrice}`}
+				</dd>
 			</div>
-			<div className="flex justify-between text-base-content/60">
-				<dt>
-					Margin <span className="text-xs">(to Anthers' funds)</span>
-				</dt>
-				<dd className="tabular-nums">${margin}</dd>
-			</div>
+			{variant.discount && (
+				<div className="flex justify-between text-success">
+					<dt>
+						Badge discount <span className="text-xs">({variant.discount}% off)</span>
+					</dt>
+					{/* Both figures are the server's quote; this renders their difference. */}
+					<dd className="tabular-nums">
+						−${(Number(variant.listPrice) - Number(variant.amount)).toFixed(2)}
+					</dd>
+				</div>
+			)}
 			<div className="flex justify-between text-base-content/60">
 				<dt>
 					Shipping <span className="text-xs">(Printful's charge)</span>
@@ -244,7 +259,12 @@ function MerchCheckoutForm({
 	quote,
 	onCancel,
 }: {
-	quote: { amount: string; shipping: string };
+	quote: {
+		size: string;
+		goodsPrice: string;
+		discount: { badge: string; percent: string; saved: string } | null;
+		shipping: string;
+	};
 	onCancel: () => void;
 }) {
 	const checkoutState = useCheckoutElements();
@@ -315,9 +335,19 @@ function MerchCheckoutForm({
 			</div>
 			<dl className="w-full rounded-lg bg-base-100 p-3 text-sm space-y-1.5">
 				<div className="flex justify-between text-base-content/60">
-					<dt>The shirt</dt>
-					<dd className="tabular-nums">${quote.amount}</dd>
+					<dt>The shirt, size {quote.size}</dt>
+					<dd className="tabular-nums">
+						{quote.discount ? <s>$30.00</s> : null} ${quote.goodsPrice}
+					</dd>
 				</div>
+				{quote.discount && (
+					<div className="flex justify-between text-success">
+						<dt>
+							Badge discount <span className="text-xs">({quote.discount.percent}% off)</span>
+						</dt>
+						<dd className="tabular-nums">−${quote.discount.saved}</dd>
+					</div>
+				)}
 				<div className="flex justify-between text-base-content/60">
 					<dt>Shipping (Printful's)</dt>
 					<dd className="tabular-nums">${quote.shipping}</dd>
@@ -337,7 +367,7 @@ function MerchCheckoutForm({
 					? "Processing…"
 					: totals?.buyerTotal != null
 						? `Pay $${totals.buyerTotal.toFixed(2)}`
-						: `Pay $${quote.amount} + shipping + tax`}
+						: `Pay + shipping + tax`}
 			</button>
 			<button type="button" className="btn btn-ghost btn-sm w-full" onClick={onCancelStable}>
 				Back

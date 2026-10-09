@@ -153,6 +153,7 @@ async function makeMerchWork(variantIds: number[]) {
 			catalogVariantId,
 			catalogVariantName: `Black / size ${catalogVariantId}`,
 			catalogPrice: "9.50",
+			listPrice: "30.00", // Printful's retail price is the list source (Parker, 2026-10-08)
 			printFileUrl: "https://cdn.anthers.org/merch/tee.png",
 			synced: true,
 		});

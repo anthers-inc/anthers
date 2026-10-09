@@ -35,16 +35,19 @@ import { purchases } from "./payments.js";
 /**
  * org — one sellable size of one merch Work, mapped to Printful's catalog.
  *
- * A merch Work (type `physical`, owned by the official Anthers account) is priced not
- * from its `price` column but **derived**: Printful's catalog price for the variant plus
- * the margin constant. This table is the link that makes the derivation real — which
- * Printful blank (`catalogVariantId`) answers this Work's `size` label, and at what the
- * catalog currently lists it.
+ * A merch Work (type `physical`, owned by the official Anthers account) is priced from
+ * **Printful's own retail price for the variant** — Parker, 2026-10-08: "I want our store
+ * to use what we set in Printful. If I ever need to change it, I'll change it on the
+ * Printful side so we don't have two sources of truth." The setup script reads the store's
+ * Sync Variant and stamps its `retail_price` here as `list_price`; the checkout charges
+ * from this column and the Badge discount applies to it. **The Printful dashboard is the
+ * list price's only editor** — a price change there, then a setup-script re-run to restamp,
+ * is the one path a list price moves by.
  *
- * ⚠️ **`catalogPrice` is a snapshot, not the pricing source.** The quote re-derives the
- * list price from the Printful catalog at checkout, so a Printful price change is caught
- * before a buyer is charged a stale figure; this column is what the Work page renders
- * before checkout and what makes drift visible rather than discovered at the Pay button.
+ * ⚠️ **`catalogPrice` (Printful's wholesale/cost side) is a snapshot for the transparency
+ * prose and the admin's margin view, never the pricing source.** The badge discount's
+ * below-fee edge case (Blossom on 3XL) is accepted, not engineered around — see
+ * `MERCH_BADGE_DISCOUNT`'s rules.
  */
 // org — the mapping between a Work's sellable size and Printful's catalog is Anthers'
 // selling machinery (a fact about the platform's own store, never a creator's).
@@ -61,8 +64,14 @@ export const merchVariants = pgTable(
 		catalogVariantId: integer("catalog_variant_id").notNull(),
 		/** Printful's name for the variant, as the receipt and packing slip name it. */
 		catalogVariantName: text("catalog_variant_name").notNull(),
-		/** The blank's catalog price, captured when the row was written. A snapshot — see above. */
+		/** Printful's wholesale cost for the blank — the transparency prose's basis, never the pricing source. */
 		catalogPrice: numeric("catalog_price").notNull(),
+		/**
+		 * The list price, stamped from Printful's own `retail_price` at setup — the one
+		 * pricing source (Parker, 2026-10-08: change the price on the Printful side, then
+		 * re-run the setup script; there is no second place to edit it).
+		 */
+		listPrice: numeric("list_price").notNull(),
 		/** The print-file URL this variant prints from — unique per design, per the File Library's reuse rule. */
 		printFileUrl: text("print_file_url").notNull(),
 		/** True once the row exists on the Printful store as a Sync Variant (`external_id` = this row's id). */
