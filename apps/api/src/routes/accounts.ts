@@ -90,6 +90,7 @@ import {
 	enableAdultAccess,
 	setMaturityDisplay,
 } from "../services/content-preferences.js";
+import { type AccessibleWork, buildAccessContext, resolveAccessSync } from "../services/access.js";
 import {
 	DELIVERY_GROUPS,
 	type DeliveryGroup,
@@ -594,6 +595,16 @@ const accountRoutes = new Hono()
 						.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
 						.limit(50);
 
+		// One access context over the whole batch — the same `buildAccessContext` a
+		// Catalog page runs, resolving each verdict without an N+1. Without it a gated
+		// release in the feed arrived with no verdict and rendered as an open tile: no
+		// locked cover, no price, nothing saying what it is — the gap the feed's grid
+		// made visible. Scoped to the batch's ids, as the resolver's docblock intends.
+		const accessCtx =
+			feedWorks.length > 0
+				? await buildAccessContext(sessionUser.id, { workIds: feedWorks.map((r) => r.work.id) })
+				: null;
+
 		// The Works each post links, for a card thumbnail and a count — a post
 		// in the grid has no artwork of its own, and announcing something while
 		// showing nothing would waste the tile. Same pattern the timeline route
@@ -694,6 +705,12 @@ const accountRoutes = new Hono()
 					// duration the way a locked book reports its page count.
 					durationSeconds: w.durationSeconds,
 					estimatedReadMinutes: w.estimatedReadMinutes,
+					// The user's own verdict — what a locked cover and a price badge
+					// need. The feed resolves no deliverable either way; this only
+					// describes the gate.
+					access: accessCtx
+						? resolveAccessSync(row.work as unknown as AccessibleWork, accessCtx)
+						: null,
 					creator: embedCreator({
 						handle: row.creatorHandle,
 						displayName: row.creatorDisplayName,
