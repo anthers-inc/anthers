@@ -1,1 +1,0 @@
-ALTER TABLE "works" ADD COLUMN "media_purged_at" timestamp with time zone;

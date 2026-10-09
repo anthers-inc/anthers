@@ -1,1 +1,0 @@
-ALTER TABLE "purchases" ADD COLUMN "kept_at" timestamp with time zone;
