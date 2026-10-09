@@ -191,6 +191,11 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
 	// Already told them. Not an error — it is the job doing its job.
 	if (!row) return { created: false, notificationId: null, emailIntended: false, emailed: false };
 
+	// 🚨 **The intent is decided BEFORE the insert.** `emailIntended` on the row is what
+	// makes a failed send findable later (the schema's note carries the why), so the
+	// insert carries the decision rather than being patched after the send — a crash
+	// between send and patch would leave an intended-but-null row that reads as
+	// suppressed. The preference reads happen first for the same reason.
 	const [user] = await db
 		.select({ email: users.email })
 		.from(users)
@@ -241,7 +246,11 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
 	if (!wantsEmail)
 		return { created: true, notificationId: row.id, emailIntended: false, emailed: false };
 
-	const { sent } = await sendEmail({
+	// The row now learns its own intent — the write the failed-mail panel keys on. Done
+	// before the send so a crash mid-send leaves the row DECIDED rather than ambiguous.
+	await db.update(notifications).set({ emailIntended: true }).where(eq(notifications.id, row.id));
+
+	const { sent, messageId } = await sendEmail({
 		to: user.email,
 		subject: input.title,
 		html: renderEmail(input, { group, unsubscribeToken: token, userId: input.userId }),
@@ -250,7 +259,7 @@ export async function notify(input: NotifyInput): Promise<NotifyResult> {
 	if (sent) {
 		await db
 			.update(notifications)
-			.set({ emailSentAt: new Date() })
+			.set({ emailSentAt: new Date(), emailMessageId: messageId })
 			.where(eq(notifications.id, row.id));
 	}
 
