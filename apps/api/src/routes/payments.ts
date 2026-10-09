@@ -75,6 +75,7 @@ import {
 	refundsAfterDownloadInWindow,
 	settleRefundedPurchase,
 } from "../services/refunds.js";
+import { addTopUpToInvoice } from "../services/storage-topup.js";
 import { applyReductionsToInvoice } from "../services/support-reductions.js";
 
 /**
@@ -1584,6 +1585,13 @@ const paymentRoutes = new Hono()
 			const applied = await applyReductionsToInvoice(event.data.object as Stripe.Invoice);
 			if (applied > 0) {
 				console.info(`support reductions: discounted ${applied} line(s) on a renewal invoice`);
+			}
+			// The storage top-up, added beside the reductions — the two mutators are
+			// independent on purpose (a month can carry either, neither, or both). A run
+			// that added nothing answers 0, which is nearly every invoice.
+			const topUp = await addTopUpToInvoice(event.data.object as Stripe.Invoice);
+			if (topUp > 0) {
+				console.info(`storage top-up: added $${topUp.toFixed(2)} at cost to a renewal invoice`);
 			}
 		} else if (event.type === "invoice.paid") {
 			/**
