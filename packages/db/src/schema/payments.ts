@@ -163,6 +163,41 @@ export const purchases = pgTable(
 		refundInitiator: text("refund_initiator"),
 		refundReason: text("refund_reason"),
 		stripeRefundId: text("stripe_refund_id"),
+		// ── Merch fulfillment (merch.ts owns its tables; these columns are the link) ──
+		/**
+		 * The shipping address the session collected, as Checkout resolved it — stamped at
+		 * completion beside the buyer's billing columns, because a merch purchase's tax
+		 * resolves from the *delivery* address and Printful ships to it. Null on every
+		 * digital purchase.
+		 */
+		shippingName: text("shipping_name"),
+		shippingAddressLine1: text("shipping_address_line1"),
+		shippingAddressLine2: text("shipping_address_line2"),
+		shippingCity: text("shipping_city"),
+		shippingState: text("shipping_state"),
+		shippingPostalCode: text("shipping_postal_code"),
+		shippingCountry: text("shipping_country"),
+		/**
+		 * Printful's own costs for fulfilling the order — subtotal, shipping, tax, total —
+		 * stamped at completion from `estimate-costs` as part of placing the order. The
+		 * snapshot the margin's realized value is computed from and the books reconcile
+		 * against; Printful's own invoices are its statements, this is Anthers' record of
+		 * what fulfillment cost per sale.
+		 */
+		printfulCosts: jsonb("printful_costs").$type<{
+			subtotal: string;
+			shipping: string;
+			tax: string;
+			total: string;
+		} | null>(),
+		/** The size the buyer chose, referencing `merch_variants.size` by value — a merch-only column. */
+		merchSize: text("merch_size"),
+		/**
+		 * The Badge whose merch discount this purchase was priced under — null on a
+		 * purchase with no discount (Free, or a pre-discount row). The receipt's
+		 * discount line names it; the value is a Badge name in `MERCH_BADGE_DISCOUNT`.
+		 */
+		merchDiscountBadge: text("merch_discount_badge"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},

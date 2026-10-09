@@ -312,6 +312,7 @@ export default function WorkPage() {
 										creatorHandle={work.creator?.handle ?? ""}
 										thumbnail={work.thumbnail}
 										creatorHasStripe={work.creatorHasStripe ?? false}
+										workType={work.type}
 									/>
 								) : (
 									<InlineUnlock post={work} access={access} />
