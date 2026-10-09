@@ -18,6 +18,7 @@
  * fulfillments; the setup script for variants) — routes read, they do not write.
  */
 import {
+	bigint,
 	boolean,
 	index,
 	integer,
@@ -62,8 +63,13 @@ export const merchVariants = pgTable(
 		color: text("color").notNull(),
 		/** The buyer-facing size label, exactly as the Work page shows it ("M", "L", "XL"). */
 		size: text("size").notNull(),
-		/** Printful's catalog variant id — the blank garment+size+color, NOT the product id. */
-		catalogVariantId: integer("catalog_variant_id").notNull(),
+		/**
+		 * Printful's catalog variant id — the blank garment+size+color, NOT the product
+		 * id. `bigint`: Printful's Sync Variant ids already exceed `integer`'s range
+		 * (55618467xx-range values read live on 2026-10-09), and the catalog id space
+		 * keeps its own pace.
+		 */
+		catalogVariantId: bigint("catalog_variant_id", { mode: "number" }).notNull(),
 		/** Printful's name for the variant, as the receipt and packing slip name it. */
 		catalogVariantName: text("catalog_variant_name").notNull(),
 		/**
@@ -71,7 +77,7 @@ export const merchVariants = pgTable(
 		 * names as `sync_variant_id`. Distinct from `catalog_variant_id`, the blank garment
 		 * itself: the Sync Variant is the store's copy carrying the print files and retail.
 		 */
-		syncVariantId: integer("sync_variant_id").notNull().default(0),
+		syncVariantId: bigint("sync_variant_id", { mode: "number" }).notNull().default(0),
 		/** Printful's wholesale cost for the blank — the transparency prose's basis, never the pricing source. */
 		catalogPrice: numeric("catalog_price").notNull(),
 		/**
@@ -122,7 +128,12 @@ export const merchFulfillments = pgTable(
 		id: serial("id").primaryKey(),
 		purchaseId: integer("purchase_id").references(() => purchases.id, { onDelete: "set null" }),
 		/** Printful's order id, null until the order is placed. */
-		printfulOrderId: integer("printful_order_id"),
+		/**
+		 * Printful's order id, null until the order is placed. `bigint` for the same
+		 * id-space reason the variant ids carry: an integer that overflowed after an
+		 * order was placed would be a broken fulfillment the code could not repair.
+		 */
+		printfulOrderId: bigint("printful_order_id", { mode: "number" }),
 		/** Printful's own order status — draft, inreview, pending, inprocess, fulfilled, onhold, failed, canceled. */
 		printfulStatus: text("printful_status"),
 		/** When the order was placed with Printful, null on a purchase whose placement is still owed. */

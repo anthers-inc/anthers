@@ -81,6 +81,24 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.16",
+		date: "2026-10-09",
+		lede: "The shirts went on sale on their Work pages, and storage started measuring what accounts actually hold.",
+		entries: [
+			"Anthers' own shirts went on sale on their Work pages: the page carries color and size pickers and prices the shirt at the store's own list, with a held Badge's discount applying to the shirt's price at checkout. Shipping is Printful's charge, priced at checkout and never discounted, and every order rides the store's carbon-offsetting delivery option.",
+			"Printful prints each shirt on demand and ships it straight to the buyer; the purchase keeps the order's record, and the tracking arrives there as Printful reports it. A returned shirt cancels its print order wherever Printful's own states still allow the cancellation.",
+			"A creator's storage reads on the dashboard now: how much the catalog and the kept files hold against the held rung's allowance, for every account. Keeping files past a storage obligation's end is an election the creator states, and the claim-aware sweep watches the deadline.",
+			"A renewal's invoice carries the month's metered overflow at the object store's own rate, with no mark-up, so the ruled shape the pricing copy describes is the one the money follows.",
+			"Notifications arrived as a feed and a bell: engagement with a creator's own works, and publishing from creators a reader follows, with the kinds of notices a creator receives chosen per group rather than fixed. Money keeps its own receipts instead.",
+			"A payout that left Anthers now emails the creator it reached, naming the amounts, at the moment the transfer landed.",
+			"The credits a creator gives a contributor have their own Studio panel, and its identity field suggests handles as the creator types.",
+			"The signup page wears the dark palette and the banded rhythm the site's other top-level pages read as.",
+			"The ATProto Records page fetches its records from the right paths again, and the infrastructure navigation no longer highlights two sections at once.",
+			"The status page's heartbeat reports again, and the queue check inside it can no longer run long past its own timeout.",
+		],
+		roadmapIds: ["storage-billing", "notifications"],
+	},
+	{
 		version: "2026.10.15",
 		date: "2026-10-07",
 		lede: "The Badge Maker: a creator's own Badge art, drawn from a catalog of nearly ten million icons and credited to the artists who drew them.",
