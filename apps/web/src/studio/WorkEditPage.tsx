@@ -78,7 +78,6 @@ import WebBuildSection from "@anthers/web-shared/content/WorkWebBuildSection";
 import {
 	fileRules,
 	isFileWorkType,
-	isGoodsWorkType,
 	UploadProgress,
 	useWorkDetails,
 	WorkFileSection,
@@ -1023,15 +1022,15 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 
 				<div className="flex flex-col gap-3">
 					<h2 className="font-semibold text-sm">Delivery</h2>
-					{isGoodsWorkType(type) ? (
+					{type === "physical" ? (
 						/*
-						    🚨 A goods Work carries no stream/download switches at all — that
-						    categorization was trying to force a shirt to answer "is it a
-						    video or a file?" (Parker, 2026-10-09). Its delivery is being
-						    bought; the store (the official account's setup) delivers a
-						    physical Work, and a service delivers itself. The switches do not
-						    exist for the goods kinds, and the server seeds and normalizes
-						    both flags false on them.
+						    🚨 A physical Work carries no stream/download switches at all —
+						    that categorization was trying to force a shirt to answer "is
+						    it a video or a file?" (Parker, 2026-10-09). Its delivery is
+						    being bought; the official account's setup delivers it. The
+						    switches do not exist for a physical Work, and the server seeds
+						    and normalizes both flags false on it. (Service still carries
+						    the switches and the floor until its own rail lands.)
 						*/
 						<p className="text-xs text-base-content/50">
 							A physical Work or a service is delivered by being bought — there is no stream and no

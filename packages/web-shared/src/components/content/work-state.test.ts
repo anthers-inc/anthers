@@ -75,7 +75,7 @@ describe("accessState", () => {
 		).toBe("gated");
 	});
 
-	it("reads a goods Work's open baseline as a sale, free or priced, streamed or not", () => {
+	it("reads a physical Work's open baseline as a sale, free or priced, streamed or not", () => {
 		// The shirts the store launched with: baseline open at $0 — which for a shirt is
 		// "the public may see the page", never "this shirt costs nothing" (the goods-works
 		// rule: the store's own prices are the price). The categorization error the rule
@@ -86,14 +86,6 @@ describe("accessState", () => {
 				access: [row(0, true), row(3, false)],
 				streamEnabled: false,
 				type: "physical",
-			}),
-		).toBe("sale");
-		expect(
-			accessState({
-				visibility: "released",
-				access: [row(0, true)],
-				streamEnabled: false,
-				type: "service",
 			}),
 		).toBe("sale");
 		// Badge rows above a goods baseline still read as a gate.
