@@ -86,6 +86,9 @@ jobs:
       - uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          # Pinned on purpose — see the note in ci.yml's deploy job. Bump deliberately,
+          # with the format columns checked against the new version.
+          version: 1.163.0
 
       # ⚠️ No DOCTL_CONTEXT here, deliberately. `action-doctl` authenticates into doctl's
       # `default` context, so the `DOCTL_CONTEXT: anthers` this workflow used to set would

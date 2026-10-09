@@ -623,6 +623,12 @@ jobs:
       - uses: digitalocean/action-doctl@v2
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          # Pinned on purpose. Unpinned, this action installs doctl's newest release,
+          # and a fresh one changed create-deployment's formatable columns (an unpinned
+          # upgrade mid-promote died the deploy's own --wait with `unknown column
+          # "Phase"`, stranding tag-and-notes behind a deploy that had succeeded).
+          # Bump deliberately, with the format columns checked against the new version.
+          version: 1.163.0
 
       # The app ID comes from the DO_APP_ID repository variable and nothing else. It used
       # to carry a hardcoded literal as a fallback — harmless while the repo was private
