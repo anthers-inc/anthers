@@ -7,6 +7,7 @@ import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
 import { Bars3Icon, GlobeAltIcon } from "@heroicons/react/24/outline";
 import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { useMediaPlayer } from "../../lib/media-player";
 import PlayerBar from "../media/PlayerBar";
 import RouteSuspense from "./RouteSuspense";
@@ -94,6 +95,12 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 
 export default function LoggedOutLayout() {
 	const { currentTrack } = useMediaPlayer();
+	// The sign-in page renders stripped down: header and meadow stay (the header keeps
+	// "Sign Up Free" next to the person, and the decor is the card's backdrop), the
+	// footer goes. A signing-in visitor is mid-gesture — Bluesky, Google and
+	// DigitalOcean all drop their chrome on this page for the same reason — and the
+	// footer's Log In link naming the page it sits under is worse than useless here.
+	const hideFooter = useLocation().pathname === "/login";
 
 	// The marketing surface scrolls the document, so reserve the scrollbar gutter
 	// while this shell is mounted — pages that scroll and pages that don't then stay
@@ -276,43 +283,45 @@ export default function LoggedOutLayout() {
 			<PlayerBar />
 
 			{/* Meadow footer — transparent (no bg overlay), compact, sitting right atop
-				the grassy floor below it. z-10 keeps it behind the side vines (z-20). */}
-			<footer
-				className={`relative z-10 border-t border-base-content/10 px-6 pt-9 pb-2 text-sm ${currentTrack ? "mb-16" : ""}`}
-			>
-				<div className="mx-auto max-w-7xl">
-					<div className="mb-8 flex flex-col items-center text-center">
-						{/* The vertical (stacked) cut — the footer is the one surface with the room
-						    its taller shape needs, where the navbar's horizontal cut stays compact
-						    (Parker, 2026-10-02). */}
-						<Logo variant="stacked" className="h-32" />
-					</div>
-					<div className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">
-						{FOOTER_NAV.map((col) => (
-							<nav key={col.title} className="flex flex-col items-center gap-2">
-								<h6
-									style={serif}
-									className="text-xs font-semibold uppercase tracking-wider text-base-content/50"
-								>
-									{col.title}
-								</h6>
-								{col.links.map(([label, href]) => (
-									<Link
-										key={label}
-										to={href}
-										className="text-base-content/70 transition-colors hover:text-primary"
+				the grassy floor below it. z-10 keeps it behind the side vines (z-20).  Hidden on /login — see `hideFooter` above. */}
+			{!hideFooter && (
+				<footer
+					className={`relative z-10 border-t border-base-content/10 px-6 pt-9 pb-2 text-sm ${currentTrack ? "mb-16" : ""}`}
+				>
+					<div className="mx-auto max-w-7xl">
+						<div className="mb-8 flex flex-col items-center text-center">
+							{/* The vertical (stacked) cut — the footer is the one surface with the room
+							    its taller shape needs, where the navbar's horizontal cut stays compact
+							    (Parker, 2026-10-02). */}
+							<Logo variant="stacked" className="h-32" />
+						</div>
+						<div className="grid grid-cols-2 gap-x-8 gap-y-7 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">
+							{FOOTER_NAV.map((col) => (
+								<nav key={col.title} className="flex flex-col items-center gap-2">
+									<h6
+										style={serif}
+										className="text-xs font-semibold uppercase tracking-wider text-base-content/50"
 									>
-										{label}
-									</Link>
-								))}
-							</nav>
-						))}
+										{col.title}
+									</h6>
+									{col.links.map(([label, href]) => (
+										<Link
+											key={label}
+											to={href}
+											className="text-base-content/70 transition-colors hover:text-primary"
+										>
+											{label}
+										</Link>
+									))}
+								</nav>
+							))}
+						</div>
+						<p className="mt-9 text-center text-xs text-base-content/45">
+							© 2026 Anthers, Inc. · growing a creative garden for free, forever
+						</p>
 					</div>
-					<p className="mt-9 text-center text-xs text-base-content/45">
-						© 2026 Anthers, Inc. · growing a creative garden for free, forever
-					</p>
-				</div>
-			</footer>
+				</footer>
+			)}
 
 			{/* Climbing side vines spanning the whole page — in front of the content and
 				footer (z-20), behind the grassy floor below (z-30). Wide screens only. */}

@@ -5,8 +5,10 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { client } from "@anthers/web-shared/rpc";
 import FormField from "@anthers/web-shared/ui/FormField";
+import { AtSymbolIcon, EnvelopeIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import BlueskyMark from "../components/auth/BlueskyMark";
 import EmailCodeModal from "../components/auth/EmailCodeModal";
 import { mergeIntoServerBasket } from "../lib/basket";
 
@@ -140,6 +142,51 @@ export default function LoginPage() {
 			live = false;
 		};
 	}, []);
+
+	/**
+	 * What the person is typing, decided as they type it — this page's answer to Bluesky's
+	 * auto-detect field.
+	 *
+	 * ⚠️ **Detection commits late, and that is the affordance.** A complete shape gets its
+	 * own drawing — an envelope for an address, the butterfly for a Bluesky handle, a
+	 * primary `@` for an Anthers handle — and anything still under construction leans email
+	 * unless an `@` leads it, which is the half-formed state a handle-typist passes through
+	 * and an address-typist never does. The butterfly is shown only for a *complete*
+	 * foreign handle, never mid-word, so it never promises Bluesky to somebody who is only
+	 * getting started on an Anthers one.
+	 *
+	 * ⚠️ **This is the same routing `handleSubmit` runs, derived rather than separated** — one
+	 * order of checks, not two that could drift. The suffix may still be loading (null) or
+	 * empty (the node is down), and then every handle reads bluesky-or-partial, which is
+	 * where all handles were headed before this page knew about suffixes anyway.
+	 */
+	const trimmed = identifier.trim();
+	const signinMode: "idle" | "email" | "handle" | "anthers" | "bluesky" = (() => {
+		if (!trimmed) return "idle";
+		if (LOOKS_LIKE_EMAIL.test(trimmed)) return "email";
+		const bare = trimmed.replace(/^@/, "").toLocaleLowerCase();
+		if (hostedSuffix && bare.endsWith(`.${hostedSuffix}`)) return "anthers";
+		if (LOOKS_LIKE_HANDLE.test(trimmed)) return "bluesky";
+		if (trimmed.startsWith("@")) return "handle";
+		return "email";
+	})();
+
+	const SIGNIN_DRAWING = {
+		idle: <EnvelopeIcon className="h-5 w-5" />,
+		email: <EnvelopeIcon className="h-5 w-5" />,
+		handle: <AtSymbolIcon className="h-5 w-5" />,
+		anthers: <AtSymbolIcon className="h-5 w-5" />,
+		bluesky: <BlueskyMark className="h-4.5 w-4.5" />,
+	} as const;
+
+	const SIGNIN_HINT: Record<typeof signinMode, string> = {
+		idle: "An email or Anthers handle gets a sign-in code by mail; a Bluesky handle signs in through Bluesky.",
+		email: "A six-character sign-in code goes to this address.",
+		handle:
+			"An Anthers handle gets a sign-in code by mail; a Bluesky handle signs in through Bluesky.",
+		anthers: "A sign-in code goes to this account's email address.",
+		bluesky: "Bluesky confirms it's you, then brings you back.",
+	};
 
 	/** Where a code was just sent and how the browser will spend it, or null when none is in flight. */
 	const [sentCode, setSentCode] = useState<{
@@ -320,31 +367,39 @@ export default function LoginPage() {
 		// outer container uses min-h-screen (indefinite) rather than a fixed height.
 		<div className="flex flex-1 items-center justify-center px-4 py-10">
 			{/* Positioning context sized to the card, so the botanical corner flourishes
-				can be placed around it. */}
-			{/* ⚠️ Wider than the `max-w-md` it carried (2026-10-09): the routing hint is a
-				paragraph now, and a paragraph at 28rem read as a wall. The botanical
-				flourishes are positioned against this container, so they move with it. */}
-			<div className="relative w-full max-w-lg">
+				can be placed around it.
+				
+				⚠️ Back at `max-w-md` (2026-10-09, second pass): the widening to `max-w-lg`
+				that the paragraph hint asked for is undone by the hint itself — the routing
+				hints are now the short, live lines `signinMode` picks, and a 32rem card only
+				ever showed off how little fills it. The flourishes are positioned against
+				this container, so they move with it. */}
+			<div className="relative w-full max-w-md">
 				{/* Botanical leaf flourishes bracketing the card's four corners — one asset
 					rotated to each corner, so it frames the card without distortion. Purely
 					decorative (pointer-events-none) and theme-reactive via currentColor;
-					hidden on the smallest screens where they'd crowd the edges. */}
+					hidden on the smallest screens where they'd crowd the edges.
+					
+					⚠️ One size smaller with shallower insets (2026-10-09), riding the card's
+					height drop: the sprays reach about six rems in from each corner now, and
+					the card's clearance below the topmost and above the lowest content must
+					stay past that. If the card shrinks again, shrink these first. */}
 				{[
-					{ corner: "-top-9 -left-9", rot: 0 },
-					{ corner: "-top-9 -right-9", rot: 90 },
-					{ corner: "-bottom-9 -right-9", rot: 180 },
-					{ corner: "-bottom-9 -left-9", rot: 270 },
+					{ corner: "-top-8 -left-8", rot: 0 },
+					{ corner: "-top-8 -right-8", rot: 90 },
+					{ corner: "-bottom-8 -right-8", rot: 180 },
+					{ corner: "-bottom-8 -left-8", rot: 270 },
 				].map(({ corner, rot }) => (
 					<BrandGlyph
 						key={rot}
 						name="corner-leafy"
-						className={`pointer-events-none absolute z-20 hidden h-36 w-36 text-primary/70 sm:block ${corner}`}
+						className={`pointer-events-none absolute z-20 hidden h-32 w-32 text-primary/70 sm:block ${corner}`}
 						style={{ transform: `rotate(${rot}deg)` }}
 					/>
 				))}
 				<div
 					data-auth-fade
-					className="card relative z-10 min-h-[38rem] w-full bg-base-200 shadow-lg"
+					className="card relative z-10 min-h-[30rem] w-full bg-base-200 shadow-lg"
 				>
 					<div className="card-body justify-center">
 						{suspended ? (
@@ -397,23 +452,13 @@ export default function LoginPage() {
 										<span>{errors.general}</span>
 									</div>
 								)}
-								<form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-1" noValidate>
+								<form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-2" noValidate>
 									<FormField
 										spaced
-										label="Email (jane@doe.com) or Handle (@janedoe.anthers.social)"
-										hint={
-											/* Two paragraphs rather than one wall of small text (2026-10-09):
-											   the sentences answer different questions — what gets a code,
-											   what gets sent to Bluesky. */
-											<>
-												<span className="block">
-													Enter your email or Anthers handle to sign in with an emailed code.
-												</span>
-												<span className="mt-2 block">
-													Enter your Bluesky handle to sign in with OAuth.
-												</span>
-											</>
-										}
+										label="Email or handle"
+										icon={SIGNIN_DRAWING[signinMode]}
+										iconName={signinMode === "email" ? "email" : signinMode}
+										hint={SIGNIN_HINT[signinMode]}
 									>
 										{/* 🚨 `type="text"`, and that is load-bearing: the browser's built-in
 								    email validation would fire *before* React sees the submit and say
@@ -429,7 +474,7 @@ export default function LoginPage() {
 										<input
 											type="text"
 											inputMode={identifier.startsWith("@") ? "url" : "email"}
-											className="input input-bordered w-full"
+											className="input input-bordered w-full pl-10"
 											autoComplete="username"
 											value={identifier}
 											onChange={(e) => setIdentifier(e.target.value)}
