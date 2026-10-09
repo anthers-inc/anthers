@@ -170,18 +170,20 @@ test.describe("signing up with Bluesky", () => {
 		).toBeVisible();
 	});
 
-	test("this door says it creates an account, where the login one says it cannot", async ({
+	test("this door says it creates an account, where the login one never claims to", async ({
 		page,
 	}) => {
 		await page.goto("/signup");
 		await openBlueskyDoor(page);
 		await expect(page.getByText(/doesn't create one/i)).toHaveCount(0);
 
-		// The other door, which still uses the modal because `/login`'s card has no room for
-		// an inline field. Two doors, two promises, and neither may quietly become the other.
+		// The other door no longer speaks at all: `/login` has no separate Bluesky button,
+		// modal or signup-shaped promise — every handle routes from its one field (2026-10-09).
+		// Two doors, two promises, and neither may quietly become the other, which is now
+		// guarded by the login page's very silence.
 		await page.goto("/login");
-		await page.getByRole("button", { name: /log in with bluesky/i }).click();
-		await expect(page.getByText(/doesn't create one/i)).toBeVisible();
+		await expect(page.getByRole("button", { name: /log in with bluesky/i })).toHaveCount(0);
+		await expect(page.getByRole("heading", { name: /what's your handle/i })).toHaveCount(0);
 	});
 
 	test("this page never becomes the one that finishes a Bluesky signup", async ({ page }) => {
