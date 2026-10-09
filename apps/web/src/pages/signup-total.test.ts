@@ -156,26 +156,26 @@ describe("what a rung adds over the one below it", () => {
 		// and nothing else. Compared on the figure alone, `50 === 50`, and the upgrade
 		// disappears from the one card whose whole job is to say what Root adds. The cell's
 		// qualifier is what the diff sees; drop it from the comparison and this fails.
-		expect(titles(root, free)).toContain("Cloud Content Storage");
+		expect(titles(root, free)).toContain("Cloud Storage");
 	});
 
 	test("marks the perks that are committed and not built, and only those", () => {
 		// Root carries every perk, so its card lists them all. A perk that ships drops out of
-		// this list in the same change that builds it.
+		// this list in the same change that builds it — Cloud Storage and Purchase
+		// Preservation shipped 2026-10-09 (#409/#412/#414), and Merch Discount is what
+		// remains unbuilt, because the shop does not exist yet.
 		const unbuilt = marginalRows(root, free)
 			.concat(marginalRows(root, null))
 			.filter((row) => row.notBuilt)
 			.map((row) => row.title);
-		expect([...new Set(unbuilt)].sort()).toEqual(
-			["Cloud Content Storage", "Merch Discount", "Purchase Preservation"].sort(),
-		);
+		expect([...new Set(unbuilt)].sort()).toEqual(["Merch Discount"].sort());
 	});
 
 	test("a middle rung adds only what actually moves", () => {
 		// Public Access, preservation, merch and recognition are all identical at Root and
 		// Sprout, so a Sprout card that listed them would be padding a comparison.
 		expect(titles(sprout, root).sort()).toEqual(
-			["Cloud Content Storage", "Monthly Sticker Budget", "Monthly Time Pool"].sort(),
+			["Cloud Storage", "Monthly Sticker Budget", "Monthly Time Pool"].sort(),
 		);
 	});
 
