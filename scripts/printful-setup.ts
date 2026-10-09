@@ -53,7 +53,10 @@ function parseArgs() {
 	};
 	const slug = get("slug");
 	const product = get("product");
-	const sizes = (get("sizes") ?? "S,M,L,XL,2XL").split(",").map((s) => s.trim()).filter(Boolean);
+	const sizes = (get("sizes") ?? "S,M,L,XL,2XL")
+		.split(",")
+		.map((s) => s.trim())
+		.filter(Boolean);
 	const printUrlTemplate = get("print-url");
 	const listPrice = get("list-price");
 	if (!slug || !product || !printUrlTemplate) {
@@ -140,9 +143,7 @@ async function main() {
 
 	// Find the store's existing Sync Product for this Work, or create it.
 	const storeProducts = await pf<{ result: SyncProductRow[] }>("GET", "/store/products");
-	const existingProduct = storeProducts.result.find(
-		(p) => p.external_id === `merch-${work.id}`,
-	);
+	const existingProduct = storeProducts.result.find((p) => p.external_id === `merch-${work.id}`);
 
 	let syncProductId: number;
 	if (existingProduct) {
@@ -201,9 +202,7 @@ async function main() {
 		"GET",
 		`/store/products/${syncProductId}`,
 	);
-	const storeByExternal = new Map(
-		stored.result.items.map((sv) => [sv.external_id ?? "", sv]),
-	);
+	const storeByExternal = new Map(stored.result.items.map((sv) => [sv.external_id ?? "", sv]));
 
 	// The merch_variants rows — one per size, updated on re-run.
 	for (const size of sizes) {

@@ -36,7 +36,7 @@ import {
 	works,
 } from "@anthers/db/schema";
 import { cycleEnd, cycleStart } from "@anthers/shared/billing-cycle";
-import type { Badge, BadgeKey } from "@anthers/shared/constants";
+import type { Badge } from "@anthers/shared/constants";
 import {
 	CLOTHING_TAX_CODE,
 	heldBadgeName,
