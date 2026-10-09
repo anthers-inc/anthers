@@ -18,7 +18,17 @@
  */
 
 import { afterAll } from "bun:test";
+import { holdUnitTestLock, isFullUnitTestRun } from "./heavy-run.ts";
 import { reusesSession, startSession } from "./session.ts";
+
+// The verify lane's machine-wide lock, before any session starts (the session boot is part
+// of the run that must not overlap another session's). `heavy-run.ts` covers the
+// invocation nobody else can wrap — a bare full `bun test`. A scoped `bun test <path>` run
+// never locks; a run already inside `make verify`'s or the push hook's held lane skips (the
+// held env var); CI skips (ephemeral runners, no sibling sessions).
+if (isFullUnitTestRun() && !reusesSession(process.env.ANTHERS_SESSION, "test")) {
+	await holdUnitTestLock((line) => console.error(line));
+}
 
 if (!reusesSession(process.env.ANTHERS_SESSION, "test")) {
 	const session = await startSession("test", (line) => console.error(line));
