@@ -363,8 +363,9 @@ export const ROADMAP: RoadmapGroup[] = [
 						title: "Being Told Something Happened",
 						blurb:
 							"Hearing when somebody engages with your work, or a creator you follow publishes.",
-						bucket: "active",
-						note: "The feed, bell and social notices are new. Purchases and payouts still tell nobody.",
+						bucket: "launched",
+						quarter: SHIPPED_SO_FAR,
+						note: "The feed, bell, per-group choices and unsubscribe are new. Money stays as receipts.",
 					},
 					{
 						id: "custom-pages",
