@@ -1871,9 +1871,8 @@ function SignupForm({
 	 *
 	 * ⭐ **The handle used to be collected in a step of its own** — press the button, meet
 	 * `BlueskyHandleModal`, type the handle, press again, leave. That is two presses and a
-	 * layer for one short field, and this card has room the `/login` card genuinely does
-	 * not (its botanical flourishes reach about seven rems in from each corner, which is
-	 * why the modal exists at all and why `/login` keeps it).
+	 * layer for one short field. The modal is gone everywhere now (2026-10-09): `/login`
+	 * stopped collecting handles in one the same day, routing them from its single field.
 	 *
 	 * ⚠️ **The panel is a field and a button, and nothing else** (Parker, 2026-08-24). It
 	 * carried a paragraph explaining the round trip, which made the Bluesky tab twice the
