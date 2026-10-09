@@ -13,12 +13,29 @@ interface FormFieldProps {
 	hint?: ReactNode;
 	children: ReactNode;
 	required?: boolean;
+	/**
+	 * Extra breathing room between the control and the text above and below it.
+	 *
+	 * ⚠️ **Opt-in, because every form on the site renders through this component** and a
+	 * spacing change here is invisible in review and everywhere at once in production.
+	 * The default stays tight, which is what one-line labels and one-line hints want;
+	 * a field whose hint is *paragraphs* (the login page's two-door routing sentence)
+	 * opts in so the label and the hint stop reading as one block with a box wedged in.
+	 */
+	spaced?: boolean;
 }
 
 /** The controls a `<label htmlFor>` can name. Anything else keeps its own labeling. */
 const LABELABLE = new Set(["input", "select", "textarea"]);
 
-export default function FormField({ label, error, hint, children, required }: FormFieldProps) {
+export default function FormField({
+	label,
+	error,
+	hint,
+	children,
+	required,
+	spaced,
+}: FormFieldProps) {
 	// Tie the label to the control when the field wraps exactly one native control, which is
 	// nearly every caller. Without it the label is text beside an unnamed input: a screen reader
 	// announces "edit text", and clicking the label focuses nothing. A composite child — an
@@ -40,7 +57,7 @@ export default function FormField({ label, error, hint, children, required }: Fo
 	// SHARED component, so it reaches every form that has ever passed a long `hint` or
 	// surfaced a long `error`. Found by `mobile-overflow.e2e.ts`; keep the class.
 	return (
-		<div className="form-control w-full">
+		<div className={spaced ? "form-control gap-2 w-full" : "form-control w-full"}>
 			<label htmlFor={controlId} className="label whitespace-normal">
 				<span className="label-text">
 					{label}

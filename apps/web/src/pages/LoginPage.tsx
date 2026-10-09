@@ -321,7 +321,10 @@ export default function LoginPage() {
 		<div className="flex flex-1 items-center justify-center px-4 py-10">
 			{/* Positioning context sized to the card, so the botanical corner flourishes
 				can be placed around it. */}
-			<div className="relative w-full max-w-md">
+			{/* ⚠️ Wider than the `max-w-md` it carried (2026-10-09): the routing hint is a
+				paragraph now, and a paragraph at 28rem read as a wall. The botanical
+				flourishes are positioned against this container, so they move with it. */}
+			<div className="relative w-full max-w-lg">
 				{/* Botanical leaf flourishes bracketing the card's four corners — one asset
 					rotated to each corner, so it frames the card without distortion. Purely
 					decorative (pointer-events-none) and theme-reactive via currentColor;
@@ -396,8 +399,21 @@ export default function LoginPage() {
 								)}
 								<form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-1" noValidate>
 									<FormField
+										spaced
 										label="Email (jane@doe.com) or Handle (@janedoe.anthers.social)"
-										hint="Enter your email or Anthers handle to sign in with an emailed code. Enter your Bluesky handle to sign in with OAuth."
+										hint={
+											/* Two paragraphs rather than one wall of small text (2026-10-09):
+											   the sentences answer different questions — what gets a code,
+											   what gets sent to Bluesky. */
+											<>
+												<span className="block">
+													Enter your email or Anthers handle to sign in with an emailed code.
+												</span>
+												<span className="mt-2 block">
+													Enter your Bluesky handle to sign in with OAuth.
+												</span>
+											</>
+										}
 									>
 										{/* 🚨 `type="text"`, and that is load-bearing: the browser's built-in
 								    email validation would fire *before* React sees the submit and say
