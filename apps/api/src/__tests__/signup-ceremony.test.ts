@@ -39,8 +39,9 @@ import {
 	SIGNUP_CODE_RESEND_MS,
 	SIGNUP_CODE_TTL_MS,
 } from "../services/signup-codes.js";
+import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { signUp, spendCode } from "./signup-fixture";
+import { clearThrottle, signUp, spendCode } from "./signup-fixture";
 
 // Every account this suite creates is taken back afterward, on success or failure.
 purgeAccountsCreatedHere();
@@ -525,5 +526,95 @@ describe("a pending account has no hidden public existence", () => {
 		// And nothing in the payload carries a null handle, which is the shape the
 		// browser's `PublicUser.handle: string` promises.
 		expect(after.creators.every((c) => typeof c.handle === "string")).toBe(true);
+	});
+});
+
+/**
+ * The handle enters the ceremony by becoming an address **on the server** — a hosted
+ * handle resolves to the account's own mailbox before any code machinery runs, and the
+ * browser spends the code keyed on the handle it typed (2026-10-09). What these tests pin
+ * is the joining seam, because everything on the far side of it is already pinned above:
+ * the handle's hosted suffix is the only thing that admits it, an unresolved handle
+ * answers exactly the way a dead address does, and the browser's `@` and casing change
+ * nothing.
+ */
+describe("a hosted handle enters the sign-in ceremony as an address", () => {
+	/** A hosted fixture account with a suite-scoped email, so cleanup reaches it. */
+	function hostedAccountFor(tag: string) {
+		return createAccount(`cer${tag}`, { email: addr(tag) });
+	}
+
+	/** The session's handle domain, learned from any fixture handle rather than guessed. */
+	function suffixOf(handle: string): string {
+		return `.${handle.split(".").slice(1).join(".")}`;
+	}
+
+	test("a hosted handle mints its code keyed on the account's own address", async () => {
+		const acct = await hostedAccountFor("hsih");
+		const res = await post("/api/auth/signin/start", { handle: acct.handle });
+		expect(res.status).toBe(200);
+
+		// The row is the assertion the response cannot make: the code went to the address
+		// only the account holder reads, keyed exactly where the email-driven door keys it.
+		const [row] = await db.select().from(signupCodes).where(eq(signupCodes.email, acct.email));
+		expect(row, "a handle-driven code keys on the account's own address").toBeTruthy();
+	});
+
+	test("the way people write it — with the `@`, in any case — changes nothing", async () => {
+		const acct = await hostedAccountFor("hswt");
+		const res = await post("/api/auth/signin/start", { handle: `@${acct.handle.toUpperCase()}` });
+		expect(res.status).toBe(200);
+
+		const [row] = await db.select().from(signupCodes).where(eq(signupCodes.email, acct.email));
+		expect(row, "`@` prefix and casing are writing style, not different accounts").toBeTruthy();
+	});
+
+	test("a hosted handle that resolves to nobody answers byte-identically to one that does", async () => {
+		const acct = await hostedAccountFor("hknw");
+		// Well-formed, under the hosted suffix, belonging to nobody — the spelling that
+		// would leak existence if the answer differed in any byte.
+		const nobody = `nosuch${RUN.slice(-6)}${suffixOf(acct.handle)}`;
+
+		const unknownRes = await post("/api/auth/signin/start", { handle: nobody });
+		const knownRes = await post("/api/auth/signin/start", { handle: acct.handle });
+
+		expect(unknownRes.status).toBe(200);
+		expect(knownRes.status).toBe(200);
+		// Byte-identical to the address door's rule, restated for the handle door: a
+		// second endpoint over the same table is only as quiet as the louder of them.
+		const unknownBody = await unknownRes.text();
+		const knownBody = await knownRes.text();
+		expect(unknownBody).toBe(knownBody);
+		expect(unknownBody).toBe(JSON.stringify({ success: true }));
+	});
+
+	test("verify keyed on the handle spends the code and signs the account in", async () => {
+		const acct = await hostedAccountFor("hvin");
+		await clearThrottle(acct.email);
+		const issued = await issueSignInCode(acct.email);
+
+		// The body the browser sends: the handle it typed and the code it read — the
+		// mailbox it is keyed on was never sent to the browser, so this is the only
+		// spending shape a handle-driven sign-in has.
+		const res = await post("/api/auth/signin/verify", { handle: acct.handle, code: issued.code });
+		expect(res.status).toBe(200);
+		expect(res.headers.get("Set-Cookie") ?? "").toContain("session=");
+
+		const body = (await res.json()) as { user: { handle: string } };
+		expect(body.user.handle).toBe(acct.handle);
+	});
+
+	test("🚨 verify keyed on a handle that resolved to nobody creates NOTHING", async () => {
+		const acct = await hostedAccountFor("hnvm");
+		const nobody = `nosuch${RUN.slice(-6)}${suffixOf(acct.handle)}`;
+
+		const res = await post("/api/auth/signin/verify", { handle: nobody, code: "AAAAAA" });
+
+		expect(res.status).toBe(400);
+		expect(res.headers.get("Set-Cookie") ?? "").not.toContain("session=");
+		// Refused in the verify pair's one voice, reason `no_code` — the same answer a
+		// wrong code gets, never a distinguishable "no such handle" (and never a mint).
+		const body = (await res.json()) as { reason: string };
+		expect(body.reason).toBe("no_code");
 	});
 });

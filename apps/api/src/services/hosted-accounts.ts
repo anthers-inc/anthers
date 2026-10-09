@@ -161,6 +161,43 @@ export async function hostedHandleFor(
 }
 
 /**
+ * The mailbox Anthers holds for the account a typed handle belongs to, or null.
+ *
+ * 🚨 **Handles Anthers did not issue resolve to nothing here, by construction.** The check
+ * is the suffix the node itself reports — anything not ending in `.anthers.social` (or
+ * whatever the session's node answers) is a foreign identity that signs in through its own
+ * server via OAuth, and this function refuses it *before* the database is asked, so no
+ * account with a brought custom-domain handle can be reached by typing its handle here.
+ * That restriction is what keeps the emailed-code door honest: Anthers resolves only its
+ * own records, never the public network's, and the address it mails is the one the account
+ * holder gave at signup — the code lands in the holder's own mailbox with the code
+ * service's per-address resend throttle and the route's per-IP send limit bounding how
+ * often a typist can trigger it.
+ *
+ * ⚠️ **Null covers "not hosted", "unknown node", and "no such account" alike**, because
+ * every one of those callers answers the same way — nothing was issued, nothing was sent,
+ * and the response does not say which. The caller burns a code's worth of hashing when
+ * this returns null, so a refusal costs what a send costs and the timing answers nothing
+ * either. The leading `@` and the case somebody typed in are stripped, matching how
+ * handles are written everywhere else on the page.
+ */
+export async function signinAddressForHostedHandle(
+	rawHandle: string,
+	opts: { fetchImpl?: typeof fetch } = {},
+): Promise<string | null> {
+	const suffix = await hostedHandleSuffix(opts);
+	if (!suffix) return null;
+	const handle = rawHandle.trim().toLowerCase().replace(/^@/, "");
+	if (!handle.endsWith(`.${suffix}`)) return null;
+	const [user] = await db
+		.select({ email: users.email })
+		.from(users)
+		.where(eq(users.atprotoHandle, handle))
+		.limit(1);
+	return user?.email ?? null;
+}
+
+/**
  * Turn whatever somebody typed into the name part of a handle.
  *
  * The rule is `@anthers/shared/handles`'; this only supplies the suffix, which that module

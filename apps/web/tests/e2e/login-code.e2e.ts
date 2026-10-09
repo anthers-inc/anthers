@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Signing in from `/login`, which is the emailed code and nothing else.
+ * Signing in from `/login`: the emailed code, or a Bluesky handle through OAuth.
  *
  * No account holds a password (Parker, 2026-09-13), so this page has no password field
- * and no route it could post one to: the one form asks for an email address, mails it a
- * six-character code, and opens the same six-box field `/signup` uses.
+ * and no route it could post one to: the one form asks for an identifier, routes on what
+ * it is, and the emailed-code half shares the six-box field `/signup` uses.
  *
  * ⚠️ **Completing a sign-in with the real code is `emailed-code.e2e.ts`'s job**, which reads the
  * code out of the session's mail catcher. This spec pins the page around it — including that
@@ -18,9 +18,10 @@
  * assertion to protect: a `/login` that minted accounts would be the second signup door the
  * 2026-08-17 consolidation removed, and it would look perfectly correct from this page.
  *
- * So what is pinned here is the browser half: the page asks for an address and says what the
- * button does, a handle is routed to the Bluesky door rather than mistaken for an address, and
- * a refused code signs nobody in.
+ * So what is pinned here is the browser half: the page asks for an identifier and says
+ * what each shape of one does, a typed `@` is recognized as the start of a handle, and a
+ * refused code signs nobody in. The OAuth half of the routing is `login-bluesky.e2e.ts`'s,
+ * and the hosted-handle walk that signs in is `emailed-code.e2e.ts`'s.
  */
 import { API_URL, expect, test } from "./fixtures";
 
@@ -28,27 +29,48 @@ import { API_URL, expect, test } from "./fixtures";
 const addr = () => `e2e-login-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 
 test.describe("signing in with an emailed code", () => {
-	test("the card asks for an email address or handle and offers no password field", async ({
+	test("the card asks for an address or handle, states both doors, and offers no password field", async ({
 		page,
 	}) => {
 		await page.goto("/login");
 
 		// 🚨 The load-bearing absence: a password input on this page is the old door
-		// rebuilt. The form asks for the address the code goes to and nothing else.
+		// rebuilt. The form asks for the identifier the code goes to and nothing else.
 		await expect(page.locator('input[type="password"]')).toHaveCount(0);
 		await expect(page.locator('input[autocomplete="username"]')).toHaveCount(1);
 
-		await expect(page.getByText(/six-character sign-in code/i)).toBeVisible();
+		// The label names both shapes with an example of each, and the hint under the
+		// field says what each one does (Parker, 2026-10-09) — the routing a person can
+		// learn before they press anything.
+		await expect(page.getByText(/email \(jane@doe\.com\) or handle/i)).toBeVisible();
+		await expect(
+			page.getByText(/enter your email or anthers handle to sign in with an emailed code/i),
+		).toBeVisible();
 		await expect(page.getByRole("button", { name: /^continue$/i })).toBeVisible();
+	});
+
+	test("typing an `@` switches the field to handle mode", async ({ page }) => {
+		await page.goto("/login");
+
+		// The recognition is the keyboard, not the routing: email keyboard first, then the
+		// moment a `@` leads the value the keyboard the rest of a handle wants — dots and
+		// letters, no `.com` suggestions (Parker, 2026-10-09).
+		const field = page.locator('input[autocomplete="username"]');
+		await expect(field).toHaveAttribute("inputmode", "email");
+		await field.fill("@");
+		await expect(field).toHaveAttribute("inputmode", "url");
+		await field.fill("jane@doe.com");
+		await expect(field).toHaveAttribute("inputmode", "email");
 	});
 
 	test("something that is neither an address nor a handle is asked for one", async ({ page }) => {
 		await page.goto("/login");
 
-		// The code is keyed on the email address, and resolving a public username to a
-		// private mailbox would let anyone mail anyone by guessing handles — so a bare
-		// word is refused by the page's own shape check, and the message is the page's
-		// own too, since the input is deliberately not `type="email"`.
+		// ⚠️ A foreign handle is resolved by the identity's own server, never by Anthers'
+		// postbox — Anthers turns only its OWN handles into mailboxes. But a bare word is
+		// neither an address nor any kind of handle, so it is refused by the page's own
+		// shape check, and the message is the page's own too, since the input is
+		// deliberately not `type="email"`.
 		await page.locator('input[autocomplete="username"]').fill("alice");
 		await page.getByRole("button", { name: /^continue$/i }).click();
 
