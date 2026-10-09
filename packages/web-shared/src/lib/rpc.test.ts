@@ -127,4 +127,25 @@ describe("the API origin under a named local URL (portless)", () => {
 			});
 		}
 	});
+
+	it("keeps the worktree's branch label ahead of the api label", () => {
+		// A branch's apps are served as `<branch>.<app>.localhost` — the site at
+		// `signup-page.anthers.localhost`, the API at `signup-page.api.anthers.localhost`.
+		// The naked `api.` prefix put the page's calls at a host nobody serves.
+		const prev = globalThis.location;
+		Object.defineProperty(globalThis, "location", {
+			value: { hostname: "creator-profile-layout.anthers.localhost" },
+			configurable: true,
+			writable: true,
+		});
+		try {
+			expect(apiBaseUrl()).toBe("https://creator-profile-layout.api.anthers.localhost");
+		} finally {
+			Object.defineProperty(globalThis, "location", {
+				value: prev,
+				configurable: true,
+				writable: true,
+			});
+		}
+	});
 });

@@ -96,7 +96,17 @@ export function apiBaseUrl(): string {
 		// A portless host carries the project in its name — the API lives on its own
 		// subdomain of that, so both sides share a parent and cookies scope correctly
 		// across the bounce.
-		return `https://api.${h}`;
+		//
+		// A git worktree's apps get the branch as a first label (`<branch>.anthers.localhost`
+		// for the site), so the API's `api.` label is inserted AFTER the branch label, not at
+		// the front — matching what portless actually serves and what `origins.ts` derives
+		// from the API's own PORTLESS_URL. A naked prefix produced `api.<branch>.anthers.localhost`,
+		// which nothing serves, and every SPA call from a worktree-browsed page died at preflight.
+		const name = h.slice(0, -".localhost".length);
+		const labels = name.split(".");
+		const apiName =
+			labels.length > 1 ? `${labels[0]}.api.${labels.slice(1).join(".")}` : `api.${labels[0]}`;
+		return `https://${apiName}.localhost`;
 	}
 	return "";
 }
