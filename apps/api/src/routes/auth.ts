@@ -39,6 +39,7 @@ import {
 	hostedHandleFor,
 	hostedIdentityOffered,
 	normalizeHandleName,
+	signinAddressForHostedHandle,
 } from "../services/hosted-accounts.js";
 import {
 	chooseHostedHandle,
@@ -57,14 +58,21 @@ import {
 } from "../services/pending-signups.js";
 import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 import { issueSignupChallenge, spendSignupChallenge } from "../services/signup-challenges.js";
-import { checkSignupCode, issueSignInCode, issueSignupCode } from "../services/signup-codes.js";
+import {
+	burnCodeWork,
+	checkSignupCode,
+	issueSignInCode,
+	issueSignupCode,
+} from "../services/signup-codes.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
 /**
- * Both emailed-code doors take the same two shapes — `/signup/*` (which may create an
- * account) and `/signin/*` (which never can). One pair of schemas, because the *request* is
- * genuinely the same request; what differs is what the route is willing to do with it.
+ * The emailed-code shapes `/signup/*` takes — an address, because signup's business is
+ * creating the account an address proves. `/signin/*` takes its own schemas below, which
+ * add the one thing signup may never accept: a hosted handle. A handle that resolved
+ * through the signup pair would mail a *create* code to an existing account's mailbox —
+ * the second signup door this file exists to keep closed.
  */
 const emailCodeStartSchema = z.object({
 	email: z.string().email().max(254),
@@ -166,6 +174,26 @@ const emailCodeVerifySchema = z.object({
 	 */
 	code: z.string().trim().length(6),
 });
+
+/**
+ * What `/signin/*` accepts that `/signup/*` must not: a **hosted handle** instead of an
+ * address. The route resolves it to the account's own mailbox before the code service
+ * runs, so the code keys, throttles and hashes exactly as an address-driven one does —
+ * the only difference is who supplied the address.
+ *
+ * ⚠️ **Why the browser supplies the handle raw and the API resolves it.** Whether a handle
+ * ends in the hosted suffix is the node's answer (`hostedHandleSuffix`), not copy the
+ * front end can hard-code — the suffix is `.anthers.social` in production and `.test` on a
+ * local network, and a second copy of that decision is how a wrong guess starts mailing
+ * people. The route is the ruling check; the front end only routes the *typing*.
+ */
+const signInStartSchema = z
+	.object({ email: z.string().email().max(254) })
+	.or(z.object({ handle: z.string().trim().min(1).max(253) }));
+
+const signInVerifySchema = z
+	.object({ email: z.string().email().max(254), code: z.string().trim().length(6) })
+	.or(z.object({ handle: z.string().trim().min(1).max(253), code: z.string().trim().length(6) }));
 
 /**
  * The only claim onboarding makes. `acceptTerms` must be literally `true` — the schema
@@ -741,7 +769,7 @@ const authRoutes = new Hono()
 	// can never mint an account.
 	//
 	// The same proof of address the signup ceremony uses, narrowed so that it can only ever
-	// sign someone in. `/login` asks for an email address and lands here.
+	// sign someone in. `/login` asks for an email address or a hosted handle and lands here.
 	//
 	// 🚨 **Why this is not just `/signup/start` called from a second page.** That pair
 	// *creates an account* when the address is unknown, which is the one thing the login
@@ -751,25 +779,45 @@ const authRoutes = new Hono()
 	// that second door, however little it looks like one.
 	//
 	// Step 1 — issue a code, but only to an address that already has an account. ALWAYS 200.
-	// The same per-IP send limit as /signup/start — the two doors hand the same mail to the
+	// The address comes two ways since 2026-10-09: typed directly, or as a hosted handle the
+	// route resolves to the account's own mailbox (`signinAddressForHostedHandle`) before
+	// anything else runs. Resolving *before* the issuer is what keeps every rule the code
+	// service holds — no row for an unknown account, the per-address resend throttle, the
+	// burn-on-miss — true by construction rather than restated here.
+	//
+	// ⚠️ **A handle that resolves to nothing answers inside this try with burned work and
+	// the same body**, so a refusal costs a refusal's worth of hashing and says nothing else.
+	// The unresolved set includes handles Anthers issued to nobody AND handles Anthers never
+	// issued at all — a foreign handle reaching here means the client's routing believed (or
+	// lied) that it was hosted, and the answer is still silence.
+	//
+	// The same per-IP send limit as /signup/start — the doors hand the same mail to the
 	// same sender, so one budget for one address*er*, keyed under the send door it shares.
-	.post("/signin/start", zValidator("json", emailCodeStartSchema, invalidBody), async (c) => {
-		const { email } = c.req.valid("json");
+	.post("/signin/start", zValidator("json", signInStartSchema, invalidBody), async (c) => {
+		const typed = c.req.valid("json");
 
 		const limited = await checkRate("auth-code-send", clientIp(c.req.raw.headers), 10, 3600);
 		if (!limited.ok) return limitResponse(limited);
 
 		try {
-			// `issueSignInCode` is the half that decides — see its note for why an unknown
-			// address gets no row (and not merely no email), and for the timing question.
-			const issued = await issueSignInCode(email);
-			if (issued.code) {
-				// Off the response path on purpose: awaiting a network call here would make
-				// "this address has an account" measurable in milliseconds, which is the
-				// question the identical body exists to refuse.
-				void sendSignInCodeEmail(email, issued.code).catch((err) => {
-					console.error("[signin/start] failed to send the code:", err);
-				});
+			// A hosted handle becomes its account's address here, in one place; an
+			// unresolved handle burns below. `issueSignInCode` remains the half that
+			// decides — see its note for why an unknown address gets no row (and not
+			// merely no email), and for the timing question.
+			const email =
+				"handle" in typed ? await signinAddressForHostedHandle(typed.handle) : typed.email;
+			if (email === null) {
+				await burnCodeWork();
+			} else {
+				const issued = await issueSignInCode(email);
+				if (issued.code) {
+					// Off the response path on purpose: awaiting a network call here would make
+					// "this address has an account" measurable in milliseconds, which is the
+					// question the identical body exists to refuse.
+					void sendSignInCodeEmail(email, issued.code).catch((err) => {
+						console.error("[signin/start] failed to send the code:", err);
+					});
+				}
 			}
 		} catch (err) {
 			console.error("[signin/start] failed to issue a code:", err);
@@ -783,11 +831,29 @@ const authRoutes = new Hono()
 	// Step 2 — spend the code and sign in. Creates nothing, ever.
 	//   The same per-IP guess limit as /signup/verify, for the same reason: the code
 	//   service caps one code's guesses, this caps one guesser's pace across codes.
-	.post("/signin/verify", zValidator("json", emailCodeVerifySchema, invalidBody), async (c) => {
-		const { email, code } = c.req.valid("json");
+	.post("/signin/verify", zValidator("json", signInVerifySchema, invalidBody), async (c) => {
+		const typed = c.req.valid("json");
+		const { code } = typed;
 
 		const limited = await checkRate("auth-code-verify", clientIp(c.req.raw.headers), 20, 3600);
 		if (!limited.ok) return limitResponse(limited);
+
+		// The resolution repeats deliberately: the browser never learns the mailbox a
+		// handle-driven code is keyed on (it is the account's private address), so this
+		// route re-resolves the same way the start route did. A handle resolving to
+		// nothing here can only mean one that was never resolved a code for, which is the
+		// `no_code` answer below — truthful, and told in the verify pair's one voice.
+		const email =
+			"handle" in typed ? await signinAddressForHostedHandle(typed.handle) : typed.email;
+		if (email === null) {
+			return c.json(
+				{
+					error: "That code didn't work. Check it, or ask for a new one.",
+					reason: "no_code",
+				},
+				400,
+			);
+		}
 
 		const result = await checkSignupCode(email, code);
 		if (!result.ok) {

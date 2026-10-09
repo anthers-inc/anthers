@@ -248,6 +248,20 @@ export async function issueSignInCode(rawEmail: string, now = new Date()): Promi
 	return issueSignupCode(email, now);
 }
 
+/**
+ * The work of answering "no code" with no answer of its own.
+ *
+ * `issueSignInCode` burns one argon2 hash on its miss branch so the response's cost cannot
+ * measure whether the address is known, and `signinAddressForHostedHandle` gives the
+ * `/signin` route a second way to reach the same miss: a typed handle that resolves to no
+ * account. A caller that refuses before ever reaching the issuer does its burning here
+ * instead, so all three paths — known address, unknown address, unknown handle — spend the
+ * same work and the uniform `{success:true}` body is the only thing anybody can learn.
+ */
+export async function burnCodeWork(): Promise<void> {
+	await hashPassword(generateSignupCode());
+}
+
 /** Why a code was refused, when it was. */
 export type CodeFailure = "no_code" | "expired" | "too_many_attempts" | "wrong_code";
 
