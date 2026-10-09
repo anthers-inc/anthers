@@ -95,6 +95,7 @@ import { and, eq, lt, notInArray } from "drizzle-orm";
 import { createTransfer, paymentsConfigured } from "../lib/processor.js";
 import { applyNettingPlan, nettingPlanFor } from "../services/netting.js";
 import { payoutStanding } from "../services/payouts.js";
+import { sendPayoutReceipt } from "../services/receipts.js";
 
 export interface TransferHeldCreditsData {
 	/**
@@ -301,6 +302,9 @@ async function transferOneCreator(
 
 	// The Stripe id, the coverage rows, and the netting recovery land in one transaction,
 	// because they describe one decision — see the module docblock.
+	let stripeTransferId: string | null = null;
+	let amount: string | null = null;
+	let transferredAt: Date = now;
 	await db.transaction(async (tx) => {
 		const [written] = await tx
 			.insert(creatorTransfers)
@@ -320,7 +324,26 @@ async function transferOneCreator(
 			.values(ids.map((creditId) => ({ transferId: written.id, creditId })))
 			.onConflictDoNothing();
 		await applyNettingPlan(tx, plan.applications);
+		stripeTransferId = transfer.id;
+		amount = sum.toFixed(2);
+		transferredAt = new Date(transfer.created * 1000);
 	});
+
+	// ⭐ The payout receipt, sent after the transaction commits. The conflict path (a
+	// retry whose row already exists) carries `null` ids out of the transaction and
+	// sends nothing: the first write was this call's to make, and only the writer mails.
+	// A crash between this transaction and the send leaves a transfer whose receipt was
+	// never attempted — the accepted residual edge, named here rather than hidden: the
+	// Failed-Mail panel cannot see it (no receipt row exists), and a future operator
+	// re-run of the creator finds no uncovered credits to re-derive the send from.
+	if (stripeTransferId != null && amount != null) {
+		await sendPayoutReceipt({ creatorId, stripeTransferId, amount, transferredAt }).catch(
+			// A send failure is recorded as failed by the receipt latch; this catch is for a
+			// throw the latch can't intercept (e.g. the preference read), which must not
+			// fail the job after the money already moved.
+			(error) => console.error(`transfer: payout receipt for ${creatorId} failed:`, error),
+		);
+	}
 
 	return true;
 }

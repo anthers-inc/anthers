@@ -19,6 +19,10 @@ import { expect, test } from "./fixtures";
 const BANDED_ROUTES = [
 	"/",
 	"/for-creators",
+	// The signup page composes its bands itself (see SURFACE_BAND in SignupPage.tsx — it
+	// is wider than the shared <Section> and its sections carry the page's scroll doors),
+	// with the same paints, so it belongs under the same alternation guard.
+	"/signup",
 	"/about",
 	"/faq",
 	"/roadmap",
