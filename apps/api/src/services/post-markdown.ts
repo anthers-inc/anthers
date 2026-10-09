@@ -31,6 +31,28 @@ const HTML_TO_MARKDOWN = new TurndownService({
 	codeBlockStyle: "fenced",
 	bulletListMarker: "-",
 	hr: "---",
+	/**
+	 * A blank paragraph is a creator pressing return twice for space between paragraphs,
+	 * so it must survive: markdown's own blank lines collapse to one paragraph break, and
+	 * turndown's default drops the paragraph entirely, meaning the space a creator drew
+	 * would be lost on storage and then again on every later normalization. The portable
+	 * spelling of "an empty line" is a paragraph holding one non-breaking space — it
+	 * renders as a full-height empty paragraph in remark's renderer and any other markdown
+	 * reader, and the round trip is stable by itself: `isBlank` reads `^\s*$`, which the
+	 * space satisfies, and CommonMark treats the character as text, so `marked` re-parses
+	 * the stored line into the same empty `<p>` and this rule runs again. Leading and
+	 * trailing blank paragraphs still fall to the final `trim()` in
+	 * `normalizeStoredMarkdown`, which is the right place for them to go.
+	 */
+	blankReplacement: (content, node) => {
+		// turndown augments every node with its own `isBlock` at runtime. The two
+		// newlines are the block separator itself and matter: turndown's `join`
+		// trims newlines between consecutive blocks, so a bare `\u00A0` would let
+		// two blank paragraphs merge into one line of two spaces — each return
+		// has to carry its own line.
+		const isBlock = (node as HTMLElement & { isBlock: boolean }).isBlock;
+		return isBlock && node.nodeName === "P" ? "\u00A0\n\n" : "";
+	},
 });
 
 // Turndown's default rule set is CommonMark only — GFM strikethrough (`<s>`, which the

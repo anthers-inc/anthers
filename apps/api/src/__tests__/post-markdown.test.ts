@@ -46,6 +46,29 @@ describe("postHtmlToMarkdown", () => {
 	});
 });
 
+describe("blank paragraphs", () => {
+	it("preserves a blank paragraph — the double return the editor produces", () => {
+		expect(postHtmlToMarkdown("<p>First</p><p></p><p>Second</p>")).toBe(
+			"First\n\n\u00A0\n\nSecond",
+		);
+	});
+
+	it("is stable over every later normalization of the stored spelling", () => {
+		const md = postHtmlToMarkdown("<p>First</p><p></p><p></p><p>Second</p>");
+		expect(normalizeStoredMarkdown(md)).toBe(md);
+	});
+
+	it("consecutive blank paragraphs each keep their own line", () => {
+		const md = postHtmlToMarkdown("<p>First</p><p></p><p></p><p>Second</p>");
+		expect(md).toBe("First\n\n\u00A0\n\n\u00A0\n\nSecond");
+	});
+
+	it("drops blank paragraphs at the edges of the body", () => {
+		expect(postHtmlToMarkdown("<p></p><p>Hello</p><p></p>")).toBe("Hello");
+		expect(normalizeStoredMarkdown("\u00A0\n\nHello")).toBe("Hello");
+	});
+});
+
 describe("normalizeStoredMarkdown", () => {
 	it("normalizes a hostile markdown body through the same allowlist", () => {
 		const hostile =
