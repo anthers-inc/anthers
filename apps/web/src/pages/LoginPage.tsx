@@ -481,7 +481,16 @@ export default function LoginPage() {
 										<input
 											type="text"
 											inputMode={identifier.startsWith("@") ? "url" : "email"}
-											className="input w-full border-2! border-base-content/60! pl-10"
+											/* 🚨 No border and one shadow, not two lines (Parker, 2026-10-09):
+											   daisyUI's `.input` was quietly drawing its own hairline pairs —
+											   a border at base-content/10 the utilities could not beat — and
+											   on focus it adds a 2px full-strength outline while zeroing the
+											   box-shadow, which is the double ring. So the resting edge is
+											   the shadow alone, focus answers with a single primary hairline
+											   over the same shadow, and the outline is gone. The important
+											   modifiers are load-bearing: the computed style, not the
+											   screenshot, is what found both overrides. */
+											className="input w-full pl-10 border-transparent! focus:border-primary/70! focus:outline-none! shadow-[0_3px_12px_color-mix(in_oklch,var(--color-base-content)_30%,transparent)]! focus:shadow-[0_3px_12px_color-mix(in_oklch,var(--color-base-content)_30%,transparent)]!"
 											autoComplete="username"
 											value={identifier}
 											onChange={(e) => setIdentifier(e.target.value)}

@@ -70,7 +70,7 @@ export default function FormField({
 	// surfaced a long `error`. Found by `mobile-overflow.e2e.ts`; keep the class.
 	return (
 		<div className={spaced ? "form-control gap-2 w-full" : "form-control w-full"}>
-			<label htmlFor={controlId} className="label whitespace-normal">
+			<label htmlFor={controlId} className={`label whitespace-normal ${spaced ? "mb-2.5" : ""}`}>
 				<span className="label-text">
 					{label}
 					{required && <span className="text-error ml-1">*</span>}
