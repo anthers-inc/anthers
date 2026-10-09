@@ -638,22 +638,23 @@ const PERK_ROWS: PerkRow[] = [
 		}),
 	},
 	{
-		title: "Cloud Content Storage",
-		notBuilt: true,
-		// 🚨 **The floor is COMBINED at every rung now (ruled 2026-10-07)**: the same
-		// allowance holds a catalog and the account's own files together, on every
-		// account — there is no "catalog only" rung to render. The surfaces (kept files,
-		// cloud saves) remain the Badge storage ladder task's build, so `notBuilt` stays.
-		// At-cost top-up from Root onward is ruled beside it and lands with the same work.
+		title: "Cloud Storage",
+		// 🚨 **Built, all of it, as of 2026-10-09** — no `notBuilt` flag on this row: the
+		// meter (#409), the at-cost top-up on the renewal (#412) and the keeping election
+		// + the claim-aware sweep (#414) are all on `main`, so the figure is live. The
+		// floor is COMBINED at every rung (ruled 2026-10-07): the same allowance holds a
+		// catalog and the account's own files together, on every account — there is no
+		// "catalog only" rung to render. At-cost top-up from Root onward is ruled (#412
+		// ships it): past the held allowance, more bytes are charged at the provider's
+		// rate with no mark-up, on the renewal.
 		desc: "Free storage for your catalog and your own files together, on every account. Each rung bundles more; past your Badge's allowance, more bytes are available at cost from Root onward.",
-		cell: (amount) => ({
-			value: `${storageGibFor(amount)} GiB`,
-			note: "catalog & your files",
-		}),
+		cell: (amount) => ({ value: `${storageGibFor(amount)} GiB` }),
 	},
 	{
 		title: "Purchase Preservation",
-		notBuilt: true,
+		// 🚨 **Built (#414)**: the claim-aware sweep + the keeping election are live — a
+		// purchase the creator withdraws stays servable while you keep it (keptAt), and
+		// the free account's ninety-day window is acted on, with the last-chance notice.
 		desc: "A Work you bought that its creator later withdrew stays in your library to download. After that, keeping a copy is yours to do.",
 		cell: (amount) => ({ value: amount > 0 ? "While Badged" : `${WITHDRAWN_RESCUE_DAYS} days` }),
 	},
@@ -1536,15 +1537,14 @@ function FreeInclusions() {
 		},
 		{
 			icon: ServerStackIcon,
-			// ⚠️ **The floor is COMBINED now (ruled 2026-10-07, this branch):** the same
-			// allowance holds a creator's catalog *and*, once the Badge storage ladder task
-			// builds the kept-file surface, the account's own files — on every account, no
-			// Badge needed for the floor. The build is not here yet, so the sentence keeps
-			// to what is real today (storing your catalog) and signposts the rest as
-			// "coming" rather than claiming a keeping mechanism that does not exist.
+			// 🚨 **Built (2026-10-09, #409/#412/#414):** the combined floor is live and
+			// metered — the same allowance holds a creator's catalog and the account's own
+			// files together, on every account, no Badge needed for the floor. Kept
+			// purchases draw it (the keeping election), cloud saves draw it (the sync
+			// perk), and the renewal carries an at-cost line past it from Root onward.
 			// The `6+` is DERIVED, never typed — see `FREE_VIDEO_HOURS`.
 			label: `${FREE_STORAGE_GIB} GiB of storage`,
-			sub: `Store the equivalent of ${FREE_VIDEO_HOURS}+ hours of Full HD video for free in your catalog — and storage for what you keep is coming, on the same allowance.`,
+			sub: `Store the equivalent of ${FREE_VIDEO_HOURS}+ hours of Full HD video for free — one allowance for your catalog and everything you keep, on every account.`,
 		},
 	];
 	return (

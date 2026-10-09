@@ -479,9 +479,9 @@ function renderPerkLadderMarkdown(): string {
 			],
 		),
 		"",
-		"**Free viewing, the Time Pool and Stickers are live today. The storage floor is committed and not built yet.**",
+		"Free viewing, the Time Pool and Stickers are live today — and so is storage now (2026-10-09): the floor is metered, kept purchases and cloud saves draw it, and the renewal carries an at-cost line past it from Root onward.",
 		"",
-		`A free account's Time Pool is paid by Anthers on its behalf. Its ${FREE_STORAGE_GIB} GiB of storage is combined — a creator's catalog and the account's own kept files together, on every account, no Badge needed for either purpose. Each rung bundles more, and past a held rung's allowance more bytes are available at cost from Root onward — the provider's rate, with no mark-up. The storage surfaces themselves (kept files, cloud saves) are committed and not built yet.`,
+		`A free account's Time Pool is paid by Anthers on its behalf. Its ${FREE_STORAGE_GIB} GiB of storage is combined — a creator's catalog and the account's own kept files together, on every account, no Badge needed for either purpose. Each rung bundles more, and past a held rung's allowance more bytes are available at cost from Root onward — the provider's rate, with no mark-up. Keeping a withdrawn purchase past the window and syncing a game's save are both live; each draws the same allowance, a kept Work's cost shared 1/N among its keepers.`,
 		"",
 		"**The Sticker column is part of the Time Pool column rather than an addition to it.** A Sticker is money already on its way to creators, handed by you to a particular one instead of being shared out by the time you spend. Whatever you do not hand out is shared by time as usual, so the two columns overlap on purpose and giving no Stickers costs creators nothing.",
 	].join("\n");
