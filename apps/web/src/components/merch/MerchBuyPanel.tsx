@@ -15,8 +15,11 @@
  * ("about $20 to print, the rest funds Anthers' programs") lives in the wiki's copy, not
  * in a checkout.
  */
+
+import { withNextPath } from "@anthers/shared/next-path";
+import { useAuth } from "@anthers/web-shared/auth";
+import { Link, useLocation } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import type { AccessResult } from "@anthers/web-shared/types";
 import {
 	CheckoutElementsProvider,
 	PaymentElement,
@@ -34,7 +37,6 @@ import {
 interface MerchBuyPanelProps {
 	workId: number;
 	slug: string;
-	access: AccessResult;
 	title: string;
 }
 
@@ -64,7 +66,9 @@ interface MerchQuote {
 	clientSecret: string;
 }
 
-export default function MerchBuyPanel({ slug, access }: MerchBuyPanelProps) {
+export default function MerchBuyPanel({ slug }: MerchBuyPanelProps) {
+	const { isAuthenticated } = useAuth();
+	const location = useLocation();
 	const [colors, setColors] = useState<MerchColorGroup[] | null>(null);
 	const [variantsError, setVariantsError] = useState<string | null>(null);
 	const [color, setColor] = useState<string | null>(null);
@@ -125,8 +129,6 @@ export default function MerchBuyPanel({ slug, access }: MerchBuyPanelProps) {
 			setCreating(false);
 		}
 	};
-
-	if (access.isFree) return null;
 
 	if (session) {
 		// The session quote carries the goods line's breakdown; the color and size are
@@ -243,14 +245,31 @@ export default function MerchBuyPanel({ slug, access }: MerchBuyPanelProps) {
 				)}
 
 				<div className="grid gap-2 w-full mt-auto">
-					<button
-						type="button"
-						className="btn btn-primary w-full"
-						disabled={!size || !color || creating}
-						onClick={() => void createSession()}
-					>
-						{creating ? "Starting checkout…" : "Buy this shirt"}
-					</button>
+					{/*
+					    🚨 The door is the account's, not the button's: buying requires an
+					    account (the same ruling that put the signed-out wall in front of
+					    streaming), and the honest way to say so is a door that leads TO the
+					    account, carrying the Work they were looking at with it — not a 401
+					    discovered after the press. The picker above stays fully readable
+					    signed out; only the purchase asks.
+					*/}
+					{isAuthenticated ? (
+						<button
+							type="button"
+							className="btn btn-primary w-full"
+							disabled={!size || !color || creating}
+							onClick={() => void createSession()}
+						>
+							{creating ? "Starting checkout…" : "Buy this shirt"}
+						</button>
+					) : (
+						<Link
+							to={withNextPath("/signup", `${location.pathname}${location.search}`)}
+							className="btn btn-primary w-full"
+						>
+							Create an account to buy
+						</Link>
+					)}
 				</div>
 			</div>
 		</div>

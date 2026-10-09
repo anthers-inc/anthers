@@ -3897,7 +3897,7 @@ const contentRoutes = new Hono()
 				maturitySource: declaredOnCreate.maturity ? "creator" : null,
 				maturitySetAt: declaredOnCreate.maturity ? new Date() : null,
 				originallyReleased: data.originallyReleased ? new Date(data.originallyReleased) : null,
-				streamEnabled: data.streamEnabled ?? true,
+				streamEnabled: data.streamEnabled ?? !(data.type === "physical" || data.type === "service"),
 				downloadEnabled: data.downloadEnabled ?? false,
 				access: data.access ?? defaultSeedAccess(),
 				credits: data.credits ?? [],
@@ -4502,9 +4502,15 @@ const contentRoutes = new Hono()
 		// `.partial()`, which silently drops any create-time refine, so a PATCH sending only
 		// `streamEnabled: false` is valid or not depending on the STORED `downloadEnabled` —
 		// something a schema refine cannot see.
+		//
+		// 🚨 The floor binds only kinds with a delivery to enable. A goods Work (physical,
+		// service) delivers by being bought — there is no stream and no download to keep
+		// on (the goods-works rule; Parker, 2026-10-09), and requiring one of the two of a
+		// shirt would make every goods Work un-editable. The flags are normalized false
+		// below for exactly this reason.
 		const willStream = data.streamEnabled ?? work.streamEnabled;
 		const willDownload = data.downloadEnabled ?? work.downloadEnabled;
-		if (!willStream && !willDownload) {
+		if (!willStream && !willDownload && work.type !== "physical" && work.type !== "service") {
 			return c.json({ error: "A Work must enable at least one of stream or download" }, 400);
 		}
 
@@ -4679,8 +4685,14 @@ const contentRoutes = new Hono()
 		if (data.embedUrl !== undefined) updates.embedUrl = data.embedUrl;
 		if (data.durationSeconds !== undefined) updates.durationSeconds = data.durationSeconds;
 		if (data.metadata !== undefined) updates.metadata = data.metadata;
-		if (data.streamEnabled !== undefined) updates.streamEnabled = data.streamEnabled;
-		if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
+		// The goods kinds carry no stream/download flags — delivery is being bought
+		// (the goods-works rule), the Studio hides the switches, and any value a raw
+		// PATCH or a stale client still sends is dropped rather than stored: a shirt
+		// marked streamable would be a store page pretending to be a player.
+		if (!(work.type === "physical" || work.type === "service")) {
+			if (data.streamEnabled !== undefined) updates.streamEnabled = data.streamEnabled;
+			if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
+		}
 		if (data.access !== undefined) updates.access = data.access;
 		if (data.credits !== undefined) updates.credits = data.credits;
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;

@@ -78,6 +78,7 @@ import WebBuildSection from "@anthers/web-shared/content/WorkWebBuildSection";
 import {
 	fileRules,
 	isFileWorkType,
+	isGoodsWorkType,
 	UploadProgress,
 	useWorkDetails,
 	WorkFileSection,
@@ -1022,34 +1023,52 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 
 				<div className="flex flex-col gap-3">
 					<h2 className="font-semibold text-sm">Delivery</h2>
-					<div className="flex flex-wrap gap-4">
-						<label className="label cursor-pointer justify-start gap-2">
-							<input
-								type="checkbox"
-								className="checkbox checkbox-sm"
-								checked={streamEnabled}
-								// A Work must keep at least one way to be consumed; the server enforces
-								// it against the resulting state, so don't offer the click that fails.
-								disabled={streamEnabled && !downloadEnabled}
-								onChange={(e) => setStreamEnabled(e.target.checked)}
-							/>
-							<span className="label-text text-sm">Stream</span>
-						</label>
-						<label className="label cursor-pointer justify-start gap-2">
-							<input
-								type="checkbox"
-								className="checkbox checkbox-sm"
-								checked={downloadEnabled}
-								disabled={downloadEnabled && !streamEnabled}
-								onChange={(e) => setDownloadEnabled(e.target.checked)}
-							/>
-							<span className="label-text text-sm">Download</span>
-						</label>
-					</div>
-					<p className="text-xs text-base-content/50">
-						At least one is required. Only streaming work can be Public Access — downloads are paid
-						for by whoever bought or unlocked them.
-					</p>
+					{isGoodsWorkType(type) ? (
+						/*
+						    🚨 A goods Work carries no stream/download switches at all — that
+						    categorization was trying to force a shirt to answer "is it a
+						    video or a file?" (Parker, 2026-10-09). Its delivery is being
+						    bought; the store (the official account's setup) delivers a
+						    physical Work, and a service delivers itself. The switches do not
+						    exist for the goods kinds, and the server seeds and normalizes
+						    both flags false on them.
+						*/
+						<p className="text-xs text-base-content/50">
+							A physical Work or a service is delivered by being bought — there is no stream and no
+							download to switch on.
+						</p>
+					) : (
+						<>
+							<div className="flex flex-wrap gap-4">
+								<label className="label cursor-pointer justify-start gap-2">
+									<input
+										type="checkbox"
+										className="checkbox checkbox-sm"
+										checked={streamEnabled}
+										// A Work must keep at least one way to be consumed; the server enforces
+										// it against the resulting state, so don't offer the click that fails.
+										disabled={streamEnabled && !downloadEnabled}
+										onChange={(e) => setStreamEnabled(e.target.checked)}
+									/>
+									<span className="label-text text-sm">Stream</span>
+								</label>
+								<label className="label cursor-pointer justify-start gap-2">
+									<input
+										type="checkbox"
+										className="checkbox checkbox-sm"
+										checked={downloadEnabled}
+										disabled={downloadEnabled && !streamEnabled}
+										onChange={(e) => setDownloadEnabled(e.target.checked)}
+									/>
+									<span className="label-text text-sm">Download</span>
+								</label>
+							</div>
+							<p className="text-xs text-base-content/50">
+								At least one is required. Only streaming work can be Public Access — downloads are
+								paid for by whoever bought or unlocked them.
+							</p>
+						</>
+					)}
 				</div>
 
 				{/* The content rating, as one matrix of content and rating. Nothing is preselected —

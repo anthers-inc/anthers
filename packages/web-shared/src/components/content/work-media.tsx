@@ -40,6 +40,19 @@ export function isFileWorkType(type: string): type is FileWorkType {
 	return workNeedsFile(type);
 }
 
+/**
+ * The goods kinds — a physical object or a service — whose deliverable is the goods
+ * themselves: nothing uploads into them, nothing streams out of them, nothing the
+ * Public Access model can apply to (the goods-works rule in the API's resolver,
+ * Parker, 2026-10-09). Their only delivery is being bought, so the upload store,
+ * the stream/download toggles and the meter all sit the goods kinds out.
+ */
+export type GoodsWorkType = "physical" | "service";
+
+export function isGoodsWorkType(type: string): type is GoodsWorkType {
+	return type === "physical" || type === "service";
+}
+
 /** What a file picker for this kind accepts, and how large a file it takes. */
 export function fileRules(type: FileWorkType): { accept: string; maxSize: number; noun: string } {
 	switch (type) {
