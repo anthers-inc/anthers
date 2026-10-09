@@ -59,6 +59,11 @@
 // marketing page does, which is center a single column, and it put a choice and its
 // consequence in different eyelines.
 //
+// ⭐ The page carries the same full-bleed band rhythm the other top-level marketing pages
+// read as (alternating `bg-base-200/70` over bare base-100, tinted hero, untinted final
+// band) — see the note beside `SURFACE_BAND` below for why it composes them itself rather
+// than sharing the marketing `<Section>`.
+//
 // The question the page asks is *whether*, never *how much*: a creator pick is
 // follow-or-back rather than a stepper, because the amount is a conversation for after
 // the account exists and asking it here costs conversion for no information.
@@ -203,6 +208,23 @@ const PICKS_KEY = "anthers_signup_picks";
 
 /** The marketing display face, as the other marketing pages set it. */
 const serif = { fontFamily: FONTS.fraunces };
+
+// ── The band rhythm ────────────────────────────────────────────────────
+// /signup reads as alternating full-bleed bands like every top-level marketing page:
+// tinted (`SURFACE_BAND`) and plain (`SURFACE_PLAIN`) from a tinted hero down, ending on
+// an untinted final band so no two like surfaces touch. The strings MATCH the shared
+// <Section> paint exactly — `bg-base-200/70` over bare base-100, the same two surfaces the
+// dark-theme ramp lifts together — so the alternation reads as one rhythm across pages in
+// either theme.
+//
+// ⚠️ Why not the shared <Section> itself: this page is deliberately wider (88rem, not
+// Section's 72rem — Parker, 2026-08-23), its sections are spacers that carry their own
+// `id`s (the doors up top scroll to them) and their own spacing, and its Reveal-wrapped
+// steps sit INSIDE those spacers — Section would paint its band on a wrapper the page's
+// own structure doesn't own. Composing the two paints directly is the smaller change, and
+// the tint strings above are what keeps it honest to the shared look.
+const SURFACE_BAND = "bg-base-200/70";
+const SURFACE_PLAIN = "";
 
 /**
  * What a visitor chose, before any of it was committed.
@@ -2769,26 +2791,21 @@ export default function SignupPage() {
 	};
 
 	return (
-		// `min-w-0 w-full` breaks the flex-column min-content cascade so this wrapper can
-		// shrink below its content's min-content width on mobile; without `w-full`,
-		// `mx-auto` on a flex item disables the default `align-self: stretch`.
+		// The page reads as alternating full-bleed bands (see SURFACE_BAND above): each
+		// <section> below paints its surface across the viewport, and each band's inner
+		// container keeps the ONE max-width of `max-w-[88rem]` — never two on one element.
+		// (Fragment, not a wrapping div, so the bands are siblings of the shell's flex
+		// column and each paints edge to edge.)
 		//
-		// 🚨 ONE max-width, never two. This carried `max-w-full max-w-[80rem]` (inherited
-		// from the page it replaced), and Tailwind resolves that pair by source order in
-		// the generated stylesheet, not by order in the attribute — `.max-w-full` is
-		// emitted last, so it won and the page ran the full width of the viewport at every
-		// size. Nothing errors; the cap is simply never applied, which reads as a scattered
-		// layout rather than as a bug.
-		//
-		// ⚠️ **88rem is wider than the shared marketing `Section` (`max-w-6xl`, 72rem), and
-		// that is deliberate but temporary** (Parker, 2026-08-23): the whole site is due a
-		// size and layout pass to widen its columns and size its text up, and this page went
-		// first because it was being rebuilt anyway. When that pass lands, this number should
-		// become whatever `Section` settles on rather than staying a local exception.
-		<div className="mx-auto min-w-0 w-full max-w-[88rem] px-6 py-12 sm:py-16">
-			<div className="min-w-0">
-				<div>
-					{/* ── Join, before anything is asked for ─────────────────── */}
+		// Band order: tinted hero → plain creator → tinted Anthers → plain summary →
+		// tinted FAQ — five bands, alternating cleanly. An odd band count ends the page
+		// on the TINT (the shared alternation rule prefers alternation over bookending;
+		// the plain-close convention only applies to an even count, where ending tinted
+		// would bookend the page with two like bands together).
+		<>
+			{/* ── Hero · Join, before anything is asked for ─────────────── */}
+			<section className={SURFACE_BAND}>
+				<div className="mx-auto min-w-0 w-full max-w-[88rem] px-6 pt-12 pb-16 sm:pt-16 sm:pb-20">
 					<Reveal>
 						<div className="text-center">
 							<p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45">
@@ -2864,15 +2881,15 @@ export default function SignupPage() {
 							</div>
 						</div>
 					</Reveal>
+				</div>
+			</section>
 
-					{/* ── 1 · Support for a creator — the primary ask ───────────
-					    The `id` is the target of the "Support creators" door up top, and the
-					    `scroll-mt` keeps the heading clear of the sticky header when it lands. */}
-					<Reveal
-						delay={80}
-						id="creator-badges"
-						className="mt-16 scroll-mt-24 border-t border-base-content/10 pt-14"
-					>
+			{/* ── 1 · Support for a creator — the primary ask ───────────
+			    The `id` is the target of the "Support creators" door up top, and the
+			    `scroll-mt` keeps the heading clear of the sticky header when it lands. */}
+			<section className={SURFACE_PLAIN}>
+				<div className="mx-auto min-w-0 w-full max-w-[88rem] px-6 pt-16 pb-14 sm:pt-20 sm:pb-16">
+					<Reveal delay={80} id="creator-badges" className="scroll-mt-24">
 						<StepHeading n={1} title="Creator Badges">
 							Creators each name their own monthly Badges, which unlock special content,
 							behind-the-scenes access, and more. And when you back a creator with a Badge or a
@@ -2912,17 +2929,18 @@ export default function SignupPage() {
 							empty="No creators picked yet — following is free whenever you're ready."
 						/>
 					</Reveal>
+				</div>
+			</section>
 
-					{/* ── 2 · Support for Anthers — the optional second thing ───
+			{/* ── 2 · Support for Anthers — the optional second thing ───
 					    🚨 The one section this page must not let read as a requirement. Plenty of
 					    people will be served entirely by purchases, creator support and the free
 					    hours, and that is a fine way to use Anthers rather than a lapse to nudge
-					    somebody out of. The heading's first words say so before the numbers do. */}
-					<Reveal
-						delay={80}
-						id="anthers-badges"
-						className="mt-16 scroll-mt-24 border-t border-base-content/10 pt-14"
-					>
+					    somebody out of. The heading's first words say so before the numbers do.
+					    (Tinted — the alternation is tinted hero → plain → tinted → plain → tinted.) */}
+			<section className={SURFACE_BAND}>
+				<div className="mx-auto min-w-0 w-full max-w-[88rem] px-6 pt-16 pb-14 sm:pt-20 sm:pb-16">
+					<Reveal delay={80} id="anthers-badges" className="scroll-mt-24">
 						<StepHeading n={2} title="Anthers Badges">
 							Anthers' free Public Access has no strings, ever; you can stay free as long as you
 							like, supporting creators directly with subscriptions and direct purchases. But if you
@@ -2970,9 +2988,13 @@ export default function SignupPage() {
 							empty={`Staying free — ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month.`}
 						/>
 					</Reveal>
+				</div>
+			</section>
 
-					{/* ── The one place it all adds up ───────────────────────── */}
-					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
+			{/* ── The one place it all adds up ───────────────────────── */}
+			<section className={SURFACE_PLAIN}>
+				<div className="mx-auto min-w-0 w-full max-w-[88rem] px-6 pt-16 pb-14 sm:pt-20 sm:pb-16">
+					<Reveal delay={80}>
 						<h2 style={serif} className="text-center text-3xl font-light leading-tight sm:text-4xl">
 							Ready when you are
 						</h2>
@@ -3004,27 +3026,31 @@ export default function SignupPage() {
 							organization, not to founders or shareholders.
 						</p>
 					</div>
+				</div>
+			</section>
 
-					{/* ── Questions ─────────────────────────────────────────────
-					    🚨 Last on this page, and that is the opposite of where the same block
-					    sits on /for-users and /for-creators. Those are pages somebody reads and
-					    then acts on, so their FAQ goes above the closing CTA. This page's
-					    control is at the TOP — a visitor can join from the first screen and
-					    never scroll — so everything below the summary is for the user who did
-					    scroll, and is still deciding. Their remaining doubts belong at the end
-					    of that scroll rather than in front of a button they have already passed
-					    twice.
+			{/* ── Questions — the closing band, tinted ─────────────────
+			    🚨 Last on this page, and that is the opposite of where the same block
+			    sits on /for-users and /for-creators. Those are pages somebody reads and
+			    then acts on, so their FAQ goes above the closing CTA. This page's
+			    control is at the TOP — a visitor can join from the first screen and
+			    never scroll — so everything below the summary is for the user who did
+			    scroll, and is still deciding. Their remaining doubts belong at the end
+			    of that scroll rather than in front of a button they have already passed
+			    twice.
 
-					    The six questions are the ones asked with a hand on the button — what
-					    this costs, what free covers, whether it can be undone — and they are
-					    the same objects /faq renders, from `content/faq.tsx`. */}
-					<Reveal delay={80} className="mt-16 border-t border-base-content/10 pt-14">
+			    The six questions are the ones asked with a hand on the button — what
+			    this costs, what free covers, whether it can be undone — and they are
+			    the same objects /faq renders, from `content/faq.tsx`. */}
+			<section className={SURFACE_BAND}>
+				<div className="mx-auto min-w-0 w-full max-w-[88rem] px-6 pt-16 pb-20 sm:pt-20 sm:pb-24">
+					<Reveal delay={80}>
 						<div className="text-center">
 							<FAQBlock surface="signup" />
 						</div>
 					</Reveal>
 				</div>
-			</div>
+			</section>
 
 			{/* ⚠️ **The only modal left on this page, and it belongs to somebody already signed
 			    in.** A visitor signing up meets no layer here at all — they are handed to
@@ -3050,6 +3076,6 @@ export default function SignupPage() {
 					}}
 				/>
 			)}
-		</div>
+		</>
 	);
 }
