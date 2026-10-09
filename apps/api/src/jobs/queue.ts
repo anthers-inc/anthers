@@ -181,6 +181,9 @@ export const QUEUES = {
 	// after each credit's own settlement. See transfer-held-credits.ts.
 	TRANSFER_HELD_CREDITS: "transfer-held-credits",
 	CALCULATE_CRF: "calculate-crf", // Legacy name; calculates hosting subsidy allocations
+	// The storage ladder's meter — snapshot what each account holds against its allowance.
+	// See storage-usage.ts for the DB-first counting rule and the per-purpose split.
+	STORAGE_USAGE: "storage-usage",
 	// Write, replace or remove a Work's public listing on the AT Protocol network. Carries only
 	// a Work id: the handler re-reads the Work and decides from its current state, so a
 	// duplicate is harmless and a late one still converges. Deliberately not part of the release
@@ -362,6 +365,11 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 1,
 		expireInMinutes: 30,
 	},
+	[QUEUES.STORAGE_USAGE]: {
+		// Idempotent upsert per cycle — a retry rewrites the same row, never duplicates.
+		retryLimit: 1,
+		expireInMinutes: 30,
+	},
 	[QUEUES.PUBLISH_SCHEDULED]: {
 		retryLimit: 1,
 		expireInMinutes: 5,
@@ -427,6 +435,13 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	[QUEUES.TRANSFER_HELD_CREDITS, "0 4 * * *"],
 	// hosting subsidy calculation (legacy queue name: calculate-crf)
 	[QUEUES.CALCULATE_CRF, "0 1 * * *"], // 1 AM daily (idempotent per month)
+	// 1:30 AM daily, after the subsidy job reads the same tables and before the night's
+	// other sweeps. The one cron whose ordering rule is about *readers*: calculate-crf's
+	// snapshot of `assets.file_size` at 1 AM and this meter's at 1:30 could in principle
+	// straddle an upload landing — acceptable, because both figures are dated snapshots of
+	// a moving stock, not a transaction. The meter must precede nothing; it must only run
+	// daily so the in-flight month's estimate stays fresh.
+	[QUEUES.STORAGE_USAGE, "30 1 * * *"], // 1:30 AM daily (idempotent upsert per cycle)
 	[QUEUES.PUBLISH_SCHEDULED, "* * * * *"], // every minute — publishes due drafts
 	[QUEUES.RELEASE_SCHEDULED, "* * * * *"], // every minute — releases due Works that are ready
 	// 3 AM daily, deliberately AFTER distribute-pool's midnight run: the pool pays

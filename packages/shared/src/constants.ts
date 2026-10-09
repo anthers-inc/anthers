@@ -512,6 +512,22 @@ export function storageGibFor(anthersDollars: number): number {
 }
 
 /**
+ * The closed set of purposes bytes can be held for — the keys `storage_usage.purposes`
+ * carries. A new storage surface adds its kind here and edits the snapshot job; nothing
+ * reads a kind not listed here, so a typo'd kind would be counted in `bytes` and in
+ * nothing else, which the reading surface would surface on its next run.
+ *
+ * ⚠️ **The kinds describe PURPOSE, not table.** `catalog` is every byte a Work's own
+ * record names (source, thumbnail, assets, build files, HLS output) whatever the table
+ * that points at it; `cloud-saves` is the players' save blobs, which belong to the
+ * *player's* account rather than the creator's; `kept-files` is reserved for the
+ * rescue-window sweep's retained purchases and stays zero until that surface lands.
+ */
+export const STORAGE_USE_KINDS = ["catalog", "cloud-saves", "kept-files"] as const;
+
+export type StorageUseKind = (typeof STORAGE_USE_KINDS)[number];
+
+/**
  * The ruled storage ladder by Badge state, in GiB — the amounts `storageGibFor`
  * serves. A lookup table rather than arithmetic, because the rungs are **policy**
  * (the solvency ruling picked them) and a table says so: there is no formula these

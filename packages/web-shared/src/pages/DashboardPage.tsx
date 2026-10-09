@@ -32,7 +32,7 @@ import { useAuth } from "../lib/auth";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 import { studioNewPostUrl, studioNewWorkUrl, studioUrl } from "../lib/studio";
-import type { CreatorEarnings, PostListItem, Project, Work } from "../lib/types";
+import type { CreatorEarnings, PostListItem, Project, StorageReading, Work } from "../lib/types";
 import { isUploading, useWorkUploads } from "../lib/work-uploads";
 
 export default function DashboardPage() {
@@ -41,6 +41,7 @@ export default function DashboardPage() {
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [posts, setPosts] = useState<PostListItem[]>([]);
 	const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
+	const [storage, setStorage] = useState<StorageReading | null>(null);
 	/** `null` until the status request answers — see `buildWorklist` for why that matters. */
 	const [payoutsReady, setPayoutsReady] = useState<boolean | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -160,6 +161,15 @@ export default function DashboardPage() {
 				if (live) setEarnings(data as CreatorEarnings);
 			})
 			.catch(() => {});
+		// The storage reading — every account's figure, creator or not, because the floor is
+		// combined. A failure leaves the panel at its "Metering…" placeholder.
+		client.api.accounts.me.storage
+			.$get()
+			.then((res) => (res.ok ? res.json() : null))
+			.then((data) => {
+				if (live && data) setStorage(data as StorageReading);
+			})
+			.catch(() => {});
 		return () => {
 			live = false;
 		};
@@ -238,7 +248,7 @@ export default function DashboardPage() {
 							<StudioPanelBody
 								key={panel}
 								panel={panel}
-								data={{ uploads, earnings, works, projects, posts }}
+								data={{ uploads, earnings, storage, works, projects, posts }}
 							/>
 						))}
 					</div>
