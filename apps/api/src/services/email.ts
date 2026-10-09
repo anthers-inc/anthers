@@ -867,6 +867,49 @@ export async function sendCreatorRefundReceiptEmail(args: {
 }
 
 /**
+ * A creator's payout receipt: the fourteen-day hold ended and their settled earnings
+ * moved into their connected account's balance.
+ *
+ * The distinction the copy lives on (`31.02 Payouts` carries it for the reader, and the
+ * transfer job is where it happens): the *transfer* into their processor balance is ours
+ * and automatic, and the *payout* from balance to bank is the creator's own choice with
+ * its own fee. This email marks the first, so it says the money is in their balance and
+ * waiting, not "sent to your bank" — that step is theirs, and these accounts pay out
+ * manually. The line they'll match it against is the transfer record shown on their
+ * Studio Payments page.
+ *
+ * Deliberately a receipt and not a notification (Parker, 2026-10-08): money stays out of
+ * the in-app feed, the bell is for people, not payments. The transfer row is the money
+ * record; this is the telling. A zero-sum close moves nothing, so it earns no email —
+ * the caller in `jobs/transfer-held-credits.ts` guards that, not this template.
+ */
+export async function sendPayoutReceiptEmail(args: {
+	to: string;
+	reference: string;
+	date: Date;
+	amount: string;
+}): Promise<SendResult> {
+	const html = shell(
+		"Your Anthers payout receipt",
+		`${receiptMeta(args.date, args.reference)}
+		<p style="margin:0 0 14px;">The 14-day hold on your settled earnings ended, and the money moved:</p>
+		${itemsTable({
+			lines: [{ description: "Settled earnings, after the card fee", amount: args.amount }],
+			totalLabel: "To your connected account",
+			total: args.amount,
+		})}
+		<p style="margin:0 0 18px;"><strong style="color:${MEADOW.ink};">${usd(args.amount)}</strong> is in your account's balance now. Moving it to your bank is your choice, whenever you like — that payout, and its fee, stays yours.</p>
+		<p style="margin:0 0 18px;"><a href="${frontendUrl()}/studio/payments" style="color:${BRAND};">Your balance and transfer record</a> are on your Studio's Payments page.</p>
+		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because receipt emails are on for your creator account; you can turn them off in your Studio settings. Anthers keeps none of this money.</p>`,
+	);
+	return sendEmail({
+		to: args.to,
+		subject: `Your Anthers payout: ${usd(args.amount)} to your balance`,
+		html,
+	});
+}
+
+/**
  * A supporter's receipt for a monthly Badge support payment: the month the charge was
  * for, the amount given to Anthers, and the split that reached creators. Anthers' own
  * line is excluded from the itemization — the receipt is about what the supporter gave
