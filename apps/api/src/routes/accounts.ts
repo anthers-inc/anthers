@@ -42,6 +42,7 @@ import { db } from "@anthers/db/client";
 import {
 	follows,
 	posts,
+	postWorkRefs,
 	rightsRequests,
 	studioPreferences,
 	userPreferences,
@@ -57,12 +58,13 @@ import {
 } from "@anthers/shared/rights";
 import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panels";
 import { zValidator } from "@hono/zod-validator";
-import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
 import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
+import { type AccessibleWork, buildAccessContext, resolveAccessSync } from "../services/access.js";
 import { buildAccountExport } from "../services/account-data.js";
 import {
 	cancelDeletion,
@@ -593,6 +595,43 @@ const accountRoutes = new Hono()
 						.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
 						.limit(50);
 
+		// One access context over the whole batch — the same `buildAccessContext` a
+		// Catalog page runs, resolving each verdict without an N+1. Without it a gated
+		// release in the feed arrived with no verdict and rendered as an open tile: no
+		// locked cover, no price, nothing saying what it is — the gap the feed's grid
+		// made visible. Scoped to the batch's ids, as the resolver's docblock intends.
+		const accessCtx =
+			feedWorks.length > 0
+				? await buildAccessContext(sessionUser.id, { workIds: feedWorks.map((r) => r.work.id) })
+				: null;
+
+		// The Works each post links, for a card thumbnail and a count — a post
+		// in the grid has no artwork of its own, and announcing something while
+		// showing nothing would waste the tile. Same pattern the timeline route
+		// uses; thumbnails are public by design.
+		const postRefs: Record<string, { thumbnail: string | null; linkedWorkCount: number }> = {};
+		if (feedPosts.length > 0) {
+			const postIds = feedPosts.map((r) => r.post.id);
+			const refRows = await db
+				.select({
+					postId: postWorkRefs.postId,
+					thumbnail: works.thumbnail,
+				})
+				.from(postWorkRefs)
+				.innerJoin(works, eq(postWorkRefs.workId, works.id))
+				.where(inArray(postWorkRefs.postId, postIds))
+				.orderBy(asc(postWorkRefs.position));
+			for (const r of refRows) {
+				let entry = postRefs[r.postId];
+				if (!entry) {
+					entry = { thumbnail: null, linkedWorkCount: 0 };
+					postRefs[r.postId] = entry;
+				}
+				entry.linkedWorkCount += 1;
+				if (!entry.thumbnail && r.thumbnail) entry.thumbnail = r.thumbnail;
+			}
+		}
+
 		// Enumerate the fields rather than spreading the row. This used to be
 		// `...row.post`, which shipped `body` and `bodyHtml` for every followed creator's
 		// post regardless of gating. A post carries no gate of its own now, so there is no
@@ -624,6 +663,11 @@ const accountRoutes = new Hono()
 					viewCount: p.viewCount,
 					createdAt: p.createdAt,
 					updatedAt: p.updatedAt,
+					// What the grid tile shows of what the post announces: the first
+					// linked Work's thumbnail and how many Works it points at.
+					// Thumbnails are public by design.
+					thumbnail: postRefs[p.id]?.thumbnail ?? null,
+					linkedWorkCount: postRefs[p.id]?.linkedWorkCount ?? 0,
 					creator: embedCreator({
 						handle: row.creatorHandle,
 						displayName: row.creatorDisplayName,
@@ -657,6 +701,16 @@ const accountRoutes = new Hono()
 					originallyReleased: w.originallyReleased,
 					releasedAt: w.releasedAt,
 					createdAt: w.createdAt,
+					// Band metadata, public on any Work: a locked video reports its
+					// duration the way a locked book reports its page count.
+					durationSeconds: w.durationSeconds,
+					estimatedReadMinutes: w.estimatedReadMinutes,
+					// The user's own verdict — what a locked cover and a price badge
+					// need. The feed resolves no deliverable either way; this only
+					// describes the gate.
+					access: accessCtx
+						? resolveAccessSync(row.work as unknown as AccessibleWork, accessCtx)
+						: null,
 					creator: embedCreator({
 						handle: row.creatorHandle,
 						displayName: row.creatorDisplayName,

@@ -132,7 +132,11 @@ export function formatOriginallyReleased(iso: string | null | undefined): string
  * the wall instead.
  */
 export function pageHoldsTheMeter(type: string): boolean {
-	return type !== "video" && !isListened(type);
+	// A goods Work (physical, service) holds no meter because it accrues no
+	// attention of the kind the meter bills: nothing streams, nothing is read in
+	// the page. (Parker, 2026-10-09 — the Public Access rules bind only streamable
+	// Works.) A shirt's page must never wear a watch-time footer.
+	return type !== "video" && type !== "physical" && type !== "service" && !isListened(type);
 }
 
 /**

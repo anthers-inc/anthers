@@ -59,7 +59,11 @@ function fakeStripeCheckout() {
 		// Cast: the merch paths read only the session create's return, and the full
 		// Stripe surface is the Stripe suite's subject with its own shaped fake.
 		client: {
-			"checkout.sessions.create": async () => stripeObject,
+			checkout: {
+				sessions: {
+					create: async () => stripeObject,
+				},
+			},
 		} as unknown as Stripe,
 	};
 }
@@ -240,6 +244,83 @@ describe("The merch resolution — whose physical Work is buyable", () => {
 	});
 });
 
+describe("The goods-works rule — the picker reads without an account, owning is not a gate", () => {
+	/**
+	 * Parker, 2026-10-09: a physical Work's deliverable is the goods themselves, so the
+	 * Public Access postures (sign-in walls, free-commons reading, purchase-forever)
+	 * never apply. What that means at these routes: the picker answers a signed-out
+	 * visitor with the undiscounted list (the Badge discount needs an account by
+	 * construction, but seeing the price does not), the work's owner may read their own
+	 * store where the old "already have access" verdict used to refuse them, and a past
+	 * buyer may buy again — a shirt is a shipment, not an unlock.
+	 */
+	it("answers a signed-out visitor's picker with the undiscounted list", async () => {
+		process.env.PRINTFUL_TOKEN = "not_a_real_printful_token";
+		try {
+			const work = await makeMerchWork([4044]);
+			const res = await req(`/api/payments/merch/${work.slug}/variants`, {
+				method: "GET",
+				headers: { Origin: ORIGIN }, // no cookie — a visitor with no account
+			});
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as {
+				colors: { sizes: { amount: string; discount: string | null }[] }[];
+			};
+			expect(body.colors[0].sizes.length).toBeGreaterThan(0);
+			expect(body.colors[0].sizes[0].discount).toBeNull();
+			expect(body.colors[0].sizes[0].amount).toBe("30.00");
+		} finally {
+			delete process.env.PRINTFUL_TOKEN;
+		}
+	});
+
+	it("lets a past buyer buy again", async () => {
+		printfulCalls.length = 0;
+		process.env.PRINTFUL_TOKEN = "not_a_real_printful_token";
+		try {
+			const work = await makeMerchWork([4055]);
+			printfulAnswer = (call) => {
+				if (call.path.startsWith("/shipping"))
+					return [
+						{
+							id: "STANDARD",
+							name: "Standard",
+							rate: "4.99",
+							currency: "USD",
+							minDeliveryDays: 3,
+							maxDeliveryDays: 6,
+						},
+					];
+				return null;
+			};
+			// The completed physical purchase the resolver used to read as forever-open.
+			await db.insert(purchases).values({
+				buyerId,
+				workId: work.id,
+				type: "physical" as const,
+				amount: "30.00",
+				processingFee: "1.17",
+				salesTax: "0.00",
+				creatorEarnings: "0.00",
+				stripePaymentIntentId: `pi_merch_repeat_${run}`,
+				status: "completed" as const,
+			});
+			const res = await req(`/api/payments/merch/checkout/${work.slug}`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: buyerCookie },
+				body: JSON.stringify({ color: "black", size: "S4055" }),
+			});
+			// Not 400 "You already have access" — the shirt's deliverable granted nothing.
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as { clientSecret?: string };
+			expect(body.clientSecret).toBeTruthy();
+		} finally {
+			delete process.env.PRINTFUL_TOKEN;
+			printfulCalls.length = 0;
+		}
+	});
+});
+
 describe("The webhook receiver — the payload is a hint, the API is the truth", () => {
 	it("writes state only from the API's answer, never from the payload", async () => {
 		process.env.PRINTFUL_TOKEN = "not_a_real_printful_token";
@@ -297,9 +378,15 @@ describe("The webhook receiver — the payload is a hint, the API is the truth",
 					},
 				],
 			});
+			// No Origin header, on purpose: Printful's v1 webhooks are unsigned and send
+			// none, so `/api/webhooks/printful` sits in `CSRF_EXEMPT_PATHS` with the
+			// payload-is-a-hint design as its proof — if that exemption is ever lost, the
+			// receiver 403s in production while this suite stays green. Same reasoning
+			// the Stripe webhook test records; the hint-verification below is the
+			// assertion that no state rides the payload.
 			const res = await req("/api/webhooks/printful", {
 				method: "POST",
-				headers: { "Content-Type": "application/json", Origin: ORIGIN },
+				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					type: "package_shipped",
 					created: Math.floor(Date.now() / 1000),
@@ -330,7 +417,7 @@ describe("The webhook receiver — the payload is a hint, the API is the truth",
 	it("answers success on an order this store does not hold", async () => {
 		const res = await req("/api/webhooks/printful", {
 			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN },
+			headers: { "Content-Type": "application/json" }, // no Origin — see above
 			body: JSON.stringify({
 				type: "order_updated",
 				created: Math.floor(Date.now() / 1000),

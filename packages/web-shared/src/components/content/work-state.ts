@@ -45,6 +45,12 @@ export interface AccessShape {
 	visibility?: Work["visibility"];
 	access?: AccessRow[] | null | Work["access"];
 	streamEnabled?: boolean;
+	/**
+	 * The Work's type, when the caller carries one. A physical Work's free baseline
+	 * row reads as a sale, not as a freebie — the store prices it (the goods-works
+	 * rule; service joins the goods kinds when its purchase rail lands).
+	 */
+	type?: string;
 }
 
 export function accessState(item: AccessShape): AccessState {
@@ -56,6 +62,12 @@ export function accessState(item: AccessShape): AccessState {
 	const baseline = rows.find((r) => r.threshold === 0);
 	if (baseline?.allow) {
 		if (Number(baseline.price) > 0) return "sale";
+		// A goods Work is bought, not cleared: its price lives in the store, never in
+		// this table (the goods-works rule in the API's resolver). The baseline row
+		// opening the page reads as somebody selling, not as a freebie — a shirt
+		// wearing a "free download" badge would be exactly the categorization error
+		// Parker named on 2026-10-09. Service joins the goods kinds with its own rail.
+		if (item.type === "physical") return "sale";
 		// Free to everyone, but only the commons when it actually streams — a
 		// download-only freebie is free, and is not Public Access.
 		return item.streamEnabled ? "public-access" : "free";

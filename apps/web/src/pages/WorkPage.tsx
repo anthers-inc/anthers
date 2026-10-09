@@ -264,7 +264,28 @@ export default function WorkPage() {
 
 			{/* ── The deliverable, or the gate in front of it ── */}
 			<section ref={deliverableRef}>
-				{!canAccess ? (
+				{work.type === "physical" ? (
+					/* 🚨 A goods Work's deliverable is the goods themselves (Parker,
+					    2026-10-09): the store panel stands exactly where a player would,
+					    for owner, revisiting buyer, and signed-out visitor alike — the
+					    resolver's goods rule carries the verdicts this reads
+					    (`requiresPurchase` for every qualifying viewer, the gate
+					    verdicts for a hard-gated one, no `isFree` posture at all). The
+					    gate card renders only when the page itself is gate-locked or
+					    badge-gated, in which case the store is nobody's to read. */
+					access && !access.canAccess && !access.requiresPurchase ? (
+						<InlineUnlock post={work} access={access} />
+					) : (
+						<ProjectPricing
+							workId={work.id}
+							slug={work.slug ?? ""}
+							access={access ?? undefined}
+							title={work.title ?? "Untitled"}
+							creatorHandle={work.creator?.handle ?? ""}
+							workType="physical"
+						/>
+					)
+				) : !canAccess ? (
 					<div className="space-y-4">
 						{/* ⚠️ A signed-out visitor is refused the bytes of free work too, and that
 						    is not a lock — the Work is free to everyone and stays free; what is
