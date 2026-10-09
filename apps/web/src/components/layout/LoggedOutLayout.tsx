@@ -273,8 +273,15 @@ export default function LoggedOutLayout() {
 				flex-column children shrink below their min-content size, so wide inner
 				grids/tables (calculators, roadmaps) can't blow the page wider than the
 				viewport on mobile — without it, a flex item's default min-width:auto
-				keeps it at its content's min-content width. */}
-			<main className={`relative z-10 flex min-w-0 flex-1 flex-col ${currentTrack ? "pb-16" : ""}`}>
+				keeps it at its content's min-content width.
+
+				`relative` with NO z-index on purpose: main must not be a stacking
+				context, so a page can place itself above the side vines (z-20) with its
+				own wrapper z (the creator profile does, at z-30, so the decorative bees
+				read as behind its content rather than painted across it). A page without
+				its own z keeps today's ordering — at the root context's zero level, below
+				the vines. */}
+			<main className={`relative flex min-w-0 flex-1 flex-col ${currentTrack ? "pb-16" : ""}`}>
 				<RouteSuspense>
 					<Outlet />
 				</RouteSuspense>
