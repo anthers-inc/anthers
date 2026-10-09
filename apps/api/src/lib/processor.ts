@@ -271,6 +271,24 @@ export async function updateInvoiceLines(
 }
 
 /**
+ * Mirrors `stripe.invoiceItems.create` — a line added to a draft invoice (or to the next
+ * upcoming one when no invoice is named). The storage top-up's charging surface: a
+ * per-cycle line on the draft renewal, priced at cost against the Anthers Product.
+ */
+export async function createInvoiceItem(
+	params: Stripe.InvoiceItemCreateParams,
+): Promise<Stripe.InvoiceItem | null> {
+	return (await getStripe()?.invoiceItems.create(params)) ?? null;
+}
+
+/** Mirrors `stripe.invoiceItems.list` — the items already on a draft, for the stamp lookup. */
+export async function listDraftInvoiceItems(
+	params: Stripe.InvoiceItemListParams,
+): Promise<Stripe.ApiList<Stripe.InvoiceItem> | null> {
+	return (await getStripe()?.invoiceItems.list(params)) ?? null;
+}
+
+/**
  * Mirrors `stripe.transfers.create` — moving settled, held money from Anthers' platform
  * balance into a creator's connected-account balance (`transfer-held-credits.ts`, the
  * monthly transfer step of the 2026-09-14 payouts decision). `options` carries the
