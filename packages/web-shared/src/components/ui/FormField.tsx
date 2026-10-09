@@ -98,12 +98,12 @@ export default function FormField({
 				children
 			)}
 			{error ? (
-				<div className="label whitespace-normal">
+				<div className={`label whitespace-normal ${spaced ? "mt-2.5" : ""}`}>
 					<span className="label-text-alt text-error">{error}</span>
 				</div>
 			) : (
 				hint && (
-					<div className="label whitespace-normal">
+					<div className={`label whitespace-normal ${spaced ? "mt-2.5" : ""}`}>
 						<span className="label-text-alt leading-relaxed text-base-content/55">{hint}</span>
 					</div>
 				)

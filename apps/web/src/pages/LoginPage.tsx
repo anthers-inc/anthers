@@ -5,6 +5,7 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { client } from "@anthers/web-shared/rpc";
 import FormField from "@anthers/web-shared/ui/FormField";
+import Logo from "@anthers/web-shared/ui/Logo";
 import { AtSymbolIcon, EnvelopeIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -175,7 +176,7 @@ export default function LoginPage() {
 		idle: <EnvelopeIcon className="h-5 w-5" />,
 		email: <EnvelopeIcon className="h-5 w-5" />,
 		handle: <AtSymbolIcon className="h-5 w-5" />,
-		anthers: <AtSymbolIcon className="h-5 w-5" />,
+		anthers: <AtSymbolIcon className="h-5 w-5 text-primary" />,
 		bluesky: <BlueskyMark className="h-4.5 w-4.5" />,
 	} as const;
 
@@ -399,9 +400,9 @@ export default function LoginPage() {
 				))}
 				<div
 					data-auth-fade
-					className="card relative z-10 min-h-[30rem] w-full bg-base-200 shadow-lg"
+					className="card relative z-10 min-h-[26rem] w-full bg-base-200/85 shadow-lg"
 				>
-					<div className="card-body justify-center">
+					<div className="card-body justify-center gap-3">
 						{suspended ? (
 							/* The suspension interstitial. The code just proved the mailbox, so this
 							   is the strongest telling there is — the card becomes the notice.
@@ -430,6 +431,12 @@ export default function LoginPage() {
 							</>
 						) : (
 							<>
+								{/* The one-line lockup (`antherslogo_hone`'s web cut) anchors the card's
+								    top: since the Meadow footer went, the sign-in page had no mark of
+								    Anthers anywhere below the navbar, and this was the empty space to
+								    spend it in (Parker, 2026-10-09). The h1 stays — it is the page's
+								    heading and the tests pin it — below the logo, at its own size. */}
+								<Logo variant="oneline" className="mx-auto h-12" />
 								<h1 className="card-title justify-center text-2xl">Log In</h1>
 								{/* Sign-up prompt sits at the top of the card (YNAB-style). Plain div, not
 						    <p>, so DaisyUI's card-body `p { flex-grow: 1 }` doesn't balloon it and
@@ -474,7 +481,7 @@ export default function LoginPage() {
 										<input
 											type="text"
 											inputMode={identifier.startsWith("@") ? "url" : "email"}
-											className="input input-bordered w-full pl-10"
+											className="input w-full border-2! border-base-content/60! pl-10"
 											autoComplete="username"
 											value={identifier}
 											onChange={(e) => setIdentifier(e.target.value)}
