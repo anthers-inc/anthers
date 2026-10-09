@@ -64,6 +64,7 @@ import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
 import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
+import { type AccessibleWork, buildAccessContext, resolveAccessSync } from "../services/access.js";
 import { buildAccountExport } from "../services/account-data.js";
 import {
 	cancelDeletion,
@@ -90,7 +91,6 @@ import {
 	enableAdultAccess,
 	setMaturityDisplay,
 } from "../services/content-preferences.js";
-import { type AccessibleWork, buildAccessContext, resolveAccessSync } from "../services/access.js";
 import {
 	DELIVERY_GROUPS,
 	type DeliveryGroup,
