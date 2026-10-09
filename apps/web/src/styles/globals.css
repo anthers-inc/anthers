@@ -106,6 +106,14 @@
 	margin-bottom: 1.25rem;
 }
 
+/* Posts read flush between paragraphs: a break reads as a break, and a creator who
+   wants a visual gap presses return again — post-markdown.ts keeps each blank
+   paragraph through the markdown round trip, so the gap survives to the reader. */
+.prose.flush p {
+	margin-top: 0;
+	margin-bottom: 0;
+}
+
 /* Lists - comfortable spacing */
 .prose ul,
 .prose ol {

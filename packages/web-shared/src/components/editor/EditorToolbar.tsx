@@ -8,7 +8,8 @@ import {
 	PhotoIcon,
 } from "@heroicons/react/24/outline";
 import type { Editor } from "@tiptap/react";
-import { apiFetch } from "../../lib/rpc";
+import { useState } from "react";
+import { uploadInlineImage } from "./editorImages";
 
 interface EditorToolbarProps {
 	editor: Editor;
@@ -17,11 +18,13 @@ interface EditorToolbarProps {
 function ToolbarButton({
 	onClick,
 	isActive,
+	disabled,
 	children,
 	title,
 }: {
 	onClick: () => void;
 	isActive?: boolean;
+	disabled?: boolean;
 	children: React.ReactNode;
 	title: string;
 }) {
@@ -29,7 +32,8 @@ function ToolbarButton({
 		<button
 			type="button"
 			onClick={onClick}
-			className={`btn btn-ghost btn-xs ${isActive ? "btn-active" : ""}`}
+			disabled={disabled}
+			className={`btn btn-ghost btn-xs ${isActive ? "btn-active" : ""} ${disabled ? "btn-disabled" : ""}`}
 			title={title}
 		>
 			{children}
@@ -38,26 +42,28 @@ function ToolbarButton({
 }
 
 export default function EditorToolbar({ editor }: EditorToolbarProps) {
-	const handleImageUpload = async () => {
+	// The insert-image flow's live state, shown in place — a multi-second upload with
+	// no "nothing happened" explanation is the failure mode an earlier shape of this
+	// button shipped (it logged to the console only), and it is Parker's own report.
+	const [uploading, setUploading] = useState(false);
+	const [imageError, setImageError] = useState<string | null>(null);
+
+	const handleImageUpload = () => {
 		const input = document.createElement("input");
 		input.type = "file";
 		input.accept = "image/*";
 		input.onchange = async () => {
 			const file = input.files?.[0];
 			if (!file) return;
-
-			const formData = new FormData();
-			formData.append("image", file);
-
+			setUploading(true);
+			setImageError(null);
 			try {
-				const res = await apiFetch("/api/content/inline-images", {
-					method: "POST",
-					body: formData,
-				});
-				const data = await res.json();
-				editor.chain().focus().setImage({ src: data.inlineImage.image }).run();
+				const url = await uploadInlineImage(file);
+				editor.chain().focus().setImage({ src: url }).run();
 			} catch (err) {
-				console.error("Image upload failed:", err);
+				setImageError(err instanceof Error ? err.message : "The image didn't upload.");
+			} finally {
+				setUploading(false);
 			}
 		};
 		input.click();
@@ -142,9 +148,18 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 				<LinkIcon className="w-4 h-4" />
 			</ToolbarButton>
 
-			<ToolbarButton onClick={handleImageUpload} title="Insert image">
+			<ToolbarButton onClick={handleImageUpload} title="Insert image" disabled={uploading}>
 				<PhotoIcon className="w-4 h-4" />
 			</ToolbarButton>
+
+			{(uploading || imageError) && (
+				<span
+					className={`w-full text-xs ${imageError ? "text-error" : "text-base-content/60"}`}
+					role={imageError ? "alert" : undefined}
+				>
+					{imageError ?? "Uploading the image…"}
+				</span>
+			)}
 		</div>
 	);
 }
