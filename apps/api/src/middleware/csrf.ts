@@ -16,6 +16,14 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  *   exemption removes the Origin check and puts nothing in its place that could be
  *   absent: an unsigned request is rejected by the handler's first act rather than
  *   waved through.
+ * - The Printful webhook carries no signature at all in Printful's v1 API — there is
+ *   nothing to verify, so the receiver's honesty comes from its *shape*: the payload is
+ *   treated as a hint, joined on the order id only to re-read the order from Printful's
+ *   API with Anthers' own token, and state is written from that answer alone. A forged
+ *   hint can therefore make the server fetch an order the store genuinely owns; it can
+ *   write no state it did not fetch. The per-IP limiter (door `merch:webhook`) caps the
+ *   fetch cost. This was missed at the feature's first ship: every Printful delivery
+ *   403'd as CSRF until the exemption landed.
  * - The two desktop-enrollment endpoints are called by the packaged app itself, which
  *   has no allowed Origin (`tauri://localhost`) and no session yet — obtaining one is
  *   the entire point of the exchange. Neither is CSRF-forgeable to any effect:
@@ -27,6 +35,9 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const CSRF_EXEMPT_PATHS = new Set([
 	"/api/payments/stripe/webhook",
 	"/api/webhooks/resend",
+	// The Printful merch webhook — see the docblock above for its proof shape (the
+	// payload is a hint; the re-read is the authentication).
+	"/api/webhooks/printful",
 	"/api/auth/desktop/start",
 	"/api/auth/desktop/exchange",
 	// The droplet's heartbeat ingest (routes/status.ts): a machine on another failure

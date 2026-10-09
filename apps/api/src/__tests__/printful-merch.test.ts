@@ -297,9 +297,15 @@ describe("The webhook receiver — the payload is a hint, the API is the truth",
 					},
 				],
 			});
+			// No Origin header, on purpose: Printful's v1 webhooks are unsigned and send
+			// none, so `/api/webhooks/printful` sits in `CSRF_EXEMPT_PATHS` with the
+			// payload-is-a-hint design as its proof — if that exemption is ever lost, the
+			// receiver 403s in production while this suite stays green. Same reasoning
+			// the Stripe webhook test records; the hint-verification below is the
+			// assertion that no state rides the payload.
 			const res = await req("/api/webhooks/printful", {
 				method: "POST",
-				headers: { "Content-Type": "application/json", Origin: ORIGIN },
+				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					type: "package_shipped",
 					created: Math.floor(Date.now() / 1000),
@@ -330,7 +336,7 @@ describe("The webhook receiver — the payload is a hint, the API is the truth",
 	it("answers success on an order this store does not hold", async () => {
 		const res = await req("/api/webhooks/printful", {
 			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN },
+			headers: { "Content-Type": "application/json" }, // no Origin — see above
 			body: JSON.stringify({
 				type: "order_updated",
 				created: Math.floor(Date.now() / 1000),
