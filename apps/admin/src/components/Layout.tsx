@@ -44,6 +44,7 @@ const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] 
 			// lights up "Jobs and Services" along with its own item, as with `/moderation`.
 			{ to: "/infrastructure", label: "Jobs and Services", end: true },
 			{ to: "/infrastructure/atproto", label: "ATProto Records" },
+			{ to: "/infrastructure/failed-mail", label: "Failed Mail" },
 		],
 	},
 	{
