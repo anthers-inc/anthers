@@ -78,11 +78,13 @@ function git(args: string[], options: StampOptions): string {
 
 /**
  * Stamp a green run, when the tree that ran it is a head's exact content. Returns whether
- * a stamp was written — false is normal (dirty tree, no repository, CI) and never fatal.
+ * a stamp was written — false is normal (dirty tree, no repository) and never fatal. The
+ * CI skip is the CLI's decision, not this function's: a library function that answers its
+ * environment differently under the test runner is a test that can never exercise it
+ * (this file's tests failed in CI for exactly that), and the CLI entry is the only write
+ * path the suite and hook reach anyway.
  */
 export function writeStamp(options: StampOptions = {}): boolean {
-	if (process.env.CI !== undefined) return false;
-
 	const head = git(["rev-parse", "HEAD"], options);
 	if (!head) {
 		options.log?.("→ no commit here, so nothing to stamp the verify against");
@@ -167,6 +169,9 @@ async function main(): Promise<number> {
 		return 0;
 	}
 	if (command === "write") {
+		// CI runs the suite's steps directly (never `make verify`) and its runners are
+		// ephemeral — a stamp on a runner would live seconds and mean nothing; skip quietly.
+		if (process.env.CI !== undefined) return 0;
 		writeStamp({ log: (line) => console.error(line) });
 		// Never a nonzero exit: the stamp is an optimization a green suite must not depend on.
 		return 0;

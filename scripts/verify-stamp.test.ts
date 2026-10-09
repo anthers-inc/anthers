@@ -200,6 +200,21 @@ describe("the CLI the hook calls", () => {
 		expect(res.exitCode).toBe(0);
 		expect(existsSync(stampFileFor(head, { dir: stamps }))).toBe(true);
 	});
+
+	it("write under CI writes nothing, quietly, and still exits 0", () => {
+		const head = commit("code.ts", "export const ciWrite = true;\n");
+		const res = Bun.spawnSync(
+			[process.execPath, "run", join(REPO_ROOT, "scripts", "verify-stamp.ts"), "write"],
+			{
+				cwd: repo,
+				stdout: "pipe",
+				stderr: "pipe",
+				env: { ...SANDBOX_ENV, ANTHERS_VERIFY_STAMPS: stamps, CI: "true" },
+			},
+		);
+		expect(res.exitCode).toBe(0);
+		expect(existsSync(stampFileFor(head, { dir: stamps }))).toBe(false);
+	});
 });
 
 describe("the Makefile's plumbing", () => {
