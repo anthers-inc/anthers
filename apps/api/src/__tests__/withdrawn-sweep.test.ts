@@ -38,7 +38,6 @@ let keeperId = 0;
 let keeperCookie: string;
 let freeBuyerId = 0;
 let otherBuyerId = 0;
-let otherBuyerCookie: string;
 const workIds: number[] = [];
 const storedKeys: string[] = [];
 
@@ -107,7 +106,6 @@ beforeAll(async () => {
 	keeperCookie = keeper.cookie;
 	const other = await createAccount(`kf_other_${RUN}`);
 	otherBuyerId = other.userId;
-	otherBuyerCookie = other.cookie;
 	const free = await createAccount(`kf_free_${RUN}`);
 	freeBuyerId = free.userId;
 }, DB_SETUP_TIMEOUT);
