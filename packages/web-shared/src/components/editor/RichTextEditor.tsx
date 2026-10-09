@@ -91,9 +91,12 @@ export default function RichTextEditor({
 			{/* Padding + min-height live on the editable (.tiptap) itself — not the
 			    wrapper — so clicking anywhere in the area places the cursor, and
 			    cursor:text covers the whole box. */}
+			{/* flush: a post's paragraphs sit flush (see globals.css) — spacing the
+			    creator wants comes from pressing return again, which the write
+			    boundary keeps. */}
 			<EditorContent
 				editor={editor}
-				className={`prose prose-sm max-w-none [&_.tiptap]:min-h-[200px] [&_.tiptap]:p-4 ${EDITABLE}`}
+				className={`prose prose-sm max-w-none flush [&_.tiptap]:min-h-[200px] [&_.tiptap]:p-4 ${EDITABLE}`}
 			/>
 		</div>
 	);

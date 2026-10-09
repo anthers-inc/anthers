@@ -269,7 +269,7 @@ export default function PostPage() {
 				    it is stored as; react-markdown without rehype-raw skips any raw HTML a
 				    stored body somehow carries, so the words show and nothing executes. */}
 				{post.body && (
-					<div className="prose prose-sm max-w-none mb-8">
+					<div className="prose prose-sm max-w-none flush mb-8">
 						<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
 					</div>
 				)}

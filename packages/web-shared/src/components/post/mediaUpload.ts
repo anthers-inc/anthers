@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Image-upload helpers for the post form. Display images (thumbnails, image-element
- * images) go through the direct multipart endpoint, which returns both a storage
- * `key` (persisted on the post) and a `url` (used only for in-form preview).
+ * images, and the inline images inside a post body) go through the direct multipart
+ * endpoint, which returns both a storage `key` (persisted on the post) and a `url`
+ * (used only for in-form preview; an inline image inserts it).
  */
 
 import { apiBaseUrl, apiFetch } from "../../lib/rpc";
 
 /** mediaType values the direct endpoint accepts for display images. */
-export type ImageMediaType = "image" | "thumbnail" | "cover";
+export type ImageMediaType = "image" | "thumbnail" | "cover" | "inline-image";
 
 /** Upload a display image via the direct endpoint. Returns the storage key + preview URL. */
 export async function uploadImageFile(
@@ -22,7 +23,14 @@ export async function uploadImageFile(
 		method: "POST",
 		body: formData,
 	});
-	if (!res.ok) throw new Error("Image upload failed");
+	if (!res.ok) {
+		const data = (await res.json().catch(() => null)) as { error?: string } | null;
+		throw new Error(
+			typeof data?.error === "string" && data.error
+				? data.error
+				: "The image didn't upload. Check your connection and try again.",
+		);
+	}
 	return (await res.json()) as { key: string; url: string };
 }
 
