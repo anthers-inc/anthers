@@ -81,6 +81,15 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.17",
+		date: "2026-10-09",
+		lede: "A Work that can't be streamed no longer borrows the rules built for the ones that can.",
+		entries: [
+			"A physical Work's page now reads without an account, exactly as an account sees it: the store panel stands where a player would, with the color and size pickers and the store's own prices, and creating an account is asked only at the buy door. The access table still gates the page, and a purchase once made no longer closes the store — a shirt is a shipment, not an unlock, so a buyer may buy again.",
+			'The free-account card\'s copy lost "to watch" — the sentence stands over music, comics and essays as well, none of which are watched.',
+		],
+	},
+	{
 		version: "2026.10.16",
 		date: "2026-10-09",
 		lede: "The shirts went on sale on their Work pages, and storage started measuring what accounts actually hold.",
