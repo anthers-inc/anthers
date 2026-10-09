@@ -3,8 +3,8 @@
 .PHONY: help install dev dev-api dev-worker dev-web down \
         db-generate db-migrate db-push db-studio db-seed sessions-clean \
         gauntlet-reset gauntlet-clean stripe-webhooks \
-        verify verify-docs typecheck test lint lint-fix format \
-        e2e-install e2e-preflight screenshots test-e2e test-e2e-ui test-gauntlet \
+        verify verify-inner verify-docs typecheck test lint lint-fix format \
+        e2e-install e2e-preflight screenshots test-e2e test-e2e-inner test-e2e-ui test-e2e-ui-inner test-gauntlet test-gauntlet-inner \
         spec-diff spec-apply deploy-status promote-version release-notes-audit resource-snapshot resource-alerts webhook-check stripe-walk dev-local \
         worktree worktrees worktree-remove \
 
@@ -253,17 +253,24 @@ stripe-webhooks: ## Forward Stripe test webhooks to the local API (run alongside
 
 # ─── Quality ───
 
-# What CI runs, in CI's order, as one command. `bun test` alone is the unit suites only,
-# and `--project=gauntlet` skips the `chromium` project the marketing-page specs live in —
-# so running a subset and believing you're covered is the easy mistake, and it is the one
-# that has actually broken CI here. If this passes, ci.yml should too; if you skip it, you
-# are guessing. (The `images` job isn't mirrored — it needs Docker and exists to catch a
-# workspace-manifest failure mode that only appears in an image build.)
-#
-# Each half runs in a session of its own — `bun test` starts one itself, and the browser suite runs
-# inside `SESSION_BROWSER` — so a verify run shares nothing with a running `make dev` or with
-# another verify.
-verify: ## Run everything CI runs: typecheck, lint, unit tests, full Playwright
+# The verify lane's lock: `make verify`, the browser targets and a full `bun test` (through
+# the test preload, `scripts/heavy-run.ts`) take one machine-wide `flock`
+# (`$HOME/.cache/anthers/heavy-run.lock`) and take turns, because two heavyweight suites
+# side by side oversubscribe the machine — the failure was a different untouched spec
+# failing on every side-by-side run, passing in isolation, from 2026-10-03 and again from
+# 2026-10-09. The suites share nothing by design (each brings its own session); only the
+# CPU lane serializes. `scripts/heavy-run.sh` exports ANTHERS_HEAVY_RUN_HELD, so the full
+# `bun test` inside `verify` does not deadlock on its own parent's lock. Deliberately
+# lock-free: editing, `make dev`, scoped `bun test <path>` runs, and the cheap checks.
+
+verify: ## Run everything CI runs: typecheck, lint, unit tests, full Playwright (heavy — waits behind another session's run when one is live)
+	@sh scripts/heavy-run.sh make --no-print-directory verify-inner
+
+# `verify`'s inner body, under the lock the wrapper above holds. Never run it directly —
+# `make verify` is the serialized door. The green run stamps the tree it ran
+# (scripts/verify-stamp.ts, only when tracked files are clean) so the next push of this
+# head's commit does not re-run the whole suite (see .githooks/pre-push).
+verify-inner:
 	bun run typecheck
 	bun run lint
 	bun run econ:figures --check
@@ -273,6 +280,7 @@ verify: ## Run everything CI runs: typecheck, lint, unit tests, full Playwright
 	bun test
 	$(MAKE) e2e-preflight
 	$(SESSION_BROWSER) bunx playwright test
+	bun run scripts/verify-stamp.ts write
 
 # The part of `verify` that can see a markdown file, which the pre-push hook runs instead of
 # `verify` when every file a push changes is markdown. Biome is here because it is cheap and
@@ -292,7 +300,7 @@ SESSION_BROWSER := cd apps/web && bun run ../../scripts/session.ts browser --
 typecheck: ## Run TypeScript type checking
 	bun run typecheck
 
-test: ## Run the unit and integration suites, in a session of their own
+test: ## Run the unit and integration suites, in a session of their own (a full run queues behind another session's heavy run)
 	bun test
 
 lint: ## Check linting with Biome
@@ -425,13 +433,24 @@ e2e-preflight: ## Assert the browser Playwright drives can launch
 screenshots: ## Screenshot routes and flag JS errors (ROUTES="/a /b" to override)
 	cd apps/web && bun run build.ts && bun run scripts/screenshot.ts $(ROUTES)
 
-test-e2e: e2e-preflight ## Run the Playwright e2e suite in its own session (builds + serves automatically)
+test-e2e: e2e-preflight ## Run the Playwright e2e suite in its own session (heavy — waits behind another session's run when one is live)
+	@sh scripts/heavy-run.sh make --no-print-directory test-e2e-inner
+
+# Inner bodies of the browser targets, under the lock the wrappers above hold — run the
+# make target, never these.
+test-e2e-inner:
 	$(SESSION_BROWSER) bunx playwright test
 
-test-e2e-ui: e2e-preflight ## Run the Playwright e2e suite in UI mode, in its own session
+test-e2e-ui: e2e-preflight ## Run the Playwright e2e suite in UI mode, in its own session (heavy — waits)
+	@sh scripts/heavy-run.sh make --no-print-directory test-e2e-ui-inner
+
+test-e2e-ui-inner:
 	$(SESSION_BROWSER) bunx playwright test --ui
 
-test-gauntlet: e2e-preflight ## Run the User Gauntlet spec pass in its own session
+test-gauntlet: e2e-preflight ## Run the User Gauntlet spec pass in its own session (heavy — waits)
+	@sh scripts/heavy-run.sh make --no-print-directory test-gauntlet-inner
+
+test-gauntlet-inner:
 	$(SESSION_BROWSER) bunx playwright test --project=gauntlet
 
 

@@ -53,7 +53,10 @@ function git(...args: string[]): string {
 		["git", "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", ...args],
 		{ cwd: repo, stdout: "pipe", stderr: "pipe", env: SANDBOX_ENV },
 	);
-	if (res.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${res.stderr.toString()}`);
+	if (res.exitCode !== 0)
+		throw new Error(
+			`git ${args.join(" ")}: exit=${res.exitCode} stderr=${res.stderr.toString()} stdout=${res.stdout.toString()}`,
+		);
 	return res.stdout.toString().trim();
 }
 
@@ -151,9 +154,28 @@ exit "$STUB_MAKE_EXIT"
 `,
 	);
 	chmodSync(join(stubBin, "make"), 0o755);
-	// The hook runs `bun install` in the worktree before the suite; stubbing it keeps the
-	// sandbox from running a real package manager against a fixture.
-	writeFileSync(join(stubBin, "bun"), "#!/bin/sh\nexit 0\n");
+	// The hook runs `bun install` in the worktree before the suite, and asks the
+	// verify-stamp script whether a green run is already stamped for the pushed head;
+	// stubbing it keeps the sandbox from running a real package manager against a fixture,
+	// and gives the stamp check the answer the test controls: `STUB_STAMPS`, a directory of
+	// one-stamp-per-head files, or empty for "no stamp" — check exits 1 either way, exactly
+	// the fail-closed shape the real script has.
+	writeFileSync(
+		join(stubBin, "bun"),
+		`#!/bin/sh
+case "$*" in
+	*verify-stamp.ts*)
+		sha=$(printf '%s' "$*" | awk '{print $NF}')
+		if [ -n "$STUB_STAMPS" ] && [ -f "$STUB_STAMPS/$sha" ]; then
+			printf 'green 1 minute ago'
+			exit 0
+		fi
+		exit 1
+		;;
+esac
+exit 0
+`,
+	);
 	chmodSync(join(stubBin, "bun"), 0o755);
 
 	// Before anything writes: an empty temporary directory is not a repository, so if git finds one
@@ -331,6 +353,60 @@ describe("the full suite runs in a detached worktree at the push's head", () => 
 		git("checkout", "-q", "main");
 		push(line(head, base));
 		expect(capturedFiles()).toContain("./decoupled-marker.txt");
+	});
+});
+
+describe("the verify stamp", () => {
+	// The hook's one earned skip: a green `make verify` at exactly the pushed head, stamped
+	// by scripts/verify-stamp.ts. The stub bun answers the check from a directory the test
+	// controls, so each test here decides whether a stamp exists — the decision shape the
+	// real script and the hook share is which way the exit code points.
+	const stampDir = () => {
+		mkdirSync(join(dir, "stamps"), { recursive: true });
+		return join(dir, "stamps");
+	};
+
+	it("skips the whole suite when this head's verify ran green by hand", () => {
+		git("checkout", "-q", "-b", "stamped", base);
+		const tip = commit({ "code.ts": "export const stamped = true;\n" });
+		writeFileSync(join(stampDir(), tip), "green\n");
+		const res = push(line(tip, base), 0, { STUB_STAMPS: stampDir() });
+		expect(res.exitCode).toBe(0);
+		expect(res.target).toBeNull();
+		expect(res.stdout).toContain("already ran green");
+		expect(res.stdout).toContain("verify-stamps");
+	});
+
+	it("does not skip a docs-only push even with a stamp, which the stamp never covers", () => {
+		git("checkout", "-q", "-b", "docs-stamped", base);
+		const tip = commit({ "README.md": "# Stamped docs\n" });
+		writeFileSync(join(stampDir(), tip), "green\n");
+		const res = push(line(tip, base), 0, { STUB_STAMPS: stampDir() });
+		expect(res.target).toBe("verify-docs");
+	});
+
+	it("never lets a stamp past the migration fork gate, which ran first on purpose", () => {
+		git("checkout", "-q", "-b", "mig-stamped", base);
+		const tip = commit({
+			"packages/db/drizzle/0096_foo.sql": "CREATE TABLE foo();\n",
+			"packages/db/drizzle/meta/_journal.json": `{"version":"7","dialect":"postgresql","entries":[{"idx":96,"version":"7","when":1234567890,"tag":"0096_foo","breakpoints":true}]}\n`,
+		});
+		git("checkout", "-q", "main");
+		const mainTip = commit({
+			"packages/db/drizzle/0096_other.sql": "CREATE TABLE other();\n",
+			"packages/db/drizzle/meta/_journal.json": `{"version":"7","dialect":"postgresql","entries":[{"idx":96,"version":"7","when":1234567891,"tag":"0096_other","breakpoints":true}]}\n`,
+		});
+		git("push", "-q", "origin", `+${mainTip}:refs/heads/main`);
+		writeFileSync(join(stampDir(), tip), "green\n");
+		const res = push(line(tip, mainTip), 0, { STUB_STAMPS: stampDir() });
+		expect(res.exitCode).toBe(1);
+		expect(res.target).toBeNull();
+		expect(res.stdout).toContain("another migration landed on origin/main since you forked");
+		// The describes that follow measure new branches from a fixture whose main and
+		// origin/main still sit at base; both were moved here, so restore rather than reorder.
+		git("checkout", "-q", "--detach", base);
+		git("branch", "-f", "main", base);
+		git("push", "-q", "origin", `+${base}:refs/heads/main`);
 	});
 });
 
