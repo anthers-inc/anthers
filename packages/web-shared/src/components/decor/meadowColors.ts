@@ -31,8 +31,8 @@ export const DARK: DecorColors = {
 	stem: "oklch(66% 0.11 152)",
 	flower: "oklch(71% 0.13 92)",
 	accent: "oklch(76% 0.12 76)",
-	grass: "oklch(36% 0.06 152)",
-	casing: "oklch(13.5% 0.016 158)",
+	grass: "oklch(38% 0.063 152)",
+	casing: "oklch(16.5% 0.019 158)",
 	vineOpacity: 0.72,
 	floorOpacity: 1,
 };
@@ -52,3 +52,6 @@ export const LIGHT: DecorColors = {
 /** Pick the decor color set for a mode. */
 export const decorColors = (mode: "light" | "dark"): DecorColors =>
 	mode === "light" ? LIGHT : DARK;
+
+// 🚨 The pollen/vine/grass colors above are tuned to sit quietly on the dark ground in
+// theme.css's [data-theme=dark] block — that block's base ramp moves, these move with it.

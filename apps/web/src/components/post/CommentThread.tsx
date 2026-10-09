@@ -321,7 +321,9 @@ function CommentRow({ comment, isReply }: { comment: Comment; isReply: boolean }
 	const replying = replyingTo === comment.id;
 
 	return (
-		<div className="flex gap-3">
+		// The anchor the notification links point at. On the row itself, so a reply's
+		// anchor lands on its own row in the thread rather than on the page top.
+		<div id={`comment-${comment.id}`} className="flex gap-3 scroll-mt-20">
 			{comment.avatar ? (
 				<img
 					src={comment.avatar}

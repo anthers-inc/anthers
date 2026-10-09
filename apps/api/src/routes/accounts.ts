@@ -17,6 +17,9 @@
  *   GET    /me/studio-panels        — the creator's Studio Dashboard layout (panels only;
  *                                     the attention worklist is never stored or hideable)
  *   PATCH  /me/studio-panels        — reorder or show/hide them
+ *   GET    /me/storage              — the account's storage reading: allowance at the held
+ *                                     Badge, bytes held this cycle, per-purpose lines
+ *                                     (services/storage-reading.ts composes it)
  *   GET    /me/content-preferences  — per-rung Hide/Blur/Show; readable signed-out, because
  *                                     the defaults are what a signed-out visitor gets
  *   PATCH  /me/content-preferences  — change either rung, or any kind of content
@@ -72,6 +75,7 @@ import {
 	notSuspendedAccount,
 	notTestAccount,
 } from "../services/account-visibility.js";
+import { notifyFollow } from "../services/activity-notify.js";
 import { interactionPermissionRefusal } from "../services/atproto.js";
 import { FOLLOW_COLLECTION } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
@@ -85,7 +89,17 @@ import {
 	enableAdultAccess,
 	setMaturityDisplay,
 } from "../services/content-preferences.js";
-import { listNotifications, markRead, notify, unreadCount } from "../services/notifications.js";
+import {
+	DELIVERY_GROUPS,
+	type DeliveryGroup,
+	type DeliveryMode,
+	listNotifications,
+	markRead,
+	notify,
+	resolvedMode,
+	unreadCount,
+	unsubscribeGroup,
+} from "../services/notifications.js";
 import {
 	clearParentalControls,
 	parentalPolicyFor,
@@ -97,6 +111,7 @@ import {
 import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 import { queueRecordSync } from "../services/record-sync.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../services/storage/keys.js";
+import { storageReadingFor } from "../services/storage-reading.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -132,13 +147,13 @@ function serializePublicUser(
 
 /** Private user profile shape (for /me) */
 async function serializePrivateUser(user: typeof users.$inferSelect) {
-	// The theme and activity-email preferences ride `user_preferences` (the accounts
-	// split moved them off `users`); a user with no row has set nothing, and `null` is
-	// what "no choice" means on both.
+	// The delivery prefs ride `user_preferences` (the accounts split moved them off
+	// `users`); a user with no row has set nothing, and `null` is what "no choice" means.
 	const [prefs] = await db
 		.select({
 			themePreference: userPreferences.themePreference,
-			notifyActivityEmail: userPreferences.notifyActivityEmail,
+			notificationDelivery: userPreferences.notificationDelivery,
+			notificationUnsubscribeToken: userPreferences.notificationUnsubscribeToken,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
@@ -163,8 +178,30 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		// return, or the "oops" window is one they can only use if they remember it
 		// unaided.
 		deletionRequestedAt: user.deletionRequestedAt,
-		notifyActivityEmail: prefs?.notifyActivityEmail !== false,
+		// The resolved per-group modes (never the raw map — the wildcard is an authoring
+		// convenience, and the client rendering every group needs every group ANSWERED).
+		notificationDelivery: resolveDeliveryModes(prefs?.notificationDelivery ?? null),
+		// Present so the Settings page can show whether the one-click links are live, but
+		// never rendered as copy — it is a credential, and the client's only use is "regenerate".
+		hasUnsubscribeToken: Boolean(prefs?.notificationUnsubscribeToken),
 	};
+}
+
+/**
+ * Every delivery group, with its resolved mode, in registry order.
+ *
+ * The route renders this rather than handing the client the raw map: the wildcard
+ * (`"*"`) is an authoring convenience on the stored side, and a client left to resolve
+ * it would each re-derive the default story — which is exactly the copying of
+ * `services/notifications.ts`' decision the registry exists to prevent.
+ */
+function resolveDeliveryModes(map: Record<string, string> | null) {
+	return Object.fromEntries(
+		(Object.keys(DELIVERY_GROUPS) as DeliveryGroup[]).map((group) => [
+			group,
+			resolvedMode(map, group),
+		]),
+	) as Record<DeliveryGroup, DeliveryMode>;
 }
 
 /**
@@ -279,7 +316,20 @@ const updateProfileSchema = z.object({
 	websiteUrl: z.string().max(500).optional(),
 	location: z.string().max(100).optional(),
 	themePreference: z.enum(["light", "dark"]).optional(),
-	notifyActivityEmail: z.boolean().optional(),
+	/**
+	 * Per-group notification delivery, as whole-mode writes per key.
+	 *
+	 * ⚠️ **Whole map, not a merge**, per PATCH: the client renders every group's control
+	 * from the GET and sends the complete map it now means — a per-key merge would need a
+	 * delete-story (how do you set a group BACK to the default?) and the client always
+	 * knows the whole state anyway.
+	 */
+	notificationDelivery: z
+		.record(
+			z.enum(Object.keys(DELIVERY_GROUPS) as [DeliveryGroup, ...DeliveryGroup[]]),
+			z.enum(["app", "email", "both"]),
+		)
+		.optional(),
 });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -335,25 +385,33 @@ const accountRoutes = new Hono()
 			}
 		}
 
-		// The theme and activity-email preferences are `user_preferences` writes now (the
-		// accounts split moved them off the identity row). Insert-or-update: the row is
+		// The theme and notification-delivery preferences are `user_preferences` writes now
+		// (the accounts split moved them off the identity row). Insert-or-update: the row is
 		// eagerly creatable, so a user setting their first preference writes the row rather
 		// than requiring a separate creation step — and the identity fields below stay on
 		// `users`, which is why the two writes are separate statements rather than one
 		// table's `set`.
 		const prefUpdates: Record<string, unknown> = { updatedAt: new Date() };
 		if (data.themePreference !== undefined) prefUpdates.themePreference = data.themePreference;
-		// `essential` mail has no switch by design — see services/notifications.ts.
-		if (data.notifyActivityEmail !== undefined)
-			prefUpdates.notifyActivityEmail = data.notifyActivityEmail;
+		// `essential` mail has no switch by design — see services/notifications.ts. The
+		// delivery map stores ONLY real group keys: a wildcard is `resolvedMode`'s business,
+		// and a client sending one is asking the server to guess what it means.
+		if (data.notificationDelivery !== undefined) {
+			const cleaned = Object.fromEntries(
+				Object.entries(data.notificationDelivery).filter(([key]) =>
+					Object.hasOwn(DELIVERY_GROUPS, key),
+				),
+			);
+			prefUpdates.notificationDelivery = cleaned;
+		}
 		if (Object.keys(prefUpdates).length > 1) {
 			// The key exists only so the `> 1` test means "something was set"; the row's own
 			// `user_id` is what the insert carries.
 			delete (prefUpdates as { updatedAt?: unknown }).updatedAt;
 			const prefs = {
 				...(data.themePreference !== undefined ? { themePreference: data.themePreference } : {}),
-				...(data.notifyActivityEmail !== undefined
-					? { notifyActivityEmail: data.notifyActivityEmail }
+				...(data.notificationDelivery !== undefined
+					? { notificationDelivery: prefUpdates.notificationDelivery as Record<string, string> }
 					: {}),
 			};
 			await db
@@ -829,19 +887,35 @@ const accountRoutes = new Hono()
 		if (unwritable) return c.json(unwritable.body, unwritable.status);
 
 		// Idempotent: insert if not exists
-		await db
+		const inserted = await db
 			.insert(follows)
 			.values({ followerId: sessionUser.id, creatorId: creator.id })
-			.onConflictDoNothing();
+			.onConflictDoNothing()
+			.returning({ id: follows.id });
 
 		// Read back rather than taken from the insert, which returns nothing on the idempotent
 		// branch — and a repeated follow is still a reason to make sure the record exists.
-		const [follow] = await db
-			.select({ id: follows.id })
-			.from(follows)
-			.where(and(eq(follows.followerId, sessionUser.id), eq(follows.creatorId, creator.id)))
-			.limit(1);
+		const [follow] =
+			inserted.length > 0
+				? inserted
+				: await db
+						.select({ id: follows.id })
+						.from(follows)
+						.where(and(eq(follows.followerId, sessionUser.id), eq(follows.creatorId, creator.id)))
+						.limit(1);
 		if (follow) void queueRecordSync("follow", follow.id);
+
+		// A NEW follow tells the person they were followed; a repeated one stays silent —
+		// the dedupe key on the follow id would catch it anyway, but the branch is free and
+		// says the intent. The block check lives in the emitter; a blocked follow never
+		// reaches here (the route 404s it above). Awaited — see the comment emitters.
+		if (inserted.length > 0) {
+			await notifyFollow({
+				followerId: sessionUser.id,
+				followedId: creator.id,
+				followerHandle: sessionUser.handle,
+			}).catch(() => {});
+		}
 
 		return c.json({ detail: "Followed." }, 201);
 	})
@@ -960,6 +1034,13 @@ const accountRoutes = new Hono()
 		return c.json({ notifications: items, unread });
 	})
 
+	// The bell's poll — one number, one query. Separate from the list read above
+	// deliberately: the poll runs every 30 seconds in every open tab, and each of those
+	// fetching the whole list to learn a count is 50 rows' serialization per tab per poll.
+	.get("/me/notifications/unread", requireAuth, async (c) => {
+		return c.json({ unread: await unreadCount(c.get("user").id) });
+	})
+
 	.post(
 		"/me/notifications/read",
 		requireAuth,
@@ -972,6 +1053,43 @@ const accountRoutes = new Hono()
 			return c.json(await markRead(sessionUser.id, c.req.valid("json").ids));
 		},
 	)
+
+	// ── One-click unsubscribe ────────────────────────────────────────────────
+	// The email link's target. Deliberately NOT requireAuth: a click from a mail client
+	// carries no session cookie, and that is the whole point of the token.
+	//
+	// 🚨 **This is a new unauthenticated write surface, so it joins the limiter** — the
+	// Hub's rule says so in exactly these words. The door's own rationale lives here:
+	// the token is slow to guess (192 bits) but THE RATE LIMIT is what stops a holder of
+	// no token from learning one — an unlimited guess loop over a valid-token oracle the
+	// responses themselves provide (200 for a hit, 404 for a miss) would eventually read
+	// the space. 10/hour/IP is far above any person's real unsubscribe rate and far below
+	// what a scan wants. GET, not POST, because the click is a navigation, and its CSRF
+	// shape is the same one every GET answers: unauthenticated, no cookie, write-authentic
+	// by token possession.
+	.get("/notifications/unsubscribe", async (c) => {
+		const verdict = await checkRate("unsubscribe", clientIp(c.req.raw.headers), 10, 3600);
+		if (!verdict.ok) return limitResponse(verdict);
+		const token = c.req.query("token") ?? "";
+		const group = c.req.query("group") ?? "";
+		// Not a group the registry names: a link with a group we do not know cannot be
+		// honored honestly — say so rather than writing a key nothing reads.
+		const known = Object.hasOwn(DELIVERY_GROUPS, group);
+		if (!token || !known) return c.json({ error: "This unsubscribe link is not valid." }, 404);
+		const ok = await unsubscribeGroup(token, group as DeliveryGroup);
+		if (!ok) return c.json({ error: "This unsubscribe link is not valid." }, 404);
+		// The click came from an email client; the answer must be the page they land on,
+		// so this is a redirect to the SITE origin (the account routes and the SPA share
+		// one origin in production — `FRONTEND_URL`), carrying the group so the page's own
+		// query can acknowledge what happened. A JSON body here would read as a broken
+		// link; a relative redirect would resolve against `/api/accounts`, which is not a
+		// page the SPA serves.
+		const site = process.env.FRONTEND_URL?.trim() || "https://anthers.org";
+		return c.redirect(
+			`${site.replace(/\/+$/, "")}/settings?tab=activity&unsubscribed=${encodeURIComponent(group)}`,
+			302,
+		);
+	})
 
 	// ── Deletion ─────────────────────────────────────────────────────────────
 	// Scheduled and cancellable, per Parker's 2026-08-07 shape: informed consent, an
@@ -1119,6 +1237,14 @@ const accountRoutes = new Hono()
 		// No row and a null column mean the same thing — never arranged — and
 		// `resolveStudioPanels` turns both into the defaults.
 		return c.json({ panels: resolveStudioPanels(row?.panels ?? null) });
+	})
+
+	.get("/me/storage", requireAuth, async (c) => {
+		// The reading is composed in the service, never here — the route is the thin
+		// door every other surface is. Deliberately not gated on `isCreator`: the ladder
+		// is an account allowance (combined-free, every account), so a player holding
+		// cloud saves reads their own figure just as a creator does.
+		return c.json(await storageReadingFor(c.get("user").id));
 	})
 
 	.patch(

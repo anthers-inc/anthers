@@ -1,6 +1,6 @@
 {
-  "id": "74d126db-2704-44ef-aeec-799de89ccee2",
-  "prevId": "9c39fae1-25f8-4c54-b6eb-136c6dee8624",
+  "id": "6a3773c7-1ba7-4779-b152-b7c980aec0ce",
+  "prevId": "3da65b55-c8ed-4469-8384-707421b33623",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2475,60 +2475,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "shipping_name": {
-          "name": "shipping_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipping_address_line1": {
-          "name": "shipping_address_line1",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipping_address_line2": {
-          "name": "shipping_address_line2",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipping_city": {
-          "name": "shipping_city",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipping_state": {
-          "name": "shipping_state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipping_postal_code": {
-          "name": "shipping_postal_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipping_country": {
-          "name": "shipping_country",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "printful_costs": {
-          "name": "printful_costs",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "merch_size": {
-          "name": "merch_size",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2706,6 +2652,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "delivery_event": {
+          "name": "delivery_event",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivery_event_at": {
+          "name": "delivery_event_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2720,6 +2678,21 @@
           "columns": [
             {
               "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_receipt_sends_message": {
+          "name": "idx_receipt_sends_message",
+          "columns": [
+            {
+              "expression": "message_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2858,267 +2831,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.merch_fulfillments": {
-      "name": "merch_fulfillments",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "purchase_id": {
-          "name": "purchase_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "printful_order_id": {
-          "name": "printful_order_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "printful_status": {
-          "name": "printful_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "placed_at": {
-          "name": "placed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "placement_error": {
-          "name": "placement_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "placement_attempts": {
-          "name": "placement_attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "events": {
-          "name": "events",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "tracking_url": {
-          "name": "tracking_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "uq_merch_fulfillments_purchase": {
-          "name": "uq_merch_fulfillments_purchase",
-          "columns": [
-            {
-              "expression": "purchase_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_merch_fulfillments_order": {
-          "name": "idx_merch_fulfillments_order",
-          "columns": [
-            {
-              "expression": "printful_order_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "merch_fulfillments_purchase_id_purchases_id_fk": {
-          "name": "merch_fulfillments_purchase_id_purchases_id_fk",
-          "tableFrom": "merch_fulfillments",
-          "tableTo": "purchases",
-          "columnsFrom": [
-            "purchase_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.merch_variants": {
-      "name": "merch_variants",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "work_id": {
-          "name": "work_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "size": {
-          "name": "size",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "catalog_variant_id": {
-          "name": "catalog_variant_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "catalog_variant_name": {
-          "name": "catalog_variant_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "catalog_price": {
-          "name": "catalog_price",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "list_price": {
-          "name": "list_price",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "print_file_url": {
-          "name": "print_file_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "synced": {
-          "name": "synced",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "uq_merch_variants_work_size": {
-          "name": "uq_merch_variants_work_size",
-          "columns": [
-            {
-              "expression": "work_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "size",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_merch_variants_work": {
-          "name": "idx_merch_variants_work",
-          "columns": [
-            {
-              "expression": "work_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "merch_variants_work_id_works_id_fk": {
-          "name": "merch_variants_work_id_works_id_fk",
-          "tableFrom": "merch_variants",
-          "tableTo": "works",
-          "columnsFrom": [
-            "work_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -4299,6 +4011,19 @@
           "primaryKey": false,
           "notNull": true
         },
+        "email_intended": {
+          "name": "email_intended",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "email_message_id": {
+          "name": "email_message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "email_sent_at": {
           "name": "email_sent_at",
           "type": "timestamp with time zone",
@@ -4346,6 +4071,21 @@
             },
             {
               "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_notifications_email_message": {
+          "name": "idx_notifications_email_message",
+          "columns": [
+            {
+              "expression": "email_message_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -7636,12 +7376,17 @@
           "primaryKey": false,
           "notNull": false
         },
-        "notify_activity_email": {
-          "name": "notify_activity_email",
-          "type": "boolean",
+        "notification_delivery": {
+          "name": "notification_delivery",
+          "type": "jsonb",
           "primaryKey": false,
-          "notNull": false,
-          "default": true
+          "notNull": false
+        },
+        "notification_unsubscribe_token": {
+          "name": "notification_unsubscribe_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

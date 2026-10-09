@@ -24,7 +24,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { abuseReports, moderationReports } from "@anthers/db/schema";
+import { abuseReports, moderationReports, notifications, receiptSends } from "@anthers/db/schema";
 import { eq, isNull, or, sql } from "drizzle-orm";
 
 /**
@@ -50,11 +50,23 @@ export interface DeliveryEvent {
 }
 
 /**
- * Record what happened to a message, against whichever report it belongs to.
+ * Record what happened to a message.
+ *
+ * Beyond the escalation rows, the same event matches **notifications and receipts by
+ * their provider message id** — a bounce against a receipt is a person not told about
+ * their money, and the failed-mail panel is where an operator meets it. These writes are
+ * deliberately narrower than the reports': the event name and its time are all that is
+ * stored (`notifications` carries `emailIntended`/`emailSentAt` for the send decision;
+ * `receipt_sends.sent` already says whether the provider accepted), and a
+ * `delivered` event overwrites nothing terminal — the same ordering rule the reports
+ * honor, in the weaker one-direction form a single nullable column can hold: anything
+ * writes an empty event, and a terminal-er event name is written over any non-terminal
+ * one but never the reverse. No attempt to re-derive a full state machine here; the row
+ * is a note from the provider, and the panel reads it as one.
  *
  * Returns how many rows were touched — zero is an ordinary outcome, not an error: Resend
  * sends events for **every** email we send, and most of them are signup verifications
- * that no report row names. A webhook that treated an unmatched event as a failure would
+ * that no row names. A webhook that treated an unmatched event as a failure would
  * spend its life reporting failures.
  *
  * 🚨 **Ordering is not guaranteed and later events are not always better.** Webhook
@@ -103,7 +115,31 @@ export async function recordDeliveryEvent(input: DeliveryEvent): Promise<{ match
 		)
 		.returning({ id: abuseReports.id });
 
-	return { matched: reports.length + abuse.length };
+	// The user-facing halves, matched on their own message-id columns. The same ordering
+	// rule as the reports, in the form a single nullable column can hold: anything fills
+	// an unanswered event, and a non-terminal event never replaces a terminal one — a
+	// late `sent` must not erase a known bounce. (A terminal event has the same guard:
+	// a terminal over a terminal is not an upgrade, so it does not rewrite — the first
+	// terminal answer stands, which is what makes the column readable.)
+	const terminalGuard = sql`(${notifications.emailDeliveryEvent} IS NULL
+		OR ${notifications.emailDeliveryEvent} NOT IN ('delivered','bounced','complained','failed','canceled'))`;
+	const notificationUpdates = await db
+		.update(notifications)
+		.set({ emailDeliveryEvent: input.event, emailDeliveryEventAt: input.occurredAt })
+		.where(sql`${notifications.emailMessageId} = ${input.messageId} AND ${terminalGuard}`)
+		.returning({ id: notifications.id });
+
+	const receiptGuard = sql`(${receiptSends.deliveryEvent} IS NULL
+		OR ${receiptSends.deliveryEvent} NOT IN ('delivered','bounced','complained','failed','canceled'))`;
+	const receiptUpdates = await db
+		.update(receiptSends)
+		.set({ deliveryEvent: input.event, deliveryEventAt: input.occurredAt })
+		.where(sql`${receiptSends.messageId} = ${input.messageId} AND ${receiptGuard}`)
+		.returning({ id: receiptSends.id });
+
+	return {
+		matched: reports.length + abuse.length + notificationUpdates.length + receiptUpdates.length,
+	};
 }
 
 export interface StoredDelivery {

@@ -21,7 +21,7 @@ import type { ReactNode } from "react";
 import { postUrl } from "../../lib/postUrl";
 import { Link } from "../../lib/router";
 import { studioEditWorkUrl, studioUrl } from "../../lib/studio";
-import type { CreatorEarnings, PostListItem, Project, Work } from "../../lib/types";
+import type { CreatorEarnings, PostListItem, Project, StorageReading, Work } from "../../lib/types";
 import type { WorkUpload } from "../../lib/work-uploads";
 import { processingQueue } from "./processing";
 import { accessState } from "./work-state";
@@ -30,6 +30,7 @@ export const PANEL_LABELS: Record<StudioPanel, string> = {
 	processing: "Processing",
 	earnings: "Earnings",
 	catalog: "Catalog",
+	storage: "Storage",
 	projects: "Projects",
 	posts: "Posts",
 };
@@ -38,6 +39,7 @@ export interface PanelData {
 	/** Files this tab is uploading, which the processing panel lists before anything processes. */
 	uploads: readonly WorkUpload[];
 	earnings: CreatorEarnings | null;
+	storage: StorageReading | null;
 	works: Work[];
 	projects: Project[];
 	posts: PostListItem[];
@@ -162,6 +164,40 @@ export function StudioPanelBody({ panel, data }: { panel: StudioPanel; data: Pan
 				</Panel>
 			);
 		}
+
+		case "storage":
+			return (
+				<Panel title="Storage">
+					{data.storage ? (
+						<div>
+							<div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+								<Stat label="Used" value={`${data.storage.giBUsed} GiB`} />
+								<Stat label="Allowance" value={`${data.storage.allowanceGiB} GiB`} />
+								<Stat
+									label={data.storage.overflowCost !== "0.00" ? "Overflow (est.)" : "Remaining"}
+									value={
+										data.storage.overflowCost !== "0.00"
+											? `$${data.storage.overflowCost}`
+											: `${(data.storage.bytesFree / (1024 * 1024 * 1024)).toFixed(1)} GiB`
+									}
+								/>
+							</div>
+							<p className="mt-2 text-xs text-base-content/50">
+								Your allowance rises with the Badge you hold, and holds your catalog and your own
+								kept files together. Past it, more bytes are available at cost — the provider's
+								rate, no mark-up. Figures are this cycle's running estimate.{" "}
+								{data.storage.sampledAt &&
+									`Last sampled ${new Date(data.storage.sampledAt).toLocaleDateString("en-US", {
+										month: "short",
+										day: "numeric",
+									})}.`}
+							</p>
+						</div>
+					) : (
+						<p className="text-sm text-base-content/60">Metering…</p>
+					)}
+				</Panel>
+			);
 
 		case "projects":
 			return (

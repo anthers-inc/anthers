@@ -1,1 +1,0 @@
-ALTER TABLE "merch_variants" ADD COLUMN "list_price" numeric NOT NULL;

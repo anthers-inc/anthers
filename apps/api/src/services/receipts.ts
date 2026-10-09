@@ -48,10 +48,14 @@ import {
 	type SendResult,
 	sendCreatorRefundReceiptEmail,
 	sendCreatorSaleReceiptEmail,
+	sendPayoutReceiptEmail,
 	sendPurchaseReceiptEmail,
 	sendRefundReceiptEmail,
 	sendSupportReceiptEmail,
 } from "./email.js";
+
+/** The transfer id prefix marking a zero-sum close — a movement of nothing, no email. */
+const ZERO_SUM_TRANSFER_PREFIX = "tr_local_zerosum_";
 
 /**
  * Whether this creator wants their copy of transaction emails. Null reads as on: the
@@ -80,7 +84,7 @@ export async function creatorWantsReceiptEmails(creatorId: number): Promise<bool
 async function sendOnce(
 	args: {
 		dedupeKey: string;
-		kind: "purchase" | "refund" | "invoice";
+		kind: "purchase" | "refund" | "invoice" | "payout";
 		userId: number | null;
 		role: "buyer" | "creator";
 		email: string;
@@ -363,6 +367,61 @@ export async function sendSupportReceipt(invoiceRow: InvoiceRow): Promise<void> 
 				lines: receiptLines,
 				tax: invoiceRow.tax,
 				total: invoiceRow.total,
+			}),
+	);
+}
+
+/**
+ * The creator's receipt for a payout: the money a transfer actually moved into their
+ * connected account's balance, called from `jobs/transfer-held-credits.ts` after the
+ * transfer row's transaction commits.
+ *
+ * 🚨 **Only real money earns this email.** The zero-sum close (the `tr_local_zerosum_`
+ * prefix, amount "0.00") is a bookkeeping movement of nothing, and a receipt for it
+ * would be mail announcing that nothing happened. The caller guards the prefix and the
+ * positive sum; the amount check below is the second of the two gates, cheap and
+ * independent, because a receipt's figure must be a movement.
+ *
+ * The dedupe key latches on the transfer's own Stripe id: a re-run that replays the same
+ * idempotency key finds Stripe returning the original transfer, whose row is already
+ * covered — and the redelivered job then lands on this row's conflict and sends nothing.
+ * The reference is the transfer id, which is also the identifier on the Studio Payments
+ * page's transfer record, so the email and the page name the same movement.
+ *
+ * The creator's receipt preference (`creatorWantsReceiptEmails`) is honored — this is
+ * transactional mail of the same family as the sale receipt, not the essential category,
+ * and the off switch on their Stripe account row says so.
+ */
+export async function sendPayoutReceipt(transfer: {
+	creatorId: number;
+	stripeTransferId: string;
+	amount: string;
+	transferredAt: Date;
+}): Promise<void> {
+	if (transfer.stripeTransferId.startsWith(ZERO_SUM_TRANSFER_PREFIX)) return;
+	if (new Decimal(transfer.amount).isZero()) {
+		console.error(
+			`[receipts] a payout receipt was asked for transfer ${transfer.stripeTransferId} with amount ${transfer.amount} — a zero movement earns no email; refusing rather than mailing a nothing`,
+		);
+		return;
+	}
+	const creatorEmail = await emailOf(transfer.creatorId);
+	if (!creatorEmail) return;
+	if (!(await creatorWantsReceiptEmails(transfer.creatorId))) return;
+	await sendOnce(
+		{
+			dedupeKey: `payout:${transfer.stripeTransferId}:creator:${transfer.creatorId}`,
+			kind: "payout",
+			userId: transfer.creatorId,
+			role: "creator",
+			email: creatorEmail,
+		},
+		() =>
+			sendPayoutReceiptEmail({
+				to: creatorEmail,
+				reference: transfer.stripeTransferId,
+				date: transfer.transferredAt,
+				amount: transfer.amount,
 			}),
 	);
 }

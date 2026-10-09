@@ -1,1 +1,0 @@
-ALTER TABLE "purchases" ADD COLUMN "merch_discount_badge" text;

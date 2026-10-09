@@ -111,10 +111,12 @@ const AbusePage = lazy(() => import("./pages/AbusePage"));
 const PostPage = lazy(() => import("./pages/PostPage"));
 const ProjectPage = lazy(() => import("./pages/ProjectPage"));
 const PurchasesPage = lazy(() => import("./pages/PurchasesPage"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
 const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
 const RoadmapPage = lazy(() => import("./pages/RoadmapPage"));
 const IssueReportsPage = lazy(() => import("./pages/IssueReportsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const UnsubscribePage = lazy(() => import("./pages/UnsubscribePage"));
 const SupportersPage = lazy(() => import("./pages/SupportersPage"));
 const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
 const SignupPage = lazy(() => import("./pages/SignupPage"));
@@ -303,6 +305,14 @@ export default function App() {
 						}
 					/>
 					<Route
+						path="/notifications"
+						element={
+							<ProtectedRoute>
+								<NotificationsPage />
+							</ProtectedRoute>
+						}
+					/>
+					<Route
 						path="/settings"
 						element={
 							<ProtectedRoute>
@@ -351,6 +361,11 @@ export default function App() {
 					    (Parker, 2026-10-02). `/safety` redirects here so the subject-family
 					    guess still lands somewhere rather than on a 404. */}
 					<Route path="/safety" element={<Navigate to="/abuse" replace />} />
+					{/* The one-click unsubscribe landing from an activity email. Not a
+					    ProtectedRoute — the click carries a token, not a session, and that is
+					    the feature. The page itself performs no write (the API redirect
+					    preceded it); see the file's note. */}
+					<Route path="/unsubscribe" element={<UnsubscribePage />} />
 					<Route path="/roadmap" element={<RoadmapPage />} />
 					<Route path="/release-notes" element={<ReleaseNotesPage />} />
 					{/* /changelog is kept as a redirect because the URL is in circulation —

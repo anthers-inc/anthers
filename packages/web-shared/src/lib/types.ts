@@ -965,6 +965,32 @@ export interface CreatorEarnings {
 }
 
 /**
+ * The account's storage reading — the shaped answer `GET /api/accounts/me/storage` serves,
+ * mirrored from the API's own interface rather than re-declared so a field they carry
+ * differently is caught at typecheck rather than at render.
+ */
+export interface StorageReading {
+	/** The ruled allowance at this account's held Badge, in GiB. */
+	allowanceGiB: number;
+	/** Bytes held this cycle, across every purpose — the figure the allowance binds. */
+	bytesUsed: number;
+	/** The allowance-binding figure in GiB, one decimal. */
+	giBUsed: number;
+	/** Bytes remaining under the allowance, 0 when over. */
+	bytesFree: number;
+	/** Whether this account can buy overflow at cost — Root or above. */
+	topUpEligible: boolean;
+	/** The at-cost overflow estimate in dollars, "0.00" when within the allowance or ineligible. */
+	overflowCost: string;
+	/** Per-purpose lines; every known kind present, so a reader never defaults a key. */
+	purposes: Record<string, number>;
+	/** When this cycle's figure was sampled — null before the meter's first sweep saw the account. */
+	sampledAt: string | null;
+	/** The cycle the reading belongs to. */
+	cycle: string;
+}
+
+/**
  * One Badge this user holds, this cycle — a discrete pick of a creator's rung.
  *
  * The holding names the Badge; its dollars are the Badge's threshold by construction,
@@ -1059,6 +1085,42 @@ export interface CreatorStatus {
 	badges: CreatorBadge[];
 	unlockedBadges: number[];
 }
+
+// ─── Notifications ──────────────────────────────────────────────────────────────
+
+/**
+ * One thing the app told a person — a row of the notifications feed.
+ *
+ * Shaped on `routes/accounts.ts`' `GET /me/notifications` response (the row's own shape,
+ * dates as ISO strings). The `kind` is the stable machine value the server records; the
+ * client never branches copy on it today — the title carries the sentence — but the icon
+ * and the "read the whole sentence where it happened" render branch on `kind`, so it
+ * travels.
+ */
+export interface NotificationItem {
+	id: number;
+	/** `essential` | `activity` */
+	category: string;
+	/** The stable machine value — `comment_reply`, `post_comment`, `work_review`, … */
+	kind: string;
+	title: string;
+	body: string;
+	/** App-relative path the item points at; empty string when there is nowhere to go. */
+	linkPath: string;
+	/** When the email actually went (the send succeeded), or null when it did not. */
+	emailSentAt: string | null;
+	/** When the person read it in the app, or null while unread. */
+	readAt: string | null;
+	createdAt: string;
+}
+
+/**
+ * A delivery group's mode, as the client renders it: app feed only, email only, or both.
+ * The names are the API's (`services/notifications.ts`), and an unrecognized value renders
+ * as "both" — the default everything unwritten answers, so a future fourth mode degrades
+ * to the noisier display rather than silently hiding mail the person is receiving.
+ */
+export type NotificationDeliveryMode = "app" | "email" | "both";
 
 export interface Bookmark {
 	id: number;

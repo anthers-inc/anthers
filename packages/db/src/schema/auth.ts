@@ -245,7 +245,41 @@ export const notifications = pgTable(
 		linkPath: text("link_path").notNull().default(""),
 		/** Caller-supplied natural key. One notification per key, ever. */
 		dedupeKey: text("dedupe_key").notNull(),
+		/**
+		 * Whether the service DECIDED this notice should email — the category/group rule's
+		 * answer on this row, recorded at the moment it was evaluated.
+		 *
+		 * ⚠️ **This is what makes a failed send findable.** `emailSentAt` null can no
+		 * longer mean "the send was never wanted": a suppressed activity notice and a
+		 * failed essential one both lack the timestamp, and a panel keyed on the null
+		 * alone would report every suppressed social notice as a failure. `emailIntended
+		 * = true` plus a null `emailSentAt` is the failure state, and nothing else is.
+		 */
+		emailIntended: boolean("email_intended").notNull().default(false),
+		/**
+		 * The provider's id for the message, when there is one — what a Resend delivery
+		 * event matches against.
+		 *
+		 * 🚨 **A FAILED send carries none** — `emailIntended` catches that case; this
+		 * catches the subtler one, a send the provider ACCEPTED and the recipient's mail
+		 * server then rejected. Without it a bounce has nothing to land on, which is the
+		 * gap the delivery-events webhook exists to close for escalation alerts and now
+		 * closes here too.
+		 */
+		emailMessageId: text("email_message_id"),
 		emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
+		/**
+		 * What the provider later told us became of the message — a Resend delivery event
+		 * matched on {@link emailMessageId}, recorded by the same webhook that reports
+		 * escalation alerts. Null until an event arrives.
+		 *
+		 * ⚠️ **Read beside `emailSentAt`, never alone.** The pair answers the two different
+		 * failures: sent-then-bounced (timestamp set, event `bounced`) and
+		 * accepted-then-nothing (timestamp set, event null after a reasonable window) — the
+		 * failed-mail panel names both; this column is only the provider's note.
+		 */
+		emailDeliveryEvent: text("email_delivery_event"),
+		emailDeliveryEventAt: timestamp("email_delivery_event_at", { withTimezone: true }),
 		readAt: timestamp("read_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
@@ -254,6 +288,8 @@ export const notifications = pgTable(
 		// job that resolves the same fact twice must land on the same row both times.
 		uniqueIndex("uq_notifications_dedupe").on(table.dedupeKey),
 		index("idx_notifications_user").on(table.userId, table.createdAt),
+		// The delivery webhook matches on the provider's id — see `emailMessageId`.
+		index("idx_notifications_email_message").on(table.emailMessageId),
 	],
 );
 

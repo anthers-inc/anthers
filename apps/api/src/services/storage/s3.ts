@@ -328,6 +328,36 @@ export class S3StorageService implements StorageService {
 		}
 	}
 
+	/**
+	 * The total bytes under a prefix, across both buckets.
+	 *
+	 * One paginated listing per bucket, summing `Size` — the same walk `deletePrefix`
+	 * performs for its population, reading instead of deleting. `ContentLength` on a
+	 * listed object is the stored size, which is the figure the meter wants.
+	 */
+	async prefixSize(prefix: string): Promise<number> {
+		const buckets =
+			this.config.publicBucket === this.config.bucket
+				? [this.config.bucket]
+				: [this.config.bucket, this.config.publicBucket];
+		let total = 0;
+		for (const target of buckets) {
+			let continuationToken: string | undefined;
+			do {
+				const listed = await this.s3.send(
+					new ListObjectsV2Command({
+						Bucket: target,
+						Prefix: prefix,
+						ContinuationToken: continuationToken,
+					}),
+				);
+				for (const object of listed.Contents ?? []) total += object.Size ?? 0;
+				continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+			} while (continuationToken);
+		}
+		return total;
+	}
+
 	async exists(key: string): Promise<boolean> {
 		try {
 			await this.s3.send(new HeadObjectCommand({ Bucket: this.bucketForKey(key), Key: key }));

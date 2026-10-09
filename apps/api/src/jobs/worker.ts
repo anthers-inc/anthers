@@ -49,6 +49,7 @@ import { rescanOwed } from "./rescan-owed.js";
 import { resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
+import { runStorageUsageSweep } from "./storage-usage.js";
 import { type SyncAtprotoRecordData, syncAtprotoRecordJob } from "./sync-atproto-record.js";
 import { type SyncWorkListingData, syncWorkListingJob } from "./sync-work-listing.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
@@ -174,6 +175,16 @@ async function start() {
 		for (const job of jobs) {
 			console.log(`[calculate-crf] Processing job ${job.id}`);
 			await calculateCrfSubsidies();
+		}
+	});
+
+	// The storage meter: quiet when nothing is stored (returns 0), a written count otherwise
+	// — the same posture every other sweep's worker logs with.
+	await queue.work(QUEUES.STORAGE_USAGE, async (jobs) => {
+		for (const job of jobs) {
+			const written = await runStorageUsageSweep();
+			if (written > 0)
+				console.log(`[storage-usage] job ${job.id}: ${written} account(s) snapshotted`);
 		}
 	});
 

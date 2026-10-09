@@ -266,9 +266,27 @@ export const receiptSends = pgTable(
 		/** Whether the provider accepted the message. Delivery is Resend's to report. */
 		sent: boolean("sent").notNull().default(false),
 		messageId: text("message_id"),
+		/**
+		 * What the provider later told us became of the message — a Resend delivery event
+		 * matched on {@link messageId}, recorded by the same webhook that reports
+		 * escalation alerts. Null until an event arrives; `delivered` when the receiving
+		 * server accepted it; `bounced`/`failed`/`complained` when it did not.
+		 *
+		 * ⚠️ **Accepted is not delivered** — that distinction is the whole reason the
+		 * webhook exists (`services/delivery-events.ts`), and a receipt whose send was
+		 * accepted but which then bounced is a person who was not told about their money.
+		 * The failed-mail panel reads this column beside `sent`.
+		 */
+		deliveryEvent: text("delivery_event"),
+		deliveryEventAt: timestamp("delivery_event_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	(table) => [index("idx_receipt_sends_user").on(table.userId)],
+	(table) => [
+		index("idx_receipt_sends_user").on(table.userId),
+		// The delivery webhook matches on the provider's id; without this every event is a
+		// scan of the table the receipt rows live in.
+		index("idx_receipt_sends_message").on(table.messageId),
+	],
 );
 
 // org — the record of money the processor clawed back. Money cannot federate.
