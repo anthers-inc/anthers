@@ -44,7 +44,7 @@ const HTML_TO_MARKDOWN = new TurndownService({
 	 * trailing blank paragraphs still fall to the final `trim()` in
 	 * `normalizeStoredMarkdown`, which is the right place for them to go.
 	 */
-	blankReplacement: (content, node) => {
+	blankReplacement: (_content, node) => {
 		// turndown augments every node with its own `isBlock` at runtime. The two
 		// newlines are the block separator itself and matter: turndown's `join`
 		// trims newlines between consecutive blocks, so a bare `\u00A0` would let
