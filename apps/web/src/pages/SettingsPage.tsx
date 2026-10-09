@@ -16,8 +16,9 @@ import {
 } from "@anthers/web-shared/desktop";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
+import type { NotificationDeliveryMode } from "@anthers/web-shared/types";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
 import ParentalControlsSection from "../components/settings/ParentalControlsSection";
 import { generateRecoveryKey, type RecoveryKeypair } from "../lib/recovery-key";
@@ -1211,6 +1212,170 @@ function ActivityHistorySection() {
 	);
 }
 
+/**
+ * How each kind of notification reaches you — **app feed, email, or both, per group**
+ * (Parker, 2026-10-08).
+ *
+ * The groups render from the server's resolved answer, never a local copy of the registry:
+ * `GET /me` returns every group with its resolved mode, so a group the server has not in
+ * its registry cannot render a control for nothing. A group with no stored answer reads
+ * `both`, which is the default everything starts at.
+ *
+ * ⭐ **One write carries the whole map.** Each control sends the complete map it now
+ * means — a per-key patch would need a story for "set it back to default", and the page
+ * holds the whole state anyway.
+ *
+ * ⚠️ **The `email`-only column is a deliberate choice the UI does not soften.** A person
+ * who picks "email only" for a group has said they read this kind in mail, not in the
+ * feed; the in-app record is still written (the service's rule — email-only is not an
+ * opt-out of being told, it is an opt-out of the *bell*), and the copy here says so.
+ */
+function NotificationsSection() {
+	type Modes = Record<string, NotificationDeliveryMode>;
+	const [modes, setModes] = useState<Modes | null>(null);
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [unsubscribed, setUnsubscribed] = useState<string | null>(null);
+
+	const load = useCallback(() => {
+		apiFetch("/api/accounts/me")
+			.then(async (res) => {
+				if (!res.ok) throw new Error("Could not load your notification settings.");
+				const body = (await res.json()) as {
+					user: { notificationDelivery?: Modes };
+				};
+				setModes(body.user.notificationDelivery ?? {});
+			})
+			.catch((e) =>
+				setError(e instanceof Error ? e.message : "Could not load your notification settings."),
+			);
+	}, []);
+
+	useEffect(() => load(), [load]);
+
+	// The unsubscribe landing arrives here carrying the group it just turned off, so the
+	// section acknowledges what the click did — the one moment somebody has acted on this
+	// section from outside it.
+	const [params, setParams] = useSearchParams();
+	useEffect(() => {
+		const group = params.get("unsubscribed");
+		if (!group) return;
+		setUnsubscribed(group);
+		setParams(
+			(prev) => {
+				const next = new URLSearchParams(prev);
+				next.delete("unsubscribed");
+				return next;
+			},
+			{ replace: true },
+		);
+		load();
+	}, [params, setParams, load]);
+
+	async function setMode(group: string, mode: NotificationDeliveryMode) {
+		if (!modes) return;
+		const before = modes;
+		const next = { ...modes, [group]: mode };
+		setModes(next); // Optimistic; snap back on refusal.
+		setSaving(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/accounts/me", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ notificationDelivery: next }),
+			});
+			if (!res.ok) throw new Error(String(res.status));
+		} catch {
+			setModes(before);
+			setError("Couldn't save that. Try again.");
+		} finally {
+			setSaving(false);
+		}
+	}
+
+	const GROUP_COPY: Record<string, { label: string; hint: string }> = {
+		conversation: {
+			label: "Replies and comments",
+			hint: "Somebody replied to your comment, or commented on your post.",
+		},
+		reviews: { label: "Reviews", hint: "Somebody reviewed a Work of yours." },
+		followers: { label: "Followers", hint: "Somebody followed you." },
+		credits: { label: "Credits", hint: "You were credited on a Work." },
+		reportAnswers: { label: "Report answers", hint: "What we did about a report you filed." },
+	};
+
+	const MODE_LABELS: Record<NotificationDeliveryMode, string> = {
+		both: "App & email",
+		app: "App only",
+		email: "Email only",
+	};
+
+	if (modes === null && !error) return null;
+
+	return (
+		<div className="card bg-base-200 mb-6">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Notifications</h3>
+				<p className="text-sm text-base-content/60">
+					Every notification lands in your app feed whatever you choose here — these decide whether
+					it also arrives by email. Essential notices (money, deadlines, legal) always email and are
+					never affected by this page.
+				</p>
+				{unsubscribed && (
+					<div className="alert alert-success mt-2">
+						<span>
+							Done — you'll no longer get emails for{" "}
+							{GROUP_COPY[unsubscribed]?.label.toLowerCase() ?? "that"}; it still shows in your app
+							feed.
+						</span>
+					</div>
+				)}
+				{error && (
+					<div className="alert alert-error mt-2">
+						<span>{error}</span>
+					</div>
+				)}
+				{modes !== null && (
+					<div className="mt-2 flex flex-col gap-3">
+						{Object.keys(GROUP_COPY).map((group) => {
+							const copy = GROUP_COPY[group];
+							// A group the server does not know renders nothing — a control for a
+							// notification that can never arrive is the settings-page dead switch
+							// the SupporterListing section's note warns about.
+							if (!(group in modes)) return null;
+							const mode = modes[group];
+							return (
+								<div key={group} className="flex flex-wrap items-center gap-x-4 gap-y-1">
+									<div className="min-w-48 flex-1">
+										<span className="text-sm font-medium">{copy.label}</span>
+										<p className="text-xs text-base-content/50">{copy.hint}</p>
+									</div>
+									<fieldset className="join border-0 p-0 m-0">
+										<legend className="sr-only">How {copy.label.toLowerCase()} reach you</legend>
+										{(Object.keys(MODE_LABELS) as NotificationDeliveryMode[]).map((m) => (
+											<button
+												key={m}
+												type="button"
+												className={`btn btn-xs join-item ${mode === m ? "btn-primary" : "btn-ghost bg-base-300/40"}`}
+												aria-pressed={mode === m}
+												disabled={saving}
+												onClick={() => setMode(group, m)}
+											>
+												{MODE_LABELS[m]}
+											</button>
+										))}
+									</fieldset>
+								</div>
+							);
+						})}
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+
 interface DeletionState {
 	scheduledFor: string | null;
 	graceDays: number;
@@ -1726,6 +1891,11 @@ export default function SettingsPage() {
 
 			{activeTab === "activity" && (
 				<>
+					{/* How each kind of notification reaches you — app, email, or both. First on
+					    the tab, because it is the settings the most surfaces point at (the email
+					    footers and the unsubscribe landing both name this page). */}
+					<NotificationsSection />
+
 					{/* The person's own attention record — what the Privacy Policy says they can read. */}
 					<ActivityHistorySection />
 

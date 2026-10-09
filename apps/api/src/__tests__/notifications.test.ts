@@ -36,6 +36,8 @@ purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
 
+const ORIGIN = "http://localhost:3000";
+
 function req(path: string, options?: RequestInit) {
 	return testFetch(new Request(`http://localhost${path}`, options));
 }
@@ -136,24 +138,30 @@ describe("one fact, one notification", () => {
 });
 
 describe("the opt-out line", () => {
-	it("keeps the in-app record when activity email is switched off", async () => {
+	it("keeps the in-app record when the whole map says app-only", async () => {
+		// The old boolean's answer, carried into the map: `"*": "app"` is what the
+		// migration writes for somebody who had turned activity email off, and the
+		// assertion it needs is that the row stands and no email was INTENDED — on a
+		// group the registry maps, since an unmapped kind is the category's business
+		// (the test below names why).
 		await db
 			.insert(userPreferences)
-			.values({ userId: recipientId, notifyActivityEmail: false })
+			.values({ userId: recipientId, notificationDelivery: { "*": "app" } })
 			.onConflictDoUpdate({
 				target: userPreferences.userId,
-				set: { notifyActivityEmail: false },
+				set: { notificationDelivery: { "*": "app" } },
 			});
 
 		const result = await notify({
 			userId: recipientId,
 			category: "activity",
-			kind: "test_activity",
+			kind: "comment_reply",
 			title: `Activity while opted out ${id}`,
 			dedupeKey: `test-activity-optout:${id}`,
 		});
 
-		// Opting out of email is NOT opting out of being told.
+		// Opting out of email is NOT opting out of being told — and this kind
+		// (`test_activity`) maps to no group, so the category-level default stands.
 		expect(result.created).toBe(true);
 		// Chose not to — the switch applies here, and this is the counterpart to the
 		// essential assertion below.
@@ -168,15 +176,54 @@ describe("the opt-out line", () => {
 		expect(row.emailSentAt).toBeNull();
 	});
 
+	it("🚨 resolves an UNMAPPED activity kind to email-on regardless of the map", async () => {
+		// `test_activity` names no delivery group. A kind the registry has not met is the
+		// category's business, not the map's — resolving an unknown kind to "app" would
+		// silence the next developer's activity kind by default, which is the direction
+		// this must fail in.
+		await db
+			.insert(userPreferences)
+			.values({ userId: recipientId, notificationDelivery: { "*": "app" } })
+			.onConflictDoUpdate({
+				target: userPreferences.userId,
+				set: { notificationDelivery: { "*": "app" } },
+			});
+		const result = await notify({
+			userId: recipientId,
+			category: "activity",
+			kind: `unmapped_kind_${id}`,
+			title: `Unmapped kind ${id}`,
+			dedupeKey: `test-unmapped:${id}`,
+		});
+		expect(result.created).toBe(true);
+		expect(result.emailIntended).toBe(true);
+		await db
+			.insert(userPreferences)
+			.values({ userId: recipientId, notificationDelivery: {} })
+			.onConflictDoUpdate({
+				target: userPreferences.userId,
+				set: { notificationDelivery: {} },
+			});
+	});
+
 	it("🚨 sends an ESSENTIAL notice regardless of the switch", async () => {
 		// The assertion the whole category split exists for. A preference that quietly
 		// applied here would mean someone believing they had opted into being told about
 		// their money, and not being.
+		await db
+			.insert(userPreferences)
+			.values({ userId: recipientId, notificationDelivery: { "*": "app" } })
+			.onConflictDoUpdate({
+				target: userPreferences.userId,
+				set: { notificationDelivery: { "*": "app" } },
+			});
 		const [before] = await db
-			.select({ pref: userPreferences.notifyActivityEmail })
+			.select({ pref: userPreferences.notificationDelivery })
 			.from(userPreferences)
 			.where(eq(userPreferences.userId, recipientId));
-		expect(before.pref).toBe(false);
+		// A live precondition, not a sibling's leftover: every group answers app-only, and
+		// essential must ride over exactly that.
+		expect(before.pref).toStrictEqual({ "*": "app" });
 
 		const result = await notify({
 			userId: recipientId,
@@ -201,11 +248,176 @@ describe("the opt-out line", () => {
 
 		await db
 			.insert(userPreferences)
-			.values({ userId: recipientId, notifyActivityEmail: true })
+			.values({ userId: recipientId, notificationDelivery: {} })
 			.onConflictDoUpdate({
 				target: userPreferences.userId,
-				set: { notifyActivityEmail: true },
+				set: { notificationDelivery: {} },
 			});
+	});
+});
+
+describe("per-group delivery", () => {
+	it("keeps the row but skips the email when a social kind's group is app-only", async () => {
+		await db
+			.insert(userPreferences)
+			.values({ userId: recipientId, notificationDelivery: { conversation: "app" } })
+			.onConflictDoUpdate({
+				target: userPreferences.userId,
+				set: { notificationDelivery: { conversation: "app" } },
+			});
+
+		const result = await notify({
+			userId: recipientId,
+			category: "activity",
+			kind: "comment_reply",
+			title: `Reply while app-only ${id}`,
+			dedupeKey: `test-group-app:${id}`,
+		});
+
+		expect(result.created).toBe(true);
+		expect(result.emailIntended).toBe(false);
+		const [row] = await db
+			.select()
+			.from(notifications)
+			.where(eq(notifications.dedupeKey, `test-group-app:${id}`));
+		expect(row).toBeDefined();
+		expect(row.emailSentAt).toBeNull();
+	});
+
+	it("emails when the mode says so, and stays silent when the wildcard says otherwise", async () => {
+		// Wildcard app-only, one group re-raised to both: the explicit key beats the
+		// wildcard — that is the whole reason there are two layers.
+		await db
+			.insert(userPreferences)
+			.values({
+				userId: recipientId,
+				notificationDelivery: { "*": "app", reviews: "both" },
+			})
+			.onConflictDoUpdate({
+				target: userPreferences.userId,
+				set: { notificationDelivery: { "*": "app", reviews: "both" } },
+			});
+
+		const silenced = await notify({
+			userId: recipientId,
+			category: "activity",
+			kind: "comment_reply",
+			title: `Wildcard app ${id}`,
+			dedupeKey: `test-wildcard-app:${id}`,
+		});
+		expect(silenced.emailIntended).toBe(false);
+
+		const mailed = await notify({
+			userId: recipientId,
+			category: "activity",
+			kind: "work_review",
+			title: `Explicit both ${id}`,
+			dedupeKey: `test-explicit-both:${id}`,
+		});
+		expect(mailed.emailIntended).toBe(true);
+
+		await db
+			.insert(userPreferences)
+			.values({ userId: recipientId, notificationDelivery: {} })
+			.onConflictDoUpdate({
+				target: userPreferences.userId,
+				set: { notificationDelivery: {} },
+			});
+	});
+
+	it("🚨 refuses a map carrying a key outside the registry, writing nothing", async () => {
+		// Strict, not filtering: a key the registry does not name means the CLIENT and the
+		// REGISTRY disagree about what map they are editing, and accepting the part that
+		// matches would store a map whose other half the next GET renders wrong. A 400
+		// names the disagreement; the schema's own enum is what answers.
+		const res = await req("/api/accounts/me", {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: recipient },
+			body: JSON.stringify({ notificationDelivery: { conversation: "app", madeUp: "app" } }),
+		});
+		expect(res.status).toBe(400);
+		const [row] = await db
+			.select({ delivery: userPreferences.notificationDelivery })
+			.from(userPreferences)
+			.where(eq(userPreferences.userId, recipientId));
+		expect(row.delivery).toStrictEqual({});
+	});
+
+	it("resolves every group for the settings page to read", async () => {
+		await db
+			.update(userPreferences)
+			.set({ notificationDelivery: { followers: "email" } })
+			.where(eq(userPreferences.userId, recipientId));
+		const res = await req("/api/accounts/me", { headers: { Cookie: recipient } });
+		const body = (await res.json()) as {
+			user: { notificationDelivery: Record<string, string> };
+		};
+		expect(body.user.notificationDelivery.followers).toBe("email");
+		// Un-answered groups arrive at their resolved default, not absent.
+		expect(body.user.notificationDelivery.conversation).toBe("both");
+		await db
+			.update(userPreferences)
+			.set({ notificationDelivery: {} })
+			.where(eq(userPreferences.userId, recipientId));
+	});
+});
+
+describe("one-click unsubscribe", () => {
+	it("mints a token on the first social send and the email carries the link", async () => {
+		// The mail is a no-op under the test runner, but minting happens on the decide-to-
+		// send path, and the ROW's state is what the next send reads.
+		const result = await notify({
+			userId: recipientId,
+			category: "activity",
+			kind: "post_comment",
+			title: `First social send ${id}`,
+			dedupeKey: `test-first-social:${id}`,
+		});
+		expect(result.created).toBe(true);
+		const [row] = await db
+			.select({ token: userPreferences.notificationUnsubscribeToken })
+			.from(userPreferences)
+			.where(eq(userPreferences.userId, recipientId));
+		expect(row.token).toMatch(/^[0-9a-f]{48}$/);
+	});
+
+	it("turns the named group app-only, without a session, and leaves the others alone", async () => {
+		const [row] = await db
+			.select({ token: userPreferences.notificationUnsubscribeToken })
+			.from(userPreferences)
+			.where(eq(userPreferences.userId, recipientId));
+		// Set two groups differently first, so "the others alone" is a claim with content.
+		await db
+			.update(userPreferences)
+			.set({ notificationDelivery: { conversation: "email", followers: "both" } })
+			.where(eq(userPreferences.userId, recipientId));
+
+		const res = await req(
+			`/api/accounts/notifications/unsubscribe?token=${row.token}&group=conversation`,
+		);
+		expect(res.status).toBe(302);
+		const [after] = await db
+			.select({ delivery: userPreferences.notificationDelivery })
+			.from(userPreferences)
+			.where(eq(userPreferences.userId, recipientId));
+		// The named group flipped to app; the untouched group kept the answer it had.
+		expect(after.delivery).toMatchObject({ conversation: "app", followers: "both" });
+
+		await db
+			.update(userPreferences)
+			.set({ notificationDelivery: {} })
+			.where(eq(userPreferences.userId, recipientId));
+	});
+
+	it("answers 404 for an unknown token and for an unknown group, writing nothing", async () => {
+		const res = await req(
+			`/api/accounts/notifications/unsubscribe?token=${"f".repeat(48)}&group=conversation`,
+		);
+		expect(res.status).toBe(404);
+		const resBadGroup = await req(
+			`/api/accounts/notifications/unsubscribe?token=whatever&group=madeup`,
+		);
+		expect(resBadGroup.status).toBe(404);
 	});
 });
 

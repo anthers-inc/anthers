@@ -21,6 +21,7 @@ import { isStudioNavActive, STUDIO_NAV } from "../../studio/studio-nav";
 import PlayerBar from "../media/PlayerBar";
 import { type AppMode, useAppMode } from "./app-mode";
 import IdentityServerBanner from "./IdentityServerBanner";
+import NotificationBell from "./NotificationBell";
 import PublishingPermissionBanner from "./PublishingPermissionBanner";
 import RouteSuspense from "./RouteSuspense";
 import SearchBar from "./SearchBar";
@@ -147,6 +148,10 @@ function LoggedInLayoutInner() {
 							</span>
 						</Link>
 					)}
+					{/* The bell — the same appear-when-there's-content rule as the basket, with the
+					    count riding the shared store so one poll serves every surface. Studio mode
+					    leaves it out with search and the basket: creator chrome, not reader chrome. */}
+					{!studio && <NotificationBell />}
 					<ThemeToggle />
 					<div className="dropdown dropdown-end">
 						{/* daisyUI's dropdown is CSS-only: `.dropdown-content` stays `display:none`

@@ -199,17 +199,41 @@ export const userPreferences = pgTable("user_preferences", {
 	themePreference: text("theme_preference"),
 
 	/**
-	 * Whether ACTIVITY email is wanted. Defaults on; the user may turn it off.
+	 * How each kind of notification reaches this person, per delivery group.
 	 *
-	 * There is deliberately no equivalent for the `essential` category — deadlines,
-	 * money and legal changes are not things anyone gets to be un-told, and offering a
-	 * switch that quietly doesn't apply to half the messages would be worse than not
-	 * offering one. The split is enforced in `services/notifications.ts`.
+	 * 🚨 **A map, not a boolean** (Parker, 2026-10-08): the reply-notification decision
+	 * replaced `notify_activity_email` with this — people choose **app-only, email-only, or
+	 * both** per group, so turning reply emails off does not have to turn everything off to
+	 * do it. Shape: `{ [groupId]: "app" | "email" | "both" }`, with a `"*"` key for every
+	 * group the person has not answered one by one. The groups and their defaults live in
+	 * `services/notifications.ts`, which is the only reader; the map is data.
 	 *
-	 * Moved here from `users` (2026-10-03) for the same reason as the theme preference:
-	 * the person's preference for org-served behavior, not an identity fact.
+	 * ⚠️ **A missing group key means the default, and the default is `both`** — the same
+	 * "absent reads as never said no" rule the content preferences above carry, so a person
+	 * who set nothing receives everything. The in-app record is never suppressed: every
+	 * mode keeps it, because opting out of email is not opting out of being told.
+	 *
+	 * 🚨 **The migration mapped the old boolean rather than dropping it blind**: a person
+	 * who had turned activity email off arrives as `{ "*": "app" }`, everybody else as
+	 * `{}` (every group at its `both` default). Re-deriving that from nothing would have
+	 * re-mailed people who had already said no.
 	 */
-	notifyActivityEmail: boolean("notify_activity_email").default(true),
+	notificationDelivery: jsonb("notification_delivery").$type<Record<string, string>>(),
+
+	/**
+	 * The secret in an activity email's one-click unsubscribe link.
+	 *
+	 * The link (`/unsubscribe?token=…&group=…`) must work from an email client — no
+	 * session cookie travels with a click from Mail — so it authenticates by carrying a
+	 * token that is a credential for exactly one thing: writing this row's
+	 * `notificationDelivery` for the group the link names. Generated on first use
+	 * (`services/notifications.ts`), so an account that has never been emailed holds none,
+	 * and an email that leaks an old one is out of date the moment the person next saves a
+	 * preference... **which is the wrong direction** — a stale link must keep working (the
+	 * person whose inbox it sits in is the one who clicked it), so it is generated once
+	 * and never rotated automatically. Revoking it is a settings-page control, not a send.
+	 */
+	notificationUnsubscribeToken: text("notification_unsubscribe_token"),
 
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
