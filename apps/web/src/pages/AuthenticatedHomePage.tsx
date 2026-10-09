@@ -2,7 +2,7 @@
 
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import type { PostListItem, Project, PublicUser, Work } from "@anthers/web-shared/types";
+import type { Project, PublicUser } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
@@ -16,9 +16,8 @@ import {
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import CreatorCard from "../components/cards/CreatorCard";
-import PostCard from "../components/cards/PostCard";
+import FeedTile from "../components/cards/FeedTile";
 import ProjectCard from "../components/cards/ProjectCard";
-import WorkCard from "../components/cards/WorkCard";
 import ContentFilterSections from "../components/layout/ContentFilterSections";
 import { useSidebar } from "../components/layout/SidebarContext";
 
@@ -276,24 +275,24 @@ export default function AuthenticatedHomePage() {
 	return (
 		<div className="min-h-full">
 			{/* Feed content */}
-			<div className="max-w-4xl mx-auto px-4 py-6">
+			<div className="max-w-6xl mx-auto px-4 py-6">
 				{feedLoading ? (
 					<div className="flex justify-center py-16">
 						<LoadingSpinner size="lg" />
 					</div>
 				) : feedPosts.length > 0 ? (
-					<div className="flex flex-col gap-4">
+					// A uniform grid, still sorted on the one chronological key —
+					// the grid is the layout, never a ranking. Columns are wide
+					// enough to read at two-across and tighten up as the screen
+					// widens, the YouTube home-grid's shape.
+					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 items-stretch">
 						{/* Posts and releases in one stream. A creator who only ever adds to
 							    their Catalog still reaches the people who follow them — without
 							    that, a post would be the price of being seen, which is exactly
 							    the coupling the Catalog/Posts split removes. */}
-						{feedPosts.map((entry) =>
-							entry.kind === "release" ? (
-								<WorkCard key={`work-${entry.id}`} work={entry as unknown as Work} />
-							) : (
-								<PostCard key={`post-${entry.id}`} post={entry as unknown as PostListItem} />
-							),
-						)}
+						{feedPosts.map((entry) => (
+							<FeedTile key={`${entry.kind}-${entry.id}`} entry={entry} />
+						))}
 					</div>
 				) : (
 					<EmptyState
@@ -312,7 +311,7 @@ export default function AuthenticatedHomePage() {
 			{/* Discovery sections (below the feed) */}
 			{projects.length > 0 && (
 				<section className="py-8 px-4 bg-base-200/30 border-t border-base-300/30">
-					<div className="max-w-4xl mx-auto">
+					<div className="max-w-6xl mx-auto">
 						<div className="flex items-center justify-between mb-4">
 							<h2 className="text-lg font-semibold flex items-center gap-2">
 								<RocketLaunchIcon className="w-5 h-5 text-primary" />
@@ -333,7 +332,7 @@ export default function AuthenticatedHomePage() {
 
 			{creators.length > 0 && (
 				<section className="py-8 px-4">
-					<div className="max-w-4xl mx-auto">
+					<div className="max-w-6xl mx-auto">
 						<div className="flex items-center justify-between mb-4">
 							<h2 className="text-lg font-semibold flex items-center gap-2">
 								<UserGroupIcon className="w-5 h-5 text-secondary" />

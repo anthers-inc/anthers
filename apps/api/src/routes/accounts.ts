@@ -42,6 +42,7 @@ import { db } from "@anthers/db/client";
 import {
 	follows,
 	posts,
+	postWorkRefs,
 	rightsRequests,
 	studioPreferences,
 	userPreferences,
@@ -57,7 +58,7 @@ import {
 } from "@anthers/shared/rights";
 import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panels";
 import { zValidator } from "@hono/zod-validator";
-import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
@@ -593,6 +594,33 @@ const accountRoutes = new Hono()
 						.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
 						.limit(50);
 
+		// The Works each post links, for a card thumbnail and a count — a post
+		// in the grid has no artwork of its own, and announcing something while
+		// showing nothing would waste the tile. Same pattern the timeline route
+		// uses; thumbnails are public by design.
+		const postRefs: Record<string, { thumbnail: string | null; linkedWorkCount: number }> = {};
+		if (feedPosts.length > 0) {
+			const postIds = feedPosts.map((r) => r.post.id);
+			const refRows = await db
+				.select({
+					postId: postWorkRefs.postId,
+					thumbnail: works.thumbnail,
+				})
+				.from(postWorkRefs)
+				.innerJoin(works, eq(postWorkRefs.workId, works.id))
+				.where(inArray(postWorkRefs.postId, postIds))
+				.orderBy(asc(postWorkRefs.position));
+			for (const r of refRows) {
+				let entry = postRefs[r.postId];
+				if (!entry) {
+					entry = { thumbnail: null, linkedWorkCount: 0 };
+					postRefs[r.postId] = entry;
+				}
+				entry.linkedWorkCount += 1;
+				if (!entry.thumbnail && r.thumbnail) entry.thumbnail = r.thumbnail;
+			}
+		}
+
 		// Enumerate the fields rather than spreading the row. This used to be
 		// `...row.post`, which shipped `body` and `bodyHtml` for every followed creator's
 		// post regardless of gating. A post carries no gate of its own now, so there is no
@@ -624,6 +652,11 @@ const accountRoutes = new Hono()
 					viewCount: p.viewCount,
 					createdAt: p.createdAt,
 					updatedAt: p.updatedAt,
+					// What the grid tile shows of what the post announces: the first
+					// linked Work's thumbnail and how many Works it points at.
+					// Thumbnails are public by design.
+					thumbnail: postRefs[p.id]?.thumbnail ?? null,
+					linkedWorkCount: postRefs[p.id]?.linkedWorkCount ?? 0,
 					creator: embedCreator({
 						handle: row.creatorHandle,
 						displayName: row.creatorDisplayName,
@@ -657,6 +690,10 @@ const accountRoutes = new Hono()
 					originallyReleased: w.originallyReleased,
 					releasedAt: w.releasedAt,
 					createdAt: w.createdAt,
+					// Band metadata, public on any Work: a locked video reports its
+					// duration the way a locked book reports its page count.
+					durationSeconds: w.durationSeconds,
+					estimatedReadMinutes: w.estimatedReadMinutes,
 					creator: embedCreator({
 						handle: row.creatorHandle,
 						displayName: row.creatorDisplayName,

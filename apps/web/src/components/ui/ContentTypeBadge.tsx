@@ -36,6 +36,19 @@ const config = {
 	mixed: { label: "Mixed", Icon: Squares2X2Icon, color: "badge-ghost" },
 } as const satisfies Record<WorkType | "mixed", unknown>;
 
+/**
+ * A type's label, icon and badge color, shared with any renderer that wants
+ * the icon or label without rendering a badge — the feed's grid tiles use the
+ * icon as their coverless poster, and the label as its corner eyebrow.
+ */
+export function contentTypeMeta(contentType: string): {
+	label: string;
+	Icon: (typeof config)[keyof typeof config]["Icon"];
+	color: string;
+} {
+	return config[contentType as keyof typeof config] ?? config.text;
+}
+
 export default function ContentTypeBadge({ contentType }: { contentType: string }) {
 	const { label, Icon, color } = config[contentType as keyof typeof config] ?? config.text;
 
