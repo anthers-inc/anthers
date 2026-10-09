@@ -26,9 +26,10 @@ test.describe("a Bluesky handle signs in through OAuth, from the one field", () 
 	test("the button and its modal are gone — the field is the door", async ({ page }) => {
 		await page.goto("/login");
 
-		// The routing a visitor can read before pressing anything: the field's own hint
-		// tells them what a Bluesky handle does (Parker, 2026-10-09).
-		await expect(page.getByText(/enter your bluesky handle to sign in with oauth/i)).toBeVisible();
+		// The routing a visitor can read before pressing anything: the label is
+		// Bluesky-simple ("Email or handle"), the field's own drawing turns as they type,
+		// and the hint under it names the door the typed handle is headed for.
+		await expect(page.getByText(/^email or handle$/i)).toBeVisible();
 
 		// 🚨 The old affordances stayed gone the day the field took the door over: a
 		// second button and a modal would be a second Bluesky door, and the two would

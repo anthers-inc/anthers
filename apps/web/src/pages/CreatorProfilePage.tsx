@@ -33,9 +33,10 @@ import {
 	PencilIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
+import PostCard from "../components/cards/PostCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import WorkCard from "../components/cards/WorkCard";
-import PreviewBar, { usePreviewQuery } from "../components/creator/PreviewBar";
+import PreviewBar, { PreviewToggle, usePreviewQuery } from "../components/creator/PreviewBar";
 import ReportDialog from "../components/ui/ReportDialog";
 import { useReportVisit } from "../lib/attention";
 
@@ -44,7 +45,7 @@ type CatalogWork = Work & {
 	creator?: { handle: string; displayName?: string | null; avatar?: string | null };
 };
 
-type Tab = "all" | "games" | "videos" | "audio" | "writing" | "badges" | "about";
+type Tab = "all" | "posts" | "games" | "videos" | "audio" | "writing" | "badges" | "about";
 
 function badgeNameFor(id: string): string {
 	if (id === "none" || id === "free" || !id) return "Free";
@@ -370,7 +371,12 @@ function BadgesTab({
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
-const TABS: Tab[] = ["all", "games", "videos", "audio", "writing", "badges", "about"];
+const TABS: Tab[] = ["all", "posts", "games", "videos", "audio", "writing", "badges", "about"];
+
+/** The separator between the tab row's groups — the timeline, the Work types, and the profile's metadata views. */
+function TabDivider() {
+	return <span aria-hidden="true" className="mx-1 h-5 w-px self-center bg-base-content/20" />;
+}
 
 export default function CreatorProfilePage() {
 	const { handle: handleParam } = useParams<{ handle: string }>();
@@ -384,7 +390,7 @@ export default function CreatorProfilePage() {
 
 	const [creator, setCreator] = useState<PublicUser | null>(null);
 	const [projects, setProjects] = useState<Project[]>([]);
-	const [_posts, setPosts] = useState<PostListItem[]>([]);
+	const [posts, setPosts] = useState<PostListItem[]>([]);
 	const [works, setWorks] = useState<CatalogWork[]>([]);
 	// ?tab=badges is a real entry point, not a nicety: a locked post's unlock panel sends the
 	// user here to act, and dropping them on the default tab loses the intent they arrived with.
@@ -410,6 +416,8 @@ export default function CreatorProfilePage() {
 	const preview = usePreviewQuery();
 	/** Stable string for the preview, so the load effect re-runs on value not identity. */
 	const _previewKey = JSON.stringify(preview);
+	/** Whether the preview mode is on — the toggle beside Edit only shows when it is off. */
+	const previewActive = Object.keys(preview).length > 0;
 
 	// A profile is a single-creator shelf — the Catalog and posts render as cards that
 	// link out to WorkPage, where consumption actually happens and the Time Pool claim
@@ -644,17 +652,30 @@ export default function CreatorProfilePage() {
 	}
 
 	// The type tabs are views over the CATALOG — they are asking "what has this creator
-	// made?", which is a question about Works, not about announcements.
+	// made?", which is a question about Works, not about announcements. A type the
+	// creator has never released shows no tab at all rather than a "(0)".
 	const gameWorks = works.filter((w) => w.type === "game" || w.type === "software");
 	const videoWorks = works.filter((w) => w.type === "video");
 	// Music and every other kind of audio share a tab: it is the medium a visitor is asking about.
 	const audioWorks = works.filter((w) => isListened(w.type));
 	const textWorks = works.filter((w) => w.type === "text");
+	const typeTabs = (
+		[
+			["games", `Games (${gameWorks.length})`, gameWorks.length > 0],
+			["videos", `Videos (${videoWorks.length})`, videoWorks.length > 0],
+			["audio", `Audio (${audioWorks.length})`, audioWorks.length > 0],
+			["writing", `Writing (${textWorks.length})`, textWorks.length > 0],
+		] as const
+	).filter(([, , nonzero]) => nonzero);
 
-	// The "All" tab is the Catalog timeline: everything this creator has put out, in the
-	// order it first came out. The API already sorts by the creator-asserted original
-	// release date; projects interleave on their own dates.
-	const allItems: { type: "project" | "work"; item: Project | CatalogWork; date: string }[] = [];
+	// The "All" tab is the timeline: everything this creator has put out, Posts included,
+	// in the order it first came out. The API already sorts works by the creator-asserted
+	// original release date; posts and projects interleave on theirs.
+	const allItems: {
+		type: "project" | "work" | "post";
+		item: Project | CatalogWork | PostListItem;
+		date: string;
+	}[] = [];
 	projects.forEach((p) => {
 		allItems.push({ type: "project", item: p, date: p.createdAt });
 	});
@@ -665,10 +686,23 @@ export default function CreatorProfilePage() {
 			date: w.originallyReleased ?? w.releasedAt ?? w.createdAt ?? "",
 		});
 	});
+	posts.forEach((p) => {
+		allItems.push({
+			type: "post",
+			item: p,
+			// A post's when is when it was published; `createdAt` is only the fallback for
+			// an unpublished straggler, which the creator-scoped listing already filters out.
+			date: p.publishedAt ?? p.createdAt,
+		});
+	});
 	allItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
 	return (
-		<div>
+		// `relative z-30` lifts the whole page above the logged-out shell's decorative
+		// layer (the side vines and their bee swarm sit at z-20 — see LoggedOutLayout) so
+		// the bees read as a background, hidden behind the header image and the cards
+		// rather than painted across them. The logged-in layout has no decorative layer.
+		<div className="relative z-30">
 			{/* Creator preview — above everything, because it changes what everything below
 			    says. Only ever offered to the person whose profile it is; the server guards
 			    it per Work regardless. */}
@@ -677,46 +711,53 @@ export default function CreatorProfilePage() {
 					<PreviewBar />
 				</div>
 			)}
-			{/* Header banner */}
+			{/* Header banner. 🚨 Inside the container's width, at a 3:1 ratio — that is
+			    the banner-size convention (Bluesky: 3:1, recommended 1500×500; YouTube
+			    similar), and full-bleed read as a second, wider site than the one the
+			    rest of this page belongs to. */}
 			{editing ? (
-				<div className="relative w-full h-48 md:h-64 bg-base-300 group">
-					{headerPreview ? (
-						<img src={headerPreview} alt="Header" className="w-full h-full object-cover" />
-					) : (
-						<div className="w-full h-full bg-base-300" />
-					)}
-					<label className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-						<div className="flex items-center gap-2 text-white text-sm font-medium">
-							<CameraIcon className="w-5 h-5" />
-							Change header
-						</div>
-						<input
-							type="file"
-							accept="image/*"
-							className="hidden"
-							onChange={(e) => {
-								const file = e.target.files?.[0];
-								if (file) {
-									setHeaderFile(file);
-									setHeaderPreview(URL.createObjectURL(file));
-								}
-							}}
-						/>
-					</label>
+				<div className="container mx-auto px-4">
+					<div className="relative w-full aspect-[3/1] bg-base-300 group">
+						{headerPreview ? (
+							<img src={headerPreview} alt="Header" className="w-full h-full object-cover" />
+						) : (
+							<div className="w-full h-full bg-base-300" />
+						)}
+						<label className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+							<div className="flex items-center gap-2 text-white text-sm font-medium">
+								<CameraIcon className="w-5 h-5" />
+								Change header
+							</div>
+							<input
+								type="file"
+								accept="image/*"
+								className="hidden"
+								onChange={(e) => {
+									const file = e.target.files?.[0];
+									if (file) {
+										setHeaderFile(file);
+										setHeaderPreview(URL.createObjectURL(file));
+									}
+								}}
+							/>
+						</label>
+					</div>
 				</div>
 			) : (
-				<div
-					className="w-full h-48 md:h-64 bg-base-300"
-					style={
-						creator.headerImage
-							? {
-									backgroundImage: `url(${creator.headerImage})`,
-									backgroundSize: "cover",
-									backgroundPosition: "center",
-								}
-							: undefined
-					}
-				/>
+				<div className="container mx-auto px-4">
+					<div
+						className="w-full aspect-[3/1] bg-base-300"
+						style={
+							creator.headerImage
+								? {
+										backgroundImage: `url(${creator.headerImage})`,
+										backgroundSize: "cover",
+										backgroundPosition: "center",
+									}
+								: undefined
+						}
+					/>
+				</div>
 			)}
 
 			<div className="container mx-auto px-4">
@@ -753,7 +794,7 @@ export default function CreatorProfilePage() {
 									/>
 								</label>
 							</div>
-							<div className="flex-1 pt-4 w-full">
+							<div className="flex-1 pt-4 sm:pt-14 w-full">
 								<p className="text-base-content/60 mb-3">@{creator.handle}</p>
 							</div>
 						</div>
@@ -836,8 +877,20 @@ export default function CreatorProfilePage() {
 								{(creator.displayName || creator.handle).charAt(0).toUpperCase()}
 							</div>
 						)}
-						<div className="flex-1 pt-4">
-							<h1 className="text-2xl font-bold">{creator.displayName || creator.handle}</h1>
+						<div className="flex-1 pt-4 sm:pt-14">
+							{/* The name and its two controls sit together, Bluesky-style — the row
+							    of text the name belongs to is where a person looks to act on a
+							    profile, not the far corner of it. */}
+							<div className="flex flex-wrap items-center gap-3">
+								<h1 className="text-2xl font-bold">{creator.displayName || creator.handle}</h1>
+								{isAuthenticated && isOwnProfile && (
+									<button type="button" className="btn btn-ghost btn-sm" onClick={startEditing}>
+										<PencilIcon className="w-4 h-4" />
+										Edit
+									</button>
+								)}
+								{isAuthenticated && isOwnProfile && !previewActive && <PreviewToggle />}
+							</div>
 							<p className="text-base-content/60">
 								@{creator.handle} · {followerCount} followers
 							</p>
@@ -862,16 +915,6 @@ export default function CreatorProfilePage() {
 								)}
 							</div>
 						</div>
-						{isAuthenticated && isOwnProfile && (
-							<button
-								type="button"
-								className="btn btn-ghost btn-sm mt-4 sm:mt-12"
-								onClick={startEditing}
-							>
-								<PencilIcon className="w-4 h-4" />
-								Edit Profile
-							</button>
-						)}
 						{isAuthenticated && !isOwnProfile && (
 							<div className="flex flex-col items-end gap-2 mt-4 sm:mt-12">
 								<div className="flex items-center gap-2">
@@ -937,28 +980,56 @@ export default function CreatorProfilePage() {
 					</div>
 				)}
 
-				{/* Tabs */}
+				{/* Tabs. One flat row, but grouped: the timeline views (All, Posts), then the
+				    Work-type views — only the types the creator has actually released, so a
+				    profile with no audio shows no Audio tab rather than "Audio (0)" — then
+				    Badges and About. The dividers sit between the groups, and collapse to a
+				    single divider when the middle group is empty. */}
 				<div className="tabs tabs-bordered mb-6 overflow-x-auto">
-					{(
-						[
-							["all", "All"],
-							["games", `Games (${gameWorks.length})`],
-							["videos", `Videos (${videoWorks.length})`],
-							["audio", `Audio (${audioWorks.length})`],
-							["writing", `Writing (${textWorks.length})`],
-							["badges", "Badges"],
-							["about", "About"],
-						] as const
-					).map(([key, label]) => (
-						<button
-							type="button"
-							key={key}
-							className={`tab whitespace-nowrap ${tab === key ? "tab-active" : ""}`}
-							onClick={() => setTab(key)}
-						>
-							{label}
-						</button>
-					))}
+					<button
+						type="button"
+						className={`tab whitespace-nowrap ${tab === "all" ? "tab-active" : ""}`}
+						onClick={() => setTab("all")}
+					>
+						All
+					</button>
+					<button
+						type="button"
+						className={`tab whitespace-nowrap ${tab === "posts" ? "tab-active" : ""}`}
+						onClick={() => setTab("posts")}
+					>
+						Posts
+					</button>
+					{typeTabs.length > 0 && (
+						<>
+							<TabDivider />
+							{typeTabs.map(([key, label]) => (
+								<button
+									type="button"
+									key={key}
+									className={`tab whitespace-nowrap ${tab === key ? "tab-active" : ""}`}
+									onClick={() => setTab(key)}
+								>
+									{label}
+								</button>
+							))}
+							<TabDivider />
+						</>
+					)}
+					<button
+						type="button"
+						className={`tab whitespace-nowrap ${tab === "badges" ? "tab-active" : ""}`}
+						onClick={() => setTab("badges")}
+					>
+						Badges
+					</button>
+					<button
+						type="button"
+						className={`tab whitespace-nowrap ${tab === "about" ? "tab-active" : ""}`}
+						onClick={() => setTab("about")}
+					>
+						About
+					</button>
 				</div>
 
 				{/* Tab content */}
@@ -972,6 +1043,11 @@ export default function CreatorProfilePage() {
 											<ProjectCard key={`proj-${entry.item.id}`} project={entry.item as Project} />
 										);
 									}
+									if (entry.type === "post") {
+										return (
+											<PostCard key={`post-${entry.item.id}`} post={entry.item as PostListItem} />
+										);
+									}
 									const work = entry.item as CatalogWork;
 									return <WorkCard key={`work-${work.id}`} work={work} />;
 								})}
@@ -980,6 +1056,20 @@ export default function CreatorProfilePage() {
 							<EmptyState
 								title="No content yet"
 								description={`${creator.displayName || creator.handle} hasn't published anything yet.`}
+							/>
+						))}
+
+					{tab === "posts" &&
+						(posts.length > 0 ? (
+							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+								{posts.map((p) => (
+									<PostCard key={`post-${p.id}`} post={p} />
+								))}
+							</div>
+						) : (
+							<EmptyState
+								title="No posts yet"
+								description={`${creator.displayName || creator.handle} hasn't published any posts yet.`}
 							/>
 						))}
 

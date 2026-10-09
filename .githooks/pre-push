@@ -23,10 +23,20 @@
 # whichever checkout the push was launched from — two backgrounded pushes collided with a
 # `git checkout` mid-verify on 2026-09-19, and a hold that long is easily misread as a broken
 # push. Each push's worktree lives at its own path (`.worktrees/pre-push-verify-<pid>`), so
-# one push's verify can never be mistaken for another's leftover and two pushes run side by
-# side without coordinating. The worktree is removed when the suite finishes; a warm second
-# checkout would drift, and drift in the thing doing the verifying is its own class of bug.
-# The docs-only fast path stays here — it is cheap and reads only markdown.
+# one push's verify can never be mistaken for another's leftover; and the verifies now take
+# turns machine-wide, because the Makefile's `verify` runs under the heavy-run lock
+# (`scripts/heavy-run.sh`) — two concurrent push verifies queue rather than oversubscribe
+# the machine and flake each other's untouched specs. The worktree is removed when the
+# suite finishes; a warm second checkout would drift, and drift in the thing doing the
+# verifying is its own class of bug. The docs-only fast path stays here — it is cheap and
+# reads only markdown.
+#
+# One further skip, and it is earned not assumed: `make verify` stamps the tree it ran green
+# at (`scripts/verify-stamp.ts`, keyed on the head, written only from a tracked-clean
+# checkout), and a push whose hand verify passed at exactly its head minutes ago skips the
+# suite here — re-verifying an unchanged verified tree buys a second lottery ticket in the
+# same load-flake lottery and nothing else. The migration gate below runs regardless; a
+# missing or stale stamp runs the suite; `git push --no-verify` remains the manual escape.
 #
 # Escape hatch: `git push --no-verify`. Use it for a WIP branch nobody builds on; don't use
 # it for anything heading at `main`, which is the one case this catches.
@@ -192,6 +202,18 @@ if [ -n "$push_head" ]; then
 			exit 1
 		fi
 	fi
+fi
+
+# The verify stamp's check: `make verify` records a green run keyed on the head it ran at
+# (scripts/verify-stamp.ts, written only when the run's tracked tree is exactly that
+# commit), and a hand run that passed at exactly this head means the suite here would spend
+# minutes re-buying a ticket in the load-flake lottery for a tree already verified. The
+# check answers with its exit code only; a missing, stale or broken check is the same as no
+# stamp. The migration gate above ran either way, and a docs-only push never reaches here.
+if stamp_info=$(bun run scripts/verify-stamp.ts check "$push_head" 2>/dev/null); then
+	printf '\033[36m→ pre-push: `make verify` already ran green at this head %s (%s) — skipping the suite\033[0m\n' "$push_head" "$stamp_info"
+	printf '\033[36m  Delete the stamp under ~/.cache/anthers/verify-stamps/%s, or push --no-verify, to force one.\033[0m\n' "$push_head"
+	exit 0
 fi
 
 cleanup_worktree() {

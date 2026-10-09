@@ -23,6 +23,16 @@ interface FormFieldProps {
 	 * opts in so the label and the hint stop reading as one block with a box wedged in.
 	 */
 	spaced?: boolean;
+	/**
+	 * A small affordance drawn over the control's left edge — an envelope, an `@`.
+	 *
+	 * ⚠️ **Opt-in, for the same reason as `spaced`.** It overlays the control rather than
+	 * wrapping it, so the label's `htmlFor` and the control's single-child contract both
+	 * survive; `iconName` rides along as a `data-form-icon` on the wrapper, which is how
+	 * tests pin which drawing is up without reaching into SVG internals.
+	 */
+	icon?: ReactNode;
+	iconName?: string;
 }
 
 /** The controls a `<label htmlFor>` can name. Anything else keeps its own labeling. */
@@ -35,6 +45,8 @@ export default function FormField({
 	children,
 	required,
 	spaced,
+	icon,
+	iconName,
 }: FormFieldProps) {
 	// Tie the label to the control when the field wraps exactly one native control, which is
 	// nearly every caller. Without it the label is text beside an unnamed input: a screen reader
@@ -58,20 +70,40 @@ export default function FormField({
 	// surfaced a long `error`. Found by `mobile-overflow.e2e.ts`; keep the class.
 	return (
 		<div className={spaced ? "form-control gap-2 w-full" : "form-control w-full"}>
-			<label htmlFor={controlId} className="label whitespace-normal">
+			<label htmlFor={controlId} className={`label whitespace-normal ${spaced ? "mb-2.5" : ""}`}>
 				<span className="label-text">
 					{label}
 					{required && <span className="text-error ml-1">*</span>}
 				</span>
 			</label>
-			{control ? cloneElement(control, { id: controlId }) : children}
+			{control ? (
+				icon ? (
+					/* The icon is drawn over the control, not inside it: the wrapper is this
+					   component's work, so the caller's label keeps its `htmlFor` and the
+					   control keeps one child. The caller widens the control (`pl-10`) to
+					   make room for the drawing. */
+					<div className="relative w-full">
+						<span
+							data-form-icon={iconName}
+							className="pointer-events-none absolute inset-y-0 left-3.5 z-10 flex items-center text-base-content/40"
+						>
+							{icon}
+						</span>
+						{cloneElement(control, { id: controlId })}
+					</div>
+				) : (
+					cloneElement(control, { id: controlId })
+				)
+			) : (
+				children
+			)}
 			{error ? (
-				<div className="label whitespace-normal">
+				<div className={`label whitespace-normal ${spaced ? "mt-2.5" : ""}`}>
 					<span className="label-text-alt text-error">{error}</span>
 				</div>
 			) : (
 				hint && (
-					<div className="label whitespace-normal">
+					<div className={`label whitespace-normal ${spaced ? "mt-2.5" : ""}`}>
 						<span className="label-text-alt leading-relaxed text-base-content/55">{hint}</span>
 					</div>
 				)

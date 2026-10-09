@@ -66,6 +66,29 @@ export function usePreviewQuery(): Record<string, string> {
 	}, [as, owned]);
 }
 
+/**
+ * The way IN — the toggle sitting beside the profile's Edit button, where a creator
+ * decides to look before they look. The expanded panel it opens is the default export
+ * above the header; the two meet only through the `previewAs` URL parameter.
+ */
+export function PreviewToggle() {
+	const [params, setParams] = useSearchParams();
+	return (
+		<button
+			type="button"
+			onClick={() => {
+				const p = new URLSearchParams(params);
+				p.set("previewAs", "out");
+				setParams(p, { replace: true });
+			}}
+			className="btn btn-outline btn-sm gap-1.5"
+		>
+			<EyeIcon className="size-4" />
+			Preview
+		</button>
+	);
+}
+
 export default function PreviewBar({ badges = [] }: { badges?: PreviewBadge[] }) {
 	const [params, setParams] = useSearchParams();
 	const as = params.get("previewAs");
@@ -92,16 +115,9 @@ export default function PreviewBar({ badges = [] }: { badges?: PreviewBadge[] })
 	};
 
 	if (!active) {
-		return (
-			<button
-				type="button"
-				onClick={() => set({ previewAs: "out" })}
-				className="btn btn-outline btn-sm gap-1.5"
-			>
-				<EyeIcon className="size-4" />
-				Preview as User
-			</button>
-		);
+		// The way in is `PreviewToggle`, rendered beside the profile's Edit button —
+		// not here. When preview is off, this panel has nothing to show.
+		return null;
 	}
 
 	return (
