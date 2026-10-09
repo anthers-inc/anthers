@@ -137,6 +137,18 @@ export interface StorageService {
 	/** Delete every file under a key prefix (e.g. an HLS output directory). Idempotent. */
 	deletePrefix(prefix: string): Promise<void>;
 
+	/**
+	 * The total bytes of every object under a key prefix, both buckets when they differ.
+	 *
+	 * The storage ladder's meter is the reason this exists, and its shape is the reason
+	 * it sits beside `deletePrefix` rather than inside a caller: a prefix's object
+	 * *population* is a storage-side fact (the same one both operations resolve), and the
+	 * meter's DB-first rule (`jobs/storage-usage.ts`) narrows every call to exactly the
+	 * priced populations — a per-Work HLS prefix, a per-creator inline-images prefix —
+	 * never the broad `creators/{id}/` walk. A missing or empty prefix answers 0.
+	 */
+	prefixSize(prefix: string): Promise<number>;
+
 	/** Check whether a file exists. */
 	exists(key: string): Promise<boolean>;
 }

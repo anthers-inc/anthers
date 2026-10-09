@@ -502,14 +502,32 @@ export function stickerBudgetFor(anthersDollars: number): number {
  * onward** at the vendor rate with no markup (see `estimateStorageCost`) — so the
  * ladder carries the bundle and the bytes beyond it are never a reason to climb.
  *
- * 🚨 **The per-rung ladder is DESIGNED, NOT BUILT** — no user-side storage exists yet,
- * `estimateStorageCost` cannot bill against a rung allowance until the storage-billing
- * work lands, and the rescue-window sweep, cloud saves and kept-file surface are all
- * the Badge storage ladder task's build. What is ruled here are the amounts.
+ * 🚨 **The per-rung ladder is DESIGNED, NOT BUILT** — the *meter* landed (PR #409: `storage_usage`
+ * snapshots, `jobs/storage-usage.ts`, the reading at `GET /api/accounts/me/storage`), so real
+ * usage is now measured against these allowances; what remains unbuilt is the charging surface
+ * (`estimateStorageCost`'s callers still bill nothing) and the rescue-window sweep's kept-file
+ * surface, whose `kept-files` line rides every snapshot at zero until it lands. What is ruled
+ * here are the amounts.
  */
 export function storageGibFor(anthersDollars: number): number {
 	return STORAGE_LADDER_GIB[heldBadgeName(anthersDollars)];
 }
+
+/**
+ * The closed set of purposes bytes can be held for — the keys `storage_usage.purposes`
+ * carries. A new storage surface adds its kind here and edits the snapshot job; nothing
+ * reads a kind not listed here, so a typo'd kind would be counted in `bytes` and in
+ * nothing else, which the reading surface would surface on its next run.
+ *
+ * ⚠️ **The kinds describe PURPOSE, not table.** `catalog` is every byte a Work's own
+ * record names (source, thumbnail, assets, build files, HLS output) whatever the table
+ * that points at it; `cloud-saves` is the players' save blobs, which belong to the
+ * *player's* account rather than the creator's; `kept-files` is reserved for the
+ * rescue-window sweep's retained purchases and stays zero until that surface lands.
+ */
+export const STORAGE_USE_KINDS = ["catalog", "cloud-saves", "kept-files"] as const;
+
+export type StorageUseKind = (typeof STORAGE_USE_KINDS)[number];
 
 /**
  * The ruled storage ladder by Badge state, in GiB — the amounts `storageGibFor`

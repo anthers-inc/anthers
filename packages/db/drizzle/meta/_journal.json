@@ -897,6 +897,13 @@
       "when": 1791512394782,
       "tag": "0127_unique_franklin_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1791516620985,
+      "tag": "0128_hot_kronos",
+      "breakpoints": true
     }
   ]
 }

@@ -16,7 +16,14 @@
  */
 
 /** Every panel that exists. The stored layout is a subset of these, in the creator's order. */
-export const STUDIO_PANELS = ["processing", "earnings", "catalog", "projects", "posts"] as const;
+export const STUDIO_PANELS = [
+	"processing",
+	"earnings",
+	"catalog",
+	"storage",
+	"projects",
+	"posts",
+] as const;
 
 export type StudioPanel = (typeof STUDIO_PANELS)[number];
 

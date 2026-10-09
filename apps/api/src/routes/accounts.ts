@@ -17,6 +17,9 @@
  *   GET    /me/studio-panels        — the creator's Studio Dashboard layout (panels only;
  *                                     the attention worklist is never stored or hideable)
  *   PATCH  /me/studio-panels        — reorder or show/hide them
+ *   GET    /me/storage              — the account's storage reading: allowance at the held
+ *                                     Badge, bytes held this cycle, per-purpose lines
+ *                                     (services/storage-reading.ts composes it)
  *   GET    /me/content-preferences  — per-rung Hide/Blur/Show; readable signed-out, because
  *                                     the defaults are what a signed-out visitor gets
  *   PATCH  /me/content-preferences  — change either rung, or any kind of content
@@ -108,6 +111,7 @@ import {
 import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 import { queueRecordSync } from "../services/record-sync.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../services/storage/keys.js";
+import { storageReadingFor } from "../services/storage-reading.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1233,6 +1237,14 @@ const accountRoutes = new Hono()
 		// No row and a null column mean the same thing — never arranged — and
 		// `resolveStudioPanels` turns both into the defaults.
 		return c.json({ panels: resolveStudioPanels(row?.panels ?? null) });
+	})
+
+	.get("/me/storage", requireAuth, async (c) => {
+		// The reading is composed in the service, never here — the route is the thin
+		// door every other surface is. Deliberately not gated on `isCreator`: the ladder
+		// is an account allowance (combined-free, every account), so a player holding
+		// cloud saves reads their own figure just as a creator does.
+		return c.json(await storageReadingFor(c.get("user").id));
 	})
 
 	.patch(

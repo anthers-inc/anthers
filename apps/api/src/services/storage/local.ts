@@ -7,7 +7,8 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { access, copyFile, mkdir, rename, rm, unlink } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { access, copyFile, mkdir, readdir, rename, rm, stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { localContentRoot } from "@anthers/db/content-root";
@@ -126,6 +127,23 @@ export class LocalStorageService implements StorageService {
 	async deletePrefix(prefix: string): Promise<void> {
 		// A prefix maps to a directory on disk; remove it recursively. Idempotent.
 		await rm(join(localContentRoot(), prefix), { recursive: true, force: true });
+	}
+
+	/** Sum every file's size under the prefix, from the directory. Read-only, idempotent. */
+	async prefixSize(prefix: string): Promise<number> {
+		const dir = join(localContentRoot(), prefix);
+		if (!existsSync(dir)) return 0;
+		let total = 0;
+		const stack = [dir];
+		while (stack.length > 0) {
+			const current = stack.pop()!;
+			for (const entry of await readdir(current, { withFileTypes: true })) {
+				const path = join(current, entry.name);
+				if (entry.isDirectory()) stack.push(path);
+				else total += (await stat(path)).size;
+			}
+		}
+		return total;
 	}
 
 	async exists(key: string): Promise<boolean> {

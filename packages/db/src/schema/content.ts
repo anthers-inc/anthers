@@ -1260,3 +1260,63 @@ export const creditRejections = pgTable(
 		index("idx_credit_rejections_work").on(table.workId),
 	],
 );
+
+/**
+ * The storage ladder's meter — one snapshot row per (account, cycle), the bytes that account
+ * drew against its allowance, split by purpose.
+ *
+ * 🚨 **The unit is held bytes per cycle, and the snapshot is the reading, never a charge.**
+ * Storage is a cost on the stock (the ladder task's own words), so the meter measures what is
+ * *held*, not what moved; the daily recompute makes the in-flight month a running estimate in
+ * exactly the posture `GET /earnings` takes, and the cycle's last snapshot is what billing
+ * reads when settlement runs. Nothing here charges anybody — `estimateStorageCost` computes
+ * the at-cost overflow from this figure, and the collection leg lands beside it.
+ *
+ * 🚨 **Bytes come from the database, not from listing the bucket.** `assets.file_size`,
+ * `web_build_files.file_size`, `work_saves.byte_size` and the works table's own media columns
+ * — the same authority `calculate-crf` already reads, deliberately, so the subsidy job and
+ * this meter cannot disagree about a creator's catalog. A bucket walk under `creators/{id}/`
+ * would sweep avatars, headers and display chrome the ladder never prices, and would cost one
+ * paginated `ListObjectsV2` per account per night — a nightly API cost paid to measure a
+ * figure one grouped query answers. Where a column can disagree with its object, the column is
+ * the recorded figure and the disagreement is a fixture-hygiene defect, not a reason to count
+ * twice.
+ *
+ * ⚠️ **The split is per-purpose because the ruled allowance is combined.** One allowance
+ * holds a catalog, kept files and cloud saves together, so the *binding* figure is `bytes`
+ * — but the reading a creator sees and the audit the rescue window's 1/N keeper-share check
+ * needs are per-purpose lines, recorded at write time rather than derived at read time by
+ * re-walking every upstream table. `purposes` carries those lines as `{ [kind]: bytes }`;
+ * kinds are a closed set (`STORAGE_USE_KINDS` in `@anthers/shared/constants`), so a new
+ * storage surface is a constant and a job edit, never a migration.
+ *
+ * ⚠️ **Derivable, and deliberately recorded anyway** — the same call `account_cycles` made
+ * for money. The upstream rows move underneath a cycle (a save overwritten, an asset
+ * replaced mid-month, a withdrawn Work swept), so a figure recomputed later is not the
+ * figure the billing run acted on. What a top-up was computed from has to be readable
+ * years afterwards from the row that recorded it.
+ */
+// org — a per-cycle infrastructure-consumption snapshot, the spend/consumption side of
+// `account_cycles`. The bytes are Anthers' obligation to its vendor; the account is the
+// draw against its allowance. Money records and consumption records are both org-only.
+export const storageUsage = pgTable(
+	"storage_usage",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** `YYYY-MM-01` — the cycle the reading belongs to, keyed like `account_cycles`. */
+		billingCycle: text("billing_cycle").notNull(),
+		/** Total bytes held against the allowance — the figure the allowance binds. */
+		bytes: bigint("bytes", { mode: "number" }).notNull().default(0),
+		/** Per-purpose lines, `{ [kind]: bytes }` over the closed `STORAGE_USE_KINDS` set. */
+		purposes: jsonb("purposes").$type<Record<string, number>>().notNull().default({}),
+		/** When this snapshot was taken. A cycle's rows form the running estimate. */
+		sampledAt: timestamp("sampled_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_storage_usage_user_cycle").on(table.userId, table.billingCycle),
+		index("idx_storage_usage_cycle").on(table.billingCycle),
+	],
+);
