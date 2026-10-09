@@ -173,6 +173,19 @@ envs:
   - key: RESEND_WEBHOOK_SECRET
     scope: RUN_TIME
     type: SECRET
+  # Printful — the merch fulfiller (Sell Anthers apparel through the Printful API).
+  # A store-scoped private token against the Anthers store; every Printful operation
+  # goes through `services/printful.ts`, and the client is built from this once.
+  # Unset means merch routes answer 503 and the physical refusals stand — unset fails
+  # closed toward "not for sale", which is the honest posture while the store is empty.
+  # At APP level beside the other merchant-of-record secrets; the webhook receiver in
+  # the api and the (future) placement sweep in the worker both want it.
+  #
+  # The name matches the Bitwarden entry exactly (`Anthers Prod` / `Anthers Dev` both
+  # carry it), so `make spec-apply FROM_BWS=1` resolves it with no third spelling.
+  - key: PRINTFUL_TOKEN
+    scope: RUN_TIME
+    type: SECRET
   # Shield by Project Arachnid — the child-safety detection vendor. Basic auth, so a
   # username and a password rather than a key. At APP level because the scan runs in the
   # worker, which inherits app-level values alongside the few it declares itself.

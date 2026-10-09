@@ -102,25 +102,18 @@ export interface MerchRow {
  */
 export function merchTable(listPrice: string = "30.00"): MerchRow[] {
 	const list = new Decimal(listPrice);
-	const rows: MerchRow[] = [
-		{
-			badge: "list",
-			discountPercent: "0",
-			goodsPrice: money(list),
-			cardFee: money(calculateFees(list, { type: "physical" }).processingFee),
-			keptBeforeFeeVariance: money(list),
-		},
-	];
-	for (const badge of BADGE_ORDER.filter((b) => thresholdForBadge(b) > 0)) {
-		const percent = MERCH_BADGE_DISCOUNT[badge as keyof typeof MERCH_BADGE_DISCOUNT] ?? "0";
+	const rows: MerchRow[] = [];
+	for (const badge of BADGE_ORDER) {
+		// `free` is the undiscounted list row — the absence answer, not a rung with 0%.
+		const percent = badge === "free" ? "0" : (MERCH_BADGE_DISCOUNT[badge as keyof typeof MERCH_BADGE_DISCOUNT] ?? "0");
 		const goods = list.minus(list.times(new Decimal(percent).dividedBy(100))).toDecimalPlaces(2);
-		const fees = calculateFees(goods, { type: "physical" });
+		const fee = calculateFees(goods, { type: "physical" }).processingFee;
 		rows.push({
-			badge: badge.charAt(0).toUpperCase() + badge.slice(1),
+			badge: badge === "free" ? "list" : badge.charAt(0).toUpperCase() + badge.slice(1),
 			discountPercent: percent,
 			goodsPrice: money(goods),
-			cardFee: money(fees.processingFee),
-			keptBeforeFeeVariance: money(goods.minus(fees.processingFee)),
+			cardFee: money(fee),
+			keptBeforeFeeVariance: money(goods.minus(fee)),
 		});
 	}
 	return rows;

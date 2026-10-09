@@ -94,6 +94,7 @@ import {
 	freePotSensitivity,
 	MODELLED_PAYING_SHARE,
 	membershipComparison,
+	merchTable,
 	PAYING_BADGE_MIX,
 	payingShareSensitivity,
 	purchaseCase,
@@ -563,6 +564,34 @@ function renderSalePublicMarkdown(): string {
 		`Monthly support has the same shape: of $${seed.gross} a month pointed at one creator, $${seed.cardFee} is card processing and **$${seed.net}** reaches them. Everything given in a month rides on one payment, so the $${CARD_FLAT.toFixed(2)} flat portion is paid once across every destination rather than once each — which is why supporting several creators together pays each of them more than supporting them separately would.`,
 		"",
 		`**File size does not appear here, because it changes nothing.** Delivery costs nothing at any volume, so every download of a purchased Work is included, forever, on as many devices as the buyer likes.`,
+	].join("\n");
+}
+
+/**
+ * The merch discount, as a Badge holder reads it on *Badges* — the fourth public renderer.
+ *
+ * ⚠️ **Committed, in build** — the shop it applies to is arriving before launch, so everything here is written in the bringing-it tense: committed, arriving, not yet purchasable. When the shop ships, the paragraph and the tense update in the same change that builds it.
+ *
+ * 🚨 **The print cost is never a figure here.** The table's arithmetic reads the card fee and the discounted price, both ours to compute; the print cost is Printful's and reprices, so the prose says "about $20 to print" and no generated row asserts an exact Printful figure. The transparency framing is "after printing and card costs, the rest funds Anthers' programs" — check any new sentence against that shape before it lands in copy.
+ */
+function renderMerchDiscountMarkdown(): string {
+	const rows = merchTable();
+	return [
+		table(
+			["Badge held", "Discount", "Shirt at $30 list", "Card processing (eaten)", "The line's net"],
+			[":--", "--:", "--:", "--:", "--:"],
+			rows.map((r) => [
+				r.badge === "list" ? "— no Badge" : r.badge,
+				r.discountPercent === "0" ? "—" : `${r.discountPercent}%`,
+				`$${r.goodsPrice}`,
+				`$${r.cardFee}`,
+				`$${r.keptBeforeFeeVariance}`,
+			]),
+		),
+		"",
+		`Anthers' own shirts are printed on demand by Printful — the list price is what Anthers sets in its own Printful store, Printful's shipping rate is added at checkout and charged per order, and sales tax is calculated from the delivery address. A Badge's discount applies to the shirt's price and never to shipping or tax: shipping is Printful's charge, and Anthers does not discount what it does not set.`,
+		"",
+		`**About $20 of every shirt goes to Printful for printing it, Printful's shipping rate covers getting it to you, and the rest — after card processing — funds Anthers' programs.** The discounts above come out of what Anthers keeps, and the largest one leaves the least expensive sizes with pennies and the largest sizes slightly below card-cost: a Blossom supporter is already giving $12 a month, so a near-at-cost shirt is the point rather than a problem. If Printful's costs change, the prices follow on the Printful side and the table regenerates.`,
 	].join("\n");
 }
 
@@ -1066,6 +1095,11 @@ const PUBLIC_WIKI_BLOCKS: Block[] = [
 		file: "20-29 Using Anthers/21 Supporting Creators/21.01 Badges.md",
 		key: "perk-ladder",
 		render: renderPerkLadderMarkdown,
+	},
+	{
+		file: "20-29 Using Anthers/21 Supporting Creators/21.01 Badges.md",
+		key: "merch-discount",
+		render: renderMerchDiscountMarkdown,
 	},
 	{
 		file: "40-49 Where the Money Goes/40 The Support Model/40.00 The Support Model.md",
