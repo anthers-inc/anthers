@@ -407,10 +407,10 @@ function PoolDiagram({ phase }: { phase: PhaseFigure }) {
 			</ResponsiveContainer>
 			<p className="mt-1 text-xs text-base-content/60">
 				Each column reads largest to smallest within its stream, and whole groups travel with their
-				parent: Programs and everything under it sit above Admin's, because Programs is larger.
-				Hover any capsule or ribbon to follow its stream. Nothing skips a strand from an input to a
-				purpose: every inflow merges into the pool before anything is spent, and every commitment is
-				made on the outflow side.
+				parent: Programs and everything under it sit above Admin's spending lines, because Programs
+				is larger. Hover any capsule or ribbon to follow its stream. No strand skips from an input
+				to a purpose: every inflow merges into the pool before anything is spent, and every
+				commitment is made on the outflow side.
 			</p>
 			<p className="mt-1 text-xs text-base-content/70">
 				{((1 - phase.adminCeiling) * 100).toFixed(0)}% of the remainder goes to the programs by
@@ -593,12 +593,12 @@ export default function RevenueResourcePage() {
 				<p>
 					Read it obligations-first. Card processing leaves at cost, paid to the processor at their
 					published rate with nothing added. The creator pools leave next, because that was always
-					the arrangement: half of what you give Anthers is your Badge's pool, paid to creators by
-					the time spent with their work. What remains is what Anthers holds, and every ceiling in
-					this page governs that remainder: administration may take up to {adminPct}% of it, and the
-					rest is the programs'. The program breakdown below the pool is the publishable form of
-					that policy: free access at its stated share, free storage for smaller creators at what it
-					actually costs, and the rest budgeted but not yet allocated.
+					the arrangement: half of what a supporter gives Anthers is that Badge's pool, paid to
+					creators by the time spent with their work. What remains is what Anthers holds, and every
+					ceiling in this page governs that remainder: administration may take up to {adminPct}% of
+					it, and the rest is the programs'. The program breakdown below the pool is the publishable
+					form of that policy: free access at its stated share, free storage for smaller creators at
+					what it actually costs, and the rest budgeted but not yet allocated.
 				</p>
 				<h2>What the drawing leaves out</h2>
 				<p>

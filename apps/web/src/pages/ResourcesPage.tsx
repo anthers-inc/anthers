@@ -140,7 +140,7 @@ export default function ResourcesPage() {
 
 			{/* Explainers — the drawing of the platform itself; formerly the demos' home,
 			restored with the revenue resource (the demos' rule: build on the shared model,
-			or don't exist). */}
+			or don't exist). Plain: it sits between the tinted hero and the calculators. */}
 			<Section>
 				<Reveal>
 					<Eyebrow>Explainers</Eyebrow>
@@ -154,7 +154,7 @@ export default function ResourcesPage() {
 			</Section>
 
 			{/* Calculators */}
-			<Section>
+			<Section tint>
 				<Reveal>
 					<Eyebrow>Calculators</Eyebrow>
 					<H2>Run the numbers yourself</H2>
@@ -167,7 +167,7 @@ export default function ResourcesPage() {
 			</Section>
 
 			{/* Comparisons */}
-			<Section tint>
+			<Section>
 				<Reveal>
 					<Eyebrow>Comparisons</Eyebrow>
 					<H2>How we stack up</H2>
@@ -180,7 +180,7 @@ export default function ResourcesPage() {
 			</Section>
 
 			{/* The way onward when the tools above don't have the answer. */}
-			<Section>
+			<Section tint>
 				<Reveal>
 					<Eyebrow>Still looking?</Eyebrow>
 					<H2>Not finding what you need?</H2>
