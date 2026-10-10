@@ -62,7 +62,7 @@ export interface BadgeRow {
 	timePool: string;
 	/** This side's share of the at-cost card fee — INSIDE the charge since 2026-08-03. */
 	payments: string;
-	/** The residual, which is what funds free access and the charitable programs. */
+	/** The residual, which funds the charitable programs — free access included. */
 	remainder: string;
 }
 

@@ -812,7 +812,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						id: "time-pool-half",
 						title: "Half of What You Give Anthers Pays Creators",
 						blurb:
-							"Distributed daily by time spent and settled monthly. The remainder funds free access and the programs.",
+							"Distributed daily by time spent and settled monthly. The remainder funds the charitable programs — free access included.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						doc: { id: "40.00", title: "The Support Model" },

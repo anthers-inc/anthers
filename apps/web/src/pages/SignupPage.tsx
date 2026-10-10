@@ -475,8 +475,8 @@ function anthersReading(amount: number, entryPrice: number): { segments: Segment
 				{
 					tone: "mission",
 					amount: amount - timePoolFor(amount) - cardFeeDisplay(amount),
-					label: "Free access & programs",
-					desc: "keeps other people's accounts free and funds Anthers' charitable programs",
+					label: "Charitable programs",
+					desc: "funds Anthers' charitable programs — free access included, which keeps other people's accounts free",
 				},
 				{
 					tone: "pay",
@@ -499,7 +499,7 @@ function anthersReading(amount: number, entryPrice: number): { segments: Segment
 			{
 				tone: "mission",
 				amount: 0,
-				label: "Free access & programs",
+				label: "Charitable programs",
 				desc: "funded by the rungs above, which is what pays for your account",
 			},
 			{
@@ -2874,8 +2874,8 @@ export default function SignupPage() {
 									/month.
 									<br></br>
 									<br></br>
-									Your Anthers Badge also funds free access for small users and creators and other
-									charitable programs.
+									Your Anthers Badge also funds the charitable programs — free access for small
+									users and creators included.
 								</GoFurtherCard>
 							</div>
 						</div>

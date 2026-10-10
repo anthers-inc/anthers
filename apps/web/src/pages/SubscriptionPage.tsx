@@ -633,7 +633,7 @@ export default function SubscriptionPage() {
 				<div className="divider text-sm text-base-content/50 my-3">
 					What your support for Anthers funds
 					<InfoTip
-						text={`What you give Anthers funds the Time Pool ($${timePoolFor(publicAccessPrice).toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds free access and the charitable programs). The card fee is inside the price. Downloads are unlimited and cost nothing, and $${publicAccessPrice} a month lifts the ${FREE_PUBLIC_ACCESS_HOURS}-hour monthly limit on Public Access.`}
+						text={`What you give Anthers funds the Time Pool ($${timePoolFor(publicAccessPrice).toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds the charitable programs — free access included). The card fee is inside the price. Downloads are unlimited and cost nothing, and $${publicAccessPrice} a month lifts the ${FREE_PUBLIC_ACCESS_HOURS}-hour monthly limit on Public Access.`}
 					/>
 				</div>
 				<div className="grid grid-cols-2 md:grid-cols-3 gap-4">

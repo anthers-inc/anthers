@@ -32,7 +32,7 @@
  * storage charge). **Directed support and direct purchases are deliberately absent**: Anthers
  * keeps $0 of either, so they cannot move any line here. That is 11.02's decoupling, and
  * it is why a creator-heavy, purchase-heavy Anthers can look successful while the budget
- * that funds free access stays thin.
+ * that funds free access — the charitable program inside the remainder — stays thin.
  */
 import {
 	FREE_STORAGE_GIB,
