@@ -943,9 +943,12 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 	 * (the Fund's pot IS the free accounts' pools; other programs' residual
 	 * sits unallocated until spent), because d3-sankey assigns columns by
 	 * longest path: a childless line falls into the last column instead of
-	 * holding its row. Children are ordered under their parent, so no ribbon
-	 * of one stream crosses a neighbor's.
+	 * holding its row. Every column sorts largest to smallest from the top
+	 * (Parker, 2026-10-10), so a capsule's row is its size's rank; parents'
+	 * children can then sit apart, and a ribbon may cross a neighbor's to
+	 * reach them — the size reading wins over the earlier no-crossing order.
 	 */
+	const bySize = (a: DiagramNode, b: DiagramNode): number => b.value - a.value;
 	const adminChildren: DiagramNode[] = [
 		{
 			name: "infra",
@@ -1066,6 +1069,12 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 		label: `Programs ${usd(Math.max(0, L.programs))}`,
 		value: Math.max(0, L.programs),
 	};
+	/**
+	 * Recharts' justify pulls every childless node into the LAST column and
+	 * stacks that column in ARRAY order — admin's spending lines and the
+	 * program lines' children both land there — so the merged column is sorted
+	 * once, across both, rather than per depth group (Parker, 2026-10-10).
+	 */
 	const nodes: DiagramNode[] = [
 		{
 			name: "revenue",
@@ -1074,11 +1083,9 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 			label: `Revenue ${usd(rev)}`,
 			value: rev,
 		},
-		adminNode,
-		programsNode,
-		...adminChildren,
-		...programLines,
-		...programChildren,
+		...[adminNode, programsNode].sort(bySize),
+		...[...programLines].sort(bySize),
+		...[...adminChildren, ...programChildren].sort(bySize),
 	];
 	const byName = new Map(nodes.map((n, i) => [n.name, i]));
 	const links: DiagramLink[] = [
