@@ -40,7 +40,19 @@ export function isFileWorkType(type: string): type is FileWorkType {
 	return workNeedsFile(type);
 }
 
-/** What a file picker for this kind accepts, and how large a file it takes. */
+/**
+ * What a file picker for this kind accepts, and how large a file it takes.
+ *
+ * 🚨 **These caps are picked to what the pipeline behind them tolerates, not to what storage
+ * accepts** — a Work's source upload goes out through the presign route (`packages/web-shared/src/lib/upload.ts`),
+ * so the bytes never pass through the API in production and R2's single-PUT ceiling is 5 GB.
+ * The binding constraint for a PDF is the worker that rasterizes it: `apps/api/src/jobs/rasterize-ebook.ts`
+ * writes the source to App Platform's ephemeral filesystem — 4 GiB total per container —
+ * alongside every page image it renders before uploading them, so the source cap is the share
+ * of that disk a book may claim. 2 GB is that share with room for the rendered pages, and parity
+ * with the video cap; a 5 GB cap would trade "cannot upload a giant master" for "the job dies
+ * out of disk partway through a 2000-page render".
+ */
 export function fileRules(type: FileWorkType): { accept: string; maxSize: number; noun: string } {
 	switch (type) {
 		case "video":
@@ -52,7 +64,7 @@ export function fileRules(type: FileWorkType): { accept: string; maxSize: number
 			return { accept: "image/*", maxSize: 20 * 1024 * 1024, noun: "an image" };
 		case "comic":
 		case "ebook":
-			return { accept: "application/pdf", maxSize: 500 * 1024 * 1024, noun: "a PDF" };
+			return { accept: "application/pdf", maxSize: 2 * 1024 * 1024 * 1024, noun: "a PDF" };
 	}
 }
 
