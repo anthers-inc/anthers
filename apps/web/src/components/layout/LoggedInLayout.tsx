@@ -297,22 +297,39 @@ function LoggedInLayoutInner() {
 						) : (
 							<nav aria-label="Anthers" className="p-3 flex flex-col gap-0.5">
 								{orderedNavLinks(navOrder).map((link, index) => (
-									<div key={link.id} className="flex items-center">
-										<NavLink to={link.to} className={`${navLinkClass} flex-1 min-w-0`}>
+									// The drag handle, at the item's own right edge: the grip is what
+									// carries the drag (only the grip is draggable — dragging a label
+									// keeps its selection behavior), and a drop on any part of another
+									// row reorders there. The row, not the grip, is the drop target: a
+									// drop lands on whatever part of the row the cursor is over.
+									// Reordering persists to the account, and the top of the order is
+									// where a signed-in visit lands (see `RootRedirect`). Keyboard
+									// reorder is not built; the gap is named in the task.
+									// biome-ignore lint/a11y/noStaticElementInteractions: the row is the drop target; it has no pointer/keyboard behavior of its own and a static div is honest about that.
+									<div
+										key={link.id}
+										className="flex items-center"
+										onDragOver={(e) => e.preventDefault()}
+										onDrop={(e) => {
+											e.preventDefault();
+											const from = navDragFrom.current;
+											navDragFrom.current = null;
+											if (from !== null && from !== index) reorderNav(from, index);
+										}}
+									>
+										<NavLink
+											to={link.to}
+											className={({ isActive }) => `${navItemClass(isActive)} flex-1 min-w-0`}
+										>
 											<link.icon className="w-5 h-5 shrink-0" />
 											{link.label}
 										</NavLink>
-										{/* The drag handle, at the item's own right edge: the grip is what
-										    carries the drag (draggable on the span), and a drop on another
-										    row reorders there. Reordering persists to the account, and
-										    the top of the order is where a signed-in visit lands (see
-										    `RootRedirect`). Keyboard reorder is not built; the gap is
-										    named in the task. */}
 										{/* biome-ignore lint/a11y/noStaticElementInteractions: the span is the drag source a native
 											 HTML5 drag needs; there is no clickable or focusable behavior on it (the drag itself is
 											 the interaction), and a static span is honest about that. */}
 										<span
 											title="Drag to reorder"
+											draggable
 											onDragStart={(e) => {
 												e.dataTransfer.effectAllowed = "move";
 												// A drag with no payload can be refused before it starts;
@@ -320,12 +337,11 @@ function LoggedInLayoutInner() {
 												e.dataTransfer.setData("text/plain", link.id);
 												navDragFrom.current = index;
 											}}
-											onDragOver={(e) => e.preventDefault()}
-											onDrop={(e) => {
-												e.preventDefault();
-												const from = navDragFrom.current;
+											// A drag that ends anywhere but an accepted drop (Escape, a
+											// drop outside the nav) leaves the source stale; the next drop
+											// would reorder from a drag that never finished.
+											onDragEnd={() => {
 												navDragFrom.current = null;
-												if (from !== null && from !== index) reorderNav(from, index);
 											}}
 											className="cursor-grab px-1.5 text-base-content/25 hover:text-base-content/50 transition-colors self-stretch flex items-center active:cursor-grabbing"
 										>
