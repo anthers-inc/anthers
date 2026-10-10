@@ -21,6 +21,11 @@ export interface User {
 	location: string | null;
 	emailVerified: boolean | null;
 	themePreference: Theme | null;
+	/**
+	 * The home sidebar's nav order (the Feed / Library / Discover ids, first first);
+	 * null = never rearranged, so the default order stands and `/` lands on the feed.
+	 */
+	homeNavOrder: string[] | null;
 	/** Every account holds exactly one ATProto identity, so it is always present. */
 	atprotoDid: string;
 	/** When the terms (and the 13+ assertion) were accepted; null until `/welcome` finishes onboarding. */

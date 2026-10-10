@@ -14,7 +14,7 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { users } from "@anthers/db/schema";
+import { users, works } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
@@ -350,6 +350,63 @@ describe("Catalog vertical slice", () => {
 		});
 		const onlyReleases = (await releasesOnly.json()).entries as { kind: string }[];
 		expect(onlyReleases.every((e) => e.kind === "release")).toBe(true);
+	});
+
+	it("gives the sidebar real control over the stream", async () => {
+		// The three filters the sidebar presents, bound to the one stream that is the
+		// page's subject. The game carries `indie` and is priced at $5; the essay is
+		// free with no tags; the announcement links only the game.
+		await db
+			.update(works)
+			.set({ tags: ["indie"] })
+			.where(eq(works.id, oldGameId));
+
+		const feed = async (params: string) =>
+			req(`/api/accounts/me/feed${params}`, { headers: { Cookie: otherCookie } });
+
+		// Type: the game's filter keeps its releases and its announcement, and drops
+		// the rest of the two halves.
+		const gameEntries = (await (await feed("?media_type=game")).json()).entries;
+		expect(gameEntries.length).toBeGreaterThan(0);
+		for (const e of gameEntries) {
+			if (e.kind === "release") expect(e.type).toBe("game");
+		}
+		const essayEntries = (await (await feed("?media_type=text")).json()).entries;
+		// A text filter keeps the essay release; the announcement links no text Work,
+		// so a type filter that kept it would announce work into filters it can't see.
+		expect(essayEntries.some((e: { kind: string }) => e.kind === "post")).toBe(false);
+
+		// ACCESS, over the follower's own standing: they own nothing here, so the
+		// priced game reads locked, the free essay reads unlocked, and a post —
+		// accessible by construction — rides unlocked and never locked.
+		const lockedEntries = (await (await feed("?access=locked")).json()).entries;
+		expect(lockedEntries.some((e: { kind: string }) => e.kind === "post")).toBe(false);
+		for (const e of lockedEntries) {
+			if (e.kind === "release") {
+				const access = (e as { access?: { canAccess?: boolean } }).access;
+				// The complement, pinned: a locked page holds nothing this account opens.
+				expect(access?.canAccess).toBe(false);
+			}
+		}
+		const unlockedEntries = (await (await feed("?access=unlocked")).json()).entries;
+		for (const e of unlockedEntries) {
+			if (e.kind === "release")
+				expect((e as { access?: { canAccess?: boolean } }).access?.canAccess).toBe(true);
+		}
+		expect(
+			unlockedEntries.some(
+				(e: { kind: string }) =>
+					e.kind === "release" && (e as { access?: { reason?: string } }).access?.reason === "free",
+			),
+		).toBe(true);
+
+		// Tags, AND over the Work's own: the indie tag matches the game alone.
+		await db.update(works).set({ tags: [] }).where(eq(works.id, recentEssayId));
+		const taggedEntries = (await (await feed("?tags=indie")).json()).entries;
+		expect(taggedEntries.length).toBeGreaterThan(0);
+		for (const e of taggedEntries) {
+			if (e.kind === "release") expect(e.title).toBe(`Old Game ${id}`);
+		}
 	});
 
 	it("keeps the Work when the announcement is deleted", async () => {

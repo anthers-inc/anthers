@@ -1,0 +1,1 @@
+ALTER TABLE "user_preferences" ADD COLUMN "home_nav_order" jsonb;

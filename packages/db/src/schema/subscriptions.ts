@@ -235,6 +235,18 @@ export const userPreferences = pgTable("user_preferences", {
 	 */
 	notificationUnsubscribeToken: text("notification_unsubscribe_token"),
 
+	/**
+	 * The home sidebar's nav order — the ids of the Feed / Library / Discover items,
+	 * first-what-you-see-first; null means the default order (Feed first).
+	 *
+	 * A preference of the same kind as `themePreference`: which way a signed-in
+	 * account's own chrome reads is not portable identity, so it lives here rather than
+	 * on the identity row. The client's redirect decides the shape; the server validates
+	 * the write as a permutation of the ids it knows and stores it verbatim otherwise
+	 * untouched, because the ids themselves are the client's vocabulary.
+	 */
+	homeNavOrder: jsonb("home_nav_order").$type<string[]>(),
+
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
