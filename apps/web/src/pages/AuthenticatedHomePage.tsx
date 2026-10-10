@@ -42,49 +42,8 @@ function FeedSidebarContent({
 	tag: string;
 	onUpdateParams: (updates: Record<string, string>) => void;
 }) {
-	const [showFeedInfo, setShowFeedInfo] = useState(false);
-
 	return (
 		<div className="flex flex-col gap-6">
-			{/* Feed info toggle */}
-			<section>
-				<button
-					type="button"
-					className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-base-content/60 transition-colors"
-					onClick={() => setShowFeedInfo(!showFeedInfo)}
-				>
-					<InformationCircleIcon className="w-3.5 h-3.5" />
-					How does the feed work?
-				</button>
-				{showFeedInfo && (
-					<div className="bg-base-200 rounded-lg p-3 text-sm mt-2 relative">
-						<button
-							type="button"
-							className="btn btn-ghost btn-xs btn-circle absolute top-1 right-1"
-							onClick={() => setShowFeedInfo(false)}
-						>
-							<XMarkIcon className="w-3.5 h-3.5" />
-						</button>
-						{/* 🚨 This listed three layers — follows, the network's likes and purchases, and
-						    followed interests — while only the first has ever run. The other two are the
-						    Layered Feed lane and are named here as not built, which is what the FAQ says. */}
-						<p className="text-base-content/70 mb-2 text-xs">
-							Your feed shows posts and releases from the creators you follow, newest first.
-						</p>
-						<p className="text-base-content/60 text-xs">
-							Things the people you follow recommend, and work matching tags you follow, are planned
-							and not built yet — and neither will ever be paid placement.
-						</p>
-						<p className="text-base-content/40 text-xs mt-2">
-							No engagement-optimizing algorithms.{" "}
-							<Link to="/faq" className="link link-primary">
-								Learn more
-							</Link>
-						</p>
-					</div>
-				)}
-			</section>
-
 			{/* Bookmarks / Favorites */}
 			<section>
 				<h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5">
@@ -160,6 +119,7 @@ export default function AuthenticatedHomePage() {
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [creators, setCreators] = useState<PublicUser[]>([]);
 	const [feedLoading, setFeedLoading] = useState(true);
+	const [showFeedInfo, setShowFeedInfo] = useState(false);
 
 	const contentType = searchParams.get("media_type") ?? "";
 	const pricing = searchParams.get("pricing") ?? "";
@@ -276,6 +236,49 @@ export default function AuthenticatedHomePage() {
 		<div className="min-h-full">
 			{/* Feed content */}
 			<div className="max-w-6xl mx-auto px-4 py-6">
+				{/* The feed's own heading, and the page explanation beside it — moved out of
+				    the sidebar, which holds filters; a HOW-does-it-work is a page element. */}
+				<div className="flex items-center justify-between mb-4">
+					<h2 className="text-lg font-semibold flex items-center gap-2">
+						<RssIcon className="w-5 h-5 text-primary" />
+						Your Feed
+					</h2>
+					<button
+						type="button"
+						className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-base-content/60 transition-colors"
+						onClick={() => setShowFeedInfo(!showFeedInfo)}
+					>
+						<InformationCircleIcon className="w-3.5 h-3.5" />
+						How does the feed work?
+					</button>
+				</div>
+				{showFeedInfo && (
+					<div className="bg-base-200 rounded-lg p-3 text-sm relative mb-6">
+						<button
+							type="button"
+							className="btn btn-ghost btn-xs btn-circle absolute top-1 right-1"
+							onClick={() => setShowFeedInfo(false)}
+						>
+							<XMarkIcon className="w-3.5 h-3.5" />
+						</button>
+						{/* 🚨 This listed three layers — follows, the network's likes and purchases, and
+						    followed interests — while only the first has ever run. The other two are the
+						    Layered Feed lane and are named here as not built, which is what the FAQ says. */}
+						<p className="text-base-content/70 mb-2 text-xs">
+							Your feed shows posts and releases from the creators you follow, newest first.
+						</p>
+						<p className="text-base-content/60 text-xs">
+							Things the people you follow recommend, and work matching tags you follow, are planned
+							and not built yet — and neither will ever be paid placement.
+						</p>
+						<p className="text-base-content/40 text-xs mt-2">
+							No engagement-optimizing algorithms.{" "}
+							<Link to="/faq" className="link link-primary">
+								Learn more
+							</Link>
+						</p>
+					</div>
+				)}
 				{feedLoading ? (
 					<div className="flex justify-center py-16">
 						<LoadingSpinner size="lg" />
