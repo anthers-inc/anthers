@@ -12,6 +12,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	isEmptyPostMarkdown,
 	normalizeStoredMarkdown,
+	postContentExcerpt,
 	postHtmlToMarkdown,
 } from "../services/post-markdown";
 
@@ -117,5 +118,49 @@ describe("isEmptyPostMarkdown", () => {
 		expect(isEmptyPostMarkdown("![the screen](https://i.example/pic.png)\n\nand words")).toBe(
 			false,
 		);
+	});
+});
+
+describe("postContentExcerpt", () => {
+	// The one consumer is the feed tile, which renders a post's stored markdown
+	// as plain text in the artwork's place — the same conversion every later
+	// plain-text surface of a post should reach for, which is why it is one
+	// named function rather than a route's private strip.
+	it("reduces the editor's whole vocabulary to readable text", () => {
+		const text = postContentExcerpt(
+			"## The plan\n\nA shirt, **printed** with the logo — [buy it here](https://anthers.example) or not.\n\n- one\n- two\n\n> a quote",
+		);
+		// No markdown syntax survives; block boundaries read as the spaces they are.
+		expect(text).toBe(
+			"The plan A shirt, printed with the logo — buy it here or not. one two a quote",
+		);
+	});
+
+	it("decodes the entities marked escapes, exactly once", () => {
+		expect(postContentExcerpt("Five &amp; six — a &quot;quote&quot;, it&#39;s `code`")).toBe(
+			'Five & six — a "quote", it\'s code',
+		);
+		// A numeric reference decodes by code point.
+		expect(postContentExcerpt("R&#233;sum&#233;")).toBe("Résumé");
+	});
+
+	it("decodes a body's &amp; once, not twice — the stored double-escape still means amp", () => {
+		expect(postContentExcerpt("type &amp;amp; ship")).toBe("type &amp; ship");
+	});
+
+	it("returns empty for a body that is only an image or is empty", () => {
+		expect(postContentExcerpt("")).toBe("");
+		expect(postContentExcerpt("![the screen](https://i.example/pic.png)")).toBe("");
+		expect(postContentExcerpt(null)).toBe("");
+	});
+
+	it("cuts at a word boundary past the limit, without baking in an ellipsis", () => {
+		const text = postContentExcerpt("first sentence here is deliberately quite long", 30);
+		// "first sentence here is deliber" (30) would end mid-word; the cut backs up
+		// to the space before "deliberately".
+		expect(text).toBe("first sentence here is");
+		const long = postContentExcerpt("word ".repeat(300));
+		expect(long.length).toBeLessThanOrEqual(600);
+		expect(long.endsWith("…")).toBe(false);
 	});
 });

@@ -7,11 +7,19 @@
 // than video alone.
 //
 // The band is where the types differ, deliberately: an entry with artwork
-// (thumbnail) shows it; a writing Work or post has no artwork, so its title
-// set in the Fraunces display face IS the artwork; music and audio get a
-// waveform poster; the remaining types get a type-icon poster. The body does
-// not repeat a title the band already set — the band is the poster, and the
-// body is the who-and-when.
+// (a Work's thumbnail, or a physical Work's store mockup) shows it; a text
+// post renders its content's opening in the slot; a writing Work has no
+// artwork, so its title set in the Fraunces display face IS the artwork;
+// music and audio get a waveform poster; the remaining types get a type-icon
+// poster. The body does not repeat a title the band already set — the band is
+// the poster, and the body is the who-and-when plus the title when the band
+// carries something else.
+//
+// A goods Work (physical) is never locked presentation while buyable — the
+// purchase gates receiving it, never seeing it — so its tile shows the art
+// and a "from $x" badge where a digital Work would blur behind a lock chip.
+// The rule is the resolver's (`services/access.ts`'s goods branch); this tile
+// is its feed-shaped consequence.
 //
 // This is a feed widget, not a general card: WorkCard stays the column card
 // the profile, project and post pages render. If another surface wants this
@@ -40,7 +48,15 @@ type FeedEntry = { kind: "post" | "release"; id: number } & Record<string, unkno
 /** A feed Work as the API sends it: the Work plus the creator the listing joins on. */
 type FeedWork = Work & {
 	creator?: { handle: string; displayName?: string | null; avatar?: string | null };
+	/**
+	 * A goods release's store facts — the artwork its first merch variant carries and the
+	 * cheapest variant's list price. Present on a physical Work when the store has either.
+	 */
+	merch?: { mockupUrl: string | null; fromPrice: string | null } | null;
 };
+
+/** A feed post as the API sends it — the timeline shape plus the plain-text body excerpt. */
+type FeedPost = PostListItem & { excerpt?: string | null };
 
 /**
  * Fallback heights for the decorative waveform, hand-picked to read as an
@@ -134,11 +150,11 @@ function TypographicBand({ label, title }: { label: string; title: string | null
 }
 
 /** A thumbnail as the band, with a video platform's duration chip and hover play. */
-function CoverBand({ work }: { work: FeedWork }) {
+function CoverBand({ work, src }: { work: FeedWork; src: string }) {
 	const duration = work.type === "video" ? durationLabel(work.durationSeconds) : "";
 	return (
 		<div className="relative aspect-video bg-base-300">
-			<img src={work.thumbnail ?? ""} alt="" className="w-full h-full object-cover" />
+			<img src={src} alt="" className="w-full h-full object-cover" />
 			<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
 			{duration && (
 				<span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white">
@@ -154,38 +170,67 @@ function CoverBand({ work }: { work: FeedWork }) {
 	);
 }
 
+/**
+ * A text post's content as the band — the artwork slot IS the opening of the body,
+ * clamped to what fits. Reads at body-text size rather than the display face: the
+ * writing-Work band's typography is a poster, where here the words themselves are
+ * the preview.
+ */
+function ContentBand({ text }: { text: string }) {
+	return (
+		<div className="aspect-video relative flex flex-col justify-center overflow-hidden bg-base-100 px-5">
+			<p className="text-sm leading-relaxed text-base-content/75 line-clamp-4">{text}</p>
+		</div>
+	);
+}
+
 function ReleaseBand({ work }: { work: FeedWork }) {
 	const { prefs } = useContentPreferences();
 	// Locked-to-the-user and veiled handling match WorkCard's, including the
 	// signed-out visitor rule (`presentsAsLocked`) and the
 	// two-treatments-never-stack rule — a locked cover is already blurred, so a
 	// veiled Work reaches here only when not locked.
+	//
+	// 🚨 The goods exception is the rule the resolver's goods branch states
+	// (`services/access.ts`, Parker 2026-10-09): a physical Work is never *locked
+	// presentation* while it is simply buyable — the purchase gates RECEIVING the
+	// shirt, never SEEING it, so the lock chip never stands in for a store. Only a
+	// still-standing gate presents as locked (which `presentsAsLocked` already
+	// answers everywhere but `payment_required`), exactly like a digital Work's.
 	const access = isAccessResult(work.access) ? work.access : null;
-	const locked = presentsAsLocked(access);
-	const cover = locked ? null : coverFor(prefs, work);
+	const isGoods = work.type === "physical";
+	// A goods release's artwork: the creator's thumbnail, or the store's first mockup.
+	// The mockup is public the same way the store panel is — a visitor may look at a shirt.
+	const artwork = work.thumbnail || (isGoods ? (work.merch?.mockupUrl ?? null) : null);
+	const locked = presentsAsLocked(access) && !(isGoods && access?.reason === "payment_required");
 
 	if (locked) {
 		return (
 			<LockedCover
-				thumbnail={work.thumbnail}
+				thumbnail={artwork}
 				className="aspect-video"
 				lockedBy={access ? lockedByBadge(access, creatorName(work)) : null}
 			/>
 		);
 	}
-	if (cover) {
+	const veil = coverFor(prefs, work);
+	if (veil) {
 		return (
 			<MaturityVeil
 				maturity={work.maturity}
 				notes={(work.maturityNotes ?? []).map(contentNoteLabel)}
-				because={cover.byRung ? undefined : cover.byNotes.map(contentNoteLabel)}
+				because={veil.byRung ? undefined : veil.byNotes.map(contentNoteLabel)}
 				className="aspect-video"
 			>
-				<CoverBand work={work} />
+				{artwork ? (
+					<CoverBand work={work} src={artwork} />
+				) : (
+					<DecorativeArtworkFallback work={work} type={work.type} />
+				)}
 			</MaturityVeil>
 		);
 	}
-	if (work.thumbnail) return <CoverBand work={work} />;
+	if (artwork) return <CoverBand work={work} src={artwork} />;
 	// No artwork: the band is the type's poster instead.
 	if (isListened(work.type)) return <ListenPosterBand type={work.type} />;
 	if (work.type === "text") {
@@ -194,7 +239,20 @@ function ReleaseBand({ work }: { work: FeedWork }) {
 	return <IconPosterBand type={work.type} />;
 }
 
-function PostBand({ post }: { post: PostListItem }) {
+/**
+ * The poster band a covered Work shows inside the veil — by the same choice the
+ * uncovered path makes below it, so revealing the veil changes shape as little as
+ * a thumbnail would.
+ */
+function DecorativeArtworkFallback({ work, type }: { work: FeedWork; type: string }) {
+	if (isListened(type)) return <ListenPosterBand type={type} />;
+	if (type === "text") {
+		return <TypographicBand label={contentTypeMeta(type).label} title={work.title} />;
+	}
+	return <IconPosterBand type={type} />;
+}
+
+function PostBand({ post }: { post: FeedPost }) {
 	// A post's thumbnail is its first linked Work's, if any — thumbnails are
 	// public by design, so the announcement can show what it announces.
 	if (post.thumbnail) {
@@ -205,6 +263,7 @@ function PostBand({ post }: { post: PostListItem }) {
 			</div>
 		);
 	}
+	if (post.excerpt) return <ContentBand text={post.excerpt} />;
 	return <TypographicBand label="Post" title={post.title} />;
 }
 
@@ -275,6 +334,13 @@ export default function FeedTile({ entry }: { entry: FeedEntry }) {
 							{label}
 						</span>
 						<PricingBadge access={isAccessResult(work.access) ? work.access : null} />
+						{/* The goods store's own ask, standing where a digital Work's price badge
+						    stands: the purchase gates receiving the thing, not seeing it, so the
+						    badge says buy rather than lock. The store's list prices are the source;
+						    the tile shows only the cheapest, since no color is picked here. */}
+						{work.type === "physical" && work.merch?.fromPrice && (
+							<span className="badge badge-sm badge-secondary">from ${work.merch.fromPrice}</span>
+						)}
 						{work.type === "text" && work.estimatedReadMinutes ? (
 							<span className="text-xs text-base-content/40">
 								{work.estimatedReadMinutes} min read
@@ -286,8 +352,11 @@ export default function FeedTile({ entry }: { entry: FeedEntry }) {
 		);
 	}
 
-	const post = entry as unknown as PostListItem;
-	const isTypographic = !post.thumbnail;
+	const post = entry as unknown as FeedPost;
+	// The typographic band is the title (a post with a thumbnail or body content
+	// has one of those as its art instead); repeating it beneath itself reads as
+	// a defect rather than as emphasis.
+	const bandIsTitle = !post.thumbnail && !post.excerpt;
 	return (
 		<Link
 			to={postUrl(post)}
@@ -300,10 +369,13 @@ export default function FeedTile({ entry }: { entry: FeedEntry }) {
 					name={creatorLabel(post.creator ?? { handle: "?" })}
 					date={compactDate(post.publishedAt ?? post.createdAt)}
 				/>
-				{/* The typographic band is the title; repeating it beneath itself
-				    reads as a defect rather than as emphasis. */}
-				{!isTypographic && post.title && (
+				{!bandIsTitle && post.title && (
 					<h3 className="font-semibold text-sm leading-snug line-clamp-2">{post.title}</h3>
+				)}
+				{post.excerpt && (
+					<p className="text-xs leading-relaxed text-base-content/60 line-clamp-2">
+						{post.excerpt}
+					</p>
 				)}
 				<div className="flex items-center gap-1.5 mt-auto pt-1 flex-wrap">
 					{post.linkedWorkCount > 0 && (
