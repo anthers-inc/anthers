@@ -81,6 +81,16 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.19",
+		date: "2026-10-10",
+		lede: "The store pages read like a shop now, and sharing never stops to argue.",
+		entries: [
+			"A Work's record — credits, stickers, reviews, announcements — now sits in a column beside a goods Work's store panel instead of under it.",
+			"The store panel's pickers are labeled Variants: every size a Work carries shows from the start (one the picked color doesn't offer greys out), the mockup keeps to its space, and the always-visible list/shipping/tax box waits for the saved-address decision rather than restating what the size buttons already say.",
+			"Share opens a modal that always offers a copy — a gated Work's link is worth sending, to point someone at something they might buy — and upgrades to the watching link where the Work allows one.",
+		],
+	},
+	{
 		version: "2026.10.18",
 		date: "2026-10-09",
 		lede: "The shirts wear their own pictures now.",

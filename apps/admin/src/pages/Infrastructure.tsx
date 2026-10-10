@@ -364,93 +364,6 @@ export default function Infrastructure() {
 				jobs && (
 					<div className="space-y-10">
 						<section>
-							<SectionHeading>Job Queues</SectionHeading>
-							{!jobs.pgboss.available ? (
-								<div className="alert">
-									<span>
-										The job queue has no schema yet, because the worker has not run against this
-										database.
-									</span>
-								</div>
-							) : (
-								<div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-									<table className="table table-sm">
-										<thead>
-											<tr>
-												<th>Queue</th>
-												<th className="text-right">Active</th>
-												<th className="text-right">Waiting</th>
-												<th className="text-right">Retry</th>
-												<th className="text-right">Failed</th>
-											</tr>
-										</thead>
-										<tbody>
-											{jobs.pgboss.queues.map((q) => (
-												<tr key={q.name}>
-													<td className="font-mono text-xs">{q.name}</td>
-													<td className="text-right tabular-nums">{q.active || "—"}</td>
-													<td className="text-right tabular-nums">{q.created || "—"}</td>
-													<td className="text-right tabular-nums">
-														{q.retry ? <span className="text-warning">{q.retry}</span> : "—"}
-													</td>
-													<td className="text-right tabular-nums">
-														{q.failed ? (
-															<span className="font-semibold text-error">{q.failed}</span>
-														) : (
-															"—"
-														)}
-													</td>
-												</tr>
-											))}
-										</tbody>
-									</table>
-								</div>
-							)}
-
-							{jobs.pgboss.available && (
-								<div className="mt-4">
-									<div className="mb-2 text-xs uppercase tracking-wide text-base-content/50">
-										Recent Failures
-									</div>
-									{jobs.pgboss.failures.length === 0 ? (
-										<p className="text-sm text-success">No job has failed recently.</p>
-									) : (
-										<div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-											<table className="table table-sm">
-												<thead>
-													<tr>
-														<th>Queue</th>
-														<th>State</th>
-														<th>When</th>
-														<th>Error</th>
-													</tr>
-												</thead>
-												<tbody>
-													{jobs.pgboss.failures.map((f) => (
-														<tr key={`${f.queue}-${f.createdOn}`}>
-															<td className="font-mono text-xs">{f.queue}</td>
-															<td>
-																<span className="badge badge-sm badge-error badge-outline">
-																	{f.state}
-																</span>
-															</td>
-															<td className="whitespace-nowrap text-xs">
-																{new Date(f.createdOn).toLocaleString()}
-															</td>
-															<td className="text-xs">
-																<ExpansibleError text={f.error} />
-															</td>
-														</tr>
-													))}
-												</tbody>
-											</table>
-										</div>
-									)}
-								</div>
-							)}
-						</section>
-
-						<section>
 							<SectionHeading>Media Processing</SectionHeading>
 							{Object.keys(jobs.transcodes.counts).length === 0 ? (
 								<p className="text-sm text-base-content/60">No media job has been recorded yet.</p>
@@ -535,6 +448,98 @@ export default function Infrastructure() {
 					))}
 				</div>
 			</section>
+
+			{/* Job Queues sits last: it is the section an operator consults least often, so the page
+			    reads in the order an operator reaches for it. It only renders when the jobs data is
+			    in, as the sections above it do when they fail. */}
+			{jobs && (
+				<section className="mt-10">
+					<SectionHeading>Job Queues</SectionHeading>
+					{!jobs.pgboss.available ? (
+						<div className="alert">
+							<span>
+								The job queue has no schema yet, because the worker has not run against this
+								database.
+							</span>
+						</div>
+					) : (
+						<div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
+							<table className="table table-sm">
+								<thead>
+									<tr>
+										<th>Queue</th>
+										<th className="text-right">Active</th>
+										<th className="text-right">Waiting</th>
+										<th className="text-right">Retry</th>
+										<th className="text-right">Failed</th>
+									</tr>
+								</thead>
+								<tbody>
+									{jobs.pgboss.queues.map((q) => (
+										<tr key={q.name}>
+											<td className="font-mono text-xs">{q.name}</td>
+											<td className="text-right tabular-nums">{q.active || "—"}</td>
+											<td className="text-right tabular-nums">{q.created || "—"}</td>
+											<td className="text-right tabular-nums">
+												{q.retry ? <span className="text-warning">{q.retry}</span> : "—"}
+											</td>
+											<td className="text-right tabular-nums">
+												{q.failed ? (
+													<span className="font-semibold text-error">{q.failed}</span>
+												) : (
+													"—"
+												)}
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
+					)}
+
+					{jobs.pgboss.available && (
+						<div className="mt-4">
+							<div className="mb-2 text-xs uppercase tracking-wide text-base-content/50">
+								Recent Failures
+							</div>
+							{jobs.pgboss.failures.length === 0 ? (
+								<p className="text-sm text-success">No job has failed recently.</p>
+							) : (
+								<div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
+									<table className="table table-sm">
+										<thead>
+											<tr>
+												<th>Queue</th>
+												<th>State</th>
+												<th>When</th>
+												<th>Error</th>
+											</tr>
+										</thead>
+										<tbody>
+											{jobs.pgboss.failures.map((f) => (
+												<tr key={`${f.queue}-${f.createdOn}`}>
+													<td className="font-mono text-xs">{f.queue}</td>
+													<td>
+														<span className="badge badge-sm badge-error badge-outline">
+															{f.state}
+														</span>
+													</td>
+													<td className="whitespace-nowrap text-xs">
+														{new Date(f.createdOn).toLocaleString()}
+													</td>
+													<td className="text-xs">
+														<ExpansibleError text={f.error} />
+													</td>
+												</tr>
+											))}
+										</tbody>
+									</table>
+								</div>
+							)}
+						</div>
+					)}
+				</section>
+			)}
 		</div>
 	);
 }

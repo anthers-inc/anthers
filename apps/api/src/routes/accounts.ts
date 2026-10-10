@@ -93,6 +93,7 @@ import {
 	enableAdultAccess,
 	setMaturityDisplay,
 } from "../services/content-preferences.js";
+import { merchStoreFactsByWork } from "../services/merch-store.js";
 import {
 	DELIVERY_GROUPS,
 	type DeliveryGroup,
@@ -635,42 +636,13 @@ const accountRoutes = new Hono()
 			}
 		}
 
-		// The goods releases' store art and from-price, the same facts the store route
-		// shows a signed-out visitor: the first color's `mockupUrl` in variant-id order
-		// (the picker's own ordering — the dashboard stamps every size of a color alike),
-		// and the cheapest variant's stamped list price for the "from" the tile shows.
-		// This exists because a goods release is never locked presentation: the purchase
-		// gates RECEIVING the thing, never seeing it (the resolver's goods branch —
-		// `services/access.ts`, Parker 2026-10-09), so the tile's price badge and image
-		// carry what a lock chip would otherwise say. The read is per Work, list-price
-		// minimums are public, and no fulfillment row is touched.
-		const merchRef: Record<number, { mockupUrl: string | null; fromPrice: string | null }> = {};
-		if (feedWorks.length > 0) {
-			const goodsIds = feedWorks.filter((r) => r.work.type === "physical").map((r) => r.work.id);
-			if (goodsIds.length > 0) {
-				const variantRows = await db
-					.select({
-						workId: merchVariants.workId,
-						mockupUrl: merchVariants.mockupUrl,
-						listPrice: merchVariants.listPrice,
-					})
-					.from(merchVariants)
-					.where(inArray(merchVariants.workId, goodsIds))
-					.orderBy(merchVariants.id);
-				for (const v of variantRows) {
-					let entry = merchRef[v.workId];
-					if (!entry) merchRef[v.workId] = entry = { mockupUrl: null, fromPrice: null };
-					if (!entry.mockupUrl && v.mockupUrl) entry.mockupUrl = v.mockupUrl;
-					// numeric reads back as string; the comparison is decimal, never float
-					if (
-						entry.fromPrice === null ||
-						new Decimal(v.listPrice).lt(new Decimal(entry.fromPrice))
-					) {
-						entry.fromPrice = v.listPrice;
-					}
-				}
-			}
-		}
+		// The goods releases' store facts — what the tile shows in place of a lock
+		// chip, since the purchase gates RECEIVING the thing, never seeing it (the
+		// resolver's goods branch — `services/access.ts`, Parker 2026-10-09). The
+		// rule and its bounds are the store-facts service's; batch-loaded here.
+		const merchMap = await merchStoreFactsByWork(
+			feedWorks.filter((r) => r.work.type === "physical").map((r) => r.work.id),
+		);
 
 		// Enumerate the fields rather than spreading the row. This used to be
 		// `...row.post`, which shipped `body` and `bodyHtml` for every followed creator's
@@ -755,7 +727,7 @@ const accountRoutes = new Hono()
 					// The goods release's store art and from-price — what a tile shows in
 					// place of the lock chip a digital Work would earn. Present only on a
 					// physical Work, and only with the facts the store has.
-					merch: w.type === "physical" ? (merchRef[w.id] ?? null) : undefined,
+					merch: w.type === "physical" ? (merchMap.get(w.id) ?? null) : undefined,
 					// The user's own verdict — what a locked cover and a price badge
 					// need. The feed resolves no deliverable either way; this only
 					// describes the gate.
