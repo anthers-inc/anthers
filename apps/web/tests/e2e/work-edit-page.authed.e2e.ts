@@ -87,13 +87,16 @@ test("a Work's Edit page shows the Work as a user sees it", async ({ page, conte
 	);
 	const pds = process.env.ATPROTO_TEST_PDS;
 	expect(pds, "the browser session names its own AT Protocol network").toBeTruthy();
-	const [, did, collection, rkey] = (owner?.atprotoUri ?? "").replace("at://", "").split("/");
-	const readBack = (await (
-		await fetch(
-			`${pds}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=${collection}&rkey=${rkey}`,
-		)
-	).json()) as { value?: { $type?: string } };
-	expect(readBack.value?.$type).toBe("org.anthers.work");
+	const [did, collection, rkey] = (owner?.atprotoUri ?? "").replace("at://", "").split("/");
+	const readBackRes = await fetch(
+		`${pds}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=${collection}&rkey=${rkey}`,
+	);
+	const readBackBody = await readBackRes.text();
+	const readBack = JSON.parse(readBackBody) as { value?: { $type?: string } };
+	expect(
+		readBack.value?.$type,
+		`getRecord answered ${readBackRes.status} for ${owner?.atprotoUri}: ${readBackBody.slice(0, 300)}`,
+	).toBe("org.anthers.work");
 	// And it is every reader's: a signed-out read of the same Work carries the same record
 	// link the owner's shape carries — no longer the creator's alone.
 	const asStranger = (await (
