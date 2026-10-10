@@ -36,8 +36,12 @@ export const financialPlanSettings = pgTable("financial_plan_settings", {
 	id: serial("id").primaryKey(),
 	/** The admin budget as a share of charitable revenue — the locked 30% ceiling. */
 	adminBudgetShare: real("admin_budget_share").notNull(),
-	/** The Time Pool Fund's share of the remainder after admin. */
-	fundShare: real("fund_share").notNull(),
+	/**
+	 * Free Access's share of Programs — the remainder after admin. Spent through
+	 * the Time Pool Fund: the mechanism that offers free access in a way still
+	 * pays creators.
+	 */
+	freeAccessShare: real("free_access_share").notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -59,7 +63,7 @@ export const financialPlanPhases = pgTable(
 		services: real("services").notNull().default(0),
 		/** Overrides of the global shares, when a phase diverges (null = use settings). */
 		adminBudgetShare: real("admin_budget_share"),
-		fundShare: real("fund_share"),
+		freeAccessShare: real("free_access_share"),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [uniqueIndex("uq_financial_plan_phases_phase").on(table.phase)],

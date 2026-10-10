@@ -160,7 +160,7 @@ export default function ForUsersPage() {
 								give a creator — does the following:
 								<ul>
 									<li>Increase the pool of money distributed to creators you spend time with</li>
-									<li>Fund Anthers' free public access and charitable programs for all</li>
+									<li>Fund Anthers' charitable programs — free public access included — for all</li>
 								</ul>
 								${publicAccessPrice} a month also lifts your monthly Public Access limit, so you can
 								watch, read, listen and play as much as you like. As you give more, you'll grow your
@@ -175,7 +175,7 @@ export default function ForUsersPage() {
 						amazing creators and free public access to their work. No shareholders, no advertisers,
 						no data brokers. Every dollar goes to one of three places: the real people who make what
 						you love, the at-cost card processing that moves the money, or what's left—which funds
-						free access and Anthers' other charitable programs.
+						Anthers' charitable programs, free access included.
 					</p>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
 						Still curious about where exactly it all goes? See our{" "}

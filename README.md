@@ -44,7 +44,7 @@ One primitive: a **monthly amount**, in dollars. What varies is who you give it 
 
 **Where what you give Anthers goes.** Every row conserves exactly — creator pay plus the at-cost card line plus what is left equals what you paid. The remainder is the residual, so it absorbs any change in the other two while creator pay stays fixed.
 
-| Badge | You pay | Time Pool → creators | Payments\* | Free access & programs |
+| Badge | You pay | Time Pool → creators | Payments\* | Charitable programs |
 |:--|--:|--:|--:|--:|
 | **Root** | $3.00 | $1.50 | $0.39 | **$1.11** |
 | **Sprout** | $6.00 | $3.00 | $0.47 | **$2.53** |

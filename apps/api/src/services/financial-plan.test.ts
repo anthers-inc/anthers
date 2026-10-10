@@ -5,9 +5,11 @@
  *
  * What deserves the standing test (81.05): the seed never overwrites an operator's
  * edit (a reload that re-inserted defaults would silently discard the plan), the
- * ledger math's shape conservation (revenue = budget + fund + storage + programs,
- * exactly), and the closed form's independence (charitableRevenue does not move
- * when the free slice does — the property the tool's no-iteration read rests on).
+ * ledger math's hierarchy conservation (revenue = admin + Programs; Free Access +
+ * Free Storage + Other Programs = Programs, exactly — Programs is the PARENT,
+ * Parker 2026-10-10), and the closed form's independence (charitableRevenue does
+ * not move when the free slice does — the property the tool's no-iteration read
+ * rests on).
  */
 import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
@@ -53,38 +55,39 @@ describe("the financial plan service", () => {
 		expect(third.phases.length).toBe(first.phases.length);
 	});
 
-	it("conserves the ledger: revenue = budget + fund + storage + programs", async () => {
+	it("conserves the hierarchy: revenue = admin + Programs, and the three program lines sum to Programs", async () => {
 		const { phases } = await loadPlan();
 		for (const p of phases) {
 			const L = p.ledger;
-			const sum = L.adminBudget + L.fund + L.freeStorage + L.programs;
-			expect(sum).toBeCloseTo(L.charitableRevenue, 6);
+			expect(L.adminBudget + L.programs).toBeCloseTo(L.charitableRevenue, 6);
+			expect(L.freeAccess + L.freeStorage + L.otherPrograms).toBeCloseTo(L.programs, 6);
 			expect(L.solvent).toBe(true);
 			// The Fund's slice is the pot divided across free accounts.
-			expect(L.fund).toBeCloseTo(L.freeSlice * L.freeAccounts, 6);
+			expect(L.freeAccess).toBeCloseTo(L.freeSlice * L.freeAccounts, 6);
 		}
 	});
 
-	it("the closed form: revenue does not move when the Fund's share does", async () => {
+	it("the closed form: revenue does not move when Free Access's share does", async () => {
 		const before = await loadPlan();
 		const rev0 = before.phases[0].ledger.charitableRevenue;
-		await updatePlanSettings({ fundShare: 0.2 });
+		await updatePlanSettings({ freeAccessShare: 0.2 });
 		const after = await loadPlan();
 		const rev1 = after.phases[0].ledger.charitableRevenue;
 		expect(rev1).toBeCloseTo(rev0, 6);
-		// But the Fund doubles, within the slice's own rounding (the slice divides the
+		// But Free Access doubles, within the slice's own rounding (the slice divides the
 		// pot across free accounts at 3dp in the UI, but the ledger is unrounded here —
 		// so the assertion is the ratio, to five places).
-		const ratio = after.phases[0].ledger.fund / before.phases[0].ledger.fund;
+		const ratio = after.phases[0].ledger.freeAccess / before.phases[0].ledger.freeAccess;
 		expect(ratio).toBeCloseTo(2, 5);
 	});
 
-	it("admin budgeted at the ceiling: the fund share reads off the remainder after it", async () => {
+	it("admin budgeted at the ceiling: Free Access's share reads off Programs after it", async () => {
 		const { settings, phases } = await loadPlan();
 		expect(settings.adminBudgetShare).toBeCloseTo(0.3, 6);
+		expect(settings.freeAccessShare).toBeCloseTo(0.1, 6);
 		const L = phases[0].ledger;
-		// Fund = 10% of (revenue − 30%), which is 7% of revenue.
-		expect(L.fund / L.charitableRevenue).toBeCloseTo(0.07, 2);
+		// Free Access = 10% of Programs; Programs = 70% of revenue → 7% of revenue.
+		expect(L.freeAccess / L.charitableRevenue).toBeCloseTo(0.07, 2);
 	});
 
 	it("phase CRUD: append and delete, in phase order", async () => {
@@ -100,7 +103,7 @@ describe("the financial plan service", () => {
 			tooling: 0,
 			services: 0,
 			adminBudgetShare: null,
-			fundShare: null,
+			freeAccessShare: null,
 		});
 		expect(created).not.toBeNull();
 		const afterAdd = await loadPlan();

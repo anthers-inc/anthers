@@ -77,9 +77,10 @@ interface PhasePayload {
 	ledger: {
 		charitableRevenue: number;
 		adminBudget: number;
-		fund: number;
-		freeStorage: number;
 		programs: number;
+		freeAccess: number;
+		freeStorage: number;
+		otherPrograms: number;
 		solvent: boolean;
 	};
 }
@@ -101,18 +102,16 @@ describe("the financial-plan routes", () => {
 		const res = await get("/financial-plan");
 		expect(res.status).toBe(200);
 		const { settings, phases } = (await res.json()) as {
-			settings: { adminBudgetShare: number; fundShare: number };
+			settings: { adminBudgetShare: number; freeAccessShare: number };
 			phases: PhasePayload[];
 		};
 		expect(settings.adminBudgetShare).toBeCloseTo(0.3, 6);
-		expect(settings.fundShare).toBeCloseTo(0.1, 6);
+		expect(settings.freeAccessShare).toBeCloseTo(0.1, 6);
 		expect(phases.length).toBeGreaterThanOrEqual(9);
 		for (const p of phases) {
 			const L = p.ledger;
-			expect(L.adminBudget + L.fund + L.freeStorage + L.programs).toBeCloseTo(
-				L.charitableRevenue,
-				6,
-			);
+			expect(L.adminBudget + L.programs).toBeCloseTo(L.charitableRevenue, 6);
+			expect(L.freeAccess + L.freeStorage + L.otherPrograms).toBeCloseTo(L.programs, 6);
 			expect(L.solvent).toBe(true);
 		}
 	});
@@ -163,17 +162,17 @@ describe("the financial-plan routes", () => {
 		expect(final.phases.length).toBe(before.phases.length);
 	});
 
-	it("settings PUT changes the fund share the ledgers read", async () => {
-		const res = await put("/financial-plan/settings", { fundShare: 0.2 });
+	it("settings PUT changes Free Access's share the ledgers read", async () => {
+		const res = await put("/financial-plan/settings", { freeAccessShare: 0.2 });
 		expect(res.status).toBe(200);
 		const { settings, phases } = (await (await get("/financial-plan")).json()) as {
-			settings: { fundShare: number };
+			settings: { freeAccessShare: number };
 			phases: PhasePayload[];
 		};
-		expect(settings.fundShare).toBeCloseTo(0.2, 6);
+		expect(settings.freeAccessShare).toBeCloseTo(0.2, 6);
 		for (const p of phases) {
 			// Defaults carry no override, so every ledger restates beside the new share.
-			expect(p.ledger.fund / p.ledger.charitableRevenue).toBeCloseTo(0.2 * 0.7, 2);
+			expect(p.ledger.freeAccess / p.ledger.charitableRevenue).toBeCloseTo(0.2 * 0.7, 2);
 		}
 	});
 });

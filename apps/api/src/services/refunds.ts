@@ -32,9 +32,9 @@
  *
  *   • **Anthers absorbs the shortfall, and it is booked.** Stripe does not return
  *     its processing fee on a refund. That unrecoverable amount comes out of the
- *     remainder — the same shock absorber that funds free access — and it is written
- *     to the charitable ledger as a negative entry so the pool's balance tells the
- *     truth.
+ *     remainder — the same shock absorber that funds the charitable programs — and
+ *     it is written to the charitable ledger as a negative entry so the pool's
+ *     balance tells the truth.
  *     A refund that moves money without a ledger row is the silent version of the
  *     gross-vs-net bug that cost ~$0.39 on every lone directed charge.
  *
@@ -365,8 +365,8 @@ export async function settleRefundedPurchase(
 	}
 
 	// The remainder absorbs what could not be recovered. Negative, because this is
-	// money leaving the pool that funds free access — the honest reason the Terms
-	// give for the cap, and it can only stay honest if the ledger records it. The
+	// money leaving the charitable pool — the honest reason the Terms give for the
+	// cap, and it can only stay honest if the ledger records it. The
 	// shortfall is the sunk processing fee alone since the delivery column died —
 	// see `refundShortfall` — so the "and delivered bytes" clause has nothing to
 	// name any more.

@@ -159,8 +159,8 @@ export const FAQ_ITEMS = {
 			<div className="space-y-2">
 				<p>
 					Support on Anthers is a <strong>monthly amount you choose</strong>, and every dollar of it
-					goes to creators, to the at-cost card processing, or to free access and Anthers'
-					charitable programs. It goes one of two ways:
+					goes to creators, to the at-cost card processing, or to Anthers' charitable programs, free
+					access included. It goes one of two ways:
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
@@ -174,10 +174,11 @@ export const FAQ_ITEMS = {
 					<li>
 						<strong>Give Anthers a monthly amount</strong> — ${SUPPORT.gross} a month lifts your
 						monthly Public Access limit, and every dollar funds the Time Pool (shared out by the
-						time you spend with each creator's work) and leaves a remainder that funds free access
-						and the charitable programs. So the more you give, the more your time is worth to the
-						creators you spend it with. Your level is your Badge (Root → Blossom, and a "+" beyond)
-						— a point-in-time choice, not a rolling total of past spend, and it gates nothing.
+						time you spend with each creator's work) and leaves a remainder that funds the
+						charitable programs, free access included. So the more you give, the more your time is
+						worth to the creators you spend it with. Your level is your Badge (Root → Blossom, and a
+						"+" beyond) — a point-in-time choice, not a rolling total of past spend, and it gates
+						nothing.
 					</li>
 				</ul>
 				<p>
@@ -203,9 +204,9 @@ export const FAQ_ITEMS = {
 	},
 	"what-pays-for-free": {
 		category: "Subscriptions & Payments",
-		question: "What pays for free access and Anthers' charitable programs?",
+		question: "What pays for Anthers' charitable programs, free access included?",
 		answer:
-			"The remainder of what is given to Anthers — what's left after the Time Pool and the at-cost card processing. It is never a cut of anyone's earnings, and direct purchases contribute nothing: Anthers takes no share of a creator's sale. (Storage's old half-again mark-up was a small second line here; it retired when storage moved onto Badges as at-cost top-up.) The budget is read obligations-first: lean operating overhead and everyone's free access come off the top, and whatever remains funds the charitable programs — with Admin held to no more than 30% of revenue, so at least 70% goes to programs and services (the CharityNavigator bar). Counting free access as the charitable program it is, the great majority of it is charitable.",
+			"The remainder of what is given to Anthers — what's left after the Time Pool and the at-cost card processing. It is never a cut of anyone's earnings, and direct purchases contribute nothing: Anthers takes no share of a creator's sale. (Storage's old half-again mark-up was a small second line here; it retired when storage moved onto Badges as at-cost top-up.) The budget is read obligations-first: lean operating overhead comes off the top, and the programs that keep Anthers open — free access for everyone, free storage for smaller creators — come next, with whatever remains for the wider charitable programs. Admin is held to no more than 30% of revenue, so at least 70% goes to programs and services (the CharityNavigator bar). Counting free access and free storage as the charitable programs they are, the great majority of it is charitable.",
 	},
 	"direct-purchases": {
 		category: "Subscriptions & Payments",
