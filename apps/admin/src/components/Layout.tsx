@@ -80,8 +80,8 @@ export default function Layout() {
 
 	return (
 		<div className="flex min-h-screen bg-base-200">
-			// Sticky with its own overflow: a page longer than the viewport scrolls under the navigation
-			// column, which otherwise scrolls away with the content it opens.
+			{/* Sticky with its own overflow: a page longer than the viewport scrolls under the
+			    navigation column, which otherwise scrolls away with the content it opens. */}
 			<aside className="sticky top-0 h-screen w-60 shrink-0 overflow-y-auto border-r border-base-300 bg-base-100 px-3 py-5">
 				<div className="mb-6 px-3">
 					<div className="text-lg font-bold">Anthers Admin</div>

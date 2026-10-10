@@ -104,20 +104,18 @@ interface FieldRow {
  * drift — so a highlighted row can never sit under a badge that did not fire. A field only
  * one side carries reads as absent from the other.
  */
-function fieldRows(
-	derived: Record<string, unknown>,
-	record: Record<string, unknown>,
-): FieldRow[] {
-	const rows = [...new Set([...Object.keys(derived), ...Object.keys(record)])].map((field) => (
-		{
-			field,
-			derived: field in derived ? derived[field] : undefined,
-			record: field in record ? record[field] : undefined,
-			differs: JSON.stringify(field in derived ? derived[field] : undefined) !==
-				JSON.stringify(field in record ? record[field] : undefined),
-		}
-	));
-	rows.sort((a, b) => (a.differs === b.differs ? a.field.localeCompare(b.field) : a.differs ? -1 : 1));
+function fieldRows(derived: Record<string, unknown>, record: Record<string, unknown>): FieldRow[] {
+	const rows = [...new Set([...Object.keys(derived), ...Object.keys(record)])].map((field) => ({
+		field,
+		derived: field in derived ? derived[field] : undefined,
+		record: field in record ? record[field] : undefined,
+		differs:
+			JSON.stringify(field in derived ? derived[field] : undefined) !==
+			JSON.stringify(field in record ? record[field] : undefined),
+	}));
+	rows.sort((a, b) =>
+		a.differs === b.differs ? a.field.localeCompare(b.field) : a.differs ? -1 : 1,
+	);
 	return rows;
 }
 
