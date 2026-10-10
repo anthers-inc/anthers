@@ -24,7 +24,7 @@
 
 import { type PlanLedger, planLedger } from "@anthers/shared/financial-plan";
 import { apiFetch } from "@anthers/web-shared/rpc";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { ResponsiveContainer, Sankey, type SankeyLinkProps, type SankeyNodeProps } from "recharts";
 import { ErrorAlert, Loading, PageHeader, SectionHeading } from "../components/ui";
 import { useAdminData } from "../lib/load";
@@ -493,8 +493,7 @@ export default function FinancialPlan() {
 					<div className="mt-10">
 						<SectionHeading>{`Phase ${sel.phase} — ${sel.label}`}</SectionHeading>
 					</div>
-					<PhaseDiagram ledger={ledgers.get(sel.id)!} phase={sel} />
-					<PhaseDetail ledger={ledgers.get(sel.id)!} />
+					<PhaseDiagram ledger={ledgers.get(sel.id)!} />
 				</>
 			)}
 		</>
@@ -764,216 +763,440 @@ function SettingsEditor({
 }
 // ── The phase diagram ────────────────────────────────────────────────────────
 
-interface Band {
-	key: string;
-	label: string;
-	value: number;
-	color: string;
-	note: string;
-}
-
 /**
- * The phase as a flow — drawn on Recharts' Sankey (the d3-sankey layout under
- * it), the same chart library the rest of the console uses, rather than a
- * hand-rolled layout: nodes never overlap because the layout spaces them, the
- * ribbons are the real computed curves, and hover dimming comes from the
- * component instead of geometry bookkeeping. Node labels are custom: the
- * revenue node captions itself beneath, and each obligation reads
- * "label — % · $/mo" with its note beside its own node.
+ * The phase as a flow, drawn on Recharts' Sankey (d3-sankey under it) in three
+ * columns, styled after the retired signup page's *Where Your Money Goes*:
+ * minimal on-graph labels (name and dollars only, riding their own capsule),
+ * the detail carried by a legend above and the facts below, and the whole
+ * container's width available to the drawing.
+ *
+ * Column two is the obligations the ledger books — the admin budget, the Time
+ * Pool Fund, free storage, programs — and column three opens the spending:
+ * the admin budget's five lines (infrastructure, staffing, tooling, services,
+ * reserves, plus the headroom the budget holds unspent) and free storage's
+ * two parts. Every column-conservation guarantee the ledger makes is drawn,
+ * so the ribbons cannot invent or lose a dollar; an over-budget row skips
+ * headroom and its children simply overshoot the parent's capsule, which the
+ * red note below names.
  */
-function PhaseDiagram({ ledger: L, phase: p }: { ledger: PlanLedger; phase: RowDraft }) {
-	const [hover, setHover] = useState<string | null>(null);
-	const rev = L.charitableRevenue;
-	const bands: Band[] = [
-		{
-			key: "admin",
-			label: "Admin",
-			value: L.adminBudget,
-			color: "#6d28d9",
-			note: `budget ${(L.adminCeiling * 100).toFixed(0)}% · actual ops ${
-				rev > 0 ? sharePct(rev, L.adminActual) : "—"
-			}`,
-		},
-		{
-			key: "fund",
-			label: "Time Pool Fund",
-			value: L.fund,
-			color: "#2563eb",
-			note: `$${L.freeSlice.toFixed(3)} per free account · ${Math.round(
-				L.freeAccounts,
-			).toLocaleString("en-US")} free accounts`,
-		},
-		{
-			key: "storage",
-			label: "Free storage",
-			value: L.freeStorage,
-			color: "#0891b2",
-			note: "combined floors and paying rungs' allowances",
-		},
-		{
-			key: "programs",
-			label: "Programs",
-			value: L.programs,
-			color: "#059669",
-			note: L.solvent ? "the residual" : "DEFICIT — this row cannot be afforded",
-		},
-	];
-
-	const nodes: DiagramNode[] = [
-		{
-			name: "revenue",
-			fill: "#4f46e5",
-			title: `Revenue ${usd(rev)}/mo`,
-			sub: `${Math.round(p.accounts ?? 0).toLocaleString("en-US")} accounts · ${
-				p.payingShare === null ? "—" : `${(p.payingShare * 100).toFixed(1)}%`
-			} paying`,
-		},
-		...bands.map((b) => ({
-			name: b.key,
-			fill: b.color,
-			headline: `${b.label} — ${rev > 0 ? sharePct(rev, b.value) : "0%"} · ${usd(b.value)}/mo`,
-			note: b.note,
-			bandKey: b.key,
-		})),
-	];
-	// A shortfall clamps the Programs ribbon at zero — the deficit lives in the
-	// node's note ("DEFICIT — this row cannot be afforded") and the table's
-	// badges, never in a backwards-drawing band.
-	const links = bands.map((b, i) => ({
-		source: 0,
-		target: i + 1,
-		value: Math.max(0, b.value),
-	}));
-
-	const dim = (key: string): number => {
-		if (!hover) return 0.85;
-		return hover === key ? 1 : 0.25;
-	};
-
-	return (
-		<figure className="mb-4 w-full max-w-4xl">
-			<ResponsiveContainer width="100%" height={420}>
-				<Sankey
-					data={{ nodes, links }}
-					nodeWidth={22}
-					nodePadding={38}
-					linkCurvature={0.55}
-					sort={false}
-					margin={{ top: 12, right: 252, bottom: 20, left: 8 }}
-					role="img"
-					aria-label="The phase as a flow: revenue in, Admin, the Time Pool Fund, free storage and programs out"
-					node={(props) => <PhaseNode {...props} dimKey={hover} dim={dim} />}
-					link={(props) => <PhaseLink {...props} dimKey={hover} dim={dim} />}
-					onMouseEnter={(item, type) => {
-						if (type !== "link") return;
-						const link = item as SankeyLinkProps;
-						setHover((link.payload.target as unknown as DiagramNode).bandKey ?? null);
-					}}
-					onMouseLeave={() => setHover(null)}
-				/>
-			</ResponsiveContainer>
-		</figure>
-	);
-}
-
-interface NodeDrawProps extends SankeyNodeProps {
-	dimKey: string | null;
-	dim: (key: string) => number;
+interface StreamGroup {
+	key: string;
+	name: string;
+	color: string;
+	prose: ReactNode;
 }
 
 interface DiagramNode {
 	name: string;
+	/** The capsule's fill — the group's color, or the revenue bar's. */
 	fill: string;
-	/** The source node's caption and destination nodes' label lines. */
-	title?: string;
-	sub?: string;
-	/** The destination's "Label — % · $/mo" line, preformatted from the ledger. */
-	headline?: string;
-	note?: string;
-	/** The band key this node stands for (the source carries none). */
-	bandKey?: string;
+	/** The stream this node belongs to; hover dims everything outside one. */
+	group: string;
+	/**
+	 * The on-graph label, preformatted from the LEDGER's figure — never from a
+	 * layout value: d3-sankey overwrites a node's `value` with its own (max of
+	 * in/out sums), so an over-spent budget's node reads its children's sum,
+	 * and a label that trusted it would print the wrong dollar figure.
+	 */
+	label: string;
+	/** Set on a node whose figure is a warning: ops over the budget, or the residual negative. */
+	warn?: "opsOver" | "insolvent";
+	/** The ledger's figure for this node — layout input; d3 overwrites it with its own, so labels never read it. */
+	value: number;
+}
+
+interface DiagramLink {
+	source: number;
+	target: number;
+	value: number;
+	group: string;
+	/** The ribbon's stroke — the stream's color. */
+	stroke: string;
+}
+
+function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
+	const [hover, setHover] = useState<string | null>(null);
+	const rev = L.charitableRevenue;
+	const S = L.spending;
+	const C = {
+		revenue: "#4f46e5",
+		admin: "#6d28d9",
+		fund: "#2563eb",
+		storage: "#0891b2",
+		programs: "#059669",
+	};
+
+	const groups: StreamGroup[] = [
+		{
+			key: "admin",
+			name: "Admin budget",
+			color: C.admin,
+			prose: (
+				<>
+					The growth budget, locked at ${(L.adminCeiling * 100).toFixed(0)}% of revenue — covering
+					out-of-pocket infrastructure is why it is budgeted at the ceiling. At this scale it covers
+					infrastructure, staff, tooling, services and reserves;{" "}
+					{L.adminWithinCeiling
+						? `$${Math.round(S.headroom).toLocaleString("en-US")}/mo stays headroom`
+						: "actual spend exceeds it"}
+					.
+				</>
+			),
+		},
+		{
+			key: "fund",
+			name: "Time Pool Fund",
+			color: C.fund,
+			prose: (
+				<>
+					Free accounts&rsquo; Time Pools together — ${L.freeSlice.toFixed(2)} per free account,{" "}
+					{Math.round(L.freeAccounts).toLocaleString("en-US")} free accounts — funded from the
+					remainder after admin.
+				</>
+			),
+		},
+		{
+			key: "storage",
+			name: "Free storage",
+			color: C.storage,
+			prose: (
+				<>
+					Storage nobody is charged for: free and new creators&rsquo; catalogs ( $
+					{Math.round(S.freeCatalog).toLocaleString("en-US")}/mo) and the bundled allowances every
+					paying rung grants (${Math.round(S.payingAllowances).toLocaleString("en-US")}/mo), both
+					paid to the vendor at cost.
+				</>
+			),
+		},
+		{
+			key: "programs",
+			name: "Programs",
+			color: C.programs,
+			prose: L.solvent ? (
+				<>
+					The residual after every obligation — charitable programs, budgeted but not yet allocated;
+					the dial to watch as the path scales.
+				</>
+			) : (
+				<>
+					DEFICIT — the obligations overrun revenue at this phase; this row cannot be afforded as
+					modeled.
+				</>
+			),
+		},
+	];
+
+	// ── Nodes and links: revenue → obligations → spending lines ──
+	/**
+	 * Every obligation breaks open in column three — including the two whose
+	 * outflow is a single line (the Fund's pot IS the free accounts' pools; a
+	 * program's residual sits unallocated until spent) — because d3-sankey
+	 * assigns columns by longest path: a childless obligation falls into the
+	 * last column beside the spending lines and the obligations' column loses
+	 * its row. The named single-child lines keep the middle column whole and
+	 * give the two residual streams an honest destination label. Column three
+	 * is ordered to mirror column two, so no ribbon of one stream crosses a
+	 * neighbor's.
+	 */
+	const obligationNodes: DiagramNode[] = [
+		{
+			name: "admin",
+			fill: C.admin,
+			group: "admin",
+			label: `Admin budget ${usd(L.adminBudget)}`,
+			value: L.adminBudget,
+			...(L.adminWithinCeiling ? {} : { warn: "opsOver" as const }),
+		},
+		{
+			name: "fund",
+			fill: C.fund,
+			group: "fund",
+			label: `Time Pool Fund ${usd(L.fund)}`,
+			value: L.fund,
+		},
+		{
+			name: "storage",
+			fill: C.storage,
+			group: "storage",
+			label: `Free storage ${usd(L.freeStorage)}`,
+			value: L.freeStorage,
+		},
+		{
+			name: "programs",
+			fill: C.programs,
+			group: "programs",
+			label: `Programs ${usd(Math.max(0, L.programs))}`,
+			value: Math.max(0, L.programs),
+			...(L.solvent ? {} : { warn: "insolvent" as const }),
+		},
+	];
+	const childNodes: DiagramNode[] = [
+		{
+			name: "infra",
+			fill: C.admin,
+			group: "admin",
+			label: `Infrastructure ${usd(S.infrastructure)}`,
+			value: S.infrastructure,
+		},
+		{
+			name: "staff",
+			fill: C.admin,
+			group: "admin",
+			label: `Staff ${usd(S.staff)}`,
+			value: S.staff,
+		},
+		{
+			name: "tooling",
+			fill: C.admin,
+			group: "admin",
+			label: `Tooling ${usd(S.tooling)}`,
+			value: S.tooling,
+		},
+		{
+			name: "services",
+			fill: C.admin,
+			group: "admin",
+			label: `Services ${usd(S.services)}`,
+			value: S.services,
+		},
+		{
+			name: "reserves",
+			fill: C.admin,
+			group: "admin",
+			label: `Reserves ${usd(S.reserves)}`,
+			value: S.reserves,
+		},
+		...(S.headroom > 1
+			? [
+					{
+						name: "headroom",
+						fill: C.admin,
+						group: "admin",
+						label: `Headroom ${usd(S.headroom)}`,
+						value: S.headroom,
+					},
+				]
+			: []),
+		{
+			name: "freePools",
+			fill: C.fund,
+			group: "fund",
+			label: `Free Time Pools ${usd(L.fund)}`,
+			value: L.fund,
+		},
+		{
+			name: "freeCatalog",
+			fill: C.storage,
+			group: "storage",
+			label: `Free creators' catalogs ${usd(S.freeCatalog)}`,
+			value: S.freeCatalog,
+		},
+		{
+			name: "payingAllowances",
+			fill: C.storage,
+			group: "storage",
+			label: `Paying rungs' allowances ${usd(S.payingAllowances)}`,
+			value: S.payingAllowances,
+		},
+		{
+			name: "unallocated",
+			fill: C.programs,
+			group: "programs",
+			label: `Unallocated ${usd(Math.max(0, L.programs))}`,
+			value: Math.max(0, L.programs),
+		},
+		// Zero-valued lines draw nothing — a phase with no staff shows no staff
+		// capsule — and their absence changes no conservation: they carried 0.
+	].filter((c) => c.value > 1);
+
+	const parentNode = (group: string): number =>
+		1 + obligationNodes.findIndex((o) => o.name === group);
+	const allChildren = childNodes.filter((c) => c.value > 1);
+	const nodes: DiagramNode[] = [
+		{
+			name: "revenue",
+			fill: C.revenue,
+			group: "revenue",
+			label: `Revenue ${usd(rev)}`,
+			value: rev,
+		},
+		...obligationNodes,
+		...allChildren,
+	];
+	const byName = new Map(nodes.map((n, i) => [n.name, i]));
+	const links: DiagramLink[] = [
+		...obligationNodes.map((o) => ({
+			source: 0,
+			target: byName.get(o.name)!,
+			value: o.value,
+			group: o.group,
+			stroke: o.fill,
+		})),
+		...allChildren.map((c) => ({
+			source: parentNode(c.group),
+			target: byName.get(c.name)!,
+			value: c.value,
+			group: c.group,
+			stroke: c.fill,
+		})),
+	];
+
+	const dim = (group: string): number => {
+		if (!hover) return 1;
+		return hover === group ? 1 : 0.15;
+	};
+
+	return (
+		<figure className="mb-4 w-full">
+			<StreamLegend groups={groups} hover={hover} setHover={setHover} />
+			<p className="mb-1 text-xs text-base-content/50">
+				Hover any stream, capsule or card to follow it.
+			</p>
+			<ResponsiveContainer width="100%" height={560}>
+				<Sankey
+					data={{ nodes, links }}
+					nodeWidth={20}
+					nodePadding={24}
+					linkCurvature={0.55}
+					sort={false}
+					margin={{ top: 8, right: 64, bottom: 8, left: 8 }}
+					role="img"
+					aria-label="The phase as a flow: revenue in; the admin budget, the Time Pool Fund, free storage and programs; then the spending each obligation stands over"
+					node={(props) => <PhaseNode {...props} dim={dim} />}
+					link={(props) => <PhaseLink {...props} dim={dim} />}
+					onMouseEnter={(item, type) => {
+						if (type === "node") {
+							const d = (item as SankeyNodeProps).payload as unknown as DiagramNode;
+							setHover(d.group);
+						} else {
+							const d = (item as SankeyLinkProps).payload as unknown as DiagramLink;
+							setHover(d.group);
+						}
+					}}
+					onMouseLeave={() => setHover(null)}
+				/>
+			</ResponsiveContainer>
+			<p className="mt-1 text-xs text-base-content/60">
+				{rev > 0 ? sharePct(rev, L.adminBudget) : "—"} of the month&rsquo;s revenue is budgeted to
+				admin ({rev > 0 ? sharePct(rev, L.adminActual) : "—"} committed at this scale),{" "}
+				{rev > 0 ? sharePct(rev, L.fund) : "—"} funds the Fund&rsquo;s free pools,{" "}
+				{rev > 0 ? sharePct(rev, L.freeStorage) : "—"} covers free storage, and{" "}
+				{rev > 0 ? sharePct(rev, Math.max(0, L.programs)) : "—"} remains for programs — dollars per
+				month, at this phase&rsquo;s scale.
+				{!L.solvent && (
+					<span className="text-error">
+						{" "}
+						The obligations overrun revenue by {usd(-L.programs)}/mo.
+					</span>
+				)}
+				{!L.adminWithinCeiling && (
+					<span className="text-error"> Actual ops run {usd(-S.headroom)}/mo over the budget.</span>
+				)}
+			</p>
+			<PhaseDetail ledger={L} />
+		</figure>
+	);
+}
+
+/** The legend above the chart: one card per stream, hover-synced with the ribbons. */
+function StreamLegend({
+	groups,
+	hover,
+	setHover,
+}: {
+	groups: StreamGroup[];
+	hover: string | null;
+	setHover: (g: string | null) => void;
+}) {
+	return (
+		<div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+			{groups.map((g) => (
+				// biome-ignore lint/a11y/noStaticElementInteractions: the hover is a pointer shortcut — the card's facts are always visible, and nothing here is mouse-only.
+				<div
+					key={g.key}
+					onMouseEnter={() => setHover(g.key)}
+					onMouseLeave={() => setHover(null)}
+					className={`rounded-box border p-4 text-xs leading-relaxed transition-colors ${
+						hover && hover !== g.key
+							? "border-base-300 bg-base-100 opacity-60"
+							: "border-base-300 bg-base-100"
+					}`}
+				>
+					<div className="flex items-center gap-2 text-sm font-semibold">
+						<span
+							aria-hidden="true"
+							className="inline-block h-3 w-3 rounded-full"
+							style={{ background: g.color }}
+						/>
+						{g.name}
+					</div>
+					<p className="mt-1 text-base-content/70">{g.prose}</p>
+				</div>
+			))}
+		</div>
+	);
+}
+
+interface NodeDrawProps extends SankeyNodeProps {
+	dim: (group: string) => number;
 }
 
 /**
- * The diagram's nodes: the revenue node plain, the obligations with their
- * label and note riding beside the node they name. Recharts' layout has
- * already spaced the nodes (nodePadding keeps a label's two lines clear of
- * the next node's), so a label just sits at its node's vertical center.
+ * The diagram's nodes: rounded capsules with the on-graph label riding beside
+ * — the revenue node labeled to its right, every other node labeled to its
+ * left, both single lines. Recharts' layout has already spaced the nodes, so
+ * a one-line label needs no crowding logic; it just rides the capsule's
+ * vertical center.
  */
 function PhaseNode(props: NodeDrawProps) {
 	const d = props.payload as unknown as DiagramNode;
-	const cx = props.y + props.height / 2;
-	const dimmed = props.dimKey !== null && props.dimKey !== d.bandKey;
-	const opacity = d.bandKey ? props.dim(d.bandKey) : 1;
+	const cy = props.y + props.height / 2;
+	const dimmed = d.group !== "revenue" ? props.dim(d.group) : props.dim("revenue");
 	return (
-		<g opacity={dimmed ? 0.3 : 1}>
+		<g opacity={dimmed}>
 			<rect
 				x={props.x}
 				y={props.y}
 				width={props.width}
-				height={Math.max(2, props.height)}
-				rx={3}
+				height={Math.max(3, props.height)}
+				rx={props.width / 2}
 				fill={d.fill}
-				opacity={opacity}
+				stroke={d.warn ? "#dc2626" : undefined}
+				strokeWidth={d.warn ? 1.5 : undefined}
 			/>
-			{d.title && (
-				<>
-					<text x={props.x} y={props.y + props.height + 18} fontSize={12} className="fill-current">
-						{d.title}
-					</text>
-					<text
-						x={props.x}
-						y={props.y + props.height + 33}
-						fontSize={11}
-						className="fill-current"
-						opacity={0.6}
-					>
-						{d.sub}
-					</text>
-				</>
-			)}
-			{d.headline && (
-				<>
-					<text
-						x={props.x + props.width + 10}
-						y={cx - 2}
-						fontSize={12}
-						className="fill-current"
-						fontWeight={500}
-					>
-						{d.headline}
-					</text>
-					<text
-						x={props.x + props.width + 10}
-						y={cx + 12}
-						fontSize={11}
-						className="fill-current"
-						opacity={0.6}
-						fill={d.note?.startsWith("DEFICIT") ? "#dc2626" : undefined}
-					>
-						{d.note}
-					</text>
-				</>
+			{d.name === "revenue" ? (
+				<text
+					x={props.x + props.width + 10}
+					y={cy + 4}
+					fontSize={12}
+					fontWeight={600}
+					className="fill-current"
+				>
+					{d.label}
+				</text>
+			) : (
+				<text x={props.x - 10} y={cy + 4} fontSize={12} textAnchor="end" className="fill-current">
+					{d.label}
+				</text>
 			)}
 		</g>
 	);
 }
 
 interface LinkDrawProps extends SankeyLinkProps {
-	dimKey: string | null;
-	dim: (key: string) => number;
+	dim: (group: string) => number;
 }
 
-/** A link's ribbon, stroke-width proportional to its dollars, in its target's color. */
+/** A link's ribbon: stroke-width proportional to its dollars, in its stream's color. */
 function PhaseLink(props: LinkDrawProps) {
-	const target = props.payload.target as unknown as DiagramNode;
+	const d = props.payload as unknown as DiagramLink;
 	return (
 		<path
 			d={`M${props.sourceX},${props.sourceY} C${props.sourceControlX},${props.sourceY} ${props.targetControlX},${props.targetY} ${props.targetX},${props.targetY}`}
 			fill="none"
-			stroke={target.fill}
-			strokeWidth={Math.max(2, props.linkWidth)}
-			opacity={props.dimKey ? props.dim(target.bandKey ?? "") : 0.4}
+			stroke={d.stroke}
+			strokeWidth={Math.max(1.5, props.linkWidth)}
+			opacity={0.45 * props.dim(d.group)}
 		/>
 	);
 }
