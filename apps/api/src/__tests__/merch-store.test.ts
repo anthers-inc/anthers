@@ -18,9 +18,10 @@
  * - **The Catalog serializer's verdict for that Work stays `payment_required`** — the
  *   facts describe the store; they never soften the resolver's verdict.
  */
+
+import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { merchVariants, users } from "@anthers/db/schema";
-import { beforeAll, describe, expect, it } from "bun:test";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { merchStoreFactsByWork } from "../services/merch-store";
@@ -33,7 +34,7 @@ import { insertWork } from "./work-fixtures.js";
 purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
-const ORIGIN = "http://localhost:3000";
+const _ORIGIN = "http://localhost:3000";
 
 function req(path: string, options?: RequestInit) {
 	return testFetch(new Request(`http://localhost${path}`, options));
