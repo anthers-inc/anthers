@@ -202,6 +202,19 @@ function emailBodyFor(item: DeadlineItem, kind: string, now: Date): string {
 }
 
 /**
+ * One reminder's subject and body, without the send — the pair {@link sendDeadlineReminderEmail}
+ * carries for a due item. Exported so the admin Email Library can show the reminder through this
+ * job's own template rather than a parallel one.
+ */
+export function renderDeadlineReminderEmail(
+	item: DeadlineItem,
+	kind: string,
+	now: Date,
+): { subject: string; html: string } {
+	return { subject: subjectFor(item), html: emailBodyFor(item, kind, now) };
+}
+
+/**
  * One daily sweep: gather every deadline, send each reminder that is due and has never been sent,
  * and record each send in `deadline_reminders`.
  *

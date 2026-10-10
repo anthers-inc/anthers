@@ -65,6 +65,21 @@ export interface SendResult {
 	messageId: string | null;
 }
 
+/**
+ * What a template renders to, before anything sends: the subject line and the body.
+ *
+ * Every template in this module is split render-from-send — `renderX(...)` is the pure
+ * string function, `sendX(...)` renders and hands the result to {@link sendEmail} — so the
+ * admin Email Library can show every standard email with placeholder data through this
+ * same code path rather than a second renderer. **A new template here extracts its render
+ * function and adds its catalog entry in `services/email-library.ts`**, so the library
+ * stays the whole catalog rather than the ones somebody remembered.
+ */
+export interface RenderedEmail {
+	subject: string;
+	html: string;
+}
+
 /** Dispatch an email. `sent` is provider acceptance, never delivery — see {@link SendResult}. */
 export async function sendEmail({ to, subject, html }: SendArgs): Promise<SendResult> {
 	// Never send from the test runner, even with a key present.
@@ -321,14 +336,22 @@ export function escapeHtml(s: string): string {
  * link would take them somewhere else and lose the picks they had already made. That is
  * the whole reason this flow uses a code instead of a link email.
  */
+/** The signup code email's template, as {@link sendSignupCodeEmail} sends it. */
+export function renderSignupCodeEmail(code: string): RenderedEmail {
+	return {
+		subject: `${code} is your Anthers code`,
+		html: shell(
+			"Your Anthers code",
+			`<p style="margin:0 0 18px;">Enter this code on the page you left open to confirm your address:</p>
+			<p style="margin:0 0 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:6px;color:${MEADOW.ink};">${escapeHtml(code)}</p>
+			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">This code expires in 10 minutes. If you didn't ask to join Anthers, you can ignore this email — no account has been created.</p>`,
+		),
+	};
+}
+
 export async function sendSignupCodeEmail(to: string, code: string): Promise<void> {
-	const html = shell(
-		"Your Anthers code",
-		`<p style="margin:0 0 18px;">Enter this code on the page you left open to confirm your address:</p>
-		<p style="margin:0 0 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:6px;color:${MEADOW.ink};">${escapeHtml(code)}</p>
-		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">This code expires in 10 minutes. If you didn't ask to join Anthers, you can ignore this email — no account has been created.</p>`,
-	);
-	const { sent } = await sendEmail({ to, subject: `${code} is your Anthers code`, html });
+	const { subject, html } = renderSignupCodeEmail(code);
+	const { sent } = await sendEmail({ to, subject, html });
 	if (!sent) console.info(`[email] signup code for ${to}: ${code}`);
 }
 
@@ -346,14 +369,22 @@ export async function sendSignupCodeEmail(to: string, code: string): Promise<voi
  * The two templates exist so the mail is honest to the one person who can read it; the
  * caller learns nothing, or the "always 200" rule would be decorative.
  */
+/** The sign-in code email's template, as {@link sendSignInCodeEmail} sends it. */
+export function renderSignInCodeEmail(code: string): RenderedEmail {
+	return {
+		subject: `${code} is your Anthers sign-in code`,
+		html: shell(
+			"Your Anthers sign-in code",
+			`<p style="margin:0 0 18px;">You already have an Anthers account with this address. Enter this code to sign in:</p>
+			<p style="margin:0 0 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:6px;color:${MEADOW.ink};">${escapeHtml(code)}</p>
+			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">This code expires in 10 minutes. If you didn't try to sign in, somebody may have started signing up with your address — signing in cancels that signup, and nothing else changes. If it wasn't you, you can ignore this email.</p>`,
+		),
+	};
+}
+
 export async function sendSignInCodeEmail(to: string, code: string): Promise<void> {
-	const html = shell(
-		"Your Anthers sign-in code",
-		`<p style="margin:0 0 18px;">You already have an Anthers account with this address. Enter this code to sign in:</p>
-		<p style="margin:0 0 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:6px;color:${MEADOW.ink};">${escapeHtml(code)}</p>
-		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">This code expires in 10 minutes. If you didn't try to sign in, somebody may have started signing up with your address — signing in cancels that signup, and nothing else changes. If it wasn't you, you can ignore this email.</p>`,
-	);
-	const { sent } = await sendEmail({ to, subject: `${code} is your Anthers sign-in code`, html });
+	const { subject, html } = renderSignInCodeEmail(code);
+	const { sent } = await sendEmail({ to, subject, html });
 	if (!sent) console.info(`[email] sign-in code for ${to}: ${code}`);
 }
 
@@ -363,18 +394,22 @@ export async function sendSignInCodeEmail(to: string, code: string): Promise<voi
  * Says *admin* in the subject and the body, so a code for the console is never mistaken for an
  * ordinary Anthers sign-in, and so somebody who did not ask for one knows what was attempted.
  */
-export async function sendAdminSignInCodeEmail(to: string, code: string): Promise<void> {
-	const html = shell(
-		"Your Anthers admin sign-in code",
-		`<p style="margin:0 0 18px;">Enter this code to sign in to the Anthers admin app:</p>
-		<p style="margin:0 0 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:6px;color:${MEADOW.ink};">${escapeHtml(code)}</p>
-		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">This code expires in 10 minutes. If you didn't try to sign in to the admin app, somebody else tried to with your address, and nothing has changed.</p>`,
-	);
-	const { sent } = await sendEmail({
-		to,
+/** The admin sign-in code email's template, as {@link sendAdminSignInCodeEmail} sends it. */
+export function renderAdminSignInCodeEmail(code: string): RenderedEmail {
+	return {
 		subject: `${code} is your Anthers admin sign-in code`,
-		html,
-	});
+		html: shell(
+			"Your Anthers admin sign-in code",
+			`<p style="margin:0 0 18px;">Enter this code to sign in to the Anthers admin app:</p>
+			<p style="margin:0 0 22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:30px;font-weight:700;letter-spacing:6px;color:${MEADOW.ink};">${escapeHtml(code)}</p>
+			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">This code expires in 10 minutes. If you didn't try to sign in to the admin app, somebody else tried to with your address, and nothing has changed.</p>`,
+		),
+	};
+}
+
+export async function sendAdminSignInCodeEmail(to: string, code: string): Promise<void> {
+	const { subject, html } = renderAdminSignInCodeEmail(code);
+	const { sent } = await sendEmail({ to, subject, html });
 	if (!sent) console.info(`[email] admin sign-in code for ${to}: ${code}`);
 }
 
@@ -385,18 +420,26 @@ export async function sendAdminSignInCodeEmail(to: string, code: string): Promis
  * with a code sent to this address is all joining takes. The message names who added them, so an
  * invitation nobody expected is recognizable as one.
  */
+/** The admin invitation email's template, as {@link sendAdminInvitationEmail} sends it. */
+export function renderAdminInvitationEmail(invitedBy: string, adminUrl: string): RenderedEmail {
+	return {
+		subject: "You have an Anthers admin account",
+		html: shell(
+			"You have an Anthers admin account",
+			`<p style="margin:0 0 18px;">${escapeHtml(invitedBy)} has given you an admin account for running Anthers. Sign in with this address at:</p>
+			<p style="margin:0 0 22px;"><a href="${escapeHtml(adminUrl)}" style="color:${BRAND};">${escapeHtml(adminUrl)}</a></p>
+			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You'll be sent a code each time you sign in. If you weren't expecting this, tell ${escapeHtml(invitedBy)} or reply to this email.</p>`,
+		),
+	};
+}
+
 export async function sendAdminInvitationEmail(
 	to: string,
 	invitedBy: string,
 	adminUrl: string,
 ): Promise<void> {
-	const html = shell(
-		"You have an Anthers admin account",
-		`<p style="margin:0 0 18px;">${escapeHtml(invitedBy)} has given you an admin account for running Anthers. Sign in with this address at:</p>
-		<p style="margin:0 0 22px;"><a href="${escapeHtml(adminUrl)}" style="color:${BRAND};">${escapeHtml(adminUrl)}</a></p>
-		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You'll be sent a code each time you sign in. If you weren't expecting this, tell ${escapeHtml(invitedBy)} or reply to this email.</p>`,
-	);
-	const { sent } = await sendEmail({ to, subject: "You have an Anthers admin account", html });
+	const { subject, html } = renderAdminInvitationEmail(invitedBy, adminUrl);
+	const { sent } = await sendEmail({ to, subject, html });
 	if (!sent) console.info(`[email] admin invitation for ${to}: ${adminUrl}`);
 }
 
@@ -467,20 +510,24 @@ function toComplainant(notice: ComplainantNotice, subject: string, html: string)
 }
 
 /** Telling a complainant that the material their notice identifies has been taken down. */
+/** The takedown acknowledgment's template, as {@link sendDmcaTakedownAcknowledgment} sends it. */
+export function renderDmcaTakedownAcknowledgment(notice: ComplainantNotice): RenderedEmail {
+	return {
+		subject: `Your copyright notice #${notice.id}: the material has been removed`,
+		html: shell(
+			"We have acted on your copyright notice",
+			`<p style="margin:0 0 18px;">Hi ${escapeHtml(notice.complainantName)}, we have acted on ${aboutNotice(notice)}. The material it identifies has been removed from Anthers.</p>
+			<p style="margin:0 0 18px;">We have told the person who uploaded it. If they believe it was removed by mistake, they may send a counter-notice, and if they do, we will email you a copy of it along with the date the material will be restored unless you tell us you have filed a court action.</p>
+			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">Questions about this notice can go to ${escapeHtml(copyrightContact())}.</p>`,
+		),
+	};
+}
+
 export async function sendDmcaTakedownAcknowledgment(
 	notice: ComplainantNotice,
 ): Promise<SendResult> {
-	const html = shell(
-		"We have acted on your copyright notice",
-		`<p style="margin:0 0 18px;">Hi ${escapeHtml(notice.complainantName)}, we have acted on ${aboutNotice(notice)}. The material it identifies has been removed from Anthers.</p>
-		<p style="margin:0 0 18px;">We have told the person who uploaded it. If they believe it was removed by mistake, they may send a counter-notice, and if they do, we will email you a copy of it along with the date the material will be restored unless you tell us you have filed a court action.</p>
-		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">Questions about this notice can go to ${escapeHtml(copyrightContact())}.</p>`,
-	);
-	return toComplainant(
-		notice,
-		`Your copyright notice #${notice.id}: the material has been removed`,
-		html,
-	);
+	const { subject, html } = renderDmcaTakedownAcknowledgment(notice);
+	return toComplainant(notice, subject, html);
 }
 
 /**
@@ -488,17 +535,25 @@ export async function sendDmcaTakedownAcknowledgment(
  * operator's own note, which is what § 512(c)(3)(B)(ii)'s reach-back asks for: the complainant is
  * told what was missing so that a notice which nearly complied can be sent again complete.
  */
+/** The rejection notice's template, as {@link sendDmcaRejection} sends it. */
+export function renderDmcaRejection(notice: ComplainantNotice, reason: string): RenderedEmail {
+	return {
+		subject: `Your copyright notice #${notice.id}: we could not act on it`,
+		html: shell(
+			"We could not act on your copyright notice",
+			`<p style="margin:0 0 18px;">Hi ${escapeHtml(notice.complainantName)}, we have reviewed ${aboutNotice(notice)}, and we could not act on it as it was filed. The material it identifies has not been removed.</p>
+			${quoted("Why", reason)}
+			<p style="margin:0 0 18px;">If you can supply what is missing, you can file a new notice at ${escapeHtml(frontendUrl())}/copyright or write to ${escapeHtml(copyrightContact())}, and we will review it again.</p>`,
+		),
+	};
+}
+
 export async function sendDmcaRejection(
 	notice: ComplainantNotice,
 	reason: string,
 ): Promise<SendResult> {
-	const html = shell(
-		"We could not act on your copyright notice",
-		`<p style="margin:0 0 18px;">Hi ${escapeHtml(notice.complainantName)}, we have reviewed ${aboutNotice(notice)}, and we could not act on it as it was filed. The material it identifies has not been removed.</p>
-		${quoted("Why", reason)}
-		<p style="margin:0 0 18px;">If you can supply what is missing, you can file a new notice at ${escapeHtml(frontendUrl())}/copyright or write to ${escapeHtml(copyrightContact())}, and we will review it again.</p>`,
-	);
-	return toComplainant(notice, `Your copyright notice #${notice.id}: we could not act on it`, html);
+	const { subject, html } = renderDmcaRejection(notice, reason);
+	return toComplainant(notice, subject, html);
 }
 
 /**
@@ -507,30 +562,38 @@ export async function sendDmcaRejection(
  * they have filed an action seeking a court order against the person who uploaded it. The copy is
  * the counter-notice as filed, including the attestation text the uploader agreed to.
  */
+/** The counter-notice forward's template, as {@link sendCounterNoticeCopy} sends it. */
+export function renderCounterNoticeCopy(
+	notice: ComplainantNotice,
+	counterNotice: ForwardedCounterNotice,
+	restoreWindow: { from: Date; by: Date },
+): RenderedEmail {
+	const contact = escapeHtml(copyrightContact());
+	return {
+		subject: `Your copyright notice #${notice.id}: a counter-notice was filed`,
+		html: shell(
+			"A counter-notice was filed against your copyright notice",
+			`<p style="margin:0 0 18px;">Hi ${escapeHtml(notice.complainantName)}, the person who uploaded the material identified in ${aboutNotice(notice)} has sent a counter-notice under 17 U.S.C. § 512(g)(3). A copy of it follows.</p>
+			<p style="margin:0 0 18px;">We will restore the material between ${longDate(restoreWindow.from)} and ${longDate(restoreWindow.by)}, unless before then our designated agent receives notice from you that you have filed an action seeking a court order to restrain this person from engaging in infringing activity relating to the material on Anthers. To give that notice, write to ${contact}.</p>
+			<hr style="border:none;border-top:1px solid ${MEADOW.hairline};margin:22px 0;">
+			${quoted("Name", counterNotice.subscriberName)}
+			${quoted("Postal address", counterNotice.subscriberAddress)}
+			${quoted("Telephone", counterNotice.subscriberPhone)}
+			${quoted("Consent to jurisdiction", counterNotice.jurisdictionConsent)}
+			${quoted("Statement under penalty of perjury", counterNotice.goodFaithStatement)}
+			${quoted("What they attested to", counterNotice.attestationTextSnapshot)}
+			${quoted("Filed", longDate(counterNotice.filedAt))}`,
+		),
+	};
+}
+
 export async function sendCounterNoticeCopy(
 	notice: ComplainantNotice,
 	counterNotice: ForwardedCounterNotice,
 	restoreWindow: { from: Date; by: Date },
 ): Promise<SendResult> {
-	const contact = escapeHtml(copyrightContact());
-	const html = shell(
-		"A counter-notice was filed against your copyright notice",
-		`<p style="margin:0 0 18px;">Hi ${escapeHtml(notice.complainantName)}, the person who uploaded the material identified in ${aboutNotice(notice)} has sent a counter-notice under 17 U.S.C. § 512(g)(3). A copy of it follows.</p>
-		<p style="margin:0 0 18px;">We will restore the material between ${longDate(restoreWindow.from)} and ${longDate(restoreWindow.by)}, unless before then our designated agent receives notice from you that you have filed an action seeking a court order to restrain this person from engaging in infringing activity relating to the material on Anthers. To give that notice, write to ${contact}.</p>
-		<hr style="border:none;border-top:1px solid ${MEADOW.hairline};margin:22px 0;">
-		${quoted("Name", counterNotice.subscriberName)}
-		${quoted("Postal address", counterNotice.subscriberAddress)}
-		${quoted("Telephone", counterNotice.subscriberPhone)}
-		${quoted("Consent to jurisdiction", counterNotice.jurisdictionConsent)}
-		${quoted("Statement under penalty of perjury", counterNotice.goodFaithStatement)}
-		${quoted("What they attested to", counterNotice.attestationTextSnapshot)}
-		${quoted("Filed", longDate(counterNotice.filedAt))}`,
-	);
-	return toComplainant(
-		notice,
-		`Your copyright notice #${notice.id}: a counter-notice was filed`,
-		html,
-	);
+	const { subject, html } = renderCounterNoticeCopy(notice, counterNotice, restoreWindow);
+	return toComplainant(notice, subject, html);
 }
 
 /**
@@ -545,16 +608,24 @@ export async function sendCounterNoticeCopy(
  * carries the whole answer, and it is returned rather than swallowed so the operator can be told
  * when it did not go.
  */
-export async function sendRightsRequestAnswerEmail(to: string, note: string): Promise<SendResult> {
+/** The rights-request answer's template, as {@link sendRightsRequestAnswerEmail} sends it. */
+export function renderRightsRequestAnswerEmail(note: string): RenderedEmail {
 	const answer = note
 		? escapeHtml(note).replace(/\n/g, "<br>")
 		: "We've responded to the request you made.";
-	const html = shell(
-		"Your data request has been answered",
-		`<p style="margin:0 0 18px;">${answer}</p>
-		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because a data-rights request was made to Anthers from this address. The account that made it has since been deleted, so this email is the only copy of the answer. If anything in it is wrong or incomplete, write to privacy@anthers.org.</p>`,
-	);
-	return sendEmail({ to, subject: "Your data request has been answered", html });
+	return {
+		subject: "Your data request has been answered",
+		html: shell(
+			"Your data request has been answered",
+			`<p style="margin:0 0 18px;">${answer}</p>
+			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because a data-rights request was made to Anthers from this address. The account that made it has since been deleted, so this email is the only copy of the answer. If anything in it is wrong or incomplete, write to privacy@anthers.org.</p>`,
+		),
+	};
+}
+
+export async function sendRightsRequestAnswerEmail(to: string, note: string): Promise<SendResult> {
+	const { subject, html } = renderRightsRequestAnswerEmail(note);
+	return sendEmail({ to, subject, html });
 }
 
 /**
@@ -760,6 +831,27 @@ function receiptMeta(date: Date, reference: string): string {
  * page. The copy says "you" throughout — a receipt has exactly one audience, the person
  * whose money it was.
  */
+/** The purchase receipt's template, as {@link sendPurchaseReceiptEmail} sends it. */
+export function renderPurchaseReceiptEmail(args: {
+	reference: string;
+	date: Date;
+	lines: ReceiptLine[];
+	tax: string;
+	total: string;
+}): RenderedEmail {
+	return {
+		subject: `Your Anthers receipt: ${usd(args.total)}`,
+		html: shell(
+			"Your Anthers receipt",
+			`${receiptMeta(args.date, args.reference)}
+			<p style="margin:0 0 14px;">Thanks for supporting creators directly. Here's what your payment covered:</p>
+			${itemsTable({ lines: args.lines, tax: args.tax, totalLabel: "Total charged", total: args.total })}
+			<p style="margin:0 0 18px;"><a href="${frontendUrl()}/library" style="color:${BRAND};">Your purchases are in your Library</a>, ready to read, watch, play or listen. They stay there.</p>
+			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because a purchase was made from your account. Anthers keeps none of your payment: after the processor's at-cost fee, it goes to the creator.</p>`,
+		),
+	};
+}
+
 export async function sendPurchaseReceiptEmail(args: {
 	to: string;
 	reference: string;
@@ -768,15 +860,8 @@ export async function sendPurchaseReceiptEmail(args: {
 	tax: string;
 	total: string;
 }): Promise<SendResult> {
-	const html = shell(
-		"Your Anthers receipt",
-		`${receiptMeta(args.date, args.reference)}
-		<p style="margin:0 0 14px;">Thanks for supporting creators directly. Here's what your payment covered:</p>
-		${itemsTable({ lines: args.lines, tax: args.tax, totalLabel: "Total charged", total: args.total })}
-		<p style="margin:0 0 18px;"><a href="${frontendUrl()}/library" style="color:${BRAND};">Your purchases are in your Library</a>, ready to read, watch, play or listen. They stay there.</p>
-		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because a purchase was made from your account. Anthers keeps none of your payment: after the processor's at-cost fee, it goes to the creator.</p>`,
-	);
-	return sendEmail({ to: args.to, subject: `Your Anthers receipt: ${usd(args.total)}`, html });
+	const { subject, html } = renderPurchaseReceiptEmail(args);
+	return sendEmail({ to: args.to, subject, html });
 }
 
 /**
@@ -788,6 +873,26 @@ export async function sendPurchaseReceiptEmail(args: {
  * Off by the creator's receipt preference by the *caller* (`services/receipts.ts`),
  * not here: this module renders and sends, it does not decide who is told.
  */
+/** The creator sale receipt's template, as {@link sendCreatorSaleReceiptEmail} sends it. */
+export function renderCreatorSaleReceiptEmail(args: {
+	reference: string;
+	date: Date;
+	lines: ReceiptLine[];
+	earnings: string;
+}): RenderedEmail {
+	return {
+		subject: `A sale on your work: ${usd(args.earnings)} to you`,
+		html: shell(
+			"A sale on your work",
+			`${receiptMeta(args.date, args.reference)}
+			<p style="margin:0 0 14px;">A reader bought something of yours. Here's what sold:</p>
+			${itemsTable({ lines: args.lines, totalLabel: "Your earnings, after the card fee", total: args.earnings })}
+			<p style="margin:0 0 18px;">After the card processor's at-cost fee, <strong style="color:${MEADOW.ink};">${usd(args.earnings)}</strong> is on its way to your connected account.</p>
+			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because receipt emails are on for your creator account; you can turn them off in your Studio settings. Anthers keeps none of the sale's price.</p>`,
+		),
+	};
+}
+
 export async function sendCreatorSaleReceiptEmail(args: {
 	to: string;
 	reference: string;
@@ -795,19 +900,8 @@ export async function sendCreatorSaleReceiptEmail(args: {
 	lines: ReceiptLine[];
 	earnings: string;
 }): Promise<SendResult> {
-	const html = shell(
-		"A sale on your work",
-		`${receiptMeta(args.date, args.reference)}
-		<p style="margin:0 0 14px;">A reader bought something of yours. Here's what sold:</p>
-		${itemsTable({ lines: args.lines, totalLabel: "Your earnings, after the card fee", total: args.earnings })}
-		<p style="margin:0 0 18px;">After the card processor's at-cost fee, <strong style="color:${MEADOW.ink};">${usd(args.earnings)}</strong> is on its way to your connected account.</p>
-		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because receipt emails are on for your creator account; you can turn them off in your Studio settings. Anthers keeps none of the sale's price.</p>`,
-	);
-	return sendEmail({
-		to: args.to,
-		subject: `A sale on your work: ${usd(args.earnings)} to you`,
-		html,
-	});
+	const { subject, html } = renderCreatorSaleReceiptEmail(args);
+	return sendEmail({ to: args.to, subject, html });
 }
 
 /**
@@ -819,6 +913,27 @@ export async function sendCreatorSaleReceiptEmail(args: {
  * platform-initiated cases (a takedown, a defect) are already messaged where they
  * happen. The receipt's job is to say the money moved back.
  */
+/** The refund receipt's template, as {@link sendRefundReceiptEmail} sends it. */
+export function renderRefundReceiptEmail(args: {
+	reference: string;
+	date: Date;
+	lines: ReceiptLine[];
+	tax: string;
+	total: string;
+}): RenderedEmail {
+	return {
+		subject: `Your Anthers refund: ${usd(args.total)}`,
+		html: shell(
+			"Your Anthers refund receipt",
+			`${receiptMeta(args.date, args.reference)}
+			<p style="margin:0 0 14px;">A refund was issued on your purchase:</p>
+			${itemsTable({ lines: args.lines, tax: args.tax, totalLabel: "Total refunded", total: args.total })}
+			<p style="margin:0 0 18px;">The refund goes back to the card you paid with; banks usually post it within 5–10 business days. Your access to the refunded work ends when it does.</p>
+			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because a refund was made on a purchase from your account. Questions about a refund can go to contact@anthers.org.</p>`,
+		),
+	};
+}
+
 export async function sendRefundReceiptEmail(args: {
 	to: string;
 	reference: string;
@@ -827,15 +942,8 @@ export async function sendRefundReceiptEmail(args: {
 	tax: string;
 	total: string;
 }): Promise<SendResult> {
-	const html = shell(
-		"Your Anthers refund receipt",
-		`${receiptMeta(args.date, args.reference)}
-		<p style="margin:0 0 14px;">A refund was issued on your purchase:</p>
-		${itemsTable({ lines: args.lines, tax: args.tax, totalLabel: "Total refunded", total: args.total })}
-		<p style="margin:0 0 18px;">The refund goes back to the card you paid with; banks usually post it within 5–10 business days. Your access to the refunded work ends when it does.</p>
-		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because a refund was made on a purchase from your account. Questions about a refund can go to contact@anthers.org.</p>`,
-	);
-	return sendEmail({ to: args.to, subject: `Your Anthers refund: ${usd(args.total)}`, html });
+	const { subject, html } = renderRefundReceiptEmail(args);
+	return sendEmail({ to: args.to, subject, html });
 }
 
 /**
@@ -844,6 +952,26 @@ export async function sendRefundReceiptEmail(args: {
  * invariant). Whether the clawback recovered at Stripe or waits in the netting ledger
  * is accounting the creator's copy does not carry; the figure they hold is what left.
  */
+/** The creator refund receipt's template, as {@link sendCreatorRefundReceiptEmail} sends it. */
+export function renderCreatorRefundReceiptEmail(args: {
+	reference: string;
+	date: Date;
+	lines: ReceiptLine[];
+	earnings: string;
+}): RenderedEmail {
+	return {
+		subject: `A refund on your sale: ${usd(args.earnings)} returned`,
+		html: shell(
+			"A refund on a sale of yours",
+			`${receiptMeta(args.date, args.reference)}
+			<p style="margin:0 0 14px;">A purchase from your work was refunded:</p>
+			${itemsTable({ lines: args.lines, totalLabel: "Your earnings, returned", total: args.earnings })}
+			<p style="margin:0 0 18px;"><strong style="color:${MEADOW.ink};">${usd(args.earnings)}</strong> comes back from the transfer, so it never stays with a sale that was undone.</p>
+			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because receipt emails are on for your creator account; you can turn them off in your Studio settings.</p>`,
+		),
+	};
+}
+
 export async function sendCreatorRefundReceiptEmail(args: {
 	to: string;
 	reference: string;
@@ -851,19 +979,8 @@ export async function sendCreatorRefundReceiptEmail(args: {
 	lines: ReceiptLine[];
 	earnings: string;
 }): Promise<SendResult> {
-	const html = shell(
-		"A refund on a sale of yours",
-		`${receiptMeta(args.date, args.reference)}
-		<p style="margin:0 0 14px;">A purchase from your work was refunded:</p>
-		${itemsTable({ lines: args.lines, totalLabel: "Your earnings, returned", total: args.earnings })}
-		<p style="margin:0 0 18px;"><strong style="color:${MEADOW.ink};">${usd(args.earnings)}</strong> comes back from the transfer, so it never stays with a sale that was undone.</p>
-		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because receipt emails are on for your creator account; you can turn them off in your Studio settings.</p>`,
-	);
-	return sendEmail({
-		to: args.to,
-		subject: `A refund on your sale: ${usd(args.earnings)} returned`,
-		html,
-	});
+	const { subject, html } = renderCreatorRefundReceiptEmail(args);
+	return sendEmail({ to: args.to, subject, html });
 }
 
 /**
@@ -883,30 +1000,38 @@ export async function sendCreatorRefundReceiptEmail(args: {
  * record; this is the telling. A zero-sum close moves nothing, so it earns no email —
  * the caller in `jobs/transfer-held-credits.ts` guards that, not this template.
  */
+/** The payout receipt's template, as {@link sendPayoutReceiptEmail} sends it. */
+export function renderPayoutReceiptEmail(args: {
+	reference: string;
+	date: Date;
+	amount: string;
+}): RenderedEmail {
+	return {
+		subject: `Your Anthers payout: ${usd(args.amount)} to your balance`,
+		html: shell(
+			"Your Anthers payout receipt",
+			`${receiptMeta(args.date, args.reference)}
+			<p style="margin:0 0 14px;">The 14-day hold on your settled earnings ended, and the money moved:</p>
+			${itemsTable({
+				lines: [{ description: "Settled earnings, after the card fee", amount: args.amount }],
+				totalLabel: "To your connected account",
+				total: args.amount,
+			})}
+			<p style="margin:0 0 18px;"><strong style="color:${MEADOW.ink};">${usd(args.amount)}</strong> is in your account's balance now. Moving it to your bank is your choice, whenever you like — that payout, and its fee, stays yours.</p>
+			<p style="margin:0 0 18px;"><a href="${frontendUrl()}/studio/payments" style="color:${BRAND};">Your balance and transfer record</a> are on your Studio's Payments page.</p>
+			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because receipt emails are on for your creator account; you can turn them off in your Studio settings. Anthers keeps none of this money.</p>`,
+		),
+	};
+}
+
 export async function sendPayoutReceiptEmail(args: {
 	to: string;
 	reference: string;
 	date: Date;
 	amount: string;
 }): Promise<SendResult> {
-	const html = shell(
-		"Your Anthers payout receipt",
-		`${receiptMeta(args.date, args.reference)}
-		<p style="margin:0 0 14px;">The 14-day hold on your settled earnings ended, and the money moved:</p>
-		${itemsTable({
-			lines: [{ description: "Settled earnings, after the card fee", amount: args.amount }],
-			totalLabel: "To your connected account",
-			total: args.amount,
-		})}
-		<p style="margin:0 0 18px;"><strong style="color:${MEADOW.ink};">${usd(args.amount)}</strong> is in your account's balance now. Moving it to your bank is your choice, whenever you like — that payout, and its fee, stays yours.</p>
-		<p style="margin:0 0 18px;"><a href="${frontendUrl()}/studio/payments" style="color:${BRAND};">Your balance and transfer record</a> are on your Studio's Payments page.</p>
-		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because receipt emails are on for your creator account; you can turn them off in your Studio settings. Anthers keeps none of this money.</p>`,
-	);
-	return sendEmail({
-		to: args.to,
-		subject: `Your Anthers payout: ${usd(args.amount)} to your balance`,
-		html,
-	});
+	const { subject, html } = renderPayoutReceiptEmail(args);
+	return sendEmail({ to: args.to, subject, html });
 }
 
 /**
@@ -915,6 +1040,30 @@ export async function sendPayoutReceiptEmail(args: {
  * line is excluded from the itemization — the receipt is about what the supporter gave
  * creators, and the whole amount is the only figure they chose.
  */
+/** The support receipt's template, as {@link sendSupportReceiptEmail} sends it. */
+export function renderSupportReceiptEmail(args: {
+	reference: string;
+	date: Date;
+	/** The month this payment is for, as cycleKeyFor spells it ("2026-10"). */
+	billingCycle: string;
+	/** Lines naming each creator this payment reached, excluding Anthers' own line. */
+	lines: ReceiptLine[];
+	tax: string;
+	total: string;
+}): RenderedEmail {
+	return {
+		subject: `Your Anthers support receipt: ${usd(args.total)}`,
+		html: shell(
+			"Your monthly support receipt",
+			`${receiptMeta(args.date, args.reference)}
+			<p style="margin:0 0 14px;">Thanks for supporting creators. Here's your payment for <strong style="color:${MEADOW.ink};">${escapeHtml(args.billingCycle)}</strong>:</p>
+			${itemsTable({ lines: args.lines, tax: args.tax, totalLabel: "Total charged", total: args.total })}
+			<p style="margin:0 0 18px;"><a href="${frontendUrl()}/supporters" style="color:${BRAND};">See who your support reached</a> on the supporters page.</p>
+			<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because a monthly support payment was made from your account.</p>`,
+		),
+	};
+}
+
 export async function sendSupportReceiptEmail(args: {
 	to: string;
 	reference: string;
@@ -926,17 +1075,6 @@ export async function sendSupportReceiptEmail(args: {
 	tax: string;
 	total: string;
 }): Promise<SendResult> {
-	const html = shell(
-		"Your monthly support receipt",
-		`${receiptMeta(args.date, args.reference)}
-		<p style="margin:0 0 14px;">Thanks for supporting creators. Here's your payment for <strong style="color:${MEADOW.ink};">${escapeHtml(args.billingCycle)}</strong>:</p>
-		${itemsTable({ lines: args.lines, tax: args.tax, totalLabel: "Total charged", total: args.total })}
-		<p style="margin:0 0 18px;"><a href="${frontendUrl()}/supporters" style="color:${BRAND};">See who your support reached</a> on the supporters page.</p>
-		<p style="margin:22px 0 0;color:${MEADOW.muted};font-size:12px;">You're receiving this because a monthly support payment was made from your account.</p>`,
-	);
-	return sendEmail({
-		to: args.to,
-		subject: `Your Anthers support receipt: ${usd(args.total)}`,
-		html,
-	});
+	const { subject, html } = renderSupportReceiptEmail(args);
+	return sendEmail({ to: args.to, subject, html });
 }
