@@ -28,6 +28,11 @@ function cardCreatorName(work: WorkCardItem): string {
 /** A Work as the Catalog lists it, plus the creator the listing joins on. */
 type WorkCardItem = Work & {
 	creator?: { handle: string; displayName?: string | null; avatar?: string | null };
+	/**
+	 * A goods release's store facts — the art its first merch variant carries and the
+	 * cheapest variant's list price. Present on a physical Work when the store has either.
+	 */
+	merch?: { mockupUrl: string | null; fromPrice: string | null } | null;
 };
 
 /**
@@ -64,7 +69,19 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 	// ⚠️ Not `!canAccess`. A signed-out visitor is refused the bytes of free work too, and
 	// rendering that as a padlock would label the whole commons "members only" for the one
 	// person the public page is for — see `presentsAsLocked`.
-	const locked = presentsAsLocked(access);
+	//
+	// 🚨 The goods exception is the rule the resolver's goods branch states
+	// (`services/access.ts`, Parker 2026-10-09): a physical Work is never *locked
+	// presentation* while it is simply buyable — the purchase gates RECEIVING the
+	// shirt, never SEEING it, so the lock chip never stands in for a store. The
+	// type-poster band and the price badge carry what a lock would have; a
+	// merch-configured Work's mockup is exactly what the store panel opens on.
+	const isGoods = post.type === "physical" || post.type === "service";
+	const locked = presentsAsLocked(access) && !(isGoods && access?.reason === "payment_required");
+	/* The goods band's artwork: the creator's thumbnail, or the store's first mockup
+	   (physical only — a service carries no merch rows). The mockup is public the same
+	   way the store panel is, so the band shows what the variants route shows. */
+	const goodsArtwork = post.type === "physical" ? (post.merch?.mockupUrl ?? null) : null;
 
 	// What this user asked to meet at this rung, and for each kind of content in it. **A veil is
 	// not a lock**: a veiled Work is listed, reachable and earning, and the user can uncover it
@@ -79,7 +96,7 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 			{/* Thumbnail / cover area */}
 			{locked ? (
 				<LockedCover
-					thumbnail={post.thumbnail}
+					thumbnail={post.thumbnail || goodsArtwork}
 					className="aspect-video"
 					lockedBy={access ? lockedByBadge(access, cardCreatorName(post)) : null}
 				/>
@@ -90,12 +107,26 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 					because={cover.byRung ? undefined : cover.byNotes.map(contentNoteLabel)}
 					className="aspect-video"
 				>
-					{post.thumbnail ? (
-						<img src={post.thumbnail} alt="" className="w-full h-full object-cover" />
+					{post.thumbnail || goodsArtwork ? (
+						<img
+							src={(post.thumbnail || goodsArtwork)!}
+							alt=""
+							className="w-full h-full object-cover"
+						/>
 					) : (
 						<div className="w-full h-full bg-gradient-to-br from-base-300 to-base-200" />
 					)}
 				</MaturityVeil>
+			) : isGoods ? (
+				/* A goods Work's band is its store face: the creator's thumbnail, or the
+				   first merch mockup the variants route shows a visitor. With neither, a
+				   quiet placeholder stands where a product photo would — a shirt with no
+				   picture is a setup gap the Studio owns, not a lock to render. */
+				goodsArtwork ? (
+					<img src={goodsArtwork} alt="" className="w-full h-full object-cover aspect-video" />
+				) : (
+					<div className="aspect-video bg-gradient-to-br from-base-300 to-base-200" />
+				)
 			) : (
 				<>
 					{post.type === "video" && (
@@ -173,6 +204,14 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 					<div className="flex items-center gap-2 mt-auto pt-1">
 						<ContentTypeBadge contentType={post.type} />
 						<PricingBadge access={access} />
+						{/* The goods store's own ask, standing where a digital Work's price
+						    badge stands: the purchase gates receiving the thing, not seeing
+						    it, so the badge says buy rather than lock. The store's list prices
+						    are the source; the tile shows only the cheapest, since no color
+						    is picked here. */}
+						{post.type === "physical" && post.merch?.fromPrice && (
+							<span className="badge badge-sm badge-secondary">from ${post.merch.fromPrice}</span>
+						)}
 						{post.estimatedReadMinutes && post.type === "text" && (
 							<span className="text-xs text-base-content/40">
 								{post.estimatedReadMinutes} min read
