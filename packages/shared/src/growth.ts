@@ -284,6 +284,18 @@ export interface GrowthLedger {
 	adminRatio: number;
 	adminHealthy: boolean;
 	timePoolToCreators: number;
+	// ── The overhead lines open, for the plan tool's granular spending view ──
+	/** The infrastructure the base and per-scale lines carry: `INFRA.base + base × scale terms`. */
+	infrastructure: number;
+	/** The set-aside: `reservesRate` of infrastructure plus staffing. */
+	reserves: number;
+	/** Free storage's two parts — what the plan tool's diagram draws as separate streams. */
+	/** Free creators' catalogs, carried on the charitable budget. */
+	freeCatalogSubsidy: number;
+	/** Paying rungs' bundled storage allowances, paid to the vendor at cost. */
+	payingAllowanceSubsidy: number;
+	/** The two parts' aggregate — `freeAccess` minus the free pool and PA incentives. */
+	freeStorageSubsidy: number;
 }
 
 /**
@@ -360,6 +372,8 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 	);
 	let storageCharge = 0;
 	let freeStorageSubsidy = 0;
+	let freeCatalogSubsidy = 0;
+	let payingAllowanceSubsidy = 0;
 	const segments: CreatorSegmentLedger[] = CREATOR_SEGMENTS.map((seg, i) => {
 		const count = segmentCounts[i];
 		const attentionShare = attentionTotal > 0 && count > 0 ? seg.attention / attentionTotal : 0;
@@ -369,12 +383,6 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		// allowance bytes are prepaid through the rung (Anthers' obligation), overflow
 		// bytes are the creator's at-cost purchase from Root onward.
 		//
-		// ⚠️ **The modeled allowance is the rung whose allowance covers the catalog** —
-		// the bundle's own intent ("the rung you hold should just cover you"), and the
-		// conservative case for the books: a storage-rational creator could instead hold
-		// Root and buy overflow at cost below Blossom, which would leave Anthers carrying
-		// only Root's 50 GiB, but "most creators hold the rung that covers them" is the
-		// honest default and the heavier obligation is what solvency is modeled against.
 		// ⚠️ **The modeled allowance is the rung whose allowance covers the catalog** —
 		// the bundle's own intent ("the rung you hold should just cover you"), and the
 		// conservative case for the books: a storage-rational creator could instead hold
@@ -401,8 +409,10 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		const chargeEach = 0;
 		if (seg.free) {
 			freeStorageSubsidy += fullCost * count;
+			freeCatalogSubsidy += fullCost * count;
 		} else {
 			freeStorageSubsidy += allowanceCost * count;
+			payingAllowanceSubsidy += allowanceCost * count;
 			storageCharge += chargeEach * count;
 		}
 		return {
@@ -454,6 +464,11 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		adminRatio,
 		adminHealthy: adminRatio <= ADMIN_CEILING + 1e-9,
 		timePoolToCreators,
+		infrastructure: baselineInfra,
+		reserves,
+		freeCatalogSubsidy,
+		payingAllowanceSubsidy,
+		freeStorageSubsidy,
 	};
 }
 

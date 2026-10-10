@@ -92,6 +92,7 @@ import {
 	enableAdultAccess,
 	setMaturityDisplay,
 } from "../services/content-preferences.js";
+import { merchStoreFactsByWork } from "../services/merch-store.js";
 import {
 	DELIVERY_GROUPS,
 	type DeliveryGroup,
@@ -111,6 +112,7 @@ import {
 	setPin,
 	updateParentalControls,
 } from "../services/parental-controls.js";
+import { postContentExcerpt } from "../services/post-markdown.js";
 import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 import { queueRecordSync } from "../services/record-sync.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../services/storage/keys.js";
@@ -708,6 +710,14 @@ const accountRoutes = new Hono()
 			}
 		}
 
+		// The goods releases' store facts — what the tile shows in place of a lock
+		// chip, since the purchase gates RECEIVING the thing, never seeing it (the
+		// resolver's goods branch — `services/access.ts`, Parker 2026-10-09). The
+		// rule and its bounds are the store-facts service's; batch-loaded here.
+		const merchMap = await merchStoreFactsByWork(
+			feedWorks.filter((r) => r.work.type === "physical").map((r) => r.work.id),
+		);
+
 		// Enumerate the fields rather than spreading the row. This used to be
 		// `...row.post`, which shipped `body` and `bodyHtml` for every followed creator's
 		// post regardless of gating. A post carries no gate of its own now, so there is no
@@ -718,6 +728,10 @@ const accountRoutes = new Hono()
 		// gated, and this endpoint resolves no access at all. Nothing here may carry a
 		// payload — no sourceKey, no embedUrl, no transcode URLs — only the card. Anyone
 		// who wants the thing itself goes to the Work, where access is resolved live.
+		//
+		// `excerpt` is exception-shaped rather than an exception: a post's body is public
+		// (a post carries no gate of its own, and its page reads signed out), and the plain-text
+		// form the tile renders is lighter than the markdown it is derived from.
 		const entries = [
 			...feedPosts.map((row) => {
 				const p = row.post;
@@ -744,6 +758,9 @@ const accountRoutes = new Hono()
 					// Thumbnails are public by design.
 					thumbnail: postRefs[p.id]?.thumbnail ?? null,
 					linkedWorkCount: postRefs[p.id]?.linkedWorkCount ?? 0,
+					// The body as plain text, where the tile's band renders the content
+					// and the card renders the shorter excerpt — both read this string.
+					excerpt: postContentExcerpt(p.body),
 					creator: embedCreator({
 						handle: row.creatorHandle,
 						displayName: row.creatorDisplayName,
@@ -781,6 +798,10 @@ const accountRoutes = new Hono()
 					// duration the way a locked book reports its page count.
 					durationSeconds: w.durationSeconds,
 					estimatedReadMinutes: w.estimatedReadMinutes,
+					// The goods release's store art and from-price — what a tile shows in
+					// place of the lock chip a digital Work would earn. Present only on a
+					// physical Work, and only with the facts the store has.
+					merch: w.type === "physical" ? (merchMap.get(w.id) ?? null) : undefined,
 					// The user's own verdict — what a locked cover and a price badge
 					// need. The feed resolves no deliverable either way; this only
 					// describes the gate.
