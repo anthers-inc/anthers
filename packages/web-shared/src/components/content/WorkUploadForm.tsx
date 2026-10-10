@@ -20,9 +20,10 @@
  * creator, because nothing is reachable until release and the access table is on the page this
  * step lands on, above the Release control.
  *
- * Used in two places: the Upload page at `/studio/works/new`, and `QuickWorkCreate` inside the
- * Work picker. ⚠️ **Don't grow either copy into a second editor** — everything past these three
- * inputs belongs to the Work's page.
+ * Used in one place: the Upload page at `/studio/works/new`, which is the only way a Work is
+ * made — the picker that once minted one in a dialog retired the path (Parker, 2026-10-10:
+ * pickers pick, and creation belongs to this page). ⚠️ **Don't grow this into a second
+ * editor** — everything past these three inputs belongs to the Work's page.
  */
 
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
@@ -55,14 +56,9 @@ function titleFromFileName(name: string): string {
 interface WorkUploadFormProps {
 	/** Called with the created Work. Any upload it started is already running. */
 	onCreated: (work: Work) => void;
-	/**
-	 * Where the creator ends up. The Upload page moves them to the Work's page, while the picker's
-	 * dialog hands the Work back to the post they are writing, and the copy has to say which.
-	 */
-	next?: "page" | "stay";
 }
 
-export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadFormProps) {
+export default function WorkUploadForm({ onCreated }: WorkUploadFormProps) {
 	const [type, setType] = useState<ContentType>("video");
 	const [title, setTitle] = useState("");
 	const [platform, setPlatform] = useState("windows");
@@ -136,7 +132,7 @@ export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadF
 				label="Title"
 				hint={
 					isFileWorkType(type) || isBuildType(type)
-						? `Leave it blank to use the file's name. You can change it ${next === "page" ? "on the next page" : "on the Work's own page"}.`
+						? "Leave it blank to use the file's name. You can change it on the next page."
 						: undefined
 				}
 			>
@@ -153,11 +149,7 @@ export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadF
 			{isFileWorkType(type) && (
 				<FormField
 					label="File"
-					hint={
-						next === "page"
-							? "Choosing the file adds this Work to your Catalog, privately, and takes you to its page to fill in the rest while it uploads."
-							: "Choosing the file adds this Work to your Catalog, privately, and attaches it here while it uploads."
-					}
+					hint="Choosing the file adds this Work to your Catalog, privately, and takes you to its page to fill in the rest while it uploads."
 				>
 					{creating ? (
 						<div className="flex items-center gap-3 rounded-lg bg-base-200 p-4 text-sm">
@@ -193,7 +185,7 @@ export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadF
 					</FormField>
 					<FormField
 						label="Build (optional)"
-						hint={`A build you add here becomes this Work's primary download. More builds, and a browser build hosted on another site, are added ${next === "page" ? "on the next page" : "on the Work's own page"}.`}
+						hint="A build you add here becomes this Work's primary download. More builds, and a browser build hosted on another site, are added on the next page."
 					>
 						{creating ? (
 							<div className="flex items-center gap-3 rounded-lg bg-base-200 p-4 text-sm">

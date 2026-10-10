@@ -6,11 +6,12 @@
  * no delivery, so there is nothing to filter by and nothing to preview; what a creator needs
  * is to find the devlog they mean among a few dozen, which is a search box.
  *
- * ⚠️ **No "new post" affordance here, unlike the Work picker.** A Work can be made in thirty
- * seconds from a file, so realizing mid-shelf that one does not exist yet is a real
+ * ⚠️ **No "new post" affordance here, unlike `WorkPicker` once did.** A Work can be made in
+ * thirty seconds from a file, so realizing mid-shelf that one does not exist yet is a real
  * interruption worth absorbing. A post is prose — writing one is the task, not a step inside
  * another one — so the button would open an editor the creator then has to abandon this
- * screen to use.
+ * screen to use. The Work picker now agrees: it retired its own create path on 2026-10-10,
+ * so a picker picks, and making the thing is always its own page's job.
  */
 import { useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
