@@ -8,9 +8,11 @@ import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	BookmarkIcon,
+	InformationCircleIcon,
 	RocketLaunchIcon,
 	RssIcon,
 	UserGroupIcon,
+	XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import CreatorCard from "../components/cards/CreatorCard";
