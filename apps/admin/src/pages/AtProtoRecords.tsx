@@ -238,7 +238,21 @@ function DriftRowView({ row, onChanged }: { row: DriftRow; onChanged: () => void
 					why no record should stand: <code className="font-mono">{row.unpublishableReason}</code>
 				</p>
 			)}
-			{row.uri && <p className="mt-1 truncate font-mono text-xs text-base-content/40">{row.uri}</p>}
+			{/* The record link a person follows, not the raw `at://` value (Parker, 2026-10-10):
+			    Taproot, the public record explorer at atproto.at, with the record's own address
+			    as its path. The raw address is still what this report fetches and diffs from. */}
+			{row.uri && (
+				<p className="mt-1 truncate font-mono text-xs">
+					<a
+						href={`https://atproto.at/uri/${row.uri}`}
+						target="_blank"
+						rel="noreferrer"
+						className="link"
+					>
+						{row.uri}
+					</a>
+				</p>
+			)}
 
 			{sides ? (
 				<RecordDiff derived={sides.derived} record={sides.record} />

@@ -1208,8 +1208,6 @@ async function serializeWork(
 	item: WorkRow,
 	workAssets: AssetRow[] = [],
 	job: TranscodingJobRow | null = null,
-	/** The server holding the creator's identity, which their own records are read from. */
-	pdsUrl: string | null = null,
 	/** The Work's browser builds, owner-facing. Loaded by `loadWorkBundles`; empty when unset. */
 	webBuildsList: WebBuildWithFiles[] = [],
 ) {
@@ -1262,12 +1260,13 @@ async function serializeWork(
 		webBuilds: webBuildsList,
 		transcoding: job,
 		/**
-		 * The Work's listing on the network while it has one, and where its creator can read that
-		 * record raw. The record is public anyway; this is the creator's own way to it, for the
-		 * Edit page, and it is null for a Work with no listing, which is ordinary rather than a fault.
+		 * The Work's listing on the network while it has one, and the public record link
+		 * beside it — every reader who can see the Work sees it too (the record is public
+		 * anyway). The link is a pure function of the stored address, so it costs no
+		 * lookup. Null for a Work with no listing, which is ordinary rather than a fault.
 		 */
 		atprotoUri: item.atprotoUri,
-		recordUrl: recordUrlFor(item.atprotoUri, pdsUrl),
+		recordUrl: recordUrlFor(item.atprotoUri),
 	};
 }
 
@@ -1288,17 +1287,6 @@ const RATING_BY_NAME_REFUSAL = {
 	error: "A Work is rated by answering every row of its rating matrix, not by naming a rating.",
 	code: "rate_through_matrix",
 } as const;
-
-/** The server holding a creator's identity, or "" when there is none to ask. */
-async function pdsUrlOf(userId: number | null): Promise<string> {
-	if (userId === null) return "";
-	const [row] = await db
-		.select({ pdsUrl: users.atprotoPdsUrl })
-		.from(users)
-		.where(eq(users.id, userId))
-		.limit(1);
-	return row?.pdsUrl ?? "";
-}
 
 /**
  * A storage URL or bare key → the storage key. Playlists/manifests, audio output, and
@@ -2077,6 +2065,14 @@ async function serializeWorkForUser(
 		 * deliberately not expressed here — see `publicAccessGate`.
 		 */
 		publicAccess,
+		/**
+		 * The Work's listing on the network, as the public record link beside it — the
+		 * same one the owner's shape carries, since the record is public no matter who
+		 * reads (the widening task, 2026-10-10). Derived from the stored address alone,
+		 * so it costs no lookup on the hot read path, and it is null for a Work with no
+		 * listing, which is ordinary rather than a fault.
+		 */
+		recordUrl: recordUrlFor(work.atprotoUri),
 	};
 }
 
@@ -3968,7 +3964,6 @@ const contentRoutes = new Hono()
 		}
 
 		await Promise.all(items.map(resolveWorkThumbnail));
-		const pdsUrl = await pdsUrlOf(user.id);
 		return c.json({
 			works: await Promise.all(
 				items.map((i) =>
@@ -3976,7 +3971,6 @@ const contentRoutes = new Hono()
 						i,
 						assetsByWork.get(i.id) ?? [],
 						jobByWork.get(i.id) ?? null,
-						pdsUrl,
 						buildsByWork.get(i.id) ?? [],
 					),
 				),
@@ -4108,9 +4102,8 @@ const contentRoutes = new Hono()
 		 * the request never reached the code that used it.
 		 */
 		if (isOwner && previewRequest(c) === null) {
-			const pdsUrl = await pdsUrlOf(work.creatorId);
 			return c.json({
-				work: await serializeWork(work, workAssets, jobRows[0] ?? null, pdsUrl, webBuildsList),
+				work: await serializeWork(work, workAssets, jobRows[0] ?? null, webBuildsList),
 			});
 		}
 
@@ -4793,13 +4786,11 @@ const contentRoutes = new Hono()
 		}
 
 		await resolveWorkThumbnail(updated);
-		const pdsUrl = await pdsUrlOf(updated.creatorId);
 		return c.json({
 			work: await serializeWork(
 				updated,
 				workAssets,
 				jobRows[0] ?? null,
-				pdsUrl,
 				buildRows.map((b) => ({ ...b, files: filesByBuild.get(b.id) ?? [] })),
 			),
 		});
