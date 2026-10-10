@@ -23,6 +23,14 @@
  * Used in two places: the Upload page at `/studio/works/new`, and `QuickWorkCreate` inside the
  * Work picker. ⚠️ **Don't grow either copy into a second editor** — everything past these three
  * inputs belongs to the Work's page.
+ *
+ * ⭐ **A file is optional on the Upload page, and only there** (Parker, 2026-10-10). A Work can
+ * be drafted before its file exists, and an upload that failed must not cost the title and type
+ * typed beside it — so the page flow offers a fileless create that lands on the Work's own page,
+ * where `WorkFileSection` already holds the no-file state and release refuses until the file
+ * arrives. The picker's dialog (`next === "stay"`) keeps the file required: it hands the created
+ * Work back to attach, and attaching an empty Work would be worse than refusing to make one.
+ * A fileless create needs a title, because a Work with neither file nor name is a row, not a draft.
  */
 
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
@@ -68,8 +76,19 @@ export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadF
 	const [platform, setPlatform] = useState("windows");
 	const [creating, setCreating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	// Only the Upload page drafts without a file; see the header on why the dialog may not.
+	const fileOptional = next === "page";
+
+	const requireTitleForDraft = (): boolean => {
+		if (fileOptional && !title.trim()) {
+			setError("Give the draft a name — you can change it on its page.");
+			return false;
+		}
+		return true;
+	};
 
 	const create = async (file: File | null) => {
+		if (!file && !requireTitleForDraft()) return;
 		setCreating(true);
 		setError(null);
 		const input: WorkInput & { type: ContentType } = {
@@ -173,6 +192,19 @@ export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadF
 						/>
 					)}
 				</FormField>
+			)}
+
+			{fileOptional && isFileWorkType(type) && (
+				<div>
+					<button
+						type="button"
+						className="btn btn-ghost btn-sm"
+						disabled={creating}
+						onClick={() => create(null)}
+					>
+						Skip for now — draft it without a file <ArrowRightIcon className="h-4 w-4" />
+					</button>
+				</div>
 			)}
 
 			{isBuildType(type) && (
