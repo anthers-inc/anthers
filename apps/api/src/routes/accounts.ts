@@ -41,7 +41,6 @@
 import { db } from "@anthers/db/client";
 import {
 	follows,
-	merchVariants,
 	posts,
 	postWorkRefs,
 	rightsRequests,
@@ -59,7 +58,6 @@ import {
 } from "@anthers/shared/rights";
 import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panels";
 import { zValidator } from "@hono/zod-validator";
-import Decimal from "decimal.js";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
