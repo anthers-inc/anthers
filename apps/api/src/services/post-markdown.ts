@@ -73,6 +73,75 @@ HTML_TO_MARKDOWN.use(turndownPluginGfm);
 export const POST_BODY_LIMIT = 100_000;
 
 /**
+ * How much of a post's body the feed tile shows when it renders content in place of a
+ * thumbnail — the band's opening lines and the card's excerpt both read this, so it bounds
+ * a whole feed's text bytes, not one tile's. 50 entries × this length is the cost ceiling.
+ */
+export const POST_CONTENT_EXCERPT_LIMIT = 600;
+
+/**
+ * A post's markdown body as plain text — what a feed tile shows when the content IS the
+ * artwork (the band renders the opening, the card excerpt renders shorter). Markdown source
+ * is not display text, so the syntax has to go before it ships.
+ *
+ * The conversion is HTML-mediated rather than regex'd over markdown: `marked` settles the
+ * structure (it is the same parser the stored form's own round trip trusts), then the tags
+ * come off and only text survives. Two details carry it:
+ *
+ * - **Block boundaries become spaces before the strip.** The strip is a regex with no block
+ *   structure, so `</p><p>` passing as nothing would jam two paragraphs into one word.
+ * - **The entities decode once.** `marked` escapes text to a small fixed set, and React
+ *   renders a string literally as textContent — "AT&amp;T" handed through would show as
+ *   "AT&amp;T". One named decode of that set, never a second: a stored body's `&amp;amp;`
+ *   means a literal `&amp;`, and a double decode would lie about it.
+ *
+ * ⚠️ **This is display text, not the sanitizer's boundary.** Security already happened at
+ * the write (`normalizeStoredMarkdown`); images ship no text and drop entirely, and a code
+ * block loses its formatting while keeping its words — the right trade for a preview band.
+ */
+export function postContentExcerpt(
+	md: string | null | undefined,
+	maxChars = POST_CONTENT_EXCERPT_LIMIT,
+): string {
+	if (!md?.trim()) return "";
+	const html = String(marked.parse(md, { async: false }));
+	const text = html
+		.replace(/<\/(p|h[1-6]|li|ul|ol|blockquote|pre|table|tr|hr|div)\s*>/gi, " ")
+		.replace(/<[^>]+>/g, "")
+		.replace(
+			/&(?:amp|lt|gt|quot|#39|apos|nbsp);|&#(x[0-9a-f]+|\d+);/gi,
+			(m, num: string | undefined) => {
+				if (num === undefined) {
+					return (
+						{
+							"&amp;": "&",
+							"&lt;": "<",
+							"&gt;": ">",
+							"&quot;": '"',
+							"&#39;": "'",
+							"&apos;": "'",
+							"&nbsp;": " ",
+						}[m.toLowerCase()] ?? m
+					);
+				}
+				const cp = m[2] === "x" || m[2] === "X" ? parseInt(num, 16) : parseInt(num, 10);
+				return Number.isSafeInteger(cp) && cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : m;
+			},
+		)
+		.replace(/\s+/g, " ")
+		.trim();
+	if (!text) return "";
+	if (text.length <= maxChars) return text;
+	// Cut at a word boundary, and never append the ellipsis: the tile's line-clamp
+	// draws the visual cut, and a "…" baked into the data would meet it twice.
+	const cut = text
+		.slice(0, maxChars)
+		.replace(/\s+\S*$/, "")
+		.trim();
+	return cut || text.slice(0, maxChars).trim();
+}
+
+/**
  * HTML from the editor → the markdown that gets stored.
  *
  * The editor's `getHTML()` output is already sanitized vocabulary (the client cannot be
