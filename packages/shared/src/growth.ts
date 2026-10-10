@@ -296,6 +296,15 @@ export interface GrowthLedger {
 	payingAllowanceSubsidy: number;
 	/** The two parts' aggregate — `freeAccess` minus the free pool and PA incentives. */
 	freeStorageSubsidy: number;
+	/**
+	 * The paying accounts apportioned across the modeled rungs (`byLevel`) — the
+	 * inflow side of any public drawing of the full support dollar. The dollar
+	 * decomposition per rung composes from the same published primitives
+	 * (`anthersSupportBreakdown`, `paymentsSplit`) against `accounts × amount`,
+	 * so a consumer that sums the split reaches this ledger's own
+	 * `charitableRevenue` exactly.
+	 */
+	bySupportRung: Array<{ amount: number; accounts: number }>;
 }
 
 /**
@@ -469,6 +478,7 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		freeCatalogSubsidy,
 		payingAllowanceSubsidy,
 		freeStorageSubsidy,
+		bySupportRung: rungs.map((n, i) => ({ amount: n, accounts: byLevel[i] })),
 	};
 }
 

@@ -27,6 +27,7 @@
 		"@tiptap/extension-placeholder": "^2.6.0",
 		"@tiptap/react": "^2.6.0",
 		"@tiptap/starter-kit": "^2.6.0",
+		"recharts": "^3.7.0",
 		"hls.js": "^1.5.0",
 		"hono": "^4.7.0",
 		"react": "^19.0.0",

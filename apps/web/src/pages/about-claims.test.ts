@@ -27,11 +27,12 @@
 // you believe is honest, the question to ask is what a user would conclude, not
 // whether the regex was fair.
 //
-// Scoped to this one page on purpose. `RETIRED_COPY` in `scripts/econ-figures.ts` was
-// the other candidate and is the wrong tool here: it runs repo-wide, and RoadmapPage
-// says "first 990 filed" as a **future milestone on a timeline**, which is exactly
-// correct there. A repo-wide rule would need an `econ:allow` on honest copy, which is
-// how a guard becomes noise people route around.
+// Scoped to two specific pages on purpose (this used to be one). /about and
+// /resources/revenue are the two pages whose subject is the organization's own
+// money; everything else is the wrong tool: RETIRED_COPY in `scripts/econ-figures.ts`
+// runs repo-wide, and RoadmapPage says "first 990 filed" as a **future milestone on a
+// timeline**, which is exactly correct there. A repo-wide rule would need an
+// `econ:allow` on honest copy, which is how a guard becomes noise people route around.
 //
 // Sources: the wiki's *How Anthers Talks About Itself* § Claims (what may be said), Organizational Structure § Phase 1 (what is true).
 
@@ -41,6 +42,18 @@ import { join } from "node:path";
 import { TIME_POOL_RATE } from "@anthers/shared/constants";
 
 const SOURCE = readFileSync(join(import.meta.dir, "AboutPage.tsx"), "utf8");
+
+/**
+ * The revenue resource joins the scan with its own copy (the About half's
+ * positive pins stay About-only below). Same stripping as above, for the same
+ * reason: the page's docblock records the claims rules, and comments must not
+ * count.
+ */
+const REVENUE_SOURCE = readFileSync(join(import.meta.dir, "RevenueResourcePage.tsx"), "utf8");
+const REVENUE_COPY = REVENUE_SOURCE.replace(/\/\*[\s\S]*?\*\//g, " ")
+	.replace(/^\s*\/\/.*$/gm, " ")
+	.replace(/\s+/g, " ")
+	.toLowerCase();
 
 // Comments are blanked before matching, the same way `econ-figures.ts` blanks them for
 // RETIRED_COPY — and here it is load-bearing rather than a courtesy. The header
@@ -224,4 +237,40 @@ describe("/about describes the organization as it is", () => {
 		// who-runs-it fact on its own.)
 		expect(COPY).toContain("anthers team is just parker");
 	});
+});
+
+describe("/resources/revenue makes no premature claim either", () => {
+	it("🚨 scans the drawing page's copy and not its own explanation", () => {
+		// Guard the guard, the same way the About block does: a comment-stripper
+		// that blanked the file would pass every row below while checking nothing.
+		// The pinned phrase is the page's own visible copy, and every mention of
+		// the Time Pool Fund rides the drawing's caption; if the phrase is rewritten
+		// away, repoint this at another copy phrase rather than dropping it.
+		expect(REVENUE_COPY).toContain("time pool fund");
+	});
+
+	for (const { claim, phrases, sayableWhen } of PREMATURE) {
+		it(`makes no claim that ${claim} — sayable when ${sayableWhen}`, () => {
+			for (const phrase of phrases) {
+				expect(`${phrase}: ${REVENUE_COPY.includes(phrase) ? "on the page" : "absent"}`).toBe(
+					`${phrase}: absent`,
+				);
+			}
+		});
+	}
+
+	// The page's whole subject is charitable spending, so the same tension the
+	// About page carries holds here: if the donation paragraph ever grows a
+	// deductibility mention, the correction must ride beside it.
+	it("never says donations become deductible without saying they are not yet", () => {
+		if (REVENUE_COPY.includes("tax-deductible") || REVENUE_COPY.includes("tax deductible")) {
+			expect(REVENUE_COPY).toContain("until the determination letter arrives, they aren't");
+		}
+	});
+
+	// And the one claim this page's subject most invites: exempt status. The page
+	// draws a *budget*, which is stewardship and is fine; a filing status is a
+	// claim about the present that no budget sentence licenses. The PREMATURE
+	// rows above already cover it in every form that has appeared on a page; a
+	// new present-tense form goes in those rows, not here.
 });

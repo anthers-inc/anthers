@@ -96,6 +96,7 @@ const CreatorMonetizationCalculatorPage = lazy(
 	() => import("./pages/CreatorMonetizationCalculatorPage"),
 );
 const CreatorPayComparisonPage = lazy(() => import("./pages/CreatorPayComparisonPage"));
+const RevenueResourcePage = lazy(() => import("./pages/RevenueResourcePage"));
 const CreatorProfilePage = lazy(() => import("./pages/CreatorProfilePage"));
 const DesktopAuthorizePage = lazy(() => import("./pages/DesktopAuthorizePage"));
 const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
@@ -387,6 +388,7 @@ export default function App() {
 						<Route path="/resources" element={<ResourcesPage />} />
 					</Route>
 					<Route path="/resources/pay-comparison" element={<CreatorPayComparisonPage />} />
+					<Route path="/resources/revenue" element={<RevenueResourcePage />} />
 					<Route path="/resources/video-storage" element={<VideoStorageCalculatorPage />} />
 					<Route
 						path="/resources/creator-monetization"
