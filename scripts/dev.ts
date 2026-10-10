@@ -43,3 +43,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, forward)
 const code = await child.exited;
 // A signal addressed the group; the child's own exit is whatever it answered that with.
 process.exit(forwarded ? code || 130 : code);
+
+// A module for the type checker's sake: the top-level await above needs imports or exports
+// to read as one, and an empty export is the quiet way to be a module and nothing more.
+export {};

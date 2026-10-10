@@ -6,7 +6,7 @@
  * with the probe injected; the route half runs the app as the e2e suites do.
  */
 import { describe, expect, it } from "bun:test";
-import { blueskyDoorRefusalFor, DOOR_LANDING } from "./bluesky-door.ts";
+import { blueskyDoorRefusalFor, DOOR_LANDING } from "./bluesky-door";
 
 const PROBE = {
 	notRunning: async (url: string) => url !== DOOR_LANDING,
