@@ -25,8 +25,8 @@
  * disclosure case. The structural sweep catches some of this by SQL; the fetch half reports
  * the rest, including a Work withdrawn or rated Adult whose record is still being advertised.
  *
- * ⚠️ **Reading is through the record's own PDS**, the address `recordUrlFor` builds from the
- * stored URI and the account's `atproto_pds_url` — the record lives in the creator's
+ * ⚠️ **Reading is through the record's own PDS**, the address {@link recordFetchUrlFor} builds
+ * from the stored URI and the account's `atproto_pds_url` — the record lives in the creator's
  * repository, wherever that is, and asking Anthers' AppView would answer a different
  * question. An unreadable record is reported `blocked` with the error rather than guessed
  * about: "cannot read" and "reads and disagrees" are different findings.
@@ -55,7 +55,7 @@ import {
 	type WorkRecord,
 	workToRecord,
 } from "./atproto-records.js";
-import { recordUrlFor, WORK_COLLECTION } from "./atproto-repo.js";
+import { recordFetchUrlFor, WORK_COLLECTION } from "./atproto-repo.js";
 import { syncPostRecord, syncProjectRecord } from "./creator-record-listing.js";
 import { syncWorkListing } from "./work-listing.js";
 
@@ -114,14 +114,14 @@ type Fetched = { ok: true; record: unknown } | { ok: false; error: string };
 
 /**
  * Read one record from the repository it lives in: the record's own PDS, through
- * `com.atproto.repo.getRecord` — the address `recordUrlFor` builds and nothing else.
+ * `com.atproto.repo.getRecord` — the address `recordFetchUrlFor` builds and nothing else.
  */
 async function fetchRecord(
 	atUri: string,
 	pdsUrl: string | null | undefined,
 	fetchImpl: typeof fetch,
 ): Promise<Fetched> {
-	const url = recordUrlFor(atUri, pdsUrl);
+	const url = recordFetchUrlFor(atUri, pdsUrl);
 	if (!url) return { ok: false, error: "no readable record URL (malformed URI or PDS)" };
 	try {
 		const res = await fetchImpl(url);

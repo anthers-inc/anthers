@@ -45,6 +45,7 @@ import {
 	WorkDescription,
 	type WorkDetail,
 	WorkHeader,
+	WorkRecordLink,
 } from "../components/work/WorkLayout";
 import { reportExternalActivity, useAttentionClaim } from "../lib/attention";
 import { useMeteredBudget } from "../lib/public-access";
@@ -299,6 +300,10 @@ export default function WorkPage() {
 					</div>
 				}
 			/>
+
+			{/* The Work's listing on the network, linked for every reader who can see the
+			    Work — the record is public, so the stranger and the creator see one link. */}
+			<WorkRecordLink work={work} />
 
 			{/* A piece of writing's description is its standfirst, under the headline where a user
 			    expects one; every other kind keeps it under the Work, below. */}
