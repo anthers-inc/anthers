@@ -282,6 +282,16 @@ test("a creator can create a Project and lands on its shelf", async ({ page, con
 		// implemented, owner-checked and called from nowhere. The only way a post ever joined a
 		// Project was a select on the New Post form that was hidden on edit and ignored by
 		// `PATCH /posts/:slug`, so membership was set at birth or never.
+		// 🚨 **The absence of the picker's mint is a tested absence.** The Works shelf's
+		// picker minted a Work through a ghost "New Work" button until 2026-10-10, when
+		// pickers became pickers only — a Project is edited by assigning existing Works, and
+		// making one is `/studio/works/new`'s job. A removed button looks like a renamed one
+		// to everything in the repository but this count.
+		await page.getByRole("button", { name: "Add a Work" }).click();
+		await expect(page.getByRole("heading", { name: "Add a Work" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "New Work" })).toHaveCount(0);
+		await page.getByRole("button", { name: "Close" }).first().click();
+
 		await expect(page.getByRole("heading", { name: "Posts" })).toBeVisible();
 		await page.getByRole("button", { name: "Add a post" }).click();
 		await expect(page.getByRole("heading", { name: "Add a post" })).toBeVisible();
