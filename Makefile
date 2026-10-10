@@ -117,8 +117,11 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 # `https://anthers.localhost` / `admin.anthers.localhost` / `api.anthers.localhost`. Nothing
 # here ever claims :3000/:3001/:8000, so two projects' dev sessions cannot collide — the
 # failure this file's kill-loops used to manage is inexpressible in this shape. The escape
-# hatch is `PORTLESS=0 bun run dev`, which serves on this machine's conventional ports for
-# contributors who have not installed the proxy.
+# hatch is `PORTLESS=0 bun run dev` (scripts/dev.ts), which serves on this machine's
+# conventional ports for contributors who have not installed the proxy — and it is also the
+# one shape the Bluesky door's ceremony can be walked by hand in, because the ceremony's
+# redirect is a literal 127.0.0.1:8000 and the proxy world answers it nowhere. Under the
+# escape hatch one dev session runs at a time, on the loopback jar the ceremony shares.
 #
 # A second `make dev` in the same checkout is still refused, by pid file rather than port: the
 # session's database and network are per-run, and sharing them across two runs is the failure

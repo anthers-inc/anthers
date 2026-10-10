@@ -11,7 +11,7 @@
 		"scripts"
 	],
 	"scripts": {
-		"dev": "portless",
+		"dev": "bun run scripts/dev.ts",
 		"dev:api": "bun run --filter api dev:api",
 		"dev:worker": "bun run --filter api dev:worker",
 		"dev:web": "bun run --filter web dev",

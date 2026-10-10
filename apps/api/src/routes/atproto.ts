@@ -159,7 +159,10 @@ interface AppState {
  *
  * Production sets `FRONTEND_URL` and it wins, as it must — there the API and the SPA share one
  * origin and none of this applies. A browser test session serves its preview on a port of its
- * own and names it in `PREVIEW_PORT`; `make dev` serves the SPA on 3000.
+ * own and names it in `PREVIEW_PORT`. And behind the name proxy this checkout's API sits under
+ * a named origin only, so the door's landing answer is `lib/bluesky-door.ts`'s: the auth route
+ * refuses the ceremony up front, because nothing serves its loopback redirect there, and the
+ * door is walked in the without-proxy shape, where this function's derivation is exact.
  */
 function getFrontendUrl(c: { req: { url: string } }): string {
 	const configured = process.env.FRONTEND_URL;
