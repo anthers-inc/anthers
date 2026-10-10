@@ -83,6 +83,33 @@ export interface PlanLedger {
 	timePoolToCreators: number;
 	/** The admin ceiling the budget honors (`ADMIN_CEILING`), for drawing. */
 	adminCeiling: number;
+	/** The granular spending view: the overhead lines open, and free storage's two parts. */
+	spending: PlanSpending;
+}
+
+/**
+ * Where the plan's money actually goes, line by line — the granular spending
+ * view the plan tool's diagram draws. Everything here is read from the model
+ * (`modelAt`'s open overhead lines and the storage subsidy's two parts); the
+ * only computed member is `headroom`, the budget's unspent remainder.
+ *
+ * Conservation is exact and is what the diagram's three columns rely on:
+ * infrastructure + the three staffing lines + reserves = `adminActual`
+ * (overhead), and with `headroom` the five sum to `adminBudget`; the two
+ * storage parts sum to `freeStorage`; free pools are the Fund itself.
+ */
+export interface PlanSpending {
+	infrastructure: number;
+	staff: number;
+	tooling: number;
+	services: number;
+	reserves: number;
+	/** `adminBudget − adminActual` — negative when ops exceeds the budget. */
+	headroom: number;
+	/** Free creators' catalogs, carried on the charitable budget. */
+	freeCatalog: number;
+	/** Paying rungs' bundled storage allowances, paid to the vendor at cost. */
+	payingAllowances: number;
 }
 
 /** Compute one phase of the plan. Pure; the tool and every generator call this. */
@@ -128,5 +155,15 @@ export function planLedger(input: PlanPhaseInput): PlanLedger {
 		solvent: programs >= -1e-9,
 		timePoolToCreators: m.timePoolToCreators,
 		adminCeiling: adminBudgetShare,
+		spending: {
+			infrastructure: m.infrastructure,
+			staff: input.staffing?.staff ?? 0,
+			tooling: input.staffing?.tooling ?? 0,
+			services: input.staffing?.services ?? 0,
+			reserves: m.reserves,
+			headroom: adminBudget - m.overhead,
+			freeCatalog: m.freeCatalogSubsidy,
+			payingAllowances: m.payingAllowanceSubsidy,
+		},
 	};
 }

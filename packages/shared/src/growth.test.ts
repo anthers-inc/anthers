@@ -192,6 +192,26 @@ describe("the ledger balances", () => {
 		}
 	});
 
+	/**
+	 * The granular lines the plan tool's spending diagram draws — the overhead's open
+	 * parts and free storage's two subsidy parts — have to reassemble the aggregates
+	 * exactly, or the three-column view draws money into existence.
+	 */
+	test("the open overhead and storage lines reassemble the aggregates", () => {
+		const staffings = [NO_STAFFING, full, { staff: 6_700, tooling: 250, services: 200 }] as const;
+		for (const accounts of [100, 15_000, 80_000, 2_000_000]) {
+			for (const staffing of staffings) {
+				const m = modelAt({ accounts, payingShare: SHARE, staffing });
+				const staffed = staffing.staff + staffing.tooling + staffing.services;
+				expect(m.infrastructure + staffed + m.reserves).toBeCloseTo(m.overhead, 6);
+				expect(m.freeCatalogSubsidy + m.payingAllowanceSubsidy).toBeCloseTo(
+					m.freeStorageSubsidy,
+					6,
+				);
+			}
+		}
+	});
+
 	test("every account is either paying or free, and none is both", () => {
 		for (const accounts of [100, 3_333, 80_000]) {
 			const m = modelAt({ accounts, payingShare: SHARE, staffing: full });
