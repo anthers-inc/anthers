@@ -132,57 +132,58 @@ describe("whether a process reuses the session it is already in", () => {
 });
 
 describe("which dev session id a checkout takes", () => {
+	const MAIN_DIR = "/home/dev/Anthers/.git";
+	const WORKTREE_DIR = `${MAIN_DIR}/worktrees/signup-page`;
+
 	it("keeps the plain dev id, and the fixed ports, for the main checkout", () => {
-		const gitDir = "/home/dev/Anthers/.git";
-		expect(devSessionFrom(gitDir, gitDir, "main")).toEqual({
+		expect(devSessionFrom(MAIN_DIR, MAIN_DIR, "main")).toEqual({
 			id: "dev",
 			fixed: true,
 			prefix: "",
+			inWorktree: false,
+			branch: "main",
 		});
 	});
 
-	it("reads not-a-git-checkout the same way", () => {
+	it("reads not a checkout at all as the main shape, with no branch to name", () => {
 		expect(devSessionFrom(undefined, undefined, undefined)).toEqual({
 			id: "dev",
 			fixed: true,
 			prefix: "",
+			inWorktree: false,
 		});
 	});
 
 	it("gives a worktree's dev session its own id, keyed on the branch like portless routes are", () => {
-		const gitDir = "/home/dev/Anthers/.git/worktrees/signup-page";
-		expect(devSessionFrom(gitDir, "/home/dev/Anthers/.git", "signup-page")).toEqual({
+		expect(devSessionFrom(WORKTREE_DIR, MAIN_DIR, "signup-page")).toEqual({
 			id: "dev-signup-page",
 			fixed: false,
 			prefix: "signup-page",
+			inWorktree: true,
+			branch: "signup-page",
 		});
 	});
 
 	it("drops everything before a branch's last path segment, as portless does", () => {
-		const gitDir = "/home/dev/Anthers/.git/worktrees/x";
-		expect(devSessionFrom(gitDir, "/home/dev/Anthers/.git", "feature/signup-page")).toEqual({
+		expect(devSessionFrom(WORKTREE_DIR, MAIN_DIR, "feature/signup-page")).toEqual({
 			id: "dev-signup-page",
 			fixed: false,
 			prefix: "signup-page",
+			inWorktree: true,
+			branch: "feature/signup-page",
 		});
 	});
-	it("keeps the plain dev id for a worktree on a default branch or detached HEAD", () => {
-		const gitDir = "/home/dev/Anthers/.git/worktrees/promote";
-		expect(devSessionFrom(gitDir, "/home/dev/Anthers/.git", "main")).toEqual({
-			id: "dev",
-			fixed: true,
-			prefix: "",
-		});
-		expect(devSessionFrom(gitDir, "/home/dev/Anthers/.git", "")).toEqual({
-			id: "dev",
-			fixed: true,
-			prefix: "",
-		});
-		expect(devSessionFrom(gitDir, "/home/dev/Anthers/.git", undefined)).toEqual({
-			id: "dev",
-			fixed: true,
-			prefix: "",
-		});
+
+	it("marks a worktree on a default branch or detached HEAD as its refusal shape", () => {
+		const promoteDir = `${MAIN_DIR}/worktrees/promote`;
+		for (const branch of ["main", "master", "", undefined]) {
+			expect(devSessionFrom(promoteDir, MAIN_DIR, branch)).toMatchObject({
+				id: "dev",
+				fixed: true,
+				prefix: "",
+				inWorktree: true,
+			});
+		}
 	});
 
 	it("makes a branch name safe for a container id without losing the name", () => {
@@ -202,7 +203,12 @@ describe("which dev session id a checkout takes", () => {
 				stderr: "ignore",
 			});
 			const shape = await devSessionId(path);
-			expect(shape).toEqual({ id: `dev-${branch}`, fixed: false, prefix: branch });
+			expect(shape).toMatchObject({
+				id: `dev-${branch}`,
+				fixed: false,
+				prefix: branch,
+				inWorktree: true,
+			});
 		} finally {
 			Bun.spawnSync(["git", "worktree", "remove", "--force", path], {
 				cwd: import.meta.dir,

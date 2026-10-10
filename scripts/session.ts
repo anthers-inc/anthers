@@ -220,6 +220,10 @@ export interface DevSessionShape {
 	 * path segment. Empty in the main checkout, where nothing is prefixed.
 	 */
 	prefix: string;
+	/** True when the checkout is a linked git worktree, whichever branch it carries. */
+	inWorktree: boolean;
+	/** The checkout's branch as git reports it, or undefined for a detached HEAD. */
+	branch?: string;
 }
 
 /**
@@ -282,14 +286,18 @@ export function devSessionFrom(
 	// Not a git checkout at all: there is no worktree fact to read, so the plain dev session —
 	// whose refusal still holds.
 	if (gitDir === undefined || commonDir === undefined) {
-		return { id: "dev", fixed: true, prefix: "" };
+		return { id: "dev", fixed: true, prefix: "", inWorktree: false };
 	}
 	const inWorktree = gitDir !== commonDir;
 	const prefixed =
 		inWorktree && branch !== undefined && branch !== "" && !DEFAULT_BRANCHES.has(branch);
-	if (!prefixed) return { id: "dev", fixed: true, prefix: "" };
+	if (!prefixed) {
+		// A worktree of this shape is one portless leaves unnamed as well; `start` refuses
+		// its dev session rather than letting it take a second turn at `dev`.
+		return { id: "dev", fixed: true, prefix: "", inWorktree, branch };
+	}
 	const prefix = sessionSuffixForBranch(branch);
-	return { id: `dev-${prefix}`, fixed: false, prefix };
+	return { id: `dev-${prefix}`, fixed: false, prefix, inWorktree, branch };
 }
 
 export interface Leftover {
@@ -640,6 +648,17 @@ export async function startSession(
 	// A dev session keys on the checkout (main checkout keeps `dev`; a worktree gets
 	// `dev-<branch>` and free ports); every other kind takes a random id.
 	const dev = kind === "dev" ? await devSessionId(REPO_ROOT) : undefined;
+	// A worktree that carries no prefix is one portless would also leave unnamed — a worktree
+	// on the default branch, or a detached one — and its dev session would answer where the
+	// main checkout's does. Refuse that rather than letting it take a second turn at `dev`.
+	if (dev?.inWorktree && dev.fixed) {
+		throw new Error(
+			`A worktree on ${dev.branch ?? "a detached HEAD"} cannot take a dev session of its own: ` +
+				"it would answer where the main checkout's does, and the main checkout's dev session " +
+				"is the only one that may. Run `make dev` there, or take a task branch for this " +
+				"worktree (`make worktree NAME=<task>`).",
+		);
+	}
 	const id = dev ? dev.id : `${kind}-${randomBytes(4).toString("hex")}`;
 	const fixed = dev ? dev.fixed : false;
 	await refuseIfRunning(id);
