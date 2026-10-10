@@ -34,13 +34,8 @@ describe("which portless routes a checkout may down", () => {
 	});
 
 	it("owns only its own branch's prefixed forms in a worktree", () => {
-		const owned = ownedHostnames(ROUTES, NAMES, "signup-page", "localhost").map(
-			(r) => r.hostname,
-		);
-		expect(owned).toEqual([
-			"signup-page.anthers.localhost",
-			"signup-page.api.anthers.localhost",
-		]);
+		const owned = ownedHostnames(ROUTES, NAMES, "signup-page", "localhost").map((r) => r.hostname);
+		expect(owned).toEqual(["signup-page.anthers.localhost", "signup-page.api.anthers.localhost"]);
 	});
 
 	it("never owns another project's routes or another checkout's branch prefix", () => {

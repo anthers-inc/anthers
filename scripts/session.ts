@@ -26,8 +26,8 @@
  * is up, and the network keeps the AT Protocol tooling's 2582 and 2583. A worktree's dev session
  * takes its own id (`dev-<branch>`) and free ports, as test and browser sessions always have, so
  * a worktree's `make dev` runs beside the main checkout's and the two share nothing — no session
- * directory, no container, no port. What they share instead is nothing at all; the refusal keeps
- * meaning "one checkout, one dev session", and the fixed ports mean exactly "this checkout".
+ * directory, no container, no port. The refusal keeps meaning "one checkout, one dev session":
+ * the plain id and the fixed ports say exactly "this checkout".
  *
  * Stripe's test-mode objects are the one thing a session creates that it cannot remove; they
  * accumulate in Stripe's own account.
@@ -239,7 +239,9 @@ export function sessionSuffixForBranch(branch: string | undefined): string {
 	if (name.length === 0) {
 		throw new Error(
 			`branch ${JSON.stringify(branch)} carries no usable name for a session id — ` +
-				`name the worktree after the task, or run ` + "`make dev`" + ` in the main checkout`,
+				`name the worktree after the task, or run ` +
+				"`make dev`" +
+				` in the main checkout`,
 		);
 	}
 	return name;

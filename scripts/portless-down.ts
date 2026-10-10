@@ -45,9 +45,7 @@ export function ownedHostnames(
 ): Route[] {
 	return routes.filter((route) => {
 		const hostname = route.hostname ?? "";
-		const bare = hostname.endsWith(`.${tld}`)
-			? hostname.slice(0, -(tld.length + 1))
-			: undefined;
+		const bare = hostname.endsWith(`.${tld}`) ? hostname.slice(0, -(tld.length + 1)) : undefined;
 		if (bare === undefined) return false;
 		// The apex forms belong to whichever checkout holds the plain name — the main checkout's
 		// shape (prefix ""), so a worktree owning them would be owning a registration it could
