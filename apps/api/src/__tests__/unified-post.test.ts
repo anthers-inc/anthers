@@ -397,8 +397,7 @@ describe("Catalog vertical slice", () => {
 		expect(feed.status).toBe(200);
 		const { entries } = await feed.json();
 		const shirtEntry = entries.find(
-			(e: { kind: string; title: string }) =>
-				e.kind === "release" && e.title === `Shirt ${id}`,
+			(e: { kind: string; title: string }) => e.kind === "release" && e.title === `Shirt ${id}`,
 		);
 		expect(shirtEntry).toBeTruthy();
 		expect(shirtEntry.access).toMatchObject({ reason: "payment_required", requiresPurchase: true });
