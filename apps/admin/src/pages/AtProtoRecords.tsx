@@ -5,7 +5,9 @@
  * The nightly reconcile sweep catches a record that should not exist and a publishable row
  * with none; this page catches the thing SQL cannot see — a record that stands but no longer
  * says what its row says — by fetching each record and diffing it against what the row
- * derives now. The re-sync button runs the row's own sync in place; the correction form
+ * derives now. A drifted row renders that comparison per field, the row-derived record
+ * beside the network record with the disagreements highlighted, rather than as two raw JSON
+ * sides. The re-sync button runs the row's own sync in place; the correction form
  * edits the listing fields through the same service the creator's edit uses, so the record
  * follows the row.
  */
@@ -72,6 +74,99 @@ function Fetched({ row }: { row: DriftRow }) {
 	);
 }
 
+/**
+ * The two sides of a drifted comparison as plain objects, when both exist and are shaped so.
+ * A drift finding always carries both sides, but the check stays defensive: any side that is
+ * not an object falls back to the raw JSON view.
+ */
+function driftSides(
+	row: DriftRow,
+): { derived: Record<string, unknown>; record: Record<string, unknown> } | null {
+	if (row.status !== "drift" || !row.derived || !row.fetched || !("record" in row.fetched)) {
+		return null;
+	}
+	const record = row.fetched.record;
+	if (typeof record !== "object" || record === null) return null;
+	return { derived: row.derived, record: record as Record<string, unknown> };
+}
+
+/** One row of the per-field comparison: the union of the two records' top-level fields. */
+interface FieldRow {
+	field: string;
+	derived: unknown;
+	record: unknown;
+	differs: boolean;
+}
+
+/**
+ * The comparison the diff table renders, differing fields first. Equality is serialized-JSON
+ * equality — the same whole-record comparison the drift service makes when it calls a row
+ * drift — so a highlighted row can never sit under a badge that did not fire. A field only
+ * one side carries reads as absent from the other.
+ */
+function fieldRows(derived: Record<string, unknown>, record: Record<string, unknown>): FieldRow[] {
+	const rows = [...new Set([...Object.keys(derived), ...Object.keys(record)])].map((field) => ({
+		field,
+		derived: field in derived ? derived[field] : undefined,
+		record: field in record ? record[field] : undefined,
+		differs:
+			JSON.stringify(field in derived ? derived[field] : undefined) !==
+			JSON.stringify(field in record ? record[field] : undefined),
+	}));
+	rows.sort((a, b) =>
+		a.differs === b.differs ? a.field.localeCompare(b.field) : a.differs ? -1 : 1,
+	);
+	return rows;
+}
+
+/** One diff cell: a string as itself, anything else as formatted JSON, absent as a dash. */
+function DiffCell({ value }: { value: unknown }) {
+	if (value === undefined) {
+		return <span className="text-base-content/40">—</span>;
+	}
+	return (
+		<div className="max-h-24 max-w-md overflow-auto whitespace-pre-wrap break-words font-mono text-xs">
+			{typeof value === "string" ? value : JSON.stringify(value, null, 2)}
+		</div>
+	);
+}
+
+/** The per-field diff for one drifted row: the two sides side by side, disagreements highlighted. */
+function RecordDiff({
+	derived,
+	record,
+}: {
+	derived: Record<string, unknown>;
+	record: Record<string, unknown>;
+}) {
+	return (
+		<div className="mt-2 max-h-96 overflow-auto rounded bg-base-200 p-2">
+			<table className="table table-sm">
+				<thead>
+					<tr>
+						<th className="sticky top-0 bg-base-200">Field</th>
+						<th className="sticky top-0 bg-base-200">What the row derives now</th>
+						<th className="sticky top-0 bg-base-200">What the record says</th>
+					</tr>
+				</thead>
+				<tbody>
+					{fieldRows(derived, record).map(({ field, derived, record, differs }) => (
+						<tr key={field} className={differs ? "bg-error/10" : "text-base-content/45"}>
+							<td className="font-mono text-xs font-semibold">{field}</td>
+							<td>
+								<DiffCell value={derived} />
+							</td>
+							<td>
+								<DiffCell value={record} />
+							</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</div>
+	);
+}
+
 /** One row: its finding, both sides of the comparison, and the actions. */
 function DriftRowView({ row, onChanged }: { row: DriftRow; onChanged: () => void }) {
 	const [busy, setBusy] = useState(false);
@@ -121,6 +216,7 @@ function DriftRowView({ row, onChanged }: { row: DriftRow; onChanged: () => void
 	};
 
 	const badge = STATUS_BADGES[row.status];
+	const sides = driftSides(row);
 
 	return (
 		<div className="rounded-box border border-base-300 bg-base-100 p-4">
@@ -144,22 +240,26 @@ function DriftRowView({ row, onChanged }: { row: DriftRow; onChanged: () => void
 			)}
 			{row.uri && <p className="mt-1 truncate font-mono text-xs text-base-content/40">{row.uri}</p>}
 
-			<div className="mt-2 grid gap-2 md:grid-cols-2">
-				<div>
-					<p className="text-xs font-semibold text-base-content/60">what the row derives now</p>
-					{row.derived ? (
-						<pre className="max-h-40 overflow-auto rounded bg-base-200 p-2 font-mono text-xs">
-							{JSON.stringify(row.derived, null, 2)}
-						</pre>
-					) : (
-						<span className="text-base-content/40 text-xs">nothing (unpublishable)</span>
-					)}
+			{sides ? (
+				<RecordDiff derived={sides.derived} record={sides.record} />
+			) : (
+				<div className="mt-2 grid gap-2 md:grid-cols-2">
+					<div>
+						<p className="text-xs font-semibold text-base-content/60">what the row derives now</p>
+						{row.derived ? (
+							<pre className="max-h-40 overflow-auto rounded bg-base-200 p-2 font-mono text-xs">
+								{JSON.stringify(row.derived, null, 2)}
+							</pre>
+						) : (
+							<span className="text-base-content/40 text-xs">nothing (unpublishable)</span>
+						)}
+					</div>
+					<div>
+						<p className="text-xs font-semibold text-base-content/60">what the record says</p>
+						<Fetched row={row} />
+					</div>
 				</div>
-				<div>
-					<p className="text-xs font-semibold text-base-content/60">what the record says</p>
-					<Fetched row={row} />
-				</div>
-			</div>
+			)}
 
 			<div className="mt-2 flex items-center gap-2">
 				<button type="button" className="btn btn-sm" onClick={resync} disabled={busy}>

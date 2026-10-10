@@ -102,10 +102,22 @@ export function apiBaseUrl(): string {
 		// the front — matching what portless actually serves and what `origins.ts` derives
 		// from the API's own PORTLESS_URL. A naked prefix produced `api.<branch>.anthers.localhost`,
 		// which nothing serves, and every SPA call from a worktree-browsed page died at preflight.
+		//
+		// An app served on its own subdomain carries its own label there (`admin.anthers`,
+		// worktree form `<branch>.admin.anthers`), and its API name substitutes that app
+		// label with `api` rather than inserting beside it — `<branch>.admin.anthers`
+		// derives `<branch>.api.anthers`, because `api.<branch>.admin.anthers` is a
+		// four-label host the proxy serves nothing on (found 2026-10-10: every dev-browsed
+		// page of the admin app died at preflight, at the main checkout too, where the
+		// same derivation made `admin.api.anthers.localhost`; the site is unaffected
+		// because it has no app label to substitute).
 		const name = h.slice(0, -".localhost".length);
 		const labels = name.split(".");
-		const apiName =
-			labels.length > 1 ? `${labels[0]}.api.${labels.slice(1).join(".")}` : `api.${labels[0]}`;
+		const project = labels.pop();
+		if (!project) return "";
+		const appLabel = labels.at(-1);
+		if (appLabel === "admin") labels.pop();
+		const apiName = [...labels, "api", project].join(".");
 		return `https://${apiName}.localhost`;
 	}
 	return "";
