@@ -943,10 +943,13 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 	 * (the Fund's pot IS the free accounts' pools; other programs' residual
 	 * sits unallocated until spent), because d3-sankey assigns columns by
 	 * longest path: a childless line falls into the last column instead of
-	 * holding its row. Every column sorts largest to smallest from the top
-	 * (Parker, 2026-10-10), so a capsule's row is its size's rank; parents'
-	 * children can then sit apart, and a ribbon may cross a neighbor's to
-	 * reach them — the size reading wins over the earlier no-crossing order.
+	 * holding its row. Each column sorts largest to smallest WITHIN each
+	 * stream, and whole groups travel with their parent (Parker, 2026-10-10):
+	 * Programs sorts above Admin for being larger, everything within Programs
+	 * — including the program lines' own spending, which justify's merged last
+	 * column stacks in ARRAY order — sorts above everything within Admin, and
+	 * each group's members sort among themselves. A stream's ribbons are then
+	 * never parted by its neighbor's.
 	 */
 	const bySize = (a: DiagramNode, b: DiagramNode): number => b.value - a.value;
 	const adminChildren: DiagramNode[] = [
@@ -1070,10 +1073,10 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 		value: Math.max(0, L.programs),
 	};
 	/**
-	 * Recharts' justify pulls every childless node into the LAST column and
-	 * stacks that column in ARRAY order — admin's spending lines and the
-	 * program lines' children both land there — so the merged column is sorted
-	 * once, across both, rather than per depth group (Parker, 2026-10-10).
+	 * The array order IS the drawing order in each justified column: parents
+	 * first (largest on top), then Programs' lines and Programs' children —
+	 * then Admin's — each family size-sorted among itself, so groups never
+	 * interleave (Parker, 2026-10-10).
 	 */
 	const nodes: DiagramNode[] = [
 		{
@@ -1085,7 +1088,8 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 		},
 		...[adminNode, programsNode].sort(bySize),
 		...[...programLines].sort(bySize),
-		...[...adminChildren, ...programChildren].sort(bySize),
+		...[...programChildren].sort(bySize),
+		...[...adminChildren].sort(bySize),
 	];
 	const byName = new Map(nodes.map((n, i) => [n.name, i]));
 	const links: DiagramLink[] = [
