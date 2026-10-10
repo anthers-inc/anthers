@@ -96,9 +96,13 @@ export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 					return;
 				}
 				setColors(body?.colors ?? []);
-				// A single-color item skips the color picker entirely — the row is
-				// preselected, and only the size asks.
-				if (body?.colors?.length === 1) setColor(body.colors[0].color);
+				// The first color is picked from the start (Parker, 2026-10-10): the sizes
+				// row is visible on load and the size buttons carry prices, which need a
+				// color's rows to price from. An existing pick survives a re-read.
+				if (body?.colors?.length) {
+					const first = body.colors[0];
+					setColor((c) => (body.colors?.some((g) => g.color === c) ? c : first.color));
+				}
 			})
 			.catch(() => {
 				if (!canceled) setVariantsError("We couldn't load the options right now.");
@@ -116,6 +120,11 @@ export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 		color == null
 			? (colors?.find((g) => g.mockupUrl)?.mockupUrl ?? null)
 			: (pickedGroup?.mockupUrl ?? null);
+
+	// Every size the Work carries, across all its colors (Parker, 2026-10-10 — the
+	// sizes row shows from the start). One with no row in the picked color greys out
+	// rather than vanishing: the shape of the range stays visible.
+	const allSizes = [...new Set((colors ?? []).flatMap((g) => g.sizes.map((v) => v.size)))];
 
 	const createSession = async () => {
 		if (!size || !color) return;
@@ -186,23 +195,30 @@ export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 					<img
 						src={mockupUrl}
 						alt={color ? `${title} in ${color}` : title}
-						className="w-full rounded-xl border border-base-300 bg-base-100"
+						// Capped, not full-bleed (Parker, 2026-10-10): the picture is the
+						// card's opening line, not its whole body.
+						className="w-full max-w-sm rounded-xl border border-base-300 bg-base-100"
 						loading="lazy"
 					/>
 				)}
 				<div>
 					<h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-2">
-						Pricing
+						Variants
 					</h2>
 					{/* The pickers ARE the price display on a merch Work — each variant's
 					    price is Printful's own retail price for it (stamped at setup),
 					    discounted when this buyer holds a Badge, so the picker and the
-					    price are one control. Color first, then size; a one-color item
-					    renders only the size row. */}
+					    price are one control. Color first, then size. */}
 					{colors ? (
 						colors.length > 0 ? (
-							<div className="space-y-2 w-full">
-								{colors.length > 1 && (
+							/* Rows are labeled and spaced (Parker, 2026-10-10): "Colors:" and
+							    "Sizes:" open each row at a fixed width so the left-most
+							    buttons align, and every size the Work carries shows from the
+							    start — one the picked color doesn't make greys out rather
+							    than vanishing. */
+							<div className="space-y-3 w-full">
+								<div className="flex items-center gap-3">
+									<span className="w-16 shrink-0 text-sm text-base-content/70">Colors:</span>
 									<fieldset className="flex flex-wrap gap-2 border-0 p-0 m-0" aria-label="Color">
 										<legend className="sr-only">Color</legend>
 										{colors.map((g) => (
@@ -212,8 +228,13 @@ export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 												aria-pressed={color === g.color}
 												className={`btn btn-sm ${color === g.color ? "btn-primary" : "btn-outline"}`}
 												onClick={() => {
+													// A picked size survives a color change when the new
+													// color makes it — the shirt the user means doesn't
+													// reset because they adjusted the shade first.
 													setColor(g.color);
-													setSize(null);
+													setSize((s) =>
+														s != null && g.sizes.some((v) => v.size === s) ? s : null,
+													);
 													setSession(null);
 												}}
 											>
@@ -221,29 +242,42 @@ export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 											</button>
 										))}
 									</fieldset>
-								)}
-								<fieldset
-									className="flex flex-wrap gap-2 border-0 p-0 m-0"
-									aria-label="Size"
-									disabled={!color}
-								>
-									<legend className="sr-only">Size</legend>
-									{(pickedGroup?.sizes ?? []).map((v) => (
-										<button
-											key={v.size}
-											type="button"
-											aria-pressed={size === v.size}
-											className={`btn btn-sm justify-between ${size === v.size ? "btn-primary" : "btn-outline"}`}
-											onClick={() => {
-												setSize(v.size);
-												setSession(null);
-											}}
-										>
-											<span>{v.size}</span>
-											<span className="tabular-nums ml-2">${v.amount}</span>
-										</button>
-									))}
-								</fieldset>
+								</div>
+								<div className="flex items-start gap-3">
+									<span className="w-16 shrink-0 pt-1.5 text-sm text-base-content/70">Sizes:</span>
+									<fieldset className="flex flex-wrap gap-2 border-0 p-0 m-0" aria-label="Size">
+										<legend className="sr-only">Size</legend>
+										{allSizes.map((s) => {
+											const variantInColor = pickedGroup?.sizes.find((v) => v.size === s);
+											return variantInColor ? (
+												<button
+													key={s}
+													type="button"
+													aria-pressed={size === variantInColor.size}
+													className={`btn btn-sm justify-between ${size === variantInColor.size ? "btn-primary" : "btn-outline"}`}
+													onClick={() => {
+														setSize(variantInColor.size);
+														setSession(null);
+													}}
+												>
+													<span>{variantInColor.size}</span>
+													<span className="tabular-nums ml-2">${variantInColor.amount}</span>
+												</button>
+											) : (
+												<button
+													key={s}
+													type="button"
+													disabled
+													aria-label={`${s} — not offered in this color`}
+													title={`Not offered in ${color ?? "this color"}`}
+													className="btn btn-sm btn-outline opacity-40 cursor-not-allowed"
+												>
+													<span>{s}</span>
+												</button>
+											);
+										})}
+									</fieldset>
+								</div>
 							</div>
 						) : (
 							<p className="text-sm text-base-content/60">This item isn't in the store yet.</p>
@@ -257,11 +291,14 @@ export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 					)}
 				</div>
 
-				{size && color && (
-					<dl className="w-full rounded-lg bg-base-100 p-3 text-sm space-y-1.5">
-						<MerchPriceRows variant={pickedGroup?.sizes.find((v) => v.size === size)} />
-					</dl>
-				)}
+				{/* The list/shipping/tax box is GONE for now (Parker, 2026-10-10, stopgap 2):
+				    with a pick made it only restated the list price already shown and said
+				    "added/calculated at checkout" for the other two lines. Its better form —
+				    always visible, quoted live per the buyer's default delivery address —
+				    folds into the saved-payment-and-address decision (the Active task
+				    "Decide how We Manage Saved Payment and Address Data"), which is where a
+				    default-zip read comes from. Until then the size buttons carry the price
+				    and checkout reveals the rest. */}
 
 				{sessionError && (
 					<div className="alert alert-error text-sm w-full">
@@ -298,46 +335,6 @@ export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 				</div>
 			</div>
 		</div>
-	);
-}
-
-/**
- * The price rows for one chosen size. Every figure is the server's own quote — the
- * client renders the discount's arithmetic as dollars beside the undiscounted list,
- * both of which the server computed with decimal arithmetic; no money is computed here.
- */
-function MerchPriceRows({ variant }: { variant: MerchVariant | undefined }) {
-	if (!variant) return null;
-	return (
-		<>
-			<div className="flex justify-between text-base-content/60">
-				<dt>List price</dt>
-				<dd className="tabular-nums">
-					{variant.discount ? <s>${variant.listPrice}</s> : `$${variant.listPrice}`}
-				</dd>
-			</div>
-			{variant.discount && (
-				<div className="flex justify-between text-success">
-					<dt>
-						Badge discount <span className="text-xs">({variant.discount}% off)</span>
-					</dt>
-					{/* Both figures are the server's quote; this renders their difference. */}
-					<dd className="tabular-nums">
-						−${(Number(variant.listPrice) - Number(variant.amount)).toFixed(2)}
-					</dd>
-				</div>
-			)}
-			<div className="flex justify-between text-base-content/60">
-				<dt>
-					Shipping <span className="text-xs">(Printful's charge)</span>
-				</dt>
-				<dd className="text-xs">added at checkout</dd>
-			</div>
-			<div className="flex justify-between text-base-content/60">
-				<dt>Sales tax</dt>
-				<dd className="text-xs">calculated at checkout</dd>
-			</div>
-		</>
 	);
 }
 

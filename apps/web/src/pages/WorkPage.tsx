@@ -224,6 +224,41 @@ export default function WorkPage() {
 	const canAccess = access ? access.canAccess : isOwner;
 	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
 
+	// Where this Work has been announced — the other half of an inert reference. Hoisted
+	// so the goods page's two-up layout and the linear one both compose it.
+	const postedAbout =
+		work.postedIn && work.postedIn.length > 0 ? (
+			<section className="border-t border-base-300 pt-6">
+				<h2 className="flex items-center gap-2 text-lg font-semibold mb-3">
+					<MegaphoneIcon className="w-5 h-5" />
+					Posted about
+				</h2>
+				<ul className="space-y-2">
+					{work.postedIn
+						.filter((p) => p.isPublished)
+						.map((p) => (
+							<li key={p.slug}>
+								<Link
+									to={postUrl({ slug: p.slug, publicId: 0 })}
+									className="link link-hover text-sm"
+								>
+									{p.title || p.slug}
+								</Link>
+								{p.postedAt && (
+									<span className="text-xs text-base-content/40 ml-2">
+										{new Date(p.postedAt).toLocaleDateString("en-US", {
+											month: "short",
+											day: "numeric",
+											year: "numeric",
+										})}
+									</span>
+								)}
+							</li>
+						))}
+				</ul>
+			</section>
+		) : null;
+
 	return (
 		<WorkColumn type={work.type}>
 			{/* Creator preview — only ever offered to the person who made it, and only ever
@@ -253,8 +288,15 @@ export default function WorkPage() {
 				work={work}
 				titleAside={
 					// Save sits beside the title rather than under the player, because it applies
-					// to a gated Work too — it keeps the thing, it does not open it.
-					<SaveButton workId={work.id} className="shrink-0" />
+					// to a gated Work too — it keeps the thing, it does not open it. Share is
+					// beside it (Parker, 2026-10-10 — the top is where a share action lives);
+					// the two are the header's quiet corner, not a toolbar.
+					<div className="flex shrink-0 items-center gap-1">
+						{isAuthenticated && !shareToken && (
+							<ShareLinkButton workId={work.id} slug={work.slug ?? ""} />
+						)}
+						<SaveButton workId={work.id} className="shrink-0" />
+					</div>
 				}
 			/>
 
@@ -263,177 +305,177 @@ export default function WorkPage() {
 			{isWriting(work.type) && <WorkDescription work={work} />}
 
 			{/* ── The deliverable, or the gate in front of it ── */}
-			<section ref={deliverableRef}>
-				{work.type === "physical" ? (
-					/* 🚨 A goods Work's deliverable is the goods themselves (Parker,
-					    2026-10-09): the store panel stands exactly where a player would,
-					    for owner, revisiting buyer, and signed-out visitor alike — the
-					    resolver's goods rule carries the verdicts this reads
-					    (`requiresPurchase` for every qualifying viewer, the gate
-					    verdicts for a hard-gated one, no `isFree` posture at all). The
-					    gate card renders only when the page itself is gate-locked or
-					    badge-gated, in which case the store is nobody's to read. */
-					access && !access.canAccess && !access.requiresPurchase ? (
-						<InlineUnlock post={work} access={access} />
-					) : (
-						<ProjectPricing
-							workId={work.id}
-							slug={work.slug ?? ""}
-							access={access ?? undefined}
-							title={work.title ?? "Untitled"}
-							creatorHandle={work.creator?.handle ?? ""}
-							workType="physical"
-						/>
-					)
-				) : !canAccess ? (
-					<div className="space-y-4">
-						{/* ⚠️ A signed-out visitor is refused the bytes of free work too, and that
+			{/* A goods Work's page is two-up (Parker, 2026-10-10): the store on the left, the
+			    record — credits, stickers, reviews, announcements — in a right-hand column,
+			    stacking under on a phone. The record has nothing to do with the goods, and
+			    wedged under a panel it would read like fine print. Every other kind keeps the
+			    single-column page; both branches compose the same pieces. */}
+			{work.type === "physical" ? (
+				<div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+					<div className="min-w-0 space-y-6">
+						<section ref={deliverableRef}>
+							{/* 🚨 A goods Work's deliverable is the goods themselves (Parker,
+							    2026-10-09): the store panel stands exactly where a player would,
+							    for owner, revisiting buyer, and signed-out visitor alike — the
+							    resolver's goods rule carries the verdicts this reads
+							    (`requiresPurchase` for every qualifying viewer, the gate
+							    verdicts for a hard-gated one, no `isFree` posture at all). The
+							    gate card renders only when the page itself is gate-locked or
+							    badge-gated, in which case the store is nobody's to read. */}
+							{access && !access.canAccess && !access.requiresPurchase ? (
+								<InlineUnlock post={work} access={access} />
+							) : (
+								<ProjectPricing
+									workId={work.id}
+									slug={work.slug ?? ""}
+									access={access ?? undefined}
+									title={work.title ?? "Untitled"}
+									creatorHandle={work.creator?.handle ?? ""}
+									workType="physical"
+								/>
+							)}
+						</section>
+
+						{/* Who sent them, and the way to an account of their own. Rendered under the
+						    deliverable rather than above it: they came here for the thing, and an
+						    invitation that interrupted that would be the funnel this is not. */}
+						{shareToken && !user && <SharedWorkBanner sharedBy={work.sharedBy ?? null} />}
+
+						{!isWriting(work.type) && <WorkDescription work={work} />}
+
+						{work.assets.length > 0 && (
+							<ProjectDownloads
+								assets={work.assets}
+								contentType={work.type}
+								workId={work.id}
+								canAccess={canAccess}
+							/>
+						)}
+					</div>
+
+					<aside className="min-w-0 space-y-6">
+						<WorkCredits work={work} onCreditDecided={refetch} />
+
+						<StickerBar subjectType="work" subjectId={work.id} label={work.title ?? "this Work"} />
+
+						<WorkReviews workId={work.id} />
+
+						{postedAbout}
+					</aside>
+				</div>
+			) : (
+				<>
+					<section ref={deliverableRef}>
+						{!canAccess ? (
+							<div className="space-y-4">
+								{/* ⚠️ A signed-out visitor is refused the bytes of free work too, and that
 						    is not a lock — the Work is free to everyone and stays free; what is
 						    missing is an account for the time to be attributed to. So the cover
 						    stays unblurred and un-padlocked here, and the card underneath asks
 						    for the account instead. See `presentsAsLocked`. */}
-						{/* The locked preview and the purchase decision are one composition: a
+								{/* The locked preview and the purchase decision are one composition: a
 						    two-up, equal-height pairing (Parker, 2026-10-04, after Vimeo On
 						    Demand's buy panel) — the blurred cover left, the price card right,
 						    both cards' edges aligned. They stack below `sm` with the cover
 						    first. Everything else on the page stays full-width; only this
 						    pairing is two-up. */}
-						{/* ⚠️ `w-full` is load-bearing on both children: a grid item stretched to
+								{/* ⚠️ `w-full` is load-bearing on both children: a grid item stretched to
 						    the row's height lets `aspect-video` derive its WIDTH from that
 						    height (254 × 16/9 ≈ 452px), overflowing its 424px track — the
 						    aspect ratio silently outranks the track. An explicit width breaks
 						    the derive-back and the cover sizes to its column. Found by
 						    measuring, invisible in the DOM string. */}
-						<div className="sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
-							{presentsAsLocked(access) ? (
-								<LockedCover
-									thumbnail={work.thumbnail}
-									className="aspect-video w-full rounded-lg"
-									lockedBy={access ? lockedByBadge(access, creatorName) : null}
-								/>
-							) : (
-								work.thumbnail && (
-									<img
-										src={work.thumbnail}
-										alt=""
-										className="aspect-video w-full rounded-lg object-cover"
-									/>
-								)
-							)}
-							{access &&
-								(access.requiresPurchase ? (
-									/* Every purchase goes through the basket (Parker, 2026-10-03): the
+								<div className="sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
+									{presentsAsLocked(access) ? (
+										<LockedCover
+											thumbnail={work.thumbnail}
+											className="aspect-video w-full rounded-lg"
+											lockedBy={access ? lockedByBadge(access, creatorName) : null}
+										/>
+									) : (
+										work.thumbnail && (
+											<img
+												src={work.thumbnail}
+												alt=""
+												className="aspect-video w-full rounded-lg object-cover"
+											/>
+										)
+									)}
+									{access &&
+										(access.requiresPurchase ? (
+											/* Every purchase goes through the basket (Parker, 2026-10-03): the
 									   pricing card offers the two doors into it and nothing about a
 									   card lives on this page. */
-									<ProjectPricing
-										workId={work.id}
-										slug={work.slug ?? ""}
-										access={access}
-										title={work.title ?? "Untitled"}
-										creatorHandle={work.creator?.handle ?? ""}
-										thumbnail={work.thumbnail}
-										creatorHasStripe={work.creatorHasStripe ?? false}
-										workType={work.type}
-									/>
-								) : (
-									<InlineUnlock post={work} access={access} />
-								))}
-						</div>
-					</div>
-				) : spentOnThis ? (
-					// The server withheld the deliverable because the allowance is gone, so
-					// there is nothing to render in its place but the reason.
-					<PublicAccessWall budget={meterBudget} />
-				) : encoding ? (
-					<TranscodingStatus
-						status={work.transcoding?.status ?? "pending"}
-						progress={work.transcoding?.progress ?? 0}
-						etaSeconds={work.transcoding?.etaSeconds ?? undefined}
-						errorMessage={work.transcoding?.errorMessage ?? undefined}
-					/>
-				) : (
-					<WorkDeliverable
-						work={work}
-						shareToken={shareToken}
-						onFrameActivity={reportExternalActivity}
-					/>
-				)}
-			</section>
+											<ProjectPricing
+												workId={work.id}
+												slug={work.slug ?? ""}
+												access={access}
+												title={work.title ?? "Untitled"}
+												creatorHandle={work.creator?.handle ?? ""}
+												thumbnail={work.thumbnail}
+												creatorHasStripe={work.creatorHasStripe ?? false}
+												workType={work.type}
+											/>
+										) : (
+											<InlineUnlock post={work} access={access} />
+										))}
+								</div>
+							</div>
+						) : spentOnThis ? (
+							// The server withheld the deliverable because the allowance is gone, so
+							// there is nothing to render in its place but the reason.
+							<PublicAccessWall budget={meterBudget} />
+						) : encoding ? (
+							<TranscodingStatus
+								status={work.transcoding?.status ?? "pending"}
+								progress={work.transcoding?.progress ?? 0}
+								etaSeconds={work.transcoding?.etaSeconds ?? undefined}
+								errorMessage={work.transcoding?.errorMessage ?? undefined}
+							/>
+						) : (
+							<WorkDeliverable
+								work={work}
+								shareToken={shareToken}
+								onFrameActivity={reportExternalActivity}
+							/>
+						)}
+					</section>
 
-			{/* Who sent them, and the way to an account of their own. Rendered under the
-			    deliverable rather than above it: they came here to watch something, and an
-			    invitation that interrupted that would be the funnel this deliberately is not. */}
-			{shareToken && !user && <SharedWorkBanner sharedBy={work.sharedBy ?? null} />}
+					{/* Who sent them, and the way to an account of their own. Rendered under the
+					    deliverable rather than above it: they came here to watch something, and an
+					    invitation that interrupted that would be the funnel this deliberately is not. */}
+					{shareToken && !user && <SharedWorkBanner sharedBy={work.sharedBy ?? null} />}
 
-			{!isWriting(work.type) && <WorkDescription work={work} />}
+					{!isWriting(work.type) && <WorkDescription work={work} />}
 
-			{/* The liner notes — who and what made it, public whether or not it is gated. A credit
-		    naming this user's own identity carries the confirm ask, and a decision re-reads
-		    the Work so the credits settle from the server's own answer. */}
-			<WorkCredits work={work} onCreditDecided={refetch} />
+					{/* The liner notes — who and what made it, public whether or not it is gated. A credit
+					    naming this user's own identity carries the confirm ask, and a decision re-reads
+					    the Work so the credits settle from the server's own answer. */}
+					<WorkCredits work={work} onCreditDecided={refetch} />
 
-			{work.assets.length > 0 && (
-				<ProjectDownloads
-					assets={work.assets}
-					contentType={work.type}
-					workId={work.id}
-					canAccess={canAccess}
-				/>
-			)}
+					{work.assets.length > 0 && (
+						<ProjectDownloads
+							assets={work.assets}
+							contentType={work.type}
+							workId={work.id}
+							canAccess={canAccess}
+						/>
+					)}
 
-			{/* Sharing is offered to anyone with an account, and the SERVER decides whether this
-			    particular Work can be shared — a client-side copy of that rule would be free to
-			    disagree, and the direction that matters is a stale page offering to share
-			    something that has since become gated or Adult. */}
-			{/* 🚨 A Work takes no votes and no comments: a review is the only feedback it accepts
-			    (Parker, 2026-09-13). */}
-			{isAuthenticated && !shareToken && (
-				<div className="flex items-center justify-end">
-					<ShareLinkButton workId={work.id} />
-				</div>
-			)}
+					{/* A Sticker may be given on any Work, gated or not, purchased or not, because it is
+					    a gift to the creator rather than payment for the Work. It moves into the review
+					    composer when Stickers become attachments to reviews, comments and votes. */}
+					<StickerBar subjectType="work" subjectId={work.id} label={work.title ?? "this Work"} />
 
-			{/* A Sticker may be given on any Work, gated or not, purchased or not, because it is
-			    a gift to the creator rather than payment for the Work. It moves into the review
-			    composer when Stickers become attachments to reviews, comments and votes. */}
-			<StickerBar subjectType="work" subjectId={work.id} label={work.title ?? "this Work"} />
+					{/* Reviews — a verdict on the work itself, which is the only thing a review
+					    was ever about. Gated behind access on the server: you can't review what you
+					    haven't been able to see. */}
+					{/* 🚨 A Work takes no votes and no comments: a review is the only feedback it accepts
+					    (Parker, 2026-09-13). */}
+					<WorkReviews workId={work.id} />
 
-			{/* Reviews — a verdict on the work itself, which is the only thing a review
-			    was ever about. Gated behind access on the server: you can't review what you
-			    haven't been able to see. */}
-			<WorkReviews workId={work.id} />
-
-			{/* Where this Work has been announced — the other half of an inert reference. */}
-			{work.postedIn && work.postedIn.length > 0 && (
-				<section className="border-t border-base-300 pt-6">
-					<h2 className="flex items-center gap-2 text-lg font-semibold mb-3">
-						<MegaphoneIcon className="w-5 h-5" />
-						Posted about
-					</h2>
-					<ul className="space-y-2">
-						{work.postedIn
-							.filter((p) => p.isPublished)
-							.map((p) => (
-								<li key={p.slug}>
-									<Link
-										to={postUrl({ slug: p.slug, publicId: 0 })}
-										className="link link-hover text-sm"
-									>
-										{p.title || p.slug}
-									</Link>
-									{p.postedAt && (
-										<span className="text-xs text-base-content/40 ml-2">
-											{new Date(p.postedAt).toLocaleDateString("en-US", {
-												month: "short",
-												day: "numeric",
-												year: "numeric",
-											})}
-										</span>
-									)}
-								</li>
-							))}
-					</ul>
-				</section>
+					{postedAbout}
+				</>
 			)}
 		</WorkColumn>
 	);

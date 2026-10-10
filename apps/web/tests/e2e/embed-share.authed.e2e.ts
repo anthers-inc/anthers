@@ -27,7 +27,10 @@ test("the Share button offers Link and Embed shapes, minted from one token", asy
 	await page.goto(FREE);
 	await page.getByRole("button", { name: "Share", exact: true }).click();
 
-	// The Link shape is the default; its input carries the share URL with its token.
+	// The share modal opens with the Work's page address in hand and then upgrades the
+	// input to the minted watch link — whose appearance is what swings the input's
+	// label from "Work link" to "Share link", so that label being present means the
+	// mint has answered.
 	const linkInput = page.getByLabel("Share link");
 	await expect(linkInput).toBeVisible();
 	const linkUrl = await linkInput.inputValue();
