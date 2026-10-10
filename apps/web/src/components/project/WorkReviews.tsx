@@ -346,6 +346,20 @@ export default function WorkReviews({ workId }: { workId: number }) {
 											<span className="text-base-content/40 text-xs">
 												{new Date(review.createdAt).toLocaleDateString()}
 											</span>
+											{/* The review's own record, open on the network beside the
+											    Work's reviews (the widening task, 2026-10-10) — the record
+											    is public, and a review carries a link the way the Work it
+											    reviews does. */}
+											{review.recordUrl && (
+												<a
+													href={review.recordUrl}
+													target="_blank"
+													rel="noreferrer"
+													className="link link-hover text-xs text-base-content/40"
+												>
+													View the record
+												</a>
+											)}
 											{/* A review's score is its helpfulness: the same gesture as a
 											    comment's vote, asked of a user's words rather than a
 											    creator's thing. It orders the list and nothing else. */}

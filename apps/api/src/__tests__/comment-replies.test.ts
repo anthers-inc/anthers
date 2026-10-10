@@ -18,6 +18,7 @@ import { db } from "@anthers/db/client";
 import { comments, posts } from "@anthers/db/schema";
 import { eq, inArray, like } from "drizzle-orm";
 import app from "../index";
+import { COMMENT_COLLECTION } from "../services/atproto-record-plan.js";
 import { blockUser, unblockUser } from "../services/blocks.js";
 import { loadQueue } from "../services/moderation.js";
 import { createAccount } from "./account-fixture";
@@ -39,6 +40,8 @@ interface Entry {
 	subjectId: number;
 	removed: boolean;
 	body?: string;
+	/** The Taproot record link the route carries; null while a comment has no record. */
+	recordUrl?: string | null;
 }
 
 async function thread(slug: string, cookie?: string): Promise<Entry[]> {
@@ -125,6 +128,22 @@ describe("replies", () => {
 			["comment", chain.c],
 			["comment", chain.d],
 		]);
+	});
+
+	it("carries each record's link beside it: null without one, Taproot with one", async () => {
+		// No record — the ordinary case, never an error: the thread renders nothing for it.
+		expect((await thread(slug)).find((e) => e.id === chain.a)?.recordUrl ?? null).toBeNull();
+
+		// With one: the comment's own address, pointed at Taproot — the form a reader can
+		// follow, carried for the author and for a stranger alike.
+		const uri = `at://did:plc:${RUN}/${COMMENT_COLLECTION}/${RUN}key`;
+		await db.update(comments).set({ atprotoUri: uri }).where(eq(comments.id, chain.a));
+		try {
+			const entry = (await thread(slug)).find((e) => e.id === chain.a)!;
+			expect(entry.recordUrl).toBe(`https://atproto.at/uri/${uri}`);
+		} finally {
+			await db.update(comments).set({ atprotoUri: null }).where(eq(comments.id, chain.a));
+		}
 	});
 
 	it("🚨 refuses a reply to a comment under a different post, as though it did not exist", async () => {

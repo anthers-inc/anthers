@@ -24,9 +24,11 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
+import { projects } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import app from "../index";
+import { PROJECT_COLLECTION } from "../services/atproto-record-plan.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
@@ -151,6 +153,26 @@ describe("a Project's Works", () => {
 
 	it("serves member Works in their stored order, newest addition last", async () => {
 		expect(await orderOf(SLUG)).toEqual([`Track C ${id}`, `Track A ${id}`, `Track B ${id}`]);
+	});
+
+	it("carries the project's record link beside it: null without one, Taproot with one", async () => {
+		const uri = `at://did:plc:${id}/${PROJECT_COLLECTION}/${id}key`;
+		const [row] = await db
+			.select({ id: projects.id })
+			.from(projects)
+			.where(eq(projects.slug, SLUG));
+		await db.update(projects).set({ atprotoUri: uri }).where(eq(projects.id, row.id));
+		try {
+			// A stranger's read — the record is public no matter who reads.
+			const detail = await req(`/api/content/projects/${SLUG}`, {
+				headers: { Cookie: strangerCookie },
+			});
+			expect(detail.status).toBe(200);
+			const { project } = await detail.json();
+			expect(project.recordUrl).toBe(`https://atproto.at/uri/${uri}`);
+		} finally {
+			await db.update(projects).set({ atprotoUri: null }).where(eq(projects.id, row.id));
+		}
 	});
 
 	it("reorders to exactly the requested sequence", async () => {

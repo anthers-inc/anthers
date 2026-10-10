@@ -24,6 +24,7 @@ import { REVIEW_MAX, REVIEW_MIN } from "@anthers/shared/content";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
+import { REVIEW_COLLECTION } from "../services/atproto-record-plan.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { handleOf } from "./handles.js";
@@ -72,6 +73,7 @@ interface ReviewList {
 		handle: string;
 		score: number;
 		userVote: "up" | "down" | null;
+		recordUrl?: string | null;
 	}[];
 }
 
@@ -432,5 +434,41 @@ describe("The Recent share", () => {
 
 		// Put the row back so nothing after this suite reads a backdated fixture.
 		await db.update(reviews).set({ createdAt: new Date() }).where(eq(reviews.id, bRow.id));
+	});
+});
+
+describe("the record link beside a review", () => {
+	it("is null while the review has no record — the ordinary case, never an error", async () => {
+		const list = await readReviews();
+		for (const review of list.reviews) expect(review.recordUrl ?? null).toBeNull();
+	});
+
+	it("is the record's own address on Taproot once a record exists, for any reader", async () => {
+		// Every review of the fixture Work gets its own address (the column is unique),
+		// keyed by the row's id so each entry in the list can be matched to it. The list
+		// withholds hidden rows entirely (an earlier describe left one hidden) — a row
+		// that does not render carries nothing, which is the shape any record link has.
+		const rows = await db
+			.select({ id: reviews.id })
+			.from(reviews)
+			.where(eq(reviews.workId, workId));
+		const uriOf = (rowId: number) => `at://did:plc:${id}/${REVIEW_COLLECTION}/r${rowId}key`;
+		for (const row of rows) {
+			await db
+				.update(reviews)
+				.set({ atprotoUri: uriOf(row.id) })
+				.where(eq(reviews.id, row.id));
+		}
+		try {
+			// Signed out — the link is not the author's alone: the record is public no
+			// matter who reads, so every reader who can see a review carries it.
+			const list = await readReviews();
+			expect(list.reviews.length).toBeGreaterThan(0);
+			for (const review of list.reviews) {
+				expect(review.recordUrl).toBe(`https://atproto.at/uri/${uriOf(review.id)}`);
+			}
+		} finally {
+			await db.update(reviews).set({ atprotoUri: null }).where(eq(reviews.workId, workId));
+		}
 	});
 });
