@@ -153,6 +153,8 @@ import {
 	declaredRating,
 	declareRating,
 	fileRatingAppeal,
+	ratingOf,
+	resetRatingForTypeChange,
 } from "../services/content-rating.js";
 import {
 	acceptCredit,
@@ -973,7 +975,11 @@ const ratingAppealSchema = z.object({
 
 const createWorkSchema = workBaseSchema.extend({ type: z.enum(WORK_TYPES) });
 
-const updateWorkSchema = workBaseSchema.partial();
+const updateWorkSchema = workBaseSchema
+	.partial()
+	// The kind may change while the Work is a draft with nothing kind-specific in it yet —
+	// see the type-change block in the PATCH handler for the exact rule and its refusals.
+	.extend({ type: z.enum(WORK_TYPES).optional() });
 
 /**
  * The two Work bodies, validated so that a refused field answers with a sentence a creator can read
@@ -4534,7 +4540,9 @@ const contentRoutes = new Hono()
 		// below for exactly this reason.
 		const willStream = data.streamEnabled ?? work.streamEnabled;
 		const willDownload = data.downloadEnabled ?? work.downloadEnabled;
-		if (!willStream && !willDownload && work.type !== "physical") {
+		// The floor asks about the kind this edit RESULTS IN, the same way every other
+		// gate below reads the row as the request leaves it.
+		if (!willStream && !willDownload && (data.type ?? work.type) !== "physical") {
 			return c.json({ error: "A Work must enable at least one of stream or download" }, 400);
 		}
 
@@ -4574,6 +4582,55 @@ const contentRoutes = new Hono()
 			) {
 				return c.json(FOREIGN_FILE_REFUSAL, 400);
 			}
+		}
+
+// 🚨 **The kind changes only while nothing kind-specific exists to strand.** The
+		// drafting rule (Parker, 2026-10-10): a Work can be drafted before its file exists,
+		// and the kind a draft starts as often isn't the kind it ends as. Once media exists,
+		// the kind is fixed — a comic Work with a video's source file is a row whose every
+		// downstream reader (processing, delivery, the reader) disagrees about what it is —
+		// and the honest refusal says to make a new Work. Two further guards: a released
+		// Work's kind is part of its public listing and never changes here, and an
+		// operator-set rating must not be erased by a type change, so that case is refused
+		// ahead of the reset rather than silently destroying the correction.
+		//
+		// The rating reset runs through the rating service: it is the one writer of a Work's
+		// maturity, and the reset erases rows answered against the old grid so the new kind
+		// is rated on its own terms before release.
+		if (data.type !== undefined && data.type !== work.type) {
+			if (work.visibility === "released") {
+				return c.json(
+					{
+						error: "A released Work's kind can't change. Make it private first.",
+						code: "type_not_private",
+					},
+					409,
+				);
+			}
+			if (ratingOf(work).locked) {
+				return c.json(
+					{
+						error:
+							"An operator set this Work's rating, so its kind can't change. Ask for the rating to be returned first.",
+						code: "type_rating_locked",
+					},
+					409,
+				);
+			}
+			if (work.sourceKey || work.body) {
+				return c.json(
+					{
+						error:
+							"This Work already has its media, so its kind can't change. Make a new Work of the other kind instead.",
+						code: "type_has_media",
+					},
+					409,
+				);
+			}
+			work = await resetRatingForTypeChange(work);
+			// The rest of this handler — the closed-rung grid, the rating declaration, the
+			// readiness gates — reads the kind the request LEAVES the Work as.
+			work = { ...work, type: data.type };
 		}
 
 		const releasing = data.visibility === "released" && work.visibility !== "released";
@@ -4702,6 +4759,7 @@ const contentRoutes = new Hono()
 		}
 
 		const updates: Record<string, unknown> = { updatedAt: new Date() };
+		if (data.type !== undefined) updates.type = data.type;
 		if (data.slug !== undefined) updates.slug = data.slug;
 		if (data.title !== undefined) updates.title = data.title;
 		if (data.description !== undefined) updates.description = data.description;
