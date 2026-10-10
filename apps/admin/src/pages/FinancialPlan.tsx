@@ -786,8 +786,8 @@ function SettingsEditor({
 			</button>
 			<span className="text-xs text-base-content/60">
 				Locked 30% is the plan: budgeted at the ceiling, so reality can only be more charitable than
-				this and the programs never fall below 70% of revenue. A phase's Admin % / Free Access % cells
-				override these for that phase alone.
+				this and the programs never fall below 70% of revenue. A phase's Admin % / Free Access %
+				cells override these for that phase alone.
 			</span>
 		</div>
 	);
@@ -885,10 +885,9 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 			color: C.programs,
 			prose: (
 				<>
-					Everything after admin — never below{" "}
-					{((1 - L.adminCeiling) * 100).toFixed(0)}% of revenue by construction. The charitable
-					programs are INSIDE this line, not beside it: Free Access, Free Storage, and the rest of
-					the spending the budget affords.
+					Everything after admin — never below {((1 - L.adminCeiling) * 100).toFixed(0)}% of revenue
+					by construction. The charitable programs are INSIDE this line, not beside it: Free Access,
+					Free Storage, and the rest of the spending the budget affords.
 				</>
 			),
 		},
@@ -912,8 +911,8 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 				<>
 					Its complement, and a program in its own right: storage nobody is charged for — free and
 					new creators&rsquo; catalogs (${Math.round(S.freeCatalog).toLocaleString("en-US")}/mo) and
-					the bundled allowances every paying rung grants (
-					${Math.round(S.payingAllowances).toLocaleString("en-US")}/mo), both paid to the vendor at
+					the bundled allowances every paying rung grants ( $
+					{Math.round(S.payingAllowances).toLocaleString("en-US")}/mo), both paid to the vendor at
 					cost.
 				</>
 			),
@@ -1083,7 +1082,13 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 	];
 	const byName = new Map(nodes.map((n, i) => [n.name, i]));
 	const links: DiagramLink[] = [
-		{ source: 0, target: byName.get("admin")!, value: adminNode.value, group: "admin", stroke: C.admin },
+		{
+			source: 0,
+			target: byName.get("admin")!,
+			value: adminNode.value,
+			group: "admin",
+			stroke: C.admin,
+		},
 		{
 			source: 0,
 			target: byName.get("programs")!,

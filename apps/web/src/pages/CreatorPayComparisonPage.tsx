@@ -343,9 +343,9 @@ export default function CreatorPayComparisonPage() {
 						come out of a price is the at-cost card processing, paid to the processor — never a cent
 						to us, and nothing at all for delivery however large the work. The one thing that funds
 						the platform is <b className="text-base-content">the remainder</b> — what's left of what
-						is given to Anthers after the Time Pool, funding the charitable programs, free access included,
-						never subtracted from your earnings. Here's what actually reaches you, platform by
-						platform.
+						is given to Anthers after the Time Pool, funding the charitable programs, free access
+						included, never subtracted from your earnings. Here's what actually reaches you,
+						platform by platform.
 					</>
 				}
 			/>
@@ -391,9 +391,9 @@ export default function CreatorPayComparisonPage() {
 					<b className="text-base-content/70">Anthers</b>; that half splits into a Time Pool ({" "}
 					{money(timePoolFor(ladder.publicAccessPrice))} of every ${ladder.publicAccessPrice},
 					distributed to the creators they watch by time) and{" "}
-					<b className="text-base-content/70">the remainder</b> that funds the charitable programs — free access included —
-					creator programs. On a direct sale Anthers takes nothing at all; the only deduction from
-					the listed price is the at-cost card processing, paid to the processor.
+					<b className="text-base-content/70">the remainder</b> that funds the charitable programs,
+					free access included. On a direct sale Anthers takes nothing at all; the only deduction
+					from the listed price is the at-cost card processing, paid to the processor.
 				</p>
 				<p>
 					<b className="text-base-content/70">Anthers streaming figures</b> are a fan's Time Pool ÷

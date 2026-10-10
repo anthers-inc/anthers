@@ -157,7 +157,12 @@ export async function loadPlanSettings(): Promise<{
 }> {
 	const existing = await db.select().from(financialPlanSettings).limit(1);
 	const row = existing[0];
-	if (row) return { id: row.id, adminBudgetShare: row.adminBudgetShare, freeAccessShare: row.freeAccessShare };
+	if (row)
+		return {
+			id: row.id,
+			adminBudgetShare: row.adminBudgetShare,
+			freeAccessShare: row.freeAccessShare,
+		};
 	const inserted = await db.insert(financialPlanSettings).values(PLAN_DEFAULTS).returning({
 		id: financialPlanSettings.id,
 		adminBudgetShare: financialPlanSettings.adminBudgetShare,

@@ -8,7 +8,7 @@
 // Copy tracks the SUPPORT MODEL: one primitive, a monthly amount, pointed either at a
 // creator (no platform cut, clearing that creator's gates at whatever amounts they set) or
 // at Anthers (half into the Time Pool and a remainder funding the charitable
-// charitable programs). A fan's Badge IS the amount they give Anthers (Root → Blossom =
+// programs, free access included). A fan's Badge IS the amount they give Anthers (Root → Blossom =
 // $3 → $12, "+" beyond). ⚠️ **Never write a level as a count of anything** — there is no
 // unit and no granularity floor — and there is no delivery line to write either, since
 // delivery costs $0 at any volume and downloads are unlimited and free on both sides.
@@ -476,8 +476,8 @@ export default function ForCreatorsPage() {
 						<strong className="font-semibold text-base-content/80">monthly amount</strong>, at
 						whatever levels you set. A fan points it at you—and we take no cut of it—or at Anthers,
 						where half of it goes to creators, paid in proportion to the time people spend with
-						their work, and the rest funds the charitable programs, free access included. Both reach you;
-						neither is a cut of your earnings, and{" "}
+						their work, and the rest funds the charitable programs, free access included. Both reach
+						you; neither is a cut of your earnings, and{" "}
 						<strong className="font-semibold text-base-content/80">
 							neither one needs the other
 						</strong>
@@ -974,8 +974,8 @@ const rivalPurchaseAllIn = (price: number, cutRate: number, absorbsProcessing = 
 const rivalPurchaseCut = (price: number, cutRate: number) => `$${(price * cutRate).toFixed(2)}`;
 
 /** The Anthers row for a combo. `platform` is what Anthers itself receives — the
- * remainder of a fan's support for Anthers on a stream (funds the charitable programs,
- * charitable programs, NOT a platform profit cut); $0 on a sale (the purchase fee was
+ * remainder of a fan's support for Anthers on a stream (funds the charitable
+ * programs, NOT a platform profit cut); $0 on a sale (the purchase fee was
  * removed 2026-08-03) and on direct support (a pure passthrough). */
 const anthers = (creator: string, platform: string, platformNote: string): Deal => ({
 	name: "Anthers",
@@ -1406,9 +1406,9 @@ function SolutionExplorer() {
 				card processing, paid to Stripe — never a cent to Anthers (the purchase fee was removed
 				2026-08-03), and delivery costs nothing however large the work or however often it is
 				downloaded. On a stream, what's left of the fan's support for Anthers after the Time Pool
-				and the at-cost card fee funds the charitable programs, free access included. What a fan gives you
-				is a pure passthrough. Scenario figures are illustrative; competitor rates are rough public
-				estimates, all-in take-home at the same list price.
+				and the at-cost card fee funds the charitable programs, free access included. What a fan
+				gives you is a pure passthrough. Scenario figures are illustrative; competitor rates are
+				rough public estimates, all-in take-home at the same list price.
 			</p>
 		</Card>
 	);

@@ -2874,8 +2874,8 @@ export default function SignupPage() {
 									/month.
 									<br></br>
 									<br></br>
-									Your Anthers Badge also funds the charitable programs — free access for small users
-									and creators included.
+									Your Anthers Badge also funds the charitable programs — free access for small
+									users and creators included.
 								</GoFurtherCard>
 							</div>
 						</div>

@@ -159,8 +159,8 @@ export const FAQ_ITEMS = {
 			<div className="space-y-2">
 				<p>
 					Support on Anthers is a <strong>monthly amount you choose</strong>, and every dollar of it
-					goes to creators, to the at-cost card processing, or to Anthers' charitable
-					programs, free access included. It goes one of two ways:
+					goes to creators, to the at-cost card processing, or to Anthers' charitable programs, free
+					access included. It goes one of two ways:
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
@@ -175,9 +175,10 @@ export const FAQ_ITEMS = {
 						<strong>Give Anthers a monthly amount</strong> — ${SUPPORT.gross} a month lifts your
 						monthly Public Access limit, and every dollar funds the Time Pool (shared out by the
 						time you spend with each creator's work) and leaves a remainder that funds the
-						charitable programs, free access included. So the more you give, the more your time is worth to the
-						creators you spend it with. Your level is your Badge (Root → Blossom, and a "+" beyond)
-						— a point-in-time choice, not a rolling total of past spend, and it gates nothing.
+						charitable programs, free access included. So the more you give, the more your time is
+						worth to the creators you spend it with. Your level is your Badge (Root → Blossom, and a
+						"+" beyond) — a point-in-time choice, not a rolling total of past spend, and it gates
+						nothing.
 					</li>
 				</ul>
 				<p>

@@ -408,13 +408,7 @@ function renderBadgePublicMarkdown(): string {
 	const rows = badgeTable();
 	return [
 		table(
-			[
-				"Badge",
-				"A month to Anthers",
-				"To the Time Pool",
-				"Card processing",
-				"Charitable programs",
-			],
+			["Badge", "A month to Anthers", "To the Time Pool", "Card processing", "Charitable programs"],
 			[":--", "--:", "--:", "--:", "--:"],
 			rows.map((r) => [
 				`**${r.badge}**`,

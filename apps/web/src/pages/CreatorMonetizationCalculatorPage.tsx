@@ -15,7 +15,7 @@ import { useAnthersLadder } from "../lib/anthers-ladder";
 // Support-model economics. A user gives Anthers a monthly amount, which names their
 // Badge (Root $3 … Blossom $12). That amount splits into a Time Pool (a share of it, to
 // creators by time) and "Supports Anthers" (the remainder funding the charitable programs,
-// programs). Money to creators = the Time Pool + what a user gives directly to a
+// free access included). Money to creators = the Time Pool + what a user gives directly to a
 // creator (any amount, no platform cut). The Time Pool is distributed
 // across the creators a user watches, in proportion to time (equal-time
 // principle — a minute is a minute across every medium). There is no bandwidth term:
@@ -786,8 +786,8 @@ export default function CreatorMonetizationCalculatorPage() {
 									Blossom). It splits into a <b>Time Pool</b> (${" "}
 									{timePoolFor(publicAccessPrice).toFixed(2)} of every ${publicAccessPrice}, to
 									creators by time) and <b>Supports Anthers</b> (the remainder, which funds the
-									charitable programs, free access included). <b>Directed support</b> (any amount, no
-									platform cut) is given alongside.
+									charitable programs, free access included). <b>Directed support</b> (any amount,
+									no platform cut) is given alongside.
 								</li>
 								<li>
 									Their <b>Time Pool</b> is divided among the creators they watch{" "}
