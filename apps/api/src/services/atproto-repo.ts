@@ -105,14 +105,29 @@ export function rkeyFromAtUri(uri: string, collection: string): string | null {
 }
 
 /**
- * Where a record can be read raw, as JSON, from the server holding the repository it lives in:
- * that server's own `com.atproto.repo.getRecord`, so the address sends nobody through a service
- * Anthers does not run (Parker, 2026-09-18). Null without a record or without a server to ask.
+ * Where a record's link points, for people: Taproot, the public record explorer at
+ * `atproto.at`, with the record's own address as its path — `https://atproto.at/uri/at://…`
+ * (Parker, 2026-10-10). The records are public, so this exposes nothing, and it is the one
+ * form of the link that a reader can follow. Null without a well-formed address.
  *
- * It is the creator's own diagnostic view of what Anthers wrote for them, and it only reaches
- * anybody through the owner's serialization.
+ * ⚠️ This replaces the 2026-09-18 decision that the link named the creator's own server. The
+ * raw-JSON reading Anthers itself does is still that address — {@link recordFetchUrlFor}, the
+ * one the drift service fetches through — while what a *person* is handed now walks through
+ * Taproot, deliberately.
  */
-export function recordUrlFor(
+export function recordUrlFor(atUri: string | null | undefined): string | null {
+	const match = /^at:\/\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(atUri ?? "");
+	if (!match) return null;
+	return `https://atproto.at/uri/${match[0]}`;
+}
+
+/**
+ * Where a record can be read raw, as JSON, from the server holding the repository it lives in:
+ * that server's own `com.atproto.repo.getRecord`. This is the address *Anthers fetches through*
+ * (the drift service's server-side read), not the link people see — {@link recordUrlFor} is
+ * that. Null without a record or without a server to ask.
+ */
+export function recordFetchUrlFor(
 	atUri: string | null | undefined,
 	pdsUrl: string | null | undefined,
 ): string | null {

@@ -70,27 +70,46 @@ test("a Work's Edit page shows the Work as a user sees it", async ({ page, conte
 	await page.waitForLoadState("networkidle");
 	await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 
-	// The released Work's listing, as its record on the network. Followed rather than only found,
-	// because a link built wrongly still renders: the seed wrote this record to the session's own
-	// network, and the link has to reach exactly that record on the creator's own server.
+	// The released Work's listing, as its record link. Followed rather than only found,
+	// because a link built wrongly still renders: the link is the record's own address on
+	// Taproot (Parker, 2026-10-10), and it is a pure function of the stored `at://` address —
+	// so the walk pins it to exactly that, then proves the record it names is real by reading
+	// it back from the session's own network the way Anthers itself reads a record raw
+	// (`recordFetchUrlFor`, getRecord on the repository it lives in).
 	const record = page.getByRole("link", { name: "View the record" });
 	const href = (await record.getAttribute("href")) ?? "";
-	expect(href).toContain("/xrpc/com.atproto.repo.getRecord?");
-	const fetched = (await (await fetch(href)).json()) as {
-		uri?: string;
-		value?: { $type?: string };
-	};
-	expect(fetched.value?.$type).toBe("org.anthers.work");
-	// And it is the creator's alone: a signed-out read of the same Work carries no such field.
+	const [owner] = (await ownWorks()).filter((w) => w.title === FIXTURE_VIDEO) as (OwnedWork & {
+		atprotoUri?: string | null;
+	})[];
+	expect(owner?.atprotoUri, "the media fixture's video carries its listing address").toBeTruthy();
+	expect(href, "the link is the stored address itself, pointed at Taproot").toBe(
+		`https://atproto.at/uri/${owner?.atprotoUri}`,
+	);
+	const pds = process.env.ATPROTO_TEST_PDS;
+	expect(pds, "the browser session names its own AT Protocol network").toBeTruthy();
+	const [did, collection, rkey] = (owner?.atprotoUri ?? "").replace("at://", "").split("/");
+	const readBackRes = await fetch(
+		`${pds}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=${collection}&rkey=${rkey}`,
+	);
+	const readBackBody = await readBackRes.text();
+	const readBack = JSON.parse(readBackBody) as { value?: { $type?: string } };
+	expect(
+		readBack.value?.$type,
+		`getRecord answered ${readBackRes.status} for ${owner?.atprotoUri}: ${readBackBody.slice(0, 300)}`,
+	).toBe("org.anthers.work");
+	// And it is every reader's: a signed-out read of the same Work carries the same record
+	// link the owner's shape carries — no longer the creator's alone.
 	const asStranger = (await (
 		await fetch(`${API_URL}/api/content/works/${video.publicId}`)
-	).json()) as { work?: Record<string, unknown> };
-	expect(asStranger.work && "recordUrl" in asStranger.work).toBe(false);
+	).json()) as { work?: { recordUrl?: string | null } };
+	expect(asStranger.work?.recordUrl).toBe(`https://atproto.at/uri/${owner?.atprotoUri}`);
 
-	// The user's view, and back again from it.
+	// The user's view, and back again from it. The record link rides along — it is on the
+	// user's page now, not the Edit page only.
 	await page.getByRole("link", { name: "Preview as User" }).click();
 	await expect(page).toHaveURL(/\/works\/[^/?]+\?previewAs=out$/);
 	await expect(page.getByText("Previewing as a user")).toBeVisible();
+	await expect(page.getByRole("link", { name: "View the record" })).toBeVisible();
 	await page.getByRole("link", { name: "Edit This Work" }).click();
 	await expect(page).toHaveURL(new RegExp(`/studio/works/${video.publicId}/edit$`));
 });

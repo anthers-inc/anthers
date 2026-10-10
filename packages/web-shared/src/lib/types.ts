@@ -416,10 +416,16 @@ export interface Work {
 	createdAt?: string;
 	updatedAt?: string;
 	/**
-	 * The Work's listing on the network while it has one, and where its creator can read that
-	 * record raw. Present only in the owner's shape; absent or null means no listing.
+	 * The Work's listing on the network while it has one. Present only in the owner's
+	 * shape; absent or null means no listing, which is ordinary rather than a fault.
 	 */
 	atprotoUri?: string | null;
+	/**
+	 * The Work's public record link, as the record's own address on Taproot
+	 * (`https://atproto.at/uri/{at-uri}`) — the one form a reader can follow. Carried by
+	 * both shapes since the widening (2026-10-10): the record is public no matter who
+	 * reads, so every reader who can see the Work sees this too. Null means no listing.
+	 */
 	recordUrl?: string | null;
 }
 

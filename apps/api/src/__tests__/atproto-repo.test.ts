@@ -18,6 +18,7 @@ import {
 	planWorkRecord,
 	type RecordRef,
 	type RepoWriter,
+	recordFetchUrlFor,
 	recordUrlFor,
 	rkeyFromAtUri,
 	syncWorkRecord,
@@ -119,9 +120,27 @@ describe("reading a record's address", () => {
 	});
 });
 
+describe("the record link people see", () => {
+	it("points the record's own address at Taproot, the public record explorer", () => {
+		// The one form a reader can follow (Parker, 2026-10-10): the raw `at://` value is
+		// what Anthers wrote for its own reading, not what a person clicks.
+		expect(recordUrlFor(URI)).toBe(`https://atproto.at/uri/${URI}`);
+	});
+
+	it("has no link without a well-formed record address", () => {
+		// A Work with no listing is ordinary; an unreadable one is, like the plan above
+		// it, refused rather than guessed about.
+		expect(recordUrlFor(null)).toBeNull();
+		expect(recordUrlFor(undefined)).toBeNull();
+		expect(recordUrlFor("")).toBeNull();
+		expect(recordUrlFor("not-a-uri")).toBeNull();
+		expect(recordUrlFor(`at://${DID}/${WORK_COLLECTION}`)).toBeNull();
+	});
+});
+
 describe("reading a record raw, from the server holding it", () => {
 	it("asks that server's own getRecord for exactly this record", () => {
-		const url = new URL(recordUrlFor(URI, "https://pds.example/") ?? "");
+		const url = new URL(recordFetchUrlFor(URI, "https://pds.example/") ?? "");
 		expect(`${url.origin}${url.pathname}`).toBe(
 			"https://pds.example/xrpc/com.atproto.repo.getRecord",
 		);
@@ -135,11 +154,11 @@ describe("reading a record raw, from the server holding it", () => {
 	it("has no address without a record or without a server to ask", () => {
 		// A Work with no listing is ordinary, and an account whose server is unknown has nowhere
 		// to point, so both are null rather than a link to nothing.
-		expect(recordUrlFor(null, "https://pds.example")).toBeNull();
-		expect(recordUrlFor(URI, "")).toBeNull();
-		expect(recordUrlFor(URI, null)).toBeNull();
-		expect(recordUrlFor("not-a-uri", "https://pds.example")).toBeNull();
-		expect(recordUrlFor(URI, "pds.example")).toBeNull();
+		expect(recordFetchUrlFor(null, "https://pds.example")).toBeNull();
+		expect(recordFetchUrlFor(URI, "")).toBeNull();
+		expect(recordFetchUrlFor(URI, null)).toBeNull();
+		expect(recordFetchUrlFor("not-a-uri", "https://pds.example")).toBeNull();
+		expect(recordFetchUrlFor(URI, "pds.example")).toBeNull();
 	});
 });
 

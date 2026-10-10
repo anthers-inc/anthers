@@ -255,6 +255,25 @@ export function WorkDates({ work }: { work: WorkDetail }) {
 }
 
 /**
+ * The released Work's listing on the network, as its record link — the same line a
+ * creator's Edit page shows, and since the widening (2026-10-10) it is public copy too:
+ * the record is public no matter who reads, so every reader who can see the Work sees
+ * this. The link is the one a person can follow, into Taproot (`recordUrl`'s target),
+ * and nothing renders for a Work with no listing, which is ordinary rather than a fault.
+ */
+export function WorkRecordLink({ work }: { work: WorkDetail }) {
+	if (!work.recordUrl) return null;
+	return (
+		<p className="text-xs text-base-content/60">
+			Its listing is on the network, where other software can read it.{" "}
+			<a href={work.recordUrl} target="_blank" rel="noreferrer" className="link">
+				View the record
+			</a>
+		</p>
+	);
+}
+
+/**
  * The rating and its content notes, for a Mature or Adult Work. Nothing for a General Work,
  * which is nearly all of them. An Adult Work reaches only users who opted in and verified, and
  * it is labeled for them all the same, because its notes are as much a warning there as anywhere.
