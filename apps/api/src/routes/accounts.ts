@@ -808,7 +808,7 @@ const accountRoutes = new Hono()
 				if (!accessFilter) return true;
 				if (e.kind === "post") return accessFilter === "unlocked";
 				const unlocked =
-					(e.access && e.access.canAccess) ||
+					e.access?.canAccess ||
 					(e.type === "physical" && (accessCtx?.purchasedWorkIds.has(e.id) ?? false));
 				return accessFilter === "unlocked" ? unlocked : !unlocked;
 			})
