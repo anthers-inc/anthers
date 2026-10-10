@@ -11,11 +11,14 @@
  * the source of truth for what persists: edits PUT through as they settle, and a
  * reload replaces local state wholesale. Inputs save; computed values never do.
  *
- * The plan's settled shape (2026-10-07): admin budgeted at the full 30% ceiling
+ * The plan's settled shape (2026-10-10): admin budgeted at the full 30% ceiling
  * — the growth budget, because covering out-of-pocket infrastructure and
- * eventually compensation is the sustainability the org grows into; the Time
- * Pool Fund at a stated share of the remainder after admin; programs the
- * residual. A phase may override either share; blank means "use the settings".
+ * eventually compensation is the sustainability the org grows into; Programs
+ * are everything after admin, and Free Access (spent through the Time Pool
+ * Fund) takes a stated share OF Programs, with Free Storage read from the model
+ * and Other Programs the residual within Programs. Free Access and Free Storage
+ * are programs within Programs, never siblings of it (Parker, 2026-10-10).
+ * A phase may override either share; blank means "use the settings".
  * The projection horizon is inflection 1 and stops there.
  *
  * Every figure is % of charitable revenue AND $/month, both, everywhere — the
@@ -31,7 +34,7 @@ import { useAdminData } from "../lib/load";
 
 interface Settings {
 	adminBudgetShare: number;
-	fundShare: number;
+	freeAccessShare: number;
 }
 
 /** One phase's editable inputs — what the operator edits and what saves. */
@@ -46,7 +49,7 @@ interface RowDraft {
 	services: number | null;
 	/** Overrides of the settings' shares; null inherits (and an emptied input clears back). */
 	adminBudgetShare: number | null;
-	fundShare: number | null;
+	freeAccessShare: number | null;
 }
 
 interface PlanPayload {
@@ -130,7 +133,10 @@ export default function FinancialPlan() {
 		[],
 	);
 
-	/** The ledger of the draft as it stands — the shared math, computed locally. */
+	/**
+	 * The ledger of the draft as it stands — the shared math, computed locally.
+	 * The operator-level defaults apply when the row carries no override.
+	 */
 	const ledgers = useMemo(() => {
 		const m = new Map<number, PlanLedger>();
 		for (const r of rows) {
@@ -145,7 +151,7 @@ export default function FinancialPlan() {
 						services: r.services ?? 0,
 					},
 					adminBudgetShare: r.adminBudgetShare ?? settings?.adminBudgetShare ?? undefined,
-					fundShare: r.fundShare ?? settings?.fundShare ?? undefined,
+					freeAccessShare: r.freeAccessShare ?? settings?.freeAccessShare ?? undefined,
 				}),
 			);
 		}
@@ -163,7 +169,7 @@ export default function FinancialPlan() {
 			r.tooling !== s.tooling ||
 			r.services !== s.services ||
 			r.adminBudgetShare !== s.adminBudgetShare ||
-			r.fundShare !== s.fundShare
+			r.freeAccessShare !== s.freeAccessShare
 		);
 	};
 
@@ -203,7 +209,7 @@ export default function FinancialPlan() {
 				tooling: draft.tooling,
 				services: draft.services,
 				adminBudgetShare: draft.adminBudgetShare,
-				fundShare: draft.fundShare,
+				freeAccessShare: draft.freeAccessShare,
 			});
 			savedRef.current.set(id, { ...draft, adminBudgetShare: draft.adminBudgetShare });
 			setPending((p) => drop(p, id));
@@ -316,7 +322,7 @@ export default function FinancialPlan() {
 		<>
 			<PageHeader
 				title="Financial Plan"
-				description="The plan from here through full-time — admin budgeted at the ceiling, the Fund beside it, programs the residual. Every figure is a share of revenue and dollars per month. Edits here are the plan; public resources generate from this data."
+				description="The plan from here through full-time — admin budgeted at the ceiling, and the charitable programs taking the rest: Free Access, Free Storage, and other programs within them. Every figure is a share of revenue and dollars per month. Edits here are the plan; public resources generate from this data."
 				onRefresh={() => void reloadPreservingEdits()}
 				loading={plan.loading}
 			/>
@@ -346,7 +352,7 @@ export default function FinancialPlan() {
 							>
 								Inputs — edit freely
 							</th>
-							<th colSpan={8} className="text-xs uppercase tracking-wider text-base-content/40">
+							<th colSpan={9} className="text-xs uppercase tracking-wider text-base-content/40">
 								Computed — restates as you type
 							</th>
 						</tr>
@@ -366,16 +372,37 @@ export default function FinancialPlan() {
 							</th>
 							<th
 								className="text-right"
-								title="Blank uses the settings' share; a number overrides it for this phase only"
+								title="Blank uses the settings' share; a number overrides it for this phase only. Free Access's share of Programs, spent through the Time Pool Fund."
 							>
-								Fund %
+								Free Access %
 							</th>
 							<th className="text-right">Revenue/mo</th>
 							<th className="text-right">Admin budget</th>
 							<th className="text-right">Actual ops</th>
-							<th className="text-right">Time Pool Fund</th>
-							<th className="text-right">Free storage</th>
-							<th className="text-right">Programs</th>
+							<th
+								className="text-right"
+								title="Revenue minus the admin budget — the parent the three program lines sum to"
+							>
+								Programs
+							</th>
+							<th
+								className="text-right"
+								title="The Time Pool Fund's pot — free public access that still pays creators"
+							>
+								Free access
+							</th>
+							<th
+								className="text-right"
+								title="Free creators' catalogs and paying rungs' bundled allowances"
+							>
+								Free storage
+							</th>
+							<th
+								className="text-right"
+								title="The residual within Programs — budgeted, not yet allocated"
+							>
+								Other programs
+							</th>
 							<th className="text-right">Slice/free acct</th>
 							<th />
 						</tr>
@@ -449,7 +476,7 @@ export default function FinancialPlan() {
 									/>
 									<OverrideCell
 										row={r}
-										field="fundShare"
+										field="freeAccessShare"
 										settings={settings}
 										saved={saved}
 										edit={edit}
@@ -457,9 +484,10 @@ export default function FinancialPlan() {
 									<ComputedCell value={usd(L.charitableRevenue)} strong />
 									<ComputedCell value={both(L.charitableRevenue, L.adminBudget)} />
 									<ComputedCell value={both(L.charitableRevenue, L.adminActual)} />
-									<ComputedCell value={both(L.charitableRevenue, L.fund)} />
-									<ComputedCell value={both(L.charitableRevenue, L.freeStorage)} />
 									<ComputedCell value={both(L.charitableRevenue, L.programs)} />
+									<ComputedCell value={both(L.charitableRevenue, L.freeAccess)} />
+									<ComputedCell value={both(L.charitableRevenue, L.freeStorage)} />
+									<ComputedCell value={both(L.charitableRevenue, L.otherPrograms)} />
 									<ComputedCell value={`$${L.freeSlice.toFixed(3)}`} />
 									<td className="text-right">
 										<DeleteButton
@@ -517,7 +545,7 @@ function toDraft(p: PlanPayload["phases"][number]): RowDraft {
 		tooling: p.tooling,
 		services: p.services,
 		adminBudgetShare: p.adminBudgetShare,
-		fundShare: p.fundShare,
+		freeAccessShare: p.freeAccessShare,
 	};
 }
 
@@ -618,14 +646,16 @@ function ShareCell(props: {
 /** Optional per-phase override; blank = the settings' share (placeholder shows what that is). */
 function OverrideCell(props: {
 	row: RowDraft;
-	field: "adminBudgetShare" | "fundShare";
+	field: "adminBudgetShare" | "freeAccessShare";
 	settings: Settings;
 	saved: RowDraft | undefined;
 	edit: (id: number, patch: Partial<RowDraft>, schedule?: boolean) => void;
 }) {
 	const value = props.row[props.field];
 	const setting =
-		props.field === "adminBudgetShare" ? props.settings.adminBudgetShare : props.settings.fundShare;
+		props.field === "adminBudgetShare"
+			? props.settings.adminBudgetShare
+			: props.settings.freeAccessShare;
 	const invalid = value !== null && (Number.isNaN(value) || value < 0 || value > 1);
 	return (
 		<td className="text-right">
@@ -717,7 +747,7 @@ function SettingsEditor({
 	busy: boolean;
 }) {
 	const [admin, setAdmin] = useState(settings.adminBudgetShare);
-	const [fund, setFund] = useState(settings.fundShare);
+	const [access, setAccess] = useState(settings.freeAccessShare);
 	return (
 		<div className="mb-6 flex flex-wrap items-end gap-4 rounded-box border border-base-300 bg-base-100 p-4">
 			<label className="text-sm" htmlFor="fp-admin-share">
@@ -733,30 +763,31 @@ function SettingsEditor({
 					onChange={(e) => setAdmin(Number(e.target.value))}
 				/>
 			</label>
-			<label className="text-sm" htmlFor="fp-fund-share">
-				<div>Time Pool Fund (share of remainder after admin)</div>
+			<label className="text-sm" htmlFor="fp-access-share">
+				<div>Free Access (share of Programs — spent through the Time Pool Fund)</div>
 				<input
 					className="input input-bordered input-sm mt-1 w-28 tabular-nums"
 					type="number"
 					step="0.01"
 					min="0"
 					max="1"
-					id="fp-fund-share"
-					value={fund}
-					onChange={(e) => setFund(Number(e.target.value))}
+					id="fp-access-share"
+					value={access}
+					onChange={(e) => setAccess(Number(e.target.value))}
 				/>
 			</label>
 			<button
 				type="button"
 				className="btn btn-primary btn-sm"
 				disabled={busy}
-				onClick={() => onSave({ adminBudgetShare: admin, fundShare: fund })}
+				onClick={() => onSave({ adminBudgetShare: admin, freeAccessShare: access })}
 			>
 				Save settings
 			</button>
 			<span className="text-xs text-base-content/60">
 				Locked 30% is the plan: budgeted at the ceiling, so reality can only be more charitable than
-				this. A phase's Admin % / Fund % cells override these for that phase alone.
+				this and the programs never fall below 70% of revenue. A phase's Admin % / Free Access % cells
+				override these for that phase alone.
 			</span>
 		</div>
 	);
@@ -764,20 +795,23 @@ function SettingsEditor({
 // ── The phase diagram ────────────────────────────────────────────────────────
 
 /**
- * The phase as a flow, drawn on Recharts' Sankey (d3-sankey under it) in three
- * columns, styled after the retired signup page's *Where Your Money Goes*:
- * minimal on-graph labels (name and dollars only, riding their own capsule),
- * the detail carried by a legend above and the facts below, and the whole
- * container's width available to the drawing.
+ * The phase as a flow, drawn on Recharts' Sankey (d3-sankey under it), styled
+ * after the retired signup page's *Where Your Money Goes*: minimal on-graph
+ * labels (name and dollars only, riding their own capsule), the detail carried
+ * by a legend above and the facts below, and the whole container's width
+ * available to the drawing.
  *
- * Column two is the obligations the ledger books — the admin budget, the Time
- * Pool Fund, free storage, programs — and column three opens the spending:
- * the admin budget's five lines (infrastructure, staffing, tooling, services,
- * reserves, plus the headroom the budget holds unspent) and free storage's
- * two parts. Every column-conservation guarantee the ledger makes is drawn,
- * so the ribbons cannot invent or lose a dollar; an over-budget row skips
- * headroom and its children simply overshoot the parent's capsule, which the
- * red note below names.
+ * The columns carry the plan's hierarchy (Parker, 2026-10-10): revenue into
+ * Admin and Programs (column two); Admin's five spending lines open beside the
+ * Programs' three — Free Access, Free Storage, Other Programs (column three);
+ * and each program line's own spending opens in column four. Free Access and
+ * Free Storage are programs WITHIN Programs, not siblings of it, and the
+ * drawing shows that structure rather than a flat list of obligations. Every
+ * column-conservation guarantee the ledger makes is drawn, so the ribbons
+ * cannot invent or lose a dollar; an over-budget row skips headroom and its
+ * children simply overshoot the parent's capsule, as do Free Access and free
+ * storage when together they overrun Programs — both named by the red note
+ * below.
  */
 interface StreamGroup {
 	key: string;
@@ -821,9 +855,11 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 	const C = {
 		revenue: "#4f46e5",
 		admin: "#6d28d9",
-		fund: "#2563eb",
+		/** Programs — the PARENT line everything after admin lands in. */
+		programs: "#065f46",
+		access: "#2563eb",
 		storage: "#0891b2",
-		programs: "#059669",
+		other: "#059669",
 	};
 
 	const groups: StreamGroup[] = [
@@ -844,93 +880,74 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 			),
 		},
 		{
-			key: "fund",
-			name: "Time Pool Fund",
-			color: C.fund,
+			key: "programs",
+			name: "Programs",
+			color: C.programs,
 			prose: (
 				<>
-					Free accounts&rsquo; Time Pools together — ${L.freeSlice.toFixed(2)} per free account,{" "}
-					{Math.round(L.freeAccounts).toLocaleString("en-US")} free accounts — funded from the
-					remainder after admin.
+					Everything after admin — never below{" "}
+					{((1 - L.adminCeiling) * 100).toFixed(0)}% of revenue by construction. The charitable
+					programs are INSIDE this line, not beside it: Free Access, Free Storage, and the rest of
+					the spending the budget affords.
+				</>
+			),
+		},
+		{
+			key: "access",
+			name: "Free Access",
+			color: C.access,
+			prose: (
+				<>
+					The program of free public access that still pays creators — ${L.freeSlice.toFixed(2)} per
+					free account, {Math.round(L.freeAccounts).toLocaleString("en-US")} free accounts — offered
+					through the Time Pool Fund, at its stated share of Programs.
 				</>
 			),
 		},
 		{
 			key: "storage",
-			name: "Free storage",
+			name: "Free Storage",
 			color: C.storage,
 			prose: (
 				<>
-					Storage nobody is charged for: free and new creators&rsquo; catalogs ( $
-					{Math.round(S.freeCatalog).toLocaleString("en-US")}/mo) and the bundled allowances every
-					paying rung grants (${Math.round(S.payingAllowances).toLocaleString("en-US")}/mo), both
-					paid to the vendor at cost.
+					Its complement, and a program in its own right: storage nobody is charged for — free and
+					new creators&rsquo; catalogs (${Math.round(S.freeCatalog).toLocaleString("en-US")}/mo) and
+					the bundled allowances every paying rung grants (
+					${Math.round(S.payingAllowances).toLocaleString("en-US")}/mo), both paid to the vendor at
+					cost.
 				</>
 			),
 		},
 		{
-			key: "programs",
-			name: "Programs",
-			color: C.programs,
+			key: "other",
+			name: "Other Programs",
+			color: C.other,
 			prose: L.solvent ? (
 				<>
-					The residual after every obligation — charitable programs, budgeted but not yet allocated;
-					the dial to watch as the path scales.
+					The residual within Programs — budgeted but not yet allocated: the dial to watch as the
+					path scales.
 				</>
 			) : (
 				<>
-					DEFICIT — the obligations overrun revenue at this phase; this row cannot be afforded as
-					modeled.
+					DEFICIT — Free Access and Free Storage together overrun Programs at this phase; this row
+					cannot be afforded as modeled.
 				</>
 			),
 		},
 	];
 
-	// ── Nodes and links: revenue → obligations → spending lines ──
+	// ── Nodes and links: revenue → admin + programs → lines → spending ──
 	/**
-	 * Every obligation breaks open in column three — including the two whose
-	 * outflow is a single line (the Fund's pot IS the free accounts' pools; a
-	 * program's residual sits unallocated until spent) — because d3-sankey
-	 * assigns columns by longest path: a childless obligation falls into the
-	 * last column beside the spending lines and the obligations' column loses
-	 * its row. The named single-child lines keep the middle column whole and
-	 * give the two residual streams an honest destination label. Column three
-	 * is ordered to mirror column two, so no ribbon of one stream crosses a
-	 * neighbor's.
+	 * Column two is Admin and Programs; column three is Admin's spending lines
+	 * beside Programs' three program lines; column four opens each program
+	 * line's own spending — including the two whose outflow is a single line
+	 * (the Fund's pot IS the free accounts' pools; other programs' residual
+	 * sits unallocated until spent), because d3-sankey assigns columns by
+	 * longest path: a childless line falls into the last column instead of
+	 * holding its row. Children are ordered under their parent, so no ribbon
+	 * of one stream crosses a neighbor's.
 	 */
-	const obligationNodes: DiagramNode[] = [
-		{
-			name: "admin",
-			fill: C.admin,
-			group: "admin",
-			label: `Admin budget ${usd(L.adminBudget)}`,
-			value: L.adminBudget,
-			...(L.adminWithinCeiling ? {} : { warn: "opsOver" as const }),
-		},
-		{
-			name: "fund",
-			fill: C.fund,
-			group: "fund",
-			label: `Time Pool Fund ${usd(L.fund)}`,
-			value: L.fund,
-		},
-		{
-			name: "storage",
-			fill: C.storage,
-			group: "storage",
-			label: `Free storage ${usd(L.freeStorage)}`,
-			value: L.freeStorage,
-		},
-		{
-			name: "programs",
-			fill: C.programs,
-			group: "programs",
-			label: `Programs ${usd(Math.max(0, L.programs))}`,
-			value: Math.max(0, L.programs),
-			...(L.solvent ? {} : { warn: "insolvent" as const }),
-		},
-	];
-	const childNodes: DiagramNode[] = [
+	const adminChildren: DiagramNode[] = [
 		{
 			name: "infra",
 			fill: C.admin,
@@ -977,12 +994,38 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 					},
 				]
 			: []),
+	].filter((c) => c.value > 1);
+	const programLines: DiagramNode[] = [
+		{
+			name: "access",
+			fill: C.access,
+			group: "access",
+			label: `Free Access ${usd(L.freeAccess)}`,
+			value: L.freeAccess,
+		},
+		{
+			name: "storage",
+			fill: C.storage,
+			group: "storage",
+			label: `Free Storage ${usd(L.freeStorage)}`,
+			value: L.freeStorage,
+		},
+		{
+			name: "other",
+			fill: C.other,
+			group: "other",
+			label: `Other Programs ${usd(Math.max(0, L.otherPrograms))}`,
+			value: Math.max(0, L.otherPrograms),
+			...(L.solvent ? {} : { warn: "insolvent" as const }),
+		},
+	];
+	const programChildren: DiagramNode[] = [
 		{
 			name: "freePools",
-			fill: C.fund,
-			group: "fund",
-			label: `Free Time Pools ${usd(L.fund)}`,
-			value: L.fund,
+			fill: C.access,
+			group: "access",
+			label: `Free Time Pools ${usd(L.freeAccess)}`,
+			value: L.freeAccess,
 		},
 		{
 			name: "freeCatalog",
@@ -1000,18 +1043,30 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 		},
 		{
 			name: "unallocated",
-			fill: C.programs,
-			group: "programs",
-			label: `Unallocated ${usd(Math.max(0, L.programs))}`,
-			value: Math.max(0, L.programs),
+			fill: C.other,
+			group: "other",
+			label: `Unallocated ${usd(Math.max(0, L.otherPrograms))}`,
+			value: Math.max(0, L.otherPrograms),
 		},
 		// Zero-valued lines draw nothing — a phase with no staff shows no staff
 		// capsule — and their absence changes no conservation: they carried 0.
 	].filter((c) => c.value > 1);
 
-	const parentNode = (group: string): number =>
-		1 + obligationNodes.findIndex((o) => o.name === group);
-	const allChildren = childNodes.filter((c) => c.value > 1);
+	const adminNode: DiagramNode = {
+		name: "admin",
+		fill: C.admin,
+		group: "admin",
+		label: `Admin budget ${usd(L.adminBudget)}`,
+		value: L.adminBudget,
+		...(L.adminWithinCeiling ? {} : { warn: "opsOver" as const }),
+	};
+	const programsNode: DiagramNode = {
+		name: "programs",
+		fill: C.programs,
+		group: "programs",
+		label: `Programs ${usd(Math.max(0, L.programs))}`,
+		value: Math.max(0, L.programs),
+	};
 	const nodes: DiagramNode[] = [
 		{
 			name: "revenue",
@@ -1020,20 +1075,40 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 			label: `Revenue ${usd(rev)}`,
 			value: rev,
 		},
-		...obligationNodes,
-		...allChildren,
+		adminNode,
+		programsNode,
+		...adminChildren,
+		...programLines,
+		...programChildren,
 	];
 	const byName = new Map(nodes.map((n, i) => [n.name, i]));
 	const links: DiagramLink[] = [
-		...obligationNodes.map((o) => ({
+		{ source: 0, target: byName.get("admin")!, value: adminNode.value, group: "admin", stroke: C.admin },
+		{
 			source: 0,
+			target: byName.get("programs")!,
+			value: programsNode.value,
+			group: "programs",
+			stroke: C.programs,
+		},
+		...adminChildren.map((c) => ({
+			source: byName.get("admin")!,
+			target: byName.get(c.name)!,
+			value: c.value,
+			group: c.group,
+			stroke: c.fill,
+		})),
+		...programLines.map((o) => ({
+			source: byName.get("programs")!,
 			target: byName.get(o.name)!,
 			value: o.value,
 			group: o.group,
 			stroke: o.fill,
 		})),
-		...allChildren.map((c) => ({
-			source: parentNode(c.group),
+		...programChildren.map((c) => ({
+			source: byName.get(
+				c.group === "access" ? "access" : c.group === "storage" ? "storage" : "other",
+			)!,
 			target: byName.get(c.name)!,
 			value: c.value,
 			group: c.group,
@@ -1041,9 +1116,18 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 		})),
 	];
 
+	/**
+	 * Hover follows streams, and the hierarchy: hovering Programs lights the
+	 * whole subtree (its three lines and their spending), and hovering a
+	 * program line lights its parent too, so the ribbon back to revenue reads
+	 * as one story.
+	 */
 	const dim = (group: string): number => {
 		if (!hover) return 1;
-		return hover === group ? 1 : 0.15;
+		if (hover === group) return 1;
+		if (hover === "programs" && group !== "admin" && group !== "revenue") return 1;
+		if (group === "programs" && ["access", "storage", "other"].includes(hover)) return 1;
+		return 0.15;
 	};
 
 	return (
@@ -1061,7 +1145,7 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 					sort={false}
 					margin={{ top: 8, right: 64, bottom: 8, left: 8 }}
 					role="img"
-					aria-label="The phase as a flow: revenue in; the admin budget, the Time Pool Fund, free storage and programs; then the spending each obligation stands over"
+					aria-label="The phase as a flow: revenue in; admin and the charitable programs; Programs opening into Free Access, Free Storage and Other Programs; then the spending each line stands over"
 					node={(props) => <PhaseNode {...props} dim={dim} />}
 					link={(props) => <PhaseLink {...props} dim={dim} />}
 					onMouseEnter={(item, type) => {
@@ -1079,14 +1163,15 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 			<p className="mt-1 text-xs text-base-content/60">
 				{rev > 0 ? sharePct(rev, L.adminBudget) : "—"} of the month&rsquo;s revenue is budgeted to
 				admin ({rev > 0 ? sharePct(rev, L.adminActual) : "—"} committed at this scale),{" "}
-				{rev > 0 ? sharePct(rev, L.fund) : "—"} funds the Fund&rsquo;s free pools,{" "}
-				{rev > 0 ? sharePct(rev, L.freeStorage) : "—"} covers free storage, and{" "}
-				{rev > 0 ? sharePct(rev, Math.max(0, L.programs)) : "—"} remains for programs — dollars per
-				month, at this phase&rsquo;s scale.
+				{rev > 0 ? sharePct(rev, L.programs) : "—"} goes to the charitable programs — and within
+				them, {rev > 0 ? sharePct(rev, L.freeAccess) : "—"} funds Free Access through the Time Pool
+				Fund, {rev > 0 ? sharePct(rev, L.freeStorage) : "—"} covers Free Storage, and{" "}
+				{rev > 0 ? sharePct(rev, Math.max(0, L.otherPrograms)) : "—"} stays in Other Programs —
+				dollars per month, at this phase&rsquo;s scale.
 				{!L.solvent && (
 					<span className="text-error">
 						{" "}
-						The obligations overrun revenue by {usd(-L.programs)}/mo.
+						Free Access and Free Storage overrun Programs by {usd(-L.otherPrograms)}/mo.
 					</span>
 				)}
 				{!L.adminWithinCeiling && (
@@ -1109,7 +1194,7 @@ function StreamLegend({
 	setHover: (g: string | null) => void;
 }) {
 	return (
-		<div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+		<div className="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
 			{groups.map((g) => (
 				// biome-ignore lint/a11y/noStaticElementInteractions: the hover is a pointer shortcut — the card's facts are always visible, and nothing here is mouse-only.
 				<div

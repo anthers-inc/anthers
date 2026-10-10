@@ -260,7 +260,7 @@ const planPhaseEditSchema = z.object({
 	tooling: z.number().min(0).optional(),
 	services: z.number().min(0).optional(),
 	adminBudgetShare: z.number().min(0).max(1).nullable().optional(),
-	fundShare: z.number().min(0).max(1).nullable().optional(),
+	freeAccessShare: z.number().min(0).max(1).nullable().optional(),
 });
 const planPhaseCreateSchema = z.object({
 	label: z.string().trim().min(1).max(120),
@@ -270,11 +270,11 @@ const planPhaseCreateSchema = z.object({
 	tooling: z.number().min(0),
 	services: z.number().min(0),
 	adminBudgetShare: z.number().min(0).max(1).nullable().optional(),
-	fundShare: z.number().min(0).max(1).nullable().optional(),
+	freeAccessShare: z.number().min(0).max(1).nullable().optional(),
 });
 const planSettingsSchema = z.object({
 	adminBudgetShare: z.number().min(0).max(1).optional(),
-	fundShare: z.number().min(0).max(1).optional(),
+	freeAccessShare: z.number().min(0).max(1).optional(),
 });
 
 /**
@@ -659,7 +659,7 @@ const adminRoutes = new Hono<AdminEnv>()
 				tooling: body.tooling,
 				services: body.services,
 				adminBudgetShare: body.adminBudgetShare ?? null,
-				fundShare: body.fundShare ?? null,
+				freeAccessShare: body.freeAccessShare ?? null,
 			});
 			return c.json(created, 201);
 		},

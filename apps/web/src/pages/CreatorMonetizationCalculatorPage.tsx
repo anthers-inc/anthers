@@ -14,7 +14,7 @@ import { useAnthersLadder } from "../lib/anthers-ladder";
 // ---------------------------------------------------------------------------
 // Support-model economics. A user gives Anthers a monthly amount, which names their
 // Badge (Root $3 … Blossom $12). That amount splits into a Time Pool (a share of it, to
-// creators by time) and "Supports Anthers" (the remainder funding free access and
+// creators by time) and "Supports Anthers" (the remainder funding the charitable programs,
 // programs). Money to creators = the Time Pool + what a user gives directly to a
 // creator (any amount, no platform cut). The Time Pool is distributed
 // across the creators a user watches, in proportion to time (equal-time
@@ -42,7 +42,7 @@ const timePoolOf = (badge: BadgeKey) => timePoolFor(thresholdForBadge(badge));
  */
 const supportOf = (badge: BadgeKey) => thresholdForBadge(badge);
 /** "Supports Anthers" — the non-Time-Pool part of what is given to Anthers: the
- * remainder that funds free access and the charitable programs. */
+ * remainder that funds the charitable programs, free access included. */
 const supportsAnthersOf = (badge: BadgeKey) =>
 	Math.max(0, thresholdForBadge(badge) - timePoolFor(thresholdForBadge(badge)));
 
@@ -785,8 +785,8 @@ export default function CreatorMonetizationCalculatorPage() {
 									A user gives Anthers a <b>monthly amount</b>, which names their Badge (Root →
 									Blossom). It splits into a <b>Time Pool</b> (${" "}
 									{timePoolFor(publicAccessPrice).toFixed(2)} of every ${publicAccessPrice}, to
-									creators by time) and <b>Supports Anthers</b> (the remainder, which funds free
-									access and the charitable programs). <b>Directed support</b> (any amount, no
+									creators by time) and <b>Supports Anthers</b> (the remainder, which funds the
+									charitable programs, free access included). <b>Directed support</b> (any amount, no
 									platform cut) is given alongside.
 								</li>
 								<li>

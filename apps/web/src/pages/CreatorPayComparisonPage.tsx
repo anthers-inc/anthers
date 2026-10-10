@@ -343,7 +343,7 @@ export default function CreatorPayComparisonPage() {
 						come out of a price is the at-cost card processing, paid to the processor — never a cent
 						to us, and nothing at all for delivery however large the work. The one thing that funds
 						the platform is <b className="text-base-content">the remainder</b> — what's left of what
-						is given to Anthers after the Time Pool, funding free access and the creator programs,
+						is given to Anthers after the Time Pool, funding the charitable programs, free access included,
 						never subtracted from your earnings. Here's what actually reaches you, platform by
 						platform.
 					</>
@@ -391,7 +391,7 @@ export default function CreatorPayComparisonPage() {
 					<b className="text-base-content/70">Anthers</b>; that half splits into a Time Pool ({" "}
 					{money(timePoolFor(ladder.publicAccessPrice))} of every ${ladder.publicAccessPrice},
 					distributed to the creators they watch by time) and{" "}
-					<b className="text-base-content/70">the remainder</b> that funds free access and the
+					<b className="text-base-content/70">the remainder</b> that funds the charitable programs — free access included —
 					creator programs. On a direct sale Anthers takes nothing at all; the only deduction from
 					the listed price is the at-cost card processing, paid to the processor.
 				</p>
@@ -453,7 +453,7 @@ const CUT_STYLE: Record<CutKind, { tone: string; tag: string; tagTone: string }>
 	profit: { tone: "text-error/80", tag: "to the platform", tagTone: "text-error/50" },
 	foundation: {
 		tone: "text-base-content/70",
-		tag: "funds free access · not a cut",
+		tag: "funds the charitable programs · not a cut",
 		tagTone: "text-primary/70",
 	},
 	none: { tone: "text-success/80", tag: "no cut — $0 to Anthers", tagTone: "text-success/60" },

@@ -6,7 +6,7 @@
 // @anthers/shared/constants + fees): a user gives a monthly amount, all in, pointed at
 // a creator (no platform cut) or at Anthers. What goes to Anthers
 // splits into Time Pool (half) + the at-cost Payments line (card 2.9%+$0.30) +
-// the remainder funding free access and the charitable programs. There is no
+// the remainder funding the charitable programs, free access included. There is no
 // bandwidth term — delivery costs $0 at any volume (retired 2026-08-12). Sales tax
 // (an illustrative ~6.5% average here; the real rate varies by location and is
 // calculated at checkout) is the ONLY thing added on top, because a
@@ -255,8 +255,8 @@ export function SubscriptionCalculator() {
 	const n = thresholdForBadge(badge);
 	const price = n;
 	const timePool = timePoolFor(n);
-	// "Supports Anthers" is the remainder — what funds free access and the charitable
-	// programs.
+	// "Supports Anthers" is the remainder — what funds the charitable programs, free
+	// access included.
 
 	const supportsAnthers = n === 0 ? 0 : price - timePool - cardFeeDisplay(price);
 	const toCreators = n === 0 ? 0 : timePool;

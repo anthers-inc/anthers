@@ -361,7 +361,7 @@ function renderReadmeModelMarkdown(): string {
 		`**Where what you give Anthers goes.** Every row conserves exactly — creator pay plus the at-cost card line plus what is left equals what you paid. The remainder is the residual, so it absorbs any change in the other two while creator pay stays fixed.`,
 		"",
 		plainTable(
-			["Badge", "You pay", "Time Pool → creators", "Payments\\*", "Free access & programs"],
+			["Badge", "You pay", "Time Pool → creators", "Payments\\*", "Charitable programs"],
 			[":--", "--:", "--:", "--:", "--:"],
 			badges.map((r) => [
 				`**${r.badge}**`,
@@ -413,7 +413,7 @@ function renderBadgePublicMarkdown(): string {
 				"A month to Anthers",
 				"To the Time Pool",
 				"Card processing",
-				"Free access & programs",
+				"Charitable programs",
 			],
 			[":--", "--:", "--:", "--:", "--:"],
 			rows.map((r) => [
@@ -425,7 +425,7 @@ function renderBadgePublicMarkdown(): string {
 			]),
 		),
 		"",
-		`Every row adds up exactly: what reaches creators, plus the cost of processing the card, plus what funds free access and the programs, equals what you paid. Card processing is ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, charged once on your whole monthly payment rather than once per destination, and paid to the payment processor rather than kept.`,
+		`Every row adds up exactly: what reaches creators, plus the cost of processing the card, plus what funds the charitable programs — free access included — equals what you paid. Card processing is ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, charged once on your whole monthly payment rather than once per destination, and paid to the payment processor rather than kept.`,
 		"",
 		`Because that $${CARD_FLAT.toFixed(2)} is fixed per payment, it does not grow with the amount — which is why the last column grows faster than the rung does. **No row depends on how much you stream or download**, because delivery costs nothing at any volume.`,
 	].join("\n");
@@ -511,7 +511,7 @@ function renderReceiptMarkdown(): string {
 		// the next `econ:figures` run puts the old wording straight back.
 		pad("  Time Pool → creators you spent time with (by time)", `$${r.timePool}`),
 		pad("  Payments → this side's share of the card fee (at cost)", `$${r.paymentsAnthers}`),
-		pad("  Free access & programs (the remainder)", `$${r.remainder}`),
+		pad("  Charitable programs (the remainder)", `$${r.remainder}`),
 		"─".repeat(66),
 		pad("Support subtotal (all-in)", `$${r.supportSubtotal}`),
 		// The rate a buyer actually pays is resolved by Stripe Tax from their billing
@@ -526,7 +526,7 @@ function renderReceiptMarkdown(): string {
 		`${" ".repeat(56)}──────`,
 		pad("Total billed (prepaid, monthly)", `$${r.totalBilled}`),
 		"",
-		`To creators this month: $${r.toCreators}  ·  Free access & programs: $${r.remainder}  ·  Anthers keeps: $0.00`,
+		`To creators this month: $${r.toCreators}  ·  Charitable programs: $${r.remainder}  ·  Anthers keeps: $0.00`,
 		"```",
 	].join("\n");
 }
