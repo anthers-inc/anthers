@@ -245,7 +245,10 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	 * the row rather than arguing with it.
 	 */
 	const [typeOverride, setTypeOverride] = useState<UploadableWorkType | null>(null);
-	const type = (typeOverride ?? editing.type) as UploadableWorkType;
+	// The kind the page stands at: an override while it is unsaved, the saved row otherwise —
+	// `current` rather than `editing`, because a save writes a new kind into the row and the
+	// page's sections (media, details, the rating grid) must follow the row from then on.
+	const type = (typeOverride ?? current.type) as UploadableWorkType;
 	// Which rating grid this Work is rated on, which its type alone decides.
 	const grid = gridFor(type);
 
@@ -563,6 +566,11 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		!current.sourceKey &&
 		!current.embedUrl &&
 		!fileUploading &&
+		// A file that landed a moment ago but that the row has not been re-read around yet
+		// is media as far as the creator is concerned, so the control waits it out rather
+		// than offering a change the save would refuse — and the walk that races this exact
+		// window is the proof (see the comic walk in `work-upload.authed.e2e.ts`).
+		landed <= readAfter &&
 		// A piece of writing is its body, on the page as on the row: prose typed here that a
 		// save would send counts as existing, and a kind cannot change from under it.
 		!(writing && !isEmptyWriting(bodyHtml)) &&
@@ -780,7 +788,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			    shows what is saved, which is why it says so while anything is not. */}
 			<div className="flex flex-wrap items-center gap-2">
 				<h1 className="text-sm font-semibold flex items-center gap-2">
-					Edit
+					Edit{" "}
 					{kindChangeable ? (
 						<select
 							aria-label="Work kind"

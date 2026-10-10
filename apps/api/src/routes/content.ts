@@ -4584,7 +4584,7 @@ const contentRoutes = new Hono()
 			}
 		}
 
-// 🚨 **The kind changes only while nothing kind-specific exists to strand.** The
+		// 🚨 **The kind changes only while nothing kind-specific exists to strand.** The
 		// drafting rule (Parker, 2026-10-10): a Work can be drafted before its file exists,
 		// and the kind a draft starts as often isn't the kind it ends as. Once media exists,
 		// the kind is fixed — a comic Work with a video's source file is a row whose every
