@@ -16,6 +16,7 @@
 import { isListened, isPaged } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import HostedEmbed from "@anthers/web-shared/content/HostedEmbed";
+import RecordLinkLine from "@anthers/web-shared/content/RecordLink";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
@@ -252,6 +253,17 @@ export function WorkDates({ work }: { work: WorkDetail }) {
 			)}
 		</div>
 	);
+}
+
+/**
+ * The released Work's listing on the network, as its record link — the same line a
+ * creator's Edit page shows, and since the widening (2026-10-10) it is public copy too:
+ * the record is public no matter who reads, so every reader who can see the Work sees
+ * this. The wording and the link live in {@link RecordLinkLine}, the one wording every
+ * page that carries a record link uses.
+ */
+export function WorkRecordLink({ work }: { work: WorkDetail }) {
+	return <RecordLinkLine recordUrl={work.recordUrl} />;
 }
 
 /**

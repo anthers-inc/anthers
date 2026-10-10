@@ -14,10 +14,11 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { merchVariants, users, works } from "@anthers/db/schema";
+import { merchVariants, posts, users, works } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
+import { POST_COLLECTION } from "../services/atproto-record-plan.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
@@ -261,6 +262,24 @@ describe("Catalog vertical slice", () => {
 		expect(post.linkedWorks.length).toBe(1);
 		expect(post.linkedWorks[0].work.access.canAccess).toBe(false);
 		expect(post.linkedWorks[0].work.assets[0].file).toBe("");
+	});
+
+	it("carries the post's record link beside it: null without one, Taproot with one", async () => {
+		const uri = `at://did:plc:${id}/${POST_COLLECTION}/${id}key`;
+		await db.update(posts).set({ atprotoUri: uri }).where(sql`slug = ${announcementSlug}`);
+		try {
+			// A stranger's read, not the creator's — the record is public no matter who
+			// reads, so the announcement's reader carries the same link (the widening
+			// task, 2026-10-10).
+			const detail = await req(`/api/content/posts/${announcementSlug}`, {
+				headers: { Cookie: otherCookie },
+			});
+			expect(detail.status).toBe(200);
+			const { post } = await detail.json();
+			expect(post.recordUrl).toBe(`https://atproto.at/uri/${uri}`);
+		} finally {
+			await db.update(posts).set({ atprotoUri: null }).where(sql`slug = ${announcementSlug}`);
+		}
 	});
 
 	it("shows the Work where it has been posted", async () => {

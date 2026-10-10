@@ -40,6 +40,7 @@
 		"./content/WorkWebBuildSection": "./src/components/content/WorkWebBuildSection.tsx",
 		"./content/work-state": "./src/components/content/work-state.ts",
 		"./content/RatingAppeal": "./src/components/content/RatingAppeal.tsx",
+		"./content/RecordLink": "./src/components/content/RecordLink.tsx",
 		"./ui/Logo": "./src/components/ui/Logo.tsx",
 		"./ui/ThemeToggle": "./src/components/ui/ThemeToggle.tsx",
 		"./ui/FormField": "./src/components/ui/FormField.tsx",

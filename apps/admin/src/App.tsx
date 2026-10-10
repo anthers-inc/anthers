@@ -16,6 +16,7 @@ import SalesTaxForecast from "./pages/books/SalesTaxForecast";
 import FinancialPlan from "./pages/FinancialPlan";
 import Home from "./pages/Home";
 import Infrastructure from "./pages/Infrastructure";
+import EmailLibrary from "./pages/infrastructure/EmailLibrary";
 import FailedMail from "./pages/infrastructure/FailedMail";
 import IssueReports from "./pages/infrastructure/IssueReports";
 import AbuseReports from "./pages/legal/AbuseReports";
@@ -50,6 +51,7 @@ export default function App() {
 				<Route path="infrastructure" element={<Infrastructure />} />
 				<Route path="infrastructure/atproto" element={<AtProtoRecords />} />
 				<Route path="infrastructure/failed-mail" element={<FailedMail />} />
+				<Route path="infrastructure/email-library" element={<EmailLibrary />} />
 				<Route path="issues" element={<IssueReports />} />
 				<Route path="books/sales-tax" element={<SalesTaxWorksheet />} />
 				<Route path="books/sales-tax-forecast" element={<SalesTaxForecast />} />

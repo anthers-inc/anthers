@@ -179,7 +179,7 @@ export interface BadgeView {
 	price: number;
 	/** Time Pool $ at this rung (to creators, by time). */
 	timePool: string;
-	/** "Supports Anthers" — the remainder, funding free access and the programs. */
+	/** "Supports Anthers" — the remainder, funding the charitable programs, free access included. */
 	supportsAnthers: string;
 	subsidized: boolean;
 }
@@ -189,7 +189,7 @@ export interface BadgeView {
  * derived from the dials, no per-user data — so the signup page, the
  * `/subscriptions/badges` route, and inline-unlock all render the same numbers and
  * can't drift. "Supports Anthers" is the remainder — what is left of the charge
- * after the Time Pool, funding free access and the charitable programs.
+ * after the Time Pool, funding the charitable programs — free access included.
  */
 export function badgeViews(): BadgeView[] {
 	// The $0 rung is the absence of a Badge, so it isn't in ANTHERS_BADGES — it's

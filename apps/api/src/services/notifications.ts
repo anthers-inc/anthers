@@ -428,6 +428,19 @@ function renderEmail(
 	);
 }
 
+/**
+ * The notification email's subject and body, without the send — the same pair a notification
+ * send carries. Exported for the admin Email Library's notification entries, the same way
+ * `services/email.ts` exports its render functions: the library renders through this module's
+ * own template rather than a parallel one.
+ */
+export function renderNotificationEmail(
+	input: NotifyInput,
+	unsubscribe?: { group: DeliveryGroup | null; unsubscribeToken: string | null; userId: number },
+): { subject: string; html: string } {
+	return { subject: input.title, html: renderEmail(input, unsubscribe) };
+}
+
 function appUrl(path: string): string {
 	const base = process.env.APP_URL ?? "https://anthers.org";
 	return `${base.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;

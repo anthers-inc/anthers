@@ -185,7 +185,7 @@ const TERMS: LegalDocument = {
 		"You can also report content or a person, which is different: that asks a human to look. We don't tell you what happened to an individual report.",
 
 		"## Money",
-		"**Monthly support** is an amount you choose, and you choose who it goes to. What you give a creator goes to that creator; what you give Anthers funds the pool that pays creators by the time you spend, pays its share of card processing at cost, and what's left funds free access and our charitable programs.",
+		"**Monthly support** is an amount you choose, and you choose who it goes to. What you give a creator goes to that creator; what you give Anthers funds the pool that pays creators by the time you spend, pays its share of card processing at cost, and what's left funds our charitable programs — free access included.",
 		"**Support recurs monthly until you change it.** You can stop at any time, and you keep what you have paid for through the cycle you have already paid for. We do not pro-rate a cycle in progress.",
 		"**Direct purchases** are one-off. You pay the price the creator set, plus sales tax where it applies, and nothing else.",
 		"Prices shown include every mandatory fee. Sales tax is the only thing added at checkout.",

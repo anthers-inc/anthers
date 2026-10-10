@@ -416,10 +416,16 @@ export interface Work {
 	createdAt?: string;
 	updatedAt?: string;
 	/**
-	 * The Work's listing on the network while it has one, and where its creator can read that
-	 * record raw. Present only in the owner's shape; absent or null means no listing.
+	 * The Work's listing on the network while it has one. Present only in the owner's
+	 * shape; absent or null means no listing, which is ordinary rather than a fault.
 	 */
 	atprotoUri?: string | null;
+	/**
+	 * The Work's public record link, as the record's own address on Taproot
+	 * (`https://atproto.at/uri/{at-uri}`) — the one form a reader can follow. Carried by
+	 * both shapes since the widening (2026-10-10): the record is public no matter who
+	 * reads, so every reader who can see the Work sees this too. Null means no listing.
+	 */
 	recordUrl?: string | null;
 }
 
@@ -499,6 +505,12 @@ export interface Post {
 	scheduledFor: string | null;
 	viewCount: number;
 	atprotoUri: string | null;
+	/**
+	 * The post's public record link — the record's own address on Taproot
+	 * (`https://atproto.at/uri/{at-uri}`), the form a reader can follow (the widening
+	 * task, 2026-10-10). Null while the post has no record, which is ordinary.
+	 */
+	recordUrl?: string | null;
 	createdAt: string;
 	updatedAt: string;
 
@@ -582,6 +594,12 @@ export interface Project {
 	pageConfig: Record<string, unknown> | null;
 	isPublished: boolean | null;
 	atprotoUri: string | null;
+	/**
+	 * The project's public record link — the record's own address on Taproot, the form a
+	 * reader can follow (the widening task, 2026-10-10). Null while there is no record,
+	 * which is ordinary.
+	 */
+	recordUrl?: string | null;
 	createdAt: string;
 	updatedAt: string;
 	creator?: Creator;
@@ -630,6 +648,12 @@ export interface Comment {
 	removed: false;
 	body: string;
 	atprotoUri: string | null;
+	/**
+	 * The comment's public record link — the record's own address on Taproot, the form a
+	 * reader can follow (the widening task, 2026-10-10). Null while the comment has no
+	 * record, which is ordinary. A removed entry carries neither field.
+	 */
+	recordUrl?: string | null;
 	createdAt: string;
 	/**
 	 * 🚨 **Null when the author deleted their account**, and the server has always sent it
@@ -700,6 +724,12 @@ export interface Review {
 	verdict: string;
 	/** "" for rows written before reviews required text — render the verdict alone. */
 	body: string;
+	/**
+	 * The review's public record link — the record's own address on Taproot, the form a
+	 * reader can follow (the widening task, 2026-10-10). Null while there is no record,
+	 * which is ordinary.
+	 */
+	recordUrl?: string | null;
 	createdAt: string;
 	handle: string;
 	avatar: string | null;

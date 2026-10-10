@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useAuth } from "@anthers/web-shared/auth";
+import RecordLinkLine from "@anthers/web-shared/content/RecordLink";
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useParams } from "@anthers/web-shared/router";
@@ -134,6 +135,14 @@ export default function ProjectPage() {
 						)}
 					</>
 				)}
+			</div>
+
+			{/* The project's listing on the network — the same record link every kind carries
+			    (the widening task, 2026-10-10), placed after the hero so an album's own title
+			    block keeps standing down. Nothing renders for a project with no record,
+			    which is ordinary. */}
+			<div className="mb-6">
+				<RecordLinkLine recordUrl={project.recordUrl} />
 			</div>
 
 			{/*

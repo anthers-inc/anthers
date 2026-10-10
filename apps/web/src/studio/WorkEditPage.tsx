@@ -126,6 +126,7 @@ import {
 	WorkDeliverable,
 	type WorkDetail,
 	WorkHeader,
+	WorkRecordLink,
 	WRITING_BODY_STYLE,
 	WRITING_STANDFIRST_CLASS,
 	workTitleTypography,
@@ -1165,20 +1166,16 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					    partner sat at the bottom. */}
 					<OriginalReleaseDate value={originalDate} released={released} onValue={setOriginalDate} />
 					{/*
-					 * The released Work's listing on the network, as its record, read raw from the
-					 * creator's own server (Parker, 2026-09-18). Said of what is SAVED, since a listing
+					 * The released Work's listing on the network. Said of what is SAVED, since a listing
 					 * is written after a save rather than while a box is ticked, and "not yet" rather
 					 * than "missing": the listing is written by a job a moment after release, and one
-					 * that cannot be written is explained by the permission warnings instead.
+					 * that cannot be written is explained by the permission warnings instead. The link
+					 * itself is the shared reader-side line (`WorkRecordLink`) — the record is public,
+					 * so the creator and a reader see exactly the same thing.
 					 */}
 					{current.visibility === "released" &&
 						(current.recordUrl ? (
-							<p className="text-xs text-base-content/60">
-								Its listing is on the network, where other software can read it.{" "}
-								<a href={current.recordUrl} target="_blank" rel="noreferrer" className="link">
-									View the record
-								</a>
-							</p>
+							<WorkRecordLink work={current} />
 						) : (
 							<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
 						))}

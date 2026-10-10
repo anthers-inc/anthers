@@ -7,8 +7,8 @@
 //
 // Copy tracks the SUPPORT MODEL: one primitive, a monthly amount, pointed either at a
 // creator (no platform cut, clearing that creator's gates at whatever amounts they set) or
-// at Anthers (half into the Time Pool and a remainder funding free access and the
-// charitable programs). A fan's Badge IS the amount they give Anthers (Root → Blossom =
+// at Anthers (half into the Time Pool and a remainder funding the charitable
+// programs, free access included). A fan's Badge IS the amount they give Anthers (Root → Blossom =
 // $3 → $12, "+" beyond). ⚠️ **Never write a level as a count of anything** — there is no
 // unit and no granularity floor — and there is no delivery line to write either, since
 // delivery costs $0 at any volume and downloads are unlimited and free on both sides.
@@ -476,8 +476,8 @@ export default function ForCreatorsPage() {
 						<strong className="font-semibold text-base-content/80">monthly amount</strong>, at
 						whatever levels you set. A fan points it at you—and we take no cut of it—or at Anthers,
 						where half of it goes to creators, paid in proportion to the time people spend with
-						their work, and the rest funds free access and the charitable programs. Both reach you;
-						neither is a cut of your earnings, and{" "}
+						their work, and the rest funds the charitable programs, free access included. Both reach
+						you; neither is a cut of your earnings, and{" "}
 						<strong className="font-semibold text-base-content/80">
 							neither one needs the other
 						</strong>
@@ -530,7 +530,7 @@ export default function ForCreatorsPage() {
 							</ul>
 							{fmtMoney(publicAccessPrice)} a month also lifts their own Public Access limit, so
 							they can spend as much time with your free work as they like. Whatever is left over
-							funds free access and the charitable programs—not Anthers' pocket. Anthers is a
+							funds the charitable programs, free access included—not Anthers' pocket. Anthers is a
 							nonprofit: no investors, no profit-taking.
 						</SignpostCard>
 					</Reveal>
@@ -892,7 +892,7 @@ const RECEIPT_INTRO: Record<ActionKey, string> = {
 	stream: "an hour a fan spends with your public work",
 };
 
-const CS_NOTE = "funds free access & programs";
+const CS_NOTE = "funds the charitable programs";
 const PASSTHROUGH = "pure passthrough";
 const NO_CUT = "no cut";
 
@@ -906,7 +906,7 @@ const SALE_25_PHYSICAL = SALE_TABLE.find((r) => r.label === "merch-25-physical")
 // typed: the creator earns the fan's Time Pool ÷ their hours, per hour — the SAME for
 // every medium (equal-time), and independent of resolution (pay is by time, not bytes).
 // The rest of that $6 is the at-cost card fee (inside the price since 2026-08-03) and the
-// remainder that funds free access and the charitable programs. Note the per-hour figures fall as they watch more only because the same
+// remainder that funds the charitable programs, free access included. Note the per-hour figures fall as they watch more only because the same
 // fixed monthly money is spread over more hours — nothing costs more per hour.
 const STREAM_FAN_SUPPORT = thresholdForBadge("sprout");
 const STREAM_FAN_HOURS = 28;
@@ -974,8 +974,8 @@ const rivalPurchaseAllIn = (price: number, cutRate: number, absorbsProcessing = 
 const rivalPurchaseCut = (price: number, cutRate: number) => `$${(price * cutRate).toFixed(2)}`;
 
 /** The Anthers row for a combo. `platform` is what Anthers itself receives — the
- * remainder of a fan's support for Anthers on a stream (funds free access + the
- * charitable programs, NOT a platform profit cut); $0 on a sale (the purchase fee was
+ * remainder of a fan's support for Anthers on a stream (funds the charitable
+ * programs, NOT a platform profit cut); $0 on a sale (the purchase fee was
  * removed 2026-08-03) and on direct support (a pure passthrough). */
 const anthers = (creator: string, platform: string, platformNote: string): Deal => ({
 	name: "Anthers",
@@ -986,7 +986,7 @@ const anthers = (creator: string, platform: string, platformNote: string): Deal 
 
 // The itemized Anthers side, shown as a mini-receipt under each comparison. The
 // closing line makes the honest point the comparison table can't: Anthers profit is
-// always $0 — the remainder funds free access and the charitable programs, and the
+// always $0 — the remainder funds the charitable programs, and the
 // card fee goes to the processor. Streaming isn't
 // where Anthers competes on pay; the Time Pool share is small and variable, and the
 // real support comes from monthly backing and sales.
@@ -997,7 +997,7 @@ const streamReceipt: Line[] = [
 		amount: STREAM_HR_CARD,
 	},
 	{
-		label: "Free access & programs — what's left of their support for Anthers, across the month",
+		label: "Charitable programs — what's left of their support for Anthers, across the month",
 		amount: STREAM_HR_FOUNDATION,
 	},
 	{ label: "Anthers profit", amount: "$0.00" },
@@ -1406,9 +1406,9 @@ function SolutionExplorer() {
 				card processing, paid to Stripe — never a cent to Anthers (the purchase fee was removed
 				2026-08-03), and delivery costs nothing however large the work or however often it is
 				downloaded. On a stream, what's left of the fan's support for Anthers after the Time Pool
-				and the at-cost card fee funds free access and the charitable programs. What a fan gives you
-				is a pure passthrough. Scenario figures are illustrative; competitor rates are rough public
-				estimates, all-in take-home at the same list price.
+				and the at-cost card fee funds the charitable programs, free access included. What a fan
+				gives you is a pure passthrough. Scenario figures are illustrative; competitor rates are
+				rough public estimates, all-in take-home at the same list price.
 			</p>
 		</Card>
 	);

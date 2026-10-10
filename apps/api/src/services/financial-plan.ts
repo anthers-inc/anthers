@@ -19,8 +19,8 @@ import { type PlanLedger, planLedger } from "@anthers/shared/financial-plan";
 import { ADMIN_CEILING } from "@anthers/shared/growth";
 import { asc, eq } from "drizzle-orm";
 
-/** The plan's global defaults when nothing has been edited: locked 30%, Fund 10%. */
-export const PLAN_DEFAULTS = { adminBudgetShare: ADMIN_CEILING, fundShare: 0.1 } as const;
+/** The plan's global defaults when nothing has been edited: locked 30% admin, Free Access 10% of Programs. */
+export const PLAN_DEFAULTS = { adminBudgetShare: ADMIN_CEILING, freeAccessShare: 0.1 } as const;
 
 interface PhaseRow {
 	id: number;
@@ -32,7 +32,7 @@ interface PhaseRow {
 	tooling: number;
 	services: number;
 	adminBudgetShare: number | null;
-	fundShare: number | null;
+	freeAccessShare: number | null;
 }
 
 /** The default plan's phases — the path from here through inflection 1. */
@@ -46,7 +46,7 @@ const DEFAULT_PHASES: Array<Omit<PhaseRow, "id">> = [
 		tooling: 50,
 		services: 0,
 		adminBudgetShare: null,
-		fundShare: null,
+		freeAccessShare: null,
 	},
 	{
 		phase: 2,
@@ -57,7 +57,7 @@ const DEFAULT_PHASES: Array<Omit<PhaseRow, "id">> = [
 		tooling: 100,
 		services: 50,
 		adminBudgetShare: null,
-		fundShare: null,
+		freeAccessShare: null,
 	},
 	{
 		phase: 3,
@@ -68,7 +68,7 @@ const DEFAULT_PHASES: Array<Omit<PhaseRow, "id">> = [
 		tooling: 100,
 		services: 50,
 		adminBudgetShare: null,
-		fundShare: null,
+		freeAccessShare: null,
 	},
 	{
 		phase: 4,
@@ -79,7 +79,7 @@ const DEFAULT_PHASES: Array<Omit<PhaseRow, "id">> = [
 		tooling: 100,
 		services: 100,
 		adminBudgetShare: null,
-		fundShare: null,
+		freeAccessShare: null,
 	},
 	{
 		phase: 5,
@@ -90,7 +90,7 @@ const DEFAULT_PHASES: Array<Omit<PhaseRow, "id">> = [
 		tooling: 150,
 		services: 150,
 		adminBudgetShare: null,
-		fundShare: null,
+		freeAccessShare: null,
 	},
 	{
 		phase: 6,
@@ -101,7 +101,7 @@ const DEFAULT_PHASES: Array<Omit<PhaseRow, "id">> = [
 		tooling: 200,
 		services: 200,
 		adminBudgetShare: null,
-		fundShare: null,
+		freeAccessShare: null,
 	},
 	{
 		phase: 7,
@@ -112,7 +112,7 @@ const DEFAULT_PHASES: Array<Omit<PhaseRow, "id">> = [
 		tooling: 200,
 		services: 200,
 		adminBudgetShare: null,
-		fundShare: null,
+		freeAccessShare: null,
 	},
 	{
 		phase: 8,
@@ -123,7 +123,7 @@ const DEFAULT_PHASES: Array<Omit<PhaseRow, "id">> = [
 		tooling: 250,
 		services: 200,
 		adminBudgetShare: null,
-		fundShare: null,
+		freeAccessShare: null,
 	},
 	{
 		phase: 9,
@@ -134,18 +134,18 @@ const DEFAULT_PHASES: Array<Omit<PhaseRow, "id">> = [
 		tooling: 250,
 		services: 200,
 		adminBudgetShare: null,
-		fundShare: null,
+		freeAccessShare: null,
 	},
 ];
 
 /** Resolve a row's effective shares against the settings row's defaults. */
 function effectiveShares(
-	row: Pick<PhaseRow, "adminBudgetShare" | "fundShare">,
-	settings: { adminBudgetShare: number; fundShare: number },
+	row: Pick<PhaseRow, "adminBudgetShare" | "freeAccessShare">,
+	settings: { adminBudgetShare: number; freeAccessShare: number },
 ) {
 	return {
 		adminBudgetShare: row.adminBudgetShare ?? settings.adminBudgetShare,
-		fundShare: row.fundShare ?? settings.fundShare,
+		freeAccessShare: row.freeAccessShare ?? settings.freeAccessShare,
 	};
 }
 
@@ -153,15 +153,20 @@ function effectiveShares(
 export async function loadPlanSettings(): Promise<{
 	id: number;
 	adminBudgetShare: number;
-	fundShare: number;
+	freeAccessShare: number;
 }> {
 	const existing = await db.select().from(financialPlanSettings).limit(1);
 	const row = existing[0];
-	if (row) return { id: row.id, adminBudgetShare: row.adminBudgetShare, fundShare: row.fundShare };
+	if (row)
+		return {
+			id: row.id,
+			adminBudgetShare: row.adminBudgetShare,
+			freeAccessShare: row.freeAccessShare,
+		};
 	const inserted = await db.insert(financialPlanSettings).values(PLAN_DEFAULTS).returning({
 		id: financialPlanSettings.id,
 		adminBudgetShare: financialPlanSettings.adminBudgetShare,
-		fundShare: financialPlanSettings.fundShare,
+		freeAccessShare: financialPlanSettings.freeAccessShare,
 	});
 	return inserted[0];
 }
@@ -169,7 +174,7 @@ export async function loadPlanSettings(): Promise<{
 /** Update the settings row (the tool's global shares). Singleton — there is exactly one. */
 export async function updatePlanSettings(values: {
 	adminBudgetShare?: number;
-	fundShare?: number;
+	freeAccessShare?: number;
 }) {
 	const row = await loadPlanSettings();
 	await db
@@ -188,7 +193,7 @@ export async function updatePlanSettings(values: {
  * Seeds the default phases when the table is empty.
  */
 export async function loadPlan(): Promise<{
-	settings: { adminBudgetShare: number; fundShare: number };
+	settings: { adminBudgetShare: number; freeAccessShare: number };
 	phases: Array<PhaseRow & { ledger: PlanLedger }>;
 }> {
 	const settings = await loadPlanSettings();
@@ -221,7 +226,7 @@ const PHASE_UPDATE_FIELDS = [
 	"tooling",
 	"services",
 	"adminBudgetShare",
-	"fundShare",
+	"freeAccessShare",
 ] as const;
 
 /** Update one phase's inputs (the tool's edit). Computed values are never written. */

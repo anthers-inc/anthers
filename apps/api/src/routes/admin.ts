@@ -73,7 +73,12 @@ import {
 	restoreWork,
 	takeDownWork,
 } from "../services/dmca.js";
-import { sendRightsRequestAnswerEmail } from "../services/email.js";
+import { sendEmail, sendRightsRequestAnswerEmail } from "../services/email.js";
+import {
+	EMAIL_LIBRARY_TEST_RECIPIENT,
+	emailLibrary,
+	emailLibraryEntry,
+} from "../services/email-library.js";
 import {
 	addPhase,
 	deletePhase,
@@ -130,6 +135,11 @@ const DRIFT_KINDS = ["work", "post", "project"] as const;
 const resyncSchema = z.object({
 	kind: z.enum(DRIFT_KINDS),
 	id: z.number().int().positive(),
+});
+
+/** The send body: which library entry to send, to the library's one fixed recipient. */
+const emailLibrarySendSchema = z.object({
+	id: z.string().min(1),
 });
 
 const listingEditSchema = z.object({
@@ -260,7 +270,7 @@ const planPhaseEditSchema = z.object({
 	tooling: z.number().min(0).optional(),
 	services: z.number().min(0).optional(),
 	adminBudgetShare: z.number().min(0).max(1).nullable().optional(),
-	fundShare: z.number().min(0).max(1).nullable().optional(),
+	freeAccessShare: z.number().min(0).max(1).nullable().optional(),
 });
 const planPhaseCreateSchema = z.object({
 	label: z.string().trim().min(1).max(120),
@@ -270,11 +280,11 @@ const planPhaseCreateSchema = z.object({
 	tooling: z.number().min(0),
 	services: z.number().min(0),
 	adminBudgetShare: z.number().min(0).max(1).nullable().optional(),
-	fundShare: z.number().min(0).max(1).nullable().optional(),
+	freeAccessShare: z.number().min(0).max(1).nullable().optional(),
 });
 const planSettingsSchema = z.object({
 	adminBudgetShare: z.number().min(0).max(1).optional(),
-	fundShare: z.number().min(0).max(1).optional(),
+	freeAccessShare: z.number().min(0).max(1).optional(),
 });
 
 /**
@@ -659,7 +669,7 @@ const adminRoutes = new Hono<AdminEnv>()
 				tooling: body.tooling,
 				services: body.services,
 				adminBudgetShare: body.adminBudgetShare ?? null,
-				fundShare: body.fundShare ?? null,
+				freeAccessShare: body.freeAccessShare ?? null,
 			});
 			return c.json(created, 201);
 		},
@@ -1207,6 +1217,53 @@ const adminRoutes = new Hono<AdminEnv>()
 		await notifyListingCorrected(result.work, { changed: result.changed, note });
 		return c.json({ work: { id: result.work.id }, changed: result.changed });
 	})
+
+	// ── Email Library ──────────────────────────────────────────────────────
+	// The catalog of every standard and automatic email Anthers sends, rendered with placeholder
+	// data by services/email-library.ts through the senders' own render functions, and a test
+	// send of one entry to the library's fixed recipient. Operator-initiated, one at a time —
+	// the GET renders, and this POST is the only send surface, so there is no bulk path to
+	// misuse. `sendEmail` routes it like any other mail: caught by a dev session's mail catcher,
+	// real through Resend from a public console.
+
+	.get("/email-library", async (c) => {
+		return c.json({
+			recipient: EMAIL_LIBRARY_TEST_RECIPIENT,
+			entries: emailLibrary.map((entry) => {
+				const rendered = entry.render();
+				return {
+					id: entry.id,
+					group: entry.group,
+					label: entry.label,
+					description: entry.description,
+					subject: rendered.subject,
+					html: rendered.html,
+				};
+			}),
+		});
+	})
+
+	.post(
+		"/email-library/send",
+		zValidator("json", emailLibrarySendSchema, invalidBody),
+		async (c) => {
+			const { id } = c.req.valid("json");
+			const entry = emailLibraryEntry(id);
+			if (!entry) return c.json({ error: "No such email in the library" }, 404);
+			const rendered = entry.render();
+			const result = await sendEmail({
+				to: EMAIL_LIBRARY_TEST_RECIPIENT,
+				subject: rendered.subject,
+				html: rendered.html,
+			});
+			return c.json({
+				to: EMAIL_LIBRARY_TEST_RECIPIENT,
+				subject: rendered.subject,
+				sent: result.sent,
+				messageId: result.messageId,
+			});
+		},
+	)
 
 	// ── Public illegal-content reports ──────────────────────────────────────────
 	// The no-account intake's queue. Separate from `/moderation` above because the
