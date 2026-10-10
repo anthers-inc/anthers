@@ -81,6 +81,14 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.18",
+		date: "2026-10-09",
+		lede: "The shirts wear their own pictures now.",
+		entries: [
+			"A physical Work's page shows the product: the store binding carries each color's mockup from Printful — the shirt in the color you're pointing at, swapped when you pick — pulled from the store so a dashboard change is all a picture update takes.",
+		],
+	},
+	{
 		version: "2026.10.17",
 		date: "2026-10-09",
 		lede: "A Work that can't be streamed no longer borrows the rules built for the ones that can.",
