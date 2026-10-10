@@ -993,9 +993,12 @@ const paymentRoutes = new Hono()
 		// Group the (color, size) rows into the picker's shape: one row per color,
 		// its sizes in setup order. Sizes repeat across colors with no shared state —
 		// a 3XL can sell out in one color while another keeps selling — so each row
-		// carries its own priced list rather than a Work-wide one.
+		// carries its own priced list rather than a Work-wide one. The color's mockup
+		// rides the first row carrying one (the dashboard stamps the same URL on every
+		// size of a color; a row that stamps none is cosmetic, not a gap in the row).
 		const colorGroups = [...new Set(rows.map((r) => r.color))].map((color) => ({
 			color,
+			mockupUrl: rows.find((r) => r.color === color && r.mockupUrl != null)?.mockupUrl ?? null,
 			sizes: rows.filter((r) => r.color === color).map((r) => ({ size: r.size, ...price(r) })),
 		}));
 		return c.json({

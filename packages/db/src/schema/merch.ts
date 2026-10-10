@@ -73,6 +73,15 @@ export const merchVariants = pgTable(
 		/** Printful's name for the variant, as the receipt and packing slip name it. */
 		catalogVariantName: text("catalog_variant_name").notNull(),
 		/**
+		 * Printful's own mockup preview for this variant's color — the shirt-carrying-print
+		 * image the store panel shows, hot-linked from Printful's CDN. The dashboard is its
+		 * source: a mockup change there, then a setup-script re-run to restamp. Cosmetic,
+		 * not binding: a variant whose files carry no preview stamps null and binds anyway
+		 * (the picker shows no picture for that color), the opposite tradeoff from the
+		 * print file's check, which is about fulfillment and skips.
+		 */
+		mockupUrl: text("mockup_url"),
+		/**
 		 * Printful's Sync Variant id — the store's own variant row, what an order's item
 		 * names as `sync_variant_id`. Distinct from `catalog_variant_id`, the blank garment
 		 * itself: the Sync Variant is the store's copy carrying the print files and retail.

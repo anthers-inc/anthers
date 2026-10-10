@@ -25,7 +25,8 @@
  *   dashboard naming — the probe verified the shape) and reads its `retail_price`,
  *   `variant_id` (the catalog blank), and print file (`front_large`, status `ok`);
  * - upserts the `merch_variants` rows keyed (work, color, size), stamping the Sync
- *   Variant id the order placement references (`sync_variant_id`).
+ *   Variant id the order placement references (`sync_variant_id`) and the color
+ *   mockup image the store panel shows (`mockup_url`, Printful's own CDN URL).
  *
  * refusing to guess is the theme: a variant whose name does not parse, whose price is
  * unset, or whose print file is not `ok` is reported and SKIPPED — a partially bound
@@ -92,7 +93,14 @@ interface SyncVariantRow {
 	name: string;
 	variant_id: number;
 	currency?: string;
-	files?: Array<{ type: string; status?: string; url?: string | null; filename?: string }>;
+	files?: Array<{
+		type: string;
+		status?: string;
+		url?: string | null;
+		filename?: string;
+		preview_url?: string | null;
+		thumbnail_url?: string | null;
+	}>;
 }
 
 interface SyncProductRow {
@@ -184,6 +192,17 @@ async function main() {
 		}
 		const blankPrice = blanks.get(sv.variant_id);
 		if (blankPrice == null) continue; // already reported above
+
+		// The color's mockup — the type `preview` file is the shirt-carrying-print image
+		// (the 2026-10-09 probe read it live: 800×800, the garment in the variant's own
+		// color; `front_large` is the flat print artwork, not a mockup). Cosmetic, so a
+		// variant with no preview file stamps null and binds anyway — the opposite
+		// tradeoff from the print file's check above, which is about fulfillment.
+		const mockup = (sv.files ?? []).find((f) => f.type === "preview" && f.preview_url);
+		if (!mockup) {
+			console.error(`  ${color}/${size}: no preview file — the picker shows no picture`);
+		}
+
 		const [existing] = await db
 			.select()
 			.from(merchVariants)
@@ -204,6 +223,7 @@ async function main() {
 			catalogVariantName: sv.name.split("/").slice(-2).join("/").trim(),
 			catalogPrice: blankPrice,
 			printFileUrl: printFile.url ?? printFile.filename ?? "",
+			mockupUrl: mockup?.preview_url ?? null,
 			synced: true,
 		};
 		if (existing) {

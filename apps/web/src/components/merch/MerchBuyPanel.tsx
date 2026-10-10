@@ -51,6 +51,8 @@ interface MerchVariant {
 /** One color row of the variants answer — the Work's pickers are color, then size. */
 interface MerchColorGroup {
 	color: string;
+	/** The color's mockup from the store's binding — null and the picker shows no picture. */
+	mockupUrl: string | null;
 	sizes: MerchVariant[];
 }
 
@@ -66,7 +68,7 @@ interface MerchQuote {
 	clientSecret: string;
 }
 
-export default function MerchBuyPanel({ slug }: MerchBuyPanelProps) {
+export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 	const { isAuthenticated } = useAuth();
 	const location = useLocation();
 	const [colors, setColors] = useState<MerchColorGroup[] | null>(null);
@@ -107,6 +109,13 @@ export default function MerchBuyPanel({ slug }: MerchBuyPanelProps) {
 	}, [slug]);
 
 	const pickedGroup = colors?.find((g) => g.color === color) ?? null;
+	// The mockup the panel opens with: the picked color's once one is picked — never
+	// some other color's shirt — and the first color's before a pick, because a
+	// product page opens on its image.
+	const mockupUrl =
+		color == null
+			? (colors?.find((g) => g.mockupUrl)?.mockupUrl ?? null)
+			: (pickedGroup?.mockupUrl ?? null);
 
 	const createSession = async () => {
 		if (!size || !color) return;
@@ -165,6 +174,22 @@ export default function MerchBuyPanel({ slug }: MerchBuyPanelProps) {
 	return (
 		<div className="card bg-base-200 border border-base-300 h-full">
 			<div className="card-body p-5 gap-4 flex flex-col items-start text-start">
+				{/*
+				    The color's mockup — Printful's own product image for the picked color,
+				    from the store's binding (the setup script stamps it; the dashboard is
+				    its source). One image, not a gallery: the shirt the buyer is pointing
+				    at, and it changes when they change color. Shown before the price so
+				    the card opens on the thing, as a shop does; a color bound without a
+				    mockup shows none rather than some other color's shirt.
+				*/}
+				{mockupUrl && (
+					<img
+						src={mockupUrl}
+						alt={color ? `${title} in ${color}` : title}
+						className="w-full rounded-xl border border-base-300 bg-base-100"
+						loading="lazy"
+					/>
+				)}
 				<div>
 					<h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-2">
 						Pricing
