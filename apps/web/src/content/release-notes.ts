@@ -81,6 +81,20 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.20",
+		date: "2026-10-10",
+		lede: "The signed-in feed's filters work now, and the Financial Plan edits like a worksheet.",
+		entries: [
+			"The signed-in feed's sidebar shows only what the feed honors now: a Bookmarks shelf listing the posts the account saved, access and Work Type filters, and a tag search that gathers several tags at once. Each filter actually filters the feed, carried in the page's address and applied before the page fills, so a filtered page is a page of matches.",
+			"The Following and New Releases shelves, which sorted nothing, are gone; the feed opens with its own heading, and the how-it-works link sits beside it rather than in the sidebar. The Feed, Library, and Discover items carry drag handles, their order persists to the account, and the top of the order is where a signed-in visit to the home page lands.",
+			"A text Post's tile reads like a post now: the band carries its opening, and the card beneath shows its title with a shorter excerpt, where an eyebrow and an empty card used to sit.",
+			"A physical Work's tile shows its store rather than a lock, the creator's thumbnail or the store's first mockup with a from-price badge where the lock chip stood, and a goods Work's card on a profile or a project shelf shows the same face. Gated goods still lock, like any gated Work.",
+			"The Admin Console's Financial Plan table is always editable now: inputs sit in the cells, each row saves as its fields change, a Save chip reports the unsaved rows, and an invalid field blocks only its own row. A background refresh no longer tears the page down mid-edit, and phases can be added, removed, and given their own share overrides.",
+			"The plan's flow diagram reads in three columns now, revenue, then the obligations, then the spending each stands over, with the granular figures drawn from the shared model and an over-spent phase printing its overruns in red. A radio at each table row picks the phase the diagram draws.",
+			"A drifted record's diff on the ATProto Records page reads field by field: differing fields first, Anthers' copy beside the fetched record's, where two raw JSON blocks used to sit. The comparison is the drift badge's own, so the two cannot disagree; other findings keep the raw view. The console's sidebar holds still while its section scrolls, and Job Queues renders last on the Infrastructure page.",
+		],
+	},
+	{
 		version: "2026.10.19",
 		date: "2026-10-10",
 		lede: "The store pages read like a shop now, and sharing never stops to argue.",
