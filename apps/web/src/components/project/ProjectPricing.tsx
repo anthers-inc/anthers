@@ -63,7 +63,14 @@ export default function ProjectPricing({
 	// render, and the early returns below (free, owned, signed out) would skip one if
 	// this sat where it is used. The fetch is wasted on those branches; it was wasted
 	// the same way for the session POST this rewrite retired, and that POST is gone.
+	//
+	// ⚠️ Except for a merch Work, where the fetch isn't just wasted, it's noise: the
+	// store panel derives its price from `merch_variants`, the generic quote's
+	// verdicts are meaningless on a physical Work (the resolver's goods verdict
+	// prices it `null`), and a signed-out visitor got a console 401 on every view.
+	// The guard lives INSIDE the effect so the hook order never depends on it.
 	useEffect(() => {
+		if (workType === "physical") return;
 		let canceled = false;
 		setQuote(null);
 		setQuoteError(null);
@@ -86,7 +93,7 @@ export default function ProjectPricing({
 		return () => {
 			canceled = true;
 		};
-	}, [slug]);
+	}, [slug, workType]);
 
 	// A merch Work's pricing panel is the merch panel — the size picker and the
 	// derived price replace the creator doors entirely (a merch sale has no connected

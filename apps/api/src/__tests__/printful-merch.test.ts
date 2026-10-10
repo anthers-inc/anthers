@@ -136,7 +136,7 @@ function catalogVariant(size: string) {
 	};
 }
 
-async function makeMerchWork(variantIds: number[]) {
+async function makeMerchWork(variantIds: number[], opts?: { mockupUrl?: string | null }) {
 	const work = await insertWork({
 		creatorId: anthersUserIdValue,
 		type: "physical",
@@ -161,6 +161,7 @@ async function makeMerchWork(variantIds: number[]) {
 			catalogPrice: "9.50",
 			listPrice: "30.00", // Printful's retail price is the list source (Parker, 2026-10-08)
 			printFileUrl: "https://cdn.anthers.org/merch/tee.png",
+			mockupUrl: opts?.mockupUrl ?? null,
 			synced: true,
 		});
 	}
@@ -257,16 +258,25 @@ describe("The goods-works rule — the picker reads without an account, owning i
 	it("answers a signed-out visitor's picker with the undiscounted list", async () => {
 		process.env.PRINTFUL_TOKEN = "not_a_real_printful_token";
 		try {
-			const work = await makeMerchWork([4044]);
+			const work = await makeMerchWork([4044], {
+				// The color's mockup, stamped by the setup script and read like any price.
+				mockupUrl: "https://files.cdn.printful.com/merch/tee-black-preview.png",
+			});
 			const res = await req(`/api/payments/merch/${work.slug}/variants`, {
 				method: "GET",
 				headers: { Origin: ORIGIN }, // no cookie — a visitor with no account
 			});
 			expect(res.status).toBe(200);
 			const body = (await res.json()) as {
-				colors: { sizes: { amount: string; discount: string | null }[] }[];
+				colors: {
+					mockupUrl: string | null;
+					sizes: { amount: string; discount: string | null }[];
+				}[];
 			};
 			expect(body.colors[0].sizes.length).toBeGreaterThan(0);
+			expect(body.colors[0].mockupUrl).toBe(
+				"https://files.cdn.printful.com/merch/tee-black-preview.png",
+			);
 			expect(body.colors[0].sizes[0].discount).toBeNull();
 			expect(body.colors[0].sizes[0].amount).toBe("30.00");
 		} finally {

@@ -1,0 +1,1 @@
+ALTER TABLE "merch_variants" ADD COLUMN "mockup_url" text;
