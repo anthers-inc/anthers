@@ -45,6 +45,7 @@ const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] 
 			{ to: "/infrastructure", label: "Jobs and Services", end: true },
 			{ to: "/infrastructure/atproto", label: "ATProto Records" },
 			{ to: "/infrastructure/failed-mail", label: "Failed Mail" },
+			{ to: "/infrastructure/email-library", label: "Email Library" },
 		],
 	},
 	{
