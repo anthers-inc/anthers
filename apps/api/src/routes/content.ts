@@ -552,6 +552,14 @@ async function listComments(
 			removed: false as const,
 			handle: r.handle,
 			avatar: r.avatar,
+			/**
+			 * The comment's public record link (the widening task, 2026-10-10) — it rides the
+			 * comment's row wherever the thread renders, for author and stranger alike, since
+			 * the record is public. Null while there is no record, which is ordinary: the
+			 * subject may have none, the author may not publish. The removed entry above
+			 * carries neither address nor link on purpose.
+			 */
+			recordUrl: recordUrlFor(r.comment.atprotoUri),
 			// 🚨 Says only WHO, never WHY. A moderation removal is the `removed` entry above;
 			// this flag means the author left. Conflating the two would have us telling users
 			// a user deleted something they didn't.
@@ -2683,6 +2691,13 @@ const contentRoutes = new Hono()
 			post: {
 				// The row carries no `body_html`; the stored body is markdown in `body`.
 				...post,
+				/**
+				 * The post's public record link, beside the thing it is (the widening task,
+				 * 2026-10-10) — the same one-form-a-person-can-follow link a Work's page
+				 * carries. Null while the post has no record: a draft, a scheduled one, or a
+				 * creator whose permission is not given yet. Ordinary, never an error.
+				 */
+				recordUrl: recordUrlFor(post.atprotoUri),
 				creator: { ...creator, hasStripe: creatorHasStripe },
 				linkedWorks,
 				edits,
@@ -3134,6 +3149,7 @@ const contentRoutes = new Hono()
 					createdAt: reviews.createdAt,
 					handle: users.atprotoHandle,
 					avatar: users.avatar,
+					atprotoUri: reviews.atprotoUri,
 				})
 				.from(reviews)
 				.innerJoin(users, eq(reviews.userId, users.id))
@@ -3188,7 +3204,9 @@ const contentRoutes = new Hono()
 				// first at this layer so Helpful-first and Newest-first are the CLIENT's two
 				// presentations of one payload rather than two queries that could disagree.
 				reviews: reviewRows
-					.map((r) => ({
+					// The raw address stays in the row's own column; the payload carries the link
+					// built from it and not the address itself.
+					.map(({ atprotoUri, ...r }) => ({
 						...r,
 						body: r.body ?? "",
 						// The scorer hides nothing. A reviewer's net shows like a commenter's does,
@@ -3196,6 +3214,8 @@ const contentRoutes = new Hono()
 						// treats a review's author as its owner.
 						score: commentScore(tallies.get(r.id) ?? NO_VOTES),
 						userVote: mine.get(r.id) ?? null,
+						/** The review's public record link (the widening task, 2026-10-10); null while there is none, which is ordinary. */
+						recordUrl: recordUrlFor(atprotoUri),
 					}))
 					.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
 			});
@@ -5441,6 +5461,12 @@ const contentRoutes = new Hono()
 		return c.json({
 			project: {
 				...row.project,
+				/**
+				 * The project's public record link, beside the thing it is (the widening task,
+				 * 2026-10-10) — same link a Work's and a post's page carry. Null while there is
+				 * no record, which is ordinary.
+				 */
+				recordUrl: recordUrlFor(row.project.atprotoUri),
 				creator: embedCreator({
 					handle: row.creatorHandle,
 					displayName: row.creatorDisplayName,

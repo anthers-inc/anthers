@@ -381,6 +381,19 @@ function CommentRow({ comment, isReply }: { comment: Comment; isReply: boolean }
 							Reply
 						</button>
 					)}
+					{/* The comment's own record, open on the network beside the thread (the
+					    widening task, 2026-10-10) — the record is public, and a comment carries
+					    a link the way the thing it comments on does. */}
+					{comment.recordUrl && (
+						<a
+							href={comment.recordUrl}
+							target="_blank"
+							rel="noreferrer"
+							className="link link-hover text-xs text-base-content/40"
+						>
+							View the record
+						</a>
+					)}
 				</div>
 				{replying && <ReplyForm replyTo={comment.id} author={author} />}
 			</div>
