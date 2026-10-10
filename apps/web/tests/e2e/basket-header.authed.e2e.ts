@@ -255,7 +255,7 @@ test("the header shows a basket link with a count when the basket has items", as
 	// The header reads the server on the page's own terms — a navigation, not a guess.
 	await page.reload();
 
-	await expect(page.getByRole("heading", { name: "Feed" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Your Feed", exact: true })).toBeVisible();
 	const link = header(page).getByRole("link", { name: /Basket \(1 item\)/ });
 	await expect(link, "the basket link did not appear in the header").toBeVisible();
 	await expect(link).toHaveAttribute("href", "/basket");
