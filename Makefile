@@ -120,9 +120,14 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 # hatch is `PORTLESS=0 bun run dev`, which serves on this machine's conventional ports for
 # contributors who have not installed the proxy.
 #
-# A second `make dev` is still refused, by pid file rather than port: the session's database
-# and network are per-run, and sharing them across two sessions is the failure the refusal
-# guards against. `make down` stops the session's process group.
+# A second `make dev` in the same checkout is still refused, by pid file rather than port: the
+# session's database and network are per-run, and sharing them across two runs is the failure
+# the refusal guards against. A different checkout — a worktree — gets its own session with its
+# own id and free ports (scripts/session.ts derives the id from the branch, as portless derives
+# the route names), so a worktree's dev runs beside the main checkout's and neither touches the
+# other. Nothing per-checkout does: only the fixed ports and the name `anthers.localhost` are
+# singletons, and both already belong to the main checkout. `make down` stops only the calling
+# checkout's session.
 #
 # The setup that makes this work is one command per machine — see
 # `packages/web-shared/src/lib/rpc.ts` beside the `portless.json` at the root for what
@@ -131,16 +136,19 @@ dev-local: ## Start dev reading secrets from .env (offline, or no vault access)
 	@for PIDFILE in .dev.pid .dev-api.pid; do \
 		DEV_PID=$$(cat $$PIDFILE 2>/dev/null); \
 		if [ -n "$$DEV_PID" ] && kill -0 $$DEV_PID 2>/dev/null; then \
-			echo "  -> A dev session is already running (pid $$DEV_PID, $$PIDFILE)."; \
-			echo "     Refusing to start a second; 'make down' stops it first."; \
+			echo "  -> A dev session is already running in this checkout (pid $$DEV_PID, $$PIDFILE)."; \
+			echo "     Refusing to start a second here; 'make down' stops it first. A worktree's"; \
+			echo "     dev session is its own, and may run beside this one."; \
 			exit 1; \
 		fi; \
 	done
 	@bun run scripts/session.ts dev --pid-file .dev.pid -- \
 		sh -c 'bun run db:seed && exec bun run dev'
 
-# The API alone still needs a database, so it starts the dev session itself — which means it cannot
-# run beside `make dev`, and the session refuses rather than letting the two share one.
+# The API alone still needs a database, so it starts its checkout's dev session itself — which
+# means one `make dev` and one `make dev-api` cannot run in the same checkout, and the session
+# refuses rather than letting the two share one. A worktree's `make dev-api` is its own session,
+# beside its checkout's `make dev`… of the same branch, where the same refusal applies.
 dev-api: ## Start API dev server only, in its own dev session
 	@bun run scripts/session.ts dev --pid-file .dev-api.pid -- \
 		sh -c 'bun run db:seed && exec bun run dev:api'
