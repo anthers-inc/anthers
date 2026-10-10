@@ -418,6 +418,10 @@ export function unlockRoute(
  * the Public Access meter (an account's allowance is not a property of a Work — see the
  * wiki's *What Is Free, and What Is Gated*) and the Library (a shelf entry is curation, and
  * `resolveAccess` must never learn to read `library_items`).
+ * The reader-facing statement of this branch's rule is the wiki's
+ * *What Is Free, and What Is Gated* § Goods Are Never Locked; the verdicts are
+ * pinned in `goods-works-access.test.ts` and the store facts a card may show
+ * instead of a lock chip are `services/merch-store.ts`'s.
  */
 export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): AccessResult {
 	const base = {
