@@ -465,7 +465,16 @@ export default function LoginPage() {
 										label="Email or handle"
 										icon={SIGNIN_DRAWING[signinMode]}
 										iconName={signinMode === "email" ? "email" : signinMode}
-										hint={SIGNIN_HINT[signinMode]}
+										/* 🚨 The hint's space is reserved at its TALLEST reading, and that is
+									    load-bearing (Parker, 2026-10-10): the idle hint wraps to two lines
+									    (2 × 22.75px, the hint's own `leading-relaxed` line at the card's
+									    fixed `max-w-md` width), and every live reading after typing is one
+									    — a hint that changed height changed the centered content's height,
+									    so the card visibly resized while the person typed. The block span
+									    holds the tallest height in every state, so the text is free to
+									    change and the space it occupies is not. If the copy grows a third
+									    line, this is the number that moves with it. */
+										hint={<span className="block min-h-[2.875rem]">{SIGNIN_HINT[signinMode]}</span>}
 									>
 										{/* 🚨 `type="text"`, and that is load-bearing: the browser's built-in
 								    email validation would fire *before* React sees the submit and say
@@ -497,7 +506,12 @@ export default function LoginPage() {
 											required
 										/>
 									</FormField>
-									<button type="submit" className="btn btn-primary w-full mt-3" disabled={loading}>
+									{/* ⚠️ `mt-5` over the form's own `gap-2`: the extra air above the
+								    Continue button is deliberate (Parker, 2026-10-10) — the button is
+								    the card's move, and it reads crowded at the field's usual spacing
+								    with the hint's line right above it. The card's centered slack
+								    pays for it, so the card's height is untouched. */}
+									<button type="submit" className="btn btn-primary w-full mt-5" disabled={loading}>
 										{loading ? <span className="loading loading-spinner loading-sm" /> : "Continue"}
 									</button>
 								</form>
