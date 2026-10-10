@@ -3,19 +3,16 @@
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import type { Project } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	BookmarkIcon,
 	InformationCircleIcon,
-	RocketLaunchIcon,
 	RssIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import FeedTile from "../components/cards/FeedTile";
-import ProjectCard from "../components/cards/ProjectCard";
 import FeedFilterSections from "../components/layout/FeedFilterSections";
 import { useSidebar } from "../components/layout/SidebarContext";
 
@@ -102,7 +99,6 @@ export default function AuthenticatedHomePage() {
 	/** One stream over both kinds — `kind` says which card to render. */
 	type FeedEntry = { kind: "post" | "release"; id: number } & Record<string, unknown>;
 	const [feedPosts, setFeedPosts] = useState<FeedEntry[]>([]);
-	const [projects, setProjects] = useState<Project[]>([]);
 	const [feedLoading, setFeedLoading] = useState(true);
 	const [showFeedInfo, setShowFeedInfo] = useState(false);
 
@@ -167,26 +163,6 @@ export default function AuthenticatedHomePage() {
 			.catch(() => {})
 			.finally(() => setFeedLoading(false));
 	}, [contentType, access, tags]);
-
-	// Featured projects are their own effect: the sidebar's filters govern the FEED —
-	// that is the access and tag machinery's subject — and this section keeps only the
-	// type row meaningful, which is the one its endpoint takes natively. Until the
-	// store's listing work names an access shape for projects, inventing one here
-	// would be a filter over nothing.
-	useEffect(() => {
-		client.api.content.projects
-			.$get({
-				query: {
-					...(contentType ? { media_type: contentType } : {}),
-				},
-			})
-			.then(async (res) => {
-				if (!res.ok) return;
-				const data = await res.json();
-				setProjects(data.projects.slice(0, 8));
-			})
-			.catch(() => {});
-	}, [contentType]);
 
 	return (
 		<div className="min-h-full">
@@ -272,28 +248,6 @@ export default function AuthenticatedHomePage() {
 					/>
 				)}
 			</div>
-
-			{/* Discovery sections (below the feed) */}
-			{projects.length > 0 && (
-				<section className="py-8 px-6 bg-base-200/30 border-t border-base-300/30">
-					<div className="w-full">
-						<div className="flex items-center justify-between mb-4">
-							<h2 className="text-lg font-semibold flex items-center gap-2">
-								<RocketLaunchIcon className="w-5 h-5 text-primary" />
-								Discover Projects
-							</h2>
-							<Link to="/discover" className="btn btn-ghost btn-sm">
-								View all
-							</Link>
-						</div>
-						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-							{projects.map((p) => (
-								<ProjectCard key={p.id} project={p} />
-							))}
-						</div>
-					</div>
-				</section>
-			)}
 		</div>
 	);
 }
