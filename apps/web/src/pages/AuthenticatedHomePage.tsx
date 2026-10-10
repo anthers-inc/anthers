@@ -3,7 +3,7 @@
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import type { Project, PublicUser } from "@anthers/web-shared/types";
+import type { Project } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
@@ -11,11 +11,9 @@ import {
 	InformationCircleIcon,
 	RocketLaunchIcon,
 	RssIcon,
-	UserGroupIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
-import CreatorCard from "../components/cards/CreatorCard";
 import FeedTile from "../components/cards/FeedTile";
 import ProjectCard from "../components/cards/ProjectCard";
 import FeedFilterSections from "../components/layout/FeedFilterSections";
@@ -105,7 +103,6 @@ export default function AuthenticatedHomePage() {
 	type FeedEntry = { kind: "post" | "release"; id: number } & Record<string, unknown>;
 	const [feedPosts, setFeedPosts] = useState<FeedEntry[]>([]);
 	const [projects, setProjects] = useState<Project[]>([]);
-	const [creators, setCreators] = useState<PublicUser[]>([]);
 	const [feedLoading, setFeedLoading] = useState(true);
 	const [showFeedInfo, setShowFeedInfo] = useState(false);
 
@@ -171,18 +168,6 @@ export default function AuthenticatedHomePage() {
 			.finally(() => setFeedLoading(false));
 	}, [contentType, access, tags]);
 
-	useEffect(() => {
-		// Fetch creators for discovery section
-		client.api.accounts.creators
-			.$get()
-			.then(async (res) => {
-				if (!res.ok) return;
-				const data = await res.json();
-				setCreators(data.creators.slice(0, 4));
-			})
-			.catch(() => {});
-	}, []);
-
 	// Featured projects are their own effect: the sidebar's filters govern the FEED —
 	// that is the access and tag machinery's subject — and this section keeps only the
 	// type row meaningful, which is the one its endpoint takes natively. Until the
@@ -205,8 +190,9 @@ export default function AuthenticatedHomePage() {
 
 	return (
 		<div className="min-h-full">
-			{/* Feed content */}
-			<div className="max-w-6xl mx-auto px-4 py-6">
+			{/* Feed content. The grid fills the content area — the wide-tile shelf's
+			    whole point is using the width the layout already gives it. */}
+			<div className="w-full px-6 py-6">
 				{/* The feed's own heading, and the page explanation beside it — moved out of
 				    the sidebar, which holds filters; a HOW-does-it-work is a page element. */}
 				<div className="flex items-center justify-between mb-4">
@@ -256,10 +242,11 @@ export default function AuthenticatedHomePage() {
 					</div>
 				) : feedPosts.length > 0 ? (
 					// A uniform grid, still sorted on the one chronological key —
-					// the grid is the layout, never a ranking. Columns are wide
-					// enough to read at two-across and tighten up as the screen
-					// widens, the YouTube home-grid's shape.
-					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 items-stretch">
+					// the grid is the layout, never a ranking. Columns keep a workable
+					// minimum width and count themselves: the row flexes to fewer, larger
+					// tiles as the window narrows and to more of them as it widens — the
+					// YouTube home-grid's shape (`auto-fill` decides; nothing is fixed).
+					<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
 						{/* Posts and releases in one stream. A creator who only ever adds to
 							    their Catalog still reaches the people who follow them — without
 							    that, a post would be the price of being seen, which is exactly
@@ -288,8 +275,8 @@ export default function AuthenticatedHomePage() {
 
 			{/* Discovery sections (below the feed) */}
 			{projects.length > 0 && (
-				<section className="py-8 px-4 bg-base-200/30 border-t border-base-300/30">
-					<div className="max-w-6xl mx-auto">
+				<section className="py-8 px-6 bg-base-200/30 border-t border-base-300/30">
+					<div className="w-full">
 						<div className="flex items-center justify-between mb-4">
 							<h2 className="text-lg font-semibold flex items-center gap-2">
 								<RocketLaunchIcon className="w-5 h-5 text-primary" />
@@ -302,27 +289,6 @@ export default function AuthenticatedHomePage() {
 						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 							{projects.map((p) => (
 								<ProjectCard key={p.id} project={p} />
-							))}
-						</div>
-					</div>
-				</section>
-			)}
-
-			{creators.length > 0 && (
-				<section className="py-8 px-4">
-					<div className="max-w-6xl mx-auto">
-						<div className="flex items-center justify-between mb-4">
-							<h2 className="text-lg font-semibold flex items-center gap-2">
-								<UserGroupIcon className="w-5 h-5 text-secondary" />
-								Creators to Follow
-							</h2>
-							<Link to="/discover" className="btn btn-ghost btn-sm">
-								View all
-							</Link>
-						</div>
-						<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-							{creators.map((c) => (
-								<CreatorCard key={c.id} creator={c} />
 							))}
 						</div>
 					</div>
