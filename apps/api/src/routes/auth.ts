@@ -242,7 +242,10 @@ const desktopExchangeSchema = z.object({
  */
 async function serializeUser(user: typeof users.$inferSelect) {
 	const [prefs] = await db
-		.select({ themePreference: userPreferences.themePreference })
+		.select({
+			themePreference: userPreferences.themePreference,
+			homeNavOrder: userPreferences.homeNavOrder,
+		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
 		.limit(1);
@@ -259,6 +262,9 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		location: user.location,
 		emailVerified: user.emailVerified,
 		themePreference: (prefs?.themePreference as "light" | "dark" | null) ?? null,
+		// The home sidebar's nav order — read at boot like the theme, so the landing
+		// redirect needs no second call.
+		homeNavOrder: (prefs?.homeNavOrder as string[] | null) ?? null,
 		atprotoDid: user.atprotoDid,
 		createdAt: user.createdAt,
 		// Null until the first run accepts the terms on `/welcome` — the signal every

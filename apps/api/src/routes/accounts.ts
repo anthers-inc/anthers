@@ -49,6 +49,7 @@ import {
 	users,
 	works,
 } from "@anthers/db/schema";
+import { isWorkType } from "@anthers/shared/content";
 import { type ContentNote, RATING_ROWS } from "@anthers/shared/content-rating";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
@@ -158,6 +159,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 			themePreference: userPreferences.themePreference,
 			notificationDelivery: userPreferences.notificationDelivery,
 			notificationUnsubscribeToken: userPreferences.notificationUnsubscribeToken,
+			homeNavOrder: userPreferences.homeNavOrder,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
@@ -175,6 +177,9 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		location: user.location,
 		emailVerified: user.emailVerified,
 		themePreference: prefs?.themePreference ?? null,
+		// The nav order rides the payload like the theme: the shell reads both at boot,
+		// before any route has rendered.
+		homeNavOrder: prefs?.homeNavOrder ?? null,
 		atprotoDid: user.atprotoDid,
 		createdAt: user.createdAt,
 		// Surfaced on /me because the cancel path runs through signing back in: someone
@@ -311,6 +316,8 @@ const PARENTAL_LOCKED = {
 	code: "parental_locked",
 } as const;
 
+const NAV_IDS = ["feed", "library", "discover"] as const;
+
 const updateProfileSchema = z.object({
 	displayName: z.string().max(150).optional(),
 	bio: z.string().max(5000).optional(),
@@ -320,6 +327,12 @@ const updateProfileSchema = z.object({
 	websiteUrl: z.string().max(500).optional(),
 	location: z.string().max(100).optional(),
 	themePreference: z.enum(["light", "dark"]).optional(),
+	/**
+	 * The home sidebar's nav order, whole write per PATCH (the client always knows the
+	 * whole order). The route validates it as covering every id; the ids themselves are
+	 * the client's nav's vocabulary, so an unknown one is refused here rather than stored.
+	 */
+	homeNavOrder: z.array(z.enum(NAV_IDS)).max(NAV_IDS.length).optional(),
 	/**
 	 * Per-group notification delivery, as whole-mode writes per key.
 	 *
@@ -397,6 +410,19 @@ const accountRoutes = new Hono()
 		// table's `set`.
 		const prefUpdates: Record<string, unknown> = { updatedAt: new Date() };
 		if (data.themePreference !== undefined) prefUpdates.themePreference = data.themePreference;
+		// The nav order is a whole-map write like the delivery map, and a permutation:
+		// an order missing an id (or naming one twice) has no meaning, so it is refused
+		// rather than merged with the stored one.
+		if (data.homeNavOrder !== undefined) {
+			const sent = data.homeNavOrder;
+			if (new Set(sent).size !== NAV_IDS.length) {
+				return c.json(
+					{ error: "homeNavOrder must name each of feed, library and discover once" },
+					400,
+				);
+			}
+			prefUpdates.homeNavOrder = sent;
+		}
 		// `essential` mail has no switch by design — see services/notifications.ts. The
 		// delivery map stores ONLY real group keys: a wildcard is `resolvedMode`'s business,
 		// and a client sending one is asking the server to guess what it means.
@@ -417,6 +443,7 @@ const accountRoutes = new Hono()
 				...(data.notificationDelivery !== undefined
 					? { notificationDelivery: prefUpdates.notificationDelivery as Record<string, string> }
 					: {}),
+				...(data.homeNavOrder !== undefined ? { homeNavOrder: data.homeNavOrder } : {}),
 			};
 			await db
 				.insert(userPreferences)
@@ -542,6 +569,33 @@ const accountRoutes = new Hono()
 		// until they write an announcement — which would quietly re-couple the two things
 		// the model just separated, by making a post the price of being seen. Filtered with
 		// `?kind=posts` or `?kind=releases` for someone who wants one or the other.
+		// ── The sidebar's filters ────────────────────────────────────────────────
+		// The signed-in page's sidebar presents three of them; the feed is the stream
+		// they bind, so ALL of them land here as query params.
+		//
+		// - `media_type` names one Work type or nothing; a post survives a type filter
+		//   when some Work it links matches it (the announcement's subject says what
+		//   kind of thing it is), and a post linking nothing drops while any filter is on.
+		// - `access` is the viewer's ACCESS verdict over the deliverable: "unlocked" is
+		//   work the viewer can open (free, purchased, entitled, or their own), with a
+		//   physical Work counting once a purchase delivered it once; "locked" is the
+		//   complement — the shirt on the shelf and the album behind a higher rung. A
+		//   post is accessible by construction, so it stays under "unlocked" and drops
+		//   under "locked".
+		// - `tags` is a comma list, and reads as AND: a Work or post matches when its
+		//   own tags cover every listed one, because a multi-select asking for fewer
+		//   results than any single chip means it is narrowing.
+		const mediaType = c.req.query("media_type") ?? "";
+		const mediaTypeFilter = isWorkType(mediaType) ? mediaType : "";
+		const accessFilter =
+			c.req.query("access") === "unlocked" || c.req.query("access") === "locked"
+				? c.req.query("access")
+				: "";
+		const tagFilter = (c.req.query("tags") ?? "")
+			.split(",")
+			.map((t) => t.trim())
+			.filter(Boolean);
+
 		const kind = c.req.query("kind") ?? "all";
 
 		// The two user-side listing conditions the Works half composes, loaded once rather
@@ -565,7 +619,24 @@ const accountRoutes = new Hono()
 						})
 						.from(posts)
 						.innerJoin(users, eq(posts.creatorId, users.id))
-						.where(and(inArray(posts.creatorId, creatorIds), eq(posts.isPublished, true)))
+						.where(
+							and(
+								inArray(posts.creatorId, creatorIds),
+								eq(posts.isPublished, true),
+								// The tags the user multi-selected, AND semantics over the post's own.
+								...(tagFilter.length > 0
+									? [sql`${posts.tags} @> ${JSON.stringify(tagFilter)}::jsonb`]
+									: []),
+								// A type filter reads a post through what it announces: some Work
+								// it links matches. (Posts never ship a payload here; the EXISTS
+								// only reads ids and a type, which are public on any listing.)
+								...(mediaTypeFilter
+									? [
+											sql`EXISTS (SELECT 1 FROM post_work_refs feed_ref INNER JOIN works feed_work ON feed_work.id = feed_ref.work_id WHERE feed_ref.post_id = ${posts.id} AND feed_work.type = ${mediaTypeFilter})`,
+										]
+									: []),
+							),
+						)
 						.orderBy(sql`COALESCE(${posts.publishedAt}, ${posts.createdAt}) DESC`)
 						.limit(50);
 
@@ -592,6 +663,11 @@ const accountRoutes = new Hono()
 								maturity.hidden,
 								// Nor is following an exemption from a guardian's blocks.
 								parental.hidden,
+								// The type and tag filters, same meaning as the posts half.
+								...(mediaTypeFilter ? [eq(works.type, mediaTypeFilter)] : []),
+								...(tagFilter.length > 0
+									? [sql`${works.tags} @> ${JSON.stringify(tagFilter)}::jsonb`]
+									: []),
 							),
 						)
 						.orderBy(sql`COALESCE(${works.releasedAt}, ${works.createdAt}) DESC`)
@@ -741,6 +817,22 @@ const accountRoutes = new Hono()
 			}),
 		]
 			.sort((a, b) => b.at.localeCompare(a.at))
+			// The viewer's ACCESS filter, over the verdicts resolved above — this
+			// account's own standing over the deliverable, in the ACCESS section's
+			// language: it can open it (the free verdict, its own work, a past
+			// purchase), or a physical Work it bought once; a store-page verdict never
+			// says canAccess, so the receipt is what counts there. A post is accessible
+			// by construction, so it rides "unlocked" and drops from "locked". Applied
+			// before the cap, so a filtered page is a page of matches rather than 50
+			// with the matches among them.
+			.filter((e) => {
+				if (!accessFilter) return true;
+				if (e.kind === "post") return accessFilter === "unlocked";
+				const unlocked =
+					e.access?.canAccess ||
+					(e.type === "physical" && (accessCtx?.purchasedWorkIds.has(e.id) ?? false));
+				return accessFilter === "unlocked" ? unlocked : !unlocked;
+			})
 			.slice(0, 50);
 
 		return c.json({

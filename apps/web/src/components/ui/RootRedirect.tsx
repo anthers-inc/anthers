@@ -16,7 +16,7 @@ import DesktopSignIn from "../../studio/DesktopSignIn";
  * - Unauthenticated users see the For Users page, which serves as the homepage
  */
 export default function RootRedirect() {
-	const { isAuthenticated, isLoading } = useAuth();
+	const { user, isAuthenticated, isLoading } = useAuth();
 	const desktop = isDesktop();
 
 	if (isLoading) {
@@ -55,7 +55,11 @@ export default function RootRedirect() {
 	}
 
 	if (isAuthenticated) {
-		return <Navigate to="/feed" replace />;
+		// The home nav's first item is the landing surface of the signed-in site: an
+		// account that rearranged the sidebar arrives at the top of its own order.
+		const first = user?.homeNavOrder?.[0];
+		const target = first === "library" ? "/library" : first === "discover" ? "/discover" : "/feed";
+		return <Navigate to={target} replace />;
 	}
 
 	return <ForUsersPage />;
