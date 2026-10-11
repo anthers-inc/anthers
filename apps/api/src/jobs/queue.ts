@@ -291,6 +291,10 @@ export const QUEUES = {
 	// gives every retry its own prefix. Enumeration from storage, references from rows;
 	// see hls-orphan-sweep.ts for the cadence, media-purge.ts for the rules.
 	HLS_ORPHAN_SWEEP: "hls-orphan-sweep",
+	// Abort upload sessions abandoned past `SESSION_CLEANUP_DAYS`: the network bills
+	// incomplete multipart uploads while they are held, so an abandoned session is a
+	// meter running rather than idle bytes. See upload-session-sweep.ts.
+	UPLOAD_SESSION_SWEEP: "upload-session-sweep",
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -388,6 +392,13 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 	[QUEUES.HLS_ORPHAN_SWEEP]: {
 		// A prefix-deleting sweep retried like any purge: idempotent (a swept prefix
 		// is gone), and a second delete of an empty prefix is a no-op.
+		retryLimit: 2,
+		retryDelay: 300,
+		expireInMinutes: 30,
+	},
+	[QUEUES.UPLOAD_SESSION_SWEEP]: {
+		// The row moves to `aborted` before the next run, so a retry sweeps nothing
+		// twice; 30 minutes bounds an abort pass over up to 200 rows.
 		retryLimit: 2,
 		retryDelay: 300,
 		expireInMinutes: 30,
@@ -535,4 +546,7 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// storage-wide, so off-hours it stays.
 	[QUEUES.DEADLINE_REMINDERS, "45 6 * * *"],
 	[QUEUES.HLS_ORPHAN_SWEEP, "0 7 * * *"],
+	// 7:15 AM daily, after the prefix sweep — the same family (storage nobody can
+	// reach and nobody is billed against by a client), just later off-hours.
+	[QUEUES.UPLOAD_SESSION_SWEEP, "15 7 * * *"],
 ] as const;

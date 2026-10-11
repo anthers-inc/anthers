@@ -55,6 +55,7 @@ import { type SyncAtprotoRecordData, syncAtprotoRecordJob } from "./sync-atproto
 import { type SyncWorkListingData, syncWorkListingJob } from "./sync-work-listing.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
 import { type TransferHeldCreditsData, transferHeldCredits } from "./transfer-held-credits.js";
+import { runUploadSessionSweep } from "./upload-session-sweep.js";
 import { watchHostedIdentities } from "./watch-identities.js";
 import { runWithdrawnSweep } from "./withdrawn-sweep.js";
 
@@ -206,6 +207,15 @@ async function start() {
 			const sweptCount = await runHlsOrphanSweep();
 			if (sweptCount > 0) {
 				console.log(`[hls-orphan-sweep] job ${job.id}: swept ${sweptCount} orphaned prefixes`);
+			}
+		}
+	});
+
+	await queue.work(QUEUES.UPLOAD_SESSION_SWEEP, async (jobs) => {
+		for (const job of jobs) {
+			const sweptCount = await runUploadSessionSweep();
+			if (sweptCount > 0) {
+				console.log(`[upload-session-sweep] job ${job.id}: aborted ${sweptCount} open sessions`);
 			}
 		}
 	});

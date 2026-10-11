@@ -960,6 +960,13 @@
       "when": 1791649706136,
       "tag": "0136_special_vulcan",
       "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1791690847100,
+      "tag": "0137_crazy_thanos",
+      "breakpoints": true
     }
   ]
 }
