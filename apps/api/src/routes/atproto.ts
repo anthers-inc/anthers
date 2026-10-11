@@ -40,6 +40,7 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { z } from "zod";
+import { blueskyDoorRefusal } from "../lib/bluesky-door.js";
 import { PENDING_SIGNUP_COOKIE, setPendingSignupCookie, setSessionCookie } from "../lib/cookies.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
@@ -158,7 +159,10 @@ interface AppState {
  *
  * Production sets `FRONTEND_URL` and it wins, as it must — there the API and the SPA share one
  * origin and none of this applies. A browser test session serves its preview on a port of its
- * own and names it in `PREVIEW_PORT`; `make dev` serves the SPA on 3000.
+ * own and names it in `PREVIEW_PORT`. And behind the name proxy this checkout's API sits under
+ * a named origin only, so the door's landing answer is `lib/bluesky-door.ts`'s: the auth route
+ * refuses the ceremony up front, because nothing serves its loopback redirect there, and the
+ * door is walked in the without-proxy shape, where this function's derivation is exact.
  */
 function getFrontendUrl(c: { req: { url: string } }): string {
 	const configured = process.env.FRONTEND_URL;
@@ -306,6 +310,13 @@ const atprotoRoutes = new Hono()
 		}
 
 		try {
+			// The door must be landable before it opens: behind the name proxy this checkout's
+			// API does not sit on the loopback redirect's address, and a ceremony that ends at a
+			// connection refusal teaches nobody anything. This is dev only — PORTLESS_URL never
+			// reaches a deployment — and the refusal names the two shapes that do work.
+			const doorRefusal = await blueskyDoorRefusal();
+			if (doorRefusal) return c.json({ error: doorRefusal }, 400);
+
 			// Opportunistic rather than scheduled: these are the only routes that create rows
 			// in either table, so this is the only place that can be relied on to run.
 			await Promise.all([sweepExpiredOauthState(), sweepExpiredPendingSignups()]);

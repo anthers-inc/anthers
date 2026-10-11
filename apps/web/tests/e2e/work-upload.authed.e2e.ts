@@ -147,7 +147,7 @@ test("a video Work is made from its file and edited while the file uploads", asy
 	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
 		timeout: 15_000,
 	});
-	await page.goto("/studio/catalog");
+	await page.goto("/studio/works");
 	await expect(cardFor(page)).not.toContainText("No file");
 
 	const [work] = (await ownWorks()).filter((w) => w.title === STEM);
@@ -187,7 +187,13 @@ for (const { type, label } of [
 
 		await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/, { timeout: 15_000 });
 		await expect(page.getByRole("heading", { name: `Edit ${label}` })).toBeVisible();
-		await expect(page.getByText("Uploaded", { exact: true })).toBeVisible({ timeout: 30_000 });
+		// A paged Work's file section is the SET editor, so arrival is the file's row in the
+		// set — the label from its filename, extension stripped by the rowLabel rule. The
+		// row's span, not the page's title (whose text the file's name became): the set row
+		// is the one place that text is the FILE's arrival.
+		await expect(
+			page.locator("span.flex-1.truncate").filter({ hasText: new RegExp(`${STEM} ${type}`) }),
+		).toBeVisible({ timeout: 30_000 });
 
 		await expect
 			.poll(async () => {
@@ -238,7 +244,7 @@ test("a Work's page and the Dashboard follow its processing", async ({ page, con
 
 	// The Catalog card gives the estimate a line of its own, because its badge has no room for it:
 	// the longest estimate wrapped inside the badge's one fixed-height line and spilled out of it.
-	await page.goto("/studio/catalog");
+	await page.goto("/studio/works");
 	const card = page.locator(".card").filter({ hasText: `${STEM} processing` });
 	await expect(card.locator(".badge").filter({ hasText: "Processing" })).toHaveText(
 		"Processing 43%",

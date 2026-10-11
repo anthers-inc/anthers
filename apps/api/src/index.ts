@@ -21,6 +21,7 @@ import { createDevBuildRoutes } from "./routes/dev-build.js";
 import { dmcaRoutes } from "./routes/dmca.js";
 import { errorCaptureRoutes } from "./routes/errors.js";
 import { integrationRoutes } from "./routes/integrations.js";
+import { mediaUploadSessionRoutes } from "./routes/media-upload-sessions.js";
 import { moderationRoutes } from "./routes/moderation.js";
 import { nounRoutes } from "./routes/noun.js";
 import { paymentRoutes } from "./routes/payments.js";
@@ -111,6 +112,7 @@ const app = new Hono()
 	.route("/api/atproto", atprotoRoutes)
 	.route("/api/accounts", accountRoutes)
 	.route("/api/content", contentRoutes)
+	.route("/api/content/media-upload", mediaUploadSessionRoutes)
 	.route("/api/noun", nounRoutes)
 	.route("/api/payments", paymentRoutes)
 	.route("/api/subscriptions", subscriptionRoutes)

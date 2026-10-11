@@ -193,11 +193,6 @@ export default function CreditsSection({
 					)}
 				</div>
 			))}
-			{rows.some(missingContributor) && (
-				<div className="alert alert-error text-sm">
-					<span>Every Created credit names its contributor before this can save.</span>
-				</div>
-			)}
 			<div className="flex flex-wrap items-center gap-2">
 				<button
 					type="button"

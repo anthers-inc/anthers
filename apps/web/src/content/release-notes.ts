@@ -81,6 +81,18 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.21",
+		date: "2026-10-10",
+		lede: "The records behind the pages open from the pages now, and the money plan's hierarchy reads the way its ledger runs.",
+		entries: [
+			"Every kind of record that has a page now carries a link to itself beside it: a Work, a Post, a Project, a comment, or a Review names its record's address on Taproot, the public record explorer, and every user of the page sees the link, signed in or not. Votes and follows carry none, because neither has a page of its own.",
+			"The support model's hierarchy reads as it is everywhere now: Programs is the parent line, and Free Access and Free Storage sit inside it as the programs they are. The Admin Console's plan table and its flow diagram draw the corrected shape, and the copy on the FAQ, legal, signup and economics pages says the same thing.",
+			"The Resources landing came off the logged-out header, the mobile drawer, and the footer navs ahead of the page's redesign; the page still answers at /resources, and the links to it inside other pages stay.",
+			"The Admin Console's Infrastructure tab carries an Email Library now: every standard and automatic email Anthers sends, cataloged in one place and previewed with placeholder data rendered from the templates the product itself sends with, and any template can be test-sent to a real inbox one at a time.",
+			"The Feed, Library and Discover items in the signed-in navigation read as rows again, and the grips that drag them into a new order actually drag.",
+		],
+	},
+	{
 		version: "2026.10.20",
 		date: "2026-10-10",
 		lede: "The signed-in feed's filters work now, and the Financial Plan edits like a worksheet.",

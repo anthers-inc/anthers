@@ -152,20 +152,30 @@ function TypographicBand({ label, title }: { label: string; title: string | null
 /** A thumbnail as the band, with a video platform's duration chip and hover play. */
 function CoverBand({ work, src }: { work: FeedWork; src: string }) {
 	const duration = work.type === "video" ? durationLabel(work.durationSeconds) : "";
+	// The play affordance belongs to what actually plays: a covered video or a
+	// listened (audio-family) Work. Everything else a thumbnail can stand for — a
+	// shirt, a book, a comic — gets NO hover overlay of its own: the purchase gates
+	// receiving, never seeing, and the tile's own highlight is the whole hover story
+	// (Parker, the feed's quiet hover).
+	const playable = work.type === "video" || isListened(work.type);
 	return (
 		<div className="relative aspect-video bg-base-300">
 			<img src={src} alt="" className="w-full h-full object-cover" />
-			<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+			{playable && (
+				<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+			)}
 			{duration && (
 				<span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white">
 					{duration}
 				</span>
 			)}
-			<div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-				<div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
-					<PlayIcon className="w-5 h-5 text-black ml-0.5" />
+			{playable && (
+				<div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+					<div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
+						<PlayIcon className="w-5 h-5 text-black ml-0.5" />
+					</div>
 				</div>
-			</div>
+			)}
 		</div>
 	);
 }
@@ -256,10 +266,12 @@ function PostBand({ post }: { post: FeedPost }) {
 	// A post's thumbnail is its first linked Work's, if any — thumbnails are
 	// public by design, so the announcement can show what it announces.
 	if (post.thumbnail) {
+		// The announcement's artwork, at the same band shape everything keeps. Nothing
+		// special happens on hover here — a post does not play — the tile's own
+		// highlight is the whole hover story.
 		return (
 			<div className="relative aspect-video bg-base-300">
 				<img src={post.thumbnail} alt="" className="w-full h-full object-cover" />
-				<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
 			</div>
 		);
 	}
@@ -294,7 +306,8 @@ function MetaRow({
 function TileBody({ children }: { children: ReactNode }) {
 	// The body's grid row stretches to the row's height, and the badge row
 	// pins to its bottom: bodies of different line counts still read as even.
-	return <div className="card-body p-3 gap-1.5 flex-1">{children}</div>;
+	// The tile's own padding frames the body, so this is the card area's spacing.
+	return <div className="p-2.5 gap-1.5 flex-1 flex flex-col">{children}</div>;
 }
 
 /**
@@ -307,6 +320,13 @@ function creatorLabel(creator: { handle: string; displayName?: string | null }):
 }
 
 export default function FeedTile({ entry }: { entry: FeedEntry }) {
+	// The hover highlight (Parker, against YouTube's own row): the tile gains a soft
+	// background tint and a hairline outline — nothing more; no type plays a hover
+	// overlay that its content cannot answer. The band sits inset from the tile's
+	// rounded edge by the tile's own padding, so the tint reads AROUND the preview
+	// the way YouTube's tinted frame reads around a thumbnail.
+	const tileClass =
+		"group flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden";
 	if (entry.kind === "release") {
 		const work = entry as unknown as FeedWork;
 		const { Icon, label } = contentTypeMeta(work.type);
@@ -314,11 +334,10 @@ export default function FeedTile({ entry }: { entry: FeedEntry }) {
 		// so the body does not repeat it — same rule the post tile keeps.
 		const bandIsTypographic = work.type === "text" && !work.thumbnail;
 		return (
-			<Link
-				to={workUrl(work)}
-				className="group card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden text-left h-full flex flex-col"
-			>
-				<ReleaseBand work={work} />
+			<Link to={workUrl(work)} className={tileClass}>
+				<div className="rounded-lg overflow-hidden">
+					<ReleaseBand work={work} />
+				</div>
 				<TileBody>
 					<MetaRow
 						avatar={work.creator?.avatar}
@@ -357,12 +376,15 @@ export default function FeedTile({ entry }: { entry: FeedEntry }) {
 	// has one of those as its art instead); repeating it beneath itself reads as
 	// a defect rather than as emphasis.
 	const bandIsTitle = !post.thumbnail && !post.excerpt;
+	// One excerpt per tile (Parker): when the band IS the body's opening — the
+	// post's ContentBand — the card adds nothing; when the band is a thumbnail, the
+	// card's excerpt is the tile's only text.
+	const bandCarriesContent = Boolean(post.thumbnail) === false && Boolean(post.excerpt);
 	return (
-		<Link
-			to={postUrl(post)}
-			className="group card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden text-left h-full flex flex-col"
-		>
-			<PostBand post={post} />
+		<Link to={postUrl(post)} className={tileClass}>
+			<div className="rounded-lg overflow-hidden">
+				<PostBand post={post} />
+			</div>
 			<TileBody>
 				<MetaRow
 					avatar={post.creator?.avatar}
@@ -372,7 +394,7 @@ export default function FeedTile({ entry }: { entry: FeedEntry }) {
 				{!bandIsTitle && post.title && (
 					<h3 className="font-semibold text-sm leading-snug line-clamp-2">{post.title}</h3>
 				)}
-				{post.excerpt && (
+				{!bandCarriesContent && post.excerpt && (
 					<p className="text-xs leading-relaxed text-base-content/60 line-clamp-2">
 						{post.excerpt}
 					</p>

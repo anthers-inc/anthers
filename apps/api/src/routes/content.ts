@@ -153,6 +153,8 @@ import {
 	declaredRating,
 	declareRating,
 	fileRatingAppeal,
+	ratingOf,
+	resetRatingForTypeChange,
 } from "../services/content-rating.js";
 import {
 	acceptCredit,
@@ -203,6 +205,13 @@ import { isLocalStorage, storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
 import { releaseRefusal } from "../services/work-release.js";
+import {
+	appendSourceFile,
+	listSourceFiles,
+	removeSourceFile,
+	reorderSourceFiles,
+	syncFromSourceKey,
+} from "../services/work-source-files.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -973,7 +982,11 @@ const ratingAppealSchema = z.object({
 
 const createWorkSchema = workBaseSchema.extend({ type: z.enum(WORK_TYPES) });
 
-const updateWorkSchema = workBaseSchema.partial();
+const updateWorkSchema = workBaseSchema
+	.partial()
+	// The kind may change while the Work is a draft with nothing kind-specific in it yet —
+	// see the type-change block in the PATCH handler for the exact rule and its refusals.
+	.extend({ type: z.enum(WORK_TYPES).optional() });
 
 /**
  * The two Work bodies, validated so that a refused field answers with a sentence a creator can read
@@ -982,6 +995,18 @@ const updateWorkSchema = workBaseSchema.partial();
  */
 const createWorkBody = zValidator("json", createWorkSchema, invalidBody);
 const updateWorkBody = zValidator("json", updateWorkSchema, invalidBody);
+
+/** One file joining a paged Work's set — the set routes stay thin, so this is the whole of it. */
+const sourceFileSchema = z.object({
+	// A storage key or URL, as the upload step hands it back. Bounded like every storage ref.
+	file: z.string().min(1).max(500),
+	filename: z.string().max(255).optional(),
+	fileSize: z.number().int().nonnegative().nullable().optional(),
+	mimeType: z.string().max(100).optional(),
+});
+
+/** A whole-set arrangement: the ids in the order the creator is showing. No partial orders. */
+const sourceOrderSchema = z.object({ order: z.array(z.number().int()) });
 
 const postBaseSchema = z.object({
 	title: z.string().max(255).optional().default(""),
@@ -1170,11 +1195,7 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 			.insert(transcodingJobs)
 			.values({ workId: item.id, mediaType: "ebook", status: "pending" })
 			.returning();
-		await queue.send(
-			QUEUES.RASTERIZE_EBOOK,
-			{ jobId: job.id },
-			JOB_OPTIONS[QUEUES.RASTERIZE_EBOOK],
-		);
+		await queue.send(QUEUES.RENDER_PAGED, { jobId: job.id }, JOB_OPTIONS[QUEUES.RENDER_PAGED]);
 		return job;
 	}
 	if (processing === "audio" && item.sourceKey) {
@@ -1218,6 +1239,11 @@ async function serializeWork(
 	job: TranscodingJobRow | null = null,
 	/** The Work's browser builds, owner-facing. Loaded by `loadWorkBundles`; empty when unset. */
 	webBuildsList: WebBuildWithFiles[] = [],
+	/**
+	 * The delivery context the response is being built in — null under local storage,
+	 * where the stored key is itself the playable address.
+	 */
+	delivery: DeliveryCtx | null = null,
 ) {
 	return {
 		id: item.id,
@@ -1230,6 +1256,17 @@ async function serializeWork(
 		thumbnail: item.thumbnail,
 		scheduledReleaseAt: item.scheduledReleaseAt,
 		sourceKey: item.sourceKey,
+		// The owner's own original, at the access-checked route, for the same ruling the
+		// user shape carries (70.06 — playable from the moment the Work exists): an
+		// owner previews their video before any ladder exists, so the Studio needs
+		// this address the way a viewer's play page does. Without a delivery context,
+		// the stored key is already the playable address.
+		originalUrl:
+			item.type === "video" && item.sourceKey
+				? delivery
+					? withShare(`${delivery.origin}/api/content/works/${item.id}/original`, delivery)
+					: item.sourceKey
+				: null,
 		// The owner's own shape is also what the Work page renders for them, so a stored address the
 		// check refuses is withheld here too rather than framed in the creator's own session.
 		embedUrl: embedUrlProblem(item.embedUrl ?? "") ? "" : item.embedUrl,
@@ -2056,6 +2093,21 @@ async function serializeWorkForUser(
 		// budget attached. Withholding the URL here as well would be a second, weaker
 		// mechanism for something already enforced — and the player decides what to render
 		// from the budget it holds, not from a missing URL.
+		// The original file's play address, for a video Work: the 2026-10-11 ruling's
+		// baseline, playable from the moment the Work exists and delivered as the
+		// bytes the creator uploaded, with the ladder as the upgrade that arrives
+		// later (wiki 70.06). The same posture as the transcoding URLs below —
+		// withheld when the user may not reach the Work, and enforced at the
+		// endpoint (`/works/:id/original`), which minted the signed URL fresh per
+		// request only after the meter and household limit answered. Without a
+		// delivery context (local mode), the stored key is already the playable
+		// address, exactly as `userTranscoding` treats its own URLs.
+		originalUrl:
+			canAccess && work.type === "video" && work.sourceKey
+				? delivery
+					? withShare(`${delivery.origin}/api/content/works/${work.id}/original`, delivery)
+					: work.sourceKey
+				: null,
 		transcoding: await userTranscoding(job, canAccess, delivery),
 		access,
 		/**
@@ -2349,6 +2401,11 @@ async function rewriteHlsPlaylist(
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
+/** The most one `GET /posts` page may carry — the page size, and the default when a client
+ * asks for no limit at all. It matches the flat limit this route carried before pagination;
+ * a client keeps walking `nextCursor` past it. */
+const FEED_PAGE_MAX = 100;
+
 const contentRoutes = new Hono()
 	// ══════════════════════════════════════════════════════════════════════════
 	// POSTS — the universal content unit
@@ -2363,6 +2420,45 @@ const contentRoutes = new Hono()
 		const tag = c.req.query("tag");
 		const search = c.req.query("search");
 		const sort = c.req.query("sort") ?? "newest";
+		const effectiveSort = sort === "popular" ? "popular" : "newest";
+
+		// ── Cursor pagination ──
+		// Keyset pagination over the full ordering tuple — the row id breaks every tie —
+		// so paging is stable under concurrent inserts and never re-serves or skips a row.
+		// The cursor is the last row of the previous page, base64url JSON, its ordering
+		// values captured when that page was served: the comparison values are a snapshot,
+		// so later movement on a boundary row (a new pin, a view-count bump) cannot shift
+		// an existing page boundary. The feed time rides as epoch-microsecond text: a JS
+		// Date holds milliseconds only, and rounding the key off by a fraction would make
+		// the equality band skip rows. Postgres 16's `extract(epoch …)` is exact numeric
+		// arithmetic, so the microseconds compare with no rounding on either side.
+		const cursorRaw = c.req.query("cursor");
+		let cursor: { s: string; p: 0 | 1; id: number; m: string; v?: number } | null = null;
+		if (cursorRaw != null && cursorRaw !== "") {
+			try {
+				const parsed = JSON.parse(Buffer.from(cursorRaw, "base64url").toString("utf8"));
+				const shapeOk =
+					parsed?.s === effectiveSort &&
+					(parsed.p === 0 || parsed.p === 1) &&
+					Number.isInteger(parsed.id) &&
+					parsed.id > 0 &&
+					typeof parsed.m === "string" &&
+					/^\d+(\.\d+)?$/.test(parsed.m) &&
+					(effectiveSort === "popular"
+						? Number.isInteger(parsed.v) && (parsed.v as number) >= 0
+						: parsed.v === undefined);
+				if (!shapeOk) throw new Error("bad cursor");
+				cursor = parsed;
+			} catch {
+				return c.json({ error: "Invalid cursor." }, 400);
+			}
+		}
+
+		const rawLimit = Number(c.req.query("limit"));
+		if (c.req.query("limit") != null && (!Number.isInteger(rawLimit) || rawLimit < 1)) {
+			return c.json({ error: "limit must be a positive integer." }, 400);
+		}
+		const limit = rawLimit ? Math.min(rawLimit, FEED_PAGE_MAX) : FEED_PAGE_MAX;
 
 		const conditions: SQL[] = [];
 
@@ -2427,28 +2523,67 @@ const contentRoutes = new Hono()
 
 		// Sorted on publication, not on when the draft row appeared. `publishedAt` is null
 		// for drafts (the creator's own view), so fall back to createdAt to keep them ordered.
-		const feedOrder = sql`COALESCE(${posts.publishedAt}, ${posts.createdAt}) DESC`;
+		// Both reads and the ordering go through the same epoch-micros expression, so what
+		// feeds the cursor is exactly what ordered the page.
+		const feedTime = sql`COALESCE(${posts.publishedAt}, ${posts.createdAt})`;
+		const feedTimeMicros = sql`((extract(epoch from ${feedTime})) * 1000000)::numeric`;
 		let orderClause: SQL[];
 		switch (sort) {
 			case "popular":
-				orderClause = [desc(posts.viewCount), feedOrder];
+				orderClause = [desc(posts.viewCount), desc(feedTimeMicros)];
 				break;
 			default:
-				orderClause = [feedOrder];
+				orderClause = [desc(feedTimeMicros)];
 		}
 
-		const result = await db
+		// Rows ranking after the cursor row under `(is_pinned DESC, sort key DESC, id DESC)`.
+		// A boolean sorts DESC as false < true, so leaving the pinned band means
+		// `is_pinned = false` when the cursor row was pinned and is impossible otherwise;
+		// inside a band the remaining keys compare as a plain "strictly before" chain.
+		if (cursor) {
+			const older = sql`(${feedTimeMicros} < ${cursor.m}::numeric OR (${feedTimeMicros} = ${cursor.m}::numeric AND ${posts.id} < ${cursor.id}))`;
+			const inBand =
+				effectiveSort === "popular"
+					? sql`((${posts.viewCount} < ${cursor.v} OR (${posts.viewCount} = ${cursor.v} AND ${older})))`
+					: older;
+			conditions.push(
+				cursor.p === 1
+					? sql`(${posts.isPinned} = false OR (${posts.isPinned} = true AND ${inBand}))`
+					: sql`(${posts.isPinned} = false AND ${inBand})`,
+			);
+		}
+
+		// One row past the page decides whether a next page exists.
+		const fetched = await db
 			.select({
 				post: posts,
 				creatorHandle: users.atprotoHandle,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
+				feedTimeMicros: sql<string>`${feedTimeMicros}::text`,
 			})
 			.from(posts)
 			.innerJoin(users, eq(posts.creatorId, users.id))
 			.where(and(...conditions))
-			.orderBy(desc(posts.isPinned), ...orderClause)
-			.limit(100);
+			.orderBy(desc(posts.isPinned), ...orderClause, desc(posts.id))
+			.limit(limit + 1);
+
+		const hasMore = fetched.length > limit;
+		const result = hasMore ? fetched.slice(0, limit) : fetched;
+
+		let nextCursor: string | null = null;
+		if (hasMore && result.length > 0) {
+			const last = result[result.length - 1];
+			nextCursor = Buffer.from(
+				JSON.stringify({
+					s: effectiveSort,
+					p: last.post.isPinned ? 1 : 0,
+					id: last.post.id,
+					m: last.feedTimeMicros,
+					...(effectiveSort === "popular" ? { v: last.post.viewCount } : {}),
+				}),
+			).toString("base64url");
+		}
 
 		const postIds = result.map((r) => r.post.id);
 
@@ -2506,6 +2641,7 @@ const contentRoutes = new Hono()
 					linkedWorkCount: linked.length,
 				};
 			}),
+			nextCursor,
 		});
 	})
 
@@ -3413,6 +3549,40 @@ const contentRoutes = new Hono()
 		return c.redirect(url, 302);
 	})
 
+	// ── Video original delivery (access-checked, signed) ─────────────────────────
+	//
+	// A video Work is playable from the moment it exists, and what plays is this
+	// Work's own stored original — the exact bytes the creator uploaded, ranged-
+	// streamed over a short-lived signed address. Same gate ladder as the audio
+	// route above: access, the Public Access meter, the household limit; a fresh
+	// signed URL minted only after every gate answered. The ladder stays the
+	// offered experience when one exists, and this route is what the client falls
+	// back to before one does.
+	.get("/works/:id/original", requireUserOrShareLink, async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		// The original is the video deliverable; other kinds' originals are either
+		// their own routes' territory (audio) or not a play surface at all.
+		if (work.type !== "video" || !work.sourceKey) return c.json({ error: "Not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		// 402, not 403, on exactly the reasoning the audio route carries above.
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
+
+		const url = await storage.getUrl(work.sourceKey, {
+			signed: true,
+			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
+		});
+		// no-store, for the same reason as the audio redirect: this 302 carries a
+		// signed URL and is access-dependent, so a proxy must never replay it.
+		c.header("Cache-Control", "no-store");
+		return c.redirect(url, 302);
+	})
+
 	// ── Ebook page delivery (access-checked, signed) ─────────────────────────────
 	//
 	// The reason `work_pages` exists, in one endpoint: a book is served ONE PAGE AT A TIME,
@@ -3930,7 +4100,7 @@ const contentRoutes = new Hono()
 		await resolveWorkThumbnail(work);
 		// No credit notification here: a Work is born private, and the notification is owed
 		// when the Work is public — see the PATCH route and `notifyCreditedAccounts`.
-		return c.json({ work: await serializeWork(work, [], job) }, 201);
+		return c.json({ work: await serializeWork(work, [], job, [], deliveryCtx()) }, 201);
 	})
 
 	/** The caller's own Catalog — every Work, private and released, with processing state. */
@@ -3992,6 +4162,7 @@ const contentRoutes = new Hono()
 						assetsByWork.get(i.id) ?? [],
 						jobByWork.get(i.id) ?? null,
 						buildsByWork.get(i.id) ?? [],
+						deliveryCtx(),
 					),
 				),
 			),
@@ -4122,8 +4293,16 @@ const contentRoutes = new Hono()
 		 * the request never reached the code that used it.
 		 */
 		if (isOwner && previewRequest(c) === null) {
+			// The owner plays their own preview through the same pipes an entitled viewer
+			// does, so their transcode runs the same delivery rewrite the user path
+			// applies: the row's raw URL points at the private bucket, where the HLS
+			// manifest 404s in the browser's player — and carries no CORS headers even
+			// where it exists. Access is asserted unconditionally, because a creator may
+			// always see their own media; `deliveryCtx()` with no share token is the
+			// owner's own session, exactly what this branch serves.
+			const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx());
 			return c.json({
-				work: await serializeWork(work, workAssets, jobRows[0] ?? null, webBuildsList),
+				work: await serializeWork(work, workAssets, playableJob, webBuildsList, deliveryCtx()),
 			});
 		}
 
@@ -4534,7 +4713,9 @@ const contentRoutes = new Hono()
 		// below for exactly this reason.
 		const willStream = data.streamEnabled ?? work.streamEnabled;
 		const willDownload = data.downloadEnabled ?? work.downloadEnabled;
-		if (!willStream && !willDownload && work.type !== "physical") {
+		// The floor asks about the kind this edit RESULTS IN, the same way every other
+		// gate below reads the row as the request leaves it.
+		if (!willStream && !willDownload && (data.type ?? work.type) !== "physical") {
 			return c.json({ error: "A Work must enable at least one of stream or download" }, 400);
 		}
 
@@ -4574,6 +4755,55 @@ const contentRoutes = new Hono()
 			) {
 				return c.json(FOREIGN_FILE_REFUSAL, 400);
 			}
+		}
+
+		// 🚨 **The kind changes only while nothing kind-specific exists to strand.** The
+		// drafting rule (Parker, 2026-10-10): a Work can be drafted before its file exists,
+		// and the kind a draft starts as often isn't the kind it ends as. Once media exists,
+		// the kind is fixed — a comic Work with a video's source file is a row whose every
+		// downstream reader (processing, delivery, the reader) disagrees about what it is —
+		// and the honest refusal says to make a new Work. Two further guards: a released
+		// Work's kind is part of its public listing and never changes here, and an
+		// operator-set rating must not be erased by a type change, so that case is refused
+		// ahead of the reset rather than silently destroying the correction.
+		//
+		// The rating reset runs through the rating service: it is the one writer of a Work's
+		// maturity, and the reset erases rows answered against the old grid so the new kind
+		// is rated on its own terms before release.
+		if (data.type !== undefined && data.type !== work.type) {
+			if (work.visibility === "released") {
+				return c.json(
+					{
+						error: "A released Work's kind can't change. Make it private first.",
+						code: "type_not_private",
+					},
+					409,
+				);
+			}
+			if (ratingOf(work).locked) {
+				return c.json(
+					{
+						error:
+							"An operator set this Work's rating, so its kind can't change. Ask for the rating to be returned first.",
+						code: "type_rating_locked",
+					},
+					409,
+				);
+			}
+			if (work.sourceKey || work.body) {
+				return c.json(
+					{
+						error:
+							"This Work already has its media, so its kind can't change. Make a new Work of the other kind instead.",
+						code: "type_has_media",
+					},
+					409,
+				);
+			}
+			work = await resetRatingForTypeChange(work);
+			// The rest of this handler — the closed-rung grid, the rating declaration, the
+			// readiness gates — reads the kind the request LEAVES the Work as.
+			work = { ...work, type: data.type };
 		}
 
 		const releasing = data.visibility === "released" && work.visibility !== "released";
@@ -4702,6 +4932,7 @@ const contentRoutes = new Hono()
 		}
 
 		const updates: Record<string, unknown> = { updatedAt: new Date() };
+		if (data.type !== undefined) updates.type = data.type;
 		if (data.slug !== undefined) updates.slug = data.slug;
 		if (data.title !== undefined) updates.title = data.title;
 		if (data.description !== undefined) updates.description = data.description;
@@ -4780,8 +5011,14 @@ const contentRoutes = new Hono()
 		// built to make unnecessary. It re-reads and decides; a no-op costs one read.
 		await queueWorkListingSync(id);
 
-		// A new source means the old transcode is stale — re-process.
-		if (sourceChanged && updated.sourceKey) await queueTranscodeForWork(updated);
+		// A new source means the old transcode is stale — re-process. For the paged kinds the
+		// set table is the truth, so the legacy attach syncs it (replacing the set with the
+		// one file) and re-renders through the service; queueing the job directly here as
+		// well would be two jobs for one file.
+		if (sourceChanged && updated.sourceKey) {
+			if (isPaged(updated.type)) await syncFromSourceKey(updated);
+			else await queueTranscodeForWork(updated);
+		}
 		if (sourceChanged || thumbnailChanged) await queueScansForWork(updated);
 
 		const [workAssets, jobRows, buildRows, buildFileRows] = await Promise.all([
@@ -4812,6 +5049,7 @@ const contentRoutes = new Hono()
 				workAssets,
 				jobRows[0] ?? null,
 				buildRows.map((b) => ({ ...b, files: filesByBuild.get(b.id) ?? [] })),
+				deliveryCtx(),
 			),
 		});
 	})
@@ -5060,6 +5298,97 @@ const contentRoutes = new Hono()
 
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 		return c.body(null, 204);
+	})
+
+	// ── A paged Work's source set ────────────────────────────────────────────────
+	// The multi-PDF ruling (Parker, 2026-10-10): a comic or book is made from one PDF or
+	// several, each file's rendered pages a contiguous run in the creator's arrangement.
+	// These routes are thin over `services/work-source-files.ts`, which owns the invariants.
+
+	.get("/works/:id/source-files", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		// A 404 rather than a 403, the way the works routes answer a non-owner — the
+		// existence of another creator's Work is not information to hand out.
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		const files = await listSourceFiles(item);
+		return c.json({ files });
+	})
+
+	.post("/works/:id/source-files", requireAuth, zValidator("json", sourceFileSchema), async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		// A 404 rather than a 403, the way the works routes answer a non-owner — the
+		// existence of another creator's Work is not information to hand out.
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!isPaged(item.type)) {
+			return c.json(
+				{ error: "Only a comic or a book carries a set of files.", code: "sources_not_paged" },
+				400,
+			);
+		}
+		if (item.visibility === "released") {
+			return c.json(
+				{
+					error: "A released Work's files can't change. Make it private first.",
+					code: "sources_not_private",
+				},
+				409,
+			);
+		}
+		const data = c.req.valid("json");
+		// The set route signs this key for the Work's owner, so a file naming another
+		// creator's private original would hand it over. See `storage/keys.ts`.
+		if (!(await isOwnStorageRef(data.file, user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
+		const { rows, job } = await appendSourceFile(item, data);
+		await queueScansForWork({ ...item, sourceKey: data.file });
+		return c.json({ files: rows, transcoding: job }, 201);
+	})
+
+	.patch(
+		"/works/:id/source-files",
+		requireAuth,
+		zValidator("json", sourceOrderSchema),
+		async (c) => {
+			const user = c.get("user");
+			const id = Number(c.req.param("id"));
+			const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+			if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			if (item.visibility === "released") {
+				return c.json(
+					{
+						error: "A released Work's files can't change. Make it private first.",
+						code: "sources_not_private",
+					},
+					409,
+				);
+			}
+			const { order } = c.req.valid("json");
+			const { rows, error } = await reorderSourceFiles(item, order);
+			if (error) return c.json({ error }, 400);
+			return c.json({ files: rows });
+		},
+	)
+
+	.delete("/works/:id/source-files/:fileId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (item.visibility === "released") {
+			return c.json(
+				{
+					error: "A released Work's files can't change. Make it private first.",
+					code: "sources_not_private",
+				},
+				409,
+			);
+		}
+		const job = await removeSourceFile(item, Number(c.req.param("fileId")));
+		if (!job) return c.json({ error: "Not found" }, 404);
+		return c.json({ transcoding: job });
 	})
 
 	// ══════════════════════════════════════════════════════════════════════════

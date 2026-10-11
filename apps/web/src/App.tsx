@@ -31,7 +31,8 @@ import { installBrowserErrorCapture } from "./lib/error-beacon";
  */
 const StudioAuthGate = lazy(() => import("./studio/StudioAuthGate"));
 const DashboardPage = lazy(() => import("@anthers/web-shared/DashboardPage"));
-const CatalogPage = lazy(() => import("@anthers/web-shared/CatalogPage"));
+const ProjectsPage = lazy(() => import("@anthers/web-shared/ProjectsPage"));
+const WorksPage = lazy(() => import("@anthers/web-shared/WorksPage"));
 const AnalyticsDashboardPage = lazy(() => import("@anthers/web-shared/AnalyticsDashboardPage"));
 const PostFormPage = lazy(() => import("@anthers/web-shared/PostFormPage"));
 const PostsPage = lazy(() => import("@anthers/web-shared/PostsPage"));
@@ -403,12 +404,17 @@ export default function App() {
 					since they live at `/@studio`. */}
 					<Route path="/studio" element={<StudioLayout />}>
 						<Route index element={<DashboardPage />} />
-						<Route path="catalog" element={<CatalogPage />} />
-						{/* The pre-2026-08-13 name, kept for bookmarks. A REDIRECT rather than a
-						second mount of the same page: two live URLs for one screen means the
-						address bar can read "library" while the heading reads "Catalog", which is
-						the exact confusion the rename was for. */}
-						<Route path="library" element={<Navigate to="/studio/catalog" replace />} />
+						{/* One object, one place (2026-10-10): the old `catalog` page held Projects
+						and Works on one surface and its two halves are pages and tabs of their own
+						now. The old paths are REDIRECTS rather than a second mount — two live URLs
+						for one screen means the address bar can disagree with the heading, and both
+						names predate the split, so bookmarks exist for each. The Works page is the
+						destination for both because it carries the substance the old page's Works
+						grid was; a Project only ever appeared there as a table above the grid. */}
+						<Route path="catalog" element={<Navigate to="/studio/works" replace />} />
+						<Route path="library" element={<Navigate to="/studio/works" replace />} />
+						<Route path="projects" element={<ProjectsPage />} />
+						<Route path="works" element={<WorksPage />} />
 						<Route path="analytics" element={<AnalyticsDashboardPage />} />
 						<Route path="posts" element={<PostsPage />} />
 						<Route path="posts/new" element={<PostFormPage />} />

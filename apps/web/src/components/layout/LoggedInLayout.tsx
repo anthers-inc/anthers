@@ -448,9 +448,6 @@ function LoggedInLayoutInner() {
 										<Link to="/supporters" className="link link-hover">
 											Supporters
 										</Link>
-										<Link to="/resources" className="link link-hover">
-											Resources
-										</Link>
 										{/* Under Support rather than Legal — see the note in LoggedOutLayout. */}
 										<Link to="/parents" className="link link-hover">
 											For Parents

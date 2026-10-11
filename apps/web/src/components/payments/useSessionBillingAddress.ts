@@ -13,6 +13,7 @@ import {
 	toCheckoutContact,
 	type UsAddressInput,
 } from "./UsBillingAddressForm";
+import type { SavedPrefill } from "./useSavedBillingAddress";
 
 /** What `useSessionBillingAddress` exposes to a purchase surface. */
 export interface SessionBillingAddress {
@@ -77,9 +78,17 @@ function contactKey(address: UsAddressInput): string {
  * on the session. While the buyer edits an already-accepted address the session still
  * holds the previous one — the totals shown are the session's own, so what the Pay
  * button offers is exactly what the charge would be until the new value lands.
+ *
+ * 🚨 **Hydration from the saved address happens exactly once, and only onto an untouched
+ * form** (`prefill` — the buyer's opt-in saved billing address, read-only at checkout per
+ * the 2026-10-11 decision). `undefined` (still fetching) and null (nothing saved)
+ * hydrate nothing. A buyer who started typing before the fetch lands keeps their typing:
+ * hydration never runs on any non-empty form, and once it has run, never again — editing
+ * a prefilled field must not snap the whole form back to the saved copy mid-edit.
  */
 export function useSessionBillingAddress(
 	checkoutState: StripeUseCheckoutElementsResult,
+	prefill?: SavedPrefill,
 ): SessionBillingAddress {
 	const [address, setAddress] = useState<UsAddressInput>(EMPTY_ADDRESS);
 	const [accepted, setAccepted] = useState(false);
@@ -146,6 +155,25 @@ export function useSessionBillingAddress(
 		},
 		[],
 	);
+
+	// 🚨 **Hydration, exactly once, onto an untouched form** — see the doc block. A still-
+	// loading fetch (`undefined`) and a loaded-but-empty one (null) both hydrate nothing;
+	// a saved address lands in the form and the resolve effect below takes it from there,
+	// which is the whole of what checkout does with the saved address.
+	const hydratedRef = useRef(false);
+	useEffect(() => {
+		if (!prefill || hydratedRef.current) return;
+		const stillUntouched =
+			address.name.trim() === "" &&
+			address.line1.trim() === "" &&
+			address.line2.trim() === "" &&
+			address.city.trim() === "" &&
+			address.state === "" &&
+			address.postalCode.trim() === "";
+		if (!stillUntouched) return;
+		hydratedRef.current = true;
+		setAddress(prefill);
+	}, [prefill, address]);
 
 	// The two deps Biome would drop — `checkoutReady` and `updating` at the bottom of the
 	// array — are the debounce's re-arm triggers, not values the body reads: the session

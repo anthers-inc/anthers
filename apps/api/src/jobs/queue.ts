@@ -174,7 +174,7 @@ export async function ensureQueueReady(): Promise<void> {
 export const QUEUES = {
 	TRANSCODE_VIDEO: "transcode-video",
 	PROCESS_AUDIO: "process-audio",
-	RASTERIZE_EBOOK: "rasterize-ebook", // Render an uploaded PDF to private per-page images
+	RENDER_PAGED: "render-paged", // Render a paged Work's source set (PDFs and page images) to private per-page images
 	DISTRIBUTE_POOL: "distribute-pool",
 	SETTLE_CYCLE: "settle-cycle", // Credit each ended month from its paid invoices; see settle-cycle.ts
 	// Move settled, held credits into each creator's connected-account balance, 14 days
@@ -286,6 +286,15 @@ export const QUEUES = {
 	// half of the 2026-09-14 decision. Deduped per item+kind through `deadline_reminders`, so
 	// a daily re-gather of the same rows never mails twice.
 	DEADLINE_REMINDERS: "deadline-reminders",
+	// Take back the video HLS run prefixes no transcode row points at — the partial
+	// ladders of encodes that died mid-job, since 2026-10-10's per-variant restructure
+	// gives every retry its own prefix. Enumeration from storage, references from rows;
+	// see hls-orphan-sweep.ts for the cadence, media-purge.ts for the rules.
+	HLS_ORPHAN_SWEEP: "hls-orphan-sweep",
+	// Abort upload sessions abandoned past `SESSION_CLEANUP_DAYS`: the network bills
+	// incomplete multipart uploads while they are held, so an abandoned session is a
+	// meter running rather than idle bytes. See upload-session-sweep.ts.
+	UPLOAD_SESSION_SWEEP: "upload-session-sweep",
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -299,7 +308,7 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryDelay: 60,
 		expireInMinutes: 15,
 	},
-	[QUEUES.RASTERIZE_EBOOK]: {
+	[QUEUES.RENDER_PAGED]: {
 		retryLimit: 2,
 		retryDelay: 60,
 		// A long graphic novel is one poppler pass plus an upload per page; generous for
@@ -380,6 +389,20 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryDelay: 300,
 		expireInMinutes: 30,
 	},
+	[QUEUES.HLS_ORPHAN_SWEEP]: {
+		// A prefix-deleting sweep retried like any purge: idempotent (a swept prefix
+		// is gone), and a second delete of an empty prefix is a no-op.
+		retryLimit: 2,
+		retryDelay: 300,
+		expireInMinutes: 30,
+	},
+	[QUEUES.UPLOAD_SESSION_SWEEP]: {
+		// The row moves to `aborted` before the next run, so a retry sweeps nothing
+		// twice; 30 minutes bounds an abort pass over up to 200 rows.
+		retryLimit: 2,
+		retryDelay: 300,
+		expireInMinutes: 30,
+	},
 	[QUEUES.PUBLISH_SCHEDULED]: {
 		retryLimit: 1,
 		expireInMinutes: 5,
@@ -419,6 +442,11 @@ export const RETIRED_QUEUES: readonly string[] = [
 	// from the code on 2026-09-13.
 	"cross-publish",
 	"fetch-metrics",
+	// The paged renderer's old name, retired on 2026-10-11: the job stopped being an
+	// ebook job when the paged kinds' ingest became its own pipeline ("render-paged") —
+	// the EPUB era's "ebook" ingest is a different job on a different table, so the old
+	// name would have said the opposite of what the handler does.
+	"rasterize-ebook",
 ];
 
 /**
@@ -518,5 +546,12 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// 30-day rights request, a 10-business-day counter-notice window, a calendar of
 	// filings months apart — so a sweep that runs once a day delivers each reminder within
 	// a day of the moment it becomes due, inside every window's tolerance.
+	// 7 AM daily, after the night's other sweeps. Nothing here is latency-sensitive —
+	// the bytes are private, unreachable and uncounted by clients — and the walk is
+	// storage-wide, so off-hours it stays.
 	[QUEUES.DEADLINE_REMINDERS, "45 6 * * *"],
+	[QUEUES.HLS_ORPHAN_SWEEP, "0 7 * * *"],
+	// 7:15 AM daily, after the prefix sweep — the same family (storage nobody can
+	// reach and nobody is billed against by a client), just later off-hours.
+	[QUEUES.UPLOAD_SESSION_SWEEP, "15 7 * * *"],
 ] as const;

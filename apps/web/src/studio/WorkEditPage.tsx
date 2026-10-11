@@ -82,7 +82,7 @@ import {
 	useWorkDetails,
 	WorkFileSection,
 } from "@anthers/web-shared/content/work-media";
-import { isBuildType, typeLabel } from "@anthers/web-shared/content/works";
+import { isBuildType, LIBRARY_TYPE_OPTIONS, typeLabel } from "@anthers/web-shared/content/works";
 import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
 import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
 import { usePayoutsReady } from "@anthers/web-shared/payouts";
@@ -212,8 +212,8 @@ export default function WorkEditPage() {
 				<p className="mt-2 text-sm text-base-content/60">
 					It may have been deleted, or it belongs to someone else.
 				</p>
-				<Link to={studioUrl("/catalog")} className="btn btn-primary btn-sm mt-6">
-					Back to your Catalog
+				<Link to={studioUrl("/works")} className="btn btn-primary btn-sm mt-6">
+					Back to your Works
 				</Link>
 			</div>
 		);
@@ -235,7 +235,20 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	const { currentTrack } = useMediaPlayer();
 
 	const [current, setCurrent] = useState<Work>(editing);
-	const type = editing.type as UploadableWorkType;
+	/**
+	 * The kind this page is editing, which is the row's kind until the creator overrides it here
+	 * and saves. 🚨 **The override is page state, not a save** (Parker, 2026-10-10): changing the
+	 * kind restructures the page at once — different media section, different detail slots, the
+	 * rating matrix reset — and only the next save sends `type` to the server, whose rule is
+	 * stricter than the page's: it refuses the change once media exists, so a failed save here
+	 * leaves the row as it was rather than half-changed. Null once saved, so the page follows
+	 * the row rather than arguing with it.
+	 */
+	const [typeOverride, setTypeOverride] = useState<UploadableWorkType | null>(null);
+	// The kind the page stands at: an override while it is unsaved, the saved row otherwise —
+	// `current` rather than `editing`, because a save writes a new kind into the row and the
+	// page's sections (media, details, the rating grid) must follow the row from then on.
+	const type = (typeOverride ?? current.type) as UploadableWorkType;
 	// Which rating grid this Work is rated on, which its type alone decides.
 	const grid = gridFor(type);
 
@@ -243,7 +256,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	const [description, setDescription] = useState(editing.description ?? "");
 	// A piece of writing's body, written in place in the typography it is read in. The plain-text
 	// shadow goes with it, as it does from the post editor, because search reads that one.
-	const writing = isWriting(editing.type);
+	const writing = isWriting(type);
 	const [bodyHtml, setBodyHtml] = useState(editing.bodyHtml ?? "");
 	const [bodyText, setBodyText] = useState(editing.body ?? "");
 	const handleBody = (html: string) => {
@@ -485,6 +498,9 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		const json: WorkInput = {
 			title: title.trim(),
 			description: description.trim(),
+			// Sent only when changed here: the server's kind rules govern, and an unchanged
+			// save that carried a type would be arguing with it for nothing.
+			...(typeOverride && typeOverride !== editing.type ? { type: typeOverride } : {}),
 			// Sent unconditionally on a music Work, including empty — deleting the lyrics
 			// is a real edit, and an omitted field cannot express it.
 			...(type === "music" ? { lyrics } : {}),
@@ -543,6 +559,32 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		return () => window.removeEventListener("beforeunload", warn);
 	}, [dirty]);
 
+	/** Whether the kind control offers itself: only a private draft with nothing kind-specific to strand, judged against the page as it stands. */
+	const kindChangeable =
+		current.visibility !== "released" &&
+		visibility !== "released" &&
+		!current.sourceKey &&
+		!current.embedUrl &&
+		!fileUploading &&
+		// A file that landed a moment ago but that the row has not been re-read around yet
+		// is media as far as the creator is concerned, so the control waits it out rather
+		// than offering a change the save would refuse — and the walk that races this exact
+		// window is the proof (see the comic walk in `work-upload.authed.e2e.ts`).
+		landed <= readAfter &&
+		// A piece of writing is its body, on the page as on the row: prose typed here that a
+		// save would send counts as existing, and a kind cannot change from under it.
+		!(writing && !isEmptyWriting(bodyHtml)) &&
+		!current.body;
+
+	const changeType = (next: UploadableWorkType) => {
+		if (next === type) return;
+		setTypeOverride(next);
+		// The new kind is rated on its own terms: unanswered rows are not a declaration, and
+		// the server unrates the Work on the save anyway — this keeps the page and the row
+		// from arguing about who erased what.
+		setRows({});
+	};
+
 	const handleSave = async () => {
 		// The editor's half of the credit rule the server enforces: a created credit names its
 		// contributor. Checked here so the refusal reads as this page's own, not the server's.
@@ -563,6 +605,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			}
 			const { work: updated } = await res.json();
 			setCurrent(updated as Work);
+			setTypeOverride(null);
 			thumbnailTouched.current = false;
 			setBaseline(null);
 			setSavedAt(Date.now());
@@ -744,7 +787,30 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			{/* What this page is, and the way to see it exactly as a user does. The user's view
 			    shows what is saved, which is why it says so while anything is not. */}
 			<div className="flex flex-wrap items-center gap-2">
-				<h1 className="text-sm font-semibold">Edit {typeLabel(type)}</h1>
+				<h1 className="text-sm font-semibold flex items-center gap-2">
+					Edit{" "}
+					{kindChangeable ? (
+						<select
+							aria-label="Work kind"
+							className="select select-sm select-bordered font-normal"
+							value={type}
+							onChange={(e) => changeType(e.target.value as UploadableWorkType)}
+						>
+							{LIBRARY_TYPE_OPTIONS.map((opt) => (
+								<option key={opt.value} value={opt.value}>
+									{opt.label}
+								</option>
+							))}
+						</select>
+					) : (
+						typeLabel(type)
+					)}
+				</h1>
+				{kindChangeable && (
+					<span className="text-xs text-base-content/60">
+						Changing the kind unrates the draft — answer the matrix again before release.
+					</span>
+				)}
 				<span
 					className={`badge badge-sm ${current.visibility === "released" ? "badge-success" : "badge-ghost"}`}
 				>

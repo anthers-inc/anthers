@@ -11,11 +11,14 @@
 import { describe, expect, it } from "bun:test";
 import {
 	abandoned,
+	devSessionFrom,
+	devSessionId,
 	parseArguments,
 	processAlive,
 	reusesSession,
 	sessionEnvironment,
 	sessionPorts,
+	sessionSuffixForBranch,
 } from "./session.ts";
 
 function counter(start: number): () => number {
@@ -24,7 +27,7 @@ function counter(start: number): () => number {
 }
 
 describe("the ports a session takes", () => {
-	it("keeps the conventional ports for dev, where .env and the tooling expect them", () => {
+	it("keeps the conventional ports for the main checkout's dev, where .env and the tooling expect them", () => {
 		expect(sessionPorts("dev", () => 1)).toEqual({
 			postgres: 5432,
 			plc: 2582,
@@ -32,6 +35,18 @@ describe("the ports a session takes", () => {
 			bluesky: 2586,
 			mail: 8025,
 		});
+	});
+
+	it("takes free ports for a worktree's dev session, so it can run beside the main checkout's", () => {
+		const ports = sessionPorts("dev", counter(40000), false);
+		expect(ports).toEqual({
+			postgres: 40000,
+			plc: 40001,
+			pds: 40002,
+			bluesky: 40003,
+			mail: 40004,
+		});
+		expect(ports.postgres).not.toBe(5432);
 	});
 
 	it("takes free ports for a test run, so it can overlap dev and other runs", () => {
@@ -113,6 +128,99 @@ describe("whether a process reuses the session it is already in", () => {
 		expect(reusesSession("browser-1a2b", "test")).toBe(false);
 		expect(reusesSession(undefined, "test")).toBe(false);
 		expect(reusesSession("", "test")).toBe(false);
+	});
+});
+
+describe("which dev session id a checkout takes", () => {
+	const MAIN_DIR = "/home/dev/Anthers/.git";
+	const WORKTREE_DIR = `${MAIN_DIR}/worktrees/signup-page`;
+
+	it("keeps the plain dev id, and the fixed ports, for the main checkout", () => {
+		expect(devSessionFrom(MAIN_DIR, MAIN_DIR, "main")).toEqual({
+			id: "dev",
+			fixed: true,
+			prefix: "",
+			inWorktree: false,
+			branch: "main",
+		});
+	});
+
+	it("reads not a checkout at all as the main shape, with no branch to name", () => {
+		expect(devSessionFrom(undefined, undefined, undefined)).toEqual({
+			id: "dev",
+			fixed: true,
+			prefix: "",
+			inWorktree: false,
+		});
+	});
+
+	it("gives a worktree's dev session its own id, keyed on the branch like portless routes are", () => {
+		expect(devSessionFrom(WORKTREE_DIR, MAIN_DIR, "signup-page")).toEqual({
+			id: "dev-signup-page",
+			fixed: false,
+			prefix: "signup-page",
+			inWorktree: true,
+			branch: "signup-page",
+		});
+	});
+
+	it("drops everything before a branch's last path segment, as portless does", () => {
+		expect(devSessionFrom(WORKTREE_DIR, MAIN_DIR, "feature/signup-page")).toEqual({
+			id: "dev-signup-page",
+			fixed: false,
+			prefix: "signup-page",
+			inWorktree: true,
+			branch: "feature/signup-page",
+		});
+	});
+
+	it("marks a worktree on a default branch or detached HEAD as its refusal shape", () => {
+		const promoteDir = `${MAIN_DIR}/worktrees/promote`;
+		for (const branch of ["main", "master", "", undefined]) {
+			expect(devSessionFrom(promoteDir, MAIN_DIR, branch)).toMatchObject({
+				id: "dev",
+				fixed: true,
+				prefix: "",
+				inWorktree: true,
+			});
+		}
+	});
+
+	it("makes a branch name safe for a container id without losing the name", () => {
+		expect(sessionSuffixForBranch("signup-page")).toBe("signup-page");
+		expect(sessionSuffixForBranch("a/very/deep/branch")).toBe("branch");
+		expect(sessionSuffixForBranch("weird name!")).toBe("weird-name");
+		expect(() => sessionSuffixForBranch("---")).toThrow(/usable name/);
+	});
+
+	it("reads the git facts of a worktree it makes and checks out of the way (and removes both)", async () => {
+		const branch = `session-id-proof-${Math.random().toString(16).slice(2, 8)}`;
+		const path = `/tmp/anthers-session-id-proof-${branch}`;
+		try {
+			Bun.spawnSync(["git", "worktree", "add", "-b", branch, path], {
+				cwd: import.meta.dir,
+				stdout: "ignore",
+				stderr: "ignore",
+			});
+			const shape = await devSessionId(path);
+			expect(shape).toMatchObject({
+				id: `dev-${branch}`,
+				fixed: false,
+				prefix: branch,
+				inWorktree: true,
+			});
+		} finally {
+			Bun.spawnSync(["git", "worktree", "remove", "--force", path], {
+				cwd: import.meta.dir,
+				stdout: "ignore",
+				stderr: "ignore",
+			});
+			Bun.spawnSync(["git", "branch", "-D", branch], {
+				cwd: import.meta.dir,
+				stdout: "ignore",
+				stderr: "ignore",
+			});
+		}
 	});
 });
 

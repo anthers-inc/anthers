@@ -18,7 +18,7 @@
  * here like any other file. Don't reintroduce an encode in the browser.
  */
 
-import { embedUrlProblem, workNeedsFile } from "@anthers/shared/content";
+import { embedUrlProblem, isPaged, workNeedsFile } from "@anthers/shared/content";
 import { type ReactNode, useState } from "react";
 import type { UploadableWorkType, Work, WorkInput } from "../../lib/types";
 import {
@@ -32,6 +32,7 @@ import TranscodingStatus from "../media/TranscodingStatus";
 import { keyToPreview } from "../post/mediaUpload";
 import FileUpload from "../ui/FileUpload";
 import FormField from "../ui/FormField";
+import { PagedSourceFiles } from "./PagedSourceFiles";
 
 /** The Work kinds whose file is uploaded into them, as the upload store names them. */
 export type FileWorkType = Extract<WorkUploadTarget, { kind: "source" }>["type"];
@@ -40,7 +41,22 @@ export function isFileWorkType(type: string): type is FileWorkType {
 	return workNeedsFile(type);
 }
 
-/** What a file picker for this kind accepts, and how large a file it takes. */
+/**
+ * What a file picker for this kind accepts, and how large a file it takes.
+ *
+ * 🚨 **These caps are picked to what the pipeline behind them tolerates, not to what storage
+ * accepts** — a Work's source upload goes out through the presign route (`packages/web-shared/src/lib/upload.ts`),
+ * so the bytes never pass through the API in production and R2's single-PUT ceiling is 5 GB.
+ * The binding constraint for a PDF is the worker that rasterizes it: `apps/api/src/jobs/render-paged.ts`
+ * writes the source to App Platform's ephemeral filesystem — 4 GiB total per container —
+ * alongside every page image it renders before uploading them, so the source cap is the share
+ * of that disk a book may claim. 2 GB is that share with room for the rendered pages, and parity
+ * with the video cap; a 5 GB cap would trade "cannot upload a giant master" for "the job dies
+ * out of disk partway through a 2000-page render". A page image is bounded not by that disk but
+ * by the job's decode bound (`PAGE_MAX_PIXELS`) and its own re-encode — the 2 GB accept is the
+ * same number either way, so one ceiling covers both paths and the creator's page quality lives
+ * downstream of it.
+ */
 export function fileRules(type: FileWorkType): { accept: string; maxSize: number; noun: string } {
 	switch (type) {
 		case "video":
@@ -52,7 +68,14 @@ export function fileRules(type: FileWorkType): { accept: string; maxSize: number
 			return { accept: "image/*", maxSize: 20 * 1024 * 1024, noun: "an image" };
 		case "comic":
 		case "ebook":
-			return { accept: "application/pdf", maxSize: 500 * 1024 * 1024, noun: "a PDF" };
+			// Page images lead (Parker, 2026-10-11) — the paged job renders image leaves
+			// directly, one leaf per page — and the PDF stays: it is what a whole-book
+			// master ships as, and the set is built from whatever mix the creator holds.
+			return {
+				accept: "image/jpeg,image/png,application/pdf",
+				maxSize: 2 * 1024 * 1024 * 1024,
+				noun: "a page image (JPG or PNG) or a PDF",
+			};
 	}
 }
 
@@ -169,6 +192,11 @@ export function WorkFileSection({
 	const upload = useSourceUpload(work.id);
 	const rules = fileRules(type);
 	const start = (file: File) => workUploads.start(work.id, file, { kind: "source", type });
+	// A paged Work's file section is the SET editor — the list with add, reorder, remove —
+	// whether the set is one file or several; the in-flight states it shares with every
+	// kind are handled inside (they read the same upload store). Called after the hooks,
+	// which its sibling states are what keep ordered.
+	if (isPaged(type)) return <PagedSourceFiles work={work} />;
 
 	const label = type === "image" ? "Image" : "File";
 

@@ -309,6 +309,13 @@ export interface Work {
 
 	// Media payload — blanked (empty) by the API when the user lacks access.
 	sourceKey: string | null;
+	/**
+	 * A video Work's original file, at its access-checked delivery route
+	 * (`/works/:id/original`) — the day-one deliverable a play page falls back to
+	 * before a ladder exists. Null for every other kind and for a user the
+	 * Work's gate refuses; the meter bites at the route, not here.
+	 */
+	originalUrl?: string | null;
 	embedUrl: string | null;
 	durationSeconds: number | null;
 	/** Prose, for `type: "text"`. Gated like any other payload. */
@@ -937,6 +944,21 @@ export interface Account {
 	canceledAt: string | null;
 	createdAt?: string;
 	updatedAt?: string;
+}
+
+/**
+ * The buyer's **saved billing address** — opt-in, managed in the account settings, and
+ * stored on the buyer's Stripe Customer record rather than on Anthers' servers (2026-10-11
+ * decision). This is the shape `GET /api/accounts/me/billing-address` answers with and
+ * `PUT` takes; checkout prefills its billing form from it and never writes back.
+ */
+export interface SavedBillingAddress {
+	name: string;
+	line1: string;
+	line2: string | null;
+	city: string;
+	state: string;
+	postalCode: string;
 }
 
 /** Response of GET /subscriptions/me — the billing row plus the Badge currently held. */

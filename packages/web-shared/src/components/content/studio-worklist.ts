@@ -43,7 +43,7 @@ export interface WorklistItem {
 	message: string;
 	/** The link's own words — what doing something about it is called. */
 	action: string;
-	/** Where the action goes: the one Work when there is one, else the Catalog. */
+	/** Where the action goes: the one Work when there is one, else the Works page. */
 	href: string;
 	/**
 	 * `blocking` is something already wrong out in the world or standing between the creator
@@ -65,12 +65,12 @@ function group(works: Work[]): Group {
 /**
  * Where an item points.
  *
- * One Work gets its own page, because that is where the fix is. Several get the Catalog,
+ * One Work gets its own page, because that is where the fix is. Several get the Works page,
  * where every card already carries its own link — naming one of five would be picking a
  * Work for the creator, and listing five lines is how this list stops being read.
  */
-function hrefFor(g: Group, editUrl: (work: Work) => string, catalogUrl: string): string {
-	return g.only ? editUrl(g.only) : catalogUrl;
+function hrefFor(g: Group, editUrl: (work: Work) => string, worksUrl: string): string {
+	return g.only ? editUrl(g.only) : worksUrl;
 }
 
 /** `"Tide"` for one, `"3 Works"` for several — the subject of the item's sentence. */
@@ -89,8 +89,8 @@ export interface WorklistInput {
 	payoutsReady: boolean | null;
 	/** The Studio path for one Work's own page. */
 	editUrl: (work: Work) => string;
-	/** The Studio's Catalog path, for an item covering several Works. */
-	catalogUrl: string;
+	/** The Studio's Works path, for an item covering several Works. */
+	worksUrl: string;
 	/**
 	 * Works whose file this tab is uploading right now. Such a Work has no file on its row yet
 	 * and is not wrong — it is in progress — so it is left off the list rather than reported.
@@ -110,7 +110,7 @@ export function buildWorklist({
 	works,
 	payoutsReady,
 	editUrl,
-	catalogUrl,
+	worksUrl,
 	uploading = new Set(),
 }: WorklistInput): WorklistItem[] {
 	const items: WorklistItem[] = [];
@@ -121,7 +121,7 @@ export function buildWorklist({
 			kind: "locked",
 			message: `${subject(locked)} ${locked.only ? "is" : "are"} released, and nobody can open ${locked.only ? "it" : "them"}.`,
 			action: locked.only ? "Set access" : "Set access on them",
-			href: hrefFor(locked, editUrl, catalogUrl),
+			href: hrefFor(locked, editUrl, worksUrl),
 			severity: "blocking",
 		});
 	}
@@ -142,8 +142,8 @@ export function buildWorklist({
 		items.push({
 			kind: "encode-failed",
 			message: `Processing failed on ${subject(failed)}.`,
-			action: failed.only ? "Open it" : "Open your Catalog",
-			href: hrefFor(failed, editUrl, catalogUrl),
+			action: failed.only ? "Open it" : "Open your Works",
+			href: hrefFor(failed, editUrl, worksUrl),
 			severity: "blocking",
 		});
 	}
@@ -165,8 +165,8 @@ export function buildWorklist({
 		items.push({
 			kind: "no-file",
 			message: `${subject(noFile)} ${noFile.only ? "has" : "have"} no file yet, so ${noFile.only ? "it" : "they"} cannot be released.`,
-			action: noFile.only ? "Upload it" : "Open your Catalog",
-			href: hrefFor(noFile, editUrl, catalogUrl),
+			action: noFile.only ? "Upload it" : "Open your Works",
+			href: hrefFor(noFile, editUrl, worksUrl),
 			severity: "attention",
 		});
 	}
@@ -185,7 +185,7 @@ export function buildWorklist({
 			kind: "unrated",
 			message: `${subject(unrated)} ${unrated.only ? "has" : "have"} unanswered rows in ${unrated.only ? "its" : "their"} rating, so ${unrated.only ? "it" : "they"} cannot be released.`,
 			action: unrated.only ? "Rate it" : "Rate them",
-			href: hrefFor(unrated, editUrl, catalogUrl),
+			href: hrefFor(unrated, editUrl, worksUrl),
 			severity: "attention",
 		});
 	}
@@ -204,7 +204,7 @@ export function buildWorklist({
 			kind: "unanswered-rows",
 			message: `${subject(unanswered)} ${unanswered.only ? "has" : "have"} unanswered rows in ${unanswered.only ? "its" : "their"} rating, so users who hide a kind of content won't see ${unanswered.only ? "it" : "them"}.`,
 			action: unanswered.only ? "Rate it" : "Rate them",
-			href: hrefFor(unanswered, editUrl, catalogUrl),
+			href: hrefFor(unanswered, editUrl, worksUrl),
 			severity: "attention",
 		});
 	}
@@ -216,8 +216,8 @@ export function buildWorklist({
 		items.push({
 			kind: "no-delivery",
 			message: `${subject(noDelivery)} can neither be streamed nor downloaded, so ${noDelivery.only ? "it" : "they"} cannot be released.`,
-			action: noDelivery.only ? "Turn one on" : "Open your Catalog",
-			href: hrefFor(noDelivery, editUrl, catalogUrl),
+			action: noDelivery.only ? "Turn one on" : "Open your Works",
+			href: hrefFor(noDelivery, editUrl, worksUrl),
 			severity: "attention",
 		});
 	}

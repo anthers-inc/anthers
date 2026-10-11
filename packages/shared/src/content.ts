@@ -182,7 +182,7 @@ export function isListened(type: string): boolean {
 
 /**
  * The Work types that are read page by page. Each is one uploaded PDF, which
- * `rasterize-ebook` renders to private per-page images, because a single-file deliverable
+ * `render-paged` renders to private per-page images, because a single-file deliverable
  * cannot be access-checked page by page.
  */
 export const PAGED_WORK_TYPES = ["comic", "ebook"] as const satisfies readonly WorkType[];

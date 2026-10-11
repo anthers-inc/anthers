@@ -37,14 +37,15 @@ import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { runDeadlineReminderSweep } from "./deadline-reminders.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
+import { runHlsOrphanSweep } from "./hls-orphan-sweep.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
 import { handlePruneAttention, type PruneAttentionData } from "./prune-attention.js";
 import { publishScheduled } from "./publish-scheduled.js";
 import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue, RETIRED_QUEUES } from "./queue.js";
-import { type RasterizeEbookData, rasterizeEbook } from "./rasterize-ebook.js";
 import { reconcileListings } from "./reconcile-listings.js";
 import { releaseScheduled } from "./release-scheduled.js";
 import { type RemoveAtprotoRecordData, removeAtprotoRecordJob } from "./remove-atproto-record.js";
+import { type RenderPagedData, renderPaged } from "./render-paged.js";
 import { rescanOwed } from "./rescan-owed.js";
 import { resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
@@ -54,6 +55,7 @@ import { type SyncAtprotoRecordData, syncAtprotoRecordJob } from "./sync-atproto
 import { type SyncWorkListingData, syncWorkListingJob } from "./sync-work-listing.js";
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
 import { type TransferHeldCreditsData, transferHeldCredits } from "./transfer-held-credits.js";
+import { runUploadSessionSweep } from "./upload-session-sweep.js";
 import { watchHostedIdentities } from "./watch-identities.js";
 import { runWithdrawnSweep } from "./withdrawn-sweep.js";
 
@@ -97,16 +99,12 @@ async function start() {
 		},
 	);
 
-	await queue.work<RasterizeEbookData>(
-		QUEUES.RASTERIZE_EBOOK,
-		{ localConcurrency: 2 },
-		async (jobs) => {
-			for (const job of jobs) {
-				console.log(`[rasterize-ebook] Processing job ${job.id}`);
-				await rasterizeEbook(job.data);
-			}
-		},
-	);
+	await queue.work<RenderPagedData>(QUEUES.RENDER_PAGED, { localConcurrency: 2 }, async (jobs) => {
+		for (const job of jobs) {
+			console.log(`[render-paged] Processing job ${job.id}`);
+			await renderPaged(job.data);
+		}
+	});
 
 	await queue.work<SyncWorkListingData>(
 		QUEUES.SYNC_WORK_LISTING,
@@ -196,6 +194,24 @@ async function start() {
 			const { sweptCount, warnedCount } = await runWithdrawnSweep();
 			if (sweptCount > 0 || warnedCount > 0) {
 				console.log(`[withdrawn-sweep] job ${job.id}: swept ${sweptCount}, warned ${warnedCount}`);
+			}
+		}
+	});
+
+	await queue.work(QUEUES.HLS_ORPHAN_SWEEP, async (jobs) => {
+		for (const job of jobs) {
+			const sweptCount = await runHlsOrphanSweep();
+			if (sweptCount > 0) {
+				console.log(`[hls-orphan-sweep] job ${job.id}: swept ${sweptCount} orphaned prefixes`);
+			}
+		}
+	});
+
+	await queue.work(QUEUES.UPLOAD_SESSION_SWEEP, async (jobs) => {
+		for (const job of jobs) {
+			const sweptCount = await runUploadSessionSweep();
+			if (sweptCount > 0) {
+				console.log(`[upload-session-sweep] job ${job.id}: aborted ${sweptCount} open sessions`);
 			}
 		}
 	});

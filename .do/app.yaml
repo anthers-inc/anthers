@@ -480,6 +480,14 @@ workers:
   - name: worker
     # The same rendered alert set on the worker — rendered and explained at services:
     # scripts/resource-alerts-lib.ts (2026-10-07).
+    #
+    # 🚨 The CPU rule here is a SATURATION NOTICE, not an error signal (Parker, 2026-10-11).
+    # The worker's healthy shape while draining media is a pegged graph — one encode at a
+    # time on one core — so 90/5m fires on every video burst by design, including healthy
+    # ones. Read it as "media is queued"; what means failure is RESTART_COUNT, MEM
+    # outside a transcode's known peaks, and the queue's failed jobs driving /status. The
+    # reasoning and the general rule behind reading a threshold this way is the wiki's
+    # 83.02, section "The Worker's CPU Alert Trips on Healthy Work".
     alerts:
       - rule: CPU_UTILIZATION
         operator: GREATER_THAN

@@ -20,11 +20,14 @@
  * owns it, and every session starts by removing whatever belongs to a process that no longer
  * exists. A leftover whose owner is still alive is somebody else's live run and is never touched.
  *
- * ⭐ **`dev` keeps fixed ports and the other kinds do not.** The dev database stays on 5432 so the
+ * ⭐ **A checkout's dev session keys on the checkout, like portless keys routes on the branch.**
+ * The main checkout's dev session keeps the id `dev` and the fixed ports — :5432 so the
  * `DATABASE_URL` in `.env` reaches it from Drizzle Studio or a hand-run migration while `make dev`
- * is up, and the network keeps the AT Protocol tooling's 2582 and 2583. Test and browser runs take
- * free ports, so any number of them can run beside each other and beside `make dev`. Two dev
- * sessions at once are refused rather than supported.
+ * is up, and the network keeps the AT Protocol tooling's 2582 and 2583. A worktree's dev session
+ * takes its own id (`dev-<branch>`) and free ports, as test and browser sessions always have, so
+ * a worktree's `make dev` runs beside the main checkout's and the two share nothing — no session
+ * directory, no container, no port. The refusal keeps meaning "one checkout, one dev session":
+ * the plain id and the fixed ports say exactly "this checkout".
  *
  * Stripe's test-mode objects are the one thing a session creates that it cannot remove; they
  * accumulate in Stripe's own account.
@@ -66,6 +69,12 @@ const POSTGRES_IMAGE = "postgres:16";
 export const SESSION_LABEL = "org.anthers.session";
 export const OWNER_LABEL = "org.anthers.session.owner";
 
+/**
+ * The branches portless also declines to prefix with a worktree label — a checkout on one of
+ * them gets the plain name, whichever directory it came from, so it must not take a second one.
+ */
+const DEFAULT_BRANCHES = new Set(["main", "master", "HEAD"]);
+
 export interface SessionPorts {
 	postgres: number;
 	plc: number;
@@ -94,9 +103,13 @@ export interface Session {
 	stopSync(): void;
 }
 
-/** The ports a session uses. `dev` is fixed; every other kind asks `freePort` for each one. */
-export function sessionPorts(kind: SessionKind, freePort: () => number): SessionPorts {
-	if (kind === "dev") return { postgres: 5432, plc: 2582, pds: 2583, bluesky: 2586, mail: 8025 };
+/** The ports a session uses. The main checkout's `dev` is fixed; every other session asks `freePort`. */
+export function sessionPorts(
+	kind: SessionKind,
+	freePort: () => number,
+	fixed = kind === "dev",
+): SessionPorts {
+	if (fixed) return { postgres: 5432, plc: 2582, pds: 2583, bluesky: 2586, mail: 8025 };
 	const taken = new Set<number>();
 	const next = () => {
 		for (;;) {
@@ -112,8 +125,8 @@ export function sessionPorts(kind: SessionKind, freePort: () => number): Session
 		ports.api = next();
 		ports.preview = next();
 		ports.adminPreview = next();
-		ports.mail = next();
 	}
+	if (kind === "dev" || kind === "browser") ports.mail = next();
 	return ports;
 }
 
@@ -197,6 +210,96 @@ export function reusesSession(sessionId: string | undefined, kind: SessionKind):
 	return sessionId === "ci" || sessionId.startsWith(`${kind}-`);
 }
 
+export interface DevSessionShape {
+	/** The dev session id of this checkout: `dev`, or `dev-<branch>` in a worktree. */
+	id: string;
+	/** True when the session owns the fixed ports — the main checkout's always does. */
+	fixed: boolean;
+	/**
+	 * The worktree label the id and this checkout's portless routes carry: the branch's last
+	 * path segment. Empty in the main checkout, where nothing is prefixed.
+	 */
+	prefix: string;
+	/** True when the checkout is a linked git worktree, whichever branch it carries. */
+	inWorktree: boolean;
+	/** The checkout's branch as git reports it, or undefined for a detached HEAD. */
+	branch?: string;
+}
+
+/**
+ * A Docker container name's charset — the same one portless's route labels are constrained to.
+ * `/` names a branch segment portless itself drops (branch `feature/x` prefixes as `x`), and
+ * everything else a branch may carry has no business in an id.
+ */
+const SAFE_ID_CHARS = /[^A-Za-z0-9_.-]+/g;
+
+/** The session-id suffix for a branch: its last path segment — portless's own prefix rule. */
+export function sessionSuffixForBranch(branch: string | undefined): string {
+	const name = ((branch ?? "").split("/").pop() ?? "")
+		.replace(SAFE_ID_CHARS, "-")
+		.replace(/^[-.]+/, "")
+		.slice(0, 40)
+		.replace(/[-.]+$/, "");
+	if (name.length === 0) {
+		throw new Error(
+			`branch ${JSON.stringify(branch)} carries no usable name for a session id — ` +
+				`name the worktree after the task, or run ` +
+				"`make dev`" +
+				` in the main checkout`,
+		);
+	}
+	return name;
+}
+
+async function gitQuery(root: string, args: string[]): Promise<string | undefined> {
+	const proc = Bun.spawn(["git", ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
+	const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+	return code === 0 ? out.trim() : undefined;
+}
+
+/**
+ * The dev session id of the checkout at `root`, read the way portless reads it.
+ *
+ * ⭐ **The git facts, not the Makefile, decide.** In a worktree `--git-dir`
+ * (`…/.git/worktrees/<name>`) differs from the shared `--git-common-dir` (`…/.git`); in the main
+ * checkout they are one directory. A worktree on a default branch or in detached HEAD gets the
+ * plain `dev` rather than a prefixed one — the same shape portless declines to prefix — and its
+ * session then collides with (and is refused by) the main checkout's, which is the correct
+ * reading of "one name, one session": two things answering on `anthers.localhost` is exactly
+ * the wrong-server-is-answering class.
+ */
+export async function devSessionId(root: string): Promise<DevSessionShape> {
+	const [gitDir, commonDir, branch] = await Promise.all([
+		gitQuery(root, ["rev-parse", "--absolute-git-dir"]),
+		gitQuery(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]),
+		gitQuery(root, ["branch", "--show-current"]),
+	]);
+	return devSessionFrom(gitDir, commonDir, branch);
+}
+
+/** The pure decision `devSessionId` reports — one call per git fact, injectable for tests. */
+export function devSessionFrom(
+	gitDir: string | undefined,
+	commonDir: string | undefined,
+	branch: string | undefined,
+): DevSessionShape {
+	// Not a git checkout at all: there is no worktree fact to read, so the plain dev session —
+	// whose refusal still holds.
+	if (gitDir === undefined || commonDir === undefined) {
+		return { id: "dev", fixed: true, prefix: "", inWorktree: false };
+	}
+	const inWorktree = gitDir !== commonDir;
+	const prefixed =
+		inWorktree && branch !== undefined && branch !== "" && !DEFAULT_BRANCHES.has(branch);
+	if (!prefixed) {
+		// A worktree of this shape is one portless leaves unnamed as well; `start` refuses
+		// its dev session rather than letting it take a second turn at `dev`.
+		return { id: "dev", fixed: true, prefix: "", inWorktree, branch };
+	}
+	const prefix = sessionSuffixForBranch(branch);
+	return { id: `dev-${prefix}`, fixed: false, prefix, inWorktree, branch };
+}
+
 export interface Leftover {
 	name: string;
 	session: string;
@@ -250,12 +353,18 @@ export function parseArguments(argv: string[]): Invocation {
  * fixture script started from a second terminal can find the dev database from `.env`, but not the
  * key that seals the hosted accounts in it, nor the directory its uploads live in — so a session
  * records its environment, and a command attaches to that record rather than guessing.
+ *
+ * ⭐ **`attach dev` means *this checkout's* dev session**, wherever the command runs from: the id
+ * is derived the way a start derives it, so `make dev-worker` and `bun run db:gauntlet` reach the
+ * same session in a worktree as in the main checkout without either having to spell the id.
+ * Any other id is taken literally, so test sessions reach through by name.
  */
-export function attachedEnvironment(id: string): Record<string, string> {
-	const dir = join(SESSIONS_DIR, id);
-	if (!processAlive(directoryOwner(id))) {
+export async function attachedEnvironment(id: string): Promise<Record<string, string>> {
+	const resolved = id === "dev" ? (await devSessionId(REPO_ROOT)).id : id;
+	const dir = join(SESSIONS_DIR, resolved);
+	if (!processAlive(directoryOwner(resolved))) {
 		throw new Error(
-			`no ${id} session is running — start one first (\`make dev\` starts the dev session)`,
+			`no ${resolved} session is running — start one first (\`make dev\` starts this checkout's)`,
 		);
 	}
 	return JSON.parse(readFileSync(join(dir, "env.json"), "utf8"));
@@ -536,11 +645,26 @@ export async function startSession(
 	if (!(await docker(["info"])).ok) {
 		throw new Error("Docker isn't running. Start the Docker daemon, then retry.");
 	}
-	const id = kind === "dev" ? "dev" : `${kind}-${randomBytes(4).toString("hex")}`;
+	// A dev session keys on the checkout (main checkout keeps `dev`; a worktree gets
+	// `dev-<branch>` and free ports); every other kind takes a random id.
+	const dev = kind === "dev" ? await devSessionId(REPO_ROOT) : undefined;
+	// A worktree that carries no prefix is one portless would also leave unnamed — a worktree
+	// on the default branch, or a detached one — and its dev session would answer where the
+	// main checkout's does. Refuse that rather than letting it take a second turn at `dev`.
+	if (dev?.inWorktree && dev.fixed) {
+		throw new Error(
+			`A worktree on ${dev.branch || "a detached HEAD"} cannot take a dev session of its own: ` +
+				"it would answer where the main checkout's does, and the main checkout's dev session " +
+				"is the only one that may. Run `make dev` there, or take a task branch for this " +
+				"worktree (`make worktree NAME=<task>`).",
+		);
+	}
+	const id = dev ? dev.id : `${kind}-${randomBytes(4).toString("hex")}`;
+	const fixed = dev ? dev.fixed : false;
 	await refuseIfRunning(id);
 	await clearAbandonedSessions();
 
-	const ports = sessionPorts(kind, freePort);
+	const ports = sessionPorts(kind, freePort, fixed);
 	const dir = join(SESSIONS_DIR, id);
 	const contentDir = join(dir, "content");
 	mkdirSync(dir, { recursive: true });
@@ -580,6 +704,18 @@ export async function startSession(
 				`directory :${ports.plc}, server :${ports.pds}, Bluesky stand-in :${ports.bluesky}` +
 				(ports.mail !== undefined ? `, mail http://localhost:${ports.mail}` : ""),
 		);
+		if (dev !== undefined && !dev.fixed) {
+			// The one convenience the fixed ports carry is that `.env` reaches this session's
+			// database — and that convenience can only belong to the checkout that owns :5432.
+			// A hand-run tool in a worktree would otherwise land on the main checkout's database,
+			// which is the wrong-server-is-answering failure; the attach route takes this
+			// session's environment instead.
+			log(
+				`[session] A worktree dev session: a tool run by hand reads .env, which points at the ` +
+					`main checkout's dev database on :5432. Attach instead: ` +
+					`\`bun run scripts/session.ts attach ${id} -- <command>\``,
+			);
+		}
 	} catch (err) {
 		await stop();
 		throw err;
@@ -614,7 +750,7 @@ export function exitCodeOf(child: ChildProcess, command: string[]): Promise<numb
 async function main(): Promise<number> {
 	const invocation = parseArguments(process.argv.slice(2));
 	if (invocation.mode === "attach") {
-		const env = attachedEnvironment(invocation.id);
+		const env = await attachedEnvironment(invocation.id);
 		return exitCodeOf(runCommand(invocation.command, env, false), invocation.command);
 	}
 	const { kind, command, pidFile } = invocation;

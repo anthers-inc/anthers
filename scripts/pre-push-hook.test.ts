@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The pre-push hook runs the whole suite unless it can PROVE a push changes only markdown.
+ * The pre-push hook runs what the push's destination demands: the whole suite to `main` or
+ * `release`, the fast tier to a task branch, `verify-docs` for a proven markdown-only push.
  *
- * 🚨 **The fast path is a way for the gate to run less, so every test here that matters is one
+ * 🚨 **Every tier shortcut is a way for the gate to run less, so every test here that matters is one
  * where it must refuse.** The hook has already turned itself off once by treating "git told me
  * nothing" as "there is nothing to check", and a markdown-only shortcut is the same shape of
  * mistake with more ways to make it: a rename that reports only its new `.md` name, a base
  * commit the remote has that this clone does not, a diff that comes back empty. Each of those
- * must land on `make verify`.
+ * must land on the dearest tier. The newest shortcut is the destination split itself, and its
+ * own refusal tests live here too: a release push handed the fast tier, a fast stamp satisfying
+ * a full push — either would be a cheaper run standing in for a dearer one.
  *
  * These drive the real `.githooks/pre-push` against a throwaway repository, with a stub `make`
  * on `PATH` that records the target it was asked for — so nothing here runs the suite, and
@@ -165,8 +168,24 @@ exit "$STUB_MAKE_EXIT"
 		`#!/bin/sh
 case "$*" in
 	*verify-stamp.ts*)
-		sha=$(printf '%s' "$*" | awk '{print $NF}')
+		# The real call is: bun run scripts/verify-stamp.ts check <head> <target> — the tier
+		# the push requires is the last argument, the head the one before it. A full stamp
+		# satisfies any tier; a fast stamp only a fast push — the same direction the real
+		# script reads markers in, fail-closed on anything else.
+		#
+		# bun install is stubbed too: exit 0, so no package manager ever runs in a fixture.
+		tier=$(printf '%s' "$*" | awk '{print $NF}')
+		sha=$(printf '%s' "$*" | awk '{print $(NF-1)}')
 		if [ -n "$STUB_STAMPS" ] && [ -f "$STUB_STAMPS/$sha" ]; then
+			case "$tier" in
+				verify)
+					grep -qF 'make verify green at ' "$STUB_STAMPS/$sha" || exit 1
+					;;
+				verify-fast)
+					grep -qF 'make verify green at ' "$STUB_STAMPS/$sha" || \
+						grep -qF 'make verify-fast green at ' "$STUB_STAMPS/$sha" || exit 1
+					;;
+			esac
 			printf 'green 1 minute ago'
 			exit 0
 		fi
@@ -237,17 +256,17 @@ describe("the markdown-only fast path", () => {
 	});
 });
 
-describe("everything else runs the whole suite", () => {
+describe("everything else on a task branch runs the fast tier", () => {
 	it("a push that touches code as well as markdown", () => {
 		git("checkout", "-q", "-b", "mixed", base);
 		const tip = commit({ "README.md": "# Mixed\n", "code.ts": "export const a = 2;\n" });
-		expect(push(line(tip, base)).target).toBe("verify");
+		expect(push(line(tip, base)).target).toBe("verify-fast");
 	});
 
 	it("deleting a code file, even with nothing else in the push", () => {
 		git("checkout", "-q", "-b", "delete-code", base);
 		const tip = commit({ "code.ts": null });
-		expect(push(line(tip, base)).target).toBe("verify");
+		expect(push(line(tip, base)).target).toBe("verify-fast");
 	});
 
 	it("renaming code to markdown, which a rename-aware diff would report as markdown only", () => {
@@ -255,13 +274,13 @@ describe("everything else runs the whole suite", () => {
 		git("mv", "code.ts", "code.md");
 		git("commit", "-q", "-m", "rename");
 		const tip = git("rev-parse", "HEAD");
-		expect(push(line(tip, base)).target).toBe("verify");
+		expect(push(line(tip, base)).target).toBe("verify-fast");
 	});
 
 	it("a remote tip this clone has never fetched", () => {
 		git("checkout", "-q", "-b", "unknown-base", base);
 		const tip = commit({ "README.md": "# Unknown\n" });
-		expect(push(line(tip, "1234567890abcdef1234567890abcdef12345678")).target).toBe("verify");
+		expect(push(line(tip, "1234567890abcdef1234567890abcdef12345678")).target).toBe("verify-fast");
 	});
 
 	it("a new branch when there is no origin/main to measure it from", () => {
@@ -269,14 +288,14 @@ describe("everything else runs the whole suite", () => {
 		const tip = commit({ "README.md": "# No origin\n" });
 		git("update-ref", "-d", "refs/remotes/origin/main");
 		try {
-			expect(push(line(tip, ZERO)).target).toBe("verify");
+			expect(push(line(tip, ZERO)).target).toBe("verify-fast");
 		} finally {
 			git("update-ref", "refs/remotes/origin/main", base);
 		}
 	});
 
 	it("a push with nothing new in it, where an empty diff proves nothing", () => {
-		expect(push(line(base, base)).target).toBe("verify");
+		expect(push(line(base, base)).target).toBe("verify-fast");
 	});
 
 	it("two refs where only one is markdown", () => {
@@ -285,11 +304,40 @@ describe("everything else runs the whole suite", () => {
 		git("checkout", "-q", "-b", "two-code", base);
 		const code = commit({ "code.ts": "export const a = 3;\n" });
 		const stdin = line(docs, base, "refs/heads/two-docs") + line(code, base, "refs/heads/two-code");
-		expect(push(stdin).target).toBe("verify");
+		expect(push(stdin).target).toBe("verify-fast");
 	});
 
 	it("still skips a push of nothing but deletions", () => {
 		expect(push(line(ZERO, base))).toMatchObject({ exitCode: 0, target: null });
+	});
+});
+
+describe("the tier split by destination", () => {
+	// The whole point of the split, stated as refusals the hook must not make: a cheaper
+	// run may never stand in for the deliverer-bearer branches, `main` and `release`.
+	it("hands a release push the whole suite even when only markdown changed", () => {
+		git("checkout", "-q", "-b", "release-docs", base);
+		const tip = commit({ "README.md": "# Release docs\n" });
+		const res = push(line(tip, base, "refs/heads/release"));
+		expect(res.exitCode).toBe(0);
+		expect(res.target).toBe("verify");
+	});
+
+	it("hands a main push the whole suite the same way", () => {
+		git("checkout", "-q", "-b", "main-dest", base);
+		const tip = commit({ "code.ts": "export const direct = true;\n" });
+		expect(push(line(tip, base, "refs/heads/main")).target).toBe("verify");
+	});
+
+	it("still skips a main push whose full stamp covers the head", () => {
+		git("checkout", "-q", "-b", "main-stamped", base);
+		const tip = commit({ "code.ts": "export const stampedDest = true;\n" });
+		const stampsForTier = join(dir, "stamps");
+		mkdirSync(stampsForTier, { recursive: true });
+		writeFileSync(join(stampsForTier, tip), `make verify green at ${tip}\n`);
+		const res = push(line(tip, base, "refs/heads/main"), 0, { STUB_STAMPS: stampsForTier });
+		expect(res.exitCode).toBe(0);
+		expect(res.target).toBeNull();
 	});
 });
 
@@ -298,7 +346,7 @@ describe("the full suite runs in a detached worktree at the push's head", () => 
 		git("checkout", "-q", "-b", "in-worktree", base);
 		commit({ "code.ts": "export const inWorktree = true;\n", "in-worktree.txt": "here\n" });
 		const res = push(line(git("rev-parse", "HEAD"), base));
-		expect(res.target).toBe("verify");
+		expect(res.target).toBe("verify-fast");
 		expect(makeCwd().startsWith(verifyWorktree())).toBe(true);
 		expect(capturedFiles()).toContain("./in-worktree.txt");
 	});
@@ -357,10 +405,12 @@ describe("the full suite runs in a detached worktree at the push's head", () => 
 });
 
 describe("the verify stamp", () => {
-	// The hook's one earned skip: a green `make verify` at exactly the pushed head, stamped
-	// by scripts/verify-stamp.ts. The stub bun answers the check from a directory the test
-	// controls, so each test here decides whether a stamp exists — the decision shape the
-	// real script and the hook share is which way the exit code points.
+	// The suite's earned skips: a green run at exactly the pushed head, stamped by
+	// scripts/verify-stamp.ts, tier-aware — a full stamp satisfies any push, a fast
+	// stamp only a fast push. The stub bun answers the check from a directory the test
+	// controls, so each test here decides whether a stamp exists and which tier it
+	// carries — the decision shape the real script and the hook share is which way the
+	// exit code points.
 	const stampDir = () => {
 		mkdirSync(join(dir, "stamps"), { recursive: true });
 		return join(dir, "stamps");
@@ -369,7 +419,7 @@ describe("the verify stamp", () => {
 	it("skips the whole suite when this head's verify ran green by hand", () => {
 		git("checkout", "-q", "-b", "stamped", base);
 		const tip = commit({ "code.ts": "export const stamped = true;\n" });
-		writeFileSync(join(stampDir(), tip), "green\n");
+		writeFileSync(join(stampDir(), tip), `make verify green at ${tip}\n`);
 		const res = push(line(tip, base), 0, { STUB_STAMPS: stampDir() });
 		expect(res.exitCode).toBe(0);
 		expect(res.target).toBeNull();
@@ -377,10 +427,29 @@ describe("the verify stamp", () => {
 		expect(res.stdout).toContain("verify-stamps");
 	});
 
+	it("satisfies a fast push with a fast stamp, which is the tier's own earned skip", () => {
+		git("checkout", "-q", "-b", "fast-stamped", base);
+		const tip = commit({ "code.ts": "export const fastStamped = true;\n" });
+		writeFileSync(join(stampDir(), tip), `make verify-fast green at ${tip}\n`);
+		const res = push(line(tip, base), 0, { STUB_STAMPS: stampDir() });
+		expect(res.exitCode).toBe(0);
+		expect(res.target).toBeNull();
+	});
+
+	it("never lets a fast stamp satisfy a release push — a cheap run may not stand in for the whole suite", () => {
+		git("checkout", "-q", "-b", "fast-stamp-release", base);
+		const tip = commit({ "code.ts": "export const climbing = true;\n" });
+		writeFileSync(join(stampDir(), tip), `make verify-fast green at ${tip}\n`);
+		const res = push(line(tip, base, "refs/heads/release"), 0, { STUB_STAMPS: stampDir() });
+		expect(res.exitCode).toBe(0);
+		expect(res.target).toBe("verify");
+		expect(res.stdout).toContain("pushing to main or release");
+	});
+
 	it("does not skip a docs-only push even with a stamp, which the stamp never covers", () => {
 		git("checkout", "-q", "-b", "docs-stamped", base);
 		const tip = commit({ "README.md": "# Stamped docs\n" });
-		writeFileSync(join(stampDir(), tip), "green\n");
+		writeFileSync(join(stampDir(), tip), `make verify green at ${tip}\n`);
 		const res = push(line(tip, base), 0, { STUB_STAMPS: stampDir() });
 		expect(res.target).toBe("verify-docs");
 	});
@@ -397,7 +466,7 @@ describe("the verify stamp", () => {
 			"packages/db/drizzle/meta/_journal.json": `{"version":"7","dialect":"postgresql","entries":[{"idx":96,"version":"7","when":1234567891,"tag":"0096_other","breakpoints":true}]}\n`,
 		});
 		git("push", "-q", "origin", `+${mainTip}:refs/heads/main`);
-		writeFileSync(join(stampDir(), tip), "green\n");
+		writeFileSync(join(stampDir(), tip), `make verify green at ${tip}\n`);
 		const res = push(line(tip, mainTip), 0, { STUB_STAMPS: stampDir() });
 		expect(res.exitCode).toBe(1);
 		expect(res.target).toBeNull();
@@ -436,7 +505,7 @@ describe("GIT_DIR inheritance from the pusher", () => {
 		expect(wtGitDir).toContain(join(".git", "worktrees"));
 		const res = push(line(tip, base), 0, { GIT_DIR: wtGitDir });
 		expect(res.exitCode).toBe(0);
-		expect(res.target).toBe("verify");
+		expect(res.target).toBe("verify-fast");
 		expect(makeCwd().startsWith(join(repo, ".worktrees", "pre-push-verify-"))).toBe(true);
 		expect(capturedFiles()).not.toContain("./wt-dirty.txt");
 		git("worktree", "remove", "--force", wtPath);
@@ -454,7 +523,7 @@ describe("GIT_DIR inheritance from the pusher", () => {
 			GIT_DIR: join(foreign, ".git"),
 		});
 		expect(res.exitCode).toBe(0);
-		expect(res.target).toBe("verify");
+		expect(res.target).toBe("verify-fast");
 		expect(makeCwd().startsWith(join(repo, ".worktrees", "pre-push-verify-"))).toBe(true);
 		expect(capturedFiles()).toContain("./foreign-code.ts");
 		rmSync(foreign, { recursive: true, force: true });
@@ -475,7 +544,7 @@ describe("the migration fork gate", () => {
 		});
 		const res = push(line(branchTip, base));
 		expect(res.exitCode).toBe(0);
-		expect(res.target).toBe("verify");
+		expect(res.target).toBe("verify-fast");
 	});
 
 	it("refuses a branch whose migration sits behind origin/main, and names the repair", () => {
@@ -516,7 +585,7 @@ describe("the migration fork gate", () => {
 		git("push", "-q", "origin", `+${mainTip}:refs/heads/main`);
 		const res = push(line(staleTip, mainTip));
 		expect(res.exitCode).toBe(0);
-		expect(res.target).toBe("verify");
+		expect(res.target).toBe("verify-fast");
 	});
 });
 

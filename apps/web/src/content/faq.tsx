@@ -69,7 +69,7 @@ export const FAQ_ITEMS = {
 	"card-required": {
 		category: "Getting Started",
 		question: "Do I need a card to sign up?",
-		answer: `No. Signing up is free: pick a name and we issue you an identity, or bring the Bluesky account you already have. What is free stays free forever — downloads of anything free or anything you buy, with no allowance to run out of and no limit on how many devices you use, and ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access streaming a month. A card is asked for at the moment you choose something that needs one: backing a creator, buying a Work, or supporting Anthers. Signing up is not one of those moments, and there is no trial to forget to cancel.`,
+		answer: `No. Signing up is free: pick a name and we issue you an identity, or bring the Bluesky account you already have. What is free stays free forever: downloads of anything free or anything you buy, with no allowance to run out of and no limit on how many devices you use, and ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access streaming a month. A card is asked for at the moment you choose something that needs one: backing a creator, buying a Work, or supporting Anthers. Signing up is not one of those moments, and there is no trial to forget to cancel.`,
 	},
 	"whats-free": {
 		category: "Getting Started",
@@ -77,21 +77,21 @@ export const FAQ_ITEMS = {
 		answer: (
 			<div className="space-y-2">
 				<p>
-					An account, following anyone you like, a Library to keep things in, and downloading — of
-					anything a creator has released free, and of anything you buy — as many times as you like
+					An account, following anyone you like, a Library to keep things in, and downloading (of
+					anything a creator has released free, and of anything you buy) as many times as you like
 					on as many devices as you like, at no cost and with nothing to top up.
 				</p>
 				<p>
 					Streaming is where the one limit sits:{" "}
 					<strong>{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, free forever</strong>.
 					Public Access is everything a creator has left ungated, and it is free to everyone rather
-					than something an account earns its way into — the limit is on how much of it a free
+					than something an account earns its way into; the limit is on how much of it a free
 					account streams in a month, and ${PRICE_TOKEN} a month to Anthers removes that limit.
 				</p>
 				<p>
 					A free account still pays creators, which is the part people don't expect. Anthers funds a
-					small Time Pool on your behalf — ${FREE_TIME_POOL.toFixed(2)} a month, shared out by the
-					time you spend with each creator's work — so watching something free is not the same as it
+					small Time Pool on your behalf: ${FREE_TIME_POOL.toFixed(2)} a month, shared out by the
+					time you spend with each creator's work, so watching something free is not the same as it
 					earning nothing.
 				</p>
 			</div>
@@ -112,7 +112,7 @@ export const FAQ_ITEMS = {
 			<div className="space-y-2">
 				<p>
 					No. Your feed is posts and releases from the creators you follow, newest first, and that
-					is the whole of it today — nothing scores it, nothing predicts what will hold your
+					is the whole of it today: nothing scores it, nothing predicts what will hold your
 					attention, and nothing you did not ask for appears in it.
 				</p>
 				<p>Three things that stay true as it grows:</p>
@@ -123,7 +123,7 @@ export const FAQ_ITEMS = {
 					</li>
 					<li>
 						<strong>Everything says why it is there.</strong> Anything added later has to be
-						attributable — you follow this person, this matches a tag you chose.
+						attributable: you follow this person, this matches a tag you chose.
 					</li>
 					<li>
 						<strong>You can turn it off.</strong> Any new signal arrives with a way to stop it.
@@ -142,13 +142,13 @@ export const FAQ_ITEMS = {
 		category: "Feed & Discovery",
 		question: "What are Custom Feeds?",
 		answer:
-			"A planned feature rather than one you can use today. The intent is that anybody can publish an alternative view of Anthers — either a transparent rule you can inspect, or a hand-picked list — and that you can subscribe to it and switch between it and your own feed. None of it is built, and this answer will change when it is.",
+			"A planned feature rather than one you can use today. The intent is that anybody can publish an alternative view of Anthers, either a transparent rule you can inspect or a hand-picked list, and that you can subscribe to it and switch between it and your own feed. None of it is built, and this answer will change when it is.",
 	},
 	"promoted-placement": {
 		category: "Feed & Discovery",
 		question: "Does Anthers sell promoted or sponsored content placement?",
 		answer:
-			"No. Anthers does not sell promoted content placement in feeds, search results, or anywhere else. What you see is always based on your relationships, your interests, and your choices -- never on who paid the most.",
+			"No. Anthers does not sell promoted content placement in feeds, search results, or anywhere else. What you see is always based on your relationships, your interests, and your choices, never on who paid the most.",
 	},
 
 	// ── Subscriptions & payments ─────────────────────────────────────────────
@@ -164,29 +164,28 @@ export const FAQ_ITEMS = {
 				</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
 					<li>
-						<strong>Give a creator a monthly amount</strong> — any amount, sent straight to creators
+						<strong>Give a creator a monthly amount</strong>: any amount, sent straight to creators
 						you pick, Patreon-style. <strong>Anthers takes no cut at all.</strong> The only
-						deduction is the at-cost card processing, paid to the processor — on ${SUPPORT.gross} a
+						deduction is the at-cost card processing, paid to the processor. On ${SUPPORT.gross} a
 						month alone that is ${SUPPORT.cardFee}, so the creator receives ${SUPPORT.net}. It is
 						one fee on your whole monthly charge, so the more you give in a month, the more of each
 						dollar reaches its creator.
 					</li>
 					<li>
-						<strong>Give Anthers a monthly amount</strong> — ${SUPPORT.gross} a month lifts your
-						monthly Public Access limit, and every dollar funds the Time Pool (shared out by the
-						time you spend with each creator's work) and leaves a remainder that funds the
-						charitable programs, free access included. So the more you give, the more your time is
-						worth to the creators you spend it with. Your level is your Badge (Root → Blossom, and a
-						"+" beyond) — a point-in-time choice, not a rolling total of past spend, and it gates
-						nothing.
+						<strong>Give Anthers a monthly amount</strong>: ${SUPPORT.gross} a month lifts your
+						monthly Public Access limit. Half of it funds the Time Pool, shared out by the time you
+						spend with each creator's work, and the rest, after the card cost, funds the charitable
+						programs, free access included. So the more you give, the more your time is worth to the
+						creators you spend it with. Your level is your Badge (Root → Blossom, and a "+" beyond),
+						a point-in-time choice, not a rolling total of past spend, and it gates nothing.
 					</li>
 				</ul>
 				<p>
-					Downloading costs you nothing on top, ever — no allowance, no wallet, however many devices
+					Downloading costs you nothing on top, ever: no allowance, no wallet, however many devices
 					you use. Streaming is free too; the one limit is on <strong>Public Access</strong>, the
 					work creators leave open to everyone, which a free account can watch for{" "}
 					{FREE_PUBLIC_ACCESS_HOURS} hours a month. Anything you bought or cleared a gate for never
-					counts against it. Card processing comes out of what you give, at cost and leaves the
+					counts against it. Card processing comes out of what you give, at cost, and leaves the
 					system entirely; sales tax is the only thing added on top of the price.
 				</p>
 			</div>
@@ -195,24 +194,24 @@ export const FAQ_ITEMS = {
 	"data-cap": {
 		category: "Subscriptions & Payments",
 		question: "Is there a data cap? What does streaming cost me?",
-		answer: `There is no data cap and delivery costs you nothing, on every account, free and paying alike, across as many devices as you like — no allowance to run out of, no wallet to top up, and a game you bought re-downloads forever at no cost. Anthers used to meter this, because delivery genuinely was expensive; our object storage now charges nothing for it at any volume, so we charge nothing for it either. Anthers charging less because it costs less is the model working as intended. There is one limit, and it is measured in time rather than data: a free account can stream ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month — the work creators leave open to everyone — free forever, and supporting Anthers lifts it for as long as you keep it up. Time with work you bought, work you cleared a creator's gate for, or work you made yourself never counts against those hours.`,
+		answer: `There is no data cap and delivery costs you nothing, on every account, free and paying alike, across as many devices as you like: no allowance to run out of, no wallet to top up, and a game you bought re-downloads forever at no cost. Anthers used to meter this, because delivery genuinely was expensive; our object storage now charges nothing for it at any volume, so we charge nothing for it either. Anthers charging less because it costs less is the model working as intended. There is one limit, and it is measured in time rather than data: a free account can stream ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month (the work creators leave open to everyone), free forever, and supporting Anthers lifts it for as long as you keep it up. Time with work you bought, work you cleared a creator's gate for, or work you made yourself never counts against those hours.`,
 	},
 	"anthers-badge-unlocks": {
 		category: "Subscriptions & Payments",
 		question: "Does supporting Anthers unlock anything I couldn't see otherwise?",
-		answer: `Nothing at all, and that is deliberate rather than an oversight. Public Access is already free to everyone — there is no ladder inside it and nothing there to be let into. What ${PRICE_TOKEN} a month removes is the monthly limit on your own streaming, and every dollar above that grows the Time Pool for the creators you spend time with, so the same hour of your time pays them more. Your Anthers Badge is standing rather than a key: no work on the platform sits behind it. A commons with rungs in it would only mean better free work for the people who paid more, which is the one thing a free layer exists to avoid.`,
+		answer: `Nothing at all, and that is deliberate rather than an oversight. Public Access is already free to everyone: there is no ladder inside it and nothing there to be let into. What ${PRICE_TOKEN} a month removes is the monthly limit on your own streaming, and every dollar above that grows the Time Pool for the creators you spend time with, so the same hour of your time pays them more. Your Anthers Badge is standing rather than a key: no work on the platform sits behind it. A commons with rungs in it would only mean better free work for the people who paid more, which is the one thing a free layer exists to avoid.`,
 	},
 	"what-pays-for-free": {
 		category: "Subscriptions & Payments",
 		question: "What pays for Anthers' charitable programs, free access included?",
 		answer:
-			"The remainder of what is given to Anthers — what's left after the Time Pool and the at-cost card processing. It is never a cut of anyone's earnings, and direct purchases contribute nothing: Anthers takes no share of a creator's sale. (Storage's old half-again mark-up was a small second line here; it retired when storage moved onto Badges as at-cost top-up.) The budget is read obligations-first: lean operating overhead comes off the top, and the programs that keep Anthers open — free access for everyone, free storage for smaller creators — come next, with whatever remains for the wider charitable programs. Admin is held to no more than 30% of revenue, so at least 70% goes to programs and services (the CharityNavigator bar). Counting free access and free storage as the charitable programs they are, the great majority of it is charitable.",
+			"The remainder of what is given to Anthers: what's left after the Time Pool and the at-cost card processing. It is never a cut of anyone's earnings, and direct purchases contribute nothing: Anthers takes no share of a creator's sale. The budget is read obligations-first: lean operating overhead comes off the top, and the programs that keep Anthers open (free access for everyone, free storage for smaller creators) come next, with whatever remains for the wider charitable programs. Admin is held to no more than 30% of revenue, so at least 70% goes to programs and services (the CharityNavigator bar). Counting free access and free storage as the charitable programs they are, the great majority of it is charitable.",
 	},
 	"direct-purchases": {
 		category: "Subscriptions & Payments",
 		question: "How do direct purchases work?",
 		answer:
-			"Direct purchases (a game, an album, a one-time download) are Anthers at a 0% cut — we keep nothing at all. The creator sets the listed price, and that price plus your state's sales tax is exactly what you pay; there are no other additions. One real cost comes out of that price: card processing, paid to the payment processor. Downloading what you bought is free, every time, on every device, for as long as you have the account — there is nothing to run out of. The receipt shows every cent, and none of it is ours.",
+			"Direct purchases (a game, an album, a one-time download) are Anthers at a 0% cut: we keep nothing at all. The creator sets the listed price, and that price plus your state's sales tax is exactly what you pay; there are no other additions. One real cost comes out of that price: card processing, paid to the payment processor. Downloading what you bought is free, every time, on every device, for as long as you have the account; there is nothing to run out of. The receipt shows every cent, and none of it is ours.",
 	},
 	gates: {
 		category: "Subscriptions & Payments",
@@ -223,20 +222,19 @@ export const FAQ_ITEMS = {
 					There is one kind of gate on Anthers and it points at a creator: a <strong>Badge</strong>{" "}
 					is a monthly amount given to that creator this month. Meet it and the Work opens. Creators
 					set the thresholds themselves and name their own Badges, and a gate doesn't have to sit
-					exactly on one — a creator can gate at $9 whether or not they've named a Badge there.
+					exactly on one. A creator can gate at $9 whether or not they've named a Badge there.
 				</p>
 				<p>
-					A creator can offer more than one way in, and the ways combine with OR — clear any one of
+					A creator can offer more than one way in, and the ways combine with OR: clear any one of
 					them and you're in, never all of them. So a Work can be free to anyone giving that creator
 					$9 a month <em>or</em> buyable outright by anyone else, and you take whichever route suits
 					you.
 				</p>
 				<p>
 					What you give <strong>Anthers</strong> gates nothing at all, deliberately. Everything
-					streaming that a creator hasn't gated is <strong>Public Access</strong> — free to
-					everyone, nothing to clear and nothing to buy. A laddered commons would just mean better
-					free work for the people who paid more, which is the one thing the free layer exists to
-					avoid.
+					streaming that a creator hasn't gated is <strong>Public Access</strong>, free to everyone,
+					nothing to clear and nothing to buy. A laddered commons would just mean better free work
+					for the people who paid more, which is the one thing the free layer exists to avoid.
 				</p>
 			</div>
 		),
@@ -246,13 +244,13 @@ export const FAQ_ITEMS = {
 	"creator-take-home": {
 		category: "Creators",
 		question: "How much do creators keep?",
-		answer: `Anthers takes no cut of creator earnings — 0% platform fee, on everything. Creators are funded by the Time Pool (from what users give Anthers, distributed by the time people spend with them, and paid out in full) plus what users direct to them. The only deduction anywhere is a cost paid to a third party: card processing. A directed $${SUPPORT.gross} a month reaches its creator as $${SUPPORT.net} at worst, and a $${GAME_10.price} game sale returns $${GAME_10.creatorReceives} whatever the download size. Every account gets ${FREE_STORAGE_GIB} GiB of free storage — for a creator's catalog and their own kept files alike; each Badge rung bundles more, and past your Badge's allowance the only thing a creator pays is their own storage at our object store's rate, with no mark-up. That is entirely their choice.`,
+		answer: `Anthers takes no cut of creator earnings: 0% platform fee, on everything. Creators are funded by the Time Pool (from what users give Anthers, distributed by the time people spend with them, and paid out in full) plus what users direct to them. The only deduction anywhere is a cost paid to a third party: card processing. A directed $${SUPPORT.gross} a month reaches its creator as $${SUPPORT.net} at worst, and a $${GAME_10.price} game sale returns $${GAME_10.creatorReceives} whatever the download size. Every account gets ${FREE_STORAGE_GIB} GiB of free storage, for a creator's catalog and their own kept files alike; each Badge rung bundles more, and past your Badge's allowance the only thing a creator pays is their own storage at our object store's rate, with no mark-up. That is entirely their choice.`,
 	},
 	"what-can-i-publish": {
 		category: "Creators",
 		question: "What kinds of content can I publish?",
 		answer:
-			"Anthers supports games (browser-playable and downloadable), video, audio (music, podcasts), and written content (articles, stories, tutorials). All media types are first-class citizens with dedicated player and reading experiences.",
+			"Anthers supports games (downloadable; if you host a web build yourself, it can be embedded and played), video, audio (music, podcasts), and written content (articles, stories, tutorials). All media types are first-class citizens with dedicated player and reading experiences.",
 	},
 	// ⚠️ **Payout setup gates RELEASE, and this answer is the one that says so plainly.**
 	// The Creator Terms always claimed it; the code only started enforcing it on
@@ -271,36 +269,36 @@ export const FAQ_ITEMS = {
 		category: "Creators",
 		question: "What do I need before I can publish?",
 		answer:
-			"A verified email address, and a completed payout setup with Stripe — the second one before you release anything, free work included. It exists for two reasons beyond paying you: it means no work here is stranded without a way to earn from the Time Pool, and because Stripe verifies identity and will not verify a minor, it is what lets us say every creator on Anthers is an adult without ever asking anyone for an ID. We never see those documents; we read back a yes or a no. The honest cost is that Stripe's setup only reaches the countries Stripe supports for a platform like ours, so at launch you need to be in one of them to publish — a limit we inherited rather than chose, and one we intend to get out of.",
+			"A verified email address, and a completed payout setup with Stripe (the second one before you release anything, free work included). It exists for two reasons beyond paying you: it means no work here is stranded without a way to earn from the Time Pool, and because Stripe verifies identity and will not verify a minor, it is what lets us say every creator on Anthers is an adult without ever asking anyone for an ID. We never see those documents; we read back a yes or a no. The honest cost is that Stripe's setup only reaches the countries Stripe supports for a platform like ours, so at launch you need to be in one of them to publish, a limit we inherited rather than chose, and one we intend to get out of.",
 	},
 	"creator-countries": {
 		category: "Creators",
 		question: "Can I publish if Stripe does not support my country?",
 		answer:
-			"Not yet, and we would rather you know that here than after you have uploaded something. Releasing anything on Anthers — free work included — requires completing Stripe's payout setup, because that is how we pay creators and how we know every creator here is an adult, and Stripe only offers it in the countries it supports for a platform like ours. If yours is not one of them, you cannot publish on Anthers today, though you can read, follow, and buy. We intend to publish from everywhere eventually, and knowing how many creators this excludes, and from where, is part of what will decide when.",
+			"Not yet, and we would rather you know that here than after you have uploaded something. Releasing anything on Anthers (free work included) requires completing Stripe's payout setup, because that is how we pay creators and how we know every creator here is an adult, and Stripe only offers it in the countries it supports for a platform like ours. If yours is not one of them, you cannot publish on Anthers today, though you can read, follow, and buy. We intend to publish from everywhere eventually, and knowing how many creators this excludes, and from where, is part of what will decide when.",
 	},
 	"creator-payouts": {
 		category: "Creators",
 		question: "How do I get paid?",
 		answer:
-			"Money from a direct purchase, or from a monthly amount someone points at you, goes to your own Stripe account, and payouts run on Stripe's schedule rather than on one we invented. You are paid from the Time Pool as well — the share of what people give Anthers that is distributed by the time they spend with your work, where a minute is a minute whether it is a game, a video, audio or writing. Tax is yours to handle, and we report what we are required to report.",
+			"Money from a direct purchase goes to your own Stripe account at the moment the charge is made; money from a monthly amount someone points at you settles, sits behind a 14-day hold, and transfers automatically to that same account. Either way, moving money on to your bank is your call, on your schedule. You are paid from the Time Pool as well, the share of what people give Anthers that is distributed by the time they spend with your work, where a minute is a minute whether it is a game, a video, audio, or writing. Tax is yours to handle, and we report what we are required to report.",
 	},
 	"creator-costs": {
 		category: "Creators",
 		question: "What does it cost to publish here?",
-		answer: `Publishing costs nothing, and neither does delivery: a creator is never billed for somebody streaming or downloading their work, at any size and at any volume. There is exactly one creator-side charge and it is storage past your Badge's allowance — your first ${FREE_STORAGE_GIB} GiB are free, each Badge rung bundles more, and past that you pay our storage provider's rate, with no mark-up: what we charge is what the bytes cost. Anthers takes no cut of anything you earn, so nothing else comes out of what reaches you except the card processing the payment network charges.`,
+		answer: `Publishing costs nothing, and neither does delivery: a creator is never billed for somebody streaming or downloading their work, at any size and at any volume. There is exactly one creator-side charge, and it is storage past your Badge's allowance: your first ${FREE_STORAGE_GIB} GiB are free, each Badge rung bundles more, and past that you pay our storage provider's rate, with no mark-up; what we charge is what the bytes cost. Anthers takes no cut of anything you earn, so nothing else comes out of what reaches you except the card processing the payment network charges.`,
 	},
 	"creator-ownership": {
 		category: "Creators",
 		question: "Who owns what I publish?",
 		answer:
-			"You do. Publishing here gives Anthers permission to store your work, deliver it to the people you have allowed to see it, and show previews of it — that is what hosting is, and nothing else is implied by it. We do not train machine-learning models on your work or your data, and we don't let anyone else do so through us. You can remove a Work at any time, with one obligation that survives the removal: people who already bought it keep it. It leaves public circulation rather than being destroyed, and we email those buyers so they can download a copy to keep.",
+			"You do. Publishing here gives Anthers permission to store your work, deliver it to the people you have allowed to see it, and show previews of it (that is what hosting is, and nothing else is implied by it). We do not train machine-learning models on your work or your data, and we don't let anyone else do so through us. You can remove a Work at any time, with one obligation that survives the removal: people who already bought it keep it. It leaves public circulation rather than being destroyed, and we email those buyers so they can download a copy to keep.",
 	},
 	"creator-exclusivity": {
 		category: "Creators",
 		question: "Do I have to publish only on Anthers?",
 		answer:
-			"No. Nothing here asks for exclusivity — publish the same work anywhere else you like, at the same time, and price it differently there if that suits you. You can stop publishing on Anthers whenever you choose, too. What survives that is what you already owe the people who paid you, which is the same obligation that removing a single Work carries.",
+			"No. Nothing here asks for exclusivity: publish the same work anywhere else you like, at the same time, and price it differently there if that suits you. You can stop publishing on Anthers whenever you choose, too. What survives that is what you already owe the people who paid you, which is the same obligation that removing a single Work carries.",
 	},
 
 	// ── Safety & controls ────────────────────────────────────────────────────
@@ -313,21 +311,20 @@ export const FAQ_ITEMS = {
 					Yes, at two levels. Every Work carries a rating. Most is <strong>General</strong> and
 					carries no restriction at all; <strong>Mature</strong> is labeled and blurred behind a
 					click for everybody by default, and can be hidden outright; <strong>Adult</strong> is
-					invisible — not merely locked — unless an account has both asked for it and passed a
-					one-off check that an adult holds the account. Whatever a Work is rated, you can also hide
-					or blur work that contains a particular kind of content, such as violence or intense
-					horror.
+					invisible (not merely locked) unless an account has both asked for it and passed a one-off
+					check that an adult holds the account. Whatever a Work is rated, you can also hide or blur
+					work that contains a particular kind of content, such as violence or intense horror.
 				</p>
 				<p>
 					Separately, any account can be given a <strong>pin</strong> from its settings, and the pin
 					is then required for every change behind it, including turning the controls off. Those
 					controls freeze the content settings where you left them, allow or block particular
-					creators and kinds of work, soften strong language, and set time limits per day, week or
+					creators and kinds of work, soften strong language, and set time limits per day, week, or
 					month.{" "}
 					<Link to="/parents" className="link text-primary decoration-primary/40">
 						The page for parents
 					</Link>{" "}
-					walks through all of it, including the honest limits — a borrowed credit card passes the
+					walks through all of it, including the honest limits: a borrowed credit card passes the
 					age check, and a time limit counts time spent with a work open rather than screen time.
 				</p>
 			</div>
@@ -346,7 +343,7 @@ export const FAQ_ITEMS = {
 				</p>
 				<p>
 					What we keep is what running the place requires: your account, what you published, what
-					you bought, and a record of what you spent time with and for how long — which is how
+					you bought, and a record of what you spent time with and for how long, which is how
 					creators get paid. Creators never see who watched their work, only totals, and the
 					per-person records are deleted after {ATTENTION_RAW_RETENTION_DAYS} days, leaving
 					anonymous totals behind. The{" "}
@@ -364,13 +361,13 @@ export const FAQ_ITEMS = {
 		category: "Platform & Identity",
 		question: "What is the Bluesky integration?",
 		answer:
-			"Bluesky runs on the AT Protocol, and so does Anthers. Every Anthers account is an identity on that network, whether you read here or publish here, and signing up is where you choose it. You can sign up and sign in with a Bluesky account you already have, or, if you'd rather start fresh, Anthers can issue you a handle on anthers.social from its own identity server -- which is a name on that same network, not a row in our database, and one you can move elsewhere later. For creators it does one thing more: each work a creator releases gets a public listing in the repository behind their identity -- what the work is, and where to reach it, readable by anyone's software without going through us. The work itself never goes there. A repository is a shared log everyone downloads in full, so it is the wrong place for a video or a game build, and it is readable by anybody, which is the wrong place for anything behind a gate. The listing says where a work is; the service hosting it still decides who may open it. This runs one way for now: other applications on the network can read what is published here, and cannot yet post, comment or follow into Anthers from outside. That second direction is a real piece of work rather than a setting, and we would rather build it properly after launch than claim it now.",
+			"Bluesky runs on the AT Protocol, and so does Anthers. Every Anthers account is an identity on that network, whether you read here or publish here, and signing up is where you choose it. You can sign up and sign in with a Bluesky account you already have, or, if you'd rather start fresh, Anthers can issue you a handle on anthers.social from its own identity server, which is a name on that same network, not a row in our database, and one you can move elsewhere later. For creators it does one thing more: each work a creator releases gets a public listing in the repository behind their identity, saying what the work is and where to reach it, readable by anyone's software without going through us. The work itself never goes there. A repository is a shared log everyone downloads in full, so it is the wrong place for a video or a game build, and it is readable by anybody, which is the wrong place for anything behind a gate. The listing says where a work is; the service hosting it still decides who may open it. This runs one way for now: other applications on the network can read what is published here, and cannot yet post, comment, or follow into Anthers from outside. That second direction is a real piece of work rather than a setting, and we would rather build it properly after launch than claim it now.",
 	},
 	"open-source": {
 		category: "Platform & Identity",
 		question: "Is Anthers open source?",
 		answer:
-			"Yes -- the whole platform is open source under the Apache-2.0 license. You can also download everything you've made from Settings, in one click. Running your own node, and federating between them, is a direction we're committed to rather than something that ships today. The goal is that no single entity -- including Anthers itself -- can become a gatekeeper.",
+			"Yes: the whole platform is open source under the Apache-2.0 license. You can also download everything you've made from Settings, in one click. Running your own node, and federating between them, is a direction we're committed to rather than something that ships today. The goal is that no single entity (including Anthers itself) can become a gatekeeper.",
 	},
 } satisfies Record<string, FAQItem>;
 

@@ -107,13 +107,13 @@ export default function DashboardPage() {
 				if (live) setProjects((d as { projects: Project[] }).projects ?? []);
 			})
 			.catch(() => {});
-		client.api.content.posts
-			.$get({ query: { mine: "true" } })
-			.then((res) => res.json())
-			.then((d) => {
-				if (live) setPosts((d as { posts: PostListItem[] }).posts ?? []);
-			})
-			.catch(() => {});
+		void (async () => {
+			try {
+				const res = await client.api.content.posts.$get({ query: { mine: "true" } });
+				const data = (await res.json()) as { posts?: PostListItem[] };
+				if (live) setPosts(data.posts ?? []);
+			} catch {}
+		})();
 		client.api.accounts.me["studio-panels"]
 			.$get()
 			.then(async (res) => (res.ok ? ((await res.json()) as { panels: string[] }) : null))
@@ -187,7 +187,7 @@ export default function DashboardPage() {
 		works,
 		payoutsReady,
 		editUrl: (w) => studioUrl(`/works/${w.publicId ?? w.id}/edit`),
-		catalogUrl: studioUrl("/catalog"),
+		worksUrl: studioUrl("/works"),
 		uploading,
 	});
 

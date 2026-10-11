@@ -1,0 +1,326 @@
+// SPDX-License-Identifier: Apache-2.0
+/**
+ * Render a **paged** Work's source set — a comic or a book — into private per-page images.
+ *
+ * 🚨 **Why pages at all, when the creator uploaded a perfectly good file.** The delivery
+ * rule is that every derived media object is stored private and every URL to one is minted
+ * per request at an endpoint that re-resolves access — and a PDF or a page set handed over
+ * as *one* object defeats that. A user pointed at a signed URL for the whole book has the
+ * whole book the moment page one opens, which makes `downloadEnabled: false` a lie for this
+ * medium specifically and would surprise a creator who deliberately turned downloads off.
+ * Pages are to a book what HLS segments are to a video: the unit that can actually be
+ * checked.
+ *
+ * 🚨 **The source is a SET** (Parker, 2026-10-10): every file's pages become a contiguous
+ * run, in the set's order. The pages are numbered across the whole set, so a comic's page 1
+ * is wherever the creator put it. An image leaf (Parker, 2026-10-11: images are the lead
+ * path) *is* one page — it normalizes rather than renders; a PDF renders with one
+ * `pdftoppm` invocation per file, never per page, because one invocation parses the
+ * document once. A download, where enabled, hands over the source files rather than these;
+ * the hosted pages are the reader's artifact, the sources the provenance.
+ *
+ * Uses **poppler** (`pdfinfo` + `pdftoppm`), a system dependency alongside ffmpeg, and
+ * `sharp` for the image path. Absent poppler, this fails the job with a legible message
+ * rather than half-rendering: a book missing pages 40–96 is worse than one that plainly
+ * did not process.
+ */
+
+import { randomUUID } from "node:crypto";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { db } from "@anthers/db";
+import { transcodingJobs, workPages, workPanels, works } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
+import sharp from "sharp";
+import { detectPanels, sampleInkColor } from "../lib/panel-detection.js";
+import { storage } from "../services/storage/index.js";
+import { listSourceFiles } from "../services/work-source-files.js";
+
+export interface RenderPagedData {
+	jobId: number;
+}
+
+/**
+ * Render at 150 DPI.
+ *
+ * Comic art is the demanding case: 150 DPI on a US-letter page is ~1275×1650, which is
+ * sharp on a retina display at reading width and still a sane file size. Going to 300
+ * quadruples the bytes for detail nobody sees on a screen, and this is *reading* rather
+ * than archival — the creator's original stays untouched as the source, and a download,
+ * where enabled, hands over that rather than these.
+ */
+const RENDER_DPI = 150;
+
+/** Hard ceiling, so one pathological upload cannot fill the bucket or the job queue. */
+const MAX_PAGES = 2000;
+
+/**
+ * The longest side a hosted page image may have. An image leaf arrives at whatever
+ * dimensions its creator's export wrote; without a bound, one 200-megapixel upload would
+ * pay for its own decode forever in every reader's bandwidth. 4096 answers more detail
+ * than a retina reading surface shows, and `withoutEnlargement` leaves anything smaller
+ * alone — the bound is a ceiling on the pathological, never a downscaler of the honest.
+ */
+const PAGE_MAX_PIXELS = 4096;
+
+/**
+ * The source mime types the job takes as image leaves — one page, normalized by `sharp`.
+ * Anything else that claims to be a page is a PDF; anything else at all fails the job
+ * with the file's name, rather than half a set.
+ */
+function isPageImage(mimeType: string): boolean {
+	return mimeType === "image/jpeg" || mimeType === "image/png";
+}
+
+async function popplerAvailable(): Promise<boolean> {
+	try {
+		const proc = Bun.spawn(["pdftoppm", "-v"], { stdout: "ignore", stderr: "ignore" });
+		return (await proc.exited) === 0;
+	} catch {
+		return false;
+	}
+}
+
+/** Page count, from `pdfinfo`. Also the first thing that fails on a file that isn't a PDF. */
+async function pageCount(path: string): Promise<number> {
+	const proc = Bun.spawn(["pdfinfo", path], { stdout: "pipe", stderr: "pipe" });
+	if ((await proc.exited) !== 0) {
+		throw new Error(
+			`Not a readable PDF: ${(await new Response(proc.stderr).text()).trim() || "pdfinfo failed"}`,
+		);
+	}
+	const out = await new Response(proc.stdout).text();
+	const match = /^Pages:\s+(\d+)$/m.exec(out);
+	if (!match) throw new Error("Could not read the page count from this PDF");
+	return Number(match[1]);
+}
+
+async function updateProgress(jobId: number, progress: number) {
+	await db
+		.update(transcodingJobs)
+		.set({ progress, updatedAt: new Date() })
+		.where(eq(transcodingJobs.id, jobId));
+}
+
+export async function renderPaged(data: RenderPagedData) {
+	const { jobId } = data;
+
+	const [job] = await db
+		.select()
+		.from(transcodingJobs)
+		.where(eq(transcodingJobs.id, jobId))
+		.limit(1);
+	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
+	// Idempotency: a late pg-boss retry of a job already finished (e.g. by the worker's
+	// startup-resume path) is a no-op, exactly as the other two jobs treat it.
+	if (job.status === "completed") {
+		console.log(`[render-paged] job ${jobId} already completed; skipping`);
+		return;
+	}
+
+	await db
+		.update(transcodingJobs)
+		.set({ status: "processing", progress: 0, updatedAt: new Date() })
+		.where(eq(transcodingJobs.id, jobId));
+
+	const [work] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
+	if (!work) throw new Error(`Work ${job.workId} not found`);
+
+	const sources = await listSourceFiles(work);
+	if (sources.length === 0) throw new Error("No source file on this Work");
+
+	/** Per-source temp dirs, plus each source's downloaded bytes; cleaned in `finally`. */
+	const scratch: string[] = [];
+	const downloaded: string[] = [];
+	/** The already-rendered normalized pages, per source, in page order — uploaded after all render. */
+	const rendered: { file: string; mime: "image/jpeg" | "image/png" }[][] = [];
+
+	try {
+		if (!(await popplerAvailable())) {
+			throw new Error(
+				"poppler (pdftoppm) is not installed on this host — an ebook cannot be rendered",
+			);
+		}
+
+		// Pre-count every source before rendering any: the ceiling is the SET's page total,
+		// and refusing an over-ceiling set before the first render runs is what keeps one
+		// pathological upload from spending an hour rendering two thousand pages it will
+		// not keep. (Also the moment anything unreadable fails, with its name.)
+		// 5% is pre-flight; nothing has rendered.
+		let totalPages = 0;
+		for (const source of sources) {
+			const path = await storage.downloadToTemp(source.file);
+			downloaded.push(path);
+			if (isPageImage(source.mimeType)) {
+				// An image leaf IS one page. Reading its metadata rather than counting
+				// pages both fixes the count and is the moment a corrupt image fails —
+				// with its name, the way `pdfinfo` fails an unreadable PDF.
+				const metadata = await sharp(path).metadata();
+				if (!metadata.width || !metadata.height) {
+					throw new Error(`A source image is unreadable: ${source.filename || source.file}`);
+				}
+				totalPages += 1;
+			} else {
+				const count = await pageCount(path);
+				if (count < 1) {
+					throw new Error(`A source file has no pages: ${source.filename || source.file}`);
+				}
+				totalPages += count;
+			}
+			if (totalPages > MAX_PAGES) {
+				throw new Error(`This set would render ${totalPages} pages; the limit is ${MAX_PAGES}`);
+			}
+		}
+		await updateProgress(jobId, 5);
+
+		for (const [i, source] of sources.entries()) {
+			const dir = await mkdtemp(join(tmpdir(), `ebook_${i}_`));
+			scratch.push(dir);
+			if (isPageImage(source.mimeType)) {
+				/*
+				 * An image leaf IS its page, so it normalizes rather than renders: one `sharp`
+				 * pass, then straight into the pages. What the pass is for — the hosted page is
+				 * the artifact the reader gets, so it must not come out dependent on how the
+				 * creator's camera or export tool happened to write it: orientation baked in
+				 * and its metadata (which reads orientation, location, sometimes the tool's
+				 * profile) stripped, decoded dimensions bounded so a pathological upload costs
+				 * bounded decode and bandwidth, and the format kept (PNG stays PNG; line art
+				 * keeps its crispness, and the source's own quality is what is served —
+				 * creator-controlled, as the set story promises).
+				 */
+				const normalized = sharp(downloaded[i]).rotate().resize({
+					width: PAGE_MAX_PIXELS,
+					height: PAGE_MAX_PIXELS,
+					fit: "inside",
+					withoutEnlargement: true,
+				});
+				const ext = source.mimeType === "image/png" ? "png" : "jpg";
+				const leafPage = join(dir, `leaf-001.${ext}`);
+				await (ext === "png" ? normalized.png() : normalized.jpeg({ quality: 85 })).toFile(
+					leafPage,
+				);
+				rendered.push([{ file: leafPage, mime: ext === "png" ? "image/png" : "image/jpeg" }]);
+			} else {
+				/*
+				 * Render this file in one `pdftoppm` invocation rather than page by page.
+				 *
+				 * Poppler parses the document once and writes `page-001.jpg`, `page-002.jpg`, ….
+				 * Spawning it per page re-parses the file every time, which on a 200-page graphic
+				 * novel is the difference between one pass and two hundred.
+				 */
+				const proc = Bun.spawn(
+					["pdftoppm", "-jpeg", "-r", String(RENDER_DPI), downloaded[i], join(dir, "page")],
+					{ stdout: "ignore", stderr: "pipe" },
+				);
+				if ((await proc.exited) !== 0) {
+					throw new Error(
+						`pdftoppm failed for ${source.filename || source.file}: ${(await new Response(proc.stderr).text()).trim()}`,
+					);
+				}
+				// Sorted by name, which poppler zero-pads — so lexical order IS page order.
+				// Reading the directory rather than assuming the filenames means a document that
+				// poppler numbered differently than expected still lands in the right sequence.
+				const files = (await readdir(dir)).filter((f) => f.endsWith(".jpg")).sort();
+				if (files.length === 0) {
+					throw new Error(`pdftoppm produced no pages for ${source.filename || source.file}`);
+				}
+				rendered.push(files.map((f) => ({ file: join(dir, f), mime: "image/jpeg" })));
+			}
+			// 🚨 This source's temp copy dies HERE — the moment its processing pass ends — not
+			// in the finally below. Everything after the render loop is uploads and database
+			// writes; holding a delivered file's copy through them is residency the caps have
+			// no reason to pay for. (pdftoppm and sharp both read files, so neither reads in
+			// place the way the ffmpeg jobs can; the one thing this job never does is keep a
+			// copy a moment past its only reader's death.)
+			await rm(downloaded[i], { force: true }).catch(() => {});
+			downloaded[i] = "";
+		}
+		await updateProgress(jobId, 40);
+
+		// A re-run replaces the pages rather than appending to them. Without this, a job
+		// retried after a partial upload leaves the book with two copies of page one and a
+		// unique-index violation on the second.
+		await db.delete(workPages).where(eq(workPages.workId, work.id));
+
+		const prefix = `creators/${work.creatorId}/ebook/${work.id}/${randomUUID().replace(/-/g, "")}`;
+		const flat = rendered.flat();
+		for (const [i, page_] of flat.entries()) {
+			const bytes = new Uint8Array(await readFile(page_.file));
+			// The extension and content type follow the page's own format: JPEG for what the
+			// pdftoppm pass wrote and for JPEG leaves, PNG for PNG leaves — which is also
+			// what the reader's <img> serves and what a download of "just this page" gets.
+			const ext = page_.mime === "image/png" ? "png" : "jpg";
+			const key = `${prefix}/page-${String(i + 1).padStart(4, "0")}.${ext}`;
+			// 🚨 PRIVATE, like every other derived object. The whole reason for this job is
+			// that pages can be checked one at a time; a public page defeats it entirely.
+			await storage.upload(key, bytes, page_.mime, "private");
+			// This page is off the disk the moment its upload lands, same as the
+			// transcode's segments — the scratch dirs hold only pages not yet uploaded.
+			await rm(page_.file, { force: true }).catch(() => {});
+
+			const metadata = await sharp(bytes).metadata();
+			const width = metadata.width ?? 0;
+			const height = metadata.height ?? 0;
+
+			const [page] = await db
+				.insert(workPages)
+				.values({ workId: work.id, pageNumber: i + 1, file: key, width, height })
+				.returning({ id: workPages.id });
+
+			// Panel detection runs on every page. Comics need regions; prose books gracefully
+			// degrade to one whole-page panel. The detector is fast enough on 150 DPI pages that
+			// doing it inline adds no separate job.
+			try {
+				const inkColor = await sampleInkColor(bytes);
+				const panels = await detectPanels(bytes, { inkColor });
+				if (panels.length > 0 && page) {
+					await db.insert(workPanels).values(
+						panels.map((p, panelNumber) => ({
+							pageId: page.id,
+							panelNumber: panelNumber + 1,
+							x: p.x,
+							y: p.y,
+							width: p.width,
+							height: p.height,
+							auto: true,
+						})),
+					);
+				}
+			} catch (detectionError) {
+				const message =
+					detectionError instanceof Error ? detectionError.message : String(detectionError);
+				console.warn(
+					`[render-paged] panel detection failed for work ${work.id} page ${i + 1}: ${message}`,
+				);
+				// A detection failure leaves the page without panels, which the user treats as
+				// whole-page fallback. The job continues.
+			}
+
+			// 40 → 95 across the upload, which is where the wall-clock actually goes.
+			if (i % 5 === 0 || i === flat.length - 1) {
+				await updateProgress(jobId, 40 + Math.round(((i + 1) / flat.length) * 55));
+			}
+		}
+
+		await db
+			.update(transcodingJobs)
+			.set({ status: "completed", progress: 100, etaSeconds: null, updatedAt: new Date() })
+			.where(eq(transcodingJobs.id, jobId));
+		console.log(
+			`[render-paged] work ${work.id} → ${flat.length} page(s) from ${sources.length} file(s)`,
+		);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		await db
+			.update(transcodingJobs)
+			.set({ status: "failed", errorMessage: message, updatedAt: new Date() })
+			.where(eq(transcodingJobs.id, jobId));
+		throw error;
+	} finally {
+		// Rendered sources were emptied at each pass's end; a failure before that still
+		// leaves the copy holding — the guard keeps the finally from rm-ing empty strings.
+		for (const path of downloaded) if (path) await rm(path, { force: true });
+		for (const dir of scratch) await rm(dir, { recursive: true, force: true });
+	}
+}

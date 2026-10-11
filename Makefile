@@ -3,7 +3,7 @@
 .PHONY: help install dev dev-api dev-worker dev-web down \
         db-generate db-migrate db-push db-studio db-seed sessions-clean \
         gauntlet-reset gauntlet-clean stripe-webhooks \
-        verify verify-inner verify-docs typecheck test lint lint-fix format \
+        verify verify-inner verify-fast verify-fast-inner verify-docs typecheck test lint lint-fix format \
         e2e-install e2e-preflight screenshots test-e2e test-e2e-inner test-e2e-ui test-e2e-ui-inner test-gauntlet test-gauntlet-inner \
         spec-diff spec-apply deploy-status promote-version release-notes-audit resource-snapshot resource-alerts webhook-check stripe-walk dev-local \
         worktree worktrees worktree-remove \
@@ -82,7 +82,7 @@ install: ## Install all dependencies
 # anyone remembering. Undo with: git config --unset core.hooksPath
 hooks: ## Point git at the repo's tracked hooks (.githooks/)
 	@git config core.hooksPath .githooks
-	@echo "git hooks → .githooks (pre-push runs 'make verify', or 'make verify-docs' when only markdown changed; bypass with git push --no-verify)"
+	@echo "git hooks → .githooks (pre-push verifies the push: 'make verify' to main or release, 'make verify-fast' to a task branch, 'make verify-docs' when only markdown changed; bypass with git push --no-verify)"
 
 # Secrets come from the "Anthers Dev" Bitwarden project, not from `.env`. `bws run` sets
 # REAL environment variables, and those beat Bun's `.env` loading, so a stale line left in
@@ -117,12 +117,20 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 # `https://anthers.localhost` / `admin.anthers.localhost` / `api.anthers.localhost`. Nothing
 # here ever claims :3000/:3001/:8000, so two projects' dev sessions cannot collide — the
 # failure this file's kill-loops used to manage is inexpressible in this shape. The escape
-# hatch is `PORTLESS=0 bun run dev`, which serves on this machine's conventional ports for
-# contributors who have not installed the proxy.
+# hatch is `PORTLESS=0 bun run dev` (scripts/dev.ts), which serves on this machine's
+# conventional ports for contributors who have not installed the proxy — and it is also the
+# one shape the Bluesky door's ceremony can be walked by hand in, because the ceremony's
+# redirect is a literal 127.0.0.1:8000 and the proxy world answers it nowhere. Under the
+# escape hatch one dev session runs at a time, on the loopback jar the ceremony shares.
 #
-# A second `make dev` is still refused, by pid file rather than port: the session's database
-# and network are per-run, and sharing them across two sessions is the failure the refusal
-# guards against. `make down` stops the session's process group.
+# A second `make dev` in the same checkout is still refused, by pid file rather than port: the
+# session's database and network are per-run, and sharing them across two runs is the failure
+# the refusal guards against. A different checkout — a worktree — gets its own session with its
+# own id and free ports (scripts/session.ts derives the id from the branch, as portless derives
+# the route names), so a worktree's dev runs beside the main checkout's and neither touches the
+# other. Nothing per-checkout does: only the fixed ports and the name `anthers.localhost` are
+# singletons, and both already belong to the main checkout. `make down` stops only the calling
+# checkout's session.
 #
 # The setup that makes this work is one command per machine — see
 # `packages/web-shared/src/lib/rpc.ts` beside the `portless.json` at the root for what
@@ -131,16 +139,19 @@ dev-local: ## Start dev reading secrets from .env (offline, or no vault access)
 	@for PIDFILE in .dev.pid .dev-api.pid; do \
 		DEV_PID=$$(cat $$PIDFILE 2>/dev/null); \
 		if [ -n "$$DEV_PID" ] && kill -0 $$DEV_PID 2>/dev/null; then \
-			echo "  -> A dev session is already running (pid $$DEV_PID, $$PIDFILE)."; \
-			echo "     Refusing to start a second; 'make down' stops it first."; \
+			echo "  -> A dev session is already running in this checkout (pid $$DEV_PID, $$PIDFILE)."; \
+			echo "     Refusing to start a second here; 'make down' stops it first. A worktree's"; \
+			echo "     dev session is its own, and may run beside this one."; \
 			exit 1; \
 		fi; \
 	done
 	@bun run scripts/session.ts dev --pid-file .dev.pid -- \
 		sh -c 'bun run db:seed && exec bun run dev'
 
-# The API alone still needs a database, so it starts the dev session itself — which means it cannot
-# run beside `make dev`, and the session refuses rather than letting the two share one.
+# The API alone still needs a database, so it starts its checkout's dev session itself — which
+# means one `make dev` and one `make dev-api` cannot run in the same checkout, and the session
+# refuses rather than letting the two share one. A worktree's `make dev-api` is its own session,
+# beside its checkout's `make dev`… of the same branch, where the same refusal applies.
 dev-api: ## Start API dev server only, in its own dev session
 	@bun run scripts/session.ts dev --pid-file .dev-api.pid -- \
 		sh -c 'bun run db:seed && exec bun run dev:api'
@@ -280,7 +291,29 @@ verify-inner:
 	bun test
 	$(MAKE) e2e-preflight
 	$(SESSION_BROWSER) bunx playwright test
-	bun run scripts/verify-stamp.ts write
+	bun run scripts/verify-stamp.ts write verify
+
+# `verify-fast` is what a push to a task branch verifies at the gate: everything except
+# what spins up Playwright. The browser suites still run — in CI, on the PR head and on
+# every merge group — where they are the responsibility of the pipeline rather than of the
+# session pushing. The tier's stamp is a fast stamp, which satisfies only a fast push; the
+# full suite's stamp satisfies everything (see scripts/verify-stamp.ts). Pushes to
+# `main` or `release` keep the whole `verify` regardless of what they change: `release` is
+# the deploy gate, and `main` is the branch every merge group is built on.
+verify-fast: ## Run what a task-branch push verifies: typecheck, lint, the unit suites — no Playwright (the browser suites run in CI)
+	@sh scripts/heavy-run.sh make --no-print-directory verify-fast-inner
+
+# `verify-fast`'s inner body, under the same lock shape as `verify`: the wrapper holds the
+# heavy-run lock, and the test preload inside `bun test` sees the lock already held.
+verify-fast-inner:
+	bun run typecheck
+	bun run lint
+	bun run econ:figures --check
+	bun run lex:check
+	bun run db:snapshots
+	bun run scripts/promote-version.ts --check
+	bun test
+	bun run scripts/verify-stamp.ts write verify-fast
 
 # The part of `verify` that can see a markdown file, which the pre-push hook runs instead of
 # `verify` when every file a push changes is markdown. Biome is here because it is cheap and

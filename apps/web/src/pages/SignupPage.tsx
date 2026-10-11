@@ -476,7 +476,7 @@ function anthersReading(amount: number, entryPrice: number): { segments: Segment
 					tone: "mission",
 					amount: amount - timePoolFor(amount) - cardFeeDisplay(amount),
 					label: "Charitable programs",
-					desc: "funds Anthers' charitable programs — free access included, which keeps other people's accounts free",
+					desc: "funds Anthers' charitable programs (free access included), which keeps other people's accounts free",
 				},
 				{
 					tone: "pay",
@@ -485,7 +485,7 @@ function anthersReading(amount: number, entryPrice: number): { segments: Segment
 					desc: "card & processing, at cost, paid to the processor",
 				},
 			],
-			note: `${money(entryPrice)} a month lifts your monthly limit, and nothing above it buys more access — what climbs is what your time pays creators, and what keeps other people's accounts free. Shown at the worst case: this alone on the charge. Back a creator too and the fixed card fee spreads across both.`,
+			note: `${money(entryPrice)} a month lifts your monthly limit, and nothing above it buys more access: what climbs is what your time pays creators, and what keeps other people's accounts free. Shown at the worst case: this alone on the charge. Back a creator too and the fixed card fee spreads across both.`,
 		};
 	}
 	return {
@@ -494,7 +494,7 @@ function anthersReading(amount: number, entryPrice: number): { segments: Segment
 				tone: "pool",
 				amount: FREE_TIME_POOL,
 				label: "To creators, by time",
-				desc: "split by the share of your time each one earned — funded by Anthers, not by you",
+				desc: "split by the share of your time each one earned, funded by Anthers, not by you",
 			},
 			{
 				tone: "mission",
@@ -632,7 +632,7 @@ const PERK_ROWS: PerkRow[] = [
 		// a user needs and is not what the money does.
 		// ⚠️ The two figures still OVERLAP, the second being part of the first, and the copy
 		// has to say so or the matrix reads as money appearing twice.
-		desc: "Part of the Time Pool above, which you can hand out yourself on a like or a comment instead of leaving it to be paid out by time.",
+		desc: "Part of the Time Pool above, which you can hand out yourself by sending a Sticker on a Work, a Post, or a Comment, instead of leaving it to be paid out by time.",
 		cell: (amount) => ({
 			value: stickerBudgetFor(amount) > 0 ? columnMoney(stickerBudgetFor(amount)) : NOT_CARRIED,
 		}),
@@ -673,7 +673,7 @@ const PERK_ROWS: PerkRow[] = [
 		// page keeps that promise only if the person is told while they are deciding —
 		// otherwise the first they hear of it is seeing their own name. The control is in
 		// account settings and the sentence has to point at it.
-		desc: "A place on the Anthers supporters page, for anyone who has ever supported Anthers. You are listed by name — never by amount — and you can take yourself off at any time in your account settings.",
+		desc: "A place on the Anthers supporters page, for anyone who has ever supported Anthers. You are listed by name (never by amount), and you can take yourself off at any time in your account settings.",
 		cell: (amount) => ({ value: amount > 0 ? "Yes" : NOT_CARRIED }),
 	},
 ];
@@ -1241,7 +1241,7 @@ function CreatorFinder({
 				) : shown.length === 0 ? (
 					<p className="col-span-full rounded-xl border border-dashed border-base-content/15 p-5 text-center text-sm text-base-content/50">
 						{query
-							? "No one by that name yet — try a medium, or browse everyone on Discover."
+							? "No one by that name yet. Try a medium, or search a different way."
 							: "No creators here yet. They're on their way."}
 					</p>
 				) : (
@@ -1315,8 +1315,8 @@ function CreatorFinder({
 			    constant-derived (see `CREATOR_WORST_CASE_*` above) rather than reading the
 			    ladder. */}
 			<p className="mt-4 text-center text-xs text-base-content/45">
-				Backing someone starts at {money(PUBLIC_ACCESS_PRICE)} a month each — their lowest Badge,
-				which you can change for a higher one whenever you like once your account exists.
+				Backing someone starts at {money(PUBLIC_ACCESS_PRICE)} a month each, which you can raise
+				whenever you like once your account exists.
 			</p>
 		</div>
 	);
@@ -1544,7 +1544,7 @@ function FreeInclusions() {
 			// perk), and the renewal carries an at-cost line past it from Root onward.
 			// The `6+` is DERIVED, never typed — see `FREE_VIDEO_HOURS`.
 			label: `${FREE_STORAGE_GIB} GiB of storage`,
-			sub: `Store the equivalent of ${FREE_VIDEO_HOURS}+ hours of Full HD video for free — one allowance for your catalog and everything you keep, on every account.`,
+			sub: `Store the equivalent of ${FREE_VIDEO_HOURS}+ hours of Full HD video for free: one allowance for your catalog and everything you keep, on every account.`,
 		},
 	];
 	return (
@@ -2580,7 +2580,7 @@ export default function SignupPage() {
 					return;
 				}
 				setSuccess(
-					picks.follow.length > 0 ? "Saved — you're following them now." : "Nothing to save yet.",
+					picks.follow.length > 0 ? "Saved; you're following them now." : "Nothing to save yet.",
 				);
 				return;
 			}
@@ -2808,7 +2808,7 @@ export default function SignupPage() {
 					<Reveal>
 						<div className="text-center">
 							<p className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45">
-								A nonprofit · no ads, no shareholders, no strings
+								A nonprofit · no ads, no shareholders, no expiry
 							</p>
 							<h1
 								style={serif}
@@ -2818,7 +2818,7 @@ export default function SignupPage() {
 							</h1>
 							<p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-base-content/65">
 								No card required, no trial period, no ads or sneaky charges. We believe amazing
-								creative and educational content should be free for all, no strings attached.
+								creative and educational content should be free for all, with no expiry.
 							</p>
 
 							<FreeInclusions />
@@ -2860,12 +2860,11 @@ export default function SignupPage() {
 							</p>
 							<div className="mx-auto mt-6 grid max-w-4xl gap-4 sm:grid-cols-2">
 								<GoFurtherCard icon={HeartIcon} title="Support creators" target="creator-badges">
-									Every creator has work that is free to everyone and work they gate behind a
-									monthly subscription level (called a Badge) or a direct purchase.
+									A creator may leave work free to everyone and put the rest behind a monthly level
+									they set (called a Badge) or a purchase price.
 									<br></br>
 									<br></br>
-									If you have any creators you want to go ahead and subscribe to, you can do that
-									now.
+									If you have creators in mind, you can back them now.
 								</GoFurtherCard>
 								<GoFurtherCard icon={SparklesIcon} title="Back Anthers" target="anthers-badges">
 									Just {money(ladder.publicAccessPrice)}/month takes the monthly limit off Public
@@ -2874,8 +2873,8 @@ export default function SignupPage() {
 									/month.
 									<br></br>
 									<br></br>
-									Your Anthers Badge also funds the charitable programs — free access for small
-									users and creators included.
+									Your Anthers Badge also funds the charitable programs (free access for small users
+									and creators included).
 								</GoFurtherCard>
 							</div>
 						</div>
@@ -2913,7 +2912,7 @@ export default function SignupPage() {
 						/>
 						<p className="mx-auto mt-12 max-w-3xl text-center text-lg leading-relaxed text-base-content/65">
 							<strong>Anyone you&rsquo;d like to start with?</strong> Search for someone by name, or
-							tap a medium to meet a few. Following is free — support someone when you&rsquo;d like
+							tap a medium to meet a few. Following is free; support someone when you&rsquo;d like
 							to back them.
 						</p>
 						<CreatorFinder
@@ -2925,7 +2924,7 @@ export default function SignupPage() {
 						<SectionEcho
 							lines={creatorLines}
 							onDrop={dropPick}
-							empty="No creators picked yet — following is free whenever you're ready."
+							empty="No creators picked yet; following is free whenever you're ready."
 						/>
 					</Reveal>
 				</div>
@@ -2941,11 +2940,12 @@ export default function SignupPage() {
 				<div className="mx-auto min-w-0 w-full max-w-[88rem] px-6 pt-16 pb-14 sm:pt-20 sm:pb-16">
 					<Reveal delay={80} id="anthers-badges" className="scroll-mt-24">
 						<StepHeading n={2} title="Anthers Badges">
-							Anthers' free Public Access has no strings, ever; you can stay free as long as you
-							like, supporting creators directly with subscriptions and direct purchases. But if you
-							want a little extra from Anthers, you can support us directly, as well. You'll unlock
-							new perks for yourself and support free access for small users and creators along with
-							a variety of other charitable programs.
+							Anthers' free Public Access never expires; you can stay free as long as you like,
+							streaming {FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month while supporting
+							creators directly with monthly amounts and direct purchases. But if you want a little
+							extra from Anthers, you can support us directly, as well. You'll get new perks for
+							yourself and support free access for small users and creators along with a variety of
+							other charitable programs.
 						</StepHeading>
 						{/* ⭐ The ladder replaced a yes/no card on 2026-08-24. A boolean could only ask
 						    about the first rung, so Sprout, Petal and Blossom existed in the model and
@@ -2984,7 +2984,7 @@ export default function SignupPage() {
 							lines={anthersLines}
 							onDrop={dropPick}
 							sizers={ANTHERS_ECHO_SIZERS}
-							empty={`Staying free — ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month.`}
+							empty={`Staying free at ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month.`}
 						/>
 					</Reveal>
 				</div>
@@ -3007,8 +3007,8 @@ export default function SignupPage() {
 						    but the reassurance, at the one moment somebody is deciding whether
 						    they have chosen enough. They have. */}
 						<p className="mx-auto mt-5 max-w-xl text-center text-xs leading-relaxed text-base-content/45">
-							Choosing nothing here is a complete answer — a free account still pays creators for
-							the time you give them.
+							Choosing nothing here is a complete answer; a free account still pays creators for the
+							time you give them.
 						</p>
 					</Reveal>
 
@@ -3021,7 +3021,7 @@ export default function SignupPage() {
 							Anthers is a nonprofit because the only way to guarantee that our platform always
 							serves creators is to make it legally impossible for it to act otherwise. Anthers
 							cannot distribute profits to insiders, cannot be acquired, and cannot have its mission
-							diluted by investors. If it ever ceases to operate, its assets go to another exempt
+							diluted by investors. If it ever ceases to operate, its assets go to another nonprofit
 							organization, not to founders or shareholders.
 						</p>
 					</div>

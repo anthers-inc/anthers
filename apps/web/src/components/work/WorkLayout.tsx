@@ -316,6 +316,14 @@ export function WorkDeliverable({
 	const { playTracks } = useMediaPlayer();
 	return (
 		<>
+			{/*
+			 * A video's ladder is the offered experience, and the original is the
+			 * baseline underneath it (70.06): an existing manifest keeps today's
+			 * behavior unchanged, and a video before its ladder — or whose ladder
+			 * never completed — plays its original through the native-file mode.
+			 * The same access rules, meter and attention wiring apply in both;
+			 * `VideoPlayer` switches on the shape of the address.
+			 */}
 			{work.type === "video" && work.transcoding?.hlsManifestUrl && (
 				<VideoPlayer
 					src={work.transcoding.hlsManifestUrl}
@@ -333,6 +341,15 @@ export function WorkDeliverable({
 								}
 							: undefined
 					}
+				/>
+			)}
+			{work.type === "video" && !work.transcoding?.hlsManifestUrl && work.originalUrl && (
+				<VideoPlayer
+					src={work.originalUrl}
+					poster={work.thumbnail ?? undefined}
+					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+					publicAccess={work.publicAccess ?? false}
+					elementRef={videoRef}
 				/>
 			)}
 			{work.type === "music" && work.transcoding?.outputFileUrl && (

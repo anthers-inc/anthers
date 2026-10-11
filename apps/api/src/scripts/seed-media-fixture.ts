@@ -50,7 +50,7 @@ import { type ProcessingKind, processingFor } from "@anthers/shared/content";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
-import { rasterizeEbook } from "../jobs/rasterize-ebook.js";
+import { renderPaged } from "../jobs/render-paged.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
 import { syncProjectRecord } from "../services/creator-record-listing.js";
 import { hostedHandleSuffix } from "../services/hosted-accounts.js";
@@ -416,7 +416,7 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 		if (processing === "video") {
 			await transcodeVideo({ jobId: job.id });
 			await seedVideoThumbnail(workId, creator, clipPath);
-		} else if (processing === "ebook") await rasterizeEbook({ jobId: job.id });
+		} else if (processing === "ebook") await renderPaged({ jobId: job.id });
 		else await processAudio({ jobId: job.id });
 
 		const [done] = await db
