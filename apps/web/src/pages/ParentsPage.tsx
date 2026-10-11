@@ -34,6 +34,7 @@
  * are places where the comfortable sentence is the false one.
  */
 
+import { ATTENTION_RAW_RETENTION_DAYS } from "@anthers/shared/constants";
 import { Link } from "@anthers/web-shared/router";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -50,14 +51,14 @@ export default function ParentsPage() {
 		<div className="container mx-auto max-w-3xl px-4 py-10">
 			<h1 className="text-3xl font-bold">For parents and guardians</h1>
 			<p className="mt-3 text-lg text-base-content/70">
-				If someone in your family uses Anthers, here is what it is, in plain language — including
-				the parts we can't promise.
+				If someone in your family uses Anthers, here is what it is, in plain language, including the
+				parts we can't promise.
 			</p>
 
 			<Section title="What Anthers is">
 				<p>
-					Anthers is a place where people publish work — games, videos, audio, and writing — and
-					where the people who enjoy that work can pay them for it directly.
+					Anthers is a place where people publish work (games, videos, audio, and writing) and where
+					the people who enjoy that work can pay them for it directly.
 				</p>
 				<p>
 					It's run by <strong>Anthers, Inc.</strong>, a Colorado nonprofit. We take no cut of what
@@ -73,7 +74,7 @@ export default function ParentsPage() {
 					sold to anyone, ever.
 				</p>
 				<p>
-					That's not a feature we added — it's a consequence of how the organization is built. An
+					That's not a feature we added; it's a consequence of how the organization is built. An
 					engagement-maximizing feed would earn Anthers nothing, so there isn't one.
 				</p>
 			</Section>
@@ -94,14 +95,14 @@ export default function ParentsPage() {
 				<p>
 					One age rule is enforced by something other than trust, and it covers everyone who
 					publishes: <strong>every creator on Anthers is a verified adult</strong>. Releasing
-					anything at all — free work included — requires finishing payout setup first, and that
-					means completing identity verification with Stripe, which will not verify a minor. We
-					never see those documents; we read back a yes or no.
+					anything at all (free work included) requires finishing payout setup first, and that means
+					completing identity verification with Stripe, which will not verify a minor. We never see
+					those documents; we read back a yes or no.
 				</p>
 				<p>
 					⚠️ <strong>This costs something real, and we would rather you knew what.</strong> Stripe's
 					identity checks reach only the countries Stripe supports for a platform like ours, so
-					requiring them to publish shuts out creators in much of the world — not only creators who
+					requiring them to publish shuts out creators in much of the world, not only creators who
 					wanted to be paid. We held the gap open for a while for exactly that reason, and closed it
 					because a platform teenagers use should be able to say plainly who is publishing on it.
 					Finding a check that does both is work we still owe.
@@ -117,19 +118,19 @@ export default function ParentsPage() {
 				<p>
 					<strong>Every work carries a rating, and there are three of them.</strong> Most work is{" "}
 					<strong>General</strong> and carries no restriction at all. <strong>Mature</strong> means
-					sustained violence, sexual activity depicted rather than implied, or similar — it's
+					sustained violence, sexual activity depicted rather than implied, or similar; it's
 					labeled, blurred behind a click by default for everybody, and can be hidden entirely.{" "}
 					<strong>Adult</strong> means explicit sexual content that is central to the work, or, in
-					video, games and other visual work, extreme violence or drug use that is the work's focus.
-					Writing, books, music and other audio are rated a little differently, closer to how music
-					is labeled explicit or not: explicit violence, drug use or language makes them Mature, and
-					only explicit sexual content can make them Adult.
+					video, games, and other visual work, extreme violence or drug use that is the work's
+					focus. Writing, books, music, and other audio are rated a little differently, closer to
+					how music is labeled explicit or not: explicit violence, drug use, or language makes them
+					Mature, and only explicit sexual content can make them Adult.
 				</p>
 				<p>
 					<strong>
 						Adult work is invisible unless an account has asked for it and proved an adult holds it.
 					</strong>{" "}
-					Not just locked — the title and thumbnail don't appear either, in listings, in search, or
+					Not just locked; the title and thumbnail don't appear either, in listings, in search, or
 					on a creator's page. Getting to it takes two separate things: a setting the account turns
 					on, and a one-off check that reads whether there's a <em>credit</em> card on the account,
 					since card issuers require the primary accountholder to be 18. We don't ask for a date of
@@ -137,8 +138,8 @@ export default function ParentsPage() {
 				</p>
 				<p>
 					⚠️ <strong>A parent's credit card would pass that check.</strong> If a young person has
-					used your card here, the age check is not what stands between them and Adult work — the
-					pin below is. We'd rather say so than let you assume otherwise.
+					used your card here, the age check is not what stands between them and Adult work; the pin
+					below is. We'd rather say so than let you assume otherwise.
 				</p>
 				<p>
 					<strong>Pornography isn't allowed at all</strong>, and that's a different line from Adult
@@ -149,23 +150,23 @@ export default function ParentsPage() {
 
 			<Section title="Why the gate works this way">
 				<p>
-					A lot of places are being pushed toward age verification that means uploading a driving
+					A lot of places are being pushed toward age verification that means uploading a driver's
 					license, or letting a camera guess how old your face looks. Those systems work by
-					collecting exactly the identity information we've promised not to hold — and once a
-					company holds it, the question stops being whether they meant well and becomes what
-					happens when they're breached.
+					collecting exactly the identity information we've promised not to hold; and once a company
+					holds it, the question stops being whether they meant well and becomes what happens when
+					they're breached.
 				</p>
 				<p>
 					<strong>Anthers never requires an ID to use it</strong>, and never asks for a date of
 					birth. What we read instead is a structural fact we can check without keeping anything:
 					whether a card on the account is <em>credit</em>-funded, because card issuers require the
 					primary accountholder to be 18. A teenager's debit card or prepaid card doesn't pass. We
-					read the answer once, record that the check happened, and keep nothing about the card — no
+					read the answer once, record that the check happened, and keep nothing about the card: no
 					number, no last four digits, not even which kind it was.
 				</p>
 				<p>
 					It's a real check rather than a checkbox, and it costs a parent nothing in privacy. But it
-					is a check on the <em>card</em>, and a card can be borrowed — which is the honest limit of
+					is a check on the <em>card</em>, and a card can be borrowed, which is the honest limit of
 					it, and the reason the controls below exist.
 				</p>
 			</Section>
@@ -173,26 +174,26 @@ export default function ParentsPage() {
 			<Section title="Parental controls">
 				<p>
 					Any account can be given a <strong>pin</strong>, from its settings page. Once it's set,
-					the pin is required for every change below — including turning the controls off — so they
+					the pin is required for every change below (including turning the controls off), so they
 					can't be undone from the account itself.
 				</p>
 				<p>
 					<strong>Lock the content settings.</strong> Mature and Adult are separate switches, and so
 					is each kind of content, such as violence or intense horror, which can be hidden or
 					blurred whatever a Work is rated. Locking freezes all of them wherever you left them. It
-					also stops the account turning Adult content on at all — card or no card — which is what
+					also stops the account turning Adult content on at all (card or no card), which is what
 					closes the borrowed-card gap in the check above. Turning Adult content <em>off</em> still
 					works while it's locked, because that only makes the account stricter.
 				</p>
 				<p>
 					<strong>Choose creators, and kinds of work.</strong> Either a list of who and what is
-					allowed, or a list of what isn't — whichever way round suits. Video, music, other audio,
-					writing, books, comics, images, games and software can each be allowed or not.
+					allowed, or a list of what isn't; whichever way round suits. Video, music, other audio,
+					writing, books, comics, images, games, and software can each be allowed or not.
 				</p>
 				<p>
-					<strong>Set time limits</strong> per day, week or month, and optionally a tighter daily
+					<strong>Set time limits</strong> per day, week, or month, and optionally a tighter daily
 					limit for one creator or one kind of work. ⚠️ These count{" "}
-					<strong>time spent with a work open</strong> — watching, reading, playing — because that's
+					<strong>time spent with a work open</strong> (watching, reading, playing) because that's
 					what we can honestly measure. Browsing and looking around isn't counted, so this isn't
 					screen time and we don't want you reading it as screen time.
 				</p>
@@ -213,9 +214,9 @@ export default function ParentsPage() {
 			<Section title="What they can do about someone">
 				<p>
 					<strong>Blocking.</strong> Anyone can block anyone, from that person's profile. It takes
-					effect immediately, nobody reviews it, and it works in both directions — afterwards
-					neither person sees the other's profile, comments, or reviews anywhere on the site, and
-					any follows between them are removed.
+					effect immediately, nobody reviews it, and it works in both directions; afterwards neither
+					person sees the other's profile, comments, or reviews anywhere on the site, and any
+					follows between them are removed.
 				</p>
 				<p>
 					<strong>Reporting.</strong> Separately, they can report a comment, a review, or a person.
@@ -231,13 +232,13 @@ export default function ParentsPage() {
 					creators get paid by time spent).
 				</p>
 				<p>
-					<strong>Creators never see who watched their work</strong> — only totals. And the
-					per-person viewing records are deleted after 180 days, leaving only anonymous totals
-					behind.
+					<strong>Creators never see who watched their work</strong>, only totals. And the
+					per-person viewing records are deleted after {ATTENTION_RAW_RETENTION_DAYS} days, leaving
+					only anonymous totals behind.
 				</p>
 				<p>
 					Any account can download everything we hold about it, or delete itself, from the settings
-					page. Before it deletes, it shows you exactly what happens to each thing — how many Works
+					page. Before it deletes, it shows you exactly what happens to each thing: how many Works
 					go, how many stay because someone bought them, what gets kept with the name removed.
 					Deletion takes seven days, and signing back in during that week cancels it. Full detail is
 					in the{" "}

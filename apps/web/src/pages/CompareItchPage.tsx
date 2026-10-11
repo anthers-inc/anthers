@@ -78,7 +78,7 @@ export default function CompareItchPage() {
 					<Reveal delay={150}>
 						<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
 							itch.io is a beloved platform that's done more for indie creators than almost anyone.
-							Anthers builds on that same spirit — creator-first economics, open publishing — and
+							Anthers builds on that same spirit (creator-first economics, open publishing) and
 							extends it with multi-media support, transparent pricing, and data portability.
 						</p>
 					</Reveal>
@@ -106,8 +106,8 @@ export default function CompareItchPage() {
 					<H2>Standing on the shoulders of a great platform</H2>
 					<Lede>
 						itch.io pioneered creator-friendly game distribution. They proved that a platform could
-						put creators first—with open publishing, flexible revenue sharing, customizable pages,
-						and a vibrant community of game jams. Millions of indie games have found their audience
+						put creators first: open publishing, flexible revenue sharing, customizable pages, and a
+						vibrant community of game jams. Millions of indie games have found their audience
 						because itch.io exists.
 					</Lede>
 					<p className="mx-auto mt-6 max-w-4xl text-lg leading-relaxed text-base-content/65">
@@ -115,8 +115,7 @@ export default function CompareItchPage() {
 						take a cut of a creator's earnings, that every medium a creator works in deserves
 						support, and that identity and data should genuinely belong to them. If itch.io is the
 						place that showed the world what indie game distribution could be, Anthers is our
-						attempt to build the next chapter—for games, videos, music, and writing all in one
-						place.
+						attempt to build the next chapter: games, videos, music, and writing all in one place.
 					</p>
 				</Reveal>
 			</Section>
@@ -131,43 +130,43 @@ export default function CompareItchPage() {
 					<Reveal delay={0}>
 						<DiffCard
 							icon={<CurrencyDollarIcon className="h-6 w-6" />}
-							title="0% platform fee—no revenue share"
-							description={`itch.io defaults to a 10% revenue share (which creators set themselves, anywhere from 0% to 100%). Anthers never takes a percentage at all. The only deduction from your price is a cost paid to a third party—card processing—itemized in full. On a $${GAME_10.price} game that is $${GAME_10.creatorReceives} to you, whatever the download size.`}
+							title="0% platform fee, no revenue share"
+							description={`itch.io defaults to a 10% revenue share (which creators set themselves, anywhere from 0% to 100%). Anthers never takes a percentage at all. The only deduction from your price is a cost paid to a third party (card processing), itemized in full. On a $${GAME_10.price} game that is $${GAME_10.creatorReceives} to you, whatever the download size.`}
 						/>
 					</Reveal>
 					<Reveal delay={100}>
 						<DiffCard
 							icon={<GlobeAltIcon className="h-6 w-6" />}
 							title="One home for every medium"
-							description="itch.io is primarily built for games. If you also make videos, music, or written content, you need separate platforms. Anthers gives you one profile, one audience, and one URL for everything you create—games, devlogs, soundtracks, essays, and more."
+							description="itch.io is built around downloadable projects: soundtracks, books, and comics ship as files to download. If you make videos or podcasts, or want an audience to watch and listen in place, you need separate platforms. Anthers gives you one profile, one audience, and one URL for everything you create: games, devlogs, soundtracks, essays, and more."
 						/>
 					</Reveal>
 					<Reveal delay={200}>
 						<DiffCard
 							icon={<EyeIcon className="h-6 w-6" />}
 							title="Transparent, itemized pricing"
-							description="On itch.io, the platform's share is deducted from your sale. On Anthers there is no platform share at all — the only deduction is card processing, at cost and itemized. Buyers see exactly where their money goes."
+							description="On itch.io, the platform's share is deducted from your sale. On Anthers there is no platform share at all; the only deduction is card processing, at cost and itemized. Buyers see exactly where their money goes."
 						/>
 					</Reveal>
 					<Reveal delay={300}>
 						<DiffCard
 							icon={<LockOpenIcon className="h-6 w-6" />}
 							title="Open, and yours to leave"
-							description="The whole platform is open source under the Apache-2.0 license, and you can download everything you've made in one click. Hosting with Anthers is meant to be a convenience, never a requirement. You sign up with an identity on the AT Protocol — one Anthers issues you, or one you already have — and each work you release gets a public listing in a repository you own, readable by anyone's software whether or not Anthers is still here."
+							description="The whole platform is open source under the Apache-2.0 license, and you can download everything you've made in one click. Hosting with Anthers is meant to be a convenience, never a requirement. You sign up with an identity on the AT Protocol (one Anthers issues you, or one you already have), and each work you release gets a public listing in a repository you own, readable by anyone's software whether or not Anthers is still here."
 						/>
 					</Reveal>
 					<Reveal delay={400}>
 						<DiffCard
 							icon={<UserGroupIcon className="h-6 w-6" />}
 							title="Subscription model that funds creators"
-							description="Beyond individual sales, Anthers offers a subscription pool where subscriber payments are distributed to creators based on actual time spent—what people play, watch, read, and listen to. It's a new revenue stream that rewards engagement, not just transactions."
+							description="Beyond individual sales, Anthers offers a subscription pool: half of what subscribers give Anthers (the Time Pool) is distributed to creators by time spent across what people play, watch, read, and listen to, and the rest, after the card cost, funds the charitable programs. It rewards engagement, not just transactions."
 						/>
 					</Reveal>
 					<Reveal delay={500}>
 						<DiffCard
 							icon={<ChartBarIcon className="h-6 w-6" />}
 							title="Unified creator dashboard"
-							description="Manage all your projects, posts, analytics, and audience from one place. itch.io's dashboard is focused on game sales and analytics. Anthers' dashboard covers your entire creative output—games, posts, audio, video—with follow and feed mechanics built in."
+							description="Manage all your projects, posts, analytics, and audience from one place. itch.io's dashboard is focused on game sales and analytics. Anthers' dashboard covers your entire creative output (games, posts, audio, video), with follow and feed mechanics built in."
 						/>
 					</Reveal>
 				</div>
@@ -179,9 +178,10 @@ export default function CompareItchPage() {
 					<Eyebrow>The economics</Eyebrow>
 					<H2>Keep more of what you earn</H2>
 					<Lede>
-						itch.io's revenue sharing is flexible—creators can set their own rate, even down to 0%.
+						itch.io's revenue sharing is flexible; creators can set their own rate, even down to 0%.
 						But the default is 10%, and many creators leave it there. Anthers takes a fundamentally
-						different approach: your price is your revenue, always.
+						different approach: no percentage ever comes off your price. The one deduction is the
+						card cost every platform pays, itemized on the receipts below.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-12 grid max-w-4xl gap-6 text-left md:grid-cols-2">
@@ -243,7 +243,7 @@ export default function CompareItchPage() {
 					<Lede>
 						itch.io is a fantastic game marketplace. Anthers is a home for every kind of creative
 						work. If you make games <em>and</em> music, if you write devlogs <em>and</em> record
-						podcasts—you don't need four platforms. You need one.
+						podcasts, you don't need four platforms. You need one.
 					</Lede>
 				</Reveal>
 				<div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -260,14 +260,14 @@ export default function CompareItchPage() {
 					<Reveal delay={200} className="h-full">
 						<MediaCard
 							icon={<MusicalNoteIcon className="h-7 w-7" />}
-							title="Audio"
+							title="Audio (hosted to stream)"
 							supported="anthers"
 						/>
 					</Reveal>
 					<Reveal delay={300} className="h-full">
 						<MediaCard
 							icon={<DocumentTextIcon className="h-7 w-7" />}
-							title="Writing"
+							title="Writing (a built-in reader)"
 							supported="anthers"
 						/>
 					</Reveal>
@@ -308,10 +308,12 @@ export default function CompareItchPage() {
 								<CompRow feature="Reviews & comments" anthers patreon />
 								<CompRow feature="Devlogs & posts" anthers patreon />
 								<CompRow feature="Video hosting" anthers />
-								<CompRow feature="Audio & music hosting" anthers />
-								<CompRow feature="Long-form writing" anthers />
-								<CompRow feature="Unified creator profile" anthers />
-								<CompRow feature="Follow & feed system" anthers />
+								{/* itch.io carries soundtracks, books and comics as downloadable classifications,
+								    per its creator FAQ, so the ✓ here can only claim the in-place experience. */}
+								<CompRow feature="Audio & music streaming in place" anthers />
+								<CompRow feature="Reading long-form writing in place" anthers />
+								<CompRow feature="Unified creator profile" anthers patreon />
+								<CompRow feature="Follow & feed system" anthers patreon />
 								<CompRow feature="0% platform fee (always)" anthers />
 								<CompRow feature="Adjustable revenue share" patreon />
 								<CompRow feature="Transparent itemized fees" anthers />
@@ -376,7 +378,7 @@ export default function CompareItchPage() {
 							icon={<ArrowPathIcon className="h-6 w-6" />}
 							title="Take your work with you"
 						>
-							One button in Settings and you get a file with everything you've made — works, posts,
+							One button in Settings and you get a file with everything you've made: works, posts,
 							purchases, the lot. Today, not eventually.
 						</PortabilityPoint>
 					</Reveal>
@@ -390,7 +392,7 @@ export default function CompareItchPage() {
 					<Reveal delay={220}>
 						<PortabilityPoint icon={<GlobeAltIcon className="h-6 w-6" />} title="On the network">
 							Your identity is an AT Protocol one, and each work you release gets a public listing
-							in a repository you own — so other people's software can read your catalog without
+							in a repository you own, so other people's software can read your catalog without
 							asking us. Running your own server is the part we haven't built yet, and we'd rather
 							say so.
 						</PortabilityPoint>
@@ -405,8 +407,8 @@ export default function CompareItchPage() {
 					<H2>Bring your itch.io projects with you</H2>
 					<Lede>
 						An importer that brings an itch.io catalog across in one step is planned and not built
-						yet, so for now a project comes over by hand. You don't have to choose one or the
-						other—publish on both, and let your audience find you wherever they prefer.
+						yet, so for now a project comes over by hand. You don't have to choose one or the other;
+						publish on both, and let your audience find you wherever they prefer.
 					</Lede>
 				</Reveal>
 				<Reveal delay={120}>
@@ -439,7 +441,7 @@ export default function CompareItchPage() {
 							Ready to try something new?
 						</h2>
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
-							Anthers is free to use, and takes a 0% cut of your sales—a ${GAME_10.price} game
+							Anthers is free to use, and takes a 0% cut of your sales: a ${GAME_10.price} game
 							returns ${GAME_10.creatorReceives} to you whatever its size, the rest being card
 							processing, at cost. If you love itch.io, you'll love what comes next.
 						</p>

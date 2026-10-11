@@ -44,6 +44,8 @@ import {
 	listActiveProducts,
 	listCardPaymentMethods,
 	paymentsConfigured,
+	retrieveCustomer,
+	updateCustomer,
 	updateProduct,
 } from "../lib/processor.js";
 import { anthersUserId } from "./anthers-badges.js";
@@ -596,6 +598,51 @@ export async function ensureStripeCustomer(userId: number, email: string): Promi
 	return customer.id;
 }
 
+/**
+ * The buyer's existing Stripe Customer id, if one is on file — the id checkout reuses
+ * (`customer`) instead of letting checkout build a second one, and the check every
+ * prefill path runs before deciding there is nothing saved.
+ */
+export async function stripeCustomerIdFor(userId: number): Promise<string | null> {
+	const [acct] = await db
+		.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, userId))
+		.limit(1);
+	return acct?.stripeCustomerId || null;
+}
+
+/**
+ * Stamp the Customer a completed checkout created or carried onto the buyer's billing
+ * row, so one buyer resolves to one Customer whichever door first touched Stripe.
+ *
+ * 🚨 **Never overwrites an existing id.** The subscription Customer is settled by Billing
+ * and everything a subscription does hangs off it; a checkout Customer linked here is the
+ * *fill* for a buyer whose first money door was a purchase, and re-linking would orphan
+ * that history. The id lands from the completed session — a `customer_creation:
+ * "if_required"` session carries one only when Stripe created it, so the null case is the
+ * ordinary opted-out buyer and is a no-op by construction.
+ */
+export async function linkCheckoutCustomer(
+	userId: number,
+	customerId: string | null,
+): Promise<void> {
+	if (!customerId) return;
+	const [acct] = await db
+		.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, userId))
+		.limit(1);
+	if (acct?.stripeCustomerId) return;
+	await db
+		.insert(billingAccounts)
+		.values({ userId, stripeCustomerId: customerId })
+		.onConflictDoUpdate({
+			target: billingAccounts.userId,
+			set: { stripeCustomerId: customerId, updatedAt: new Date() },
+		});
+}
+
 /** The customer's saved card, if one is on file (attached when a payment is confirmed). */
 export async function savedCardFor(
 	customerId: string,
@@ -603,6 +650,121 @@ export async function savedCardFor(
 	const pms = await listCardPaymentMethods({ customer: customerId, type: "card", limit: 1 });
 	const pm = pms?.data[0];
 	return pm?.card ? { id: pm.id, brand: pm.card.brand, last4: pm.card.last4 } : null;
+}
+
+/**
+ * A buyer's **saved billing address** — the one opt-in address the 2026-10-11 decision
+ * offers, and the only address Anthers stores nowhere: the address lives on the buyer's
+ * Stripe Customer (`address`), the name that goes with it on the Customer's own `name`
+ * field (`Stripe.Address` carries neither name nor anywhere else usable — that is what
+ * its shape costs us, and the two are saved and cleared together), and this module
+ * carries only the existing `stripeCustomerId`. No cache. The shape mirrors what the
+ * purchase surfaces collect (an `UsAddressInput` less the country, which is US by
+ * construction); `line2` is null when the buyer left it empty rather than a whitespace
+ * string.
+ */
+export interface SavedBillingAddress {
+	name: string;
+	line1: string;
+	line2: string | null;
+	city: string;
+	state: string;
+	postalCode: string;
+}
+
+/**
+ * Read the buyer's saved billing address, or null when nothing is saved — which is also
+ * the reading for a buyer with no billing row at all, the ordinary case under
+ * `customer_creation: "if_required"`. The client prefills checkout from this same shape;
+ * an address Stripe holds for a non-US country is reported as nothing rather than
+ * prefilling something the purchase surfaces would refuse.
+ */
+export async function savedBillingAddress(userId: number): Promise<SavedBillingAddress | null> {
+	if (!paymentsConfigured()) return null;
+	const [acct] = await db
+		.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, userId))
+		.limit(1);
+	if (!acct?.stripeCustomerId) return null;
+	const customer = await retrieveCustomer(acct.stripeCustomerId);
+	if (!customer || customer.deleted) return null;
+	const address = customer.address;
+	// The country check doubles as the null check (an optional chain): anything that is
+	// not an address with a US country is exactly "nothing saved".
+	if (address?.country !== "US" || !address.line1) return null;
+	return {
+		name: customer.name ?? "",
+		line1: address.line1,
+		line2: address.line2 ?? null,
+		city: address.city ?? "",
+		state: address.state ?? "",
+		postalCode: address.postal_code ?? "",
+	};
+}
+
+/**
+ * Save (or replace) the buyer's billing address on their Stripe Customer — creating the
+ * row and the Customer on first save through `ensureStripeCustomer`. This route is the
+ * ONLY write of an address for reuse; checkout never writes to it, and nothing is
+ * persistent for a buyer who has never come here.
+ */
+export async function saveBillingAddress(
+	userId: number,
+	email: string,
+	address: SavedBillingAddress,
+): Promise<SavedBillingAddress> {
+	const customerId = await ensureStripeCustomer(userId, email);
+	const updated = await updateCustomer(customerId, {
+		name: address.name,
+		address: {
+			line1: address.line1,
+			...(address.line2 ? { line2: address.line2 } : {}),
+			city: address.city,
+			state: address.state,
+			postal_code: address.postalCode,
+			country: "US",
+		},
+	});
+	const saved = updated?.address;
+	if (!updated || !saved?.line1) throw new Error("Stripe not configured");
+	return {
+		name: updated.name ?? address.name,
+		line1: saved.line1,
+		line2: saved.line2 ?? null,
+		city: saved.city ?? address.city,
+		state: saved.state ?? address.state,
+		postalCode: saved.postal_code ?? address.postalCode,
+	};
+}
+
+/**
+ * Clear the buyer's saved billing address — the settings surface's "clear" button and,
+ * through `eraseAccount`, the account-deletion wipe. A buyer with no billing row has
+ * nothing to clear (`"none"`, not `"failed"`): the settings card reflects a saved state
+ * that can legitimately be empty. `"failed"` is the one signal deletion defers on.
+ */
+export async function clearSavedBillingAddress(
+	userId: number,
+): Promise<"cleared" | "none" | "failed"> {
+	if (!paymentsConfigured()) return "none";
+	const [acct] = await db
+		.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, userId))
+		.limit(1);
+	if (!acct?.stripeCustomerId) return "none";
+	try {
+		await updateCustomer(acct.stripeCustomerId, {
+			// 🚨 `""` on an Emptyable param is this SDK's spelling of a JSON null — the
+			// unset Stripe itself documents to clear the field — not a saved empty value.
+			name: "",
+			address: "",
+		});
+		return "cleared";
+	} catch {
+		return "failed";
+	}
 }
 
 // 🚨 **A one-off support top-up used to live here** (`createOneTimeCharge`, behind

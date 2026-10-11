@@ -72,6 +72,7 @@ import {
 } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { revokeAtprotoGrant } from "./atproto-client.js";
+import { clearSavedBillingAddress } from "./billing.js";
 import { escapeHtml, sendOperationalAlert } from "./email.js";
 import { hostedHandlesFor, isHostedIdentity, releaseHostedIdentities } from "./hosted-accounts.js";
 import { isUnderHold } from "./legal-hold.js";
@@ -362,6 +363,22 @@ export async function eraseAccount(
 		}
 	}
 	if (user.atprotoDid) await revokeAtprotoGrant(user.atprotoDid);
+
+	// 🚨 **The saved billing address is cleared from Stripe BEFORE the wipe**, because the
+	// wipe is what erases the `billing_accounts` row that knows which customer to clear —
+	// after it, the promise "deleting your account clears the saved address from Stripe"
+	// would be unkeepable by anybody. The policy line (Privacy Policy, *What we collect*)
+	// commits Anthers to exactly this, so a Stripe failure DEFERS the deletion the same
+	// way `releaseHostedIdentities` defers on the node: the sweep re-selects the account
+	// tomorrow and tries again. "None" is the ordinary buyer who saved nothing — the
+	// clear is a no-op for them, which is the point of the one-Customer posture.
+	const cleared = await clearSavedBillingAddress(userId);
+	if (cleared === "failed") {
+		console.warn(
+			`account-deletion: Stripe would not clear user ${userId}'s saved billing address — deletion deferred`,
+		);
+		return { erased: false };
+	}
 
 	const workIds = (
 		await db.select({ id: works.id }).from(works).where(eq(works.creatorId, userId))
