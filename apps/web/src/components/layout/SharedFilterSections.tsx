@@ -51,7 +51,10 @@ export const SHARED_FILTER_TYPES = [
 const sectionTitleClass =
 	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5";
 
-const filterBtnClass = (isActive: boolean) =>
+/** The sidebar row a selectable list renders with — the same shape the nav's own
+ *  rows carry (`navItemClass`), so every selectable list in the sidebar reads as
+ *  one control family. Exported for the per-tab sections that follow the pattern. */
+export const sidebarRowClass = (isActive: boolean) =>
 	`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full ${
 		isActive
 			? "bg-secondary/10 text-secondary font-medium"
@@ -116,7 +119,7 @@ export default function SharedFilterSections({
 								type="button"
 								disabled={greyed}
 								aria-disabled={greyed || undefined}
-								className={`${filterBtnClass(type === typeItem.id)} ${greyed ? "opacity-40 pointer-events-none" : ""}`}
+								className={`${sidebarRowClass(type === typeItem.id)} ${greyed ? "opacity-40 pointer-events-none" : ""}`}
 								onClick={() => onType(typeItem.id)}
 							>
 								<typeItem.icon className="w-5 h-5 shrink-0" />

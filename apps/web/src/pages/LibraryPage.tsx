@@ -21,6 +21,15 @@
  *      access, so a free Work whose creator later gated it stays here and stops being
  *      openable. It renders locked with the route to unlock, the same way a gated track
  *      sits in the play queue.
+ *
+ * The controls live in the SIDEBAR (the house structure, 2026-10-11): the Lenses are the
+ * Library's middle section, the Type and Tags filters the tab-shared section beneath
+ * them — the page body keeps only the content the view selects, plus the Show-hidden
+ * toggle, whose invariant is absolute (see below). The lens switcher used to be a
+ * page-level tabs row, kept deliberately apart from the media tabs for the
+ * narrow-vs-reorganize distinction; the sidebar replaces that visual argument with the
+ * structural one — Lenses are their own section, above the shared filters, and the
+ * greying contract does the rest.
  */
 
 import { WITHDRAWN_RESCUE_DAYS } from "@anthers/shared/constants";
@@ -37,33 +46,104 @@ import { isAccessResult, type Work } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
-	BookOpenIcon,
 	EyeIcon,
 	EyeSlashIcon,
 	LockClosedIcon,
-	MicrophoneIcon,
 	MusicalNoteIcon,
-	PencilSquareIcon,
-	PuzzlePieceIcon,
-	RectangleGroupIcon,
-	RectangleStackIcon,
-	VideoCameraIcon,
+	Square3Stack3DIcon,
+	Squares2X2Icon,
+	TvIcon,
 } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import SharedFilterSections, {
+	SHARED_FILTER_TYPES,
+	sidebarRowClass,
+} from "../components/layout/SharedFilterSections";
+import { useSidebar } from "../components/layout/SidebarContext";
 import MusicLens, { type LensItem, type LensProject } from "../components/library/MusicLens";
-import VideoLens from "../components/library/VideoLens";
 import { removeItem, setHidden } from "../lib/library";
 
-const MEDIA_TABS = [
-	{ id: "", label: "All", icon: RectangleStackIcon },
-	{ id: "game", label: "Games", icon: PuzzlePieceIcon },
-	{ id: "music", label: "Music", icon: MusicalNoteIcon },
-	{ id: "audio", label: "Audio", icon: MicrophoneIcon },
-	{ id: "video", label: "Video", icon: VideoCameraIcon },
-	{ id: "text", label: "Writing", icon: PencilSquareIcon },
-	{ id: "ebook", label: "Books", icon: BookOpenIcon },
-	{ id: "comic", label: "Comics", icon: RectangleGroupIcon },
+/**
+ * The LENSES (Parker, 2026-10-11): the Library's middle sidebar section. **A lens is a
+ * view, never a container** — the shelf stays complete and usable with no lens applied,
+ * and switching or removing one must never touch what is *in* the Library, which matters
+ * more here than in the app this idea came from, because a shelf entry can be a thing
+ * somebody paid for.
+ *
+ * 🚨 **A lens is a UI/UX shift, never a type filter in disguise** (Parker, 2026-10-11 —
+ * the retired Video lens is the cautionary example: the plain video grid is just the
+ * Video type filter). What is not built yet renders GREYED with "(Coming Soon)" rather
+ * than absent — the lense's vocabulary is stable the same way the shared Type list's is;
+ * the two greyed entries ship with their own tasks (Channel Guide, Bookshelf), which
+ * build the real view and flip their rows live.
+ */
+const LENSES = [
+	{ id: "", label: "No Lens", icon: Squares2X2Icon, comingSoon: false },
+	{ id: "music", label: "Music Player", icon: MusicalNoteIcon, comingSoon: false },
+	{ id: "channel-guide", label: "Channel Guide", icon: TvIcon, comingSoon: true },
+	{ id: "bookshelf", label: "Bookshelf", icon: Square3Stack3DIcon, comingSoon: true },
 ] as const;
+
+const sectionTitleClass =
+	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5";
+
+/**
+ * The Library's MIDDLE-SECTION sidebar content: the Lenses. The Music Player's dial
+ * rides the lens it is a control ON, rendered beneath its row only while that lens is
+ * active — the placement the dial's invariant (beside the view it re-scopes) lands on
+ * when the sidebar became the lens's home.
+ */
+function LensSection({
+	lens,
+	includeSpoken,
+	onLens,
+	onIncludeSpoken,
+}: {
+	lens: string;
+	includeSpoken: boolean;
+	onLens: (id: string) => void;
+	onIncludeSpoken: (on: boolean) => void;
+}) {
+	return (
+		<section>
+			<h3 className={sectionTitleClass}>Lenses</h3>
+			<div className="flex flex-col gap-0.5">
+				{LENSES.map((lensItem) => (
+					<div key={lensItem.id}>
+						<button
+							type="button"
+							disabled={lensItem.comingSoon}
+							aria-disabled={lensItem.comingSoon || undefined}
+							className={`${sidebarRowClass(lens === lensItem.id)} ${
+								lensItem.comingSoon ? "opacity-40 pointer-events-none" : ""
+							}`}
+							onClick={() => onLens(lensItem.id)}
+						>
+							<lensItem.icon className="w-5 h-5 shrink-0" />
+							{lensItem.label}
+							{lensItem.comingSoon && (
+								<span className="ml-auto text-[10px] text-base-content/40 italic">
+									(Coming Soon)
+								</span>
+							)}
+						</button>
+						{lensItem.id === "music" && lens === "music" && (
+							<label className="mt-1 ml-6 flex w-fit cursor-pointer items-center gap-2 text-xs">
+								<input
+									type="checkbox"
+									className="toggle toggle-sm"
+									checked={includeSpoken}
+									onChange={(e) => onIncludeSpoken(e.target.checked)}
+								/>
+								Include spoken word
+							</label>
+						)}
+					</div>
+				))}
+			</div>
+		</section>
+	);
+}
 
 /** The shelf's view of a saved Project — the album card's whole data source. */
 type ShelfProject = LensProject;
@@ -214,33 +294,30 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 	);
 }
 
+/** The shelf items a tag filter keeps — AND semantics, the feed's comma-list read. A
+ *  Project carries no tags of its own, so it drops while any tag filter is on, the way
+ *  a post linking nothing drops while any type filter is on. */
+function matchesTags(item: ShelfItem, tags: string[]): boolean {
+	if (tags.length === 0) return true;
+	const own = item.kind === "work" ? (item.work?.tags ?? []) : [];
+	return tags.every((t) => own.includes(t));
+}
+
 export default function LibraryPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
+	const { setPageContent, setSharedContent } = useSidebar();
 	const [items, setItems] = useState<ShelfItem[]>([]);
 	// How many entries the shelf was cut to, when it was cut at all. The server leaves out the
 	// oldest past its limit, and a shelf that silently ends reads as lost saves.
 	const [cutTo, setCutTo] = useState<number | null>(null);
 	const [loading, setLoading] = useState(true);
 
-	const activeTab = searchParams.get("type") ?? "";
+	const activeType = searchParams.get("type") ?? "";
 	const showHidden = searchParams.get("hidden") === "1";
-	/**
-	 * Which lens is applied, or the bare shelf.
-	 *
-	 * 🚨 **A lens is a view, never a container.** The shelf stays complete and usable with
-	 * no lens applied, and switching or removing one must never touch what is *in* the
-	 * Library — which matters more here than in the app this idea came from, because a
-	 * shelf entry can be a thing somebody paid for.
-	 */
 	const lens = searchParams.get("lens") ?? "";
-	/**
-	 * The music lens's one preset dial over its own filter: widen the same view to spoken
-	 * word. Off by default — the lens *is* music by default — and switching it is a view
-	 * change with the same invariant as the lens itself: never a change to what the shelf
-	 * holds. Only the music lens reads this today; a future spoken-word lens would ship
-	 * the same control in reverse if it earns one.
-	 */
 	const includeSpoken = searchParams.get("spoken") === "1";
+	/** The selected tags as the comma list the shared Tags section carries. */
+	const tagsParam = searchParams.get("tags") ?? "";
 
 	/*
 	 * 🚨 Always fetch the WHOLE shelf, hidden included, and filter for display below.
@@ -280,11 +357,89 @@ export default function LibraryPage() {
 
 	// Hidden entries are filtered HERE rather than by the request — see `load`.
 	const visible = showHidden ? items : items.filter((i) => !i.hidden);
-	// A Project has no media type of its own, so a media tab necessarily excludes albums.
-	// The All tab is where they live, which is honest: an album is not "a video".
-	const filtered = activeTab
-		? visible.filter((i) => i.kind === "work" && i.work?.type === activeTab)
-		: visible;
+	// The tag filter reads the shelf's own tags, client-side: the Library view is a
+	// browser over what is already fetched.
+	const selectedTags = useMemo(
+		() =>
+			tagsParam
+				.split(",")
+				.map((t) => t.trim())
+				.filter(Boolean),
+		[tagsParam],
+	);
+	const withTags = useMemo(
+		() => visible.filter((i) => matchesTags(i, selectedTags)),
+		[visible, selectedTags],
+	);
+	// A Project has no media type of its own, so a type filter necessarily excludes
+	// albums. The All type is where they live, which is honest: an album is not "a video".
+	const filtered = useMemo(
+		() =>
+			activeType
+				? withTags.filter((i) => i.kind === "work" && i.work?.type === activeType)
+				: withTags,
+		[withTags, activeType],
+	);
+
+	/**
+	 * The Type rows the sidebar greys out (Parker, 2026-10-11): a type greyed when the
+	 * Library holds nothing of it, and — under a lens — when the lens excludes it. The
+	 * shared list's rows otherwise stay live and stable. Posts never exist in a Library;
+	 * the row greys permanently here.
+	 */
+	const unavailableTypes = useMemo(() => {
+		const set = new Set<string>(["posts"]);
+		if (lens === "music") {
+			const included = includeSpoken ? ["music", "audio"] : ["music"];
+			for (const t of SHARED_FILTER_TYPES) {
+				if (t.id && !included.includes(t.id)) set.add(t.id);
+			}
+			// A type the lens includes but the shelf has nothing of greys the same way.
+			for (const type of included) {
+				if (!items.some((i) => i.kind === "work" && i.work?.type === type)) set.add(type);
+			}
+		} else {
+			for (const t of SHARED_FILTER_TYPES) {
+				if (t.id && !items.some((i) => i.kind === "work" && i.work?.type === t.id)) set.add(t.id);
+			}
+		}
+		return set;
+	}, [lens, includeSpoken, items]);
+
+	// Register the sidebar's two pieces: the Lenses (the Library's middle section) and
+	// the tab-shared Type and Tags, each with its adapter into this page's params.
+	useEffect(() => {
+		setPageContent(
+			<LensSection
+				lens={lens}
+				includeSpoken={includeSpoken}
+				onLens={(id) => setParam("lens", id)}
+				onIncludeSpoken={(on) => setParam("spoken", on ? "1" : "")}
+			/>,
+		);
+		setSharedContent(
+			<SharedFilterSections
+				type={activeType}
+				onType={(id) => setParam("type", id)}
+				unavailableTypes={unavailableTypes}
+				tags={tagsParam}
+				onTags={(value) => setParam("tags", value)}
+			/>,
+		);
+		return () => {
+			setPageContent(null);
+			setSharedContent(null);
+		};
+	}, [
+		setPageContent,
+		setSharedContent,
+		lens,
+		includeSpoken,
+		activeType,
+		tagsParam,
+		unavailableTypes,
+		searchParams,
+	]);
 
 	if (loading) {
 		return (
@@ -309,84 +464,9 @@ export default function LibraryPage() {
 				</p>
 			)}
 
-			{/*
-			 * The lens switcher.
-			 *
-			 * Deliberately separated from the media tabs below, and above them, because the
-			 * two do genuinely different things and putting them in one row would say they
-			 * are the same kind of control: a media tab NARROWS the shelf, a lens REORGANIZES
-			 * it. The whole point of the concept is that those are not the same move.
-			 */}
-			<div className="mb-4 flex flex-wrap items-center gap-2">
-				<span className="text-xs font-semibold uppercase tracking-wider text-base-content/40">
-					View
-				</span>
-				{/* Named, because the page carries TWO tab groups and one of the labels
-				    ("Music") appears in both — as a lens that reorganizes, and as a media
-				    type that narrows. Sighted users get the "View" heading beside it; without
-				    these, a screen reader hears two identical tabs with different meanings. */}
-				<div role="tablist" aria-label="View" className="tabs tabs-box tabs-sm w-fit">
-					<button
-						type="button"
-						role="tab"
-						className={`tab ${lens === "" ? "tab-active" : ""}`}
-						onClick={() => setParam("lens", "")}
-					>
-						Shelf
-					</button>
-					<button
-						type="button"
-						role="tab"
-						className={`tab gap-1.5 ${lens === "music" ? "tab-active" : ""}`}
-						onClick={() => setParam("lens", "music")}
-					>
-						<MusicalNoteIcon className="size-4" />
-						Music
-					</button>
-					<button
-						type="button"
-						role="tab"
-						className={`tab gap-1.5 ${lens === "video" ? "tab-active" : ""}`}
-						onClick={() => setParam("lens", "video")}
-					>
-						<VideoCameraIcon className="size-4" />
-						Video
-					</button>
-				</div>
-			</div>
-
-			{/* The media tabs belong to the shelf. Under a lens they would be a second,
-			    competing way to narrow the same list, and the lens already decides what it
-			    draws on. */}
-			<div className={`mb-6 flex flex-wrap items-center gap-3 ${lens ? "hidden" : ""}`}>
-				{/* `tabs-box`, not the retired v4 `tabs-boxed`. */}
-				<div role="tablist" aria-label="Media type" className="tabs tabs-box w-fit">
-					{MEDIA_TABS.map((tab) => (
-						<button
-							key={tab.id}
-							type="button"
-							role="tab"
-							className={`tab tab-sm gap-1.5 ${activeTab === tab.id ? "tab-active" : ""}`}
-							onClick={() => setParam("type", tab.id)}
-						>
-							<tab.icon className="size-4" />
-							{tab.label}
-							{tab.id === "" && visible.length > 0 && (
-								<span className="badge badge-xs">{visible.length}</span>
-							)}
-						</button>
-					))}
-				</div>
-
-				{/*
-				 * 🚨 The way back from Hide, and therefore not optional.
-				 *
-				 * A purchase can only ever be hidden — never removed — so if this control is
-				 * missing or hard to find, hiding becomes the black hole that refusing to
-				 * remove was supposed to prevent. Shown whenever anything is hidden, and also
-				 * while the toggle is on, so turning it off is possible.
-				 */}
-				{(showHidden || hiddenCount > 0) && (
+			{/* The page body holds only what the view selects, plus this toggle. */}
+			{(showHidden || hiddenCount > 0) && (
+				<div className="mb-6">
 					<label className="label cursor-pointer gap-2 text-sm">
 						<input
 							type="checkbox"
@@ -399,45 +479,24 @@ export default function LibraryPage() {
 							<span className="badge badge-xs">{hiddenCount}</span>
 						)}
 					</label>
-				)}
-			</div>
+				</div>
+			)}
 
 			{lens === "music" ? (
-				<>
-					{/* The lens's one dial — a preset control over the filter the lens itself
-					    defines (Parker, 2026-09-20). This is a control ON the lens rather than
-					    a second lens, so it lives inside the lens block, beside the view it
-					    re-scopes. */}
-					<label className="mb-4 flex w-fit cursor-pointer items-center gap-2 text-sm">
-						<input
-							type="checkbox"
-							className="toggle toggle-sm"
-							checked={includeSpoken}
-							onChange={(e) => setParam("spoken", e.target.checked ? "1" : "")}
-						/>
-						Include spoken word
-					</label>
-					{/* The lens draws on the same `visible` list the shelf does — it reorganizes
-					    what is there rather than fetching a different corpus, which is what
-					    keeps "a lens is a view" true rather than merely stated. The toggle is
-					    passed in so the same rule holds of it: toggling re-scopes the view,
-					    never the shelf. */}
-					<MusicLens items={visible as LensItem[]} includeSpoken={includeSpoken} />
-				</>
-			) : lens === "video" ? (
-				// Same rule as the music lens: the lens reorganizes what is on the shelf,
-				// never fetches a different corpus. Drawing on `visible` is what keeps
-				// "a lens is a view" true of the whole family of them.
-				<VideoLens items={visible as LensItem[]} />
+				/* Same rule as before the lenses moved into the sidebar: the lens
+				   reorganizes what is on the shelf, never fetches a different corpus.
+				   Drawing on `withTags` is what keeps "a lens is a view" true of the whole
+				   family of them. */
+				<MusicLens items={withTags as LensItem[]} includeSpoken={includeSpoken} />
 			) : filtered.length === 0 ? (
 				<EmptyState
 					title={
-						activeTab
-							? `No ${MEDIA_TABS.find((t) => t.id === activeTab)?.label.toLowerCase()} in your Library`
+						activeType
+							? `No ${SHARED_FILTER_TYPES.find((t) => t.id === activeType)?.label.toLowerCase()} in your Library`
 							: "Your Library is empty"
 					}
 					description={
-						activeTab
+						activeType
 							? "Nothing here yet — save something, or buy it, and it lands here."
 							: "Save anything you want to keep. Free work included — you don't have to buy something to keep it."
 					}
