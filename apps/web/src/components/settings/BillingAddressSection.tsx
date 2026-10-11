@@ -29,10 +29,10 @@ export default function BillingAddressSection() {
 	// 🚨 Rendered only once the read has answered. A settings card that renders empty then
 	// fills in reads as "the saved address was lost"; the loading silence is quieter.
 	useEffect(() => {
-		let cancelled = false;
+		let canceled = false;
 		apiFetch("/api/accounts/me/billing-address")
 			.then(async (res) => {
-				if (cancelled) return;
+				if (canceled) return;
 				if (res.ok) {
 					const data = (await res.json()) as { address: SavedBillingAddress | null };
 					setSaved(data.address);
@@ -40,10 +40,10 @@ export default function BillingAddressSection() {
 				setLoaded(true);
 			})
 			.catch(() => {
-				if (!cancelled) setLoaded(true);
+				if (!canceled) setLoaded(true);
 			});
 		return () => {
-			cancelled = true;
+			canceled = true;
 		};
 	}, []);
 

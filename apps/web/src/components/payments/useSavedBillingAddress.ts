@@ -35,10 +35,10 @@ export function savedPrefillFrom(saved: SavedBillingAddress): UsAddressInput {
 export function useSavedBillingAddress(): SavedPrefill {
 	const [saved, setSaved] = useState<SavedPrefill>(undefined);
 	useEffect(() => {
-		let cancelled = false;
+		let canceled = false;
 		apiFetch("/api/accounts/me/billing-address")
 			.then(async (res) => {
-				if (cancelled) return;
+				if (canceled) return;
 				if (!res.ok) {
 					setSaved(null);
 					return;
@@ -47,10 +47,10 @@ export function useSavedBillingAddress(): SavedPrefill {
 				setSaved(data.address ? savedPrefillFrom(data.address) : null);
 			})
 			.catch(() => {
-				if (!cancelled) setSaved(null);
+				if (!canceled) setSaved(null);
 			});
 		return () => {
-			cancelled = true;
+			canceled = true;
 		};
 	}, []);
 	return saved;
