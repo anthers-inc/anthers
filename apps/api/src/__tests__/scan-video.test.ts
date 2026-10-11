@@ -209,11 +209,15 @@ describe("scanStoredVideo — object in, rows out", () => {
 		}
 	}, 60_000);
 
-	it("⚠️ releases its temp copy of the source before the vendor is asked", async () => {
+	it("⚠️ holds no temp copy of the source when the vendor is asked", async () => {
 		const { workId, key } = await stageVideo("temp-free");
 		// Seeded so a run where the vendor was never asked reads as a failure of this
-		// assertion, not of the residency one — an unasked vendor tells nothing about the
-		// temp copy.
+		// assertion, not of the residency one — an unasked vendor tells nothing about
+		// the source's bytes. Since 2026-10-11 the scan reads the source over ranged
+		// requests to a signed address, and **no temp copy exists at all** — the
+		// assertion is the narrow form of that: in the middle of the job, at the slow
+		// vendor call, this scan holds nothing (the property that matters for two
+		// scans running at once sharing the disk the platform replaces when it fills).
 		let strays = ["the vendor call was never observed"];
 		const stub = stubShield(null, "csam", async () => {
 			// At the moment the vendor call arrives — the slow part of the job — the source's

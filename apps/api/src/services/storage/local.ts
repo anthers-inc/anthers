@@ -84,6 +84,16 @@ export class LocalStorageService implements StorageService {
 		return `${getBaseUrl()}/content/${key}`;
 	}
 
+	/**
+	 * The object's own path: in local mode a streaming tool reads the file where it lies,
+	 * rather than fetching a URL this process would then have to be serving. The same
+	 * servable-key refusal applies — the path is the object, quarantine or not.
+	 */
+	async readableInput(key: string, _opts?: { expiresIn?: number }): Promise<string> {
+		assertServableKey(key);
+		return join(localContentRoot(), key);
+	}
+
 	/** Rename on disk, creating the destination directory. False when the source is absent. */
 	async move(fromKey: string, toKey: string): Promise<boolean> {
 		if (fromKey === toKey) return true;

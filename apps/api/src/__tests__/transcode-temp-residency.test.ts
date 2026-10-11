@@ -83,6 +83,8 @@ describe("a transcode's temp residency", () => {
 	let jobId: number | null = null;
 	let originalUpload: typeof storage.upload;
 	let uploadSpy: ReturnType<typeof spyOn>;
+	/** The downloads a regression would make: the job must read the source in place. */
+	let downloadSpy: ReturnType<typeof spyOn>;
 	/** The uploads the spy observed, each with the job's progress read at that moment. */
 	const uploads: Array<{ key: string; progress: number | null }> = [];
 	let strayTemps: string[] = [];
@@ -107,6 +109,12 @@ describe("a transcode's temp residency", () => {
 			}
 			return originalUpload(key, body, contentType, acl);
 		}) as typeof storage.upload);
+		// The source leg reads in place (a temp copy is the residency class that killed
+		// the worker); the mock refuses loudly, so a regression fails THIS job visibly
+		// rather than quietly costing the disk again.
+		downloadSpy = spyOn(storage, "downloadToTemp").mockRejectedValue(
+			new Error("the transcode downloaded its source instead of reading it in place"),
+		);
 
 		const sourceKey = `creators/${creatorId}/videos/originals/${RUN}.mp4`;
 		await storage.upload(sourceKey, await makeVideo(), "video/mp4", "private");
@@ -124,6 +132,7 @@ describe("a transcode's temp residency", () => {
 
 	afterAll(async () => {
 		uploadSpy.mockRestore();
+		downloadSpy.mockRestore();
 		// The run's own leftovers go too, whether the assertions passed or not — a suite
 		// testing the cleanup contract must not become the leak it watches for.
 		for (const name of strayTemps) {
@@ -168,6 +177,8 @@ describe("a transcode's temp residency", () => {
 		expect(hls[0]?.progress).toBeLessThan(80);
 		// The master is uploaded after every variant and rendition file it names.
 		expect(hls.at(-1)?.key.endsWith("master.m3u8")).toBe(true);
+		// And the source never became a temp copy: the pin above the run.
+		expect(downloadSpy).not.toHaveBeenCalled();
 	}, 60_000);
 
 	it("leaves nothing of itself on the disk after it completes", async () => {
