@@ -205,6 +205,13 @@ import { isLocalStorage, storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
 import { releaseRefusal } from "../services/work-release.js";
+import {
+	appendSourceFile,
+	listSourceFiles,
+	removeSourceFile,
+	reorderSourceFiles,
+	syncFromSourceKey,
+} from "../services/work-source-files.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -988,6 +995,18 @@ const updateWorkSchema = workBaseSchema
  */
 const createWorkBody = zValidator("json", createWorkSchema, invalidBody);
 const updateWorkBody = zValidator("json", updateWorkSchema, invalidBody);
+
+/** One file joining a paged Work's set — the set routes stay thin, so this is the whole of it. */
+const sourceFileSchema = z.object({
+	// A storage key or URL, as the upload step hands it back. Bounded like every storage ref.
+	file: z.string().min(1).max(500),
+	filename: z.string().max(255).optional(),
+	fileSize: z.number().int().nonnegative().nullable().optional(),
+	mimeType: z.string().max(100).optional(),
+});
+
+/** A whole-set arrangement: the ids in the order the creator is showing. No partial orders. */
+const sourceOrderSchema = z.object({ order: z.array(z.number().int()) });
 
 const postBaseSchema = z.object({
 	title: z.string().max(255).optional().default(""),
@@ -4996,8 +5015,14 @@ const contentRoutes = new Hono()
 		// built to make unnecessary. It re-reads and decides; a no-op costs one read.
 		await queueWorkListingSync(id);
 
-		// A new source means the old transcode is stale — re-process.
-		if (sourceChanged && updated.sourceKey) await queueTranscodeForWork(updated);
+		// A new source means the old transcode is stale — re-process. For the paged kinds the
+		// set table is the truth, so the legacy attach syncs it (replacing the set with the
+		// one file) and re-renders through the service; queueing the job directly here as
+		// well would be two jobs for one file.
+		if (sourceChanged && updated.sourceKey) {
+			if (isPaged(updated.type)) await syncFromSourceKey(updated);
+			else await queueTranscodeForWork(updated);
+		}
 		if (sourceChanged || thumbnailChanged) await queueScansForWork(updated);
 
 		const [workAssets, jobRows, buildRows, buildFileRows] = await Promise.all([
@@ -5277,6 +5302,97 @@ const contentRoutes = new Hono()
 
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 		return c.body(null, 204);
+	})
+
+	// ── A paged Work's source set ────────────────────────────────────────────────
+	// The multi-PDF ruling (Parker, 2026-10-10): a comic or book is made from one PDF or
+	// several, each file's rendered pages a contiguous run in the creator's arrangement.
+	// These routes are thin over `services/work-source-files.ts`, which owns the invariants.
+
+	.get("/works/:id/source-files", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		// A 404 rather than a 403, the way the works routes answer a non-owner — the
+		// existence of another creator's Work is not information to hand out.
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		const files = await listSourceFiles(item);
+		return c.json({ files });
+	})
+
+	.post("/works/:id/source-files", requireAuth, zValidator("json", sourceFileSchema), async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		// A 404 rather than a 403, the way the works routes answer a non-owner — the
+		// existence of another creator's Work is not information to hand out.
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!isPaged(item.type)) {
+			return c.json(
+				{ error: "Only a comic or a book carries a set of files.", code: "sources_not_paged" },
+				400,
+			);
+		}
+		if (item.visibility === "released") {
+			return c.json(
+				{
+					error: "A released Work's files can't change. Make it private first.",
+					code: "sources_not_private",
+				},
+				409,
+			);
+		}
+		const data = c.req.valid("json");
+		// The set route signs this key for the Work's owner, so a file naming another
+		// creator's private original would hand it over. See `storage/keys.ts`.
+		if (!(await isOwnStorageRef(data.file, user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
+		const { rows, job } = await appendSourceFile(item, data);
+		await queueScansForWork({ ...item, sourceKey: data.file });
+		return c.json({ files: rows, transcoding: job }, 201);
+	})
+
+	.patch(
+		"/works/:id/source-files",
+		requireAuth,
+		zValidator("json", sourceOrderSchema),
+		async (c) => {
+			const user = c.get("user");
+			const id = Number(c.req.param("id"));
+			const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+			if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			if (item.visibility === "released") {
+				return c.json(
+					{
+						error: "A released Work's files can't change. Make it private first.",
+						code: "sources_not_private",
+					},
+					409,
+				);
+			}
+			const { order } = c.req.valid("json");
+			const { rows, error } = await reorderSourceFiles(item, order);
+			if (error) return c.json({ error }, 400);
+			return c.json({ files: rows });
+		},
+	)
+
+	.delete("/works/:id/source-files/:fileId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (item.visibility === "released") {
+			return c.json(
+				{
+					error: "A released Work's files can't change. Make it private first.",
+					code: "sources_not_private",
+				},
+				409,
+			);
+		}
+		const job = await removeSourceFile(item, Number(c.req.param("fileId")));
+		if (!job) return c.json({ error: "Not found" }, 404);
+		return c.json({ transcoding: job });
 	})
 
 	// ══════════════════════════════════════════════════════════════════════════
