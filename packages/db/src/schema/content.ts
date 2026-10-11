@@ -20,6 +20,7 @@ import {
 	text,
 	timestamp,
 	uniqueIndex,
+	uuid,
 } from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
 
@@ -1332,4 +1333,38 @@ export const storageUsage = pgTable(
 		uniqueIndex("uq_storage_usage_user_cycle").on(table.userId, table.billingCycle),
 		index("idx_storage_usage_cycle").on(table.billingCycle),
 	],
+);
+
+// node — an upload session is the creator's own bytes in transit: the session, its part
+// plan and its client-computed digest are the WORK's provenance, not the platform's book.
+// The org half is only the sweeping of abandoned sessions, which is operations reading
+// node rows the way it reads works — never owning them.
+export const mediaUploadSessions = pgTable(
+	"media_upload_sessions",
+	{
+		id: uuid("id").primaryKey().defaultRandom(),
+		creatorId: integer("creator_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** The destination key, in the creator's own prefix — the session completes into it. */
+		key: text("key").notNull(),
+		/** The storage backend's own multipart handle; opaque outside the storage module. */
+		uploadId: text("upload_id").notNull(),
+		contentType: text("content_type").notNull(),
+		/** How large a part the plan asked the client to send. */
+		partSize: bigint("part_size", { mode: "number" }).notNull(),
+		/** How many parts the plan carries — the last one may be smaller. */
+		partCount: integer("part_count").notNull(),
+		/** `open` | `completed` | `aborted`. */
+		status: text("status").default("open").notNull(),
+		/**
+		 * The digest the uploading client streamed, carried at completion. The server does
+		 * not re-hash here (that verification is a later leg); the value is the object's
+		 * client-vouched identity, the thing a resumed-by-digest upload would key on.
+		 */
+		clientSha256: text("client_sha256"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		completedAt: timestamp("completed_at", { withTimezone: true }),
+	},
+	(table) => [index("idx_upload_sessions_open_age").on(table.status, table.createdAt)],
 );

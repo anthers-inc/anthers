@@ -309,6 +309,13 @@ export interface Work {
 
 	// Media payload — blanked (empty) by the API when the user lacks access.
 	sourceKey: string | null;
+	/**
+	 * A video Work's original file, at its access-checked delivery route
+	 * (`/works/:id/original`) — the day-one deliverable a play page falls back to
+	 * before a ladder exists. Null for every other kind and for a user the
+	 * Work's gate refuses; the meter bites at the route, not here.
+	 */
+	originalUrl?: string | null;
 	embedUrl: string | null;
 	durationSeconds: number | null;
 	/** Prose, for `type: "text"`. Gated like any other payload. */

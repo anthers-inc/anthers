@@ -104,7 +104,7 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
 		timeout: 15_000,
 	});
-	await page.goto("/studio/catalog");
+	await page.goto("/studio/works");
 	const card = page.locator(".card").filter({ hasText: TITLE });
 	await expect(card).toContainText("Releases");
 	await expect(card).toContainText("Private");

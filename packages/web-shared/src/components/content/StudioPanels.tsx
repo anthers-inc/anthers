@@ -158,8 +158,8 @@ export function StudioPanelBody({ panel, data }: { panel: StudioPanel; data: Pan
 						<Stat label="Released" value={released.length} />
 						<Stat label="Public Access" value={publicAccess.length} />
 					</div>
-					<Link to={studioUrl("/catalog")} className="link link-primary mt-3 inline-block text-sm">
-						Open your Catalog
+					<Link to={studioUrl("/works")} className="link link-primary mt-3 inline-block text-sm">
+						Open your Works
 					</Link>
 				</Panel>
 			);

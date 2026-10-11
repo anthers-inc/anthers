@@ -84,6 +84,53 @@ export class LocalStorageService implements StorageService {
 		return `${getBaseUrl()}/content/${key}`;
 	}
 
+	/**
+	 * The object's own path: in local mode a streaming tool reads the file where it lies,
+	 * rather than fetching a URL this process would then have to be serving. The same
+	 * servable-key refusal applies — the path is the object, quarantine or not.
+	 */
+	async readableInput(key: string, _opts?: { expiresIn?: number }): Promise<string> {
+		assertServableKey(key);
+		return join(localContentRoot(), key);
+	}
+
+	/**
+	 * The directories under the path, as fully-qualified child prefixes — `prefix` plus
+	 * each directory's name, matching the S3 shape's `CommonPrefixes` output. An absent
+	 * parent enumerates empty: a sweep asks about creators that may never have created
+	 * a video.
+	 */
+	async listChildPrefixes(prefix: string): Promise<string[]> {
+		try {
+			const entries = await readdir(join(localContentRoot(), prefix), { withFileTypes: true });
+			return entries.filter((e) => e.isDirectory()).map((e) => `${prefix}${e.name}/`);
+		} catch {
+			// ENOENT and any other read trouble: nothing under this prefix.
+			return [];
+		}
+	}
+
+	/**
+	 * Local mode runs no multipart sessions — its uploads are small and go over the
+	 * direct endpoint whole. The session route decides by backend before reaching any
+	 * of these, so these throws mean a caller bug rather than a user-facing failure.
+	 */
+	async createMultipartUpload(): Promise<{ uploadId: string }> {
+		throw new Error("multipart sessions are not available in local mode");
+	}
+	async getPresignedPartUrl(): Promise<string> {
+		throw new Error("multipart sessions are not available in local mode");
+	}
+	async listMultipartParts(): Promise<Array<{ number: number; etag: string }>> {
+		throw new Error("multipart sessions are not available in local mode");
+	}
+	async completeMultipartUpload(): Promise<void> {
+		throw new Error("multipart sessions are not available in local mode");
+	}
+	async abortMultipartUpload(): Promise<void> {
+		throw new Error("multipart sessions are not available in local mode");
+	}
+
 	/** Rename on disk, creating the destination directory. False when the source is absent. */
 	async move(fromKey: string, toKey: string): Promise<boolean> {
 		if (fromKey === toKey) return true;

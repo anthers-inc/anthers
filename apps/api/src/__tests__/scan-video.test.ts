@@ -15,7 +15,7 @@
  * been decoded and cannot know how many frames there will be.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { rm } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
@@ -105,12 +105,18 @@ async function makeVideo(seconds: number): Promise<Buffer> {
 /**
  * A Shield stand-in that answers `classification` for the nth hash it is asked about and
  * `no-known-match` for the rest — so a test can plant one match in a video without knowing
- * the hashes in advance.
+ * the hashes in advance. `onAsk` runs when the fetch arrives, before any answer, which is
+ * where the temp-residency test observes the disk.
  */
-function stubShield(matchIndex: number | null, classification = "csam") {
+function stubShield(
+	matchIndex: number | null,
+	classification = "csam",
+	onAsk?: () => void | Promise<void>,
+) {
 	const original = globalThis.fetch;
 	let sent: string[] = [];
 	globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+		if (onAsk) await onAsk();
 		const body = JSON.parse(String(init?.body ?? "{}")) as { hashes?: string[] };
 		sent = body.hashes ?? [];
 		const scanned: Record<string, { classification: string; match_type: string | null }> = {};
@@ -198,6 +204,39 @@ describe("scanStoredVideo — object in, rows out", () => {
 			}
 			// One request for the whole video, not one per frame.
 			expect(stub.sent.length).toBe(frames.length);
+		} finally {
+			stub.restore();
+		}
+	}, 60_000);
+
+	it("⚠️ holds no temp copy of the source when the vendor is asked", async () => {
+		const { workId, key } = await stageVideo("temp-free");
+		// Seeded so a run where the vendor was never asked reads as a failure of this
+		// assertion, not of the residency one — an unasked vendor tells nothing about
+		// the source's bytes. Since 2026-10-11 the scan reads the source over ranged
+		// requests to a signed address, and **no temp copy exists at all** — the
+		// assertion is the narrow form of that: in the middle of the job, at the slow
+		// vendor call, this scan holds nothing (the property that matters for two
+		// scans running at once sharing the disk the platform replaces when it fills).
+		let strays = ["the vendor call was never observed"];
+		const stub = stubShield(null, "csam", async () => {
+			// At the moment the vendor call arrives — the slow part of the job — the source's
+			// temp copy must already be gone. Two scans run at once on the worker, each with
+			// a source of its own, and the disk they would otherwise hold together is the
+			// one the platform replaces when it fills.
+			strays = (await readdir(tmpdir())).filter(
+				(n) => n.startsWith("local_dl_") || n.startsWith("s3dl_"),
+			);
+		});
+		try {
+			await scanStoredVideo(key, {
+				workId,
+				credentials: CREDS,
+				baseUrl: stub.url,
+			});
+			// The vendor was actually asked — the seeded string below would still be there if not.
+			expect(stub.sent.length).toBeGreaterThan(0);
+			expect(strays).toEqual([]);
 		} finally {
 			stub.restore();
 		}

@@ -1,26 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Work picker: a modal grid of the creator's Catalog (filterable by type), plus a quiet
- * second action that makes a new one without leaving.
+ * Work picker: a modal grid of the creator's Catalog, filterable by type.
  *
  * Used when a post wants to LINK a Work and when a Project wants to SHELVE one. Neither
  * confers anything — no access, no ownership — so picking here never changes what the Work
  * costs or who can open it. The verb differs between the two, which is why the heading
  * takes one rather than always saying "Link".
  *
- * 🚨 **Picking is this dialog's job; creating is the lesser path** (Parker, 2026-09-11).
- * `QuickWorkCreate` is a ghost button rather than a primary one, and it makes a deliberately
- * minimal Work, because the good flow is the Work's own page at `/studio/works/new`. This
- * used to swap itself for the full twelve-section editor two modals deep.
+ * 🚨 **A picker picks, and nothing else** (Parker, 2026-10-10, retiring the opposite ruling of
+ * 2026-09-11). This dialog minted a minimal Work through a ghost "New Work" button and
+ * `QuickWorkCreate`, and that path is gone: realizing a Work does not exist yet is the moment
+ * to go to `/studio/works/new` and come back, not a reason to make a half-finished one inside
+ * another screen. `PostPicker` carries the same shape — list, filter, pick, and no create path.
  */
-import { PlusIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
-import { Link } from "../../lib/router";
 import { client } from "../../lib/rpc";
-import { studioEditWorkUrl } from "../../lib/studio";
 import type { UploadableWorkType, Work } from "../../lib/types";
 import LoadingSpinner from "../ui/LoadingSpinner";
-import QuickWorkCreate from "./QuickWorkCreate";
 import {
 	itemPreviewUrl,
 	LIBRARY_TYPE_OPTIONS,
@@ -44,9 +40,6 @@ export default function WorkPicker({ onSelect, onClose, verb = "link" }: WorkPic
 	const [items, setItems] = useState<Work[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [typeFilter, setTypeFilter] = useState<"all" | UploadableWorkType>("all");
-	const [creating, setCreating] = useState(false);
-	/** A Work just made here, so the dialog can offer the page that finishes it. */
-	const [justCreated, setJustCreated] = useState<Work | null>(null);
 
 	useEffect(() => {
 		client.api.content.works
@@ -61,19 +54,6 @@ export default function WorkPicker({ onSelect, onClose, verb = "link" }: WorkPic
 	}, []);
 
 	const filtered = typeFilter === "all" ? items : items.filter((i) => i.type === typeFilter);
-
-	if (creating) {
-		return (
-			<QuickWorkCreate
-				onCreated={(work) => {
-					setCreating(false);
-					setJustCreated(work);
-					onSelect(work);
-				}}
-				onClose={() => setCreating(false)}
-			/>
-		);
-	}
 
 	return (
 		<div className="modal modal-open" role="dialog">
@@ -90,19 +70,6 @@ export default function WorkPicker({ onSelect, onClose, verb = "link" }: WorkPic
 					</button>
 				</div>
 
-				{justCreated && (
-					<div className="alert alert-info text-sm">
-						<span>
-							“{justCreated.title || "Untitled"}” is made and attached, and it is private until you
-							give it access and release it.{" "}
-							<Link to={studioEditWorkUrl(justCreated.publicId ?? justCreated.id)} className="link">
-								Finish setting it up
-							</Link>
-							.
-						</span>
-					</div>
-				)}
-
 				<div className="flex flex-wrap items-center gap-2">
 					<select
 						className="select select-bordered select-sm"
@@ -116,15 +83,6 @@ export default function WorkPicker({ onSelect, onClose, verb = "link" }: WorkPic
 							</option>
 						))}
 					</select>
-					{/* Ghost, and to the right of the filter rather than beside the grid: picking is
-					    what this dialog is for, and the better way to make a Work is its own page. */}
-					<button
-						type="button"
-						className="btn btn-ghost btn-sm ml-auto"
-						onClick={() => setCreating(true)}
-					>
-						<PlusIcon className="w-4 h-4" /> New Work
-					</button>
 				</div>
 
 				<div className="overflow-y-auto pr-1">

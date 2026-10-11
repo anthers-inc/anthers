@@ -137,6 +137,14 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 		if ((await proc.exited) !== 0) {
 			throw new Error(`pdftoppm failed: ${(await new Response(proc.stderr).text()).trim()}`);
 		}
+		// 🚨 The source's temp copy dies HERE — the moment poppler's pass ends — not in the
+		// finally below. Everything after this line is uploads and database writes; holding
+		// a delivered PDF's whole copy through them is residency the caps have no reason
+		// to pay for. (Poppler reads a file, so this job cannot read in place the way the
+		// ffmpeg jobs can; the one thing it never does is keep the copy a moment past its
+		// only reader's death.)
+		await rm(localPath, { force: true }).catch(() => {});
+		localPath = null;
 		await updateProgress(jobId, 40);
 
 		// Sorted by name, which poppler zero-pads — so lexical order IS page order. Reading
@@ -157,6 +165,9 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 			// 🚨 PRIVATE, like every other derived object. The whole reason for this job is
 			// that pages can be checked one at a time; a public page defeats it entirely.
 			await storage.upload(key, bytes, "image/jpeg", "private");
+			// This page is off the disk the moment its upload lands, same as the
+			// transcode's segments — the directory holds only pages not yet uploaded.
+			await rm(join(outDir, file)).catch(() => {});
 
 			const metadata = await sharp(bytes).metadata();
 			const width = metadata.width ?? 0;

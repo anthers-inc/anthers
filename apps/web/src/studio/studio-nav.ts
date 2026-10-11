@@ -2,13 +2,14 @@
 /**
  * The Studio's nav, which is the sidebar in studio mode (`components/layout/app-mode.ts`).
  *
- * 🚨 **These are PLACES, and one of them was an action until 2026-09-11.** The nav read
- * *Dashboard · Catalog · New Post · Analytics · Settings*: a verb sitting among locations,
- * belonging to the object that carries the least, while Projects — which has two routes and
- * its own wiki page — had no entry at all. Anthers has three clean objects and the tabs
- * divide along them (Parker): the **Catalog** owns Projects and Works, **Posts** owns posts,
- * and the **Dashboard** stopped being an overview of everything so it can say what needs
- * attention. Keep the New buttons on each index rather than bringing one back up here.
+ * 🚨 **These are PLACES, one object per tab, and the division has two generations.** The nav
+ * read *Dashboard · Catalog · New Post · Analytics · Settings* until 2026-09-11 — a verb
+ * sitting among locations — and then *Dashboard · Catalog · Posts · …* with the Catalog owning
+ * Projects and Works, until 2026-10-10 split the Catalog tab (Parker: one object, one tab):
+ * **Projects** owns projects, **Works** owns works, **Posts** owns posts, and the
+ * **Dashboard** says what needs attention. Keep the New buttons on each index rather than
+ * bringing one back up here. "Catalog" survives as the noun for a creator's whole body of
+ * work (the wiki's *How Anthers Talks About Itself*), never as a tab.
  *
  * Every path comes from `studioUrl`, the one place the `/studio` prefix is written.
  */
@@ -20,6 +21,7 @@ import {
 	CreditCardIcon,
 	PencilSquareIcon,
 	RectangleStackIcon,
+	Square3Stack3DIcon,
 	Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType } from "react";
@@ -37,14 +39,23 @@ export interface StudioNavItem {
 
 export const STUDIO_NAV: readonly StudioNavItem[] = [
 	{ to: studioUrl("/"), label: "Dashboard", icon: Squares2X2Icon, owns: [] },
-	// Catalog, NOT "Library". A creator keeps a Catalog of Works; **Library is the bound term
-	// for the USER's own owned content**, so the two were the same word for opposite things.
-	// `/studio/library` redirects here — kept for bookmarks predating the 2026-08-13 rename.
+	// A Project is the shelf the Works sit on, so it reads first — the same order the old
+	// Catalog page's sections kept.
 	{
-		to: studioUrl("/catalog"),
-		label: "Catalog",
+		to: studioUrl("/projects"),
+		label: "Projects",
+		icon: Square3Stack3DIcon,
+		owns: [studioUrl("/projects")],
+	},
+	// Works, NOT a "Library" tab. Library is the bound term for the USER's own owned content,
+	// and `/studio/library` redirects to the Works page — kept for bookmarks predating the
+	// 2026-08-13 rename. "Catalog" is the noun for the whole body of work; a Work's own pages
+	// count as this tab's.
+	{
+		to: studioUrl("/works"),
+		label: "Works",
 		icon: RectangleStackIcon,
-		owns: [studioUrl("/catalog"), studioUrl("/works"), studioUrl("/projects")],
+		owns: [studioUrl("/works")],
 	},
 	{
 		to: studioUrl("/posts"),
