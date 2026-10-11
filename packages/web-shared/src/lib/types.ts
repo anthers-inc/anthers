@@ -946,6 +946,21 @@ export interface Account {
 	updatedAt?: string;
 }
 
+/**
+ * The buyer's **saved billing address** — opt-in, managed in the account settings, and
+ * stored on the buyer's Stripe Customer record rather than on Anthers' servers (2026-10-11
+ * decision). This is the shape `GET /api/accounts/me/billing-address` answers with and
+ * `PUT` takes; checkout prefills its billing form from it and never writes back.
+ */
+export interface SavedBillingAddress {
+	name: string;
+	line1: string;
+	line2: string | null;
+	city: string;
+	state: string;
+	postalCode: string;
+}
+
 /** Response of GET /subscriptions/me — the billing row plus the Badge currently held. */
 export interface AccountResponse {
 	account: Account;

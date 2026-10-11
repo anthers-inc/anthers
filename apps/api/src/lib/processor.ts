@@ -210,6 +210,34 @@ export async function createCustomer(
 	return (await getStripe()?.customers.create(params)) ?? null;
 }
 
+/**
+ * Mirrors `stripe.customers.retrieve` — the Customer a saved billing address prefills
+ * from. The only customer read the saved-address flow makes; callers treat null as
+ * "nothing on file" as well as "payments unconfigured", which is the same no-op. A
+ * *deleted* Customer is reachable here and narrows in the service.
+ */
+export async function retrieveCustomer(
+	customerId: string,
+): Promise<Stripe.Response<Stripe.Customer | Stripe.DeletedCustomer> | null> {
+	return (
+		(await getStripe()
+			?.customers.retrieve(customerId)
+			.catch(() => null)) ?? null
+	);
+}
+
+/**
+ * Mirrors `stripe.customers.update` — the saved billing address's only write. `address:
+ * null` is the clear; a shape is the save. No `.catch`: a refused address must reach the
+ * caller as an error, not as a silent no-save.
+ */
+export async function updateCustomer(
+	customerId: string,
+	params: Stripe.CustomerUpdateParams,
+): Promise<Stripe.Customer | null> {
+	return (await getStripe()?.customers.update(customerId, params)) ?? null;
+}
+
 /** Mirrors `stripe.setupIntents.create` — a card check that moves no money. */
 export async function createSetupIntent(
 	params: Stripe.SetupIntentCreateParams,

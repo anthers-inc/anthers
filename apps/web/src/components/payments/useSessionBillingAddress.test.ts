@@ -27,6 +27,7 @@ import type { StripeUseCheckoutElementsResult } from "@stripe/react-stripe-js/ch
 import type { StripeCheckoutContact, StripeCheckoutSession } from "@stripe/stripe-js";
 import { act, createElement, render } from "./render-hooks";
 import { EMPTY_ADDRESS, type UsAddressInput } from "./UsBillingAddressForm";
+import type { SavedPrefill } from "./useSavedBillingAddress";
 import {
 	mayConfirm,
 	TAX_RESOLVE_DEBOUNCE_MS,
@@ -84,10 +85,15 @@ function checkoutStateFor(
 }
 
 /** Mount the hook inside a probe component; the probe reports every render's value. */
-function mountHook(box: { current: ReturnType<typeof fakeSession> | null }) {
+function mountHook(
+	box: { current: ReturnType<typeof fakeSession> | null },
+	prefill?: {
+		current: SavedPrefill;
+	},
+) {
 	const exposed = { current: null as ReturnType<typeof useSessionBillingAddress> | null };
 	function Probe() {
-		exposed.current = useSessionBillingAddress(checkoutStateFor(box.current));
+		exposed.current = useSessionBillingAddress(checkoutStateFor(box.current), prefill?.current);
 		return null;
 	}
 	const handle = render(createElement(Probe));
@@ -312,6 +318,95 @@ describe("automatic tax resolution", () => {
 		await act(() => h.rerender());
 		await wait(AFTER_DEBOUNCE);
 		expect(s.calls).toHaveLength(1);
+		h.unmount();
+	});
+});
+
+describe("prefill — the buyer's saved billing address, read-only at checkout", () => {
+	/** A saved address that differs from COMPLETE in every field hydration would copy. */
+	const SAVED: UsAddressInput = {
+		name: "Pat Saved",
+		line1: "900 Larimer St",
+		line2: "Unit 2",
+		city: "Fort Collins",
+		state: "NY",
+		postalCode: "10001",
+	};
+
+	test("hydrates exactly once from a saved address, and the session resolves from it", async () => {
+		// The whole point of the saved address: the buyer arrives, the form is filled,
+		// and the tax resolves with no keystroke. The prefill arriving (`undefined` ->
+		// the address) is the fetch landing after mount, the ordinary order.
+		const s = fakeSession();
+		const box = { current: s };
+		const prefill = { current: null as SavedPrefill };
+		const h = mountHook(box, prefill);
+		expect(h.exposed.current?.address).toEqual(EMPTY_ADDRESS);
+		await act(async () => {
+			prefill.current = SAVED;
+			h.rerender();
+		});
+		expect(h.exposed.current?.address).toEqual(SAVED);
+		await wait(AFTER_DEBOUNCE);
+		await act(() => h.rerender());
+		// And it resolved: one write to the session, from the saved address.
+		expect(s.calls).toHaveLength(1);
+		h.unmount();
+	});
+
+	test("still-loading and nothing-saved hydrate nothing", async () => {
+		const s = fakeSession();
+		const box = { current: s };
+		const prefill = { current: null as SavedPrefill };
+		const h = mountHook(box, prefill);
+		// `undefined` is the still-loading fetch; `null` is the loaded, nothing-saved
+		// answer. Neither is an address, and neither may pretend to be.
+		await act(() => h.rerender());
+		expect(h.exposed.current?.address).toEqual(EMPTY_ADDRESS);
+		await wait(AFTER_DEBOUNCE);
+		expect(s.calls).toHaveLength(0);
+		h.unmount();
+	});
+
+	test("a buyer who edits a prefilled address keeps their edits, and they resolve", async () => {
+		// Hydration is once, ever: a later render (a session tick, a totals effect) that
+		// still carries the prefill must not snap the form back to the saved copy. The
+		// edit resolves on its own, as every typed edit does.
+		const s = fakeSession();
+		const box = { current: s };
+		const prefill = { current: SAVED as SavedPrefill };
+		const h = mountHook(box, prefill);
+		await wait(AFTER_DEBOUNCE);
+		await act(() => h.rerender());
+		expect(s.calls).toHaveLength(1);
+
+		await typeAddress(h, [{ ...SAVED, line1: "77 Speer Blvd", postalCode: "80209" }], 0);
+		await wait(AFTER_DEBOUNCE);
+		await act(() => h.rerender());
+		await wait(AFTER_DEBOUNCE);
+		// One resolution in flight at a time; the settled count is two.
+		expect(s.calls.length).toBe(2);
+		expect(h.exposed.current?.address.line1).toBe("77 Speer Blvd");
+		h.unmount();
+	});
+
+	test("a buyer who types before the saved fetch lands keeps their typing", async () => {
+		// The fetch loses to fast fingers, deliberately: hydration never runs on any
+		// non-empty form, and the typed address resolves without waiting for the fetch.
+		const s = fakeSession();
+		const box = { current: s };
+		const prefill = { current: null as SavedPrefill };
+		const h = mountHook(box, prefill);
+		await typeAddress(h, [COMPLETE], 0);
+		await wait(AFTER_DEBOUNCE);
+		await act(() => h.rerender());
+		expect(s.calls).toHaveLength(1);
+		await act(async () => {
+			prefill.current = SAVED;
+			h.rerender();
+		});
+		// The saved copy of a different address arrives late. It changes nothing.
+		expect(h.exposed.current?.address).toEqual(COMPLETE);
 		h.unmount();
 	});
 });
