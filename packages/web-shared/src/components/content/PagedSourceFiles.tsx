@@ -204,8 +204,8 @@ export function PagedSourceFiles({ work }: { work: Work }) {
 			)}
 			{rows && rows.length === 0 && (
 				<p className="mb-2 text-sm text-warning">
-					This Work has no file yet, so it can't be released. If it was uploading in a tab that
-					has since closed, upload it again here.
+					This Work has no file yet, so it can't be released. If it was uploading in a tab that has
+					since closed, upload it again here.
 				</p>
 			)}
 			<MultipleFileInput onFiles={addFiles} disabled={busy} />
