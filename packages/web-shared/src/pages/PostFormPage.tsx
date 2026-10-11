@@ -293,8 +293,8 @@ export default function PostFormPage() {
 					) : (
 						<p className="text-xs text-base-content/50">
 							Which Projects this post belongs to is managed on the Project — open it from your{" "}
-							<Link to={studioUrl("/catalog")} className="link">
-								Catalog
+							<Link to={studioUrl("/projects")} className="link">
+								Projects page
 							</Link>{" "}
 							and use its Posts shelf.
 						</p>
