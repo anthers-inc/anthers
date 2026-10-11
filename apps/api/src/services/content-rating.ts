@@ -137,6 +137,41 @@ export async function declareRating(
 }
 
 /**
+ * A Work whose kind has changed drops its rating answer, in the one place such a write may
+ * happen.
+ *
+ * 🚨 **Why a type change erases the declaration instead of carrying it:** the rows were
+ * answered against `gridFor(oldType)`, so reading them against the new grid could add up to a
+ * rating the creator never answered for, and releasing on that would be an under-declaration
+ * the matrix exists to prevent. `maturity` returns to `unrated` — the state every Work is born
+ * in — and the notes, which derive from the rows, go with them. Release refuses an unrated
+ * Work, so nothing slips through the reset: the creator answers the new grid before the Work
+ * goes public, which is the ordinary flow for a draft whose type has just changed.
+ *
+ * ⚠️ **Refused before this is called when an operator has set the rating.** A correction is a
+ * judgment with an appeal trail behind it, and silently unrating it would destroy the record of
+ * the decision; the works route holds that refusal, and this function is only reachable past it.
+ */
+export async function resetRatingForTypeChange(
+	work: WorkRow,
+	now: Date = new Date(),
+): Promise<WorkRow> {
+	const [updated] = await db
+		.update(works)
+		.set({
+			maturity: "unrated",
+			maturityRows: {},
+			maturityNotes: [],
+			maturitySetAt: now,
+			updatedAt: now,
+		})
+		.where(eq(works.id, work.id))
+		.returning();
+	await queueWorkListingSync(work.id);
+	return updated;
+}
+
+/**
  * An operator correcting a Work's rating.
  *
  * Writes the moderation log alongside it, because a correction is an operator judgment about
