@@ -4122,8 +4122,16 @@ const contentRoutes = new Hono()
 		 * the request never reached the code that used it.
 		 */
 		if (isOwner && previewRequest(c) === null) {
+			// The owner plays their own preview through the same pipes an entitled viewer
+			// does, so their transcode runs the same delivery rewrite the user path
+			// applies: the row's raw URL points at the private bucket, where the HLS
+			// manifest 404s in the browser's player — and carries no CORS headers even
+			// where it exists. Access is asserted unconditionally, because a creator may
+			// always see their own media; `deliveryCtx()` with no share token is the
+			// owner's own session, exactly what this branch serves.
+			const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx());
 			return c.json({
-				work: await serializeWork(work, workAssets, jobRows[0] ?? null, webBuildsList),
+				work: await serializeWork(work, workAssets, playableJob, webBuildsList),
 			});
 		}
 
