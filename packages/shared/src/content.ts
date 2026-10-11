@@ -192,6 +192,23 @@ export function isPaged(type: string): boolean {
 }
 
 /**
+ * The Work types the Bookshelf lens holds — the book-like shelf, the single bookshelf
+ * every written Work stands on (Parker, 2026-09-20): the *reading* experience is
+ * different enough for `comic` to be its own Work type, but the shelf metaphor for
+ * anything you read is the same, so `text`, `ebook` and `comic` keep one lens. Anything
+ * not in this list stays on the lensless shelf; a lens is a view, never a container.
+ */
+export const BOOKSHELF_WORK_TYPES = [
+	"text",
+	"ebook",
+	"comic",
+] as const satisfies readonly WorkType[];
+
+export function isBookshelf(type: string): boolean {
+	return (BOOKSHELF_WORK_TYPES as readonly string[]).includes(type);
+}
+
+/**
  * Which processing a Work's uploaded file goes through, as `transcoding_jobs.media_type`
  * names it, or null for a type whose file is used as it was uploaded. The pipeline is a
  * property of the medium rather than the type, which is why `music` and `audio` share one.
