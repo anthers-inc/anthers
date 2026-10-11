@@ -109,10 +109,10 @@ export default function ForUsersPage() {
 							</Link>
 						</div>
 						<p className="mx-auto mt-6 max-w-xl text-sm text-base-content/50">
-							Signing up is free — no card, no trial, nothing to cancel. What's free stays free
+							Signing up is free: no card, no trial, nothing to cancel. What's free stays free
 							forever: every account downloads freely and streams {FREE_PUBLIC_ACCESS_HOURS} hours
-							of Public Access a month. You'll only ever be asked to pay when you decide to back a
-							creator.
+							of Public Access a month. You pay nothing until you choose to: backing a creator,
+							buying something they made, or supporting Anthers itself.
 						</p>
 						<BrandGlyph
 							name="divider-botanical"
@@ -130,8 +130,8 @@ export default function ForUsersPage() {
 					<Lede>
 						Anthers is where you back the people whose work you love. Give a creator a{" "}
 						<strong className="font-semibold text-base-content/80">monthly amount</strong>, or buy
-						something they made outright — and Anthers takes no cut of either one. You pay less and
-						they keep more, which is most of the reason this place exists.
+						something they made outright; Anthers takes no cut of either one. You pay less and they
+						keep more, which is most of the reason this place exists.
 					</Lede>
 					<Lede>
 						The rest of it is that everything a creator leaves ungated starts{" "}
@@ -146,8 +146,8 @@ export default function ForUsersPage() {
 								Directing a monthly amount to a creator does the following:
 								<ul>
 									<li>Send that creator your support with no platform cut</li>
-									<li>Unlock new creator-gated content and interactions</li>
-									<li>Receive special discounts and early access on direct purchases</li>
+									<li>Open that creator's gated work, priced at a monthly level they set</li>
+									<li>Hold that creator's Badges for as long as you keep giving</li>
 								</ul>
 								And remember: whether you back a creator monthly or buy from them directly, Anthers
 								takes no cut of it. The price you see is the price you pay, and sales tax is the
@@ -156,17 +156,18 @@ export default function ForUsersPage() {
 						</Reveal>
 						<Reveal delay={110} className="h-full">
 							<SignpostCard step="2" title="Support Anthers" tone="anthers">
-								Giving Anthers a monthly amount — entirely optional, and separate from anything you
-								give a creator — does the following:
+								Giving Anthers a monthly amount (entirely optional, and separate from anything you
+								give a creator) does the following:
 								<ul>
 									<li>Increase the pool of money distributed to creators you spend time with</li>
-									<li>Fund Anthers' charitable programs — free public access included — for all</li>
+									<li>Fund Anthers' charitable programs (free public access included) for all</li>
 								</ul>
 								${publicAccessPrice} a month also lifts your monthly Public Access limit, so you can
-								watch, read, listen and play as much as you like. As you give more, you'll grow your
+								watch, read, listen, and play as much as you like. As you give more, you'll grow
+								your
 								<strong className="font-semibold text-base-content/85"> Anthers Badge</strong>, from
-								Root all the way to Blossom — a mark of what your giving does, not a key to
-								anything. Nothing on Anthers is ever gated behind it.
+								Root all the way to Blossom, and "+" beyond it, a mark of what your giving does, not
+								a key to anything. Nothing on Anthers is ever gated behind it.
 							</SignpostCard>
 						</Reveal>
 					</div>
@@ -174,7 +175,7 @@ export default function ForUsersPage() {
 						No matter where you direct it each month, you can rest assured that you're supporting
 						amazing creators and free public access to their work. No shareholders, no advertisers,
 						no data brokers. Every dollar goes to one of three places: the real people who make what
-						you love, the at-cost card processing that moves the money, or what's left—which funds
+						you love, the at-cost card processing that moves the money, or what's left, which funds
 						Anthers' charitable programs, free access included.
 					</p>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
@@ -191,7 +192,7 @@ export default function ForUsersPage() {
 			<Section tint>
 				<Reveal>
 					<Eyebrow>Support creators directly</Eyebrow>
-					<H2>When you pay a creator, that's what they get</H2>
+					<H2>When you pay a creator, that's what they keep; only the card cost comes out</H2>
 					<Lede>
 						We all deserve a way to support the people we love without tossing more money onto a
 						pile for some Fortune 500 company. Our favorite video platforms choke us with ads and
@@ -201,7 +202,8 @@ export default function ForUsersPage() {
 						<em className="not-italic underline decoration-primary/40">have</em> to be like that.
 					</Lede>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						On Anthers there are two ways to back a creator directly, and both reach them in full:
+						On Anthers there are two ways to back a creator directly, and Anthers keeps none of
+						either:
 					</p>
 				</Reveal>
 				<div className="mx-auto mt-10 grid max-w-4xl gap-6 text-left md:grid-cols-2">
@@ -211,8 +213,8 @@ export default function ForUsersPage() {
 								🌱&nbsp; Back them monthly
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Pick an amount and give it to a creator every month—whatever you like, changed
-								whenever you like. Anthers takes no cut of it — no fee, no skim — and it keeps going
+								Pick an amount and give it to a creator every month; whatever you like, changed
+								whenever you like. Anthers takes no cut of it (no fee, no skim), and it keeps going
 								until you change it. It is also how you unlock that creator's own gated content.
 							</p>
 						</Card>
@@ -223,7 +225,7 @@ export default function ForUsersPage() {
 								🎁&nbsp; Buy their work
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Buy a game, an album, a book, a print—even merch or a service—and it's yours to
+								Buy a game, an album, a book, a print (even merch or a service), and it's yours to
 								keep. You pay the listed price plus your state's sales tax, and nothing else.
 								Anthers keeps none of it: the one thing that comes out of that price is card
 								processing, at cost. Downloading it again, on any device, costs nothing.
@@ -239,7 +241,8 @@ export default function ForUsersPage() {
 						style={serif}
 						className="mt-12 text-balance text-2xl font-light leading-snug text-primary sm:text-3xl"
 					>
-						0% cut. Not a cent of it is ours. That's why Anthers is a nonprofit; it's not about us.
+						0% cut. Not a cent of it is ours; the one cost in the price is card processing, paid at
+						cost to the processor. That's why Anthers is a nonprofit: it's not about us.
 					</p>
 				</Reveal>
 			</Section>
@@ -252,22 +255,21 @@ export default function ForUsersPage() {
 					<H2>A garden that stays free for everyone</H2>
 					<Lede>
 						Everything above is between you and a creator. This part is the ground it grows in, and
-						you are never asked to pay for it: every account downloads without a meter—no allowance
-						to run out of, no data cap, no per-gigabyte charge, on as many devices as you like—and
+						you are never asked to pay for it: every account downloads without a meter (no allowance
+						to run out of, no data cap, no per-gigabyte charge, on as many devices as you like) and
 						streams {FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, free forever. This
-						isn't a trial or a trick (we're a nonprofit; there's little incentive for either), it's
+						isn't a trial or a trick (we're a nonprofit; there's little incentive for either); it's
 						an attempt to fulfill what we believe is a common right: for everyone to share and
 						experience creativity and community with their neighbors around the world.
 					</Lede>
 					<p className="mx-auto mt-4 max-w-4xl text-lg leading-relaxed text-base-content/65">
-						If you want more time than that, or simply want to hold the gates open for everyone
-						else, ${publicAccessPrice} a month to Anthers lifts that limit for as long as you keep
-						it up—and every dollar of it funds the free public content everyone enjoys, because
-						creators earn from the{" "}
+						If you want more time than that, or simply want to help keep it free for everyone else,
+						${publicAccessPrice} a month to Anthers lifts that limit for as long as you keep it up.
+						Half of it goes to the{" "}
 						<strong className="font-semibold text-base-content/80">Time Pool</strong> for the time
-						people spend with their public work. Give more and your hours are worth more to the
-						people you spend them with. The more the garden fills in, the further each dollar
-						reaches.
+						people spend with their public work; the rest, after the card cost, funds the charitable
+						programs that keep it free. Give more and your hours are worth more to the people you
+						spend them with. The more the garden fills in, the further each dollar reaches.
 					</p>
 				</Reveal>
 				<div className="mx-auto mt-12 grid max-w-4xl gap-6 text-left md:grid-cols-2">
@@ -278,10 +280,10 @@ export default function ForUsersPage() {
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
 								On most of the internet, advertisers own the roads and make you the product. Here, a
-								free user still pays the creators they watch—their small Time Pool is covered as
-								free access, from a pool that everything given to Anthers supports. By sharing the
-								load together, mountains diffuse into pebbles—and we all get a healthier internet
-								for it.
+								free user still pays the creators they spend time with; their small Time Pool is
+								covered as free access, from a pool that everything given to Anthers supports. When
+								the load is shared, mountains diffuse into pebbles, and we all get a healthier
+								internet for it.
 							</p>
 						</Card>
 					</Reveal>
@@ -298,7 +300,7 @@ export default function ForUsersPage() {
 									A bigger Time Pool, so the same hour of your time pays the creator more.
 								</FreeItem>
 								<FreeItem yes>
-									A Badge on your profile—Root to Blossom—that says you hold the garden open.
+									A Badge on your profile, Root to Blossom, that says you hold the garden open.
 								</FreeItem>
 							</ul>
 							<p className="mt-4 border-t border-base-content/10 pt-3 text-xs leading-relaxed text-base-content/55">
@@ -307,8 +309,8 @@ export default function ForUsersPage() {
 								    seeded answer renders nothing rather than a made-up range. */}
 								{rungs.length > 0 &&
 									`The Badges run $${rungs[0].threshold} to $${rungs[rungs.length - 1].threshold} a month, and "+" beyond. `}
-								Supporting Anthers is separate from supporting a creator directly—one keeps the
-								commons free, the other reaches a creator in full.
+								Supporting Anthers is separate from supporting a creator directly: one keeps the
+								commons free, the other reaches a creator with no cut taken.
 							</p>
 						</Card>
 					</Reveal>

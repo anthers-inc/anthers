@@ -86,8 +86,8 @@ export default function CompareGhostPage() {
 					<Eyebrow>Positioning</Eyebrow>
 					<H2>Two platforms, two philosophies</H2>
 					<Lede>
-						Ghost and Anthers share some values—independence, creator ownership, transparent
-						economics—but they're built for different creative workflows.
+						Ghost and Anthers share some values (independence, creator ownership, transparent
+						economics), but they're built for different creative workflows.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-12 grid max-w-4xl gap-8 text-left md:grid-cols-2">
@@ -135,7 +135,7 @@ export default function CompareGhostPage() {
 							</h3>
 							<p className="mb-4 text-sm leading-relaxed text-base-content/65">
 								A creator economy platform built for multi-media indie creators. Anthers is designed
-								for people who make games, videos, music, and written content—and want one home for
+								for people who make games, videos, music, and written content, and want one home for
 								all of it.
 							</p>
 							<ul className="flex flex-col gap-2 text-sm text-base-content/65">
@@ -145,7 +145,7 @@ export default function CompareGhostPage() {
 								</li>
 								<li className="flex gap-2">
 									<span className="shrink-0 text-primary">✓</span>
-									0% platform fee on all support and sales—no revenue share, ever
+									0% platform fee on all support and sales; no revenue share, ever
 								</li>
 								<li className="flex gap-2">
 									<span className="shrink-0 text-primary">✓</span>
@@ -172,7 +172,7 @@ export default function CompareGhostPage() {
 					<H2>Content types at a glance</H2>
 					<Lede>
 						Ghost is laser-focused on written publishing and newsletters. Anthers covers a wider
-						range of creative media—ideal for indie creators who work across multiple formats.
+						range of creative media, ideal for indie creators who work across multiple formats.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-14 grid max-w-4xl gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -223,14 +223,14 @@ export default function CompareGhostPage() {
 						<DiffCard
 							icon={<CurrencyDollarIcon className="h-6 w-6" />}
 							title="Revenue model"
-							description="Ghost charges a monthly hosting fee ($9-$199+/mo for Ghost Pro) and takes 0% of membership revenue. Anthers is free to use and takes 0% of sales—real costs are passed through as transparent line items to the buyer. Both platforms let creators keep what they earn."
+							description="Ghost charges a monthly hosting fee (published plans run from $18/mo) and takes 0% of membership revenue. Anthers is free to use and takes 0% of sales; real costs are passed through as transparent line items to the buyer. Both platforms let creators keep what they earn."
 						/>
 					</Reveal>
 					<Reveal delay={100}>
 						<DiffCard
 							icon={<EyeIcon className="h-6 w-6" />}
 							title="Publishing approach"
-							description="Ghost gives you a full website with custom themes, SEO tools, and email newsletter delivery—it's a CMS. Anthers gives you a creator profile with project pages, devlogs, and a built-in audience—it's a marketplace and community platform."
+							description="Ghost gives you a full website with custom themes, SEO tools, and email newsletter delivery; it's a CMS. Anthers gives you a creator profile with project pages, devlogs, and a built-in audience; it's a marketplace and community platform."
 						/>
 					</Reveal>
 					<Reveal delay={200}>
@@ -244,21 +244,21 @@ export default function CompareGhostPage() {
 						<DiffCard
 							icon={<CodeBracketIcon className="h-6 w-6" />}
 							title="Open-source approach"
-							description="Ghost is fully open-source (MIT license) and self-hostable, and their non-profit foundation has been building in the open since 2013 — a decade of earned credibility. Anthers is open source under the Apache-2.0 license and holds the same principle: hosting with us is meant to be a convenience, never a requirement."
+							description="Ghost is fully open-source (MIT license) and self-hostable, and their non-profit foundation has been building in the open since 2013, a decade of earned credibility. Anthers is open source under the Apache-2.0 license and holds the same principle: hosting with us is meant to be a convenience, never a requirement."
 						/>
 					</Reveal>
 					<Reveal delay={400}>
 						<DiffCard
 							icon={<TrophyIcon className="h-6 w-6" />}
 							title="Community features"
-							description="Ghost focuses on the creator-to-reader relationship: write, publish, deliver via email. Anthers adds community mechanics around the works themselves — project reviews, comments, and follow/feed — built for the kind of interactive, collaborative community that forms around indie games and creative projects."
+							description="Ghost focuses on the creator-to-reader relationship: write, publish, deliver via email. Anthers adds community mechanics around the works themselves (project reviews, comments, and follow/feed), built for the kind of interactive, collaborative community that forms around indie games and creative projects."
 						/>
 					</Reveal>
 					<Reveal delay={500}>
 						<DiffCard
 							icon={<GlobeAltIcon className="h-6 w-6" />}
 							title="Customization"
-							description="Ghost offers deep website customization with hundreds of themes, custom code injection, and a full theme development framework. Anthers focuses on creator profiles and project pages with consistent structure—less custom design, more consistent discovery experience."
+							description="Ghost offers deep website customization with hundreds of themes, custom code injection, and a full theme development framework. Anthers focuses on creator profiles and project pages with consistent structure: less custom design, more consistent discovery experience."
 						/>
 					</Reveal>
 				</div>
@@ -420,7 +420,7 @@ export default function CompareGhostPage() {
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
 								Anthers is licensed Apache-2.0. Creators will be able to store and serve their own
-								content — on their own hardware or their own cloud — while identity, payments and
+								content (on their own hardware or their own cloud) while identity, payments, and
 								discovery stay with the platform.
 							</p>
 						</div>
@@ -435,7 +435,7 @@ export default function CompareGhostPage() {
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
 								Both reject the model where platforms own your audience and take a cut of your
-								revenue. Different architectures, same creator-first mission.
+								revenue. Different architectures, but the same creator-first mission.
 							</p>
 						</div>
 					</Reveal>
@@ -456,9 +456,9 @@ export default function CompareGhostPage() {
 						</h2>
 						<p className="mx-auto mt-5 max-w-4xl text-lg leading-relaxed text-base-content/70">
 							If you're a writer or journalist, Ghost is an excellent choice. If you make games,
-							videos, music, or multimedia creative work — Anthers was built for you. Free to use,
-							and Anthers takes no cut of any support or sale — the only deductions are card
-							processing and delivery, at cost, itemized in full.
+							videos, music, or multimedia creative work, Anthers was built for you. Free to use,
+							and Anthers takes no cut of any support or sale; the only deduction is card
+							processing, at cost, itemized in full.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
 							<Link to={startHref} className="btn btn-primary rounded-full px-7">

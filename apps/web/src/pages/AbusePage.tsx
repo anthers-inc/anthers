@@ -61,7 +61,7 @@ export default function AbusePage() {
 		<div className="container mx-auto max-w-3xl px-4 py-10">
 			<h1 className="text-3xl font-bold">Report Abuse</h1>
 			<p className="mt-3 text-lg text-base-content/70">
-				Anyone can report content on Anthers — things that break the law and things that break our
+				Anyone can report content on Anthers: things that break the law and things that break our
 				rules. You do not need an account, and you do not need to tell us who you are.
 			</p>
 
@@ -95,13 +95,13 @@ export default function AbusePage() {
 				<p>
 					The form asks you to choose what is wrong from two groups:{" "}
 					<strong>against the law</strong>, and <strong>against our rules</strong>. Things against
-					the law — child sexual abuse material, threats, anything else illegal — reach a person
-					straight away. Things against our rules — harassment, spam, pornographic material, work
-					that is not rated for what it shows — are reviewed by an operator. Pick the closest one if
+					the law (child sexual abuse material, threats, anything else illegal) reach a person
+					straight away. Things against our rules (harassment, spam, pornographic material, work
+					that is not rated for what it shows) are reviewed by an operator. Pick the closest one if
 					you are unsure; you do not have to be certain.
 				</p>
 				<p>
-					Tell us <strong>where</strong> — the exact link — and <strong>what</strong> is wrong. We
+					Tell us <strong>where</strong> (the exact link) and <strong>what</strong> is wrong. We
 					cannot act on a report we cannot locate, and the link is the part people most often leave
 					out.
 				</p>
@@ -109,14 +109,14 @@ export default function AbusePage() {
 					{/* Points away rather than absorbing. Two duties, two statutes, two processes. */}
 					<strong>Copyright is a different process.</strong> If work of yours has been published
 					here without permission, that is a formal notice with legal requirements we cannot meet on
-					your behalf — file it at{" "}
+					your behalf; file it at{" "}
 					<Link to="/copyright" className="link">
 						Copyright
 					</Link>{" "}
 					instead. Nothing on this page can remove content for a copyright claim.
 				</p>
 				<p>
-					If you are signed in, the report control on the item itself is the faster route — it tells
+					If you are signed in, the report control on the item itself is the faster route: it tells
 					us exactly what you are looking at, and it works the same for every kind of report.
 				</p>
 			</Section>
@@ -129,7 +129,7 @@ export default function AbusePage() {
 				</p>
 				<p>
 					When we find that material is what a report says it is, we take it out of reach of
-					everybody — including anyone who paid for it — and we{" "}
+					everybody (including anyone who paid for it) and we{" "}
 					<strong>preserve it rather than deleting it</strong>. That is not our choice: US federal
 					law requires a provider who reports child sexual abuse material to preserve what the
 					report names for a year, and destroying it would be a crime. It is also why{" "}
@@ -145,7 +145,7 @@ export default function AbusePage() {
 				</p>
 				<p>
 					<strong>We may not be able to tell you what happened.</strong> If you leave an email
-					address we will confirm we received your report, and where we can say more we will — but
+					address we will confirm we received your report, and where we can say more we will; but
 					what we do about a specific account is often something we are not free to discuss.
 				</p>
 			</Section>
@@ -167,8 +167,8 @@ export default function AbusePage() {
 					{/* The privacy half, stated here as well as in the privacy policy, because the
 					    person reading THIS page is the one wondering what we do with their files. */}
 					<strong>Your files do not leave Anthers to be checked.</strong> We calculate a short
-					mathematical fingerprint of an image — not the picture, and nothing anyone could turn back
-					into it — and ask whether that fingerprint is known. A fingerprint that matches nothing,
+					mathematical fingerprint of an image (not the picture, and nothing anyone could turn back
+					into it) and ask whether that fingerprint is known. A fingerprint that matches nothing,
 					which is very nearly all of them, tells the other side nothing whatsoever about you or
 					what you uploaded.
 				</p>
@@ -183,7 +183,7 @@ export default function AbusePage() {
 					material works by comparing a file against a database of known files. An encrypted or
 					password-protected archive cannot be compared by anyone, because there is nothing to
 					compare until it is opened. That is true of every platform doing this, and it is why
-					reports from people are not a fallback for detection — they are part of how this works.
+					reports from people are not a fallback for detection; they are part of how this works.
 				</p>
 			</Section>
 
@@ -205,7 +205,7 @@ export default function AbusePage() {
 				<p>
 					The same distinction runs through everything on this page:{" "}
 					<strong>a subject is not the same as its treatment.</strong> Work <em>about</em> violence,
-					addiction or sex is not the thing it depicts, and difficult art is not a rule-break. What
+					addiction, or sex is not the thing it depicts, and difficult art is not a rule-break. What
 					we act on is what a work does, not what it is about.
 				</p>
 			</Section>
@@ -278,13 +278,13 @@ function AbuseReportForm() {
 					ok: false,
 					message:
 						body.error ||
-						`Something went wrong sending that. Please email ${ABUSE_EMAIL} instead — do not let this stop you reporting.`,
+						`Something went wrong sending that. Please email ${ABUSE_EMAIL} instead; do not let this stop you reporting.`,
 				});
 			}
 		} catch {
 			setResult({
 				ok: false,
-				message: `Something went wrong sending that. Please email ${ABUSE_EMAIL} instead — do not let this stop you reporting.`,
+				message: `Something went wrong sending that. Please email ${ABUSE_EMAIL} instead; do not let this stop you reporting.`,
 			});
 		} finally {
 			setSubmitting(false);

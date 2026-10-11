@@ -57,7 +57,7 @@ export default function FAQPage() {
 					<Reveal delay={150}>
 						<p className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-base-content/75">
 							Where the money goes, what supporting does, what we haven't built yet. If something
-							here reads like a dodge, tell us — we'd rather fix the answer than the wording.
+							here reads like a dodge, tell us; we'd rather fix the answer than the wording.
 						</p>
 						<BrandGlyph
 							name="divider-botanical"
