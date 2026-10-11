@@ -8,12 +8,13 @@
 // replacement is US by construction: there is no country field to set and the state comes
 // from Anthers' own list, so the property these tests pin is that a non-US address cannot
 // be built from the form's output at all, not merely that it usually isn't.
+
 import { describe, expect, test } from "bun:test";
+import { US_STATES } from "@anthers/shared/us-states";
 import {
 	EMPTY_ADDRESS,
 	isAddressComplete,
 	toCheckoutContact,
-	US_STATES,
 	zipForTax,
 } from "./UsBillingAddressForm";
 

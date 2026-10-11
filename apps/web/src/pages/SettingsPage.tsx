@@ -20,6 +20,7 @@ import type { NotificationDeliveryMode } from "@anthers/web-shared/types";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useCallback, useEffect, useState } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
+import BillingAddressSection from "../components/settings/BillingAddressSection";
 import ParentalControlsSection from "../components/settings/ParentalControlsSection";
 import { generateRecoveryKey, type RecoveryKeypair } from "../lib/recovery-key";
 import { getStripe } from "../lib/stripe";
@@ -1843,6 +1844,10 @@ export default function SettingsPage() {
 
 					{/* The one setting that decides whether a person's name appears in public. */}
 					<SupporterListingSection />
+
+					{/* The saved billing address — the account's one opt-in payment-side record,
+					    read-only everywhere except this page. */}
+					<BillingAddressSection />
 
 					{/* Creator tools live in the Studio (payouts, connections, Badges). */}
 					{isCreator && (

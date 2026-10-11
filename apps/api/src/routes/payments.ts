@@ -72,7 +72,11 @@ import { invalidBody } from "../middleware/validate.js";
 import { resolveAccess } from "../services/access.js";
 import { heldAnthersBadgeAmount } from "../services/anthers-badges.js";
 import { addBasketItem, clearBasket, listBasket, removeBasketItem } from "../services/basket.js";
-import { syncSubscriptionToAccount } from "../services/billing.js";
+import {
+	linkCheckoutCustomer,
+	stripeCustomerIdFor,
+	syncSubscriptionToAccount,
+} from "../services/billing.js";
 import { recordDisputeClosed, recordDisputeCreated } from "../services/disputes.js";
 import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoices.js";
 import { saveOnPurchase } from "../services/library.js";
@@ -274,6 +278,14 @@ function purchaseSession(params: {
 	/** The creator's earnings in cents — the fixed, location-independent transfer. */
 	transferAmountCents: number;
 	/**
+	 * The buyer's existing Stripe Customer id, when one is on file — the session reuses
+	 * it rather than building a second one. Null for a buyer whose first money door this
+	 * is, which is the ordinary case under the 2026-10-11 decision (a Customer is created
+	 * `if_required`, or by checkout when Stripe needs one, and the completion webhook then
+	 * links it — `linkCheckoutCustomer`).
+	 */
+	customerId: string | null;
+	/**
 	 * The buyer's account email, put on the session as its Customer's address. None of the
 	 * purchase surfaces collect an email (the address form is name-and-address), so without
 	 * this the session held none and Stripe's `canConfirm` stayed false forever — the
@@ -299,9 +311,18 @@ function purchaseSession(params: {
 		// because local tax is address-level rather than state-level — the same full street
 		// address the return worksheets and the threshold forecast later read off the row.
 		billing_address_collection: "required",
-		// A Customer is created for every buyer, so the address and email survive the
-		// session and are readable at completion.
-		customer_creation: "always",
+		// 🚨 **A Customer exists only for a buyer with something to reuse, per the
+		// 2026-10-11 decision.** A buyer whose billing row carries a customer id pays on
+		// that same Customer (`customer`), so a saved address or a subscription
+		// accumulates into the one record; nobody else leaves a Customer behind at all
+		// (`if_required` creates one only when the session needs it, and a plain card
+		// payment without a save does not) — and if Stripe does create one, the
+		// completion webhook links it via `linkCheckoutCustomer` so the next purchase
+		// reuses it. Before the decision, every one-time buyer kept a permanent
+		// customer object with their address and email on it.
+		...(params.customerId
+			? { customer: params.customerId }
+			: { customer_creation: "if_required" as const }),
 		// 🚨 Card-only is the account-wide Default configuration (Parker, 2026-10-06:
 		// the Dashboard's Default narrowed to card and nothing else, matching the
 		// buyer-facing decision rather than overriding it per deployment). No
@@ -321,14 +342,15 @@ function purchaseSession(params: {
 			: {}),
 		// 🚨 **No payment-method saves are offered on this flow.** Anthers never stores a
 		// card for reuse (`setup_future_usage` is nowhere in this route), so the session
-		// does not ask to save — and Checkout attaches `allow_redisplay_filters` whenever
-		// `customer_creation: "always"` is set, which makes Stripe.js render Link's
-		// consent block ("Save my information for faster checkout", an email + MOBILE
-		// NUMBER sub-form, checkbox checked by default). A buyer who ignores the block
-		// left the phone field empty and Stripe held `canConfirm` false forever: the
-		// fully-filled form with a greyed Pay button (2026-10-06, live payment_method
-		// collection blocked all day; the client-side `savedPaymentMethod.enableSave:
-		// "never"` below removes the sub-form from its side too).
+		// does not ask to save — and Checkout renders Link's consent block ("Save my
+		// information for faster checkout", an email + MOBILE NUMBER sub-form, checkbox
+		// checked by default) whenever a Customer rides the session: a saved one passed
+		// in, or one Stripe created. A buyer who ignores the block left the phone field
+		// empty and Stripe held `canConfirm` false forever: the fully-filled form with
+		// a greyed Pay button (2026-10-06, live payment_method collection blocked all
+		// day; the client-side `savedPaymentMethod.enableSave: "never"` below removes
+		// the sub-form from its side too). The suppression stays regardless of which
+		// way a Customer got there.
 		saved_payment_method_options: {
 			payment_method_save: "disabled",
 			payment_method_remove: "disabled",
@@ -476,6 +498,20 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 				updatedAt: new Date(),
 			})
 			.where(and(eq(purchases.id, row.id), eq(purchases.status, "pending")));
+	}
+
+	// ── Link the checkout's Customer, after the rows are stamped ─────────────
+	// Under the 2026-10-11 posture a session without a saved customer carries one only
+	// when Stripe created it (`if_required`); linking it here is what makes the buyer's
+	// NEXT purchase reuse that one instead of leaving a second customer object behind.
+	// No-op when the session carries no customer (the ordinary opted-out buyer) and
+	// never overwrites the id `billingAccounts` already holds. The buyer's own id rides
+	// the intent's metadata, which every purchase surface stamps.
+	const linkCustomerId =
+		typeof session.customer === "string" ? session.customer : (session.customer?.id ?? null);
+	const buyerUserId = Number(pi.metadata?.buyerId ?? NaN);
+	if (linkCustomerId && Number.isFinite(buyerUserId)) {
+		await linkCheckoutCustomer(buyerUserId, linkCustomerId);
 	}
 
 	// ── Merch fulfillment, after the money has moved ──────────────────────────
@@ -1045,6 +1081,9 @@ const paymentRoutes = new Hono()
 			if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 			if (!printfulConfigured()) return c.json({ error: "Merch isn't available right now." }, 503);
 
+			// The buyer's Customer on file, for the session's reuse-or-as-needed posture.
+			const customerId = await stripeCustomerIdFor(user.id);
+
 			// The body names only the color and size labels — never a price, never a
 			// variant id. The (color, size) pair must name exactly one row; a Work's
 			// picker shows a size per color, so two rows matching would be a data error
@@ -1133,7 +1172,10 @@ const paymentRoutes = new Hono()
 				ui_mode: "elements",
 				customer_email: user.email,
 				billing_address_collection: "required",
-				customer_creation: "always",
+				// The 2026-10-11 customer posture, same as every purchase surface: a buyer
+				// with a Customer on file pays on it; no Customer, no created one unless
+				// `if_required` requires it and the webhook links it.
+				...(customerId ? { customer: customerId } : { customer_creation: "if_required" as const }),
 				saved_payment_method_options: {
 					payment_method_save: "disabled",
 					payment_method_remove: "disabled",
@@ -1318,6 +1360,7 @@ const paymentRoutes = new Hono()
 				lineItems: [workLineItem(work, totalCents, taxCode)],
 				destination: creatorAccount.stripeAccountId,
 				transferAmountCents: transferCents,
+				customerId: await stripeCustomerIdFor(user.id),
 				customerEmail: user.email,
 				metadata: {
 					kind: "direct_purchase",
@@ -1550,6 +1593,7 @@ const paymentRoutes = new Hono()
 				// The whole basket's earnings, on the sum — the fixed $0.30 is per charge,
 				// which is the entire point of the basket.
 				transferAmountCents: Math.round(q.fees.creatorEarnings.toNumber() * 100),
+				customerId: await stripeCustomerIdFor(user.id),
 				customerEmail: user.email,
 				metadata: {
 					kind: "direct_purchase_basket",

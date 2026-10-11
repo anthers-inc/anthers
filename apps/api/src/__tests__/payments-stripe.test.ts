@@ -723,11 +723,15 @@ describe("Webhook signature verification", () => {
 
 // The fake records call ARGS, not return values, so a session completion test shapes
 // what the list returns with `asyncList([session])`, iterated by the completion path.
-function fakeSessionFor(intentId: string, opts: { country?: string; taxCents?: number } = {}) {
+function fakeSessionFor(
+	intentId: string,
+	opts: { country?: string; taxCents?: number; customer?: string | null } = {},
+) {
 	return {
 		id: `cs_${uid()}`,
 		payment_intent: intentId,
 		total_details: { amount_tax: opts.taxCents ?? 0, amount_discount: 0, amount_shipping: null },
+		customer: opts.customer ?? null,
 		customer_details: {
 			address: {
 				country: opts.country ?? "US",
@@ -894,6 +898,119 @@ describe("Webhook: payment_intent.succeeded", () => {
 		expect(sum.toFixed(2)).toBe("0.73");
 		// And the address is stamped on every row — each row is a remittance record.
 		expect(rows.every((r) => r.buyerState === "CO")).toBe(true);
+	});
+
+	it("links the Customer a checkout created to the buyer's billing row", async () => {
+		// The 2026-10-11 posture: a session without a saved customer carries one only
+		// when Stripe created it (`if_required`). Linking it at completion is what makes
+		// the buyer's NEXT purchase reuse that one instead of a second customer object
+		// accumulating behind them.
+		const piId = `pi_${uid()}`;
+		const sessionId = `cs_${uid()}`;
+		const customerId = `cus_created_${uid()}`;
+		await db.insert(purchases).values({
+			buyerId,
+			workId: webhookWorkId,
+			type: "digital",
+			amount: "5.00",
+			processingFee: "0.45",
+			creatorEarnings: "4.55",
+			stripePaymentIntentId: sessionId,
+			status: "pending",
+		});
+		await db.delete(billingAccounts).where(eq(billingAccounts.userId, buyerId));
+
+		const session = fakeSessionFor(piId, { taxCents: 0, customer: customerId });
+		session.id = sessionId;
+		fake.responses["checkout.sessions.list"] = asyncList([session]);
+		const event = stripeEvent("payment_intent.succeeded", {
+			id: piId,
+			object: "payment_intent",
+			metadata: { buyerId: String(buyerId) },
+		});
+		expect((await sendWebhook(event)).status).toBe(200);
+
+		const [acct] = await db
+			.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
+			.from(billingAccounts)
+			.where(eq(billingAccounts.userId, buyerId));
+		expect(acct?.stripeCustomerId).toBe(customerId);
+	});
+
+	it("links nothing when the session carries no customer", async () => {
+		// The ordinary opted-out buyer: `if_required` created nothing. No billing row
+		// may appear for them — a purchase writes rows and stamps nothing reusable.
+		const piId = `pi_${uid()}`;
+		const sessionId = `cs_${uid()}`;
+		await db.insert(purchases).values({
+			buyerId,
+			workId: webhookWorkId,
+			type: "digital",
+			amount: "5.00",
+			processingFee: "0.45",
+			creatorEarnings: "4.55",
+			stripePaymentIntentId: sessionId,
+			status: "pending",
+		});
+		await db.delete(billingAccounts).where(eq(billingAccounts.userId, buyerId));
+
+		const session = fakeSessionFor(piId, { taxCents: 0, customer: null });
+		session.id = sessionId;
+		fake.responses["checkout.sessions.list"] = asyncList([session]);
+		const event = stripeEvent("payment_intent.succeeded", {
+			id: piId,
+			object: "payment_intent",
+			metadata: { buyerId: String(buyerId) },
+		});
+		expect((await sendWebhook(event)).status).toBe(200);
+
+		const accts = await db
+			.select()
+			.from(billingAccounts)
+			.where(eq(billingAccounts.userId, buyerId));
+		expect(accts).toHaveLength(0);
+	});
+
+	it("never overwrites the customer id the billing row already holds", async () => {
+		// The subscription Customer is settled by Billing and the subscription hangs off
+		// it; a checkout session carried a different one must not re-link over it.
+		const piId = `pi_${uid()}`;
+		const sessionId = `cs_${uid()}`;
+		const settledCustomerId = `cus_subscription_${uid()}`;
+		const createdCustomerId = `cus_created_${uid()}`;
+		await db.insert(purchases).values({
+			buyerId,
+			workId: webhookWorkId,
+			type: "digital",
+			amount: "5.00",
+			processingFee: "0.45",
+			creatorEarnings: "4.55",
+			stripePaymentIntentId: sessionId,
+			status: "pending",
+		});
+		await db
+			.insert(billingAccounts)
+			.values({ userId: buyerId, stripeCustomerId: settledCustomerId })
+			.onConflictDoUpdate({
+				target: billingAccounts.userId,
+				set: { stripeCustomerId: settledCustomerId },
+			});
+
+		const session = fakeSessionFor(piId, { taxCents: 0, customer: createdCustomerId });
+		session.id = sessionId;
+		fake.responses["checkout.sessions.list"] = asyncList([session]);
+		const event = stripeEvent("payment_intent.succeeded", {
+			id: piId,
+			object: "payment_intent",
+			metadata: { buyerId: String(buyerId) },
+		});
+		expect((await sendWebhook(event)).status).toBe(200);
+
+		const [acct] = await db
+			.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
+			.from(billingAccounts)
+			.where(eq(billingAccounts.userId, buyerId));
+		expect(acct?.stripeCustomerId).toBe(settledCustomerId);
 	});
 });
 
@@ -1693,6 +1810,33 @@ describe("Checkout — session construction under automatic tax", () => {
 			workId: String(paidWorkId),
 			buyerId: String(buyerId),
 		});
+	});
+
+	it("reuses the buyer's Customer when they have one, and creates none when they don't", async () => {
+		// The 2026-10-11 posture in the session itself. Nothing to reuse: the params name
+		// `if_required` — a buyer who saved nothing and holds no subscription leaves no
+		// Customer at Stripe behind. Something to reuse: `customer` — the session pays on
+		// the record the saved address (or subscription) already made, so one buyer
+		// accumulates into one Customer rather than one per flow.
+		await db.delete(billingAccounts).where(eq(billingAccounts.userId, buyerId));
+		const { res: noneRes } = await checkout();
+		expect(noneRes.status).toBe(200);
+		const none = fake.lastCall("checkout.sessions.create")
+			?.args[0] as Stripe.Checkout.SessionCreateParams;
+		expect(none.customer_creation).toBe("if_required");
+		expect(none.customer).toBeUndefined();
+
+		const savedId = `cus_saved_${uid()}`;
+		await db
+			.insert(billingAccounts)
+			.values({ userId: buyerId, stripeCustomerId: savedId })
+			.onConflictDoUpdate({ target: billingAccounts.userId, set: { stripeCustomerId: savedId } });
+		const { res: reuseRes } = await checkout();
+		expect(reuseRes.status).toBe(200);
+		const reuse = fake.lastCall("checkout.sessions.create")
+			?.args[0] as Stripe.Checkout.SessionCreateParams;
+		expect(reuse.customer).toBe(savedId);
+		expect(reuse.customer_creation).toBeUndefined();
 	});
 
 	// The branch this replaces used to charge the buyer and hold the money on the platform

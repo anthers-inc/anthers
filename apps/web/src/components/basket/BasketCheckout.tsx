@@ -41,6 +41,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getStripe } from "../../lib/stripe";
 import CheckoutBillingAddressBlock from "../payments/CheckoutBillingAddressBlock";
 import { formatAddress } from "../payments/UsBillingAddressForm";
+import { useSavedBillingAddress } from "../payments/useSavedBillingAddress";
 import {
 	mayConfirm,
 	sessionTotals,
@@ -83,7 +84,8 @@ export function workIdsKey(workIds: number[]): string {
 
 function CheckoutForm({ buyerTotal, onComplete, onTotals }: Omit<BasketCheckoutProps, "workIds">) {
 	const checkoutState = useCheckoutElements();
-	const billing = useSessionBillingAddress(checkoutState);
+	const savedPrefill = useSavedBillingAddress();
+	const billing = useSessionBillingAddress(checkoutState, savedPrefill);
 	const [processing, setProcessing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [succeeded, setSucceeded] = useState(false);
