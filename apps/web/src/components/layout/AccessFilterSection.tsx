@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The FEED-UNIQUE Access section — the viewer's own reach over the deliverable, above
- * the kind. A MIDDLE-SECTION control of the Feed's sidebar, and deliberately not one
- * of the tab-shared filters (Parker, 2026-10-11): only the feed's stream reads it —
- * the Library states access on its cards, and Discover's price machinery is its own
- * middle section. Split out of `FeedFilterSections`, whose Type and Tags halves
- * became `SharedFilterSections` when the house sidebar structure landed.
+ * The ACCESS section of the shared sidebar filters (Parker, 2026-10-11): the viewer's
+ * own reach over the deliverable, above the kind. Optional per tab — a tab whose
+ * content carries access state supplies it (the Feed's stream today, the Library with
+ * its locked saves) and it renders first among the shared filters; a tab whose content
+ * has no such reading (Discover) omits it, and its browsing machinery stays its own.
+ *
+ * Carried over from the feed-bound component this shared section came from — the
+ * explainer's copy is the one that a NEW user needs: "unlocked" is a reach verdict,
+ * not a price.
  */
 
 const sectionTitleClass =
@@ -19,10 +22,10 @@ const ACCESS_MODES = [
 
 export default function AccessFilterSection({
 	access,
-	onUpdateParams,
+	onAccess,
 }: {
 	access: string;
-	onUpdateParams: (updates: Record<string, string>) => void;
+	onAccess: (access: string) => void;
 }) {
 	return (
 		<section>
@@ -37,7 +40,7 @@ export default function AccessFilterSection({
 								? "bg-base-100 text-base-content shadow-sm"
 								: "text-base-content/50 hover:text-base-content/70"
 						}`}
-						onClick={() => onUpdateParams({ access: mode.id })}
+						onClick={() => onAccess(mode.id)}
 					>
 						{mode.label}
 					</button>
