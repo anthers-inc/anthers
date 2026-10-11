@@ -567,7 +567,10 @@ export default function CreatorProfilePage() {
 				return res.json();
 			}),
 			client.api.content.projects.$get({ query: { creator: handle } }).then((res) => res.json()),
-			client.api.content.posts.$get({ query: { creator: handle } }).then((res) => res.json()),
+			(async () => {
+				const res = await client.api.content.posts.$get({ query: { creator: handle } });
+				return res.ok ? ((await res.json()) as { posts: PostListItem[] }) : { posts: [] };
+			})(),
 			client.api.content.catalog[":handle"]
 				// The preview reaches the server, which re-resolves each Work with a
 				// substituted context — the frontend never decides a gate itself.
