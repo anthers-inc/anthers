@@ -227,9 +227,7 @@ test("the Dashboard stopped being a copy of everything the creator owns", async 
 	// page carries two of the button — the header's and the empty state's — the same two
 	// doors PostsPage shows for zero posts.
 	await page.goto("/studio/projects");
-	await expect(
-		page.getByRole("link", { name: "New Project", exact: true }).first(),
-	).toBeVisible();
+	await expect(page.getByRole("link", { name: "New Project", exact: true }).first()).toBeVisible();
 	await page.goto("/studio/posts");
 	await expect(page.getByRole("heading", { name: "Posts", exact: true })).toBeVisible();
 });
