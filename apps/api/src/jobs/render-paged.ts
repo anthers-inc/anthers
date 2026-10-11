@@ -1,27 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Rasterize an **ebook** Work: its source set in, one private page image out per rendered page.
+ * Render a **paged** Work's source set — a comic or a book — into private per-page images.
  *
- * 🚨 **Why this job exists at all, when the creator already uploaded a perfectly good
- * PDF.** The delivery rule is that every derived media object is stored private and every
- * URL to one is minted per request at an endpoint that re-resolves access — and a PDF is
- * *one* object. A user pointed at a signed URL for it has the whole book the moment page
- * one opens, which makes `downloadEnabled: false` a lie for this medium specifically and
- * would surprise a creator who deliberately turned downloads off. Pages are to a book what
- * HLS segments are to a video: the unit that can actually be checked.
+ * 🚨 **Why pages at all, when the creator uploaded a perfectly good file.** The delivery
+ * rule is that every derived media object is stored private and every URL to one is minted
+ * per request at an endpoint that re-resolves access — and a PDF or a page set handed over
+ * as *one* object defeats that. A user pointed at a signed URL for the whole book has the
+ * whole book the moment page one opens, which makes `downloadEnabled: false` a lie for this
+ * medium specifically and would surprise a creator who deliberately turned downloads off.
+ * Pages are to a book what HLS segments are to a video: the unit that can actually be
+ * checked.
  *
- * The happy side effect is that the *client* gets simpler, not heavier — the user shows
- * images, so no PDF parser (~1 MB) ships to the browser at all.
+ * 🚨 **The source is a SET** (Parker, 2026-10-10): every file's pages become a contiguous
+ * run, in the set's order. The pages are numbered across the whole set, so a comic's page 1
+ * is wherever the creator put it. An image leaf (Parker, 2026-10-11: images are the lead
+ * path) *is* one page — it normalizes rather than renders; a PDF renders with one
+ * `pdftoppm` invocation per file, never per page, because one invocation parses the
+ * document once. A download, where enabled, hands over the source files rather than these;
+ * the hosted pages are the reader's artifact, the sources the provenance.
  *
- * 🚨 **The source is a SET since the multi-PDF ruling** (Parker, 2026-10-10): every file's
- * rendered pages become a contiguous run, in the set's order. Each file renders with its own
- * `pdftoppm` invocation — one per file, never per page, for the same reason the single-file
- * shape used one per document: one invocation parses the document once. The pages are
- * numbered across the whole set, so a comic's page 1 is wherever the creator put it.
- *
- * Uses **poppler** (`pdfinfo` + `pdftoppm`), a system dependency alongside ffmpeg. Absent,
- * this fails the job with a legible message rather than half-rendering: a book missing pages
- * 40–96 is worse than one that plainly did not process.
+ * Uses **poppler** (`pdfinfo` + `pdftoppm`), a system dependency alongside ffmpeg, and
+ * `sharp` for the image path. Absent poppler, this fails the job with a legible message
+ * rather than half-rendering: a book missing pages 40–96 is worse than one that plainly
+ * did not process.
  */
 
 import { randomUUID } from "node:crypto";
@@ -53,6 +54,24 @@ const RENDER_DPI = 150;
 
 /** Hard ceiling, so one pathological upload cannot fill the bucket or the job queue. */
 const MAX_PAGES = 2000;
+
+/**
+ * The longest side a hosted page image may have. An image leaf arrives at whatever
+ * dimensions its creator's export wrote; without a bound, one 200-megapixel upload would
+ * pay for its own decode forever in every reader's bandwidth. 4096 answers more detail
+ * than a retina reading surface shows, and `withoutEnlargement` leaves anything smaller
+ * alone — the bound is a ceiling on the pathological, never a downscaler of the honest.
+ */
+const PAGE_MAX_PIXELS = 4096;
+
+/**
+ * The source mime types the job takes as image leaves — one page, normalized by `sharp`.
+ * Anything else that claims to be a page is a PDF; anything else at all fails the job
+ * with the file's name, rather than half a set.
+ */
+function isPageImage(mimeType: string): boolean {
+	return mimeType === "image/jpeg" || mimeType === "image/png";
+}
 
 async function popplerAvailable(): Promise<boolean> {
 	try {
@@ -114,8 +133,8 @@ export async function renderPaged(data: RenderPagedData) {
 	/** Per-source temp dirs, plus each source's downloaded bytes; cleaned in `finally`. */
 	const scratch: string[] = [];
 	const downloaded: string[] = [];
-	/** The already-rendered page files, per source, in page order — uploaded after all render. */
-	const rendered: string[][] = [];
+	/** The already-rendered normalized pages, per source, in page order — uploaded after all render. */
+	const rendered: { file: string; mime: "image/jpeg" | "image/png" }[][] = [];
 
 	try {
 		if (!(await popplerAvailable())) {
@@ -125,19 +144,30 @@ export async function renderPaged(data: RenderPagedData) {
 		}
 
 		// Pre-count every source before rendering any: the ceiling is the SET's page total,
-		// and refusing an over-ceiling set before the first pdftoppm runs is what keeps one
+		// and refusing an over-ceiling set before the first render runs is what keeps one
 		// pathological upload from spending an hour rendering two thousand pages it will
-		// not keep. (Also the moment a file that is not a PDF fails, with its name.)
+		// not keep. (Also the moment anything unreadable fails, with its name.)
 		// 5% is pre-flight; nothing has rendered.
 		let totalPages = 0;
-		for (const source of sources) {
+		for (const [i, source] of sources.entries()) {
 			const path = await storage.downloadToTemp(source.file);
 			downloaded.push(path);
-			const count = await pageCount(path);
-			if (count < 1) {
-				throw new Error(`A source file has no pages: ${source.filename || source.file}`);
+			if (isPageImage(source.mimeType)) {
+				// An image leaf IS one page. Reading its metadata rather than counting
+				// pages both fixes the count and is the moment a corrupt image fails —
+				// with its name, the way `pdfinfo` fails an unreadable PDF.
+				const metadata = await sharp(path).metadata();
+				if (!metadata.width || !metadata.height) {
+					throw new Error(`A source image is unreadable: ${source.filename || source.file}`);
+				}
+				totalPages += 1;
+			} else {
+				const count = await pageCount(path);
+				if (count < 1) {
+					throw new Error(`A source file has no pages: ${source.filename || source.file}`);
+				}
+				totalPages += count;
 			}
-			totalPages += count;
 			if (totalPages > MAX_PAGES) {
 				throw new Error(`This set would render ${totalPages} pages; the limit is ${MAX_PAGES}`);
 			}
@@ -145,38 +175,66 @@ export async function renderPaged(data: RenderPagedData) {
 		await updateProgress(jobId, 5);
 
 		for (const [i, source] of sources.entries()) {
-			/*
-			 * Render this file in one `pdftoppm` invocation rather than page by page.
-			 *
-			 * Poppler parses the document once and writes `page-001.jpg`, `page-002.jpg`, ….
-			 * Spawning it per page re-parses the file every time, which on a 200-page graphic
-			 * novel is the difference between one pass and two hundred.
-			 */
 			const dir = await mkdtemp(join(tmpdir(), `ebook_${i}_`));
 			scratch.push(dir);
-			const proc = Bun.spawn(
-				["pdftoppm", "-jpeg", "-r", String(RENDER_DPI), downloaded[i], join(dir, "page")],
-				{ stdout: "ignore", stderr: "pipe" },
-			);
-			if ((await proc.exited) !== 0) {
-				throw new Error(
-					`pdftoppm failed for ${source.filename || source.file}: ${(await new Response(proc.stderr).text()).trim()}`,
+			if (isPageImage(source.mimeType)) {
+				/*
+				 * An image leaf IS its page, so it normalizes rather than renders: one `sharp`
+				 * pass, then straight into the pages. What the pass is for — the hosted page is
+				 * the artifact the reader gets, so it must not come out dependent on how the
+				 * creator's camera or export tool happened to write it: orientation baked in
+				 * and its metadata (which reads orientation, location, sometimes the tool's
+				 * profile) stripped, decoded dimensions bounded so a pathological upload costs
+				 * bounded decode and bandwidth, and the format kept (PNG stays PNG; line art
+				 * keeps its crispness, and the source's own quality is what is served —
+				 * creator-controlled, as the set story promises).
+				 */
+				const normalized = sharp(downloaded[i])
+					.rotate()
+					.resize({
+						width: PAGE_MAX_PIXELS,
+						height: PAGE_MAX_PIXELS,
+						fit: "inside",
+						withoutEnlargement: true,
+					});
+				const ext = source.mimeType === "image/png" ? "png" : "jpg";
+				const leafPage = join(dir, `leaf-001.${ext}`);
+				await (ext === "png" ? normalized.png() : normalized.jpeg({ quality: 85 })).toFile(
+					leafPage,
 				);
+				rendered.push([{ file: leafPage, mime: ext === "png" ? "image/png" : "image/jpeg" }]);
+			} else {
+				/*
+				 * Render this file in one `pdftoppm` invocation rather than page by page.
+				 *
+				 * Poppler parses the document once and writes `page-001.jpg`, `page-002.jpg`, ….
+				 * Spawning it per page re-parses the file every time, which on a 200-page graphic
+				 * novel is the difference between one pass and two hundred.
+				 */
+				const proc = Bun.spawn(
+					["pdftoppm", "-jpeg", "-r", String(RENDER_DPI), downloaded[i], join(dir, "page")],
+					{ stdout: "ignore", stderr: "pipe" },
+				);
+				if ((await proc.exited) !== 0) {
+					throw new Error(
+						`pdftoppm failed for ${source.filename || source.file}: ${(await new Response(proc.stderr).text()).trim()}`,
+					);
+				}
+				// Sorted by name, which poppler zero-pads — so lexical order IS page order.
+				// Reading the directory rather than assuming the filenames means a document that
+				// poppler numbered differently than expected still lands in the right sequence.
+				const files = (await readdir(dir)).filter((f) => f.endsWith(".jpg")).sort();
+				if (files.length === 0) {
+					throw new Error(`pdftoppm produced no pages for ${source.filename || source.file}`);
+				}
+				rendered.push(files.map((f) => ({ file: join(dir, f), mime: "image/jpeg" })));
 			}
-			// Sorted by name, which poppler zero-pads — so lexical order IS page order.
-			// Reading the directory rather than assuming the filenames means a document that
-			// poppler numbered differently than expected still lands in the right sequence.
-			const files = (await readdir(dir)).filter((f) => f.endsWith(".jpg")).sort();
-			if (files.length === 0) {
-				throw new Error(`pdftoppm produced no pages for ${source.filename || source.file}`);
-			}
-			rendered.push(files.map((f) => join(dir, f)));
-			// 🚨 This source's temp copy dies HERE — the moment its poppler pass ends — not
+			// 🚨 This source's temp copy dies HERE — the moment its processing pass ends — not
 			// in the finally below. Everything after the render loop is uploads and database
-			// writes; holding a delivered PDF's copy through them is residency the caps have
-			// no reason to pay for. (Poppler reads a file, so this job cannot read in place
-			// the way the ffmpeg jobs can; the one thing it never does is keep a copy a
-			// moment past this source's only reader's death.)
+			// writes; holding a delivered file's copy through them is residency the caps have
+			// no reason to pay for. (pdftoppm and sharp both read files, so neither reads in
+			// place the way the ffmpeg jobs can; the one thing this job never does is keep a
+			// copy a moment past its only reader's death.)
 			await rm(downloaded[i], { force: true }).catch(() => {});
 			downloaded[i] = "";
 		}
@@ -189,15 +247,19 @@ export async function renderPaged(data: RenderPagedData) {
 
 		const prefix = `creators/${work.creatorId}/ebook/${work.id}/${randomUUID().replace(/-/g, "")}`;
 		const flat = rendered.flat();
-		for (const [i, file] of flat.entries()) {
-			const bytes = new Uint8Array(await readFile(file));
-			const key = `${prefix}/page-${String(i + 1).padStart(4, "0")}.jpg`;
+		for (const [i, page_] of flat.entries()) {
+			const bytes = new Uint8Array(await readFile(page_.file));
+			// The extension and content type follow the page's own format: JPEG for what the
+			// pdftoppm pass wrote and for JPEG leaves, PNG for PNG leaves — which is also
+			// what the reader's <img> serves and what a download of "just this page" gets.
+			const ext = page_.mime === "image/png" ? "png" : "jpg";
+			const key = `${prefix}/page-${String(i + 1).padStart(4, "0")}.${ext}`;
 			// 🚨 PRIVATE, like every other derived object. The whole reason for this job is
 			// that pages can be checked one at a time; a public page defeats it entirely.
-			await storage.upload(key, bytes, "image/jpeg", "private");
+			await storage.upload(key, bytes, page_.mime, "private");
 			// This page is off the disk the moment its upload lands, same as the
 			// transcode's segments — the scratch dirs hold only pages not yet uploaded.
-			await rm(file, { force: true }).catch(() => {});
+			await rm(page_.file, { force: true }).catch(() => {});
 
 			const metadata = await sharp(bytes).metadata();
 			const width = metadata.width ?? 0;
