@@ -202,6 +202,6 @@ export async function askRerender(work: WorkRow): Promise<TranscodingJobRow | nu
 		.insert(transcodingJobs)
 		.values({ workId: work.id, mediaType: "ebook", status: "pending" })
 		.returning();
-	await queue.send(QUEUES.RASTERIZE_EBOOK, { jobId: job.id }, JOB_OPTIONS[QUEUES.RASTERIZE_EBOOK]);
+	await queue.send(QUEUES.RENDER_PAGED, { jobId: job.id }, JOB_OPTIONS[QUEUES.RENDER_PAGED]);
 	return job;
 }

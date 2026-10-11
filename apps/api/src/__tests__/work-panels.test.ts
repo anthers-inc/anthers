@@ -15,7 +15,7 @@ import { transcodingJobs, users, workPages, workPanels, works } from "@anthers/d
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq } from "drizzle-orm";
 import app from "../index";
-import { rasterizeEbook } from "../jobs/rasterize-ebook.js";
+import { renderPaged } from "../jobs/render-paged.js";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -125,7 +125,7 @@ describe("/works/:id/panels", () => {
 			.insert(transcodingJobs)
 			.values({ workId, mediaType: "ebook", status: "pending", progress: 0 })
 			.returning({ id: transcodingJobs.id });
-		await rasterizeEbook({ jobId: job.id });
+		await renderPaged({ jobId: job.id });
 	}, DB_SETUP_TIMEOUT);
 
 	afterAll(async () => {

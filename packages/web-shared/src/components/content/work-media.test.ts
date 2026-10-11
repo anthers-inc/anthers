@@ -5,7 +5,7 @@
  * 🚨 **Each number is a claim about the pipeline behind the medium, not a UI preference** —
  * the reasoning lives on `fileRules` itself. This suite fails when somebody edits a cap
  * without revisiting that arithmetic: a PDF raising past 2 GB breaks the rasterize job's
- * disk budget (`apps/api/src/jobs/rasterize-ebook.ts` on App Platform's 4 GiB ephemeral
+ * disk budget (`apps/api/src/jobs/render-paged.ts` on App Platform's 4 GiB ephemeral
  * filesystem), and the image cap past 20 MB puts a full-size upload through the in-memory
  * direct route (`POST /api/content/media-upload/direct`). Change a number here only after
  * changing the constraint it encodes.
@@ -33,9 +33,11 @@ describe("fileRules", () => {
 		expect(fileRules("comic").maxSize).toBeGreaterThanOrEqual(1.5 * GB);
 	});
 
-	it("takes PDFs for paged kinds and nothing else", () => {
-		expect(fileRules("comic").accept).toBe("application/pdf");
-		expect(fileRules("ebook").accept).toBe("application/pdf");
+	it("takes page images and PDFs for the paged kinds, and only the medium's own type for the rest", () => {
+		// The lead path: a JPG or PNG page image; the PDF beside it, because a
+		// whole-book master is what a creator holds and the set is one set either way.
+		expect(fileRules("comic").accept).toBe("image/jpeg,image/png,application/pdf");
+		expect(fileRules("ebook").accept).toBe("image/jpeg,image/png,application/pdf");
 		expect(fileRules("video").accept).toBe("video/*");
 		expect(fileRules("audio").accept).toBe("audio/*");
 		expect(fileRules("image").accept).toBe("image/*");

@@ -169,8 +169,8 @@ describe("each kind with a file is processed by its medium's pipeline", () => {
 	for (const [type, mediaType, queueName] of [
 		["music", "audio", QUEUES.PROCESS_AUDIO],
 		["audio", "audio", QUEUES.PROCESS_AUDIO],
-		["comic", "ebook", QUEUES.RASTERIZE_EBOOK],
-		["ebook", "ebook", QUEUES.RASTERIZE_EBOOK],
+		["comic", "ebook", QUEUES.RENDER_PAGED],
+		["ebook", "ebook", QUEUES.RENDER_PAGED],
 	] as const) {
 		it(`sends a ${type} Work's file to ${queueName}, and waits for it before release`, async () => {
 			const workId = await createWithoutFile(type);

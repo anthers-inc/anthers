@@ -174,7 +174,7 @@ export async function ensureQueueReady(): Promise<void> {
 export const QUEUES = {
 	TRANSCODE_VIDEO: "transcode-video",
 	PROCESS_AUDIO: "process-audio",
-	RASTERIZE_EBOOK: "rasterize-ebook", // Render an uploaded PDF to private per-page images
+	RENDER_PAGED: "render-paged", // Render a paged Work's source set (PDFs and page images) to private per-page images
 	DISTRIBUTE_POOL: "distribute-pool",
 	SETTLE_CYCLE: "settle-cycle", // Credit each ended month from its paid invoices; see settle-cycle.ts
 	// Move settled, held credits into each creator's connected-account balance, 14 days
@@ -308,7 +308,7 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryDelay: 60,
 		expireInMinutes: 15,
 	},
-	[QUEUES.RASTERIZE_EBOOK]: {
+	[QUEUES.RENDER_PAGED]: {
 		retryLimit: 2,
 		retryDelay: 60,
 		// A long graphic novel is one poppler pass plus an upload per page; generous for
@@ -442,6 +442,11 @@ export const RETIRED_QUEUES: readonly string[] = [
 	// from the code on 2026-09-13.
 	"cross-publish",
 	"fetch-metrics",
+	// The paged renderer's old name, retired on 2026-10-11: the job stopped being an
+	// ebook job when the paged kinds' ingest became its own pipeline ("render-paged") —
+	// the EPUB era's "ebook" ingest is a different job on a different table, so the old
+	// name would have said the opposite of what the handler does.
+	"rasterize-ebook",
 ];
 
 /**

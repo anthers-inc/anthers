@@ -204,7 +204,7 @@ describe("resumeOrphanedTranscodes", () => {
 		// wearing a plausible error. A test that only covered video and audio would agree
 		// with the broken version completely.
 		expect(sentFor(audio.jobId)).toEqual([QUEUES.PROCESS_AUDIO]);
-		expect(sentFor(ebook.jobId)).toEqual([QUEUES.RASTERIZE_EBOOK]);
+		expect(sentFor(ebook.jobId)).toEqual([QUEUES.RENDER_PAGED]);
 	});
 
 	it("skips an unrecognized mediaType rather than sending it somewhere", async () => {

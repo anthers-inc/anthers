@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The source set of a comic or book — the files its pages render from, as the creator
- * arranges them (Parker, 2026-10-10: one PDF or several, each file's pages a contiguous run
+ * arranges them (Parker, 2026-10-10 as PDFs; 2026-10-11 the adopted design: page images
+ * lead, PDFs stay as the whole-book alternate, and each file's pages are a contiguous run
  * in the set's order).
  *
  * 🚨 **The first file rides the same rail as every other Work's source upload** — created on
@@ -233,7 +234,7 @@ function MultipleFileInput({
 				style={{ display: "none" }}
 				ref={inputRef}
 				type="file"
-				accept="application/pdf"
+				accept="image/jpeg,image/png,application/pdf"
 				multiple
 				onChange={(e) => {
 					const files = Array.from(e.target.files ?? []);
@@ -259,7 +260,9 @@ function MultipleFileInput({
 					if (files.length > 0 && !disabled) onFiles(files);
 				}}
 			>
-				<span>{disabled ? "Working…" : "Drop a PDF or several, or click to browse"}</span>
+				<span>
+					{disabled ? "Working…" : "Drop page images (JPG or PNG) or PDFs, or click to browse"}
+				</span>
 			</button>
 		</div>
 	);

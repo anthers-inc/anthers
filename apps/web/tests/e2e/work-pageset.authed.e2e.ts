@@ -5,11 +5,11 @@
  * set the server then holds equals what the page showed.
  *
  * 🚨 **The walk is the honest answer to "could a creator load their book this way?"** The
- * per-page export shape (one PDF per page, a comic production pipeline's actual output) is
- * joined as many picks or one multi-pick; what this proves is the multi-pick, which is the
- * one path whose ordering claim ("attached in the order the picker handed them") is only
- * visible in a browser: the input's FileList order, the sequential uploads, the appended
- * positions and a re-render per file are all real there.
+ * per-page export shape (one file per page — PDFs, and the image leaves the lead path
+ * accepts) is joined as many picks or one multi-pick; what this proves is the multi-pick,
+ * which is the one path whose ordering claim ("attached in the order the picker handed
+ * them") is only visible in a browser: the input's FileList order, the sequential uploads,
+ * the appended positions and a re-render per file are all real there.
  *
  * Runs in the `authed` project on `media_fixture`, serial with the other walks it shares
  * the sweep shape with.
@@ -29,6 +29,18 @@ function stubPdf(name: string): { name: string; mimeType: string; buffer: Buffer
 		mimeType: "application/pdf",
 		buffer: Buffer.from(
 			"%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n",
+		),
+	};
+}
+
+/** A real 1×1 PNG — small but honest: the row's mime is what the pipeline would branch on. */
+function stubImage(name: string): { name: string; mimeType: string; buffer: Buffer } {
+	return {
+		name,
+		mimeType: "image/png",
+		buffer: Buffer.from(
+			"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+			"base64",
 		),
 	};
 }
@@ -78,13 +90,29 @@ test("a comic's set grows by a multi-pick, reorders and removes", async ({ page,
 	await page.getByRole("button", { name: /remove chapter two page/i }).click();
 	await expect(page.getByText(/chapter two page$/)).toHaveCount(0);
 
-	// The server's set equals what the page showed — order included.
+	// A page image joins the same way — the leaf path is the lead story, not the exotic one.
+	await page.locator('input[type="file"][multiple]').setInputFiles([stubImage("leaf page.png")]);
+	await expect(page.getByText(/leaf page,?$/)).toBeVisible({ timeout: 30_000 });
+
+	// The server's set equals what the page showed — order and mime included.
 	const [row] = await db.select({ id: works.id }).from(works).where(eq(works.title, TITLE));
 	const set = await db.select().from(workSourceFiles).where(eq(workSourceFiles.workId, row.id));
 	console.log(
 		"[pageset] final set:",
-		set.map((f) => ({ pos: f.position, id: f.id, file: f.file, name: f.filename })),
+		set.map((f) => ({
+			pos: f.position,
+			id: f.id,
+			file: f.file,
+			name: f.filename,
+			mime: f.mimeType,
+		})),
 	);
 	// Ordering is the column's whole job; this is the assertion the list alone cannot make.
-	expect(set.map((f) => f.filename)).toEqual(["chapter three page.pdf", "lead page.pdf"]);
+	expect(set.map((f) => f.filename)).toEqual([
+		"chapter three page.pdf",
+		"lead page.pdf",
+		"leaf page.png",
+	]);
+	// The leaf's mime lands as the leaf itself declared it, not a defaulted PDF.
+	expect(set[2]?.mimeType).toBe("image/png");
 });
