@@ -13,7 +13,8 @@ import {
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import FeedTile from "../components/cards/FeedTile";
-import FeedFilterSections from "../components/layout/FeedFilterSections";
+import AccessFilterSection from "../components/layout/AccessFilterSection";
+import SharedFilterSections from "../components/layout/SharedFilterSections";
 import { useSidebar } from "../components/layout/SidebarContext";
 
 /** One bookmarked post as the sidebar's shelf shows it. */
@@ -22,15 +23,17 @@ interface BookmarkedPost {
 	post: { title: string | null; slug: string; publicId: number } | null;
 }
 
+/**
+ * The Feed's MIDDLE-SECTION sidebar content (the house structure, 2026-10-11): the
+ * bookmarked strip — the only part of this sidebar that is not a filter — and the
+ * feed-unique Access control. The tab-shared Type and Tags sections register
+ * separately, below the layout's second divider.
+ */
 function FeedSidebarContent({
 	access,
-	contentType,
-	tags,
 	onUpdateParams,
 }: {
 	access: string;
-	contentType: string;
-	tags: string;
 	onUpdateParams: (updates: Record<string, string>) => void;
 }) {
 	// The bookmarks are the section: a real fetch of the shelf ordered by the user's
@@ -82,20 +85,16 @@ function FeedSidebarContent({
 				)}
 			</section>
 
-			{/* The feed's own filters: what the stream binds, in the order the page reads. */}
-			<FeedFilterSections
-				access={access}
-				contentType={contentType}
-				tags={tags}
-				onUpdateParams={onUpdateParams}
-			/>
+			{/* Access stays feed-unique; the tab-shared Type and Tags live below the
+			    layout's second divider, registered by the page as `sharedContent`. */}
+			<AccessFilterSection access={access} onUpdateParams={onUpdateParams} />
 		</div>
 	);
 }
 
 export default function AuthenticatedHomePage() {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const { setPageContent } = useSidebar();
+	const { setPageContent, setSharedContent } = useSidebar();
 	/** One stream over both kinds — `kind` says which card to render. */
 	type FeedEntry = { kind: "post" | "release"; id: number } & Record<string, unknown>;
 	const [feedPosts, setFeedPosts] = useState<FeedEntry[]>([]);
@@ -126,18 +125,27 @@ export default function AuthenticatedHomePage() {
 		[setSearchParams],
 	);
 
-	// Register page-specific sidebar content
+	// Register the sidebar's two pieces: the Feed's middle section, and the tab-shared
+	// filters (house structure, 2026-10-11). The type adapter translates the shared
+	// vocabulary into the feed route's params: the Work types are the `media_type`
+	// query, and "posts" — a kind of feed entry, not a Work type — rides the same
+	// URL param (the type list's ids are page words past the Work types) while the
+	// fetch below translates it to `kind=posts`.
 	useEffect(() => {
-		setPageContent(
-			<FeedSidebarContent
-				access={access}
-				contentType={contentType}
+		setPageContent(<FeedSidebarContent access={access} onUpdateParams={updateParams} />);
+		setSharedContent(
+			<SharedFilterSections
+				type={contentType}
+				onType={(id) => updateParams({ media_type: id })}
 				tags={tags}
-				onUpdateParams={updateParams}
+				onTags={(value) => updateParams({ tags: value })}
 			/>,
 		);
-		return () => setPageContent(null);
-	}, [setPageContent, contentType, access, tags, updateParams]);
+		return () => {
+			setPageContent(null);
+			setSharedContent(null);
+		};
+	}, [setPageContent, setSharedContent, contentType, access, tags, updateParams]);
 
 	useEffect(() => {
 		// Fetch the user's feed. Guard on res.ok before reading the body: an error
@@ -150,7 +158,14 @@ export default function AuthenticatedHomePage() {
 		client.api.accounts.me.feed
 			.$get({
 				query: {
-					...(contentType ? { media_type: contentType } : {}),
+					// "posts" is not a Work type; it is the feed's kind filter over its other
+					// half of entries. A Work type narrows the work side and leaves posts
+					// in place (a post survives a type filter through what it announces).
+					...(contentType === "posts"
+						? { kind: "posts" }
+						: contentType
+							? { media_type: contentType }
+							: {}),
 					...(access ? { access } : {}),
 					...(tags ? { tags } : {}),
 				},
