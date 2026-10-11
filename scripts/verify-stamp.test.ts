@@ -336,14 +336,24 @@ describe("the Makefile's plumbing", () => {
 		expect(fast).toContain("verify-fast-inner");
 
 		const inner = recipe("verify-fast-inner");
-		for (const step of ["typecheck", "lint", "econ:figures", "lex:check", "db:snapshots", "promote-version", "bun test"]) {
+		for (const step of [
+			"typecheck",
+			"lint",
+			"econ:figures",
+			"lex:check",
+			"db:snapshots",
+			"promote-version",
+			"bun test",
+		]) {
 			expect(inner).toContain(step);
 		}
 		// The tier is defined by absence: the browser gate and its suites belong to CI now.
 		expect(inner).not.toContain("playwright");
 		expect(inner).not.toContain("e2e-preflight");
 		expect(inner.trimEnd().endsWith("verify-stamp.ts write verify-fast")).toBe(true);
-		expect(recipe("verify-fast-inner").indexOf("verify-stamp")).toBeGreaterThan(recipe("verify-fast-inner").indexOf("bun test"));
+		expect(recipe("verify-fast-inner").indexOf("verify-stamp")).toBeGreaterThan(
+			recipe("verify-fast-inner").indexOf("bun test"),
+		);
 	});
 
 	it("the browser targets route through the same lock", () => {

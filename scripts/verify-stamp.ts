@@ -42,8 +42,8 @@ import {
 	existsSync,
 	mkdirSync,
 	openSync,
-	readFileSync,
 	readdirSync,
+	readFileSync,
 	rmSync,
 	statSync,
 	writeFileSync,
@@ -220,7 +220,9 @@ async function main(): Promise<number> {
 		// Never a nonzero exit: the stamp is an optimization a green suite must not depend on.
 		return 0;
 	}
-	console.error("usage: bun run scripts/verify-stamp.ts write [verify|verify-fast] | check <head> [verify|verify-fast]");
+	console.error(
+		"usage: bun run scripts/verify-stamp.ts write [verify|verify-fast] | check <head> [verify|verify-fast]",
+	);
 	return 64;
 }
 
