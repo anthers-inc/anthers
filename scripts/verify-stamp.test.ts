@@ -3,11 +3,12 @@
  * The verify stamp's contract, unit-tested and driven for real through the CLI.
  *
  * The stamp is the pre-push hook's reason to SKIP the suite, so every test that matters is
- * one where the stamp must not exist: a dirty tracked tree, a stale stamp, an unknown head.
- * A stamp the hook wrongly trusts is a gate that turns itself off — the same category of
- * failure as the empty-ref-list skip that once let a lint-red main accept a push. The
- * Makefile assertions keep the plumbing (`verify` → `heavy-run.sh` → `verify-inner`, the
- * stamp write at the end) from decaying separately, since nothing else pairs the pieces.
+ * one where the stamp must not exist: a dirty tracked tree, a stale stamp, an unknown head,
+ * a fast stamp where a full one is required. A stamp the hook wrongly trusts is a gate that
+ * turns itself off — the same category of failure as the empty-ref-list skip that once let
+ * a lint-red main accept a push. The Makefile assertions keep the plumbing (`verify` and
+ * `verify-fast` → `heavy-run.sh` → their inner bodies, each stamping its own tier at the
+ * end) from decaying separately, since nothing else pairs the pieces.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -120,6 +121,33 @@ describe("checkStamp", () => {
 		expect(check.ok).toBe(true);
 	});
 
+	it("a fast stamp satisfies a fast check but never a full one", () => {
+		const head = commit("code.ts", "export const tiered = true;\n");
+		writeStamp({ cwd: repo, dir: stamps, tier: "verify-fast" });
+		const fast = checkStamp(head, { dir: stamps, requiredTier: "verify-fast" });
+		expect(fast.ok).toBe(true);
+		const full = checkStamp(head, { dir: stamps, requiredTier: "verify" });
+		expect(full.ok).toBe(false);
+		expect(full.reason).toBe("insufficient");
+	});
+
+	it("a stamp that started fast and then ran full answers the dearest check either way", () => {
+		const head = commit("code.ts", "export const upgraded = true;\n");
+		writeStamp({ cwd: repo, dir: stamps, tier: "verify-fast" });
+		writeStamp({ cwd: repo, dir: stamps, tier: "verify" });
+		expect(checkStamp(head, { dir: stamps, requiredTier: "verify" }).ok).toBe(true);
+		expect(checkStamp(head, { dir: stamps, requiredTier: "verify-fast" }).ok).toBe(true);
+	});
+
+	it("content naming neither tier is trusted for nothing", () => {
+		const head = commit("code.ts", "export const unrecognized = true;\n");
+		writeFileSync(stampFileFor(head, { dir: stamps }), "green\n");
+		expect(checkStamp(head, { dir: stamps, requiredTier: "verify-fast" })).toMatchObject({
+			ok: false,
+			reason: "unrecognized",
+		});
+	});
+
 	it("answers missing for an unknown head", () => {
 		expect(checkStamp("0".repeat(40), { dir: stamps })).toMatchObject({
 			ok: false,
@@ -201,6 +229,62 @@ describe("the CLI the hook calls", () => {
 		expect(existsSync(stampFileFor(head, { dir: stamps }))).toBe(true);
 	});
 
+	it("write and check carry the tier through the CLI the hook passes", () => {
+		const fastHead = commit("code.ts", "export const cliTiered = true;\n");
+		const write = Bun.spawnSync(
+			[
+				process.execPath,
+				"run",
+				join(REPO_ROOT, "scripts", "verify-stamp.ts"),
+				"write",
+				"verify-fast",
+			],
+			{
+				cwd: repo,
+				stdout: "pipe",
+				stderr: "pipe",
+				env: { ...SANDBOX_ENV, ANTHERS_VERIFY_STAMPS: stamps },
+			},
+		);
+		expect(write.exitCode).toBe(0);
+		// The fast stamp satisfies the fast check…
+		const fast = Bun.spawnSync(
+			[
+				process.execPath,
+				"run",
+				join(REPO_ROOT, "scripts", "verify-stamp.ts"),
+				"check",
+				fastHead,
+				"verify-fast",
+			],
+			{
+				cwd: dir,
+				stdout: "pipe",
+				stderr: "pipe",
+				env: { ...SANDBOX_ENV, ANTHERS_VERIFY_STAMPS: stamps },
+			},
+		);
+		expect(fast.exitCode).toBe(0);
+		// …and never the full one.
+		const full = Bun.spawnSync(
+			[
+				process.execPath,
+				"run",
+				join(REPO_ROOT, "scripts", "verify-stamp.ts"),
+				"check",
+				fastHead,
+				"verify",
+			],
+			{
+				cwd: dir,
+				stdout: "pipe",
+				stderr: "pipe",
+				env: { ...SANDBOX_ENV, ANTHERS_VERIFY_STAMPS: stamps },
+			},
+		);
+		expect(full.exitCode).toBe(1);
+	});
+
 	it("write under CI writes nothing, quietly, and still exits 0", () => {
 		const head = commit("code.ts", "export const ciWrite = true;\n");
 		const res = Bun.spawnSync(
@@ -242,7 +326,24 @@ describe("the Makefile's plumbing", () => {
 			expect(inner).toContain(step);
 		}
 		expect(inner.indexOf("bun test")).toBeLessThan(inner.indexOf("playwright test"));
-		expect(inner.trimEnd().endsWith("verify-stamp.ts write")).toBe(true);
+		expect(inner.trimEnd().endsWith("verify-stamp.ts write verify")).toBe(true);
+	});
+
+	it("verify-fast runs the suites a push gate runs, stamps a fast tier, and never spins up Playwright", () => {
+		const fast = recipe("verify-fast");
+		// Same serialized door as `verify`: the wrapper holds the heavy-run lock.
+		expect(fast).toContain("heavy-run.sh");
+		expect(fast).toContain("verify-fast-inner");
+
+		const inner = recipe("verify-fast-inner");
+		for (const step of ["typecheck", "lint", "econ:figures", "lex:check", "db:snapshots", "promote-version", "bun test"]) {
+			expect(inner).toContain(step);
+		}
+		// The tier is defined by absence: the browser gate and its suites belong to CI now.
+		expect(inner).not.toContain("playwright");
+		expect(inner).not.toContain("e2e-preflight");
+		expect(inner.trimEnd().endsWith("verify-stamp.ts write verify-fast")).toBe(true);
+		expect(recipe("verify-fast-inner").indexOf("verify-stamp")).toBeGreaterThan(recipe("verify-fast-inner").indexOf("bun test"));
 	});
 
 	it("the browser targets route through the same lock", () => {

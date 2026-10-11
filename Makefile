@@ -3,7 +3,7 @@
 .PHONY: help install dev dev-api dev-worker dev-web down \
         db-generate db-migrate db-push db-studio db-seed sessions-clean \
         gauntlet-reset gauntlet-clean stripe-webhooks \
-        verify verify-inner verify-docs typecheck test lint lint-fix format \
+        verify verify-inner verify-fast verify-fast-inner verify-docs typecheck test lint lint-fix format \
         e2e-install e2e-preflight screenshots test-e2e test-e2e-inner test-e2e-ui test-e2e-ui-inner test-gauntlet test-gauntlet-inner \
         spec-diff spec-apply deploy-status promote-version release-notes-audit resource-snapshot resource-alerts webhook-check stripe-walk dev-local \
         worktree worktrees worktree-remove \
@@ -82,7 +82,7 @@ install: ## Install all dependencies
 # anyone remembering. Undo with: git config --unset core.hooksPath
 hooks: ## Point git at the repo's tracked hooks (.githooks/)
 	@git config core.hooksPath .githooks
-	@echo "git hooks → .githooks (pre-push runs 'make verify', or 'make verify-docs' when only markdown changed; bypass with git push --no-verify)"
+	@echo "git hooks → .githooks (pre-push verifies the push: 'make verify' to main or release, 'make verify-fast' to a task branch, 'make verify-docs' when only markdown changed; bypass with git push --no-verify)"
 
 # Secrets come from the "Anthers Dev" Bitwarden project, not from `.env`. `bws run` sets
 # REAL environment variables, and those beat Bun's `.env` loading, so a stale line left in
@@ -291,7 +291,29 @@ verify-inner:
 	bun test
 	$(MAKE) e2e-preflight
 	$(SESSION_BROWSER) bunx playwright test
-	bun run scripts/verify-stamp.ts write
+	bun run scripts/verify-stamp.ts write verify
+
+# `verify-fast` is what a push to a task branch verifies at the gate: everything except
+# what spins up Playwright. The browser suites still run — in CI, on the PR head and on
+# every merge group — where they are the responsibility of the pipeline rather than of the
+# session pushing. The tier's stamp is a fast stamp, which satisfies only a fast push; the
+# full suite's stamp satisfies everything (see scripts/verify-stamp.ts). Pushes to
+# `main` or `release` keep the whole `verify` regardless of what they change: `release` is
+# the deploy gate, and `main` is the branch every merge group is built on.
+verify-fast: ## Run what a task-branch push verifies: typecheck, lint, the unit suites — no Playwright (the browser suites run in CI)
+	@sh scripts/heavy-run.sh make --no-print-directory verify-fast-inner
+
+# `verify-fast`'s inner body, under the same lock shape as `verify`: the wrapper holds the
+# heavy-run lock, and the test preload inside `bun test` sees the lock already held.
+verify-fast-inner:
+	bun run typecheck
+	bun run lint
+	bun run econ:figures --check
+	bun run lex:check
+	bun run db:snapshots
+	bun run scripts/promote-version.ts --check
+	bun test
+	bun run scripts/verify-stamp.ts write verify-fast
 
 # The part of `verify` that can see a markdown file, which the pre-push hook runs instead of
 # `verify` when every file a push changes is markdown. Biome is here because it is cheap and

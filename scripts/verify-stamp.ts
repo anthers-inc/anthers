@@ -10,6 +10,16 @@
  * the tree a push is about to send, re-verifying it adds nothing but a second chance to
  * flake.
  *
+ * **Tiers.** Since the push gate routes by destination (2026-10-11), a push to a task
+ * branch asks the suite less than a push to `main` or `release`: the fast tier runs
+ * everything but Playwright, whose suites are CI's responsibility. A stamp carries the
+ * tier that ran. **A full stamp satisfies any tier, and a fast stamp satisfies only a
+ * fast push** — the direction that matters is that a cheaper run can never stand in for
+ * a dearer one, which is why `requiredTier` defaults to `verify`. A head that first ran
+ * fast and then ran full carries both markers in its file: writes append, so the file
+ * answers with the dearest suite that has ever passed at that head. A stamp file whose
+ * content names neither marker is trusted for nothing — every doubt fails closed.
+ *
  * **The stamp is keyed on the head, and only a tracked-clean tree may write one.** The
  * hook verifies the pushed COMMIT, and a hand run in a worktree with uncommitted changes
  * verified that commit plus whatever was dirty — different tree, no stamp. Untracked
@@ -21,8 +31,9 @@
  * Stamps live under `~/.cache/anthers/verify-stamps/<head>` (tests override with
  * `ANTHERS_VERIFY_STAMPS`) and are trusted for 24 hours — a window, not a proof: the
  * verified content never changes, but the environment around it can. Everything fails
- * closed: a missing, stale or unreadable stamp is the same as no stamp, and the hook runs
- * the suite. `check` answers by its exit code; the hook must never read further than that.
+ * closed: a missing, stale, unreadable or unrecognized stamp is the same as no stamp,
+ * and the hook runs the suite. `check` answers by its exit code; the hook must never
+ * read further than that.
  */
 
 import { spawnSync } from "node:child_process";
@@ -31,6 +42,7 @@ import {
 	existsSync,
 	mkdirSync,
 	openSync,
+	readFileSync,
 	readdirSync,
 	rmSync,
 	statSync,
@@ -42,6 +54,9 @@ import { join } from "node:path";
 export const STAMP_DIR_DEFAULT = join(homedir(), ".cache", "anthers", "verify-stamps");
 export const STAMP_WINDOW_MINUTES = 24 * 60;
 
+/** Which suite a stamp records, or which a check must be satisfied by. */
+export type StampTier = "verify" | "verify-fast";
+
 export interface StampOptions {
 	/** Directory stamps live in (tests override the default). */
 	dir?: string;
@@ -49,8 +64,16 @@ export interface StampOptions {
 	now?: Date;
 	/** cwd whose HEAD and tracked state are read (defaults to this process's). */
 	cwd?: string;
+	/** For `writeStamp`, the tier that ran (defaults to `verify`); for the CLI, see `main`. */
+	tier?: StampTier;
+	/** For `checkStamp`, the tier the caller needs (defaults to `verify`, the strict side). */
+	requiredTier?: StampTier;
 	log?: (line: string) => void;
 }
+
+/** The markers' exact texts — neither is a substring of the other, so a content read names its tier. */
+export const FULL_STAMP_MARKER = "make verify green at ";
+export const FAST_STAMP_MARKER = "make verify-fast green at ";
 
 function stampDir(options: StampOptions): string {
 	return options.dir ?? process.env.ANTHERS_VERIFY_STAMPS ?? STAMP_DIR_DEFAULT;
@@ -104,9 +127,12 @@ export function writeStamp(options: StampOptions = {}): boolean {
 	const file = stampFileFor(head, options);
 	mkdirSync(dir, { recursive: true });
 	// Open-then-write instead of truncate: a re-entrant run can never leave a half file
-	// behind, and the mtime is the freshness the check reads.
+	// behind, the mtime is the freshness the check reads, and an append is what lets a
+	// head upgrade its stamp — a head that ran fast and then ran full carries both
+	// markers, and answers the dearest check either would.
 	const fd = openSync(file, "a");
-	writeFileSync(fd, `${(options.now ?? new Date()).toISOString()} make verify green at ${head}\n`);
+	const tier = options.tier ?? "verify";
+	writeFileSync(fd, `${(options.now ?? new Date()).toISOString()} make ${tier} green at ${head}\n`);
 	closeSync(fd);
 	pruneExpiredStamps(options);
 	return true;
@@ -138,8 +164,8 @@ export interface StampCheck {
 	ok: boolean;
 	/** When a stamp was found (fresh or not), its timestamp — the message a skip prints. */
 	writtenAt?: Date;
-	/** Why the stamp was not trusted: nothing there, or older than the window. */
-	reason?: "missing" | "expired";
+	/** Why the stamp was not trusted: nothing there, older than the window, content naming no tier, or a tier that does not satisfy the required one. */
+	reason?: "missing" | "expired" | "unrecognized" | "insufficient";
 }
 
 export function checkStamp(head: string | undefined, options: StampOptions = {}): StampCheck {
@@ -148,7 +174,20 @@ export function checkStamp(head: string | undefined, options: StampOptions = {})
 	const writtenAt = statSync(file).mtime;
 	const ageMinutes = ((options.now ?? new Date()).getTime() - writtenAt.getTime()) / 60_000;
 	if (ageMinutes > STAMP_WINDOW_MINUTES) return { ok: false, reason: "expired", writtenAt };
-	return { ok: true, writtenAt };
+	try {
+		const content = readFileSync(file, "utf8");
+		const hasFull = content.includes(FULL_STAMP_MARKER);
+		const hasFast = content.includes(FAST_STAMP_MARKER);
+		// A full stamp satisfies any tier; a fast stamp satisfies only a fast check. Content
+		// naming neither marker is trusted for nothing — fail closed on every doubt.
+		if (!hasFull && !hasFast) return { ok: false, reason: "unrecognized", writtenAt };
+		const requiredTier = options.requiredTier ?? "verify";
+		const ok = requiredTier === "verify-fast" ? hasFull || hasFast : hasFull;
+		return ok ? { ok: true, writtenAt } : { ok: false, reason: "insufficient", writtenAt };
+	} catch {
+		// An unreadable stamp is the same as no stamp.
+		return { ok: false, reason: "unrecognized", writtenAt };
+	}
 }
 
 /** The skip message's human half: how old the stamp is, as the stamp-check will print it. */
@@ -160,9 +199,12 @@ export function stampAge(writtenAt: Date, now: Date = new Date()): string {
 }
 
 async function main(): Promise<number> {
-	const [command, head] = process.argv.slice(2);
+	const [command, head, tier] = process.argv.slice(2);
 	if (command === "check") {
-		const result = checkStamp(head);
+		// The required tier defaults to `verify`, the strict side: a caller that passes no
+		// tier is asking what the full suite's gate would ask.
+		const requiredTier: StampTier = tier === "verify-fast" ? "verify-fast" : "verify";
+		const result = checkStamp(head, { requiredTier });
 		if (!result.ok) return 1;
 		const written = result.writtenAt ? stampAge(result.writtenAt) : "";
 		console.log(`green ${written}`.trim());
@@ -172,11 +214,13 @@ async function main(): Promise<number> {
 		// CI runs the suite's steps directly (never `make verify`) and its runners are
 		// ephemeral — a stamp on a runner would live seconds and mean nothing; skip quietly.
 		if (process.env.CI !== undefined) return 0;
-		writeStamp({ log: (line) => console.error(line) });
+		// For `write`, the tier is the argument right after the command: `write verify-fast`.
+		const stampTier: StampTier = head === "verify-fast" ? "verify-fast" : "verify";
+		writeStamp({ tier: stampTier, log: (line) => console.error(line) });
 		// Never a nonzero exit: the stamp is an optimization a green suite must not depend on.
 		return 0;
 	}
-	console.error("usage: bun run scripts/verify-stamp.ts write | check <head>");
+	console.error("usage: bun run scripts/verify-stamp.ts write [verify|verify-fast] | check <head> [verify|verify-fast]");
 	return 64;
 }
 
