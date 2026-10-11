@@ -1,25 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The Resources marketing page — the Meadow-styled hub for everything that shows
-// our work: calculators (run it yourself) and comparisons (how we stack up). The
-// page is wrapped in the shared <MeadowDecor> (pollen + woven side vines) at the
-// route level, so this file styles content only.
+// our work: explainers (the platform, drawn), calculators (run it yourself) and
+// comparisons (how we stack up). The page is wrapped in the shared <MeadowDecor>
+// (pollen + woven side vines) at the route level, so this file styles content only.
 //
 // Two axes, kept deliberately separate — the section says what *format* a resource
 // is, the card's tag says what *subject* it covers. Don't tag a card with its own
 // section name; that collapses the axes and is what made this page read as a pile
-// of posts. A Documentation section lands here once the vault exporter exists, which is
-// why the closing band points at the FAQ instead.
+// of posts.
 //
-// ⚠️ **An Explainers section stood first here until 2026-08-30**, holding the three
-// `/demo-*` pages. All four demos were deleted rather than rebuilt: each modeled the
-// economics in its own hardcoded numbers, so each could go wrong on its own while
-// every generated figure on the site stayed right. Two resources replace them —
-// creator financials, and where Anthers' own revenue goes — and both are built
-// against the shared model rather than typed. Until they land this page is honestly
-// two sections rather than three, which is better than a section advertising pages
-// that do not exist. The section is missing, not empty: an empty one would read as
-// a rendering bug.
+// ⚠️ **The demos' replacement is now fully in place.** An Explainers section stood
+// first until 2026-08-30, holding three /demo-* pages; all four demos were deleted
+// rather than rebuilt, because each modeled the economics in its own hardcoded
+// numbers, so each could go wrong on its own while every generated figure on the
+// site stayed right. The rule out of that deletion: a resource builds against the
+// shared model, or it does not exist. Creator financials became the monetization
+// calculator; the revenue resource is the drawing of where Anthers' own money
+// goes. The Explainers section below is back with one card in it, which is more
+// honest than a section holding demos that could lie.
 
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -36,6 +35,19 @@ import {
 } from "@heroicons/react/24/outline";
 
 const serif = { fontFamily: FONTS.fraunces };
+
+/** The drawn resources: they explain rather than compute, and they draw from the
+ * shared model — the rule out of the demos' deletion (see the file's header). */
+const EXPLAINERS: ResourceCard[] = [
+	{
+		to: "/resources/revenue",
+		title: "Where the money goes",
+		blurb:
+			"The whole pool, drawn: what comes in by Badge rung, what leaves at cost, and what funds free access, free storage and the other charitable programs, at each scale of the plan. Targets and estimates, not actuals.",
+		tag: "Money",
+		icon: BanknotesIcon,
+	},
+];
 
 interface ResourceCard {
 	to: string;
@@ -126,8 +138,23 @@ export default function ResourcesPage() {
 				</div>
 			</header>
 
-			{/* Calculators */}
+			{/* Explainers — the drawing of the platform itself; formerly the demos' home,
+			restored with the revenue resource (the demos' rule: build on the shared model,
+			or don't exist). Plain: it sits between the tinted hero and the calculators. */}
 			<Section>
+				<Reveal>
+					<Eyebrow>Explainers</Eyebrow>
+					<H2>The platform, drawn</H2>
+					<Lede>
+						Where the money goes, one pool at a time: what supporters bring in, what leaves at cost
+						first, and what the charitable programs receive from everything that remains.
+					</Lede>
+				</Reveal>
+				<ResourceGrid cards={EXPLAINERS} />
+			</Section>
+
+			{/* Calculators */}
+			<Section tint>
 				<Reveal>
 					<Eyebrow>Calculators</Eyebrow>
 					<H2>Run the numbers yourself</H2>
@@ -140,7 +167,7 @@ export default function ResourcesPage() {
 			</Section>
 
 			{/* Comparisons */}
-			<Section tint>
+			<Section>
 				<Reveal>
 					<Eyebrow>Comparisons</Eyebrow>
 					<H2>How we stack up</H2>
@@ -153,7 +180,7 @@ export default function ResourcesPage() {
 			</Section>
 
 			{/* The way onward when the tools above don't have the answer. */}
-			<Section>
+			<Section tint>
 				<Reveal>
 					<Eyebrow>Still looking?</Eyebrow>
 					<H2>Not finding what you need?</H2>

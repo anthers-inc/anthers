@@ -106,6 +106,15 @@ export interface PlanLedger {
 	timePoolToCreators: number;
 	/** The admin ceiling the budget honors (`ADMIN_CEILING`), for drawing. */
 	adminCeiling: number;
+	/**
+	 * The paying accounts apportioned across the modeled Badge rungs — the
+	 * inflow side of any public drawing of the full support dollar. Each
+	 * rung's money split composes from the published primitives against
+	 * `accounts × amount`, and the sum of the splits equals
+	 * `charitableRevenue + (timePoolToCreators − the Fund's free pools)` plus
+	 * card cost, by the model's own conservation.
+	 */
+	payersByRung: Array<{ amount: number; accounts: number }>;
 	/** The granular spending view: the overhead lines open, and free storage's two parts. */
 	spending: PlanSpending;
 }
@@ -174,6 +183,7 @@ export function planLedger(input: PlanPhaseInput): PlanLedger {
 		creators: base.creators,
 		payingAccounts: base.payingAccounts,
 		freeAccounts: base.freeAccounts,
+		payersByRung: base.bySupportRung,
 		charitableRevenue,
 		adminBudget,
 		adminActual: m.overhead,
@@ -197,4 +207,160 @@ export function planLedger(input: PlanPhaseInput): PlanLedger {
 			payingAllowances: m.payingAllowanceSubsidy,
 		},
 	};
+}
+
+// ── The authored plan ────────────────────────────────────────────────────────
+/**
+ * The plan's rows, **authored**, so the admin tool's seed and any generator
+ * read one source rather than two copies of nine rows — the same
+ * two-descriptions-of-one-fact defect the mix's history carries.
+ *
+ * ⚠️ **These rows are the plan as published.** The admin tool seeds them once
+ * and the operator edits the table afterwards; a materially changed plan means
+ * editing these rows in the same breath, so the next generated public surface
+ * draws the plan the operator means (the prompt-at-the-moment-the-information-
+ * exists rule from the machine rules — accepted cost of public-source
+ * generation). The phase labels are public copy.
+ */
+export const PLAN_DEFAULTS = { adminBudgetShare: ADMIN_CEILING, freeAccessShare: 0.1 } as const;
+
+/** One authored row of the plan's path, matching the plan tables' columns. */
+export interface AuthoredPlanPhase {
+	phase: number;
+	label: string;
+	accounts: number;
+	/** Share of accounts giving Anthers anything. */
+	payingShare: number;
+	staff: number;
+	tooling: number;
+	services: number;
+	adminBudgetShare: number | null;
+	freeAccessShare: number | null;
+}
+
+/** The path from launch through inflection 1 and one phase past it (2026-10-07 working sessions). */
+export const DEFAULT_PLAN_PHASES: readonly AuthoredPlanPhase[] = [
+	{
+		phase: 1,
+		label: "Launch — covering out-of-pocket",
+		accounts: 1_000,
+		payingShare: 0.3,
+		staff: 0,
+		tooling: 50,
+		services: 0,
+		adminBudgetShare: null,
+		freeAccessShare: null,
+	},
+	{
+		phase: 2,
+		label: "First tooling",
+		accounts: 2_000,
+		payingShare: 0.3,
+		staff: 0,
+		tooling: 100,
+		services: 50,
+		adminBudgetShare: null,
+		freeAccessShare: null,
+	},
+	{
+		phase: 3,
+		label: "Gathering",
+		accounts: 5_000,
+		payingShare: 0.3,
+		staff: 0,
+		tooling: 100,
+		services: 50,
+		adminBudgetShare: null,
+		freeAccessShare: null,
+	},
+	{
+		phase: 4,
+		label: "Token stipend",
+		accounts: 10_000,
+		payingShare: 0.3,
+		staff: 800,
+		tooling: 100,
+		services: 100,
+		adminBudgetShare: null,
+		freeAccessShare: null,
+	},
+	{
+		phase: 5,
+		label: "Part-time",
+		accounts: 15_000,
+		payingShare: 0.3,
+		staff: 1_800,
+		tooling: 150,
+		services: 150,
+		adminBudgetShare: null,
+		freeAccessShare: null,
+	},
+	{
+		phase: 6,
+		label: "Most-of-the-time",
+		accounts: 20_000,
+		payingShare: 0.3,
+		staff: 3_600,
+		tooling: 200,
+		services: 200,
+		adminBudgetShare: null,
+		freeAccessShare: null,
+	},
+	{
+		phase: 7,
+		label: "Near full-time",
+		accounts: 30_000,
+		payingShare: 0.3,
+		staff: 3_600,
+		tooling: 200,
+		services: 200,
+		adminBudgetShare: null,
+		freeAccessShare: null,
+	},
+	{
+		phase: 8,
+		label: "INFLECTION 1 — full-time",
+		accounts: 40_000,
+		payingShare: 0.3,
+		staff: 6_700,
+		tooling: 250,
+		services: 200,
+		adminBudgetShare: null,
+		freeAccessShare: null,
+	},
+	{
+		phase: 9,
+		label: "Full-time, room to spare",
+		accounts: 60_000,
+		payingShare: 0.3,
+		staff: 6_700,
+		tooling: 250,
+		services: 200,
+		adminBudgetShare: null,
+		freeAccessShare: null,
+	},
+];
+
+/** A phase row's effective shares against the plan's settings row. */
+function withShares(
+	row: Pick<AuthoredPlanPhase, "adminBudgetShare" | "freeAccessShare">,
+	settings: { adminBudgetShare: number; freeAccessShare: number },
+) {
+	return {
+		adminBudgetShare: row.adminBudgetShare ?? settings.adminBudgetShare,
+		freeAccessShare: row.freeAccessShare ?? settings.freeAccessShare,
+	};
+}
+
+/** One plan row at a settings row's defaults, computed — the tool's and generators' shared mapping. */
+export function planLedgerFor(
+	row: Omit<AuthoredPlanPhase, "phase" | "label">,
+	settings: { adminBudgetShare: number; freeAccessShare: number },
+): PlanLedger {
+	return planLedger({
+		accounts: row.accounts,
+		payingShare: row.payingShare,
+		staffing: { staff: row.staff, tooling: row.tooling, services: row.services },
+		...withShares(row, settings),
+	});
 }

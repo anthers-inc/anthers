@@ -15,139 +15,28 @@
  */
 import { db } from "@anthers/db/client";
 import { financialPlanPhases, financialPlanSettings } from "@anthers/db/schema";
-import { type PlanLedger, planLedger } from "@anthers/shared/financial-plan";
-import { ADMIN_CEILING } from "@anthers/shared/growth";
+import {
+	type AuthoredPlanPhase,
+	DEFAULT_PLAN_PHASES,
+	PLAN_DEFAULTS,
+	type PlanLedger,
+	planLedgerFor,
+} from "@anthers/shared/financial-plan";
 import { asc, eq } from "drizzle-orm";
 
-/** The plan's global defaults when nothing has been edited: locked 30% admin, Free Access 10% of Programs. */
-export const PLAN_DEFAULTS = { adminBudgetShare: ADMIN_CEILING, freeAccessShare: 0.1 } as const;
+export type { AuthoredPlanPhase };
+/** The plan's global defaults when nothing has been edited: locked 30% admin, Free Access 10% of Programs. Authored in shared — the published-figures generator reads the same rows. */
+export { PLAN_DEFAULTS };
 
-interface PhaseRow {
+/**
+ * A plan row as the tables carry it — `AuthoredPlanPhase` plus its id.
+ */
+interface PhaseRow extends AuthoredPlanPhase {
 	id: number;
-	phase: number;
-	label: string;
-	accounts: number;
-	payingShare: number;
-	staff: number;
-	tooling: number;
-	services: number;
-	adminBudgetShare: number | null;
-	freeAccessShare: number | null;
 }
 
-/** The default plan's phases — the path from here through inflection 1. */
-const DEFAULT_PHASES: Array<Omit<PhaseRow, "id">> = [
-	{
-		phase: 1,
-		label: "Launch — covering out-of-pocket",
-		accounts: 1_000,
-		payingShare: 0.3,
-		staff: 0,
-		tooling: 50,
-		services: 0,
-		adminBudgetShare: null,
-		freeAccessShare: null,
-	},
-	{
-		phase: 2,
-		label: "First tooling",
-		accounts: 2_000,
-		payingShare: 0.3,
-		staff: 0,
-		tooling: 100,
-		services: 50,
-		adminBudgetShare: null,
-		freeAccessShare: null,
-	},
-	{
-		phase: 3,
-		label: "Gathering",
-		accounts: 5_000,
-		payingShare: 0.3,
-		staff: 0,
-		tooling: 100,
-		services: 50,
-		adminBudgetShare: null,
-		freeAccessShare: null,
-	},
-	{
-		phase: 4,
-		label: "Token stipend",
-		accounts: 10_000,
-		payingShare: 0.3,
-		staff: 800,
-		tooling: 100,
-		services: 100,
-		adminBudgetShare: null,
-		freeAccessShare: null,
-	},
-	{
-		phase: 5,
-		label: "Part-time",
-		accounts: 15_000,
-		payingShare: 0.3,
-		staff: 1_800,
-		tooling: 150,
-		services: 150,
-		adminBudgetShare: null,
-		freeAccessShare: null,
-	},
-	{
-		phase: 6,
-		label: "Most-of-the-time",
-		accounts: 20_000,
-		payingShare: 0.3,
-		staff: 3_600,
-		tooling: 200,
-		services: 200,
-		adminBudgetShare: null,
-		freeAccessShare: null,
-	},
-	{
-		phase: 7,
-		label: "Near full-time",
-		accounts: 30_000,
-		payingShare: 0.3,
-		staff: 3_600,
-		tooling: 200,
-		services: 200,
-		adminBudgetShare: null,
-		freeAccessShare: null,
-	},
-	{
-		phase: 8,
-		label: "INFLECTION 1 — full-time",
-		accounts: 40_000,
-		payingShare: 0.3,
-		staff: 6_700,
-		tooling: 250,
-		services: 200,
-		adminBudgetShare: null,
-		freeAccessShare: null,
-	},
-	{
-		phase: 9,
-		label: "Full-time, room to spare",
-		accounts: 60_000,
-		payingShare: 0.3,
-		staff: 6_700,
-		tooling: 250,
-		services: 200,
-		adminBudgetShare: null,
-		freeAccessShare: null,
-	},
-];
-
-/** Resolve a row's effective shares against the settings row's defaults. */
-function effectiveShares(
-	row: Pick<PhaseRow, "adminBudgetShare" | "freeAccessShare">,
-	settings: { adminBudgetShare: number; freeAccessShare: number },
-) {
-	return {
-		adminBudgetShare: row.adminBudgetShare ?? settings.adminBudgetShare,
-		freeAccessShare: row.freeAccessShare ?? settings.freeAccessShare,
-	};
-}
+/** The default plan's phases — authored in shared, seeded once into the operator's tables. */
+const DEFAULT_PHASES = DEFAULT_PLAN_PHASES;
 
 /** Load the settings row, creating it from `PLAN_DEFAULTS` on first read. */
 export async function loadPlanSettings(): Promise<{
@@ -200,7 +89,7 @@ export async function loadPlan(): Promise<{
 
 	let rows = await db.select().from(financialPlanPhases).orderBy(asc(financialPlanPhases.phase));
 	if (rows.length === 0) {
-		await db.insert(financialPlanPhases).values(DEFAULT_PHASES);
+		await db.insert(financialPlanPhases).values([...DEFAULT_PHASES]);
 		rows = await db.select().from(financialPlanPhases).orderBy(asc(financialPlanPhases.phase));
 	}
 
@@ -208,12 +97,7 @@ export async function loadPlan(): Promise<{
 		settings,
 		phases: rows.map((row) => ({
 			...row,
-			ledger: planLedger({
-				accounts: row.accounts,
-				payingShare: row.payingShare,
-				staffing: { staff: row.staff, tooling: row.tooling, services: row.services },
-				...effectiveShares(row, settings),
-			}),
+			ledger: planLedgerFor(row, settings),
 		})),
 	};
 }
