@@ -2,7 +2,8 @@
 /**
  * The house sidebar structure (Parker, 2026-10-11): the nav tabs, a divider below
  * them that is PERSISTENT — it stands even where the page registers nothing — then
- * the page's middle section, a second divider, and the tab-shared Type and Tags.
+ * the tab-shared Lenses, a second divider, and the shared filters (Access where the
+ * tab consumes it, Type, Tags).
  *
  * Pins in the shape of `sidebar-nav.authed.e2e.ts`: structure and order measured,
  * never a screenshot. The greying half of the shared Type contract (a type absent
@@ -37,18 +38,17 @@ const typeSectionRows = (page: import("@playwright/test").Page) =>
 		return [...typeSection.querySelectorAll("button")].map((b) => b.textContent?.trim());
 	});
 
-test("the sidebar reads tabs, divider, middle section, divider, shared filters", async ({
-	page,
-}) => {
+test("the sidebar reads tabs, divider, lenses, divider, shared filters", async ({ page }) => {
 	test.setTimeout(60_000);
 	await page.goto(`${WEB_ORIGIN}/feed`);
 	await expect(
 		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Feed" }),
 	).toBeVisible();
 
-	// The section order on the Feed: Bookmarks (middle content, not a filter), then
-	// Access (feed-unique), then the shared Type and Tags — after the second divider.
-	expect(await page.getByRole("heading", { name: "Bookmarks", exact: true })).toBeVisible();
+	// The section order on the Feed: the tab-shared LENSES (the middles are lenses
+	// now), then the shared filters — Access, which the feed's stream consumes, then
+	// Type, then Tags.
+	expect(await page.getByRole("heading", { name: "Lenses", exact: true })).toBeVisible();
 	expect(await page.getByRole("heading", { name: "Access", exact: true })).toBeVisible();
 	expect(await page.getByRole("heading", { name: "Type", exact: true })).toBeVisible();
 	expect(await page.getByRole("heading", { name: "Tags", exact: true })).toBeVisible();
@@ -56,25 +56,45 @@ test("the sidebar reads tabs, divider, middle section, divider, shared filters",
 		await page
 			.getByRole("heading", { name, exact: true })
 			.evaluate((el) => el.getBoundingClientRect().y);
-	expect(await headingY("Bookmarks")).toBeLessThan(await headingY("Access"));
+	expect(await headingY("Lenses")).toBeLessThan(await headingY("Access"));
 	expect(await headingY("Access")).toBeLessThan(await headingY("Type"));
 	expect(await headingY("Type")).toBeLessThan(await headingY("Tags"));
 
 	// The map carries the two dividers between the sections: one below the nav
-	// (persistent), one between the middle and the shared filters.
+	// (persistent), one between the Lenses and the shared filters.
 	const map = await sidebarMap(page);
 	expect(map).not.toBeNull();
 	const dividers = map?.filter((d) => d.divider) ?? [];
 	expect(dividers.length, "the two structural dividers stand").toBeGreaterThanOrEqual(2);
 	const nav = map?.find((d) => d.tag === "nav");
-	const bookmarks = map?.find((d) => d.text === "Bookmarks");
+	const lenses = map?.find((d) => d.text === "Lenses");
 	expect(
-		nav && dividers[0] && bookmarks && dividers[0].y > nav.y && dividers[0].y < bookmarks.y,
-		"the persistent divider sits between the nav and the page's section",
+		nav && dividers[0] && lenses && dividers[0].y > nav.y && dividers[0].y < lenses.y,
+		"the persistent divider sits between the nav and the Lenses",
 	).toBe(true);
 
-	// The retired name is gone: the shared section's heading is Type, not Work Type.
+	// The Lenses on the feed: only No Lens is live — the rest greyed with the marker,
+	// never absent.
+	const lensRows = await page.evaluate(() => {
+		const headings = [...document.querySelectorAll("aside section h3")];
+		const s = headings.find((h) => h.textContent === "Lenses")?.closest("section");
+		return [...(s?.querySelectorAll("button") ?? [])].map(
+			(b) =>
+				`${b.textContent?.trim()}${b.getAttribute("aria-disabled") === "true" ? " [greyed]" : ""}`,
+		);
+	});
+	expect(lensRows).toEqual([
+		"No Lens",
+		"Music Player(Coming Soon) [greyed]",
+		"Channel Guide(Coming Soon) [greyed]",
+		"Bookshelf(Coming Soon) [greyed]",
+	]);
+
+	// The retired names are gone: the shared section's heading is Type, not Work Type
+	// — and Bookmarks, whose strip the Save unification retires, has no heading left
+	// on this sidebar.
 	expect(await page.getByText("Work Type").count()).toBe(0);
+	expect(await page.getByRole("heading", { name: "Bookmarks", exact: true }).count()).toBe(0);
 });
 
 test("the shared Type list is the unified vocabulary, greyed rows included", async ({ page }) => {
@@ -155,15 +175,13 @@ test("a Type selection filters the feed through the page's own adapter", async (
 	).toBe(true);
 });
 
-test("the divider below the nav is persistent on a page that registers nothing yet", async ({
+test("the divider below the nav is persistent on a page that registers nothing", async ({
 	page,
 }) => {
-	// The Library's sidebar migration is its own task; before it, its sidebar still
-	// stands the persistent divider — the structure never depends on the page.
-	await page.goto(`${WEB_ORIGIN}/library`);
-	await expect(
-		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Library" }),
-	).toBeVisible();
+	// A page with no sidebar content of its own still gets the structure's divider:
+	// the shape never depends on the page. (The Library no longer qualifies — its
+	// Lenses grew in with its sidebar task; Purchases never registers anything.)
+	await page.goto(`${WEB_ORIGIN}/purchases`);
 	const map = await sidebarMap(page);
 	const nav = map?.find((d) => d.tag === "nav");
 	const anyDivider = map?.some((d) => d.divider && d.y > (nav?.y ?? 0));

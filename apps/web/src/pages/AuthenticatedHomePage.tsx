@@ -1,96 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import {
-	BookmarkIcon,
-	InformationCircleIcon,
-	RssIcon,
-	XMarkIcon,
-} from "@heroicons/react/24/outline";
+import { InformationCircleIcon, RssIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import FeedTile from "../components/cards/FeedTile";
-import AccessFilterSection from "../components/layout/AccessFilterSection";
 import SharedFilterSections from "../components/layout/SharedFilterSections";
+import SharedLensesSection from "../components/layout/SharedLensesSection";
 import { useSidebar } from "../components/layout/SidebarContext";
-
-/** One bookmarked post as the sidebar's shelf shows it. */
-interface BookmarkedPost {
-	id: number;
-	post: { title: string | null; slug: string; publicId: number } | null;
-}
-
-/**
- * The Feed's MIDDLE-SECTION sidebar content (the house structure, 2026-10-11): the
- * bookmarked strip — the only part of this sidebar that is not a filter — and the
- * feed-unique Access control. The tab-shared Type and Tags sections register
- * separately, below the layout's second divider.
- */
-function FeedSidebarContent({
-	access,
-	onUpdateParams,
-}: {
-	access: string;
-	onUpdateParams: (updates: Record<string, string>) => void;
-}) {
-	// The bookmarks are the section: a real fetch of the shelf ordered by the user's
-	// own sort order, rendered small. (An empty shelf says so and stops.)
-	const [bookmarks, setBookmarks] = useState<BookmarkedPost[] | null>(null);
-
-	useEffect(() => {
-		client.api.content.bookmarks
-			.$get()
-			.then(async (res) => {
-				if (res.ok) {
-					const data = (await res.json()) as unknown as { bookmarks: BookmarkedPost[] };
-					setBookmarks(data.bookmarks ?? []);
-				} else {
-					setBookmarks([]);
-				}
-			})
-			.catch(() => setBookmarks([]));
-	}, []);
-
-	return (
-		<div className="flex flex-col gap-5">
-			{/* Bookmarks — the strip between the nav and the filters, and the only page
-			    content in this sidebar that is not a filter. Renders as a smaller list. */}
-			<section>
-				<h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5">
-					<BookmarkIcon className="w-3.5 h-3.5" />
-					Bookmarks
-				</h3>
-				{bookmarks === null ? null : bookmarks.length > 0 ? (
-					<ul className="space-y-1">
-						{bookmarks.map((b) =>
-							b.post ? (
-								<li key={b.id}>
-									<Link
-										to={postUrl({ slug: b.post.slug, publicId: b.post.publicId } as never)}
-										className="text-xs text-base-content/60 hover:text-base-content line-clamp-1 block"
-									>
-										{b.post.title || "Untitled post"}
-									</Link>
-								</li>
-							) : null,
-						)}
-					</ul>
-				) : (
-					<p className="text-xs text-base-content/40 italic">
-						Nothing bookmarked yet. Bookmark posts to find them here.
-					</p>
-				)}
-			</section>
-
-			{/* Access stays feed-unique; the tab-shared Type and Tags live below the
-			    layout's second divider, registered by the page as `sharedContent`. */}
-			<AccessFilterSection access={access} onUpdateParams={onUpdateParams} />
-		</div>
-	);
-}
 
 export default function AuthenticatedHomePage() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -101,6 +20,12 @@ export default function AuthenticatedHomePage() {
 	const [feedLoading, setFeedLoading] = useState(true);
 	const [showFeedInfo, setShowFeedInfo] = useState(false);
 
+	/**
+	 * The shared Type selection, which on the feed rides `media_type` — with "posts"
+	 * (a kind of feed entry, not a Work type) carried inside it and translated to the
+	 * feed route's `kind=posts` query below. `access` and `tags` are the shared
+	 * filters' other two params, read the same way.
+	 */
 	const contentType = searchParams.get("media_type") ?? "";
 	const access = searchParams.get("access") ?? "";
 	const tags = searchParams.get("tags") ?? "";
@@ -125,18 +50,19 @@ export default function AuthenticatedHomePage() {
 		[setSearchParams],
 	);
 
-	// Register the sidebar's two pieces: the Feed's middle section, and the tab-shared
-	// filters (house structure, 2026-10-11). The type adapter translates the shared
-	// vocabulary into the feed route's params: the Work types are the `media_type`
-	// query, and "posts" — a kind of feed entry, not a Work type — rides the same
-	// URL param (the type list's ids are page words past the Work types) while the
-	// fetch below translates it to `kind=posts`.
+	// Register the sidebar's two pieces (the house structure, 2026-10-11): the
+	// tab-shared LENSES — on the feed only No Lens is live; the feed's lens builds are
+	// their own later tasks — and the shared filters with the Access control, which
+	// the feed's stream consumes. The old Bookmarks strip is gone: saving is the one
+	// keep action, and the strip had no home in the structure once nothing on this
+	// sidebar was per-tab unique.
 	useEffect(() => {
-		setPageContent(<FeedSidebarContent access={access} onUpdateParams={updateParams} />);
+		setPageContent(<SharedLensesSection lens="" onLens={() => {}} />);
 		setSharedContent(
 			<SharedFilterSections
 				type={contentType}
 				onType={(id) => updateParams({ media_type: id })}
+				access={{ value: access, onAccess: (value) => updateParams({ access: value }) }}
 				tags={tags}
 				onTags={(value) => updateParams({ tags: value })}
 			/>,

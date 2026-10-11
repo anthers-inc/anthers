@@ -18,9 +18,14 @@
  * where something is an image and vanishing elsewhere would read as the sidebar
  * reshuffling its words under you.
  *
- * Deliberately its own component, not a mode of `FeedFilterSections` (whose remaining
- * half, Access, is feed-unique) and not a mode of `ContentFilterSections` (Discover's
- * browsing-only machinery): Discover's own tags stay until its task migrates it.
+ * An `access` prop — the tab's Access filter, supplied where the content carries
+ * access state — renders the Access section FIRST among the shared filters (Parker,
+ * 2026-10-11: the Library now holds locked saves, which is what earned the row there).
+ * Discover leaves it out for now and keeps its own pricing machinery; that placement
+ * is the Discover rework's call.
+ *
+ * Deliberately not a mode of `ContentFilterSections` (Discover's browsing-only
+ * machinery): Discover's own tags stay until its task migrates it.
  *
  * The Tags section is the FEED's shape, carried over unchanged: the tags the user
  * filtered on are the only ones that render, and a search names candidates over the
@@ -34,6 +39,7 @@ import {
 	TagIcon,
 } from "@heroicons/react/24/outline";
 import { useMemo, useState } from "react";
+import AccessFilterSection from "./AccessFilterSection";
 import { CONTENT_TYPES, TAGS_BY_TYPE } from "./ContentFilterSections";
 
 /**
@@ -51,7 +57,10 @@ export const SHARED_FILTER_TYPES = [
 const sectionTitleClass =
 	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5";
 
-const filterBtnClass = (isActive: boolean) =>
+/** The sidebar row a selectable list renders with — the same shape the nav's own
+ *  rows carry, so every selectable list in the sidebar reads as one control family.
+ *  Exported for the shared Lenses section and any per-tab section that follows. */
+export const sidebarRowClass = (isActive: boolean) =>
 	`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full ${
 		isActive
 			? "bg-secondary/10 text-secondary font-medium"
@@ -64,6 +73,7 @@ export default function SharedFilterSections({
 	unavailableTypes,
 	tags,
 	onTags,
+	access,
 }: {
 	/** The selected type id — "" is All, "posts" the Posts kind, the rest are Work types. */
 	type: string;
@@ -77,6 +87,8 @@ export default function SharedFilterSections({
 	/** The selected tags as the comma list the shared shape carries (AND semantics on the feed). */
 	tags: string;
 	onTags: (tags: string) => void;
+	/** This tab's Access filter, supplied where the content carries access state — renders FIRST (see the docblock). */
+	access?: { value: string; onAccess: (access: string) => void };
 }) {
 	const selected = useMemo(
 		() =>
@@ -100,6 +112,11 @@ export default function SharedFilterSections({
 
 	return (
 		<>
+			{/* ACCESS — first among the shared filters, where the tab consumes access. */}
+			{access?.value != null && (
+				<AccessFilterSection access={access.value} onAccess={access.onAccess} />
+			)}
+
 			{/*
 			 * TYPE — the unified list. Greyed rows keep their place: they are the
 			 * vocabulary, not the supply. (Was the "Work Type" heading; Parker
@@ -116,7 +133,7 @@ export default function SharedFilterSections({
 								type="button"
 								disabled={greyed}
 								aria-disabled={greyed || undefined}
-								className={`${filterBtnClass(type === typeItem.id)} ${greyed ? "opacity-40 pointer-events-none" : ""}`}
+								className={`${sidebarRowClass(type === typeItem.id)} ${greyed ? "opacity-40 pointer-events-none" : ""}`}
 								onClick={() => onType(typeItem.id)}
 							>
 								<typeItem.icon className="w-5 h-5 shrink-0" />
