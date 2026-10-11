@@ -187,7 +187,13 @@ for (const { type, label } of [
 
 		await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/, { timeout: 15_000 });
 		await expect(page.getByRole("heading", { name: `Edit ${label}` })).toBeVisible();
-		await expect(page.getByText("Uploaded", { exact: true })).toBeVisible({ timeout: 30_000 });
+		// A paged Work's file section is the SET editor, so arrival is the file's row in the
+		// set — the label from its filename, extension stripped by the rowLabel rule. The
+		// row's span, not the page's title (whose text the file's name became): the set row
+		// is the one place that text is the FILE's arrival.
+		await expect(
+			page.locator("span.flex-1.truncate").filter({ hasText: new RegExp(`${STEM} ${type}`) }),
+		).toBeVisible({ timeout: 30_000 });
 
 		await expect
 			.poll(async () => {
