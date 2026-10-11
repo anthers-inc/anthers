@@ -141,7 +141,7 @@ it("saves to the Stripe Customer, never into a column", async () => {
 		.from(billingAccounts)
 		.where(eq(billingAccounts.userId, userId));
 	expect(row?.stripeCustomerId).toMatch(/^cus_/);
-	if (!row) throw new Error("unreachable");
+	if (!row?.stripeCustomerId) throw new Error("unreachable");
 	const updates = fake.callsTo("customers.update");
 	expect(updates.length).toBe(1);
 	const [updateId, updateParams] = updates[0].args as [string, Record<string, unknown>];
@@ -237,7 +237,7 @@ it("clears by unsetting the field pair at Stripe", async () => {
 		.select({ stripeCustomerId: billingAccounts.stripeCustomerId })
 		.from(billingAccounts)
 		.where(eq(billingAccounts.userId, userId));
-	if (!row) throw new Error("unreachable");
+	if (!row?.stripeCustomerId) throw new Error("unreachable");
 	expect(afterId).toBe(row.stripeCustomerId);
 	expect(afterParams).toEqual({ name: "", address: "" });
 });
