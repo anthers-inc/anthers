@@ -32,16 +32,16 @@ export default function PostPicker({ excludeIds, onSelect, onClose }: PostPicker
 
 	useEffect(() => {
 		let live = true;
-		client.api.content.posts
-			.$get({ query: { mine: "true" } })
-			.then((res) => res.json())
-			.then((d) => {
-				if (live) setPosts((d as { posts: PostListItem[] }).posts ?? []);
-			})
-			.catch(() => {})
-			.finally(() => {
+		void (async () => {
+			try {
+				const res = await client.api.content.posts.$get({ query: { mine: "true" } });
+				const d = (await res.json()) as { posts?: PostListItem[] };
+				if (live) setPosts(d.posts ?? []);
+			} catch {
+			} finally {
 				if (live) setLoading(false);
-			});
+			}
+		})();
 		return () => {
 			live = false;
 		};
