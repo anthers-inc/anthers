@@ -33,6 +33,14 @@ on:
   push:
     branches: [main, release]
   pull_request:
+  # The merge queue ("Require merge queue" in `main`'s branch protection) validates
+  # each queued group on a temporary `gh-readonly-queue/main/…` branch and dispatches a
+  # `merge_group` event. The five required checks must be reported on that event, or the
+  # queue times every entry out while waiting for checks that never arrive — so no job
+  # that reports one may be renamed, moved behind a filter that misses this event, or
+  # skipped on it. `deploy` stays push-and-`release`-only by its own `if`; a merge group
+  # is a candidate, not a landing.
+  merge_group:
 
 jobs:
   # Has this code already been tested?
