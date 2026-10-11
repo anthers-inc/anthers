@@ -81,15 +81,36 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.22",
+		date: "2026-10-11",
+		lede: "A video plays the moment it is published now, and an upload is a session that resumes rather than a file that starts over.",
+		entries: [
+			"A released video plays the moment it is published: its stored original serves, behind the same access check and Public Access metering every stream runs, so publishing no longer waits on an encode. Where a ladder of adaptive variants exists, that stays the offered experience, the original underneath for a later quality menu; a creator's own preview of a finished video plays the same way.",
+			"An upload is a resumable session now: the bytes go straight to the storage network in parts the creator's browser can retry individually, so a dropped connection no longer starts a large file over, and a session left unfinished for three days aborts itself, because held parts bill.",
+			"A Work can be drafted with nothing but a type and a name, so a failed upload costs nothing typed beside it, and an empty draft can change its kind, with the rating read against the kind that then holds.",
+			"A comic or a book is an ordered set of sources now: one PDF, several each contributing a contiguous run of pages in the set's order, or page images directly, where one JPG or PNG leaf is one page. Pages number across the whole set, files are added, removed, and reordered from the Work's own page, with each change re-rendering what it touched, and the pickers take page images beside PDFs.",
+			"A comic or book's PDF may weigh what a video's may, at 2 GiB: the old ceiling was the render pass's disk budget rather than a rule of the storage network.",
+			"The signed-in home page is just the feed now: one full-width shelf of wide tiles, with the Discover Projects section and the creator suggestions gone. And a feed that stops is a feed that ended: the timeline walks on behind a Load more button, where it used to end flat at the hundredth post, indistinguishable from running out.",
+			"A buyer may keep one billing address: saved and cleared only in account settings, stored on their Stripe customer rather than on Anthers' servers, prefilled into checkout read-only and never offered to save there, with shipping still per order. The Privacy Policy carried the disclosure before the first address ever saved.",
+			"The Studio's Catalog page split in two: Projects and Works are their own pages now (/studio/projects and /studio/works, the old addresses redirecting), each with its own New button. The Add a Work picker picks existing Works rather than minting a bare one, and the credits section warns about a missing contributor at its rows only, where a page-wide alert used to duplicate it.",
+			'The top-level marketing pages had a voice-and-fact pass: the supporter card no longer promises gated interactions or purchase discounts, "every dollar funds" and "in full" carry the half rate and the at-cost card cost, the federal exemption states itself as an intention only, and the FAQ names the built fourteen-day hold rather than "Stripe\'s schedule".',
+			"The pay-comparison rows were rebuilt from each platform's published rates: Ghost's current plans, itch.io's share as a creator-set default, YouTube's split, Patreon's flat rate, Substack's fee priced in, and Steam's crossing point computed from the card rate. The monetization calculator's example receipt now nets directed support against the card fee it rides.",
+			"The supporters page no longer says the platform is closed, and the browser-game rows describe what exists honestly: a game embedded from a creator's own host, Anthers' own serving not yet built.",
+			"The worker's CPU alert reads as a saturation notice now: a pegged graph is the component's healthy shape while media is queued.",
+			"The jobs that process media stopped holding whole files on the worker's disk: the transcode uploads each variant the moment it finishes and reads its source in place, as do the ladder encode, the safety scan, and the audio and ebook jobs, and a daily sweep clears the run prefixes nothing is waiting on. A burst of video uploads that filled the worker's disk set this off.",
+			"The sign-in card holds its size while the hint under the field changes, so typing a handle no longer stretches the card taller and shorter, and the Continue button keeps a line of air.",
+		],
+	},
+	{
 		version: "2026.10.21",
 		date: "2026-10-10",
 		lede: "The records behind the pages open from the pages now, and the money plan's hierarchy reads the way its ledger runs.",
 		entries: [
 			"Every kind of record that has a page now carries a link to itself beside it: a Work, a Post, a Project, a comment, or a Review names its record's address on Taproot, the public record explorer, and every user of the page sees the link, signed in or not. Votes and follows carry none, because neither has a page of its own.",
-			"The support model's hierarchy reads as it is everywhere now: Programs is the parent line, and Free Access and Free Storage sit inside it as the programs they are. The Admin Console's plan table and its flow diagram draw the corrected shape, and the copy on the FAQ, legal, signup and economics pages says the same thing.",
+			"The support model's hierarchy reads as it is everywhere now: Programs is the parent line, and Free Access and Free Storage sit inside it as the programs they are. The Admin Console's plan table and its flow diagram draw the corrected shape, and the copy on the FAQ, legal, signup, and economics pages says the same thing.",
 			"The Resources landing came off the logged-out header, the mobile drawer, and the footer navs ahead of the page's redesign; the page still answers at /resources, and the links to it inside other pages stay.",
 			"The Admin Console's Infrastructure tab carries an Email Library now: every standard and automatic email Anthers sends, cataloged in one place and previewed with placeholder data rendered from the templates the product itself sends with, and any template can be test-sent to a real inbox one at a time.",
-			"The Feed, Library and Discover items in the signed-in navigation read as rows again, and the grips that drag them into a new order actually drag.",
+			"The Feed, Library, and Discover items in the signed-in navigation read as rows again, and the grips that drag them into a new order actually drag.",
 		],
 	},
 	{
