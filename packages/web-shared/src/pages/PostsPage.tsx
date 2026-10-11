@@ -53,16 +53,16 @@ export default function PostsPage() {
 
 	useEffect(() => {
 		let live = true;
-		client.api.content.posts
-			.$get({ query: { mine: "true" } })
-			.then((res) => res.json())
-			.then((data) => {
-				if (live) setPosts((data as { posts: PostListItem[] }).posts ?? []);
-			})
-			.catch(() => {})
-			.finally(() => {
+		void (async () => {
+			try {
+				const res = await client.api.content.posts.$get({ query: { mine: "true" } });
+				const data = (await res.json()) as { posts?: PostListItem[] };
+				if (live) setPosts(data.posts ?? []);
+			} catch {
+			} finally {
 				if (live) setLoading(false);
-			});
+			}
+		})();
 		return () => {
 			live = false;
 		};
