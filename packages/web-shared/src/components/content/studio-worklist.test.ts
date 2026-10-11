@@ -43,7 +43,7 @@ const build = (
 		works,
 		payoutsReady,
 		editUrl: (w) => `/studio/works/${w.publicId}/edit`,
-		catalogUrl: "/studio/catalog",
+		worksUrl: "/studio/works",
 		uploading,
 	});
 
@@ -79,9 +79,9 @@ describe("buildWorklist", () => {
 		expect(build([locked(1, "Tide")])[0].message).toContain("“Tide”");
 		const many = build([locked(1, "Tide"), locked(2, "Ebb")]);
 		expect(many[0].message).toContain("2 Works");
-		// Several means the Catalog, where every card carries its own link. Naming one of
+		// Several means the Works page, where every card carries its own link. Naming one of
 		// them would be picking a Work on the creator's behalf.
-		expect(many[0].href).toBe("/studio/catalog");
+		expect(many[0].href).toBe("/studio/works");
 	});
 
 	it("stays silent about payouts until the answer actually arrives", () => {

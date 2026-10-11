@@ -1224,6 +1224,11 @@ async function serializeWork(
 	job: TranscodingJobRow | null = null,
 	/** The Work's browser builds, owner-facing. Loaded by `loadWorkBundles`; empty when unset. */
 	webBuildsList: WebBuildWithFiles[] = [],
+	/**
+	 * The delivery context the response is being built in — null under local storage,
+	 * where the stored key is itself the playable address.
+	 */
+	delivery: DeliveryCtx | null = null,
 ) {
 	return {
 		id: item.id,
@@ -1236,6 +1241,17 @@ async function serializeWork(
 		thumbnail: item.thumbnail,
 		scheduledReleaseAt: item.scheduledReleaseAt,
 		sourceKey: item.sourceKey,
+		// The owner's own original, at the access-checked route, for the same ruling the
+		// user shape carries (70.06 — playable from the moment the Work exists): an
+		// owner previews their video before any ladder exists, so the Studio needs
+		// this address the way a viewer's play page does. Without a delivery context,
+		// the stored key is already the playable address.
+		originalUrl:
+			item.type === "video" && item.sourceKey
+				? delivery
+					? withShare(`${delivery.origin}/api/content/works/${item.id}/original`, delivery)
+					: item.sourceKey
+				: null,
 		// The owner's own shape is also what the Work page renders for them, so a stored address the
 		// check refuses is withheld here too rather than framed in the creator's own session.
 		embedUrl: embedUrlProblem(item.embedUrl ?? "") ? "" : item.embedUrl,
@@ -2062,6 +2078,21 @@ async function serializeWorkForUser(
 		// budget attached. Withholding the URL here as well would be a second, weaker
 		// mechanism for something already enforced — and the player decides what to render
 		// from the budget it holds, not from a missing URL.
+		// The original file's play address, for a video Work: the 2026-10-11 ruling's
+		// baseline, playable from the moment the Work exists and delivered as the
+		// bytes the creator uploaded, with the ladder as the upgrade that arrives
+		// later (wiki 70.06). The same posture as the transcoding URLs below —
+		// withheld when the user may not reach the Work, and enforced at the
+		// endpoint (`/works/:id/original`), which minted the signed URL fresh per
+		// request only after the meter and household limit answered. Without a
+		// delivery context (local mode), the stored key is already the playable
+		// address, exactly as `userTranscoding` treats its own URLs.
+		originalUrl:
+			canAccess && work.type === "video" && work.sourceKey
+				? delivery
+					? withShare(`${delivery.origin}/api/content/works/${work.id}/original`, delivery)
+					: work.sourceKey
+				: null,
 		transcoding: await userTranscoding(job, canAccess, delivery),
 		access,
 		/**
@@ -3419,6 +3450,40 @@ const contentRoutes = new Hono()
 		return c.redirect(url, 302);
 	})
 
+	// ── Video original delivery (access-checked, signed) ─────────────────────────
+	//
+	// A video Work is playable from the moment it exists, and what plays is this
+	// Work's own stored original — the exact bytes the creator uploaded, ranged-
+	// streamed over a short-lived signed address. Same gate ladder as the audio
+	// route above: access, the Public Access meter, the household limit; a fresh
+	// signed URL minted only after every gate answered. The ladder stays the
+	// offered experience when one exists, and this route is what the client falls
+	// back to before one does.
+	.get("/works/:id/original", requireUserOrShareLink, async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		// The original is the video deliverable; other kinds' originals are either
+		// their own routes' territory (audio) or not a play surface at all.
+		if (work.type !== "video" || !work.sourceKey) return c.json({ error: "Not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		// 402, not 403, on exactly the reasoning the audio route carries above.
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
+
+		const url = await storage.getUrl(work.sourceKey, {
+			signed: true,
+			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
+		});
+		// no-store, for the same reason as the audio redirect: this 302 carries a
+		// signed URL and is access-dependent, so a proxy must never replay it.
+		c.header("Cache-Control", "no-store");
+		return c.redirect(url, 302);
+	})
+
 	// ── Ebook page delivery (access-checked, signed) ─────────────────────────────
 	//
 	// The reason `work_pages` exists, in one endpoint: a book is served ONE PAGE AT A TIME,
@@ -3936,7 +4001,7 @@ const contentRoutes = new Hono()
 		await resolveWorkThumbnail(work);
 		// No credit notification here: a Work is born private, and the notification is owed
 		// when the Work is public — see the PATCH route and `notifyCreditedAccounts`.
-		return c.json({ work: await serializeWork(work, [], job) }, 201);
+		return c.json({ work: await serializeWork(work, [], job, [], deliveryCtx()) }, 201);
 	})
 
 	/** The caller's own Catalog — every Work, private and released, with processing state. */
@@ -3998,6 +4063,7 @@ const contentRoutes = new Hono()
 						assetsByWork.get(i.id) ?? [],
 						jobByWork.get(i.id) ?? null,
 						buildsByWork.get(i.id) ?? [],
+						deliveryCtx(),
 					),
 				),
 			),
@@ -4128,8 +4194,16 @@ const contentRoutes = new Hono()
 		 * the request never reached the code that used it.
 		 */
 		if (isOwner && previewRequest(c) === null) {
+			// The owner plays their own preview through the same pipes an entitled viewer
+			// does, so their transcode runs the same delivery rewrite the user path
+			// applies: the row's raw URL points at the private bucket, where the HLS
+			// manifest 404s in the browser's player — and carries no CORS headers even
+			// where it exists. Access is asserted unconditionally, because a creator may
+			// always see their own media; `deliveryCtx()` with no share token is the
+			// owner's own session, exactly what this branch serves.
+			const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx());
 			return c.json({
-				work: await serializeWork(work, workAssets, jobRows[0] ?? null, webBuildsList),
+				work: await serializeWork(work, workAssets, playableJob, webBuildsList, deliveryCtx()),
 			});
 		}
 
@@ -4870,6 +4944,7 @@ const contentRoutes = new Hono()
 				workAssets,
 				jobRows[0] ?? null,
 				buildRows.map((b) => ({ ...b, files: filesByBuild.get(b.id) ?? [] })),
+				deliveryCtx(),
 			),
 		});
 	})

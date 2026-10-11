@@ -79,7 +79,7 @@ test("a Work rated before the matrix is released only once every row is answered
 
 	// The card is how a back catalog is released thirty at a time, so it has to say which ones
 	// still need answering.
-	await page.goto("/studio/catalog");
+	await page.goto("/studio/works");
 	const card = page.locator(".card").filter({ hasText: TITLE });
 	await expect(card).toContainText("Rate this");
 	await expect(card.getByRole("button", { name: "Release" })).toBeDisabled();

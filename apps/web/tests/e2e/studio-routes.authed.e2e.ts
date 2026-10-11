@@ -156,16 +156,16 @@ test("an account without creator mode has no Studio to switch to", async ({ page
 test("every Studio tab lands on its own route", async ({ page, context }) => {
 	await signInAsCreator(context);
 
-	// ⭐ **The nav is places, not actions, as of 2026-09-11.** It read *Dashboard · Catalog ·
-	// New Post · Analytics · Settings* — a verb among locations — while Projects had no entry
-	// at all. Anthers' three objects now each have a home: the Catalog owns Projects and
-	// Works, Posts owns posts, and the Dashboard says what needs attention.
+	// ⭐ **The nav is places, not actions, as of 2026-09-11,** and one object per tab as of
+	// 2026-10-10: the Catalog tab that owned Projects and Works split in two, so each of
+	// Anthers' three objects points at its own listing.
 	//
 	// "Import" is absent because the itch.io import endpoints all return "not yet
 	// implemented", so a creator who reached the page found a form that always failed.
 	// Restore the row when the itch.io importer's backend is built.
 	const tabs = [
-		{ name: "Catalog", url: /\/studio\/catalog$/ },
+		{ name: "Projects", url: /\/studio\/projects$/ },
+		{ name: "Works", url: /\/studio\/works$/ },
 		{ name: "Posts", url: /\/studio\/posts$/ },
 		{ name: "Analytics", url: /\/studio\/analytics$/ },
 		{ name: "Payments", url: /\/studio\/payments$/ },
@@ -186,13 +186,15 @@ test("every Studio tab lands on its own route", async ({ page, context }) => {
 test("every New button lands inside the Studio", async ({ page, context }) => {
 	await signInAsCreator(context);
 
-	// The New buttons live on each index rather than in the nav. Every one of these was
-	// root-absolute until 2026-08-17 and each resolved to a real, wrong page — `/settings`,
-	// `/library` and `/@somebody` are all real destinations a stale Studio link can reach —
-	// so the shell assertion is doing the actual work, not the URL check.
+	// The New buttons live on each index rather than in the nav — one creation door per
+	// object, on the page that owns the object (Parker, 2026-10-10, as the Catalog split
+	// apart). Every one of these was root-absolute until 2026-08-17 and each resolved to a
+	// real, wrong page — `/settings`, `/library` and `/@somebody` are all real destinations
+	// a stale Studio link can reach — so the shell assertion is doing the actual work, not
+	// the URL check.
 	const buttons = [
-		{ from: "/studio/catalog", name: "New Work", url: /\/studio\/works\/new$/ },
-		{ from: "/studio/catalog", name: "New Project", url: /\/studio\/projects\/new$/ },
+		{ from: "/studio/works", name: "New Work", url: /\/studio\/works\/new$/ },
+		{ from: "/studio/projects", name: "New Project", url: /\/studio\/projects\/new$/ },
 		{ from: "/studio/posts", name: "New Post", url: /\/studio\/posts\/new$/ },
 	];
 
@@ -221,22 +223,32 @@ test("the Dashboard stopped being a copy of everything the creator owns", async 
 	await expect(page.getByRole("heading", { name: "Your Projects" })).toHaveCount(0);
 	await expect(page.getByRole("heading", { name: "Your Posts" })).toHaveCount(0);
 
-	// And they are reachable, at the tab that owns each.
-	await page.goto("/studio/catalog");
-	await expect(page.getByRole("link", { name: "New Project", exact: true })).toBeVisible();
+	// And they are reachable, at the tab that owns each. FIRST, because an empty Projects
+	// page carries two of the button — the header's and the empty state's — the same two
+	// doors PostsPage shows for zero posts.
+	await page.goto("/studio/projects");
+	await expect(page.getByRole("link", { name: "New Project", exact: true }).first()).toBeVisible();
 	await page.goto("/studio/posts");
 	await expect(page.getByRole("heading", { name: "Posts", exact: true })).toBeVisible();
 });
 
-test("the pre-rename Catalog path redirects rather than rendering", async ({ page, context }) => {
+test("the pre-rename paths redirect to the Works page rather than rendering", async ({
+	page,
+	context,
+}) => {
 	await signInAsCreator(context);
 
-	// `/studio/library` mounted `CatalogPage` a second time, so the address bar could read
-	// "library" while the heading read "Catalog" — the confusion the 2026-08-13 rename was
-	// for. Kept as a redirect because bookmarks from before it still exist.
+	// Two of them now: `/studio/library` is the pre-2026-08-13 name, and `/studio/catalog`
+	// is the pre-2026-10-10 tab before the Catalog split. Each used to mount its page a
+	// second time, so the address bar could read one word while the heading read another —
+	// the confusion each rename was for. Both are REDIRECTS, and both go to the Works page,
+	// which carries the substance the old page's Works grid was.
 	await page.goto("/studio/library");
-	await expect(page).toHaveURL(/\/studio\/catalog$/);
-	await expect(page.getByRole("heading", { name: "Catalog", exact: true })).toBeVisible();
+	await expect(page).toHaveURL(/\/studio\/works$/);
+	await expect(page.getByRole("heading", { name: "Works", exact: true })).toBeVisible();
+	await page.goto("/studio/catalog");
+	await expect(page).toHaveURL(/\/studio\/works$/);
+	await expect(page.getByRole("heading", { name: "Works", exact: true })).toBeVisible();
 });
 
 test("a creator can create a Project and lands on its shelf", async ({ page, context }) => {
@@ -246,7 +258,7 @@ test("a creator can create a Project and lands on its shelf", async ({ page, con
 	const slug = `e2e-project-${Date.now()}`;
 
 	try {
-		await page.goto("/studio/catalog");
+		await page.goto("/studio/projects");
 		await page.getByRole("link", { name: "New Project", exact: true }).first().click();
 		await expect(page).toHaveURL(/\/studio\/projects\/new$/);
 		await expect(page.getByRole("heading", { name: "New Project" })).toBeVisible();
@@ -282,6 +294,16 @@ test("a creator can create a Project and lands on its shelf", async ({ page, con
 		// implemented, owner-checked and called from nowhere. The only way a post ever joined a
 		// Project was a select on the New Post form that was hidden on edit and ignored by
 		// `PATCH /posts/:slug`, so membership was set at birth or never.
+		// 🚨 **The absence of the picker's mint is a tested absence.** The Works shelf's
+		// picker minted a Work through a ghost "New Work" button until 2026-10-10, when
+		// pickers became pickers only — a Project is edited by assigning existing Works, and
+		// making one is `/studio/works/new`'s job. A removed button looks like a renamed one
+		// to everything in the repository but this count.
+		await page.getByRole("button", { name: "Add a Work" }).click();
+		await expect(page.getByRole("heading", { name: "Add a Work" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "New Work" })).toHaveCount(0);
+		await page.getByRole("button", { name: "Close" }).first().click();
+
 		await expect(page.getByRole("heading", { name: "Posts" })).toBeVisible();
 		await page.getByRole("button", { name: "Add a post" }).click();
 		await expect(page.getByRole("heading", { name: "Add a post" })).toBeVisible();

@@ -30,7 +30,7 @@ export default function WorkUploadPage() {
 			<WorkUploadForm onCreated={(work) => navigate(studioEditWorkUrl(work.publicId ?? work.id))} />
 
 			<div className="mt-6 border-t border-base-300 pt-4">
-				<Link to={studioUrl("/catalog")} className="btn btn-ghost">
+				<Link to={studioUrl("/works")} className="btn btn-ghost">
 					Cancel
 				</Link>
 			</div>

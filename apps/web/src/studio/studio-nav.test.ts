@@ -9,7 +9,8 @@ const active = (pathname: string) =>
 describe("isStudioNavActive", () => {
 	it("marks exactly one tab on each Studio page", () => {
 		expect(active("/studio")).toEqual(["Dashboard"]);
-		expect(active("/studio/catalog")).toEqual(["Catalog"]);
+		expect(active("/studio/projects")).toEqual(["Projects"]);
+		expect(active("/studio/works")).toEqual(["Works"]);
 		expect(active("/studio/posts")).toEqual(["Posts"]);
 		expect(active("/studio/analytics")).toEqual(["Analytics"]);
 		expect(active("/studio/payments")).toEqual(["Payments"]);
@@ -17,9 +18,14 @@ describe("isStudioNavActive", () => {
 	});
 
 	it("counts an object's own pages as its tab's", () => {
-		expect(active("/studio/works/new")).toEqual(["Catalog"]);
-		expect(active("/studio/works/123456789/edit")).toEqual(["Catalog"]);
-		expect(active("/studio/projects/an-album/edit")).toEqual(["Catalog"]);
+		expect(active("/studio/works/new")).toEqual(["Works"]);
+		expect(active("/studio/works/123456789/edit")).toEqual(["Works"]);
+		expect(active("/studio/projects/an-album/edit")).toEqual(["Projects"]);
 		expect(active("/studio/posts/a-post/edit")).toEqual(["Posts"]);
+	});
+
+	it("leaves the split Catalog's old paths owned by nothing, since they redirect", () => {
+		expect(active("/studio/catalog")).toEqual([]);
+		expect(active("/studio/library")).toEqual([]);
 	});
 });

@@ -212,8 +212,8 @@ export default function WorkEditPage() {
 				<p className="mt-2 text-sm text-base-content/60">
 					It may have been deleted, or it belongs to someone else.
 				</p>
-				<Link to={studioUrl("/catalog")} className="btn btn-primary btn-sm mt-6">
-					Back to your Catalog
+				<Link to={studioUrl("/works")} className="btn btn-primary btn-sm mt-6">
+					Back to your Works
 				</Link>
 			</div>
 		);

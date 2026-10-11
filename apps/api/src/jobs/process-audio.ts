@@ -15,6 +15,13 @@ import { eq } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { storage } from "../services/storage/index.js";
 
+/**
+ * How long the job's signed source address stays valid, exactly as the video legs'
+ * reasoning is carried in their own files: one pass, minutes, and an expired address
+ * fails the job into the queue's ordinary retries.
+ */
+const SOURCE_URL_TTL_SECONDS = 60 * 60;
+
 export interface ProcessAudioData {
 	jobId: number;
 }
@@ -162,15 +169,19 @@ export async function processAudio(data: ProcessAudioData) {
 	const storageKey = item.sourceKey ?? "";
 	if (!storageKey) throw new Error("No source file on content item");
 
-	let localPath: string | null = null;
+	let source: string;
 	let outputPath: string | null = null;
 
 	try {
-		// 0. Download source file to local temp path for ffmpeg
-		localPath = await storage.downloadToTemp(storageKey);
+		// The source is read in place — `readableInput`: its own path in local mode, a
+		// ranged-read signed address in remote mode — and ffprobe's and ffmpeg's passes
+		// take either form. No temp copy of the source exists, so the job's residency
+		// is its MP3's output file alone, and that is freed below the moment its own
+		// upload lands.
+		source = await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS });
 
 		// 1. Probe for duration
-		const probe = await ffprobe(localPath);
+		const probe = await ffprobe(source);
 		const duration = Number.parseFloat(probe.format?.duration ?? "0");
 		if (duration > 0) {
 			await db
@@ -183,7 +194,7 @@ export async function processAudio(data: ProcessAudioData) {
 		// 2. Normalize and convert to MP3
 		outputPath = join(tmpdir(), `audio_${randomUUID()}.mp3`);
 		const proc = Bun.spawn(
-			ffmpegCommand(localPath, [
+			ffmpegCommand(source, [
 				"-af",
 				"loudnorm",
 				"-c:a",
@@ -211,11 +222,15 @@ export async function processAudio(data: ProcessAudioData) {
 		const outputKey = `creators/${item.creatorId}/audio/processed/${randomUUID().replace(/-/g, "")}.mp3`;
 		const outputBuffer = await readFile(outputPath);
 		await storage.upload(outputKey, outputBuffer, "audio/mpeg", "private");
+		// The deliverable produced and delivered: its temp file is dead the moment the
+		// upload lands, so the finally sweep below is crash cleanup, not the plan.
+		await rm(outputPath).catch(() => {});
+		outputPath = null;
 		const outputUrl = await storage.getUrl(outputKey);
 		await updateJobProgress(jobId, 80);
 
 		// 4. Generate waveform
-		const waveform = await generateWaveform(localPath, 128);
+		const waveform = await generateWaveform(source, 128);
 
 		// 5. Complete
 		await db
@@ -241,12 +256,8 @@ export async function processAudio(data: ProcessAudioData) {
 			.where(eq(transcodingJobs.id, jobId));
 		throw error;
 	} finally {
-		// Clean up temp files (only files under tmpdir)
-		if (localPath?.startsWith(tmpdir())) {
-			try {
-				await rm(localPath);
-			} catch {}
-		}
+		// Crash cleanup only: the source is read in place (nothing to clean), and the
+		// output freed itself the moment its own upload landed.
 		if (outputPath) {
 			try {
 				await rm(outputPath);

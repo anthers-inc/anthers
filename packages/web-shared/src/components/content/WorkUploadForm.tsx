@@ -20,17 +20,16 @@
  * creator, because nothing is reachable until release and the access table is on the page this
  * step lands on, above the Release control.
  *
- * Used in two places: the Upload page at `/studio/works/new`, and `QuickWorkCreate` inside the
- * Work picker. ⚠️ **Don't grow either copy into a second editor** — everything past these three
- * inputs belongs to the Work's page.
+ * Used in one place: the Upload page at `/studio/works/new`, which is the only way a Work is
+ * made — the picker that once minted one in a dialog retired the path (Parker, 2026-10-10:
+ * pickers pick, and creation belongs to this page). ⚠️ **Don't grow this into a second
+ * editor** — everything past these three inputs belongs to the Work's page.
  *
- * ⭐ **A file is optional on the Upload page, and only there** (Parker, 2026-10-10). A Work can
- * be drafted before its file exists, and an upload that failed must not cost the title and type
- * typed beside it — so the page flow offers a fileless create that lands on the Work's own page,
- * where `WorkFileSection` already holds the no-file state and release refuses until the file
- * arrives. The picker's dialog (`next === "stay"`) keeps the file required: it hands the created
- * Work back to attach, and attaching an empty Work would be worse than refusing to make one.
- * A fileless create needs a title, because a Work with neither file nor name is a row, not a draft.
+ * ⭐ **A file is optional** (Parker, 2026-10-10). A Work can be drafted before its file exists,
+ * and an upload that failed must not cost the title and type typed beside it — so the page
+ * offers a fileless create that lands on the Work's own page, where `WorkFileSection` already
+ * holds the no-file state and release refuses until the file arrives. A fileless create needs
+ * a title, because a Work with neither file nor name is a row, not a draft.
  */
 
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
@@ -63,24 +62,16 @@ function titleFromFileName(name: string): string {
 interface WorkUploadFormProps {
 	/** Called with the created Work. Any upload it started is already running. */
 	onCreated: (work: Work) => void;
-	/**
-	 * Where the creator ends up. The Upload page moves them to the Work's page, while the picker's
-	 * dialog hands the Work back to the post they are writing, and the copy has to say which.
-	 */
-	next?: "page" | "stay";
 }
 
-export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadFormProps) {
+export default function WorkUploadForm({ onCreated }: WorkUploadFormProps) {
 	const [type, setType] = useState<ContentType>("video");
 	const [title, setTitle] = useState("");
 	const [platform, setPlatform] = useState("windows");
 	const [creating, setCreating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	// Only the Upload page drafts without a file; see the header on why the dialog may not.
-	const fileOptional = next === "page";
-
 	const requireTitleForDraft = (): boolean => {
-		if (fileOptional && !title.trim()) {
+		if (!title.trim()) {
 			setError("Give the draft a name — you can change it on its page.");
 			return false;
 		}
@@ -155,7 +146,7 @@ export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadF
 				label="Title"
 				hint={
 					isFileWorkType(type) || isBuildType(type)
-						? `Leave it blank to use the file's name. You can change it ${next === "page" ? "on the next page" : "on the Work's own page"}.`
+						? "Leave it blank to use the file's name. You can change it on the next page."
 						: undefined
 				}
 			>
@@ -172,11 +163,7 @@ export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadF
 			{isFileWorkType(type) && (
 				<FormField
 					label="File"
-					hint={
-						next === "page"
-							? "Choosing the file adds this Work to your Catalog, privately, and takes you to its page to fill in the rest while it uploads."
-							: "Choosing the file adds this Work to your Catalog, privately, and attaches it here while it uploads."
-					}
+					hint="Choosing the file adds this Work to your Catalog, privately, and takes you to its page to fill in the rest while it uploads."
 				>
 					{creating ? (
 						<div className="flex items-center gap-3 rounded-lg bg-base-200 p-4 text-sm">
@@ -194,7 +181,7 @@ export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadF
 				</FormField>
 			)}
 
-			{fileOptional && isFileWorkType(type) && (
+			{isFileWorkType(type) && (
 				<div>
 					<button
 						type="button"
@@ -225,7 +212,7 @@ export default function WorkUploadForm({ onCreated, next = "page" }: WorkUploadF
 					</FormField>
 					<FormField
 						label="Build (optional)"
-						hint={`A build you add here becomes this Work's primary download. More builds, and a browser build hosted on another site, are added ${next === "page" ? "on the next page" : "on the Work's own page"}.`}
+						hint="A build you add here becomes this Work's primary download. More builds, and a browser build hosted on another site, are added on the next page."
 					>
 						{creating ? (
 							<div className="flex items-center gap-3 rounded-lg bg-base-200 p-4 text-sm">
