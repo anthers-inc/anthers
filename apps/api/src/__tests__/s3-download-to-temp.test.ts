@@ -2,11 +2,16 @@
 /**
  * `downloadToTemp` streams an object to disk and never holds it in memory.
  *
- * 🚨 **This is the one read of a whole video the worker makes, and the worker has less memory
- * than a video can be large.** Collecting the body with `transformToByteArray()` killed the
- * production worker on every video upload, and the restart resumed the same transcode and died
- * again. So every body here refuses to be collected: a download that reaches for the whole
- * object fails the test rather than merely using more memory than it should.
+ * 🚨 **What still uses this holds whole objects by design and must stream, not collect:**
+ * the audio and ebook jobs hold a source and its output, so a download that reaches for
+ * the whole object in memory is their kill. (Collecting the body with
+ * `transformToByteArray()` killed the production worker on every video upload, 2026-08;
+ * the video jobs since read their sources in place — `readableInput` — and no longer
+ * come through here at all.)
+ *
+ * The contract pinned here is the same either way: every body refuses to be collected,
+ * and a download that reaches for the whole object fails the test rather than merely
+ * using more memory than it should.
  */
 import { afterAll, describe, expect, it, spyOn } from "bun:test";
 import { readdir, readFile, rm } from "node:fs/promises";
