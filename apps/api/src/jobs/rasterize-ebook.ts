@@ -171,15 +171,15 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 				throw new Error(`pdftoppm produced no pages for ${source.filename || source.file}`);
 			}
 			rendered.push(files.map((f) => join(dir, f)));
+			// 🚨 This source's temp copy dies HERE — the moment its poppler pass ends — not
+			// in the finally below. Everything after the render loop is uploads and database
+			// writes; holding a delivered PDF's copy through them is residency the caps have
+			// no reason to pay for. (Poppler reads a file, so this job cannot read in place
+			// the way the ffmpeg jobs can; the one thing it never does is keep a copy a
+			// moment past this source's only reader's death.)
+			await rm(downloaded[i], { force: true }).catch(() => {});
+			downloaded[i] = "";
 		}
-		// 🚨 The source's temp copy dies HERE — the moment poppler's pass ends — not in the
-		// finally below. Everything after this line is uploads and database writes; holding
-		// a delivered PDF's whole copy through them is residency the caps have no reason
-		// to pay for. (Poppler reads a file, so this job cannot read in place the way the
-		// ffmpeg jobs can; the one thing it never does is keep the copy a moment past its
-		// only reader's death.)
-		await rm(localPath, { force: true }).catch(() => {});
-		localPath = null;
 		await updateProgress(jobId, 40);
 
 		// A re-run replaces the pages rather than appending to them. Without this, a job
@@ -196,8 +196,8 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 			// that pages can be checked one at a time; a public page defeats it entirely.
 			await storage.upload(key, bytes, "image/jpeg", "private");
 			// This page is off the disk the moment its upload lands, same as the
-			// transcode's segments — the directory holds only pages not yet uploaded.
-			await rm(join(outDir, file)).catch(() => {});
+			// transcode's segments — the scratch dirs hold only pages not yet uploaded.
+			await rm(file, { force: true }).catch(() => {});
 
 			const metadata = await sharp(bytes).metadata();
 			const width = metadata.width ?? 0;
@@ -258,7 +258,9 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 			.where(eq(transcodingJobs.id, jobId));
 		throw error;
 	} finally {
-		for (const path of downloaded) await rm(path, { force: true });
+		// Rendered sources were emptied at each pass's end; a failure before that still
+		// leaves the copy holding — the guard keeps the finally from rm-ing empty strings.
+		for (const path of downloaded) if (path) await rm(path, { force: true });
 		for (const dir of scratch) await rm(dir, { recursive: true, force: true });
 	}
 }
