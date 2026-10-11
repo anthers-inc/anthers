@@ -19,7 +19,6 @@
  * log, because § 6(b)/(c) of the Shield terms make agent use of it a prohibited use.
  */
 
-import { rm } from "node:fs/promises";
 import { db } from "@anthers/db/client";
 import type { VendorMatch } from "@anthers/db/schema";
 import { mediaQuarantine, mediaScans, works } from "@anthers/db/schema";
@@ -37,6 +36,15 @@ import { hashVideoFrames, probeVideo, type SampledFrame } from "../lib/video-fra
 import { type QuarantineObjectKind, quarantineObject, quarantineWork } from "./quarantine.js";
 import { storage } from "./storage/index.js";
 import { urlToKey } from "./storage/keys.js";
+
+/**
+ * How long a video scan's signed source address stays valid — long enough for ffmpeg to
+ * range-read the whole file at network speed, short of everything else in the system
+ * (`SIGNED_MEDIA_TTL_SECONDS`'s six hours is a play session's life; a decode pass takes
+ * minutes). If a pass outlives it, the scan records `unscannable` and the owed sweep asks
+ * again; a retry minting a fresh address is ordinary rather than a fault.
+ */
+const SOURCE_URL_TTL_SECONDS = 60 * 60;
 
 /** The vendor identifier recorded on every `VendorMatch` this service writes. */
 export const VENDOR = "arachnid-shield";
@@ -421,12 +429,17 @@ export async function scanStoredVideo(
 	} = {},
 ): Promise<ScanOutcome> {
 	let frames: SampledFrame[] = [];
-	let localPath: string | null = null;
 	try {
-		localPath = await storage.downloadToTemp(storageKey);
-		const probe = await probeVideo(localPath);
+		// The source is read in place — ranged requests off a short-lived signed address
+		// in remote mode, its own path on disk in local mode — and ffmpeg and ffprobe
+		// both take either form. **No temp copy is made**: a scan's whole point —
+		// creator-supplied bytes decoded server-side — does not care where the bytes
+		// come from, only that this process computes the hashes. Nothing media-sized
+		// ever lands on this disk from a scan.
+		const source = await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS });
+		const probe = await probeVideo(source);
 		frames = probe
-			? await hashVideoFrames(localPath, {
+			? await hashVideoFrames(source, {
 					width: probe.width,
 					height: probe.height,
 					durationSeconds: probe.durationSeconds,
@@ -437,8 +450,6 @@ export async function scanStoredVideo(
 		// a video at all. Unscannable rather than thrown: retrying will not change any of
 		// them, and the row is what says the question was asked and could not be answered.
 		frames = [];
-	} finally {
-		if (localPath) await rm(localPath).catch(() => {});
 	}
 
 	if (frames.length === 0) {
