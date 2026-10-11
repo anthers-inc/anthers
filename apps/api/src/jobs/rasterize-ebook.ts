@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Rasterize an **ebook** Work: one uploaded PDF in, one private page image out per page.
+ * Rasterize an **ebook** Work: its source set in, one private page image out per rendered page.
  *
  * 🚨 **Why this job exists at all, when the creator already uploaded a perfectly good
  * PDF.** The delivery rule is that every derived media object is stored private and every
@@ -13,9 +13,15 @@
  * The happy side effect is that the *client* gets simpler, not heavier — the user shows
  * images, so no PDF parser (~1 MB) ships to the browser at all.
  *
- * Uses **poppler** (`pdfinfo` + `pdftoppm`), which is a new system dependency alongside
- * ffmpeg. Absent, this fails the job with a legible message rather than half-rendering: a
- * book missing pages 40–96 is worse than one that plainly did not process.
+ * 🚨 **The source is a SET since the multi-PDF ruling** (Parker, 2026-10-10): every file's
+ * rendered pages become a contiguous run, in the set's order. Each file renders with its own
+ * `pdftoppm` invocation — one per file, never per page, for the same reason the single-file
+ * shape used one per document: one invocation parses the document once. The pages are
+ * numbered across the whole set, so a comic's page 1 is wherever the creator put it.
+ *
+ * Uses **poppler** (`pdfinfo` + `pdftoppm`), a system dependency alongside ffmpeg. Absent,
+ * this fails the job with a legible message rather than half-rendering: a book missing pages
+ * 40–96 is worse than one that plainly did not process.
  */
 
 import { randomUUID } from "node:crypto";
@@ -28,6 +34,7 @@ import { eq } from "drizzle-orm";
 import sharp from "sharp";
 import { detectPanels, sampleInkColor } from "../lib/panel-detection.js";
 import { storage } from "../services/storage/index.js";
+import { listSourceFiles } from "../services/work-source-files.js";
 
 export interface RasterizeEbookData {
 	jobId: number;
@@ -101,11 +108,14 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 	const [work] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
 	if (!work) throw new Error(`Work ${job.workId} not found`);
 
-	const sourceKey = work.sourceKey ?? "";
-	if (!sourceKey) throw new Error("No source file on this Work");
+	const sources = await listSourceFiles(work);
+	if (sources.length === 0) throw new Error("No source file on this Work");
 
-	let localPath: string | null = null;
-	let outDir: string | null = null;
+	/** Per-source temp dirs, plus each source's downloaded bytes; cleaned in `finally`. */
+	const scratch: string[] = [];
+	const downloaded: string[] = [];
+	/** The already-rendered page files, per source, in page order — uploaded after all render. */
+	const rendered: string[][] = [];
 
 	try {
 		if (!(await popplerAvailable())) {
@@ -114,36 +124,55 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 			);
 		}
 
-		localPath = await storage.downloadToTemp(sourceKey);
-		const pages = await pageCount(localPath);
-		if (pages < 1) throw new Error("This PDF has no pages");
-		if (pages > MAX_PAGES) {
-			throw new Error(`This PDF has ${pages} pages; the limit is ${MAX_PAGES}`);
+		// Pre-count every source before rendering any: the ceiling is the SET's page total,
+		// and refusing an over-ceiling set before the first pdftoppm runs is what keeps one
+		// pathological upload from spending an hour rendering two thousand pages it will
+		// not keep. (Also the moment a file that is not a PDF fails, with its name.)
+		// 5% is pre-flight; nothing has rendered.
+		let totalPages = 0;
+		for (const source of sources) {
+			const path = await storage.downloadToTemp(source.file);
+			downloaded.push(path);
+			const count = await pageCount(path);
+			if (count < 1) {
+				throw new Error(`A source file has no pages: ${source.filename || source.file}`);
+			}
+			totalPages += count;
+			if (totalPages > MAX_PAGES) {
+				throw new Error(`This set would render ${totalPages} pages; the limit is ${MAX_PAGES}`);
+			}
 		}
 		await updateProgress(jobId, 5);
 
-		/*
-		 * Render the whole document in one `pdftoppm` invocation rather than page by page.
-		 *
-		 * Poppler parses the document once and writes `page-001.jpg`, `page-002.jpg`, …
-		 * Spawning it per page re-parses the file every time, which on a 200-page graphic
-		 * novel is the difference between one pass and two hundred.
-		 */
-		outDir = await mkdtemp(join(tmpdir(), "ebook_"));
-		const proc = Bun.spawn(
-			["pdftoppm", "-jpeg", "-r", String(RENDER_DPI), localPath, join(outDir, "page")],
-			{ stdout: "ignore", stderr: "pipe" },
-		);
-		if ((await proc.exited) !== 0) {
-			throw new Error(`pdftoppm failed: ${(await new Response(proc.stderr).text()).trim()}`);
+		for (const [i, source] of sources.entries()) {
+			/*
+			 * Render this file in one `pdftoppm` invocation rather than page by page.
+			 *
+			 * Poppler parses the document once and writes `page-001.jpg`, `page-002.jpg`, ….
+			 * Spawning it per page re-parses the file every time, which on a 200-page graphic
+			 * novel is the difference between one pass and two hundred.
+			 */
+			const dir = await mkdtemp(join(tmpdir(), `ebook_${i}_`));
+			scratch.push(dir);
+			const proc = Bun.spawn(
+				["pdftoppm", "-jpeg", "-r", String(RENDER_DPI), downloaded[i], join(dir, "page")],
+				{ stdout: "ignore", stderr: "pipe" },
+			);
+			if ((await proc.exited) !== 0) {
+				throw new Error(
+					`pdftoppm failed for ${source.filename || source.file}: ${(await new Response(proc.stderr).text()).trim()}`,
+				);
+			}
+			// Sorted by name, which poppler zero-pads — so lexical order IS page order.
+			// Reading the directory rather than assuming the filenames means a document that
+			// poppler numbered differently than expected still lands in the right sequence.
+			const files = (await readdir(dir)).filter((f) => f.endsWith(".jpg")).sort();
+			if (files.length === 0) {
+				throw new Error(`pdftoppm produced no pages for ${source.filename || source.file}`);
+			}
+			rendered.push(files.map((f) => join(dir, f)));
 		}
 		await updateProgress(jobId, 40);
-
-		// Sorted by name, which poppler zero-pads — so lexical order IS page order. Reading
-		// the directory rather than assuming the filenames means a document poppler numbered
-		// differently than expected still lands in the right sequence.
-		const files = (await readdir(outDir)).filter((f) => f.endsWith(".jpg")).sort();
-		if (files.length === 0) throw new Error("pdftoppm produced no pages");
 
 		// A re-run replaces the pages rather than appending to them. Without this, a job
 		// retried after a partial upload leaves the book with two copies of page one and a
@@ -151,8 +180,9 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 		await db.delete(workPages).where(eq(workPages.workId, work.id));
 
 		const prefix = `creators/${work.creatorId}/ebook/${work.id}/${randomUUID().replace(/-/g, "")}`;
-		for (const [i, file] of files.entries()) {
-			const bytes = new Uint8Array(await readFile(join(outDir, file)));
+		const flat = rendered.flat();
+		for (const [i, file] of flat.entries()) {
+			const bytes = new Uint8Array(await readFile(file));
 			const key = `${prefix}/page-${String(i + 1).padStart(4, "0")}.jpg`;
 			// 🚨 PRIVATE, like every other derived object. The whole reason for this job is
 			// that pages can be checked one at a time; a public page defeats it entirely.
@@ -197,8 +227,8 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 			}
 
 			// 40 → 95 across the upload, which is where the wall-clock actually goes.
-			if (i % 5 === 0 || i === files.length - 1) {
-				await updateProgress(jobId, 40 + Math.round(((i + 1) / files.length) * 55));
+			if (i % 5 === 0 || i === flat.length - 1) {
+				await updateProgress(jobId, 40 + Math.round(((i + 1) / flat.length) * 55));
 			}
 		}
 
@@ -206,7 +236,9 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 			.update(transcodingJobs)
 			.set({ status: "completed", progress: 100, etaSeconds: null, updatedAt: new Date() })
 			.where(eq(transcodingJobs.id, jobId));
-		console.log(`[rasterize-ebook] work ${work.id} → ${files.length} page(s)`);
+		console.log(
+			`[rasterize-ebook] work ${work.id} → ${flat.length} page(s) from ${sources.length} file(s)`,
+		);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		await db
@@ -215,7 +247,7 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 			.where(eq(transcodingJobs.id, jobId));
 		throw error;
 	} finally {
-		if (localPath) await rm(localPath, { force: true });
-		if (outDir) await rm(outDir, { recursive: true, force: true });
+		for (const path of downloaded) await rm(path, { force: true });
+		for (const dir of scratch) await rm(dir, { recursive: true, force: true });
 	}
 }

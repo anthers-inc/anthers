@@ -27,7 +27,7 @@
  * moment earlier.
  */
 
-import { type FILE_WORK_TYPES, processingFor } from "@anthers/shared/content";
+import { type FILE_WORK_TYPES, isPaged, processingFor } from "@anthers/shared/content";
 import { useMemo, useSyncExternalStore } from "react";
 import { uploadImageFile } from "../components/post/mediaUpload";
 import { client } from "./rpc";
@@ -77,21 +77,35 @@ const defaultTransport: WorkUploadTransport = {
 	},
 	async attach(workId, target, key, file) {
 		const param = { id: String(workId) };
+		// 🚨 A paged Work's file attaches as a ROW of its source set (Parker, 2026-10-10) —
+		// the route carries the filename and size a `source_key` PATCH cannot, and the set is
+		// the row-level truth for these kinds; the service keeps the legacy column following
+		// the set. The other kinds' attach stays the legacy column patch.
 		const res =
-			target.kind === "source"
-				? await client.api.content.works[":id"].$patch({ param, json: { sourceKey: key } })
-				: await client.api.content.works[":id"].assets.$post({
+			target.kind === "source" && isPaged(target.type)
+				? await client.api.content.works[":id"]["source-files"].$post({
 						param,
 						json: {
 							file: key,
 							filename: file.name,
 							fileSize: file.size,
-							mimeType: file.type || "application/octet-stream",
-							platform: target.platform,
-							version: "",
-							isPrimary: true,
+							mimeType: file.type || "application/pdf",
 						},
-					});
+					})
+				: target.kind === "source"
+					? await client.api.content.works[":id"].$patch({ param, json: { sourceKey: key } })
+					: await client.api.content.works[":id"].assets.$post({
+							param,
+							json: {
+								file: key,
+								filename: file.name,
+								fileSize: file.size,
+								mimeType: file.type || "application/octet-stream",
+								platform: target.platform,
+								version: "",
+								isPrimary: true,
+							},
+						});
 		if (!res.ok) throw new Error(`attach answered ${res.status}`);
 	},
 };

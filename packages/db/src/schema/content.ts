@@ -745,6 +745,32 @@ export const workPanels = pgTable(
 	],
 );
 
+// node — the ordered PDF files a paged Work (comic, ebook) is made from. The Work itself
+// records one legacy `sourceKey`; this table is the source set's home and, since the 2026-10-10
+// multi-PDF task, the row-level truth for the paged kinds. Node media: the creator's own files,
+// cascading with the Work.
+export const workSourceFiles = pgTable(
+	"work_source_files",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** 0-based and dense — renumbered on every mutation, so the order is always this column's order. */
+		position: integer("position").notNull(),
+		/** Private storage key of the uploaded PDF. Never served directly; pages are. */
+		file: text("file").notNull(),
+		filename: text("filename").notNull().default(""),
+		fileSize: integer("file_size"),
+		mimeType: text("mime_type").notNull().default("application/pdf"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_work_source_files").on(table.workId, table.position),
+		index("idx_work_source_files_work").on(table.workId, table.position),
+	],
+);
+
 // both — a transcoding job is node media processing (the creator's source → derived
 // renditions), but it runs on org infrastructure (ffmpeg, the worker) and the org's
 // delivery layer reads it. The row is node-owned (it is about one creator's Work); the
