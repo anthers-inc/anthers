@@ -42,15 +42,15 @@ export default function SupportersPage() {
 		<div className="mx-auto max-w-3xl px-4 py-12">
 			<h1 className="font-serif text-3xl font-medium">Thank You</h1>
 			<p className="mt-3 text-base-content/70">
-				These are the people who have supported Anthers — everyone who ever has, whether they still
-				do or not. Half of what each of them gives goes to creators; the rest keeps the commons free
-				and pays for the programs.
+				These are the people who have supported Anthers: everyone who ever has, whether they still
+				do or not. Half of what each of them gives goes to creators; the rest, after the card cost,
+				keeps the commons free and pays for the programs.
 			</p>
 			{/* Says what the page does NOT publish, because a page ordered by money invites the
 			    question and answering it is cheaper than leaving somebody to wonder. */}
 			<p className="mt-2 text-sm text-base-content/45">
-				Grouped by how much each person has given in total, and listed alphabetically within each
-				group. No amounts are shown, and nobody is listed who has asked not to be —{" "}
+				They are grouped by how much each person has given in total, and listed alphabetically
+				within each group. No amounts are shown, and nobody is listed who has asked not to be;{" "}
 				<Link to="/settings" className="link link-hover">
 					that is a setting on your account
 				</Link>
@@ -68,8 +68,7 @@ export default function SupportersPage() {
 				// ⚠️ Not an error, and it must not read as one. Anthers is pre-launch; an empty
 				// page here is the honest state of a young platform rather than a failure.
 				<p className="mt-10 text-base-content/50">
-					Nobody is listed yet. Anthers has not opened to the public, so this page is waiting for
-					its first names.
+					Nobody is listed yet. This page is waiting for its first names.
 				</p>
 			)}
 

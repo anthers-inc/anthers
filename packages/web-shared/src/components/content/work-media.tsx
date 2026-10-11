@@ -18,7 +18,7 @@
  * here like any other file. Don't reintroduce an encode in the browser.
  */
 
-import { embedUrlProblem, workNeedsFile } from "@anthers/shared/content";
+import { embedUrlProblem, isPaged, workNeedsFile } from "@anthers/shared/content";
 import { type ReactNode, useState } from "react";
 import type { UploadableWorkType, Work, WorkInput } from "../../lib/types";
 import {
@@ -32,6 +32,7 @@ import TranscodingStatus from "../media/TranscodingStatus";
 import { keyToPreview } from "../post/mediaUpload";
 import FileUpload from "../ui/FileUpload";
 import FormField from "../ui/FormField";
+import { PagedSourceFiles } from "./PagedSourceFiles";
 
 /** The Work kinds whose file is uploaded into them, as the upload store names them. */
 export type FileWorkType = Extract<WorkUploadTarget, { kind: "source" }>["type"];
@@ -181,6 +182,11 @@ export function WorkFileSection({
 	const upload = useSourceUpload(work.id);
 	const rules = fileRules(type);
 	const start = (file: File) => workUploads.start(work.id, file, { kind: "source", type });
+	// A paged Work's file section is the SET editor — the list with add, reorder, remove —
+	// whether the set is one file or several; the in-flight states it shares with every
+	// kind are handled inside (they read the same upload store). Called after the hooks,
+	// which its sibling states are what keep ordered.
+	if (isPaged(type)) return <PagedSourceFiles work={work} />;
 
 	const label = type === "image" ? "Image" : "File";
 

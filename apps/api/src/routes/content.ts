@@ -205,6 +205,13 @@ import { isLocalStorage, storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
 import { releaseRefusal } from "../services/work-release.js";
+import {
+	appendSourceFile,
+	listSourceFiles,
+	removeSourceFile,
+	reorderSourceFiles,
+	syncFromSourceKey,
+} from "../services/work-source-files.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -988,6 +995,18 @@ const updateWorkSchema = workBaseSchema
  */
 const createWorkBody = zValidator("json", createWorkSchema, invalidBody);
 const updateWorkBody = zValidator("json", updateWorkSchema, invalidBody);
+
+/** One file joining a paged Work's set — the set routes stay thin, so this is the whole of it. */
+const sourceFileSchema = z.object({
+	// A storage key or URL, as the upload step hands it back. Bounded like every storage ref.
+	file: z.string().min(1).max(500),
+	filename: z.string().max(255).optional(),
+	fileSize: z.number().int().nonnegative().nullable().optional(),
+	mimeType: z.string().max(100).optional(),
+});
+
+/** A whole-set arrangement: the ids in the order the creator is showing. No partial orders. */
+const sourceOrderSchema = z.object({ order: z.array(z.number().int()) });
 
 const postBaseSchema = z.object({
 	title: z.string().max(255).optional().default(""),
@@ -2386,6 +2405,11 @@ async function rewriteHlsPlaylist(
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
+/** The most one `GET /posts` page may carry — the page size, and the default when a client
+ * asks for no limit at all. It matches the flat limit this route carried before pagination;
+ * a client keeps walking `nextCursor` past it. */
+const FEED_PAGE_MAX = 100;
+
 const contentRoutes = new Hono()
 	// ══════════════════════════════════════════════════════════════════════════
 	// POSTS — the universal content unit
@@ -2400,6 +2424,45 @@ const contentRoutes = new Hono()
 		const tag = c.req.query("tag");
 		const search = c.req.query("search");
 		const sort = c.req.query("sort") ?? "newest";
+		const effectiveSort = sort === "popular" ? "popular" : "newest";
+
+		// ── Cursor pagination ──
+		// Keyset pagination over the full ordering tuple — the row id breaks every tie —
+		// so paging is stable under concurrent inserts and never re-serves or skips a row.
+		// The cursor is the last row of the previous page, base64url JSON, its ordering
+		// values captured when that page was served: the comparison values are a snapshot,
+		// so later movement on a boundary row (a new pin, a view-count bump) cannot shift
+		// an existing page boundary. The feed time rides as epoch-microsecond text: a JS
+		// Date holds milliseconds only, and rounding the key off by a fraction would make
+		// the equality band skip rows. Postgres 16's `extract(epoch …)` is exact numeric
+		// arithmetic, so the microseconds compare with no rounding on either side.
+		const cursorRaw = c.req.query("cursor");
+		let cursor: { s: string; p: 0 | 1; id: number; m: string; v?: number } | null = null;
+		if (cursorRaw != null && cursorRaw !== "") {
+			try {
+				const parsed = JSON.parse(Buffer.from(cursorRaw, "base64url").toString("utf8"));
+				const shapeOk =
+					parsed?.s === effectiveSort &&
+					(parsed.p === 0 || parsed.p === 1) &&
+					Number.isInteger(parsed.id) &&
+					parsed.id > 0 &&
+					typeof parsed.m === "string" &&
+					/^\d+(\.\d+)?$/.test(parsed.m) &&
+					(effectiveSort === "popular"
+						? Number.isInteger(parsed.v) && (parsed.v as number) >= 0
+						: parsed.v === undefined);
+				if (!shapeOk) throw new Error("bad cursor");
+				cursor = parsed;
+			} catch {
+				return c.json({ error: "Invalid cursor." }, 400);
+			}
+		}
+
+		const rawLimit = Number(c.req.query("limit"));
+		if (c.req.query("limit") != null && (!Number.isInteger(rawLimit) || rawLimit < 1)) {
+			return c.json({ error: "limit must be a positive integer." }, 400);
+		}
+		const limit = rawLimit ? Math.min(rawLimit, FEED_PAGE_MAX) : FEED_PAGE_MAX;
 
 		const conditions: SQL[] = [];
 
@@ -2464,28 +2527,67 @@ const contentRoutes = new Hono()
 
 		// Sorted on publication, not on when the draft row appeared. `publishedAt` is null
 		// for drafts (the creator's own view), so fall back to createdAt to keep them ordered.
-		const feedOrder = sql`COALESCE(${posts.publishedAt}, ${posts.createdAt}) DESC`;
+		// Both reads and the ordering go through the same epoch-micros expression, so what
+		// feeds the cursor is exactly what ordered the page.
+		const feedTime = sql`COALESCE(${posts.publishedAt}, ${posts.createdAt})`;
+		const feedTimeMicros = sql`((extract(epoch from ${feedTime})) * 1000000)::numeric`;
 		let orderClause: SQL[];
 		switch (sort) {
 			case "popular":
-				orderClause = [desc(posts.viewCount), feedOrder];
+				orderClause = [desc(posts.viewCount), desc(feedTimeMicros)];
 				break;
 			default:
-				orderClause = [feedOrder];
+				orderClause = [desc(feedTimeMicros)];
 		}
 
-		const result = await db
+		// Rows ranking after the cursor row under `(is_pinned DESC, sort key DESC, id DESC)`.
+		// A boolean sorts DESC as false < true, so leaving the pinned band means
+		// `is_pinned = false` when the cursor row was pinned and is impossible otherwise;
+		// inside a band the remaining keys compare as a plain "strictly before" chain.
+		if (cursor) {
+			const older = sql`(${feedTimeMicros} < ${cursor.m}::numeric OR (${feedTimeMicros} = ${cursor.m}::numeric AND ${posts.id} < ${cursor.id}))`;
+			const inBand =
+				effectiveSort === "popular"
+					? sql`((${posts.viewCount} < ${cursor.v} OR (${posts.viewCount} = ${cursor.v} AND ${older})))`
+					: older;
+			conditions.push(
+				cursor.p === 1
+					? sql`(${posts.isPinned} = false OR (${posts.isPinned} = true AND ${inBand}))`
+					: sql`(${posts.isPinned} = false AND ${inBand})`,
+			);
+		}
+
+		// One row past the page decides whether a next page exists.
+		const fetched = await db
 			.select({
 				post: posts,
 				creatorHandle: users.atprotoHandle,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
+				feedTimeMicros: sql<string>`${feedTimeMicros}::text`,
 			})
 			.from(posts)
 			.innerJoin(users, eq(posts.creatorId, users.id))
 			.where(and(...conditions))
-			.orderBy(desc(posts.isPinned), ...orderClause)
-			.limit(100);
+			.orderBy(desc(posts.isPinned), ...orderClause, desc(posts.id))
+			.limit(limit + 1);
+
+		const hasMore = fetched.length > limit;
+		const result = hasMore ? fetched.slice(0, limit) : fetched;
+
+		let nextCursor: string | null = null;
+		if (hasMore && result.length > 0) {
+			const last = result[result.length - 1];
+			nextCursor = Buffer.from(
+				JSON.stringify({
+					s: effectiveSort,
+					p: last.post.isPinned ? 1 : 0,
+					id: last.post.id,
+					m: last.feedTimeMicros,
+					...(effectiveSort === "popular" ? { v: last.post.viewCount } : {}),
+				}),
+			).toString("base64url");
+		}
 
 		const postIds = result.map((r) => r.post.id);
 
@@ -2543,6 +2645,7 @@ const contentRoutes = new Hono()
 					linkedWorkCount: linked.length,
 				};
 			}),
+			nextCursor,
 		});
 	})
 
@@ -4912,8 +5015,14 @@ const contentRoutes = new Hono()
 		// built to make unnecessary. It re-reads and decides; a no-op costs one read.
 		await queueWorkListingSync(id);
 
-		// A new source means the old transcode is stale — re-process.
-		if (sourceChanged && updated.sourceKey) await queueTranscodeForWork(updated);
+		// A new source means the old transcode is stale — re-process. For the paged kinds the
+		// set table is the truth, so the legacy attach syncs it (replacing the set with the
+		// one file) and re-renders through the service; queueing the job directly here as
+		// well would be two jobs for one file.
+		if (sourceChanged && updated.sourceKey) {
+			if (isPaged(updated.type)) await syncFromSourceKey(updated);
+			else await queueTranscodeForWork(updated);
+		}
 		if (sourceChanged || thumbnailChanged) await queueScansForWork(updated);
 
 		const [workAssets, jobRows, buildRows, buildFileRows] = await Promise.all([
@@ -5193,6 +5302,97 @@ const contentRoutes = new Hono()
 
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 		return c.body(null, 204);
+	})
+
+	// ── A paged Work's source set ────────────────────────────────────────────────
+	// The multi-PDF ruling (Parker, 2026-10-10): a comic or book is made from one PDF or
+	// several, each file's rendered pages a contiguous run in the creator's arrangement.
+	// These routes are thin over `services/work-source-files.ts`, which owns the invariants.
+
+	.get("/works/:id/source-files", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		// A 404 rather than a 403, the way the works routes answer a non-owner — the
+		// existence of another creator's Work is not information to hand out.
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		const files = await listSourceFiles(item);
+		return c.json({ files });
+	})
+
+	.post("/works/:id/source-files", requireAuth, zValidator("json", sourceFileSchema), async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		// A 404 rather than a 403, the way the works routes answer a non-owner — the
+		// existence of another creator's Work is not information to hand out.
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!isPaged(item.type)) {
+			return c.json(
+				{ error: "Only a comic or a book carries a set of files.", code: "sources_not_paged" },
+				400,
+			);
+		}
+		if (item.visibility === "released") {
+			return c.json(
+				{
+					error: "A released Work's files can't change. Make it private first.",
+					code: "sources_not_private",
+				},
+				409,
+			);
+		}
+		const data = c.req.valid("json");
+		// The set route signs this key for the Work's owner, so a file naming another
+		// creator's private original would hand it over. See `storage/keys.ts`.
+		if (!(await isOwnStorageRef(data.file, user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
+		const { rows, job } = await appendSourceFile(item, data);
+		await queueScansForWork({ ...item, sourceKey: data.file });
+		return c.json({ files: rows, transcoding: job }, 201);
+	})
+
+	.patch(
+		"/works/:id/source-files",
+		requireAuth,
+		zValidator("json", sourceOrderSchema),
+		async (c) => {
+			const user = c.get("user");
+			const id = Number(c.req.param("id"));
+			const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+			if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			if (item.visibility === "released") {
+				return c.json(
+					{
+						error: "A released Work's files can't change. Make it private first.",
+						code: "sources_not_private",
+					},
+					409,
+				);
+			}
+			const { order } = c.req.valid("json");
+			const { rows, error } = await reorderSourceFiles(item, order);
+			if (error) return c.json({ error }, 400);
+			return c.json({ files: rows });
+		},
+	)
+
+	.delete("/works/:id/source-files/:fileId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (item.visibility === "released") {
+			return c.json(
+				{
+					error: "A released Work's files can't change. Make it private first.",
+					code: "sources_not_private",
+				},
+				409,
+			);
+		}
+		const job = await removeSourceFile(item, Number(c.req.param("fileId")));
+		if (!job) return c.json({ error: "Not found" }, 404);
+		return c.json({ transcoding: job });
 	})
 
 	// ══════════════════════════════════════════════════════════════════════════

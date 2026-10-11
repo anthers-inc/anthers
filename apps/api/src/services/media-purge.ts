@@ -19,7 +19,7 @@
  * that refused to delete is a deletion request we did not honor.
  */
 
-import { assets, db, transcodingJobs, webBuilds, works } from "@anthers/db";
+import { assets, db, transcodingJobs, webBuilds, workSourceFiles, works } from "@anthers/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { storage } from "./storage/index.js";
 import { isKeyUnder, urlToKey } from "./storage/keys.js";
@@ -27,6 +27,7 @@ import { isKeyUnder, urlToKey } from "./storage/keys.js";
 type WorkRow = typeof works.$inferSelect;
 type AssetRow = typeof assets.$inferSelect;
 type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
+type SourceFileRow = typeof workSourceFiles.$inferSelect;
 
 /** Delete a set of prefixes and keys, logging and swallowing every failure. */
 async function sweep(keys: Set<string>, prefixes: Set<string>, label: string): Promise<void> {
@@ -138,8 +139,9 @@ function keysForWork(
 	item: WorkRow,
 	workAssets: AssetRow[],
 	jobRows: TranscodingJobRow[],
+	sourceFiles: SourceFileRow[],
 ): { keys: Set<string>; prefixes: Set<string> } {
-	const all = collectRawKeysForWork(item, workAssets, jobRows);
+	const all = collectRawKeysForWork(item, workAssets, jobRows, sourceFiles);
 	const owner = item.creatorId;
 	const mine = (key: string) => owner != null && isKeyUnder(key, owner);
 	return {
@@ -193,12 +195,18 @@ function collectRawKeysForWork(
 	item: WorkRow,
 	workAssets: AssetRow[],
 	jobRows: TranscodingJobRow[],
+	sourceFiles: SourceFileRow[],
 ): { keys: Set<string>; prefixes: Set<string> } {
 	const keys = new Set<string>();
 	const prefixes = new Set<string>();
 
 	if (item.sourceKey) keys.add(urlToKey(item.sourceKey));
 	if (item.thumbnail) keys.add(urlToKey(item.thumbnail));
+	// A paged Work's source set — every file's original, not only the one the legacy
+	// column names. A removed source file's row is already gone when a delete runs, so
+	// the sweep cannot see it here by design: the remove path asks the sweep directly
+	// (`removeSourceFileStorage`, below) rather than through this enumeration.
+	for (const sourceFile of sourceFiles) keys.add(urlToKey(sourceFile.file));
 	for (const a of workAssets) if (a.file) keys.add(urlToKey(a.file));
 	for (const job of jobRows) {
 		if (job.hlsManifestUrl) {
@@ -222,7 +230,11 @@ export async function purgeWorkMedia(
 	workAssets: AssetRow[],
 	jobRows: TranscodingJobRow[],
 ): Promise<void> {
-	const { keys, prefixes } = keysForWork(item, workAssets, jobRows);
+	const sourceFileRows = await db
+		.select()
+		.from(workSourceFiles)
+		.where(eq(workSourceFiles.workId, item.id));
+	const { keys, prefixes } = keysForWork(item, workAssets, jobRows, sourceFileRows);
 	// A browser build is swept by prefix — one whole `web-builds/{buildId}/` prefix per
 	// build — rather than file by file, because the number of files a real engine export
 	// carries makes enumerating keys the wrong shape and a missed file an ungated copy of
@@ -259,13 +271,14 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 	const prefixes = new Set<string>();
 	if (workIds.length === 0) return { keys, prefixes };
 
-	const [workRows, assetRows, jobRows] = await Promise.all([
+	const [workRows, assetRows, jobRows, sourceFileRows] = await Promise.all([
 		db.select().from(works).where(inArray(works.id, workIds)),
 		db.select().from(assets).where(inArray(assets.workId, workIds)),
 		db
 			.select()
 			.from(transcodingJobs)
 			.where(and(inArray(transcodingJobs.workId, workIds))),
+		db.select().from(workSourceFiles).where(inArray(workSourceFiles.workId, workIds)),
 	]);
 	await addWebBuildPrefixes({ keys, prefixes }, workIds);
 
@@ -274,6 +287,7 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 			w,
 			assetRows.filter((a) => a.workId === w.id),
 			jobRows.filter((j) => j.workId === w.id),
+			sourceFileRows.filter((s) => s.workId === w.id),
 		);
 		for (const k of forThis.keys) keys.add(k);
 		for (const p of forThis.prefixes) prefixes.add(p);
@@ -303,4 +317,20 @@ export function addUserImages(
 /** Perform the deletions a {@link collectWorkMedia} pass enumerated. Call AFTER commit. */
 export async function sweepCollected(collected: CollectedMedia): Promise<void> {
 	await sweep(collected.keys, collected.prefixes, "account erase");
+}
+
+/**
+ * Sweep ONE source file's object, when a mutation removes it from its Work's set (a removal,
+ * or the file a replace retires). The remove path runs immediately — not through the Work
+ * delete enumeration, which by definition reads only keys the Work still names — so the
+ * ownership refusal `keysForWork` applies is applied here the same way: the key must be under
+ * the Work's creator's own prefix, or it is not touched.
+ */
+export async function removeSourceFileStorage(
+	sourceFile: Pick<SourceFileRow, "file">,
+	creatorId: number | null,
+): Promise<void> {
+	const key = urlToKey(sourceFile.file);
+	if (creatorId == null || !isKeyUnder(key, creatorId)) return;
+	await sweep(new Set([key]), new Set(), "work source remove");
 }

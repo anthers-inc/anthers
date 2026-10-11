@@ -141,7 +141,7 @@ export default function VideoStorageCalculatorPage() {
 							Pick the master resolution and framerate, and how the original was exported. The tool
 							stores that <b className="text-base-content">original file as-is</b>, then builds a
 							full <b className="text-base-content">AV1</b> transcode ladder down to{" "}
-							<b className="text-base-content">240p30</b> and stores that too — reporting monthly
+							<b className="text-base-content">240p30</b> and stores that too, reporting monthly
 							storage cost per hour of source content.
 						</>
 					}
@@ -358,10 +358,11 @@ export default function VideoStorageCalculatorPage() {
 					<p>
 						<strong className="text-base-content/70">Master.</strong> The original upload is stored
 						untouched at {fixed(masterVar.total, 2)} Mbps ({fixed(masterVar.gib, 2)} GiB per
-						source-hour) — {masterShare}% of the total store here. Defaults assume a quality-leaning
-						NLE export; ProRes 422 HQ masters run 10–40× an H.264 export and will swamp everything.
-						Switch to <em className="text-base-content/60 not-italic font-semibold">Custom</em> to
-						model your own observed upload bitrate.
+						source-hour); that is {masterShare}% of the total store here. Defaults assume a
+						quality-leaning NLE export; ProRes 422 HQ masters run 10–40× an H.264 export and will
+						swamp everything. Switch to{" "}
+						<em className="text-base-content/60 not-italic font-semibold">Custom</em> to model your
+						own observed upload bitrate.
 					</p>
 					<p>
 						<strong className="text-base-content/70">Ladder.</strong> AV1 video at delivery bitrates
@@ -372,11 +373,11 @@ export default function VideoStorageCalculatorPage() {
 					</p>
 					<p>
 						<strong className="text-base-content/70">Units.</strong> Size = bitrate × 3600s ÷ 8, in
-						GiB (2³⁰ bytes) to match a per-GiB price. One Mbps for an hour = 0.419 GiB. Storage only
-						— egress (see the companion bandwidth tool), requests, and any replication factor land
-						on top. Object stores quote per GB (10⁹), so multiply by 1.074 for $/GiB — Cloudflare
-						R2's $0.015/GB-month is the $0.0161/GiB-month this field starts at. Planning model, not
-						for invoicing.
+						GiB (2³⁰ bytes) to match a per-GiB price. One Mbps for an hour = 0.419 GiB. Storage
+						only; egress on your own object store, requests, and any replication factor land on top.
+						Object stores quote per GB (10⁹), so multiply by 1.074 for $/GiB; Cloudflare R2's
+						$0.015/GB-month is the $0.0161/GiB-month this field starts at. Planning model, not for
+						invoicing.
 					</p>
 				</CalcNotes>
 			</Reveal>

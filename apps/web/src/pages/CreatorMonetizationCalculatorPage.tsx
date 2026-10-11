@@ -3,6 +3,7 @@
 import {
 	type BadgeKey,
 	badgeLabel,
+	cardFeeDisplay,
 	thresholdForBadge,
 	timePoolFor,
 } from "@anthers/shared/constants";
@@ -64,6 +65,21 @@ function rate(n: number): string {
 }
 const cnt = (n: number) => Math.round(n).toLocaleString("en-US");
 
+/**
+ * What a creator receives from a directed amount `d` riding a monthly charge whose
+ * Anthers side is `price`: d less the direction's pro-rata slice of the single at-cost
+ * card fee on the whole charge, the fee share rounded per side before subtracting.
+ * Matches SAMPLE_RECEIPT ($6 directed atop a Sprout nets $5.67; $3.00 + $5.67 = $8.67);
+ * the Time Pool side of the charge arrives whole, the Anthers-side fee share comes off
+ * the remainder.
+ */
+const directedNetOf = (d: number, price: number) =>
+	d <= 0
+		? 0
+		: Math.round(
+				(d - Math.round(cardFeeDisplay(price + d) * (d / (price + d)) * 100) / 100) * 100,
+			) / 100;
+
 // ---------------------------------------------------------------------------
 // Section 1 — the conversion engine (one user)
 // ---------------------------------------------------------------------------
@@ -87,7 +103,8 @@ function ConversionEngine() {
 
 		const share = youCapped / safeTotal;
 		const tpEarn = share * tp;
-		const seedEarn = directed;
+		const seedEarn = directedNetOf(directed, price);
+		const toCreatorsDirectNet = directedNetOf(toCreatorsDirect, price);
 		const earn = tpEarn + seedEarn;
 
 		const perHour = tp / safeTotal; // Time Pool value of a view-hour
@@ -97,7 +114,8 @@ function ConversionEngine() {
 			directed,
 			planSupport,
 			tp,
-			toCreatorsDirect,
+			toCreatorsDirect: toCreatorsDirectNet,
+			toCreatorsDirectWhole: toCreatorsDirect,
 			supportsAnthers,
 			price,
 			share,
@@ -105,7 +123,12 @@ function ConversionEngine() {
 			seedEarn,
 			earn,
 			perHour,
-			toCreators: tp + toCreatorsDirect,
+			toCreators: tp + toCreatorsDirectNet,
+			cardFeeOnDirected:
+				toCreatorsDirect > 0
+					? cardFeeDisplay(price + toCreatorsDirect) *
+						(toCreatorsDirect / (price + toCreatorsDirect))
+					: 0,
 		};
 	}, [badge, total, you, directedToYou]);
 
@@ -128,8 +151,8 @@ function ConversionEngine() {
 				</h2>
 				<p className="text-sm text-base-content/60 max-w-2xl mb-2">
 					Pick the Badge a user chose, then how they spend their month. Their Time Pool is split
-					across everyone they watch, by time; your slice of their time — plus anything they direct
-					to you — is what you take home from them. Anthers is a nonprofit—no profit-taking.
+					across everyone they watch, by time; your slice of their time (plus anything they direct
+					to you) is what you take home from them. Anthers is a nonprofit: no profit-taking.
 				</p>
 
 				<div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-6">
@@ -187,7 +210,7 @@ function ConversionEngine() {
 							</div>
 							{you > total && (
 								<p className="text-error text-xs mt-1">
-									Time with you can't exceed their total — capped at {total} hrs.
+									Time with you can't exceed their total; capped at {total} hrs.
 								</p>
 							)}
 						</label>
@@ -209,7 +232,7 @@ function ConversionEngine() {
 							<p className="text-base-content/40 text-xs mt-1">
 								{m.planSupport === 0
 									? "Free directs nothing."
-									: `They direct about ${usd2(m.planSupport)} — capped there (${usd2(m.directed)} to you).`}
+									: `They direct about ${usd2(m.planSupport)} in all; ${usd2(m.directed)} goes to you.`}
 							</p>
 						</label>
 					</div>
@@ -238,7 +261,7 @@ function ConversionEngine() {
 									<span className="ml-1 text-sm font-medium text-base-content/50">/hr</span>
 								</p>
 								<p className="mt-1.5 text-xs text-base-content/50">
-									Time Pool basis — directed support stacks on top
+									Time Pool basis; directed support stacks on top
 								</p>
 							</div>
 							<div className="rounded-xl bg-base-200 p-4">
@@ -307,18 +330,13 @@ function ConversionEngine() {
 						</div>
 
 						<div className="text-sm text-base-content/80 bg-success/10 rounded-lg p-3.5 leading-relaxed">
-							{/* ⚠️ "Of that" was a lie about the arithmetic and had been one for a while.
-							    Directed support is a SEPARATE charge from the Anthers one — the model
-							    even says so — so `tp + directed` was never a slice of the Anthers
-							    amount, and the sentence read "$6.00/mo. Of that, $9.00 reaches
-							    creators". Under the pre-2026-08-16 triple it read $21 of $6, which is
-							    absurd enough that nobody can have looked at it. */}
 							This user gives Anthers <b className="text-success">{usd2(m.price)}</b>/mo (
 							{badgeLabel(badge)}), of which <b>{usd2(m.tp)}</b> becomes Time Pool, and directs
-							about <b>{usd2(m.toCreatorsDirect)}</b> more straight to creators — so{" "}
-							<b>{usd2(m.toCreators)}</b> reaches creators in all and Anthers keeps <b>$0</b>. You
-							hold <b>{(m.share * 100).toFixed(m.share < 0.1 ? 1 : 0)}%</b> of their{" "}
-							{+total.toFixed(2)} hrs, so you earn <b>{usd2(m.earn)}/mo</b> from them.
+							about <b>{usd2(m.toCreatorsDirectWhole)}</b> more straight to creators, less the
+							directed share of the at-cost card fee — so <b>{usd2(m.toCreators)}</b> reaches
+							creators in all and Anthers keeps <b>$0</b>. You hold{" "}
+							<b>{(m.share * 100).toFixed(m.share < 0.1 ? 1 : 0)}%</b> of their {+total.toFixed(2)}{" "}
+							hrs, so you earn <b>{usd2(m.earn)}/mo</b> from them.
 						</div>
 					</div>
 				</div>
@@ -446,8 +464,8 @@ function ValueMatrix() {
 						{ratio.toLocaleString("en-US", { maximumFractionDigits: 0 })}×
 					</b>{" "}
 					the least (<b className="text-base-content">{loCell}</b>,{" "}
-					<span className="font-mono text-success">{rate(lo)}/hr</span>). Same content, same minute
-					— the difference is entirely who's watching and how much else they watch. Directed support
+					<span className="font-mono text-success">{rate(lo)}/hr</span>). Same content, same minute;
+					the difference is entirely who's watching and how much else they watch. Directed support
 					stacks on top.
 				</div>
 			</div>
@@ -493,9 +511,12 @@ function AudienceBuilder() {
 			const you = Math.min(s.you, total);
 			const tp = timePoolOf(s.badge);
 			const directed = Math.min(s.directedToYou, supportOf(s.badge));
+			// Directed support nets its pro-rata slice of the whole charge's card fee — the same
+			// model the one-user engine above applies (see `directedNetOf`).
+			const directedNet = directedNetOf(directed, thresholdForBadge(s.badge));
 			const share = you / total;
 			const tpPerSub = share * tp;
-			const seedPerSub = directed;
+			const seedPerSub = directedNet;
 			const perSub = tpPerSub + seedPerSub;
 			const segRev = perSub * s.subs;
 			rev += segRev;
@@ -539,7 +560,8 @@ function AudienceBuilder() {
 				<p className="text-sm text-base-content/60 max-w-2xl mb-3">
 					Build an audience from segments. For each, set the subscriber count, the Badge they chose,
 					total monthly time, hours spent with you, and anything they direct to you. Revenue per
-					subscriber = (your share of their time × their Time Pool) + what they direct.
+					subscriber = (your share of their time × their Time Pool) + what they direct (less that
+					direction's pro-rata slice of the at-cost card fee on their whole monthly charge).
 				</p>
 
 				<div className="overflow-x-auto">
@@ -756,9 +778,9 @@ export default function CreatorMonetizationCalculatorPage() {
 					title="How time with a creator becomes revenue"
 					lede={
 						<>
-							On Anthers, your <b className="text-base-content">Time Pool</b> — set by the Badge you
-							chose — is split across every creator you engage with,{" "}
-							<b className="text-base-content">proportionally by time</b> — a minute is a minute,
+							On Anthers, your <b className="text-base-content">Time Pool</b> (set by the Badge you
+							chose) is split across every creator you engage with,{" "}
+							<b className="text-base-content">proportionally by time</b>: a minute is a minute,
 							whether it's video, audio, reading, or play. So a view-minute isn't worth a fixed
 							platform rate: it's worth a{" "}
 							<b className="text-base-content">slice of your Time Pool</b>, plus anything you direct
@@ -814,7 +836,7 @@ export default function CreatorMonetizationCalculatorPage() {
 									companion storage calculator.
 								</li>
 								<li>
-									Rates from the support model (<code>@anthers/shared</code>). Planning model —
+									Rates from the support model (<code>@anthers/shared</code>). Planning model;
 									approximate, not for invoicing.
 								</li>
 							</ul>

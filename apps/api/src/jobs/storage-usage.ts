@@ -52,6 +52,7 @@ import {
 	webBuildFiles,
 	webBuilds,
 	workSaves,
+	workSourceFiles,
 	works,
 } from "@anthers/db/schema";
 import { currentCycleKey } from "@anthers/shared/billing-cycle";
@@ -225,6 +226,20 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		if (source != null) add(purposes, "catalog", source);
 		const thumb = await sizeOfKey(row.thumbnail);
 		if (thumb != null) add(purposes, "catalog", thumb);
+	}
+
+	// ── A paged Work's source set ────────────────────────────────────────────────
+	// Each file is a creator original in its own right, and the set is the row-level
+	// truth for the paged kinds — so they enter the account's catalog total here,
+	// beside the column-sized media above.
+	const setRows = await db
+		.select({ creatorId: works.creatorId, file: workSourceFiles.file })
+		.from(workSourceFiles)
+		.innerJoin(works, eq(workSourceFiles.workId, works.id));
+	for (const row of setRows) {
+		if (row.creatorId == null) continue;
+		const size = await sizeOfKey(row.file);
+		if (size != null) add(account(row.creatorId).purposes, "catalog", size);
 	}
 
 	// ── Cloud saves, by the player ───────────────────────────────────────────────
