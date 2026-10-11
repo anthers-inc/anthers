@@ -221,6 +221,16 @@ export class S3StorageService implements StorageService {
 		return publicUrlFor(this.config, key);
 	}
 
+	/**
+	 * A short-lived signed address, ranged-read by the consuming tool. `getUrl` with the
+	 * signing options already does exactly this; the method exists so a caller that wants
+	 * "let the tool read it in place" states that intent and picks up the local mode
+	 * alongside it — the whole point of the method is that no caller of it downloads.
+	 */
+	async readableInput(key: string, opts?: { expiresIn?: number }): Promise<string> {
+		return this.getUrl(key, { signed: true, expiresIn: opts?.expiresIn });
+	}
+
 	async getPresignedUploadUrl(
 		key: string,
 		contentType: string,

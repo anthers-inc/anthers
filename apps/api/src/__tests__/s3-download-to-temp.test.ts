@@ -98,3 +98,18 @@ describe("downloadToTemp", () => {
 		expect((await tempDownloads()).filter((name) => !before.includes(name))).toEqual([]);
 	});
 });
+
+describe("readableInput", () => {
+	it("hands over a presigned ranged-read address and copies nothing to disk", async () => {
+		const service = new S3StorageService(CONFIG);
+		// Signing is entirely local — no client send is expected, and none is stubbed,
+		// so a readableInput that ever made a network request or a temp file fails here.
+		// The file's earlier tests own their own strays (afterAll clears them), so the
+		// delta is what this asserts.
+		const before = await tempDownloads();
+		const url = await service.readableInput("creators/1/videos/originals/a.mp4");
+		expect(url).toContain("creators/1/videos/originals/a.mp4");
+		expect(url).toContain("X-Amz-Signature");
+		expect((await tempDownloads()).filter((n) => !before.includes(n))).toEqual([]);
+	});
+});

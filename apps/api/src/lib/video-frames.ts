@@ -29,12 +29,12 @@ import { ffmpegCommand } from "./ffmpeg.js";
 import { type PdqHash, pdqHashPixels } from "./pdq.js";
 
 /** Run ffprobe and return its parsed JSON. Shared with `jobs/transcode-video.ts`. */
-export async function ffprobeJson(filePath: string): Promise<{
+export async function ffprobeJson(source: string): Promise<{
 	streams?: Array<{ codec_type?: string; width?: number; height?: number }>;
 	format?: { duration?: string };
 }> {
 	const proc = Bun.spawn(
-		["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", filePath],
+		["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", source],
 		{ stdout: "pipe", stderr: "pipe" },
 	);
 	const exitCode = await proc.exited;
@@ -48,14 +48,17 @@ export async function ffprobeJson(filePath: string): Promise<{
 /**
  * The three facts the sampler needs, or null when the file has no video stream at all.
  *
+ * `source` is a local path **or a network address** — ffmpeg and ffprobe both read ranged
+ * HTTP(S) natively, and the caller chooses whichever keeps media bytes off this disk.
+ *
  * Null is an ordinary answer rather than an error: an audio file, a corrupt container, or
  * something that was never a video will all land here, and the caller records the object
  * as unscannable rather than retrying it forever.
  */
 export async function probeVideo(
-	localPath: string,
+	source: string,
 ): Promise<{ width: number; height: number; durationSeconds: number } | null> {
-	const probe = await ffprobeJson(localPath);
+	const probe = await ffprobeJson(source);
 	const stream = probe.streams?.find((s) => s.codec_type === "video");
 	const width = Number(stream?.width ?? 0);
 	const height = Number(stream?.height ?? 0);
@@ -131,7 +134,7 @@ export interface SampledFrame {
  * worth retrying.
  */
 export async function hashVideoFrames(
-	localPath: string,
+	source: string,
 	options: { width: number; height: number; durationSeconds: number },
 ): Promise<SampledFrame[]> {
 	const { width, height } = options;
@@ -145,7 +148,7 @@ export async function hashVideoFrames(
 
 	const proc = Bun.spawn(
 		ffmpegCommand(
-			localPath,
+			source,
 			[
 				"-vf",
 				// A rate rather than a count: ffmpeg has no "give me N frames evenly" filter,

@@ -84,6 +84,17 @@ export interface StorageService {
 	getUrl(key: string, opts?: { signed?: boolean; expiresIn?: number }): Promise<string>;
 
 	/**
+	 * An input a streaming tool (ffmpeg, ffprobe) reads bytes from directly, **with no local
+	 * copy made**: a ranged-read network address off a short-lived signature in remote mode,
+	 * and the object's own filesystem path in local mode, where the bytes already sit on
+	 * this disk. ffmpeg and ffprobe take either form as their input argument, so a caller
+	 * uses the string uniformly and never asks which kind it got. This is what replaces
+	 * `downloadToTemp` for any job whose tool can eat its input a piece at a time — the
+	 * whole-file temp copy is the residency the incident of 2026-10-10 came from.
+	 */
+	readableInput(key: string, opts?: { expiresIn?: number }): Promise<string>;
+
+	/**
 	 * Get a presigned PUT URL for direct browser-to-storage uploads, plus the headers
 	 * the client MUST send with it. In local mode this returns the direct upload
 	 * endpoint URL and no headers.
