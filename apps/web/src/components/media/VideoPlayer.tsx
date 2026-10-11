@@ -86,6 +86,8 @@ export default function VideoPlayer({
 		};
 	}, [elementRef]);
 	const hlsRef = useRef<HlsInstance | null>(null);
+	/** The native-file branch's error listener, so its cleanup stays inside the source effect. */
+	const nativeErrorHandler = useRef<(() => void) | null>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [position, setPosition] = useState(0);
 	const [duration, setDuration] = useState(0);
@@ -297,7 +299,15 @@ export default function VideoPlayer({
 					video.src = src;
 				});
 		} else {
-			// Direct file playback
+			// Direct file playback — the original, delivered as its access-checked
+			// route's 302. The status-reading backstop the HLS branch has does not
+			// exist for a media element (a refused source reports
+			// `MEDIA_ERR_SRC_NOT_SUPPORTED` with no status), so the budget is the
+			// only honest signal a refusal arrives on — nudge it, the way a
+			// 402 fragment does for the ladder.
+			const onError = () => refreshBudget();
+			video.addEventListener("error", onError);
+			nativeErrorHandler.current = () => video.removeEventListener("error", onError);
 			video.src = src;
 			if (autoPlay) video.play().catch(() => {});
 		}
@@ -307,6 +317,8 @@ export default function VideoPlayer({
 				hlsRef.current.destroy();
 				hlsRef.current = null;
 			}
+			nativeErrorHandler.current?.();
+			nativeErrorHandler.current = null;
 			setLevels([]);
 			setCurrentLevel(-1);
 			setActiveLevelHeight(null);
