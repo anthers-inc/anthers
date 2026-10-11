@@ -24,7 +24,9 @@
  *   never names a model; a blend is a genuine mixed credit; precision is the rewarded move.
  *
  * One rule is enforced here as on the server: a **Created** credit names its contributor —
- * the Contributor box is disabled and cleared unless Created is among the ticked types.
+ * the Contributor box is disabled and cleared unless Created is among the ticked types. The
+ * inline error for an unfilled field, though, is a save-time complaint, never a live one: a
+ * freshly ticked Created box stays quiet until a save attempt finds the row still empty.
  */
 
 import { client } from "@anthers/web-shared/rpc";
@@ -94,11 +96,14 @@ export default function CreditsSection({
 	rows,
 	onChange,
 	selfIdentity,
+	showErrors,
 }: {
 	rows: WorkCredit[];
 	onChange: (next: WorkCredit[]) => void;
 	/** The signed-in account's own identity, for the Me button on every row; null when signed out. */
 	selfIdentity: { did: string; handle: string; displayName: string | null } | null;
+	/** Whether a save attempt has caught a malformed row — the inline error speaks only then, never while the creator is still filling the field in. */
+	showErrors: boolean;
 }) {
 	const setRow = (index: number, next: WorkCredit) => {
 		onChange(rows.map((r, i) => (i === index ? next : r)));
@@ -186,7 +191,7 @@ export default function CreditsSection({
 							confirm.
 						</p>
 					)}
-					{missingContributor(row) && (
+					{showErrors && missingContributor(row) && (
 						<p className="w-full text-xs text-error">
 							A Created credit names its contributor — say who made this part.
 						</p>
