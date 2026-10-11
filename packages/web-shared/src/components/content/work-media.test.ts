@@ -5,7 +5,7 @@
  * 🚨 **Each number is a claim about the pipeline behind the medium, not a UI preference** —
  * the reasoning lives on `fileRules` itself. This suite fails when somebody edits a cap
  * without revisiting that arithmetic: a PDF raising past 2 GB breaks the rasterize job's
- * disk budget (`apps/api/src/jobs/rasterize-ebook.ts` on App Platform's 4 GiB ephemeral
+ * disk budget (`apps/api/src/jobs/render-paged.ts` on App Platform's 4 GiB ephemeral
  * filesystem), and the image cap past 20 MB puts a full-size upload through the in-memory
  * direct route (`POST /api/content/media-upload/direct`). Change a number here only after
  * changing the constraint it encodes.

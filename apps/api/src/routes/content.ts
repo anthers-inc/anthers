@@ -1195,11 +1195,7 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 			.insert(transcodingJobs)
 			.values({ workId: item.id, mediaType: "ebook", status: "pending" })
 			.returning();
-		await queue.send(
-			QUEUES.RASTERIZE_EBOOK,
-			{ jobId: job.id },
-			JOB_OPTIONS[QUEUES.RASTERIZE_EBOOK],
-		);
+		await queue.send(QUEUES.RENDER_PAGED, { jobId: job.id }, JOB_OPTIONS[QUEUES.RENDER_PAGED]);
 		return job;
 	}
 	if (processing === "audio" && item.sourceKey) {

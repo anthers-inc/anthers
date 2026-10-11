@@ -36,7 +36,7 @@ import { JOB_OPTIONS, QUEUES, queue } from "./queue.js";
 export const RESUME_QUEUE: Record<string, string | undefined> = {
 	video: QUEUES.TRANSCODE_VIDEO,
 	audio: QUEUES.PROCESS_AUDIO,
-	ebook: QUEUES.RASTERIZE_EBOOK,
+	ebook: QUEUES.RENDER_PAGED,
 };
 
 /** What the sweep did, so a caller (or a test) can assert on outcomes rather than logs. */

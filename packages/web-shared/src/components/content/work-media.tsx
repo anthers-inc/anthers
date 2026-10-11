@@ -47,7 +47,7 @@ export function isFileWorkType(type: string): type is FileWorkType {
  * 🚨 **These caps are picked to what the pipeline behind them tolerates, not to what storage
  * accepts** — a Work's source upload goes out through the presign route (`packages/web-shared/src/lib/upload.ts`),
  * so the bytes never pass through the API in production and R2's single-PUT ceiling is 5 GB.
- * The binding constraint for a PDF is the worker that rasterizes it: `apps/api/src/jobs/rasterize-ebook.ts`
+ * The binding constraint for a PDF is the worker that rasterizes it: `apps/api/src/jobs/render-paged.ts`
  * writes the source to App Platform's ephemeral filesystem — 4 GiB total per container —
  * alongside every page image it renders before uploading them, so the source cap is the share
  * of that disk a book may claim. 2 GB is that share with room for the rendered pages, and parity

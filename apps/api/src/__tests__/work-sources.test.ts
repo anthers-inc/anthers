@@ -167,7 +167,7 @@ describe("a paged Work's source set", () => {
 
 		// Exactly one re-render per mutation: the legacy sync was one, each append one.
 		const rasterizeCalls = (sendSpy.mock.calls as Array<[unknown, unknown]>).filter(
-			([q]) => q === QUEUES.RASTERIZE_EBOOK,
+			([q]) => q === QUEUES.RENDER_PAGED,
 		).length;
 		expect(rasterizeCalls).toBe(3);
 	});

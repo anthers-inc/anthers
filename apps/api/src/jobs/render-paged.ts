@@ -36,7 +36,7 @@ import { detectPanels, sampleInkColor } from "../lib/panel-detection.js";
 import { storage } from "../services/storage/index.js";
 import { listSourceFiles } from "../services/work-source-files.js";
 
-export interface RasterizeEbookData {
+export interface RenderPagedData {
 	jobId: number;
 }
 
@@ -84,7 +84,7 @@ async function updateProgress(jobId: number, progress: number) {
 		.where(eq(transcodingJobs.id, jobId));
 }
 
-export async function rasterizeEbook(data: RasterizeEbookData) {
+export async function renderPaged(data: RenderPagedData) {
 	const { jobId } = data;
 
 	const [job] = await db
@@ -96,7 +96,7 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 	// Idempotency: a late pg-boss retry of a job already finished (e.g. by the worker's
 	// startup-resume path) is a no-op, exactly as the other two jobs treat it.
 	if (job.status === "completed") {
-		console.log(`[rasterize-ebook] job ${jobId} already completed; skipping`);
+		console.log(`[render-paged] job ${jobId} already completed; skipping`);
 		return;
 	}
 
@@ -231,7 +231,7 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 				const message =
 					detectionError instanceof Error ? detectionError.message : String(detectionError);
 				console.warn(
-					`[rasterize-ebook] panel detection failed for work ${work.id} page ${i + 1}: ${message}`,
+					`[render-paged] panel detection failed for work ${work.id} page ${i + 1}: ${message}`,
 				);
 				// A detection failure leaves the page without panels, which the user treats as
 				// whole-page fallback. The job continues.
@@ -248,7 +248,7 @@ export async function rasterizeEbook(data: RasterizeEbookData) {
 			.set({ status: "completed", progress: 100, etaSeconds: null, updatedAt: new Date() })
 			.where(eq(transcodingJobs.id, jobId));
 		console.log(
-			`[rasterize-ebook] work ${work.id} → ${flat.length} page(s) from ${sources.length} file(s)`,
+			`[render-paged] work ${work.id} → ${flat.length} page(s) from ${sources.length} file(s)`,
 		);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
