@@ -28,6 +28,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { getStripe } from "../../lib/stripe";
 import CheckoutBillingAddressBlock from "../payments/CheckoutBillingAddressBlock";
+import { useSavedBillingAddress } from "../payments/useSavedBillingAddress";
 import {
 	mayConfirm,
 	sessionTotalsFrom,
@@ -354,7 +355,8 @@ function MerchCheckoutForm({
 	onCancel: () => void;
 }) {
 	const checkoutState = useCheckoutElements();
-	const billing = useSessionBillingAddress(checkoutState);
+	const savedPrefill = useSavedBillingAddress();
+	const billing = useSessionBillingAddress(checkoutState, savedPrefill);
 	const [processing, setProcessing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [succeeded, setSucceeded] = useState(false);

@@ -58,6 +58,7 @@ import {
 	RIGHTS_RESPONSE_DAYS,
 } from "@anthers/shared/rights";
 import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panels";
+import { isUsState } from "@anthers/shared/us-states";
 import { zValidator } from "@hono/zod-validator";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -65,6 +66,7 @@ import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
 import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
+import { invalidBody } from "../middleware/validate.js";
 import { type AccessibleWork, buildAccessContext, resolveAccessSync } from "../services/access.js";
 import { buildAccountExport } from "../services/account-data.js";
 import {
@@ -82,6 +84,11 @@ import { notifyFollow } from "../services/activity-notify.js";
 import { interactionPermissionRefusal } from "../services/atproto.js";
 import { FOLLOW_COLLECTION } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
+import {
+	clearSavedBillingAddress,
+	saveBillingAddress,
+	savedBillingAddress,
+} from "../services/billing.js";
 import { blockUser, isBlocked, listBlocks, notBlockedBy, unblockUser } from "../services/blocks.js";
 import {
 	adultAccessFor,
@@ -253,6 +260,33 @@ const publishedProjectCount = sql<number>`(SELECT count(*)::int FROM projects WH
  * nothing about whether they want explicit work at all.
  */
 const displaySchema = z.enum(["hide", "blur", "show"]);
+
+/**
+ * The address body a save takes — the shape the purchase surfaces collect, US only.
+ * Trimmed, with `line2` normalized to a real null, the state uppercased and checked
+ * against the shared state list (the same list the checkout form renders), and the
+ * ZIP shaped like a US ZIP exactly as `isAddressComplete` shapes it at checkout.
+ */
+const savedBillingAddressSchema = z.object({
+	name: z.string().trim().min(1).max(200),
+	line1: z.string().trim().min(1).max(200),
+	line2: z
+		.string()
+		.trim()
+		.max(200)
+		.nullish()
+		.transform((v) => (v ? v : null)),
+	city: z.string().trim().min(1).max(200),
+	state: z
+		.string()
+		.trim()
+		.transform((v) => v.toUpperCase())
+		.refine((code) => isUsState(code), "Not a US state code"),
+	postalCode: z
+		.string()
+		.trim()
+		.regex(/^\d{5}(-\d{4})?$/, "Not a US ZIP code"),
+});
 
 const contentPreferencesSchema = z.object({
 	mature: displaySchema.optional(),
@@ -1412,6 +1446,54 @@ const accountRoutes = new Hono()
 		// is an account allowance (combined-free, every account), so a player holding
 		// cloud saves reads their own figure just as a creator does.
 		return c.json(await storageReadingFor(c.get("user").id));
+	})
+
+	// ── Saved billing address ──────────────────────────────────────────────
+	//
+	// 🚨 **The one opt-in address, per the 2026-10-11 decision** — saved only here,
+	// stored on the buyer's Stripe Customer object, never in a column
+	// (`services/billing.ts` is this record's only writer and carries its docblock).
+	// This GET is also checkout's prefill source, so prefill is a read-only trip;
+	// nothing on a checkout ever offers to save, and settings is where both the save
+	// and the clear happen.
+
+	.get("/me/billing-address", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		return c.json({ address: await savedBillingAddress(sessionUser.id) });
+	})
+
+	.put(
+		"/me/billing-address",
+		requireAuth,
+		zValidator("json", savedBillingAddressSchema, invalidBody),
+		async (c) => {
+			const sessionUser = c.get("user");
+			// The email the Customer carries comes from the row, not the session's own
+			// cache — the same read `subscriptions.ts` makes before its own ensure.
+			const [email] = await db
+				.select({ email: users.email })
+				.from(users)
+				.where(eq(users.id, sessionUser.id))
+				.limit(1);
+			const saved = await saveBillingAddress(
+				sessionUser.id,
+				email?.email ?? "",
+				c.req.valid("json"),
+			);
+			return c.json({ address: saved });
+		},
+	)
+
+	.delete("/me/billing-address", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const cleared = await clearSavedBillingAddress(sessionUser.id);
+		if (cleared === "failed") {
+			return c.json(
+				{ error: "We couldn't clear your saved address right now. Please try again." },
+				503,
+			);
+		}
+		return c.json({ address: null });
 	})
 
 	.patch(
