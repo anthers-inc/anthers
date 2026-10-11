@@ -110,6 +110,27 @@ export class LocalStorageService implements StorageService {
 		}
 	}
 
+	/**
+	 * Local mode runs no multipart sessions — its uploads are small and go over the
+	 * direct endpoint whole. The session route decides by backend before reaching any
+	 * of these, so these throws mean a caller bug rather than a user-facing failure.
+	 */
+	async createMultipartUpload(): Promise<{ uploadId: string }> {
+		throw new Error("multipart sessions are not available in local mode");
+	}
+	async getPresignedPartUrl(): Promise<string> {
+		throw new Error("multipart sessions are not available in local mode");
+	}
+	async listMultipartParts(): Promise<Array<{ number: number; etag: string }>> {
+		throw new Error("multipart sessions are not available in local mode");
+	}
+	async completeMultipartUpload(): Promise<void> {
+		throw new Error("multipart sessions are not available in local mode");
+	}
+	async abortMultipartUpload(): Promise<void> {
+		throw new Error("multipart sessions are not available in local mode");
+	}
+
 	/** Rename on disk, creating the destination directory. False when the source is absent. */
 	async move(fromKey: string, toKey: string): Promise<boolean> {
 		if (fromKey === toKey) return true;

@@ -172,4 +172,44 @@ export interface StorageService {
 	 * the *sweep's rules* that decide what is then deleted — not this method's.
 	 */
 	listChildPrefixes(prefix: string): Promise<string[]>;
+
+	/**
+	 * Multipart upload primitives — the resumable-upload session's floor. ⚠️
+	 * **Implemented for S3-compatible backends only; local mode declares them and
+	 * throws**, because local uploads are small and go over the direct endpoint whole.
+	 * The session route decides by backend before reaching any of these, so a local
+	 * throw means a caller bug, not a user-facing failure.
+	 */
+	createMultipartUpload(
+		key: string,
+		contentType: string,
+		acl: "public" | "private",
+	): Promise<{ uploadId: string }>;
+
+	/** One part's PUT address, presigned and short-lived. */
+	getPresignedPartUrl(
+		key: string,
+		uploadId: string,
+		partNumber: number,
+		expiresIn?: number,
+	): Promise<string>;
+
+	/**
+	 * The parts the backend holds for this session, as the client reported them:
+	 * `{ number, etag }`. A completion that does not name every held part fails.
+	 */
+	listMultipartParts(
+		key: string,
+		uploadId: string,
+	): Promise<Array<{ number: number; etag: string }>>;
+
+	/** Assemble the uploaded parts into the object at `key`. */
+	completeMultipartUpload(
+		key: string,
+		uploadId: string,
+		parts: Array<{ number: number; etag: string }>,
+	): Promise<void>;
+
+	/** Abandon a session: the backend frees the held parts. */
+	abortMultipartUpload(key: string, uploadId: string): Promise<void>;
 }
