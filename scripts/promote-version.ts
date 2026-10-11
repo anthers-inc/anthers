@@ -14,8 +14,9 @@
  * The full promote flow, in order:
  *
  * 1. `bun run scripts/promote-version.ts` — compute the next version, write the bump
- *    and the release-notes entries the version needs (this script; idempotent, so a
- *    re-run converges).
+ *    and the release-notes entries the version needs (this script; the target is
+ *    computed from the constant as `HEAD` carries it, so a re-run of a resumed promote
+ *    converges on the same version rather than bumping twice).
  * 2. Open a PR for the bump — **its commit carries the version and the new release's
  *    release-notes entry together**, because CI's deploy job refuses a release whose
  *    version has no entry (`scripts/release-notes-audit.ts` runs before the deploy).
@@ -39,6 +40,8 @@
  * --version     pin the next version instead of computing it, for the rare promote
  *               that needs to skip numbers (a pulled release, a re-promote).
  */
+
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const VERSION_FILE = "packages/shared/src/version.ts";
@@ -64,6 +67,73 @@ function readCurrent(): string {
 	return match[1];
 }
 
+/**
+ * The version constant as `HEAD` carries it — the baseline a promote computes its target
+ * from, not the working tree's. The working tree of a resumed promote already carries the
+ * interrupted session's bump, and computing nextVersion from that double-bumps: the first
+ * run writes `.22` from a `.21` committed constant, a re-run reads `.22` still unreleased
+ * and writes `.23`, a number this promote then publishes while its release-notes entry
+ * names `.22`. The committed constant is the one thing an interrupted session cannot have
+ * moved, so it is the only honest baseline.
+ */
+function readCommitted(): string {
+	let out: string;
+	try {
+		const toplevel = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+			encoding: "utf8",
+		}).trim();
+		out = execFileSync("git", ["show", `HEAD:${VERSION_FILE}`], {
+			encoding: "utf8",
+			cwd: toplevel,
+		});
+	} catch (error) {
+		return fail(
+			`${VERSION_FILE} is not readable at HEAD (run from the repository) — ${
+				error instanceof Error ? error.message : String(error)
+			}`,
+		);
+	}
+	const line = out.split("\n").find((l) => l.startsWith(VERSION_EXPORT));
+	if (!line) return fail(`no "${VERSION_EXPORT}" line at HEAD:${VERSION_FILE}`);
+	const match = line.match(/"([^"]+)"/);
+	if (!match) return fail(`the APP_VERSION line at HEAD does not carry a quoted string`);
+	return match[1];
+}
+
+/**
+ * The bump decision, pure for tests and shared by the script's only path. `committed` is
+ * the baseline nextVersion computes from; `working` is the tree's constant, which is the
+ * committed value on a clean tree and the interrupted session's bump on a resumed one.
+ * `pinned` replaces the computed target outright (--version), for the rare promote that
+ * must skip a pulled release's number — and is deliberate by construction, so it also
+ * writes over a stray constant where the unpinned path refuses.
+ */
+export type BumpPlan =
+	| { action: "no-op"; target: string }
+	| { action: "write"; target: string }
+	| { action: "refuse"; target: string; committed: string; working: string };
+
+export function bumpPlan(
+	committed: string,
+	working: string,
+	pinned?: string,
+	today?: Date,
+): BumpPlan {
+	const target = pinned ?? nextVersion(committed, today);
+	// Already at the promote's target in the working tree: the bump is written (a
+	// re-invocation of an interrupted promote) — converging is success, not an error.
+	if (target === working) return { action: "no-op", target };
+	// Without a pin, a tree that disagrees with both HEAD and this promote's target is a
+	// constant edit no step of this flow wrote or will write. Bumping over it would
+	// publish a version neither the entries nor a release was composed for, so refuse
+	// with the way out (restore the computed target, or pin one deliberately). With a
+	// pin, the operator has named the version deliberately: write it.
+	if (working !== committed && pinned === undefined) {
+		return { action: "refuse", target, committed, working };
+	}
+	return { action: "write", target };
+}
+
 /** The next calver version, given today's date and the current constant. */
 export function nextVersion(current: string, today = new Date()): string {
 	const match = current.match(/^(\d{4})\.(\d{1,2})\.(\d+)$/);
@@ -85,8 +155,8 @@ export function nextVersion(current: string, today = new Date()): string {
 }
 
 // 🚨 Everything below runs only as a script. The module is imported by
-// `promote-version.test.ts` for `nextVersion`, so the bump flow must not execute on
-// import — a test run would otherwise rewrite the committed version constant.
+// `promote-version.test.ts` for `nextVersion` and `bumpPlan`, so the bump flow must not
+// execute on import — a test run would otherwise rewrite the committed version constant.
 if (import.meta.main) {
 	// --check: no writes, exit 1 on a malformed constant. The deploy job composes a
 	// git tag from this string, and a tag with a space or a `v` fails there rather
@@ -101,21 +171,36 @@ if (import.meta.main) {
 		process.exit(0);
 	}
 
-	const current = readCurrent();
+	const working = readCurrent();
 	const pinIndex = process.argv.indexOf("--version");
-	const next =
+	const pinned =
 		pinIndex !== -1 ? (process.argv[pinIndex + 1] ?? fail("--version needs a value")) : undefined;
-	const target = next ?? nextVersion(current);
-	if (!/^\d{4}\.\d{1,2}\.\d+$/.test(target)) {
-		fail(`next version "${target}" is not calver YYYY.M.N`);
+	const committed = readCommitted();
+	const plan = (() => {
+		try {
+			return bumpPlan(committed, working, pinned);
+		} catch (error) {
+			return fail(`HEAD's APP_VERSION is bad: ${(error as Error).message}`);
+		}
+	})();
+	if (!/^\d{4}\.\d{1,2}\.\d+$/.test(plan.target)) {
+		fail(`next version "${plan.target}" is not calver YYYY.M.N`);
 	}
-	if (target === current) {
+	if (plan.action === "no-op") {
 		// Idempotent, not an error: the flow's step 1 already ran (a re-invocation after
 		// the release-notes pass staged its entries, a resumed promote). Converging on
 		// the same version is success — that is what makes the whole flow self-healing.
-		console.log(`promote-version: APP_VERSION is already ${target} ✓`);
+		console.log(`promote-version: APP_VERSION is already ${plan.target} ✓`);
 		process.exit(0);
 	}
+	if (plan.action === "refuse") {
+		fail(
+			`the working tree's APP_VERSION is ${plan.working}, where HEAD carries ${plan.committed}, ` +
+				`and this promote computes ${plan.target}. Restore the constant to ${plan.target} and run ` +
+				`this again, or pin a deliberately different version with --version.`,
+		);
+	}
+	const target = plan.target;
 
 	// Write the bump: replace the constant's line, preserving everything around it.
 	const source = readFileSync(VERSION_FILE, "utf8");
@@ -128,7 +213,7 @@ if (import.meta.main) {
 	}
 	writeFileSync(VERSION_FILE, updated);
 
-	console.log(`promote-version: ${current} → ${target}`);
+	console.log(`promote-version: ${working} → ${target}`);
 	console.log("");
 	console.log("Next steps — the bump and its release-notes entry are one PR:");
 	console.log("  1. Run the /promote command, or by hand:");
