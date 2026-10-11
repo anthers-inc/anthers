@@ -162,4 +162,14 @@ export interface StorageService {
 
 	/** Check whether a file exists. */
 	exists(key: string): Promise<boolean>;
+
+	/**
+	 * The immediate child prefixes under `prefix`, one path segment each — the run
+	 * directories under `creators/{id}/videos/hls/`, the accounts under `creators/`.
+	 * Empty when nothing is there. ⚠️ **A sweep's enumeration primitive, never a
+	 * delivery surface**: it hands back raw prefixes with no signature and no access
+	 * check, because everything under a private prefix is already private, and it is
+	 * the *sweep's rules* that decide what is then deleted — not this method's.
+	 */
+	listChildPrefixes(prefix: string): Promise<string[]>;
 }

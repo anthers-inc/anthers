@@ -368,6 +368,32 @@ export class S3StorageService implements StorageService {
 		return total;
 	}
 
+	/**
+	 * The immediate child prefixes under `prefix`, from CommonPrefixes with a ` delimiter.
+	 * The bucket is whatever the prefix's own ownership rule resolves to — a sweep's
+	 * prefixes sit under one creator (private), and local mode's answer lives beside it.
+	 */
+	async listChildPrefixes(prefix: string): Promise<string[]> {
+		const out: string[] = [];
+		const bucket = this.bucketForKey(prefix);
+		let continuationToken: string | undefined;
+		do {
+			const listed = await this.s3.send(
+				new ListObjectsV2Command({
+					Bucket: bucket,
+					Prefix: prefix,
+					Delimiter: "/",
+					ContinuationToken: continuationToken,
+				}),
+			);
+			for (const common of listed.CommonPrefixes ?? []) {
+				if (common.Prefix && common.Prefix !== prefix) out.push(common.Prefix);
+			}
+			continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+		} while (continuationToken);
+		return out;
+	}
+
 	async exists(key: string): Promise<boolean> {
 		try {
 			await this.s3.send(new HeadObjectCommand({ Bucket: this.bucketForKey(key), Key: key }));

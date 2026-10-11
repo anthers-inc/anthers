@@ -94,6 +94,22 @@ export class LocalStorageService implements StorageService {
 		return join(localContentRoot(), key);
 	}
 
+	/**
+	 * The directories under the path, as fully-qualified child prefixes — `prefix` plus
+	 * each directory's name, matching the S3 shape's `CommonPrefixes` output. An absent
+	 * parent enumerates empty: a sweep asks about creators that may never have created
+	 * a video.
+	 */
+	async listChildPrefixes(prefix: string): Promise<string[]> {
+		try {
+			const entries = await readdir(join(localContentRoot(), prefix), { withFileTypes: true });
+			return entries.filter((e) => e.isDirectory()).map((e) => `${prefix}${e.name}/`);
+		} catch {
+			// ENOENT and any other read trouble: nothing under this prefix.
+			return [];
+		}
+	}
+
 	/** Rename on disk, creating the destination directory. False when the source is absent. */
 	async move(fromKey: string, toKey: string): Promise<boolean> {
 		if (fromKey === toKey) return true;

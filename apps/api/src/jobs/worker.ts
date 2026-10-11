@@ -37,6 +37,7 @@ import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { runDeadlineReminderSweep } from "./deadline-reminders.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
+import { runHlsOrphanSweep } from "./hls-orphan-sweep.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
 import { handlePruneAttention, type PruneAttentionData } from "./prune-attention.js";
 import { publishScheduled } from "./publish-scheduled.js";
@@ -196,6 +197,15 @@ async function start() {
 			const { sweptCount, warnedCount } = await runWithdrawnSweep();
 			if (sweptCount > 0 || warnedCount > 0) {
 				console.log(`[withdrawn-sweep] job ${job.id}: swept ${sweptCount}, warned ${warnedCount}`);
+			}
+		}
+	});
+
+	await queue.work(QUEUES.HLS_ORPHAN_SWEEP, async (jobs) => {
+		for (const job of jobs) {
+			const sweptCount = await runHlsOrphanSweep();
+			if (sweptCount > 0) {
+				console.log(`[hls-orphan-sweep] job ${job.id}: swept ${sweptCount} orphaned prefixes`);
 			}
 		}
 	});
