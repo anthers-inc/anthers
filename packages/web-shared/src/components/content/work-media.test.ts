@@ -33,9 +33,11 @@ describe("fileRules", () => {
 		expect(fileRules("comic").maxSize).toBeGreaterThanOrEqual(1.5 * GB);
 	});
 
-	it("takes PDFs for paged kinds and nothing else", () => {
-		expect(fileRules("comic").accept).toBe("application/pdf");
-		expect(fileRules("ebook").accept).toBe("application/pdf");
+	it("takes page images and PDFs for the paged kinds, and only the medium's own type for the rest", () => {
+		// The lead path: a JPG or PNG page image; the PDF beside it, because a
+		// whole-book master is what a creator holds and the set is one set either way.
+		expect(fileRules("comic").accept).toBe("image/jpeg,image/png,application/pdf");
+		expect(fileRules("ebook").accept).toBe("image/jpeg,image/png,application/pdf");
 		expect(fileRules("video").accept).toBe("video/*");
 		expect(fileRules("audio").accept).toBe("audio/*");
 		expect(fileRules("image").accept).toBe("image/*");

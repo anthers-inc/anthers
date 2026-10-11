@@ -149,7 +149,7 @@ export async function renderPaged(data: RenderPagedData) {
 		// not keep. (Also the moment anything unreadable fails, with its name.)
 		// 5% is pre-flight; nothing has rendered.
 		let totalPages = 0;
-		for (const [i, source] of sources.entries()) {
+		for (const source of sources) {
 			const path = await storage.downloadToTemp(source.file);
 			downloaded.push(path);
 			if (isPageImage(source.mimeType)) {
@@ -189,14 +189,12 @@ export async function renderPaged(data: RenderPagedData) {
 				 * keeps its crispness, and the source's own quality is what is served —
 				 * creator-controlled, as the set story promises).
 				 */
-				const normalized = sharp(downloaded[i])
-					.rotate()
-					.resize({
-						width: PAGE_MAX_PIXELS,
-						height: PAGE_MAX_PIXELS,
-						fit: "inside",
-						withoutEnlargement: true,
-					});
+				const normalized = sharp(downloaded[i]).rotate().resize({
+					width: PAGE_MAX_PIXELS,
+					height: PAGE_MAX_PIXELS,
+					fit: "inside",
+					withoutEnlargement: true,
+				});
 				const ext = source.mimeType === "image/png" ? "png" : "jpg";
 				const leafPage = join(dir, `leaf-001.${ext}`);
 				await (ext === "png" ? normalized.png() : normalized.jpeg({ quality: 85 })).toFile(

@@ -52,7 +52,10 @@ export function isFileWorkType(type: string): type is FileWorkType {
  * alongside every page image it renders before uploading them, so the source cap is the share
  * of that disk a book may claim. 2 GB is that share with room for the rendered pages, and parity
  * with the video cap; a 5 GB cap would trade "cannot upload a giant master" for "the job dies
- * out of disk partway through a 2000-page render".
+ * out of disk partway through a 2000-page render". A page image is bounded not by that disk but
+ * by the job's decode bound (`PAGE_MAX_PIXELS`) and its own re-encode — the 2 GB accept is the
+ * same number either way, so one ceiling covers both paths and the creator's page quality lives
+ * downstream of it.
  */
 export function fileRules(type: FileWorkType): { accept: string; maxSize: number; noun: string } {
 	switch (type) {
@@ -65,7 +68,14 @@ export function fileRules(type: FileWorkType): { accept: string; maxSize: number
 			return { accept: "image/*", maxSize: 20 * 1024 * 1024, noun: "an image" };
 		case "comic":
 		case "ebook":
-			return { accept: "application/pdf", maxSize: 2 * 1024 * 1024 * 1024, noun: "a PDF" };
+			// Page images lead (Parker, 2026-10-11) — the paged job renders image leaves
+			// directly, one leaf per page — and the PDF stays: it is what a whole-book
+			// master ships as, and the set is built from whatever mix the creator holds.
+			return {
+				accept: "image/jpeg,image/png,application/pdf",
+				maxSize: 2 * 1024 * 1024 * 1024,
+				noun: "a page image (JPG or PNG) or a PDF",
+			};
 	}
 }
 
