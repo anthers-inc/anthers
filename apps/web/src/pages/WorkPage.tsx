@@ -279,8 +279,8 @@ export default function WorkPage() {
 			{work.visibility === "private" && isOwner && (
 				<div className="alert alert-warning">
 					<span>
-						This Work is still private — only you can see it. Release it from your Catalog when it's
-						ready.
+						This Work is still private — only you can see it. Release it from your Works page when
+						it's ready.
 					</span>
 				</div>
 			)}

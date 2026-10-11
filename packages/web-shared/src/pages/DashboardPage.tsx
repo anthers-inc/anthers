@@ -187,7 +187,7 @@ export default function DashboardPage() {
 		works,
 		payoutsReady,
 		editUrl: (w) => studioUrl(`/works/${w.publicId ?? w.id}/edit`),
-		catalogUrl: studioUrl("/catalog"),
+		worksUrl: studioUrl("/works"),
 		uploading,
 	});
 

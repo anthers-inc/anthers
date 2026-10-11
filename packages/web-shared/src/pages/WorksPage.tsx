@@ -1,37 +1,31 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The creator's **Catalog** — where Projects and Works are managed and created.
+ * The Studio's **Works** tab: the creator's Works, and the way to make another one.
  *
- * A **Work** OWNS its media, downloadable builds and transcodes, plus its own visibility,
- * dates, delivery switches and access gates; posts merely reference Works. A **Project** is
- * a shelf that groups them and carries no files, prices or gates of its own. Both live here
- * as of 2026-09-11, because the Studio's tabs now divide along Anthers' three objects and
- * Projects had no tab at all — they were a table on the Dashboard, reachable from one
- * button.
+ * 🚨 **One object, one place** (Parker, 2026-10-10). This, the Projects page, and Posts were
+ * one "Catalog" page with a Projects table above a Works grid, and each object now has its own
+ * listing, its own New button and its own tab. A **Work** OWNS its media, downloadable builds
+ * and transcodes, plus its own visibility, dates, delivery switches and access gates; posts and
+ * Projects merely reference Works.
  *
  * Processing state is derived from each Work's latest transcode and polled while anything is
  * still encoding.
  *
- * 🚨 **Catalog, not "Library".** Library is a bound term meaning the *user's* own owned
- * content — see the wiki's *How Anthers Talks About Itself*. This page said "Content Library" until 2026-08-13.
+ * 🚨 **Catalog, not "Library".** The word is kept for the noun — a creator's whole body of
+ * work — while the pages and tabs carry the object names. Library is a bound term meaning the
+ * *user's* own owned content — see the wiki's *How Anthers Talks About Itself*. This page's
+ * predecessor said "Content Library" until 2026-08-13.
  */
-import {
-	PencilSquareIcon,
-	PlusIcon,
-	RectangleStackIcon,
-	TrashIcon,
-} from "@heroicons/react/24/outline";
+import { PlusIcon, RectangleStackIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import WorkCard from "../components/content/WorkCard";
 import { processingState } from "../components/content/works";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { useAuth } from "../lib/auth";
-import { creatorProjectUrl } from "../lib/profile";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
-import { studioEditProjectUrl, studioNewProjectUrl, studioNewWorkUrl } from "../lib/studio";
-import type { Project, Work } from "../lib/types";
+import { studioNewWorkUrl } from "../lib/studio";
+import type { Work } from "../lib/types";
 import { useWorkUploads } from "../lib/work-uploads";
 
 /** A post referencing a library item, as returned by the 409 `work_in_use` body. */
@@ -41,20 +35,9 @@ interface UsingPost {
 	isPublished: boolean;
 }
 
-export default function CatalogPage() {
-	const { user } = useAuth();
+export default function WorksPage() {
 	const [items, setItems] = useState<Work[]>([]);
-	const [projects, setProjects] = useState<Project[]>([]);
 	const [loading, setLoading] = useState(true);
-
-	/**
-	 * Project pending deletion. Milder than deleting a Work: `project_posts.projectId`
-	 * cascades, so only the MEMBERSHIP rows go and every post and Work inside survives on the
-	 * creator's profile. There is nothing to purge, so offering a media checkbox here would
-	 * imply a destructiveness this action does not have.
-	 */
-	const [projectDeleteTarget, setProjectDeleteTarget] = useState<Project | null>(null);
-	const [deletingProject, setDeletingProject] = useState(false);
 
 	const [deleteTarget, setDeleteTarget] = useState<Work | null>(null);
 	const [deleting, setDeleting] = useState(false);
@@ -81,20 +64,6 @@ export default function CatalogPage() {
 	);
 
 	useEffect(() => {
-		let live = true;
-		client.api.content.projects
-			.$get({ query: { mine: "true" } })
-			.then((res) => res.json())
-			.then((data) => {
-				if (live) setProjects((data as { projects: Project[] }).projects ?? []);
-			})
-			.catch(() => {});
-		return () => {
-			live = false;
-		};
-	}, []);
-
-	useEffect(() => {
 		fetchItems().finally(() => setLoading(false));
 	}, [fetchItems]);
 
@@ -106,22 +75,6 @@ export default function CatalogPage() {
 	useEffect(() => {
 		if (landed > 0) fetchItems();
 	}, [landed]);
-
-	const confirmDeleteProject = async () => {
-		if (!projectDeleteTarget) return;
-		setDeletingProject(true);
-		try {
-			const res = await client.api.content.projects[":slug"].$delete({
-				param: { slug: projectDeleteTarget.slug },
-			});
-			if (res.status === 204 || res.ok) {
-				setProjects((prev) => prev.filter((p) => p.id !== projectDeleteTarget.id));
-				setProjectDeleteTarget(null);
-			}
-		} finally {
-			setDeletingProject(false);
-		}
-	};
 
 	// Catch up whenever the tab comes back into view — cheap, and it covers the case
 	// where processing finished while the creator was looking at something else.
@@ -276,76 +229,12 @@ export default function CatalogPage() {
 
 	return (
 		<div className="max-w-7xl mx-auto px-4 py-8">
-			<div className="flex flex-wrap items-center justify-between gap-2 mb-8">
-				<h1 className="text-2xl font-bold">Catalog</h1>
-				<div className="flex gap-2">
-					<Link to={studioNewProjectUrl()} className="btn btn-outline btn-sm">
-						<PlusIcon className="w-4 h-4" /> New Project
-					</Link>
-					<Link to={studioNewWorkUrl()} className="btn btn-primary btn-sm">
-						<PlusIcon className="w-4 h-4" /> New Work
-					</Link>
-				</div>
+			<div className="flex items-center justify-between mb-6">
+				<h1 className="text-2xl font-bold">Works</h1>
+				<Link to={studioNewWorkUrl()} className="btn btn-primary btn-sm">
+					<PlusIcon className="w-4 h-4" /> New Work
+				</Link>
 			</div>
-
-			{/* Projects first, because a Project is the shelf the Works below sit on — and
-			    because there are always fewer of them, so the grid stays the page's substance. */}
-			{projects.length > 0 && (
-				<section className="mb-10">
-					<h2 className="text-lg font-semibold mb-3">Projects</h2>
-					<div className="overflow-x-auto">
-						<table className="table table-sm">
-							<thead>
-								<tr>
-									<th>Title</th>
-									<th>Status</th>
-									<th>Actions</th>
-								</tr>
-							</thead>
-							<tbody>
-								{projects.map((project) => (
-									<tr key={project.id}>
-										<td>
-											<Link
-												to={creatorProjectUrl(user?.handle ?? "", project.slug)}
-												className="link link-hover font-medium"
-											>
-												{project.title}
-											</Link>
-										</td>
-										<td>
-											<span
-												className={`badge badge-sm ${project.isPublished ? "badge-success" : "badge-warning"}`}
-											>
-												{project.isPublished ? "Published" : "Draft"}
-											</span>
-										</td>
-										<td className="flex gap-1">
-											<Link
-												to={studioEditProjectUrl(project.slug)}
-												className="btn btn-ghost btn-xs"
-												title="Edit"
-											>
-												<PencilSquareIcon className="w-4 h-4" />
-											</Link>
-											<button
-												type="button"
-												className="btn btn-ghost btn-xs text-error"
-												title="Delete"
-												onClick={() => setProjectDeleteTarget(project)}
-											>
-												<TrashIcon className="w-4 h-4" />
-											</button>
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
-				</section>
-			)}
-
-			{projects.length > 0 && <h2 className="text-lg font-semibold mb-3">Works</h2>}
 
 			{releaseError && (
 				<div className="alert alert-error text-sm mb-4">
@@ -359,16 +248,9 @@ export default function CatalogPage() {
 					title="Your Catalog is empty"
 					description="Upload video, music and other audio, images, comics and books, games or software, or list physical goods and services. Each one is a Work you can release, gate or sell on its own — with or without ever writing a post about it."
 					action={
-						<div className="flex flex-wrap justify-center gap-2">
-							<Link to={studioNewWorkUrl()} className="btn btn-primary btn-sm">
-								<PlusIcon className="w-4 h-4" /> New Work
-							</Link>
-							{projects.length === 0 && (
-								<Link to={studioNewProjectUrl()} className="btn btn-ghost btn-sm">
-									or start a Project
-								</Link>
-							)}
-						</div>
+						<Link to={studioNewWorkUrl()} className="btn btn-primary btn-sm">
+							<PlusIcon className="w-4 h-4" /> New Work
+						</Link>
 					}
 				/>
 			) : (
@@ -382,48 +264,6 @@ export default function CatalogPage() {
 							busy={releasing === item.id}
 						/>
 					))}
-				</div>
-			)}
-
-			{/* Deleting a Project. Says plainly that its contents survive — the whole reason
-				this dialog is milder than the Work one below it. */}
-			{projectDeleteTarget && (
-				<div className="modal modal-open" role="dialog">
-					<div className="modal-box">
-						<h3 className="text-lg font-bold">
-							Delete "{projectDeleteTarget.title || "Untitled"}"?
-						</h3>
-						<p className="py-3 text-sm text-base-content/70">
-							This removes the Project and its ordering.{" "}
-							<strong>Nothing inside it is deleted</strong> — the Works stay in your Catalog with
-							their access, and the posts stay on your profile. They just stop being grouped here.
-							It can't be undone.
-						</p>
-						<div className="modal-action">
-							<button
-								type="button"
-								className="btn btn-ghost"
-								onClick={() => setProjectDeleteTarget(null)}
-								disabled={deletingProject}
-							>
-								Cancel
-							</button>
-							<button
-								type="button"
-								className="btn btn-error"
-								onClick={confirmDeleteProject}
-								disabled={deletingProject}
-							>
-								{deletingProject ? "Deleting..." : "Delete project"}
-							</button>
-						</div>
-					</div>
-					<button
-						type="button"
-						className="modal-backdrop"
-						onClick={() => setProjectDeleteTarget(null)}
-						aria-label="Close"
-					/>
 				</div>
 			)}
 

@@ -60,7 +60,7 @@ test.describe.configure({ mode: "serial" });
  * /api/accounts/me` refuses `isCreator: true` unless `emailVerified` (routes/accounts.ts),
  * which a spec cannot satisfy without receiving an email. So an account the spec signs up
  * is a user the Studio bounces to /settings — the Studio never renders, and every
- * assertion below fails at the first `goto("/studio/catalog")`. The handoff that tried it
+ * assertion below fails at the first `goto("/studio/works")`. The handoff that tried it
  * landed on that redirect, which reads as a Studio bug and is a test-harness one.
  *
  * The earlier cause was the opposite mistake — borrowing `gauntlet_creator`. The
@@ -135,8 +135,8 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// Edit page because everything else lives there — Release included, since `POST /works`
 	// refuses `visibility: "released"` outright. The walk asserts on URLs between the steps
 	// because each step is a page with an address, and "the right page opened" is the claim.
-	await page.goto("/studio/catalog");
-	await expect(page.getByRole("heading", { name: "Catalog", exact: true })).toBeVisible();
+	await page.goto("/studio/works");
+	await expect(page.getByRole("heading", { name: "Works", exact: true })).toBeVisible();
 
 	await page
 		.getByRole("link", { name: /new work/i })
@@ -177,7 +177,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 		page.getByRole("checkbox", { name: /released to my public catalog/i }),
 	).toBeDisabled();
 
-	await page.goto("/studio/catalog");
+	await page.goto("/studio/works");
 	// Born private. Not a detail — it is why a Release control has to exist at all.
 	await expect(cardFor(page)).toContainText("Private");
 
@@ -191,7 +191,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// title already names the same link, so it is found by its place on the card, not by role.
 	await cardFor(page).locator('a[aria-hidden="true"]').click();
 	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
-	await page.goto("/studio/catalog");
+	await page.goto("/studio/works");
 
 	// ── Rate it ─────────────────────────────────────────────────────────────
 	// ⭐ The card's blocked-release hint is a LINK now rather than a tooltip. It could not be
@@ -219,7 +219,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
 		timeout: 15_000,
 	});
-	await page.goto("/studio/catalog");
+	await page.goto("/studio/works");
 
 	// ── Release ─────────────────────────────────────────────────────────────
 	await cardFor(page).getByRole("button", { name: "Release" }).click();
@@ -279,7 +279,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
 		timeout: 15_000,
 	});
-	await page.goto("/studio/catalog");
+	await page.goto("/studio/works");
 	await expect(cardFor(page)).toContainText("Nobody can open");
 
 	// Still released, and now genuinely shut: the server drops it from what a user sees.
