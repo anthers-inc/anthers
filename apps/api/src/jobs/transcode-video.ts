@@ -7,10 +7,16 @@
  * Flow:
  * 1. Probe source file with ffprobe for resolution/duration
  * 2. Determine variants based on source height (480p, 720p, 1080p)
- * 3. Transcode each variant to HLS via ffmpeg
+ * 3. Transcode each variant to HLS via ffmpeg, uploading and freeing each one's
+ *    files before the next variant starts; 3b transcodes the audio-only rendition the same way
  * 4. Generate master playlist
- * 5. Upload all HLS files to storage
+ * 5. Upload the master playlist (the rest is uploaded per step 3)
  * 6. Update TranscodingJob status throughout
+ *
+ * The per-variant upload is a disk constraint, not an ordering preference: the worker's
+ * filesystem is ephemeral and small, and the platform replaces a container whose disk
+ * fills — silently, with no line the app can log. Holding the whole output beside a
+ * whole source is how a burst of uploads bounced this worker every few minutes.
  *
  * It takes no poster from the video: its creator chooses the thumbnail, and release waits for it.
  */
@@ -244,6 +250,12 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 	const storageKey = item.sourceKey ?? "";
 	if (!storageKey) throw new Error("No source file on content item");
 
+	// The storage prefix is built before the encode loop because the uploads now happen
+	// throughout the job, one variant at a time (creator-first layout — see media-upload
+	// route). Every run of the job gets its own prefix, so a retry never merges with a
+	// partial prior attempt.
+	const storagePrefix = `creators/${item.creatorId}/videos/hls/${randomUUID().replace(/-/g, "")}`;
+
 	let localPath: string | null = null;
 	let outputDir: string | null = null;
 
@@ -312,6 +324,37 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		outputDir = join(tmpdir(), `hls_${randomUUID()}`);
 		await mkdir(outputDir, { recursive: true });
 
+		/**
+		 * Upload every file a finished encode left in `dir`, deleting each the moment its
+		 * upload lands, so the directory never holds more than the variant still encoding
+		 * is about to write. The ephemeral disk is small and the platform replaces a
+		 * container whose disk fills, silently; uploading per variant rather than once at
+		 * the end of the job is what keeps the output's residency bounded by one variant
+		 * instead of by all of them.
+		 */
+		const uploadAndFree = async (dir: string): Promise<void> => {
+			for (const filename of await readdir(dir)) {
+				const contentType = filename.endsWith(".m3u8")
+					? "application/vnd.apple.mpegurl"
+					: "video/mp2t";
+				// Content is processed in the library before it's attached to any post, so its
+				// access isn't known yet (and one item can be posted with different access).
+				// EVERYTHING is private — playlists included. A public playlist had a working
+				// CDN URL that bypassed the access-checked endpoint entirely, which is the whole
+				// point of that endpoint; it fetches playlists signed now, so nothing needs the
+				// public bootstrap that used to justify it.
+				await storage.upload(
+					`${storagePrefix}/${filename}`,
+					await readFile(join(dir, filename)),
+					contentType,
+					"private",
+				);
+				// Not swallowed, unlike the `finally` sweep: a file that survives its own
+				// upload is exactly the leak this restructure exists to bound.
+				await rm(join(dir, filename));
+			}
+		};
+
 		// Variants span the 10→80 range; within each, ffmpeg's -progress drives a
 		// smooth sub-percentage and a live estimate of what is left (`transcode-eta.ts`).
 		const spanStart = 10;
@@ -345,6 +388,9 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 				}
 			});
 			await updateJobProgress(jobId, Math.round(spanStart + (i + 1) * perVariant));
+			// This variant's segments are off the disk before the next variant's encode
+			// grows the directory again — the whole point of uploading per variant.
+			await uploadAndFree(outputDir);
 		}
 
 		// 3b. The audio-only rendition, beside the variants — one more pass over the same
@@ -352,7 +398,10 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		// presence is what `userTranscoding` serializes as `audioManifestUrl`. A silent
 		// source has nothing to demux, so it ships no rendition and the master says so.
 		const hasAudio = probe.streams?.some((s: { codec_type: string }) => s.codec_type === "audio");
-		if (hasAudio) await ffmpegAudioHls(localPath, outputDir);
+		if (hasAudio) {
+			await ffmpegAudioHls(localPath, outputDir);
+			await uploadAndFree(outputDir);
+		}
 
 		// 4. Generate master playlist
 		await generateMasterPlaylist(outputDir, variants, !!hasAudio);
@@ -367,21 +416,10 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			.set({ progress: 80, etaSeconds: null })
 			.where(eq(transcodingJobs.id, jobId));
 
-		// 5. Upload HLS files to storage (creator-first layout — see media-upload route)
-		const storagePrefix = `creators/${item.creatorId}/videos/hls/${randomUUID().replace(/-/g, "")}`;
-		const hlsFiles = await readdir(outputDir);
-		for (const filename of hlsFiles) {
-			const filePath = join(outputDir, filename);
-			const fileBuffer = await readFile(filePath);
-			const ct = filename.endsWith(".m3u8") ? "application/vnd.apple.mpegurl" : "video/mp2t";
-			// Content is processed in the library before it's attached to any post, so its
-			// access isn't known yet (and one item can be posted with different access).
-			// EVERYTHING is private — playlists included. A public playlist had a working
-			// CDN URL that bypassed the access-checked endpoint entirely, which is the whole
-			// point of that endpoint; it fetches playlists signed now, so nothing needs the
-			// public bootstrap that used to justify it.
-			await storage.upload(`${storagePrefix}/${filename}`, fileBuffer, ct, "private");
-		}
+		// 5. The master, uploaded last — after every variant and rendition file it names
+		// is already in storage, which is the order a player expecting a playable tree
+		// sees. What was uploaded is whatever `uploadAndFree` carried during the job.
+		await uploadAndFree(outputDir);
 		await updateJobProgress(jobId, 90);
 
 		// 6. Complete. No poster is taken from the video: its creator chooses the thumbnail,
