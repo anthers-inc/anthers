@@ -338,6 +338,16 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	const [creditRows, setCreditRows] = useState<WorkCredit[]>(() =>
 		(editing.credits ?? []).map((r) => ({ ...r, types: [...r.types] })),
 	);
+	// The inline contributor error is a save-time complaint, not a live one: a freshly ticked
+	// Created box stays quiet until the creator has had the chance to fill the field, and only
+	// a save attempt that still finds a malformed row turns it on. Every edit to the rows
+	// re-arms the gate, so each attempt speaks for itself rather than complaining about an
+	// edit the creator has already superseded.
+	const [showCreditErrors, setShowCreditErrors] = useState(false);
+	const onCreditRowsChange = (next: WorkCredit[]) => {
+		setShowCreditErrors(false);
+		setCreditRows(next);
+	};
 
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -589,6 +599,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		// The editor's half of the credit rule the server enforces: a created credit names its
 		// contributor. Checked here so the refusal reads as this page's own, not the server's.
 		if (creditRows.some((r) => r.types.includes("created") && r.contributor.trim() === "")) {
+			setShowCreditErrors(true);
 			setError("Every Created credit names its contributor before this can save.");
 			return;
 		}
@@ -1181,7 +1192,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					<h2 className="font-semibold text-sm">Credits</h2>
 					<CreditsSection
 						rows={creditRows}
-						onChange={setCreditRows}
+						onChange={onCreditRowsChange}
+						showErrors={showCreditErrors}
 						selfIdentity={
 							user
 								? { did: user.atprotoDid, handle: user.handle, displayName: user.displayName }
