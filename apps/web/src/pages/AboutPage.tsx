@@ -109,6 +109,8 @@
 // Fraunces stays on the section headings, upright, where the rest of the site
 // uses it.
 
+import { FREE_STORAGE_GIB } from "@anthers/shared/constants";
+import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -142,7 +144,7 @@ const BINDING_SOON = [
 	"Donations to Anthers become tax-deductible for the person making them. Until the determination letter arrives, they aren't, and that's why we don't yet solicit donations.",
 	"Anthers becomes eligible for special grants and discounts that foundations and vendors reserve for recognized charities, which is money and service going into the platform rather than out of it.",
 	"Anthers' finances become a matter of public record, published every year, so anyone can check what came in and where it went. We do our best to be transparent already, but that will increase significantly once the determination letter arrives.",
-	"The prohibition on paying insiders, which are already binding through our Articles and Bylaws, gains the further force of the federal government to bind us even further to good behavior.",
+	"The prohibition on paying insiders, which the filed Articles already bind us to, is entrenched further once federal recognition arrives.",
 ];
 
 /* ------------------------------------------------------------------ */
@@ -211,8 +213,9 @@ export default function AboutPage() {
 					<H2>What Anthers Is</H2>
 					<Lede>
 						Anthers, Inc. is a Colorado nonprofit corporation, Secretary of State ID 20261969882. We
-						aren't a registered 501(c)(3) exempt organization yet, but we're filing that soon. In
-						case you're not familiar with the terms, there's some differences between the two:
+						aren't a registered 501(c)(3) exempt organization yet; we intend to file for that
+						recognition. In case you're not familiar with the terms, there are some differences
+						between the two:
 					</Lede>
 				</Reveal>
 
@@ -264,19 +267,20 @@ export default function AboutPage() {
 								</p>
 								<p>
 									We're committed not only to making these things available and easy to use, but
-									also to making them as free and accessible as possible. Free users can enjoy hours
-									of Public Access streaming every week, forever. Creators can host hours of video
-									(or the equivalent of games, music, writing, anything), for free, forever. And
-									when users and creators need more than we offer for free, we offer upgrades where
-									100% of the price above what we pay goes straight back into free access for other
-									users/creators and our other charitable programs.
+									also to making them as free and accessible as possible. Free users can enjoy{" "}
+									{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access streaming a month, free forever.
+									Creators can host hours of video (or the equivalent of games, music, writing,
+									anything) within every account's {FREE_STORAGE_GIB} GiB of combined storage, free,
+									forever. And when users and creators need more than we offer for free, we offer
+									upgrades, and what they bring in above cost goes back into free access for other
+									users and creators, and our other charitable programs.
 								</p>
 								<p>
 									That's the beauty of being a nonprofit in this space: Whatever money we bring in
 									above what's needed to keep the lights on, whether that's through subscriptions to
 									Anthers itself, or purchases of Anthers merch, or donations to our nonprofit (not
-									possible yet, but soon), it all goes straight to supporting creators, providing
-									free access, and expanding our other charitable services and programs.
+									possible yet), it all goes straight to supporting creators, providing free access,
+									and expanding our other charitable services and programs.
 								</p>
 								<p>
 									Turns out, it's possible to build a place that creators and their audiences can
@@ -302,18 +306,18 @@ export default function AboutPage() {
 									advertisements, without manipulative algorithms, and without a for-profit platform
 									aiming to extract the max out of you and your communities. We don't take a cut off
 									the top of anything users pay directly to you; that's your money. The only
-									deduction between you and your users are payment processing and taxes; as yet, we
-									don't have a solution for those (you'll know as soon as we think of one).
+									deduction between you and your users is card processing, charged at cost to the
+									processor and already inside the price; sales tax is added on top.
 								</p>
 								<p>
 									And we're also committed to building a free, open, and durable internet. Our
-									entire platform is open source and interoperable, and built atop the same ATProto
-									protocol and standards that powers Bluesky. If you want to self-host your creator
-									identity and content, you can. If you want to build or move your account to
-									another Anthers-compatible platform, you can. We want to make Anthers the best
-									place to everything you can do on Anthers. But at the end of the day, your data,
-									your identity, and your creativity belongs to you. We aim to help build the best
-									home for it, but it belongs to you and always will.
+									entire platform is open source, built on the AT Protocol for identity and the
+									public catalog: the same protocol and standards behind Bluesky. The records of
+									what you publish are readable by anyone's software, and you can download
+									everything you've made from your settings at any time. We want to make Anthers the
+									best place to do everything you can do on Anthers. But at the end of the day, your
+									data, your identity, and your creativity belong to you. We aim to help build the
+									best home for it, but it belongs to you and always will.
 								</p>
 								<p>
 									The creative and educational internet is a beautiful thing; it has been for a long
@@ -321,7 +325,7 @@ export default function AboutPage() {
 									the last generation or two have really been wrung out by extractive and
 									manipulative platforms, and it doesn't have to be like that. It really is possible
 									to create connection between creators and their audiences, let them make the
-									magic, and just get out of way.
+									magic, and just get out of the way.
 								</p>
 							</div>
 						</Card>
@@ -401,8 +405,8 @@ export default function AboutPage() {
 									things I'm truly proud of, nothing prepared me for the pride of leading a game dev
 									team. I saw such a spectrum of creative talent, personal perspective, and
 									professional ingenuity; I knew right away that nothing I could ever build alone
-									would be anywhere as worthwhile as my ability to help other people feel encouraged
-									and equipped to create and share what means the most to them.
+									would be anywhere near as worthwhile as my ability to help other people feel
+									encouraged and equipped to create and share what means the most to them.
 								</p>
 								<p>
 									Anthers, at the most fundamental level, is that same impulse built out into a
@@ -422,8 +426,8 @@ export default function AboutPage() {
 									(selfishly), it is why Anthers is what it is: a place where I can be helpful.
 								</p>
 								<p className="text-sm italic text-base-content/50">
-									"Nearly everything in life that matters is a challenge, and everything matters." —
-									Rainer Maria Rilke
+									"Nearly everything that matters is a challenge, and everything matters." — Rainer
+									Maria Rilke, Letters to a Young Poet
 								</p>
 							</div>
 						</div>

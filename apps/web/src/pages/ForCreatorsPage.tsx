@@ -126,10 +126,10 @@ export default function ForCreatorsPage() {
 					</Reveal>
 					<Reveal delay={150}>
 						<p className="mx-auto mt-8 max-w-4xl text-lg leading-relaxed text-base-content/75">
-							Anthers is Patreon, Bandcamp, Steam, and itch in one place—games, videos, music, and
-							writing under one roof, one identity, one audience. Anthers takes <strong>0%</strong>{" "}
-							of every dollar given to you and every sale — no cut, no skim. The only thing that
-							ever comes out is the at-cost card processing, and that goes to the processor.
+							Anthers is Patreon, Bandcamp, Steam, and itch in one place (games, videos, music, and
+							writing under one roof, one identity, one audience). Anthers takes <strong>0%</strong>{" "}
+							of every dollar given to you and every sale; no cut, no skim. The only thing that ever
+							comes out is the at-cost card processing, and that goes to the processor.
 						</p>
 					</Reveal>
 					<Reveal delay={300}>
@@ -166,7 +166,7 @@ export default function ForCreatorsPage() {
 					<Eyebrow>The problem</Eyebrow>
 					<H2>The creator internet is rigged</H2>
 					<Lede>
-						Every kind of platform has its own way of taking from creators—and none of them let you
+						Every kind of platform has its own way of taking from creators, and none of them let you
 						be all of who you are in one place.
 					</Lede>
 				</Reveal>
@@ -182,7 +182,7 @@ export default function ForCreatorsPage() {
 						<Feature
 							icon={<EyeIcon className="h-6 w-6" />}
 							title="Ad platforms pay pennies"
-							description="YouTube-style platforms hand you a sliver of ad revenue—and turn your fans into the product."
+							description="YouTube-style platforms hand you a sliver of ad revenue, and turn your fans into the product."
 						/>
 					</Reveal>
 					<Reveal delay={160}>
@@ -196,7 +196,7 @@ export default function ForCreatorsPage() {
 						<Feature
 							icon={<Squares2X2Icon className="h-6 w-6" />}
 							title="Your work is scattered"
-							description="A game, a soundtrack, a devlog, a zine—each needs a different platform and a separate audience."
+							description="A game, a soundtrack, a devlog, a zine: each seems to need a different platform and a separate audience."
 						/>
 					</Reveal>
 				</div>
@@ -206,11 +206,12 @@ export default function ForCreatorsPage() {
 			<Section tint>
 				<Reveal>
 					<Eyebrow>The solution</Eyebrow>
-					<H2>When someone pays you, that's what you get paid.</H2>
+					<H2>When someone pays you, this shows what you get paid</H2>
 					<Lede>
-						What a fan gives you and anything they buy from you carry no platform cut at all—no fee,
-						no skim, nothing to us. Streaming is the other side: it makes your work discoverable,
-						served at cost, and pays you from the Time Pool for the time people spend with it.
+						What a fan gives you and anything they buy from you carry no platform cut at all (no
+						fee, no skim, nothing to us). Streaming is the other side: it makes your work
+						discoverable, served at cost, and pays you from the Time Pool for the time people spend
+						with it.
 					</Lede>
 					<Lede>
 						Try out all the ways a fan can support you, and see what happens when you cut out the
@@ -229,7 +230,7 @@ export default function ForCreatorsPage() {
 					<H2>Transparent pricing, not platform rent</H2>
 					<Lede>
 						At checkout, buyers see exactly where every penny goes. No hidden fees, no opaque
-						"revenue share." Real infrastructure costs are passed through—and they're tiny.
+						"revenue share." Real infrastructure costs are passed through, and they're tiny.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-12 grid max-w-4xl gap-6 text-left md:grid-cols-2">
@@ -258,7 +259,7 @@ export default function ForCreatorsPage() {
 							</div>
 							<p className="mt-3 text-xs text-base-content/45">
 								The buyer pays your listed price plus sales tax and nothing else. The one thing that
-								comes out of it goes to the payment processor — never a cent to us.
+								comes out of it goes to the payment processor, never a cent to us.
 							</p>
 						</Card>
 					</Reveal>
@@ -278,10 +279,10 @@ export default function ForCreatorsPage() {
 								Anthers takes <strong>nothing</strong> from a sale or from monthly support. The only
 								charge that touches a creator is storage past your Badge's allowance, at cost: from
 								the {FREE_STORAGE_GIB} GiB free floor upward, each rung bundles more, and past it
-								more bytes are {STORAGE_PER_GIB_MONTH_LABEL} per GiB-month — our provider's rate,
+								more bytes are {STORAGE_PER_GIB_MONTH_LABEL} per GiB-month, our provider's rate,
 								with no mark-up. Free access and the charitable programs are funded by what's left
 								of a fan's monthly support to Anthers after the Time Pool and the card cost, and by
-								lean operations—Anthers itself never profits.
+								lean operations; Anthers itself never profits.
 							</PricePoint>
 						</div>
 					</Reveal>
@@ -289,8 +290,9 @@ export default function ForCreatorsPage() {
 				<div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-3">
 					<Reveal delay={0} className="h-full">
 						<PricingOption title="Free">
-							No charge—anyone can download it or play it in the browser, as many times as they
-							like. Great for jam entries, demos, and open-source projects.
+							No charge: anyone can download it as many times as they like, and a web build you host
+							yourself can play in the browser. Great for demos, beta tests, and open-source
+							projects.
 						</PricingOption>
 					</Reveal>
 					<Reveal delay={110} className="h-full">
@@ -300,15 +302,15 @@ export default function ForCreatorsPage() {
 						    deleted: the third option is real and shipped, and a two-card row in a
 						    three-column grid reads as something missing. */}
 						<PricingOption title="Badge Access">
-							Open it to supporters at a Badge level you set—any monthly amount you choose. The same
-							work can carry a purchase price alongside it; a supporter at that level simply doesn't
-							need to pay it.
+							Open it to supporters at a Badge level you set: any monthly amount you choose. The
+							same work can carry a purchase price alongside it; a supporter at that level simply
+							doesn't need to pay it.
 						</PricingOption>
 					</Reveal>
 					<Reveal delay={220} className="h-full">
 						<PricingOption title="Fixed Price">
 							Set the price a buyer sees, and we show you exactly what you'll receive. The only
-							deduction is the at-cost card processing—paid to a third party, not to us. Downloads
+							deduction is the at-cost card processing (paid to a third party, not to us). Downloads
 							are free, at any size.
 						</PricingOption>
 					</Reveal>
@@ -321,7 +323,7 @@ export default function ForCreatorsPage() {
 					<Eyebrow>Every medium</Eyebrow>
 					<H2>Every kind of creative work</H2>
 					<Lede>
-						Anthers isn't just for games. Publish anything you create—the platform adapts to the
+						Anthers isn't just for games. Publish anything you create; the platform adapts to the
 						medium while keeping the same tools, the same audience, and the same economics.
 					</Lede>
 				</Reveal>
@@ -372,28 +374,28 @@ export default function ForCreatorsPage() {
 						<Feature
 							icon={<PaintBrushIcon className="h-6 w-6" />}
 							title="Rich project pages"
-							description="Thumbnails, screenshots, detailed descriptions, and download links. Each project gets a dedicated page that adapts to its media type—platform-grouped downloads for games, embedded players for audio and video."
+							description="Thumbnails, screenshots, detailed descriptions, and download links. Each project gets a dedicated page that adapts to its media type, platform-grouped downloads for games, embedded players for audio and video."
 						/>
 					</Reveal>
 					<Reveal delay={80}>
 						<Feature
 							icon={<ArrowDownTrayIcon className="h-6 w-6" />}
 							title="Build management"
-							description="Upload builds for multiple platforms. Label versions as stable, beta, or prerelease. Your audience downloads from organized, clearly labeled files—not a confusing pile of .zips."
+							description="Upload builds for multiple platforms. Label versions as stable, beta, or prerelease. Your audience downloads from organized, clearly labeled files, not a confusing pile of .zips."
 						/>
 					</Reveal>
 					<Reveal delay={160}>
 						<Feature
 							icon={<ChatBubbleLeftRightIcon className="h-6 w-6" />}
 							title="Devlogs and posts"
-							description="Write updates, announcements, and essays. Link posts to specific projects as devlogs, or publish standalone. Your audience follows your work in a unified feed—like Patreon, but alongside your actual projects."
+							description="Write updates, announcements, and essays. Link posts to specific projects as devlogs, or publish standalone. Your audience follows your work in a unified feed, like Patreon but alongside your actual projects."
 						/>
 					</Reveal>
 					<Reveal delay={240}>
 						<Feature
 							icon={<StarIcon className="h-6 w-6" />}
-							title="Ratings and comments"
-							description="Community feedback built into every project page. Ratings help the best work surface. Comments create conversation around your creations."
+							title="Reviews and comments"
+							description="Community feedback built into every page. Reviews, always written, help the best work surface, and comments under your posts carry the conversation."
 						/>
 					</Reveal>
 					<Reveal delay={400}>
@@ -407,7 +409,7 @@ export default function ForCreatorsPage() {
 						<Feature
 							icon={<UserGroupIcon className="h-6 w-6" />}
 							title="Creator profiles"
-							description="Your own anther on Anthers—header image, bio, links, and all your work in one place. Audiences follow you, not individual projects. Like a Patreon page and an itch.io profile combined."
+							description="Your own anther on Anthers: header image, bio, links, and all your work in one place. Audiences follow you, not individual projects. Like a Patreon page and an itch.io profile combined."
 						/>
 					</Reveal>
 					<Reveal delay={560}>
@@ -433,7 +435,7 @@ export default function ForCreatorsPage() {
 					<H2>Build your audience in one place</H2>
 					<Lede>
 						Like Patreon and YouTube Memberships, but alongside your actual work. Post devlogs,
-						vlogs, podcasts, and blogs—all under the same profile your games live on. Your audience
+						vlogs, podcasts, and blogs, all under the same profile your games live on. Your audience
 						follows <em className="not-italic text-base-content/80">you</em>, not a platform.
 					</Lede>
 				</Reveal>
@@ -444,9 +446,9 @@ export default function ForCreatorsPage() {
 								Native content creation
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Write devlogs, upload video updates, share podcast episodes — all natively hosted.
-								No linking out to YouTube or Substack. Your content lives where your audience
-								already is.
+								Write devlogs, upload video updates, share podcast episodes; all natively hosted. No
+								linking out to YouTube or Substack. Your content lives where your audience already
+								is.
 							</p>
 						</Card>
 					</Reveal>
@@ -457,7 +459,7 @@ export default function ForCreatorsPage() {
 								<span className="text-xs text-base-content/45">(not built yet)</span>
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								One-time importers for itch.io, Patreon, Substack and YouTube are planned, so a
+								One-time importers for itch.io, Patreon, Substack, and YouTube are planned, so a
 								creator can bring an existing catalog over in one step rather than rebuilding it by
 								hand. None of the four works yet.
 							</p>
@@ -474,20 +476,20 @@ export default function ForCreatorsPage() {
 					<Lede>
 						There's one thing to support on Anthers: a{" "}
 						<strong className="font-semibold text-base-content/80">monthly amount</strong>, at
-						whatever levels you set. A fan points it at you—and we take no cut of it—or at Anthers,
-						where half of it goes to creators, paid in proportion to the time people spend with
-						their work, and the rest funds the charitable programs, free access included. Both reach
-						you; neither is a cut of your earnings, and{" "}
+						whatever levels you set. A fan points it at you (and we take no cut of it), or at
+						Anthers, where half of it goes to creators, paid in proportion to the time people spend
+						with their work, and the rest, after the card cost, funds the charitable programs, free
+						access included. Both reach you; neither is a cut of your earnings, and{" "}
 						<strong className="font-semibold text-base-content/80">
 							neither one needs the other
 						</strong>
-						—a fan who never gives Anthers a cent can still back you in full.
+						: a fan who never gives Anthers a cent can still back you in full.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-10 grid max-w-4xl gap-8 text-left sm:grid-cols-2">
 					<Reveal delay={0} className="h-full">
 						<SignpostCard step="1" title="Direct support — 0% cut" tone="creator">
-							The wedge, and the part we'll state flatly: nothing is taken.
+							And the part we'll state flatly: nothing is taken.
 							<ul>
 								<li>
 									<strong className="font-semibold text-base-content/85">Monthly support</strong> —
@@ -500,8 +502,8 @@ export default function ForCreatorsPage() {
 									and we show you exactly what you'll receive before you publish
 								</li>
 								<li>
-									The only deduction is the at-cost card processing—paid to a third party, never a
-									cent to Anthers. Delivery is free, at any size and any number of downloads
+									The only deduction is the at-cost card processing (paid to a third party, never a
+									cent to Anthers). Delivery is free, at any size and any number of downloads
 								</li>
 							</ul>
 							This is where "0% cut" is simply true, with nothing to qualify.
@@ -511,7 +513,7 @@ export default function ForCreatorsPage() {
 						<SignpostCard step="2" title="The Anthers commons — the Time Pool" tone="anthers">
 							Fans also point a monthly amount at{" "}
 							<strong className="font-semibold text-base-content/85">the platform itself</strong>.
-							That:
+							Here's what that does:
 							<ul>
 								<li>
 									puts {fmtMoney(timePoolFor(publicAccessPrice))} of every{" "}
@@ -520,17 +522,17 @@ export default function ForCreatorsPage() {
 									across the creators they spend time with, by time
 								</li>
 								<li>
-									counts every medium equally—an hour of reading, listening, playing, and watching
-									are the same hour
+									counts every medium equally; an hour of reading, listening, playing, or watching
+									is the same hour
 								</li>
 								<li>
-									raises their Badge (Root → Blossom)—standing, not a key: it opens no work of yours
-									or anyone's
+									raises their Badge (Root → Blossom), which is standing and not a key: it opens no
+									work of yours or anyone's
 								</li>
 							</ul>
 							{fmtMoney(publicAccessPrice)} a month also lifts their own Public Access limit, so
 							they can spend as much time with your free work as they like. Whatever is left over
-							funds the charitable programs, free access included—not Anthers' pocket. Anthers is a
+							funds the charitable programs, free access included, not Anthers' pocket. Anthers is a
 							nonprofit: no investors, no profit-taking.
 						</SignpostCard>
 					</Reveal>
@@ -543,11 +545,12 @@ export default function ForCreatorsPage() {
 							Whoever hands out the work is who pays you for it
 						</h3>
 						<p className="text-sm leading-relaxed text-base-content/70">
-							Work <em className="not-italic font-medium">you</em> hand out—behind one of your own
-							gates, or sold—is paid by direct support, and draws nothing from the Time Pool. Work{" "}
-							<em className="not-italic font-medium">Anthers</em> hands out—the streaming work you
-							leave ungated, free to everyone—is paid from the Time Pool, funded by everyone backing
-							the commons. Every piece of work pays you exactly once, from the side that carried it.
+							Work <em className="not-italic font-medium">you</em> hand out (behind one of your own
+							gates, or sold) is paid by direct support, and draws nothing from the Time Pool. Work{" "}
+							<em className="not-italic font-medium">Anthers</em> hands out (the streaming work you
+							leave ungated, free to everyone) is paid from the Time Pool, funded by everyone
+							backing the commons. Every piece of work pays you exactly once, from the side that
+							carried it.
 						</p>
 					</Card>
 				</Reveal>
@@ -604,15 +607,15 @@ export default function ForCreatorsPage() {
 				</Reveal>
 				<Reveal>
 					<p className="mx-auto mt-5 max-w-2xl text-xs leading-relaxed text-base-content/45">
-						A fan's Badge is what they're giving Anthers right now—a point-in-time choice, not a
-						rolling total of past spend—and it keeps scaling past Blossom. Their Time Pool is split
-						across every creator they spend time with, so what reaches you is your share of their
-						month, not the whole figure. What they give you directly is separate, and carries no
-						platform cut. *A free account pays nothing; free access covers its small Time Pool, so
-						even a free user pays the creators they spend time with—up to {FREE_PUBLIC_ACCESS_HOURS}{" "}
-						hours of Public Access a month, which supporting Anthers lifts. Delivery costs nothing
-						on either side—no per-GiB charge, however much anyone streams or downloads—and you get{" "}
-						{FREE_STORAGE_GIB} GiB of free storage.
+						A fan's Badge is what they're giving Anthers right now (a point-in-time choice, not a
+						rolling total of past spend), and it keeps scaling past Blossom. Their Time Pool is
+						split across every creator they spend time with, so what reaches you is your share of
+						their month, not the whole figure. What they give you directly is separate, and carries
+						no platform cut. *A free account pays nothing; Anthers funds its small Time Pool out of
+						free access, so the creators a free user spends time with are paid just the same, up to{" "}
+						{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, which supporting Anthers
+						lifts. Delivery costs nothing on either side (no per-GiB charge, however much anyone
+						streams or downloads), and you get {FREE_STORAGE_GIB} GiB of free storage.
 					</p>
 				</Reveal>
 			</Section>
@@ -626,7 +629,8 @@ export default function ForCreatorsPage() {
 						There is exactly one gate on Anthers and it points at{" "}
 						<em className="not-italic underline decoration-primary/40">you</em>: an amount given to
 						you each month. Every piece of work you make is either behind one of your rungs or free
-						to everyone—and nothing sits in between, because a commons with a velvet rope isn't one.
+						to everyone, and nothing sits in between, because a commons with a velvet rope isn't
+						one.
 					</Lede>
 				</Reveal>
 				<div className="mx-auto mt-12 grid max-w-4xl gap-6 text-left md:grid-cols-3">
@@ -641,7 +645,7 @@ export default function ForCreatorsPage() {
 							    / $15 is as valid as $3 / $6 / $9 / $12"), so the illustration is
 							    deliberately uneven and deliberately not derived from our price. */}
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Your own rungs, at any amount you like—$2, $7.50, $15 a month, whatever suits your
+								Your own rungs, at any amount you like: $2, $7.50, $15 a month, whatever suits your
 								work. You write the names and pick what each one opens. Because support is given
 								deliberately, nobody backs into your inner circle by watching.
 							</p>
@@ -654,7 +658,7 @@ export default function ForCreatorsPage() {
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
 								Or gate nothing at all. Streaming work you leave open is free to everyone, and it
-								still earns—the Time Pool pays you for the time people spend with it, so a stranger
+								still earns; the Time Pool pays you for the time people spend with it, so a stranger
 								who has never heard of you costs you nothing and pays you anyway.
 							</p>
 						</Card>
@@ -665,10 +669,9 @@ export default function ForCreatorsPage() {
 								👑&nbsp; Your Badges
 							</h3>
 							<p className="text-sm leading-relaxed text-base-content/70">
-								Every threshold of yours carries a Badge—a small collectible patch your supporters
+								Every threshold of yours carries a Badge, a small collectible patch your supporters
 								wear. Pick its shape and color, put one of our emblems on it or your own art, and it
-								sits beside Anthers' own Badges as part of the same set. Anthers sponsors emerging
-								illustrators to help creators make them.
+								sits beside Anthers' own Badges as part of the same set.
 							</p>
 						</Card>
 					</Reveal>
@@ -681,8 +684,8 @@ export default function ForCreatorsPage() {
 					<Eyebrow>Your identity &amp; work</Eyebrow>
 					<H2>Your home on the internet</H2>
 					<Lede>
-						Every creator gets a profile that brings together everything they do—games, devlogs,
-						music, writing—and every project gets a full-featured page adapted to the kind of work
+						Every creator gets a profile that brings together everything they do (games, devlogs,
+						music, writing), and every project gets a full-featured page adapted to the kind of work
 						you're sharing. One identity, one audience, one URL to share.
 					</Lede>
 				</Reveal>
@@ -839,7 +842,7 @@ export default function ForCreatorsPage() {
 						    release refusal. No country count — the list moves with Stripe. */}
 						<p className="mx-auto mt-4 max-w-4xl text-sm leading-relaxed text-base-content/50">
 							Publishing also asks for a completed Stripe payout setup, which at launch reaches only
-							the countries Stripe supports for a platform like ours — where you are decides whether
+							the countries Stripe supports for a platform like ours; where you are decides whether
 							you can publish yet, though not whether you can read, follow, and buy.
 						</p>
 						<div className="mt-8 flex flex-wrap justify-center gap-3">
@@ -956,7 +959,7 @@ const rivalBadgeAllIn = (cutRate: number, absorbsProcessing = false) => {
 };
 const rivalTakes = (cutRate: number) => `$${(BADGE_SPEND * cutRate).toFixed(2)}`;
 const BADGE_SCENARIO = `A fan gives you ${BADGE_SPEND_STR} a month`;
-const BADGE_NOTE = `A Badge recurs until the fan changes it, and Anthers takes no cut of it — the only deduction is the at-cost card fee, which goes to the processor. That fee is charged once on the fan's WHOLE monthly charge and split pro-rata, so a fan who also backs other creators pays you more, not less. The figure shown is the worst case: this as their entire charge. Rival figures are all-in take-home at the same ${BADGE_SPEND_STR} — their stated cut plus the same card processing everyone pays, except where the rival absorbs it.`;
+const BADGE_NOTE = `A Badge recurs until the fan changes it, and Anthers takes no cut of it; the only deduction is the at-cost card fee, which goes to the processor. That fee is charged once on the fan's WHOLE monthly charge and split pro-rata, so a fan who also backs other creators pays you more, not less. The figure shown is the worst case: this as their entire charge. Rival figures are all-in take-home at the same ${BADGE_SPEND_STR}: their stated cut plus the same card processing everyone pays, except where the rival absorbs it.`;
 
 /** Rival all-in take-home on a sale: list × (1 − cutRate), minus the at-cost card
  * fee unless the rival absorbs processing (as Steam and Apple do — they fold the
@@ -1061,16 +1064,11 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 			note: `${STREAM_FAN} pays a creator about ${STREAM_HR_PAY.replace("~", "")} for an hour of their time — the same whether they watch 720p on mobile or 1080p on desktop, since pay is by time, not bytes, and it climbs with every dollar they give Anthers. Streaming still isn't where Anthers competes; your public page makes your work discoverable and available effectively at cost, with no ads. The real support comes from monthly backing and sales.`,
 			breakdown: streamReceipt,
 		},
-		games: {
-			scenario: "A fan plays an hour of your public browser game",
-			rows: [
-				anthers(STREAM_HR_PAY, STREAM_HR_FOUNDATION, CS_NOTE),
-				{ name: "Steam / itch.io", creator: "$0.00", platform: "$0.00" },
-				{ name: "Xbox Game Pass", creator: "pennies", platform: "undisclosed" },
-			],
-			note: `Almost nowhere pays indie devs for play-time at all — Anthers pays the same ${STREAM_HR_PAY}/hr as any medium (a minute is a minute). Your public browser game is discoverable and served effectively at cost; monthly backing and sales are where fans really pay you.`,
-			breakdown: streamReceipt,
-		},
+		// stream × games has no entry on purpose: Anthers does not serve browser builds yet
+		// (`routes/web-builds.ts` registers and never serves), so there is no public play-hour
+		// to price, and the explorer's fallback branch says so rather than presenting the
+		// equal-time payout as live. `stream` has no `merch` entry either — that combo is the
+		// shirt easter egg (see SolutionExplorer).
 		music: {
 			scenario: "A fan listens to an hour of your public tracks",
 			rows: [
@@ -1078,7 +1076,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "Spotify", creator: "~$0.07", platform: "~30% + labels" },
 				{ name: "Apple Music", creator: "~$0.17", platform: "~30% + labels" },
 			],
-			note: `Honestly: per hour we're in the middle here. Spotify pays roughly $0.07 an hour before a label takes its share, Apple Music about twice that, and Anthers ${STREAM_HR_PAY} — ad-free, and paid by time rather than per stream, so an hour of your tracks earns exactly what an hour of video does. We won't pretend streaming is the win; devoted fans pay you through monthly backing and album sales, and we take no cut of either.`,
+			note: `Honestly: per hour we're in the middle here. Spotify pays roughly $0.07 an hour before a label takes its share, Apple Music about twice that, and Anthers ${STREAM_HR_PAY}, ad-free and paid by time rather than per stream, so an hour of your tracks earns exactly what an hour of video does. We won't pretend streaming is the win; devoted fans pay you through monthly backing and album sales, and we take no cut of either.`,
 			breakdown: streamReceipt,
 		},
 		writing: {
@@ -1088,7 +1086,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 				{ name: "Medium", creator: "~$0.02", platform: "members only" },
 				{ name: "Substack", creator: "$0.00", platform: "no per-read pay" },
 			],
-			note: `Most writing platforms don't pay per-read at all. Anthers pays by time like everything else — about ${STREAM_HR_PAY.replace("~", "")} for an hour with your work — and your public writing stays free to discover, served at cost. Monthly backing and sales are the real support.`,
+			note: `Most writing platforms don't pay per-read at all. Anthers pays by time like everything else (about ${STREAM_HR_PAY.replace("~", "")} for an hour with your work), and your public writing stays free to discover, on no charge to you or your reader. Monthly backing and sales are the real support.`,
 			breakdown: streamReceipt,
 		},
 	},
@@ -1118,6 +1116,8 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 					name: "itch.io",
 					creator: rivalPurchaseAllIn(15, 0.1),
 					platform: rivalPurchaseCut(15, 0.1),
+					// itch.io's share is the creator's own setting (0–100%); 10% is their default.
+					platformNote: "10% is their default; creators set itch.io's share themselves",
 				},
 				{
 					name: "Steam",
@@ -1176,7 +1176,7 @@ const MATRIX: Record<ActionKey, Partial<Record<MediaKey, Combo>>> = {
 					platform: rivalPurchaseCut(25, 0.1),
 				},
 			],
-			note: "Excludes production & shipping—a real cost on any platform, including Anthers.",
+			note: "Excludes production and shipping, a real cost on any platform, including Anthers.",
 			breakdown: merchReceipt,
 		},
 	},
@@ -1379,6 +1379,27 @@ function SolutionExplorer() {
 							</dl>
 						</div>
 					</>
+				) : media === "games" ? (
+					/* stream × games: browser serving is planned, not built, so there is no public
+					   play-hour to price. The honest empty state beats a false figure. */
+					<div className="flex flex-col items-center gap-2 rounded-2xl bg-base-200/60 px-6 py-12 text-center">
+						<span className="text-3xl">🎮</span>
+						<p style={serif} className="text-lg font-medium">
+							Nothing streams from us yet, so there's no hour to price.
+						</p>
+						<p className="max-w-sm text-sm text-base-content/55">
+							Serving browser games is planned, not built, and until it lands there is no public
+							play-hour for the Time Pool to pay. Meanwhile a fan can buy your games{" "}
+							<button
+								type="button"
+								onClick={() => setAction("purchase")}
+								className="not-italic text-primary underline decoration-primary/40"
+							>
+								outright
+							</button>{" "}
+							or back you monthly, and a web build you host yourself can play embedded.
+						</p>
+					</div>
 				) : (
 					/* Easter egg: you can't stream merch. */
 					<div className="flex flex-col items-center gap-2 rounded-2xl bg-base-200/60 px-6 py-12 text-center">
@@ -1403,12 +1424,12 @@ function SolutionExplorer() {
 
 			<p className="mt-5 border-t border-base-content/10 pt-3 text-xs text-base-content/45">
 				Anthers never profits. On a sale, the only deduction from your listed price is the at-cost
-				card processing, paid to Stripe — never a cent to Anthers (the purchase fee was removed
-				2026-08-03), and delivery costs nothing however large the work or however often it is
-				downloaded. On a stream, what's left of the fan's support for Anthers after the Time Pool
-				and the at-cost card fee funds the charitable programs, free access included. What a fan
-				gives you is a pure passthrough. Scenario figures are illustrative; competitor rates are
-				rough public estimates, all-in take-home at the same list price.
+				card processing, paid to Stripe, never a cent to Anthers, and delivery costs nothing however
+				large the work or however often it is downloaded. On a stream, what's left of the fan's
+				support for Anthers after the Time Pool and the at-cost card fee funds the charitable
+				programs, free access included. What a fan gives you is a pure passthrough. Scenario figures
+				are illustrative; competitor rates are rough public estimates, all-in take-home at the same
+				list price.
 			</p>
 		</Card>
 	);

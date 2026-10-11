@@ -21,7 +21,7 @@
 // EVERY row is all-in take-home at the same list price, per the wiki's *How Anthers Talks About Itself* § Comparisons.
 // Rival figures include THEIR payment processing, because every platform pays the
 // same card cost — comparing our all-in against their headline cut would flatter us
-// and a creator would catch it. Where a rival wins (Steam below ~$1.15) or ties
+// and a creator would catch it. Where a rival wins (Steam below ~$1.11) or ties
 // (Bandcamp Friday), the row says so. Competitor rates checked 2026-08-03 and
 // perishable — re-check before publishing.
 //   • On streaming the creator earns their share of every user's Time Pool (half of
@@ -46,6 +46,7 @@
 // it reads as one set with the rest of Resources.
 
 import {
+	CARD_RATE,
 	cardFeeDisplay,
 	PUBLIC_ACCESS_PRICE,
 	thresholdForBadge,
@@ -120,6 +121,11 @@ const BANDCAMP_DIGITAL = rivalSaleNet(SALE_10_1GIB, 0.15);
 const STEAM_CUT = "$3.00";
 
 const money = (n: number) => `$${n.toFixed(2)}`;
+/** The price below which Steam's absorbed 30% beats a flat card fee: the flat fee divided
+ * by the margin where a percentage beats a flat deduction (0.3 − CARD_RATE). Derived, never
+ * typed — it moves with the card rate (packages/shared/src/scenarios.ts warns against
+ * re-typing it, having spent $1.15 on that once). */
+const STEAM_CROSSING = money(0.3 / (0.3 - CARD_RATE));
 const POOL_RANGE = `${money(PAID_POOLS[0])}–${money(PAID_POOLS[PAID_POOLS.length - 1])}`;
 /** The reference streamer both this page and /for-creators quote: Sprout ($6 a month to
  *  Anthers), ~28 watch-hours a month → their Time Pool ÷ those hours. */
@@ -142,13 +148,17 @@ const CARD_ON_SEEDS = money(cardFeeDisplay(SEED_SPEND));
 const SEED_NET = money(SEED_SPEND - cardFeeDisplay(SEED_SPEND));
 /** What Patreon delivers on the same $6: 10% platform fee, then the same card cost. */
 const RIVAL_SEED_NET = money(SEED_SPEND * 0.9 - cardFeeDisplay(SEED_SPEND));
+/** What Substack delivers on the same $6: 10%, Stripe, and the ~0.7% recurring-billing
+ * fee every subscription started since mid-2024 carries. Matches 31.06's generated
+ * table ($4.88 at $6), which includes the fee. */
+const SUBSTACK_SEED_NET = money(SEED_SPEND * 0.9 - cardFeeDisplay(SEED_SPEND) - SEED_SPEND * 0.007);
 
 // Anthers' per-transaction facts, reused across tabs. Anthers' cut is a literal $0
 // everywhere; the one thing that comes out of a price is at-cost card processing, paid
 // to the processor.
 const A_STREAM: Side = {
 	keep: "~$0.03–0.60 / hr",
-	keepSub: `your share of the fan's monthly Time Pool — the same rate for every medium (a Sprout fan watching ~${REF_HOURS} hrs pays ~${REF_HR_PAY}/hr)`,
+	keepSub: `your share of the fan's monthly Time Pool; the same rate for every medium (a Sprout fan watching ~${REF_HOURS} hrs pays ~${REF_HR_PAY}/hr)`,
 	cut: "$0",
 	cutKind: "none",
 };
@@ -157,13 +167,13 @@ const A_STREAM: Side = {
  * reaches the creator. */
 const aPrice = (list: string, net: string): Side => ({
 	keep: net,
-	keepSub: `your ${list} list, less at-cost card processing — Anthers takes none of it`,
+	keepSub: `your ${list} list, less at-cost card processing, and Anthers takes none of it`,
 	cut: "$0",
 	cutKind: "none",
 });
 const A_SEED: Side = {
 	keep: SEED_NET,
-	keepSub: `$${SEED_SPEND} a month less the at-cost card fee (${CARD_ON_SEEDS} on the whole monthly charge) — no platform cut, no payout processing`,
+	keepSub: `$${SEED_SPEND} a month less the at-cost card fee (${CARD_ON_SEEDS} on the whole monthly charge); no platform cut, no payout processing`,
 	cut: "$0",
 	cutKind: "none",
 };
@@ -172,22 +182,23 @@ const PLATFORMS: Platform[] = [
 	{
 		id: "youtube",
 		label: "YouTube",
-		blurb: "Ad-supported video. Creators get 45% of the ad/Premium revenue their views generate.",
+		blurb:
+			"Ad-supported video. Creators get 55% of the ad revenue their long-form views generate (45% on Shorts).",
 		matchups: [
 			{
 				scenario: "A fan streams 1 hour of your 1080p video",
 				kind: "Streaming",
 				anthers: A_STREAM,
 				rival: {
-					keep: "45% of the revenue",
+					keep: "55% of the revenue",
 					// econ:allow — YouTube Premium really is pooled by watch-time; that is THEIR
 					// mechanism and their word for it. The wiki's *How Anthers Talks About Itself* bans it for OURS, and § Comparisons
 					// binds us to describing a rival accurately — renaming their metric to suit our
 					// vocabulary would misdescribe them, which is the worse failure.
 					keepSub: "≈ $0.05–0.20/hr on Premium (a ~$16 sub pooled by watch-time); pennies on ads",
-					cut: "55%",
+					cut: "45%",
 				},
-				note: `What a fan gives Anthers sets a monthly Time Pool (${money(timePoolFor(PUBLIC_ACCESS_PRICE))} of every $${PUBLIC_ACCESS_PRICE}) that's split across everyone they spend time with, by time — Anthers takes none of it and profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from monthly backing and direct sales. Streaming's value is reach — your public work is available effectively at cost.`,
+				note: `What a fan gives Anthers sets a monthly Time Pool (${money(timePoolFor(PUBLIC_ACCESS_PRICE))} of every $${PUBLIC_ACCESS_PRICE}) that's split across everyone they spend time with, by time; Anthers takes none of it and profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from monthly backing and direct sales. Streaming's value is reach: your public work is available effectively at cost.`,
 			},
 		],
 	},
@@ -206,7 +217,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "$0.004/stream × ~17 songs (3:30 each); an artist keeps less after their label",
 					cut: "~30% + labels",
 				},
-				note: `Equal-time means a music hour earns the same Time Pool share as a video hour — no per-stream micro-payment, no penalty for cheap-to-stream media. Depending on how much the fan gives Anthers that's roughly comparable to Spotify, and ad-free. But streaming isn't where the money is: monthly backing and direct album/merch sales are, and Anthers takes no cut of either.`,
+				note: `Equal-time means a music hour earns the same Time Pool share as a video hour: no per-stream micro-payment, no penalty for cheap-to-stream media. Depending on how much the fan gives Anthers that's roughly comparable to Spotify, and ad-free. But streaming isn't where the money is: monthly backing and direct album/merch sales are, and Anthers takes no cut of either.`,
 			},
 		],
 	},
@@ -221,10 +232,10 @@ const PLATFORMS: Platform[] = [
 				anthers: aPrice(`$${SALE_10_1GIB.price}`, `$${SALE_10_1GIB.creatorReceives}`),
 				rival: {
 					keep: "$7.00",
-					keepSub: "70% — Valve absorbs card processing inside its 30%",
+					keepSub: "70%; Valve absorbs card processing inside its 30%",
 					cut: `30% (≈ ${STEAM_CUT})`,
 				},
-				note: `Both figures are all-in take-home. Anthers takes $0; the $${SALE_10_1GIB.cardFee} that leaves your $${SALE_10_1GIB.price} is card processing, paid to Stripe. Steam's ${STEAM_CUT} is a cut. One honest caveat: below about $1.15 Steam pays MORE, because their 30% on a $1 sale is roughly the flat card fee and they absorb processing — a percentage model beats a flat-fee model at the very bottom.`,
+				note: `Both figures are all-in take-home. Anthers takes $0; the $${SALE_10_1GIB.cardFee} that leaves your $${SALE_10_1GIB.price} is card processing, paid to Stripe. Steam's ${STEAM_CUT} is a cut. One honest caveat: below about ${STEAM_CROSSING} Steam pays MORE, because their 30% on a $1 sale is roughly the flat card fee and they absorb processing; a percentage model beats a flat-fee model at the very bottom.`,
 			},
 		],
 	},
@@ -247,7 +258,7 @@ const PLATFORMS: Platform[] = [
 				// revenue share entirely that day, which lands an artist on the same
 				// figure we pay every day — conceding it costs nothing and is what makes
 				// the rest of these rows believable.
-				note: `Both figures are all-in. Bandcamp's headline is 15%, but processing comes out of the remainder too, so the honest comparison is $${SALE_10_1GIB.creatorReceives} against $${BANDCAMP_DIGITAL} — not against 85% of the list price. Worth conceding: on Bandcamp Friday they waive the revenue share entirely, which puts an artist at $${SALE_10_1GIB.creatorReceives} too — an exact tie. Their best day is our every day.`,
+				note: `Both figures are all-in. Bandcamp's headline is 15%, but processing comes out of the remainder too, so the honest comparison is $${SALE_10_1GIB.creatorReceives} against $${BANDCAMP_DIGITAL}, not against 85% of the list price. Worth conceding: on Bandcamp Friday they waive the revenue share entirely, which puts an artist at $${SALE_10_1GIB.creatorReceives} too, an exact tie. Their best day is our every day.`,
 			},
 			{
 				scenario: "A fan buys your $25 vinyl",
@@ -258,7 +269,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "90% less the same card processing",
 					cut: "10% (≈ $2.50)",
 				},
-				note: `Both all-in. Nothing ships through us and there is no fee on a sale, so the only deduction from your $${SALE_25_PHYSICAL.price} is card processing. Excludes production & shipping, a real cost on any platform.`,
+				note: `Both all-in. Nothing ships through us and there is no fee on a sale, so the only deduction from your $${SALE_25_PHYSICAL.price} is card processing. Excludes production and shipping, a real cost on any platform.`,
 			},
 		],
 	},
@@ -266,7 +277,7 @@ const PLATFORMS: Platform[] = [
 		id: "patreon",
 		label: "Patreon",
 		blurb:
-			"Membership platform. 10% on subscriptions, 5–12% on one-time purchases, plus payment processing.",
+			"Membership platform. 10% on subscriptions and one-time purchases, plus payment processing.",
 		matchups: [
 			{
 				scenario: `A fan supports you $${SEED_SPEND} / month`,
@@ -277,18 +288,18 @@ const PLATFORMS: Platform[] = [
 					keepSub: `${rivalKeeps(0.1)} after their 10%, less the same card processing`,
 					cut: "10% + processing",
 				},
-				note: `Both figures are all-in take-home on the same $${SEED_SPEND}. Anthers takes $0 — the only deduction is the at-cost card fee (~${CARD_ON_SEEDS} here), charged once on the fan's WHOLE monthly charge. That is the structural difference: Patreon bills per creator, so a fan backing four creators pays four separate flat fees, while every destination rides one transaction. Back more creators on Patreon and each one nets less; on Anthers each one nets more.`,
+				note: `Both figures are all-in take-home on the same $${SEED_SPEND}. Anthers takes $0; the only deduction is the at-cost card fee (~${CARD_ON_SEEDS} here), charged once on the fan's WHOLE monthly charge. That is the structural difference: Patreon bills per creator, so a fan backing four creators pays four separate flat fees, while every destination rides one transaction. Back more creators on Patreon and each one nets less; on Anthers each one nets more.`,
 			},
 			{
 				scenario: "A fan buys a $10 one-time item",
 				kind: "Purchase",
 				anthers: aPrice(`$${SALE_10_1GIB.price}`, `$${SALE_10_1GIB.creatorReceives}`),
 				rival: {
-					keep: "$8.21–8.91",
-					keepSub: "88–95% after their cut, less the same card processing",
-					cut: "5–12% + processing",
+					keep: `$${rivalSaleNet(SALE_10_1GIB, 0.1)}`,
+					keepSub: "90% after their 10%, less the same card processing",
+					cut: "10% + processing",
 				},
-				note: "Patreon now sells one-time digital products too, at the same 10% plus processing — so they belong in this row, not only the membership one.",
+				note: "Patreon now sells one-time digital products too, at the same 10% plus processing, so they belong in this row, not only the membership one.",
 			},
 		],
 	},
@@ -302,8 +313,8 @@ const PLATFORMS: Platform[] = [
 				kind: "Support",
 				anthers: A_SEED,
 				rival: {
-					keep: RIVAL_SEED_NET,
-					keepSub: `${rivalKeeps(0.1)} after their 10%, less Stripe processing and a recurring-billing fee`,
+					keep: SUBSTACK_SEED_NET,
+					keepSub: `${rivalKeeps(0.1)} after their 10%, less Stripe processing and the ~0.7% recurring-billing fee`,
 					cut: "10% + processing",
 				},
 				note: `Both all-in on the same $${SEED_SPEND}. Anthers takes no cut; the only deduction is the at-cost card fee (~${CARD_ON_SEEDS}), charged once on the fan's whole monthly charge. Substack's 10% is before Stripe, and subscriptions started after mid-2024 also carry a recurring-billing fee of roughly 0.5–0.7% that is easy to miss.`,
@@ -340,9 +351,9 @@ export default function CreatorPayComparisonPage() {
 						Anthers takes <b className="text-base-content">0%</b> of what reaches you: every{" "}
 						<b className="text-base-content">dollar</b> given to you and every direct sale carries
 						no platform fee at all, and the Time Pool is distributed to creators by time. What does
-						come out of a price is the at-cost card processing, paid to the processor — never a cent
+						come out of a price is the at-cost card processing, paid to the processor, never a cent
 						to us, and nothing at all for delivery however large the work. The one thing that funds
-						the platform is <b className="text-base-content">the remainder</b> — what's left of what
+						the platform is <b className="text-base-content">the remainder</b>: what's left of what
 						is given to Anthers after the Time Pool, funding the charitable programs, free access
 						included, never subtracted from your earnings. Here's what actually reaches you,
 						platform by platform.
@@ -374,12 +385,12 @@ export default function CreatorPayComparisonPage() {
 			<div className="mt-6 rounded-xl border border-dashed border-base-300 bg-base-200/40 p-4 text-sm leading-relaxed text-base-content/70">
 				<b className="text-base-content">The bottom line.</b> Nothing Anthers does comes out of your
 				earnings. Anthers' cut is <b className="text-base-content">$0</b> on every dollar given and
-				every sale — the only deductions are the real costs of moving money and bytes, paid to third
-				parties, and the Time Pool reaches creators whole. Where we clearly win is monthly backing
-				and purchases. Streaming we treat as a public good, not a paycheck: under equal-time a music
-				hour now earns the same as a video hour (no more per-medium penalty), it's ad-free — but we
-				won't pretend a view-hour out-earns YouTube or Spotify. It makes your work discoverable at
-				cost; your income comes from the fans who back you and buy.
+				every sale; the only deduction is the real cost of moving money (card processing, paid to
+				the processor), and the Time Pool reaches creators whole. Where we clearly win is monthly
+				backing and purchases. Streaming we treat as a public good, not a paycheck: under equal-time
+				a music hour now earns the same as a video hour (no more per-medium penalty), it's ad-free,
+				but we won't pretend a view-hour out-earns YouTube or Spotify. It makes your work
+				discoverable at cost; your income comes from the fans who back you and buy.
 			</div>
 
 			<CalcNotes>
@@ -399,16 +410,16 @@ export default function CreatorPayComparisonPage() {
 					<b className="text-base-content/70">Anthers streaming figures</b> are a fan's Time Pool ÷
 					their monthly time, the same rate for every medium (equal-time). Every $
 					{ladder.publicAccessPrice} to Anthers adds $
-					{timePoolFor(ladder.publicAccessPrice).toFixed(2)} of Time Pool —{" "}
+					{timePoolFor(ladder.publicAccessPrice).toFixed(2)} of Time Pool (
 					{PAID_POOLS.map(
 						(p, i) => `${RANKS[i][0].toUpperCase() + RANKS[i].slice(1)} ${money(p)}`,
 					).join(" · ")}
-					, and up from there — so a fan lands roughly {POOL_RANGE} of pool per month → about
+					, and up from there), so a fan lands roughly {POOL_RANGE} of pool per month → about
 					$0.03–0.60 per view-hour, with our reference streamer (Sprout, ~{REF_HOURS} hrs) at ~
 					{REF_HR_PAY}. <b className="text-base-content/70">Competitor figures</b> are each
-					platform's public fee and payout structure on the same transaction — rough estimates, not
-					quotes, and before their own payment-processing deductions except where noted. A planning
-					comparison, not an offer or guarantee.
+					platform's published rate at the same list price, with the same card processing every
+					platform pays subtracted: all-in against all-in, streaming rows rough estimates. A
+					planning comparison, not an offer or guarantee.
 				</p>
 				<p>
 					Want to model your own audience?{" "}
@@ -456,7 +467,7 @@ const CUT_STYLE: Record<CutKind, { tone: string; tag: string; tagTone: string }>
 		tag: "funds the charitable programs · not a cut",
 		tagTone: "text-primary/70",
 	},
-	none: { tone: "text-success/80", tag: "no cut — $0 to Anthers", tagTone: "text-success/60" },
+	none: { tone: "text-success/80", tag: "no cut, $0 to Anthers", tagTone: "text-success/60" },
 };
 
 /** One side of a matchup: who, the take-home headline, its basis, and the cut —

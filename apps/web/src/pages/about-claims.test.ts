@@ -182,7 +182,7 @@ describe("/about describes the organization as it is", () => {
 	// present-tense phrase the reword reached for. Rewording is fine — update this line
 	// with the reword rather than dropping it.
 	it("states federal recognition as something ahead of us, never as something we hold", () => {
-		expect(COPY).toContain("but we're filing that soon");
+		expect(COPY).toContain("we intend to file for that recognition");
 	});
 
 	// 🚨 The co-presence rule, same shape as "free forever" beside the monthly limit: a
