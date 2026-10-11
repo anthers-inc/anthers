@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { STORAGE_PER_GIB_MONTH, thresholdForBadge, timePoolFor } from "@anthers/shared/constants";
+import {
+	cardFeeDisplay,
+	STORAGE_PER_GIB_MONTH,
+	thresholdForBadge,
+	timePoolFor,
+} from "@anthers/shared/constants";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
@@ -112,9 +117,18 @@ test.describe("Resources calculators", () => {
 		// that amount × the Public Access price, which is the assertion that would have
 		// caught it — and nothing else on the page would have.
 		expect(text, "what the user directs, NOT a multiple of it").toContain(usd(sprout));
-		expect(text, "reaches creators = Time Pool + directed").toContain(
-			usd(timePoolFor(sprout) + sprout),
+		// Directed support rides the whole monthly charge's single at-cost card fee, and the
+		// directed half bears its pro-rata share of it (the fee share rounds per side before
+		// subtracting — SAMPLE_RECEIPT: $6 directed atop a Sprout nets $5.67, so $3.00 + $5.67
+		// = $8.67 reaches creators). The earlier expectation here added the directed amount
+		// whole, which quietly modeled the card fee away.
+		const directedShare = Math.round(
+			cardFeeDisplay(sprout + sprout) * (sprout / (sprout + sprout)) * 100,
 		);
+		expect(
+			text,
+			"reaches creators = Time Pool + directed net of the card fee's pro-rata share",
+		).toContain(usd(timePoolFor(sprout) + (sprout - directedShare / 100)));
 
 		expect(errors).toEqual([]);
 	});
