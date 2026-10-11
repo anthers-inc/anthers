@@ -286,6 +286,15 @@ export const QUEUES = {
 	// half of the 2026-09-14 decision. Deduped per item+kind through `deadline_reminders`, so
 	// a daily re-gather of the same rows never mails twice.
 	DEADLINE_REMINDERS: "deadline-reminders",
+	// Take back the video HLS run prefixes no transcode row points at — the partial
+	// ladders of encodes that died mid-job, since 2026-10-10's per-variant restructure
+	// gives every retry its own prefix. Enumeration from storage, references from rows;
+	// see hls-orphan-sweep.ts for the cadence, media-purge.ts for the rules.
+	HLS_ORPHAN_SWEEP: "hls-orphan-sweep",
+	// Abort upload sessions abandoned past `SESSION_CLEANUP_DAYS`: the network bills
+	// incomplete multipart uploads while they are held, so an abandoned session is a
+	// meter running rather than idle bytes. See upload-session-sweep.ts.
+	UPLOAD_SESSION_SWEEP: "upload-session-sweep",
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -376,6 +385,20 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 	[QUEUES.WITHDRAWN_SWEEP]: {
 		// Best-effort purge, marked done per Work — a retry sweeps already-swept Works
 		// as no-ops and re-sends nothing (the warning dedupes by key).
+		retryLimit: 2,
+		retryDelay: 300,
+		expireInMinutes: 30,
+	},
+	[QUEUES.HLS_ORPHAN_SWEEP]: {
+		// A prefix-deleting sweep retried like any purge: idempotent (a swept prefix
+		// is gone), and a second delete of an empty prefix is a no-op.
+		retryLimit: 2,
+		retryDelay: 300,
+		expireInMinutes: 30,
+	},
+	[QUEUES.UPLOAD_SESSION_SWEEP]: {
+		// The row moves to `aborted` before the next run, so a retry sweeps nothing
+		// twice; 30 minutes bounds an abort pass over up to 200 rows.
 		retryLimit: 2,
 		retryDelay: 300,
 		expireInMinutes: 30,
@@ -518,5 +541,12 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// 30-day rights request, a 10-business-day counter-notice window, a calendar of
 	// filings months apart — so a sweep that runs once a day delivers each reminder within
 	// a day of the moment it becomes due, inside every window's tolerance.
+	// 7 AM daily, after the night's other sweeps. Nothing here is latency-sensitive —
+	// the bytes are private, unreachable and uncounted by clients — and the walk is
+	// storage-wide, so off-hours it stays.
 	[QUEUES.DEADLINE_REMINDERS, "45 6 * * *"],
+	[QUEUES.HLS_ORPHAN_SWEEP, "0 7 * * *"],
+	// 7:15 AM daily, after the prefix sweep — the same family (storage nobody can
+	// reach and nobody is billed against by a client), just later off-hours.
+	[QUEUES.UPLOAD_SESSION_SWEEP, "15 7 * * *"],
 ] as const;

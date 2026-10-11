@@ -49,6 +49,82 @@ async function sweep(keys: Set<string>, prefixes: Set<string>, label: string): P
 }
 
 /**
+ * Sweep the video HLS run prefixes no transcoding row points at.
+ *
+ * Since the transcode's per-variant restructure, every run of the job — the first
+ * attempt and every retry alike — renders into its own run prefix
+ * (`creators/{id}/videos/hls/<run>/`). An attempt that never finished is a prefix full
+ * of private, unreachable-by-client bytes sitting inside its creator's allowance, with
+ * nothing pointing at or reclaiming it: the delete and withdrawal paths enumerate from
+ * rows, and the retry that died left no row carrying the prefix at all.
+ *
+ * The rule, per this module's ownership rules:
+ *
+ * - **Enumeration is storage-first, not row-first** — `listChildPrefixes` finds what
+ *   actually exists, and the database answers which runs are referenced. A reference
+ *   is a video transcode row whose `hlsManifestUrl` key resolves under the candidate
+ *   prefix.
+ * - 🚨 **A creator with a live video transcode is skipped entirely.** A pending row's
+ *   own run prefix does not exist anywhere in the database yet — the job mints it when
+ *   it runs — so there is no way to know from rows alone that `…/hls/<future>/` is
+ *   about to be written, and a prefix deleted while an encode is still writing into it
+ *   is the one unrecoverable error a sweep could make. An account with any
+ *   `pending` or `processing` video job this cycle simply waits for the next run.
+ */
+export async function sweepOrphanedVideoHlsPrefixes(): Promise<number> {
+	let deleted = 0;
+	for (const creatorRoot of await storage.listChildPrefixes("creators/")) {
+		const creatorId = Number.parseInt(creatorRoot.replace("creators/", ""), 10);
+		if (!Number.isInteger(creatorId)) continue;
+
+		const candidates = await storage.listChildPrefixes(`creators/${creatorId}/videos/hls/`);
+		if (candidates.length === 0) continue;
+
+		// The live-write guard above, one query per creator who has anything to sweep.
+		const [live] = await db
+			.select({ id: transcodingJobs.id })
+			.from(transcodingJobs)
+			.innerJoin(works, eq(works.id, transcodingJobs.workId))
+			.where(
+				and(
+					eq(works.creatorId, creatorId),
+					eq(transcodingJobs.mediaType, "video"),
+					inArray(transcodingJobs.status, ["pending", "processing"]),
+				),
+			)
+			.limit(1);
+		if (live) continue;
+
+		// Every run prefix some row's master playlist still points at. Normalized to the
+		// candidate form — trailing slash — so the comparison can never miss on the two
+		// spellings of the same directory.
+		const rows = await db
+			.select({ hlsManifestUrl: transcodingJobs.hlsManifestUrl })
+			.from(transcodingJobs)
+			.innerJoin(works, eq(works.id, transcodingJobs.workId))
+			.where(and(eq(works.creatorId, creatorId), eq(transcodingJobs.mediaType, "video")));
+		const referenced = new Set(
+			rows
+				.map((r) => urlToKey(r.hlsManifestUrl ?? ""))
+				.filter(Boolean)
+				.map((key) => `${key.replace(/\/[^/]+$/, "")}/`),
+		);
+
+		for (const candidate of candidates) {
+			const prefix = candidate;
+			if (referenced.has(prefix)) continue;
+			try {
+				await storage.deletePrefix(prefix);
+				deleted += 1;
+			} catch (err) {
+				console.error(`[media-purge] orphan sweep: deletePrefix failed for ${prefix}:`, err);
+			}
+		}
+	}
+	return deleted;
+}
+
+/**
  * Collect every storage key and prefix a Work owns, given its already-loaded rows.
  *
  * 🚨 **Only what sits under the Work's own creator's prefix, whatever its columns say.** Those
