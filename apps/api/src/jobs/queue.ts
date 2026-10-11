@@ -53,6 +53,11 @@ export interface SendOptions {
 	retryLimit?: number;
 	retryDelay?: number; // seconds, flat
 	expireInMinutes?: number;
+	/** Expected heartbeat interval in seconds. When set, pg-boss's worker refreshes
+	 * the job's heartbeat while its handler runs, and pg-boss's maintenance fails a
+	 * job whose heartbeats stopped — the fast "worker died mid-job" detection that
+	 * makes a long expireInMinutes safe. Must be ≥ 10 when set. */
+	heartbeatSeconds?: number;
 	startAfter?: number; // ms epoch
 }
 
@@ -68,11 +73,12 @@ export interface Job<T> {
 
 export type Handler<T> = (jobs: Job<T>[]) => Promise<void> | void;
 
-function toBossSendOptions(options?: SendOptions): Record<string, unknown> {
+export function toBossSendOptions(options?: SendOptions): Record<string, unknown> {
 	const out: Record<string, unknown> = {};
 	if (options?.retryLimit !== undefined) out.retryLimit = options.retryLimit;
 	if (options?.retryDelay !== undefined) out.retryDelay = options.retryDelay;
 	if (options?.expireInMinutes !== undefined) out.expireInSeconds = options.expireInMinutes * 60;
+	if (options?.heartbeatSeconds !== undefined) out.heartbeatSeconds = options.heartbeatSeconds;
 	if (options?.startAfter !== undefined) out.startAfter = new Date(options.startAfter);
 	return out;
 }
@@ -298,10 +304,27 @@ export const QUEUES = {
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
+	// 🚨 **expireInMinutes is the handler's runtime cap, not a liveness window** — pg-boss
+	// (v12) treats a job that runs this long as expired: the supervisor re-delivers it and
+	// the worker races the handler against the same limit, and NOTHING kills the
+	// abandoned handler or its ffmpeg child, so an encode that outlives the window
+	// double-runs (measured 2026-10-11: one 4K-adjacent source re-encoded in full, twice,
+	// because expireInMinutes was 45 and the encode took 54 min). The cap therefore has
+	// to exceed the worst encode the ladder allows, and the ladder has no duration cap —
+	// sources are bounded only by multipart upload size. Sizing: 12 h, roughly 20× the
+	// one measured long encode. The recovery a long window does not provide — a worker
+	// that DIED mid-encode — is the heartbeat's, which catches it in minutes instead of
+	// the window's full length; the heartbeat does not extend expiry (pg-boss still
+	// expires on started_on), it only fails a job whose worker stopped refreshing it.
+	// A stalled encode self-fails regardless of the window at its pass's SOURCE_URL_TTL,
+	// when ffmpeg's ranged reads outrun the signed address.
+	// The lock in the handler (`withTranscodeLock`) is the floor under sizing mistakes:
+	// a re-delivery waits there instead of encoding beside the first handler.
 	[QUEUES.TRANSCODE_VIDEO]: {
 		retryLimit: 2,
 		retryDelay: 60,
-		expireInMinutes: 45, // Video transcoding can take up to 30 min
+		expireInMinutes: 12 * 60,
+		heartbeatSeconds: 120,
 	},
 	[QUEUES.PROCESS_AUDIO]: {
 		retryLimit: 2,

@@ -78,9 +78,10 @@ export const MAX_TRANSCODE_RESUMES = 3;
  * Re-queue transcodes orphaned by a previous worker's restart.
  *
  * A deploy bounces the worker and kills any in-flight ffmpeg, leaving the DB row stuck at
- * pending/processing (pg-boss would only retry after the job's 45-min expiry). On boot we
+ * pending/processing (pg-boss would only retry the job itself after its expiry window, now
+ * hours for video; the boot sweep exists so recovery does not wait that long). On boot we
  * reset those rows and re-send them so they resume promptly; the per-job idempotency guard
- * makes a later pg-boss retry a no-op.
+ * and the encode lock make a later pg-boss retry a no-op.
  *
  * A row whose Work carries no source file is **not** an orphan — it is a job that can never
  * succeed, since all three handlers throw on a missing source key before reaching ffmpeg.
