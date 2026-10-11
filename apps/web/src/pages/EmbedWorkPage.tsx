@@ -130,6 +130,8 @@ export default function EmbedWorkPage() {
 	const canAccess = isAccessResult(work.access) && work.access.canAccess;
 	const jobStatus = work.transcoding?.status;
 	const encoding = jobStatus != null && jobStatus !== "completed" && jobStatus !== "failed";
+	/** A video whose original is not on hand yet — the encoder status is what shows. */
+	const videoWithoutOriginal = work.type === "video" && !work.originalUrl;
 
 	return (
 		<div className="mx-auto max-w-3xl p-3">
@@ -139,7 +141,7 @@ export default function EmbedWorkPage() {
 						// The sharer's relay allowance is gone, so the server withheld the
 						// deliverable — the reason is all there is to render.
 						<PublicAccessWall budget={meterBudget} />
-					) : encoding ? (
+					) : encoding && !videoWithoutOriginal ? (
 						<p className="py-12 text-center text-sm text-base-content/60">Processing…</p>
 					) : (
 						<WorkDeliverable work={work} shareToken={token ?? null} />
