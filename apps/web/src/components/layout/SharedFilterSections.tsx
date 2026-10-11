@@ -12,8 +12,8 @@
  * own tasks'.
  *
  * 🚨 The list is the UNIFIED vocabulary — All, then Posts, then every Work type —
- * rendered on every tab, GREYED where that tab or its active view cannot select it
- * (`unavailableTypes`), never dropped. A greyed-where-empty list keeps the vocabulary
+ * rendered on every tab, GRAYED where that tab or its active view cannot select it
+ * (`unavailableTypes`), never dropped. A grayed-where-empty list keeps the vocabulary
  * stable between tabs, which is what a shared section is: "Images" appearing only
  * where something is an image and vanishing elsewhere would read as the sidebar
  * reshuffling its words under you.
@@ -79,7 +79,7 @@ export default function SharedFilterSections({
 	type: string;
 	onType: (id: string) => void;
 	/**
-	 * Types the current page or its active view cannot reach: rendered GREYED rather
+	 * Types the current page or its active view cannot reach: rendered GRAYED rather
 	 * than dropped (Parker, 2026-10-11) — a Work type absent from a Library, or already
 	 * excluded by the selected lens, keeps its row, unselectable. Absent, every row selects.
 	 */
@@ -118,7 +118,7 @@ export default function SharedFilterSections({
 			)}
 
 			{/*
-			 * TYPE — the unified list. Greyed rows keep their place: they are the
+			 * TYPE — the unified list. Grayed rows keep their place: they are the
 			 * vocabulary, not the supply. (Was the "Work Type" heading; Parker
 			 * shortened it when this became the shared section, 2026-10-11.)
 			 */}
@@ -126,14 +126,14 @@ export default function SharedFilterSections({
 				<h3 className={sectionTitleClass}>Type</h3>
 				<div className="flex flex-col gap-0.5">
 					{SHARED_FILTER_TYPES.map((typeItem) => {
-						const greyed = unavailableTypes?.has(typeItem.id) ?? false;
+						const grayed = unavailableTypes?.has(typeItem.id) ?? false;
 						return (
 							<button
 								key={typeItem.id}
 								type="button"
-								disabled={greyed}
-								aria-disabled={greyed || undefined}
-								className={`${sidebarRowClass(type === typeItem.id)} ${greyed ? "opacity-40 pointer-events-none" : ""}`}
+								disabled={grayed}
+								aria-disabled={grayed || undefined}
+								className={`${sidebarRowClass(type === typeItem.id)} ${grayed ? "opacity-40 pointer-events-none" : ""}`}
 								onClick={() => onType(typeItem.id)}
 							>
 								<typeItem.icon className="w-5 h-5 shrink-0" />

@@ -22,14 +22,13 @@
  *      openable. It renders locked with the route to unlock, the same way a gated track
  *      sits in the play queue.
  *
- * The controls live in the SIDEBAR (the house structure, 2026-10-11): the Lenses are the
- * Library's middle section, the Type and Tags filters the tab-shared section beneath
- * them — the page body keeps only the content the view selects, plus the Show-hidden
- * toggle, whose invariant is absolute (see below). The lens switcher used to be a
- * page-level tabs row, kept deliberately apart from the media tabs for the
+ * The controls live in the SIDEBAR (the house structure, 2026-10-11, v2): the tab-shared
+ * LENSES are the section above the second divider, the shared filters (Access, Type,
+ * Tags) beneath them — the page body keeps only the content the view selects, plus the
+ * Show-hidden toggle, whose invariant is absolute (see below). The lens switcher used
+ * to be a page-level tabs row, kept deliberately apart from the media tabs for the
  * narrow-vs-reorganize distinction; the sidebar replaces that visual argument with the
- * structural one — Lenses are their own section, above the shared filters, and the
- * greying contract does the rest.
+ * structural one, and the graying contract does the rest.
  */
 
 import { WITHDRAWN_RESCUE_DAYS } from "@anthers/shared/constants";
@@ -45,103 +44,44 @@ import { client } from "@anthers/web-shared/rpc";
 import { isAccessResult, type Work } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import {
-	EyeIcon,
-	EyeSlashIcon,
-	LockClosedIcon,
-	MusicalNoteIcon,
-	Square3Stack3DIcon,
-	Squares2X2Icon,
-	TvIcon,
-} from "@heroicons/react/24/outline";
+import { EyeIcon, EyeSlashIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import SharedFilterSections, {
 	SHARED_FILTER_TYPES,
-	sidebarRowClass,
 } from "../components/layout/SharedFilterSections";
+import SharedLensesSection from "../components/layout/SharedLensesSection";
 import { useSidebar } from "../components/layout/SidebarContext";
 import MusicLens, { type LensItem, type LensProject } from "../components/library/MusicLens";
 import { removeItem, setHidden } from "../lib/library";
 
 /**
- * The LENSES (Parker, 2026-10-11): the Library's middle sidebar section. **A lens is a
- * view, never a container** — the shelf stays complete and usable with no lens applied,
- * and switching or removing one must never touch what is *in* the Library, which matters
- * more here than in the app this idea came from, because a shelf entry can be a thing
- * somebody paid for.
+ * The LENSES (Parker, 2026-10-11, v2): the tab-shared LENSES section carries the rows
+ * — the Library's own contribution to it is the live set. **A lens is a view, never a
+ * container** — the shelf stays complete and usable with no lens applied, and switching
+ * or removing one must never touch what is *in* the Library, which matters more here
+ * than in the app this idea came from, because a shelf entry can be a thing somebody
+ * paid for. 🚨 **A lens is a UI/UX shift, never a type filter in disguise** (the
+ * retired Video lens is the cautionary example: the plain video grid is just the Video
+ * type filter).
  *
- * 🚨 **A lens is a UI/UX shift, never a type filter in disguise** (Parker, 2026-10-11 —
- * the retired Video lens is the cautionary example: the plain video grid is just the
- * Video type filter). What is not built yet renders GREYED with "(Coming Soon)" rather
- * than absent — the lense's vocabulary is stable the same way the shared Type list's is;
- * the two greyed entries ship with their own tasks (Channel Guide, Bookshelf), which
- * build the real view and flip their rows live.
+ * The Music Player's dial rides the lens it is a control on, rendered beneath its row
+ * (the shared section's `extras` slot) only while that lens is active.
  */
-const LENSES = [
-	{ id: "", label: "No Lens", icon: Squares2X2Icon, comingSoon: false },
-	{ id: "music", label: "Music Player", icon: MusicalNoteIcon, comingSoon: false },
-	{ id: "channel-guide", label: "Channel Guide", icon: TvIcon, comingSoon: true },
-	{ id: "bookshelf", label: "Bookshelf", icon: Square3Stack3DIcon, comingSoon: true },
-] as const;
+const LIBRARY_LIVES = new Set(["", "music"]);
 
-const sectionTitleClass =
-	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5";
-
-/**
- * The Library's MIDDLE-SECTION sidebar content: the Lenses. The Music Player's dial
- * rides the lens it is a control ON, rendered beneath its row only while that lens is
- * active — the placement the dial's invariant (beside the view it re-scopes) lands on
- * when the sidebar became the lens's home.
- */
-function LensSection({
-	lens,
-	includeSpoken,
-	onLens,
-	onIncludeSpoken,
-}: {
-	lens: string;
-	includeSpoken: boolean;
-	onLens: (id: string) => void;
-	onIncludeSpoken: (on: boolean) => void;
-}) {
+/** The Music Player's dial, given to the shared section as the row's `extras` — a
+ *  control ON the lens, rendered beneath its row only while the lens is selected. */
+function musicDial(includeSpoken: boolean, onIncludeSpoken: (on: boolean) => void) {
 	return (
-		<section>
-			<h3 className={sectionTitleClass}>Lenses</h3>
-			<div className="flex flex-col gap-0.5">
-				{LENSES.map((lensItem) => (
-					<div key={lensItem.id}>
-						<button
-							type="button"
-							disabled={lensItem.comingSoon}
-							aria-disabled={lensItem.comingSoon || undefined}
-							className={`${sidebarRowClass(lens === lensItem.id)} ${
-								lensItem.comingSoon ? "opacity-40 pointer-events-none" : ""
-							}`}
-							onClick={() => onLens(lensItem.id)}
-						>
-							<lensItem.icon className="w-5 h-5 shrink-0" />
-							{lensItem.label}
-							{lensItem.comingSoon && (
-								<span className="ml-auto text-[10px] text-base-content/40 italic">
-									(Coming Soon)
-								</span>
-							)}
-						</button>
-						{lensItem.id === "music" && lens === "music" && (
-							<label className="mt-1 ml-6 flex w-fit cursor-pointer items-center gap-2 text-xs">
-								<input
-									type="checkbox"
-									className="toggle toggle-sm"
-									checked={includeSpoken}
-									onChange={(e) => onIncludeSpoken(e.target.checked)}
-								/>
-								Include spoken word
-							</label>
-						)}
-					</div>
-				))}
-			</div>
-		</section>
+		<label className="mt-1 ml-6 flex w-fit cursor-pointer items-center gap-2 text-xs">
+			<input
+				type="checkbox"
+				className="toggle toggle-sm"
+				checked={includeSpoken}
+				onChange={(e) => onIncludeSpoken(e.target.checked)}
+			/>
+			Include spoken word
+		</label>
 	);
 }
 
@@ -294,13 +234,27 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 	);
 }
 
-/** The shelf items a tag filter keeps — AND semantics, the feed's comma-list read. A
- *  Project carries no tags of its own, so it drops while any tag filter is on, the way
- *  a post linking nothing drops while any type filter is on. */
+/**
+ * The shelf items a tag filter keeps — AND semantics, the feed's comma-list read. A
+ * Project carries no tags of its own, so it drops while any tag filter is on, the way
+ * a post linking nothing drops while any type filter is on. */
 function matchesTags(item: ShelfItem, tags: string[]): boolean {
 	if (tags.length === 0) return true;
 	const own = item.kind === "work" ? (item.work?.tags ?? []) : [];
 	return tags.every((t) => own.includes(t));
+}
+
+/**
+ * The shelf items an Access filter keeps — the resolved verdict the card already
+ * renders ("unlocked" is canAccess; "locked" its complement). A Project carries no
+ * access reading, so any access filter drops it; All is where an album lives.
+ */
+function matchesAccess(item: ShelfItem, access: string): boolean {
+	if (!access) return true;
+	if (item.kind !== "work" || !item.work || !isAccessResult(item.work.access)) return false;
+	return access === "unlocked"
+		? item.work.access.canAccess === true
+		: item.work.access.canAccess === false;
 }
 
 export default function LibraryPage() {
@@ -318,6 +272,8 @@ export default function LibraryPage() {
 	const includeSpoken = searchParams.get("spoken") === "1";
 	/** The selected tags as the comma list the shared Tags section carries. */
 	const tagsParam = searchParams.get("tags") ?? "";
+	/** The Access filter's value — "" any, "unlocked", "locked" — the shared section's control. */
+	const accessParam = searchParams.get("access") ?? "";
 
 	/*
 	 * 🚨 Always fetch the WHOLE shelf, hidden included, and filter for display below.
@@ -348,15 +304,25 @@ export default function LibraryPage() {
 
 	useEffect(load, [load]);
 
-	const setParam = (key: string, value: string) => {
-		const next = new URLSearchParams(searchParams);
-		if (value) next.set(key, value);
-		else next.delete(key);
-		setSearchParams(next, { replace: true });
-	};
+	const setParam = useCallback(
+		(key: string, value: string) => {
+			const next = new URLSearchParams(searchParams);
+			if (value) next.set(key, value);
+			else next.delete(key);
+			setSearchParams(next, { replace: true });
+		},
+		[searchParams, setSearchParams],
+	);
 
 	// Hidden entries are filtered HERE rather than by the request — see `load`.
 	const visible = showHidden ? items : items.filter((i) => !i.hidden);
+	// The Access filter reads the resolved verdict the cards already carry. A Project
+	// has no access reading, so it drops while any access filter is on — the same
+	// rule a post obeys under a type filter, and the same honesty: All is where it lives.
+	const withAccess = useMemo(
+		() => visible.filter((i) => matchesAccess(i, accessParam)),
+		[visible, accessParam],
+	);
 	// The tag filter reads the shelf's own tags, client-side: the Library view is a
 	// browser over what is already fetched.
 	const selectedTags = useMemo(
@@ -368,8 +334,8 @@ export default function LibraryPage() {
 		[tagsParam],
 	);
 	const withTags = useMemo(
-		() => visible.filter((i) => matchesTags(i, selectedTags)),
-		[visible, selectedTags],
+		() => withAccess.filter((i) => matchesTags(i, selectedTags)),
+		[withAccess, selectedTags],
 	);
 	// A Project has no media type of its own, so a type filter necessarily excludes
 	// albums. The All type is where they live, which is honest: an album is not "a video".
@@ -382,19 +348,20 @@ export default function LibraryPage() {
 	);
 
 	/**
-	 * The Type rows the sidebar greys out (Parker, 2026-10-11): a type greyed when the
-	 * Library holds nothing of it, and — under a lens — when the lens excludes it. The
-	 * shared list's rows otherwise stay live and stable. Posts never exist in a Library;
-	 * the row greys permanently here.
+	 * The Type rows the sidebar grays out (Parker, 2026-10-11): a type grayed when the
+	 * Library holds nothing of it, and — under a lens — when the lens excludes it. Posts
+	 * gray here by absence too: until and unless the shelf holds a saved post
+	 * (the Save unification adds posts as Library rows), the row shows the grayed state
+	 * — the vocabulary, exactly as with any empty type.
 	 */
 	const unavailableTypes = useMemo(() => {
-		const set = new Set<string>(["posts"]);
+		const set = new Set<string>();
 		if (lens === "music") {
 			const included = includeSpoken ? ["music", "audio"] : ["music"];
 			for (const t of SHARED_FILTER_TYPES) {
 				if (t.id && !included.includes(t.id)) set.add(t.id);
 			}
-			// A type the lens includes but the shelf has nothing of greys the same way.
+			// A type the lens includes but the shelf has nothing of grays the same way.
 			for (const type of included) {
 				if (!items.some((i) => i.kind === "work" && i.work?.type === type)) set.add(type);
 			}
@@ -406,15 +373,18 @@ export default function LibraryPage() {
 		return set;
 	}, [lens, includeSpoken, items]);
 
-	// Register the sidebar's two pieces: the Lenses (the Library's middle section) and
-	// the tab-shared Type and Tags, each with its adapter into this page's params.
+	// Register the sidebar's two pieces: the tab-shared LENSES, with the Library's live
+	// set and the Music Player's dial, and the shared filters with the Access control
+	// this page consumes — each adapter writing this page's own params.
 	useEffect(() => {
 		setPageContent(
-			<LensSection
+			<SharedLensesSection
 				lens={lens}
-				includeSpoken={includeSpoken}
 				onLens={(id) => setParam("lens", id)}
-				onIncludeSpoken={(on) => setParam("spoken", on ? "1" : "")}
+				live={LIBRARY_LIVES}
+				extras={{
+					music: musicDial(includeSpoken, (on) => setParam("spoken", on ? "1" : "")),
+				}}
 			/>,
 		);
 		setSharedContent(
@@ -424,6 +394,7 @@ export default function LibraryPage() {
 				unavailableTypes={unavailableTypes}
 				tags={tagsParam}
 				onTags={(value) => setParam("tags", value)}
+				access={{ value: accessParam, onAccess: (value) => setParam("access", value) }}
 			/>,
 		);
 		return () => {
@@ -433,12 +404,13 @@ export default function LibraryPage() {
 	}, [
 		setPageContent,
 		setSharedContent,
+		setParam,
 		lens,
 		includeSpoken,
 		activeType,
 		tagsParam,
+		accessParam,
 		unavailableTypes,
-		searchParams,
 	]);
 
 	if (loading) {
