@@ -5,7 +5,7 @@
  * Ported from _legacy/backend/content/tasks.py transcode_video()
  *
  * Flow:
- * 1. Probe source file with ffprobe for resolution/duration
+ * 1. Probe the source with ffprobe for resolution/duration — read in place, never downloaded
  * 2. Determine variants based on source height (480p, 720p, 1080p)
  * 3. Transcode each variant to HLS via ffmpeg, uploading and freeing each one's
  *    files before the next variant starts; 3b transcodes the audio-only rendition the same way
@@ -17,6 +17,14 @@
  * filesystem is ephemeral and small, and the platform replaces a container whose disk
  * fills — silently, with no line the app can log. Holding the whole output beside a
  * whole source is how a burst of uploads bounced this worker every few minutes.
+ *
+ * 🚨 **The source is read in place, every pass minting its own short-lived address**
+ * (`storage.readableInput`): a signed ranged-read URL in remote mode, the object's own
+ * path locally, and ffprobe and ffmpeg take either. No temp copy of the source exists,
+ * so a job's residency is bounded by one variant's segments, briefly — nothing a source
+ * file of any size adds to it. Each pass mints fresh rather than sharing one URL minted
+ * at job start, because the sign window then covers the longest single read, not the
+ * longest job.
  *
  * It takes no poster from the video: its creator chooses the thumbnail, and release waits for it.
  */
@@ -36,6 +44,14 @@ export interface TranscodeVideoData {
 	jobId: number;
 }
 
+/**
+ * How long one pass's signed source address stays valid. A pass is one variant's decode,
+ * or the probe — minutes at network speed for any source the caps allow; if one outlives
+ * the window the job fails at a storage refusal and the queue retries it, which is
+ * ordinary and visible rather than a slow decay.
+ */
+const SOURCE_URL_TTL_SECONDS = 60 * 60;
+
 interface Variant {
 	name: string;
 	height: number;
@@ -44,10 +60,10 @@ interface Variant {
 	width: number;
 }
 
-/** Run ffprobe and return parsed JSON metadata */
-async function ffprobe(filePath: string) {
+/** Run ffprobe on a local path or a network address and return parsed JSON metadata */
+async function ffprobe(source: string) {
 	const proc = Bun.spawn(
-		["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", filePath],
+		["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", source],
 		{ stdout: "pipe", stderr: "pipe" },
 	);
 	const exitCode = await proc.exited;
@@ -256,15 +272,14 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 	// partial prior attempt.
 	const storagePrefix = `creators/${item.creatorId}/videos/hls/${randomUUID().replace(/-/g, "")}`;
 
-	let localPath: string | null = null;
 	let outputDir: string | null = null;
 
 	try {
-		// 0. Download source file to local temp path for ffmpeg
-		localPath = await storage.downloadToTemp(storageKey);
-
-		// 1. Probe source
-		const probe = await ffprobe(localPath);
+		// 1. Probe the source — read in place, no temp copy. A fresh address per pass;
+		// the TTL constant above carries the reasoning.
+		const probe = await ffprobe(
+			await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
+		);
 		const videoStream = probe.streams?.find(
 			(s: { codec_type: string }) => s.codec_type === "video",
 		);
@@ -369,24 +384,31 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			const variantBase = spanStart + i * perVariant;
 			let lastPct = -1;
 			let lastWriteMs = 0;
-			await ffmpegHls(localPath, outputDir, v.height, v.bitrate, v.name, (outSec, speed) => {
-				if (duration <= 0 || !encoding) return;
-				const frac = Math.min(1, outSec / duration);
-				const pct = Math.min(spanEnd - 1, Math.round(variantBase + frac * perVariant));
-				const eta = clampEta(remainingEncodeSeconds(heights, i, outSec, duration, speed));
-				const now = Date.now();
-				if (pct !== lastPct && now - lastWriteMs >= 1000) {
-					lastPct = pct;
-					lastWriteMs = now;
-					// Fire-and-forget so the progress stream isn't blocked on the DB write.
-					lastWrite = db
-						.update(transcodingJobs)
-						.set({ progress: pct, etaSeconds: eta })
-						.where(eq(transcodingJobs.id, jobId))
-						.execute()
-						.catch(() => {});
-				}
-			});
+			await ffmpegHls(
+				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
+				outputDir,
+				v.height,
+				v.bitrate,
+				v.name,
+				(outSec, speed) => {
+					if (duration <= 0 || !encoding) return;
+					const frac = Math.min(1, outSec / duration);
+					const pct = Math.min(spanEnd - 1, Math.round(variantBase + frac * perVariant));
+					const eta = clampEta(remainingEncodeSeconds(heights, i, outSec, duration, speed));
+					const now = Date.now();
+					if (pct !== lastPct && now - lastWriteMs >= 1000) {
+						lastPct = pct;
+						lastWriteMs = now;
+						// Fire-and-forget so the progress stream isn't blocked on the DB write.
+						lastWrite = db
+							.update(transcodingJobs)
+							.set({ progress: pct, etaSeconds: eta })
+							.where(eq(transcodingJobs.id, jobId))
+							.execute()
+							.catch(() => {});
+					}
+				},
+			);
 			await updateJobProgress(jobId, Math.round(spanStart + (i + 1) * perVariant));
 			// This variant's segments are off the disk before the next variant's encode
 			// grows the directory again — the whole point of uploading per variant.
@@ -399,7 +421,10 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		// source has nothing to demux, so it ships no rendition and the master says so.
 		const hasAudio = probe.streams?.some((s: { codec_type: string }) => s.codec_type === "audio");
 		if (hasAudio) {
-			await ffmpegAudioHls(localPath, outputDir);
+			await ffmpegAudioHls(
+				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
+				outputDir,
+			);
 			await uploadAndFree(outputDir);
 		}
 
@@ -450,12 +475,8 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			.where(eq(transcodingJobs.id, jobId));
 		throw error;
 	} finally {
-		// Clean up temp files (only files under tmpdir)
-		if (localPath?.startsWith(tmpdir())) {
-			try {
-				await rm(localPath);
-			} catch {}
-		}
+		// Clean up temp files (only files under tmpdir) — no source copy exists to
+		// clean, since every pass reads the source in place.
 		if (outputDir) {
 			try {
 				await rm(outputDir, { recursive: true });
