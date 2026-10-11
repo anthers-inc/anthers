@@ -58,16 +58,19 @@ let userAuth: Record<string, string>;
 let userCookie: string;
 let userId = 0;
 let creatorId = 0;
+let creatorHandle = "";
 
 let freeWorkId = 0;
 let gatedWorkId = 0;
 let boughtWorkId = 0;
 let privateWorkId = 0;
 
-async function signUp(username: string): Promise<{ cookie: string; userId: number }> {
+async function signUp(
+	username: string,
+): Promise<{ cookie: string; userId: number; handle: string }> {
 	const account = await createAccount(username);
 	const cookie = account.cookie;
-	return { cookie, userId: account.userId as number };
+	return { cookie, userId: account.userId as number, handle: account.handle };
 }
 
 async function makeWork(title: string, access: unknown, released = true): Promise<number> {
@@ -108,7 +111,13 @@ async function shelf(opts: { hidden?: boolean } = {}) {
 		kind: string;
 		hidden: boolean;
 		purchased: boolean;
-		work?: { id: number; access: { canAccess: boolean } };
+		work?: {
+			id: number;
+			access: { canAccess: boolean };
+			creatorHandle?: string | null;
+			creatorDisplayName?: string | null;
+			creatorAvatar?: string | null;
+		};
 	}[];
 }
 
@@ -137,6 +146,7 @@ describe("the Library", () => {
 		const user = await signUp(userName);
 		await enablePayouts(userName);
 		creatorId = creator.userId;
+		creatorHandle = creator.handle;
 		userId = user.userId;
 		userCookie = user.cookie;
 		creatorAuth = { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creator.cookie };
@@ -193,6 +203,21 @@ describe("the Library", () => {
 		expect(items.some((i) => i.work?.id === freeWorkId)).toBe(true);
 		// Free means free: kept, and openable, and NOT a purchase.
 		expect(items.find((i) => i.work?.id === freeWorkId)?.purchased).toBe(false);
+	});
+
+	it("carries the creator's display surface on the work arm, for the lens that labels channels by maker", async () => {
+		// A lens that organizes the shelf by its creators (the Channel Guide) needs each
+		// entry's channel label and avatar without a profile fetch per creator — the
+		// project arm has always carried its creator pair; the work arm now answers the
+		// same question. The join is a LEFT one for a reason: an account row that has
+		// gone missing must not vanish someone's saved Work from their shelf.
+		const entry = (await shelf()).find((i) => i.work?.id === freeWorkId);
+		expect(entry, "the free Work should be on the shelf").toBeTruthy();
+		expect(entry?.work?.creatorHandle).toBe(creatorHandle);
+		// `displayName` may legitimately be unset on an account; the field must ride
+		// regardless, as `creatorAvatar` must (its default is the empty string).
+		expect("creatorDisplayName" in (entry?.work ?? {})).toBe(true);
+		expect("creatorAvatar" in (entry?.work ?? {})).toBe(true);
 	});
 
 	it("is idempotent — pressing Save twice is not an error", async () => {

@@ -6522,6 +6522,29 @@ const contentRoutes = new Hono()
 		const workById = new Map(workRows.map((w) => [w.id, w]));
 		const projectById = new Map(projectRows.map((p) => [p.id, p]));
 
+		// The channel-guide fields, for the work arm only: a creator's display name,
+		// handle and avatar, so a lens that organizes the shelf **by its creators** can
+		// label channels without an N+1 of profile fetches on a shelf-sized page. The
+		// project arm has carried the same two fields since the album lens; a Work's own
+		// serialization withholds them because nothing until now needed them wholesale.
+		// Deliberately additive and route-local — a Work's public serialization is a
+		// contract consumed everywhere, and this is the one listing that wants them.
+		const creatorIds = [
+			...new Set(workRows.map((w) => w.creatorId).filter((id): id is number => id != null)),
+		];
+		const creatorRows = creatorIds.length
+			? await db
+					.select({
+						id: users.id,
+						creatorHandle: users.atprotoHandle,
+						creatorDisplayName: users.displayName,
+						creatorAvatar: users.avatar,
+					})
+					.from(users)
+					.where(inArray(users.id, creatorIds))
+			: [];
+		const creatorById = new Map(creatorRows.map((u) => [u.id, u]));
+
 		return c.json({
 			items: (
 				await Promise.all(
@@ -6535,25 +6558,31 @@ const contentRoutes = new Hono()
 						if (row.workId != null) {
 							const w = workById.get(row.workId);
 							if (!w) return null;
+							const creator = w.creatorId != null ? creatorById.get(w.creatorId) : undefined;
 							return {
 								...base,
 								kind: "work" as const,
 								// Derived from `purchases` on every read, never stamped on the row —
 								// so a refund releases the entry with nothing to keep in step.
 								purchased: permanent.has(w.id),
-								work: await serializeWorkForUser(
-									w,
-									assetsByWork.get(w.id) ?? [],
-									jobByWork.get(w.id) ?? null,
-									resolveAccessSync(w as AccessibleWork, ctx),
-									deliveryCtx(),
-									spent,
-									user.id,
-									pagesByWork.get(w.id) ?? 0,
-									(buildsByWork.get(w.id) ?? []).some((b) => b.isPrimary),
-									(buildsByWork.get(w.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ??
-										false,
-								),
+								work: {
+									...(await serializeWorkForUser(
+										w,
+										assetsByWork.get(w.id) ?? [],
+										jobByWork.get(w.id) ?? null,
+										resolveAccessSync(w as AccessibleWork, ctx),
+										deliveryCtx(),
+										spent,
+										user.id,
+										pagesByWork.get(w.id) ?? 0,
+										(buildsByWork.get(w.id) ?? []).some((b) => b.isPrimary),
+										(buildsByWork.get(w.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ??
+											false,
+									)),
+									creatorHandle: creator?.creatorHandle ?? null,
+									creatorDisplayName: creator?.creatorDisplayName ?? null,
+									creatorAvatar: creator?.creatorAvatar ?? null,
+								},
 							};
 						}
 						const p = row.projectId != null ? projectById.get(row.projectId) : null;

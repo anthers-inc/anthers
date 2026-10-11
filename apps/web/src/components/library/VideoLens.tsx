@@ -26,7 +26,7 @@ import { PlayIcon, VideoCameraIcon } from "@heroicons/react/24/solid";
 import type { LensItem } from "./MusicLens";
 
 /** One saved video, rendered as something you put on rather than a tile you click. */
-function formatDuration(seconds: number | null | undefined): string | null {
+export function formatDuration(seconds: number | null | undefined): string | null {
 	if (seconds == null || seconds <= 0) return null;
 	const s = Math.round(seconds);
 	const h = Math.floor(s / 3600);
