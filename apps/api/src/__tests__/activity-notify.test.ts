@@ -17,7 +17,7 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { comments, follows, notifications, posts, userPreferences } from "@anthers/db/schema";
-import { and, eq, inArray, like } from "drizzle-orm";
+import { and, eq, inArray, like, or } from "drizzle-orm";
 import app from "../index";
 import { blockUser } from "../services/blocks.js";
 import { createAccount } from "./account-fixture";
@@ -254,11 +254,23 @@ describe("emitters", () => {
 		});
 		expect(follow.status).toBe(404);
 
-		// And the rows: nothing of the blocked person's writing notified anybody.
+		// And the rows: nothing of the blocked person's writing notified anybody. The
+		// filter is anchored per door (actor at position two of each emitter's key, a
+		// colon on both sides) rather than a bare contain: an unanchored `%id%` matches
+		// any row whose key happens to carry the number as a SUBSTRING — some other
+		// suite's actor id inside a bigger one — which is how this assertion failed
+		// whole-suite and passed alone.
 		const rows = await db
 			.select()
 			.from(notifications)
-			.where(like(notifications.dedupeKey, `%${people.blocked.userId}%`));
+			.where(
+				or(
+					like(notifications.dedupeKey, `comment-reply:${people.blocked.userId}:%`),
+					like(notifications.dedupeKey, `post-comment:${people.blocked.userId}:%`),
+					like(notifications.dedupeKey, `work-review:${people.blocked.userId}:%`),
+					like(notifications.dedupeKey, `new-follower:${people.blocked.userId}:%`),
+				),
+			);
 		expect(rows).toEqual([]);
 	});
 

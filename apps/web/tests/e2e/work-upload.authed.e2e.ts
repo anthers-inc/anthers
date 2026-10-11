@@ -147,7 +147,7 @@ test("a video Work is made from its file and edited while the file uploads", asy
 	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
 		timeout: 15_000,
 	});
-	await page.goto("/studio/catalog");
+	await page.goto("/studio/works");
 	await expect(cardFor(page)).not.toContainText("No file");
 
 	const [work] = (await ownWorks()).filter((w) => w.title === STEM);
@@ -244,7 +244,7 @@ test("a Work's page and the Dashboard follow its processing", async ({ page, con
 
 	// The Catalog card gives the estimate a line of its own, because its badge has no room for it:
 	// the longest estimate wrapped inside the badge's one fixed-height line and spilled out of it.
-	await page.goto("/studio/catalog");
+	await page.goto("/studio/works");
 	const card = page.locator(".card").filter({ hasText: `${STEM} processing` });
 	await expect(card.locator(".badge").filter({ hasText: "Processing" })).toHaveText(
 		"Processing 43%",

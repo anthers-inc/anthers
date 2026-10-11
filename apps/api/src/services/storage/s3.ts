@@ -20,14 +20,19 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import {
+	AbortMultipartUploadCommand,
+	CompleteMultipartUploadCommand,
 	CopyObjectCommand,
+	CreateMultipartUploadCommand,
 	DeleteObjectCommand,
 	DeleteObjectsCommand,
 	GetObjectCommand,
 	HeadObjectCommand,
 	ListObjectsV2Command,
+	ListPartsCommand,
 	PutObjectCommand,
 	S3Client,
+	UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { assertServableKey, isPublicKey } from "./acl.js";
@@ -221,6 +226,16 @@ export class S3StorageService implements StorageService {
 		return publicUrlFor(this.config, key);
 	}
 
+	/**
+	 * A short-lived signed address, ranged-read by the consuming tool. `getUrl` with the
+	 * signing options already does exactly this; the method exists so a caller that wants
+	 * "let the tool read it in place" states that intent and picks up the local mode
+	 * alongside it — the whole point of the method is that no caller of it downloads.
+	 */
+	async readableInput(key: string, opts?: { expiresIn?: number }): Promise<string> {
+		return this.getUrl(key, { signed: true, expiresIn: opts?.expiresIn });
+	}
+
 	async getPresignedUploadUrl(
 		key: string,
 		contentType: string,
@@ -252,6 +267,109 @@ export class S3StorageService implements StorageService {
 		// Verified against a live R2 bucket on 2026-08-11 — with the header 403, without it
 		// 200. `this.config.sendObjectAcl` is the derivation and carries the full reasoning.
 		return { url, headers: this.config.sendObjectAcl ? { "x-amz-acl": value } : {} };
+	}
+
+	/**
+	 * Open a multipart upload. A presigned part PUT is `UploadPart` signed per part
+	 * number; assembly names every part with the ETag the upload's own PUT answered
+	 * with, which makes the completion itself the integrity gate — a part the client
+	 * never uploaded, or uploaded to a different session, fails assembly rather than
+	 * corrupting an object.
+	 */
+	async createMultipartUpload(
+		key: string,
+		contentType: string,
+		acl: "public" | "private",
+	): Promise<{ uploadId: string }> {
+		assertServableKey(key);
+		const { UploadId } = await this.s3.send(
+			new CreateMultipartUploadCommand({
+				Bucket: this.bucketFor(acl),
+				Key: key,
+				ContentType: contentType,
+				// Two-bucket providers carry access in the bucket choice (`config`'s
+				// derivation); per-object-ACL ones take it here, signing hoists it into
+				// the part PUTs the same way it does for the single PUT.
+				...(this.config.sendObjectAcl ? { ACL: acl === "public" ? "public-read" : "private" } : {}),
+			}),
+		);
+		if (!UploadId) throw new Error("the bucket did not name a multipart upload");
+		return { uploadId: UploadId };
+	}
+
+	async getPresignedPartUrl(
+		key: string,
+		uploadId: string,
+		partNumber: number,
+		expiresIn = 3600,
+	): Promise<string> {
+		assertServableKey(key);
+		return getSignedUrl(
+			this.s3,
+			new UploadPartCommand({
+				Bucket: this.bucketForKey(key),
+				Key: key,
+				UploadId: uploadId,
+				PartNumber: partNumber,
+			}),
+			{ expiresIn },
+		);
+	}
+
+	async listMultipartParts(
+		key: string,
+		uploadId: string,
+	): Promise<Array<{ number: number; etag: string }>> {
+		try {
+			const listed = await this.s3.send(
+				new ListPartsCommand({ Bucket: this.bucketForKey(key), Key: key, UploadId: uploadId }),
+			);
+			return (listed.Parts ?? [])
+				.filter((part) => part.PartNumber != null && part.ETag != null)
+				.map((part) => ({ number: part.PartNumber!, etag: part.ETag! }));
+		} catch {
+			// A session the backend holds nothing for is a zero-part answer, not an
+			// exception — the completion's own coverage check is the gate.
+			return [];
+		}
+	}
+
+	async completeMultipartUpload(
+		key: string,
+		uploadId: string,
+		parts: Array<{ number: number; etag: string }>,
+	): Promise<void> {
+		assertServableKey(key);
+		await this.s3.send(
+			new CompleteMultipartUploadCommand({
+				Bucket: this.bucketForKey(key),
+				Key: key,
+				UploadId: uploadId,
+				MultipartUpload: {
+					Parts: parts
+						.sort((a, b) => a.number - b.number)
+						.map((part) => ({
+							PartNumber: part.number,
+							ETag: part.etag,
+						})),
+				},
+			}),
+		);
+	}
+
+	async abortMultipartUpload(key: string, uploadId: string): Promise<void> {
+		assertServableKey(key);
+		try {
+			await this.s3.send(
+				new AbortMultipartUploadCommand({
+					Bucket: this.bucketForKey(key),
+					Key: key,
+					UploadId: uploadId,
+				}),
+			);
+		} catch {
+			// Abandoning an already-finished or already-abandoned session is a no-op.
+		}
 	}
 
 	/**
@@ -356,6 +474,32 @@ export class S3StorageService implements StorageService {
 			} while (continuationToken);
 		}
 		return total;
+	}
+
+	/**
+	 * The immediate child prefixes under `prefix`, from CommonPrefixes with a ` delimiter.
+	 * The bucket is whatever the prefix's own ownership rule resolves to — a sweep's
+	 * prefixes sit under one creator (private), and local mode's answer lives beside it.
+	 */
+	async listChildPrefixes(prefix: string): Promise<string[]> {
+		const out: string[] = [];
+		const bucket = this.bucketForKey(prefix);
+		let continuationToken: string | undefined;
+		do {
+			const listed = await this.s3.send(
+				new ListObjectsV2Command({
+					Bucket: bucket,
+					Prefix: prefix,
+					Delimiter: "/",
+					ContinuationToken: continuationToken,
+				}),
+			);
+			for (const common of listed.CommonPrefixes ?? []) {
+				if (common.Prefix && common.Prefix !== prefix) out.push(common.Prefix);
+			}
+			continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+		} while (continuationToken);
+		return out;
 	}
 
 	async exists(key: string): Promise<boolean> {

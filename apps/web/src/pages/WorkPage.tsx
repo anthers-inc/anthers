@@ -136,8 +136,13 @@ export default function WorkPage() {
 	}, [work, location.pathname, navigate, shareToken]);
 
 	// Poll while the media is still encoding, so the player swaps in without a refresh.
+	// A video plays its original whether or not a ladder encode is running (70.06), so
+	// `encoding` no longer gates what renders for a video — it only drives this poll,
+	// which ends the moment the ladder exists and the player swaps to it.
 	const jobStatus = work?.transcoding?.status;
 	const encoding = jobStatus != null && jobStatus !== "completed" && jobStatus !== "failed";
+	/** A video whose original is not on hand yet, for the encoder-status fallback. */
+	const videoWithoutOriginal = work?.type === "video" && !work?.originalUrl;
 
 	/*
 	 * The Public Access meter, for the media that have no player of their own.
@@ -279,8 +284,8 @@ export default function WorkPage() {
 			{work.visibility === "private" && isOwner && (
 				<div className="alert alert-warning">
 					<span>
-						This Work is still private — only you can see it. Release it from your Catalog when it's
-						ready.
+						This Work is still private — only you can see it. Release it from your Works page when
+						it's ready.
 					</span>
 				</div>
 			)}
@@ -430,7 +435,7 @@ export default function WorkPage() {
 							// The server withheld the deliverable because the allowance is gone, so
 							// there is nothing to render in its place but the reason.
 							<PublicAccessWall budget={meterBudget} />
-						) : encoding ? (
+						) : encoding && !videoWithoutOriginal ? (
 							<TranscodingStatus
 								status={work.transcoding?.status ?? "pending"}
 								progress={work.transcoding?.progress ?? 0}
