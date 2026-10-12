@@ -71,10 +71,15 @@ export function fileRules(type: FileWorkType): { accept: string; maxSize: number
 			// Page images lead (Parker, 2026-10-11) — the paged job renders image leaves
 			// directly, one leaf per page — and the PDF stays: it is what a whole-book
 			// master ships as, and the set is built from whatever mix the creator holds.
+			// For an ebook Work the EPUB rides beside them (the reflow path's source —
+			// the 2026-10-11 design's native ebook source): it must NOT be mixed into a
+			// set with page-shaped files, which the ingest refuses legibly, and it
+			// processes on its own queue into `work_sections` rather than pages, so
+			// `downloadEnabled: false` keeps holding for a reflow book too.
 			return {
-				accept: "image/jpeg,image/png,application/pdf",
+				accept: "image/jpeg,image/png,application/pdf,application/epub+zip,.epub",
 				maxSize: 2 * 1024 * 1024 * 1024,
-				noun: "a page image (JPG or PNG) or a PDF",
+				noun: "a page image (JPG or PNG), a PDF, or an EPUB",
 			};
 	}
 }
