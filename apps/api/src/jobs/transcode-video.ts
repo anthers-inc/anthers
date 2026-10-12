@@ -27,13 +27,20 @@
  * longest job.
  *
  * It takes no poster from the video: its creator chooses the thumbnail, and release waits for it.
+ *
+ * **One encode per job, enforced in the database.** `transcodeVideo` runs under
+ * `withTranscodeLock` — a session-level advisory lock a re-delivered job waits on rather
+ * than encoding beside the first handler — and `ensureStillOurs` re-reads the row before
+ * every upload and the completion write, so a run that has outlived its own delivery
+ * abandons quietly instead of planting a second ladder over the finisher's. The expiry
+ * sizing this design assumes is `JOB_OPTIONS[TRANSCODE_VIDEO]` in `queue.ts`.
  */
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { db } from "@anthers/db";
+import { client, db } from "@anthers/db";
 import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
@@ -42,6 +49,63 @@ import { createEtaClamp, remainingEncodeSeconds } from "./transcode-eta.js";
 
 export interface TranscodeVideoData {
 	jobId: number;
+}
+
+// ── The one-encode lock ─────────────────────────────────────────────────
+//
+// 🚨 **One encode per TranscodingJob, enforced in the database rather than the process.**
+// pg-boss v12 fails a job whose handler runs past `expireInSeconds` and re-delivers it,
+// and nothing kills the abandoned handler or its ffmpeg child — so absent a lock a
+// re-delivery encodes the same source a second time, beside the first. That happened:
+// `JOB_OPTIONS[TRANSCODE_VIDEO]` in `queue.ts` carries the 2026-10-11 measurement of one
+// long source encoded twice in full. `localConcurrency: 1` cannot be the guard, because
+// the expiry path frees the worker's local slot while the orphaned handler is still
+// running — the semaphore counts fetch batches, and a re-delivery is a new fetch.
+//
+// A session-level advisory lock survives every shape of this: a re-delivery waits here
+// while the first handler finishes, then re-reads the row and skips what it already
+// completed; if the worker process dies, the lock dies with its session and the boot
+// recovery re-sends the job. The key is namespaced above serial id space so nothing
+// else in the application can collide with it.
+export const TRANSCODE_LOCK_KEY_BASE = 9_000_000_000_000;
+
+// How long between lock attempts while another handler holds the job. Waiting releases
+// the pooled connection between attempts — only the asking occupies a connection.
+const LOCK_POLL_MS = 10_000;
+
+/**
+ * Run `fn` holding the TranscodingJob's advisory lock, waiting while another handler
+ * holds it. Takes `pollMs` because a test needs waiting to be fast.
+ */
+export async function withTranscodeLock<T>(
+	jobId: number,
+	fn: () => Promise<T>,
+	pollMs: number = LOCK_POLL_MS,
+): Promise<T> {
+	const key = TRANSCODE_LOCK_KEY_BASE + jobId;
+	let loggedWait = false;
+	while (true) {
+		// The lock lives on the session, so acquire and hold use one reserved connection;
+		// the unlock must ride the same session or it is a no-op. The key is cast to
+		// `bigint` explicitly — pg_try_advisory_lock has int and bigint overloads, and an
+		// untyped parameter must not have its overload chosen by accident.
+		const session = await client.reserve();
+		const [row] = await session`select pg_try_advisory_lock(${key}::bigint) as acquired`;
+		if (row.acquired) {
+			try {
+				return await fn();
+			} finally {
+				await session`select pg_advisory_unlock(${key}::bigint)`;
+				session.release();
+			}
+		}
+		session.release();
+		if (!loggedWait) {
+			loggedWait = true;
+			console.log(`[transcode-video] job ${jobId}: another handler holds the encode lock; waiting`);
+		}
+		await new Promise((resolve) => setTimeout(resolve, pollMs));
+	}
 }
 
 /**
@@ -237,7 +301,28 @@ async function updateJobProgress(jobId: number, progress: number) {
 	await db.update(transcodingJobs).set({ progress }).where(eq(transcodingJobs.id, jobId));
 }
 
+/**
+ * Whether the job's row has already reached `completed` — the one fact both the
+ * claim-time skip and the supersession re-checks rest on. Exported because a test
+ * asserts the fact itself rather than inferring it from a handler's side effects.
+ */
+export async function isTranscodeCompleted(jobId: number): Promise<boolean> {
+	const [row] = await db
+		.select({ status: transcodingJobs.status })
+		.from(transcodingJobs)
+		.where(eq(transcodingJobs.id, jobId))
+		.limit(1);
+	return row?.status === "completed";
+}
+
 export async function transcodeVideo(data: TranscodeVideoData) {
+	// The lock is the whole reason `runTranscode` can trust what it re-reads: while it
+	// holds `pg_try_advisory_lock` no other handler can be past this point, so a row
+	// read `completed` really means another handler finished the work.
+	return withTranscodeLock(data.jobId, () => runTranscode(data));
+}
+
+async function runTranscode(data: TranscodeVideoData) {
 	const { jobId } = data;
 
 	const [job] = await db
@@ -247,7 +332,9 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 	// Idempotency: a late pg-boss retry of a job already finished (e.g. by the
-	// worker startup-resume path) is a no-op.
+	// worker startup-resume path) is a no-op. Holding the encode lock makes this
+	// check authoritative rather than advisory: a re-delivery that waited on the
+	// lock lands here only after the handler that held it returned.
 	if (job.status === "completed") {
 		console.log(`[transcode-video] job ${jobId} already completed; skipping`);
 		return;
@@ -271,6 +358,35 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 	// route). Every run of the job gets its own prefix, so a retry never merges with a
 	// partial prior attempt.
 	const storagePrefix = `creators/${item.creatorId}/videos/hls/${randomUUID().replace(/-/g, "")}`;
+
+	/**
+	 * ⭐ **The re-check a handler that has outlived its own delivery owes the row.** A
+	 * handler can lose the race to its expiry — or to a lock session dropped beneath it —
+	 * while still encoding, and nothing kills it: if it then uploads and completes on its
+	 * own schedule it uploads a second, unreferenced ladder and overwrites the manifest a
+	 * finishing handler wrote. So before every upload and before the completion write, the
+	 * row is re-read, and a run that finds the job already completed stops quietly —
+	 * nothing uploaded, nothing written to the row, no failure recorded. Held under the
+	 * encode lock this is hard to reach, since a re-delivery waits for the lock; hard to
+	 * reach is not unreachable (a dropped connection releases a session lock without
+	 * stopping the process), and the cost of reaching it silently was measured on
+	 * 2026-10-11: one wasted full ladder. ⚠️ What is NOT checked is mid-variant: an
+	 * encode already running finishes its current variant before the next check, because
+	 * interrupting ffmpeg cleanly would need a cancel plumbed through every spawn — the
+	 * waste is bounded by one variant and the lock makes the case rare.
+	 */
+	let superseded = false;
+	const ensureStillOurs = async (): Promise<boolean> => {
+		if (superseded) return false;
+		if (await isTranscodeCompleted(jobId)) {
+			superseded = true;
+			console.log(
+				`[transcode-video] job ${jobId} completed by another handler; abandoning this run before touching storage or the row`,
+			);
+			return false;
+		}
+		return true;
+	};
 
 	let outputDir: string | null = null;
 
@@ -348,6 +464,10 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		 * instead of by all of them.
 		 */
 		const uploadAndFree = async (dir: string): Promise<void> => {
+			// The supersession check rides the upload, because the upload is exactly what
+			// a zombie must not do: a run whose job another handler completed re-reads the
+			// row first and uploads nothing.
+			if (!(await ensureStillOurs())) return;
 			for (const filename of await readdir(dir)) {
 				const contentType = filename.endsWith(".m3u8")
 					? "application/vnd.apple.mpegurl"
@@ -380,6 +500,9 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		let encoding = true;
 		let lastWrite: Promise<unknown> = Promise.resolve();
 		for (let i = 0; i < variants.length; i++) {
+			// A run that lost its delivery between variants leaves the encode loop here;
+			// its last check was the previous variant's upload.
+			if (superseded) break;
 			const v = variants[i];
 			const variantBase = spanStart + i * perVariant;
 			let lastPct = -1;
@@ -391,7 +514,7 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 				v.bitrate,
 				v.name,
 				(outSec, speed) => {
-					if (duration <= 0 || !encoding) return;
+					if (duration <= 0 || !encoding || superseded) return;
 					const frac = Math.min(1, outSec / duration);
 					const pct = Math.min(spanEnd - 1, Math.round(variantBase + frac * perVariant));
 					const eta = clampEta(remainingEncodeSeconds(heights, i, outSec, duration, speed));
@@ -415,6 +538,10 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 			await uploadAndFree(outputDir);
 		}
 
+		// A run that learned it was superseded leaves here; the `finally` below still
+		// frees its temp directory, and nothing was uploaded or written to the row.
+		if (superseded) return;
+
 		// 3b. The audio-only rendition, beside the variants — one more pass over the same
 		// source, so a video can be listened to as a podcast without its picture. Its
 		// presence is what `userTranscoding` serializes as `audioManifestUrl`. A silent
@@ -430,6 +557,9 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 
 		// 4. Generate master playlist
 		await generateMasterPlaylist(outputDir, variants, !!hasAudio);
+		// Re-check before the estimate-clear and the 80 write: this run has now seen
+		// every upload's check, but the row is what the whole tail below is written on.
+		if (!(await ensureStillOurs())) return;
 		// ⚠️ **The estimate covers the encoding alone, so it is cleared here.** Uploading the
 		// segments takes a time nothing measures, and the last estimate the
 		// encode wrote, usually a second or two, would otherwise stand for as long as they take.
@@ -452,6 +582,9 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		// could be any moment of a Mature or Adult video and a thumbnail is shown to everybody.
 		// Release refuses a video without one (`thumbnail_missing`).
 		const manifestUrl = await storage.getUrl(`${storagePrefix}/master.m3u8`);
+		// The completion write is the supersession check's whole reason to exist — this is
+		// the write a zombie run used to make, planting its manifest over the finisher's.
+		if (!(await ensureStillOurs())) return;
 		await db
 			.update(transcodingJobs)
 			.set({

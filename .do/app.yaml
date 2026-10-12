@@ -508,13 +508,18 @@ workers:
       branch: release
       deploy_on_push: false
     run_command: bun run apps/api/src/jobs/worker.ts
-    # 2 GB, because the media queues run side by side and their peaks add up. Idle is about
-    # 140 MB; a 4K source encoded to 1080p peaks near 400 MB and its scan's frame decode near
-    # 165 MB, each with ffmpeg pinned to one thread (`lib/ffmpeg.ts`); and scans, audio and
-    # ebooks each run two at a time beside the one transcode. 512 MB could not run one video
-    # upload at all. Still one vCPU, which is what that thread pin and the transcode's
-    # concurrency of one are sized for — raise both if this gains cores.
-    instance_size_slug: basic-s
+    # 4 GB and two DEDICATED vCPUs, because the transcode is the one wall-clock experience a
+    # creator stares at and a shared vCPU delivered roughly a quarter of a modern core under the
+    # sustained burn an encode is: a real 4:55 1080p upload took 55 minutes there (2026-10-11,
+    # job 15) while the same full encode measures 13 minutes on one thread of a modern desktop
+    # core. Idle is about 140 MB; a 1080p encode pinned to two threads peaks near 440 MB
+    # (`lib/ffmpeg.ts`), its scan's frame decode near 165 MB, and scans, audio and ebooks each
+    # run two at a time beside the one transcode. The thread pin (`FFMPEG_THREADS = 2`) and the
+    # transcode's concurrency of one are sized to this plan — **raise both together if this
+    # gains cores: never more ffmpeg threads than vCPUs, and never a second concurrent
+    # transcode the cores cannot feed.** The transcode's concurrency stays one for now; raising
+    # it is the queue-throughput lever, a deliberate later step.
+    instance_size_slug: apps-d-2vcpu-4gb
     instance_count: 1
     envs:
       # 🚨 **Without this the worker sends NO ALERTS, and does it silently.**

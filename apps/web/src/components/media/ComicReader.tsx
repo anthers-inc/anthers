@@ -20,6 +20,7 @@ import {
 } from "@heroicons/react/24/solid";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type PanelPage, type PanelPosition, usePanelNavigation } from "@/lib/panel-navigation";
+import { readPage, readStoredPanel, writePage, writePanel } from "@/lib/reading-positions";
 import SeekBar from "./transport/SeekBar";
 import TransportButton from "./transport/TransportButton";
 
@@ -27,59 +28,10 @@ import TransportButton from "./transport/TransportButton";
 type Layout = "single" | "spread";
 type ViewMode = "page" | "panel";
 
-/** Where a user got to, per Work, so reopening a chapter resumes rather than restarts. */
-const PROGRESS_KEY = "anthers_reading_progress";
-const PANEL_PROGRESS_KEY = "anthers_panel_progress";
-
-interface PanelProgress {
-	page: number;
-	panel: number;
-}
-
-function readProgress(workId: number): number {
-	try {
-		const raw = localStorage.getItem(PROGRESS_KEY);
-		if (!raw) return 1;
-		const map = JSON.parse(raw) as Record<string, number>;
-		const page = map[String(workId)];
-		return Number.isInteger(page) && page > 0 ? page : 1;
-	} catch {
-		return 1;
-	}
-}
-
-function writeProgress(workId: number, page: number) {
-	try {
-		const raw = localStorage.getItem(PROGRESS_KEY);
-		const map = raw ? (JSON.parse(raw) as Record<string, number>) : {};
-		map[String(workId)] = page;
-		localStorage.setItem(PROGRESS_KEY, JSON.stringify(map));
-	} catch {
-		/* Storage disabled — the user simply always opens at page one. */
-	}
-}
-
-function readPanelProgress(workId: number): PanelProgress {
-	try {
-		const raw = localStorage.getItem(PANEL_PROGRESS_KEY);
-		if (!raw) return { page: 1, panel: 1 };
-		const map = JSON.parse(raw) as Record<string, PanelProgress>;
-		const p = map[String(workId)];
-		if (p && Number.isInteger(p.page) && Number.isInteger(p.panel)) return p;
-	} catch {}
-	return { page: 1, panel: 1 };
-}
-
-function writePanelProgress(workId: number, position: PanelProgress) {
-	try {
-		const raw = localStorage.getItem(PANEL_PROGRESS_KEY);
-		const map = raw ? (JSON.parse(raw) as Record<string, PanelProgress>) : {};
-		map[String(workId)] = position;
-		localStorage.setItem(PANEL_PROGRESS_KEY, JSON.stringify(map));
-	} catch {
-		/* Storage disabled — panel progress does not persist. */
-	}
-}
+// The reading-position keys and their readers/writers live in `lib/reading-positions.ts`
+// — extracted so the Bookshelf lens's spine markers read the same data rather than
+// reaching into this component's privates; the calls below are this file's whole
+// remaining ownership of them.
 
 export default function ComicReader({
 	workId,
@@ -104,7 +56,7 @@ export default function ComicReader({
 	shareToken?: string | null;
 }) {
 	const containerRef = useRef<HTMLDivElement>(null);
-	const [page, setPage] = useState(() => Math.min(readProgress(workId), Math.max(pageCount, 1)));
+	const [page, setPage] = useState(() => Math.min(readPage(workId), Math.max(pageCount, 1)));
 	const [layout, setLayout] = useState<Layout>("single");
 	const [fullscreen, setFullscreen] = useState(false);
 	const [mode, setMode] = useState<ViewMode>("page");
@@ -154,7 +106,7 @@ export default function ComicReader({
 		(n: number) => {
 			const clamped = Math.min(Math.max(1, n), Math.max(pageCount, 1));
 			setPage(clamped);
-			writeProgress(workId, clamped);
+			writePage(workId, clamped);
 		},
 		[pageCount, workId],
 	);
@@ -176,12 +128,12 @@ export default function ComicReader({
 		return () => document.removeEventListener("fullscreenchange", onChange);
 	}, []);
 
-	const [initialPanel] = useState(() => readPanelProgress(workId));
+	const [initialPanel] = useState(() => readStoredPanel(workId) ?? { page: 1, panel: 1 });
 	const panelNav = usePanelNavigation(
 		panelPages ?? [],
 		useCallback(
 			(pos: PanelPosition) => {
-				writePanelProgress(workId, { page: pos.pageNumber, panel: pos.panelNumber });
+				writePanel(workId, { page: pos.pageNumber, panel: pos.panelNumber });
 				setPage(pos.pageNumber);
 			},
 			[workId],

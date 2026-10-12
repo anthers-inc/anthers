@@ -1,107 +1,31 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import {
-	BookmarkIcon,
-	InformationCircleIcon,
-	RssIcon,
-	XMarkIcon,
-} from "@heroicons/react/24/outline";
+import { InformationCircleIcon, RssIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import FeedTile from "../components/cards/FeedTile";
-import FeedFilterSections from "../components/layout/FeedFilterSections";
+import SharedFilterSections from "../components/layout/SharedFilterSections";
+import SharedLensesSection from "../components/layout/SharedLensesSection";
 import { useSidebar } from "../components/layout/SidebarContext";
-
-/** One bookmarked post as the sidebar's shelf shows it. */
-interface BookmarkedPost {
-	id: number;
-	post: { title: string | null; slug: string; publicId: number } | null;
-}
-
-function FeedSidebarContent({
-	access,
-	contentType,
-	tags,
-	onUpdateParams,
-}: {
-	access: string;
-	contentType: string;
-	tags: string;
-	onUpdateParams: (updates: Record<string, string>) => void;
-}) {
-	// The bookmarks are the section: a real fetch of the shelf ordered by the user's
-	// own sort order, rendered small. (An empty shelf says so and stops.)
-	const [bookmarks, setBookmarks] = useState<BookmarkedPost[] | null>(null);
-
-	useEffect(() => {
-		client.api.content.bookmarks
-			.$get()
-			.then(async (res) => {
-				if (res.ok) {
-					const data = (await res.json()) as unknown as { bookmarks: BookmarkedPost[] };
-					setBookmarks(data.bookmarks ?? []);
-				} else {
-					setBookmarks([]);
-				}
-			})
-			.catch(() => setBookmarks([]));
-	}, []);
-
-	return (
-		<div className="flex flex-col gap-5">
-			{/* Bookmarks — the strip between the nav and the filters, and the only page
-			    content in this sidebar that is not a filter. Renders as a smaller list. */}
-			<section>
-				<h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5">
-					<BookmarkIcon className="w-3.5 h-3.5" />
-					Bookmarks
-				</h3>
-				{bookmarks === null ? null : bookmarks.length > 0 ? (
-					<ul className="space-y-1">
-						{bookmarks.map((b) =>
-							b.post ? (
-								<li key={b.id}>
-									<Link
-										to={postUrl({ slug: b.post.slug, publicId: b.post.publicId } as never)}
-										className="text-xs text-base-content/60 hover:text-base-content line-clamp-1 block"
-									>
-										{b.post.title || "Untitled post"}
-									</Link>
-								</li>
-							) : null,
-						)}
-					</ul>
-				) : (
-					<p className="text-xs text-base-content/40 italic">
-						Nothing bookmarked yet. Bookmark posts to find them here.
-					</p>
-				)}
-			</section>
-
-			{/* The feed's own filters: what the stream binds, in the order the page reads. */}
-			<FeedFilterSections
-				access={access}
-				contentType={contentType}
-				tags={tags}
-				onUpdateParams={onUpdateParams}
-			/>
-		</div>
-	);
-}
 
 export default function AuthenticatedHomePage() {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const { setPageContent } = useSidebar();
+	const { setPageContent, setSharedContent } = useSidebar();
 	/** One stream over both kinds — `kind` says which card to render. */
 	type FeedEntry = { kind: "post" | "release"; id: number } & Record<string, unknown>;
 	const [feedPosts, setFeedPosts] = useState<FeedEntry[]>([]);
 	const [feedLoading, setFeedLoading] = useState(true);
 	const [showFeedInfo, setShowFeedInfo] = useState(false);
 
+	/**
+	 * The shared Type selection, which on the feed rides `media_type` — with "posts"
+	 * (a kind of feed entry, not a Work type) carried inside it and translated to the
+	 * feed route's `kind=posts` query below. `access` and `tags` are the shared
+	 * filters' other two params, read the same way.
+	 */
 	const contentType = searchParams.get("media_type") ?? "";
 	const access = searchParams.get("access") ?? "";
 	const tags = searchParams.get("tags") ?? "";
@@ -126,18 +50,28 @@ export default function AuthenticatedHomePage() {
 		[setSearchParams],
 	);
 
-	// Register page-specific sidebar content
+	// Register the sidebar's two pieces (the house structure, 2026-10-11): the
+	// tab-shared LENSES — on the feed only No Lens is live; the feed's lens builds are
+	// their own later tasks — and the shared filters with the Access control, which
+	// the feed's stream consumes. The old Bookmarks strip is gone: saving is the one
+	// keep action, and the strip had no home in the structure once nothing on this
+	// sidebar was per-tab unique.
 	useEffect(() => {
-		setPageContent(
-			<FeedSidebarContent
-				access={access}
-				contentType={contentType}
+		setPageContent(<SharedLensesSection lens="" onLens={() => {}} />);
+		setSharedContent(
+			<SharedFilterSections
+				type={contentType}
+				onType={(id) => updateParams({ media_type: id })}
+				access={{ value: access, onAccess: (value) => updateParams({ access: value }) }}
 				tags={tags}
-				onUpdateParams={updateParams}
+				onTags={(value) => updateParams({ tags: value })}
 			/>,
 		);
-		return () => setPageContent(null);
-	}, [setPageContent, contentType, access, tags, updateParams]);
+		return () => {
+			setPageContent(null);
+			setSharedContent(null);
+		};
+	}, [setPageContent, setSharedContent, contentType, access, tags, updateParams]);
 
 	useEffect(() => {
 		// Fetch the user's feed. Guard on res.ok before reading the body: an error
@@ -150,7 +84,14 @@ export default function AuthenticatedHomePage() {
 		client.api.accounts.me.feed
 			.$get({
 				query: {
-					...(contentType ? { media_type: contentType } : {}),
+					// "posts" is not a Work type; it is the feed's kind filter over its other
+					// half of entries. A Work type narrows the work side and leaves posts
+					// in place (a post survives a type filter through what it announces).
+					...(contentType === "posts"
+						? { kind: "posts" }
+						: contentType
+							? { media_type: contentType }
+							: {}),
 					...(access ? { access } : {}),
 					...(tags ? { tags } : {}),
 				},

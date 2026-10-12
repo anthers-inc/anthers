@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Library and its first lens, walked in a browser.
+ * The Library, its lenses, and its sidebar, walked in a browser.
  *
  * 🚨 **The load-bearing assertion is that a lens is a VIEW, never a container.** Switching
  * to the music lens and back must leave the shelf holding exactly what it held before. That
@@ -10,7 +10,11 @@
  * is stronger because entitlement is money.
  *
  * The other half is that the lens is not a filter wearing a new name: it reorganizes the
- * same items into albums you play from, rather than narrowing a grid.
+ * same items into albums you play from, rather than narrowing a grid. Since the sidebar
+ * restructure (2026-10-11) the Lenses are the Library's middle sidebar section and the
+ * Type and Tags filters the shared section beneath them — the sidebar spec
+ * (`sidebar-structure.authed.e2e.ts`) pins the structure; this one pins the Library's
+ * content: the lens rows, the dial, and the graying.
  */
 import { MEDIA_FIXTURE_PROJECT, mediaFixtureWork } from "@anthers/db/media-fixture";
 import type { Page } from "@playwright/test";
@@ -57,6 +61,11 @@ async function shelfCount(page: Page): Promise<number> {
 	return page.locator(".card").count();
 }
 
+/** The sidebar lens rows, by label. */
+function lensRow(page: Page, label: string) {
+	return page.getByRole("button", { name: label, exact: true });
+}
+
 test.describe.configure({ mode: "serial" });
 
 test("a lens is a view, not a container — the shelf survives switching", async ({ page }) => {
@@ -66,15 +75,87 @@ test("a lens is a view, not a container — the shelf survives switching", async
 	const before = await shelfCount(page);
 	expect(before, "the fixtures should be on the shelf").toBeGreaterThan(0);
 
-	// Scoped to the View group: "Music" is also a media-type tab, and the two mean
-	// genuinely different things — one reorganizes the shelf, the other narrows it.
-	const views = page.getByRole("tablist", { name: "View" });
-	await views.getByRole("tab", { name: "Music" }).click();
+	// Scoped to the sidebar's Lenses section: "Music" is also a shared Type row, and
+	// the two mean genuinely different things — one reorganizes the shelf, the other
+	// narrows it; the lens row says Music Player and the type row says Music.
+	await expect(page.getByRole("heading", { name: "Lenses", exact: true })).toBeVisible();
+	await lensRow(page, "Music Player").click();
 	await expect(page).toHaveURL(/lens=music/);
-	await views.getByRole("tab", { name: "Shelf" }).click();
+	await lensRow(page, "No Lens").click();
 	await expect(page).toHaveURL(/^(?!.*lens=music).*$/);
 
 	expect(await shelfCount(page), "the lens changed what is IN the Library").toBe(before);
+});
+
+test("the Library's sidebar reads Lenses, Access, Type, Tags", async ({ page }) => {
+	await page.goto("/library");
+	await saveFixtures(page);
+	await expect(page.getByRole("heading", { name: "Lenses", exact: true })).toBeVisible();
+
+	// The four lens rows in order: the two unbuilt ones grayed with the marker, not
+	// absent — the vocabulary is stable the same way the shared Type list's is.
+	const sections = page.evaluate(() => {
+		const headings = [...document.querySelectorAll("aside section h3")];
+		const rows = (name: string) => {
+			const s = headings.find((h) => h.textContent === name)?.closest("section");
+			return [...(s?.querySelectorAll("button") ?? [])].map(
+				(b) =>
+					`${b.textContent?.trim()}${b.getAttribute("aria-disabled") === "true" ? " [grayed]" : ""}`,
+			);
+		};
+		return { lenses: rows("Lenses"), type: rows("Type"), access: rows("Access") };
+	});
+	expect((await sections).lenses).toEqual([
+		"No Lens",
+		"Music Player",
+		"Channel Guide(Coming Soon) [grayed]",
+		"Bookshelf(Coming Soon) [grayed]",
+	]);
+	expect((await sections).type?.length).toBeGreaterThan(0);
+	// Access, the Library consumes: the three-mode control renders (Any live by default).
+	expect((await sections).access).toEqual(["Any", "Unlocked", "Locked"]);
+	// Tags carries the feed's shape: with nothing selected, the search input only.
+	expect(await page.getByPlaceholder("Search tags…").count()).toBe(1);
+	// The section ORDER: Lenses above Access above Type above Tags — Lenses, then the
+	// shared filters with Access first (the Library holds locked saves, and Access is
+	// the row that reads them).
+	const y = (name: string) =>
+		page.evaluate((n) => {
+			const h = [...document.querySelectorAll("aside section h3")].find((x) => x.textContent === n);
+			return h ? h.getBoundingClientRect().y : -1;
+		}, name);
+	expect(await y("Lenses")).toBeLessThan(await y("Access"));
+	expect(await y("Access")).toBeLessThan(await y("Type"));
+	expect(await y("Type")).toBeLessThan(await y("Tags"));
+
+	// A grayed lens row is not a view: the disabled button is the whole proof, and the
+	// URL carries no lens — the (Coming Soon) entry is vocabulary, not a control that
+	// navigates anywhere. (Playwright refuses to click a disabled button; the state is
+	// the assertion, not a click.) The marker rides the row's accessible name, so the
+	// match is the substring.
+	await expect(page.getByRole("button", { name: "Channel Guide" })).toBeDisabled();
+	await expect(page).toHaveURL(/\/library$/);
+});
+
+test("a type grays where the Library holds nothing of it; a row with stock stays live", async ({
+	page,
+}) => {
+	await page.goto("/library");
+	await expect(page.getByRole("heading", { name: "Type", exact: true })).toBeVisible();
+
+	// Posts have no stock in this walk's Library (they will once the Save unification
+	// adds posts as Library rows); the row grays by absence like any empty type.
+	// Games and Software are grayed by absence — the walker's shelf runs on the media
+	// fixture.
+	await expect(page.getByRole("button", { name: "Posts", exact: true })).toBeDisabled();
+	await expect(page.getByRole("button", { name: "Games", exact: true })).toBeDisabled();
+	await expect(page.getByRole("button", { name: "Software", exact: true })).toBeDisabled();
+
+	// And graying is by stock, not decoration: save a music track and its row is live.
+	await saveFixtures(page);
+	await expect(page.getByRole("button", { name: "Music", exact: true })).toBeEnabled();
+	await page.getByRole("button", { name: "Music", exact: true }).click();
+	await expect(page).toHaveURL(/type=music/);
 });
 
 test("the music lens organizes rather than filters", async ({ page }) => {
@@ -85,11 +166,11 @@ test("the music lens organizes rather than filters", async ({ page }) => {
 	await expect(page.getByText(MEDIA_FIXTURE_PROJECT.title).first()).toBeVisible();
 	await expect(page.getByText(/\d+ tracks?/).first()).toBeVisible();
 
-	// And the media tabs are gone: under a lens they would be a second, competing way to
-	// narrow the same list, which is the "it's just a filter" reading this rejects.
-	await expect(
-		page.getByRole("tablist", { name: "Media type" }).getByRole("tab", { name: "Games" }),
-	).toBeHidden();
+	// And the types the lens excludes are GRAYED in the shared section: under the
+	// Music Player the Type list cannot narrow what the lens reorganizes — the lens
+	// decides what it draws on.
+	await expect(page.getByRole("button", { name: "Games", exact: true })).toBeDisabled();
+	await expect(page.getByRole("button", { name: "Music", exact: true })).toBeEnabled();
 });
 
 test("an album plays straight from the shelf", async ({ page }) => {
@@ -116,7 +197,8 @@ test("the music lens's spoken-word dial re-scopes the view without touching the 
 
 	// A view change, not a container change — the same invariant the lens itself is
 	// held to: toggling the dial off and on must leave the shelf holding exactly what
-	// it held. The toggle lives only on the music lens.
+	// it held. The dial is the lens's control, rendered beneath the Music Player row
+	// only while that lens is active.
 	const before = await shelfCount(page);
 	await page.goto("/library?lens=music");
 
@@ -134,16 +216,16 @@ test("the music lens's spoken-word dial re-scopes the view without touching the 
 	expect(await shelfCount(page), "the dial changed what is IN the Library").toBe(before);
 });
 
-test("the video lens organizes the shelf as a watchlist", async ({ page }) => {
-	await page.goto("/library");
+test("the dial's widening ungrays the audio Type row", async ({ page }) => {
+	await page.goto("/library?lens=music");
 	await saveFixtures(page);
-
-	// The video fixture is a Work, saved as itself — the lens reads the same `visible`
-	// list the shelf does rather than fetching, so saving it is the whole setup.
+	// Spoken word needs an episode on the shelf: without stock, the Audio row would
+	// stay grayed by absence (the graying is by supply, and the fixture's episode is
+	// the spoken-word stock).
 	const cookies = await page.context().cookies();
 	const session = cookies.find((c) => c.name === "session")?.value;
-	const video = await fetch(
-		`${API_URL}/api/content/works/${mediaFixtureWork("video").slug}-${mediaFixtureWork("video").publicId}`,
+	const episode = await fetch(
+		`${API_URL}/api/content/works/${mediaFixtureWork("episode").slug}-${mediaFixtureWork("episode").publicId}`,
 	).then((r) => r.json());
 	await fetch(`${API_URL}/api/content/library`, {
 		method: "POST",
@@ -152,16 +234,70 @@ test("the video lens organizes the shelf as a watchlist", async ({ page }) => {
 			Origin: WEB_ORIGIN,
 			Cookie: `session=${session}`,
 		},
-		body: JSON.stringify({ workId: video.work.id }),
+		body: JSON.stringify({ workId: episode.work.id }),
 	});
 
-	await page.goto("/library?lens=video");
-	await expect(page.getByRole("heading", { name: "Watchlist" })).toBeVisible();
-	await expect(page.getByText(mediaFixtureWork("video").title).first()).toBeVisible();
+	await expect(page.getByRole("button", { name: "Audio", exact: true })).toBeDisabled();
+	await page.getByText("Include spoken word", { exact: true }).click();
+	await expect(page).toHaveURL(/spoken=1/);
+	await expect(page.getByRole("button", { name: "Audio", exact: true })).toBeEnabled();
+});
 
-	// Same rejection of "it's just a filter" as the music lens: the media tabs are a
-	// second, competing way to narrow the same list, and so are gone under a lens.
+test("an Access filter reads the resolved verdict the cards already carry", async ({ page }) => {
+	await page.goto("/library");
+	await saveFixtures(page);
+	const before = await shelfCount(page); // album + track
+
+	// Unlocked keeps the free track and drops the album, which has no access reading.
+	await page.getByRole("button", { name: "Unlocked", exact: true }).click();
+	await expect(page).toHaveURL(/access=unlocked/);
+	await expect(page.locator(".card"), "the album drops; the unlocked stock stands").toHaveCount(
+		before - 1,
+	);
+
+	// Locked is the complement — with nothing locked saved, the view empties rather
+	// than lying.
+	await page.getByRole("button", { name: "Locked", exact: true }).click();
+	await expect(page).toHaveURL(/access=locked/);
+	await expect(page.locator(".card")).toHaveCount(0);
+
+	// Any restores.
+	await page.getByRole("button", { name: "Any", exact: true }).click();
+	await expect(page).toHaveURL(/^(?!.*access=).*$/);
+	await expect(page.locator(".card")).toHaveCount(before);
+});
+
+test("a removed lens reads as No Lens, and nothing else breaks with it", async ({ page }) => {
+	// The Video lens was retired on 2026-10-11 — a lens is a UI/UX shift, never a type
+	// filter in disguise, and the plain video grid is just the Video type filter. A
+	// stale `lens=video` bookmark must land on the plain shelf, not a broken page.
+	await page.goto("/library?lens=video");
+	await saveFixtures(page);
+	await expect(page.getByRole("heading", { name: "Watchlist" })).toHaveCount(0);
+	// The library read resolves after load; the Library heading only renders once it has.
+	await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
+	await expect(page.locator(".card").first()).toBeVisible();
+});
+
+test("a tag filter narrows the shelf and its removal restores it", async ({ page }) => {
+	await page.goto("/library");
+	await saveFixtures(page);
+
+	const before = await shelfCount(page);
+	expect(before).toBeGreaterThan(0);
+
+	// The Tags section is the feed's shape: search names candidates, and Enter on a
+	// typed token adds it anyway. A tag nothing on the shelf carries must empty the
+	// view (AND semantics), and removing the filter restores the shelf — the shelf is
+	// narrowed by filters, but never changed BY them.
+	await page.getByPlaceholder("Search tags…").fill("zzz-shelf-has-nothing");
+	await page.getByPlaceholder("Search tags…").press("Enter");
+	await expect(page).toHaveURL(/tags=zzz-shelf-has-nothing/);
 	await expect(
-		page.getByRole("tablist", { name: "Media type" }).getByRole("tab", { name: "Video" }),
-	).toBeHidden();
+		page.locator(".card"),
+		"nothing carries the tag, so AND semantics empty the view",
+	).toHaveCount(0);
+	await page.getByRole("button", { name: "Remove tag zzz-shelf-has-nothing" }).click();
+	await expect(page).toHaveURL(/^(?!.*tags=).*$/);
+	await expect(page.locator(".card")).toHaveCount(before);
 });

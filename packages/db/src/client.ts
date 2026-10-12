@@ -24,3 +24,7 @@ const client = postgres(url, { max: 3 });
 
 export const db = drizzle(client, { schema });
 export type Database = typeof db;
+// The raw postgres-js client, for the things drizzle does not model: reserved
+// sessions, LISTEN, advisory locks. The transcode handler holds the advisory
+// lock that keeps a re-delivered job from double-encoding on one of these.
+export { client };

@@ -49,7 +49,17 @@ import {
 } from "../../lib/channel-guide";
 import VideoPlayer from "../media/VideoPlayer";
 import type { LensItem } from "./MusicLens";
-import { formatDuration } from "./VideoLens";
+
+/** A video duration rendered the way a video platform shows it: 25:02, or 1:04:33. */
+export function formatDuration(seconds: number | null | undefined): string | null {
+	if (seconds == null || seconds <= 0) return null;
+	const s = Math.round(seconds);
+	const h = Math.floor(s / 3600);
+	const m = Math.floor((s % 3600) / 60);
+	const rem = s % 60;
+	if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(rem).padStart(2, "0")}`;
+	return `${m}:${String(rem).padStart(2, "0")}`;
+}
 
 /** A block's date, the compact feed shape (`FeedTile`'s convention). */
 function compactDate(iso: string | null | undefined): string {
