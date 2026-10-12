@@ -40,7 +40,7 @@ import { workUploads } from "../../lib/work-uploads";
 import { serializeAccessRows } from "../post/AccessTables";
 import FileUpload from "../ui/FileUpload";
 import FormField from "../ui/FormField";
-import { fileRules, isFileWorkType } from "./work-media";
+import { FormatsHint, fileRules, isFileWorkType } from "./work-media";
 import { isBuildType, LIBRARY_TYPE_OPTIONS } from "./works";
 
 const BUILD_PLATFORMS = [
@@ -178,6 +178,7 @@ export default function WorkUploadForm({ onCreated }: WorkUploadFormProps) {
 							onFileSelect={(file) => create(file)}
 						/>
 					)}
+					<FormatsHint type={type} />
 				</FormField>
 			)}
 
