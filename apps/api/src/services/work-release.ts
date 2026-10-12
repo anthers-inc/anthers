@@ -131,17 +131,23 @@ export async function releaseRefusal(
 		if (unready.length > 0) {
 			// ⚠️ A failed encode is unready too, and is not something to wait for: nothing will
 			// finish it. It keeps the code a client already understands and says what happened.
-			const failed = unready.some((u) => u.status === "failed");
+			// 🚨 A canceled job is the same shape from the gate's side: the creator stopped it,
+			// so nothing will finish it either — the fix is theirs (cancel was the exit;
+			// release again means replace the media or re-process it), and waiting would be
+			// the same forever-scheduled shape the failure was.
+			const creatorStalled = unready.some(
+				(u) => u.status === "failed" || u.status === "canceled",
+			);
 			return {
 				status: 409,
 				body: {
-					error: failed
-						? "Processing this Work's media failed, so it can't be released."
+					error: creatorStalled
+						? "Processing this Work's media was stopped, so it can't be released — replace the media or start the processing again."
 						: "Can't release yet — the media is still processing.",
 					code: "media_not_ready",
 					unready,
 				},
-				resolves: failed ? "creator" : "waiting",
+				resolves: creatorStalled ? "creator" : "waiting",
 			};
 		}
 	}

@@ -105,6 +105,21 @@ async function updateProgress(jobId: number, progress: number) {
 		.where(eq(transcodingJobs.id, jobId));
 }
 
+/**
+ * Whether the job's row still reads `processing` — the run's own claim state. Anything
+ * else means the outside world settled the row (the creator's cancel route marks it
+ * `canceled`), and a run that discovers this stops quietly rather than finishing on its
+ * own schedule.
+ */
+async function stillProcessing(jobId: number): Promise<boolean> {
+	const [row] = await db
+		.select({ status: transcodingJobs.status })
+		.from(transcodingJobs)
+		.where(eq(transcodingJobs.id, jobId))
+		.limit(1);
+	return row?.status === "processing";
+}
+
 export async function renderPaged(data: RenderPagedData) {
 	const { jobId } = data;
 
@@ -121,6 +136,12 @@ export async function renderPaged(data: RenderPagedData) {
 	// re-runnable on purpose, as the queue's ordinary self-healing within its budget.
 	if (job.status === "completed") {
 		console.log(`[render-paged] job ${jobId} already completed; skipping`);
+		return;
+	}
+	// 🚨 A canceled row is final: the creator stopped it, and a stale redelivery must
+	// not resume what they stopped.
+	if (job.status === "canceled") {
+		console.log(`[render-paged] job ${jobId} canceled; skipping`);
 		return;
 	}
 	if (job.status === "failed" && job.resumeCount >= MAX_TRANSCODE_RESUMES) {
@@ -199,6 +220,16 @@ export async function renderPaged(data: RenderPagedData) {
 		await updateProgress(jobId, 5);
 
 		for (const [i, source] of sources.entries()) {
+			// ⭐ The cancel checkpoint, one per source render — the render pass is the long
+			// pole of this job, and pages render into temp files that the `finally` frees,
+			// so a run stopped here abandons cheaply: workPages untouched, nothing uploaded.
+			// Anything no longer `processing` (the creator's cancel route marks it
+			// `canceled`) stops the run, the same shape the video job's supersession checks
+			// take.
+			if (!(await stillProcessing(jobId))) {
+				console.log(`[render-paged] job ${jobId} no longer processing; abandoning at source ${i}`);
+				return;
+			}
 			const dir = await mkdtemp(join(tmpdir(), `ebook_${i}_`));
 			scratch.push(dir);
 			if (isPageImage(source.mimeType)) {
@@ -265,6 +296,15 @@ export async function renderPaged(data: RenderPagedData) {
 		// A re-run replaces the pages rather than appending to them. Without this, a job
 		// retried after a partial upload leaves the book with two copies of page one and a
 		// unique-index violation on the second.
+		//
+		// ⭐ This is also the point of no return for a cancel: the pages' rows are about to
+		// be cleared and rewritten, so a cancel that arrives after it takes effect at the
+		// run's next render rather than here — past this line the run finishes and writes
+		// `completed`, the settlement that is consistent with the pages it is replacing.
+		if (!(await stillProcessing(jobId))) {
+			console.log(`[render-paged] job ${jobId} no longer processing; abandoning before the page pass`);
+			return;
+		}
 		await db.delete(workPages).where(eq(workPages.workId, work.id));
 
 		const prefix = `creators/${work.creatorId}/ebook/${work.id}/${randomUUID().replace(/-/g, "")}`;

@@ -13,7 +13,7 @@
  * scope is the property being tested: hold `pg_advisory_lock` from one reserved session
  * in the test and assert the handler's helper waits, runs on release, and returns the
  * lock to the pool. The supersession check is exercised through
- * `isTranscodeCompleted` and through `transcodeVideo`'s claim-time skip on a row already
+ * `isTranscodeSettled` and through `transcodeVideo`'s claim-time skip on a row already
  * `completed` — the reachable surface of a job another handler finished.
  */
 
@@ -24,7 +24,7 @@ import { eq } from "drizzle-orm";
 import app from "../index";
 import { MAX_TRANSCODE_RESUMES } from "../jobs/resume-orphans";
 import {
-	isTranscodeCompleted,
+	isTranscodeSettled,
 	TRANSCODE_LOCK_KEY_BASE,
 	transcodeVideo,
 	withTranscodeLock,
@@ -134,8 +134,8 @@ describe("the re-delivery's claim re-check", () => {
 			const done = await makeJob("completed", "superseded-completed");
 			const live = await makeJob("processing", "superseded-live");
 
-			expect(await isTranscodeCompleted(done)).toBe(true);
-			expect(await isTranscodeCompleted(live)).toBe(false);
+			expect(await isTranscodeSettled(done)).toBe(true);
+			expect(await isTranscodeSettled(live)).toBe(false);
 		},
 		DB_SETUP_TIMEOUT,
 	);

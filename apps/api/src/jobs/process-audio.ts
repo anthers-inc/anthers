@@ -163,6 +163,12 @@ export async function processAudio(data: ProcessAudioData) {
 		console.log(`[process-audio] job ${jobId} already completed; skipping`);
 		return;
 	}
+	// 🚨 A canceled row is final: the creator stopped it, and a stale redelivery must
+	// not resume what they stopped.
+	if (job.status === "canceled") {
+		console.log(`[process-audio] job ${jobId} canceled; skipping`);
+		return;
+	}
 	if (job.status === "failed" && job.resumeCount >= MAX_TRANSCODE_RESUMES) {
 		console.log(`[process-audio] job ${jobId} failed past its resume bound; skipping`);
 		return;
@@ -225,6 +231,28 @@ export async function processAudio(data: ProcessAudioData) {
 			throw new Error(`Audio normalization failed: ${stderr.slice(0, 500)}`);
 		}
 		await updateJobProgress(jobId, 60);
+
+		/**
+		 * ⭐ The cancel checkpoint, placed before the run's only storage write. A creator
+		 * canceling an in-flight audio job must not have their stopped run upload its MP3
+		 * anyway — an object no row would ever name, left behind in `audio/processed/`.
+		 * The row is re-read; anything that is no longer `processing` (the creator's
+		 * cancel route marks it `canceled`, another handler's claim marks it anything
+		 * else) stops the run here, before touching storage, the same shape the video
+		 * job's `ensureStillOurs` takes at its own upload checks. Once the upload has
+		 * begun the run finishes normally — the MP3 and waveform it produces are the
+		 * truth for the source the Work still names, and a cancel that arrives in the
+		 * window takes effect at the next state change.
+		 */
+		const [nowRow] = await db
+			.select({ status: transcodingJobs.status })
+			.from(transcodingJobs)
+			.where(eq(transcodingJobs.id, jobId))
+			.limit(1);
+		if (nowRow?.status !== "processing") {
+			console.log(`[process-audio] job ${jobId} no longer processing; abandoning before upload`);
+			return;
+		}
 
 		// 3. Upload processed file (creator-first layout). Processed in the library before
 		// it's attached to any post, so access isn't known here — which is exactly why the

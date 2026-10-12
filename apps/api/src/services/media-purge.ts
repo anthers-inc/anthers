@@ -20,6 +20,7 @@
  */
 
 import { assets, db, transcodingJobs, webBuilds, workSourceFiles, works } from "@anthers/db";
+import { isPaged } from "@anthers/shared/content";
 import { and, eq, inArray } from "drizzle-orm";
 import { storage } from "./storage/index.js";
 import { isKeyUnder, urlToKey } from "./storage/keys.js";
@@ -201,6 +202,10 @@ function collectRawKeysForWork(
 	const prefixes = new Set<string>();
 
 	if (item.sourceKey) keys.add(urlToKey(item.sourceKey));
+	// The remux-retained original rides its pointer column (see the schema comment) so
+	// every sweep reaches it — an object this enumeration cannot name is one no path
+	// deletes without a second hand-written key list, the shape this module exists to end.
+	if (item.sourceOriginalKey) keys.add(urlToKey(item.sourceOriginalKey));
 	if (item.thumbnail) keys.add(urlToKey(item.thumbnail));
 	// A paged Work's source set — every file's original, not only the one the legacy
 	// column names. A removed source file's row is already gone when a delete runs, so
@@ -215,6 +220,16 @@ function collectRawKeysForWork(
 			if (prefix && prefix !== masterKey) prefixes.add(prefix);
 		}
 		if (job.outputFileUrl) keys.add(urlToKey(job.outputFileUrl));
+	}
+	// 🚨 **A paged Work's derived storage lives under one deterministic prefix** — its
+	// rendered pages (and panels beside them, and a reflow ebook's ladder sections), all
+	// `creators/{id}/ebook/{workId}/`, one per-run sub-prefix per render or ingest. The
+	// prefix IS the enumeration here rather than the rows: rows are deleted and rewritten
+	// mid-replace, and a prefix sweep takes everything every run wrote. Found during the
+	// replace work: a Work delete cascaded the page rows and stranded every page object
+	// in the creator's prefix forever.
+	if (isPaged(item.type) && item.creatorId != null) {
+		prefixes.add(`creators/${item.creatorId}/ebook/${item.id}/`);
 	}
 
 	return { keys, prefixes };
@@ -333,4 +348,50 @@ export async function removeSourceFileStorage(
 	const key = urlToKey(sourceFile.file);
 	if (creatorId == null || !isKeyUnder(key, creatorId)) return;
 	await sweep(new Set([key]), new Set(), "work source remove");
+}
+
+/**
+ * Sweep the media a source REPLACEMENT retires, from the Work's prior state alone —
+ * the caller passes the row and the job rows as they were before the new source was
+ * written, because after it the enumeration can no longer see any of this.
+ *
+ * 🚨 **This is what "keep no old versions" is made of**: the prior source object, the
+ * prior remux-retained original, and every derived output the prior job rows name
+ * (the HLS run prefixes and processed-audio files). Nothing survives a replace under
+ * the one rule a creator's allowance is metered by. Ownership-guarded like
+ * {@link removeSourceFileStorage}: a prior key not under the creator's own prefix is
+ * never touched.
+ *
+ * The caller owns the rows: the superseded `transcoding_jobs` rows are deleted by the
+ * route that retires them, and a paged set's rows and their objects belong to
+ * `work-source-files.ts`.
+ */
+export async function purgeReplacedWorkMedia(
+	prior: Pick<WorkRow, "sourceKey" | "sourceOriginalKey" | "creatorId">,
+	priorJobs: Pick<TranscodingJobRow, "hlsManifestUrl" | "outputFileUrl">[],
+): Promise<void> {
+	const keys = new Set<string>();
+	const prefixes = new Set<string>();
+	const mine = (key: string) => prior.creatorId != null && isKeyUnder(key, prior.creatorId);
+
+	if (prior.sourceKey) {
+		const key = urlToKey(prior.sourceKey);
+		if (mine(key)) keys.add(key);
+	}
+	if (prior.sourceOriginalKey) {
+		const key = urlToKey(prior.sourceOriginalKey);
+		if (mine(key)) keys.add(key);
+	}
+	for (const job of priorJobs) {
+		if (job.hlsManifestUrl) {
+			const masterKey = urlToKey(job.hlsManifestUrl);
+			const prefix = masterKey.replace(/\/[^/]+$/, "");
+			if (prefix && prefix !== masterKey && mine(`${prefix}/`)) prefixes.add(prefix);
+		}
+		if (job.outputFileUrl) {
+			const key = urlToKey(job.outputFileUrl);
+			if (mine(key)) keys.add(key);
+		}
+	}
+	await sweep(keys, prefixes, "work source replace");
 }

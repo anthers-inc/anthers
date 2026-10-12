@@ -357,17 +357,18 @@ async function updateJobProgress(jobId: number, progress: number) {
 }
 
 /**
- * Whether the job's row has already reached `completed` — the one fact both the
+ * Whether the job's row has reached a state a still-running handler must stop for —
+ * `completed`, or since the creator-cancel work `canceled`. The one fact both the
  * claim-time skip and the supersession re-checks rest on. Exported because a test
  * asserts the fact itself rather than inferring it from a handler's side effects.
  */
-export async function isTranscodeCompleted(jobId: number): Promise<boolean> {
+export async function isTranscodeSettled(jobId: number): Promise<boolean> {
 	const [row] = await db
 		.select({ status: transcodingJobs.status })
 		.from(transcodingJobs)
 		.where(eq(transcodingJobs.id, jobId))
 		.limit(1);
-	return row?.status === "completed";
+	return row?.status === "completed" || row?.status === "canceled";
 }
 
 export async function transcodeVideo(data: TranscodeVideoData) {
@@ -392,6 +393,13 @@ async function runTranscode(data: TranscodeVideoData) {
 	// lock lands here only after the handler that held it returned.
 	if (job.status === "completed") {
 		console.log(`[transcode-video] job ${jobId} already completed; skipping`);
+		return;
+	}
+	// 🚨 A canceled row is final the same way: the creator stopped it, and a stale
+	// redelivery must not resume what they stopped — the claim-time guard the
+	// cancel route relies on to make cancellation survive redelivery.
+	if (job.status === "canceled") {
+		console.log(`[transcode-video] job ${jobId} canceled; skipping`);
 		return;
 	}
 	// 🚨 A row the boot sweep finally failed — its crash-resume ceiling spent — must NOT
@@ -452,7 +460,7 @@ async function runTranscode(data: TranscodeVideoData) {
 	let superseded = false;
 	const ensureStillOurs = async (): Promise<boolean> => {
 		if (superseded) return false;
-		if (await isTranscodeCompleted(jobId)) {
+		if (await isTranscodeSettled(jobId)) {
 			superseded = true;
 			console.log(
 				`[transcode-video] job ${jobId} completed by another handler; abandoning this run before touching storage or the row`,
@@ -542,7 +550,17 @@ async function runTranscode(data: TranscodeVideoData) {
 			// The re-point is the Work's write a zombie handler must never make, so the
 			// supersession check stands before it, as it does before every upload.
 			if (!(await ensureStillOurs())) return;
-			await db.update(works).set({ sourceKey: remuxedKey }).where(eq(works.id, item.id));
+			// The remuxed MP4 takes over the Work's source, and the creator's uploaded
+			// original moves onto the pointer column that keeps it enumerated and metered
+			// (`works.source_original_key` — see the schema comment); replace and remove
+			// sweeps read it so the original leaves when the Work's media does.
+			await db
+				.update(works)
+				.set({
+					sourceKey: remuxedKey,
+					sourceOriginalKey: storageKey,
+				})
+				.where(eq(works.id, item.id));
 			// A remuxed source is a NEW object on the Work — owed its scan like any attach,
 			// and the release gate waits on exactly this queue's answer.
 			await queueScansForWork({ ...item, sourceKey: remuxedKey });
