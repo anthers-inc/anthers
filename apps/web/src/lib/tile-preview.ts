@@ -38,8 +38,8 @@
 
 import { isListened } from "@anthers/shared/content";
 import type { PublicAccessBudget } from "@anthers/shared/public-access";
-import type { AccessResult } from "@anthers/web-shared/types";
 import { apiBaseUrl } from "@anthers/web-shared/rpc";
+import type { AccessResult } from "@anthers/web-shared/types";
 
 /** How long a hover must hold before bytes ship — long enough that a cursor in transit never loads a stream. */
 export const PREVIEW_HOVER_DELAY_MS = 500;

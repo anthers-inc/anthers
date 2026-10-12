@@ -98,7 +98,9 @@ describe("previewSourceFor", () => {
 	// docblock warns against, so the test pins the endpoint shape and the test run
 	// at `localhost:3000` pinned the wiring through the real API origin.
 	test("video mints the access-checked HLS manifest path", () => {
-		expect(previewSourceFor({ id: 42, type: "video" })).toContain("/api/content/works/42/hls/master.m3u8");
+		expect(previewSourceFor({ id: 42, type: "video" })).toContain(
+			"/api/content/works/42/hls/master.m3u8",
+		);
 	});
 
 	test("listened family mints the audio endpoint", () => {
