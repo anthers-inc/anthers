@@ -30,6 +30,14 @@
  * Widening the status filter to include `completed` fails 1. Each sabotage was `grep`ed
  * for before running, because a no-op sabotage comes back fully green and reads exactly
  * like "this test proves nothing", which is the most convincing possible false result.
+ *
+ * **The benign-bounds work was sabotage-verified the same way (2026-10-12), and its
+ * predictions were written before each run:** dropping the flag split from the sweep's two
+ * filters AND its conditional charge fails 3 (the past-bound benign resume, and the two
+ * count assertions on ordinary rows — the charge-path half, which the plain filter removal
+ * under-covers); writing the canned message unconditionally fails 1 (the real-error row);
+ * retiring nothing fails 1 (the vanished-row retire); the shutdown marker no-oped fails 1.
+ * The handler guard's own skip is verified in `transcode-lock.test.ts` (predict 1, got 1).
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
@@ -40,7 +48,10 @@ import app from "../index";
 import { QUEUES } from "../jobs/queue";
 import {
 	MAX_TRANSCODE_RESUMES,
+	markBenignInterrupted,
 	resumeOrphanedTranscodes,
+	retireLingeringQueueJobs,
+	type LingeringQueueAccess,
 	type SendJob,
 } from "../jobs/resume-orphans";
 import { createAccount } from "./account-fixture";
@@ -113,6 +124,7 @@ function statusOf(jobId: number) {
 			status: transcodingJobs.status,
 			error: transcodingJobs.errorMessage,
 			resumeCount: transcodingJobs.resumeCount,
+			flag: transcodingJobs.interruptedGracefully,
 		})
 		.from(transcodingJobs)
 		.where(eq(transcodingJobs.id, jobId))
@@ -126,6 +138,20 @@ const recordingSend: SendJob = async (queueName, data) => {
 };
 const sentFor = (jobId: number) => sent.filter((s) => s.jobId === jobId).map((s) => s.queue);
 
+// The retire pass, captured through an injected LingeringQueueAccess: `queuedFake` names
+// the queued pg-boss jobs the fake `findQueued` reports, and `retiredDeletions` records
+// which of them the sweep deleted.
+const QUEUED_FAKE: { queue: string; id: string; data: Record<string, unknown> }[] = [];
+let retiredDeletions: { queue: string; id: string }[] = [];
+const recordingLingering: LingeringQueueAccess = {
+	findQueued: (queueName) =>
+		Promise.resolve(QUEUED_FAKE.filter((q) => q.queue === queueName)),
+	deleteJob: (queueName, id) => {
+		retiredDeletions.push({ queue: queueName, id });
+		return Promise.resolve();
+	},
+};
+
 let video: { workId: number; jobId: number };
 let unsourced: { workId: number; jobId: number };
 let audio: { workId: number; jobId: number };
@@ -134,6 +160,9 @@ let unknown: { workId: number; jobId: number };
 let done: { workId: number; jobId: number };
 let exhausted: { workId: number; jobId: number };
 let onceResumed: { workId: number; jobId: number };
+let benign: { workId: number; jobId: number };
+let benignPastBound: { workId: number; jobId: number };
+let exhaustedWithError: { workId: number; jobId: number };
 
 beforeAll(async () => {
 	await db.execute(sql`DELETE FROM users WHERE email = ${`${ownerName}@example.com`}`);
@@ -165,9 +194,53 @@ beforeAll(async () => {
 		.update(transcodingJobs)
 		.set({ resumeCount: MAX_TRANSCODE_RESUMES - 1 })
 		.where(eq(transcodingJobs.id, onceResumed.jobId));
+	// The benign fixtures: rows carrying `interruptedGracefully`, the flag a graceful
+	// (SIGTERM) stop leaves. A flagged row is resumed WITHOUT spending a ceiling slot —
+	// its `resumeCount` passes through untouched — and one past the bound is resumed
+	// all the same, because the bound counts crash-resumes and a deploy is not a crash.
+	benign = await makeJob({ title: "orphan-benign", mediaType: "video", sourced: true });
+	await db
+		.update(transcodingJobs)
+		.set({ interruptedGracefully: true })
+		.where(eq(transcodingJobs.id, benign.jobId));
+	benignPastBound = await makeJob({
+		title: "orphan-benign-past-bound",
+		mediaType: "video",
+		sourced: true,
+	});
+	await db
+		.update(transcodingJobs)
+		.set({ resumeCount: MAX_TRANSCODE_RESUMES, interruptedGracefully: true })
+		.where(eq(transcodingJobs.id, benignPastBound.jobId));
+	// The real-error fixture: a row past the bound that also carries the error its one
+	// reached-handler attempt wrote. The canned "kept interrupting" message must not
+	// overwrite it — the real reason is the one thing the creator can act on.
+	exhaustedWithError = await makeJob({
+		title: "orphan-exhausted-with-error",
+		mediaType: "video",
+		sourced: true,
+	});
+	await db
+		.update(transcodingJobs)
+		.set({
+			resumeCount: MAX_TRANSCODE_RESUMES,
+			errorMessage: "ffmpeg HLS failed for 1080p: sample refusal from the reached attempt",
+		})
+		.where(eq(transcodingJobs.id, exhaustedWithError.jobId));
+
+	// The queued pg-boss jobs the retire pass examines: one for a real fixture row
+	// (kept), one for a row that exists NOWHERE in this table (deleted), and one whose
+	// payload never resolved (deleted).
+	QUEUED_FAKE.length = 0;
+	QUEUED_FAKE.push(
+		{ queue: QUEUES.TRANSCODE_VIDEO, id: "q-kept", data: { jobId: video.jobId } },
+		{ queue: QUEUES.TRANSCODE_VIDEO, id: "q-vanished", data: { jobId: 999_999 } },
+		{ queue: QUEUES.PROCESS_AUDIO, id: "q-malformed", data: {} },
+	);
 
 	sent = [];
-	await resumeOrphanedTranscodes(recordingSend);
+	retiredDeletions = [];
+	await resumeOrphanedTranscodes(recordingSend, recordingLingering);
 }, DB_SETUP_TIMEOUT);
 
 // Works go first and by creator_id: `works.creator_id` is ON DELETE SET NULL, so deleting
@@ -212,6 +285,9 @@ describe("resumeOrphanedTranscodes", () => {
 		// unfinishable, so a release that later understands the type can still run it.
 		expect(sentFor(unknown.jobId)).toEqual([]);
 		expect((await statusOf(unknown.jobId)).status).toBe("pending");
+		// The spent flag is still spent by a pass that did nothing but warn: leaving it
+		// would let every later crash-free boot read the same stale excuse.
+		expect((await statusOf(unknown.jobId)).flag).toBe(false);
 	});
 
 	it("leaves a completed job alone", async () => {
@@ -227,6 +303,110 @@ describe("resumeOrphanedTranscodes", () => {
 		expect(row.status).toBe("failed");
 		expect(row.error).toContain("interrupting the media worker");
 		expect(sentFor(exhausted.jobId)).toEqual([]);
+	});
+
+	it("fails a past-the-bound row whose own error was blank, with the canned message", async () => {
+		// The same pass that gives up must still write SOMETHING the creator can act on
+		// when the crash left the row with empty error — the handler never reached its
+		// catch, so there is nothing of its own to keep.
+		expect((await statusOf(exhausted.jobId)).error).toBe(
+			"Processing this file kept interrupting the media worker, so it was stopped. Re-upload the file, or contact support if it happens again.",
+		);
+	});
+
+	it("does not overwrite a past-the-bound row's REAL handler error with the canned text", async () => {
+		// 🚨 The misleading-message case filed with the task: the sweep used to stamp
+		// "kept interrupting the media worker" over every row it failed, including one
+		// whose previous attempt had reached a catch and written the actual refusal —
+		// the one diagnostic its creator can act on. The real error survives the fail.
+		const row = await statusOf(exhaustedWithError.jobId);
+		expect(row.status).toBe("failed");
+		expect(row.error).toBe("ffmpeg HLS failed for 1080p: sample refusal from the reached attempt");
+		expect(row.error).not.toContain("interrupting the media worker");
+		expect(sentFor(exhaustedWithError.jobId)).toEqual([]);
+	});
+
+	it("resumes a benignly interrupted row WITHOUT spending a resume", async () => {
+		// A deploy bounce is the normal case the ceiling must not charge: the previous
+		// stop marked the row, so the resume passes through uncharged and the flag is
+		// spent by the hand-back.
+		const row = await statusOf(benign.jobId);
+		expect(row.status).toBe("pending");
+		expect(row.resumeCount).toBe(0);
+		expect(row.flag).toBe(false);
+		expect(sentFor(benign.jobId)).toEqual([QUEUES.TRANSCODE_VIDEO]);
+	});
+
+	it("resumes a flagged row even past the bound, still without spending a resume", async () => {
+		// The bound counts crash-resumes; deploys are not crashes. A file that survived
+		// three real crashes and was then deploy-bounced keeps working rather than
+		// failing for the deploy.
+		const row = await statusOf(benignPastBound.jobId);
+		expect(row.status).toBe("pending");
+		expect(row.resumeCount).toBe(MAX_TRANSCODE_RESUMES);
+		expect(row.flag).toBe(false);
+		expect(sentFor(benignPastBound.jobId)).toEqual([QUEUES.TRANSCODE_VIDEO]);
+	});
+
+	it("retires queued pg-boss jobs whose row has vanished, and never one whose row exists", async () => {
+		const retiredIds = retiredDeletions
+			.filter((d) => d.queue === QUEUES.TRANSCODE_VIDEO)
+			.map((d) => d.id);
+		// The vanished row's job is deleted; the live row's is not touched.
+		expect(retiredIds).toEqual(["q-vanished"]);
+		// A job whose payload never resolved cannot be handled at any time, so there is
+		// nothing it could ever do but fail — retired on the same pass.
+		const audioRetired = retiredDeletions
+			.filter((d) => d.queue === QUEUES.PROCESS_AUDIO)
+			.map((d) => d.id);
+		expect(audioRetired).toEqual(["q-malformed"]);
+	});
+
+	it("retires nothing when every queued job still resolves", async () => {
+		// The quiet case — the ordinary boot, where the trash cascade has stranded
+		// nothing. `video.jobId`'s queued job above is the only kept one; a fake pass
+		// reporting only it deletes nothing. The RETIRE pass alone is re-run here, not
+		// the sweep: a second full sweep re-charges every row this suite's fixed state
+		// was built for (the board's rows are global, the pass is global, and a second
+		// pass reads the first pass's writes — `onceResumed` would reach its bound).
+		const quiet: LingeringQueueAccess = {
+			findQueued: (queueName) =>
+				Promise.resolve(
+					[{ id: "q-kept", data: { jobId: video.jobId } }].filter(
+						() => queueName === QUEUES.TRANSCODE_VIDEO,
+					),
+				),
+			deleteJob: () => {
+				throw new Error("nothing should be deleted when every queued job resolves");
+			},
+		};
+		expect(await retireLingeringQueueJobs(quiet)).toBe(0);
+	});
+
+	it("the shutdown marker flags the rows a graceful stop leaves behind, and nothing terminal", async () => {
+		const pending = await makeJob({ title: "mark-pending", mediaType: "video", sourced: true });
+		const processing = await makeJob({
+			title: "mark-processing",
+			mediaType: "video",
+			sourced: true,
+			status: "processing",
+		});
+		const completed = await makeJob({
+			title: "mark-completed",
+			mediaType: "video",
+			sourced: true,
+			status: "completed",
+		});
+		await markBenignInterrupted();
+		expect((await statusOf(pending.jobId)).flag).toBe(true);
+		// The row a handler is mid-way through is the row the bounce actually interrupts —
+		// the principal case this marker exists to record.
+		const processingRow = await statusOf(processing.jobId);
+		expect(processingRow.flag).toBe(true);
+		expect(processingRow.status).toBe("processing");
+		// A terminal row is left alone — the flag is inert anywhere it lands, but a
+		// completed job is nobody's interruption.
+		expect((await statusOf(completed.jobId)).flag).toBe(false);
 	});
 
 	it("resumes a job below the bound, and the count is what the resume spends", async () => {

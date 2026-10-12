@@ -46,6 +46,7 @@ import { eq } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { storage } from "../services/storage/index.js";
 import { createEtaClamp, remainingEncodeSeconds } from "./transcode-eta.js";
+import { MAX_TRANSCODE_RESUMES } from "./resume-orphans.js";
 
 export interface TranscodeVideoData {
 	jobId: number;
@@ -345,12 +346,31 @@ async function runTranscode(data: TranscodeVideoData) {
 		console.log(`[transcode-video] job ${jobId} already completed; skipping`);
 		return;
 	}
+	// 🚨 A row the boot sweep finally failed — its crash-resume ceiling spent — must NOT
+	// be resurrected by a stale redelivery. Re-running the file that took the worker
+	// down restores the crash loop the ceiling exists to stop, now that expiry is sized
+	// in hours: the redelivery that would have done it is exactly "pg-boss redelivery
+	// re-runs failed rows". A failed row BELOW the bound stays re-runnable on purpose:
+	// that is a handler refusal from a possibly-transient cause still inside its job's
+	// own retry budget, where re-running is the queue's ordinary self-healing.
+	if (job.status === "failed" && job.resumeCount >= MAX_TRANSCODE_RESUMES) {
+		console.log(`[transcode-video] job ${jobId} failed past its resume bound; skipping`);
+		return;
+	}
 
 	// Mark as processing. The estimate is cleared too, so a job run again after a crash does not
-	// show the previous run's figure until its own first reading.
+	// show the previous run's figure until its own first reading. The benign-interruption
+	// flag is spent here as well: a run reaching the row has consumed the excuse its
+	// previous stop left, so whatever kills THIS run says for itself.
 	await db
 		.update(transcodingJobs)
-		.set({ status: "processing", progress: 0, etaSeconds: null, updatedAt: new Date() })
+		.set({
+			status: "processing",
+			progress: 0,
+			etaSeconds: null,
+			interruptedGracefully: false,
+			updatedAt: new Date(),
+		})
 		.where(eq(transcodingJobs.id, jobId));
 
 	const [item] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
