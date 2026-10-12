@@ -42,6 +42,7 @@ import {
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
+import { useSidebar } from "@anthers/web-shared/sidebar";
 import { isAccessResult, type Work } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
@@ -51,7 +52,6 @@ import SharedFilterSections, {
 	SHARED_FILTER_TYPES,
 } from "../components/layout/SharedFilterSections";
 import SharedLensesSection from "../components/layout/SharedLensesSection";
-import { useSidebar } from "@anthers/web-shared/sidebar";
 import BookshelfLens from "../components/library/BookshelfLens";
 import ChannelGuideLens, {
 	channelGuideChannelsFromShelf,
