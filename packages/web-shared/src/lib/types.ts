@@ -368,6 +368,15 @@ export interface Work {
 	 * pointer at any page; those are served one at a time from `/works/:id/pages/:n`.
 	 */
 	pageCount?: number;
+	/**
+	 * How many **reflow** sections an ebook's EPUB ingest extracted, or 0 — the fixed
+	 * page reader's counterpart to `pageCount`. Sections exist → the reflow reader
+	 * (vendored foliate-js on the section/asset ladder); none → the page reader, exactly
+	 * as a PDF-shaped ebook or a comic reads.
+	 *
+	 * ⚠️ Present even when the Work is locked, for the same reason `pageCount` is.
+	 */
+	sectionCount?: number;
 	metadata: Record<string, unknown> | null;
 
 	// Visibility & dates. `createdAt` is the UPLOAD date and is creator-facing only;
