@@ -203,6 +203,7 @@ import {
 import { aclForMediaType, scannedObjectKind } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
+import { mediaUploadKeyFor } from "../services/upload-sessions.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
 import { releaseRefusal } from "../services/work-release.js";
 import {
@@ -6165,15 +6166,10 @@ const contentRoutes = new Hono()
 			const { filename, contentType, mediaType } = c.req.valid("json");
 			const user = c.get("user");
 
-			const ext = filename.includes(".") ? filename.split(".").pop() : "";
-			const uuid = crypto.randomUUID().replace(/-/g, "");
-			const prefix = `creators/${user.id}`;
-			const keyMap = {
-				video: `${prefix}/videos/originals/${uuid}.${ext}`,
-				audio: `${prefix}/audio/originals/${uuid}.${ext}`,
-				asset: `${prefix}/assets/${uuid}.${ext}`,
-			} as const;
-			const key = keyMap[mediaType];
+			// The key naming is the session service's one naming — a session's destination
+			// and a presign's destination are the same layout by construction now, not by
+			// two kept-in-step literals.
+			const key = mediaUploadKeyFor(user.id, mediaType, filename);
 
 			if (isLocalStorage) {
 				return c.json({

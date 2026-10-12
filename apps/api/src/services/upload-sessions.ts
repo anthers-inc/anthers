@@ -42,11 +42,9 @@ export const MAX_SESSION_BYTES = UPLOAD_PART_SIZE * MAX_PARTS;
 export type UploadMediaType = "video" | "audio" | "asset";
 
 /**
- * The destination key for a session — the same creator-first layout the presign route
- * stamps. ⚠️ **This is the naming, and the presign route's own keyMap is its sibling
- * with one job between them**: the two are kept textually identical until the presign
- * route adopts this function; it must be adopted, because two key layouts is the drift
- * this project has been bit by before.
+ * The destination key for a session — one key naming for every media upload: this
+ * function is what the presign route calls too, so a session's destination and a
+ * presign's destination are the same layout by construction.
  */
 export function mediaUploadKeyFor(
 	creatorId: number,
@@ -77,7 +75,7 @@ export async function startUploadSession(
 	const partCount = Math.max(1, Math.ceil(input.size / UPLOAD_PART_SIZE));
 	if (partCount > MAX_PARTS) {
 		throw new Error(
-			`A source this size needs ${partCount} parts and the bucket takes ${MAX_PARTS}; the ceiling is ${Math.floor(MAX_SESSION_BYTES / 1024 ** 4)} TB`,
+			`A source this size needs ${partCount} parts and the plan carries at most ${MAX_PARTS}; the ceiling is ${Math.floor(MAX_SESSION_BYTES / 1024 ** 3)} GB`,
 		);
 	}
 	const key = mediaUploadKeyFor(creatorId, input.mediaType, input.filename);
