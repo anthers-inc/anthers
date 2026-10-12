@@ -47,11 +47,11 @@ import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { QUEUES } from "../jobs/queue";
 import {
+	type LingeringQueueAccess,
 	MAX_TRANSCODE_RESUMES,
 	markBenignInterrupted,
 	resumeOrphanedTranscodes,
 	retireLingeringQueueJobs,
-	type LingeringQueueAccess,
 	type SendJob,
 } from "../jobs/resume-orphans";
 import { createAccount } from "./account-fixture";
@@ -144,8 +144,7 @@ const sentFor = (jobId: number) => sent.filter((s) => s.jobId === jobId).map((s)
 const QUEUED_FAKE: { queue: string; id: string; data: Record<string, unknown> }[] = [];
 let retiredDeletions: { queue: string; id: string }[] = [];
 const recordingLingering: LingeringQueueAccess = {
-	findQueued: (queueName) =>
-		Promise.resolve(QUEUED_FAKE.filter((q) => q.queue === queueName)),
+	findQueued: (queueName) => Promise.resolve(QUEUED_FAKE.filter((q) => q.queue === queueName)),
 	deleteJob: (queueName, id) => {
 		retiredDeletions.push({ queue: queueName, id });
 		return Promise.resolve();

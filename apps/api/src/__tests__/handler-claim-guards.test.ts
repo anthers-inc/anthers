@@ -18,9 +18,8 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { transcodingJobs, works } from "@anthers/db/schema";
+import { transcodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import app from "../index";
 import { processAudio } from "../jobs/process-audio";
 import { renderPaged } from "../jobs/render-paged";
 import { MAX_TRANSCODE_RESUMES } from "../jobs/resume-orphans";
@@ -31,19 +30,14 @@ import { insertWork } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
 
-const testFetch = app.fetch;
-const ORIGIN = "http://localhost:3000";
-
-function req(path: string, options?: RequestInit) {
-	return testFetch(new Request(`http://localhost${path}`, options));
-}
-
 let creatorId: number;
 
 beforeAll(async () => {
-	creatorId = (await createAccount(`hcg_${crypto.randomUUID().slice(0, 8)}`, {
-		fields: { isCreator: true },
-	})).userId;
+	creatorId = (
+		await createAccount(`hcg_${crypto.randomUUID().slice(0, 8)}`, {
+			fields: { isCreator: true },
+		})
+	).userId;
 }, DB_SETUP_TIMEOUT);
 
 /**
@@ -80,37 +74,53 @@ function pastTheBound(jobId: number) {
 }
 
 describe("the lighter handlers' failed-past-bound skip", () => {
-	it("process-audio does not resurrect a finally failed row past the bound", async () => {
-		const jobId = await makeJob("audio", "audio-past-bound-skip");
-		await pastTheBound(jobId);
+	it(
+		"process-audio does not resurrect a finally failed row past the bound",
+		async () => {
+			const jobId = await makeJob("audio", "audio-past-bound-skip");
+			await pastTheBound(jobId);
 
-		await processAudio({ jobId });
+			await processAudio({ jobId });
 
-		const row = await jobRow(jobId);
-		expect(row.status).toBe("failed");
-		expect(row.resumeCount).toBe(MAX_TRANSCODE_RESUMES);
-	}, DB_SETUP_TIMEOUT);
+			const row = await jobRow(jobId);
+			expect(row.status).toBe("failed");
+			expect(row.resumeCount).toBe(MAX_TRANSCODE_RESUMES);
+		},
+		DB_SETUP_TIMEOUT,
+	);
 
-	it("render-paged does not resurrect a finally failed row past the bound", async () => {
-		const jobId = await makeJob("ebook", "paged-past-bound-skip");
-		await pastTheBound(jobId);
+	it(
+		"render-paged does not resurrect a finally failed row past the bound",
+		async () => {
+			const jobId = await makeJob("ebook", "paged-past-bound-skip");
+			await pastTheBound(jobId);
 
-		await renderPaged({ jobId });
+			await renderPaged({ jobId });
 
-		const row = await jobRow(jobId);
-		expect(row.status).toBe("failed");
-		expect(row.resumeCount).toBe(MAX_TRANSCODE_RESUMES);
-	}, DB_SETUP_TIMEOUT);
+			const row = await jobRow(jobId);
+			expect(row.status).toBe("failed");
+			expect(row.resumeCount).toBe(MAX_TRANSCODE_RESUMES);
+		},
+		DB_SETUP_TIMEOUT,
+	);
 
-	it("process-audio still re-runs a failed row below the bound", async () => {
-		// The body runs and throws at its source check — proof the skip is not broadened
-		// past the bound. The catch marks the row failed (again) with the real reason.
-		const jobId = await makeJob("audio", "audio-below-bound-reruns");
-		await expect(processAudio({ jobId })).rejects.toThrow("No source file on content item");
-	}, DB_SETUP_TIMEOUT);
+	it(
+		"process-audio still re-runs a failed row below the bound",
+		async () => {
+			// The body runs and throws at its source check — proof the skip is not broadened
+			// past the bound. The catch marks the row failed (again) with the real reason.
+			const jobId = await makeJob("audio", "audio-below-bound-reruns");
+			await expect(processAudio({ jobId })).rejects.toThrow("No source file on content item");
+		},
+		DB_SETUP_TIMEOUT,
+	);
 
-	it("render-paged still re-runs a failed row below the bound", async () => {
-		const jobId = await makeJob("ebook", "paged-below-bound-reruns");
-		await expect(renderPaged({ jobId })).rejects.toThrow("No source file on this Work");
-	}, DB_SETUP_TIMEOUT);
+	it(
+		"render-paged still re-runs a failed row below the bound",
+		async () => {
+			const jobId = await makeJob("ebook", "paged-below-bound-reruns");
+			await expect(renderPaged({ jobId })).rejects.toThrow("No source file on this Work");
+		},
+		DB_SETUP_TIMEOUT,
+	);
 });

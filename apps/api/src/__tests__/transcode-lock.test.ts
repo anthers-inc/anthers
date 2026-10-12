@@ -22,13 +22,13 @@ import { client, db } from "@anthers/db/client";
 import { transcodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
+import { MAX_TRANSCODE_RESUMES } from "../jobs/resume-orphans";
 import {
 	isTranscodeCompleted,
 	TRANSCODE_LOCK_KEY_BASE,
 	transcodeVideo,
 	withTranscodeLock,
 } from "../jobs/transcode-video";
-import { MAX_TRANSCODE_RESUMES } from "../jobs/resume-orphans";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";

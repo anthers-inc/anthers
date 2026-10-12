@@ -45,8 +45,8 @@ import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { storage } from "../services/storage/index.js";
-import { createEtaClamp, remainingEncodeSeconds } from "./transcode-eta.js";
 import { MAX_TRANSCODE_RESUMES } from "./resume-orphans.js";
+import { createEtaClamp, remainingEncodeSeconds } from "./transcode-eta.js";
 
 export interface TranscodeVideoData {
 	jobId: number;
