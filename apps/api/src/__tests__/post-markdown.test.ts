@@ -92,6 +92,21 @@ describe("normalizeStoredMarkdown", () => {
 		expect(normalizeStoredMarkdown(first)).toBe(first);
 	});
 
+	/*
+	 * An image's description is part of what storage keeps: the editor inserts one, and
+	 * markdown is the stored spelling of it — so a round trip that dropped the alt text
+	 * would silently de-describe the image on the first unrelated edit. (The empty alt
+	 * stays empty, which is the image arriving undescribed, not one dropped.)
+	 */
+	it("keeps an image's description through the stored round trip", () => {
+		const described = "![A red kite over the harbor](https://i.example/kite.png)";
+		expect(normalizeStoredMarkdown(described)).toBe(described);
+		const inserted = postHtmlToMarkdown(
+			'<p><img src="https://i.example/kite.png" alt="A red kite over the harbor"></p>',
+		);
+		expect(inserted).toBe(described);
+	});
+
 	it("strips raw HTML a client embedded in a stored body", () => {
 		const out = normalizeStoredMarkdown("Hello world!\n\n<img src onerror=y>");
 		expect(out).not.toContain("<b");

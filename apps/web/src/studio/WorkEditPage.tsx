@@ -269,6 +269,10 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		setBodyText(holder.textContent ?? "");
 	};
 	const [lyrics, setLyrics] = useState(editing.lyrics ?? "");
+	// The image an image Work is — the description its picture announces to a screen reader.
+	// Empty keeps the reader's title fallback, and sending it unconditionally on an image
+	// Work (including empty) means clearing it is a real edit, as with lyrics.
+	const [imageAlt, setImageAlt] = useState(editing.imageAlt ?? "");
 	const [thumbnailUrl, setThumbnailUrl] = useState(editing.thumbnail ?? "");
 	const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
 		editing.thumbnail ? keyToPreview(editing.thumbnail) : null,
@@ -581,6 +585,9 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			// Sent unconditionally on a music Work, including empty — deleting the lyrics
 			// is a real edit, and an omitted field cannot express it.
 			...(type === "music" ? { lyrics } : {}),
+			// Sent unconditionally on an image Work, including empty — clearing the
+			// description is a real edit, and an omitted field cannot express it.
+			...(type === "image" ? { imageAlt: imageAlt.trim() } : {}),
 			// Only when changed here: see the header on why a save must not carry what was loaded.
 			...(thumbnailTouched.current ? { thumbnail: thumbnailUrl } : {}),
 			visibility,
@@ -842,6 +849,31 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		) : null;
 
 	/*
+	 * The image a Work of images is, described. Reads beside the picture on the page's
+	 * user view, since the field is what a screen reader announces in its place. Empty
+	 * keeps the reader's title fallback, and the help text states the gate rather than
+	 * letting a creator assume opposite: the description rides with the image, so a
+	 * locked Work announces nothing.
+	 */
+	const imageAltEditor =
+		type === "image" ? (
+			<section>
+				<textarea
+					aria-label="Image description (alt text)"
+					className={`${IN_PLACE} ${GROWS} w-full min-h-12`}
+					value={imageAlt}
+					onChange={(e) => setImageAlt(e.target.value)}
+					rows={2}
+					placeholder="Describe this image…"
+				/>
+				<p className="text-xs text-base-content/50">
+					What a screen reader announces for the picture — what it shows, in a sentence. Left empty,
+					the Work's title is announced instead. Gated with the image itself.
+				</p>
+			</section>
+		) : null;
+
+	/*
 	 * 🚨 **The hint is the point, not decoration.** A description is shown to
 	 * everyone — including somebody who has not cleared this Work's gate, and, once
 	 * a creator holds an Anthers handle, on the AT Protocol network where it cannot
@@ -965,6 +997,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 								</div>
 							)}
 							<WorkDeliverable work={asRead} lyrics={lyricsEditor} videoRef={videoEl} />
+							{/* The image Work's description field, under the picture it describes. */}
+							{imageAltEditor}
 							{/* The ladder's own state, as the small line under the player: a video
 							    plays its original while the ladder encodes (the `fileReady` comment
 							    above carries why), so the processing block shrank from standing in
@@ -1048,6 +1082,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 						<>
 							<WorkFileSection work={current} landing={landed > readAfter} />
 							{lyricsEditor}
+							{imageAltEditor}
 						</>
 					))}
 				{/* A game or software's embedded build: the address it runs from, and the build

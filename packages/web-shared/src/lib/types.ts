@@ -359,6 +359,14 @@ export interface Work {
 	 * `description`.
 	 */
 	lyrics?: string | null;
+	/**
+	 * The alt text of the image an image Work **is** — what a screen reader announces for
+	 * the picture itself, falling back to the title when the creator wrote nothing.
+	 *
+	 * Gated with the payload like `body` (it describes pixels the gate withholds); a denied
+	 * user gets `""`, but a denied user gets no image either, so nothing renders against it.
+	 */
+	imageAlt?: string | null;
 	estimatedReadMinutes?: number | null;
 	/**
 	 * How many pages an ebook has, or 0.
@@ -506,6 +514,8 @@ export interface WorkInput {
 	bodyHtml?: string;
 	/** Untimestamped song lyrics (audio Works). Plain text — never HTML. */
 	lyrics?: string;
+	/** The alt text of the image an image Work is. Plain text — never HTML. */
+	imageAlt?: string;
 	metadata?: Record<string, unknown>;
 	/**
 	 * What a creator may SET. Deliberately narrower than `Work["visibility"]`:

@@ -59,7 +59,18 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 			setImageError(null);
 			try {
 				const url = await uploadInlineImage(file);
-				editor.chain().focus().setImage({ src: url }).run();
+				// The description is asked at insertion, the moment the image is in hand — the
+				// same blocking prompt the link flow above uses. A cancel inserts the image
+				// undescribed rather than throwing away the upload that just finished, and the
+				// selected-image field under this toolbar is where a description is added or
+				// fixed afterwards.
+				const description = window.prompt("Describe this image for screen readers (alt text)");
+				const alt = description?.trim();
+				editor
+					.chain()
+					.focus()
+					.setImage({ src: url, ...(alt ? { alt } : {}) })
+					.run();
 			} catch (err) {
 				setImageError(err instanceof Error ? err.message : "The image didn't upload.");
 			} finally {
@@ -160,6 +171,28 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 					{imageError ?? "Uploading the image…"}
 				</span>
 			)}
+
+			{/* The selected image's description. Clicking an image in the editor selects it, and
+			    this is where its alt text is set or fixed — the flow above covers the moment of
+			    insertion, but a stored body comes back from the markdown it is stored as with
+			    the image's alt already on it, and editing a post would otherwise make every
+			    description write-once. */}
+			{editor.isActive("image") &&
+				(() => {
+					const attr = editor.getAttributes("image").alt;
+					return (
+						<input
+							type="text"
+							className="w-full input input-bordered input-xs"
+							aria-label="Image description (alt text)"
+							placeholder="Describe this image for screen readers (alt text)"
+							value={typeof attr === "string" ? attr : ""}
+							onChange={(e) =>
+								editor.chain().updateAttributes("image", { alt: e.target.value }).run()
+							}
+						/>
+					);
+				})()}
 		</div>
 	);
 }

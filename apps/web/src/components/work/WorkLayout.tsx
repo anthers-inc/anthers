@@ -418,7 +418,14 @@ export function WorkDeliverable({
 					/>
 				))}
 			{work.type === "image" && work.sourceKey && (
-				<img src={work.sourceKey} alt={work.title ?? ""} className="w-full rounded-lg" />
+				// The creator's alt text when there is one; the Work's title is the fallback
+				// this render always fell back to, and `""` keeps it (empty alt on a content
+				// image would read as deliberately decorative, which the picture never is).
+				<img
+					src={work.sourceKey}
+					alt={work.imageAlt || work.title || ""}
+					className="w-full rounded-lg"
+				/>
 			)}
 			{/* A hosted build outranks an external embed address: the build Anthers serves is
 			    the thing the creator uploaded here, and the embed address is creator-hosted

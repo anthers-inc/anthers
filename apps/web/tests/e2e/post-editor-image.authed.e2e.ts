@@ -8,8 +8,9 @@
  * image arrived saw nothing inserted and nothing on the page, the failure sitting in the
  * console** (Parker, 2026-10-09). What this walk catches is exactly that shape: a picked
  * file must end as an image in the editor and as markdown in the stored body, whatever
- * each step of the two-step upload does. It also catches the blank line a creator draws
- * by pressing return twice, which the write boundary has to keep, and it fails if a
+ * each step of the two-step upload does — **with the description the insertion flow now
+ * asks for stored as the markdown alt text and announced on the read page**. It also
+ * catches the blank line a creator draws by pressing return twice, and it fails if a
  * refused upload stays in the console — the oversized case's message must be on the page.
  */
 import { deflateSync } from "node:zlib";
@@ -19,6 +20,9 @@ import { eq } from "drizzle-orm";
 import { API_URL, expect, signInAsCreator, test, trackErrorsStrict, WEB_ORIGIN } from "./fixtures";
 
 const RUN = Date.now().toString(36);
+
+/** The description the insertion flow is answered with, asserted all the way to the reader. */
+const DESCRIPTION = `A colored checkered pattern ${RUN}`;
 
 let token = "";
 const createdSlugs: string[] = [];
@@ -101,6 +105,11 @@ test("a picked file becomes an image in the editor and a gap a return drew survi
 	await page.keyboard.press("Enter");
 	await page.keyboard.type("Line two");
 
+	// The insertion flow asks for the description once the image has uploaded; the
+	// prompt's answer is what the screen reader announces, so it is answered here and
+	// followed to the stored body and the read page below.
+	page.on("dialog", (dialog) => void dialog.accept(DESCRIPTION));
+
 	// The button's own flow: upload, register, insert. Both steps answer 2xx before the
 	// image is on the page — a response for the registration step is captured for cleanup.
 	const chooserPromise = page.waitForEvent("filechooser");
@@ -117,6 +126,14 @@ test("a picked file becomes an image in the editor and a gap a return drew survi
 	const image = page.locator(".tiptap img");
 	await expect(image).toBeVisible();
 	await expect(image).toHaveAttribute("src", /\//);
+	await expect(image).toHaveAttribute("alt", DESCRIPTION);
+
+	// The stored description stays editable: selecting the image in the editor brings up
+	// its description field, and a change there is what the next save sends.
+	await image.click();
+	const descriptionField = page.getByRole("textbox", { name: "Image description (alt text)" });
+	await expect(descriptionField).toHaveValue(DESCRIPTION);
+	await descriptionField.fill(`${DESCRIPTION}, edited`);
 
 	// Save as a draft, then read what was stored through the API the editor writes to.
 	page.getByRole("button", { name: "Save as Draft" }).click();
@@ -129,15 +146,18 @@ test("a picked file becomes an image in the editor and a gap a return drew survi
 	});
 	const stored = (await read.json()) as { post: { body: string } };
 	// The blank paragraph is the stored spelling of the double return, and the image is
-	// the markdown the editor's HTML became.
+	// the markdown the editor's HTML became — with the description the flow asked for,
+	// as edited in the selected-image field before this save.
 	expect(stored.post.body).toContain("Line one\n\n\u00A0\n\nLine two");
-	expect(stored.post.body).toMatch(/!\[\]\(\S+\)/);
+	expect(stored.post.body).toMatch(new RegExp(`!\\[${DESCRIPTION}, edited\\]\\(\\S+\\)`));
 
 	// On the reading side the paragraphs sit flush — the margins the post styling adds
 	// between them are gone, and the stored blank line renders with real height.
 	await page.goto(`/posts/${slug}-${(stored.post as { publicId: number }).publicId}`);
 	const rendered = page.locator("article .prose");
 	await expect(rendered.locator("p").first()).toBeVisible();
+	// The description reaches the reader's DOM unchanged — what a screen reader announces.
+	await expect(rendered.locator("img").first()).toHaveAttribute("alt", `${DESCRIPTION}, edited`);
 	const margins = await rendered
 		.locator("p")
 		.evaluateAll((paragraphs) =>
