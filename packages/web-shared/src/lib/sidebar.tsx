@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useLocation } from "@anthers/web-shared/router";
+
 import {
 	createContext,
 	type ReactNode,
@@ -9,16 +9,17 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useLocation } from "./router";
 
 /**
  * The width at which the sidebar sits BESIDE the page; below it, the sidebar opens OVER
- * the page and starts closed. It is Tailwind's `md`, and `LoggedInLayout` spells the same
- * boundary with `md:` classes, so change both or neither.
+ * the page and starts closed. It is Tailwind's `md`, and the signed-in layout spells the
+ * same boundary with `md:` classes, so change both or neither.
  *
  * 🚨 **Beside the page is wrong on a phone, and it is not a matter of taste.** The sidebar
  * is 16rem, so at 390px an open one leaves the page about 140px, which wraps comment text
- * every few characters and pushes nested replies off the screen. `mobile-overflow.e2e.ts`
- * cannot see it, because it measures only logged-out routes, so `sidebar-phone.authed.e2e.ts`
+ * every few characters and pushes nested replies off the screen. The layout that renders
+ * this sidebar carries the same breakpoint in its classes, and `sidebar-phone.authed.e2e.ts`
  * is the guard.
  */
 const SIDEBAR_BESIDE_QUERY = "(min-width: 48rem)";
@@ -102,7 +103,7 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
 	);
 }
 
-/** No-op fallback for pages rendered outside LoggedInLayout (e.g. logged-out Discover) */
+/** No-op fallback for pages rendered outside a layout carrying the sidebar */
 const NOOP_SIDEBAR: SidebarContextValue = {
 	sidebarOpen: false,
 	toggleSidebar: () => {},

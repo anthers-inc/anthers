@@ -8,6 +8,15 @@
  * and transcodes, plus its own visibility, dates, delivery switches and access gates; posts and
  * Projects merely reference Works.
  *
+ * The listing is a **table** (Parker, 2026-10-11), in the shape of YouTube Studio's Content
+ * tab and modeled on it: rows tall enough to carry a small thumbnail, the title and
+ * description beside it, then visibility, status, the upload date and the counts as
+ * columns, sortable by header and filterable. The filters live in the left sidebar below
+ * the Studio nav — the Feed page's pattern — rather than in tabs above the table; they ride
+ * the URL as query parameters, and the table (client-side over the loaded list) re-derives
+ * from them. The filtering and sorting themselves are `works-list.ts`'s, extracted so a
+ * suite can fail on them.
+ *
  * Processing state is derived from each Work's latest transcode and polled while anything is
  * still encoding.
  *
@@ -17,13 +26,20 @@
  * predecessor said "Content Library" until 2026-08-13.
  */
 import { PlusIcon, RectangleStackIcon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useState } from "react";
-import WorkCard from "../components/content/WorkCard";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import WorkRow from "../components/content/WorkRow";
 import { processingState } from "../components/content/works";
+import WorksFilterSections from "../components/content/works-filters";
+import {
+	arrangeWorks,
+	DEFAULT_WORKS_SORT,
+	type WorksSortKey,
+} from "../components/content/works-list";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { Link } from "../lib/router";
+import { Link, useSearchParams } from "../lib/router";
 import { client } from "../lib/rpc";
+import { useSidebar } from "../lib/sidebar";
 import { studioNewWorkUrl } from "../lib/studio";
 import type { Work } from "../lib/types";
 import { useWorkUploads } from "../lib/work-uploads";
@@ -42,13 +58,52 @@ export default function WorksPage() {
 	const [deleteTarget, setDeleteTarget] = useState<Work | null>(null);
 	const [deleting, setDeleting] = useState(false);
 	/** Posts blocking an unflagged delete — non-null once the server has named them. */
-	const [inUse, setInUse] = useState<UsingPost[] | null>(null);
+	const [inUse, setInUse] = useState<
+		{ slug: string; title: string | null; isPublished: boolean }[] | null
+	>(null);
 	/** Completed purchases of this Work; null until the preflight answers. */
 	const [sold, setSold] = useState<number | null>(null);
 	/** Work id whose visibility flip is in flight, so only its own button disables. */
 	const [releasing, setReleasing] = useState<number | null>(null);
-	/** A refused release, kept beside the grid — the server's reason, not a generic one. */
+	/** A refused release, kept beside the table — the server's reason, not a generic one. */
 	const [releaseError, setReleaseError] = useState<string | null>(null);
+
+	// The filters and the sort ride the URL, the Feed page's pattern — shareable, and
+	// visible in the address bar when a creator has filtered to one kind.
+	const [searchParams, setSearchParams] = useSearchParams();
+	const q = searchParams.get("q") ?? "";
+	const visibility = searchParams.get("visibility") ?? "";
+	const contentType = searchParams.get("type") ?? "";
+	const [sort, setSort] = useState<{ key: WorksSortKey; dir: "asc" | "desc" }>(DEFAULT_WORKS_SORT);
+
+	const updateParams = useCallback(
+		(updates: Record<string, string>) => {
+			setSearchParams(
+				(prev) => {
+					const next = new URLSearchParams(prev);
+					for (const [key, value] of Object.entries(updates)) {
+						if (value) {
+							next.set(key, value);
+						} else {
+							next.delete(key);
+						}
+					}
+					return next;
+				},
+				{ replace: true },
+			);
+		},
+		[setSearchParams],
+	);
+
+	// Repeat click on a sorted column flips it; a new column starts the way users expect
+	// its data to read — names A→Z, numbers and dates high first.
+	const onSort = (key: WorksSortKey) =>
+		setSort((prev) =>
+			prev.key === key
+				? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+				: { key, dir: key === "title" ? "asc" : "desc" },
+		);
 
 	const fetchItems = useCallback(
 		() =>
@@ -67,7 +122,7 @@ export default function WorksPage() {
 		fetchItems().finally(() => setLoading(false));
 	}, [fetchItems]);
 
-	// Re-read when a file this tab was uploading lands on its Work. The card shows the upload
+	// Re-read when a file this tab was uploading lands on its Work. The row shows the upload
 	// from the store while it runs, but the processing it starts is only on the row — and the
 	// poll below switches on only once a row says something is processing.
 	const landed = useWorkUploads().filter((u) => u.status === "done").length;
@@ -108,7 +163,7 @@ export default function WorksPage() {
 		);
 
 	/**
-	 * Flip a Work between private and released, from the card.
+	 * Flip a Work between private and released, from the row.
 	 *
 	 * The server owns the preconditions — media finished encoding, at least one delivery
 	 * switch on — and refuses with a specific message when they aren't met. Show that
@@ -219,6 +274,28 @@ export default function WorksPage() {
 		}
 	};
 
+	// The sidebar's filter sections, below the Studio nav — registered here, the Feed
+	// page's mechanism. The sections read the URL, so they re-register as it changes.
+	const { setPageContent } = useSidebar();
+	const filters = useMemo(
+		() => ({ q, visibility, type: contentType }),
+		[q, visibility, contentType],
+	);
+	useEffect(() => {
+		setPageContent(
+			<WorksFilterSections
+				items={items}
+				q={filters.q}
+				visibility={filters.visibility}
+				contentType={filters.type}
+				onUpdateParams={updateParams}
+			/>,
+		);
+		return () => setPageContent(null);
+	}, [setPageContent, items, filters, updateParams]);
+
+	const rows = arrangeWorks(items, filters, sort.key, sort.dir);
+
 	if (loading) {
 		return (
 			<div className="flex justify-center py-16">
@@ -228,9 +305,9 @@ export default function WorksPage() {
 	}
 
 	return (
-		<div className="max-w-7xl mx-auto px-4 py-8">
-			<div className="flex items-center justify-between mb-6">
-				<h1 className="text-2xl font-bold">Works</h1>
+		<div className="w-full px-6 py-6">
+			<div className="flex items-center justify-between mb-4">
+				<h2 className="text-lg font-semibold">Works</h2>
 				<Link to={studioNewWorkUrl()} className="btn btn-primary btn-sm">
 					<PlusIcon className="w-4 h-4" /> New Work
 				</Link>
@@ -253,17 +330,52 @@ export default function WorksPage() {
 						</Link>
 					}
 				/>
+			) : rows.length === 0 ? (
+				/* Every Work is filtered out — distinguishable from an empty Catalog, and
+				   its remedy is a click, not an upload. */
+				<div className="text-sm text-base-content/60">
+					<p className="mb-2">No Works match these filters.</p>
+					<button
+						type="button"
+						className="btn btn-ghost btn-sm"
+						onClick={() => updateParams({ q: "", visibility: "", type: "" })}
+					>
+						Clear filters
+					</button>
+				</div>
 			) : (
-				<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-					{items.map((item) => (
-						<WorkCard
-							key={item.id}
-							item={item}
-							onDelete={(it) => openDelete(it)}
-							onSetVisibility={setVisibility}
-							busy={releasing === item.id}
-						/>
-					))}
+				<div className="overflow-x-auto">
+					<table className="table w-full">
+						<thead>
+							<tr className="border-base-300/50 text-xs text-base-content/50">
+								<th scope="col" className="w-2/5" aria-sort={ariaSort(sort, "title")}>
+									<SortButton label="Work" k="title" sort={sort} onSort={onSort} />
+								</th>
+								<th scope="col">Visibility</th>
+								<th scope="col">Status</th>
+								<th scope="col" aria-sort={ariaSort(sort, "date")}>
+									<SortButton label="Date" k="date" sort={sort} onSort={onSort} />
+								</th>
+								<th scope="col" aria-sort={ariaSort(sort, "views")}>
+									<SortButton label="Views" k="views" sort={sort} onSort={onSort} />
+								</th>
+								<th scope="col">
+									<span className="sr-only">Actions</span>
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+							{rows.map((item) => (
+								<WorkRow
+									key={item.id}
+									item={item}
+									onDelete={(it) => openDelete(it)}
+									onSetVisibility={setVisibility}
+									busy={releasing === item.id}
+								/>
+							))}
+						</tbody>
+					</table>
 				</div>
 			)}
 
@@ -355,5 +467,38 @@ export default function WorksPage() {
 				</div>
 			)}
 		</div>
+	);
+}
+
+/** The `aria-sort` a column header carries, given the table's current sort. */
+function ariaSort(sort: { key: WorksSortKey; dir: "asc" | "desc" }, key: WorksSortKey) {
+	if (sort.key !== key) return undefined;
+	return sort.dir === "asc" ? "ascending" : "descending";
+}
+
+/** A sortable column header. Not a link, not a plain button row — repeat click flips it. */
+function SortButton({
+	label,
+	k,
+	sort,
+	onSort,
+}: {
+	label: string;
+	k: WorksSortKey;
+	sort: { key: WorksSortKey; dir: "asc" | "desc" };
+	onSort: (key: WorksSortKey) => void;
+}) {
+	const active = sort.key === k;
+	return (
+		<button
+			type="button"
+			className="flex items-center gap-1 hover:text-base-content transition-colors"
+			onClick={() => onSort(k)}
+		>
+			{label}
+			<span className={active ? "" : "opacity-0"} aria-hidden="true">
+				{active ? (sort.dir === "asc" ? "↑" : "↓") : "↓"}
+			</span>
+		</button>
 	);
 }

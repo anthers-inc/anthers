@@ -2,6 +2,7 @@
 
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
+import { useSidebar } from "@anthers/web-shared/sidebar";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { InformationCircleIcon, RssIcon, XMarkIcon } from "@heroicons/react/24/outline";
@@ -9,7 +10,6 @@ import { useCallback, useEffect, useState } from "react";
 import FeedTile from "../components/cards/FeedTile";
 import SharedFilterSections from "../components/layout/SharedFilterSections";
 import SharedLensesSection from "../components/layout/SharedLensesSection";
-import { useSidebar } from "../components/layout/SidebarContext";
 
 export default function AuthenticatedHomePage() {
 	const [searchParams, setSearchParams] = useSearchParams();

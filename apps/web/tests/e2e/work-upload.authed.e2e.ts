@@ -94,8 +94,8 @@ test.afterAll(sweep);
 // stopped updating — every re-read answered 404 — which reads as a polling bug.
 test.describe.configure({ mode: "serial" });
 
-const cardFor = (page: import("@playwright/test").Page) =>
-	page.locator(".card").filter({ hasText: STEM });
+const rowFor = (page: import("@playwright/test").Page) =>
+	page.locator("tbody tr").filter({ hasText: STEM });
 
 test("a video Work is made from its file and edited while the file uploads", async ({
 	page,
@@ -148,7 +148,7 @@ test("a video Work is made from its file and edited while the file uploads", asy
 		timeout: 15_000,
 	});
 	await page.goto("/studio/works");
-	await expect(cardFor(page)).not.toContainText("No file");
+	await expect(rowFor(page)).not.toContainText("No file");
 
 	const [work] = (await ownWorks()).filter((w) => w.title === STEM);
 	expect(work, "the Work the Upload page made is not in the creator's own listing").toBeTruthy();
@@ -242,14 +242,14 @@ test("a Work's page and the Dashboard follow its processing", async ({ page, con
 	await expect(page.getByText("43%", { exact: true })).toBeVisible();
 	await expect(page.getByText("About 3 minutes left")).toBeVisible();
 
-	// The Catalog card gives the estimate a line of its own, because its badge has no room for it:
+	// The row gives the estimate a line of its own, because its badge has no room for it:
 	// the longest estimate wrapped inside the badge's one fixed-height line and spilled out of it.
 	await page.goto("/studio/works");
-	const card = page.locator(".card").filter({ hasText: `${STEM} processing` });
-	await expect(card.locator(".badge").filter({ hasText: "Processing" })).toHaveText(
+	const row = page.locator("tbody tr").filter({ hasText: `${STEM} processing` });
+	await expect(row.locator(".badge").filter({ hasText: "Processing" })).toHaveText(
 		"Processing 43%",
 	);
-	await expect(card.getByText("About 3 minutes left")).toBeVisible();
+	await expect(row.getByText("About 3 minutes left")).toBeVisible();
 	await page.goto(`/studio/works/${work.publicId}/edit`);
 
 	// The page re-reads the job on its own. An audio or ebook job has no estimate, and the page

@@ -77,14 +77,14 @@ test("a Work rated before the matrix is released only once every row is answered
 		.set({ maturity: "general", maturitySource: "creator" })
 		.where(eq(works.id, work.id));
 
-	// The card is how a back catalog is released thirty at a time, so it has to say which ones
-	// still need answering.
+	// The Works table is how a back catalog is released thirty rows at a time, so it has to
+	// say which ones still need answering.
 	await page.goto("/studio/works");
-	const card = page.locator(".card").filter({ hasText: TITLE });
-	await expect(card).toContainText("Rate this");
-	await expect(card.getByRole("button", { name: "Release" })).toBeDisabled();
+	const row = page.locator("tbody tr").filter({ hasText: TITLE });
+	await expect(row).toContainText("Rate this");
+	await expect(row.getByRole("button", { name: "Release" })).toBeDisabled();
 
-	await card.getByRole("link", { name: "Rate this" }).click();
+	await row.getByRole("link", { name: "Rate this" }).click();
 	await expect(page).toHaveURL(new RegExp(`/studio/works/${work.publicId}/edit$`));
 	const released = page.getByLabel("Released to my public Catalog");
 	await expect(
@@ -103,7 +103,7 @@ test("a Work rated before the matrix is released only once every row is answered
 		timeout: 15_000,
 	});
 
-	const [row] = await db.select().from(works).where(eq(works.id, work.id));
-	expect(row.visibility).toBe("released");
-	expect(row.maturityRows).toMatchObject({ violence: "none", language: "none" });
+	const [stored] = await db.select().from(works).where(eq(works.id, work.id));
+	expect(stored.visibility).toBe("released");
+	expect(stored.maturityRows).toMatchObject({ violence: "none", language: "none" });
 });

@@ -287,4 +287,51 @@ describe("a Project's Works", () => {
 		expect(await orderOf(SLUG, auth.Cookie)).toContain(`Draft ${id}`);
 		expect(await orderOf(SLUG, strangerCookie)).not.toContain(`Draft ${id}`);
 	});
+
+	it("the owner's listing rides worksSummary in shelf order; the public listing carries none", async () => {
+		// The Studio's Projects table renders each project's works as a thumbnail grid
+		// beside the project block, and this is the only call it fetches them with — the
+		// owner's serialization needs no maturity hiding, but it must not leak onto the
+		// public one, where a private member's existence is a disclosure.
+		const mine = await req("/api/content/projects?mine=true", { headers: auth });
+		expect(mine.status).toBe(200);
+		const { projects: mineProjects } = (await mine.json()) as {
+			projects: {
+				slug: string;
+				worksSummary?: { id: number; type: string; visibility?: string; sortOrder: number }[];
+			}[];
+		};
+		const album = mineProjects.find((p) => p.slug === SLUG);
+		expect(album, "the owner's own listing is where the summary rides").toBeTruthy();
+		// Shelf order for the released tracks; the draft the earlier test added to this
+		// same shelf is here too — with its visibility — because the owner's grid shows
+		// the shelf as the owner holds it, private members included.
+		expect(album!.worksSummary?.length).toBe(tracks.length + 1);
+		expect(album!.worksSummary?.slice(0, tracks.length).map((w) => w.id)).toEqual(
+			tracks.map((t) => t.workId),
+		);
+		const [draft] = album!.worksSummary!.slice(-1);
+		expect(draft.visibility).toBe("private");
+		// A summary is identity and state, not the Work entire — no media payload rides it.
+		expect(Object.keys(album!.worksSummary![0])).toEqual([
+			"id",
+			"publicId",
+			"slug",
+			"title",
+			"type",
+			"thumbnail",
+			"visibility",
+			"sortOrder",
+		]);
+		const other = mineProjects.find((p) => p.slug === OTHER_SLUG);
+		expect(other!.worksSummary?.map((w) => w.id)).toEqual(otherWorks.map((w) => w.workId));
+
+		// And the public listing never carries it — the exact assertion an absence needs.
+		const listing = await req("/api/content/projects");
+		expect(listing.status).toBe(200);
+		const { projects: publicProjects } = (await listing.json()) as {
+			projects: { slug: string; worksSummary?: unknown }[];
+		};
+		expect(publicProjects.find((p) => p.slug === SLUG)?.worksSummary).toBeUndefined();
+	});
 });

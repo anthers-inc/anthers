@@ -74,6 +74,7 @@ import {
 	recommendedPercent,
 	reviewWindowSince,
 	WORK_TYPES,
+	type WorkType,
 } from "@anthers/shared/content";
 import {
 	gridFor,
@@ -6123,10 +6124,78 @@ const contentRoutes = new Hono()
 			.orderBy(...orderClause)
 			.limit(100);
 
+		/**
+		 * The Studio's Projects table shows each Project's works as a thumbnail grid beside
+		 * the project block, and the owner's listing is the only caller that sends `mine`,
+		 * so the works ride this same call rather than one fetch per project. The owner
+		 * already holds every state serialized here — private and withdrawn included —
+		 * which is what makes an owner-only shape safe to lean. One batched query over the
+		 * page's projects, grouped in memory; a correlated subquery per row would run a
+		 * hundred queries at a Catalog's size for the same bytes.
+		 */
+		const worksByProject: Map<
+			number,
+			{
+				id: number;
+				publicId?: number;
+				slug?: string;
+				title: string | null;
+				type: WorkType;
+				thumbnail: string | null;
+				visibility?: "private" | "released" | "withdrawn";
+				sortOrder: number;
+			}[]
+		> | null = mine === "true" && result.length > 0 ? new Map() : null;
+		if (worksByProject) {
+			const itemRows = await db
+				.select({
+					projectId: projectItems.projectId,
+					sortOrder: projectItems.sortOrder,
+					id: works.id,
+					publicId: works.publicId,
+					slug: works.slug,
+					title: works.title,
+					type: works.type,
+					thumbnail: works.thumbnail,
+					visibility: works.visibility,
+				})
+				.from(projectItems)
+				.innerJoin(works, eq(projectItems.workId, works.id))
+				.where(
+					inArray(
+						projectItems.projectId,
+						result.map((r) => r.project.id),
+					),
+				)
+				.orderBy(asc(projectItems.sortOrder));
+			for (const row of itemRows) {
+				const list = worksByProject.get(row.projectId) ?? [];
+				list.push({
+					id: row.id,
+					publicId: row.publicId,
+					slug: row.slug,
+					title: row.title,
+					// Text columns arrive as strings; the column's own comment hands the
+					// invariant that they hold only the published vocabulary. Asserting it
+					// here keeps the response's shape honest — the client types its unions.
+					type: row.type as WorkType,
+					thumbnail: row.thumbnail,
+					visibility:
+						row.visibility === "released" || row.visibility === "withdrawn"
+							? row.visibility
+							: "private",
+					sortOrder: row.sortOrder,
+				});
+				worksByProject.set(row.projectId, list);
+			}
+		}
+
 		return c.json({
 			projects: result.map((r) => ({
 				...r.project,
 				postCount: Number(r.postCount),
+				// Only the Studio's listing carries it; the public shape never does.
+				...(worksByProject ? { worksSummary: worksByProject.get(r.project.id) ?? [] } : {}),
 				creator: embedCreator({
 					handle: r.creatorHandle,
 					displayName: r.creatorDisplayName,

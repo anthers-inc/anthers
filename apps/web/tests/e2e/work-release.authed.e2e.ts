@@ -86,9 +86,9 @@ const CREATOR = MEDIA_FIXTURE_USERNAME;
 /** The creator's issued handle, which is what the public Catalog route keys on now. */
 let creatorHandle = "";
 
-/** The card for our Work, found by its unique title rather than by position in the grid. */
-const cardFor = (page: import("@playwright_test").Page) =>
-	page.locator(".card").filter({ hasText: TITLE });
+/** The table row for our Work, found by its unique title rather than by position in the table. */
+const rowsFor = (page: import("@playwright_test").Page) =>
+	page.locator("tbody tr").filter({ hasText: TITLE });
 
 /**
  * Delete every Work owned by the signed-in creator whose title starts with the Release-walk
@@ -179,24 +179,24 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 
 	await page.goto("/studio/works");
 	// Born private. Not a detail — it is why a Release control has to exist at all.
-	await expect(cardFor(page)).toContainText("Private");
+	await expect(rowsFor(page)).toContainText("Private");
 
-	// The card says the same thing, because the card is how a back catalog gets released
+	// The row says the same thing, because this listing is how a back catalog gets released
 	// thirty at a time and thirty identical 409s is the failure this prevents.
-	await expect(cardFor(page)).toContainText("Rate this");
-	await expect(cardFor(page).getByRole("button", { name: "Release" })).toBeDisabled();
+	await expect(rowsFor(page)).toContainText("Rate this");
+	await expect(rowsFor(page).getByRole("button", { name: "Release" })).toBeDisabled();
 
-	// The thumbnail opens the Work as the title does, since it is the biggest thing on the card
+	// The thumbnail opens the Work as the title does, since it is the biggest thing on the row
 	// and the first thing a creator clicks. It is kept out of the accessibility tree because the
-	// title already names the same link, so it is found by its place on the card, not by role.
-	await cardFor(page).locator('a[aria-hidden="true"]').click();
+	// title already names the same link, so it is found by its place on the row, not by role.
+	await rowsFor(page).locator('a[aria-hidden="true"]').click();
 	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
 	await page.goto("/studio/works");
 
 	// ── Rate it ─────────────────────────────────────────────────────────────
-	// ⭐ The card's blocked-release hint is a LINK now rather than a tooltip. It could not be
+	// ⭐ The row's blocked-release hint is a LINK now rather than a tooltip. It could not be
 	// one while the editor had no URL, which is the smallest concrete thing the page bought.
-	await cardFor(page).getByRole("link", { name: "Rate this" }).click();
+	await rowsFor(page).getByRole("link", { name: "Rate this" }).click();
 	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
 	// Rated through the matrix: every row answered Not in It is a General Work.
 	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
@@ -222,16 +222,16 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await page.goto("/studio/works");
 
 	// ── Release ─────────────────────────────────────────────────────────────
-	await cardFor(page).getByRole("button", { name: "Release" }).click();
+	await rowsFor(page).getByRole("button", { name: "Release" }).click();
 
 	// The editor proposes an allowed baseline at $0, so releasing lands in the commons.
-	await expect(cardFor(page)).toContainText("Public Access");
+	await expect(rowsFor(page)).toContainText("Public Access");
 
 	// And the user-facing endpoint agrees, which is the assertion that matters: the badge
 	// is derived in the browser while `publicAccess` is derived on the server, from
 	// `resolveAccessSync`. Two derivations of one idea — this is where they have to meet.
 	//
-	// **POLLED, not read once, because those two derivations are also two clocks** — the card
+	// **POLLED, not read once, because those two derivations are also two clocks** — the row
 	// can show its new state a moment before this endpoint reflects it. Polling changes
 	// nothing about what is asserted: if the server never agrees this still fails, with the
 	// same message.
@@ -266,7 +266,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	expect(published?.originallyReleased).toBe("2015-01-15T00:00:00.000Z");
 
 	// ── The locked state ────────────────────────────────────────────────────
-	await cardFor(page).getByRole("link", { name: "Edit" }).click();
+	await rowsFor(page).getByRole("link", { name: "Edit" }).click();
 	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
 
 	// Warning first, while the change is still only in the form — a creator should be told
@@ -280,7 +280,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 		timeout: 15_000,
 	});
 	await page.goto("/studio/works");
-	await expect(cardFor(page)).toContainText("Nobody can open");
+	await expect(rowsFor(page)).toContainText("Nobody can open");
 
 	// Still released, and now genuinely shut: the server drops it from what a user sees.
 	// Polled for the same reason as the read after Release — and note this direction was
