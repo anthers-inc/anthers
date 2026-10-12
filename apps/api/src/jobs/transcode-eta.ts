@@ -7,12 +7,19 @@
  * variant still to come, and the variants are not the same amount of work.
  *
  * ⭐ **A variant's cost is weighted by its HEIGHT, not by its pixel count, and that was measured
- * rather than assumed.** Timed on one thread with the job's own settings, a 720p encode cost 0.68
+ * rather than assumed.** Timed on one thread with the job's settings, a 720p encode cost 0.68
  * of a 1080p one and a 480p encode 0.45, where their pixel counts would say 0.44 and 0.20: every
  * variant decodes the whole source and encodes the audio again, and that part does not shrink
  * with the output. The heights say 0.67 and 0.44. From a 4K source the same encodes cost 0.70 and
  * 0.52, a little more than the heights say, which the clamp below absorbs. Treating every variant
  * as costing what the running one costs overstates the first stretch of every job.
+ *
+ * ⚠️ **The real ratios sit in a band around the weights, and the preset moves where in the band.**
+ * Measured on one real 1080p source (2026-10-11, `Curtains.mp4`): at `fast`/1-thread the 720p
+ * pass cost 0.52 of the 1080p one; at 2 threads with `veryfast` the encode shrinks, the shared
+ * decode floor's share rises, and the same pair lands nearer 0.63 (extrapolated from the 480p
+ * and decode-only runs). The height weights stay as the model — they bound both regimes — and
+ * the clamp absorbs whatever band the running job is in.
  */
 
 /**

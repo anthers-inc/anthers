@@ -162,8 +162,14 @@ async function ffmpegHls(
 			`scale=-2:${height}`,
 			"-c:v",
 			"libx264",
+			// veryfast, not fast: on the benchmark file (a real 1080p source at the job's own
+			// bitrates) it runs the tall rungs 2.5–3× faster for PSNR 43.51 → 43.14 and SSIM
+			// 0.9836 → 0.9826, visually indistinguishable in matched 1:1 crops; the low rungs
+			// are decode-bound and save almost nothing (57 s → 54 s), which is fine — the
+			// wall time lives in the tall ones. Parker's verdict, 2026-10-11, after
+			// comparing the 720p pair by eye.
 			"-preset",
-			"fast",
+			"veryfast",
 			"-b:v",
 			bitrate,
 			"-c:a",
