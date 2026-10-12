@@ -6,8 +6,11 @@
  * container that is the host's rather than the plan's.** Each decoder and encoder thread holds
  * frames of its own, so memory grows with hardware nobody chose: measured on a 16-core machine,
  * an unpinned 1080p encode peaked at 1,051 MB and a 4K source encoded to 1080p at 1,418 MB. The
- * worker's plan is one shared vCPU, where the extra threads buy no speed at all, and pinned to
- * one thread the same two encodes peaked at 381 MB and 400 MB.
+ * worker's plan carries two dedicated vCPUs, so the pin is two; every ffmpeg below reports
+ * against threads anyway — extra threads beyond the plan buy no speed and only hold frames.
+ * Pinned to two threads a 1080p encode peaks at ~440 MB (measured on a real 12.5 Mbps 1080p
+ * source), alongside scans, audio and ebooks, each of which run two at a time with their own
+ * pins; the plan's 4 GB carries all of it with room to spare.
  *
  * ⚠️ **The flag is positional, which is why this builds the whole command.** Before `-i` it
  * sets the decoder's threads and after it the encoder's, and pinning only the encoder still
@@ -16,7 +19,7 @@
  */
 
 /** Threads per ffmpeg stage. Raise it with the worker's vCPU count and never above it. */
-export const FFMPEG_THREADS = 1;
+export const FFMPEG_THREADS = 2;
 
 const THREAD_ARGS = ["-threads", String(FFMPEG_THREADS)];
 
