@@ -38,9 +38,27 @@ import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import { isAccessResult, type PostListItem, type Work } from "@anthers/web-shared/types";
 import { DocumentTextIcon, LinkIcon, PlayIcon } from "@heroicons/react/24/solid";
-import type { ReactNode } from "react";
+import {
+	type ReactNode,
+	type PointerEvent as ReactPointerEvent,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
+import { useMeteredBudget } from "../../lib/public-access";
+import {
+	activeTilePreview,
+	PREVIEW_HOVER_DELAY_MS,
+	requestTilePreview,
+	subscribeTilePreview,
+	tilePreviewPlayable,
+} from "../../lib/tile-preview";
 import { contentTypeMeta } from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
+import TileHoverPreview from "./TileHoverPreview";
 
 /** One entry of the feed: a release of a Work, or a post. */
 type FeedEntry = { kind: "post" | "release"; id: number } & Record<string, unknown>;
@@ -102,7 +120,7 @@ function IconPosterBand({ type }: { type: string }) {
 }
 
 /** Music and audio: a soft gradient, the type's icon, and a decorative waveform. */
-function ListenPosterBand({ type }: { type: string }) {
+function ListenPosterBand({ type, playing = false }: { type: string; playing?: boolean }) {
 	const { Icon, label } = contentTypeMeta(type);
 	return (
 		<div className="aspect-video relative flex flex-col items-center justify-center gap-2 overflow-hidden bg-gradient-to-br from-secondary/25 to-primary/15">
@@ -110,13 +128,21 @@ function ListenPosterBand({ type }: { type: string }) {
 			<span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-base-content/40">
 				{label}
 			</span>
-			<div className="absolute inset-x-4 bottom-3 flex items-end gap-[3px] h-8 opacity-35">
+			<div className="absolute inset-x-4 bottom-3 flex items-end gap-[3px] h-8">
 				{DECORATIVE_WAVEFORM.map((h, i) => (
 					<div
 						// biome-ignore lint/suspicious/noArrayIndexKey: the waveform is a static decorative list, never reordered
 						key={i}
-						className="flex-1 rounded-full bg-base-content/40"
-						style={{ height: `${h}%` }}
+						// The waveform lights up from the preview's play state — the
+						// decorative bars step with the shared equalizer motion while the
+						// tile's audio plays beneath, and stand still when nothing plays.
+						className={`flex-1 rounded-full bg-base-content/40 origin-bottom ${
+							playing ? "opacity-80 motion-safe:animate-eq-bar" : "opacity-35"
+						}`}
+						style={{
+							height: `${h}%`,
+							...(playing ? { animationDelay: `${i * 40}ms` } : null),
+						}}
 					/>
 				))}
 			</div>
@@ -150,7 +176,19 @@ function TypographicBand({ label, title }: { label: string; title: string | null
 }
 
 /** A thumbnail as the band, with a video platform's duration chip and hover play. */
-function CoverBand({ work, src }: { work: FeedWork; src: string }) {
+function CoverBand({
+	work,
+	src,
+	previewing = false,
+	onDone,
+}: {
+	work: FeedWork;
+	src: string;
+	/** The tile's hover preview is playing — the in-band player replaces this band's picture. */
+	previewing?: boolean;
+	/** The preview's finished-for-good callback (fatal failure, or the video ended). */
+	onDone: () => void;
+}) {
 	const duration = work.type === "video" ? durationLabel(work.durationSeconds) : "";
 	// The play affordance belongs to what actually plays: a covered video or a
 	// listened (audio-family) Work. Everything else a thumbnail can stand for — a
@@ -161,6 +199,12 @@ function CoverBand({ work, src }: { work: FeedWork; src: string }) {
 	return (
 		<div className="relative aspect-video bg-base-300">
 			<img src={src} alt="" className="w-full h-full object-cover" />
+			{previewing && (
+				<TileHoverPreview
+					work={{ id: work.id, type: work.type, creatorId: work.creatorId ?? null }}
+					onDone={onDone}
+				/>
+			)}
 			{playable && (
 				<div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
 			)}
@@ -169,7 +213,7 @@ function CoverBand({ work, src }: { work: FeedWork; src: string }) {
 					{duration}
 				</span>
 			)}
-			{playable && (
+			{playable && !previewing && (
 				<div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
 					<div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
 						<PlayIcon className="w-5 h-5 text-black ml-0.5" />
@@ -194,7 +238,17 @@ function ContentBand({ text }: { text: string }) {
 	);
 }
 
-function ReleaseBand({ work }: { work: FeedWork }) {
+function ReleaseBand({
+	work,
+	previewing = false,
+	onDone,
+}: {
+	work: FeedWork;
+	/** The tile's hover preview is playing — the band hosts the in-place player. */
+	previewing?: boolean;
+	/** The preview's finished-for-good callback, passed only where the band is actually visible. */
+	onDone: () => void;
+}) {
 	const { prefs } = useContentPreferences();
 	// Locked-to-the-user and veiled handling match WorkCard's, including the
 	// signed-out visitor rule (`presentsAsLocked`) and the
@@ -225,6 +279,11 @@ function ReleaseBand({ work }: { work: FeedWork }) {
 	}
 	const veil = coverFor(prefs, work);
 	if (veil) {
+		// No preview under a veil: the band is blurred behind an opaque reveal
+		// overlay, so anything mounted inside would stream bytes and register
+		// attention for content the user cannot see. The preview exists only where
+		// the band is actually shown; revealing (the veil's own click) returns the
+		// pointer to a tile whose next enter previews normally.
 		return (
 			<MaturityVeil
 				maturity={work.maturity}
@@ -233,16 +292,17 @@ function ReleaseBand({ work }: { work: FeedWork }) {
 				className="aspect-video"
 			>
 				{artwork ? (
-					<CoverBand work={work} src={artwork} />
+					<CoverBand work={work} src={artwork} onDone={onDone} />
 				) : (
 					<DecorativeArtworkFallback work={work} type={work.type} />
 				)}
 			</MaturityVeil>
 		);
 	}
-	if (artwork) return <CoverBand work={work} src={artwork} />;
+	if (artwork)
+		return <CoverBand work={work} src={artwork} previewing={previewing} onDone={onDone} />;
 	// No artwork: the band is the type's poster instead.
-	if (isListened(work.type)) return <ListenPosterBand type={work.type} />;
+	if (isListened(work.type)) return <ListenPosterBand type={work.type} playing={previewing} />;
 	if (work.type === "text") {
 		return <TypographicBand label={contentTypeMeta(work.type).label} title={work.title} />;
 	}
@@ -319,58 +379,128 @@ function creatorLabel(creator: { handle: string; displayName?: string | null }):
 	return creator.displayName || creator.handle || "?";
 }
 
-export default function FeedTile({ entry }: { entry: FeedEntry }) {
-	// The hover highlight (Parker, against YouTube's own row): the tile gains a soft
-	// background tint and a hairline outline — nothing more; no type plays a hover
-	// overlay that its content cannot answer. The band sits inset from the tile's
-	// rounded edge by the tile's own padding, so the tint reads AROUND the preview
-	// the way YouTube's tinted frame reads around a thumbnail.
+/**
+ * The release tile: the grid entry for a released Work, carrying the hover
+ * preview's wiring because a release is the one entry kind that plays.
+ *
+ * Preview hover rules (Parker, 2026-10-12): a deliberate cursor hover only —
+ * a 500 ms hold ships the same bytes the tile poster fronts, a glance in
+ * transit never does — one tile playing at a time, and full teardown on
+ * leave. Never autoplay at any scroll position, mobile or desktop: that would
+ * be the engagement mechanic this platform is built to not have.
+ */
+function ReleaseTile({ entry }: { entry: FeedEntry }) {
+	const work = entry as unknown as FeedWork;
+	const { Icon, label } = contentTypeMeta(work.type);
+	// A text Work with no artist-chosen thumbnail shows its title in the band,
+	// so the body does not repeat it — same rule the post tile keeps.
+	const bandIsTypographic = work.type === "text" && !work.thumbnail;
+
+	// ── The hover preview's state ───────────────────────────────────────────────
+	//
+	// The gate reads this render's access verdict and the meter store; the store
+	// read is what keeps the one-at-a-time rule without any tile knowing another
+	// exists — each tile only ever compares its key to the singleton's.
+	const budget = useMeteredBudget();
+	const previewKey = `release-${work.id}`;
+	const previewable = useMemo(
+		() =>
+			tilePreviewPlayable({
+				type: work.type,
+				access: isAccessResult(work.access) ? work.access : null,
+				budget,
+			}),
+		[work.type, work.access, budget],
+	);
+	// Hover preview is a cursor affordance: a deliberate pointer hover, which
+	// touch never produces (a tap enters and immediately navigates anyway).
+	const [hoverCapable] = useState(
+		() =>
+			typeof matchMedia !== "undefined" && matchMedia("(hover: hover) and (pointer: fine)").matches,
+	);
+	const activePreviewKey = useSyncExternalStore(subscribeTilePreview, activeTilePreview);
+	const previewing = previewable && hoverCapable && activePreviewKey === previewKey;
+
+	// The leave/unmount teardown, guarded by an active check so a tile whose
+	// preview the store already took never clears the tile that took its place.
+	const endPreview = useCallback(() => {
+		if (activeTilePreview() === previewKey) requestTilePreview(null);
+	}, [previewKey]);
+	const timerRef = useRef<number | null>(null);
+	useEffect(
+		() => () => {
+			if (timerRef.current != null) window.clearTimeout(timerRef.current);
+			if (activeTilePreview() === previewKey) requestTilePreview(null);
+		},
+		[previewKey],
+	);
+
+	// A deliberate cursor hover: pointer events rather than mouseenter, so the
+	// tap that touch produces never schedules a stream. Mouse and pen both count
+	// — they are both cursors; touch is not.
+	const onPointerEnter = (e: ReactPointerEvent) => {
+		if (!previewable || e.pointerType === "touch") return;
+		if (timerRef.current != null) window.clearTimeout(timerRef.current);
+		timerRef.current = window.setTimeout(() => {
+			timerRef.current = null;
+			// One tile at a time: asking the store replaces whatever played.
+			requestTilePreview(previewKey);
+		}, PREVIEW_HOVER_DELAY_MS);
+	};
+	const onPointerLeave = () => {
+		if (timerRef.current != null) {
+			window.clearTimeout(timerRef.current);
+			timerRef.current = null;
+		}
+		endPreview();
+	};
+
 	const tileClass =
 		"group flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden";
-	if (entry.kind === "release") {
-		const work = entry as unknown as FeedWork;
-		const { Icon, label } = contentTypeMeta(work.type);
-		// A text Work with no artist-chosen thumbnail shows its title in the band,
-		// so the body does not repeat it — same rule the post tile keeps.
-		const bandIsTypographic = work.type === "text" && !work.thumbnail;
-		return (
-			<Link to={workUrl(work)} className={tileClass}>
-				<div className="rounded-lg overflow-hidden">
-					<ReleaseBand work={work} />
-				</div>
-				<TileBody>
-					<MetaRow
-						avatar={work.creator?.avatar}
-						name={creatorLabel(work.creator ?? { handle: "?" })}
-						date={compactDate(work.originallyReleased ?? work.releasedAt)}
-					/>
-					{!bandIsTypographic && work.title && (
-						<h3 className="font-semibold text-sm leading-snug line-clamp-2">{work.title}</h3>
+	return (
+		<Link
+			to={workUrl(work)}
+			className={tileClass}
+			onPointerEnter={onPointerEnter}
+			onPointerLeave={onPointerLeave}
+		>
+			<div className="rounded-lg overflow-hidden">
+				<ReleaseBand work={work} previewing={previewing} onDone={endPreview} />
+			</div>
+			<TileBody>
+				<MetaRow
+					avatar={work.creator?.avatar}
+					name={creatorLabel(work.creator ?? { handle: "?" })}
+					date={compactDate(work.originallyReleased ?? work.releasedAt)}
+				/>
+				{!bandIsTypographic && work.title && (
+					<h3 className="font-semibold text-sm leading-snug line-clamp-2">{work.title}</h3>
+				)}
+				<div className="flex items-center gap-1.5 mt-auto pt-1 flex-wrap">
+					<span className="badge badge-sm gap-1">
+						<Icon className="w-3 h-3" />
+						{label}
+					</span>
+					<PricingBadge access={isAccessResult(work.access) ? work.access : null} />
+					{/* The goods store's own ask, standing where a digital Work's price badge
+					    stands: the purchase gates receiving the thing, not seeing it, so the
+					    badge says buy rather than lock. The store's list prices are the source;
+					    the tile shows only the cheapest, since no color is picked here. */}
+					{work.type === "physical" && work.merch?.fromPrice && (
+						<span className="badge badge-sm badge-secondary">from ${work.merch.fromPrice}</span>
 					)}
-					<div className="flex items-center gap-1.5 mt-auto pt-1 flex-wrap">
-						<span className="badge badge-sm gap-1">
-							<Icon className="w-3 h-3" />
-							{label}
+					{work.type === "text" && work.estimatedReadMinutes ? (
+						<span className="text-xs text-base-content/40">
+							{work.estimatedReadMinutes} min read
 						</span>
-						<PricingBadge access={isAccessResult(work.access) ? work.access : null} />
-						{/* The goods store's own ask, standing where a digital Work's price badge
-						    stands: the purchase gates receiving the thing, not seeing it, so the
-						    badge says buy rather than lock. The store's list prices are the source;
-						    the tile shows only the cheapest, since no color is picked here. */}
-						{work.type === "physical" && work.merch?.fromPrice && (
-							<span className="badge badge-sm badge-secondary">from ${work.merch.fromPrice}</span>
-						)}
-						{work.type === "text" && work.estimatedReadMinutes ? (
-							<span className="text-xs text-base-content/40">
-								{work.estimatedReadMinutes} min read
-							</span>
-						) : null}
-					</div>
-				</TileBody>
-			</Link>
-		);
-	}
+					) : null}
+				</div>
+			</TileBody>
+		</Link>
+	);
+}
 
+function PostTile({ entry }: { entry: FeedEntry }) {
 	const post = entry as unknown as FeedPost;
 	// The typographic band is the title (a post with a thumbnail or body content
 	// has one of those as its art instead); repeating it beneath itself reads as
@@ -380,6 +510,13 @@ export default function FeedTile({ entry }: { entry: FeedEntry }) {
 	// post's ContentBand — the card adds nothing; when the band is a thumbnail, the
 	// card's excerpt is the tile's only text.
 	const bandCarriesContent = Boolean(post.thumbnail) === false && Boolean(post.excerpt);
+	// The hover highlight (Parker, against YouTube's own row): the tile gains a soft
+	// background tint and a hairline outline — nothing more; no type plays a hover
+	// overlay that its content cannot answer. The band sits inset from the tile's
+	// rounded edge by the tile's own padding, so the tint reads AROUND the preview
+	// the way YouTube's tinted frame reads around a thumbnail.
+	const tileClass =
+		"group flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden";
 	return (
 		<Link to={postUrl(post)} className={tileClass}>
 			<div className="rounded-lg overflow-hidden">
@@ -410,4 +547,9 @@ export default function FeedTile({ entry }: { entry: FeedEntry }) {
 			</TileBody>
 		</Link>
 	);
+}
+
+export default function FeedTile({ entry }: { entry: FeedEntry }) {
+	if (entry.kind === "release") return <ReleaseTile entry={entry} />;
+	return <PostTile entry={entry} />;
 }
