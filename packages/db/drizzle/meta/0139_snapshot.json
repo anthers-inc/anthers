@@ -1,5 +1,5 @@
 {
-  "id": "14addc14-fb63-4f25-953e-3e852e3ec058",
+  "id": "544f4c31-861c-4972-a7a2-7628df59bd59",
   "prevId": "b3a3709c-3869-4b91-aa3b-8e00b39d2d4c",
   "version": "7",
   "dialect": "postgresql",
@@ -9339,27 +9339,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "idx_upload_sessions_resume": {
-          "name": "idx_upload_sessions_resume",
-          "columns": [
-            {
-              "expression": "creator_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "client_sha256",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -10831,6 +10810,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "interrupted_gracefully": {
+          "name": "interrupted_gracefully",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created_at": {
           "name": "created_at",

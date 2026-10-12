@@ -796,7 +796,21 @@ export const transcodingJobs = pgTable(
 		// How many times the boot sweep has handed this job back to a handler. The bound the
 		// row's own life is measured against: a file that cannot fit any worker, or is
 		// genuinely corrupt, would otherwise be resumed on every restart forever.
+		//
+		// ⚠️ The ceiling counts CRASH-resumes only. `interrupted_gracefully` (below) is the
+		// deploy bounce's pass-through: the worker sets it on the rows it leaves behind at a
+		// graceful (SIGTERM) stop, and the boot sweep resumes those rows WITHOUT spending a
+		// slot — a deploy landing mid-transcode is a normal event, and charging it here is how
+		// six real uploads all reached resumeCount 2 of 3 during the 2026-10-10 burst.
 		resumeCount: integer("resume_count").notNull().default(0),
+		// Set by the worker's SHUTDOWN path for every row it leaves in pending/processing —
+		// the record that the previous worker was stopped deliberately (SIGTERM: a deploy,
+		// a manual restart) and the row was therefore bounced benignly. A hard kill (OOM kill,
+		// the disk-fill container replacement, a crash) has no shutdown path, so an unflagged
+		// row is the sweep's evidence of a crash resume. Cleared wherever the row is acted on
+		// again — the boot sweep on a resume-send, and each handler when it claims the row —
+		// so a stale flag can never stand in for the interruption it did not describe.
+		interruptedGracefully: boolean("interrupted_gracefully").notNull().default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},

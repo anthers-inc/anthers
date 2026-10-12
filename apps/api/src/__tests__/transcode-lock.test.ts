@@ -22,6 +22,7 @@ import { client, db } from "@anthers/db/client";
 import { transcodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
+import { MAX_TRANSCODE_RESUMES } from "../jobs/resume-orphans";
 import {
 	isTranscodeCompleted,
 	TRANSCODE_LOCK_KEY_BASE,
@@ -155,6 +156,48 @@ describe("the re-delivery's claim re-check", () => {
 				.from(transcodingJobs)
 				.where(eq(transcodingJobs.id, jobId));
 			expect(row.status).toBe("completed");
+		},
+		DB_SETUP_TIMEOUT,
+	);
+
+	it(
+		"does not resurrect a row the boot sweep finally failed at its resume bound",
+		async () => {
+			// 🚨 The claim-time guard this suite's header does not yet describe: a row the
+			// sweep failed as exhausted — its crash resumes spent, canned message left —
+			// must not be resurrected by a stale pg-boss redelivery, which is exactly the
+			// re-run that keeps a worker-crashing file in a crash loop after the ceiling
+			// has already stopped its recovery. A clean resolve is the assertion: nothing
+			// may touch the failed row's state.
+			const jobId = await makeJob("failed", "entry-exhausted-skip");
+			await db
+				.update(transcodingJobs)
+				.set({ resumeCount: MAX_TRANSCODE_RESUMES })
+				.where(eq(transcodingJobs.id, jobId));
+
+			await transcodeVideo({ jobId });
+
+			const [row] = await db
+				.select({ status: transcodingJobs.status, resumeCount: transcodingJobs.resumeCount })
+				.from(transcodingJobs)
+				.where(eq(transcodingJobs.id, jobId));
+			expect(row.status).toBe("failed");
+			expect(row.resumeCount).toBe(MAX_TRANSCODE_RESUMES);
+		},
+		DB_SETUP_TIMEOUT,
+	);
+
+	it(
+		"still re-runs a failed row BELOW its resume bound — the queue's own retry self-healing",
+		async () => {
+			// The counterweight guard: a handler refusal from a possibly-transient cause
+			// stays inside its job's retry budget, and re-running is how a transient
+			// failure heals. Proven by the body RUNNING — the row is `failed` and its Work
+			// carries no source, so reaching the body throws from the source check; a
+			// wrongly-broadened skip would resolve cleanly instead.
+			const jobId = await makeJob("failed", "entry-below-bound-reruns");
+
+			await expect(transcodeVideo({ jobId })).rejects.toThrow("No source file on content item");
 		},
 		DB_SETUP_TIMEOUT,
 	);
