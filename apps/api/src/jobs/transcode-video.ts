@@ -497,7 +497,6 @@ async function runTranscode(data: TranscodeVideoData) {
 		const perVariant = (spanEnd - spanStart) / variants.length;
 		const heights = variants.map((v) => v.height);
 		const clampEta = createEtaClamp();
-		let encoding = true;
 		let lastWrite: Promise<unknown> = Promise.resolve();
 		for (let i = 0; i < variants.length; i++) {
 			// A run that lost its delivery between variants leaves the encode loop here;
@@ -507,6 +506,18 @@ async function runTranscode(data: TranscodeVideoData) {
 			const variantBase = spanStart + i * perVariant;
 			let lastPct = -1;
 			let lastWriteMs = 0;
+			// Per-variant, and flipped before this variant's post-encode writes: a tick
+			// reported once its variant's ffmpeg has exited is stale by definition (the
+			// variant-end write and everything after supersede it), and it must queue
+			// NOTHING. The reporting loop inside `ffmpegHls` is detached and keeps draining
+			// the dead process's buffered stdout after this await resolves, so without the
+			// per-variant flip its late ticks would re-enqueue writes with no one waiting
+			// on them — landing through the estimate-clear write and the completion write,
+			// where a final row reading a mid-ladder progress and a stale estimate is a
+			// bug the real 2026-10-11 job 15 carried. One shared flag could not do this:
+			// a stale tick draining during the AUDIO pass would still read the encode
+			// flag as true, which is exactly the window the old shape leaked through.
+			let variantReporting = true;
 			await ffmpegHls(
 				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
 				outputDir,
@@ -514,7 +525,7 @@ async function runTranscode(data: TranscodeVideoData) {
 				v.bitrate,
 				v.name,
 				(outSec, speed) => {
-					if (duration <= 0 || !encoding || superseded) return;
+					if (duration <= 0 || !variantReporting || superseded) return;
 					const frac = Math.min(1, outSec / duration);
 					const pct = Math.min(spanEnd - 1, Math.round(variantBase + frac * perVariant));
 					const eta = clampEta(remainingEncodeSeconds(heights, i, outSec, duration, speed));
@@ -532,6 +543,7 @@ async function runTranscode(data: TranscodeVideoData) {
 					}
 				},
 			);
+			variantReporting = false;
 			await updateJobProgress(jobId, Math.round(spanStart + (i + 1) * perVariant));
 			// This variant's segments are off the disk before the next variant's encode
 			// grows the directory again — the whole point of uploading per variant.
@@ -563,8 +575,9 @@ async function runTranscode(data: TranscodeVideoData) {
 		// ⚠️ **The estimate covers the encoding alone, so it is cleared here.** Uploading the
 		// segments takes a time nothing measures, and the last estimate the
 		// encode wrote, usually a second or two, would otherwise stand for as long as they take.
-		// A progress reading still in flight is let land first, or it could write that figure back.
-		encoding = false;
+		// A write the last variant queued is let land first, or it could write its figure
+		// over the clear. Every tick whose variant has ended was already stopped at the
+		// queueing step, so nothing enqueued after this line exists.
 		await lastWrite;
 		await db
 			.update(transcodingJobs)
