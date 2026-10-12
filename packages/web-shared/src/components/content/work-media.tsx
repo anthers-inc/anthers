@@ -226,6 +226,13 @@ export function WorkFileSection({
 					You can go on editing and move around the Studio while it uploads. Keep this tab open
 					until it finishes, because closing it stops the upload.
 				</p>
+				<button
+					type="button"
+					className="btn btn-sm mt-2"
+					onClick={() => workUploads.cancel(upload.id)}
+				>
+					Cancel the upload
+				</button>
 			</FormField>
 		);
 	}

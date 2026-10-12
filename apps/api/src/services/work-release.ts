@@ -135,9 +135,7 @@ export async function releaseRefusal(
 			// so nothing will finish it either — the fix is theirs (cancel was the exit;
 			// release again means replace the media or re-process it), and waiting would be
 			// the same forever-scheduled shape the failure was.
-			const creatorStalled = unready.some(
-				(u) => u.status === "failed" || u.status === "canceled",
-			);
+			const creatorStalled = unready.some((u) => u.status === "failed" || u.status === "canceled");
 			return {
 				status: 409,
 				body: {

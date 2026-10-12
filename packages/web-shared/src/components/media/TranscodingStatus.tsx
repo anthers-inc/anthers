@@ -55,6 +55,15 @@ export default function TranscodingStatus({
 					{errorMessage && <span className="text-xs text-base-content/50">{errorMessage}</span>}
 				</div>
 			)}
+
+			{status === "canceled" && (
+				<div className="flex flex-col gap-1">
+					<span className="text-sm font-medium">Processing was canceled</span>
+					<span className="text-xs text-base-content/50">
+						Replace the media to start it again, or remove the file.
+					</span>
+				</div>
+			)}
 		</div>
 	);
 }

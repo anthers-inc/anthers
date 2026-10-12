@@ -36,11 +36,14 @@ const PART_CONCURRENCY = 3;
 /** The whole file's SHA-256, read in slices. Web Crypto wants the entire buffer, which
  * a multi-gigabyte file cannot offer; a chained hasher takes slices instead and yields
  * between them, so the page stays alive while a read pass ahead of the upload runs. */
-export async function wholeFileSha256Hex(file: File): Promise<string> {
+export async function wholeFileSha256Hex(file: File, signal?: AbortSignal): Promise<string> {
 	const hasher = await createSHA256();
 	hasher.init();
 	const CHUNK = 8 * 1024 * 1024;
 	for (let at = 0; at < file.size; at += CHUNK) {
+		// A cancel checks between slices: it stops the read pass as a whole, at chunk
+		// granularity, which is as close as this loop can honestly come.
+		if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 		const bytes = await file.slice(at, Math.min(at + CHUNK, file.size)).arrayBuffer();
 		hasher.update(new Uint8Array(bytes));
 	}
@@ -51,12 +54,13 @@ export async function uploadMediaFile(
 	file: File,
 	mediaType: "video" | "audio" | "asset",
 	onProgress?: (percent: number | null) => void,
+	signal?: AbortSignal,
 ): Promise<string> {
-	// The digest comes first — it is the resume key, so it must exist before the plan
-	// is asked for. No progress is reportable yet, so the caller sees the
-	// indeterminate bar rather than a misleading 0%.
+	// The digest comes first — it is the resume key, so it must exist before the plan is
+	// asked for. No progress is reportable yet, so the caller sees the indeterminate bar
+	// rather than a misleading 0%.
 	onProgress?.(null);
-	const digest = `sha-${await wholeFileSha256Hex(file)}`;
+	const digest = `sha-${await wholeFileSha256Hex(file, signal)}`;
 
 	const res = await client.api.content["media-upload"].session.start.$post({
 		json: {
@@ -86,6 +90,7 @@ export async function uploadMediaFile(
 			"/api/content/media-upload/direct",
 			formData,
 			onProgress,
+			signal,
 		);
 		return result.key;
 	}
@@ -100,6 +105,7 @@ export async function uploadMediaFile(
 			digest,
 		},
 		onProgress,
+		signal,
 	);
 }
 
@@ -113,6 +119,7 @@ async function uploadSessionPlan(
 		digest: string;
 	},
 	onProgress?: (percent: number | null) => void,
+	signal?: AbortSignal,
 ): Promise<string> {
 	// An empty plan is a protocol bug the server must never produce — a session with a
 	// sessionId and no parts is a session that completes into nothing.
@@ -138,6 +145,7 @@ async function uploadSessionPlan(
 		const queue = plan.parts.filter((part) => !held.has(part.number));
 		const workers = Array.from({ length: PART_CONCURRENCY }, async () => {
 			for (;;) {
+				if (signal?.aborted || aborted) return;
 				const next = queue.shift();
 				if (!next || aborted) return;
 				const end = Math.min(next.number * plan.partSize, file.size);
@@ -145,15 +153,20 @@ async function uploadSessionPlan(
 
 				for (let attempt = 1; attempt <= 3; attempt++) {
 					try {
-						const { etag, bytes } = await xhrUploadPart(next.url, blob, (chunkLoaded) => {
-							if (onProgress) {
-								onProgress(
-									// Progress is whole-file honest: delivered = parts done +
-									// the in-flight part's own loaded counter.
-									percentOf(deliveredBytes + bytes + chunkLoaded, file.size),
-								);
-							}
-						});
+						const { etag, bytes } = await xhrUploadPart(
+							next.url,
+							blob,
+							(chunkLoaded) => {
+								if (onProgress) {
+									onProgress(
+										// Progress is whole-file honest: delivered = parts done +
+										// the in-flight part's own loaded counter.
+										percentOf(deliveredBytes + bytes + chunkLoaded, file.size),
+									);
+								}
+							},
+							signal,
+						);
 						uploaded[next.number - 1] = { number: next.number, ...(etag ? { etag } : {}) };
 						deliveredBytes += bytes;
 						break;
@@ -199,9 +212,13 @@ function xhrUploadPart(
 	url: string,
 	blob: Blob,
 	onLoaded: (chunkLoaded: number) => void,
+	signal?: AbortSignal,
 ): Promise<{ etag: string | null; bytes: number }> {
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
+		// A canceled upload aborts its own requests on the wire; the rejection is the
+		// ordinary error path, and the session stays open for the sweeper.
+		signal?.addEventListener("abort", () => xhr.abort());
 		xhr.open("PUT", url);
 		xhr.upload.addEventListener("progress", (e) => {
 			if (e.lengthComputable) onLoaded(e.loaded);
@@ -222,6 +239,7 @@ function xhrUploadFormData<T>(
 	url: string,
 	formData: FormData,
 	onProgress?: (percent: number) => void,
+	signal?: AbortSignal,
 ): Promise<T> {
 	return new Promise((resolve, reject) => {
 		const xhr = new XMLHttpRequest();
@@ -232,6 +250,7 @@ function xhrUploadFormData<T>(
 		xhr.open("POST", fullUrl);
 		xhr.withCredentials = apiSendsCookies();
 		for (const [k, v] of Object.entries(apiAuthHeaders())) xhr.setRequestHeader(k, v);
+		signal?.addEventListener("abort", () => xhr.abort());
 
 		xhr.upload.addEventListener("progress", (e) => {
 			if (e.lengthComputable && onProgress) {

@@ -302,7 +302,9 @@ export async function renderPaged(data: RenderPagedData) {
 		// run's next render rather than here — past this line the run finishes and writes
 		// `completed`, the settlement that is consistent with the pages it is replacing.
 		if (!(await stillProcessing(jobId))) {
-			console.log(`[render-paged] job ${jobId} no longer processing; abandoning before the page pass`);
+			console.log(
+				`[render-paged] job ${jobId} no longer processing; abandoning before the page pass`,
+			);
 			return;
 		}
 		await db.delete(workPages).where(eq(workPages.workId, work.id));

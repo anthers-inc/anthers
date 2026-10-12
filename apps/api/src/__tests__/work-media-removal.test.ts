@@ -149,7 +149,10 @@ describe("remove an unpublished Work's media", () => {
 				// leaving the release sweep waiting forever.
 				expect(row.scheduledReleaseAt).toBeNull();
 
-				const jobs = await db.select().from(transcodingJobs).where(eq(transcodingJobs.workId, work.id));
+				const jobs = await db
+					.select()
+					.from(transcodingJobs)
+					.where(eq(transcodingJobs.workId, work.id));
 				expect(jobs).toHaveLength(0);
 
 				expect(deleted).toContain(source);
@@ -174,7 +177,13 @@ describe("remove an unpublished Work's media", () => {
 			const prefix = `creators/${creatorId}/ebook/${work.id}/run/`;
 			const [page] = await db
 				.insert(workPages)
-				.values({ workId: work.id, pageNumber: 1, file: `${prefix}page-0001.jpg`, width: 800, height: 1200 })
+				.values({
+					workId: work.id,
+					pageNumber: 1,
+					file: `${prefix}page-0001.jpg`,
+					width: 800,
+					height: 1200,
+				})
 				.returning({ id: workPages.id });
 			await db.insert(workPanels).values({
 				pageId: page.id,
@@ -194,8 +203,12 @@ describe("remove an unpublished Work's media", () => {
 				});
 				expect(res.status).toBe(200);
 
-				expect((await db.select().from(workSourceFiles).where(eq(workSourceFiles.workId, work.id)))).toHaveLength(0);
-				expect((await db.select().from(workPages).where(eq(workPages.workId, work.id)))).toHaveLength(0);
+				expect(
+					await db.select().from(workSourceFiles).where(eq(workSourceFiles.workId, work.id)),
+				).toHaveLength(0);
+				expect(await db.select().from(workPages).where(eq(workPages.workId, work.id))).toHaveLength(
+					0,
+				);
 				// The panels cascade off their page; the sweep's ebook prefix covers the page
 				// objects and everything else that run wrote.
 				expect(sweptPrefixes).toContain(`creators/${creatorId}/ebook/${work.id}/`);
@@ -236,10 +249,7 @@ describe("remove an unpublished Work's media", () => {
 
 	it("refuses a quarantined Work with a 404 that says neither yes nor no", async () => {
 		const work = await makeWork({ type: "video", title: "held", visibility: "private" });
-		await db
-			.update(works)
-			.set({ quarantineStatus: "quarantined" })
-			.where(eq(works.id, work.id));
+		await db.update(works).set({ quarantineStatus: "quarantined" }).where(eq(works.id, work.id));
 		captureStorage();
 		try {
 			const res = await req(`/api/content/works/${work.id}/media`, {

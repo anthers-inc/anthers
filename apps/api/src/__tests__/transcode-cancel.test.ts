@@ -16,10 +16,10 @@ import { db } from "@anthers/db/client";
 import { transcodingJobs, users, works } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import app from "../index";
-import { processAudio } from "../jobs/process-audio";
-import { isTranscodeSettled, transcodeVideo } from "../jobs/transcode-video";
-import { renderPaged } from "../jobs/render-paged";
 import { ingestEbook } from "../jobs/ingest-ebook";
+import { processAudio } from "../jobs/process-audio";
+import { renderPaged } from "../jobs/render-paged";
+import { isTranscodeSettled, transcodeVideo } from "../jobs/transcode-video";
 import { releaseRefusal } from "../services/work-release";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -49,9 +49,7 @@ async function makeJob(
 	status = "pending",
 	workType: "video" | "game" = "game",
 ): Promise<{ workId: number; jobId: number }> {
-	const workId = (
-		await insertWork({ creatorId, type: workType, title, visibility: "private" })
-	).id;
+	const workId = (await insertWork({ creatorId, type: workType, title, visibility: "private" })).id;
 	createdWorkIds.push(workId);
 	const [job] = await db
 		.insert(transcodingJobs)
@@ -173,7 +171,10 @@ describe("canceling processing", () => {
 
 	it("a canceled latest job refuses release as the creator's to fix, not something to wait for", async () => {
 		const { workId } = await makeJob("video", "gate-canceled", "canceled", "video");
-		await db.update(works).set({ sourceKey: `creators/${creatorId}/media/gate.mp4` }).where(eq(works.id, workId));
+		await db
+			.update(works)
+			.set({ sourceKey: `creators/${creatorId}/media/gate.mp4` })
+			.where(eq(works.id, workId));
 		const [row] = await db.select().from(works).where(eq(works.id, workId));
 		const refusal = await releaseRefusal(row, { id: creatorId, isCreator: true });
 		expect(refusal?.body).toMatchObject({ code: "media_not_ready" });

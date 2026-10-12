@@ -406,10 +406,68 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			transcoding: fresh.transcoding,
 			pageCount: fresh.pageCount,
 			webBuilds: fresh.webBuilds,
+			scheduledReleaseAt: fresh.scheduledReleaseAt,
 		}));
 		if (!thumbnailTouched.current && fresh.thumbnail) {
 			setThumbnailUrl(fresh.thumbnail);
 			setThumbnailPreview(keyToPreview(fresh.thumbnail));
+		}
+	};
+
+	/** Stop a processing run the creator no longer wants — the row shows the canceled state after. */
+	const [cancelBusy, setCancelBusy] = useState(false);
+	const cancelProcessing = async () => {
+		const job = current.transcoding;
+		if (!job || (job.status !== "pending" && job.status !== "processing")) return;
+		setCancelBusy(true);
+		try {
+			const res = await client.api.content.works[":id"].transcoding[":jobId"].$delete({
+				param: { id: String(current.id), jobId: String(job.id) },
+			});
+			if (!res.ok) throw new Error(`cancel answered ${res.status}`);
+			await refreshMedia();
+		} catch {
+			setError("Failed to cancel processing.");
+		} finally {
+			setCancelBusy(false);
+		}
+	};
+
+	/**
+	 * The Work's unpublished test — the gate its media removal rides, decided on the row
+	 * the page is showing (the server re-checks it with `releasedAt`, and a withdrawn
+	 * Work is released's twin in the gate's eyes).
+	 */
+	const unpublished = !current.releasedAt && current.visibility !== "withdrawn";
+
+	/**
+	 * The removal busy state; removeMedia carries its own confirm, so the button cannot
+	 * double-fire the destructive half.
+	 */
+	const [removalBusy, setRemovalBusy] = useState(false);
+	const removeMedia = async () => {
+		if (
+			!confirm(
+				"Remove this Work's media? The file and everything produced from it will be deleted, and the Work goes back to being a draft with no file.",
+			)
+		)
+			return;
+		setRemovalBusy(true);
+		try {
+			const res = await client.api.content.works[":id"].media.$delete({
+				param: { id: String(current.id) },
+			});
+			if (!res.ok) throw new Error(`removal answered ${res.status}`);
+			// An image's face follows its file; clearing the local preview keeps the field
+			// from showing the just-swept object on the way out.
+			thumbnailTouched.current = false;
+			setThumbnailUrl("");
+			setThumbnailPreview(null);
+			await refreshMedia();
+		} catch {
+			setError("Failed to remove the media.");
+		} finally {
+			setRemovalBusy(false);
 		}
 	};
 
@@ -896,13 +954,25 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 							{type === "video" &&
 								current.transcoding &&
 								current.transcoding.status !== "completed" && (
-									<div className="max-w-xl">
+									<div className="max-w-xl space-y-2">
 										<TranscodingStatus
 											status={current.transcoding.status}
 											progress={current.transcoding.progress ?? 0}
 											etaSeconds={current.transcoding.etaSeconds}
 											errorMessage={current.transcoding.errorMessage ?? ""}
 										/>
+										{unpublished &&
+											(current.transcoding.status === "pending" ||
+												current.transcoding.status === "processing") && (
+												<button
+													type="button"
+													className="btn btn-sm"
+													onClick={() => void cancelProcessing()}
+													disabled={cancelBusy}
+												>
+													{cancelBusy ? "Canceling…" : "Cancel processing"}
+												</button>
+											)}
 									</div>
 								)}
 							{/* Comics get a panel-correction surface once the pages are rendered. */}
@@ -912,20 +982,30 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 								</section>
 							)}
 
-							{/* An image is replaced in place, as it could be before it had an upload
-				    step. Other kinds are not offered this: a new video re-encodes, and a
-				    released one would be unplayable while it did. */}
-							{type === "image" && (
-								<div className="max-w-xs">
-									<FileUpload
-										accept={fileRules("image").accept}
-										maxSize={fileRules("image").maxSize}
-										compact
-										label="Replace the image"
-										onFileSelect={(file) =>
-											workUploads.start(current.id, file, { kind: "source", type: "image" })
-										}
-									/>
+							{/* Any file kind is replaced in place: the new source rides the attach
+							    path, which re-runs the kind's processing and sweeps what the old
+							    version left. A replacement's storage follows — no old versions. */}
+							{unpublished && (
+								<div className="flex flex-wrap items-center gap-2">
+									<div className="max-w-xs">
+										<FileUpload
+											accept={fileRules(type).accept}
+											maxSize={fileRules(type).maxSize}
+											compact
+											label={type === "image" ? "Replace the image" : "Replace the file"}
+											onFileSelect={(file) =>
+												workUploads.start(current.id, file, { kind: "source", type })
+											}
+										/>
+									</div>
+									<button
+										type="button"
+										className="btn btn-sm btn-error"
+										onClick={() => void removeMedia()}
+										disabled={removalBusy}
+									>
+										{removalBusy ? "Removing…" : "Remove the media"}
+									</button>
 								</div>
 							)}
 						</>

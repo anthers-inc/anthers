@@ -3618,7 +3618,10 @@ const contentRoutes = new Hono()
 			.where(eq(transcodingJobs.id, jobId));
 
 		const [jobRow] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, jobId));
-		return c.json({ work: await serializeWork(work, [], jobRow, [], deliveryCtx()), job: jobRow }, 200);
+		return c.json(
+			{ work: await serializeWork(work, [], jobRow, [], deliveryCtx()), job: jobRow },
+			200,
+		);
 	})
 
 	/**
@@ -3647,7 +3650,10 @@ const contentRoutes = new Hono()
 		}
 		if (work.releasedAt) {
 			return c.json(
-				{ error: "Only an unpublished Work's media can be removed.", code: "media_removal_published" },
+				{
+					error: "Only an unpublished Work's media can be removed.",
+					code: "media_removal_published",
+				},
 				409,
 			);
 		}
@@ -5296,7 +5302,8 @@ const contentRoutes = new Hono()
 		if (sourceChanged && !data.sourceKey && work.sourceKey) {
 			return c.json(
 				{
-					error: "To remove this Work's media, use the media removal route (DELETE /works/:id/media) rather than clearing the source.",
+					error:
+						"To remove this Work's media, use the media removal route (DELETE /works/:id/media) rather than clearing the source.",
 					code: "source_clear_refused",
 				},
 				400,
