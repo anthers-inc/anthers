@@ -59,7 +59,13 @@ export async function uploadMediaFile(
 	const digest = `sha-${await wholeFileSha256Hex(file)}`;
 
 	const res = await client.api.content["media-upload"].session.start.$post({
-		json: { filename: file.name, contentType: file.type, mediaType, size: file.size, clientSha256: digest },
+		json: {
+			filename: file.name,
+			contentType: file.type,
+			mediaType,
+			size: file.size,
+			clientSha256: digest,
+		},
 	});
 	if (!res.ok) throw new Error("The upload could not start");
 	const plan = (await res.json()) as {

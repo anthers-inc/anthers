@@ -111,16 +111,17 @@ export async function startUploadSession(
 		// Same digest, same size window, still open — the resumed plan is its own, not a
 		// rebuilt one: its part count is what completion's coverage gate demands exactly.
 		const floor = resumable ? (resumable.partCount - 1) * resumable.partSize : -1;
-		if (
-			resumable &&
-			input.size > floor &&
-			input.size <= resumable.partCount * resumable.partSize
-		) {
+		if (resumable && input.size > floor && input.size <= resumable.partCount * resumable.partSize) {
 			const held = await storage.listMultipartParts(resumable.key, resumable.uploadId);
 			const parts = await Promise.all(
 				Array.from({ length: resumable.partCount }, (_, i) => i + 1).map(async (number) => ({
 					number,
-					url: await storage.getPresignedPartUrl(resumable.key, resumable.uploadId, number, PART_URL_TTL_SECONDS),
+					url: await storage.getPresignedPartUrl(
+						resumable.key,
+						resumable.uploadId,
+						number,
+						PART_URL_TTL_SECONDS,
+					),
 				})),
 			);
 			return {

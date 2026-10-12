@@ -248,7 +248,10 @@ describe("resume by digest — the byte-level leg", () => {
 	}
 
 	async function uploadIdOf(sessionId: string): Promise<string> {
-		const [row] = await db.select().from(mediaUploadSessions).where(eq(mediaUploadSessions.id, sessionId));
+		const [row] = await db
+			.select()
+			.from(mediaUploadSessions)
+			.where(eq(mediaUploadSessions.id, sessionId));
 		return row.uploadId;
 	}
 
@@ -300,7 +303,12 @@ describe("resume by digest — the byte-level leg", () => {
 		const session = await open(mismatchCreator, DIGEST, UPLOAD_PART_SIZE);
 		stagePart(await uploadIdOf(session.sessionId), 1, "etag-1");
 		await expect(
-			completeUploadSession(mismatchCreator, session.sessionId, [{ number: 1, etag: "etag-1" }], `sha-${"d".repeat(64)}`),
+			completeUploadSession(
+				mismatchCreator,
+				session.sessionId,
+				[{ number: 1, etag: "etag-1" }],
+				`sha-${"d".repeat(64)}`,
+			),
 		).rejects.toMatchObject({ status: 409 });
 		const [row] = await db
 			.select()
@@ -310,7 +318,12 @@ describe("resume by digest — the byte-level leg", () => {
 
 		// The session's own digest completes it, and the row carries it (already set —
 		// the same value, confirmed rather than changed).
-		await completeUploadSession(mismatchCreator, session.sessionId, [{ number: 1, etag: "etag-1" }], DIGEST);
+		await completeUploadSession(
+			mismatchCreator,
+			session.sessionId,
+			[{ number: 1, etag: "etag-1" }],
+			DIGEST,
+		);
 		const [after] = await db
 			.select()
 			.from(mediaUploadSessions)

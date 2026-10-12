@@ -61,7 +61,7 @@ if (process.env[MODE_ENV] === "1") {
 
 			// No session is an answer no route gives. The direct hand-back is the only door.
 			const unauth = await app.fetch(
-				new Request("http://localhost" + start, {
+				new Request(`http://localhost${start}`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json", Origin: ORIGIN },
 					body: JSON.stringify(body),
@@ -71,7 +71,7 @@ if (process.env[MODE_ENV] === "1") {
 
 			const { cookie } = await createAccount(`upsessLocal_${Date.now().toString(36)}`);
 			const local = await app.fetch(
-				new Request("http://localhost" + start, {
+				new Request(`http://localhost${start}`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
 					body: JSON.stringify(body),
@@ -84,7 +84,7 @@ if (process.env[MODE_ENV] === "1") {
 
 			// A plan with no file in it is no plan at all — the schema refuses it before any door.
 			const invalid = await app.fetch(
-				new Request("http://localhost" + start, {
+				new Request(`http://localhost${start}`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
 					body: JSON.stringify({ ...body, size: 0 }),
@@ -147,9 +147,7 @@ async function runSessionModeSuite(): Promise<void> {
 							`<Part><ETag>${etag}</ETag><PartNumber>${number}</PartNumber><Size>${number}</Size></Part>`,
 					)
 					.join("");
-				return xml(
-					`<ListPartsResult><IsTruncated>false</IsTruncated>${parts}</ListPartsResult>`,
-				);
+				return xml(`<ListPartsResult><IsTruncated>false</IsTruncated>${parts}</ListPartsResult>`);
 			}
 			if (method === "POST" && query.has("uploadId")) {
 				completedUploads.add(query.get("uploadId") ?? "");
@@ -237,9 +235,7 @@ async function runSessionModeSuite(): Promise<void> {
 			};
 			expect(plan.method).toBe("session");
 			expect(plan.sessionId).toMatch(/^[0-9a-f-]{36}$/);
-			expect(plan.key).toMatch(
-				new RegExp(`^creators/${creatorId}/videos/originals/.*\\.mp4$`),
-			);
+			expect(plan.key).toMatch(new RegExp(`^creators/${creatorId}/videos/originals/.*\\.mp4$`));
 			expect(plan.partSize).toBe(UPLOAD_PART_SIZE);
 			expect(plan.parts).toHaveLength(3);
 			for (const [i, part] of plan.parts.entries()) {
@@ -262,8 +258,7 @@ async function runSessionModeSuite(): Promise<void> {
 		it("answers nothing without an account, and refuses a plan that asks for nothing", async () => {
 			expect((await req("/session/start", { auth: null })).status).toBe(401);
 			expect(
-				(await req("/session/start", { auth: creatorCookie, body: { ...BODY, size: 0 } }))
-					.status,
+				(await req("/session/start", { auth: creatorCookie, body: { ...BODY, size: 0 } })).status,
 			).toBe(400);
 		});
 	});
@@ -290,7 +285,11 @@ async function runSessionModeSuite(): Promise<void> {
 				auth: creatorCookie,
 				body: {
 					sessionId: plan.sessionId,
-					parts: [{ number: 2, etag: '"etag-2"' }, { number: 1, etag: '"etag-1"' }, { number: 3, etag: thirdEtag }],
+					parts: [
+						{ number: 2, etag: '"etag-2"' },
+						{ number: 1, etag: '"etag-1"' },
+						{ number: 3, etag: thirdEtag },
+					],
 					clientSha256: `sha-${"a".repeat(64)}`,
 				},
 			});
@@ -341,7 +340,9 @@ async function runSessionModeSuite(): Promise<void> {
 				auth: creatorCookie,
 				body: {
 					sessionId: withHole.sessionId,
-					parts: withHole.parts.slice(0, 2).map((p, i) => ({ number: i + 1, etag: `"etag-${i + 1}"` })),
+					parts: withHole.parts
+						.map((part) => ({ number: part.number, etag: `"etag-${part.number}"` }))
+						.slice(0, 2),
 				},
 			});
 			expect(holey.status).toBe(409);
@@ -419,7 +420,10 @@ async function runSessionModeSuite(): Promise<void> {
 				auth: creatorCookie,
 				body: { ...BODY, clientSha256: digest },
 			});
-			const plan = (await res.json()) as { sessionId: string; parts: Array<{ number: number; url: string }> };
+			const plan = (await res.json()) as {
+				sessionId: string;
+				parts: Array<{ number: number; url: string }>;
+			};
 			for (const part of plan.parts) {
 				await fetch(part.url, { method: "PUT", body: "bytes" });
 			}
@@ -440,12 +444,18 @@ async function runSessionModeSuite(): Promise<void> {
 	describe("abandoning a session", () => {
 		it("frees a session's parts on the creator's say-so, and a repeat abort is a no-op", async () => {
 			const res = await req("/session/start", { auth: creatorCookie });
-			const plan = (await res.json()) as { sessionId: string; parts: Array<{ number: number; url: string }> };
+			const plan = (await res.json()) as {
+				sessionId: string;
+				parts: Array<{ number: number; url: string }>;
+			};
 			for (const part of plan.parts) {
 				await fetch(part.url, { method: "PUT", body: "bytes" });
 			}
 
-			const abort = await req("/session/abort", { auth: creatorCookie, body: { sessionId: plan.sessionId } });
+			const abort = await req("/session/abort", {
+				auth: creatorCookie,
+				body: { sessionId: plan.sessionId },
+			});
 			expect(abort.status).toBe(204);
 			const [row] = await db
 				.select()
@@ -454,7 +464,10 @@ async function runSessionModeSuite(): Promise<void> {
 			expect(row.status).toBe("aborted");
 			expect(heldParts.get(row.uploadId)?.size ?? 0).toBe(0);
 
-			const again = await req("/session/abort", { auth: creatorCookie, body: { sessionId: plan.sessionId } });
+			const again = await req("/session/abort", {
+				auth: creatorCookie,
+				body: { sessionId: plan.sessionId },
+			});
 			expect(again.status).toBe(204);
 		});
 	});
