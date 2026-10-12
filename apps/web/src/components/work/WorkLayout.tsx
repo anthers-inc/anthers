@@ -29,6 +29,7 @@ import { useMediaPlayer } from "../../lib/media-player";
 import { trackFromWork } from "../../lib/tracks";
 import AudioPlayer from "../media/AudioPlayer";
 import ComicReader from "../media/ComicReader";
+import EbookReader from "../media/EbookReader";
 import { PublicAccessFooter } from "../media/PublicAccessNotice";
 import SpokenPlayer from "../media/SpokenPlayer";
 import VideoPlayer from "../media/VideoPlayer";
@@ -396,15 +397,26 @@ export function WorkDeliverable({
 					onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
 				/>
 			)}
-			{isPaged(work.type) && (
-				<ComicReader
-					workId={work.id}
-					pageCount={work.pageCount ?? 0}
-					apiBase={apiBaseUrl()}
-					title={work.title ?? "Untitled"}
-					shareToken={shareToken}
-				/>
-			)}
+			{isPaged(work.type) &&
+				// The ingest's own shape signal: sections exist → the reflow reader on the
+				// vendored foliate-js engine, reading only through the section/asset
+				// ladder; none → the page reader, comic and PDF-shaped ebook alike.
+				(work.type === "ebook" && (work.sectionCount ?? 0) > 0 ? (
+					<EbookReader
+						workId={work.id}
+						apiBase={apiBaseUrl()}
+						title={work.title ?? "Untitled"}
+						shareToken={shareToken}
+					/>
+				) : (
+					<ComicReader
+						workId={work.id}
+						pageCount={work.pageCount ?? 0}
+						apiBase={apiBaseUrl()}
+						title={work.title ?? "Untitled"}
+						shareToken={shareToken}
+					/>
+				))}
 			{work.type === "image" && work.sourceKey && (
 				<img src={work.sourceKey} alt={work.title ?? ""} className="w-full rounded-lg" />
 			)}

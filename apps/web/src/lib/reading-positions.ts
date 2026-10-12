@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Where a reader got to in a paged Work (`comic` and `ebook` — anything the
- * page-image pipeline serves), kept per Work in localStorage on this device.
+ * Where a reader got to in a book Work — the reflow reader and the paged one both.
  *
- * 🚨 **This module is the only writer of the two keys, and `ComicReader` reaches its
- * reads and writes through here rather than owning its own copy.** It was extracted from
- * the reader so a shelf-level view of "how far you got" (the Bookshelf lens's spine
+ * 🚨 **This module is the only writer of the three keys, and the readers reach their
+ * reads and writes through here rather than owning their own copies.** It was extracted
+ * from the reader so a shelf-level view of "how far you got" (the Bookshelf lens's spine
  * markers) can read the same data without a component's private helpers becoming a
  * second surface's API — and so there is one place a later server-backed position store
  * replaces the local one.
@@ -26,10 +25,22 @@
  */
 const READING_PROGRESS_KEY = "anthers_reading_progress";
 const PANEL_PROGRESS_KEY = "anthers_panel_progress";
+const REFLOW_PROGRESS_KEY = "anthers_reflow_progress";
 
 export interface PanelPosition {
 	page: number;
 	panel: number;
+}
+
+/** Where a reader got to in a reflow book, kept per Work on this device. */
+export interface ReflowPosition {
+	/**
+	 * A foliate CFI — a fake one, since reflow sections carry no OPF-derived CFIs, which
+	 * is exactly what the vendored view's own fallback resolves on reopen.
+	 */
+	cfi: string;
+	/** The book-wide 0–1 fraction the shelf marker reads; refreshed alongside the CFI. */
+	fraction: number;
 }
 
 /** The stored page for a Work, or `null` when this device never recorded one. */
@@ -108,4 +119,38 @@ export function readPageFraction(
 	const page = Math.max(readStoredPage(workId) ?? 0, readStoredPanel(workId)?.page ?? 0);
 	if (page <= 0) return null;
 	return Math.min(page / pageCount, 1);
+}
+
+/** The stored reflow position for a Work, or `null` when this device never recorded one. */
+export function readStoredReflow(workId: number): ReflowPosition | null {
+	try {
+		const raw = localStorage.getItem(REFLOW_PROGRESS_KEY);
+		if (!raw) return null;
+		const p = (JSON.parse(raw) as Record<string, ReflowPosition>)[String(workId)];
+		if (p && typeof p.cfi === "string" && p.cfi && typeof p.fraction === "number") return p;
+	} catch {
+		/* Unreadable store — the reflow position reads as never recorded. */
+	}
+	return null;
+}
+
+/** Persist where inside a reflow book a reader got to, CFI and book-wide fraction both. */
+export function writeReflow(workId: number, position: ReflowPosition): void {
+	try {
+		const raw = localStorage.getItem(REFLOW_PROGRESS_KEY);
+		const map = raw ? (JSON.parse(raw) as Record<string, ReflowPosition>) : {};
+		map[String(workId)] = position;
+		localStorage.setItem(REFLOW_PROGRESS_KEY, JSON.stringify(map));
+	} catch {
+		/* Storage disabled — the reader always opens at the book's start. */
+	}
+}
+
+/**
+ * The reflow book's shelf fraction: the stored 0–1 progress, or `null` when never
+ * opened. Unlike a page count a reflow book has no fixed geometry, so the fraction is
+ * written beside the CFI rather than recomputed from a count that changed.
+ */
+export function readReflowFraction(workId: number): number | null {
+	return readStoredReflow(workId)?.fraction ?? null;
 }
