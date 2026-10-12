@@ -152,9 +152,9 @@ export const RESOURCE_THRESHOLDS: readonly ResourceThresholds[] = [
 				soonAt: 75,
 				nowAt: 90,
 				// The evidence-driven history is #259: a 4K encode plus its scan peaked near
-				// 565 MB against a 512 MB plan, which moved the worker to basic-s (2 GB).
-				// Memory is the worker's signal — the queues' peaks add up, and the transcode's
-				// one-thread pin means CPU pressure shows up as queue latency, not CPU%.
+				// 565 MB against a 512 MB plan, which moved the worker to basic-s (2 GB); the
+				// sustained-burn transcode then moved it to 2 dedicated vCPUs (2026-10-11).
+				// Memory is the worker's signal — the queues' peaks add up.
 				remedy: "bigger",
 				precondition: null,
 			},
@@ -167,7 +167,7 @@ export const RESOURCE_THRESHOLDS: readonly ResourceThresholds[] = [
 				precondition: null,
 			},
 		],
-		note: "Memory is the worker's signal: media queue peaks add up (a 4K encode plus its scan once peaked near 565 MB against 512 MB, #259), which is what moved it to basic-s. ffmpeg is pinned to one thread, so CPU pressure shows as queue latency rather than CPU%.",
+		note: "Memory is the worker's signal: media queue peaks add up (a 4K encode plus its scan once peaked near 565 MB against 512 MB, #259). The vCPUs are dedicated and the ffmpeg pin follows the plan (`FFMPEG_THREADS`), so sustained CPU% reads as genuinely saturated cores — the transcode pegged the old shared single vCPU at ~100% for an entire 55-minute job (2026-10-11) and still delivered a quarter of a modern core's work.",
 	},
 	{
 		component: "migrate",
