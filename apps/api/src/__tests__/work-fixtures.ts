@@ -128,6 +128,8 @@ export interface WorkFixture {
 	credits?: WorkCredit[];
 	originallyReleased?: Date | null;
 	metadata?: Record<string, unknown>;
+	/** The alt text of the image an image Work is (`works.image_alt`). */
+	imageAlt?: string;
 }
 
 /** Insert a Work with the identity fields filled in. Returns the inserted row. */
@@ -147,6 +149,7 @@ export async function insertWork(fixture: WorkFixture) {
 			body: fixture.body ?? "",
 			bodyHtml: fixture.bodyHtml ?? "",
 			lyrics: fixture.lyrics ?? "",
+			imageAlt: fixture.imageAlt ?? "",
 			sourceKey: fixture.sourceKey ?? "",
 			sourceOriginalKey: fixture.sourceOriginalKey ?? "",
 			thumbnail:

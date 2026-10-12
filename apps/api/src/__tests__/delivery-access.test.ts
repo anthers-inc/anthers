@@ -253,6 +253,43 @@ describe("Delivery-layer access", () => {
 		expect(work.lyrics).toBe("the open words");
 	});
 
+	/*
+	 * The image's alt text, the same deliverable shape at the column the picture itself
+	 * rides on: it describes pixels the gate withholds, so it goes out and comes back
+	 * with them. The second assertion is again the anti-"blank everything" one.
+	 */
+	it("withholds a locked image Work's description with its image", async () => {
+		const picture = await insertWork({
+			creatorId,
+			type: "image",
+			title: "Locked Picture",
+			description: "The public blurb.",
+			imageAlt: "the gated description",
+			...LOCKED,
+		});
+		const res = await req(`/api/content/works/${picture.id}`, { headers: { Cookie: userCookie } });
+		expect(res.status).toBe(200);
+		const { work } = await res.json();
+		expect(work.access.canAccess).toBe(false);
+		expect(work.imageAlt).toBe("");
+		expect(work.description).toBe("The public blurb.");
+	});
+
+	it("hands the image's description over once the user can reach the picture", async () => {
+		const picture = await insertWork({
+			creatorId,
+			type: "image",
+			title: "Open Picture",
+			imageAlt: "the open description",
+			access: [{ threshold: 0, allow: true, price: "0" }],
+		});
+		const res = await req(`/api/content/works/${picture.id}`, { headers: { Cookie: userCookie } });
+		expect(res.status).toBe(200);
+		const { work } = await res.json();
+		expect(work.access.canAccess).toBe(true);
+		expect(work.imageAlt).toBe("the open description");
+	});
+
 	it("still hands the owner their own media URLs", async () => {
 		for (const workId of [audioItemId, videoItemId]) {
 			const res = await req(`/api/content/works/${workId}`, {

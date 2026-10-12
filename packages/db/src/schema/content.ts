@@ -171,6 +171,16 @@ export const works = pgTable(
 		// restricted to `text`), so that changing a Work's type cannot silently destroy
 		// what someone wrote. Only music Works display them.
 		lyrics: text("lyrics").default(""),
+		// The alt text of the image an image Work **is**. Authored in the Studio beside the
+		// image; a reader who authored nothing gets the title, which is the fallback the
+		// reader always fell back to (see WorkLayout's image render). Stored for any type
+		// rather than only `image`, same reasoning as `lyrics` above: changing a Work's kind
+		// cannot silently destroy what someone wrote, and the column is inert everywhere else.
+		//
+		// 🚨 **Gated with the payload.** It describes pixels the gate withholds, so
+		// `serializeWorkForUser` blanks it alongside `sourceKey` — the blurb that survives a
+		// gate is `description`, as it is for lyrics.
+		imageAlt: text("image_alt").default(""),
 		// Browser-encode transport (metadata.clientVariants) + physical/service product
 		// details. Full variant/SKU modeling lands when merch/fulfillment is real; for now
 		// downloadable variants (game/software builds) live in `assets`.

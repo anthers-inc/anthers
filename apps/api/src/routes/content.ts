@@ -948,6 +948,9 @@ const workBaseSchema = z
 		// — a long song with repeats runs to a few thousand characters, and an epic runs to
 		// more. No sanitizer, because nothing here is ever rendered as HTML.
 		lyrics: z.string().max(20_000).optional(),
+		// type = "image": the alt text of the image the Work is, rendered as the img's alt
+		// beside the image itself. No sanitizer either — an img attribute, never markup.
+		imageAlt: z.string().max(1000).optional(),
 		metadata: z.record(z.unknown()).optional().default({}),
 
 		// Visibility. `released` is public listing, NOT public access — the gates decide that.
@@ -1319,6 +1322,7 @@ async function serializeWork(
 		bodyHtml: item.bodyHtml,
 		// Owner-facing, so ungated — this is the shape the Studio editor loads to edit.
 		lyrics: item.lyrics,
+		imageAlt: item.imageAlt,
 		estimatedReadMinutes: item.estimatedReadMinutes,
 		metadata: stripInternalMetadata(item.metadata),
 		visibility: item.visibility,
@@ -2185,6 +2189,9 @@ async function serializeWorkForUser(
 		// rule here ("gated by access but not by the meter") would be a second mechanism
 		// for something already enforced once.
 		lyrics: deliverable ? work.lyrics : "",
+		// The image's alt rides the same branch as the image itself — it describes pixels
+		// the gate withholds (the schema column's docblock carries the reasoning).
+		imageAlt: deliverable ? work.imageAlt : "",
 		pageCount,
 		sectionCount,
 		// ⚠️ Downloads stay on `canAccess` alone, deliberately. **The meter measures
@@ -5389,6 +5396,10 @@ const contentRoutes = new Hono()
 		// creator typed if they ever changed the type — and the column is inert everywhere
 		// else, so there is nothing to protect against.
 		if (data.lyrics !== undefined) updates.lyrics = data.lyrics;
+		// Not gated on `work.type === "image"`, unlike bodyHtml below — same reasoning as
+		// lyrics' write above it: inert for every other kind, so refusing the write would
+		// only discard what a creator typed.
+		if (data.imageAlt !== undefined) updates.imageAlt = data.imageAlt;
 		if (data.bodyHtml !== undefined && work.type === "text") {
 			updates.bodyHtml = sanitizePostHtml(data.bodyHtml);
 			updates.estimatedReadMinutes = estimateReadMinutes(updates.bodyHtml as string);
