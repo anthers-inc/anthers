@@ -11,6 +11,7 @@
  * changing the constraint it encodes.
  */
 import { describe, expect, it } from "bun:test";
+import { acceptedVideoFormatsSentence } from "@anthers/shared/accepted-formats";
 import { fileRules } from "./work-media";
 
 const GB = 1024 * 1024 * 1024;
@@ -46,5 +47,20 @@ describe("fileRules", () => {
 		expect(fileRules("video").accept).toBe("video/*");
 		expect(fileRules("audio").accept).toBe("audio/*");
 		expect(fileRules("image").accept).toBe("image/*");
+	});
+
+	it("states the video accepted set on the picker, as the page and the refusal state it", () => {
+		// The formats sentence is the product sentence the picker, the upload page and
+		// the transcode job's refusal all read; its content is pinned by the shared
+		// module's own suite. Here: it is present, names the remux promise, and never
+		// silently stops being said.
+		const video = fileRules("video");
+		expect(video.formats).toBeTruthy();
+		expect(video.formats).toContain(acceptedVideoFormatsSentence());
+		expect(video.formats).toContain("remuxed");
+	});
+
+	it("says audio is converted rather than refused", () => {
+		expect(fileRules("audio").formats).toContain("MP3");
 	});
 });

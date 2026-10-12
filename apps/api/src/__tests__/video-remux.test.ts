@@ -10,6 +10,7 @@
  * and visible.
  */
 import { describe, expect, it } from "bun:test";
+import { acceptedVideoFormatsSentence } from "@anthers/shared/accepted-formats";
 import { classifyVideoStreams, remuxedContentType, remuxedKeyFor } from "../lib/video-remux";
 
 interface ProbeStream {
@@ -139,5 +140,16 @@ describe("the refusals", () => {
 			"creators/1/videos/originals/x.mp4",
 		);
 		expect(verdict.refusal).toContain("remuxed at ingest");
+	});
+
+	// The refusal and the upload page state the same sentence from the same dataset
+	// (`@anthers/shared/accepted-formats`); pinning it here is what makes the two
+	// surfaces widening together a fact rather than an intention.
+	it("the refusal names the accepted set with the sentence the upload page states", () => {
+		const verdict = classifyVideoStreams(
+			probe([{ codec_type: "video", codec_name: "mpeg4" }]),
+			"creators/1/videos/originals/x.mp4",
+		);
+		expect(verdict.refusal).toContain(acceptedVideoFormatsSentence());
 	});
 });

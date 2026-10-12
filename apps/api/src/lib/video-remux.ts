@@ -7,7 +7,9 @@
  * codecs the pipeline cannot deliver natively is refused with the sentence that names
  * the set, never a silent store-now-may-not-play.
  *
- * The accepted set, as codec pairs:
+ * The accepted set lives in `@anthers/shared/accepted-formats` — the pairs and the copy
+ * sentence the refusal states are dataset and consequence there, so the upload page and
+ * this refusal state the set alike and widen together:
  *
  *   - **H.264 + AAC**, whose native container is the mp4 family (.mp4/.m4v/.mov) — and
  *     whose pair remuxes into it from *any* container, MKV included, because OBS's
@@ -28,7 +30,13 @@
  * the refusal), both against files ffmpeg itself produced.
  */
 
-export type DeliverableContainer = "mp4" | "webm";
+import {
+	ACCEPTED_VIDEO_PAIRS,
+	acceptedVideoFormatsSentence,
+	type DeliverableContainer,
+} from "@anthers/shared/accepted-formats";
+
+export type { DeliverableContainer } from "@anthers/shared/accepted-formats";
 
 export interface VideoFormatVerdict {
 	/** The codec pair's native container, when the pair is deliverable at all. */
@@ -43,9 +51,13 @@ export interface VideoFormatVerdict {
 	refusal?: string;
 }
 
+/**
+ * The refusal a file outside the set reads, composed from the shared sentence so it
+ * can never drift from the copy the upload page states (both surfaces widen together).
+ */
 const ACCEPTED_CODECS_REFUSAL =
 	"This file's video or audio codecs aren't ones the player can carry. The accepted set is " +
-	"H.264 or VP9 video with AAC or Opus audio — and any container is fine, because one that " +
+	`${acceptedVideoFormatsSentence()} — and any container is fine, because one that ` +
 	"can't play as-is is remuxed at ingest to the browser-native form of its codec pair. " +
 	"Re-export this file with a codec pair from that set and upload it again.";
 
@@ -64,16 +76,15 @@ export function classifyVideoStreams(
 	// The pair decides: one native container per pair, and a pair is deliverable only
 	// when BOTH codecs are native to the container it remuxes into — an H.264+Opus file
 	// plays in no browser's mp4 and no browser's WebM, so it is a refusal, not a remux.
-	let container: DeliverableContainer | null = null;
-	if (video?.codec_name === "h264") container = "mp4";
-	if (video?.codec_name === "vp9") container = "webm";
-	if (container) {
-		const audioDeliverable = !audio || audio.codec_name === (container === "mp4" ? "aac" : "opus");
-		if (!audioDeliverable) container = null;
-	}
-	if (!container || !video) {
+	const pairs = ACCEPTED_VIDEO_PAIRS.filter(
+		(pair) => video && pair.videoCodec === video.codec_name,
+	);
+	const pair =
+		pairs.find((candidate) => !audio || candidate.audioCodec === audio.codec_name) ?? null;
+	if (!pair) {
 		return { alreadyPlayable: false, refusal: ACCEPTED_CODECS_REFUSAL };
 	}
+	const container = pair.container;
 
 	// The file's own extension is what the container says it is. A deliverable pair
 	// already in its native container plays without a copy; everything else — MKV

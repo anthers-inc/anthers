@@ -76,6 +76,7 @@ import { useAuth } from "@anthers/web-shared/auth";
 import RatingAppeal from "@anthers/web-shared/content/RatingAppeal";
 import WebBuildSection from "@anthers/web-shared/content/WorkWebBuildSection";
 import {
+	FormatsHint,
 	fileRules,
 	isFileWorkType,
 	UploadProgress,
@@ -1028,6 +1029,9 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 												workUploads.start(current.id, file, { kind: "source", type })
 											}
 										/>
+										<div className="mt-2">
+											<FormatsHint type={type} />
+										</div>
 									</div>
 									<button
 										type="button"
