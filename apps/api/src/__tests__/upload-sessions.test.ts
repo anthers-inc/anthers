@@ -233,6 +233,93 @@ describe("an upload session's plan", () => {
 	});
 });
 
+describe("resume by digest — the byte-level leg", () => {
+	const DIGEST = `sha-${"c".repeat(64)}`;
+	const SIZE = UPLOAD_PART_SIZE * 2 + 1024;
+
+	function open(creatorId: number, digest: string | null, size = SIZE) {
+		return startUploadSession(creatorId, {
+			filename: "take.mp4",
+			contentType: "video/mp4",
+			mediaType: "video",
+			size,
+			...(digest ? { clientSha256: digest } : {}),
+		});
+	}
+
+	async function uploadIdOf(sessionId: string): Promise<string> {
+		const [row] = await db.select().from(mediaUploadSessions).where(eq(mediaUploadSessions.id, sessionId));
+		return row.uploadId;
+	}
+
+	it("a start naming an open session's digest hands back that session, its held parts named", async () => {
+		const resumeCreator = (await createAccount(`upsess_res_${Date.now().toString(36)}`)).userId;
+		const first = await open(resumeCreator, DIGEST);
+		// The relaunch PUT part 1 before dying; the digest is all the retry knows.
+		stagePart(await uploadIdOf(first.sessionId), 1, "etag-1");
+
+		const resumed = await open(resumeCreator, DIGEST);
+		expect(resumed.sessionId).toBe(first.sessionId);
+		expect(resumed.held).toEqual([1]);
+		expect(resumed.key).toBe(first.key);
+		// The plan is the resumed session's own — part count and fresh addresses —
+		// re-asked rather than carried (a stale list's life is a day).
+		expect(resumed.parts).toHaveLength(3);
+	});
+
+	it("a digest with no open session of its own starts a fresh one — even completed, aborted, or another creator's", async () => {
+		const c1 = (await createAccount(`upsess_re2_${Date.now().toString(36)}`)).userId;
+		const c2 = (await createAccount(`upsess_re3_${Date.now().toString(36)}`)).userId;
+		const settled = await open(c1, DIGEST, UPLOAD_PART_SIZE);
+		stagePart(await uploadIdOf(settled.sessionId), 1, "etag-1");
+		await completeUploadSession(c1, settled.sessionId, [{ number: 1, etag: "etag-1" }], DIGEST);
+
+		const fresh = await open(c1, DIGEST);
+		expect(fresh.sessionId).not.toBe(settled.sessionId);
+		expect(fresh.held).toEqual([]);
+		expect(fresh.key).not.toBe(settled.key);
+
+		// A foreign creator naming c1's digest starts their own session, and their keys
+		// never meet: the resume lookup is the creator's own rows, and so is the key.
+		const foreign = await open(c2, DIGEST);
+		expect(foreign.sessionId).not.toBe(settled.sessionId);
+		expect(foreign.key).toMatch(new RegExp(`^creators/${c2}/`));
+	});
+
+	it("a digest whose session's plan cannot hold the named size starts fresh rather than hijacking parts", async () => {
+		const shrinkCreator = (await createAccount(`upsess_re4_${Date.now().toString(36)}`)).userId;
+		const kept = await open(shrinkCreator, DIGEST);
+		// Three parts' window will not take a file four parts would call its own.
+		const tooBig = await open(shrinkCreator, DIGEST, UPLOAD_PART_SIZE * 4);
+		expect(tooBig.held).toEqual([]);
+		expect(tooBig.sessionId).not.toBe(kept.sessionId);
+	});
+
+	it("a completion naming a digest other than the one the session was opened with is refused, and the session stays open", async () => {
+		const mismatchCreator = (await createAccount(`upsess_re5_${Date.now().toString(36)}`)).userId;
+		const session = await open(mismatchCreator, DIGEST, UPLOAD_PART_SIZE);
+		stagePart(await uploadIdOf(session.sessionId), 1, "etag-1");
+		await expect(
+			completeUploadSession(mismatchCreator, session.sessionId, [{ number: 1, etag: "etag-1" }], `sha-${"d".repeat(64)}`),
+		).rejects.toMatchObject({ status: 409 });
+		const [row] = await db
+			.select()
+			.from(mediaUploadSessions)
+			.where(eq(mediaUploadSessions.id, session.sessionId));
+		expect(row.status).toBe("open");
+
+		// The session's own digest completes it, and the row carries it (already set —
+		// the same value, confirmed rather than changed).
+		await completeUploadSession(mismatchCreator, session.sessionId, [{ number: 1, etag: "etag-1" }], DIGEST);
+		const [after] = await db
+			.select()
+			.from(mediaUploadSessions)
+			.where(eq(mediaUploadSessions.id, session.sessionId));
+		expect(after.status).toBe("completed");
+		expect(after.clientSha256).toBe(DIGEST);
+	});
+});
+
 describe("the abandonment sweeper", () => {
 	let sweepCreatorId: number;
 

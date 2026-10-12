@@ -18,7 +18,7 @@
 
 import { db } from "@anthers/db/client";
 import { mediaUploadSessions } from "@anthers/db/schema";
-import { and, eq, lt } from "drizzle-orm";
+import { and, desc, eq, lt } from "drizzle-orm";
 import { storage } from "./storage/index.js";
 
 /** How large a part the plan asks the client to send: R2's floor is 5 MiB; 64 MiB keeps
@@ -66,11 +66,27 @@ export interface MultipartSession {
 	key: string;
 	partSize: number;
 	parts: Array<{ number: number; url: string }>;
+	/** Part numbers the backend already holds — a resumed attempt need not send them. */
+	held: number[];
 }
 
+/**
+ * Open a session — or, where the digest names one this creator still has open, RESUME
+ * it. A resume is the byte-level leg of the design: the backend holds the completed
+ * parts, the plan is re-presented with fresh part addresses (the old list's life is a
+ * day), and the client sends only what is missing. The digest pins the bytes — the
+ * only identity that survives a relaunch — and the plan's own size window is checked
+ * beside it, so a hash collision with a different-length file cannot hijack parts.
+ */
 export async function startUploadSession(
 	creatorId: number,
-	input: { filename: string; contentType: string; mediaType: UploadMediaType; size: number },
+	input: {
+		filename: string;
+		contentType: string;
+		mediaType: UploadMediaType;
+		size: number;
+		clientSha256?: string | null;
+	},
 ): Promise<MultipartSession> {
 	const partCount = Math.max(1, Math.ceil(input.size / UPLOAD_PART_SIZE));
 	if (partCount > MAX_PARTS) {
@@ -78,6 +94,45 @@ export async function startUploadSession(
 			`A source this size needs ${partCount} parts and the plan carries at most ${MAX_PARTS}; the ceiling is ${Math.floor(MAX_SESSION_BYTES / 1024 ** 3)} GB`,
 		);
 	}
+
+	if (input.clientSha256) {
+		const [resumable] = await db
+			.select()
+			.from(mediaUploadSessions)
+			.where(
+				and(
+					eq(mediaUploadSessions.creatorId, creatorId),
+					eq(mediaUploadSessions.clientSha256, input.clientSha256),
+					eq(mediaUploadSessions.status, "open"),
+				),
+			)
+			.orderBy(desc(mediaUploadSessions.createdAt))
+			.limit(1);
+		// Same digest, same size window, still open — the resumed plan is its own, not a
+		// rebuilt one: its part count is what completion's coverage gate demands exactly.
+		const floor = resumable ? (resumable.partCount - 1) * resumable.partSize : -1;
+		if (
+			resumable &&
+			input.size > floor &&
+			input.size <= resumable.partCount * resumable.partSize
+		) {
+			const held = await storage.listMultipartParts(resumable.key, resumable.uploadId);
+			const parts = await Promise.all(
+				Array.from({ length: resumable.partCount }, (_, i) => i + 1).map(async (number) => ({
+					number,
+					url: await storage.getPresignedPartUrl(resumable.key, resumable.uploadId, number, PART_URL_TTL_SECONDS),
+				})),
+			);
+			return {
+				sessionId: resumable.id,
+				key: resumable.key,
+				partSize: resumable.partSize,
+				parts,
+				held: held.map((part) => part.number),
+			};
+		}
+	}
+
 	const key = mediaUploadKeyFor(creatorId, input.mediaType, input.filename);
 	const { uploadId } = await storage.createMultipartUpload(key, input.contentType, "private");
 	const [row] = await db
@@ -89,6 +144,7 @@ export async function startUploadSession(
 			contentType: input.contentType,
 			partSize: UPLOAD_PART_SIZE,
 			partCount,
+			clientSha256: input.clientSha256 ?? null,
 		})
 		.returning();
 	const parts = await Promise.all(
@@ -97,7 +153,7 @@ export async function startUploadSession(
 			url: await storage.getPresignedPartUrl(key, uploadId, number, PART_URL_TTL_SECONDS),
 		})),
 	);
-	return { sessionId: row.id, key, partSize: UPLOAD_PART_SIZE, parts };
+	return { sessionId: row.id, key, partSize: UPLOAD_PART_SIZE, parts, held: [] };
 }
 
 export class SessionCompleteError extends Error {
@@ -132,6 +188,18 @@ export async function completeUploadSession(
 	}
 	if (row.status !== "open") {
 		throw new SessionCompleteError("This upload session already ended", 409);
+	}
+
+	// The digest the session was opened with is the plan's own byte identity — a
+	// completion naming a different digest is completing somebody else's file's
+	// leftover plan, and the gate refuses rather than guessing which is right. An
+	// absent digest passes only because a pre-resume client never sent one; a client
+	// that CAN hash sends the same one at both ends.
+	if (row.clientSha256 && clientSha256 && row.clientSha256 !== clientSha256) {
+		throw new SessionCompleteError(
+			"This file is not the one this upload session was opened for",
+			409,
+		);
 	}
 
 	const sorted = [...reported].sort((a, b) => a.number - b.number);

@@ -366,6 +366,77 @@ async function runSessionModeSuite(): Promise<void> {
 		});
 	});
 
+	describe("resume — a relaunch rekeys on the digest", () => {
+		it("a second start with the digest hands back the open session it names, and the held part is not resent", async () => {
+			const digest = `sha-${"b".repeat(64)}`;
+			const first = await req("/session/start", {
+				auth: creatorCookie,
+				body: { ...BODY, clientSha256: digest },
+			});
+			expect(first.status).toBe(201);
+			const plan1 = (await first.json()) as {
+				sessionId: string;
+				parts: Array<{ number: number; url: string }>;
+				held: number[];
+			};
+			expect(plan1.held).toEqual([]);
+
+			// Only part 1 goes up before the "relaunch"; the digest is all the next start knows.
+			await fetch(plan1.parts[0].url, { method: "PUT", body: "bytes" });
+			const second = await req("/session/start", {
+				auth: creatorCookie,
+				body: { ...BODY, clientSha256: digest },
+			});
+			expect(second.status).toBe(201);
+			const plan2 = (await second.json()) as {
+				sessionId: string;
+				parts: Array<{ number: number; url: string }>;
+				held: number[];
+			};
+			expect(plan2.sessionId).toBe(plan1.sessionId);
+			expect(plan2.held).toEqual([1]);
+
+			// Parts 2 and 3 go up; the held part is reported bare — its ETag is the
+			// backend's listing to supply, and the completion accepts exactly that.
+			for (const part of plan2.parts.slice(1)) {
+				const put = await fetch(part.url, { method: "PUT", body: "bytes" });
+				expect(put.ok).toBe(true);
+			}
+			const complete = await req("/session/complete", {
+				auth: creatorCookie,
+				body: {
+					sessionId: plan2.sessionId,
+					parts: [{ number: 1 }, { number: 2, etag: '"etag-2"' }, { number: 3, etag: '"etag-3"' }],
+					clientSha256: digest,
+				},
+			});
+			expect(complete.status).toBe(200);
+		});
+
+		it("a completion naming a digest other than the session's own is refused through the route", async () => {
+			const digest = `sha-${"e".repeat(64)}`;
+			const res = await req("/session/start", {
+				auth: creatorCookie,
+				body: { ...BODY, clientSha256: digest },
+			});
+			const plan = (await res.json()) as { sessionId: string; parts: Array<{ number: number; url: string }> };
+			for (const part of plan.parts) {
+				await fetch(part.url, { method: "PUT", body: "bytes" });
+			}
+			const mismatch = await req("/session/complete", {
+				auth: creatorCookie,
+				body: {
+					sessionId: plan.sessionId,
+					parts: plan.parts.map((p) => ({ number: p.number, etag: `"etag-${p.number}"` })),
+					clientSha256: `sha-${"f".repeat(64)}`,
+				},
+			});
+			expect(mismatch.status).toBe(409);
+			const body = (await mismatch.json()) as { error?: string };
+			expect(body.error).toContain("not the one this upload session was opened for");
+		});
+	});
+
 	describe("abandoning a session", () => {
 		it("frees a session's parts on the creator's say-so, and a repeat abort is a no-op", async () => {
 			const res = await req("/session/start", { auth: creatorCookie });
