@@ -487,7 +487,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						blurb:
 							"A stated conformance level, tooling that catches a regression, and every medium usable.",
 						bucket: "active",
-						note: "Reduced motion is honored. Very little else is.",
+						note: "Reduced motion is honored, and images carry alt text. Very little else is.",
 						doc: { id: "23.01", title: "Accessibility" },
 					},
 					{
@@ -495,8 +495,8 @@ export const ROADMAP: RoadmapGroup[] = [
 						title: "Captions and Transcripts",
 						blurb:
 							"For video and audio, with a way to supply your own rather than accept what a machine heard.",
-						bucket: "planned",
-						note: "There are no captions anywhere on Anthers.",
+						bucket: "active",
+						note: "Video captions are live, from the Studio to the player. Audio captions and transcripts are not.",
 						doc: { id: "23.01", title: "Accessibility" },
 					},
 					{

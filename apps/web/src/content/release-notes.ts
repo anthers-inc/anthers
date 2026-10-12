@@ -81,6 +81,28 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.23",
+		date: "2026-10-12",
+		lede: "A book is readable on Anthers now, a video carries captions for the first time, and the Studio's Works and Projects pages became tables.",
+		entries: [
+			"An ebook Work takes an EPUB now: the book's text and images are ingested into private sections that serve only through the same access ladder every stream runs, and a reflow reader built on the vendored foliate-js engine renders them, so the type flows to the window it is read in.",
+			"A video carries captions now, and a creator supplies them: the Studio's Work editor gained a captions panel, a track's WebVTT is validated as it attaches, and the player offers the cues beside its other controls, served behind the same access check the video itself answers.",
+			"Hovering a feed tile plays the Work inside its frame now, muted and in place, and the preview counts as an ordinary open play: its seconds earn a creator and spend Public Access exactly as an opened play does. It rides a deliberate hover only, one tile at a time, and plays only where the Work is open anyway: a gated tile keeps its poster, a blurred one its blur.",
+			"Where a video carries an adaptive ladder, the quality menu now offers the original as an opt-in alternative, and a rung click returns the player to the ladder's variants. In the Studio, a video's original plays while its ladder encodes, so the page answers with the player rather than a processing block, and the thumbnail's frame is picked from that same player.",
+			"The Studio's Works and Projects pages are tables now, in the shape YouTube Studio's Content tab reads: tall rows carrying a thumbnail, visibility, status, upload date, and counts as columns, sortable by header click and filterable from the signed-in sidebar, with a Projects row carrying the works its project holds, each opening on the Work's Edit page.",
+			"The Library holds two lenses beside the music player now: the Bookshelf draws text, ebook and comic Works as spines aligned to a shelf line, with a reading-progress ribbon on the paged ones, and the Channel Guide reads a video collection like a TV guide turned on its side, the channels in columns left to right by name, each column one creator's videos stacked newest first.",
+			"The signed-in sidebar carries a structure shared across its pages now: Lenses rows on every tab, live where a lens is built for the page and grayed as Coming Soon where it is not, and shared Type, Tags and Access filters beneath a persistent divider. The Feed's Bookmarks strip retired with the change; saving remains the one keep action.",
+			"A Work's media is managed in place now: a creator can replace a source, sweeping the files the replaced version left behind, take a never-released Work back to an empty draft, and cancel a pending or processing media job rather than wait it out.",
+			"The upload page states what Anthers accepts beside each picker now, one set naming the video codec pairs, audio, the paged kinds' sources, and images, and the refusal for a source outside it says the same words. A source whose codecs can travel is remuxed into its native container without re-encoding, so an MKV or OBS capture publishes as it stands.",
+			"A retried upload finds its own session again, by the file's digest carried end to end: a relaunch names the digest at open and receives that session's plan, sends only the parts still missing, and the file is confirmed by the same digest at completion.",
+			"Video encodes run several times faster: the worker holds two dedicated vCPUs where a real transcode crawled 55 minutes on a shared one, and the ladder's variants encode with x264 veryfast, measured two and a half to three times faster on the tall rungs and visually indistinguishable at the job's bitrates.",
+			"The queue that processes media stopped three failures seen in production: a job no longer encodes the same file twice after its expiry, an exited encoder's drained output no longer writes progress past a job's own completion, and a deploy's graceful stop no longer spends one of a job's resume allowances.",
+			"Holding a creator's Badge follows that creator now, at both places a holding is written, and canceling it never unfollows; a follow leaves only by the account's own act.",
+			"An image Work carries a description the creator authors beside the picture, and the post editor's insert flow asks for one the moment an image is in hand; the description is announced on the Work page and in rendered post bodies.",
+			"A Created credit's missing-contributor warning appears when a save is attempted now, rather than the moment the box is ticked, and any edit to the credit rows silences it again until the next attempt.",
+		],
+	},
+	{
 		version: "2026.10.22",
 		date: "2026-10-11",
 		lede: "A video plays the moment it is published now, and an upload is a session that resumes rather than a file that starts over.",
