@@ -6,7 +6,7 @@
  * tab consumes it, Type, Tags).
  *
  * Pins in the shape of `sidebar-nav.authed.e2e.ts`: structure and order measured,
- * never a screenshot. The greying half of the shared Type contract (a type absent
+ * never a screenshot. The graying half of the shared Type contract (a type absent
  * from a page or excluded by its view) is asserted where the first consumer lands —
  * the Library task's lens section — not here, where no consumer passes the set yet.
  */
@@ -73,21 +73,21 @@ test("the sidebar reads tabs, divider, lenses, divider, shared filters", async (
 		"the persistent divider sits between the nav and the Lenses",
 	).toBe(true);
 
-	// The Lenses on the feed: only No Lens is live — the rest greyed with the marker,
+	// The Lenses on the feed: only No Lens is live — the rest grayed with the marker,
 	// never absent.
 	const lensRows = await page.evaluate(() => {
 		const headings = [...document.querySelectorAll("aside section h3")];
 		const s = headings.find((h) => h.textContent === "Lenses")?.closest("section");
 		return [...(s?.querySelectorAll("button") ?? [])].map(
 			(b) =>
-				`${b.textContent?.trim()}${b.getAttribute("aria-disabled") === "true" ? " [greyed]" : ""}`,
+				`${b.textContent?.trim()}${b.getAttribute("aria-disabled") === "true" ? " [grayed]" : ""}`,
 		);
 	});
 	expect(lensRows).toEqual([
 		"No Lens",
-		"Music Player(Coming Soon) [greyed]",
-		"Channel Guide(Coming Soon) [greyed]",
-		"Bookshelf(Coming Soon) [greyed]",
+		"Music Player(Coming Soon) [grayed]",
+		"Channel Guide(Coming Soon) [grayed]",
+		"Bookshelf(Coming Soon) [grayed]",
 	]);
 
 	// The retired names are gone: the shared section's heading is Type, not Work Type
@@ -97,7 +97,7 @@ test("the sidebar reads tabs, divider, lenses, divider, shared filters", async (
 	expect(await page.getByRole("heading", { name: "Bookmarks", exact: true }).count()).toBe(0);
 });
 
-test("the shared Type list is the unified vocabulary, greyed rows included", async ({ page }) => {
+test("the shared Type list is the unified vocabulary, grayed rows included", async ({ page }) => {
 	test.setTimeout(60_000);
 	await page.goto(`${WEB_ORIGIN}/feed`);
 	await expect(
@@ -107,7 +107,7 @@ test("the shared Type list is the unified vocabulary, greyed rows included", asy
 	// vocabulary rather than racing it.
 	await expect(page.getByRole("heading", { name: "Type", exact: true })).toBeVisible();
 	// All, then Posts below it, then every Work type in the shared order — the one
-	// list every tab's sidebar carries (greyed consumers assert this where they land).
+	// list every tab's sidebar carries (grayed consumers assert this where they land).
 	expect(await typeSectionRows(page)).toEqual([
 		"All",
 		"Posts",
