@@ -49,7 +49,6 @@ import {
 	updateProduct,
 } from "../lib/processor.js";
 import { anthersUserId } from "./anthers-badges.js";
-import { ensureFollow } from "./follows.js";
 
 /** Record this cycle's snapshot (what was given to Anthers + its decomposition + what was directed). */
 async function snapshotCycle(
@@ -1098,7 +1097,18 @@ export async function applyDirectedSupport(
 		// nothing of the repeat, and the refused cases (a block, an ungranted repository)
 		// are silent to this arm: the holding is the act, the follow rides along when it
 		// can. A cancellation never walks this back — see the docblock.
+		//
+		// 🚨 **The follow service is imported lazily, and that is load-bearing.** A static
+		// import of `./follows.js` closed an import-time cycle: this module is evaluated
+		// deep inside the identity chain (`atproto-repo → atproto-records → access →
+		// content-preferences → here`), and `follows`' own imports reach back through the
+		// record writers into `atproto-client`, whose module body then ran while
+		// `atproto-repo` was still mid-initialization — a `WORK_COLLECTION` TDZ that killed
+		// `db:seed` and `db:media-fixture` outright. The lazy import keeps this module's
+		// evaluation free of the follow ceremony; by the time any pick is applied, the
+		// graph is fully loaded and the import resolves from cache.
 		if (pick.creatorId !== anthersId) {
+			const { ensureFollow } = await import("./follows.js");
 			await ensureFollow(userId, pick.creatorId);
 		}
 	}
