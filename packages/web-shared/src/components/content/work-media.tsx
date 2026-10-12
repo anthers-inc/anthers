@@ -72,14 +72,27 @@ export function fileRules(type: FileWorkType): { accept: string; maxSize: number
 		case "image":
 			return { accept: "image/*", maxSize: 20 * 1024 * 1024, noun: "an image" };
 		case "comic":
-		case "ebook":
 			// Page images lead (Parker, 2026-10-11) — the paged job renders image leaves
 			// directly, one leaf per page — and the PDF stays: it is what a whole-book
 			// master ships as, and the set is built from whatever mix the creator holds.
+			// The comic's own container (CBZ) and the authored-fixed EPUB 3 FXL sit in
+			// the format ladder's tail, parked — an accept for those lands when the
+			// ingest for them does.
 			return {
 				accept: "image/jpeg,image/png,application/pdf",
 				maxSize: 2 * 1024 * 1024 * 1024,
 				noun: "a page image (JPG or PNG) or a PDF",
+			};
+		case "ebook":
+			// The EPUB rides beside the paged set's files (the reflow path's source — the
+			// 2026-10-11 design's native ebook source): it must NOT be mixed into a set
+			// with page-shaped files, which the routing and the ingest both refuse
+			// legibly, and it processes on its own queue into `work_sections` rather
+			// than pages, so `downloadEnabled: false` keeps holding for a reflow book too.
+			return {
+				accept: "image/jpeg,image/png,application/pdf,application/epub+zip,.epub",
+				maxSize: 2 * 1024 * 1024 * 1024,
+				noun: "a page image (JPG or PNG), a PDF, or an EPUB",
 			};
 	}
 }

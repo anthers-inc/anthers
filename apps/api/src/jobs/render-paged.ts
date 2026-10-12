@@ -33,6 +33,7 @@ import { db } from "@anthers/db";
 import { transcodingJobs, workPages, workPanels, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import sharp from "sharp";
+import { isEpubSource } from "../lib/paged-ingest.js";
 import { detectPanels, sampleInkColor } from "../lib/panel-detection.js";
 import { storage } from "../services/storage/index.js";
 import { listSourceFiles } from "../services/work-source-files.js";
@@ -151,6 +152,18 @@ export async function renderPaged(data: RenderPagedData) {
 		if (!(await popplerAvailable())) {
 			throw new Error(
 				"poppler (pdftoppm) is not installed on this host — an ebook cannot be rendered",
+			);
+		}
+
+		// An EPUB in the set is not this job's input — it extracts on the reflow path
+		// (`ingest-ebook`). Failing legibly and INSIDE the try (so the refusal lands on
+		// the row the status badge reads, not stranding it at "processing" — the same
+		// shape the ingest's own shape guards hold), this catches the paths that bypass
+		// routing: a legacy `.epub` attach, a resume resolved before the ingest split.
+		const epubSource = sources.find((s) => isEpubSource(s));
+		if (epubSource) {
+			throw new Error(
+				`This set contains an EPUB (${epubSource.filename || epubSource.file}), and the page renderer takes PDFs and page images — an EPUB processes as a reflow ebook; replace the source or remove the EPUB`,
 			);
 		}
 

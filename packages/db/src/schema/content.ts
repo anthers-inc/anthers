@@ -772,6 +772,89 @@ export const workSourceFiles = pgTable(
 	],
 );
 
+/**
+ * The reflow sections of an **ebook** Work — one row per extracted chapter component, in
+ * spine order, numbered across the whole source set.
+ *
+ * 🚨 **Why sections as rows, mirroring `work_pages`.** The same delivery rule drives both
+ * tables: every derived media object is stored private and every URL to one is minted per
+ * request at an endpoint that re-resolves access (`/works/:id/sections/:n`, same gate
+ * ladder as the page route), so `downloadEnabled: false` stays honest — no one URL the
+ * whole book falls out of. Sections are to a reflow book what pages are to a fixed one
+ * and what HLS segments are to a video: the unit that can actually be checked.
+ *
+ * `href` is the container-relative path the resource had inside the EPUB, and it is the
+ * identity a reader resolves chapter jumps through — the book interface's `resolveHref`
+ * keys on these, never on raw hrefs inside stored XHTML. `title` is the chapter name the
+ * book's own navigation carried (EPUB 3 nav or EPUB 2 NCX), so the table of contents is
+ * the book's, not ours to invent.
+ */
+// node — an ebook Work's extracted reflow sections. Node media, cascades with the Work.
+export const workSections = pgTable(
+	"work_sections",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** 1-based, in spine order and contiguous across the source set — the reading order. */
+		position: integer("position").notNull(),
+		/** Container-relative path inside the EPUB (no leading slash, no `..`), normalized at ingest. */
+		href: text("href").notNull(),
+		/** Private storage key. Never served directly — see `/works/:id/sections/:n`. */
+		file: text("file").notNull(),
+		/** The chapter's title from the book's own navigation; an unnamed chapter is "" — never a guess. */
+		title: text("title").notNull().default(""),
+		/** Uncompressed size of the extracted component, as the extraction caps recorded it. */
+		sizeBytes: integer("size_bytes"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_work_sections").on(table.workId, table.position),
+		index("idx_work_sections_work").on(table.workId, table.position),
+	],
+);
+
+/**
+ * The non-section components an EPUB's chapters reference — images, stylesheets, embedded
+ * fonts — one row per manifest resource that is not a spine item, keyed by the
+ * **container-relative path** a chapter references it by.
+ *
+ * 🚨 **This table is the ladder's inventory** (the design's *Parked at implementation*
+ * reason for it): the reader's loader maps every asset reference a chapter makes to these
+ * rows and through them to `/works/:id/assets/:id` — a per-asset check — so a chapter can
+ * fetch its own picture without ever being handed the container. `isOwnStorageRef`'s rule
+ * applies upstream of every key here: these keys are minted by the ingest job itself, not
+ * accepted from a client, which is what keeps a foreign reference from riding an upload.
+ *
+ * Re-resolution is by *path*, not baked URL: a re-ingest changes every storage key but the
+ * container-relative paths — so the reader's map is rebuilt fresh from this table each
+ * session and no stored chapter ever carries a URL that can go stale.
+ */
+// node — components an ebook Work's sections reference. Node media, cascades with the Work.
+export const workSectionAssets = pgTable(
+	"work_section_assets",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** Container-relative path inside the EPUB, exactly as a chapter's references resolve to it. */
+		path: text("path").notNull(),
+		/** Private storage key. Never served directly — see `/works/:id/assets/:id`. */
+		file: text("file").notNull(),
+		/** The media type the EPUB's own manifest declared; an undeclared one is `application/octet-stream`. */
+		mimeType: text("mime_type").notNull().default("application/octet-stream"),
+		/** Uncompressed size of the extracted component, as the extraction caps recorded it. */
+		sizeBytes: integer("size_bytes"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_work_section_assets").on(table.workId, table.path),
+		index("idx_work_section_assets_work").on(table.workId),
+	],
+);
+
 // both — a transcoding job is node media processing (the creator's source → derived
 // renditions), but it runs on org infrastructure (ffmpeg, the worker) and the org's
 // delivery layer reads it. The row is node-owned (it is about one creator's Work); the

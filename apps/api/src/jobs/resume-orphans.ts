@@ -21,6 +21,8 @@
 import { db } from "@anthers/db";
 import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
+import { routePagedIngest } from "../lib/paged-ingest.js";
+import { listSourceFiles } from "../services/work-source-files.js";
 import { JOB_OPTIONS, QUEUES, queue } from "./queue.js";
 
 /**
@@ -32,6 +34,11 @@ import { JOB_OPTIONS, QUEUES, queue } from "./queue.js";
  * for reasons that name ffmpeg. An unknown type is skipped with a warning rather than
  * guessed at, so adding a fourth media type without adding a row here loses recovery
  * loudly instead of corrupting it quietly.
+ * ⚠️ `"ebook"` is deliberately NOT enough to place a row any more: the stored string stayed
+ * `"ebook"` for both paged shapes when the ingest split (2026-10-11), and a reflow EPUB
+ * resumed here would rasterize into "Not a readable PDF". The sweep resolves an ebook row
+ * against its Work's actual source set — `routePagedIngest`, the one decider — in the loop
+ * below; this map keeps only the entries a media type settles by itself.
  */
 export const RESUME_QUEUE: Record<string, string | undefined> = {
 	video: QUEUES.TRANSCODE_VIDEO,
@@ -155,6 +162,7 @@ export async function resumeOrphanedTranscodes(
 	const orphans = await db
 		.select({
 			id: transcodingJobs.id,
+			workId: transcodingJobs.workId,
 			mediaType: transcodingJobs.mediaType,
 			resumeCount: transcodingJobs.resumeCount,
 			sourceKey: works.sourceKey,
@@ -273,6 +281,29 @@ export async function resumeOrphanedTranscodes(
 			summary.skipped++;
 			continue;
 		}
+		// An `"ebook"` row is both paged shapes — resolve it against the set it declares
+		// rather than the media type's string. A mixed set routes nowhere: failed here,
+		// legibly, rather than half-processed by either handler.
+		let target = q;
+		if (job.mediaType === "ebook") {
+			try {
+				const route = routePagedIngest(
+					await listSourceFiles({ id: job.workId, sourceKey: job.sourceKey }),
+				);
+				target = route === "ingest-ebook" ? QUEUES.INGEST_EBOOK : QUEUES.RENDER_PAGED;
+			} catch (error) {
+				const message =
+					error instanceof Error
+						? error.message
+						: "This ebook's source set could not be routed for processing";
+				await db
+					.update(transcodingJobs)
+					.set({ status: "failed", errorMessage: message, updatedAt: new Date() })
+					.where(eq(transcodingJobs.id, job.id));
+				summary.failed++;
+				continue;
+			}
+		}
 		// The flag is spent by the hand-back in every branch: it stands for ONE
 		// interruption, and this re-send consumed it. If the next attempt is killed
 		// hard, the row arrives unflagged and is charged as a crash — which is the
@@ -292,7 +323,7 @@ export async function resumeOrphanedTranscodes(
 				...charge,
 			})
 			.where(eq(transcodingJobs.id, job.id));
-		await send(q, { jobId: job.id });
+		await send(target, { jobId: job.id });
 		summary.resumed++;
 	}
 

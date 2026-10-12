@@ -37,7 +37,12 @@ describe("fileRules", () => {
 		// The lead path: a JPG or PNG page image; the PDF beside it, because a
 		// whole-book master is what a creator holds and the set is one set either way.
 		expect(fileRules("comic").accept).toBe("image/jpeg,image/png,application/pdf");
-		expect(fileRules("ebook").accept).toBe("image/jpeg,image/png,application/pdf");
+		// The ebook kind additionally takes an EPUB — the reflow path's native source
+		// (the 2026-10-11 design). The comic does not: its container formats (CBZ,
+		// EPUB 3 FXL) sit in the format ladder's tail and ride their own tasks.
+		expect(fileRules("ebook").accept).toBe(
+			"image/jpeg,image/png,application/pdf,application/epub+zip,.epub",
+		);
 		expect(fileRules("video").accept).toBe("video/*");
 		expect(fileRules("audio").accept).toBe("audio/*");
 		expect(fileRules("image").accept).toBe("image/*");
