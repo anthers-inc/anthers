@@ -37,6 +37,7 @@ import { isEpubSource } from "../lib/paged-ingest.js";
 import { detectPanels, sampleInkColor } from "../lib/panel-detection.js";
 import { storage } from "../services/storage/index.js";
 import { listSourceFiles } from "../services/work-source-files.js";
+import { MAX_TRANSCODE_RESUMES } from "./resume-orphans.js";
 
 export interface RenderPagedData {
 	jobId: number;
@@ -114,15 +115,25 @@ export async function renderPaged(data: RenderPagedData) {
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 	// Idempotency: a late pg-boss retry of a job already finished (e.g. by the worker's
-	// startup-resume path) is a no-op, exactly as the other two jobs treat it.
+	// startup-resume path) is a no-op, exactly as the other two jobs treat it. A row the
+	// boot sweep finally failed — its crash-resume ceiling spent — is equally final, and
+	// must not be resurrected by a stale redelivery; a failed row BELOW the bound stays
+	// re-runnable on purpose, as the queue's ordinary self-healing within its budget.
 	if (job.status === "completed") {
 		console.log(`[render-paged] job ${jobId} already completed; skipping`);
 		return;
 	}
+	if (job.status === "failed" && job.resumeCount >= MAX_TRANSCODE_RESUMES) {
+		console.log(`[render-paged] job ${jobId} failed past its resume bound; skipping`);
+		return;
+	}
 
+	// The claim spends any benign-interruption flag the previous stop left: a run
+	// reaching the row has consumed the excuse, so whatever kills THIS run says for
+	// itself.
 	await db
 		.update(transcodingJobs)
-		.set({ status: "processing", progress: 0, updatedAt: new Date() })
+		.set({ status: "processing", progress: 0, interruptedGracefully: false, updatedAt: new Date() })
 		.where(eq(transcodingJobs.id, jobId));
 
 	const [work] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);

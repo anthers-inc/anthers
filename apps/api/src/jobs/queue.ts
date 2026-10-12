@@ -159,6 +159,16 @@ class JobQueue {
 		this.started = false;
 	}
 
+	/** Every queued (`created`/`retry`-state) job in a queue, with its payload. */
+	findQueuedJobs<T>(queue: string): Promise<{ id: string; data: T }[]> {
+		return this.boss.findJobs<T>(queue, { queued: true });
+	}
+
+	/** Delete one job from a queue — the retirement a stranded job gets. */
+	async deleteQueuedJob(queue: string, id: string): Promise<void> {
+		await this.boss.deleteJob(queue, id);
+	}
+
 	get isStarted(): boolean {
 		return this.started;
 	}

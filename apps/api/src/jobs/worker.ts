@@ -48,7 +48,7 @@ import { releaseScheduled } from "./release-scheduled.js";
 import { type RemoveAtprotoRecordData, removeAtprotoRecordJob } from "./remove-atproto-record.js";
 import { type RenderPagedData, renderPaged } from "./render-paged.js";
 import { rescanOwed } from "./rescan-owed.js";
-import { resumeOrphanedTranscodes } from "./resume-orphans.js";
+import { markBenignInterrupted, resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
 import { runStorageUsageSweep } from "./storage-usage.js";
@@ -450,9 +450,12 @@ async function start() {
 	}
 	for (const retired of RETIRED_QUEUES) await queue.retire(retired);
 
-	// Recover any transcodes interrupted by the previous worker's shutdown.
-	// Best-effort: recovery must never crash the worker, so failures are logged,
-	// not thrown (a stuck job still self-heals via pg-boss's retry-on-expiry).
+	// Recover any transcodes interrupted by the previous worker's stop — rows the stop
+	// marked benign (a SIGTERM, i.e. a deploy bounce) resume without spending a ceiling
+	// slot, unmarked rows charge as crashes, and queued jobs whose row has vanished are
+	// retired (see the sweep's docblock). Best-effort: recovery must never crash the
+	// worker, so failures are logged, not thrown (a stuck job still self-heals via
+	// pg-boss's retry-on-expiry, heartbeat-failure detection now covering the fast case).
 	try {
 		await resumeOrphanedTranscodes();
 	} catch (err) {
@@ -475,6 +478,19 @@ async function start() {
 
 async function shutdown() {
 	console.log("Shutting down worker...");
+	// 🚨 Mark the rows this worker leaves behind BEFORE anything else: this write is what
+	// tells the next boot's recovery sweep that the stop was DELIBERATE (SIGTERM — the
+	// shape of every deploy bounce) rather than a crash, so the row is resumed without
+	// spending one of its crash resumes. Going first means the flag is down even when
+	// the platform's kill outlives the graceful stop below — a hard kill racing this
+	// write is exactly the case the marker exists to settle, and a missed write only
+	// costs a resume slot, never correctness. Best-effort: a failed write must not stop
+	// the stop, and its cost is the same slot.
+	try {
+		await markBenignInterrupted();
+	} catch (err) {
+		console.error("Failed to mark benign interruptions (non-fatal):", err);
+	}
 	await queue.stop({ graceful: true, timeout: 30000 });
 	process.exit(0);
 }
