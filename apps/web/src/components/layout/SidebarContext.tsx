@@ -34,10 +34,23 @@ interface SidebarContextValue {
 	toggleSidebar: () => void;
 	/** Close the sidebar — the backdrop's action on a phone */
 	closeSidebar: () => void;
-	/** Page-specific sidebar content rendered below the persistent nav */
+	/**
+	 * The page's MIDDLE-SECTION sidebar content, rendered behind the persistent divider
+	 * under the nav (Parker, 2026-10-11): Bookmarks and Access on the Feed, the Lenses
+	 * on the Library. The layout owns that divider; the page owns only its content.
+	 */
 	pageContent: ReactNode | null;
 	/** Called by pages to register their sidebar content; returns a cleanup fn */
 	setPageContent: (content: ReactNode | null) => void;
+	/**
+	 * The TAB-SHARED filter sections — Type and Tags — rendered behind one more
+	 * divider below the middle section, registered separately so the layout owns
+	 * the seams (Parker, 2026-10-11). A page with no shared filters simply
+	 * registers nothing.
+	 */
+	sharedContent: ReactNode | null;
+	/** Same contract as `setPageContent`, for the shared sections. */
+	setSharedContent: (content: ReactNode | null) => void;
 }
 
 const SidebarContext = createContext<SidebarContextValue | null>(null);
@@ -45,12 +58,17 @@ const SidebarContext = createContext<SidebarContextValue | null>(null);
 export function SidebarProvider({ children }: { children: ReactNode }) {
 	const [sidebarOpen, setSidebarOpen] = useState(sidebarFitsBeside);
 	const [pageContent, setPageContentState] = useState<ReactNode | null>(null);
+	const [sharedContent, setSharedContentState] = useState<ReactNode | null>(null);
 	const { pathname } = useLocation();
 
 	const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), []);
 	const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 	const setPageContent = useCallback(
 		(content: ReactNode | null) => setPageContentState(content),
+		[],
+	);
+	const setSharedContent = useCallback(
+		(content: ReactNode | null) => setSharedContentState(content),
 		[],
 	);
 
@@ -75,6 +93,8 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
 				closeSidebar,
 				pageContent,
 				setPageContent,
+				sharedContent,
+				setSharedContent,
 			}}
 		>
 			{children}
@@ -89,6 +109,8 @@ const NOOP_SIDEBAR: SidebarContextValue = {
 	closeSidebar: () => {},
 	pageContent: null,
 	setPageContent: () => {},
+	sharedContent: null,
+	setSharedContent: () => {},
 };
 
 export function useSidebar() {
