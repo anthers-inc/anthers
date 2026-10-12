@@ -14,6 +14,7 @@
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { useMemo } from "react";
 import type { Work } from "../../lib/types";
+import { filterBtnClass, sectionTitleClass } from "./studio-filter-classes";
 import { LIBRARY_TYPE_OPTIONS, TypeIcon, typeLabel } from "./works";
 
 /** The distinct kinds actually present in a list, in the Studio's own type order. */
@@ -21,16 +22,6 @@ export function presentWorkTypes(items: Work[]): string[] {
 	const present = new Set(items.map((item) => item.type));
 	return LIBRARY_TYPE_OPTIONS.filter((o) => present.has(o.value)).map((o) => o.value);
 }
-
-const sectionTitleClass =
-	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5";
-
-const filterBtnClass = (isActive: boolean) =>
-	`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full ${
-		isActive
-			? "bg-secondary/10 text-secondary font-medium"
-			: "text-base-content/70 hover:bg-base-300/50 hover:text-base-content"
-	}`;
 
 export default function WorksFilterSections({
 	items,

@@ -23,6 +23,7 @@
 		"./local-datetime": "./src/lib/local-datetime.ts",
 		"./work-uploads": "./src/lib/work-uploads.ts",
 		"./fonts": "./src/styles/fonts.ts",
+		"./sidebar": "./src/lib/sidebar.tsx",
 		"./decor/BrandGlyph": "./src/components/decor/BrandGlyph.tsx",
 		"./decor/LineArt": "./src/components/decor/LineArt.tsx",
 		"./decor/MeadowDecor": "./src/components/decor/MeadowDecor.tsx",

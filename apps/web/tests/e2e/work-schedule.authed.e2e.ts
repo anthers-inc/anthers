@@ -3,8 +3,8 @@
  * Scheduling a Work's release from its page, walked in a browser.
  *
  * What this proves is the join a unit test cannot reach: the time typed into the page's
- * datetime input is the instant the server stores, in the creator's own zone, and the Catalog
- * card says so afterwards. The sweep that acts on the time is `work-release-schedule.test.ts`'s
+ * datetime input is the instant the server stores, in the creator's own zone, and the
+ * Works table says so afterwards. The sweep that acts on the time is `work-release-schedule.test.ts`'s
  * subject; no worker runs in a browser session.
  *
  * Runs on `media_fixture`, which nothing else resets and which has payouts set up, since a
@@ -105,9 +105,9 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 		timeout: 15_000,
 	});
 	await page.goto("/studio/works");
-	const card = page.locator(".card").filter({ hasText: TITLE });
-	await expect(card).toContainText("Releases");
-	await expect(card).toContainText("Private");
+	const row = page.locator("tbody tr").filter({ hasText: TITLE });
+	await expect(row).toContainText("Releases");
+	await expect(row).toContainText("Private");
 
 	// The instant stored is the typed local time, not the same digits read as UTC.
 	const expected = await page.evaluate((value) => new Date(value).toISOString(), local);

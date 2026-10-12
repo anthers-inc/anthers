@@ -625,6 +625,26 @@ export interface Project {
 	 * arrived and TypeScript had no name for it.
 	 */
 	works?: ProjectWork[];
+	/** The works grid's summaries — the Studio's owner listing only; the public shape carries none. */
+	worksSummary?: ProjectWorkSummary[];
+}
+
+/**
+ * A Work as it appears in the Studio's Projects listing, beside the project block as a
+ * thumbnail grid. A summary rather than the `Work` entire — the owner's Projects listing
+ * carries it in one batched fetch, and the grid needs identity and state, not media
+ * payload and access tables — and named separately from `works` on purpose: one field
+ * name carrying two shapes is the serialization blur that bit post access before.
+ */
+export interface ProjectWorkSummary {
+	id: number;
+	publicId?: number;
+	slug?: string;
+	title: string | null;
+	type: ContentType;
+	thumbnail: string | null;
+	visibility?: WorkVisibility;
+	sortOrder: number;
 }
 
 /**

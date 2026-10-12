@@ -8,20 +8,38 @@
  * grouping, ordering, nothing else — so a Project's listing is a table of names and states,
  * not a grid: the substance lives on the Works it holds.
  *
+ * The listing is a **table of tall rows** (Parker, 2026-10-11), the Works table's treatment
+ * with room for a different row: the project's header image and its title and description
+ * down the left, and a grid of the works it holds on the right — a project described by
+ * what it contains. The rows sort by header and filter from the left sidebar below the
+ * Studio nav, the Works page's mechanism; the filters and the sort are
+ * `projects-list.ts`'s, extracted so a suite can fail on them. The works in the grid come
+ * from the owner listing's batched `worksSummary`; a Work's tile opens its Edit page, the
+ * place a creator acts on it.
+ *
  * The wiki's *Projects* carries the model: what joins what, and how finely a body of work
  * splits.
  */
 
 import { PencilSquareIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import ProjectsFilterSections from "../components/content/projects-filters";
+import {
+	arrangeProjects,
+	DEFAULT_PROJECTS_SORT,
+	type ProjectsSortKey,
+} from "../components/content/projects-list";
+import SortableHeader, { ariaSort } from "../components/content/SortableHeader";
+import { TypeIcon } from "../components/content/works";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
 import { creatorProjectUrl } from "../lib/profile";
-import { Link } from "../lib/router";
+import { Link, useSearchParams } from "../lib/router";
 import { client } from "../lib/rpc";
-import { studioEditProjectUrl, studioNewProjectUrl } from "../lib/studio";
-import type { Project } from "../lib/types";
+import { useSidebar } from "../lib/sidebar";
+import { studioEditProjectUrl, studioEditWorkUrl, studioNewProjectUrl } from "../lib/studio";
+import type { Project, ProjectWorkSummary } from "../lib/types";
 
 export default function ProjectsPage() {
 	const { user } = useAuth();
@@ -36,6 +54,43 @@ export default function ProjectsPage() {
 	 */
 	const [projectDeleteTarget, setProjectDeleteTarget] = useState<Project | null>(null);
 	const [deletingProject, setDeletingProject] = useState(false);
+
+	// The filters and the sort ride the URL, the Works page's pattern.
+	const [searchParams, setSearchParams] = useSearchParams();
+	const q = searchParams.get("q") ?? "";
+	const status = searchParams.get("status") ?? "";
+	const contentType = searchParams.get("type") ?? "";
+	const [sort, setSort] = useState<{ key: ProjectsSortKey; dir: "asc" | "desc" }>(
+		DEFAULT_PROJECTS_SORT,
+	);
+
+	const updateParams = useCallback(
+		(updates: Record<string, string>) => {
+			setSearchParams(
+				(prev) => {
+					const next = new URLSearchParams(prev);
+					for (const [key, value] of Object.entries(updates)) {
+						if (value) {
+							next.set(key, value);
+						} else {
+							next.delete(key);
+						}
+					}
+					return next;
+				},
+				{ replace: true },
+			);
+		},
+		[setSearchParams],
+	);
+
+	// Repeat click on a sorted column flips it; a new column starts names A→Z, dates high first.
+	const onSort = (key: ProjectsSortKey) =>
+		setSort((prev) =>
+			prev.key === key
+				? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+				: { key, dir: key === "title" ? "asc" : "desc" },
+		);
 
 	useEffect(() => {
 		let live = true;
@@ -70,6 +125,25 @@ export default function ProjectsPage() {
 		}
 	};
 
+	// The sidebar's filter sections, below the Studio nav — registered here, the Feed
+	// page's mechanism by way of the Works page. The sections read the URL.
+	const { setPageContent } = useSidebar();
+	const filters = useMemo(() => ({ q, status, type: contentType }), [q, status, contentType]);
+	useEffect(() => {
+		setPageContent(
+			<ProjectsFilterSections
+				items={projects}
+				q={filters.q}
+				status={filters.status}
+				contentType={filters.type}
+				onUpdateParams={updateParams}
+			/>,
+		);
+		return () => setPageContent(null);
+	}, [setPageContent, projects, filters, updateParams]);
+
+	const rows = arrangeProjects(projects, filters, sort.key, sort.dir);
+
 	if (loading) {
 		return (
 			<div className="flex justify-center py-16">
@@ -79,9 +153,9 @@ export default function ProjectsPage() {
 	}
 
 	return (
-		<div className="max-w-5xl mx-auto px-4 py-8">
-			<div className="flex items-center justify-between mb-6">
-				<h1 className="text-2xl font-bold">Projects</h1>
+		<div className="w-full px-6 py-6">
+			<div className="flex items-center justify-between mb-4">
+				<h2 className="text-lg font-semibold">Projects</h2>
 				<Link to={studioNewProjectUrl()} className="btn btn-primary btn-sm">
 					<PlusIcon className="w-4 h-4" /> New Project
 				</Link>
@@ -98,52 +172,45 @@ export default function ProjectsPage() {
 						</Link>
 					}
 				/>
+			) : rows.length === 0 ? (
+				/* Every Project is filtered out — distinguishable from an empty list, and
+				   its remedy is a click, not a new shelf. */
+				<div className="text-sm text-base-content/60">
+					<p className="mb-2">No Projects match these filters.</p>
+					<button
+						type="button"
+						className="btn btn-ghost btn-sm"
+						onClick={() => updateParams({ q: "", status: "", type: "" })}
+					>
+						Clear filters
+					</button>
+				</div>
 			) : (
 				<div className="overflow-x-auto">
-					<table className="table table-sm">
+					<table className="table w-full">
 						<thead>
-							<tr>
-								<th>Title</th>
-								<th>Status</th>
-								<th>Actions</th>
+							<tr className="border-base-300/50 text-xs text-base-content/50">
+								<th scope="col" className="w-1/3" aria-sort={ariaSort(sort, "title")}>
+									<SortableHeader label="Project" sortKey="title" sort={sort} onSort={onSort} />
+								</th>
+								<th scope="col">Works</th>
+								<th scope="col">Status</th>
+								<th scope="col" aria-sort={ariaSort(sort, "date")}>
+									<SortableHeader label="Date" sortKey="date" sort={sort} onSort={onSort} />
+								</th>
+								<th scope="col">
+									<span className="sr-only">Actions</span>
+								</th>
 							</tr>
 						</thead>
 						<tbody>
-							{projects.map((project) => (
-								<tr key={project.id}>
-									<td>
-										<Link
-											to={creatorProjectUrl(user?.handle ?? "", project.slug)}
-											className="link link-hover font-medium"
-										>
-											{project.title}
-										</Link>
-									</td>
-									<td>
-										<span
-											className={`badge badge-sm ${project.isPublished ? "badge-success" : "badge-warning"}`}
-										>
-											{project.isPublished ? "Published" : "Draft"}
-										</span>
-									</td>
-									<td className="flex gap-1">
-										<Link
-											to={studioEditProjectUrl(project.slug)}
-											className="btn btn-ghost btn-xs"
-											title="Edit"
-										>
-											<PencilSquareIcon className="w-4 h-4" />
-										</Link>
-										<button
-											type="button"
-											className="btn btn-ghost btn-xs text-error"
-											title="Delete"
-											onClick={() => setProjectDeleteTarget(project)}
-										>
-											<TrashIcon className="w-4 h-4" />
-										</button>
-									</td>
-								</tr>
+							{rows.map((project) => (
+								<ProjectRow
+									key={project.id}
+									project={project}
+									handle={user?.handle ?? ""}
+									onDelete={setProjectDeleteTarget}
+								/>
 							))}
 						</tbody>
 					</table>
@@ -190,6 +257,130 @@ export default function ProjectsPage() {
 						aria-label="Close"
 					/>
 				</div>
+			)}
+		</div>
+	);
+}
+
+/**
+ * One Project as a tall row: the header image and the title and description on the left,
+ * the works it holds as a thumbnail grid on the right (Parker's sketch, 2026-10-11).
+ */
+function ProjectRow({
+	project,
+	handle,
+	onDelete,
+}: {
+	project: Project;
+	handle: string;
+	onDelete: (project: Project) => void;
+}) {
+	const works = project.worksSummary ?? [];
+	const publicIfPublished = project.isPublished !== false;
+	// Draft projects have no public page yet, so the name opens the editor instead —
+	// the same choice the public project's link would make the creator wish for.
+	const projectUrl = publicIfPublished
+		? creatorProjectUrl(handle, project.slug)
+		: studioEditProjectUrl(project.slug);
+
+	return (
+		<tr className="border-b border-base-300/50 hover:bg-base-200/40 align-top">
+			{/* PROJECT — the header image above the name and the description, the row's left zone. */}
+			<td className="py-3 pr-4">
+				<div className="max-w-xs w-64">
+					{project.coverImage ? (
+						<img
+							src={project.coverImage}
+							alt=""
+							className="w-full aspect-[2/1] object-cover rounded"
+						/>
+					) : (
+						<div className="w-full aspect-[2/1] rounded bg-base-300/50 flex items-center justify-center">
+							<TypeIcon type="image" className="w-8 h-8 text-base-content/30" />
+						</div>
+					)}
+					<p className="font-medium text-sm mt-2" title={project.title ?? undefined}>
+						<Link to={projectUrl} className="link link-hover">
+							{project.title || "Untitled"}
+						</Link>
+					</p>
+					<p className="text-xs text-base-content/60 line-clamp-3 break-words">
+						{project.description || "No description"}
+					</p>
+				</div>
+			</td>
+
+			{/* WORKS — the row's right zone: the shelf's contents as a grid of thumbnails,
+			    each opening the Work's Edit page. Six show; a bigger shelf says by how much. */}
+			<td className="py-3 pr-4">
+				<WorksGrid works={works} />
+			</td>
+
+			{/* Status — a project publishes as a whole, or it is still a draft. */}
+			<td className="py-3 pr-4">
+				<span className={`badge badge-sm ${publicIfPublished ? "badge-success" : "badge-warning"}`}>
+					{publicIfPublished ? "Published" : "Draft"}
+				</span>
+			</td>
+
+			<td className="py-3 pr-4 whitespace-nowrap text-sm text-base-content/70">
+				{new Date(project.createdAt).toLocaleString(undefined, { dateStyle: "medium" })}
+			</td>
+
+			{/* Row actions: the editor, and the delete dialog the page owns. */}
+			<td className="py-3 pr-4 text-right whitespace-nowrap">
+				<div className="flex justify-end gap-1">
+					<Link
+						to={studioEditProjectUrl(project.slug)}
+						className="btn btn-ghost btn-xs"
+						title="Edit"
+					>
+						<PencilSquareIcon className="w-4 h-4" />
+					</Link>
+					<button
+						type="button"
+						className="btn btn-ghost btn-xs text-error"
+						title="Delete"
+						onClick={() => onDelete(project)}
+					>
+						<TrashIcon className="w-4 h-4" />
+					</button>
+				</div>
+			</td>
+		</tr>
+	);
+}
+
+/** Up to PROJECT_ROW_WORK_LIMIT tiles, then a quiet count of the rest. */
+const PROJECT_ROW_WORK_LIMIT = 6;
+
+function WorksGrid({ works }: { works: ProjectWorkSummary[] }) {
+	const shown = works.slice(0, PROJECT_ROW_WORK_LIMIT);
+	if (shown.length === 0) {
+		return <p className="text-xs text-base-content/40">No Works in this Project yet.</p>;
+	}
+	return (
+		<div className="flex flex-wrap gap-2 max-w-lg">
+			{shown.map((work) => (
+				<Link
+					key={work.id}
+					to={studioEditWorkUrl(work.publicId ?? work.id)}
+					className="block w-28 aspect-video rounded bg-base-200 overflow-hidden"
+					title={work.title || "Untitled"}
+				>
+					{work.thumbnail ? (
+						<img src={work.thumbnail} alt="" className="w-full h-full object-cover" />
+					) : (
+						<span className="w-full h-full flex items-center justify-center">
+							<TypeIcon type={work.type} className="w-6 h-6 text-base-content/30" />
+						</span>
+					)}
+				</Link>
+			))}
+			{works.length > shown.length && (
+				<p className="text-xs text-base-content/40 self-center">
+					+{works.length - shown.length} more
+				</p>
 			)}
 		</div>
 	);

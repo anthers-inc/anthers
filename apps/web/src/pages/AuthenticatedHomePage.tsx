@@ -3,6 +3,7 @@
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
+import { useSidebar } from "@anthers/web-shared/sidebar";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
@@ -14,7 +15,6 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import FeedTile from "../components/cards/FeedTile";
 import FeedFilterSections from "../components/layout/FeedFilterSections";
-import { useSidebar } from "../components/layout/SidebarContext";
 
 /** One bookmarked post as the sidebar's shelf shows it. */
 interface BookmarkedPost {

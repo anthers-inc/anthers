@@ -5,6 +5,7 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
+import { SidebarProvider, useSidebar } from "@anthers/web-shared/sidebar";
 import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
 import {
@@ -27,7 +28,6 @@ import NotificationBell from "./NotificationBell";
 import PublishingPermissionBanner from "./PublishingPermissionBanner";
 import RouteSuspense from "./RouteSuspense";
 import SearchBar from "./SearchBar";
-import { SidebarProvider, useSidebar } from "./SidebarContext";
 
 /** The sidebar's nav in user mode. Studio mode has `STUDIO_NAV` in its place. */
 const NAV_LINKS = [
