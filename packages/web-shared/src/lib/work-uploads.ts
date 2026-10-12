@@ -62,26 +62,40 @@ export interface WorkUpload {
 export interface WorkUploadTransport {
 	/** Send the bytes; resolves to the stored key. Progress of `null` is honest — a
 	 * transport reading the file before sending (the session's digest pass) reports no
-	 * percent yet, and the caller renders its indeterminate bar. */
+	 * percent yet, and the caller renders its indeterminate bar. The signal aborts the
+	 * send — a canceled upload stops spending the wire, and may leave its session open
+	 * for the sweeper, exactly as a tab close would. */
 	put(
 		file: File,
 		target: WorkUploadTarget,
 		onProgress: (percent: number | null) => void,
+		signal?: AbortSignal,
 	): Promise<string>;
 	/** Tell the Work its file has arrived. */
-	attach(workId: number, target: WorkUploadTarget, key: string, file: File): Promise<void>;
+	attach(
+		workId: number,
+		target: WorkUploadTarget,
+		key: string,
+		file: File,
+		signal?: AbortSignal,
+	): Promise<void>;
 }
 
 const defaultTransport: WorkUploadTransport = {
-	async put(file, target, onProgress) {
+	async put(file, target, onProgress, signal) {
 		if (target.kind === "source" && target.type === "image") {
-			return (await uploadImageFile(file, "image")).url;
+			return (await uploadImageFile(file, "image", signal)).url;
 		}
 		const processing = target.kind === "source" ? processingFor(target.type) : null;
 		const mediaType = processing === "video" || processing === "audio" ? processing : "asset";
-		return uploadMediaFile(file, mediaType, onProgress);
+		return uploadMediaFile(file, mediaType, onProgress, signal);
 	},
-	async attach(workId, target, key, file) {
+	// ⚠️ The attach ignores its signal on purpose: it is the narrow single-field write
+	// that follows a completed upload, sub-second by construction. A cancel landing in
+	// its window stops the store from tracking the entry, and the run's own completion
+	// writes land on a forgotten entry — the honest shape of a cancel that arrives a
+	// breath after the bytes did.
+	async attach(workId, target, key, file, _signal) {
 		const param = { id: String(workId) };
 		// 🚨 A paged Work's file attaches as a ROW of its source set (Parker, 2026-10-10) —
 		// the route carries the filename and size a `source_key` PATCH cannot, and the set is
@@ -121,12 +135,16 @@ interface Entry {
 	file: File;
 	/** Set once the bytes have arrived, so a failed attach retries the attach alone. */
 	key: string | null;
+	/** The run's own abort. A cancel aborts what is on the wire and forgets the entry. */
+	controller: AbortController;
 }
 
 export interface WorkUploadStore {
 	start(workId: number, file: File, target: WorkUploadTarget): string;
 	retry(uploadId: string): void;
 	dismiss(uploadId: string): void;
+	/** Abort an in-flight upload and forget it — the creator's cancel, not a retry. */
+	cancel(uploadId: string): void;
 	list(): readonly WorkUpload[];
 	/** True while any upload would be lost by leaving the page. */
 	active(): boolean;
@@ -156,14 +174,19 @@ export function createWorkUploadStore(transport: WorkUploadTransport): WorkUploa
 	const run = async (id: string) => {
 		const entry = entries.get(id);
 		if (!entry) return;
-		const { file, state } = entry;
+		const { file, state, controller } = entry;
 		if (entry.key == null) {
 			update(id, { status: "uploading", error: null });
 			try {
-				entry.key = await transport.put(file, state.target, (percent) =>
-					update(id, { progress: percent }),
+				entry.key = await transport.put(
+					file,
+					state.target,
+					(percent) => update(id, { progress: percent }),
+					controller.signal,
 				);
 			} catch {
+				// A canceled run lands here because it aborted itself; the entry is already
+				// gone, so there is no state left to mark failed.
 				update(id, {
 					status: "failed",
 					error: `${file.name} didn't finish uploading. Check your connection and try again.`,
@@ -171,11 +194,18 @@ export function createWorkUploadStore(transport: WorkUploadTransport): WorkUploa
 				return;
 			}
 		}
+		// 🚨 A cancel that arrived while the wire was still speaking is final: the entry is
+		// gone, and the run that was awaiting it stops here rather than attaching what its
+		// creator told it to stop. (The orphaned key the late upload leaves is the same
+		// shape a closed tab leaves; the session sweeper is what reclaims those.)
+		if (!entries.get(id)) return;
 		update(id, { status: "attaching", error: null });
 		try {
-			await transport.attach(state.workId, state.target, entry.key, file);
+			await transport.attach(state.workId, state.target, entry.key, file, controller.signal);
 			update(id, { status: "done", progress: 100 });
 		} catch {
+			// A canceled run lands here because it aborted itself; the entry is already
+			// gone, so there is no state left to mark failed.
 			update(id, {
 				status: "failed",
 				error: `${file.name} uploaded, but the Work couldn't be told it had arrived. Try again.`,
@@ -203,6 +233,7 @@ export function createWorkUploadStore(transport: WorkUploadTransport): WorkUploa
 			entries.set(id, {
 				file,
 				key: null,
+				controller: new AbortController(),
 				state: {
 					id,
 					workId,
@@ -222,6 +253,16 @@ export function createWorkUploadStore(transport: WorkUploadTransport): WorkUploa
 		},
 		dismiss(uploadId) {
 			if (entries.delete(uploadId)) emit();
+		},
+		cancel(uploadId) {
+			const entry = entries.get(uploadId);
+			if (!entry) return;
+			if (entry.state.status !== "uploading" && entry.state.status !== "attaching") return;
+			// Aborting first, then forgetting: the run's rejected promise lands on an entry
+			// that is already gone, so nothing marks it failed over the creator's own stop.
+			entry.controller.abort();
+			entries.delete(uploadId);
+			emit();
 		},
 		list: () => snapshot,
 		active: () => snapshot.some((u) => u.status === "uploading" || u.status === "attaching"),

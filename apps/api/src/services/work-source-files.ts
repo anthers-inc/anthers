@@ -71,6 +71,12 @@ export async function syncFromSourceKey(work: WorkRow): Promise<void> {
 	if (!work.sourceKey) return;
 	const rows = await listSourceFiles(work);
 	if (rows.length === 1 && rows[0].id !== 0 && rows[0].file === work.sourceKey) return;
+	// The replaced set's objects leave with its rows — the remove path follows the same
+	// rule (`removeSourceFileStorage`), and a set replaced wholesale retires its files
+	// the same way rather than leaving orphaned originals in the creator's prefix.
+	for (const row of rows) {
+		if (row.id !== 0) await removeSourceFileStorage(row, work.creatorId);
+	}
 	await db.delete(workSourceFiles).where(eq(workSourceFiles.workId, work.id));
 	await db.insert(workSourceFiles).values({
 		workId: work.id,

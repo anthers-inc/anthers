@@ -19,6 +19,7 @@ const VIDEO: WorkUploadTarget = { kind: "source", type: "video" };
 /** A transport whose every call waits until the test lets it go, and records what it was asked. */
 function controlledTransport() {
 	const calls: string[] = [];
+	const signals: Array<AbortSignal | undefined> = [];
 	let releasePut: ((key: string) => void) | null = null;
 	let failPut: (() => void) | null = null;
 	let releaseAttach: (() => void) | null = null;
@@ -26,16 +27,18 @@ function controlledTransport() {
 	let progress: ((percent: number) => void) | null = null;
 
 	const transport: WorkUploadTransport = {
-		put(_file, _target, onProgress) {
+		put(_file, _target, onProgress, signal) {
 			calls.push("put");
+			signals.push(signal);
 			progress = onProgress;
 			return new Promise((resolve, reject) => {
 				releasePut = resolve;
 				failPut = () => reject(new Error("network"));
 			});
 		},
-		attach(workId, _target, key) {
+		attach(workId, _target, key, _file, signal) {
 			calls.push(`attach ${workId} ${key}`);
+			signals.push(signal);
 			return new Promise((resolve, reject) => {
 				releaseAttach = resolve;
 				failAttach = () => reject(new Error("409"));
@@ -47,6 +50,7 @@ function controlledTransport() {
 	return {
 		transport,
 		calls,
+		signals,
 		progress: (p: number) => progress?.(p),
 		putArrives: async (key: string) => {
 			releasePut?.(key);
@@ -139,5 +143,36 @@ describe("work uploads", () => {
 		await t.putFails();
 		store.start(7, file(), build);
 		expect(store.list()).toHaveLength(2);
+	});
+
+	it("a cancel aborts the send and forgets the entry in either phase", async () => {
+		// Mid-upload: the transport was handed a live signal, the cancel aborts it, and
+		// what the wire eventually answers attaches to nothing — no attach is asked at all.
+		const t = controlledTransport();
+		const store = createWorkUploadStore(t.transport);
+		const idMid = store.start(7, file(), VIDEO);
+		expect(t.signals[0]?.aborted).toBe(false);
+		store.cancel(idMid);
+		expect(t.signals[0]?.aborted).toBe(true);
+		expect(store.list()).toHaveLength(0);
+		expect(store.active()).toBe(false);
+		await t.putArrives("k");
+		await t.attachAnswers();
+		expect(t.calls).toEqual(["put"]);
+
+		// Mid-attach: the bytes have arrived, so the run holds no put to abort; the cancel
+		// still forgets the entry, whose completion writes land nowhere.
+		const t2 = controlledTransport();
+		const store2 = createWorkUploadStore(t2.transport);
+		const idAttach = store2.start(9, file(), VIDEO);
+		await t2.putArrives("arrived.mp4");
+		store2.cancel(idAttach);
+		expect(store2.list()).toHaveLength(0);
+		await t2.attachAnswers();
+		expect(t2.calls).toEqual(["put", "attach 9 arrived.mp4"]);
+
+		// Canceling an unknown id changes nothing and refuses nothing.
+		store2.cancel("upload-999");
+		expect(store2.list()).toHaveLength(0);
 	});
 });

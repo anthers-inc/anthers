@@ -148,6 +148,12 @@ export async function ingestEbook(data: IngestEbookData) {
 		console.log(`[ingest-ebook] job ${jobId} already completed; skipping`);
 		return;
 	}
+	// A canceled row is final: the creator stopped it, and a stale redelivery must not
+	// resume what they stopped — the same guard the three other handlers claim with.
+	if (job.status === "canceled") {
+		console.log(`[ingest-ebook] job ${jobId} canceled; skipping`);
+		return;
+	}
 
 	await db
 		.update(transcodingJobs)

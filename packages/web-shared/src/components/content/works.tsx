@@ -88,14 +88,15 @@ export function isBuildType(type: string): boolean {
 /**
  * Processing lifecycle of an item, derived (no new schema) from its latest transcode.
  * `none` = nothing to process (or not yet queued); `processing` = pending/processing;
- * `ready` = completed; `failed` = failed.
+ * `ready` = completed; `failed` = failed; `canceled` = the creator stopped it.
  */
-export type ProcessingState = "none" | "processing" | "ready" | "failed";
+export type ProcessingState = "none" | "processing" | "ready" | "failed" | "canceled";
 
 export function processingState(item: Work): ProcessingState {
 	const status = item.transcoding?.status;
 	if (!status) return "none";
 	if (status === "failed") return "failed";
+	if (status === "canceled") return "canceled";
 	if (status === "completed") return "ready";
 	return "processing"; // pending | processing
 }
@@ -139,6 +140,8 @@ export function ProcessingBadge({ item }: { item: Work }) {
 			return <span className="badge badge-success badge-sm">Ready</span>;
 		case "failed":
 			return <span className="badge badge-error badge-sm">Failed</span>;
+		case "canceled":
+			return <span className="badge badge-ghost badge-sm">Processing canceled</span>;
 		default:
 			return null;
 	}

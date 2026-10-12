@@ -133,6 +133,14 @@ export const works = pgTable(
 
 		// ── Source media (only the fields relevant to `type` are populated) ──
 		sourceKey: text("source_key").default(""), // uploaded video/audio/image source key
+		// The original the video ingest kept when it re-pointed the source. Since the remux
+		// ingest (#489), a remuxed MKV's MP4 takes `source_key` and the creator's uploaded
+		// MKV moves here. 🚨 **The column exists so the original stays enumerated and
+		// metered rather than an un-tracked remnant**: `media-purge`'s enumeration and the
+		// storage-usage sweep both read it, and every sweep that retires a Work's media
+		// (replace and remove alike) deletes it — an original no pointer reaches is the
+		// exact un-metered-forever shape the storage ladder must never create.
+		sourceOriginalKey: text("source_original_key").default(""),
 		embedUrl: text("embed_url").default(""), // game/software web embed
 		durationSeconds: integer("duration_seconds"), // video, music and audio
 		// type = "text": the prose itself. `body` is the plain-text shadow used for search;
@@ -902,7 +910,7 @@ export const transcodingJobs = pgTable(
 			.notNull()
 			.references(() => works.id, { onDelete: "cascade" }),
 		mediaType: text("media_type").notNull(), // video | audio | ebook
-		status: text("status").notNull().default("pending"), // pending | processing | completed | failed
+		status: text("status").notNull().default("pending"), // pending | processing | completed | failed | canceled
 		progress: integer("progress").default(0),
 		etaSeconds: integer("eta_seconds"), // estimated seconds remaining (video transcode; null when unknown/done)
 		errorMessage: text("error_message").default(""),

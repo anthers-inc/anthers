@@ -14,16 +14,16 @@
  * reasoning: the DB is the same authority `calculate-crf` reads, a bucket walk would
  * sweep avatars and display chrome the ladder never prices, and a paginated
  * `ListObjectsV2` per account per night is an API bill paid to measure figures grouped
- * queries answer. The five surfaces and how each is reached:
+ * queries answer. The surfaces and how each is reached:
  *
  * - **Assets and build files carry their own sizes** — `assets.file_size` and
  *   `web_build_files.file_size`, summed per account in grouped queries; the same
  *   authority `calculate-crf` reads for the first of them, so the subsidy job and this
  *   meter cannot disagree about a creator's catalog.
- * - **The Work record's own media** — `works.source_key` and `works.thumbnail` — are the
- *   columns whose size is carried nowhere in the database, so they are this job's one
- *   per-row `size()` cost: two heads per Work, once a day, on rows a whole-table sweep
- *   reaches anyway.
+ * - **The Work record's own media** — `works.source_key`, `works.source_original_key`
+ *   and `works.thumbnail` — are the columns whose size is carried nowhere in the
+ *   database, so they are this job's one per-row `size()` cost: up to three heads per
+ *   Work, once a day, on rows a whole-table sweep reaches anyway.
  * - **HLS output** — a transcoding job's manifest key names its rendition prefix (the
  *   read `media-purge.ts` already established: master key minus its file). One
  *   `prefixSize` per job row — narrow, per-Work, exactly the priced population.
@@ -31,6 +31,9 @@
  *   one `prefixSize` per creator prefix. These are body content rather than display
  *   chrome, which is what puts this prefix on the metered side of the line
  *   `aclForMediaType` draws: the ladder's catalog purpose is where body images bill.
+ * - **Paged derived storage** — a paged Work's rendered pages and a reflow ebook's
+ *   ladder, all under `creators/{id}/ebook/` (the prefix `media-purge.ts` sweeps), so
+ *   one `prefixSize` per creator with paged Works, on the inline-images pattern.
  * - **Cloud saves** — `work_saves.byte_size`, attributed to the *player's* account: the
  *   settled design's rule is that the blob charges the player's floor like any kept
  *   file, not the creator's.
@@ -57,6 +60,7 @@ import {
 } from "@anthers/db/schema";
 import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import { STORAGE_USE_KINDS, type StorageUseKind } from "@anthers/shared/constants";
+import { isPaged } from "@anthers/shared/content";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { keptShareBytes } from "../services/keeping.js";
 import { storage } from "../services/storage/index.js";
@@ -216,7 +220,12 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 	// Two `size()` heads per Work with a source or thumbnail. This is the one surface
 	// the database cannot answer, because these columns' sizes are carried nowhere.
 	const mediaRows = await db
-		.select({ creatorId: works.creatorId, sourceKey: works.sourceKey, thumbnail: works.thumbnail })
+		.select({
+			creatorId: works.creatorId,
+			sourceKey: works.sourceKey,
+			sourceOriginalKey: works.sourceOriginalKey,
+			thumbnail: works.thumbnail,
+		})
 		.from(works)
 		.where(sql`${works.creatorId} IS NOT NULL`);
 	for (const row of mediaRows) {
@@ -224,6 +233,11 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		const purposes = account(row.creatorId).purposes;
 		const source = await sizeOfKey(row.sourceKey);
 		if (source != null) add(purposes, "catalog", source);
+		// The remux-retained original rides its pointer column, so a Work whose MKV was
+		// remuxed in place meters the original's bytes too — the un-metered remnant was
+		// the shape the pointer column exists to end.
+		const original = await sizeOfKey(row.sourceOriginalKey);
+		if (original != null) add(purposes, "catalog", original);
 		const thumb = await sizeOfKey(row.thumbnail);
 		if (thumb != null) add(purposes, "catalog", thumb);
 	}
@@ -240,6 +254,22 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		if (row.creatorId == null) continue;
 		const size = await sizeOfKey(row.file);
 		if (size != null) add(account(row.creatorId).purposes, "catalog", size);
+	}
+
+	// ── A paged Work's derived storage, one prefix read per creator ─────────────
+	// The rendered pages (and a reflow ebook's ladder sections) live entirely under
+	// `creators/{id}/ebook/`, one per-run sub-prefix per render or ingest — the same
+	// deterministic prefix `media-purge.ts` sweeps. No table carries these sizes, so
+	// this is the inline-images bend again: one prefix read per *creator with paged
+	// Works* is a bounded population, and every byte the runs wrote is inside it.
+	const pagedWorks = await db
+		.selectDistinct({ creatorId: works.creatorId, type: works.type })
+		.from(works)
+		.where(isNotNull(works.creatorId));
+	for (const row of pagedWorks) {
+		if (row.creatorId == null || !isPaged(row.type)) continue;
+		const bytes = await prefixBytes(`creators/${row.creatorId}/ebook/`);
+		if (bytes > 0) add(account(row.creatorId).purposes, "catalog", bytes);
 	}
 
 	// ── Cloud saves, by the player ───────────────────────────────────────────────

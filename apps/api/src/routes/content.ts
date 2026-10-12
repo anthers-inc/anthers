@@ -48,6 +48,7 @@ import {
 	workSaves,
 	workSectionAssets,
 	workSections,
+	workSourceFiles,
 	works,
 } from "@anthers/db/schema";
 import {
@@ -184,7 +185,12 @@ import {
 	saveWork,
 	setHidden,
 } from "../services/library.js";
-import { purgeWorkMedia } from "../services/media-purge.js";
+import {
+	collectWorkMedia,
+	purgeReplacedWorkMedia,
+	purgeWorkMedia,
+	sweepCollected,
+} from "../services/media-purge.js";
 import { merchStoreFactsByWork } from "../services/merch-store.js";
 import { notifyMany } from "../services/notifications.js";
 import {
@@ -3666,6 +3672,125 @@ const contentRoutes = new Hono()
 		});
 	})
 
+	/**
+	 * Cancel one of the Work's in-flight processing jobs (owner-only).
+	 *
+	 * 🚨 **Cancel is a mark, not an interrupt.** The route sets the row `canceled`; the
+	 * handlers discover it at the checkpoints they already run — the claim-time guards
+	 * refuse to resurrect a canceled row past a stale redelivery, the video job's
+	 * supersession re-checks abandon before touching storage, and the audio and paged
+	 * jobs check before their own upload or page pass. A run already past its last
+	 * checkpoint finishes, like the video job's documented per-variant bound. A
+	 * `completed` job has nothing to cancel (409), and a `failed` one is already
+	 * settled — the Studio's exit from a failure is replace or remove, not cancel.
+	 *
+	 * Only a pending or processing job cancels: the state this route exists to make
+	 * exitable is the one whose exit is otherwise "wait it out".
+	 */
+	.delete("/works/:id/transcoding/:jobId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		const jobId = Number(c.req.param("jobId"));
+
+		// A quarantined Work is untouchable at 404, on the same reasoning as the PATCH —
+		// and this route's storage-adjacent half makes it the more important one here.
+		if (work.quarantineStatus === "quarantined") {
+			return c.json({ error: "Work not found" }, 404);
+		}
+
+		const [job] = await db
+			.select()
+			.from(transcodingJobs)
+			.where(and(eq(transcodingJobs.id, jobId), eq(transcodingJobs.workId, work.id)))
+			.limit(1);
+		if (!job) return c.json({ error: "Job not found" }, 404);
+		if (job.status === "completed") {
+			return c.json({ error: "This job has already completed." }, 409);
+		}
+		if (job.status === "failed") {
+			return c.json({ error: "This job already failed — replace the media or remove it." }, 409);
+		}
+		if (job.status === "canceled") {
+			return c.json({ work: await serializeWork(work, [], null, [], deliveryCtx()) }, 200);
+		}
+
+		await db
+			.update(transcodingJobs)
+			.set({ status: "canceled", etaSeconds: null, updatedAt: new Date() })
+			.where(eq(transcodingJobs.id, jobId));
+
+		const [jobRow] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, jobId));
+		return c.json(
+			{ work: await serializeWork(work, [], jobRow, [], deliveryCtx()), job: jobRow },
+			200,
+		);
+	})
+
+	/**
+	 * Remove an unpublished Work's media outright (owner-only) — the creator's clean
+	 * slate: everything the Work names in storage leaves (source, the remux-retained
+	 * original, derived outputs, the paged set, the ebook prefix, thumbnail, assets and
+	 * browser builds), and the row returns to the no-media shape a draft is created in.
+	 *
+	 * 🚨 **Unpublished only — never-released is the gate, `releasedAt` is its test.** A
+	 * released Work's media is behind somebody's purchase or the Time Pool, and a
+	 * withdrawn one serves people who bought it; no creator gesture returns either to a
+	 * draft. A Work scheduled to release can still call this — removing its media makes
+	 * the schedule unmeetable, so the schedule is cleared with the media rather than
+	 * left promising a release that can never pass its gate.
+	 *
+	 * 🚨 **Enumeration before the rows go; sweep after.** `collectWorkMedia` reads the
+	 * very rows this route deletes, and `media-purge.ts` owns what may be deleted —
+	 * the same straddle the account-erase path runs.
+	 */
+	.delete("/works/:id/media", requireAuth, async (c) => {
+		const user = c.get("user");
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (work.quarantineStatus === "quarantined") {
+			return c.json({ error: "Work not found" }, 404);
+		}
+		if (work.releasedAt) {
+			return c.json(
+				{
+					error: "Only an unpublished Work's media can be removed.",
+					code: "media_removal_published",
+				},
+				409,
+			);
+		}
+
+		// Enumerate first — the rows below are what the enumeration reads.
+		const collected = await collectWorkMedia([work.id]);
+
+		await db.transaction(async (tx) => {
+			await tx.delete(webBuilds).where(eq(webBuilds.workId, work.id));
+			await tx.delete(assets).where(eq(assets.workId, work.id));
+			await tx.delete(workSections).where(eq(workSections.workId, work.id));
+			await tx.delete(workSectionAssets).where(eq(workSectionAssets.workId, work.id));
+			await tx.delete(workPages).where(eq(workPages.workId, work.id));
+			await tx.delete(workSourceFiles).where(eq(workSourceFiles.workId, work.id));
+			await tx.delete(transcodingJobs).where(eq(transcodingJobs.workId, work.id));
+			await tx
+				.update(works)
+				.set({
+					sourceKey: "",
+					sourceOriginalKey: "",
+					thumbnail: "",
+					durationSeconds: null,
+					scheduledReleaseAt: null,
+					updatedAt: new Date(),
+				})
+				.where(eq(works.id, work.id));
+		});
+
+		await sweepCollected(collected);
+
+		const [row] = await db.select().from(works).where(eq(works.id, work.id));
+		return c.json({ work: await serializeWork(row, [], null, [], deliveryCtx()) }, 200);
+	})
+
 	// ── Audio delivery (access-checked, signed) ──────────────────────────────────
 	// The audio counterpart of the HLS endpoint below. Processed audio is stored private,
 	// so this is the only way to reach it: access is re-checked here on every request,
@@ -5286,9 +5411,31 @@ const contentRoutes = new Hono()
 		}
 
 		const sourceChanged = data.sourceKey !== undefined && data.sourceKey !== work.sourceKey;
+		// 🚨 **A bare clear of the column is refused, not obeyed** — setting `sourceKey` to
+		// `""` on a Work that has one is a removal request, and removal has a route: a
+		// silent clear would strand the old object un-enumerated and any in-flight job
+		// un-exitable, which is the exact state the media removal route exists to do
+		// honestly. The same for both halves of a paged Work's media.
+		if (sourceChanged && !data.sourceKey && work.sourceKey) {
+			return c.json(
+				{
+					error:
+						"To remove this Work's media, use the media removal route (DELETE /works/:id/media) rather than clearing the source.",
+					code: "source_clear_refused",
+				},
+				400,
+			);
+		}
 		// A replaced thumbnail is new bytes from the same uploader, so it owes its own scan.
 		const thumbnailChanged = data.thumbnail !== undefined && data.thumbnail !== work.thumbnail;
-		if (data.sourceKey !== undefined) updates.sourceKey = data.sourceKey;
+		if (data.sourceKey !== undefined) {
+			updates.sourceKey = data.sourceKey;
+			// The version that a change moves away from carries its original pointer with
+			// it; the code below sweeps what it named. A new source has no original of its
+			// own yet — the remux ingest is the only writer of the pointer after its own
+			// ingest, and it writes the work the next remux makes one for.
+			if (data.sourceKey !== work.sourceKey) updates.sourceOriginalKey = "";
+		}
 		// An image is its own thumbnail, and follows its file when the file arrives or is replaced
 		// (Parker, 2026-09-18). Decided here rather than by the client, because the file arrives
 		// while the creator may be editing the same Work on its page.
@@ -5315,7 +5462,28 @@ const contentRoutes = new Hono()
 		// set table is the truth, so the legacy attach syncs it (replacing the set with the
 		// one file) and re-renders through the service; queueing the job directly here as
 		// well would be two jobs for one file.
+		//
+		// 🚨 **A replacement is replace-in-place: nothing of the old version survives it.**
+		// When the Work already carried media, the retired source — the prior object, its
+		// remux-retained original, every derived output the prior job rows name — is swept
+		// through `media-purge.ts` (the one writer for what may be deleted), and the prior
+		// job rows are deleted so the replacement is the Work's only processing truth.
+		// The no-old-versions ruling (Parker, 2026-10-10): a replaced source's objects
+		// leave the Work and their storage follows. A paged set's own files are retired
+		// by `syncFromSourceKey`, which owns the set and its rows in the same mutation.
+		// An in-flight job's stale pg-boss delivery finds its row gone and throws at the
+		// claim guard — the same precedent DELETE /works/:id's cascade already set.
 		if (sourceChanged && updated.sourceKey) {
+			if (work.sourceKey || work.sourceOriginalKey) {
+				const priorJobs = await db
+					.select()
+					.from(transcodingJobs)
+					.where(eq(transcodingJobs.workId, id));
+				await purgeReplacedWorkMedia(work, priorJobs);
+				if (priorJobs.length > 0) {
+					await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, id));
+				}
+			}
 			if (isPaged(updated.type)) await syncFromSourceKey(updated);
 			else await queueTranscodeForWork(updated);
 		}
