@@ -22,4 +22,9 @@ LICENSE.md, with the following exceptions.
   under the SIL Open Font License 1.1, described in
   apps/web/public/fonts/THIRD-PARTY.md.
 
+- apps/web/src/vendor/foliate-js/ is a vendored copy of john Factotum's foliate-js
+  (https://github.com/johnfactotum/foliate-js), licensed under the MIT License; its
+  original license text is carried in that directory as LICENSE, and the vendoring is
+  documented — upstream commit, and each patch Anthers carries — in VENDOR.md beside it.
+
 The Apache License grants no rights to the Anthers name or logo.
