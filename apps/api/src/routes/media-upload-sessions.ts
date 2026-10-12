@@ -42,6 +42,15 @@ export const mediaUploadSessionRoutes = new Hono()
 				mediaType: z.enum(["video", "audio", "asset"]),
 				/** The file's full size — what the part plan is built from. */
 				size: z.number().int().min(1),
+				/**
+				 * The whole file's digest, read before anything is sent. A digest this
+				 * creator still holds an open session for is the RESUME key: the answer is
+				 * that session's plan, with the parts the backend already holds named.
+				 */
+				clientSha256: z
+					.string()
+					.regex(/^sha-[0-9a-f]{64}$/)
+					.optional(),
 			}),
 		),
 		async (c) => {
@@ -54,7 +63,17 @@ export const mediaUploadSessionRoutes = new Hono()
 				return c.json({ method: "direct" as const, sessionId: null });
 			}
 			const session = await startUploadSession(user.id, input);
-			return c.json({ method: "session" as const, ...session }, 201);
+			return c.json(
+				{
+					method: "session" as const,
+					sessionId: session.sessionId,
+					key: session.key,
+					partSize: session.partSize,
+					parts: session.parts,
+					held: session.held,
+				},
+				201,
+			);
 		},
 	)
 

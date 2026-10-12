@@ -60,8 +60,14 @@ export interface WorkUpload {
 
 /** How a file reaches storage and then its Work. Swappable so the store can be tested without a network. */
 export interface WorkUploadTransport {
-	/** Send the bytes; resolves to the stored key. */
-	put(file: File, target: WorkUploadTarget, onProgress: (percent: number) => void): Promise<string>;
+	/** Send the bytes; resolves to the stored key. Progress of `null` is honest — a
+	 * transport reading the file before sending (the session's digest pass) reports no
+	 * percent yet, and the caller renders its indeterminate bar. */
+	put(
+		file: File,
+		target: WorkUploadTarget,
+		onProgress: (percent: number | null) => void,
+	): Promise<string>;
 	/** Tell the Work its file has arrived. */
 	attach(workId: number, target: WorkUploadTarget, key: string, file: File): Promise<void>;
 }
