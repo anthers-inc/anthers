@@ -27,7 +27,7 @@
 import type HlsInstance from "hls.js";
 import { useEffect, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
-import { previewSourceFor } from "../../lib/tile-preview";
+import { previewOriginalSourceFor, previewSourceFor } from "../../lib/tile-preview";
 
 export interface TilePreviewWork {
 	id: number;
@@ -81,7 +81,7 @@ function TileVideoPreview({ work, onDone }: TileHoverPreviewProps) {
 				onDone();
 			};
 			video.addEventListener("error", onError);
-			video.src = `/api/content/works/${work.id}/original`;
+			video.src = previewOriginalSourceFor(work.id);
 			void video.play().catch(() => {});
 		};
 

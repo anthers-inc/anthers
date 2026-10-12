@@ -39,6 +39,7 @@
 import { isListened } from "@anthers/shared/content";
 import type { PublicAccessBudget } from "@anthers/shared/public-access";
 import type { AccessResult } from "@anthers/web-shared/types";
+import { apiBaseUrl } from "@anthers/web-shared/rpc";
 
 /** How long a hover must hold before bytes ship — long enough that a cursor in transit never loads a stream. */
 export const PREVIEW_HOVER_DELAY_MS = 500;
@@ -73,13 +74,26 @@ export function tilePreviewPlayable(params: {
  * players use, minted per request. The feed serializes no payload, so nothing
  * here can be cached from the listing: every hover goes back through the gates.
  *
+ * 🚨 **Addressed absolutely through `apiBaseUrl()`** — the work page's player receives
+ * a Work-detail URL minted server-side, but the preview builds its own, and a *relative*
+ * path would resolve against the page's host and fetch the SPA shell instead of the API
+ * wherever the two differ (the plain dev checkout's API is another port entirely; the
+ * web server answers every path with the app HTML and a cheerful 200, so hls.js then
+ * dies parsing markup as a manifest). The one sanctioned resolver is `apiBaseUrl()`.
+ *
  * A ladder-less video falls back to `/works/:id/original` when the manifest's
  * HLS attempt 404s, matching the Work page's own ladder-then-original rule; the
  * fallback happens in the player component, which owns the elements.
  */
 export function previewSourceFor(work: { id: number; type: string }): string {
-	if (work.type === "video") return `/api/content/works/${work.id}/hls/master.m3u8`;
-	return `/api/content/works/${work.id}/audio`;
+	const base = apiBaseUrl();
+	if (work.type === "video") return `${base}/api/content/works/${work.id}/hls/master.m3u8`;
+	return `${base}/api/content/works/${work.id}/audio`;
+}
+
+/** The ladder-less video's fallback route, addressed the same way. */
+export function previewOriginalSourceFor(workId: number): string {
+	return `${apiBaseUrl()}/api/content/works/${workId}/original`;
 }
 
 // ── The one-active-tile store ────────────────────────────────────────────────

@@ -301,8 +301,22 @@ function ReleaseBand({
 	}
 	if (artwork)
 		return <CoverBand work={work} src={artwork} previewing={previewing} onDone={onDone} />;
-	// No artwork: the band is the type's poster instead.
-	if (isListened(work.type)) return <ListenPosterBand type={work.type} playing={previewing} />;
+	// No artwork: the band is the type's poster instead — and the preview rides it
+	// as an invisible muted element, with the decorative waveform lighting up from
+	// the play state rather than taking any picture.
+	if (isListened(work.type)) {
+		return (
+			<div className="relative">
+				<ListenPosterBand type={work.type} playing={previewing} />
+				{previewing && (
+					<TileHoverPreview
+						work={{ id: work.id, type: work.type, creatorId: work.creatorId ?? null }}
+						onDone={onDone}
+					/>
+				)}
+			</div>
+		);
+	}
 	if (work.type === "text") {
 		return <TypographicBand label={contentTypeMeta(work.type).label} title={work.title} />;
 	}

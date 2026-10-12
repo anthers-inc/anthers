@@ -92,15 +92,18 @@ describe("tilePreviewPlayable", () => {
 });
 
 describe("previewSourceFor", () => {
+	// The absolute-origin property (`apiBaseUrl()` prefixes the API host) is proven in
+	// the browser, not here: with no `location`, the test environment's base is empty
+	// and URLs come out page-relative — which is exactly the failure mode the
+	// docblock warns against, so the test pins the endpoint shape and the test run
+	// at `localhost:3000` pinned the wiring through the real API origin.
 	test("video mints the access-checked HLS manifest path", () => {
-		expect(previewSourceFor({ id: 42, type: "video" })).toBe(
-			"/api/content/works/42/hls/master.m3u8",
-		);
+		expect(previewSourceFor({ id: 42, type: "video" })).toContain("/api/content/works/42/hls/master.m3u8");
 	});
 
 	test("listened family mints the audio endpoint", () => {
-		expect(previewSourceFor({ id: 7, type: "music" })).toBe("/api/content/works/7/audio");
-		expect(previewSourceFor({ id: 9, type: "audio" })).toBe("/api/content/works/9/audio");
+		expect(previewSourceFor({ id: 7, type: "music" })).toContain("/api/content/works/7/audio");
+		expect(previewSourceFor({ id: 9, type: "audio" })).toContain("/api/content/works/9/audio");
 	});
 });
 
