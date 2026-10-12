@@ -45,6 +45,8 @@ import {
 	workPages,
 	workPanels,
 	workSaves,
+	workSectionAssets,
+	workSections,
 	works,
 } from "@anthers/db/schema";
 import {
@@ -113,6 +115,7 @@ import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { queueScansForWork } from "../jobs/scan-media.js";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
+import { routePagedIngest } from "../lib/paged-ingest.js";
 import { buildDeliveryHost, mintPlayToken, PLAY_TOKEN_TTL_SECONDS } from "../lib/web-build.js";
 import { getOptionalUserId, requireAuth, requireCreator } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
@@ -1191,11 +1194,26 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 		return job;
 	}
 	if (processing === "ebook" && item.sourceKey) {
+		// The row routes by composition, exactly as `askRerender` does: an EPUB set
+		// extracts (`ingest-ebook`), every other set renders as fixed pages. A set that
+		// routes nowhere is recorded failed, legibly, rather than thrown out of a create
+		// the creator is mid-way through.
 		const [job] = await db
 			.insert(transcodingJobs)
 			.values({ workId: item.id, mediaType: "ebook", status: "pending" })
 			.returning();
-		await queue.send(QUEUES.RENDER_PAGED, { jobId: job.id }, JOB_OPTIONS[QUEUES.RENDER_PAGED]);
+		try {
+			const route = routePagedIngest(await listSourceFiles(item));
+			const queueName = route === "ingest-ebook" ? QUEUES.INGEST_EBOOK : QUEUES.RENDER_PAGED;
+			await queue.send(queueName, { jobId: job.id }, JOB_OPTIONS[queueName]);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			await db
+				.update(transcodingJobs)
+				.set({ status: "failed", errorMessage: message, updatedAt: new Date() })
+				.where(eq(transcodingJobs.id, job.id));
+			return { ...job, status: "failed", errorMessage: message };
+		}
 		return job;
 	}
 	if (processing === "audio" && item.sourceKey) {
@@ -1952,6 +1970,14 @@ async function serializeWorkForUser(
 	 */
 	pageCount = 0,
 	/**
+	 * How many **reflow** sections an ebook's EPUB ingest extracted, or 0 — the fixed
+	 * shape's `pageCount` sibling. This is the only ingest-produced signal the reader
+	 * needs to pick its view: sections exist → reflow (`work_sections`, foliate);
+	 * none → fixed (`work_pages`, the page reader). Same publicity rule as `pageCount` —
+	 * a count is the book's shape, never a pointer into it.
+	 */
+	sectionCount = 0,
+	/**
 	 * Whether a guardian's **time limit** has run out on this account.
 	 *
 	 * ⚠️ **Optional where `allowanceSpent` is required, and the asymmetry is deliberate.** A
@@ -2083,6 +2109,7 @@ async function serializeWorkForUser(
 		// for something already enforced once.
 		lyrics: deliverable ? work.lyrics : "",
 		pageCount,
+		sectionCount,
 		// ⚠️ Downloads stay on `canAccess` alone, deliberately. **The meter measures
 		// attention to the commons, not bytes** — delivery is free at any volume since R2,
 		// and a spent allowance has never had anything to do with a file you are entitled
@@ -2181,6 +2208,8 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 	jobByWork: Map<number, TranscodingJobRow>;
 	/** Page count per ebook Work. A COUNT, never the keys — see `serializeWorkForUser`. */
 	pagesByWork: Map<number, number>;
+	/** Reflow section count per ebook Work — the reader's shape signal, `pageCount`'s sibling. */
+	sectionsByWork: Map<number, number>;
 	/** Browser builds per Work, with their file rows. Owner-facing payload; see `serializeWork`. */
 	buildsByWork: Map<number, WebBuildWithFiles[]>;
 }> {
@@ -2188,32 +2217,47 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 	const assetsByWork = new Map<number, AssetRow[]>();
 	const jobByWork = new Map<number, TranscodingJobRow>();
 	const pagesByWork = new Map<number, number>();
+	const sectionsByWork = new Map<number, number>();
 	const buildsByWork = new Map<number, WebBuildWithFiles[]>();
 	if (workIds.length === 0) {
-		return { worksById, assetsByWork, jobByWork, pagesByWork, buildsByWork };
+		return {
+			worksById,
+			assetsByWork,
+			jobByWork,
+			pagesByWork,
+			sectionsByWork,
+			buildsByWork,
+		};
 	}
 
-	const [workRows, assetRows, jobRows, pageRows, buildRows, buildFileRows] = await Promise.all([
-		db.select().from(works).where(inArray(works.id, workIds)),
-		db.select().from(assets).where(inArray(assets.workId, workIds)),
-		db
-			.select()
-			.from(transcodingJobs)
-			.where(inArray(transcodingJobs.workId, workIds))
-			.orderBy(desc(transcodingJobs.createdAt)),
-		db
-			.select({ workId: workPages.workId, count: sql<number>`count(*)::int` })
-			.from(workPages)
-			.where(inArray(workPages.workId, workIds))
-			.groupBy(workPages.workId),
-		db.select().from(webBuilds).where(inArray(webBuilds.workId, workIds)),
-		db
-			.select({ file: webBuildFiles, workId: webBuilds.workId })
-			.from(webBuildFiles)
-			.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
-			.where(inArray(webBuilds.workId, workIds)),
-	]);
+	const [workRows, assetRows, jobRows, pageRows, sectionRows, buildRows, buildFileRows] =
+		await Promise.all([
+			db.select().from(works).where(inArray(works.id, workIds)),
+			db.select().from(assets).where(inArray(assets.workId, workIds)),
+			db
+				.select()
+				.from(transcodingJobs)
+				.where(inArray(transcodingJobs.workId, workIds))
+				.orderBy(desc(transcodingJobs.createdAt)),
+			db
+				.select({ workId: workPages.workId, count: sql<number>`count(*)::int` })
+				.from(workPages)
+				.where(inArray(workPages.workId, workIds))
+				.groupBy(workPages.workId),
+			db
+				.select({ workId: workSections.workId, count: sql<number>`count(*)::int` })
+				.from(workSections)
+				.where(inArray(workSections.workId, workIds))
+				.groupBy(workSections.workId),
+			db.select().from(webBuilds).where(inArray(webBuilds.workId, workIds)),
+			db
+				.select({ file: webBuildFiles, workId: webBuilds.workId })
+				.from(webBuildFiles)
+				.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
+				.where(inArray(webBuilds.workId, workIds)),
+		]);
 	for (const p of pageRows) pagesByWork.set(p.workId, p.count);
+	for (const s of sectionRows) sectionsByWork.set(s.workId, s.count);
 
 	await Promise.all(workRows.map(resolveWorkThumbnail));
 	for (const w of workRows) worksById.set(w.id, w);
@@ -2236,7 +2280,14 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 		list.push({ ...b, files: filesByBuild.get(b.id) ?? [] });
 		buildsByWork.set(b.workId, list);
 	}
-	return { worksById, assetsByWork, jobByWork, pagesByWork, buildsByWork };
+	return {
+		worksById,
+		assetsByWork,
+		jobByWork,
+		pagesByWork,
+		sectionsByWork,
+		buildsByWork,
+	};
 }
 
 /**
@@ -2259,7 +2310,7 @@ async function loadPostWorks(
 	if (refs.length === 0) return [];
 
 	const workIds = refs.map((r) => r.workId);
-	const { worksById, assetsByWork, jobByWork, pagesByWork, buildsByWork } =
+	const { worksById, assetsByWork, jobByWork, pagesByWork, sectionsByWork, buildsByWork } =
 		await loadWorkBundles(workIds);
 	const [ctx, spent] = await Promise.all([
 		buildAccessContext(userId, { workIds }),
@@ -2294,6 +2345,7 @@ async function loadPostWorks(
 					spent,
 					userId,
 					pagesByWork.get(work.id) ?? 0,
+					sectionsByWork.get(work.id) ?? 0,
 					(buildsByWork.get(work.id) ?? []).some((b) => b.isPrimary),
 					(buildsByWork.get(work.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ?? false,
 				),
@@ -3625,7 +3677,128 @@ const contentRoutes = new Hono()
 		return c.redirect(url, 302);
 	})
 
-	// ── Browser-build delivery: mint the play address (access-checked) ──────────
+	// ── Ebook reflow delivery: sections and assets (access-checked, signed) ─────
+	//
+	// The reflow counterpart of the page route's ladder. An EPUB's ingest extracted the
+	// container into `work_sections` (chapters, in reading order) and `work_section_assets`
+	// (the images, stylesheets and fonts those chapters reference), stored private under
+	// the same rule the pages are — so `downloadEnabled: false` stays honest for a reflow
+	// book too: no one URL the whole title falls out of. The manifest is what the reader's
+	// loader maps references through (it carries container-relative paths, the stable
+	// identity a re-ingest keeps), and the two unit routes mint short-lived signed URLs
+	// behind the same gate ladder the page route runs — access, the Public Access meter,
+	// the household limit.
+	//
+	// The manifest is metadata: it gates on access and the household limit (chapter titles
+	// are part of the Work), but the meter draws on the units, where attention actually
+	// goes — there is no minute spent opening a table of contents.
+	.get("/works/:id/sections", requireUserOrShareLink, async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
+
+		const [sectionRows, assetRows] = await Promise.all([
+			db
+				.select()
+				.from(workSections)
+				.where(eq(workSections.workId, work.id))
+				.orderBy(asc(workSections.position)),
+			db
+				.select()
+				.from(workSectionAssets)
+				.where(eq(workSectionAssets.workId, work.id))
+				.orderBy(asc(workSectionAssets.id)),
+		]);
+		return c.json({
+			sections: sectionRows.map((s) => ({
+				position: s.position,
+				href: s.href,
+				title: s.title,
+				// Paths the client prefixes with its API base the way the page reader
+				// composes its page URLs (`${apiBase}/api/content/works/…`); never a
+				// hand-rolled origin.
+				url: `/api/content/works/${work.id}/sections/${s.position}`,
+			})),
+			assets: assetRows.map((a) => ({
+				path: a.path,
+				mimeType: a.mimeType,
+				url: `/api/content/works/${work.id}/assets/${a.id}`,
+			})),
+		});
+	})
+
+	// One reflow section, one check, one signed address — the page route's shape to the
+	// byte, because the reader's loader must never learn a second way to ask.
+	.get("/works/:id/sections/:section", requireUserOrShareLink, async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const position = parseNumericId(c.req.param("section"));
+		if (position == null) return c.json({ error: "Not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		// 402, not 403, for the reason the page route carries: reading the commons draws
+		// the allowance exactly as watching does — the equal-time principle is about what
+		// a minute IS, not about which medium.
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
+
+		const [section] = await db
+			.select()
+			.from(workSections)
+			.where(and(eq(workSections.workId, work.id), eq(workSections.position, position)))
+			.limit(1);
+		if (!section) return c.json({ error: "Not found" }, 404);
+
+		const url = await storage.getUrl(section.file, {
+			signed: true,
+			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
+		});
+		// no-store: this 302 carries a signed URL and is access-dependent, for the same
+		// reason as every redirect above.
+		c.header("Cache-Control", "no-store");
+		return c.redirect(url, 302);
+	})
+
+	// One asset — an image, a stylesheet, a font a chapter's XHTML references — through
+	// its own check. The manifest is what makes this possible: the reader maps a
+	// chapter's references from container-relative paths to these routes, so serving a
+	// picture to a page never re-serves the book.
+	.get("/works/:id/assets/:assetId", requireUserOrShareLink, async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const assetId = parseNumericId(c.req.param("assetId"));
+		if (assetId == null) return c.json({ error: "Not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
+
+		const [asset] = await db
+			.select()
+			.from(workSectionAssets)
+			.where(and(eq(workSectionAssets.workId, work.id), eq(workSectionAssets.id, assetId)))
+			.limit(1);
+		if (!asset) return c.json({ error: "Not found" }, 404);
+
+		const url = await storage.getUrl(asset.file, {
+			signed: true,
+			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
+		});
+		c.header("Cache-Control", "no-store");
+		return c.redirect(url, 302);
+	})
 	//
 	// A hosted build's files answer on the Work's delivery origin, where the Anthers
 	// session never arrives — so the entitlement is this route's answer: signed, per
@@ -4347,6 +4520,12 @@ const contentRoutes = new Hono()
 			.select({ count: sql<number>`count(*)::int` })
 			.from(workPages)
 			.where(eq(workPages.workId, work.id));
+		// The reflow count rides the same answer's shape: sections exist → the reader is
+		// the reflow one, none → the fixed page reader.
+		const [sectionRow] = await db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(workSections)
+			.where(eq(workSections.workId, work.id));
 
 		return c.json({
 			work: {
@@ -4362,6 +4541,7 @@ const contentRoutes = new Hono()
 					await allowanceSpent(userId, sharedBy),
 					userId,
 					pageRow?.count ?? 0,
+					sectionRow?.count ?? 0,
 					// The one page a user actually opens a text Work, a game or an image
 					// from, so it is the one that has to consult a household's time limit —
 					// those four media have no delivery route of their own.
@@ -4637,7 +4817,8 @@ const contentRoutes = new Hono()
 		if (rows.length === 0) return c.json({ creator, works: [] });
 
 		const ids = rows.map((r) => r.id);
-		const { assetsByWork, jobByWork, pagesByWork, buildsByWork } = await loadWorkBundles(ids);
+		const { assetsByWork, jobByWork, pagesByWork, sectionsByWork, buildsByWork } =
+			await loadWorkBundles(ids);
 		const [ctx, catalogSpent] = await Promise.all([
 			buildAccessContext(userId, { workIds: ids }),
 			allowanceSpent(userId),
@@ -4663,6 +4844,7 @@ const contentRoutes = new Hono()
 						catalogSpent,
 						userId,
 						pagesByWork.get(w.id) ?? 0,
+						sectionsByWork.get(w.id) ?? 0,
 						(buildsByWork.get(w.id) ?? []).some((b) => b.isPrimary),
 						(buildsByWork.get(w.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ?? false,
 					)),
@@ -5342,7 +5524,10 @@ const contentRoutes = new Hono()
 		// The set route signs this key for the Work's owner, so a file naming another
 		// creator's private original would hand it over. See `storage/keys.ts`.
 		if (!(await isOwnStorageRef(data.file, user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
-		const { rows, job } = await appendSourceFile(item, data);
+		const { rows, job, error } = await appendSourceFile(item, data);
+		if (error) {
+			return c.json({ error, code: "sources_mixed_shapes" }, 400);
+		}
 		await queueScansForWork({ ...item, sourceKey: data.file });
 		return c.json({ files: rows, transcoding: job }, 201);
 	})
@@ -5779,7 +5964,7 @@ const contentRoutes = new Hono()
 			.orderBy(asc(projectItems.sortOrder));
 
 		const memberWorkIds = itemRows.map((r) => r.work.id);
-		const { assetsByWork, jobByWork, pagesByWork, buildsByWork } =
+		const { assetsByWork, jobByWork, pagesByWork, sectionsByWork, buildsByWork } =
 			await loadWorkBundles(memberWorkIds);
 		const [workCtx, projectSpent] = await Promise.all([
 			buildAccessContext(userId, { workIds: memberWorkIds }),
@@ -5816,6 +6001,7 @@ const contentRoutes = new Hono()
 							projectSpent,
 							userId,
 							pagesByWork.get(m.work.id) ?? 0,
+							sectionsByWork.get(m.work.id) ?? 0,
 							(buildsByWork.get(m.work.id) ?? []).some((b) => b.isPrimary),
 							(buildsByWork.get(m.work.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ??
 								false,
@@ -6511,7 +6697,8 @@ const contentRoutes = new Hono()
 			: [];
 		const countsByProject = new Map(memberCounts.map((m) => [m.projectId, m]));
 
-		const { assetsByWork, jobByWork, pagesByWork, buildsByWork } = await loadWorkBundles(workIds);
+		const { assetsByWork, jobByWork, pagesByWork, sectionsByWork, buildsByWork } =
+			await loadWorkBundles(workIds);
 		const [ctx, spent, permanent] = await Promise.all([
 			buildAccessContext(user.id, { workIds }),
 			allowanceSpent(user.id),
@@ -6575,6 +6762,7 @@ const contentRoutes = new Hono()
 										spent,
 										user.id,
 										pagesByWork.get(w.id) ?? 0,
+										sectionsByWork.get(w.id) ?? 0,
 										(buildsByWork.get(w.id) ?? []).some((b) => b.isPrimary),
 										(buildsByWork.get(w.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ??
 											false,

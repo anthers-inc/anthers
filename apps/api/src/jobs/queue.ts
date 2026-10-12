@@ -181,6 +181,12 @@ export const QUEUES = {
 	TRANSCODE_VIDEO: "transcode-video",
 	PROCESS_AUDIO: "process-audio",
 	RENDER_PAGED: "render-paged", // Render a paged Work's source set (PDFs and page images) to private per-page images
+	// Extract a reflow ebook Work's EPUB source set into private chapters and their
+	// referenced assets (`work_sections` + `work_section_assets`), one row per component
+	// in reading order. Separate queue from RENDER_PAGED because the design keeps the two
+	// shapes apart (the reader picks by what the ingest produced) and because a job that
+	// unzips is not a job that rasterizes. See ingest-ebook.ts.
+	INGEST_EBOOK: "ingest-ebook",
 	DISTRIBUTE_POOL: "distribute-pool",
 	SETTLE_CYCLE: "settle-cycle", // Credit each ended month from its paid invoices; see settle-cycle.ts
 	// Move settled, held credits into each creator's connected-account balance, 14 days
@@ -336,6 +342,14 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryDelay: 60,
 		// A long graphic novel is one poppler pass plus an upload per page; generous for
 		// the same reason video is, and bounded by MAX_PAGES in the job itself.
+		expireInMinutes: 30,
+	},
+	// An EPUB extract is a decompress and one upload per component — the same budget as the
+	// paged render, generous for the same reason, and bounded by the extraction caps in
+	// the job itself.
+	[QUEUES.INGEST_EBOOK]: {
+		retryLimit: 2,
+		retryDelay: 60,
 		expireInMinutes: 30,
 	},
 	[QUEUES.SCAN_MEDIA]: {

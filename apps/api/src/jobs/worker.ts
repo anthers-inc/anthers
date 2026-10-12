@@ -38,6 +38,7 @@ import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { runDeadlineReminderSweep } from "./deadline-reminders.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
 import { runHlsOrphanSweep } from "./hls-orphan-sweep.js";
+import { type IngestEbookData, ingestEbook } from "./ingest-ebook.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
 import { handlePruneAttention, type PruneAttentionData } from "./prune-attention.js";
 import { publishScheduled } from "./publish-scheduled.js";
@@ -103,6 +104,13 @@ async function start() {
 		for (const job of jobs) {
 			console.log(`[render-paged] Processing job ${job.id}`);
 			await renderPaged(job.data);
+		}
+	});
+
+	await queue.work<IngestEbookData>(QUEUES.INGEST_EBOOK, { localConcurrency: 2 }, async (jobs) => {
+		for (const job of jobs) {
+			console.log(`[ingest-ebook] Processing job ${job.id}`);
+			await ingestEbook(job.data);
 		}
 	});
 
