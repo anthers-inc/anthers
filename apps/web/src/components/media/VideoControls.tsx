@@ -49,6 +49,8 @@ export default function VideoControls({
 	originalActive,
 	originalAvailable,
 	activeLevelHeight,
+	captionTracks,
+	activeCaptionId,
 	fullscreen,
 	visible,
 	onTogglePlay,
@@ -56,6 +58,7 @@ export default function VideoControls({
 	onRate,
 	onLevel,
 	onOriginal,
+	onCaption,
 	onToggleFullscreen,
 	/**
 	 * The Podcast-This hand-off, present only on a video whose audio rendition exists —
@@ -82,6 +85,10 @@ export default function VideoControls({
 	originalAvailable: boolean;
 	/** What automatic actually chose, so "Auto" can say what it is doing. */
 	activeLevelHeight: number | null;
+	/** The Work's caption tracks. Empty hides the whole captions section rather than rendering it disabled. */
+	captionTracks: Array<{ id: number; language: string; label: string; kind: string }>;
+	/** The track showing now, or null for none. The player owns what that means for the element. */
+	activeCaptionId: number | null;
 	fullscreen: boolean;
 	/** Whether the bar is on screen. Hidden means faded out, never unmounted. */
 	visible: boolean;
@@ -90,6 +97,8 @@ export default function VideoControls({
 	onRate: (rate: number) => void;
 	onLevel: (index: number) => void;
 	onOriginal: () => void;
+	/** Which track to show, or null to turn captions off. The player writes the preference. */
+	onCaption: (trackId: number | null) => void;
 	onToggleFullscreen: () => void;
 	onPodcastThis?: () => void;
 }) {
@@ -157,7 +166,12 @@ export default function VideoControls({
 						size="sm"
 					/>
 					{settingsOpen && (
-						<div className="absolute bottom-full right-0 z-10 mb-2 w-52 rounded-box bg-base-100 p-2 text-base-content shadow-xl">
+						/* 🚨 Scroll, because the sections it can carry (speed, quality, captions,
+						    listen) already exceed a short clip's height on a small player, where
+						    a plain panel would overflow and its top rows would be unclickable.
+						    The overflow is INSIDE the panel — it itself stays anchored at the
+						    player's bottom edge. */
+						<div className="absolute bottom-full right-0 z-10 mb-2 max-h-full w-52 overflow-y-auto rounded-box bg-base-100 p-2 text-base-content shadow-xl">
 							<p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-base-content/50">
 								Speed
 							</p>
@@ -232,6 +246,44 @@ export default function VideoControls({
 										)}
 									</ul>
 								</>
+							)}
+							{captionTracks.length > 0 && (
+								<div data-testid="captions-menu">
+									<p className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-base-content/50">
+										Captions
+									</p>
+									{/* A caption row stays open after the choice, the way the
+									    quality rows do: a viewer switching between two languages
+									    is choosing, not dismissing, and the panel closes on the
+									    outside click like any other menu here. */}
+									<ul className="menu menu-sm w-full">
+										<li>
+											<button
+												type="button"
+												data-testid="captions-off"
+												className={activeCaptionId == null ? "menu-active" : ""}
+												onClick={() => onCaption(null)}
+											>
+												Off
+											</button>
+										</li>
+										{captionTracks.map((t) => (
+											<li key={t.id}>
+												<button
+													type="button"
+													data-testid={`captions-track-${t.id}`}
+													className={t.id === activeCaptionId ? "menu-active" : ""}
+													onClick={() => onCaption(t.id)}
+												>
+													{t.label}
+													<span className="block text-[10px] opacity-60">
+														{t.kind === "subtitles" ? "subtitles" : "captions"}
+													</span>
+												</button>
+											</li>
+										))}
+									</ul>
+								</div>
 							)}
 							{onPodcastThis && (
 								<>

@@ -11,7 +11,7 @@
  *
  * The bindings follow the conventions people already have from YouTube and VLC rather
  * than inventing any: space/k play, j/l jump ten, arrows nudge five, f fullscreen,
- * m mute, digits seek by tenths, `,`/`.` step a frame while paused. j/l move by ten
+ * c captions, m mute, digits seek by tenths, `,`/`.` step a frame while paused. j/l move by ten
  * *seconds on video*; a spoken player overrides the step via `jump`, which is what a
  * podcast pair (−15, +30) binds to instead.
  */
@@ -36,6 +36,8 @@ export interface MediaShortcutHandlers {
 	stepFrame?: (direction: 1 | -1) => void;
 	/** Multiplier steps through the speed list. */
 	stepRate?: (direction: 1 | -1) => void;
+	/** c — whether captions are showing at all, when the video carries tracks. */
+	toggleCaptions?: () => void;
 	next?: () => void;
 	previous?: () => void;
 }
@@ -86,6 +88,9 @@ export function useMediaShortcuts(handlers: MediaShortcutHandlers) {
 			case "m":
 			case "M":
 				return run(h.toggleMuted);
+			case "c":
+			case "C":
+				return run(h.toggleCaptions);
 			case "f":
 			case "F":
 				return run(h.toggleFullscreen);

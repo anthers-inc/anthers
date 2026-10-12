@@ -18,6 +18,9 @@
  * scrubber we owned, no keyboard control, no speed, no quality picker, and no consistent
  * look between Chrome and Safari.
  */
+
+import { apiFetch } from "@anthers/web-shared/rpc";
+import type { WorkCaptionTrack } from "@anthers/web-shared/types";
 import { PlayIcon } from "@heroicons/react/24/solid";
 import type HlsInstance from "hls.js";
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
@@ -32,6 +35,30 @@ import VideoControls, { PLAYBACK_RATES, type QualityLevel } from "./VideoControl
 
 /** How long the controls linger after the pointer stops moving, while playing. */
 const CONTROLS_IDLE_MS = 2500;
+
+/**
+ * The remembered captions choice — on/off only, shared across every video the app plays,
+ * because a viewer who fixed "this talks to me" once does not want to say it again. The
+ * language picked is a per-video choice; the preference answers whether captions are
+ * wanted at all. Never-set and "off" both play silent, which is the mainstream player
+ * default and the smaller surprise.
+ */
+const CAPTIONS_PREF_KEY = "anthers.captions";
+function readCaptionPref(): "on" | "off" {
+	try {
+		return localStorage.getItem(CAPTIONS_PREF_KEY) === "on" ? "on" : "off";
+	} catch {
+		return "off";
+	}
+}
+function writeCaptionPref(value: "on" | "off") {
+	try {
+		localStorage.setItem(CAPTIONS_PREF_KEY, value);
+	} catch {
+		// Storage can refuse in private modes; the choice then is per-video, which is
+		// degraded remembering, not broken captions.
+	}
+}
 
 interface VideoPlayerProps {
 	src: string;
@@ -79,6 +106,15 @@ interface VideoPlayerProps {
 	 * which plays the original *by default*, so the menu then has nothing to offer.
 	 */
 	originalUrl?: string | null;
+	/**
+	 * The Work's caption tracks, as the detail payload carries them, gated with the video
+	 * like every other deliverable. Each renders as a `<track>` child whose bytes come
+	 * from the same access-checked captions route the payload built the URL with, so a
+	 * share-link viewer's token rides and a stranger gets the gate. Absent or empty means
+	 * no menu and no shortcut — the a11y lint note on the `<video>` element says why it
+	 * is still satisfied.
+	 */
+	captions?: WorkCaptionTrack[];
 }
 
 export default function VideoPlayer({
@@ -90,6 +126,7 @@ export default function VideoPlayer({
 	elementRef,
 	podcast,
 	originalUrl,
+	captions,
 	onEnded,
 }: VideoPlayerProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -136,6 +173,86 @@ export default function VideoPlayer({
 	const [refused, setRefused] = useState(false);
 	const budget = useMeteredBudget();
 	const { playTracks } = useMediaPlayer();
+
+	/**
+	 * The caption track showing right now, or null for none. Initialized from the shared
+	 * on/off preference once captions arrive, and re-derived whenever the Work changes —
+	 * a remembered "on" re-lights the new video's first track, because the preference is
+	 * about captions, not about one video's track ids.
+	 */
+	const [activeCaptionId, setActiveCaptionId] = useState<number | null>(null);
+	useEffect(() => {
+		setActiveCaptionId((current) => {
+			if (current != null && captions?.some((t) => t.id === current)) return current;
+			if (readCaptionPref() === "on" && captions?.length) return captions[0].id;
+			return null;
+		});
+	}, [captions]);
+
+	/**
+	 * Each track's bytes, fetched with the app's own transport and handed to the element
+	 * as a same-origin blob URL.
+	 *
+	 * ⚠️ This is deliberate rather than a `<track src="/api…">` direct: in production the
+	 * API is same-origin and the direct form would work, but everywhere the page does NOT
+	 * share the API's origin — the Studio preview, a desktop app, any future split — a
+	 * native text-track fetch runs CORS-anonymous, dropping the session cookie and 401ing,
+	 * which reads on screen as "captions are missing" instead of "fetch failed". `apiFetch`
+	 * is the one place credentials are resolved; the menu's bytes then belong to whatever
+	 * origin the document is.
+	 */
+	const [trackBlobUrls, setTrackBlobUrls] = useState<Record<number, string>>({});
+	useEffect(() => {
+		if (!captions?.length) {
+			setTrackBlobUrls({});
+			return;
+		}
+		let dead = false;
+		const urls: Record<number, string> = {};
+		void (async () => {
+			for (const t of captions) {
+				try {
+					const res = await apiFetch(t.url);
+					if (!res.ok) continue;
+					urls[t.id] = URL.createObjectURL(new Blob([await res.text()], { type: "text/vtt" }));
+				} catch {
+					// A track that cannot be read is skipped: the menu loses a language, it
+					// does not error the page — the degraded case the reader still controls.
+				}
+			}
+			if (!dead) setTrackBlobUrls(urls);
+		})();
+		return () => {
+			dead = true;
+			for (const url of Object.values(urls)) URL.revokeObjectURL(url);
+		};
+	}, [captions]);
+
+	/** Push the active choice onto the element's text tracks — the one place modes are set, so the browser's own menu and ours can never disagree. */
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-applying after a source rebuild, a blob arrival or an addtrack is the point — the element's text tracks reset with its media, and a track's own TextTrack only exists once its resource has attached
+	useEffect(() => {
+		const video = videoRef.current;
+		if (!video) return;
+		const applyModes = () => {
+			video.querySelectorAll("track[data-caption-track-id]").forEach((el) => {
+				const track = (el as HTMLTrackElement).track;
+				if (!track) return;
+				track.mode =
+					Number(el.getAttribute("data-caption-track-id")) === activeCaptionId
+						? "showing"
+						: "disabled";
+			});
+		};
+		applyModes();
+		// The TextTrack on each `<track>` element exists only after its resource loads —
+		// reading `.track` in the commit pass finds null and the mode would never land.
+		// `addtrack` is the browser announcing that a TextTrack now exists, which is
+		// exactly when the mode belongs on it.
+		video.textTracks.addEventListener("addtrack", applyModes);
+		return () => {
+			video.textTracks.removeEventListener("addtrack", applyModes);
+		};
+	}, [activeCaptionId, playedSrc, trackBlobUrls]);
 
 	/**
 	 * Hand this video's audio rendition to the persistent bar, as spoken word.
@@ -444,6 +561,23 @@ export default function VideoPlayer({
 		setMode("original");
 	}, [mode]);
 
+	// ── Captions ───────────────────────────────────────────────────────────
+
+	/**
+	 * One setter for the choice, whatever surface makes it — the settings language rows,
+	 * the `c` shortcut — and every change through it writes the shared preference, so a
+	 * viewer's second video never re-asks. Selecting a language writes "on"; turning
+	 * captions off writes "off"; the per-video language rides only in state.
+	 */
+	const selectCaption = useCallback((id: number | null) => {
+		setActiveCaptionId(id);
+		writeCaptionPref(id == null ? "off" : "on");
+	}, []);
+
+	const toggleCaptions = useCallback(() => {
+		selectCaption(activeCaptionId == null ? (captions?.[0]?.id ?? null) : null);
+	}, [activeCaptionId, captions, selectCaption]);
+
 	const toggleFullscreen = useCallback(() => {
 		const container = containerRef.current;
 		const video = videoRef.current;
@@ -497,6 +631,7 @@ export default function VideoPlayer({
 		adjustVolume: (delta) => setVolumeLevel(volume.level + delta),
 		toggleMuted,
 		toggleFullscreen,
+		toggleCaptions: captions?.length ? toggleCaptions : undefined,
 		stepFrame: (direction) => {
 			// Not a true frame — the element cannot tell us the frame rate — but a step
 			// small enough to land on a neighboring one at ordinary rates. Named for what
@@ -532,7 +667,18 @@ export default function VideoPlayer({
 					isPlaying && !controlsVisible ? "cursor-none" : ""
 				}`}
 			>
-				{/* biome-ignore lint/a11y/useMediaCaption: Anthers has no caption tracks to offer yet — the `captions` roadmap entry. */}
+				{/*
+				 * Caption tracks render as children whose src is a blob URL built from the
+				 * app's own authenticated fetch (above), so the track's modes are ours to
+				 * set — the modes are never set from `default`, which would hand the choice
+				 * to the element's load order rather than to the active-selection effect.
+				 */}
+				{/* biome-ignore lint/a11y/useMediaCaption: tracks render as children below whenever the Work carries any; the rule is static and cannot see the conditional.
+				    The tracks are children of THIS element — that is what makes them text tracks
+				    of it — and their src is a blob URL built from the app's own authenticated
+				    fetch (above), so the bytes read no differently from the page. The modes are
+				    never set from `default`, which would hand the choice to the element's load
+				    order rather than to the active-selection effect. */}
 				<video
 					ref={videoRef}
 					poster={poster}
@@ -544,7 +690,20 @@ export default function VideoPlayer({
 						togglePlay();
 					}}
 					className="aspect-video w-full cursor-pointer bg-black"
-				/>
+				>
+					{(captions ?? [])
+						.filter((t) => trackBlobUrls[t.id])
+						.map((t) => (
+							<track
+								key={t.id}
+								data-caption-track-id={t.id}
+								src={trackBlobUrls[t.id]}
+								kind={t.kind === "subtitles" ? "subtitles" : "captions"}
+								srcLang={t.language}
+								label={t.label || t.language}
+							/>
+						))}
+				</video>
 
 				{/* The big idle affordance. Only while paused, and it never eats the click —
 				    the picture underneath is the button. */}
@@ -568,6 +727,8 @@ export default function VideoPlayer({
 					originalActive={mode === "original"}
 					originalAvailable={!!originalUrl}
 					activeLevelHeight={activeLevelHeight}
+					captionTracks={captions ?? []}
+					activeCaptionId={activeCaptionId}
 					fullscreen={fullscreen}
 					visible={controlsVisible || !isPlaying}
 					onTogglePlay={togglePlay}
@@ -575,6 +736,7 @@ export default function VideoPlayer({
 					onRate={applyRate}
 					onLevel={applyLevel}
 					onOriginal={selectOriginal}
+					onCaption={selectCaption}
 					onToggleFullscreen={toggleFullscreen}
 					onPodcastThis={podcast ? podcastThis : undefined}
 				/>

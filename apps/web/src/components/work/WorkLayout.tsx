@@ -336,6 +336,7 @@ export function WorkDeliverable({
 					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 					publicAccess={work.publicAccess ?? false}
 					elementRef={videoRef}
+					captions={work.captions}
 					// The Podcast-This row: only a video whose audio rendition really shipped
 					// gets one — serialization nulls the URL when `audio.m3u8` is absent.
 					podcast={
@@ -355,6 +356,7 @@ export function WorkDeliverable({
 					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 					publicAccess={work.publicAccess ?? false}
 					elementRef={videoRef}
+					captions={work.captions}
 				/>
 			)}
 			{work.type === "music" && work.transcoding?.outputFileUrl && (

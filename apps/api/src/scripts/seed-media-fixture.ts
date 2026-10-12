@@ -42,6 +42,7 @@ import {
 	stripeAccounts,
 	transcodingJobs,
 	users,
+	workCaptionTracks,
 	workPages,
 	workPanels,
 	works,
@@ -52,6 +53,7 @@ import { and, eq } from "drizzle-orm";
 import { processAudio } from "../jobs/process-audio.js";
 import { renderPaged } from "../jobs/render-paged.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
+import { attachCaptionTrack } from "../services/captions.js";
 import { syncProjectRecord } from "../services/creator-record-listing.js";
 import { hostedHandleSuffix } from "../services/hosted-accounts.js";
 import { storage } from "../services/storage/index.js";
@@ -341,6 +343,56 @@ async function ensureWork(spec: MediaFixtureWork, creator: number): Promise<numb
 	return created.id;
 }
 
+/**
+ * The video Work's caption track — an English VTT the player spec's CC assertions read.
+ *
+ * Idempotent, and deliberately BEFORE the `alreadyPlayable` early return above: a fixture
+ * seeded on an older branch has working media and no captions, and a skip that stood for
+ * the whole function would hold that gap open forever. Re-runs are handled by the attach
+ * service's own replace-by-language rule, so calling this from `FORCE` re-seeds too.
+ *
+ * Attached through `attachCaptionTrack`, not a bare insert — one path for the write, and
+ * the fixture bytes validated by the same gate a creator's upload passes.
+ */
+async function ensureVideoCaptions(
+	spec: MediaFixtureWork,
+	creator: number,
+	workId: number,
+): Promise<void> {
+	if (spec.media !== "video") return;
+	const [existing] = await db
+		.select()
+		.from(workCaptionTracks)
+		.where(eq(workCaptionTracks.workId, workId))
+		.limit(1);
+	if (existing) return;
+	const work = (await db.select().from(works).where(eq(works.id, workId)).limit(1))[0];
+	const key = `creators/${creator}/captions/${workId}/fixture-en.vtt`;
+	await storage.upload(
+		key,
+		new Uint8Array(Buffer.from(FIXTURE_VTT, "utf-8")),
+		"text/vtt",
+		"private",
+	);
+	await attachCaptionTrack({
+		work,
+		requesterId: creator,
+		key,
+		language: "en",
+		label: "English (fixture)",
+	});
+	console.log(`${TAG} ${spec.key} caption track attached (en)`);
+}
+
+const FIXTURE_VTT = `WEBVTT
+
+00:00:01.000 --> 00:00:02.500
+A tone, from the fixture that really plays.
+
+00:00:03.000 --> 00:00:06.000
+Still a tone.
+`;
+
 /** Whether this Work already has media we can trust, so the encode can be skipped. */
 async function alreadyPlayable(workId: number): Promise<boolean> {
 	const [job] = await db
@@ -377,6 +429,7 @@ async function alreadyPlayable(workId: number): Promise<boolean> {
 
 async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<void> {
 	const workId = await ensureWork(spec, creator);
+	await ensureVideoCaptions(spec, creator, workId);
 
 	if (!FORCE && (await alreadyPlayable(workId))) {
 		console.log(`${TAG} ${spec.key} already playable — skipped`);
