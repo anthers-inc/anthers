@@ -52,6 +52,13 @@ interface VideoPlayerProps {
 	 */
 	publicAccess?: boolean;
 	/**
+	 * Called when the video ends. The Channel Guide's auto-advance rides this (its
+	 * preference is opt-in; nothing else wires it today). Deliberately **called on the
+	 * ended event only** — a pause or a stall is not an end — and the caller decides
+	 * what "next" even is.
+	 */
+	onEnded?: () => void;
+	/**
 	 * Handed the `<video>` element, for a caller that reads the picture it is showing — the
 	 * Studio's *Use This Frame*, which draws the paused frame into a thumbnail.
 	 */
@@ -83,6 +90,7 @@ export default function VideoPlayer({
 	elementRef,
 	podcast,
 	originalUrl,
+	onEnded,
 }: VideoPlayerProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const videoRef = useRef<HTMLVideoElement>(null);
@@ -177,13 +185,23 @@ export default function VideoPlayer({
 	// Playback state drives attention, so it's tracked on the element itself
 	// rather than from our own play()/pause() calls — that way controls, keyboard
 	// shortcuts, picture-in-picture, and stalls are all reflected honestly.
+	// The caller's ended callback rides a ref so this mount-time effect (deps
+	// deliberately empty — playback state reads the element, not the props) never
+	// has to rebind its listeners when the callback changes.
+	const onEndedRef = useRef(onEnded);
+	useEffect(() => {
+		onEndedRef.current = onEnded;
+	});
 	useEffect(() => {
 		const video = videoRef.current;
 		if (!video) return;
 
 		const onPlay = () => setIsPlaying(true);
 		const onPause = () => setIsPlaying(false);
-		const onEnded = () => setIsPlaying(false);
+		const onEnded = () => {
+			setIsPlaying(false);
+			onEndedRef.current?.();
+		};
 		const onWaiting = () => setIsPlaying(false);
 		const onPlaying = () => setIsPlaying(true);
 		const onTimeUpdate = () => {
