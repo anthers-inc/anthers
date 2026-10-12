@@ -44,17 +44,22 @@ export function isFileWorkType(type: string): type is FileWorkType {
 /**
  * What a file picker for this kind accepts, and how large a file it takes.
  *
- * 🚨 **These caps are picked to what the pipeline behind them tolerates, not to what storage
- * accepts** — a Work's source upload goes out through the presign route (`packages/web-shared/src/lib/upload.ts`),
- * so the bytes never pass through the API in production and R2's single-PUT ceiling is 5 GB.
- * The binding constraint for a PDF is the worker that rasterizes it: `apps/api/src/jobs/render-paged.ts`
- * writes the source to App Platform's ephemeral filesystem — 4 GiB total per container —
- * alongside every page image it renders before uploading them, so the source cap is the share
- * of that disk a book may claim. 2 GB is that share with room for the rendered pages, and parity
- * with the video cap; a 5 GB cap would trade "cannot upload a giant master" for "the job dies
- * out of disk partway through a 2000-page render". A page image is bounded not by that disk but
- * by the job's decode bound (`PAGE_MAX_PIXELS`) and its own re-encode — the 2 GB accept is the
- * same number either way, so one ceiling covers both paths and the creator's page quality lives
+ * 🚨 **These caps are picked to what the pipeline behind them tolerates, not to what
+ * storage accepts.** A Work's source goes up through the resumable multipart session
+ * (`packages/web-shared/src/lib/upload.ts`) wherever the plan is more than one part, so
+ * the transport's own ceiling is the bucket's — ten thousand 64 MiB parts is ~640 GB,
+ * and no session cap belongs in this table. What binds each kind is the worker behind
+ * it: `apps/api/src/jobs/transcode-video.ts` reads a video's source from App Platform's
+ * ephemeral filesystem — 4 GiB total per container — with the encode ladder beside it,
+ * so the video cap is the share of that disk a master may claim; the binding constraint
+ * for a PDF is the rasterize job: `apps/api/src/jobs/render-paged.ts` writes the source
+ * to the same filesystem alongside every page image it renders before uploading them,
+ * so the source cap is the share of that disk a book may claim. 2 GB is that share with
+ * room for the rendered pages, and parity with the video cap; a 5 GB cap would trade
+ * "cannot upload a giant master" for "the job dies out of disk partway through a
+ * 2000-page render". A page image is bounded not by that disk but by the job's decode
+ * bound (`PAGE_MAX_PIXELS`) and its own re-encode — the 2 GB accept is the same number
+ * either way, so one ceiling covers both paths and the creator's page quality lives
  * downstream of it.
  */
 export function fileRules(type: FileWorkType): { accept: string; maxSize: number; noun: string } {

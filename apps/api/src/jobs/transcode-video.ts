@@ -6,6 +6,10 @@
  *
  * Flow:
  * 1. Probe the source with ffprobe for resolution/duration — read in place, never downloaded
+ * 1b. The ingest three-way (wiki 70.06's accepted set): refuse a codec pair the pipeline
+ *     cannot deliver (`-c copy` remuxes what the pair's native container does take), accept
+ *     a file already in it, and land the remuxed original beside the uploaded one, re-pointing
+ *     the Work at it and queueing its scan like any other attach
  * 2. Determine variants based on source height (480p, 720p, 1080p)
  * 3. Transcode each variant to HLS via ffmpeg, uploading and freeing each one's
  *    files before the next variant starts; 3b transcodes the audio-only rendition the same way
@@ -44,8 +48,15 @@ import { client, db } from "@anthers/db";
 import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
+import {
+	classifyVideoStreams,
+	type DeliverableContainer,
+	remuxedContentType,
+	remuxedKeyFor,
+} from "../lib/video-remux.js";
 import { storage } from "../services/storage/index.js";
 import { MAX_TRANSCODE_RESUMES } from "./resume-orphans.js";
+import { queueScansForWork } from "./scan-media.js";
 import { createEtaClamp, remainingEncodeSeconds } from "./transcode-eta.js";
 
 export interface TranscodeVideoData {
@@ -242,6 +253,43 @@ async function ffmpegHls(
 /** The filename of a Work's audio-only rendition, within the same HLS directory. */
 export const AUDIO_RENDITION_PLAYLIST = "audio.m3u8";
 
+/**
+ * The remux: the deliverable pair copied into its native container, `-c copy`, nothing
+ * re-encoded — a remux's cost is transfer, which is why it is measured in seconds
+ * against the ladder's minutes whatever a file's length is. The maps take the FIRST
+ * video stream and the first audio (the pair the classifier demanded) and deliberately
+ * leave subtitles and attachments uncarried: the original object keeps those, and the
+ * pair's native container is what the player reads. +faststart moves an MP4's index to
+ * its head, which is what a browser's first ranged read of the object wants.
+ */
+async function ffmpegRemux(
+	inputPath: string,
+	outPath: string,
+	container: DeliverableContainer,
+): Promise<void> {
+	const proc = Bun.spawn(
+		ffmpegCommand(inputPath, [
+			"-map",
+			"0:v:0",
+			"-map",
+			"0:a:0?",
+			"-c",
+			"copy",
+			...(container === "mp4" ? ["-movflags", "+faststart"] : []),
+			"-f",
+			container,
+			outPath,
+			"-y",
+		]),
+		{ stdout: "pipe", stderr: "pipe" },
+	);
+	const exitCode = await proc.exited;
+	if (exitCode !== 0) {
+		const stderr = await new Response(proc.stderr).text();
+		throw new Error(`the remux failed: ${stderr.slice(0, 500)}`);
+	}
+}
+
 /** Transcode an audio-only HLS rendition — the same audio the variants carry, demuxed
  *  into its own playlist. One variant, at the bitrate the muxed ones carry, so a Work
  *  can be listened to as a podcast without paying for video bandwidth it cannot see. */
@@ -376,7 +424,7 @@ async function runTranscode(data: TranscodeVideoData) {
 	const [item] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
 	if (!item) throw new Error(`Content item ${job.workId} not found`);
 
-	const storageKey = item.sourceKey ?? "";
+	let storageKey = item.sourceKey ?? "";
 	if (!storageKey) throw new Error("No source file on content item");
 
 	// The storage prefix is built before the encode loop because the uploads now happen
@@ -417,6 +465,12 @@ async function runTranscode(data: TranscodeVideoData) {
 	let outputDir: string | null = null;
 
 	try {
+		// The job's temp directory is created before anything reads the source: the
+		// three-way below may put a remuxed copy here, and the `finally` sweep frees
+		// whatever is in it whether the run reached the ladder or not.
+		outputDir = join(tmpdir(), `hls_${randomUUID()}`);
+		await mkdir(outputDir, { recursive: true });
+
 		// 1. Probe the source — read in place, no temp copy. A fresh address per pass;
 		// the TTL constant above carries the reasoning.
 		const probe = await ffprobe(
@@ -440,6 +494,63 @@ async function runTranscode(data: TranscodeVideoData) {
 		}
 
 		await updateJobProgress(jobId, 10);
+
+		// 1b. The ingest three-way — accept, remux, refuse — the ruling that makes OBS's
+		// default MKV capture a Work that plays rather than one that never did. A copy is
+		// honest work: no encode runs, the ladder's math is unchanged (a remux changes no
+		// stream, so this probe's duration and heights stay the answer), and the remuxed
+		// original lands beside the uploaded one in the same directory.
+		const verdict = classifyVideoStreams(probe, storageKey);
+		if (verdict.refusal) {
+			// A refusal is terminal and does not rethrow: the row carries the creator-facing
+			// message, the handler RETURNS, pg-boss completes this queue job, and no retry
+			// re-runs a decision that cannot change. The boot sweep re-sends only
+			// pending/processing rows, so a row failed here is done deciding.
+			await db
+				.update(transcodingJobs)
+				.set({ status: "failed", updatedAt: new Date(), errorMessage: verdict.refusal })
+				.where(eq(transcodingJobs.id, jobId));
+			console.log(
+				`[transcode-video] job ${jobId}: the source's codec pair is outside the accepted set; refused`,
+			);
+			return;
+		}
+
+		if (!verdict.alreadyPlayable && verdict.container) {
+			const remuxedKey = remuxedKeyFor(storageKey, verdict.container);
+			const remuxedPath = join(outputDir, `remux.${verdict.container}`);
+			await ffmpegRemux(
+				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
+				remuxedPath,
+				verdict.container,
+			);
+			// One whole object on the temp disk — the residency the ladder's per-variant
+			// uploads exist to bound is one variant at a time, and a remux's answer is the
+			// same shape: uploaded the moment its copy finishes, freed the moment the
+			// upload's answer is in.
+			await storage.upload(
+				remuxedKey,
+				Buffer.from(await Bun.file(remuxedPath).arrayBuffer()),
+				remuxedContentType(verdict.container),
+				"private",
+			);
+			// The `finally` sweep frees the directory regardless; no error path of a rm on
+			// a file that the sweep will get to anyway is worth reporting instead of the
+			// work that follows.
+			await rm(remuxedPath).catch(() => {});
+
+			// The re-point is the Work's write a zombie handler must never make, so the
+			// supersession check stands before it, as it does before every upload.
+			if (!(await ensureStillOurs())) return;
+			await db.update(works).set({ sourceKey: remuxedKey }).where(eq(works.id, item.id));
+			// A remuxed source is a NEW object on the Work — owed its scan like any attach,
+			// and the release gate waits on exactly this queue's answer.
+			await queueScansForWork({ ...item, sourceKey: remuxedKey });
+
+			// The ladder reads the remuxed original from here on.
+			storageKey = remuxedKey;
+			await updateJobProgress(jobId, 15);
+		}
 
 		// 2. Determine variants based on source resolution
 		const variants: Variant[] = [];
@@ -478,8 +589,6 @@ async function runTranscode(data: TranscodeVideoData) {
 		}
 
 		// 3. Transcode each variant
-		outputDir = join(tmpdir(), `hls_${randomUUID()}`);
-		await mkdir(outputDir, { recursive: true });
 
 		/**
 		 * Upload every file a finished encode left in `dir`, deleting each the moment its

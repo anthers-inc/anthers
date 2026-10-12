@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createSHA256 } from "hash-wasm";
 import { apiAuthHeaders, apiBaseUrl, apiSendsCookies, client } from "./rpc";
 
 /**
@@ -14,24 +15,57 @@ import { apiAuthHeaders, apiBaseUrl, apiSendsCookies, client } from "./rpc";
  * lived here until 2026-08-17 and was removed because it did not work; it returns with
  * the desktop's pre-process step, which produces one upload pack uploaded deliberately.
  *
- * ⚠️ **A failed part abandons the whole attempt, deliberately.** The parts the backend
- * holds are freed by the abandonment sweeper, and a retry is a fresh session with a
- * fresh plan. Byte-level resume of a half-finished attempt (the completed parts persist
- * and are re-named into the new session) is the follow-up leg — the sweeper's grace
- * makes the first cut's cost bounded, not zero.
+ * ⚠️ **Every session upload carries the file's SHA-256, read before anything goes up.**
+ * The digest does two jobs at once: it keys a RESUME (a start that names a digest the
+ * creator still holds an open session for is answered with that session's plan, the
+ * parts it already holds named) and it completes the session, so the object's identity
+ * is client-vouched end to end. A digest read before the upload means a multi-
+ * gigabyte file is read through once up front — the honest cost of a resume bound
+ * to the bytes rather than to a tab.
+ *
+ * ⚠️ **A failed attempt leaves the session open.** The parts the backend holds persist
+ * and a retry re-keys on the digest, re-asks the plan (fresh part addresses, the old
+ * list having a day's life), and sends only what is missing. The abandonment sweeper's
+ * grace is the bound for an attempt nobody ever retries.
  */
 
 /** How many parts go on the wire at once. A part is 64 MiB; three is a wire full of
  * throughput without a spike that starves a shared connection. */
 const PART_CONCURRENCY = 3;
 
+/** The whole file's SHA-256, read in slices. Web Crypto wants the entire buffer, which
+ * a multi-gigabyte file cannot offer; a chained hasher takes slices instead and yields
+ * between them, so the page stays alive while a read pass ahead of the upload runs. */
+export async function wholeFileSha256Hex(file: File): Promise<string> {
+	const hasher = await createSHA256();
+	hasher.init();
+	const CHUNK = 8 * 1024 * 1024;
+	for (let at = 0; at < file.size; at += CHUNK) {
+		const bytes = await file.slice(at, Math.min(at + CHUNK, file.size)).arrayBuffer();
+		hasher.update(new Uint8Array(bytes));
+	}
+	return hasher.digest("hex");
+}
+
 export async function uploadMediaFile(
 	file: File,
 	mediaType: "video" | "audio" | "asset",
-	onProgress?: (percent: number) => void,
+	onProgress?: (percent: number | null) => void,
 ): Promise<string> {
+	// The digest comes first — it is the resume key, so it must exist before the plan
+	// is asked for. No progress is reportable yet, so the caller sees the
+	// indeterminate bar rather than a misleading 0%.
+	onProgress?.(null);
+	const digest = `sha-${await wholeFileSha256Hex(file)}`;
+
 	const res = await client.api.content["media-upload"].session.start.$post({
-		json: { filename: file.name, contentType: file.type, mediaType, size: file.size },
+		json: {
+			filename: file.name,
+			contentType: file.type,
+			mediaType,
+			size: file.size,
+			clientSha256: digest,
+		},
 	});
 	if (!res.ok) throw new Error("The upload could not start");
 	const plan = (await res.json()) as {
@@ -40,6 +74,7 @@ export async function uploadMediaFile(
 		key?: string;
 		partSize?: number;
 		parts?: Array<{ number: number; url: string }>;
+		held?: number[];
 	};
 
 	if (plan.method === "direct") {
@@ -61,6 +96,8 @@ export async function uploadMediaFile(
 			sessionId: plan.sessionId ?? "",
 			partSize: plan.partSize ?? 0,
 			parts: plan.parts ?? [],
+			held: plan.held ?? [],
+			digest,
 		},
 		onProgress,
 	);
@@ -68,20 +105,37 @@ export async function uploadMediaFile(
 
 async function uploadSessionPlan(
 	file: File,
-	plan: { sessionId: string; partSize: number; parts: Array<{ number: number; url: string }> },
-	onProgress?: (percent: number) => void,
+	plan: {
+		sessionId: string;
+		partSize: number;
+		parts: Array<{ number: number; url: string }>;
+		held: number[];
+		digest: string;
+	},
+	onProgress?: (percent: number | null) => void,
 ): Promise<string> {
 	// An empty plan is a protocol bug the server must never produce — a session with a
 	// sessionId and no parts is a session that completes into nothing.
 	if (!plan.sessionId || plan.parts.length === 0) {
 		throw new Error("The server's upload plan was empty");
 	}
+	const held = new Set(plan.held);
+	// The parts of a resumed attempt the backend already holds are recorded, never
+	// re-sent — their ETags are the backend listing's to supply, which completion
+	// consults where the client could not have read one.
 	const uploaded = new Array<{ number: number; etag?: string }>(plan.parts.length);
-	let deliveredBytes = 0;
+	for (const number of held) uploaded[number - 1] = { number };
+	const heldBytes = [...held].reduce(
+		(bytes, number) => bytes + Math.min(plan.partSize, file.size - (number - 1) * plan.partSize),
+		0,
+	);
+	let deliveredBytes = heldBytes;
 	let aborted = false;
+	// A resumed attempt reports where it already is, not a restarted 0%.
+	if (heldBytes > 0) onProgress?.(percentOf(deliveredBytes, file.size));
 
 	try {
-		const queue = [...plan.parts];
+		const queue = plan.parts.filter((part) => !held.has(part.number));
 		const workers = Array.from({ length: PART_CONCURRENCY }, async () => {
 			for (;;) {
 				const next = queue.shift();
@@ -115,6 +169,7 @@ async function uploadSessionPlan(
 			json: {
 				sessionId: plan.sessionId,
 				parts: uploaded.filter((p) => p != null),
+				clientSha256: plan.digest,
 			},
 		});
 		if (!complete.ok) {
@@ -125,12 +180,11 @@ async function uploadSessionPlan(
 		if (onProgress) onProgress(100);
 		return key;
 	} catch (error) {
-		// Tell the server the session is dead, so the sweeper has nothing to wait out
-		// and the parts are freed now rather than in three days.
+		// The session STAYS OPEN: its held parts are exactly what a retry resumes, keyed
+		// on the digest read before either attempt sent anything. The abandonment
+		// sweeper's grace bounds an attempt nobody ever retried, and a creator who picks
+		// a different file just orphans the open one to that same sweeper.
 		aborted = true;
-		void client.api.content["media-upload"].session.abort
-			.$post({ json: { sessionId: plan.sessionId } })
-			.catch(() => {});
 		throw error;
 	}
 }

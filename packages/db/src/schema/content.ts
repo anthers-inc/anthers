@@ -1481,13 +1481,20 @@ export const mediaUploadSessions = pgTable(
 		/** `open` | `completed` | `aborted`. */
 		status: text("status").default("open").notNull(),
 		/**
-		 * The digest the uploading client streamed, carried at completion. The server does
-		 * not re-hash here (that verification is a later leg); the value is the object's
-		 * client-vouched identity, the thing a resumed-by-digest upload would key on.
+		 * The digest the uploading client reads from the file as a whole — carried at
+		 * session start (where it keys a resume: a later start naming the same digest
+		 * finds this row and is handed its plan) and confirmed at completion (a
+		 * different digest is refused): the object's client-vouched identity. The
+		 * server does not re-hash here (that verification is a later leg).
 		 */
 		clientSha256: text("client_sha256"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		completedAt: timestamp("completed_at", { withTimezone: true }),
 	},
-	(table) => [index("idx_upload_sessions_open_age").on(table.status, table.createdAt)],
+	(table) => [
+		index("idx_upload_sessions_open_age").on(table.status, table.createdAt),
+		// The resume lookup: a start naming a digest finds its creator's open session
+		// by it, on a table every upload ever completed accumulates.
+		index("idx_upload_sessions_resume").on(table.creatorId, table.clientSha256),
+	],
 );
