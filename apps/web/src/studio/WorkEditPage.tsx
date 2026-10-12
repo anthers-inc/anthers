@@ -386,6 +386,11 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	// table and an image's new thumbnail catch up without discarding anything typed.
 	const uploads = useWorkUploads().filter((u) => u.workId === editing.id);
 	const landed = uploads.filter((u) => u.status === "done").length;
+	/** This tab's landed own-file upload, for the arrival acknowledgment the row carries. */
+	const landedUpload =
+		uploads.length > 0
+			? uploads.filter((u) => u.target.kind === "source" && u.status === "done").at(-1) ?? null
+			: null;
 	/** How many landed uploads the row has been re-read after — see `WorkFileSection`'s `landing`. */
 	const [readAfter, setReadAfter] = useState(0);
 	const buildUploads = uploads.filter((u) => u.target.kind === "build" && u.status !== "done");
@@ -944,6 +949,18 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 				{isFileWorkType(type) &&
 					(fileReady ? (
 						<>
+							{/* This tab's own upload, acknowledged for as long as it stays the
+							    newest one. The landed state that `WorkFileSection` shows is a
+							    moment between attach and the row re-read — on a fast machine a
+							    few milliseconds — so the acknowledgment that the file is ON the
+							    Work is carried here too, keyed on the upload store's done entry
+							    (which a new pick replaces), not on the moment. */}
+							{landedUpload && (
+								<div className="flex items-center gap-3 rounded-lg bg-base-200 p-3">
+									<span className="flex-1 truncate text-sm">{landedUpload.fileName}</span>
+									<span className="badge badge-success badge-sm">Uploaded</span>
+								</div>
+							)}
 							<WorkDeliverable work={asRead} lyrics={lyricsEditor} videoRef={videoEl} />
 							{/* The ladder's own state, as the small line under the player: a video
 							    plays its original while the ladder encodes (the `fileReady` comment
