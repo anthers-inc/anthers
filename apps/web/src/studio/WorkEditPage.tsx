@@ -85,6 +85,7 @@ import {
 import { isBuildType, LIBRARY_TYPE_OPTIONS, typeLabel } from "@anthers/web-shared/content/works";
 import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
 import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
+import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import { usePayoutsReady } from "@anthers/web-shared/payouts";
 import AccessTables, {
 	type AccessRowDraft,
@@ -705,12 +706,21 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	 * Whether the Work itself can be shown as a user sees it: its file is here, and whatever
 	 * processing it needs has finished. Until then the file section stands in for it, with the
 	 * upload's or the processing's progress.
+	 *
+	 * A video is the exception since the 2026-10-10/11 delivery ruling: it plays its ORIGINAL
+	 * from the moment the file is attached (the ladder is the upgrade that arrives later), so
+	 * "finished processing" would gate nothing the viewer's page doesn't already play — and a
+	 * creator spending 30 minutes watching a progress bar instead of their own video is the
+	 * wait this ruling exists to kill. The ladder's state still shows, as the small line under
+	 * the player below. Audio and ebooks keep the completed gate: their processing product IS
+	 * the player (a normalized rendition; rasterized pages), so their preview during
+	 * processing genuinely does not exist.
 	 */
 	const fileReady =
 		isFileWorkType(type) &&
 		!!current.sourceKey &&
 		!fileUploading &&
-		(type === "image" || current.transcoding?.status === "completed");
+		(type === "image" || type === "video" || current.transcoding?.status === "completed");
 
 	/**
 	 * The Work as the user's page would draw it: the saved row, with the creator named as a
@@ -877,6 +887,24 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 					(fileReady ? (
 						<>
 							<WorkDeliverable work={asRead} lyrics={lyricsEditor} videoRef={videoEl} />
+							{/* The ladder's own state, as the small line under the player: a video
+							    plays its original while the ladder encodes (the `fileReady` comment
+							    above carries why), so the processing block shrank from standing in
+							    FOR the player to reporting BESIDE it. The failed case reports too —
+							    the original keeps playing while the ladder's failure is the visible
+							    state on the page, where the Dashboard worklist also carries it. */}
+							{type === "video" &&
+								current.transcoding &&
+								current.transcoding.status !== "completed" && (
+									<div className="max-w-xl">
+										<TranscodingStatus
+											status={current.transcoding.status}
+											progress={current.transcoding.progress ?? 0}
+											etaSeconds={current.transcoding.etaSeconds}
+											errorMessage={current.transcoding.errorMessage ?? ""}
+										/>
+									</div>
+								)}
 							{/* Comics get a panel-correction surface once the pages are rendered. */}
 							{isPaged(type) && fileReady && (
 								<section className="rounded-box border border-base-300 bg-base-200/40 p-5">
