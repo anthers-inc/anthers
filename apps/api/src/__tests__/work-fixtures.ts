@@ -110,6 +110,8 @@ export interface WorkFixture {
 	maturityRows?: Record<string, string>;
 	/** When scans were last enqueued for this Work — the release gate's clock. */
 	scanQueuedAt?: Date | null;
+	/** The remux-retained original riding its pointer column (see the schema comment). */
+	sourceOriginalKey?: string;
 	embedUrl?: string;
 	durationSeconds?: number;
 	visibility?: "private" | "released";
@@ -146,6 +148,7 @@ export async function insertWork(fixture: WorkFixture) {
 			bodyHtml: fixture.bodyHtml ?? "",
 			lyrics: fixture.lyrics ?? "",
 			sourceKey: fixture.sourceKey ?? "",
+			sourceOriginalKey: fixture.sourceOriginalKey ?? "",
 			thumbnail:
 				fixture.thumbnail ??
 				(needsChosenThumbnail(fixture.type)

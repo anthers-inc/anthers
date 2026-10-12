@@ -55,6 +55,7 @@
 			"!**/dist",
 			"!**/packages/db/drizzle",
 			"!**/src/generated",
+			"!**/apps/web/src/vendor",
 			"!**/*.lock",
 			"!**/package-lock.json",
 			"!**/apps/web/public/fonts"

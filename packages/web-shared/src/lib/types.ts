@@ -267,6 +267,26 @@ export interface TranscodingJob {
 	updatedAt: string;
 }
 
+/**
+ * One caption track on a video Work, as the player's `<track>` elements need it: the
+ * route it plays from is always the access-checked captions endpoint, and the menu shows
+ * `label` (which the serializer already falls back to the language). Absent on Work
+ * shapes built from listings — only the detail payload carries tracks.
+ */
+export interface WorkCaptionTrack {
+	id: number;
+	language: string;
+	label: string;
+	kind: string;
+	url: string;
+	/**
+	 * The row's size and cue count — the Studio editor's facts about what was uploaded.
+	 * Owner-shape only; the reader's player payload omits them.
+	 */
+	byteSize?: number;
+	cueCount?: number;
+}
+
 /** A Work's type. `WORK_TYPES` in `@anthers/shared/content` is the authority on the list. */
 export type ContentType = WorkType;
 
@@ -302,6 +322,16 @@ export interface Work {
 	publicId?: number;
 	slug?: string;
 	creatorId?: number;
+	/**
+	 * The creator's display surface, carried only by listings that organize **by** their
+	 * creators — the Library shelf response attaches them at the route (the project arm
+	 * has always carried the handle/name pair); `serializeWorkForUser` withholds them
+	 * everywhere else. Present so a lens that groups the shelf by creator can label
+	 * channels wholesale instead of fetching profiles per creator.
+	 */
+	creatorHandle?: string | null;
+	creatorDisplayName?: string | null;
+	creatorAvatar?: string | null;
 	type: ContentType;
 	title: string | null;
 	description?: string | null;
@@ -338,6 +368,15 @@ export interface Work {
 	 * pointer at any page; those are served one at a time from `/works/:id/pages/:n`.
 	 */
 	pageCount?: number;
+	/**
+	 * How many **reflow** sections an ebook's EPUB ingest extracted, or 0 — the fixed
+	 * page reader's counterpart to `pageCount`. Sections exist → the reflow reader
+	 * (vendored foliate-js on the section/asset ladder); none → the page reader, exactly
+	 * as a PDF-shaped ebook or a comic reads.
+	 *
+	 * ⚠️ Present even when the Work is locked, for the same reason `pageCount` is.
+	 */
+	sectionCount?: number;
 	metadata: Record<string, unknown> | null;
 
 	// Visibility & dates. `createdAt` is the UPLOAD date and is creator-facing only;
@@ -420,6 +459,11 @@ export interface Work {
 	 */
 	webBuilds?: WebBuild[];
 	transcoding: TranscodingJob | null;
+	/**
+	 * The Work's caption tracks, when the payload carries them: gated with the video
+	 * itself, so a locked Work reports none and a reachable Work reports its menu.
+	 */
+	captions?: WorkCaptionTrack[];
 	createdAt?: string;
 	updatedAt?: string;
 	/**

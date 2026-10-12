@@ -11,10 +11,28 @@
  * what access it proposes.
  */
 
+import { acceptedVideoFormatsSentence } from "@anthers/shared/accepted-formats";
 import { useNavigate } from "react-router-dom";
 import WorkUploadForm from "../components/content/WorkUploadForm";
 import { Link } from "../lib/router";
 import { studioEditWorkUrl, studioUrl } from "../lib/studio";
+
+/**
+ * The accepted formats, stated where the file is picked rather than discovered by failure —
+ * the second ruling of the wiki's *Originals and the Ladder*. The video pair sentence reads
+ * from `@anthers/shared/accepted-formats`, the same dataset the transcode job's refusal
+ * states, so what the page promises and what the pipeline delivers are one set. The last
+ * line is the expansion posture: additions to the list are deliberate decisions this page
+ * states as they land, never a widening that happens without saying so.
+ */
+const FORMATS_INTRO = `Video — ${acceptedVideoFormatsSentence()}, in any container: MP4, MOV, MKV and WebM all work, and a file a browser can't stream as it stands is remuxed as it arrives, with no re-encode, before processing starts. A video with no audio track is fine too.`;
+const FORMATS_AUDIO =
+	"Audio — any common audio format, whatever a music player opens. It's converted to MP3 for streaming as it is processed.";
+const FORMATS_PAGED =
+	"Comics and books — JPG or PNG page images, or a PDF; a book may also be an EPUB.";
+const FORMATS_IMAGE = "Images — any format a browser displays.";
+const FORMATS_EXPANSION =
+	"The list is short on purpose, and it widens only in daylight: a format joins it when Anthers decides to deliver it, and this page states each addition as it lands. If the file you have isn't in the list, re-export it with one from above.";
 
 export default function WorkUploadPage() {
 	const navigate = useNavigate();
@@ -26,6 +44,17 @@ export default function WorkUploadPage() {
 				file if you have it, or name the draft and skip the file for now; you'll add it on the
 				Work's own page. Nothing is public until you release it.
 			</p>
+
+			<div className="mb-6 rounded-lg bg-base-200/50 p-4 text-sm">
+				<p className="mb-2 font-medium">What Anthers accepts</p>
+				<ul className="list-disc space-y-1 pl-5 text-base-content/70">
+					<li>{FORMATS_INTRO}</li>
+					<li>{FORMATS_AUDIO}</li>
+					<li>{FORMATS_PAGED}</li>
+					<li>{FORMATS_IMAGE}</li>
+				</ul>
+				<p className="mt-2 text-xs text-base-content/50">{FORMATS_EXPANSION}</p>
+			</div>
 
 			<WorkUploadForm onCreated={(work) => navigate(studioEditWorkUrl(work.publicId ?? work.id))} />
 

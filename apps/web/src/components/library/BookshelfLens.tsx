@@ -31,12 +31,12 @@
  * lens-customization ruling), never an open filter builder.
  */
 
-import { BOOKSHELF_WORK_TYPES, isPaged } from "@anthers/shared/content";
+import { BOOKSHELF_WORK_TYPES } from "@anthers/shared/content";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import { isAccessResult } from "@anthers/web-shared/types";
 import { BookOpenIcon, LockClosedIcon } from "@heroicons/react/24/solid";
-import { readPageFraction } from "../../lib/reading-positions";
+import { readPageFraction, readReflowFraction } from "../../lib/reading-positions";
 import type { LensItem } from "./MusicLens";
 
 /** The lens's default organization, until more presets earn their places: by title. */
@@ -87,7 +87,13 @@ export default function BookshelfLens({ items }: { items: LensItem[] }) {
 							? workUrl({ slug: work.slug, publicId: work.publicId })
 							: null;
 					const locked = isAccessResult(work.access) && work.access.canAccess === false;
-					const fraction = isPaged(work.type) ? readPageFraction(work.id, work.pageCount) : null;
+					// A paged book's marker reads page over count; a reflow book has no page
+					// count to read — its marker is the fraction repositioning wrote beside
+					// the CFI. Either way the spine fills as far as the reader got.
+					const fraction =
+						(work.sectionCount ?? 0) > 0
+							? readReflowFraction(work.id)
+							: readPageFraction(work.id, work.pageCount);
 					const spine = (
 						<span
 							className={`relative block h-44 overflow-hidden bg-base-200 shadow-[2px_3px_6px_rgb(0_0_0_/_0.25)] border-b-4 border-base-300 ${

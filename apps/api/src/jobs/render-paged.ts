@@ -33,9 +33,11 @@ import { db } from "@anthers/db";
 import { transcodingJobs, workPages, workPanels, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import sharp from "sharp";
+import { isEpubSource } from "../lib/paged-ingest.js";
 import { detectPanels, sampleInkColor } from "../lib/panel-detection.js";
 import { storage } from "../services/storage/index.js";
 import { listSourceFiles } from "../services/work-source-files.js";
+import { MAX_TRANSCODE_RESUMES } from "./resume-orphans.js";
 
 export interface RenderPagedData {
 	jobId: number;
@@ -103,6 +105,21 @@ async function updateProgress(jobId: number, progress: number) {
 		.where(eq(transcodingJobs.id, jobId));
 }
 
+/**
+ * Whether the job's row still reads `processing` — the run's own claim state. Anything
+ * else means the outside world settled the row (the creator's cancel route marks it
+ * `canceled`), and a run that discovers this stops quietly rather than finishing on its
+ * own schedule.
+ */
+async function stillProcessing(jobId: number): Promise<boolean> {
+	const [row] = await db
+		.select({ status: transcodingJobs.status })
+		.from(transcodingJobs)
+		.where(eq(transcodingJobs.id, jobId))
+		.limit(1);
+	return row?.status === "processing";
+}
+
 export async function renderPaged(data: RenderPagedData) {
 	const { jobId } = data;
 
@@ -113,15 +130,31 @@ export async function renderPaged(data: RenderPagedData) {
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 	// Idempotency: a late pg-boss retry of a job already finished (e.g. by the worker's
-	// startup-resume path) is a no-op, exactly as the other two jobs treat it.
+	// startup-resume path) is a no-op, exactly as the other two jobs treat it. A row the
+	// boot sweep finally failed — its crash-resume ceiling spent — is equally final, and
+	// must not be resurrected by a stale redelivery; a failed row BELOW the bound stays
+	// re-runnable on purpose, as the queue's ordinary self-healing within its budget.
 	if (job.status === "completed") {
 		console.log(`[render-paged] job ${jobId} already completed; skipping`);
 		return;
 	}
+	// 🚨 A canceled row is final: the creator stopped it, and a stale redelivery must
+	// not resume what they stopped.
+	if (job.status === "canceled") {
+		console.log(`[render-paged] job ${jobId} canceled; skipping`);
+		return;
+	}
+	if (job.status === "failed" && job.resumeCount >= MAX_TRANSCODE_RESUMES) {
+		console.log(`[render-paged] job ${jobId} failed past its resume bound; skipping`);
+		return;
+	}
 
+	// The claim spends any benign-interruption flag the previous stop left: a run
+	// reaching the row has consumed the excuse, so whatever kills THIS run says for
+	// itself.
 	await db
 		.update(transcodingJobs)
-		.set({ status: "processing", progress: 0, updatedAt: new Date() })
+		.set({ status: "processing", progress: 0, interruptedGracefully: false, updatedAt: new Date() })
 		.where(eq(transcodingJobs.id, jobId));
 
 	const [work] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
@@ -140,6 +173,18 @@ export async function renderPaged(data: RenderPagedData) {
 		if (!(await popplerAvailable())) {
 			throw new Error(
 				"poppler (pdftoppm) is not installed on this host — an ebook cannot be rendered",
+			);
+		}
+
+		// An EPUB in the set is not this job's input — it extracts on the reflow path
+		// (`ingest-ebook`). Failing legibly and INSIDE the try (so the refusal lands on
+		// the row the status badge reads, not stranding it at "processing" — the same
+		// shape the ingest's own shape guards hold), this catches the paths that bypass
+		// routing: a legacy `.epub` attach, a resume resolved before the ingest split.
+		const epubSource = sources.find((s) => isEpubSource(s));
+		if (epubSource) {
+			throw new Error(
+				`This set contains an EPUB (${epubSource.filename || epubSource.file}), and the page renderer takes PDFs and page images — an EPUB processes as a reflow ebook; replace the source or remove the EPUB`,
 			);
 		}
 
@@ -175,6 +220,16 @@ export async function renderPaged(data: RenderPagedData) {
 		await updateProgress(jobId, 5);
 
 		for (const [i, source] of sources.entries()) {
+			// ⭐ The cancel checkpoint, one per source render — the render pass is the long
+			// pole of this job, and pages render into temp files that the `finally` frees,
+			// so a run stopped here abandons cheaply: workPages untouched, nothing uploaded.
+			// Anything no longer `processing` (the creator's cancel route marks it
+			// `canceled`) stops the run, the same shape the video job's supersession checks
+			// take.
+			if (!(await stillProcessing(jobId))) {
+				console.log(`[render-paged] job ${jobId} no longer processing; abandoning at source ${i}`);
+				return;
+			}
 			const dir = await mkdtemp(join(tmpdir(), `ebook_${i}_`));
 			scratch.push(dir);
 			if (isPageImage(source.mimeType)) {
@@ -241,6 +296,17 @@ export async function renderPaged(data: RenderPagedData) {
 		// A re-run replaces the pages rather than appending to them. Without this, a job
 		// retried after a partial upload leaves the book with two copies of page one and a
 		// unique-index violation on the second.
+		//
+		// ⭐ This is also the point of no return for a cancel: the pages' rows are about to
+		// be cleared and rewritten, so a cancel that arrives after it takes effect at the
+		// run's next render rather than here — past this line the run finishes and writes
+		// `completed`, the settlement that is consistent with the pages it is replacing.
+		if (!(await stillProcessing(jobId))) {
+			console.log(
+				`[render-paged] job ${jobId} no longer processing; abandoning before the page pass`,
+			);
+			return;
+		}
 		await db.delete(workPages).where(eq(workPages.workId, work.id));
 
 		const prefix = `creators/${work.creatorId}/ebook/${work.id}/${randomUUID().replace(/-/g, "")}`;

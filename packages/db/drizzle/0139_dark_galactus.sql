@@ -1,0 +1,1 @@
+ALTER TABLE "transcoding_jobs" ADD COLUMN "interrupted_gracefully" boolean DEFAULT false NOT NULL;

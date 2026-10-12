@@ -1,0 +1,1 @@
+CREATE INDEX "idx_upload_sessions_resume" ON "media_upload_sessions" USING btree ("creator_id","client_sha256");

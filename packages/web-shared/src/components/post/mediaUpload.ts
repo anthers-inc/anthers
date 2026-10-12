@@ -15,6 +15,7 @@ export type ImageMediaType = "image" | "thumbnail" | "cover" | "inline-image";
 export async function uploadImageFile(
 	file: File,
 	mediaType: ImageMediaType = "image",
+	signal?: AbortSignal,
 ): Promise<{ key: string; url: string }> {
 	const formData = new FormData();
 	formData.append("file", file);
@@ -22,6 +23,7 @@ export async function uploadImageFile(
 	const res = await apiFetch("/api/content/media-upload/direct", {
 		method: "POST",
 		body: formData,
+		signal,
 	});
 	if (!res.ok) {
 		const data = (await res.json().catch(() => null)) as { error?: string } | null;

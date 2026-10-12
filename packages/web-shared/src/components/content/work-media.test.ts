@@ -11,6 +11,7 @@
  * changing the constraint it encodes.
  */
 import { describe, expect, it } from "bun:test";
+import { acceptedVideoFormatsSentence } from "@anthers/shared/accepted-formats";
 import { fileRules } from "./work-media";
 
 const GB = 1024 * 1024 * 1024;
@@ -37,9 +38,29 @@ describe("fileRules", () => {
 		// The lead path: a JPG or PNG page image; the PDF beside it, because a
 		// whole-book master is what a creator holds and the set is one set either way.
 		expect(fileRules("comic").accept).toBe("image/jpeg,image/png,application/pdf");
-		expect(fileRules("ebook").accept).toBe("image/jpeg,image/png,application/pdf");
+		// The ebook kind additionally takes an EPUB — the reflow path's native source
+		// (the 2026-10-11 design). The comic does not: its container formats (CBZ,
+		// EPUB 3 FXL) sit in the format ladder's tail and ride their own tasks.
+		expect(fileRules("ebook").accept).toBe(
+			"image/jpeg,image/png,application/pdf,application/epub+zip,.epub",
+		);
 		expect(fileRules("video").accept).toBe("video/*");
 		expect(fileRules("audio").accept).toBe("audio/*");
 		expect(fileRules("image").accept).toBe("image/*");
+	});
+
+	it("states the video accepted set on the picker, as the page and the refusal state it", () => {
+		// The formats sentence is the product sentence the picker, the upload page and
+		// the transcode job's refusal all read; its content is pinned by the shared
+		// module's own suite. Here: it is present, names the remux promise, and never
+		// silently stops being said.
+		const video = fileRules("video");
+		expect(video.formats).toBeTruthy();
+		expect(video.formats).toContain(acceptedVideoFormatsSentence());
+		expect(video.formats).toContain("remuxed");
+	});
+
+	it("says audio is converted rather than refused", () => {
+		expect(fileRules("audio").formats).toContain("MP3");
 	});
 });

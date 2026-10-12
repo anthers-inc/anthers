@@ -18,6 +18,7 @@
  * here like any other file. Don't reintroduce an encode in the browser.
  */
 
+import { acceptedVideoFormatsSentence } from "@anthers/shared/accepted-formats";
 import { embedUrlProblem, isPaged, workNeedsFile } from "@anthers/shared/content";
 import { type ReactNode, useState } from "react";
 import type { UploadableWorkType, Work, WorkInput } from "../../lib/types";
@@ -41,40 +42,112 @@ export function isFileWorkType(type: string): type is FileWorkType {
 	return workNeedsFile(type);
 }
 
+/** The accepted-formats sentence under a file picker, for the kinds whose file carries one. */
+export function FormatsHint({ type }: { type: FileWorkType }) {
+	const formats = fileRules(type).formats;
+	if (!formats) return null;
+	return <p className="mt-2 text-xs text-base-content/50">{formats}</p>;
+}
+
 /**
  * What a file picker for this kind accepts, and how large a file it takes.
  *
- * 🚨 **These caps are picked to what the pipeline behind them tolerates, not to what storage
- * accepts** — a Work's source upload goes out through the presign route (`packages/web-shared/src/lib/upload.ts`),
- * so the bytes never pass through the API in production and R2's single-PUT ceiling is 5 GB.
- * The binding constraint for a PDF is the worker that rasterizes it: `apps/api/src/jobs/render-paged.ts`
- * writes the source to App Platform's ephemeral filesystem — 4 GiB total per container —
- * alongside every page image it renders before uploading them, so the source cap is the share
- * of that disk a book may claim. 2 GB is that share with room for the rendered pages, and parity
- * with the video cap; a 5 GB cap would trade "cannot upload a giant master" for "the job dies
- * out of disk partway through a 2000-page render". A page image is bounded not by that disk but
- * by the job's decode bound (`PAGE_MAX_PIXELS`) and its own re-encode — the 2 GB accept is the
- * same number either way, so one ceiling covers both paths and the creator's page quality lives
+ * 🚨 **These caps are picked to what the pipeline behind them tolerates, not to what
+ * storage accepts.** A Work's source goes up through the resumable multipart session
+ * (`packages/web-shared/src/lib/upload.ts`) wherever the plan is more than one part, so
+ * the transport's own ceiling is the bucket's — ten thousand 64 MiB parts is ~640 GB,
+ * and no session cap belongs in this table. What binds each kind is the worker behind
+ * it: `apps/api/src/jobs/transcode-video.ts` reads a video's source from App Platform's
+ * ephemeral filesystem — 4 GiB total per container — with the encode ladder beside it,
+ * so the video cap is the share of that disk a master may claim; the binding constraint
+ * for a PDF is the rasterize job: `apps/api/src/jobs/render-paged.ts` writes the source
+ * to the same filesystem alongside every page image it renders before uploading them,
+ * so the source cap is the share of that disk a book may claim. 2 GB is that share with
+ * room for the rendered pages, and parity with the video cap; a 5 GB cap would trade
+ * "cannot upload a giant master" for "the job dies out of disk partway through a
+ * 2000-page render". A page image is bounded not by that disk but by the job's decode
+ * bound (`PAGE_MAX_PIXELS`) and its own re-encode — the 2 GB accept is the same number
+ * either way, so one ceiling covers both paths and the creator's page quality lives
  * downstream of it.
  */
-export function fileRules(type: FileWorkType): { accept: string; maxSize: number; noun: string } {
+/**
+ * What a file picker for this kind accepts, and how large a file it takes.
+ *
+ * 🚨 **These caps are picked to what the pipeline behind them tolerates, not to what
+ * storage accepts.** A Work's source goes up through the resumable multipart session
+ * (`packages/web-shared/src/lib/upload.ts`) wherever the plan is more than one part, so
+ * the transport's own ceiling is the bucket's — ten thousand 64 MiB parts is ~640 GB,
+ * and no session cap belongs in this table. What binds each kind is the worker behind
+ * it: `apps/api/src/jobs/transcode-video.ts` reads a video's source from App Platform's
+ * ephemeral filesystem — 4 GiB total per container — with the encode ladder beside it,
+ * so the video cap is the share of that disk a master may claim; the binding constraint
+ * for a PDF is the rasterize job: `apps/api/src/jobs/render-paged.ts` writes the source
+ * to the same filesystem alongside every page image it renders before uploading them,
+ * so the source cap is the share of that disk a book may claim. 2 GB is that share with
+ * room for the rendered pages, and parity with the video cap; a 5 GB cap would trade
+ * "cannot upload a giant master" for "the job dies out of disk partway through a
+ * 2000-page render". A page image is bounded not by that disk but by the job's decode
+ * bound (`PAGE_MAX_PIXELS`) and its own re-encode — the 2 GB accept is the same number
+ * either way, so one ceiling covers both paths and the creator's page quality lives
+ * downstream of it.
+ *
+ * `formats`, when the kind carries one, is the sentence telling a creator what may be
+ * inside the file — the accepted formats stated where the file is picked rather than
+ * discovered by failure (the second ruling of the wiki's *Originals and the Ladder*).
+ * The video sentence reads from `@anthers/shared/accepted-formats`, the same dataset the
+ * transcode job's refusal states, so the two say the set alike and widen together.
+ */
+export function fileRules(type: FileWorkType): {
+	accept: string;
+	maxSize: number;
+	noun: string;
+	formats?: string;
+} {
 	switch (type) {
 		case "video":
-			return { accept: "video/*", maxSize: 2 * 1024 * 1024 * 1024, noun: "a video file" };
+			return {
+				accept: "video/*",
+				maxSize: 2 * 1024 * 1024 * 1024,
+				noun: "a video file",
+				formats:
+					`Inside the file: ${acceptedVideoFormatsSentence()}. Any container is fine — ` +
+					"MP4, MOV and MKV all work, and a file a browser can't stream as it stands is " +
+					"remuxed on arrival, with no re-encode, before processing starts. A video with " +
+					"no audio track is fine too.",
+			};
 		case "music":
 		case "audio":
-			return { accept: "audio/*", maxSize: 500 * 1024 * 1024, noun: "an audio file" };
+			return {
+				accept: "audio/*",
+				maxSize: 500 * 1024 * 1024,
+				noun: "an audio file",
+				formats:
+					"Any common audio format — anything you can open in a music player. It's converted to MP3 for streaming as it is processed.",
+			};
 		case "image":
 			return { accept: "image/*", maxSize: 20 * 1024 * 1024, noun: "an image" };
 		case "comic":
-		case "ebook":
 			// Page images lead (Parker, 2026-10-11) — the paged job renders image leaves
 			// directly, one leaf per page — and the PDF stays: it is what a whole-book
 			// master ships as, and the set is built from whatever mix the creator holds.
+			// The comic's own container (CBZ) and the authored-fixed EPUB 3 FXL sit in
+			// the format ladder's tail, parked — an accept for those lands when the
+			// ingest for them does.
 			return {
 				accept: "image/jpeg,image/png,application/pdf",
 				maxSize: 2 * 1024 * 1024 * 1024,
 				noun: "a page image (JPG or PNG) or a PDF",
+			};
+		case "ebook":
+			// The EPUB rides beside the paged set's files (the reflow path's source — the
+			// 2026-10-11 design's native ebook source): it must NOT be mixed into a set
+			// with page-shaped files, which the routing and the ingest both refuse
+			// legibly, and it processes on its own queue into `work_sections` rather
+			// than pages, so `downloadEnabled: false` keeps holding for a reflow book too.
+			return {
+				accept: "image/jpeg,image/png,application/pdf,application/epub+zip,.epub",
+				maxSize: 2 * 1024 * 1024 * 1024,
+				noun: "a page image (JPG or PNG), a PDF, or an EPUB",
 			};
 	}
 }
@@ -208,6 +281,13 @@ export function WorkFileSection({
 					You can go on editing and move around the Studio while it uploads. Keep this tab open
 					until it finishes, because closing it stops the upload.
 				</p>
+				<button
+					type="button"
+					className="btn btn-sm mt-2"
+					onClick={() => workUploads.cancel(upload.id)}
+				>
+					Cancel the upload
+				</button>
 			</FormField>
 		);
 	}
@@ -229,6 +309,7 @@ export function WorkFileSection({
 						label="Or choose a different file"
 						onFileSelect={start}
 					/>
+					<FormatsHint type={type} />
 				</div>
 			</FormField>
 		);
@@ -292,6 +373,7 @@ export function WorkFileSection({
 				label={`Drop ${rules.noun} or click to browse`}
 				onFileSelect={start}
 			/>
+			<FormatsHint type={type} />
 		</FormField>
 	);
 }

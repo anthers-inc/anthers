@@ -133,6 +133,14 @@ export const works = pgTable(
 
 		// ── Source media (only the fields relevant to `type` are populated) ──
 		sourceKey: text("source_key").default(""), // uploaded video/audio/image source key
+		// The original the video ingest kept when it re-pointed the source. Since the remux
+		// ingest (#489), a remuxed MKV's MP4 takes `source_key` and the creator's uploaded
+		// MKV moves here. 🚨 **The column exists so the original stays enumerated and
+		// metered rather than an un-tracked remnant**: `media-purge`'s enumeration and the
+		// storage-usage sweep both read it, and every sweep that retires a Work's media
+		// (replace and remove alike) deletes it — an original no pointer reaches is the
+		// exact un-metered-forever shape the storage ladder must never create.
+		sourceOriginalKey: text("source_original_key").default(""),
 		embedUrl: text("embed_url").default(""), // game/software web embed
 		durationSeconds: integer("duration_seconds"), // video, music and audio
 		// type = "text": the prose itself. `body` is the plain-text shadow used for search;
@@ -772,6 +780,122 @@ export const workSourceFiles = pgTable(
 	],
 );
 
+/**
+ * The reflow sections of an **ebook** Work — one row per extracted chapter component, in
+ * spine order, numbered across the whole source set.
+ *
+ * 🚨 **Why sections as rows, mirroring `work_pages`.** The same delivery rule drives both
+ * tables: every derived media object is stored private and every URL to one is minted per
+ * request at an endpoint that re-resolves access (`/works/:id/sections/:n`, same gate
+ * ladder as the page route), so `downloadEnabled: false` stays honest — no one URL the
+ * whole book falls out of. Sections are to a reflow book what pages are to a fixed one
+ * and what HLS segments are to a video: the unit that can actually be checked.
+ *
+ * `href` is the container-relative path the resource had inside the EPUB, and it is the
+ * identity a reader resolves chapter jumps through — the book interface's `resolveHref`
+ * keys on these, never on raw hrefs inside stored XHTML. `title` is the chapter name the
+ * book's own navigation carried (EPUB 3 nav or EPUB 2 NCX), so the table of contents is
+ * the book's, not ours to invent.
+ */
+// node — caption tracks a creator authored for their own video Work: WebVTT files stored
+// private and served gated with the payload like the video itself (the captions task,
+// 2026-10-12). The org serves them but does not own them, and the rows cascade with the
+// Work. Subtitles in other languages ride the same rows through `kind` — the
+// localization design is deliberately still open — and nothing here is published to the
+// network record.
+export const workCaptionTracks = pgTable(
+	"work_caption_tracks",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** BCP-47 language tag as the creator entered it — the `<track srcLang>` and the player menu's key. */
+		language: text("language").notNull(),
+		/** The human label a player menu shows. Empty falls back to the language. */
+		label: text("label").default(""),
+		/** captions | subtitles — the `<track kind>` this row renders as. */
+		kind: text("kind").notNull().default("captions"),
+		/** Private storage key of the .vtt. Never served directly — the captions route is, access-checked. */
+		storageKey: text("storage_key").notNull(),
+		byteSize: integer("byte_size").notNull(),
+		/** What the upload validation counted — the one honest size signal a creator sees. */
+		cueCount: integer("cue_count").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_work_captions_work_language_kind").on(table.workId, table.language, table.kind),
+		index("idx_work_captions_work").on(table.workId),
+	],
+);
+
+// node — an ebook Work's extracted reflow sections. Node media, cascades with the Work.
+export const workSections = pgTable(
+	"work_sections",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** 1-based, in spine order and contiguous across the source set — the reading order. */
+		position: integer("position").notNull(),
+		/** Container-relative path inside the EPUB (no leading slash, no `..`), normalized at ingest. */
+		href: text("href").notNull(),
+		/** Private storage key. Never served directly — see `/works/:id/sections/:n`. */
+		file: text("file").notNull(),
+		/** The chapter's title from the book's own navigation; an unnamed chapter is "" — never a guess. */
+		title: text("title").notNull().default(""),
+		/** Uncompressed size of the extracted component, as the extraction caps recorded it. */
+		sizeBytes: integer("size_bytes"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_work_sections").on(table.workId, table.position),
+		index("idx_work_sections_work").on(table.workId, table.position),
+	],
+);
+
+/**
+ * The non-section components an EPUB's chapters reference — images, stylesheets, embedded
+ * fonts — one row per manifest resource that is not a spine item, keyed by the
+ * **container-relative path** a chapter references it by.
+ *
+ * 🚨 **This table is the ladder's inventory** (the design's *Parked at implementation*
+ * reason for it): the reader's loader maps every asset reference a chapter makes to these
+ * rows and through them to `/works/:id/assets/:id` — a per-asset check — so a chapter can
+ * fetch its own picture without ever being handed the container. `isOwnStorageRef`'s rule
+ * applies upstream of every key here: these keys are minted by the ingest job itself, not
+ * accepted from a client, which is what keeps a foreign reference from riding an upload.
+ *
+ * Re-resolution is by *path*, not baked URL: a re-ingest changes every storage key but the
+ * container-relative paths — so the reader's map is rebuilt fresh from this table each
+ * session and no stored chapter ever carries a URL that can go stale.
+ */
+// node — components an ebook Work's sections reference. Node media, cascades with the Work.
+export const workSectionAssets = pgTable(
+	"work_section_assets",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** Container-relative path inside the EPUB, exactly as a chapter's references resolve to it. */
+		path: text("path").notNull(),
+		/** Private storage key. Never served directly — see `/works/:id/assets/:id`. */
+		file: text("file").notNull(),
+		/** The media type the EPUB's own manifest declared; an undeclared one is `application/octet-stream`. */
+		mimeType: text("mime_type").notNull().default("application/octet-stream"),
+		/** Uncompressed size of the extracted component, as the extraction caps recorded it. */
+		sizeBytes: integer("size_bytes"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_work_section_assets").on(table.workId, table.path),
+		index("idx_work_section_assets_work").on(table.workId),
+	],
+);
+
 // both — a transcoding job is node media processing (the creator's source → derived
 // renditions), but it runs on org infrastructure (ffmpeg, the worker) and the org's
 // delivery layer reads it. The row is node-owned (it is about one creator's Work); the
@@ -786,7 +910,7 @@ export const transcodingJobs = pgTable(
 			.notNull()
 			.references(() => works.id, { onDelete: "cascade" }),
 		mediaType: text("media_type").notNull(), // video | audio | ebook
-		status: text("status").notNull().default("pending"), // pending | processing | completed | failed
+		status: text("status").notNull().default("pending"), // pending | processing | completed | failed | canceled
 		progress: integer("progress").default(0),
 		etaSeconds: integer("eta_seconds"), // estimated seconds remaining (video transcode; null when unknown/done)
 		errorMessage: text("error_message").default(""),
@@ -796,7 +920,21 @@ export const transcodingJobs = pgTable(
 		// How many times the boot sweep has handed this job back to a handler. The bound the
 		// row's own life is measured against: a file that cannot fit any worker, or is
 		// genuinely corrupt, would otherwise be resumed on every restart forever.
+		//
+		// ⚠️ The ceiling counts CRASH-resumes only. `interrupted_gracefully` (below) is the
+		// deploy bounce's pass-through: the worker sets it on the rows it leaves behind at a
+		// graceful (SIGTERM) stop, and the boot sweep resumes those rows WITHOUT spending a
+		// slot — a deploy landing mid-transcode is a normal event, and charging it here is how
+		// six real uploads all reached resumeCount 2 of 3 during the 2026-10-10 burst.
 		resumeCount: integer("resume_count").notNull().default(0),
+		// Set by the worker's SHUTDOWN path for every row it leaves in pending/processing —
+		// the record that the previous worker was stopped deliberately (SIGTERM: a deploy,
+		// a manual restart) and the row was therefore bounced benignly. A hard kill (OOM kill,
+		// the disk-fill container replacement, a crash) has no shutdown path, so an unflagged
+		// row is the sweep's evidence of a crash resume. Cleared wherever the row is acted on
+		// again — the boot sweep on a resume-send, and each handler when it claims the row —
+		// so a stale flag can never stand in for the interruption it did not describe.
+		interruptedGracefully: boolean("interrupted_gracefully").notNull().default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
@@ -1384,13 +1522,20 @@ export const mediaUploadSessions = pgTable(
 		/** `open` | `completed` | `aborted`. */
 		status: text("status").default("open").notNull(),
 		/**
-		 * The digest the uploading client streamed, carried at completion. The server does
-		 * not re-hash here (that verification is a later leg); the value is the object's
-		 * client-vouched identity, the thing a resumed-by-digest upload would key on.
+		 * The digest the uploading client reads from the file as a whole — carried at
+		 * session start (where it keys a resume: a later start naming the same digest
+		 * finds this row and is handed its plan) and confirmed at completion (a
+		 * different digest is refused): the object's client-vouched identity. The
+		 * server does not re-hash here (that verification is a later leg).
 		 */
 		clientSha256: text("client_sha256"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		completedAt: timestamp("completed_at", { withTimezone: true }),
 	},
-	(table) => [index("idx_upload_sessions_open_age").on(table.status, table.createdAt)],
+	(table) => [
+		index("idx_upload_sessions_open_age").on(table.status, table.createdAt),
+		// The resume lookup: a start naming a digest finds its creator's open session
+		// by it, on a table every upload ever completed accumulates.
+		index("idx_upload_sessions_resume").on(table.creatorId, table.clientSha256),
+	],
 );

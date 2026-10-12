@@ -52,6 +52,7 @@ export default function WorkRow({
 	// with no delivery switch on. Disable rather than let the click earn an error.
 	const processing =
 		item.transcoding?.status === "pending" || item.transcoding?.status === "processing";
+	const canceled = item.transcoding?.status === "canceled";
 	const eta =
 		item.transcoding?.status === "processing" ? etaLeft(item.transcoding.etaSeconds) : null;
 	// And one whose file has not arrived (`media_missing`) — still uploading from this tab, or
@@ -72,7 +73,8 @@ export default function WorkRow({
 	// And a video with no thumbnail its creator chose (`thumbnail_missing`).
 	const noThumbnail = needsChosenThumbnail(item.type) && !item.thumbnail;
 	const blocked =
-		!released && (noFile || emptyWriting || processing || noDelivery || unrated || noThumbnail);
+		!released &&
+		(noFile || emptyWriting || processing || canceled || noDelivery || unrated || noThumbnail);
 	const blockedWhy = uploading
 		? "Still uploading — it can be released once its file arrives and is processed"
 		: noFile
@@ -81,11 +83,13 @@ export default function WorkRow({
 				? "Write it before releasing"
 				: processing
 					? "Still processing — it can be released once the media is ready"
-					: unrated
-						? "Rate it before releasing"
-						: noThumbnail
-							? "Choose a thumbnail before releasing"
-							: "Turn on streaming or downloads before releasing";
+					: canceled
+						? "Replace the media or remove it — its processing was canceled"
+						: unrated
+							? "Rate it before releasing"
+							: noThumbnail
+								? "Choose a thumbnail before releasing"
+								: "Turn on streaming or downloads before releasing";
 
 	return (
 		<tr className="border-b border-base-300/50 hover:bg-base-200/40 align-middle">

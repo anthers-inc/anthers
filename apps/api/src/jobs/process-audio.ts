@@ -14,6 +14,7 @@ import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { storage } from "../services/storage/index.js";
+import { MAX_TRANSCODE_RESUMES } from "./resume-orphans.js";
 
 /**
  * How long the job's signed source address stays valid, exactly as the video legs'
@@ -152,15 +153,33 @@ export async function processAudio(data: ProcessAudioData) {
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 	// Idempotency: a late pg-boss retry of a job already finished (e.g. by the
-	// worker startup-resume path) is a no-op.
+	// worker startup-resume path) is a no-op. A row the boot sweep finally failed —
+	// its crash-resume ceiling spent — is equally final, and must not be resurrected
+	// by a stale redelivery that would restore the crash loop the ceiling exists to
+	// stop. A failed row BELOW the bound stays re-runnable on purpose: a handler
+	// refusal from a possibly-transient cause still inside its job's retry budget,
+	// where re-running is the queue's ordinary self-healing.
 	if (job.status === "completed") {
 		console.log(`[process-audio] job ${jobId} already completed; skipping`);
 		return;
 	}
+	// 🚨 A canceled row is final: the creator stopped it, and a stale redelivery must
+	// not resume what they stopped.
+	if (job.status === "canceled") {
+		console.log(`[process-audio] job ${jobId} canceled; skipping`);
+		return;
+	}
+	if (job.status === "failed" && job.resumeCount >= MAX_TRANSCODE_RESUMES) {
+		console.log(`[process-audio] job ${jobId} failed past its resume bound; skipping`);
+		return;
+	}
 
+	// The claim spends any benign-interruption flag the previous stop left: a run
+	// reaching the row has consumed the excuse, so whatever kills THIS run says for
+	// itself.
 	await db
 		.update(transcodingJobs)
-		.set({ status: "processing", progress: 0, updatedAt: new Date() })
+		.set({ status: "processing", progress: 0, interruptedGracefully: false, updatedAt: new Date() })
 		.where(eq(transcodingJobs.id, jobId));
 
 	const [item] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
@@ -212,6 +231,28 @@ export async function processAudio(data: ProcessAudioData) {
 			throw new Error(`Audio normalization failed: ${stderr.slice(0, 500)}`);
 		}
 		await updateJobProgress(jobId, 60);
+
+		/**
+		 * ⭐ The cancel checkpoint, placed before the run's only storage write. A creator
+		 * canceling an in-flight audio job must not have their stopped run upload its MP3
+		 * anyway — an object no row would ever name, left behind in `audio/processed/`.
+		 * The row is re-read; anything that is no longer `processing` (the creator's
+		 * cancel route marks it `canceled`, another handler's claim marks it anything
+		 * else) stops the run here, before touching storage, the same shape the video
+		 * job's `ensureStillOurs` takes at its own upload checks. Once the upload has
+		 * begun the run finishes normally — the MP3 and waveform it produces are the
+		 * truth for the source the Work still names, and a cancel that arrives in the
+		 * window takes effect at the next state change.
+		 */
+		const [nowRow] = await db
+			.select({ status: transcodingJobs.status })
+			.from(transcodingJobs)
+			.where(eq(transcodingJobs.id, jobId))
+			.limit(1);
+		if (nowRow?.status !== "processing") {
+			console.log(`[process-audio] job ${jobId} no longer processing; abandoning before upload`);
+			return;
+		}
 
 		// 3. Upload processed file (creator-first layout). Processed in the library before
 		// it's attached to any post, so access isn't known here — which is exactly why the

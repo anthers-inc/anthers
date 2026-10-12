@@ -80,8 +80,6 @@ import {
 	notSuspendedAccount,
 	notTestAccount,
 } from "../services/account-visibility.js";
-import { notifyFollow } from "../services/activity-notify.js";
-import { interactionPermissionRefusal } from "../services/atproto.js";
 import { FOLLOW_COLLECTION } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
 import {
@@ -99,6 +97,7 @@ import {
 	enableAdultAccess,
 	setMaturityDisplay,
 } from "../services/content-preferences.js";
+import { ensureFollow } from "../services/follows.js";
 import { merchStoreFactsByWork } from "../services/merch-store.js";
 import {
 	DELIVERY_GROUPS,
@@ -121,7 +120,6 @@ import {
 } from "../services/parental-controls.js";
 import { postContentExcerpt } from "../services/post-markdown.js";
 import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
-import { queueRecordSync } from "../services/record-sync.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../services/storage/keys.js";
 import { storageReadingFor } from "../services/storage-reading.js";
 
@@ -1076,46 +1074,19 @@ const accountRoutes = new Hono()
 			return c.json({ error: "You cannot follow yourself" }, 400);
 		}
 
-		// A block refuses the follow in both directions, and answers 404 rather than 403
-		// so it matches what the profile said a moment earlier. A 403 here would be the
-		// endpoint announcing the block the profile route just declined to.
-		if (await isBlocked(sessionUser.id, creator.id)) {
-			return c.json({ error: "User not found" }, 404);
-		}
-
-		// A follow is a record in the follower's own repository. Unfollowing is never refused.
-		const unwritable = await interactionPermissionRefusal(sessionUser.id);
-		if (unwritable) return c.json(unwritable.body, unwritable.status);
-
-		// Idempotent: insert if not exists
-		const inserted = await db
-			.insert(follows)
-			.values({ followerId: sessionUser.id, creatorId: creator.id })
-			.onConflictDoNothing()
-			.returning({ id: follows.id });
-
-		// Read back rather than taken from the insert, which returns nothing on the idempotent
-		// branch — and a repeated follow is still a reason to make sure the record exists.
-		const [follow] =
-			inserted.length > 0
-				? inserted
-				: await db
-						.select({ id: follows.id })
-						.from(follows)
-						.where(and(eq(follows.followerId, sessionUser.id), eq(follows.creatorId, creator.id)))
-						.limit(1);
-		if (follow) void queueRecordSync("follow", follow.id);
-
-		// A NEW follow tells the person they were followed; a repeated one stays silent —
-		// the dedupe key on the follow id would catch it anyway, but the branch is free and
-		// says the intent. The block check lives in the emitter; a blocked follow never
-		// reaches here (the route 404s it above). Awaited — see the comment emitters.
-		if (inserted.length > 0) {
-			await notifyFollow({
-				followerId: sessionUser.id,
-				followedId: creator.id,
-				followerHandle: sessionUser.handle,
-			}).catch(() => {});
+		// The whole ceremony — block refusal in both directions, repository permission,
+		// the idempotent insert, the record sync and the new-follower notification —
+		// lives in `services/follows.ts`, which is also where an automatic follow (a
+		// Badge subscription follows its creator) goes through. The route is the one
+		// caller that TELLS the person why, so it maps the outcomes to responses: 404
+		// for a block, matching what the profile said a moment earlier (a 403 would be
+		// the endpoint announcing the block the profile route just declined to).
+		const outcome = await ensureFollow(sessionUser.id, creator.id);
+		if (!outcome.ok) {
+			if (outcome.reason === "permission")
+				return c.json(outcome.refusal.body, outcome.refusal.status);
+			if (outcome.reason === "blocked") return c.json({ error: "User not found" }, 404);
+			return c.json({ error: "You cannot follow yourself" }, 400);
 		}
 
 		return c.json({ detail: "Followed." }, 201);

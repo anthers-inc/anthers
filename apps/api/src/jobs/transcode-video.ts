@@ -6,6 +6,10 @@
  *
  * Flow:
  * 1. Probe the source with ffprobe for resolution/duration — read in place, never downloaded
+ * 1b. The ingest three-way (wiki 70.06's accepted set): refuse a codec pair the pipeline
+ *     cannot deliver (`-c copy` remuxes what the pair's native container does take), accept
+ *     a file already in it, and land the remuxed original beside the uploaded one, re-pointing
+ *     the Work at it and queueing its scan like any other attach
  * 2. Determine variants based on source height (480p, 720p, 1080p)
  * 3. Transcode each variant to HLS via ffmpeg, uploading and freeing each one's
  *    files before the next variant starts; 3b transcodes the audio-only rendition the same way
@@ -44,7 +48,15 @@ import { client, db } from "@anthers/db";
 import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
+import {
+	classifyVideoStreams,
+	type DeliverableContainer,
+	remuxedContentType,
+	remuxedKeyFor,
+} from "../lib/video-remux.js";
 import { storage } from "../services/storage/index.js";
+import { MAX_TRANSCODE_RESUMES } from "./resume-orphans.js";
+import { queueScansForWork } from "./scan-media.js";
 import { createEtaClamp, remainingEncodeSeconds } from "./transcode-eta.js";
 
 export interface TranscodeVideoData {
@@ -162,8 +174,14 @@ async function ffmpegHls(
 			`scale=-2:${height}`,
 			"-c:v",
 			"libx264",
+			// veryfast, not fast: on the benchmark file (a real 1080p source at the job's own
+			// bitrates) it runs the tall rungs 2.5–3× faster for PSNR 43.51 → 43.14 and SSIM
+			// 0.9836 → 0.9826, visually indistinguishable in matched 1:1 crops; the low rungs
+			// are decode-bound and save almost nothing (57 s → 54 s), which is fine — the
+			// wall time lives in the tall ones. Parker's verdict, 2026-10-11, after
+			// comparing the 720p pair by eye.
 			"-preset",
-			"fast",
+			"veryfast",
 			"-b:v",
 			bitrate,
 			"-c:a",
@@ -235,6 +253,43 @@ async function ffmpegHls(
 /** The filename of a Work's audio-only rendition, within the same HLS directory. */
 export const AUDIO_RENDITION_PLAYLIST = "audio.m3u8";
 
+/**
+ * The remux: the deliverable pair copied into its native container, `-c copy`, nothing
+ * re-encoded — a remux's cost is transfer, which is why it is measured in seconds
+ * against the ladder's minutes whatever a file's length is. The maps take the FIRST
+ * video stream and the first audio (the pair the classifier demanded) and deliberately
+ * leave subtitles and attachments uncarried: the original object keeps those, and the
+ * pair's native container is what the player reads. +faststart moves an MP4's index to
+ * its head, which is what a browser's first ranged read of the object wants.
+ */
+async function ffmpegRemux(
+	inputPath: string,
+	outPath: string,
+	container: DeliverableContainer,
+): Promise<void> {
+	const proc = Bun.spawn(
+		ffmpegCommand(inputPath, [
+			"-map",
+			"0:v:0",
+			"-map",
+			"0:a:0?",
+			"-c",
+			"copy",
+			...(container === "mp4" ? ["-movflags", "+faststart"] : []),
+			"-f",
+			container,
+			outPath,
+			"-y",
+		]),
+		{ stdout: "pipe", stderr: "pipe" },
+	);
+	const exitCode = await proc.exited;
+	if (exitCode !== 0) {
+		const stderr = await new Response(proc.stderr).text();
+		throw new Error(`the remux failed: ${stderr.slice(0, 500)}`);
+	}
+}
+
 /** Transcode an audio-only HLS rendition — the same audio the variants carry, demuxed
  *  into its own playlist. One variant, at the bitrate the muxed ones carry, so a Work
  *  can be listened to as a podcast without paying for video bandwidth it cannot see. */
@@ -302,17 +357,18 @@ async function updateJobProgress(jobId: number, progress: number) {
 }
 
 /**
- * Whether the job's row has already reached `completed` — the one fact both the
+ * Whether the job's row has reached a state a still-running handler must stop for —
+ * `completed`, or since the creator-cancel work `canceled`. The one fact both the
  * claim-time skip and the supersession re-checks rest on. Exported because a test
  * asserts the fact itself rather than inferring it from a handler's side effects.
  */
-export async function isTranscodeCompleted(jobId: number): Promise<boolean> {
+export async function isTranscodeSettled(jobId: number): Promise<boolean> {
 	const [row] = await db
 		.select({ status: transcodingJobs.status })
 		.from(transcodingJobs)
 		.where(eq(transcodingJobs.id, jobId))
 		.limit(1);
-	return row?.status === "completed";
+	return row?.status === "completed" || row?.status === "canceled";
 }
 
 export async function transcodeVideo(data: TranscodeVideoData) {
@@ -339,18 +395,44 @@ async function runTranscode(data: TranscodeVideoData) {
 		console.log(`[transcode-video] job ${jobId} already completed; skipping`);
 		return;
 	}
+	// 🚨 A canceled row is final the same way: the creator stopped it, and a stale
+	// redelivery must not resume what they stopped — the claim-time guard the
+	// cancel route relies on to make cancellation survive redelivery.
+	if (job.status === "canceled") {
+		console.log(`[transcode-video] job ${jobId} canceled; skipping`);
+		return;
+	}
+	// 🚨 A row the boot sweep finally failed — its crash-resume ceiling spent — must NOT
+	// be resurrected by a stale redelivery. Re-running the file that took the worker
+	// down restores the crash loop the ceiling exists to stop, now that expiry is sized
+	// in hours: the redelivery that would have done it is exactly "pg-boss redelivery
+	// re-runs failed rows". A failed row BELOW the bound stays re-runnable on purpose:
+	// that is a handler refusal from a possibly-transient cause still inside its job's
+	// own retry budget, where re-running is the queue's ordinary self-healing.
+	if (job.status === "failed" && job.resumeCount >= MAX_TRANSCODE_RESUMES) {
+		console.log(`[transcode-video] job ${jobId} failed past its resume bound; skipping`);
+		return;
+	}
 
 	// Mark as processing. The estimate is cleared too, so a job run again after a crash does not
-	// show the previous run's figure until its own first reading.
+	// show the previous run's figure until its own first reading. The benign-interruption
+	// flag is spent here as well: a run reaching the row has consumed the excuse its
+	// previous stop left, so whatever kills THIS run says for itself.
 	await db
 		.update(transcodingJobs)
-		.set({ status: "processing", progress: 0, etaSeconds: null, updatedAt: new Date() })
+		.set({
+			status: "processing",
+			progress: 0,
+			etaSeconds: null,
+			interruptedGracefully: false,
+			updatedAt: new Date(),
+		})
 		.where(eq(transcodingJobs.id, jobId));
 
 	const [item] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
 	if (!item) throw new Error(`Content item ${job.workId} not found`);
 
-	const storageKey = item.sourceKey ?? "";
+	let storageKey = item.sourceKey ?? "";
 	if (!storageKey) throw new Error("No source file on content item");
 
 	// The storage prefix is built before the encode loop because the uploads now happen
@@ -378,7 +460,7 @@ async function runTranscode(data: TranscodeVideoData) {
 	let superseded = false;
 	const ensureStillOurs = async (): Promise<boolean> => {
 		if (superseded) return false;
-		if (await isTranscodeCompleted(jobId)) {
+		if (await isTranscodeSettled(jobId)) {
 			superseded = true;
 			console.log(
 				`[transcode-video] job ${jobId} completed by another handler; abandoning this run before touching storage or the row`,
@@ -391,6 +473,12 @@ async function runTranscode(data: TranscodeVideoData) {
 	let outputDir: string | null = null;
 
 	try {
+		// The job's temp directory is created before anything reads the source: the
+		// three-way below may put a remuxed copy here, and the `finally` sweep frees
+		// whatever is in it whether the run reached the ladder or not.
+		outputDir = join(tmpdir(), `hls_${randomUUID()}`);
+		await mkdir(outputDir, { recursive: true });
+
 		// 1. Probe the source — read in place, no temp copy. A fresh address per pass;
 		// the TTL constant above carries the reasoning.
 		const probe = await ffprobe(
@@ -414,6 +502,73 @@ async function runTranscode(data: TranscodeVideoData) {
 		}
 
 		await updateJobProgress(jobId, 10);
+
+		// 1b. The ingest three-way — accept, remux, refuse — the ruling that makes OBS's
+		// default MKV capture a Work that plays rather than one that never did. A copy is
+		// honest work: no encode runs, the ladder's math is unchanged (a remux changes no
+		// stream, so this probe's duration and heights stay the answer), and the remuxed
+		// original lands beside the uploaded one in the same directory.
+		const verdict = classifyVideoStreams(probe, storageKey);
+		if (verdict.refusal) {
+			// A refusal is terminal and does not rethrow: the row carries the creator-facing
+			// message, the handler RETURNS, pg-boss completes this queue job, and no retry
+			// re-runs a decision that cannot change. The boot sweep re-sends only
+			// pending/processing rows, so a row failed here is done deciding.
+			await db
+				.update(transcodingJobs)
+				.set({ status: "failed", updatedAt: new Date(), errorMessage: verdict.refusal })
+				.where(eq(transcodingJobs.id, jobId));
+			console.log(
+				`[transcode-video] job ${jobId}: the source's codec pair is outside the accepted set; refused`,
+			);
+			return;
+		}
+
+		if (!verdict.alreadyPlayable && verdict.container) {
+			const remuxedKey = remuxedKeyFor(storageKey, verdict.container);
+			const remuxedPath = join(outputDir, `remux.${verdict.container}`);
+			await ffmpegRemux(
+				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
+				remuxedPath,
+				verdict.container,
+			);
+			// One whole object on the temp disk — the residency the ladder's per-variant
+			// uploads exist to bound is one variant at a time, and a remux's answer is the
+			// same shape: uploaded the moment its copy finishes, freed the moment the
+			// upload's answer is in.
+			await storage.upload(
+				remuxedKey,
+				Buffer.from(await Bun.file(remuxedPath).arrayBuffer()),
+				remuxedContentType(verdict.container),
+				"private",
+			);
+			// The `finally` sweep frees the directory regardless; no error path of a rm on
+			// a file that the sweep will get to anyway is worth reporting instead of the
+			// work that follows.
+			await rm(remuxedPath).catch(() => {});
+
+			// The re-point is the Work's write a zombie handler must never make, so the
+			// supersession check stands before it, as it does before every upload.
+			if (!(await ensureStillOurs())) return;
+			// The remuxed MP4 takes over the Work's source, and the creator's uploaded
+			// original moves onto the pointer column that keeps it enumerated and metered
+			// (`works.source_original_key` — see the schema comment); replace and remove
+			// sweeps read it so the original leaves when the Work's media does.
+			await db
+				.update(works)
+				.set({
+					sourceKey: remuxedKey,
+					sourceOriginalKey: storageKey,
+				})
+				.where(eq(works.id, item.id));
+			// A remuxed source is a NEW object on the Work — owed its scan like any attach,
+			// and the release gate waits on exactly this queue's answer.
+			await queueScansForWork({ ...item, sourceKey: remuxedKey });
+
+			// The ladder reads the remuxed original from here on.
+			storageKey = remuxedKey;
+			await updateJobProgress(jobId, 15);
+		}
 
 		// 2. Determine variants based on source resolution
 		const variants: Variant[] = [];
@@ -452,8 +607,6 @@ async function runTranscode(data: TranscodeVideoData) {
 		}
 
 		// 3. Transcode each variant
-		outputDir = join(tmpdir(), `hls_${randomUUID()}`);
-		await mkdir(outputDir, { recursive: true });
 
 		/**
 		 * Upload every file a finished encode left in `dir`, deleting each the moment its
@@ -497,7 +650,6 @@ async function runTranscode(data: TranscodeVideoData) {
 		const perVariant = (spanEnd - spanStart) / variants.length;
 		const heights = variants.map((v) => v.height);
 		const clampEta = createEtaClamp();
-		let encoding = true;
 		let lastWrite: Promise<unknown> = Promise.resolve();
 		for (let i = 0; i < variants.length; i++) {
 			// A run that lost its delivery between variants leaves the encode loop here;
@@ -507,6 +659,18 @@ async function runTranscode(data: TranscodeVideoData) {
 			const variantBase = spanStart + i * perVariant;
 			let lastPct = -1;
 			let lastWriteMs = 0;
+			// Per-variant, and flipped before this variant's post-encode writes: a tick
+			// reported once its variant's ffmpeg has exited is stale by definition (the
+			// variant-end write and everything after supersede it), and it must queue
+			// NOTHING. The reporting loop inside `ffmpegHls` is detached and keeps draining
+			// the dead process's buffered stdout after this await resolves, so without the
+			// per-variant flip its late ticks would re-enqueue writes with no one waiting
+			// on them — landing through the estimate-clear write and the completion write,
+			// where a final row reading a mid-ladder progress and a stale estimate is a
+			// bug the real 2026-10-11 job 15 carried. One shared flag could not do this:
+			// a stale tick draining during the AUDIO pass would still read the encode
+			// flag as true, which is exactly the window the old shape leaked through.
+			let variantReporting = true;
 			await ffmpegHls(
 				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
 				outputDir,
@@ -514,7 +678,7 @@ async function runTranscode(data: TranscodeVideoData) {
 				v.bitrate,
 				v.name,
 				(outSec, speed) => {
-					if (duration <= 0 || !encoding || superseded) return;
+					if (duration <= 0 || !variantReporting || superseded) return;
 					const frac = Math.min(1, outSec / duration);
 					const pct = Math.min(spanEnd - 1, Math.round(variantBase + frac * perVariant));
 					const eta = clampEta(remainingEncodeSeconds(heights, i, outSec, duration, speed));
@@ -532,6 +696,7 @@ async function runTranscode(data: TranscodeVideoData) {
 					}
 				},
 			);
+			variantReporting = false;
 			await updateJobProgress(jobId, Math.round(spanStart + (i + 1) * perVariant));
 			// This variant's segments are off the disk before the next variant's encode
 			// grows the directory again — the whole point of uploading per variant.
@@ -563,8 +728,9 @@ async function runTranscode(data: TranscodeVideoData) {
 		// ⚠️ **The estimate covers the encoding alone, so it is cleared here.** Uploading the
 		// segments takes a time nothing measures, and the last estimate the
 		// encode wrote, usually a second or two, would otherwise stand for as long as they take.
-		// A progress reading still in flight is let land first, or it could write that figure back.
-		encoding = false;
+		// A write the last variant queued is let land first, or it could write its figure
+		// over the clear. Every tick whose variant has ended was already stopped at the
+		// queueing step, so nothing enqueued after this line exists.
 		await lastWrite;
 		await db
 			.update(transcodingJobs)

@@ -33,8 +33,9 @@ import { JOB_OPTIONS, QUEUES, queue } from "./queue.js";
  * clock when anything is owed.
  *
  * 🚨 **Every writer that attaches an object to a Work calls this**, and there are two: the
- * content routes, when a file or a thumbnail arrives, and the video transcode, which attaches
- * the poster thumbnail it generates. The transcode used to write its thumbnail straight onto the
+ * content routes, when a file or a thumbnail arrives, and the video transcode, when a
+ * foreign-container source remuxes (the remuxed MP4 is a new object on the Work). The
+ * transcode used to write its thumbnail straight onto the
  * Work, so a released video's poster sat in the public bucket unscanned until the hourly
  * `rescan-owed` sweep found it. `beginScans` decides what is owed; the key set is the one the
  * release gate waits on, so it is never computed a second way.

@@ -26,14 +26,18 @@ import { transcodingJobs, workSourceFiles, works } from "@anthers/db/schema";
 import { isPaged } from "@anthers/shared/content";
 import { and, asc, eq, max, sql } from "drizzle-orm";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
+import { routePagedIngest } from "../lib/paged-ingest.js";
 import { removeSourceFileStorage } from "./media-purge.js";
 
 export type WorkSourceFileRow = typeof workSourceFiles.$inferSelect;
 export type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
 export type WorkRow = typeof works.$inferSelect;
 
+/** The fields of a Work `listSourceFiles` reads — what a caller holding only ids and keys passes. */
+type WorkSourceRef = Pick<WorkRow, "id" | "sourceKey">;
+
 /** The Work's sources, from the table when it has rows and from the legacy column when not. */
-export async function listSourceFiles(work: WorkRow): Promise<WorkSourceFileRow[]> {
+export async function listSourceFiles(work: WorkSourceRef): Promise<WorkSourceFileRow[]> {
 	const stored = await db
 		.select()
 		.from(workSourceFiles)
@@ -67,6 +71,12 @@ export async function syncFromSourceKey(work: WorkRow): Promise<void> {
 	if (!work.sourceKey) return;
 	const rows = await listSourceFiles(work);
 	if (rows.length === 1 && rows[0].id !== 0 && rows[0].file === work.sourceKey) return;
+	// The replaced set's objects leave with its rows — the remove path follows the same
+	// rule (`removeSourceFileStorage`), and a set replaced wholesale retires its files
+	// the same way rather than leaving orphaned originals in the creator's prefix.
+	for (const row of rows) {
+		if (row.id !== 0) await removeSourceFileStorage(row, work.creatorId);
+	}
 	await db.delete(workSourceFiles).where(eq(workSourceFiles.workId, work.id));
 	await db.insert(workSourceFiles).values({
 		workId: work.id,
@@ -80,12 +90,34 @@ export async function syncFromSourceKey(work: WorkRow): Promise<void> {
 export async function appendSourceFile(
 	work: WorkRow,
 	input: { file: string; filename?: string; fileSize?: number | null; mimeType?: string },
-): Promise<{ rows: WorkSourceFileRow[]; job: TranscodingJobRow | null }> {
+): Promise<{ rows: WorkSourceFileRow[]; job: TranscodingJobRow | null; error?: string }> {
 	const existing = await db
 		.select()
 		.from(workSourceFiles)
 		.where(eq(workSourceFiles.workId, work.id))
 		.orderBy(asc(workSourceFiles.position));
+	// 🚨 **The set is one shape** (the two-shape ingest of 2026-10-11): one EPUB makes the
+	// set reflow, one PDF or page image makes it fixed, and mixing them lands nowhere.
+	// Checked before anything is written, so a refused add leaves the set exactly as it was.
+	const wouldBe = [
+		...existing.map((r) => ({ mimeType: r.mimeType, filename: r.filename, file: r.file })),
+		{
+			mimeType: input.mimeType ?? "",
+			filename: input.filename ?? "",
+			file: input.file,
+		},
+	];
+	// A legacy column file with no row joins the considered set the append would seed it
+	// as — the list fallback's row, whose mime reads as the PDF default it has always read as.
+	const fallback =
+		existing.length === 0 && work.sourceKey
+			? [{ mimeType: "application/pdf", filename: "", file: work.sourceKey }]
+			: [];
+	try {
+		routePagedIngest([...fallback, ...wouldBe]);
+	} catch (error) {
+		return { rows: existing, job: null, error: error instanceof Error ? error.message : "mixed" };
+	}
 	// 🚨 **A set that has grown past its legacy column carries the column's file with it.**
 	// A Work with a legacy `source_key` and no rows (a fixture, or any source attached
 	// before its first add) reads as the one-file set through the list fallback — so an
@@ -193,8 +225,14 @@ export async function reorderSourceFiles(
 
 /**
  * Ask a re-render: the transcoding job row the status surfaces read, and the queue entry the
- * worker drains. The rasterizer renders the whole current set, so one job covers any mutation
+ * worker drains. The ingest renders the whole current set, so one job covers any mutation
  * of it; the caller enqueues a scan beside it, because a new source is a new object to scan.
+ *
+ * 🚨 **The queue routes by composition** (`routePagedIngest`): a set with an EPUB in it is
+ * reflow-shaped and extracts through `ingest-ebook`; every other set keeps rendering
+ * through `render-paged` exactly as before. A mixed set cannot route anywhere — the
+ * refusal is recorded on the job row the status badge reads, legibly, rather than thrown
+ * out of an enqueue the creator is mid-way through.
  */
 export async function askRerender(work: WorkRow): Promise<TranscodingJobRow | null> {
 	if (!isPaged(work.type)) return null;
@@ -202,6 +240,17 @@ export async function askRerender(work: WorkRow): Promise<TranscodingJobRow | nu
 		.insert(transcodingJobs)
 		.values({ workId: work.id, mediaType: "ebook", status: "pending" })
 		.returning();
-	await queue.send(QUEUES.RENDER_PAGED, { jobId: job.id }, JOB_OPTIONS[QUEUES.RENDER_PAGED]);
+	try {
+		const target = routePagedIngest(await listSourceFiles(work));
+		const queueName = target === "ingest-ebook" ? QUEUES.INGEST_EBOOK : QUEUES.RENDER_PAGED;
+		await queue.send(queueName, { jobId: job.id }, JOB_OPTIONS[queueName]);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		await db
+			.update(transcodingJobs)
+			.set({ status: "failed", errorMessage: message, updatedAt: new Date() })
+			.where(eq(transcodingJobs.id, job.id));
+		return { ...job, status: "failed", errorMessage: message };
+	}
 	return job;
 }

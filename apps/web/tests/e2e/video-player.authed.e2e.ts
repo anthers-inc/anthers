@@ -179,6 +179,62 @@ test("the settings menu offers Listen as podcast when the rendition exists", asy
 	await expect(page.getByRole("button", { name: /listen as podcast/i })).toBeVisible();
 });
 
+test("the quality menu offers Original Media beside the ladder's rungs", async ({ page }) => {
+	await openPlayer(page);
+	const controls = page.locator(CONTROLS);
+	await controls.getByRole("button", { name: "Playback settings" }).click();
+	// The offer, at the menu's end under the rungs. The fixture is a real ladder with
+	// rungs of its own, so the menu carries both: the rungs the default plays.
+	await expect(page.getByTestId("quality-original")).toBeVisible();
+	await expect(
+		page.locator('[data-testid^="quality-"]:not([data-testid="quality-original"])'),
+	).not.toHaveCount(0);
+	// Automatic is the resting choice; the original is offered, not active.
+	await expect(page.getByTestId("quality-original")).not.toHaveClass(/menu-active/);
+});
+
+test("choosing Original Media leaves the ladder, and a rung re-enters it", async ({ page }) => {
+	await openPlayer(page);
+	// hls.js drives the element through a blob URL; the original is an explicit src.
+	// What is under test is the switch's plumbing, not the original's servability in
+	// this mode: local delivery's raw-key answer may carry no playable bytes, and a
+	// refused source has nothing to assert beyond the menu's own state.
+	const srcBefore = await page.evaluate(() => document.querySelector("video")?.getAttribute("src"));
+	expect(srcBefore, "hls.js was not driving the element").toContain("blob:");
+
+	const controls = page.locator(CONTROLS);
+	await controls.getByRole("button", { name: "Playback settings" }).click();
+	await page.getByTestId("quality-original").click();
+	await expect
+		.poll(() => page.evaluate(() => document.querySelector("video")?.getAttribute("src") ?? ""))
+		.not.toContain("blob:");
+
+	// The menu on the other side of the choice: the original carries the active mark,
+	// and the Auto row is hidden — a row that looked active-but-nothing-would-happen
+	// would be a lie of the same kind a dead control is. The rungs stay listed, so
+	// rejoining is a click on what it rejoins.
+	await controls.getByRole("button", { name: "Playback settings" }).click();
+	await expect(page.getByTestId("quality-original")).toHaveClass(/menu-active/);
+	await expect(page.getByRole("button", { name: /^Auto/ })).toHaveCount(0);
+
+	// And a rung re-enters the ladder: hls.js rebuilds (an import promise away), the
+	// chosen rung rides the pending-level handoff, and the element reaches a real
+	// duration again through the manifest.
+	await page
+		.locator('[data-testid^="quality-"]:not([data-testid="quality-original"])')
+		.first()
+		.click();
+	await expect
+		.poll(() => page.evaluate(() => document.querySelector("video")?.duration ?? 0), {
+			timeout: 15_000,
+			message: "re-entering the ladder never reattached media",
+		})
+		.toBeGreaterThan(0);
+	await expect
+		.poll(() => page.evaluate(() => document.querySelector("video")?.getAttribute("src") ?? ""))
+		.toContain("blob:");
+});
+
 test("volume is remembered across a reload", async ({ page }) => {
 	await openPlayer(page);
 

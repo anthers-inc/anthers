@@ -42,9 +42,13 @@ import {
 	votes,
 	webBuildFiles,
 	webBuilds,
+	workCaptionTracks,
 	workPages,
 	workPanels,
 	workSaves,
+	workSectionAssets,
+	workSections,
+	workSourceFiles,
 	works,
 } from "@anthers/db/schema";
 import {
@@ -114,6 +118,7 @@ import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { queueScansForWork } from "../jobs/scan-media.js";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
+import { routePagedIngest } from "../lib/paged-ingest.js";
 import { buildDeliveryHost, mintPlayToken, PLAY_TOKEN_TTL_SECONDS } from "../lib/web-build.js";
 import { getOptionalUserId, requireAuth, requireCreator } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
@@ -141,6 +146,13 @@ import {
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
 import { recordUrlFor } from "../services/atproto-repo.js";
 import { blockedUserIds, isBlocked, notBlockedBy } from "../services/blocks.js";
+import {
+	attachCaptionTrack,
+	type CaptionTrackRow,
+	deleteCaptionTrack,
+	listCaptionTracks,
+	VttRefusal,
+} from "../services/captions.js";
 import {
 	commentAncestry,
 	REPLY_SUBJECT_TYPE,
@@ -174,7 +186,12 @@ import {
 	saveWork,
 	setHidden,
 } from "../services/library.js";
-import { purgeWorkMedia } from "../services/media-purge.js";
+import {
+	collectWorkMedia,
+	purgeReplacedWorkMedia,
+	purgeWorkMedia,
+	sweepCollected,
+} from "../services/media-purge.js";
 import { merchStoreFactsByWork } from "../services/merch-store.js";
 import { notifyMany } from "../services/notifications.js";
 import {
@@ -204,6 +221,7 @@ import {
 import { aclForMediaType, scannedObjectKind } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
+import { mediaUploadKeyFor } from "../services/upload-sessions.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
 import { releaseRefusal } from "../services/work-release.js";
 import {
@@ -1009,6 +1027,15 @@ const sourceFileSchema = z.object({
 /** A whole-set arrangement: the ids in the order the creator is showing. No partial orders. */
 const sourceOrderSchema = z.object({ order: z.array(z.number().int()) });
 
+/** One caption track to attach: the uploaded .vtt's key, its language tag, and its menu label. */
+const captionAttachSchema = z.object({
+	key: z.string().min(1).max(500),
+	// A BCP-47 tag as broad as `zh-Hant-TW` fits; the shape gate itself is in the service.
+	language: z.string().min(2).max(35),
+	label: z.string().max(100).default(""),
+	kind: z.enum(["captions", "subtitles"]).default("captions"),
+});
+
 const postBaseSchema = z.object({
 	title: z.string().max(255).optional().default(""),
 	slug: z
@@ -1192,11 +1219,26 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 		return job;
 	}
 	if (processing === "ebook" && item.sourceKey) {
+		// The row routes by composition, exactly as `askRerender` does: an EPUB set
+		// extracts (`ingest-ebook`), every other set renders as fixed pages. A set that
+		// routes nowhere is recorded failed, legibly, rather than thrown out of a create
+		// the creator is mid-way through.
 		const [job] = await db
 			.insert(transcodingJobs)
 			.values({ workId: item.id, mediaType: "ebook", status: "pending" })
 			.returning();
-		await queue.send(QUEUES.RENDER_PAGED, { jobId: job.id }, JOB_OPTIONS[QUEUES.RENDER_PAGED]);
+		try {
+			const route = routePagedIngest(await listSourceFiles(item));
+			const queueName = route === "ingest-ebook" ? QUEUES.INGEST_EBOOK : QUEUES.RENDER_PAGED;
+			await queue.send(queueName, { jobId: job.id }, JOB_OPTIONS[queueName]);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			await db
+				.update(transcodingJobs)
+				.set({ status: "failed", errorMessage: message, updatedAt: new Date() })
+				.where(eq(transcodingJobs.id, job.id));
+			return { ...job, status: "failed", errorMessage: message };
+		}
 		return job;
 	}
 	if (processing === "audio" && item.sourceKey) {
@@ -1245,6 +1287,8 @@ async function serializeWork(
 	 * where the stored key is itself the playable address.
 	 */
 	delivery: DeliveryCtx | null = null,
+	/** The Work's caption tracks, for the Studio's editor; empty when the caller did not load them. */
+	captions: CaptionTrackRow[] = [],
 ) {
 	return {
 		id: item.id,
@@ -1305,6 +1349,17 @@ async function serializeWork(
 		assets: workAssets,
 		webBuilds: webBuildsList,
 		transcoding: job,
+		// The owner's caption tracks, ungated here — this shape is what the Studio edits —
+		// with the play-facing URLs built the way the user shape builds them. Full rows,
+		// not the reader's slim objects: the editor shows size and cue count, which say
+		// something about what was uploaded that the play menu has no use for.
+		captions:
+			item.type !== "video"
+				? []
+				: captions.map((t) => ({
+						...t,
+						url: buildCaptionUrl(delivery ?? localDelivery, item.id, t.id),
+					})),
 		/**
 		 * The Work's listing on the network while it has one, and the public record link
 		 * beside it — every reader who can see the Work sees it too (the record is public
@@ -1569,6 +1624,36 @@ function buildHlsManifestUrl(ctx: DeliveryCtx, workId: number, file = "master.m3
 /** URL of the access-checked audio endpoint for an audio Work. */
 function buildAudioUrl(ctx: DeliveryCtx, workId: number): string {
 	return withShare(`${ctx.origin}/api/content/works/${workId}/audio`, ctx);
+}
+
+/**
+ * URL of the access-checked caption route for one track. Unlike media URLs, the caption
+ * route is the address in every mode — there is no bucket URL to fall back to, because a
+ * local-mode key is not a playable address the way a small file's is. Local mode answers
+ * `publicOrigin()`, which is same-origin, so the `<track>` fetch carries the session.
+ */
+function buildCaptionUrl(ctx: DeliveryCtx, workId: number, trackId: number): string {
+	return withShare(`${ctx.origin}/api/content/works/${workId}/captions/${trackId}`, ctx);
+}
+
+/** The delivery context the local-mode serialization falls back to for caption URLs. */
+const localDelivery: DeliveryCtx = { origin: publicOrigin() };
+
+/**
+ * One caption track as its consumer needs it: the play-facing URL beside the row's shape.
+ * The owner shape keeps the counts (the Studio's editor shows them); the read shape is
+ * what a `<track>` element wants and nothing more (the serializers).
+ */
+function serializeCaptionRow(row: CaptionTrackRow, ctx: DeliveryCtx) {
+	return {
+		id: row.id,
+		language: row.language,
+		label: row.label || row.language,
+		kind: row.kind,
+		url: buildCaptionUrl(ctx, row.workId, row.id),
+		byteSize: row.byteSize,
+		cueCount: row.cueCount,
+	};
 }
 
 /**
@@ -1953,6 +2038,14 @@ async function serializeWorkForUser(
 	 */
 	pageCount = 0,
 	/**
+	 * How many **reflow** sections an ebook's EPUB ingest extracted, or 0 — the fixed
+	 * shape's `pageCount` sibling. This is the only ingest-produced signal the reader
+	 * needs to pick its view: sections exist → reflow (`work_sections`, foliate);
+	 * none → fixed (`work_pages`, the page reader). Same publicity rule as `pageCount` —
+	 * a count is the book's shape, never a pointer into it.
+	 */
+	sectionCount = 0,
+	/**
 	 * Whether a guardian's **time limit** has run out on this account.
 	 *
 	 * ⚠️ **Optional where `allowanceSpent` is required, and the asymmetry is deliberate.** A
@@ -1974,6 +2067,16 @@ async function serializeWorkForUser(
 	hasPrimaryBuild = false,
 	/** Whether that primary build declared cross-origin isolation (threaded export). */
 	primaryRequiresIsolation = false,
+	/**
+	 * The Work's caption tracks, loaded by `loadWorkBundles` — empty (never loaded) at the
+	 * call sites that serialize cards and listings, where no player renders.
+	 *
+	 * The URL list rides `canAccess`, exactly like `originalUrl`: withheld from a user who
+	 * cannot reach the Work, enforced again at the captions endpoint for whoever holds a
+	 * stale URL. Withheld is an EMPTY list rather than a null field — the type is one
+	 * array either way.
+	 */
+	captions: CaptionTrackRow[] = [],
 ) {
 	const canAccess = access.canAccess;
 
@@ -2084,6 +2187,7 @@ async function serializeWorkForUser(
 		// for something already enforced once.
 		lyrics: deliverable ? work.lyrics : "",
 		pageCount,
+		sectionCount,
 		// ⚠️ Downloads stay on `canAccess` alone, deliberately. **The meter measures
 		// attention to the commons, not bytes** — delivery is free at any volume since R2,
 		// and a spent allowance has never had anything to do with a file you are entitled
@@ -2110,6 +2214,20 @@ async function serializeWorkForUser(
 					: work.sourceKey
 				: null,
 		transcoding: await userTranscoding(job, canAccess, delivery),
+		// Caption tracks ride `canAccess` like the video's own URLs: authored descriptions
+		// of a gated video are inside its gate, and a served track answers to the same
+		// access check at its route. They do NOT ride the meter — the meter measures
+		// attention, not bytes, and a caption file is bytes (see the download note above).
+		captions:
+			canAccess && work.type === "video"
+				? captions.map((t) => ({
+						id: t.id,
+						language: t.language,
+						label: t.label || t.language,
+						kind: t.kind,
+						url: buildCaptionUrl(delivery ?? localDelivery, work.id, t.id),
+					}))
+				: [],
 		access,
 		/**
 		 * Whether this Work is **Public Access** — ungated, streaming, free to everyone.
@@ -2182,19 +2300,42 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 	jobByWork: Map<number, TranscodingJobRow>;
 	/** Page count per ebook Work. A COUNT, never the keys — see `serializeWorkForUser`. */
 	pagesByWork: Map<number, number>;
+	/** Reflow section count per ebook Work — the reader's shape signal, `pageCount`'s sibling. */
+	sectionsByWork: Map<number, number>;
 	/** Browser builds per Work, with their file rows. Owner-facing payload; see `serializeWork`. */
 	buildsByWork: Map<number, WebBuildWithFiles[]>;
+	/** Caption tracks per Work — player payload, only for surfaces that render one. */
+	captionsByWork: Map<number, CaptionTrackRow[]>;
 }> {
 	const worksById = new Map<number, WorkRow>();
 	const assetsByWork = new Map<number, AssetRow[]>();
 	const jobByWork = new Map<number, TranscodingJobRow>();
 	const pagesByWork = new Map<number, number>();
+	const sectionsByWork = new Map<number, number>();
 	const buildsByWork = new Map<number, WebBuildWithFiles[]>();
+	const captionsByWork = new Map<number, CaptionTrackRow[]>();
 	if (workIds.length === 0) {
-		return { worksById, assetsByWork, jobByWork, pagesByWork, buildsByWork };
+		return {
+			worksById,
+			assetsByWork,
+			jobByWork,
+			pagesByWork,
+			sectionsByWork,
+			buildsByWork,
+			captionsByWork,
+		};
 	}
 
-	const [workRows, assetRows, jobRows, pageRows, buildRows, buildFileRows] = await Promise.all([
+	const [
+		workRows,
+		assetRows,
+		jobRows,
+		pageRows,
+		sectionRows,
+		buildRows,
+		buildFileRows,
+		captionRows,
+	] = await Promise.all([
 		db.select().from(works).where(inArray(works.id, workIds)),
 		db.select().from(assets).where(inArray(assets.workId, workIds)),
 		db
@@ -2207,14 +2348,21 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 			.from(workPages)
 			.where(inArray(workPages.workId, workIds))
 			.groupBy(workPages.workId),
+		db
+			.select({ workId: workSections.workId, count: sql<number>`count(*)::int` })
+			.from(workSections)
+			.where(inArray(workSections.workId, workIds))
+			.groupBy(workSections.workId),
 		db.select().from(webBuilds).where(inArray(webBuilds.workId, workIds)),
 		db
 			.select({ file: webBuildFiles, workId: webBuilds.workId })
 			.from(webBuildFiles)
 			.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
 			.where(inArray(webBuilds.workId, workIds)),
+		db.select().from(workCaptionTracks).where(inArray(workCaptionTracks.workId, workIds)),
 	]);
 	for (const p of pageRows) pagesByWork.set(p.workId, p.count);
+	for (const s of sectionRows) sectionsByWork.set(s.workId, s.count);
 
 	await Promise.all(workRows.map(resolveWorkThumbnail));
 	for (const w of workRows) worksById.set(w.id, w);
@@ -2225,6 +2373,11 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 	}
 	for (const j of jobRows) {
 		if (!jobByWork.has(j.workId)) jobByWork.set(j.workId, j);
+	}
+	for (const t of captionRows) {
+		const list = captionsByWork.get(t.workId) ?? [];
+		list.push(t);
+		captionsByWork.set(t.workId, list);
 	}
 	const filesByBuild = new Map<number, (typeof webBuildFiles.$inferSelect)[]>();
 	for (const { file } of buildFileRows) {
@@ -2237,7 +2390,15 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 		list.push({ ...b, files: filesByBuild.get(b.id) ?? [] });
 		buildsByWork.set(b.workId, list);
 	}
-	return { worksById, assetsByWork, jobByWork, pagesByWork, buildsByWork };
+	return {
+		worksById,
+		assetsByWork,
+		jobByWork,
+		pagesByWork,
+		sectionsByWork,
+		buildsByWork,
+		captionsByWork,
+	};
 }
 
 /**
@@ -2260,7 +2421,7 @@ async function loadPostWorks(
 	if (refs.length === 0) return [];
 
 	const workIds = refs.map((r) => r.workId);
-	const { worksById, assetsByWork, jobByWork, pagesByWork, buildsByWork } =
+	const { worksById, assetsByWork, jobByWork, pagesByWork, sectionsByWork, buildsByWork } =
 		await loadWorkBundles(workIds);
 	const [ctx, spent] = await Promise.all([
 		buildAccessContext(userId, { workIds }),
@@ -2295,6 +2456,7 @@ async function loadPostWorks(
 					spent,
 					userId,
 					pagesByWork.get(work.id) ?? 0,
+					sectionsByWork.get(work.id) ?? 0,
 					(buildsByWork.get(work.id) ?? []).some((b) => b.isPrimary),
 					(buildsByWork.get(work.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ?? false,
 				),
@@ -3511,6 +3673,125 @@ const contentRoutes = new Hono()
 		});
 	})
 
+	/**
+	 * Cancel one of the Work's in-flight processing jobs (owner-only).
+	 *
+	 * 🚨 **Cancel is a mark, not an interrupt.** The route sets the row `canceled`; the
+	 * handlers discover it at the checkpoints they already run — the claim-time guards
+	 * refuse to resurrect a canceled row past a stale redelivery, the video job's
+	 * supersession re-checks abandon before touching storage, and the audio and paged
+	 * jobs check before their own upload or page pass. A run already past its last
+	 * checkpoint finishes, like the video job's documented per-variant bound. A
+	 * `completed` job has nothing to cancel (409), and a `failed` one is already
+	 * settled — the Studio's exit from a failure is replace or remove, not cancel.
+	 *
+	 * Only a pending or processing job cancels: the state this route exists to make
+	 * exitable is the one whose exit is otherwise "wait it out".
+	 */
+	.delete("/works/:id/transcoding/:jobId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		const jobId = Number(c.req.param("jobId"));
+
+		// A quarantined Work is untouchable at 404, on the same reasoning as the PATCH —
+		// and this route's storage-adjacent half makes it the more important one here.
+		if (work.quarantineStatus === "quarantined") {
+			return c.json({ error: "Work not found" }, 404);
+		}
+
+		const [job] = await db
+			.select()
+			.from(transcodingJobs)
+			.where(and(eq(transcodingJobs.id, jobId), eq(transcodingJobs.workId, work.id)))
+			.limit(1);
+		if (!job) return c.json({ error: "Job not found" }, 404);
+		if (job.status === "completed") {
+			return c.json({ error: "This job has already completed." }, 409);
+		}
+		if (job.status === "failed") {
+			return c.json({ error: "This job already failed — replace the media or remove it." }, 409);
+		}
+		if (job.status === "canceled") {
+			return c.json({ work: await serializeWork(work, [], null, [], deliveryCtx()) }, 200);
+		}
+
+		await db
+			.update(transcodingJobs)
+			.set({ status: "canceled", etaSeconds: null, updatedAt: new Date() })
+			.where(eq(transcodingJobs.id, jobId));
+
+		const [jobRow] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, jobId));
+		return c.json(
+			{ work: await serializeWork(work, [], jobRow, [], deliveryCtx()), job: jobRow },
+			200,
+		);
+	})
+
+	/**
+	 * Remove an unpublished Work's media outright (owner-only) — the creator's clean
+	 * slate: everything the Work names in storage leaves (source, the remux-retained
+	 * original, derived outputs, the paged set, the ebook prefix, thumbnail, assets and
+	 * browser builds), and the row returns to the no-media shape a draft is created in.
+	 *
+	 * 🚨 **Unpublished only — never-released is the gate, `releasedAt` is its test.** A
+	 * released Work's media is behind somebody's purchase or the Time Pool, and a
+	 * withdrawn one serves people who bought it; no creator gesture returns either to a
+	 * draft. A Work scheduled to release can still call this — removing its media makes
+	 * the schedule unmeetable, so the schedule is cleared with the media rather than
+	 * left promising a release that can never pass its gate.
+	 *
+	 * 🚨 **Enumeration before the rows go; sweep after.** `collectWorkMedia` reads the
+	 * very rows this route deletes, and `media-purge.ts` owns what may be deleted —
+	 * the same straddle the account-erase path runs.
+	 */
+	.delete("/works/:id/media", requireAuth, async (c) => {
+		const user = c.get("user");
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (work.quarantineStatus === "quarantined") {
+			return c.json({ error: "Work not found" }, 404);
+		}
+		if (work.releasedAt) {
+			return c.json(
+				{
+					error: "Only an unpublished Work's media can be removed.",
+					code: "media_removal_published",
+				},
+				409,
+			);
+		}
+
+		// Enumerate first — the rows below are what the enumeration reads.
+		const collected = await collectWorkMedia([work.id]);
+
+		await db.transaction(async (tx) => {
+			await tx.delete(webBuilds).where(eq(webBuilds.workId, work.id));
+			await tx.delete(assets).where(eq(assets.workId, work.id));
+			await tx.delete(workSections).where(eq(workSections.workId, work.id));
+			await tx.delete(workSectionAssets).where(eq(workSectionAssets.workId, work.id));
+			await tx.delete(workPages).where(eq(workPages.workId, work.id));
+			await tx.delete(workSourceFiles).where(eq(workSourceFiles.workId, work.id));
+			await tx.delete(transcodingJobs).where(eq(transcodingJobs.workId, work.id));
+			await tx
+				.update(works)
+				.set({
+					sourceKey: "",
+					sourceOriginalKey: "",
+					thumbnail: "",
+					durationSeconds: null,
+					scheduledReleaseAt: null,
+					updatedAt: new Date(),
+				})
+				.where(eq(works.id, work.id));
+		});
+
+		await sweepCollected(collected);
+
+		const [row] = await db.select().from(works).where(eq(works.id, work.id));
+		return c.json({ work: await serializeWork(row, [], null, [], deliveryCtx()) }, 200);
+	})
+
 	// ── Audio delivery (access-checked, signed) ──────────────────────────────────
 	// The audio counterpart of the HLS endpoint below. Processed audio is stored private,
 	// so this is the only way to reach it: access is re-checked here on every request,
@@ -3626,7 +3907,132 @@ const contentRoutes = new Hono()
 		return c.redirect(url, 302);
 	})
 
-	// ── Browser-build delivery: mint the play address (access-checked) ──────────
+	// ── Ebook reflow delivery: sections and assets (access-checked, signed) ─────
+	//
+	// The reflow counterpart of the page route's ladder. An EPUB's ingest extracted the
+	// container into `work_sections` (chapters, in reading order) and `work_section_assets`
+	// (the images, stylesheets and fonts those chapters reference), stored private under
+	// the same rule the pages are — so `downloadEnabled: false` stays honest for a reflow
+	// book too: no one URL the whole title falls out of. The manifest is what the reader's
+	// loader maps references through (it carries container-relative paths, the stable
+	// identity a re-ingest keeps), and the two unit routes mint short-lived signed URLs
+	// behind the same gate ladder the page route runs — access, the Public Access meter,
+	// the household limit.
+	//
+	// The manifest is metadata: it gates on access and the household limit (chapter titles
+	// are part of the Work), but the meter draws on the units, where attention actually
+	// goes — there is no minute spent opening a table of contents.
+	.get("/works/:id/sections", requireUserOrShareLink, async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
+
+		const [sectionRows, assetRows] = await Promise.all([
+			db
+				.select()
+				.from(workSections)
+				.where(eq(workSections.workId, work.id))
+				.orderBy(asc(workSections.position)),
+			db
+				.select()
+				.from(workSectionAssets)
+				.where(eq(workSectionAssets.workId, work.id))
+				.orderBy(asc(workSectionAssets.id)),
+		]);
+		return c.json({
+			sections: sectionRows.map((s) => ({
+				position: s.position,
+				href: s.href,
+				title: s.title,
+				// The byte size the reading progress math reads (foliate's SectionProgress
+				// weights a book's locations by section size); never a width or height —
+				// reflow has no fixed geometry.
+				size: s.sizeBytes,
+				// Paths the client prefixes with its API base the way the page reader
+				// composes its page URLs (`${apiBase}/api/content/works/…`); never a
+				// hand-rolled origin.
+				url: `/api/content/works/${work.id}/sections/${s.position}`,
+			})),
+			assets: assetRows.map((a) => ({
+				path: a.path,
+				mimeType: a.mimeType,
+				url: `/api/content/works/${work.id}/assets/${a.id}`,
+			})),
+		});
+	})
+
+	// One reflow section, one check, one signed address — the page route's shape to the
+	// byte, because the reader's loader must never learn a second way to ask.
+	.get("/works/:id/sections/:section", requireUserOrShareLink, async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const position = parseNumericId(c.req.param("section"));
+		if (position == null) return c.json({ error: "Not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		// 402, not 403, for the reason the page route carries: reading the commons draws
+		// the allowance exactly as watching does — the equal-time principle is about what
+		// a minute IS, not about which medium.
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
+
+		const [section] = await db
+			.select()
+			.from(workSections)
+			.where(and(eq(workSections.workId, work.id), eq(workSections.position, position)))
+			.limit(1);
+		if (!section) return c.json({ error: "Not found" }, 404);
+
+		const url = await storage.getUrl(section.file, {
+			signed: true,
+			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
+		});
+		// no-store: this 302 carries a signed URL and is access-dependent, for the same
+		// reason as every redirect above.
+		c.header("Cache-Control", "no-store");
+		return c.redirect(url, 302);
+	})
+
+	// One asset — an image, a stylesheet, a font a chapter's XHTML references — through
+	// its own check. The manifest is what makes this possible: the reader maps a
+	// chapter's references from container-relative paths to these routes, so serving a
+	// picture to a page never re-serves the book.
+	.get("/works/:id/assets/:assetId", requireUserOrShareLink, async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const assetId = parseNumericId(c.req.param("assetId"));
+		if (assetId == null) return c.json({ error: "Not found" }, 404);
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		const metered = await publicAccessGate(c, work, access);
+		if (metered) return c.json(metered, 402);
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
+
+		const [asset] = await db
+			.select()
+			.from(workSectionAssets)
+			.where(and(eq(workSectionAssets.workId, work.id), eq(workSectionAssets.id, assetId)))
+			.limit(1);
+		if (!asset) return c.json({ error: "Not found" }, 404);
+
+		const url = await storage.getUrl(asset.file, {
+			signed: true,
+			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
+		});
+		c.header("Cache-Control", "no-store");
+		return c.redirect(url, 302);
+	})
 	//
 	// A hosted build's files answer on the Work's delivery origin, where the Anthers
 	// session never arrives — so the entitlement is this route's answer: signed, per
@@ -4279,6 +4685,12 @@ const contentRoutes = new Hono()
 
 		await resolveWorkThumbnail(work);
 
+		// The one route a viewer opens a video from, so it is the one route that loads the
+		// Work's caption tracks. Both branches below serialize them — the owner's editor
+		// lists them, the viewer's player offers them — and the batch shapes (cards,
+		// listings) carry none, because nothing there renders a player.
+		const captionRows = await listCaptionTracks(work.id);
+
 		/*
 		 * The owner short-circuit — and the one place creator preview has to interrupt it.
 		 *
@@ -4303,7 +4715,14 @@ const contentRoutes = new Hono()
 			// owner's own session, exactly what this branch serves.
 			const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx());
 			return c.json({
-				work: await serializeWork(work, workAssets, playableJob, webBuildsList, deliveryCtx()),
+				work: await serializeWork(
+					work,
+					workAssets,
+					playableJob,
+					webBuildsList,
+					deliveryCtx(),
+					captionRows,
+				),
 			});
 		}
 
@@ -4348,6 +4767,12 @@ const contentRoutes = new Hono()
 			.select({ count: sql<number>`count(*)::int` })
 			.from(workPages)
 			.where(eq(workPages.workId, work.id));
+		// The reflow count rides the same answer's shape: sections exist → the reader is
+		// the reflow one, none → the fixed page reader.
+		const [sectionRow] = await db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(workSections)
+			.where(eq(workSections.workId, work.id));
 
 		return c.json({
 			work: {
@@ -4363,6 +4788,7 @@ const contentRoutes = new Hono()
 					await allowanceSpent(userId, sharedBy),
 					userId,
 					pageRow?.count ?? 0,
+					sectionRow?.count ?? 0,
 					// The one page a user actually opens a text Work, a game or an image
 					// from, so it is the one that has to consult a household's time limit —
 					// those four media have no delivery route of their own.
@@ -4373,6 +4799,7 @@ const contentRoutes = new Hono()
 					// One query answers both: is there a primary build, and does it need
 					// isolation (which decides whether play opens the /play page).
 					...(await buildFlagsForWork(work.id)),
+					captionRows,
 				)),
 				creator,
 				creatorHasStripe,
@@ -4638,7 +5065,8 @@ const contentRoutes = new Hono()
 		if (rows.length === 0) return c.json({ creator, works: [] });
 
 		const ids = rows.map((r) => r.id);
-		const { assetsByWork, jobByWork, pagesByWork, buildsByWork } = await loadWorkBundles(ids);
+		const { assetsByWork, jobByWork, pagesByWork, sectionsByWork, buildsByWork } =
+			await loadWorkBundles(ids);
 		const [ctx, catalogSpent] = await Promise.all([
 			buildAccessContext(userId, { workIds: ids }),
 			allowanceSpent(userId),
@@ -4664,6 +5092,7 @@ const contentRoutes = new Hono()
 						catalogSpent,
 						userId,
 						pagesByWork.get(w.id) ?? 0,
+						sectionsByWork.get(w.id) ?? 0,
 						(buildsByWork.get(w.id) ?? []).some((b) => b.isPrimary),
 						(buildsByWork.get(w.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ?? false,
 					)),
@@ -4987,9 +5416,31 @@ const contentRoutes = new Hono()
 		}
 
 		const sourceChanged = data.sourceKey !== undefined && data.sourceKey !== work.sourceKey;
+		// 🚨 **A bare clear of the column is refused, not obeyed** — setting `sourceKey` to
+		// `""` on a Work that has one is a removal request, and removal has a route: a
+		// silent clear would strand the old object un-enumerated and any in-flight job
+		// un-exitable, which is the exact state the media removal route exists to do
+		// honestly. The same for both halves of a paged Work's media.
+		if (sourceChanged && !data.sourceKey && work.sourceKey) {
+			return c.json(
+				{
+					error:
+						"To remove this Work's media, use the media removal route (DELETE /works/:id/media) rather than clearing the source.",
+					code: "source_clear_refused",
+				},
+				400,
+			);
+		}
 		// A replaced thumbnail is new bytes from the same uploader, so it owes its own scan.
 		const thumbnailChanged = data.thumbnail !== undefined && data.thumbnail !== work.thumbnail;
-		if (data.sourceKey !== undefined) updates.sourceKey = data.sourceKey;
+		if (data.sourceKey !== undefined) {
+			updates.sourceKey = data.sourceKey;
+			// The version that a change moves away from carries its original pointer with
+			// it; the code below sweeps what it named. A new source has no original of its
+			// own yet — the remux ingest is the only writer of the pointer after its own
+			// ingest, and it writes the work the next remux makes one for.
+			if (data.sourceKey !== work.sourceKey) updates.sourceOriginalKey = "";
+		}
 		// An image is its own thumbnail, and follows its file when the file arrives or is replaced
 		// (Parker, 2026-09-18). Decided here rather than by the client, because the file arrives
 		// while the creator may be editing the same Work on its page.
@@ -5016,7 +5467,28 @@ const contentRoutes = new Hono()
 		// set table is the truth, so the legacy attach syncs it (replacing the set with the
 		// one file) and re-renders through the service; queueing the job directly here as
 		// well would be two jobs for one file.
+		//
+		// 🚨 **A replacement is replace-in-place: nothing of the old version survives it.**
+		// When the Work already carried media, the retired source — the prior object, its
+		// remux-retained original, every derived output the prior job rows name — is swept
+		// through `media-purge.ts` (the one writer for what may be deleted), and the prior
+		// job rows are deleted so the replacement is the Work's only processing truth.
+		// The no-old-versions ruling (Parker, 2026-10-10): a replaced source's objects
+		// leave the Work and their storage follows. A paged set's own files are retired
+		// by `syncFromSourceKey`, which owns the set and its rows in the same mutation.
+		// An in-flight job's stale pg-boss delivery finds its row gone and throws at the
+		// claim guard — the same precedent DELETE /works/:id's cascade already set.
 		if (sourceChanged && updated.sourceKey) {
+			if (work.sourceKey || work.sourceOriginalKey) {
+				const priorJobs = await db
+					.select()
+					.from(transcodingJobs)
+					.where(eq(transcodingJobs.workId, id));
+				await purgeReplacedWorkMedia(work, priorJobs);
+				if (priorJobs.length > 0) {
+					await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, id));
+				}
+			}
 			if (isPaged(updated.type)) await syncFromSourceKey(updated);
 			else await queueTranscodeForWork(updated);
 		}
@@ -5343,7 +5815,10 @@ const contentRoutes = new Hono()
 		// The set route signs this key for the Work's owner, so a file naming another
 		// creator's private original would hand it over. See `storage/keys.ts`.
 		if (!(await isOwnStorageRef(data.file, user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
-		const { rows, job } = await appendSourceFile(item, data);
+		const { rows, job, error } = await appendSourceFile(item, data);
+		if (error) {
+			return c.json({ error, code: "sources_mixed_shapes" }, 400);
+		}
 		await queueScansForWork({ ...item, sourceKey: data.file });
 		return c.json({ files: rows, transcoding: job }, 201);
 	})
@@ -5848,7 +6323,7 @@ const contentRoutes = new Hono()
 			.orderBy(asc(projectItems.sortOrder));
 
 		const memberWorkIds = itemRows.map((r) => r.work.id);
-		const { assetsByWork, jobByWork, pagesByWork, buildsByWork } =
+		const { assetsByWork, jobByWork, pagesByWork, sectionsByWork, buildsByWork } =
 			await loadWorkBundles(memberWorkIds);
 		const [workCtx, projectSpent] = await Promise.all([
 			buildAccessContext(userId, { workIds: memberWorkIds }),
@@ -5885,6 +6360,7 @@ const contentRoutes = new Hono()
 							projectSpent,
 							userId,
 							pagesByWork.get(m.work.id) ?? 0,
+							sectionsByWork.get(m.work.id) ?? 0,
 							(buildsByWork.get(m.work.id) ?? []).some((b) => b.isPrimary),
 							(buildsByWork.get(m.work.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ??
 								false,
@@ -6234,15 +6710,10 @@ const contentRoutes = new Hono()
 			const { filename, contentType, mediaType } = c.req.valid("json");
 			const user = c.get("user");
 
-			const ext = filename.includes(".") ? filename.split(".").pop() : "";
-			const uuid = crypto.randomUUID().replace(/-/g, "");
-			const prefix = `creators/${user.id}`;
-			const keyMap = {
-				video: `${prefix}/videos/originals/${uuid}.${ext}`,
-				audio: `${prefix}/audio/originals/${uuid}.${ext}`,
-				asset: `${prefix}/assets/${uuid}.${ext}`,
-			} as const;
-			const key = keyMap[mediaType];
+			// The key naming is the session service's one naming — a session's destination
+			// and a presign's destination are the same layout by construction now, not by
+			// two kept-in-step literals.
+			const key = mediaUploadKeyFor(user.id, mediaType, filename);
 
 			if (isLocalStorage) {
 				return c.json({
@@ -6300,6 +6771,14 @@ const contentRoutes = new Hono()
 			case "audio":
 				key = `${prefix}/audio/originals/${uuid}.${ext}`;
 				break;
+			case "caption":
+				// A caption upload lands under the entityId'd Work's directory and is
+				// validated as WebVTT at attach (`services/captions.ts`), which is also why
+				// it is not perceptually scanned here: a hash of still frames has nothing to
+				// read in a text file, and anything disguised as a caption dies at that
+				// parse — a refusal that leaves a row never created.
+				key = `${prefix}/captions/${entityId ?? "unknown"}/${uuid}.vtt`;
+				break;
 			case "avatar":
 				key = `${prefix}/avatars/${uuid}.${ext}`;
 				break;
@@ -6355,6 +6834,93 @@ const contentRoutes = new Hono()
 		const url = await storage.getUrl(key);
 
 		return c.json({ key, url }, 201);
+	})
+
+	// ── Caption tracks — the WebVTT a creator authors onto their video Works ─────────
+	// See `services/captions.ts` for the invariants: parse is the ingest gate, serving is
+	// access-checked storage read, and a released Work may gain captions.
+
+	.post("/works/:id/captions", requireAuth, zValidator("json", captionAttachSchema), async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		// A 404 rather than a 403, the way the works routes answer a non-owner — the
+		// existence of another creator's Work is not information to hand out.
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (item.type !== "video") {
+			return c.json(
+				{ error: "Only a video carries caption tracks.", code: "captions_not_video" },
+				400,
+			);
+		}
+		const data = c.req.valid("json");
+		try {
+			const row = await attachCaptionTrack({
+				work: item,
+				requesterId: user.id,
+				key: data.key,
+				language: data.language,
+				label: data.label || null,
+				kind: data.kind,
+			});
+			return c.json({ caption: serializeCaptionRow(row, deliveryCtx() ?? localDelivery) }, 201);
+		} catch (err) {
+			if (err instanceof VttRefusal) {
+				return c.json({ error: err.message, code: "captions_refused" }, 400);
+			}
+			throw err;
+		}
+	})
+
+	.delete("/works/:id/captions/:trackId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const trackId = Number(c.req.param("trackId"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!Number.isInteger(trackId) || trackId <= 0) return c.json({ error: "Not found" }, 404);
+		const [track] = await db
+			.select()
+			.from(workCaptionTracks)
+			.where(and(eq(workCaptionTracks.workId, item.id), eq(workCaptionTracks.id, trackId)));
+		if (!track) return c.json({ error: "Not found" }, 404);
+		await deleteCaptionTrack(track, item.creatorId);
+		const remaining = await listCaptionTracks(item.id);
+		return c.json({
+			captions: remaining.map((t) => serializeCaptionRow(t, deliveryCtx() ?? localDelivery)),
+		});
+	})
+
+	/**
+	 * Serve one caption track. The same gates as the HLS route — access, the household
+	 * time limit, the share token — and deliberately the same ONE missing gate: no
+	 * Public-Access meter. **The meter measures attention, not bytes** (the download
+	 * note below says the same), and a caption file is bytes you are entitled to read
+	 * once you can reach the Work at all. The player that renders the track is stopped
+	 * by the meter at its playlist; the text of the thing is not a second copy of the
+	 * video to meter.
+	 */
+	.get("/works/:id/captions/:trackId", requireUserOrShareLink, async (c) => {
+		const trackId = Number(c.req.param("trackId"));
+		if (!Number.isInteger(trackId) || trackId <= 0) return c.json({ error: "Not found" }, 404);
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
+
+		const [track] = await db
+			.select()
+			.from(workCaptionTracks)
+			.where(and(eq(workCaptionTracks.workId, work.id), eq(workCaptionTracks.id, trackId)));
+		if (!track) return c.json({ error: "Not found" }, 404);
+		const bytes = await storage.read(track.storageKey);
+		if (!bytes) return c.json({ error: "Not found" }, 404);
+		return c.body(new TextDecoder().decode(bytes), 200, {
+			"Content-Type": "text/vtt; charset=utf-8",
+			"Cache-Control": "no-store",
+		});
 	})
 
 	// ── Inline Images ────────────────────────────────────────────────────────────
@@ -6580,7 +7146,8 @@ const contentRoutes = new Hono()
 			: [];
 		const countsByProject = new Map(memberCounts.map((m) => [m.projectId, m]));
 
-		const { assetsByWork, jobByWork, pagesByWork, buildsByWork } = await loadWorkBundles(workIds);
+		const { assetsByWork, jobByWork, pagesByWork, sectionsByWork, buildsByWork } =
+			await loadWorkBundles(workIds);
 		const [ctx, spent, permanent] = await Promise.all([
 			buildAccessContext(user.id, { workIds }),
 			allowanceSpent(user.id),
@@ -6590,6 +7157,29 @@ const contentRoutes = new Hono()
 
 		const workById = new Map(workRows.map((w) => [w.id, w]));
 		const projectById = new Map(projectRows.map((p) => [p.id, p]));
+
+		// The channel-guide fields, for the work arm only: a creator's display name,
+		// handle and avatar, so a lens that organizes the shelf **by its creators** can
+		// label channels without an N+1 of profile fetches on a shelf-sized page. The
+		// project arm has carried the same two fields since the album lens; a Work's own
+		// serialization withholds them because nothing until now needed them wholesale.
+		// Deliberately additive and route-local — a Work's public serialization is a
+		// contract consumed everywhere, and this is the one listing that wants them.
+		const creatorIds = [
+			...new Set(workRows.map((w) => w.creatorId).filter((id): id is number => id != null)),
+		];
+		const creatorRows = creatorIds.length
+			? await db
+					.select({
+						id: users.id,
+						creatorHandle: users.atprotoHandle,
+						creatorDisplayName: users.displayName,
+						creatorAvatar: users.avatar,
+					})
+					.from(users)
+					.where(inArray(users.id, creatorIds))
+			: [];
+		const creatorById = new Map(creatorRows.map((u) => [u.id, u]));
 
 		return c.json({
 			items: (
@@ -6604,25 +7194,32 @@ const contentRoutes = new Hono()
 						if (row.workId != null) {
 							const w = workById.get(row.workId);
 							if (!w) return null;
+							const creator = w.creatorId != null ? creatorById.get(w.creatorId) : undefined;
 							return {
 								...base,
 								kind: "work" as const,
 								// Derived from `purchases` on every read, never stamped on the row —
 								// so a refund releases the entry with nothing to keep in step.
 								purchased: permanent.has(w.id),
-								work: await serializeWorkForUser(
-									w,
-									assetsByWork.get(w.id) ?? [],
-									jobByWork.get(w.id) ?? null,
-									resolveAccessSync(w as AccessibleWork, ctx),
-									deliveryCtx(),
-									spent,
-									user.id,
-									pagesByWork.get(w.id) ?? 0,
-									(buildsByWork.get(w.id) ?? []).some((b) => b.isPrimary),
-									(buildsByWork.get(w.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ??
-										false,
-								),
+								work: {
+									...(await serializeWorkForUser(
+										w,
+										assetsByWork.get(w.id) ?? [],
+										jobByWork.get(w.id) ?? null,
+										resolveAccessSync(w as AccessibleWork, ctx),
+										deliveryCtx(),
+										spent,
+										user.id,
+										pagesByWork.get(w.id) ?? 0,
+										sectionsByWork.get(w.id) ?? 0,
+										(buildsByWork.get(w.id) ?? []).some((b) => b.isPrimary),
+										(buildsByWork.get(w.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ??
+											false,
+									)),
+									creatorHandle: creator?.creatorHandle ?? null,
+									creatorDisplayName: creator?.creatorDisplayName ?? null,
+									creatorAvatar: creator?.creatorAvatar ?? null,
+								},
 							};
 						}
 						const p = row.projectId != null ? projectById.get(row.projectId) : null;

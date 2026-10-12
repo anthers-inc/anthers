@@ -32,6 +32,7 @@ export type WorklistKind =
 	| "locked"
 	| "payouts"
 	| "encode-failed"
+	| "encode-canceled"
 	| "no-file"
 	| "unrated"
 	| "unanswered-rows"
@@ -144,6 +145,17 @@ export function buildWorklist({
 			message: `Processing failed on ${subject(failed)}.`,
 			action: failed.only ? "Open it" : "Open your Works",
 			href: hrefFor(failed, editUrl, worksUrl),
+			severity: "blocking",
+		});
+	}
+
+	const canceled = group(works.filter((w) => w.transcoding?.status === "canceled"));
+	if (canceled.count > 0) {
+		items.push({
+			kind: "encode-canceled",
+			message: `Processing was canceled on ${subject(canceled)} — replace the media to start it again, or remove the file.`,
+			action: canceled.only ? "Open it" : "Open your Works",
+			href: hrefFor(canceled, editUrl, worksUrl),
 			severity: "blocking",
 		});
 	}

@@ -46,13 +46,19 @@ export default function VideoControls({
 	levels,
 	currentLevel,
 	autoLevel,
+	originalActive,
+	originalAvailable,
 	activeLevelHeight,
+	captionTracks,
+	activeCaptionId,
 	fullscreen,
 	visible,
 	onTogglePlay,
 	onSeek,
 	onRate,
 	onLevel,
+	onOriginal,
+	onCaption,
 	onToggleFullscreen,
 	/**
 	 * The Podcast-This hand-off, present only on a video whose audio rendition exists —
@@ -70,8 +76,19 @@ export default function VideoControls({
 	/** The pinned level index, or -1 for automatic. */
 	currentLevel: number;
 	autoLevel: boolean;
+	/**
+	 * The Original Media option: present when the Work offers it, active while the
+	 * original itself is playing. One row that keeps the rungs listed on both sides of
+	 * the choice, so leaving Original Media is clicking a rung, not an escape hatch.
+	 */
+	originalActive: boolean;
+	originalAvailable: boolean;
 	/** What automatic actually chose, so "Auto" can say what it is doing. */
 	activeLevelHeight: number | null;
+	/** The Work's caption tracks. Empty hides the whole captions section rather than rendering it disabled. */
+	captionTracks: Array<{ id: number; language: string; label: string; kind: string }>;
+	/** The track showing now, or null for none. The player owns what that means for the element. */
+	activeCaptionId: number | null;
 	fullscreen: boolean;
 	/** Whether the bar is on screen. Hidden means faded out, never unmounted. */
 	visible: boolean;
@@ -79,6 +96,9 @@ export default function VideoControls({
 	onSeek: (seconds: number) => void;
 	onRate: (rate: number) => void;
 	onLevel: (index: number) => void;
+	onOriginal: () => void;
+	/** Which track to show, or null to turn captions off. The player writes the preference. */
+	onCaption: (trackId: number | null) => void;
 	onToggleFullscreen: () => void;
 	onPodcastThis?: () => void;
 }) {
@@ -146,7 +166,12 @@ export default function VideoControls({
 						size="sm"
 					/>
 					{settingsOpen && (
-						<div className="absolute bottom-full right-0 z-10 mb-2 w-52 rounded-box bg-base-100 p-2 text-base-content shadow-xl">
+						/* 🚨 Scroll, because the sections it can carry (speed, quality, captions,
+						    listen) already exceed a short clip's height on a small player, where
+						    a plain panel would overflow and its top rows would be unclickable.
+						    The overflow is INSIDE the panel — it itself stays anchored at the
+						    player's bottom edge. */
+						<div className="absolute bottom-full right-0 z-10 mb-2 max-h-full w-52 overflow-y-auto rounded-box bg-base-100 p-2 text-base-content shadow-xl">
 							<p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-base-content/50">
 								Speed
 							</p>
@@ -163,30 +188,39 @@ export default function VideoControls({
 									</li>
 								))}
 							</ul>
-							{levels.length > 1 && (
+							{(levels.length > 1 || originalAvailable) && (
 								<>
 									<p className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-base-content/50">
 										Quality
 									</p>{" "}
 									<ul className="menu menu-sm w-full">
-										<li>
-											<button
-												type="button"
-												className={autoLevel ? "menu-active" : ""}
-												onClick={() => onLevel(-1)}
-											>
-												Auto
-												{activeLevelHeight != null && (
-													<span className="text-xs opacity-60">{activeLevelHeight}p</span>
-												)}
-											</button>
-										</li>
+										{/* A rung row hides while the original plays: the mode's own
+									    entry carries the active mark, and "Auto" re-enters the
+									    ladder at automatic (the pending-level path), so every row
+									    of this menu is a move, on both sides. */}
+										{!originalActive && (
+											<li>
+												<button
+													type="button"
+													className={autoLevel ? "menu-active" : ""}
+													onClick={() => onLevel(-1)}
+												>
+													Auto
+													{activeLevelHeight != null && (
+														<span className="text-xs opacity-60">{activeLevelHeight}p</span>
+													)}
+												</button>
+											</li>
+										)}
 										{levels.map((level) => (
 											<li key={level.index}>
 												<button
 													type="button"
+													data-testid={`quality-${level.height}`}
 													className={
-														!autoLevel && level.index === currentLevel ? "menu-active" : ""
+														!originalActive && !autoLevel && level.index === currentLevel
+															? "menu-active"
+															: ""
 													}
 													onClick={() => onLevel(level.index)}
 												>
@@ -194,8 +228,62 @@ export default function VideoControls({
 												</button>
 											</li>
 										))}
+										{originalAvailable && (
+											<li>
+												<button
+													type="button"
+													data-testid="quality-original"
+													className={originalActive ? "menu-active" : ""}
+													onClick={() => {
+														setSettingsOpen(false);
+														onOriginal();
+													}}
+												>
+													Original Media
+													<span className="block text-[10px] opacity-60">as uploaded</span>
+												</button>
+											</li>
+										)}
 									</ul>
 								</>
+							)}
+							{captionTracks.length > 0 && (
+								<div data-testid="captions-menu">
+									<p className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-base-content/50">
+										Captions
+									</p>
+									{/* A caption row stays open after the choice, the way the
+									    quality rows do: a viewer switching between two languages
+									    is choosing, not dismissing, and the panel closes on the
+									    outside click like any other menu here. */}
+									<ul className="menu menu-sm w-full">
+										<li>
+											<button
+												type="button"
+												data-testid="captions-off"
+												className={activeCaptionId == null ? "menu-active" : ""}
+												onClick={() => onCaption(null)}
+											>
+												Off
+											</button>
+										</li>
+										{captionTracks.map((t) => (
+											<li key={t.id}>
+												<button
+													type="button"
+													data-testid={`captions-track-${t.id}`}
+													className={t.id === activeCaptionId ? "menu-active" : ""}
+													onClick={() => onCaption(t.id)}
+												>
+													{t.label}
+													<span className="block text-[10px] opacity-60">
+														{t.kind === "subtitles" ? "subtitles" : "captions"}
+													</span>
+												</button>
+											</li>
+										))}
+									</ul>
+								</div>
 							)}
 							{onPodcastThis && (
 								<>

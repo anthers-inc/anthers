@@ -90,7 +90,7 @@ function ModeSwitch({ mode }: { mode: AppMode }) {
 function LoggedInLayoutInner() {
 	const { user, signOut, refreshUser } = useAuth();
 	const { currentTrack } = useMediaPlayer();
-	const { sidebarOpen, toggleSidebar, closeSidebar, pageContent } = useSidebar();
+	const { sidebarOpen, toggleSidebar, closeSidebar, pageContent, sharedContent } = useSidebar();
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
 	const { count: basketCount } = useBasket();
@@ -362,8 +362,28 @@ function LoggedInLayoutInner() {
 							</nav>
 						)}
 
-						{/* Page-specific sidebar content */}
-						{pageContent && (
+						{!studio && (
+							<>
+								{/* The divider below the nav is PERSISTENT (Parker, 2026-10-11): it
+								    stands whether or not anything is registered below it, so the
+								    sidebar's shape — tabs above, sections below — never depends on
+								    the page. Studio mode is out of this structure's scope. */}
+								<div className="divider my-0 mx-3" />
+								{/* The lower region: the page's middle section, then the tab-shared
+								    filters behind one more divider (rendered only when both exist —
+								    a trailing divider would promise content that isn't there). One
+								    scroll region for both, so a long middle section scrolls on into
+								    the filters rather than stopping at a seam. */}
+								<div className="flex-1 min-h-0 overflow-y-auto">
+									{pageContent && <div className="p-3 pb-1">{pageContent}</div>}
+									{pageContent && sharedContent && <div className="divider my-0 mx-3" />}
+									{sharedContent && <div className="p-3 pt-1">{sharedContent}</div>}
+								</div>
+							</>
+						)}
+						{/* Studio keeps the old shape — divider only when a page registers
+						    content; none does today. This is the seam if that ever changes. */}
+						{studio && pageContent && (
 							<>
 								<div className="divider my-0 mx-3" />
 								<div className="flex-1 p-3 overflow-y-auto">{pageContent}</div>

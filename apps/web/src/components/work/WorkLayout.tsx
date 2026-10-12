@@ -29,6 +29,7 @@ import { useMediaPlayer } from "../../lib/media-player";
 import { trackFromWork } from "../../lib/tracks";
 import AudioPlayer from "../media/AudioPlayer";
 import ComicReader from "../media/ComicReader";
+import EbookReader from "../media/EbookReader";
 import { PublicAccessFooter } from "../media/PublicAccessNotice";
 import SpokenPlayer from "../media/SpokenPlayer";
 import VideoPlayer from "../media/VideoPlayer";
@@ -327,10 +328,16 @@ export function WorkDeliverable({
 			{work.type === "video" && work.transcoding?.hlsManifestUrl && (
 				<VideoPlayer
 					src={work.transcoding.hlsManifestUrl}
+					// Original Media, in the quality menu as the opted-into alternative to the
+					// ladder's rungs (the Jellyfin-shaped offer): the route is the same
+					// access-checked one the pre-ladder baseline plays from, so the gate, the
+					// meter and the household limit already hold.
+					originalUrl={work.originalUrl}
 					poster={work.thumbnail ?? undefined}
 					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 					publicAccess={work.publicAccess ?? false}
 					elementRef={videoRef}
+					captions={work.captions}
 					// The Podcast-This row: only a video whose audio rendition really shipped
 					// gets one — serialization nulls the URL when `audio.m3u8` is absent.
 					podcast={
@@ -350,6 +357,7 @@ export function WorkDeliverable({
 					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 					publicAccess={work.publicAccess ?? false}
 					elementRef={videoRef}
+					captions={work.captions}
 				/>
 			)}
 			{work.type === "music" && work.transcoding?.outputFileUrl && (
@@ -389,15 +397,26 @@ export function WorkDeliverable({
 					onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
 				/>
 			)}
-			{isPaged(work.type) && (
-				<ComicReader
-					workId={work.id}
-					pageCount={work.pageCount ?? 0}
-					apiBase={apiBaseUrl()}
-					title={work.title ?? "Untitled"}
-					shareToken={shareToken}
-				/>
-			)}
+			{isPaged(work.type) &&
+				// The ingest's own shape signal: sections exist → the reflow reader on the
+				// vendored foliate-js engine, reading only through the section/asset
+				// ladder; none → the page reader, comic and PDF-shaped ebook alike.
+				(work.type === "ebook" && (work.sectionCount ?? 0) > 0 ? (
+					<EbookReader
+						workId={work.id}
+						apiBase={apiBaseUrl()}
+						title={work.title ?? "Untitled"}
+						shareToken={shareToken}
+					/>
+				) : (
+					<ComicReader
+						workId={work.id}
+						pageCount={work.pageCount ?? 0}
+						apiBase={apiBaseUrl()}
+						title={work.title ?? "Untitled"}
+						shareToken={shareToken}
+					/>
+				))}
 			{work.type === "image" && work.sourceKey && (
 				<img src={work.sourceKey} alt={work.title ?? ""} className="w-full rounded-lg" />
 			)}
