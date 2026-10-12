@@ -72,6 +72,13 @@ interface VideoPlayerProps {
 		audioManifestUrl: string;
 		track: Omit<QueueTrack, "src" | "kind">;
 	};
+	/**
+	 * "Original Media": the Work's original file at its access-checked route, offered in
+	 * the quality menu as an opted-into alternative to the ladder. Absent for a user the
+	 * serialization refused (the gate already bit) and for a video before its ladder —
+	 * which plays the original *by default*, so the menu then has nothing to offer.
+	 */
+	originalUrl?: string | null;
 }
 
 export default function VideoPlayer({
@@ -82,6 +89,7 @@ export default function VideoPlayer({
 	publicAccess = false,
 	elementRef,
 	podcast,
+	originalUrl,
 	onEnded,
 }: VideoPlayerProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -106,6 +114,21 @@ export default function VideoPlayer({
 	const [activeLevelHeight, setActiveLevelHeight] = useState<number | null>(null);
 	const [fullscreen, setFullscreen] = useState(false);
 	const [controlsVisible, setControlsVisible] = useState(true);
+	/**
+	 * Which address plays. The manifest rungs are the default and the only thing the
+	 * ladder mode streams; Original Media is the explicit choice, at the file as uploaded.
+	 * A caller-level `src` change (a different Work, the ladder arriving) resets it: the
+	 * opt-in never outlives the thing it opted out of.
+	 */
+	const [mode, setMode] = useState<"adaptive" | "original">("adaptive");
+	const playedSrc = mode === "original" && originalUrl ? originalUrl : src;
+	/**
+	 * The level to pin on rejoining the ladder. Leaving Original Media tears the hls
+	 * instance down (the source effect's cleanup) and rebuilds it from an import promise,
+	 * so a rung clicked there cannot be applied through `applyLevel` — the instance does
+	 * not exist yet. The manifest handler picks it up instead; `-1` rejoins as automatic.
+	 */
+	const pendingLevel = useRef<number | null>(null);
 	/**
 	 * Set when delivery itself refuses — the backstop for an allowance that empties
 	 * *between* attention flushes, where the store has not caught up yet.
@@ -230,9 +253,9 @@ export default function VideoPlayer({
 
 	useEffect(() => {
 		const video = videoRef.current;
-		if (!video || !src) return;
+		if (!video || !playedSrc) return;
 
-		const isHls = src.endsWith(".m3u8");
+		const isHls = playedSrc.endsWith(".m3u8");
 
 		if (isHls) {
 			// Try HLS.js first (most browsers)
@@ -290,14 +313,24 @@ export default function VideoPlayer({
 									}))
 									.sort((a: QualityLevel, b: QualityLevel) => b.height - a.height),
 							);
-							setCurrentLevel(hls.currentLevel);
+							// Rejoining from Original Media applies the chosen rung here, at
+							// the instance that will actually carry it — a pin issued to a
+							// not-yet-existing instance would be silently lost.
+							if (pendingLevel.current != null) {
+								const target = pendingLevel.current;
+								pendingLevel.current = null;
+								hls.currentLevel = target;
+								setCurrentLevel(target);
+							} else {
+								setCurrentLevel(hls.currentLevel);
+							}
 						});
 						// What automatic is actually doing right now, so "Auto" can say so.
 						hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
 							setActiveLevelHeight(hls.levels[data.level]?.height ?? null);
 						});
 
-						hls.loadSource(src);
+						hls.loadSource(playedSrc);
 						hls.attachMedia(video);
 						hlsRef.current = hls;
 
@@ -308,13 +341,13 @@ export default function VideoPlayer({
 						}
 					} else if (video.canPlayType("application/vnd.apple.mpegurl")) {
 						// Safari native HLS
-						video.src = src;
+						video.src = playedSrc;
 						if (autoPlay) video.play().catch(() => {});
 					}
 				})
 				.catch(() => {
 					// hls.js not available, try native
-					video.src = src;
+					video.src = playedSrc;
 				});
 		} else {
 			// Direct file playback — the original, delivered as its access-checked
@@ -326,7 +359,7 @@ export default function VideoPlayer({
 			const onError = () => refreshBudget();
 			video.addEventListener("error", onError);
 			nativeErrorHandler.current = () => video.removeEventListener("error", onError);
-			video.src = src;
+			video.src = playedSrc;
 			if (autoPlay) video.play().catch(() => {});
 		}
 
@@ -337,11 +370,19 @@ export default function VideoPlayer({
 			}
 			nativeErrorHandler.current?.();
 			nativeErrorHandler.current = null;
-			setLevels([]);
-			setCurrentLevel(-1);
-			setActiveLevelHeight(null);
+			// The level list is deliberately NOT cleared here. A source change that leaves
+			// the ladder for Original Media still needs the rungs, so the trip back shows
+			// what it can rejoin; a genuinely different Work re-renders a fresh player.
 		};
-	}, [src, autoPlay]);
+	}, [playedSrc, autoPlay]);
+
+	// A caller-level source change returns the opt-in to its resting state: the ladder
+	// plays by default, and whatever Original Media was chosen for a previous address
+	// says nothing about the next one.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the reset keys on the CALLER's address, not the played one — the played address is this opt-in's own output
+	useEffect(() => {
+		setMode("adaptive");
+	}, [src]);
 
 	// Stop what is already playing the moment the allowance goes. Without this the
 	// buffered tail keeps running under the wall — which credits attention the user is
@@ -377,10 +418,31 @@ export default function VideoPlayer({
 	// -1 is hls.js's "automatic". Kept as the same value the library uses rather than a
 	// separate boolean, so there is one representation of the choice and no way for a
 	// pinned level and an "auto" flag to disagree.
-	const applyLevel = useCallback((index: number) => {
-		if (hlsRef.current) hlsRef.current.currentLevel = index;
-		setCurrentLevel(index);
-	}, []);
+	//
+	// Original Media routes the same prop: leaving it re-enters the ladder with the
+	// clicked rung queued for the manifest parse (the pending-level ref above), and
+	// entering it is just the mode switch — the source effect tears hls.js down itself.
+	const applyLevel = useCallback(
+		(index: number) => {
+			if (mode === "original") {
+				setActiveLevelHeight(null);
+				pendingLevel.current = index;
+				setMode("adaptive");
+				setCurrentLevel(index);
+				return;
+			}
+			if (hlsRef.current) hlsRef.current.currentLevel = index;
+			setCurrentLevel(index);
+		},
+		[mode],
+	);
+
+	const selectOriginal = useCallback(() => {
+		if (mode === "original") return;
+		videoRef.current?.pause();
+		setActiveLevelHeight(null);
+		setMode("original");
+	}, [mode]);
 
 	const toggleFullscreen = useCallback(() => {
 		const container = containerRef.current;
@@ -502,7 +564,9 @@ export default function VideoPlayer({
 					rate={rate}
 					levels={levels}
 					currentLevel={currentLevel}
-					autoLevel={currentLevel === -1}
+					autoLevel={mode === "adaptive" && currentLevel === -1}
+					originalActive={mode === "original"}
+					originalAvailable={!!originalUrl}
 					activeLevelHeight={activeLevelHeight}
 					fullscreen={fullscreen}
 					visible={controlsVisible || !isPlaying}
@@ -510,6 +574,7 @@ export default function VideoPlayer({
 					onSeek={seekTo}
 					onRate={applyRate}
 					onLevel={applyLevel}
+					onOriginal={selectOriginal}
 					onToggleFullscreen={toggleFullscreen}
 					onPodcastThis={podcast ? podcastThis : undefined}
 				/>

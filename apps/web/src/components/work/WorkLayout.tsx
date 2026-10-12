@@ -327,6 +327,11 @@ export function WorkDeliverable({
 			{work.type === "video" && work.transcoding?.hlsManifestUrl && (
 				<VideoPlayer
 					src={work.transcoding.hlsManifestUrl}
+					// Original Media, in the quality menu as the opted-into alternative to the
+					// ladder's rungs (the Jellyfin-shaped offer): the route is the same
+					// access-checked one the pre-ladder baseline plays from, so the gate, the
+					// meter and the household limit already hold.
+					originalUrl={work.originalUrl}
 					poster={work.thumbnail ?? undefined}
 					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 					publicAccess={work.publicAccess ?? false}

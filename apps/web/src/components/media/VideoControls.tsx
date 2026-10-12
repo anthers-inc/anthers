@@ -46,6 +46,8 @@ export default function VideoControls({
 	levels,
 	currentLevel,
 	autoLevel,
+	originalActive,
+	originalAvailable,
 	activeLevelHeight,
 	fullscreen,
 	visible,
@@ -53,6 +55,7 @@ export default function VideoControls({
 	onSeek,
 	onRate,
 	onLevel,
+	onOriginal,
 	onToggleFullscreen,
 	/**
 	 * The Podcast-This hand-off, present only on a video whose audio rendition exists —
@@ -70,6 +73,13 @@ export default function VideoControls({
 	/** The pinned level index, or -1 for automatic. */
 	currentLevel: number;
 	autoLevel: boolean;
+	/**
+	 * The Original Media option: present when the Work offers it, active while the
+	 * original itself is playing. One row that keeps the rungs listed on both sides of
+	 * the choice, so leaving Original Media is clicking a rung, not an escape hatch.
+	 */
+	originalActive: boolean;
+	originalAvailable: boolean;
 	/** What automatic actually chose, so "Auto" can say what it is doing. */
 	activeLevelHeight: number | null;
 	fullscreen: boolean;
@@ -79,6 +89,7 @@ export default function VideoControls({
 	onSeek: (seconds: number) => void;
 	onRate: (rate: number) => void;
 	onLevel: (index: number) => void;
+	onOriginal: () => void;
 	onToggleFullscreen: () => void;
 	onPodcastThis?: () => void;
 }) {
@@ -163,30 +174,39 @@ export default function VideoControls({
 									</li>
 								))}
 							</ul>
-							{levels.length > 1 && (
+							{(levels.length > 1 || originalAvailable) && (
 								<>
 									<p className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-base-content/50">
 										Quality
 									</p>{" "}
 									<ul className="menu menu-sm w-full">
-										<li>
-											<button
-												type="button"
-												className={autoLevel ? "menu-active" : ""}
-												onClick={() => onLevel(-1)}
-											>
-												Auto
-												{activeLevelHeight != null && (
-													<span className="text-xs opacity-60">{activeLevelHeight}p</span>
-												)}
-											</button>
-										</li>
+										{/* A rung row hides while the original plays: the mode's own
+									    entry carries the active mark, and "Auto" re-enters the
+									    ladder at automatic (the pending-level path), so every row
+									    of this menu is a move, on both sides. */}
+										{!originalActive && (
+											<li>
+												<button
+													type="button"
+													className={autoLevel ? "menu-active" : ""}
+													onClick={() => onLevel(-1)}
+												>
+													Auto
+													{activeLevelHeight != null && (
+														<span className="text-xs opacity-60">{activeLevelHeight}p</span>
+													)}
+												</button>
+											</li>
+										)}
 										{levels.map((level) => (
 											<li key={level.index}>
 												<button
 													type="button"
+													data-testid={`quality-${level.height}`}
 													className={
-														!autoLevel && level.index === currentLevel ? "menu-active" : ""
+														!originalActive && !autoLevel && level.index === currentLevel
+															? "menu-active"
+															: ""
 													}
 													onClick={() => onLevel(level.index)}
 												>
@@ -194,6 +214,22 @@ export default function VideoControls({
 												</button>
 											</li>
 										))}
+										{originalAvailable && (
+											<li>
+												<button
+													type="button"
+													data-testid="quality-original"
+													className={originalActive ? "menu-active" : ""}
+													onClick={() => {
+														setSettingsOpen(false);
+														onOriginal();
+													}}
+												>
+													Original Media
+													<span className="block text-[10px] opacity-60">as uploaded</span>
+												</button>
+											</li>
+										)}
 									</ul>
 								</>
 							)}
