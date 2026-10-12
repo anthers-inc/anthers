@@ -1002,6 +1002,13 @@
       "when": 1791820871220,
       "tag": "0142_loud_rocket_raccoon",
       "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "7",
+      "when": 1791823337830,
+      "tag": "0143_lucky_sersi",
+      "breakpoints": true
     }
   ]
 }

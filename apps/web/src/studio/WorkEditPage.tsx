@@ -390,7 +390,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	/** This tab's landed own-file upload, for the arrival acknowledgment the row carries. */
 	const landedUpload =
 		uploads.length > 0
-			? uploads.filter((u) => u.target.kind === "source" && u.status === "done").at(-1) ?? null
+			? (uploads.filter((u) => u.target.kind === "source" && u.status === "done").at(-1) ?? null)
 			: null;
 	/** How many landed uploads the row has been re-read after — see `WorkFileSection`'s `landing`. */
 	const [readAfter, setReadAfter] = useState(0);
