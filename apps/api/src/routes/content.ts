@@ -3947,6 +3947,10 @@ const contentRoutes = new Hono()
 				position: s.position,
 				href: s.href,
 				title: s.title,
+				// The byte size the reading progress math reads (foliate's SectionProgress
+				// weights a book's locations by section size); never a width or height —
+				// reflow has no fixed geometry.
+				size: s.sizeBytes,
 				// Paths the client prefixes with its API base the way the page reader
 				// composes its page URLs (`${apiBase}/api/content/works/…`); never a
 				// hand-rolled origin.

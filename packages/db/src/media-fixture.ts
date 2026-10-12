@@ -38,7 +38,13 @@ export interface MediaFixtureWork {
 	publicId: number;
 	title: string;
 	/** The Work's type. */
-	media: "video" | "music" | "comic" | "audio";
+	media: "video" | "music" | "comic" | "ebook" | "audio";
+	/**
+	 * Whether the reflow book's sections are hostile: a script that beacons outward and
+	 * same-origin the moment it runs, a meta refresh, an inline event handler. The reader
+	 * security spec reads it; the seeding produces exactly the EPUB the ingest extracts.
+	 */
+	scripted?: boolean;
 	/** Position within the fixture's Project — the album's track order. */
 	trackNumber: number;
 	/**
@@ -58,10 +64,11 @@ export interface MediaFixtureWork {
 /**
  * The Works.
  *
- * One comic, one video and four music tracks. Four rather than one because the music work needs a
- * queue with somewhere to advance *to* — a single-track album cannot tell a "next" that
- * works from a "next" that silently does nothing — and because **track 3 is gated**, which
- * is what makes the skip-over-locked behavior observable at all.
+ * One comic, one video, one spoken Work, four music tracks and two reflow books. Four
+ * rather than one because the music work needs a queue with somewhere to advance *to* —
+ * a single-track album cannot tell a "next" that works from a "next" that silently does
+ * nothing — and because **track 3 is gated**, which is what makes the skip-over-locked
+ * behavior observable at all.
  *
  * The gated one is in the MIDDLE on purpose: at the end it would be indistinguishable from
  * the queue simply running out.
@@ -129,6 +136,27 @@ export const MEDIA_FIXTURE_WORKS: MediaFixtureWork[] = [
 		title: "An episode worth talking about",
 		media: "audio",
 		trackNumber: 0,
+	},
+	// Two reflow books: one clean (prose the reader spec navigates through), one whose
+	// chapters are hostile (the standing security test's subject). Both upload as real
+	// EPUBs and go through the real ingest — the reader's ladder is what the specs are
+	// for, so the fixture must carry the shape #488's ingest produces, not hand-built rows.
+	{
+		key: "ebook",
+		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}ebook`,
+		publicId: PUBLIC_ID_BASE + 31,
+		title: "A book that really reflows",
+		media: "ebook",
+		trackNumber: 0,
+	},
+	{
+		key: "ebook-scripted",
+		slug: `${MEDIA_FIXTURE_SLUG_PREFIX}ebook-scripted`,
+		publicId: PUBLIC_ID_BASE + 32,
+		title: "A book with hostile chapters",
+		media: "ebook",
+		trackNumber: 0,
+		scripted: true,
 	},
 ];
 
