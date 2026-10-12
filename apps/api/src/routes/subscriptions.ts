@@ -116,6 +116,7 @@ import {
 	taxCodeForBadge,
 } from "../services/billing.js";
 import { commentAncestry, rootOfAncestry } from "../services/comment-thread.js";
+import { ensureFollow } from "../services/follows.js";
 import { canBePaid } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { scanInlineUpload } from "../services/safety-scan.js";
@@ -1779,6 +1780,16 @@ const subscriptionRoutes = new Hono()
 					target: [userBadges.userId, userBadges.badgeId, userBadges.billingCycle],
 					set: { updatedAt: new Date() },
 				});
+
+			// ⭐ **Subscribing to a creator's Badge follows the creator** (Parker,
+			// 2026-10-11) — the automatic consequence purchasing a Work has (it saves). The
+			// webhook arm of the same rule lives in `applyDirectedSupport`; the ceremony,
+			// the refusal semantics and the cancellation decision live in
+			// `services/follows.ts`'s docblock. The guards above have already 400'd a
+			// self-holding and Anthers' own ladder, so what reaches here is always a real
+			// creator; the refused cases (a block, an ungranted repository) are silent —
+			// the pick is what the account did, and the follow rides along when it can.
+			await ensureFollow(user.id, badge.creatorId);
 
 			return c.json({ success: true });
 		},

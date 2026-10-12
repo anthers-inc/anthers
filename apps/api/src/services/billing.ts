@@ -49,6 +49,7 @@ import {
 	updateProduct,
 } from "../lib/processor.js";
 import { anthersUserId } from "./anthers-badges.js";
+import { ensureFollow } from "./follows.js";
 
 /** Record this cycle's snapshot (what was given to Anthers + its decomposition + what was directed). */
 async function snapshotCycle(
@@ -1033,6 +1034,8 @@ export async function applyDirectedSupport(
 ): Promise<void> {
 	if (picks.length === 0) return;
 
+	// The Anthers creator account — the ladder the follow rule does not reach (below).
+	const anthersId = await anthersUserId();
 	const cycle = currentCycleKey();
 	for (const pick of picks) {
 		// The threshold as stored on every money column: a two-decimal string, so the
@@ -1085,5 +1088,18 @@ export async function applyDirectedSupport(
 				// makes the re-delivery a no-op, and the stamp exists to bump `updated_at`.
 				set: { updatedAt: new Date() },
 			});
+		// ⭐ **Subscribing to a creator's Badge follows the creator** (Parker, 2026-10-11) —
+		// the automatic consequence the route arm of the picker carries too
+		// (`routes/subscriptions.ts`, and the reasoning lives in `services/follows.ts`'s
+		// docblock). The Anthers ladder is not a creator pick — the picker's route refuses
+		// it with exactly that reasoning — so holding a rung on Anthers' own Badges never
+		// follows anything, and anything else here is a creator the subscriber has just
+		// decided to support. `ensureFollow` is idempotent, so a replayed webhook makes
+		// nothing of the repeat, and the refused cases (a block, an ungranted repository)
+		// are silent to this arm: the holding is the act, the follow rides along when it
+		// can. A cancellation never walks this back — see the docblock.
+		if (pick.creatorId !== anthersId) {
+			await ensureFollow(userId, pick.creatorId);
+		}
 	}
 }
