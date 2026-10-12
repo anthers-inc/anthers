@@ -797,6 +797,39 @@ export const workSourceFiles = pgTable(
  * book's own navigation carried (EPUB 3 nav or EPUB 2 NCX), so the table of contents is
  * the book's, not ours to invent.
  */
+// node — caption tracks a creator authored for their own video Work: WebVTT files stored
+// private and served gated with the payload like the video itself (the captions task,
+// 2026-10-12). The org serves them but does not own them, and the rows cascade with the
+// Work. Subtitles in other languages ride the same rows through `kind` — the
+// localization design is deliberately still open — and nothing here is published to the
+// network record.
+export const workCaptionTracks = pgTable(
+	"work_caption_tracks",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** BCP-47 language tag as the creator entered it — the `<track srcLang>` and the player menu's key. */
+		language: text("language").notNull(),
+		/** The human label a player menu shows. Empty falls back to the language. */
+		label: text("label").default(""),
+		/** captions | subtitles — the `<track kind>` this row renders as. */
+		kind: text("kind").notNull().default("captions"),
+		/** Private storage key of the .vtt. Never served directly — the captions route is, access-checked. */
+		storageKey: text("storage_key").notNull(),
+		byteSize: integer("byte_size").notNull(),
+		/** What the upload validation counted — the one honest size signal a creator sees. */
+		cueCount: integer("cue_count").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_work_captions_work_language_kind").on(table.workId, table.language, table.kind),
+		index("idx_work_captions_work").on(table.workId),
+	],
+);
+
 // node — an ebook Work's extracted reflow sections. Node media, cascades with the Work.
 export const workSections = pgTable(
 	"work_sections",

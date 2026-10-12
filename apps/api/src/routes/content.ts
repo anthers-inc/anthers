@@ -42,6 +42,7 @@ import {
 	votes,
 	webBuildFiles,
 	webBuilds,
+	workCaptionTracks,
 	workPages,
 	workPanels,
 	workSaves,
@@ -144,6 +145,13 @@ import {
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
 import { recordUrlFor } from "../services/atproto-repo.js";
 import { blockedUserIds, isBlocked, notBlockedBy } from "../services/blocks.js";
+import {
+	attachCaptionTrack,
+	type CaptionTrackRow,
+	deleteCaptionTrack,
+	listCaptionTracks,
+	VttRefusal,
+} from "../services/captions.js";
 import {
 	commentAncestry,
 	REPLY_SUBJECT_TYPE,
@@ -1018,6 +1026,15 @@ const sourceFileSchema = z.object({
 /** A whole-set arrangement: the ids in the order the creator is showing. No partial orders. */
 const sourceOrderSchema = z.object({ order: z.array(z.number().int()) });
 
+/** One caption track to attach: the uploaded .vtt's key, its language tag, and its menu label. */
+const captionAttachSchema = z.object({
+	key: z.string().min(1).max(500),
+	// A BCP-47 tag as broad as `zh-Hant-TW` fits; the shape gate itself is in the service.
+	language: z.string().min(2).max(35),
+	label: z.string().max(100).default(""),
+	kind: z.enum(["captions", "subtitles"]).default("captions"),
+});
+
 const postBaseSchema = z.object({
 	title: z.string().max(255).optional().default(""),
 	slug: z
@@ -1269,6 +1286,8 @@ async function serializeWork(
 	 * where the stored key is itself the playable address.
 	 */
 	delivery: DeliveryCtx | null = null,
+	/** The Work's caption tracks, for the Studio's editor; empty when the caller did not load them. */
+	captions: CaptionTrackRow[] = [],
 ) {
 	return {
 		id: item.id,
@@ -1329,6 +1348,17 @@ async function serializeWork(
 		assets: workAssets,
 		webBuilds: webBuildsList,
 		transcoding: job,
+		// The owner's caption tracks, ungated here — this shape is what the Studio edits —
+		// with the play-facing URLs built the way the user shape builds them. Full rows,
+		// not the reader's slim objects: the editor shows size and cue count, which say
+		// something about what was uploaded that the play menu has no use for.
+		captions:
+			item.type !== "video"
+				? []
+				: captions.map((t) => ({
+						...t,
+						url: buildCaptionUrl(delivery ?? localDelivery, item.id, t.id),
+					})),
 		/**
 		 * The Work's listing on the network while it has one, and the public record link
 		 * beside it — every reader who can see the Work sees it too (the record is public
@@ -1593,6 +1623,36 @@ function buildHlsManifestUrl(ctx: DeliveryCtx, workId: number, file = "master.m3
 /** URL of the access-checked audio endpoint for an audio Work. */
 function buildAudioUrl(ctx: DeliveryCtx, workId: number): string {
 	return withShare(`${ctx.origin}/api/content/works/${workId}/audio`, ctx);
+}
+
+/**
+ * URL of the access-checked caption route for one track. Unlike media URLs, the caption
+ * route is the address in every mode — there is no bucket URL to fall back to, because a
+ * local-mode key is not a playable address the way a small file's is. Local mode answers
+ * `publicOrigin()`, which is same-origin, so the `<track>` fetch carries the session.
+ */
+function buildCaptionUrl(ctx: DeliveryCtx, workId: number, trackId: number): string {
+	return withShare(`${ctx.origin}/api/content/works/${workId}/captions/${trackId}`, ctx);
+}
+
+/** The delivery context the local-mode serialization falls back to for caption URLs. */
+const localDelivery: DeliveryCtx = { origin: publicOrigin() };
+
+/**
+ * One caption track as its consumer needs it: the play-facing URL beside the row's shape.
+ * The owner shape keeps the counts (the Studio's editor shows them); the read shape is
+ * what a `<track>` element wants and nothing more (the serializers).
+ */
+function serializeCaptionRow(row: CaptionTrackRow, ctx: DeliveryCtx) {
+	return {
+		id: row.id,
+		language: row.language,
+		label: row.label || row.language,
+		kind: row.kind,
+		url: buildCaptionUrl(ctx, row.workId, row.id),
+		byteSize: row.byteSize,
+		cueCount: row.cueCount,
+	};
 }
 
 /**
@@ -2006,6 +2066,16 @@ async function serializeWorkForUser(
 	hasPrimaryBuild = false,
 	/** Whether that primary build declared cross-origin isolation (threaded export). */
 	primaryRequiresIsolation = false,
+	/**
+	 * The Work's caption tracks, loaded by `loadWorkBundles` — empty (never loaded) at the
+	 * call sites that serialize cards and listings, where no player renders.
+	 *
+	 * The URL list rides `canAccess`, exactly like `originalUrl`: withheld from a user who
+	 * cannot reach the Work, enforced again at the captions endpoint for whoever holds a
+	 * stale URL. Withheld is an EMPTY list rather than a null field — the type is one
+	 * array either way.
+	 */
+	captions: CaptionTrackRow[] = [],
 ) {
 	const canAccess = access.canAccess;
 
@@ -2143,6 +2213,20 @@ async function serializeWorkForUser(
 					: work.sourceKey
 				: null,
 		transcoding: await userTranscoding(job, canAccess, delivery),
+		// Caption tracks ride `canAccess` like the video's own URLs: authored descriptions
+		// of a gated video are inside its gate, and a served track answers to the same
+		// access check at its route. They do NOT ride the meter — the meter measures
+		// attention, not bytes, and a caption file is bytes (see the download note above).
+		captions:
+			canAccess && work.type === "video"
+				? captions.map((t) => ({
+						id: t.id,
+						language: t.language,
+						label: t.label || t.language,
+						kind: t.kind,
+						url: buildCaptionUrl(delivery ?? localDelivery, work.id, t.id),
+					}))
+				: [],
 		access,
 		/**
 		 * Whether this Work is **Public Access** — ungated, streaming, free to everyone.
@@ -2219,6 +2303,8 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 	sectionsByWork: Map<number, number>;
 	/** Browser builds per Work, with their file rows. Owner-facing payload; see `serializeWork`. */
 	buildsByWork: Map<number, WebBuildWithFiles[]>;
+	/** Caption tracks per Work — player payload, only for surfaces that render one. */
+	captionsByWork: Map<number, CaptionTrackRow[]>;
 }> {
 	const worksById = new Map<number, WorkRow>();
 	const assetsByWork = new Map<number, AssetRow[]>();
@@ -2226,6 +2312,7 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 	const pagesByWork = new Map<number, number>();
 	const sectionsByWork = new Map<number, number>();
 	const buildsByWork = new Map<number, WebBuildWithFiles[]>();
+	const captionsByWork = new Map<number, CaptionTrackRow[]>();
 	if (workIds.length === 0) {
 		return {
 			worksById,
@@ -2234,35 +2321,45 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 			pagesByWork,
 			sectionsByWork,
 			buildsByWork,
+			captionsByWork,
 		};
 	}
 
-	const [workRows, assetRows, jobRows, pageRows, sectionRows, buildRows, buildFileRows] =
-		await Promise.all([
-			db.select().from(works).where(inArray(works.id, workIds)),
-			db.select().from(assets).where(inArray(assets.workId, workIds)),
-			db
-				.select()
-				.from(transcodingJobs)
-				.where(inArray(transcodingJobs.workId, workIds))
-				.orderBy(desc(transcodingJobs.createdAt)),
-			db
-				.select({ workId: workPages.workId, count: sql<number>`count(*)::int` })
-				.from(workPages)
-				.where(inArray(workPages.workId, workIds))
-				.groupBy(workPages.workId),
-			db
-				.select({ workId: workSections.workId, count: sql<number>`count(*)::int` })
-				.from(workSections)
-				.where(inArray(workSections.workId, workIds))
-				.groupBy(workSections.workId),
-			db.select().from(webBuilds).where(inArray(webBuilds.workId, workIds)),
-			db
-				.select({ file: webBuildFiles, workId: webBuilds.workId })
-				.from(webBuildFiles)
-				.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
-				.where(inArray(webBuilds.workId, workIds)),
-		]);
+	const [
+		workRows,
+		assetRows,
+		jobRows,
+		pageRows,
+		sectionRows,
+		buildRows,
+		buildFileRows,
+		captionRows,
+	] = await Promise.all([
+		db.select().from(works).where(inArray(works.id, workIds)),
+		db.select().from(assets).where(inArray(assets.workId, workIds)),
+		db
+			.select()
+			.from(transcodingJobs)
+			.where(inArray(transcodingJobs.workId, workIds))
+			.orderBy(desc(transcodingJobs.createdAt)),
+		db
+			.select({ workId: workPages.workId, count: sql<number>`count(*)::int` })
+			.from(workPages)
+			.where(inArray(workPages.workId, workIds))
+			.groupBy(workPages.workId),
+		db
+			.select({ workId: workSections.workId, count: sql<number>`count(*)::int` })
+			.from(workSections)
+			.where(inArray(workSections.workId, workIds))
+			.groupBy(workSections.workId),
+		db.select().from(webBuilds).where(inArray(webBuilds.workId, workIds)),
+		db
+			.select({ file: webBuildFiles, workId: webBuilds.workId })
+			.from(webBuildFiles)
+			.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
+			.where(inArray(webBuilds.workId, workIds)),
+		db.select().from(workCaptionTracks).where(inArray(workCaptionTracks.workId, workIds)),
+	]);
 	for (const p of pageRows) pagesByWork.set(p.workId, p.count);
 	for (const s of sectionRows) sectionsByWork.set(s.workId, s.count);
 
@@ -2275,6 +2372,11 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 	}
 	for (const j of jobRows) {
 		if (!jobByWork.has(j.workId)) jobByWork.set(j.workId, j);
+	}
+	for (const t of captionRows) {
+		const list = captionsByWork.get(t.workId) ?? [];
+		list.push(t);
+		captionsByWork.set(t.workId, list);
 	}
 	const filesByBuild = new Map<number, (typeof webBuildFiles.$inferSelect)[]>();
 	for (const { file } of buildFileRows) {
@@ -2294,6 +2396,7 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 		pagesByWork,
 		sectionsByWork,
 		buildsByWork,
+		captionsByWork,
 	};
 }
 
@@ -4577,6 +4680,12 @@ const contentRoutes = new Hono()
 
 		await resolveWorkThumbnail(work);
 
+		// The one route a viewer opens a video from, so it is the one route that loads the
+		// Work's caption tracks. Both branches below serialize them — the owner's editor
+		// lists them, the viewer's player offers them — and the batch shapes (cards,
+		// listings) carry none, because nothing there renders a player.
+		const captionRows = await listCaptionTracks(work.id);
+
 		/*
 		 * The owner short-circuit — and the one place creator preview has to interrupt it.
 		 *
@@ -4601,7 +4710,14 @@ const contentRoutes = new Hono()
 			// owner's own session, exactly what this branch serves.
 			const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx());
 			return c.json({
-				work: await serializeWork(work, workAssets, playableJob, webBuildsList, deliveryCtx()),
+				work: await serializeWork(
+					work,
+					workAssets,
+					playableJob,
+					webBuildsList,
+					deliveryCtx(),
+					captionRows,
+				),
 			});
 		}
 
@@ -4678,6 +4794,7 @@ const contentRoutes = new Hono()
 					// One query answers both: is there a primary build, and does it need
 					// isolation (which decides whether play opens the /play page).
 					...(await buildFlagsForWork(work.id)),
+					captionRows,
 				)),
 				creator,
 				creatorHasStripe,
@@ -6581,6 +6698,14 @@ const contentRoutes = new Hono()
 			case "audio":
 				key = `${prefix}/audio/originals/${uuid}.${ext}`;
 				break;
+			case "caption":
+				// A caption upload lands under the entityId'd Work's directory and is
+				// validated as WebVTT at attach (`services/captions.ts`), which is also why
+				// it is not perceptually scanned here: a hash of still frames has nothing to
+				// read in a text file, and anything disguised as a caption dies at that
+				// parse — a refusal that leaves a row never created.
+				key = `${prefix}/captions/${entityId ?? "unknown"}/${uuid}.vtt`;
+				break;
 			case "avatar":
 				key = `${prefix}/avatars/${uuid}.${ext}`;
 				break;
@@ -6636,6 +6761,93 @@ const contentRoutes = new Hono()
 		const url = await storage.getUrl(key);
 
 		return c.json({ key, url }, 201);
+	})
+
+	// ── Caption tracks — the WebVTT a creator authors onto their video Works ─────────
+	// See `services/captions.ts` for the invariants: parse is the ingest gate, serving is
+	// access-checked storage read, and a released Work may gain captions.
+
+	.post("/works/:id/captions", requireAuth, zValidator("json", captionAttachSchema), async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		// A 404 rather than a 403, the way the works routes answer a non-owner — the
+		// existence of another creator's Work is not information to hand out.
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (item.type !== "video") {
+			return c.json(
+				{ error: "Only a video carries caption tracks.", code: "captions_not_video" },
+				400,
+			);
+		}
+		const data = c.req.valid("json");
+		try {
+			const row = await attachCaptionTrack({
+				work: item,
+				requesterId: user.id,
+				key: data.key,
+				language: data.language,
+				label: data.label || null,
+				kind: data.kind,
+			});
+			return c.json({ caption: serializeCaptionRow(row, deliveryCtx() ?? localDelivery) }, 201);
+		} catch (err) {
+			if (err instanceof VttRefusal) {
+				return c.json({ error: err.message, code: "captions_refused" }, 400);
+			}
+			throw err;
+		}
+	})
+
+	.delete("/works/:id/captions/:trackId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const trackId = Number(c.req.param("trackId"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!Number.isInteger(trackId) || trackId <= 0) return c.json({ error: "Not found" }, 404);
+		const [track] = await db
+			.select()
+			.from(workCaptionTracks)
+			.where(and(eq(workCaptionTracks.workId, item.id), eq(workCaptionTracks.id, trackId)));
+		if (!track) return c.json({ error: "Not found" }, 404);
+		await deleteCaptionTrack(track, item.creatorId);
+		const remaining = await listCaptionTracks(item.id);
+		return c.json({
+			captions: remaining.map((t) => serializeCaptionRow(t, deliveryCtx() ?? localDelivery)),
+		});
+	})
+
+	/**
+	 * Serve one caption track. The same gates as the HLS route — access, the household
+	 * time limit, the share token — and deliberately the same ONE missing gate: no
+	 * Public-Access meter. **The meter measures attention, not bytes** (the download
+	 * note below says the same), and a caption file is bytes you are entitled to read
+	 * once you can reach the Work at all. The player that renders the track is stopped
+	 * by the meter at its playlist; the text of the thing is not a second copy of the
+	 * video to meter.
+	 */
+	.get("/works/:id/captions/:trackId", requireUserOrShareLink, async (c) => {
+		const trackId = Number(c.req.param("trackId"));
+		if (!Number.isInteger(trackId) || trackId <= 0) return c.json({ error: "Not found" }, 404);
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		if (limited) return c.json(limited, 403);
+
+		const [track] = await db
+			.select()
+			.from(workCaptionTracks)
+			.where(and(eq(workCaptionTracks.workId, work.id), eq(workCaptionTracks.id, trackId)));
+		if (!track) return c.json({ error: "Not found" }, 404);
+		const bytes = await storage.read(track.storageKey);
+		if (!bytes) return c.json({ error: "Not found" }, 404);
+		return c.body(new TextDecoder().decode(bytes), 200, {
+			"Content-Type": "text/vtt; charset=utf-8",
+			"Cache-Control": "no-store",
+		});
 	})
 
 	// ── Inline Images ────────────────────────────────────────────────────────────

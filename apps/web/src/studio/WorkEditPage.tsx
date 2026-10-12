@@ -137,6 +137,7 @@ import { frameOf } from "../lib/video-frame";
 import CreditsSection from "./CreditsSection";
 import PanelEditor from "./PanelEditor";
 import RatingMatrix from "./RatingMatrix";
+import WorkCaptionsEditor from "./WorkCaptionsEditor";
 import { unsavedKey } from "./work-edit";
 
 function formatFileSize(bytes: number): string {
@@ -412,6 +413,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			pageCount: fresh.pageCount,
 			webBuilds: fresh.webBuilds,
 			scheduledReleaseAt: fresh.scheduledReleaseAt,
+			captions: fresh.captions,
 		}));
 		if (!thumbnailTouched.current && fresh.thumbnail) {
 			setThumbnailUrl(fresh.thumbnail);
@@ -992,6 +994,18 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 											)}
 									</div>
 								)}
+							{/* The captions editor, beside the player a creator previews from — a
+							    track attached here shows up in their own preview's CC menu when
+							    refreshMedia brings the row back. */}
+							{type === "video" && (
+								<div className="max-w-xl">
+									<WorkCaptionsEditor
+										workId={current.id}
+										captions={current.captions ?? []}
+										onChanged={() => void refreshMedia()}
+									/>
+								</div>
+							)}
 							{/* Comics get a panel-correction surface once the pages are rendered. */}
 							{isPaged(type) && fileReady && (
 								<section className="rounded-box border border-base-300 bg-base-200/40 p-5">
