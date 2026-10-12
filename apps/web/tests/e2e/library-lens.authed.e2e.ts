@@ -108,8 +108,8 @@ test("the Library's sidebar reads Lenses, Access, Type, Tags", async ({ page }) 
 	expect((await sections).lenses).toEqual([
 		"No Lens",
 		"Music Player",
-		"Channel Guide(Coming Soon) [grayed]",
-		"Bookshelf(Coming Soon) [grayed]",
+		"Channel Guide",
+		"Bookshelf",
 	]);
 	expect((await sections).type?.length).toBeGreaterThan(0);
 	// Access, the Library consumes: the three-mode control renders (Any live by default).
@@ -128,12 +128,14 @@ test("the Library's sidebar reads Lenses, Access, Type, Tags", async ({ page }) 
 	expect(await y("Access")).toBeLessThan(await y("Type"));
 	expect(await y("Type")).toBeLessThan(await y("Tags"));
 
-	// A grayed lens row is not a view: the disabled button is the whole proof, and the
-	// URL carries no lens — the (Coming Soon) entry is vocabulary, not a control that
-	// navigates anywhere. (Playwright refuses to click a disabled button; the state is
-	// the assertion, not a click.) The marker rides the row's accessible name, so the
-	// match is the substring.
-	await expect(page.getByRole("button", { name: "Channel Guide" })).toBeDisabled();
+	// Every lens row is live on the Library, one per built view — the two newest
+	// flipped live by their own tasks on 2026-10-11, so no (Coming Soon) marker and
+	// none disabled remains here. The grayed-row vocabulary stays pinned once per
+	// tab family: the sidebar-structure spec carries it on the Feed, the only tab
+	// with unbuilt lens rows.
+	for (const label of ["No Lens", "Music Player", "Channel Guide", "Bookshelf"]) {
+		await expect(page.getByRole("button", { name: label, exact: true })).toBeEnabled();
+	}
 	await expect(page).toHaveURL(/\/library$/);
 });
 
@@ -300,4 +302,114 @@ test("a tag filter narrows the shelf and its removal restores it", async ({ page
 	await page.getByRole("button", { name: "Remove tag zzz-shelf-has-nothing" }).click();
 	await expect(page).toHaveURL(/^(?!.*tags=).*$/);
 	await expect(page.locator(".card")).toHaveCount(before);
+});
+
+// ── The 2026-10-11 lens pair — Bookshelf and Channel Guide ──────────────────
+//
+// Both read the same shelf list the older lenses draw on (`withTags`), so the walk's
+// setup is saving fixture Works and nothing more.
+
+/** Save one fixture Work for the signed-in user, and return its serialized Work. */
+async function saveFixtureWork(page: Page, key: string) {
+	const cookies = await page.context().cookies();
+	const session = cookies.find((c) => c.name === "session")?.value;
+	expect(session, "the authed project should carry a session cookie").toBeTruthy();
+	const fixture = mediaFixtureWork(key);
+	const res = await fetch(`${API_URL}/api/content/works/${fixture.slug}-${fixture.publicId}`).then(
+		(r) => r.json(),
+	);
+	const work = res.work as { id: number; pageCount?: number };
+	const save = await fetch(`${API_URL}/api/content/library`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${session}`,
+		},
+		body: JSON.stringify({ workId: work.id }),
+	});
+	expect([201, 404]).toContain(save.status);
+	return work;
+}
+
+test("the Bookshelf lens stands the saved comic up as a spine", async ({ page }) => {
+	const comic = await saveFixtureWork(page, "comic");
+	const pageCount = comic.pageCount ?? 0;
+	expect(pageCount, "the fixture comic renders pages — no pages, no spine ribbon").toBeGreaterThan(
+		1,
+	);
+
+	// Seed where this device last got in it — the store `lib/reading-positions.ts`
+	// owns, written by the comic reader on navigation. The spine marker is the shelf's
+	// read of the same data: page 2 of the fixture's pages, as a ribbon on the spine.
+	await page.addInitScript(
+		(seed) => {
+			localStorage.setItem("anthers_reading_progress", JSON.stringify({ [String(seed.id)]: 2 }));
+		},
+		{ id: comic.id },
+	);
+
+	await page.goto("/library?lens=bookshelf");
+	await expect(page.getByRole("heading", { name: "Bookshelf" })).toBeVisible();
+	await expect(page.getByText("A comic that really turns").first()).toBeVisible();
+
+	// The ribbon, at the depth the device got to: round(2 / pageCount) percent.
+	const expected = `${Math.round((2 / pageCount) * 100)}%`;
+	await expect(page.getByTestId("spine-marker")).toHaveAttribute(
+		"style",
+		new RegExp(`height:\\s*${expected.replace("%", "")}%`),
+	);
+});
+
+test("the Channel Guide lens puts a channel per creator and its timeline under them", async ({
+	page,
+}) => {
+	await saveFixtureWork(page, "video");
+
+	await page.goto("/library?lens=channel-guide");
+	await expect(page.getByRole("heading", { name: "Channel Guide" })).toBeVisible();
+
+	// One channel: the video's creator, holding exactly their timeline. The fixture
+	// walker saved one video, so one channel stands.
+	const channels = page.getByTestId("guide-channel");
+	await expect(channels).toHaveCount(1);
+	await expect(page.getByText(mediaFixtureWork("video").title).first()).toBeVisible();
+
+	// Select it: the playlist-player arrangement — the player pane and this video's
+	// channel in the rail, the selection highlighted.
+	await page.getByTestId("guide-block").click();
+	await expect(page.getByTestId("guide-playing")).toBeVisible();
+	await expect(page.getByTestId("guide-rail-block")).toHaveCount(1);
+
+	// Up next is UP — this channel's only program is its newest, so there is nothing
+	// above it and the control says so by refusing; the guide ends rather than looping.
+	await expect(page.getByTestId("guide-next")).toBeDisabled();
+
+	// The X closes the player and the guide returns, whole.
+	await page.getByRole("button", { name: "Back to the guide" }).click();
+	await expect(page.getByTestId("guide-playing")).toHaveCount(0);
+	await expect(channels).toHaveCount(1);
+});
+
+test("the new lenses are views, not containers — switching through them leaves the shelf exact", async ({
+	page,
+}) => {
+	await page.goto("/library");
+	await saveFixtures(page);
+	await saveFixtureWork(page, "video");
+	await saveFixtureWork(page, "comic");
+
+	const before = await shelfCount(page);
+	expect(before, "the fixture stock should be on the shelf").toBeGreaterThan(0);
+
+	await page.getByRole("button", { name: "Channel Guide", exact: true }).click();
+	await expect(page).toHaveURL(/lens=channel-guide/);
+	await page.getByRole("button", { name: "Bookshelf", exact: true }).click();
+	await expect(page).toHaveURL(/lens=bookshelf/);
+	await page.getByRole("button", { name: "Music Player", exact: true }).click();
+	await expect(page).toHaveURL(/lens=music/);
+	await page.getByRole("button", { name: "No Lens", exact: true }).click();
+	await expect(page).toHaveURL(/^(?!.*lens=).*$/);
+
+	expect(await shelfCount(page), "walking every lens changed what is IN the Library").toBe(before);
 });

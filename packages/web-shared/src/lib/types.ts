@@ -302,6 +302,16 @@ export interface Work {
 	publicId?: number;
 	slug?: string;
 	creatorId?: number;
+	/**
+	 * The creator's display surface, carried only by listings that organize **by** their
+	 * creators — the Library shelf response attaches them at the route (the project arm
+	 * has always carried the handle/name pair); `serializeWorkForUser` withholds them
+	 * everywhere else. Present so a lens that groups the shelf by creator can label
+	 * channels wholesale instead of fetching profiles per creator.
+	 */
+	creatorHandle?: string | null;
+	creatorDisplayName?: string | null;
+	creatorAvatar?: string | null;
 	type: ContentType;
 	title: string | null;
 	description?: string | null;

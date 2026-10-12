@@ -32,6 +32,7 @@
  */
 
 import { WITHDRAWN_RESCUE_DAYS } from "@anthers/shared/constants";
+import { BOOKSHELF_WORK_TYPES } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import {
 	coverFor,
@@ -51,6 +52,10 @@ import SharedFilterSections, {
 } from "../components/layout/SharedFilterSections";
 import SharedLensesSection from "../components/layout/SharedLensesSection";
 import { useSidebar } from "../components/layout/SidebarContext";
+import BookshelfLens from "../components/library/BookshelfLens";
+import ChannelGuideLens, {
+	channelGuideChannelsFromShelf,
+} from "../components/library/ChannelGuideLens";
 import MusicLens, { type LensItem, type LensProject } from "../components/library/MusicLens";
 import { removeItem, setHidden } from "../lib/library";
 
@@ -67,7 +72,7 @@ import { removeItem, setHidden } from "../lib/library";
  * The Music Player's dial rides the lens it is a control on, rendered beneath its row
  * (the shared section's `extras` slot) only while that lens is active.
  */
-const LIBRARY_LIVES = new Set(["", "music"]);
+const LIBRARY_LIVES = new Set(["", "music", "channel-guide", "bookshelf"]);
 
 /** The Music Player's dial, given to the shared section as the row's `extras` — a
  *  control ON the lens, rendered beneath its row only while the lens is selected. */
@@ -356,13 +361,25 @@ export default function LibraryPage() {
 	 */
 	const unavailableTypes = useMemo(() => {
 		const set = new Set<string>();
-		if (lens === "music") {
-			const included = includeSpoken ? ["music", "audio"] : ["music"];
+		// A lens decides what it draws on, so under it the Type list cannot narrow what
+		// the lens reorganizes — non-participating types gray, and a participating one
+		// grays on empty stock exactly as it does lensless.
+		const lensIncluded: string[] | null =
+			lens === "music"
+				? includeSpoken
+					? ["music", "audio"]
+					: ["music"]
+				: lens === "bookshelf"
+					? [...BOOKSHELF_WORK_TYPES]
+					: lens === "channel-guide"
+						? ["video"]
+						: null;
+		if (lensIncluded) {
 			for (const t of SHARED_FILTER_TYPES) {
-				if (t.id && !included.includes(t.id)) set.add(t.id);
+				if (t.id && !lensIncluded.includes(t.id)) set.add(t.id);
 			}
 			// A type the lens includes but the shelf has nothing of grays the same way.
-			for (const type of included) {
+			for (const type of lensIncluded) {
 				if (!items.some((i) => i.kind === "work" && i.work?.type === type)) set.add(type);
 			}
 		} else {
@@ -460,6 +477,18 @@ export default function LibraryPage() {
 				   Drawing on `withTags` is what keeps "a lens is a view" true of the whole
 				   family of them. */
 				<MusicLens items={withTags as LensItem[]} includeSpoken={includeSpoken} />
+			) : lens === "bookshelf" ? (
+				/* The reading shelf: book-like types as spines, alpha by title. The same
+				   drawn list as every lens — `withTags`, the shelf's own narrowing. */
+				<BookshelfLens items={withTags as LensItem[]} />
+			) : lens === "channel-guide" ? (
+				/* The TV-guide: a channel per creator with saved video, that channel's
+				   timeline of saved videos, latest first. Channels translate client-side
+				   from the same drawn list; the guide itself owns selection. */
+				<ChannelGuideLens
+					channels={channelGuideChannelsFromShelf(withTags as LensItem[])}
+					source="library"
+				/>
 			) : filtered.length === 0 ? (
 				<EmptyState
 					title={
