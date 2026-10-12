@@ -40,7 +40,11 @@ const RUN = crypto.randomUUID().slice(0, 8);
  * choosing — the same testsrc the other transcode suites run, plus a sine tone, so the
  * source carries both the streams a real capture does.
  */
-async function makeVideo(container: "matroska" | "mp4", audioCodec: string, videoCodec = "libx264"): Promise<Buffer> {
+async function makeVideo(
+	container: "matroska" | "mp4",
+	audioCodec: string,
+	videoCodec = "libx264",
+): Promise<Buffer> {
 	const path = join(tmpdir(), `trx_${RUN}.${container === "matroska" ? "mkv" : "mp4"}`);
 	const proc = Bun.spawn(
 		[
@@ -76,10 +80,15 @@ async function makeVideo(container: "matroska" | "mp4", audioCodec: string, vide
 
 describe("a video transcode's ingest three-way", () => {
 	let creatorId: number;
-	let sent: Array<{ name: string; data: { storageKey: string; workId: number; kind?: string } }> = [];
+	let sent: Array<{ name: string; data: { storageKey: string; workId: number; kind?: string } }> =
+		[];
 	let sendSpy: ReturnType<typeof spyOn>;
 
-	async function stage(label: string, bytes: Buffer, filename: string): Promise<{ workId: number; jobId: number }> {
+	async function stage(
+		label: string,
+		bytes: Buffer,
+		filename: string,
+	): Promise<{ workId: number; jobId: number }> {
 		const sourceKey = `creators/${creatorId}/videos/originals/${RUN}-${filename}`;
 		await storage.upload(sourceKey, bytes, "video/x-container", "private");
 		const workId = (await insertWork({ creatorId, type: "video", title: `Remux ${label} ${RUN}` }))
@@ -148,7 +157,11 @@ describe("a video transcode's ingest three-way", () => {
 		sent = [];
 		// Capture-tool audio: PCM in an MKV. The video is H.264; the pair has no native
 		// container that plays both, so it is a refusal rather than a remux.
-		const { workId, jobId } = await stage("pcm", await makeVideo("matroska", "pcm_s16le"), "refuse.mkv");
+		const { workId, jobId } = await stage(
+			"pcm",
+			await makeVideo("matroska", "pcm_s16le"),
+			"refuse.mkv",
+		);
 
 		// The handler returns normally — no throw, so the queue's job completes and no
 		// retry re-runs the answer — and the row is failed with the creator-facing copy.
@@ -182,7 +195,9 @@ describe("a video transcode's ingest three-way", () => {
 });
 
 /** Run the job's own ffprobe over the copy in storage, read at its readability address. */
-async function probeStreams(sourceKey: string): Promise<{ streams: Array<{ codec_name?: string }> }> {
+async function probeStreams(
+	sourceKey: string,
+): Promise<{ streams: Array<{ codec_name?: string }> }> {
 	const address = await storage.readableInput(sourceKey);
 	const bytes = address.startsWith("http")
 		? Buffer.from(await (await fetch(address)).arrayBuffer())
@@ -190,10 +205,13 @@ async function probeStreams(sourceKey: string): Promise<{ streams: Array<{ codec
 	const path = join(tmpdir(), `trx_probe_${RUN}`);
 	await Bun.write(path, bytes);
 	try {
-		const proc = Bun.spawn(["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", path], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
+		const proc = Bun.spawn(
+			["ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", path],
+			{
+				stdout: "pipe",
+				stderr: "pipe",
+			},
+		);
 		expect(await proc.exited).toBe(0);
 		return JSON.parse(await new Response(proc.stdout).text());
 	} finally {

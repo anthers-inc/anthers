@@ -55,8 +55,8 @@ import {
 	remuxedKeyFor,
 } from "../lib/video-remux.js";
 import { storage } from "../services/storage/index.js";
-import { queueScansForWork } from "./scan-media.js";
 import { MAX_TRANSCODE_RESUMES } from "./resume-orphans.js";
+import { queueScansForWork } from "./scan-media.js";
 import { createEtaClamp, remainingEncodeSeconds } from "./transcode-eta.js";
 
 export interface TranscodeVideoData {
@@ -518,10 +518,7 @@ async function runTranscode(data: TranscodeVideoData) {
 
 		if (!verdict.alreadyPlayable && verdict.container) {
 			const remuxedKey = remuxedKeyFor(storageKey, verdict.container);
-			const remuxedPath = join(
-				outputDir,
-				`remux.${verdict.container}`,
-			);
+			const remuxedPath = join(outputDir, `remux.${verdict.container}`);
 			await ffmpegRemux(
 				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
 				remuxedPath,

@@ -79,8 +79,7 @@ export function classifyVideoStreams(
 	// already in its native container plays without a copy; everything else — MKV
 	// above all, OBS's default — remuxes.
 	const ext = sourceKey.includes(".") ? sourceKey.split(".").pop()!.toLowerCase() : "";
-	const alreadyPlayable =
-		container === "mp4" ? MP4_FAMILY_EXTENSIONS.has(ext) : ext === "webm";
+	const alreadyPlayable = container === "mp4" ? MP4_FAMILY_EXTENSIONS.has(ext) : ext === "webm";
 	return { container, alreadyPlayable, ...(alreadyPlayable ? {} : { refusal: undefined }) };
 }
 
