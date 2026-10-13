@@ -30,7 +30,12 @@ import { type PdqHash, pdqHashPixels } from "./pdq.js";
 
 /** Run ffprobe and return its parsed JSON. Shared with `jobs/transcode-video.ts`. */
 export async function ffprobeJson(source: string): Promise<{
-	streams?: Array<{ codec_type?: string; width?: number; height?: number }>;
+	streams?: Array<{
+		codec_type?: string;
+		width?: number;
+		height?: number;
+		avg_frame_rate?: string;
+	}>;
 	format?: { duration?: string };
 }> {
 	const proc = Bun.spawn(
@@ -45,6 +50,15 @@ export async function ffprobeJson(source: string): Promise<{
 	return JSON.parse(await new Response(proc.stdout).text());
 }
 
+/** Frame rate as probes report it — `"24/1"`, `"30000/1001"` — 0 when absent or malformed. */
+function framesPerSecond(value: string | undefined): number {
+	if (!value) return 0;
+	const [num, den] = value.split("/").map(Number);
+	const denominator = den === undefined || den === 0 ? 1 : den;
+	const rate = num / denominator;
+	return Number.isFinite(rate) && rate > 0 ? rate : 0;
+}
+
 /**
  * The three facts the sampler needs, or null when the file has no video stream at all.
  *
@@ -55,15 +69,24 @@ export async function ffprobeJson(source: string): Promise<{
  * something that was never a video will all land here, and the caller records the object
  * as unscannable rather than retrying it forever.
  */
-export async function probeVideo(
-	source: string,
-): Promise<{ width: number; height: number; durationSeconds: number } | null> {
+export async function probeVideo(source: string): Promise<{
+	width: number;
+	height: number;
+	durationSeconds: number;
+	/** Frames per second, 0 when the container reports none — callers clamp accordingly. */
+	framesPerSecond: number;
+} | null> {
 	const probe = await ffprobeJson(source);
 	const stream = probe.streams?.find((s) => s.codec_type === "video");
 	const width = Number(stream?.width ?? 0);
 	const height = Number(stream?.height ?? 0);
 	if (!width || !height) return null;
-	return { width, height, durationSeconds: Number.parseFloat(probe.format?.duration ?? "0") };
+	return {
+		width,
+		height,
+		durationSeconds: Number.parseFloat(probe.format?.duration ?? "0"),
+		framesPerSecond: framesPerSecond(stream?.avg_frame_rate),
+	};
 }
 
 /**

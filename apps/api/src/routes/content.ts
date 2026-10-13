@@ -5623,7 +5623,12 @@ const contentRoutes = new Hono()
 			try {
 				let at = atSeconds;
 				// Read the duration straight from the stored original, so a paused moment
-				// past the end (or a client claiming one) still lands inside the file.
+				// past the end (or a client claiming one) still lands inside the file —
+				// and past the last DECODED frame, not merely inside the container: an
+				// input seek asks for frames from the moment onward, so a moment past the
+				// last frame's own timestamp (an ended video's pause is exactly its
+				// duration) yields nothing. One frame earlier is the last displayable
+				// picture the file holds.
 				const input = await storage.readableInput(work.sourceKey);
 				const probe = await probeVideo(input);
 				if (!probe) {
@@ -5635,7 +5640,9 @@ const contentRoutes = new Hono()
 						409,
 					);
 				}
-				at = Math.max(0, Math.min(at, Math.max(probe.durationSeconds - 0.05, 0)));
+				const lastFrame =
+					probe.durationSeconds - (probe.framesPerSecond > 0 ? 1 / probe.framesPerSecond : 0.5);
+				at = Math.max(0, Math.min(at, Math.max(lastFrame, 0)));
 
 				// One frame into the pipe: input seeking (`-ss` before `-i`) stops ffmpeg
 				// reading past the moment, and `image2pipe` keeps the JPEG on stdout rather
