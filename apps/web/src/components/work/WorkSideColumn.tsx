@@ -30,8 +30,12 @@ export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: 
 	if (!current) return null;
 
 	return (
-		<aside aria-label="Reviews and showings" className="flex flex-col gap-3">
-			<div role="tablist" aria-label="Reviews and showings" className="join">
+		<aside aria-label="Reviews and showings" className="flex flex-col gap-4">
+			<div
+				role="tablist"
+				aria-label="Reviews and showings"
+				className="join rounded-box shadow-[0_2px_6px_0_rgba(0,0,0,0.25)]"
+			>
 				{tabs.map((tab) => (
 					<button
 						key={tab.key}

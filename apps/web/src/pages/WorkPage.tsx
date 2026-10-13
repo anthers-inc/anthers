@@ -285,19 +285,18 @@ export default function WorkPage() {
 		) : null;
 
 	if (ownerEditsVideo) {
-		return (
-			<WorkColumn type={work.type} wide>
-				<OwnerWorkEditor work={work} onRefetch={refetch} />
-			</WorkColumn>
-		);
+		// No column of its own here: the editor renders the page's one WorkColumn, and a
+		// second would double its top padding against the topbar (Parker's fourth pass).
+		return <OwnerWorkEditor work={work} onRefetch={refetch} />;
 	}
 
 	return (
 		// A video's views are one width everywhere — the creator's editor, the unlocked
 		// visitor page and the locked one (Parker's second pass, 2026-10-13): the columns
 		// and their divider read the same in all three, and the rule's centering is true
-		// of the player's center because the two areas share one width.
-		<WorkColumn type={work.type} wide={work.type === "video"}>
+		// of the player's center because the two areas share one width. The top is tight:
+		// the video starts under the topbar at the section spacing, not the page's.
+		<WorkColumn type={work.type} wide={work.type === "video"} tight={work.type === "video"}>
 			{/* Creator preview — only ever offered to the person who made it, and only ever
 			    able to subtract access (the server guards that per Work). Beside it, the way back
 			    to the Work's Edit page, which is where the preview is usually reached from. */}
@@ -669,7 +668,10 @@ function VideoVisitorRecord({
 								<div className="flex flex-col gap-6">
 									<section className="flex flex-col gap-2">
 										<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
-										<WorkDescription work={work} />
+										{/* Same prose-margin trim as the editor's read (Parker, 2026-10-13). */}
+										<div className="[&_p]:my-0">
+											<WorkDescription work={work} />
+										</div>
 									</section>
 									<section className="flex flex-col gap-2">
 										<h3 className={WORK_DETAILS_HEADING_CLASS}>Release</h3>

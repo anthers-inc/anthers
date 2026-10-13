@@ -194,7 +194,12 @@ export default function MediaStatusCard({
 					/>
 					<VariantChip name="Audio" ready={job?.audioManifestUrl ?? ""} running={running} />
 					{depths.length > 0 ? (
-						depths.map((h) => <VariantChip key={h} name={`${h}p`} ready="ready" />)
+						// Largest first (Parker, 2026-10-13): the ladder reads as what it offers,
+						// best at the left.
+						depths
+							.slice()
+							.sort((a, b) => b - a)
+							.map((h) => <VariantChip key={h} name={`${h}p`} ready="ready" />)
 					) : (
 						<VariantChip name="Ladder" ready={job?.hlsManifestUrl ?? ""} running={running} />
 					)}

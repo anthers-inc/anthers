@@ -167,13 +167,22 @@ export function WorkColumn({
 	children,
 	type,
 	wide,
+	tight,
 }: {
 	children: ReactNode;
 	type?: string;
 	wide?: boolean;
+	/** Pull the content to the topbar's edge: a page whose first element is the thing
+	 *  itself (a video's page, whose player starts under the mode banner) wants the top
+	 *  gap the section spacing gives, not the page's own (Parker, 2026-10-13). */
+	tight?: boolean;
 }) {
 	const width = wide ? "max-w-7xl" : type && isWriting(type) ? "max-w-2xl" : "max-w-4xl";
-	return <div className={`${width} mx-auto px-4 py-8 space-y-6`}>{children}</div>;
+	return (
+		<div className={`${width} mx-auto px-4 ${tight ? "pt-6 pb-8" : "py-8"} space-y-6`}>
+			{children}
+		</div>
+	);
 }
 
 interface WorkHeaderProps {
@@ -357,44 +366,48 @@ export interface WorkBylineProps {
  */
 export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
-	return (
-		<header className="space-y-1.5">
-			<div className="flex items-start justify-between gap-4">
-				<div className="min-w-0 flex-1">
-					{title ?? (
-						<h1
-							className={workTitleTypography(work.type).className}
-							style={workTitleTypography(work.type).style}
-						>
-							{work.title || "Untitled"}
-						</h1>
-					)}
+	const creatorEl = work.creator && (
+		<Link to={profileUrl(work.creator.handle)} className="flex items-center gap-2 hover:underline">
+			{work.creator.avatar ? (
+				<img
+					src={work.creator.avatar}
+					alt={work.creator.handle}
+					className="size-6 rounded-full object-cover"
+				/>
+			) : (
+				<div className="flex size-6 items-center justify-center rounded-full bg-base-300 text-xs font-bold">
+					{work.creator.handle.charAt(0).toUpperCase()}
 				</div>
-				{actions && <div className="flex shrink-0 items-center gap-1 self-center">{actions}</div>}
-			</div>
-			<div className="flex flex-wrap items-center gap-2 text-sm">
-				{work.creator && (
-					<Link
-						to={profileUrl(work.creator.handle)}
-						className="flex items-center gap-2 hover:underline"
+			)}
+			{creatorName}
+		</Link>
+	);
+	return (
+		// Centered, fanning out symmetrically (Parker's fourth pass, 2026-10-13): the
+		// maker's name is always the page's center, a rule on either side of it, the
+		// chips right-aligned to the left one and the actions left-aligned to the right.
+		<header className="space-y-2.5">
+			<div className="text-center">
+				{title ?? (
+					<h1
+						className={`${workTitleTypography(work.type).className} text-center`}
+						style={workTitleTypography(work.type).style}
 					>
-						{work.creator.avatar ? (
-							<img
-								src={work.creator.avatar}
-								alt={work.creator.handle}
-								className="size-6 rounded-full object-cover"
-							/>
-						) : (
-							<div className="flex size-6 items-center justify-center rounded-full bg-base-300 text-xs font-bold">
-								{work.creator.handle.charAt(0).toUpperCase()}
-							</div>
-						)}
-						{creatorName}
-					</Link>
+						{work.title || "Untitled"}
+					</h1>
 				)}
-				<span aria-hidden className="mx-1 h-4 w-px bg-base-300" />
-				<ContentTypeBadge contentType={work.type} />
-				{chips}
+			</div>
+			<div className="grid grid-cols-1 items-center gap-y-2 sm:grid-cols-[1fr_auto_1fr]">
+				<div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end sm:pr-2.5">
+					<ContentTypeBadge contentType={work.type} />
+					{chips}
+					<span aria-hidden className="h-4 w-px bg-base-300 max-sm:hidden" />
+				</div>
+				{creatorEl}
+				<div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:pl-2.5">
+					<span aria-hidden className="h-4 w-px bg-base-300 max-sm:hidden" />
+					{actions}
+				</div>
 			</div>
 		</header>
 	);

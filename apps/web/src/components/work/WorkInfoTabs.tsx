@@ -38,8 +38,14 @@ export default function WorkInfoTabs({
 	if (!current) return null;
 
 	return (
-		<section aria-label="About this Work" className="flex flex-col gap-3">
-			<div role="tablist" aria-label="Work information" className="join">
+		<section aria-label="About this Work" className="flex flex-col gap-4">
+			{/* The shadow marks the bar as its own object — heavier at the bottom edge where
+			    the panels hang from it (Parker's fourth pass, 2026-10-13). */}
+			<div
+				role="tablist"
+				aria-label="Work information"
+				className="join rounded-box shadow-[0_2px_6px_0_rgba(0,0,0,0.25)]"
+			>
 				{tabs.map((tab) => (
 					<button
 						key={tab.key}

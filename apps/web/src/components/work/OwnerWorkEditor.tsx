@@ -71,7 +71,7 @@ import {
 import FileUpload from "@anthers/web-shared/ui/FileUpload";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { isUploading, useSourceUpload, workUploads } from "@anthers/web-shared/work-uploads";
-import { CalendarIcon } from "@heroicons/react/24/outline";
+import { CalendarIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import CreditsSection from "../../studio/CreditsSection";
 import RatingMatrix from "../../studio/RatingMatrix";
@@ -533,7 +533,11 @@ export default function OwnerWorkEditor({
 			label="Description"
 			saved={description}
 			renderRead={() => (
-				<section className={WORK_DESCRIPTION_CLASS}>
+				// `[&_p]:my-0`: prose adds a paragraph's own margins, which opened a gap
+				// between the section's heading and its text no other section has (Parker,
+				// 2026-10-13) — the heading's gap is the section's, and it is the section's
+				// everywhere.
+				<section className={`${WORK_DESCRIPTION_CLASS} [&_p]:my-0`}>
 					{description ? (
 						<p>{description}</p>
 					) : (
@@ -738,11 +742,10 @@ export default function OwnerWorkEditor({
 			label="Original release date"
 			saved={originalDate}
 			renderRead={() => (
-				<p className="text-sm text-base-content/60">
-					<CalendarIcon className="mr-1 inline size-4" />
-					<span className="text-base-content/50">Original release date:</span>{" "}
-					{originalDate ? formatOriginallyReleased(`${originalDate}T00:00:00.000Z`) : "—"}
-				</p>
+				<DateValueLine
+					label="Original Release"
+					value={originalDate ? formatOriginallyReleased(`${originalDate}T00:00:00.000Z`) : "—"}
+				/>
 			)}
 			renderEdit={(draft, setDraft) => (
 				<div>
@@ -808,39 +811,27 @@ export default function OwnerWorkEditor({
 		/>
 	);
 
+	/**
+	 * The access, edited from the chip in the byline strip (Parker's fourth pass,
+	 * 2026-10-13): the Details tab loses its Access section — the chip below the video
+	 * already names it — and for the creator the chip is the door: it opens the access
+	 * table and the delivery switches in a modal, and the same save they made commits it.
+	 */
 	const accessField = (
-		<InlineField<AccessRowDraft[]>
-			label="Access"
-			saved={accessRows}
-			renderRead={() => (
-				<AccessSummary publicAccess={publicAccessNow} anyoneAllowed={anyoneAllowed} />
-			)}
-			renderEdit={(draft, setDraft) => (
-				<div>
-					<AccessTables rows={draft} onRowsChange={setDraft} />
-					<DeliverySwitches
-						streamEnabled={streamEnabled}
-						downloadEnabled={downloadEnabled}
-						onStream={setStreamEnabled}
-						onDownload={setDownloadEnabled}
-					/>
-					{accessRows.length === 1 && (
-						<p className="text-xs text-base-content/50">
-							Want to gate this by monthly support?{" "}
-							<Link to={studioUrl("/settings")} className="link">
-								Add Badge rungs in Settings
-							</Link>
-							.
-						</p>
-					)}
-				</div>
-			)}
-			save={async (draft) => {
+		<OwnerAccessChipEditor
+			rows={accessRows}
+			publicAccess={publicAccessNow}
+			streamEnabled={streamEnabled}
+			downloadEnabled={downloadEnabled}
+			onStream={setStreamEnabled}
+			onDownload={setDownloadEnabled}
+			onSave={async (draft) => {
 				await saveFields({
 					streamEnabled,
 					downloadEnabled,
 					access: serializeAccessRows(draft),
 				});
+				setAccessRows(draft);
 			}}
 		/>
 	);
@@ -939,12 +930,9 @@ export default function OwnerWorkEditor({
 				{releaseField}
 				{originalDateField}
 			</section>
-			<section className="flex flex-col gap-2">
-				<h3 className={WORK_DETAILS_HEADING_CLASS}>Access</h3>
-				{/* The read names itself in the byline strip's chip; the table under it is
-				    the working truth of who may open this and at what. */}
-				{accessField}
-			</section>
+			{/* The Access section is gone (Parker, 2026-10-13): the chip in the byline strip
+			    below the video names who may open this, and for the creator that chip is the
+			    way in — the table lives in the dialog it opens. */}
 		</div>
 	);
 
@@ -1002,7 +990,7 @@ export default function OwnerWorkEditor({
 			content: (
 				<div className="flex flex-col gap-6">
 					<section className="flex flex-col gap-2">
-						<h3 className={WORK_DETAILS_HEADING_CLASS}>Media</h3>
+						<h3 className={WORK_DETAILS_HEADING_CLASS}>Media Status</h3>
 						<MediaStatusCard
 							work={asRead}
 							sourceUpload={sourceUpload}
@@ -1029,7 +1017,7 @@ export default function OwnerWorkEditor({
 	];
 
 	return (
-		<WorkColumn type={work.type} wide>
+		<WorkColumn type={work.type} wide tight>
 			<EditingBanner title={current.title} />
 
 			{/* ── The Work itself, full width. Everything above the video is the banner and
@@ -1085,7 +1073,7 @@ export default function OwnerWorkEditor({
 						}}
 					/>
 				}
-				chips={<WorkAccessChip publicAccess={publicAccessNow} />}
+				chips={accessField}
 			/>
 
 			{/* ── The record's halves. The rule between them is its own grid column, a
@@ -1174,6 +1162,33 @@ function ThumbEditor({
 }
 
 /** The release read view: the row's status, said as a status rather than a control. */
+/**
+ * One labeled date line, shared by both of the Release section's lines (Parker's fourth
+ * pass, 2026-10-13): the label in its fixed column, the value starting at the same x on
+ * every line — the tab stop a text editor would give — with the same type per line and
+ * the dash where the Work carries no value.
+ */
+export function DateValueLine({
+	label,
+	value,
+	hint,
+}: {
+	label: string;
+	value: ReactNode;
+	/** A qualifier after the value, for a scheduled release. */
+	hint?: string;
+}) {
+	return (
+		<div className="grid grid-cols-[8rem_1fr] items-baseline text-sm">
+			<span className="text-base-content/50">{label}</span>
+			<span>
+				{value}
+				{hint && <span className="text-base-content/60"> — {hint}</span>}
+			</span>
+		</div>
+	);
+}
+
 export function ReleaseSummary({
 	work,
 	scheduled,
@@ -1197,21 +1212,12 @@ export function ReleaseSummary({
 				minute: "2-digit",
 			})
 		: null;
-	// A labeled value line, not a status badge (Parker's third pass, 2026-10-13): the
-	// publish date is the fact, said between "Published" and its value — and where the
-	// Work has none yet, the value is the dash, not a word about why.
-	if (scheduledAt) {
-		return (
-			<p className="text-sm">
-				<span className="text-base-content/50">Published</span> —{" "}
-				<span className="text-base-content/60">scheduled for {scheduledAt}</span>
-			</p>
-		);
-	}
 	return (
-		<p className="text-sm">
-			<span className="text-base-content/50">Published</span> {released ?? "—"}
-		</p>
+		<DateValueLine
+			label="Anthers Release"
+			value={released ?? "—"}
+			hint={scheduledAt ? `scheduled for ${scheduledAt}` : undefined}
+		/>
 	);
 }
 
@@ -1282,6 +1288,124 @@ export function AccessSummary({
 	}
 	return (
 		<p className="text-sm text-base-content/60">Nobody can open this yet — allow someone in.</p>
+	);
+}
+
+/**
+ * The creator's access chip (Parker, 2026-10-13): the Work's access as a chip in the
+ * byline strip, and for the creator the chip is the door — it opens the Access table
+ * and the delivery switches in a modal, asked for deliberately. The chip's look comes
+ * from the rows themselves, so a save answers it the way it answers every read.
+ */
+function OwnerAccessChipEditor({
+	rows,
+	publicAccess,
+	streamEnabled,
+	downloadEnabled,
+	onStream,
+	onDownload,
+	onSave,
+}: {
+	rows: AccessRowDraft[];
+	publicAccess: boolean;
+	streamEnabled: boolean;
+	downloadEnabled: boolean;
+	onStream: (next: boolean) => void;
+	onDownload: (next: boolean) => void;
+	onSave: (rows: AccessRowDraft[]) => Promise<void>;
+}) {
+	const [open, setOpen] = useState(false);
+	const [draft, setDraft] = useState<AccessRowDraft[]>(rows);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const dialog = useRef<HTMLDialogElement>(null);
+
+	useEffect(() => {
+		if (open) dialog.current?.showModal();
+	}, [open]);
+
+	const commit = async () => {
+		setBusy(true);
+		setError(null);
+		try {
+			await onSave(draft);
+			dialog.current?.close();
+			setOpen(false);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "The access change didn't save.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<>
+			<button
+				type="button"
+				title="Edit who can open this Work"
+				className={`badge badge-sm cursor-pointer gap-1 border py-1.5 pr-2 ${
+					publicAccess ? "badge-success badge-outline" : "badge-outline"
+				}`}
+				onClick={() => {
+					setDraft(rows);
+					setError(null);
+					setOpen(true);
+				}}
+			>
+				{publicAccess ? "Public Access" : "Gated"}
+				<PencilSquareIcon className="size-3 opacity-60" />
+			</button>
+			{open && (
+				<dialog ref={dialog} className="modal" onClose={() => setOpen(false)}>
+					<div className="modal-box max-w-2xl">
+						<h3 className="text-lg font-semibold">Who can open this Work</h3>
+						<p className="mt-1 text-xs text-base-content/60">
+							The Access table decides who pays what. The chip above answers from these rows: Public
+							Access is Everyone at $0.
+						</p>
+						<div className="mt-4 flex flex-col gap-4">
+							<AccessTables rows={draft} onRowsChange={setDraft} />
+							<DeliverySwitches
+								streamEnabled={streamEnabled}
+								downloadEnabled={downloadEnabled}
+								onStream={onStream}
+								onDownload={onDownload}
+							/>
+							{draft.length === 1 && (
+								<p className="text-xs text-base-content/50">
+									Want to gate this by monthly support?{" "}
+									<Link to={studioUrl("/settings")} className="link">
+										Add Badge rungs in Settings
+									</Link>
+									.
+								</p>
+							)}
+							{error && <p className="text-xs text-error">{error}</p>}
+						</div>
+						<div className="modal-action">
+							<button
+								type="button"
+								className="btn btn-ghost btn-sm"
+								onClick={() => dialog.current?.close()}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								className="btn btn-primary btn-sm"
+								disabled={busy}
+								onClick={() => void commit()}
+							>
+								{busy ? "Saving…" : "Save Access"}
+							</button>
+						</div>
+					</div>
+					<form method="dialog" className="modal-backdrop">
+						<button aria-label="Close the access dialog" />
+					</form>
+				</dialog>
+			)}
+		</>
 	);
 }
 

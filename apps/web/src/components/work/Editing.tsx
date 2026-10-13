@@ -113,10 +113,10 @@ export function InlineField<V>({
 			) : (
 				<div className="space-y-2">
 					{renderEdit(draft, setDraft, () => {
-					setDraft(saved);
-					setError(null);
-					setMode("read");
-				})}
+						setDraft(saved);
+						setError(null);
+						setMode("read");
+					})}
 					{error && <p className="text-xs text-error">{error}</p>}
 					<div className="flex items-center gap-1">
 						{mode === "busy" ? (
