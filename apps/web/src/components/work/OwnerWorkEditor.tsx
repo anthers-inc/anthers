@@ -204,6 +204,13 @@ export default function OwnerWorkEditor({
 		setShowCreditErrors(false);
 		setCreditRows(next);
 	};
+	// A save's (or a decision's) answer is what the page now shows: the editor's rows
+	// follow the row rather than arguing with it. Safe while an edit is open too — the
+	// InlineField copies the saved value into its own draft at open time, so a re-sync
+	// never reaches into a control somebody is typing in.
+	useEffect(() => {
+		setCreditRows((current.credits ?? []).map((r) => ({ ...r, types: [...r.types] })));
+	}, [current.credits]);
 
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -1151,7 +1158,13 @@ function ThumbEditor({
 }
 
 /** The release read view: the row's status, said as a status rather than a control. */
-export function ReleaseSummary({ work, scheduled }: { work: WorkDetail; scheduled: string | null }) {
+export function ReleaseSummary({
+	work,
+	scheduled,
+}: {
+	work: WorkDetail;
+	scheduled: string | null;
+}) {
 	const released = work.releasedAt
 		? new Date(work.releasedAt).toLocaleDateString("en-US", {
 				month: "long",

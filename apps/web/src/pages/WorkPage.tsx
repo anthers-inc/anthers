@@ -298,9 +298,32 @@ export default function WorkPage() {
 					<div className="flex-1">
 						<PreviewBar />
 					</div>
-					<Link to={studioEditWorkUrl(work.publicId ?? work.id)} className="btn btn-primary btn-sm">
-						Edit This Work
-					</Link>
+					{/* A video's editing surface is the page itself now — the "Edit" affordance
+					    leaves the preview rather than rounding a redirect loop through the
+					    Studio route this page no longer serves for video (2026-10-13). */}
+					{work.type === "video" ? (
+						<button
+							type="button"
+							className="btn btn-primary btn-sm"
+							onClick={() => {
+								const p = new URLSearchParams(window.location.search);
+								p.delete("previewAs");
+								p.delete("previewOwned");
+								navigate(`${window.location.pathname}${p.toString() ? `?${p.toString()}` : ""}`, {
+									replace: true,
+								});
+							}}
+						>
+							Edit This Work
+						</button>
+					) : (
+						<Link
+							to={studioEditWorkUrl(work.publicId ?? work.id)}
+							className="btn btn-primary btn-sm"
+						>
+							Edit This Work
+						</Link>
+					)}
 				</div>
 			)}
 
@@ -483,7 +506,16 @@ export default function WorkPage() {
 					    version of the very same information, in the same two columns (2026-10-13);
 					    every other kind keeps the page as it was. */}
 					{work.type === "video" ? (
-						<VideoVisitorRecord work={work} refetch={refetch} />
+						<>
+							{/* A Sticker may be given on any Work, gated or not, purchased or not — it
+							    rides above the columns so a giver meets it right after watching. */}
+							<StickerBar
+								subjectType="work"
+								subjectId={work.id}
+								label={work.title ?? "this Work"}
+							/>
+							<VideoVisitorRecord work={work} refetch={refetch} />
+						</>
 					) : (
 						<>
 							{!isWriting(work.type) && <WorkDescription work={work} />}

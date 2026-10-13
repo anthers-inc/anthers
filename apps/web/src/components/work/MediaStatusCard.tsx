@@ -23,16 +23,29 @@ import type { WorkDetail } from "./WorkLayout";
 
 /**
  * One line in the card's variant list: what has been produced from the Work's file.
- * `ready` is presence — the URL the serializer hands over when the object exists.
+ * `ready` is presence — the URL the serializer hands over when the object exists — and
+ * a variant that never came out of a COMPLETED run was never a product of this file
+ * (a video with no audio track has no audio rendition), shown as "—" rather than a
+ * "Pending" nobody is waiting on.
  */
-function Variant({ name, ready }: { name: string; ready: string | "" }) {
+function Variant({
+	name,
+	ready,
+	running,
+}: {
+	name: string;
+	ready: string | "";
+	running?: boolean;
+}) {
 	return (
 		<li className="flex items-center justify-between gap-2 text-xs">
 			<span>{name}</span>
 			{ready ? (
 				<span className="badge badge-success badge-xs badge-outline">Ready</span>
-			) : (
+			) : running ? (
 				<span className="text-base-content/40">Pending</span>
+			) : (
+				<span className="text-base-content/40">—</span>
 			)}
 		</li>
 	);
@@ -111,8 +124,12 @@ export default function MediaStatusCard({
 
 			{type === "video" && work.sourceKey && (
 				<ul className="flex flex-col gap-1">
-					<Variant name="HLS ladder" ready={job?.hlsManifestUrl ?? ""} />
-					<Variant name="Audio-only rendition" ready={job?.audioManifestUrl ?? ""} />
+					<Variant name="HLS ladder" ready={job?.hlsManifestUrl ?? ""} running={running} />
+					<Variant
+						name="Audio-only rendition"
+						ready={job?.audioManifestUrl ?? ""}
+						running={running}
+					/>
 				</ul>
 			)}
 
