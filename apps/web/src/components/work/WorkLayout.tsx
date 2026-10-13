@@ -21,7 +21,7 @@ import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
-import type { Work, WorkCredit } from "@anthers/web-shared/types";
+import type { AccessResult, Work, WorkCredit } from "@anthers/web-shared/types";
 import { CalendarIcon, ClockIcon } from "@heroicons/react/24/outline";
 import { PlayIcon } from "@heroicons/react/24/solid";
 import { type CSSProperties, type MutableRefObject, type ReactNode, useState } from "react";
@@ -68,6 +68,10 @@ export const WORK_TITLE_CLASS = "text-3xl font-bold";
 
 /** The public blurb's typography, likewise. */
 export const WORK_DESCRIPTION_CLASS = "prose max-w-none text-base-content/80";
+
+/** The Details tab's section labels — small, named, uppercased (Parker, 2026-10-13). */
+export const WORK_DETAILS_HEADING_CLASS =
+	"text-xs font-semibold uppercase tracking-wider text-base-content/50";
 
 /**
  * Whether a Work is a piece of writing, which reads as an article rather than as a player.
@@ -297,6 +301,104 @@ export function WorkRating({ work }: { work: WorkDetail }) {
 	);
 }
 
+/**
+ * The access chip, for the byline strip: what opening this Work costs, in one badge.
+ *
+ * A user page passes the resolver's own verdict — `isFree` says Public Access, a
+ * purchasable Work its price, a badge-gated one Members — because the *user's* chip
+ * must be the truth they stand in, not the setting behind it (`presentsAsLocked`'s
+ * lesson: a signed-out visitor is refused free bytes too, and calling that "Gated"
+ * would rename the commons). The creator's page passes no verdict and the chip reads
+ * the table's setting instead — their own draft, gated or public by choice.
+ */
+export function WorkAccessChip({
+	publicAccess,
+	access,
+}: {
+	publicAccess?: boolean;
+	access?: AccessResult | null;
+}) {
+	if (access) {
+		if (access.isFree) {
+			return <span className="badge badge-sm badge-outline badge-success">Public Access</span>;
+		}
+		if (access.requiresPurchase && access.price) {
+			return <span className="badge badge-sm badge-outline badge-secondary">${access.price}</span>;
+		}
+		if (!access.canAccess) {
+			return <span className="badge badge-sm badge-outline">Members</span>;
+		}
+		return <span className="badge badge-sm badge-outline">Yours</span>;
+	}
+	return publicAccess ? (
+		<span className="badge badge-sm badge-outline badge-success">Public Access</span>
+	) : (
+		<span className="badge badge-sm badge-outline">Gated</span>
+	);
+}
+
+export interface WorkBylineProps {
+	work: WorkDetail;
+	/** In place of the title, for a control standing in for it. */
+	title?: ReactNode;
+	/** To the title's right, at the page's edge — a signed-in reader's Share and Save. */
+	actions?: ReactNode;
+	/** After the creator, the kind and any chip the page's mode knows first-hand. */
+	chips?: ReactNode;
+}
+
+/**
+ * The byline strip, under the deliverable (Parker, 2026-10-13): the title on the first
+ * line and the person who made it on the second — avatar, name, a rule, the kind — with
+ * the access chip after it. It replaces the header block above the deliverable, whose
+ * position a player owns: what a Work is and who made it now stands *between* the thing
+ * itself and its record, and Share and Save go with it, to the right, above the side
+ * tabs. The rating is deliberately absent — it is the Rating tab's fact.
+ */
+export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
+	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
+	return (
+		<header className="space-y-1.5">
+			<div className="flex items-start justify-between gap-4">
+				<div className="min-w-0 flex-1">
+					{title ?? (
+						<h1
+							className={workTitleTypography(work.type).className}
+							style={workTitleTypography(work.type).style}
+						>
+							{work.title || "Untitled"}
+						</h1>
+					)}
+				</div>
+				{actions && <div className="flex shrink-0 items-center gap-1 self-center">{actions}</div>}
+			</div>
+			<div className="flex flex-wrap items-center gap-2 text-sm">
+				{work.creator && (
+					<Link
+						to={profileUrl(work.creator.handle)}
+						className="flex items-center gap-2 hover:underline"
+					>
+						{work.creator.avatar ? (
+							<img
+								src={work.creator.avatar}
+								alt={work.creator.handle}
+								className="size-6 rounded-full object-cover"
+							/>
+						) : (
+							<div className="flex size-6 items-center justify-center rounded-full bg-base-300 text-xs font-bold">
+								{work.creator.handle.charAt(0).toUpperCase()}
+							</div>
+						)}
+						{creatorName}
+					</Link>
+				)}
+				<span aria-hidden className="mx-1 h-4 w-px bg-base-300" />
+				<ContentTypeBadge contentType={work.type} />
+				{chips}
+			</div>
+		</header>
+	);
+}
 /**
  * The Work itself, for somebody who may open it: the player, the user, the image, the
  * embedded build or the gated prose, whichever the kind has.

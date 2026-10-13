@@ -182,9 +182,9 @@ export default function StickerBar({
 					type="button"
 					className="btn btn-ghost btn-xs"
 					onClick={() => setPicking(true)}
-					aria-label={`Give a Sticker to ${label}`}
+					aria-label={`Add a Sticker to ${label}`}
 				>
-					{total === 0 ? "Give a Sticker" : "＋"}
+					{total === 0 ? "Add a Sticker" : "＋"}
 				</button>
 			)}
 
@@ -192,7 +192,7 @@ export default function StickerBar({
 				<div className="flex w-full flex-col gap-2 rounded-box border border-base-300 p-3">
 					<div className="flex items-center justify-between">
 						<span className="font-medium text-sm">
-							Give a Sticker{showAll ? "" : ` — ${CURRENT_BATCH.name}`}
+							Add a Sticker{showAll ? "" : ` — ${CURRENT_BATCH.name}`}
 						</span>
 						<button
 							type="button"

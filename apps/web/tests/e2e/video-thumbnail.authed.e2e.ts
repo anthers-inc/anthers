@@ -14,7 +14,6 @@
 import { db } from "@anthers/db/client";
 import { mediaFixtureWork } from "@anthers/db/media-fixture";
 import { works } from "@anthers/db/schema";
-import { THUMBNAIL_RULE } from "@anthers/shared/content";
 import { eq } from "drizzle-orm";
 import { expect, signInAsMediaFixture, test } from "./fixtures";
 
@@ -35,11 +34,12 @@ test("a video's thumbnail can be the frame its creator paused on", async ({ page
 		.where(eq(works.publicId, CLIP.publicId));
 	previous = before.thumbnail;
 
-	// The editing surface is the Work's own page now (2026-10-13): the Studio route
-	// redirects there, and the thumbnail lives in the Details tab as a field.
+	// The editing surface is the Work's own page now (2026-10-13); the thumbnail lives in
+	// the Manage tab since the byline pass — the creator's tab, Media and Thumbnail.
 	await page.goto(`/studio/works/${CLIP.publicId}/edit`);
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
-	await expect(page.getByText(THUMBNAIL_RULE)).toBeVisible();
+	await page.getByRole("tab", { name: "Manage" }).click();
+	await expect(page.getByText(/A video needs a thumbnail before it's released/)).toBeVisible();
 
 	// Wait for a real picture, then pause a second in.
 	await expect

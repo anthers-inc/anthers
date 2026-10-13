@@ -177,24 +177,11 @@ export default function MediaStatusCard({
 	return (
 		<section
 			aria-label="Media status"
-			// `status`, not `alert`: the card is the page's persistent media state.
-			className="rounded-box border border-base-300 bg-base-100 px-4 py-3 flex flex-col gap-2 h-full"
+			// The tab's own section names the media; this holds only its facts.
+			className="flex flex-col gap-3"
 		>
-			<div className="flex items-center gap-2">
-				<h2 className="text-sm font-semibold">Media Status</h2>
-				{(() => {
-					// Only the failures headline here: the in-flight and ready states are the
-					// chips' own answer, the same fact said once rather than twice (Parker's
-					// second pass, 2026-10-13).
-					if (sourceUpload?.status === "failed")
-						return <span className="badge badge-error badge-sm">Upload failed</span>;
-					if (failed) return <span className="badge badge-error badge-sm">Processing failed</span>;
-					return null;
-				})()}
-			</div>
-
 			{type === "video" && (
-				<div className="flex flex-wrap gap-1.5">
+				<div className="flex flex-wrap items-center gap-1.5">
 					{/* The original: the one variant that exists the moment the file does, and
 					    the one chip that acts — replace or remove, from its pencil. */}
 					<VariantChip
@@ -211,6 +198,12 @@ export default function MediaStatusCard({
 					) : (
 						<VariantChip name="Ladder" ready={job?.hlsManifestUrl ?? ""} running={running} />
 					)}
+					{/* The failures stand at the row's end: the in-flight and ready states are
+					    the chips' own answer (Parker's third pass, 2026-10-13). */}
+					{sourceUpload?.status === "failed" && (
+						<span className="badge badge-error badge-sm">Upload failed</span>
+					)}
+					{failed && <span className="badge badge-error badge-sm">Processing failed</span>}
 				</div>
 			)}
 

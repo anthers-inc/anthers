@@ -27,7 +27,7 @@
  * and the field pattern here are what that pass will adopt.
  */
 
-import { needsChosenThumbnail, THUMBNAIL_RULE } from "@anthers/shared/content";
+import { needsChosenThumbnail } from "@anthers/shared/content";
 import {
 	type ContentNote,
 	contentNoteLabel,
@@ -84,12 +84,13 @@ import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
 import {
 	formatOriginallyReleased,
 	WORK_DESCRIPTION_CLASS,
+	WORK_DETAILS_HEADING_CLASS,
+	WorkAccessChip,
+	WorkByline,
 	WorkColumn,
 	WorkCredits,
 	WorkDeliverable,
 	type WorkDetail,
-	WorkHeader,
-	WorkRating,
 	WorkRecordLink,
 	workTitleTypography,
 } from "./WorkLayout";
@@ -494,10 +495,13 @@ export default function OwnerWorkEditor({
 					) : (
 						<p className="text-sm text-base-content/60">No thumbnail yet.</p>
 					)}
+					{/* Creator's own tab: the terms without the sanitizing preamble. The rule
+					    is still the rule — a thumbnail shows in public feeds — but the line
+					    says it plainly rather than excusing itself (Parker, 2026-10-13). */}
 					<p className="max-w-prose text-xs text-base-content/60">
-						{THUMBNAIL_RULE}
 						{needsChosenThumbnail(work.type) &&
-							" A video needs one before it's released: upload an image, or pause the video and use that frame."}
+							"A video needs a thumbnail before it's released: upload an image, or pause the player and use that frame. "}
+						Nothing Mature or Adult in it — it shows in public feeds.
 					</p>
 				</div>
 			)}
@@ -736,9 +740,8 @@ export default function OwnerWorkEditor({
 			renderRead={() => (
 				<p className="text-sm text-base-content/60">
 					<CalendarIcon className="mr-1 inline size-4" />
-					{originalDate
-						? `First released ${formatOriginallyReleased(`${originalDate}T00:00:00.000Z`)}`
-						: "No original release date — it came out here first."}
+					<span className="text-base-content/50">Original release date:</span>{" "}
+					{originalDate ? formatOriginallyReleased(`${originalDate}T00:00:00.000Z`) : "—"}
 				</p>
 			)}
 			renderEdit={(draft, setDraft) => (
@@ -903,7 +906,10 @@ export default function OwnerWorkEditor({
 	);
 
 	const detailsSection = (
-		<div className="flex flex-col gap-5">
+		// Named parts (Parker's third pass, 2026-10-13): the Details tab is the Work's
+		// composition — what it says, when it came out, who may open it — each under its
+		// own heading rather than a flat run of controls.
+		<div className="flex flex-col gap-6">
 			{kindChangeable && (
 				<div className="flex items-center gap-2">
 					<span className="text-sm font-medium">Kind</span>
@@ -924,15 +930,21 @@ export default function OwnerWorkEditor({
 					</span>
 				</div>
 			)}
-			{thumbnailField}
-			{descriptionField}
-			{releaseField}
-			{originalDateField}
-			{/* Access lives in Details too (Parker's first iteration pass, 2026-10-13): the
-			    combined tab keeps the working surface of the page in one place, and the tabs
-			    stay three (Details · Credits · Rating · Accessibility) unless further combining
-			    moves Credits in as well. */}
-			{accessField}
+			<section className="flex flex-col gap-2">
+				<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
+				{descriptionField}
+			</section>
+			<section className="flex flex-col gap-2">
+				<h3 className={WORK_DETAILS_HEADING_CLASS}>Release</h3>
+				{releaseField}
+				{originalDateField}
+			</section>
+			<section className="flex flex-col gap-2">
+				<h3 className={WORK_DETAILS_HEADING_CLASS}>Access</h3>
+				{/* The read names itself in the byline strip's chip; the table under it is
+				    the working truth of who may open this and at what. */}
+				{accessField}
+			</section>
 		</div>
 	);
 
@@ -981,104 +993,106 @@ export default function OwnerWorkEditor({
 			label: "Showings",
 			content: <ShowingsStub work={current} />,
 		},
+		{
+			// The creator's tab — where the record's machinery lives (Parker's third pass,
+			// 2026-10-13): the file's status and its acts, and the thumbnail. A user's page
+			// never renders this tab; the surface is the creator's alone and says so.
+			key: "manage",
+			label: "Manage",
+			content: (
+				<div className="flex flex-col gap-6">
+					<section className="flex flex-col gap-2">
+						<h3 className={WORK_DETAILS_HEADING_CLASS}>Media</h3>
+						<MediaStatusCard
+							work={asRead}
+							sourceUpload={sourceUpload}
+							unpublished={unpublished}
+							cancelBusy={cancelBusy}
+							removeBusy={removalBusy}
+							onCancel={() => void cancelProcessing()}
+							onRemove={() => void removeMedia()}
+							onReplaceFile={(file) =>
+								workUploads.start(current.id, file, { kind: "source", type: "video" })
+							}
+							onRetry={() => {
+								if (sourceUpload) workUploads.retry(sourceUpload.id);
+							}}
+						/>
+					</section>
+					<section className="flex flex-col gap-2">
+						<h3 className={WORK_DETAILS_HEADING_CLASS}>Thumbnail</h3>
+						{thumbnailField}
+					</section>
+				</div>
+			),
+		},
 	];
 
 	return (
 		<WorkColumn type={work.type} wide>
 			<EditingBanner title={current.title} />
 
-			{/* ── Row 1: the header and the Media Status card SPLIT the area above the
-			    video (Parker's first iteration pass, 2026-10-13) ── */}
-			<div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
-				<WorkHeader
-					work={asRead}
-					title={
-						<InlineField<string>
-							label="Title"
-							saved={title}
-							className="w-full min-w-0"
-							renderRead={() => (
-								<h1
-									className={`${workTitleTypography(work.type).className} truncate`}
-									style={workTitleTypography(work.type).style}
-								>
-									{title || "Untitled"}
-								</h1>
-							)}
-							renderEdit={(draft, setDraft) => (
-								<textarea
-									aria-label="Title"
-									rows={1}
-									className={`${workTitleTypography(work.type).className} ${IN_PLACE} ${GROWS} w-full min-w-0 flex-1`}
-									style={workTitleTypography(work.type).style}
-									value={draft}
-									onChange={(e) => setDraft(e.target.value.replace(/\n/g, " "))}
-									onKeyDown={(e) => {
-										if (e.key === "Enter") e.preventDefault();
-									}}
-									placeholder="Work title"
-								/>
-							)}
-							save={(draft) => {
-								const next = draft.trim() || "Untitled";
-								setTitle(next);
-								return saveFields({ title: next });
-							}}
-						/>
-					}
-					dates={
-						<HeaderDates
-							originally={formatOriginallyReleased(current.originallyReleased)}
-							released={
-								current.releasedAt
-									? new Date(current.releasedAt).toLocaleDateString("en-US", {
-											month: "long",
-											day: "numeric",
-											year: "numeric",
-										})
-									: null
-							}
-						/>
-					}
-					// The rating as a user meets it — a Mature or Adult Work's warning badge and
-					// nothing for a General or unrated one (Parker's second pass, 2026-10-13: the
-					// "Not rated yet" chip and "Rate it" link were the Rating tab said twice; the
-					// warning is the one part whose home is the header, because it is a fact about
-					// the thing being watched, not its metadata).
-					rating={<WorkRating work={asRead} />}
-				/>
-
-				<MediaStatusCard
-					work={asRead}
-					sourceUpload={sourceUpload}
-					unpublished={unpublished}
-					cancelBusy={cancelBusy}
-					removeBusy={removalBusy}
-					onCancel={() => void cancelProcessing()}
-					onRemove={() => void removeMedia()}
-					onReplaceFile={(file) =>
-						workUploads.start(current.id, file, { kind: "source", type: "video" })
-					}
-					onRetry={() => {
-						if (sourceUpload) workUploads.retry(sourceUpload.id);
-					}}
-				/>
-			</div>
-
-			{/* ── Row 2: the Work itself, full width ── */}
+			{/* ── The Work itself, full width. Everything above the video is the banner and
+			    nothing else (Parker's third pass, 2026-10-13): a player wants no header
+			    block above it, and what a Work is and who made it reads under it, between
+			    the thing and its record. ── */}
 			<section>
 				<WorkDeliverable work={asRead} videoRef={videoEl} />
 				{!current.sourceKey && (
 					<p className="text-sm text-base-content/60">
-						This Work has no file yet — the Media Status card, above, takes one.
+						This Work has no file yet — Manage, at its right, takes one.
 					</p>
 				)}
 			</section>
 
-			{/* ── Row 3: the two columns, evenly split with the rule BETWEEN them centered —
-			    no inter-column gap: the halves carry their own padding, so the rule stands
-			    exactly at the player's center (Parker's second pass, 2026-10-13) ── */}
-			<div className="grid lg:grid-cols-2 lg:items-start">
+			{/* ── The byline strip: the title (editable in place as everywhere) on the first
+			    line, the creator with the kind and access chips on the second. The rating
+			    line is not here — it is the Rating tab's fact, already above where the tabs
+			    name it (Parker's third pass, 2026-10-13). ── */}
+			<WorkByline
+				work={asRead}
+				title={
+					<InlineField<string>
+						label="Title"
+						saved={title}
+						className="w-full min-w-0"
+						renderRead={() => (
+							<h1
+								className={`${workTitleTypography(work.type).className} truncate`}
+								style={workTitleTypography(work.type).style}
+							>
+								{title || "Untitled"}
+							</h1>
+						)}
+						renderEdit={(draft, setDraft) => (
+							<textarea
+								aria-label="Title"
+								rows={1}
+								className={`${workTitleTypography(work.type).className} ${IN_PLACE} ${GROWS} w-full min-w-0 flex-1`}
+								style={workTitleTypography(work.type).style}
+								value={draft}
+								onChange={(e) => setDraft(e.target.value.replace(/\n/g, " "))}
+								onKeyDown={(e) => {
+									if (e.key === "Enter") e.preventDefault();
+								}}
+								placeholder="Work title"
+							/>
+						)}
+						save={(draft) => {
+							const next = draft.trim() || "Untitled";
+							setTitle(next);
+							return saveFields({ title: next });
+						}}
+					/>
+				}
+				chips={<WorkAccessChip publicAccess={publicAccessNow} />}
+			/>
+
+			{/* ── The record's halves. The rule between them is its own grid column, a
+			    two-pixel span the row's full height: it stands at the player's midline and
+			    reaches the content area's bottom, which a border on one half only ever
+			    reached that half (Parker's third pass, 2026-10-13). ── */}
+			<div className="grid lg:grid-cols-[minmax(0,1fr)_2px_minmax(0,1fr)]">
 				<div className="lg:pr-4">
 					<WorkInfoTabs
 						tabs={infoTabs}
@@ -1086,7 +1100,8 @@ export default function OwnerWorkEditor({
 						onActiveChange={setActiveInfoTab}
 					/>
 				</div>
-				<div className="lg:border-l lg:border-base-300 lg:pl-4">
+				<div aria-hidden className="w-0.5 self-stretch bg-base-content/20 max-lg:hidden" />
+				<div className="lg:pl-4">
 					<WorkSideColumn tabs={sideTabs} work={current} />
 				</div>
 			</div>
@@ -1097,27 +1112,6 @@ export default function OwnerWorkEditor({
 }
 
 /* ── The read views and small controls the tabs and header use ─────────────── */
-
-/** The header's dates slot, owner mode: the saved dates as a user reads them. */
-function HeaderDates({
-	originally,
-	released,
-}: {
-	originally: string | null;
-	released: string | null;
-}) {
-	return (
-		<div className="flex flex-wrap items-center gap-4 text-sm text-base-content/60">
-			{originally && (
-				<span className="flex items-center gap-1">
-					<CalendarIcon className="size-4" />
-					First released {originally}
-				</span>
-			)}
-			{released && <span>Released {released}</span>}
-		</div>
-	);
-}
 
 /**
  * The thumbnail's edit state: the upload and the paused-frame act are what the edit IS.
@@ -1203,18 +1197,21 @@ export function ReleaseSummary({
 				minute: "2-digit",
 			})
 		: null;
-	return (
-		<div className="flex flex-wrap items-center gap-2 text-sm">
-			<span
-				className={`badge badge-sm ${work.visibility === "released" ? "badge-success" : "badge-ghost"}`}
-			>
-				{work.visibility === "released" ? "Released" : "Private"}
-			</span>
-			{released && <span className="text-base-content/60">released {released}</span>}
-			{!released && scheduledAt && (
+	// A labeled value line, not a status badge (Parker's third pass, 2026-10-13): the
+	// publish date is the fact, said between "Published" and its value — and where the
+	// Work has none yet, the value is the dash, not a word about why.
+	if (scheduledAt) {
+		return (
+			<p className="text-sm">
+				<span className="text-base-content/50">Published</span> —{" "}
 				<span className="text-base-content/60">scheduled for {scheduledAt}</span>
-			)}
-		</div>
+			</p>
+		);
+	}
+	return (
+		<p className="text-sm">
+			<span className="text-base-content/50">Published</span> {released ?? "—"}
+		</p>
 	);
 }
 
@@ -1264,7 +1261,8 @@ function DeliverySwitches({
 	);
 }
 
-/** The access read view — what being able to open this Work means, in a line. */
+/** The access read view — what being able to open this Work means, in a line. The chip
+ *  itself lives in the byline strip; this line says the terms. */
 export function AccessSummary({
 	publicAccess,
 	anyoneAllowed,
@@ -1273,12 +1271,7 @@ export function AccessSummary({
 	anyoneAllowed: boolean;
 }) {
 	if (publicAccess) {
-		return (
-			<p className="text-sm">
-				<span className="badge badge-sm badge-success badge-outline mr-2">Public Access</span>
-				Free to everyone, and earning from the Time Pool.
-			</p>
-		);
+		return <p className="text-sm">Free to everyone.</p>;
 	}
 	if (anyoneAllowed) {
 		return (

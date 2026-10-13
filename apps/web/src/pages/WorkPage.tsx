@@ -22,7 +22,7 @@ import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { studioEditWorkUrl } from "@anthers/web-shared/studio";
-import { isAccessResult, type TranscodingJob } from "@anthers/web-shared/types";
+import { type AccessResult, isAccessResult, type TranscodingJob } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { MegaphoneIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -45,6 +45,9 @@ import WorkInfoTabs from "../components/work/WorkInfoTabs";
 import {
 	isWriting,
 	pageHoldsTheMeter,
+	WORK_DETAILS_HEADING_CLASS,
+	WorkAccessChip,
+	WorkByline,
 	WorkColumn,
 	WorkCredits,
 	WorkDeliverable,
@@ -54,6 +57,7 @@ import {
 	WorkRating,
 	WorkRecordLink,
 } from "../components/work/WorkLayout";
+
 import WorkSideColumn, { ShowingsStub } from "../components/work/WorkSideColumn";
 import { reportExternalActivity, useAttentionClaim } from "../lib/attention";
 import { useMeteredBudget } from "../lib/public-access";
@@ -340,25 +344,30 @@ export default function WorkPage() {
 				</div>
 			)}
 
-			<WorkHeader
-				work={work}
-				titleAside={
-					// Save sits beside the title rather than under the player, because it applies
-					// to a gated Work too — it keeps the thing, it does not open it. Share is
-					// beside it (Parker, 2026-10-10 — the top is where a share action lives);
-					// the two are the header's quiet corner, not a toolbar.
-					<div className="flex shrink-0 items-center gap-1">
-						{isAuthenticated && !shareToken && (
-							<ShareLinkButton workId={work.id} slug={work.slug ?? ""} />
-						)}
-						<SaveButton workId={work.id} className="shrink-0" />
-					</div>
-				}
-			/>
+			{work.type !== "video" && (
+				<>
+					<WorkHeader
+						work={work}
+						titleAside={
+							// Save sits beside the title rather than under the player, because it applies
+							// to a gated Work too — it keeps the thing, it does not open it. Share is
+							// beside it (Parker, 2026-10-10 — the top is where a share action lives);
+							// the two are the header's quiet corner, not a toolbar.
+							<div className="flex shrink-0 items-center gap-1">
+								{isAuthenticated && !shareToken && (
+									<ShareLinkButton workId={work.id} slug={work.slug ?? ""} />
+								)}
+								<SaveButton workId={work.id} className="shrink-0" />
+							</div>
+						}
+					/>
 
-			{/* The Work's listing on the network, linked for every reader who can see the
-			    Work — the record is public, so the stranger and the creator see one link. */}
-			<WorkRecordLink work={work} />
+					{/* The Work's listing on the network, linked for every reader who can see the
+					    Work — the record is public, so the stranger and the creator see one link.
+					    A video's record link lives in its Details tab now (the byline pass). */}
+					<WorkRecordLink work={work} />
+				</>
+			)}
 
 			{/* A piece of writing's description is its standfirst, under the headline where a user
 			    expects one; every other kind keeps it under the Work, below. */}
@@ -558,11 +567,30 @@ export default function WorkPage() {
 					    invitation that interrupted that would be the funnel this deliberately is not. */}
 					{shareToken && !user && <SharedWorkBanner sharedBy={work.sharedBy ?? null} />}
 
+					{/* The byline strip, under the deliverable (Parker's third pass, 2026-10-13):
+					    the title and the maker between the thing and its record — the same strip
+					    the creator's editor renders — with Share and Save to its right, above the
+					    side tabs they've always sat near. */}
+					{work.type === "video" && (
+						<WorkByline
+							work={work}
+							actions={
+								<div className="flex shrink-0 items-center gap-1">
+									{isAuthenticated && !shareToken && (
+										<ShareLinkButton workId={work.id} slug={work.slug ?? ""} />
+									)}
+									<SaveButton workId={work.id} className="shrink-0" />
+								</div>
+							}
+							chips={<WorkAccessChip access={access} />}
+						/>
+					)}
+
 					{/* A video gets the SAME tab groups its editor renders — a user's read-only
 					    version of the very same information, in the same two columns (2026-10-13);
 					    every other kind keeps the page as it was. */}
 					{work.type === "video" ? (
-						<VideoVisitorRecord work={work} refetch={refetch} />
+						<VideoVisitorRecord work={work} refetch={refetch} access={access} />
 					) : (
 						<>
 							{!isWriting(work.type) && <WorkDescription work={work} />}
@@ -612,11 +640,22 @@ export default function WorkPage() {
  * pass: Parker reviews the layout in screenshots and the reads get tuned against what
  * they look like, not against a spec.
  */
-function VideoVisitorRecord({ work, refetch }: { work: WorkDetail; refetch: () => void }) {
-	const publicAccess = work.publicAccess ?? false;
+function VideoVisitorRecord({
+	work,
+	refetch,
+	access,
+}: {
+	work: WorkDetail;
+	refetch: () => void;
+	/** The user's own verdict — the access line's and the chip's truth, not the flag. */
+	access: AccessResult | null | undefined;
+}) {
+	const publicAccess = access ? access.isFree : (work.publicAccess ?? false);
 	const rating = work.maturity;
 	return (
-		<div className="grid lg:grid-cols-2 lg:items-start">
+		// The rule between the halves is its own grid column — the same two-pixel, full-
+		// height divider the creator's editor draws (Parker's third pass, 2026-10-13).
+		<div className="grid lg:grid-cols-[minmax(0,1fr)_2px_minmax(0,1fr)]">
 			<div className="lg:pr-4">
 				<WorkInfoTabs
 					tabs={[
@@ -624,24 +663,32 @@ function VideoVisitorRecord({ work, refetch }: { work: WorkDetail; refetch: () =
 							key: "details",
 							label: "Details",
 							content: (
-								<div className="flex flex-col gap-4">
-									<WorkDescription work={work} />
-									<ReleaseSummary work={work} scheduled={work.scheduledReleaseAt ?? null} />
-									{/* Access reads in Details too — the combined tab the editor uses. */}
-									<p className="text-sm">
-										{publicAccess ? (
-											<>
-												<span className="badge badge-sm badge-success badge-outline mr-2">
-													Public Access
+								// Named parts, as the creator's Details tab is (Parker, 2026-10-13):
+								// what it says, when it came out — with the listing's address — and
+								// who may open it.
+								<div className="flex flex-col gap-6">
+									<section className="flex flex-col gap-2">
+										<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
+										<WorkDescription work={work} />
+									</section>
+									<section className="flex flex-col gap-2">
+										<h3 className={WORK_DETAILS_HEADING_CLASS}>Release</h3>
+										<ReleaseSummary work={work} scheduled={work.scheduledReleaseAt ?? null} />
+										<WorkRecordLink work={work} />
+									</section>
+									<section className="flex flex-col gap-2">
+										<h3 className={WORK_DETAILS_HEADING_CLASS}>Access</h3>
+										{/* The chip names this in the byline strip; the line says the terms. */}
+										<p className="text-sm">
+											{publicAccess ? (
+												"Free to everyone."
+											) : (
+												<span className="text-base-content/60">
+													Not free to everyone — the unlock above says what opens it.
 												</span>
-												Free to everyone.
-											</>
-										) : (
-											<span className="text-base-content/60">
-												Not free to everyone — the unlock above says what opens it.
-											</span>
-										)}
-									</p>
+											)}
+										</p>
+									</section>
 								</div>
 							),
 						},
@@ -670,7 +717,8 @@ function VideoVisitorRecord({ work, refetch }: { work: WorkDetail; refetch: () =
 					]}
 				/>
 			</div>
-			<div className="lg:border-l lg:border-base-300 lg:pl-4">
+			<div aria-hidden className="w-0.5 self-stretch bg-base-content/20 max-lg:hidden" />
+			<div className="lg:pl-4">
 				<WorkSideColumn
 					tabs={[
 						{
