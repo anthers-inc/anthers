@@ -117,8 +117,10 @@ import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { queueScansForWork } from "../jobs/scan-media.js";
+import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
 import { routePagedIngest } from "../lib/paged-ingest.js";
+import { probeVideo } from "../lib/video-frames.js";
 import { buildDeliveryHost, mintPlayToken, PLAY_TOKEN_TTL_SECONDS } from "../lib/web-build.js";
 import { getOptionalUserId, requireAuth, requireCreator } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
@@ -1254,6 +1256,23 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 	}
 	return null;
 }
+
+/** The creator's live frame extractions, one per Work — the request-scoped busy guard
+ *  `POST thumbnail-frame` promises. A Set because one Work's extract is one at a time;
+ *  two different Works extracting at once is fine (they are the creator's own requests,
+ *  each bounded by `FRAME_EXTRACT_TIMEOUT_MS`).
+ *
+ *  ⚠️ This is process state, and the api component runs one instance today — the honest
+ *  shape of a guard that protects one CPU rather than a distributed resource. If the api
+ *  component ever runs more, the guard still protects each process's ffmpeg from stacking,
+ *  and two extracts racing would need a shared lock — a deliberate step up, not assumed.
+ */
+const frameExtractionsBusy = new Set<number>();
+
+/** A single-frame extraction reads only up to the paused moment and encodes one frame —
+ *  seconds, not minutes. The timeout exists so a wedged reader (an unreachable storage
+ *  address) fails the request instead of hanging it. */
+const FRAME_EXTRACT_TIMEOUT_MS = 20_000;
 
 /**
  * Thumbnails render directly as <img src>; older rows stored a bare storage key instead
@@ -5537,6 +5556,172 @@ const contentRoutes = new Hono()
 			),
 		});
 	})
+
+	/**
+	 * Take the video's paused moment as its thumbnail — server-side.
+	 *
+	 * ⚠️ **Why the client does not grab the frame itself** (Parker's report, work 23): the
+	 * frame the browser draws into a canvas comes from the media element's bytes, and any
+	 * cross-origin source taints that canvas — so before the transcode ladder exists, when
+	 * the video plays its **original** through a signed cross-origin storage address
+	 * (70.06), `canvas.toBlob` throws and the creator was told their browser could not take
+	 * a frame it demonstrably could. After the ladder, playback is fed by the page's own
+	 * script (hls.js/MSE), which is why the button started working at exactly the moment
+	 * processing finished — a dependency on what was playing rather than on the choice
+	 * itself. Extracting on the server reads the original in place (`readableInput`) at the
+	 * timestamp the creator paused on and works everywhere, for every kind of work, with
+	 * no CORS configuration dependency at all.
+	 *
+	 * The result is stored exactly as an uploaded thumbnail: the creator's own prefix, the
+	 * public ACL the thumbnail media type earns, and its own scan (`queueScansForWork`),
+	 * because it is new image bytes even though they derive from a cleaned source. The
+	 * creator's own save flow never carries this value — the route stores and answers with
+	 * the saved row, so the interaction is one act with no raced client state behind it
+	 * (see the save-race this closes, the batch edit page's touched-flag bug).
+	 *
+	 * One extract at a time per Work: rapid clicks stack requests on ffmpeg else, and two
+	 * racing extracts writing the same row would be a last-write race over one choice.
+	 */
+	.post(
+		"/works/:id/thumbnail-frame",
+		requireAuth,
+		zValidator("json", z.object({ atSeconds: z.number().finite().nonnegative() }), invalidBody),
+		async (c) => {
+			const user = c.get("user");
+			const id = Number(c.req.param("id"));
+			const [work] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+			if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			if (work.type !== "video") {
+				return c.json(
+					{ error: "Only a video can give a frame.", code: "thumbnail_frame_not_video" },
+					400,
+				);
+			}
+			if (!work.sourceKey) {
+				return c.json(
+					{
+						error: "This Work has no file yet — play the video first.",
+						code: "thumbnail_frame_no_media",
+					},
+					409,
+				);
+			}
+
+			const busy = frameExtractionsBusy.has(id);
+			if (busy) {
+				return c.json(
+					{
+						error: "A frame from this video is already being taken — one moment.",
+						code: "thumbnail_frame_busy",
+					},
+					409,
+				);
+			}
+
+			const { atSeconds } = c.req.valid("json");
+			frameExtractionsBusy.add(id);
+			try {
+				let at = atSeconds;
+				// Read the duration straight from the stored original, so a paused moment
+				// past the end (or a client claiming one) still lands inside the file.
+				const input = await storage.readableInput(work.sourceKey);
+				const probe = await probeVideo(input);
+				if (!probe) {
+					return c.json(
+						{
+							error: "This file has no readable video to take a frame from.",
+							code: "thumbnail_frame_unreadable",
+						},
+						409,
+					);
+				}
+				at = Math.max(0, Math.min(at, Math.max(probe.durationSeconds - 0.05, 0)));
+
+				// One frame into the pipe: input seeking (`-ss` before `-i`) stops ffmpeg
+				// reading past the moment, and `image2pipe` keeps the JPEG on stdout rather
+				// than on this process's disk. `ffmpegCommand` pins the threads the plan
+				// is sized to (`lib/ffmpeg.ts`).
+				const proc = Bun.spawn(
+					ffmpegCommand(
+						input,
+						["-frames:v", "1", "-q:v", "2", "-f", "image2pipe", "-c:v", "mjpeg", "-"],
+						["-v", "error", "-ss", at.toFixed(3)],
+					),
+					{ stdout: "pipe", stderr: "pipe", stdin: "ignore" },
+				);
+				const withTimeout = Promise.resolve(new Response(proc.stdout).arrayBuffer());
+				let jpeg: ArrayBuffer;
+				try {
+					jpeg = await Promise.race([
+						withTimeout,
+						new Promise<never>((_, reject) =>
+							setTimeout(() => {
+								proc.kill();
+								reject(new Error("extraction timed out"));
+							}, FRAME_EXTRACT_TIMEOUT_MS).unref(),
+						),
+					]);
+				} finally {
+					await proc.exited;
+				}
+				if (jpeg.byteLength === 0) {
+					return c.json(
+						{
+							error:
+								"No frame came out of that moment — try pausing somewhere a picture is showing.",
+							code: "thumbnail_frame_empty",
+						},
+						409,
+					);
+				}
+
+				const uuid = crypto.randomUUID().replace(/-/g, "");
+				const key = `creators/${user.id}/thumbnails/${id}/${uuid}.jpg`;
+				await storage.upload(key, Buffer.from(jpeg), "image/jpeg", "public");
+
+				const [updated] = await db
+					.update(works)
+					.set({ thumbnail: await storage.getUrl(key), updatedAt: new Date() })
+					.where(eq(works.id, id))
+					.returning();
+				await queueScansForWork(updated);
+
+				const [workAssets, jobRows] = await Promise.all([
+					db.select().from(assets).where(eq(assets.workId, id)),
+					db
+						.select()
+						.from(transcodingJobs)
+						.where(eq(transcodingJobs.workId, id))
+						.orderBy(desc(transcodingJobs.createdAt)),
+				]);
+				const [buildRows, buildFileRows] = await Promise.all([
+					db.select().from(webBuilds).where(eq(webBuilds.workId, id)),
+					db
+						.select({ file: webBuildFiles })
+						.from(webBuildFiles)
+						.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
+						.where(eq(webBuilds.workId, id)),
+				]);
+				const filesByBuild = new Map<number, WebBuildFileRow[]>();
+				for (const { file } of buildFileRows) {
+					const list = filesByBuild.get(file.buildId) ?? [];
+					list.push(file);
+					filesByBuild.set(file.buildId, list);
+				}
+				return c.json({
+					work: await serializeWork(
+						updated,
+						workAssets,
+						jobRows[0] ?? null,
+						buildRows.map((b) => ({ ...b, files: filesByBuild.get(b.id) ?? [] })),
+						deliveryCtx(),
+					),
+				});
+			} finally {
+				frameExtractionsBusy.delete(id);
+			}
+		},
+	)
 
 	/**
 	 * A Work's rating appeals — the creator's own record of what they contested and how it

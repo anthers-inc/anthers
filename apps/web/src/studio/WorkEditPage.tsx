@@ -134,7 +134,6 @@ import {
 	workTitleTypography,
 } from "../components/work/WorkLayout";
 import { useMediaPlayer } from "../lib/media-player";
-import { frameOf } from "../lib/video-frame";
 import CreditsSection from "./CreditsSection";
 import PanelEditor from "./PanelEditor";
 import RatingMatrix from "./RatingMatrix";
@@ -288,6 +287,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	const videoEl = useRef<HTMLVideoElement | null>(null);
 	/** Why taking a frame did not work, said beside the button. */
 	const [frameError, setFrameError] = useState<string | null>(null);
+	const [frameBusy, setFrameBusy] = useState(false);
 
 	const details = useWorkDetails(type, editing);
 
@@ -559,7 +559,17 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		}
 	};
 
-	/** Make the frame the video is paused on its thumbnail. See `lib/video-frame.ts`. */
+	/**
+	 * Store the moment the video is paused on as its thumbnail — the SERVER extracts it.
+	 *
+	 * ⚠️ **The click pauses first, so the thumbnail is the frame the creator is looking
+	 * at**: extraction reads the original at `currentTime`, and a playing video's moment
+	 * is the click's instant, which is nobody's choice.
+	 *
+	 * ⚠️ **The route saves the field itself** — its answer is the saved row, one act, no
+	 * client upload in flight (the save-race this closes) — so adopting the row here
+	 * disarms the thumbnail for the very value the server now stores.
+	 */
 	const takeCurrentFrame = async () => {
 		setFrameError(null);
 		const video = videoEl.current;
@@ -567,14 +577,34 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			setFrameError("Play the video to the moment you want first.");
 			return;
 		}
-		let frame: File;
+		if (!video.paused) video.pause();
+		setFrameBusy(true);
 		try {
-			frame = await frameOf(video);
+			const res = await client.api.content.works[":id"]["thumbnail-frame"].$post({
+				param: { id: String(current.id) },
+				json: { atSeconds: video.currentTime },
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => null)) as { error?: string } | null;
+				setFrameError(body?.error || "Taking the frame didn't work. Upload an image instead.");
+				return;
+			}
+			const { work: updated } = (await res.json()) as { work: Work };
+			// The server stored the field, so what came back is settled: adopt the row and
+			// let the frame show up in the thumbnail slot at once.
+			const fresh = updated as Work;
+			setCurrent(fresh);
+			thumbnailTouched.current = false;
+			thumbnailInFlight.current = 0;
+			if (fresh.thumbnail) {
+				setThumbnailUrl(fresh.thumbnail);
+				setThumbnailPreview(keyToPreview(fresh.thumbnail));
+			}
 		} catch {
-			setFrameError("This browser can't take a frame from the video. Upload an image instead.");
-			return;
+			setFrameError("Taking the frame didn't work. Upload an image instead.");
+		} finally {
+			setFrameBusy(false);
 		}
-		await handleThumbnail(frame);
 	};
 
 	/**
@@ -1149,6 +1179,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 							setThumbnailPreview(null);
 						}}
 						onFrame={type === "video" && fileReady ? takeCurrentFrame : undefined}
+						frameBusy={frameBusy}
 						frameError={frameError}
 					/>
 				)}
@@ -1767,6 +1798,7 @@ function Thumbnail({
 	onFile,
 	onClear,
 	onFrame,
+	frameBusy,
 	frameError,
 }: {
 	preview: string | null;
@@ -1774,6 +1806,8 @@ function Thumbnail({
 	onFile: (file: File) => void;
 	onClear: () => void;
 	onFrame?: () => void;
+	/** While the server is extracting the paused moment into the field. */
+	frameBusy: boolean;
 	frameError: string | null;
 }) {
 	return (
@@ -1796,8 +1830,13 @@ function Thumbnail({
 						onClear={onClear}
 					/>
 					{onFrame && (
-						<button type="button" className="btn btn-outline btn-sm" onClick={onFrame}>
-							Use This Frame
+						<button
+							type="button"
+							className="btn btn-outline btn-sm"
+							onClick={onFrame}
+							disabled={frameBusy}
+						>
+							{frameBusy ? "Taking this moment…" : "Use This Frame"}
 						</button>
 					)}
 				</div>
