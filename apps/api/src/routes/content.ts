@@ -1566,6 +1566,24 @@ async function postsUsingWork(workId: number): Promise<
 		.where(eq(postWorkRefs.workId, workId));
 }
 
+/**
+ * The Projects a Work sits in — published ones, in the order the project places them —
+ * as the Showings panel's first facts. The creator's own profile card needs no query at
+ * all (the Work already carries its creator), so this is the only lookup a Showings
+ * stub takes today; the channels, collections and collaborations that will join these
+ * rows are future facts, and the stub text says so where they are still to come.
+ */
+async function projectsShowingWork(
+	workId: number,
+): Promise<Array<{ slug: string; title: string }>> {
+	return await db
+		.select({ slug: projects.slug, title: projects.title })
+		.from(projectItems)
+		.innerJoin(projects, eq(projects.id, projectItems.projectId))
+		.where(and(eq(projectItems.workId, workId), eq(projects.isPublished, true)))
+		.orderBy(asc(projectItems.sortOrder));
+}
+
 // ─── Post → Work references ─────────────────────────────────────────────────────
 
 /**
@@ -4718,6 +4736,14 @@ const contentRoutes = new Hono()
 		const captionRows = await listCaptionTracks(work.id);
 
 		/*
+		 * The stub foundation of **Showings** — where a Work can be found. The creator's
+		 * profile card and every Project it sits in today; channels, collections and
+		 * collaborations follow when their machinery exists, and the client's side panel
+		 * is the one place that reads this.
+		 */
+		const shownOn = { projects: await projectsShowingWork(work.id) };
+
+		/*
 		 * The owner short-circuit — and the one place creator preview has to interrupt it.
 		 *
 		 * A creator's own Work comes back through `serializeWork`, the owner-facing shape:
@@ -4741,14 +4767,17 @@ const contentRoutes = new Hono()
 			// owner's own session, exactly what this branch serves.
 			const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx());
 			return c.json({
-				work: await serializeWork(
-					work,
-					workAssets,
-					playableJob,
-					webBuildsList,
-					deliveryCtx(),
-					captionRows,
-				),
+				work: {
+					...(await serializeWork(
+						work,
+						workAssets,
+						playableJob,
+						webBuildsList,
+						deliveryCtx(),
+						captionRows,
+					)),
+					shownOn,
+				},
 			});
 		}
 
@@ -4836,6 +4865,7 @@ const contentRoutes = new Hono()
 				sharedBy: sharedBy != null ? await sharerName(sharedBy) : null,
 				// Where this Work has been announced — the other half of the reference.
 				postedIn: await postsUsingWork(work.id),
+				shownOn,
 			},
 		});
 	})

@@ -94,6 +94,20 @@ export interface WorkCredit {
 	contributor: string;
 	types: WorkCreditType[];
 	/**
+	 * The contributor presented as a person, when the stored contributor is a DID that
+	 * resolves to one. Name, profile page and avatar ride here; `contributor` stays the
+	 * stored (or, on the user shape, the resolved plain-text) value so the acceptance
+	 * linkage round-trips. The DID itself is presented on hover or as subtext — it is
+	 * still the credit's identity, never the headline.
+	 */
+	contributorProfile?: {
+		/** The Anthers handle an account page answers; null when no account row resolves. */
+		handle: string | null;
+		displayName: string | null;
+		/** A served avatar URL; null or "" when the account has none. */
+		avatar: string | null;
+	} | null;
+	/**
 	 * Present only when this credit names the user's own identity and awaits their
 	 * confirmation. The user-facing serialization emits it so the front-end can render
 	 * Accept/Decline controls; the credit ships with role and types intact because those

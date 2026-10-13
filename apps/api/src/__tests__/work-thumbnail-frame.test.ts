@@ -38,8 +38,6 @@ let cookie = "";
 let otherCookie = "";
 let creatorId = 0;
 const workIds: number[] = [];
-/** Storage keys this suite minted, so teardown can point at them by name. */
-const frameKeys: string[] = [];
 let sent: Array<{ name: string; data: Record<string, unknown> }> = [];
 let sendSpy: ReturnType<typeof spyOn>;
 
@@ -112,14 +110,7 @@ beforeAll(async () => {
 afterAll(async () => {
 	sendSpy.mockRestore();
 	if (workIds.length > 0) await db.delete(works).where(inArray(works.id, workIds));
-	if (frameKeys.length > 0) {
-		await db.delete(mediaScans).where(
-			inArray(
-				mediaScans.storageKey,
-				frameKeys.map((k) => sql`${k}`),
-			),
-		);
-	}
+	await db.delete(mediaScans).where(sql`${mediaScans.storageKey} LIKE ${`%framethumb-${id}-%`}`);
 	// The storage objects themselves need no sweep: this suite's session owns its content
 	// directory and the next session starts empty.
 });
@@ -207,9 +198,6 @@ describe("POST /works/:id/thumbnail-frame", () => {
 		// creator's overwrite, not a race.
 		const [row] = await db.select().from(works).where(eq(works.id, workId));
 		expect(row.thumbnail).toBe(work.thumbnail);
-
-		// Own the storage reference the same way the row does, for scans cleanup.
-		frameKeys.push(work.thumbnail.replace(/^.*\/content\//, ""));
 	});
 
 	it("clamps a moment past the end to the file's own duration", async () => {

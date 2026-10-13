@@ -316,6 +316,15 @@ export async function findRejectedCredit(
  * an unaccepted one is withheld from everyone but the two parties above.
  */
 export type UserWorkCredit = WorkCredit & {
+	/**
+	 * Who a DID credit names as a person, presented beside the stored (or resolved)
+	 * contributor: name, Anthers handle and avatar. Rides the overlay — never stored —
+	 * and is present in both the user and owner shapes, because both presentations show
+	 * a person; the DID stays the record and reads as subtext.
+	 */
+	contributorProfile?:
+		| { handle: string | null; displayName: string | null; avatar: string | null }
+		| null;
 	awaitingYourConfirmation?: true;
 	awaitingContributorConfirmation?: true;
 };
@@ -378,6 +387,7 @@ export async function creditsForUser(
 				atprotoDid: users.atprotoDid,
 				displayName: users.displayName,
 				handle: users.atprotoHandle,
+				avatar: users.avatar,
 			})
 			.from(users)
 			.where(inArray(users.atprotoDid, dids)),
@@ -390,6 +400,15 @@ export async function creditsForUser(
 	const accepted = new Set(acceptedRows.map((r) => `${r.contributorDid}|${r.role}`));
 	const nameForDid = new Map(
 		accountRows.map((r) => [r.atprotoDid, r.displayName?.trim() || r.handle]),
+	);
+	// Who a credit names as a PERSON, presented beside the name: display name, profile
+	// page handle and avatar. Rides every visible DID credit — the presented identity is
+	// the name and the face, and the stored (or subtext) DID stays on the record.
+	const profileForDid = new Map(
+		accountRows.map((r) => [
+			r.atprotoDid,
+			{ handle: r.handle, displayName: r.displayName, avatar: r.avatar },
+		]),
 	);
 	const userDid = userRows[0]?.atprotoDid ?? null;
 	const isCreator = userId != null && userId === work.creatorId;
@@ -405,16 +424,24 @@ export async function creditsForUser(
 			// An acceptance implies a users row (acceptance is a signed-in account acting on
 			// its own DID), so a miss is the invariant broken. Withheld rather than named: a
 			// bare `did:` string in public copy is exactly what this overlay exists to prevent.
-			if (name) visible.push({ ...credit, contributor: name });
+			if (name) visible.push({ ...credit, contributor: name, contributorProfile: profileForDid.get(credit.contributor) });
 			else if (isCreator || userDid === credit.contributor) visible.push(credit);
 			continue;
 		}
 		if (userDid === credit.contributor) {
-			visible.push({ ...credit, awaitingYourConfirmation: true });
+			visible.push({
+				...credit,
+				awaitingYourConfirmation: true,
+				contributorProfile: profileForDid.get(credit.contributor) ?? null,
+			});
 			continue;
 		}
 		if (isCreator) {
-			visible.push({ ...credit, awaitingContributorConfirmation: true });
+			visible.push({
+				...credit,
+				awaitingContributorConfirmation: true,
+				contributorProfile: profileForDid.get(credit.contributor) ?? null,
+			});
 		}
 		// Everybody else — signed-out and third-party users alike — does not see the
 		// credit at all: an unconfirmed claim about a third party is not a liner note.
@@ -445,7 +472,7 @@ export async function creditsForOwner(work: OverlayWork): Promise<UserWorkCredit
 
 	const didCredits = credits.filter((c) => creditContributorIsDid(c.contributor));
 	const dids = [...new Set(didCredits.map((c) => c.contributor))];
-	const [acceptedRows, rejectedRows] = await Promise.all([
+	const [acceptedRows, rejectedRows, accountRows] = await Promise.all([
 		db
 			.select({ contributorDid: creditAcceptances.contributorDid, role: creditAcceptances.role })
 			.from(creditAcceptances)
@@ -458,9 +485,28 @@ export async function creditsForOwner(work: OverlayWork): Promise<UserWorkCredit
 			.where(
 				and(eq(creditRejections.workId, work.id), inArray(creditRejections.contributorDid, dids)),
 			),
+		// The account card a credit presents with: name, profile page and avatar. The
+		// stored contributor still round-trips verbatim — see the docblock above — and
+		// this rides BESIDE it, so the creator credits a person they are looking at a
+		// person, not a did: string.
+		db
+			.select({
+				atprotoDid: users.atprotoDid,
+				displayName: users.displayName,
+				handle: users.atprotoHandle,
+				avatar: users.avatar,
+			})
+			.from(users)
+			.where(inArray(users.atprotoDid, dids)),
 	]);
 	const decided = new Set(
 		[...acceptedRows, ...rejectedRows].map((r) => `${r.contributorDid}|${r.role}`),
+	);
+	const profileForDid = new Map(
+		accountRows.map((r) => [
+			r.atprotoDid,
+			{ handle: r.handle, displayName: r.displayName, avatar: r.avatar },
+		]),
 	);
 
 	// Pass-through-plus-flags: every credit ships with its stored contributor untouched.
@@ -470,8 +516,12 @@ export async function creditsForOwner(work: OverlayWork): Promise<UserWorkCredit
 	return credits.map((credit) =>
 		creditContributorIsDid(credit.contributor) &&
 		!decided.has(`${credit.contributor}|${credit.role}`)
-			? { ...credit, awaitingContributorConfirmation: true }
-			: credit,
+			? {
+					...credit,
+					awaitingContributorConfirmation: true,
+					contributorProfile: profileForDid.get(credit.contributor) ?? null,
+				}
+			: { ...credit, contributorProfile: profileForDid.get(credit.contributor) ?? null },
 	);
 }
 
