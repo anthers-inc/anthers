@@ -21,7 +21,7 @@ import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
-import type { Work } from "@anthers/web-shared/types";
+import type { Work, WorkCredit } from "@anthers/web-shared/types";
 import { CalendarIcon, ClockIcon } from "@heroicons/react/24/outline";
 import { PlayIcon } from "@heroicons/react/24/solid";
 import { type CSSProperties, type MutableRefObject, type ReactNode, useState } from "react";
@@ -54,6 +54,13 @@ export type WorkDetail = Work & {
 		isPublished: boolean;
 		postedAt: string | null;
 	}[];
+	/**
+	 * Where this Work can be found — the facts of the Showings panel. The creator's
+	 * profile is read off `creator`; the Projects carrying it ride here, in the order
+	 * the project places them. Channels, collections and collaborations follow when
+	 * their machinery exists; the panel's stub text is the promise's current shape.
+	 */
+	shownOn?: { projects: Array<{ slug: string; title: string }> };
 };
 
 /** The title's typography, so a control standing in for the title reads as the title. */
@@ -600,6 +607,13 @@ function CreditConfirmationControls({
  * badged rather than buried. Public: any user of a released Work sees these, gated or
  * not, as they see the description. A Work with no credits renders nothing.
  *
+ * ⭐ **A DID credit names a person, not a protocol** (Parker, 2026-10-13): the account
+ * presents as its avatar and display name, and clicking it goes to the person — their
+ * Anthers profile page when their account resolves (`/@handle`), otherwise their Bluesky
+ * profile by the DID, which is the one address a DID always has a way to name. The DID
+ * itself stays on the record as the tooltip's hover text, never the line's face. A
+ * plain-name contributor renders as text and is never a link — it is nobody's identity.
+ *
  * A credit the user's own identity has not confirmed yet renders beside a
  * "You're credited — confirm?" ask with Accept and Decline, because the credit is a
  * public claim about them and their word is what publishes it.
@@ -633,7 +647,7 @@ export function WorkCredits({
 								{credit.contributor && (
 									<>
 										{" "}
-										<span className="text-base-content/70">{credit.contributor}</span>
+										<CreditIdentity credit={credit} />
 									</>
 								)}
 							</span>
@@ -655,4 +669,54 @@ export function WorkCredits({
 			</ul>
 		</section>
 	);
+}
+
+/**
+ * One credit's contributor, presented as the person it names. The profile card rides the
+ * overlay when the DID resolves (both shapes attach it); below it, the DID's own Bluesky
+ * profile is the fallback — the same person, at the address their DID is the key to.
+ */
+function CreditIdentity({ credit }: { credit: WorkCredit }) {
+	const profile = credit.contributorProfile;
+	const isDid = credit.contributor.startsWith("did:");
+	const didAttr = isDid ? credit.contributor : undefined;
+	if (profile?.handle) {
+		return (
+			<Link
+				to={profileUrl(profile.handle)}
+				title={didAttr}
+				className="inline-flex items-baseline gap-1.5"
+			>
+				{profile.avatar ? (
+					<img
+						src={profile.avatar}
+						alt=""
+						className="inline h-5 w-5 self-center rounded-full object-cover"
+					/>
+				) : (
+					<span className="inline-flex h-5 w-5 self-center items-center justify-center rounded-full bg-primary/20 text-xs font-bold">
+						{(profile.displayName || profile.handle).charAt(0).toUpperCase()}
+					</span>
+				)}
+				<span className="text-base-content/70 underline decoration-base-content/20 underline-offset-2 hover:decoration-base-content/60">
+					{profile.displayName || profile.handle}
+				</span>
+			</Link>
+		);
+	}
+	if (isDid) {
+		return (
+			<a
+				href={`https://bsky.app/profile/${credit.contributor}`}
+				title={didAttr}
+				target="_blank"
+				rel="noreferrer"
+				className="text-base-content/70 underline decoration-base-content/20 underline-offset-2 hover:decoration-base-content/60"
+			>
+				{profile?.displayName || credit.contributor}
+			</a>
+		);
+	}
+	// No identity behind it on the network, and no Anthers account: a name as words.
+	return <span className="text-base-content/70">{credit.contributor}</span>;
 }

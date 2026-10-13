@@ -100,7 +100,7 @@ import {
 	RATED_PUBLIC_ACCESS_HELP,
 	showsRatedPublicAccessNotice,
 } from "@anthers/web-shared/rated-public-access";
-import { Link, useParams } from "@anthers/web-shared/router";
+import { Link, Navigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { studioUrl } from "@anthers/web-shared/studio";
 import {
@@ -198,6 +198,16 @@ export default function WorkEditPage() {
 			live = false;
 		};
 	}, [publicId, generation]);
+
+	/**
+	 * A video's editing surface is the Work's OWN page now (the unified layout,
+	 * 2026-10-13): the Studio ends at the Works list, and this route's video addresses
+	 * redirect there. Every other kind still meets this editor, until its kind's pass
+	 * moves it onto the same surface.
+	 */
+	if (loaded?.type === "video") {
+		return <Navigate to={workUrl(loaded)} replace />;
+	}
 
 	if (loading) {
 		return (

@@ -34,8 +34,14 @@ import StickerBar from "../components/post/StickerBar";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectPricing from "../components/project/ProjectPricing";
 import WorkReviews from "../components/project/WorkReviews";
+import OwnerWorkEditor, {
+	AccessSummary,
+	CaptionsSummary,
+	ReleaseSummary,
+} from "../components/work/OwnerWorkEditor";
 import SharedWorkBanner from "../components/work/SharedWorkBanner";
 import ShareLinkButton from "../components/work/ShareLinkButton";
+import WorkInfoTabs from "../components/work/WorkInfoTabs";
 import {
 	isWriting,
 	pageHoldsTheMeter,
@@ -45,8 +51,10 @@ import {
 	WorkDescription,
 	type WorkDetail,
 	WorkHeader,
+	WorkRating,
 	WorkRecordLink,
 } from "../components/work/WorkLayout";
+import WorkSideColumn, { ShowingsStub } from "../components/work/WorkSideColumn";
 import { reportExternalActivity, useAttentionClaim } from "../lib/attention";
 import { useMeteredBudget } from "../lib/public-access";
 import { useShareToken, withShareToken } from "../lib/share-link";
@@ -229,6 +237,13 @@ export default function WorkPage() {
 	 */
 	const canAccess = access ? access.canAccess : isOwner;
 	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
+	/**
+	 * A video's editing surface is the Work's own page now (the unified layout,
+	 * 2026-10-13): its owner edits right here, and the persona preview's purpose is
+	 * exactly that — when one is active the page is the user's rendering, which is what
+	 * the PreviewBar itself says.
+	 */
+	const ownerEditsVideo = work.type === "video" && isOwner && !preview.previewAs;
 
 	// Where this Work has been announced — the other half of an inert reference. Hoisted
 	// so the goods page's two-up layout and the linear one both compose it.
@@ -264,6 +279,14 @@ export default function WorkPage() {
 				</ul>
 			</section>
 		) : null;
+
+	if (ownerEditsVideo) {
+		return (
+			<WorkColumn type={work.type} wide>
+				<OwnerWorkEditor work={work} onRefetch={refetch} />
+			</WorkColumn>
+		);
+	}
 
 	return (
 		<WorkColumn type={work.type}>
@@ -456,37 +479,138 @@ export default function WorkPage() {
 					    invitation that interrupted that would be the funnel this deliberately is not. */}
 					{shareToken && !user && <SharedWorkBanner sharedBy={work.sharedBy ?? null} />}
 
-					{!isWriting(work.type) && <WorkDescription work={work} />}
+					{/* A video gets the SAME tab groups its editor renders — a user's read-only
+					    version of the very same information, in the same two columns (2026-10-13);
+					    every other kind keeps the page as it was. */}
+					{work.type === "video" ? (
+						<VideoVisitorRecord work={work} refetch={refetch} />
+					) : (
+						<>
+							{!isWriting(work.type) && <WorkDescription work={work} />}
 
-					{/* The liner notes — who and what made it, public whether or not it is gated. A credit
-					    naming this user's own identity carries the confirm ask, and a decision re-reads
-					    the Work so the credits settle from the server's own answer. */}
-					<WorkCredits work={work} onCreditDecided={refetch} />
+							{/* The liner notes — who and what made it, public whether or not it is gated. A credit
+							    naming this user's own identity carries the confirm ask, and a decision re-reads
+							    the Work so the credits settle from the server's own answer. */}
+							<WorkCredits work={work} onCreditDecided={refetch} />
 
-					{work.assets.length > 0 && (
-						<ProjectDownloads
-							assets={work.assets}
-							contentType={work.type}
-							workId={work.id}
-							canAccess={canAccess}
-						/>
+							{work.assets.length > 0 && (
+								<ProjectDownloads
+									assets={work.assets}
+									contentType={work.type}
+									workId={work.id}
+									canAccess={canAccess}
+								/>
+							)}
+
+							{/* A Sticker may be given on any Work, gated or not, purchased or not, because it is
+							    a gift to the creator rather than payment for the Work. It moves into the review
+							    composer when Stickers become attachments to reviews, comments and votes. */}
+							<StickerBar
+								subjectType="work"
+								subjectId={work.id}
+								label={work.title ?? "this Work"}
+							/>
+
+							{/* Reviews — a verdict on the work itself, which is the only thing a review
+							    was ever about. Gated behind access on the server: you can't review what you
+							    haven't been able to see. */}
+							{/* 🚨 A Work takes no votes and no comments: a review is the only feedback it accepts
+							    (Parker, 2026-09-13). */}
+							<WorkReviews workId={work.id} />
+
+							{postedAbout}
+						</>
 					)}
-
-					{/* A Sticker may be given on any Work, gated or not, purchased or not, because it is
-					    a gift to the creator rather than payment for the Work. It moves into the review
-					    composer when Stickers become attachments to reviews, comments and votes. */}
-					<StickerBar subjectType="work" subjectId={work.id} label={work.title ?? "this Work"} />
-
-					{/* Reviews — a verdict on the work itself, which is the only thing a review
-					    was ever about. Gated behind access on the server: you can't review what you
-					    haven't been able to see. */}
-					{/* 🚨 A Work takes no votes and no comments: a review is the only feedback it accepts
-					    (Parker, 2026-09-13). */}
-					<WorkReviews workId={work.id} />
-
-					{postedAbout}
 				</>
 			)}
 		</WorkColumn>
+	);
+}
+
+/**
+ * A video Work's information for a viewer — the same Info and side tab groups its owner
+ * edits in (`WorkInfoTabs`/`WorkSideColumn`), read-only. Rough views on purpose, this
+ * pass: Parker reviews the layout in screenshots and the reads get tuned against what
+ * they look like, not against a spec.
+ */
+function VideoVisitorRecord({ work, refetch }: { work: WorkDetail; refetch: () => void }) {
+	const publicAccess = work.publicAccess ?? false;
+	const rating = work.maturity;
+	return (
+		<div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+			<WorkInfoTabs
+				tabs={[
+					{
+						key: "details",
+						label: "Details",
+						content: (
+							<div className="flex flex-col gap-4">
+								<WorkDescription work={work} />
+								<ReleaseSummary work={work} scheduled={work.scheduledReleaseAt ?? null} />
+							</div>
+						),
+					},
+					{
+						key: "credits",
+						label: "Credits",
+						content: <WorkCredits work={work} onCreditDecided={refetch} />,
+					},
+					{
+						key: "access",
+						label: "Access",
+						content: (
+							<p className="text-sm">
+								{publicAccess ? (
+									<>
+										<span className="badge badge-sm badge-success badge-outline mr-2">
+											Public Access
+										</span>
+										Free to everyone.
+									</>
+								) : (
+									<span className="text-base-content/60">
+										Not free to everyone — the unlock above says what opens it.
+									</span>
+								)}
+							</p>
+						),
+					},
+					{
+						key: "rating",
+						label: "Rating",
+						content:
+							rating === "mature" || rating === "adult" ? (
+								<WorkRating work={work} />
+							) : (
+								<p className="text-sm text-base-content/60">
+									General — users see no rating on a General Work.
+								</p>
+							),
+					},
+					{
+						key: "accessibility",
+						label: "Accessibility",
+						content: <CaptionsSummary captions={work.captions ?? []} />,
+					},
+				]}
+			/>
+			<WorkSideColumn
+				tabs={[
+					{
+						key: "reviews",
+						label: "Reviews",
+						// 🚨 A Work takes no votes and no comments: a review is the only feedback
+						// it accepts (Parker, 2026-09-13).
+						content: <WorkReviews workId={work.id} />,
+					},
+					{
+						key: "showings",
+						label: "Showings",
+						content: <ShowingsStub work={work} />,
+					},
+				]}
+				work={work}
+			/>
+		</div>
 	);
 }
