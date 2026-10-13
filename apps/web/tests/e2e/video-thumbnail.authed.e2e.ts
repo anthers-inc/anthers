@@ -35,7 +35,10 @@ test("a video's thumbnail can be the frame its creator paused on", async ({ page
 		.where(eq(works.publicId, CLIP.publicId));
 	previous = before.thumbnail;
 
+	// The editing surface is the Work's own page now (2026-10-13): the Studio route
+	// redirects there, and the thumbnail lives in the Details tab as a field.
 	await page.goto(`/studio/works/${CLIP.publicId}/edit`);
+	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
 	await expect(page.getByText(THUMBNAIL_RULE)).toBeVisible();
 
 	// Wait for a real picture, then pause a second in.
@@ -54,21 +57,21 @@ test("a video's thumbnail can be the frame its creator paused on", async ({ page
 			}),
 	);
 
-	const uploaded = page.waitForResponse(
-		(res) => res.url().includes("/api/content/media-upload/direct") && res.ok(),
-	);
+	// Open the field, then take the moment. The extraction is the SERVER's doing now —
+	// the route saves the field itself — so the answered request IS the save.
+	const taken = page.waitForResponse((res) => res.url().includes("/thumbnail-frame") && res.ok());
+	await page.getByRole("button", { name: "Edit Thumbnail" }).click();
 	await page.getByRole("button", { name: "Use This Frame" }).click();
-	const { key } = (await (await uploaded).json()) as { key: string };
-	expect(key).toMatch(/\/thumbnails\/.+\.jpg$/);
+	const { work } = (await (await taken).json()) as { work: { thumbnail: string } };
+	expect(work.thumbnail).toMatch(/\/thumbnails\/\d+\/\w+\.jpg$/);
 
-	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
-		timeout: 15_000,
-	});
-
+	// The field shows what the route answered, and the row is it — no save to press,
+	// and no save bar promising anything else anywhere on the page.
+	await expect(page.getByRole("img", { name: "The Work's thumbnail" })).toBeVisible();
+	await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 	const [after] = await db
 		.select({ thumbnail: works.thumbnail })
 		.from(works)
 		.where(eq(works.publicId, CLIP.publicId));
-	expect(after.thumbnail).toContain(key);
+	expect(after.thumbnail).toBe(work.thumbnail);
 });

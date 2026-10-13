@@ -55,8 +55,13 @@ export function InlineField<V>({
 	saved: V;
 	/** The user's version — the page's own rendering of the field. */
 	renderRead: () => ReactNode;
-	/** The working control; the draft value and its setter are the edit's whole state. */
-	renderEdit: (draft: V, onChange: (next: V) => void) => ReactNode;
+	/**
+	 * The working control; the draft value and its setter are the edit's whole state, and
+	 * `close` is how an act inside the edit that settled by itself (the server saved it)
+	 * returns the field to its read state — the check is for a save, and an act that
+	 * already saved is not one.
+	 */
+	renderEdit: (draft: V, onChange: (next: V) => void, close: () => void) => ReactNode;
 	/** Commit the draft; a throw leaves the field open with the error shown. */
 	save: (draft: V) => Promise<void>;
 	/** Set when the field cannot open — said beside the read view, never as silence. */
@@ -107,7 +112,11 @@ export function InlineField<V>({
 				</>
 			) : (
 				<div className="space-y-2">
-					{renderEdit(draft, setDraft)}
+					{renderEdit(draft, setDraft, () => {
+					setDraft(saved);
+					setError(null);
+					setMode("read");
+				})}
 					{error && <p className="text-xs text-error">{error}</p>}
 					<div className="flex items-center gap-1">
 						{mode === "busy" ? (

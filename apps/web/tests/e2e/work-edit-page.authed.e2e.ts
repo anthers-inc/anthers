@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A Work's Edit page is the Work as a user sees it, with what they see editable in place
- * (Parker, 2026-09-17), and one explicit Save that leaves the creator on the page.
+ * A video Work's editing surface, on the Work's own page (Parker, 2026-10-13) — the Work
+ * rendered by the user's own parts, editable in place, its fields each saving themselves.
  *
  * What these pin, each of which a form beside the Work would get wrong without anything failing:
  *
  *   - **The Work itself is on the page**, drawn by the user's own parts. A processed video
  *     plays in the user's player rather than appearing as a file name in a form.
- *   - **Loading is not an unsaved change.** The page learns things after it loads (the creator's
- *     Badge rungs, the file's processing), and a Save bar that appears on arrival is a page
- *     that cannot be trusted to mean it.
- *   - **Save stays, and Discard puts back what is saved.**
- *   - **The user's view and the Edit page lead to each other.**
+ *   - **Loading is not a save**: with the per-field model there is no page-wide bar to lie.
+ *   - **A field saves itself alone, and Cancel puts back what is saved.**
+ *   - **The user's view and the editing surface lead to each other** — the Studio route
+ *     redirects to the page, and the preview's Edit button comes back.
  *
  * Runs on `media_fixture`, whose Works nothing else resets, and whose seeded video is a real
  * processed file. Works made here are titled with this spec's prefix and swept in `afterAll`.
@@ -54,19 +53,27 @@ test.afterAll(async () => {
 	}
 });
 
-test("a Work's Edit page shows the Work as a user sees it", async ({ page, context }) => {
+/**
+ * A video's editing surface is the Work's own page (Parker, 2026-10-13): the Studio route
+ * redirects there, the editing banner is the mode, the work's player is on the page, and
+ * the user's view and it lead to each other.
+ */
+test("a video's editing surface is its own page, and the two lead to each other", async ({
+	page,
+	context,
+}) => {
 	session = await signInAsMediaFixture(context);
 	const [video] = (await ownWorks()).filter((w) => w.title === FIXTURE_VIDEO);
 	expect(video, "the media fixture's video is missing").toBeTruthy();
 
+	// The Studio route REDIRECTS: the creator lands on the Work's own page, in editor mode.
 	await page.goto(`/studio/works/${video.publicId}/edit`);
-	await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue(FIXTURE_VIDEO);
-	// The user's player, not a file name standing in for it.
+	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
+	await expect(page.getByText("Editing your Work")).toBeVisible();
+	// The Work itself, the player — the same page a user is drawn.
 	await expect(page.locator("video")).toHaveCount(1);
-	await expect(page.getByRole("heading", { name: "Only you see these" })).toBeVisible();
 
-	// Nothing has been changed, so nothing is offered to save. Asked once everything the page
-	// learns after it loads has arrived, which the Badge rungs are the last of.
+	// Loading is not a save anywhere: with per-field saves there is no page-wide bar at all.
 	await page.waitForLoadState("networkidle");
 	await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 
@@ -104,17 +111,21 @@ test("a Work's Edit page shows the Work as a user sees it", async ({ page, conte
 	).json()) as { work?: { recordUrl?: string | null } };
 	expect(asStranger.work?.recordUrl).toBe(`https://atproto.at/uri/${owner?.atprotoUri}`);
 
-	// The user's view, and back again from it. The record link rides along — it is on the
-	// user's page now, not the Edit page only.
-	await page.getByRole("link", { name: "Preview as User" }).click();
+	// The user's view, and back again from it — by way of the banner's door in, and the
+	// Edit button's leaving the preview (the page does not round a Studio redirect).
+	await page.getByRole("button", { name: "Preview as a user" }).click();
 	await expect(page).toHaveURL(/\/works\/[^/?]+\?previewAs=out$/);
 	await expect(page.getByText("Previewing as a user")).toBeVisible();
 	await expect(page.getByRole("link", { name: "View the record" })).toBeVisible();
-	await page.getByRole("link", { name: "Edit This Work" }).click();
-	await expect(page).toHaveURL(new RegExp(`/studio/works/${video.publicId}/edit$`));
+	await page.getByRole("button", { name: "Edit This Work" }).click();
+	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
+	await expect(page.getByText("Editing your Work")).toBeVisible();
 });
 
-test("saving stays on the page, and Discard puts back what is saved", async ({ page, context }) => {
+test("a field saves itself alone, and Cancel puts back what is saved", async ({
+	page,
+	context,
+}) => {
 	session = await signInAsMediaFixture(context);
 	const created = await fetch(`${API_URL}/api/content/works`, {
 		method: "POST",
@@ -126,37 +137,39 @@ test("saving stays on the page, and Discard puts back what is saved", async ({ p
 		body: JSON.stringify({ type: "video", title: STEM }),
 	});
 	const { work } = (await created.json()) as { work: { publicId: number } };
-	const editUrl = new RegExp(`/studio/works/${work.publicId}/edit$`);
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
+	// The Studio route redirected; the page under test is the Work's own.
+	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
+	await expect(page.getByText("Editing your Work")).toBeVisible();
+
+	// The title field, opened: the pencil opens, the X cancels, the check saves.
+	await page.getByRole("button", { name: "Edit Title" }).click();
 	const title = page.getByRole("textbox", { name: "Title" });
-	const description = page.getByRole("textbox", { name: "Description" });
-	const unsaved = page.getByText("Unsaved changes");
 	await expect(title).toHaveValue(STEM);
-	await expect(unsaved).toHaveCount(0);
 
-	// ── Discard ──
+	// ── Cancel ──
 	await title.fill(`${STEM} renamed`);
-	await expect(unsaved).toBeVisible();
-	await page.getByRole("button", { name: "Discard" }).click();
-	await expect(title).toHaveValue(STEM);
-	await expect(unsaved).toHaveCount(0);
+	await page.getByRole("button", { name: "Cancel editing Title" }).click();
+	await expect(
+		page.locator("h1").filter({ hasText: STEM }),
+		"cancel did not put back what is saved",
+	).toBeVisible();
 
-	// ── Save ──
-	await description.fill("Written on the Work's own page.");
-	await expect(unsaved).toBeVisible();
-	await page.getByRole("button", { name: /save work/i }).click();
-	// ⚠️ Anchored, because a string filter is a case-insensitive substring and "Unsaved changes"
-	// contains "saved": unanchored, this passed before the save had even been sent.
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
-	await expect(page).toHaveURL(editUrl);
-	await expect(unsaved).toHaveCount(0);
+	// ── Save, and the page stays where it is ──
+	await page.getByRole("button", { name: "Edit Title" }).click();
+	await title.fill(`${STEM} renamed`);
+	await page.getByRole("button", { name: "Save Title" }).click();
+	await expect(page.locator("h1").filter({ hasText: `${STEM} renamed` })).toBeVisible();
+	await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 
 	// And it is what the server holds, not only what the page shows.
-	const [stored] = (await ownWorks()).filter((w) => w.title === STEM);
-	expect(stored.description).toBe("Written on the Work's own page.");
+	const [stored] = (await ownWorks()).filter((w) => w.title === `${STEM} renamed`);
+	expect(stored, "the renamed Work is the row the server holds").toBeTruthy();
+
+	// A reload reads the same, because it is the row's own state.
 	await page.reload();
-	await expect(description).toHaveValue("Written on the Work's own page.");
+	await expect(page.locator("h1").filter({ hasText: `${STEM} renamed` })).toBeVisible();
 });
 
 /**

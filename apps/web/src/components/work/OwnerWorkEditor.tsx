@@ -352,12 +352,12 @@ export default function OwnerWorkEditor({
 	 * ⚠️ The click pauses first, so the thumbnail is the frame the creator is looking at;
 	 * the route saves the field itself (one act, no client upload in flight).
 	 */
-	const takeCurrentFrame = async () => {
+	const takeCurrentFrame = async (): Promise<boolean> => {
 		setFrameError(null);
 		const video = videoEl.current;
 		if (!video?.videoWidth) {
 			setFrameError("Play the video to the moment you want first.");
-			return;
+			return false;
 		}
 		if (!video.paused) video.pause();
 		setFrameBusy(true);
@@ -369,7 +369,7 @@ export default function OwnerWorkEditor({
 			if (!res.ok) {
 				const body = (await res.json().catch(() => null)) as { error?: string } | null;
 				setFrameError(body?.error || "Taking the frame didn't work. Upload an image instead.");
-				return;
+				return false;
 			}
 			const { work: updated } = (await res.json()) as { work: Work };
 			adopt(updated);
@@ -379,8 +379,10 @@ export default function OwnerWorkEditor({
 				setThumbnailUrl(updated.thumbnail);
 				setThumbnailPreview(keyToPreview(updated.thumbnail));
 			}
+			return true;
 		} catch {
 			setFrameError("Taking the frame didn't work. Upload an image instead.");
+			return false;
 		} finally {
 			setFrameBusy(false);
 		}
@@ -499,7 +501,7 @@ export default function OwnerWorkEditor({
 					</p>
 				</div>
 			)}
-			renderEdit={(_draft, _setDraft) => (
+			renderEdit={(_draft, _setDraft, close) => (
 				/* The upload and the paused-frame act are what the edit state IS; the value
 				   below is touched, not typed — the check is disabled until one settles. */
 				<ThumbEditor
@@ -512,6 +514,7 @@ export default function OwnerWorkEditor({
 						setThumbnailPreview(null);
 					}}
 					onFrame={fileReady ? takeCurrentFrame : undefined}
+					onFrameTaken={close}
 					frameBusy={frameBusy}
 					inFlight={thumbnailInFlight.current > 0}
 					frameError={frameError}
@@ -549,7 +552,10 @@ export default function OwnerWorkEditor({
 					</p>
 				</div>
 			)}
-			save={(draft) => saveFields({ description: draft.trim() })}
+			save={(draft) => {
+				setDescription(draft.trim());
+				return saveFields({ description: draft.trim() });
+			}}
 		/>
 	);
 
@@ -557,7 +563,19 @@ export default function OwnerWorkEditor({
 		<InlineField
 			label="Release"
 			saved={visibility}
-			renderRead={() => <ReleaseSummary work={current} scheduled={scheduledIso} />}
+			renderRead={() => (
+				<div className="flex flex-col gap-2">
+					<ReleaseSummary work={current} scheduled={scheduledIso} />
+					{/* The released Work's listing on the network — the shared reader-side line,
+					    read here the moment the page is, because it is public either way. */}
+					{current.visibility === "released" &&
+						(current.recordUrl ? (
+							<WorkRecordLink work={current} />
+						) : (
+							<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
+						))}
+				</div>
+			)}
 			renderEdit={(_draft, _setDraft) => (
 				<div className="flex flex-col gap-3">
 					<label className="label cursor-pointer justify-start gap-2">
@@ -742,7 +760,10 @@ export default function OwnerWorkEditor({
 					</p>
 				</div>
 			)}
-			save={(draft) => saveFields({ originallyReleased: draft ? `${draft}T00:00:00.000Z` : null })}
+			save={(draft) => {
+				setOriginalDate(draft);
+				return saveFields({ originallyReleased: draft ? `${draft}T00:00:00.000Z` : null });
+			}}
 		/>
 	);
 
@@ -995,7 +1016,11 @@ export default function OwnerWorkEditor({
 									placeholder="Work title"
 								/>
 							)}
-							save={(draft) => saveFields({ title: draft.trim() || "Untitled" })}
+							save={(draft) => {
+								const next = draft.trim() || "Untitled";
+								setTitle(next);
+								return saveFields({ title: next });
+							}}
 						/>
 					}
 					dates={
@@ -1102,6 +1127,7 @@ function ThumbEditor({
 	onFile,
 	onClear,
 	onFrame,
+	onFrameTaken,
 	frameBusy,
 	inFlight,
 	frameError,
@@ -1110,7 +1136,9 @@ function ThumbEditor({
 	required?: boolean;
 	onFile: (file: File) => void;
 	onClear: () => void;
-	onFrame?: () => void;
+	onFrame?: () => Promise<boolean> | boolean;
+	/** The field's close — the frame act saves itself, so its close is the field's own. */
+	onFrameTaken?: () => void;
 	frameBusy: boolean;
 	inFlight: boolean;
 	frameError: string | null;
@@ -1131,7 +1159,11 @@ function ThumbEditor({
 					<button
 						type="button"
 						className="btn btn-outline btn-sm"
-						onClick={onFrame}
+						onClick={async () => {
+							// The frame act saved the field server-side; its close is the field's
+							// own return to the read state rather than a save to press.
+							if (await onFrame()) onFrameTaken?.();
+						}}
 						disabled={frameBusy || inFlight}
 					>
 						{frameBusy ? "Taking this moment…" : "Use This Frame"}
