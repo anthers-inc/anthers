@@ -289,7 +289,11 @@ export default function WorkPage() {
 	}
 
 	return (
-		<WorkColumn type={work.type}>
+		// A video's views are one width everywhere — the creator's editor, the unlocked
+		// visitor page and the locked one (Parker's second pass, 2026-10-13): the columns
+		// and their divider read the same in all three, and the rule's centering is true
+		// of the player's center because the two areas share one width.
+		<WorkColumn type={work.type} wide={work.type === "video"}>
 			{/* Creator preview — only ever offered to the person who made it, and only ever
 			    able to subtract access (the server guards that per Work). Beside it, the way back
 			    to the Work's Edit page, which is where the preview is usually reached from. */}
@@ -612,59 +616,61 @@ function VideoVisitorRecord({ work, refetch }: { work: WorkDetail; refetch: () =
 	const publicAccess = work.publicAccess ?? false;
 	const rating = work.maturity;
 	return (
-		<div className="grid gap-8 lg:grid-cols-2 lg:items-start">
-			<WorkInfoTabs
-				tabs={[
-					{
-						key: "details",
-						label: "Details",
-						content: (
-							<div className="flex flex-col gap-4">
-								<WorkDescription work={work} />
-								<ReleaseSummary work={work} scheduled={work.scheduledReleaseAt ?? null} />
-								{/* Access reads in Details too — the combined tab the editor uses. */}
-								<p className="text-sm">
-									{publicAccess ? (
-										<>
-											<span className="badge badge-sm badge-success badge-outline mr-2">
-												Public Access
+		<div className="grid lg:grid-cols-2 lg:items-start">
+			<div className="lg:pr-4">
+				<WorkInfoTabs
+					tabs={[
+						{
+							key: "details",
+							label: "Details",
+							content: (
+								<div className="flex flex-col gap-4">
+									<WorkDescription work={work} />
+									<ReleaseSummary work={work} scheduled={work.scheduledReleaseAt ?? null} />
+									{/* Access reads in Details too — the combined tab the editor uses. */}
+									<p className="text-sm">
+										{publicAccess ? (
+											<>
+												<span className="badge badge-sm badge-success badge-outline mr-2">
+													Public Access
+												</span>
+												Free to everyone.
+											</>
+										) : (
+											<span className="text-base-content/60">
+												Not free to everyone — the unlock above says what opens it.
 											</span>
-											Free to everyone.
-										</>
-									) : (
-										<span className="text-base-content/60">
-											Not free to everyone — the unlock above says what opens it.
-										</span>
-									)}
-								</p>
-							</div>
-						),
-					},
-					{
-						key: "credits",
-						label: "Credits",
-						content: <WorkCredits work={work} onCreditDecided={refetch} />,
-					},
-					{
-						key: "rating",
-						label: "Rating",
-						content:
-							rating === "mature" || rating === "adult" ? (
-								<WorkRating work={work} />
-							) : (
-								<p className="text-sm text-base-content/60">
-									General — users see no rating on a General Work.
-								</p>
+										)}
+									</p>
+								</div>
 							),
-					},
-					{
-						key: "accessibility",
-						label: "Accessibility",
-						content: <CaptionsSummary captions={work.captions ?? []} />,
-					},
-				]}
-			/>
-			<div className="lg:border-l lg:border-base-300 lg:pl-8">
+						},
+						{
+							key: "credits",
+							label: "Credits",
+							content: <WorkCredits work={work} onCreditDecided={refetch} />,
+						},
+						{
+							key: "rating",
+							label: "Rating",
+							content:
+								rating === "mature" || rating === "adult" ? (
+									<WorkRating work={work} />
+								) : (
+									<p className="text-sm text-base-content/60">
+										General — users see no rating on a General Work.
+									</p>
+								),
+						},
+						{
+							key: "accessibility",
+							label: "Accessibility",
+							content: <CaptionsSummary captions={work.captions ?? []} />,
+						},
+					]}
+				/>
+			</div>
+			<div className="lg:border-l lg:border-base-300 lg:pl-4">
 				<WorkSideColumn
 					tabs={[
 						{

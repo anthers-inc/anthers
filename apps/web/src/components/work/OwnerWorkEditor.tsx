@@ -76,8 +76,8 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import CreditsSection from "../../studio/CreditsSection";
 import RatingMatrix from "../../studio/RatingMatrix";
 import WorkCaptionsEditor from "../../studio/WorkCaptionsEditor";
-import WorkReviews from "../project/WorkReviews";
 import StickerBar from "../post/StickerBar";
+import WorkReviews from "../project/WorkReviews";
 import { EditingBanner, InlineField } from "./Editing";
 import MediaStatusCard from "./MediaStatusCard";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
@@ -89,6 +89,7 @@ import {
 	WorkDeliverable,
 	type WorkDetail,
 	WorkHeader,
+	WorkRating,
 	WorkRecordLink,
 	workTitleTypography,
 } from "./WorkLayout";
@@ -941,7 +942,13 @@ export default function OwnerWorkEditor({
 			content: (
 				<WorkReviews
 					workId={current.id}
-					aside={<StickerBar subjectType="work" subjectId={current.id} label={current.title ?? "this Work"} />}
+					aside={
+						<StickerBar
+							subjectType="work"
+							subjectId={current.id}
+							label={current.title ?? "this Work"}
+						/>
+					}
 				/>
 			),
 		},
@@ -1005,13 +1012,12 @@ export default function OwnerWorkEditor({
 							}
 						/>
 					}
-					rating={
-						<RatingLineInHeader
-							maturity={maturity}
-							notes={contentNotes}
-							onChangeTo={() => setActiveInfoTab("rating")}
-						/>
-					}
+					// The rating as a user meets it — a Mature or Adult Work's warning badge and
+					// nothing for a General or unrated one (Parker's second pass, 2026-10-13: the
+					// "Not rated yet" chip and "Rate it" link were the Rating tab said twice; the
+					// warning is the one part whose home is the header, because it is a fact about
+					// the thing being watched, not its metadata).
+					rating={<WorkRating work={asRead} />}
 				/>
 
 				<MediaStatusCard
@@ -1041,11 +1047,18 @@ export default function OwnerWorkEditor({
 				)}
 			</section>
 
-			{/* ── Row 3: the two columns, evenly split with a rule between them (Parker's
-			    first iteration pass, 2026-10-13) ── */}
-			<div className="grid gap-8 lg:grid-cols-2 lg:items-start">
-				<WorkInfoTabs tabs={infoTabs} activeKey={activeInfoTab} onActiveChange={setActiveInfoTab} />
-				<div className="lg:border-l lg:border-base-300 lg:pl-8">
+			{/* ── Row 3: the two columns, evenly split with the rule BETWEEN them centered —
+			    no inter-column gap: the halves carry their own padding, so the rule stands
+			    exactly at the player's center (Parker's second pass, 2026-10-13) ── */}
+			<div className="grid lg:grid-cols-2 lg:items-start">
+				<div className="lg:pr-4">
+					<WorkInfoTabs
+						tabs={infoTabs}
+						activeKey={activeInfoTab}
+						onActiveChange={setActiveInfoTab}
+					/>
+				</div>
+				<div className="lg:border-l lg:border-base-300 lg:pl-4">
 					<WorkSideColumn tabs={sideTabs} work={current} />
 				</div>
 			</div>
@@ -1074,49 +1087,6 @@ function HeaderDates({
 				</span>
 			)}
 			{released && <span>Released {released}</span>}
-		</div>
-	);
-}
-
-/**
- * The rating where a user meets it — the header's version, whose *Change* opens the
- * Rating tab rather than scrolling to a form that no longer exists down-page.
- */
-function RatingLineInHeader({
-	maturity,
-	notes,
-	onChangeTo,
-}: {
-	maturity: Exclude<MaturityRating, "unrated"> | null;
-	notes: ContentNote[];
-	onChangeTo: () => void;
-}) {
-	return (
-		<div className="flex flex-wrap items-center gap-2 text-sm">
-			{maturity ? (
-				<span
-					className={`badge badge-sm ${
-						maturity === "general"
-							? "badge-ghost"
-							: maturity === "adult"
-								? "badge-error"
-								: "badge-warning"
-					}`}
-				>
-					{maturityLabel(maturity)}
-				</span>
-			) : (
-				<span className="badge badge-sm badge-warning badge-outline">Not rated yet</span>
-			)}
-			{maturity && maturity !== "general" && notes.length > 0 && (
-				<span className="text-base-content/60">{notes.map(contentNoteLabel).join(" · ")}</span>
-			)}
-			{maturity === "general" && (
-				<span className="text-xs text-base-content/50">Users see no rating on a General Work.</span>
-			)}
-			<button type="button" className="link link-hover text-xs" onClick={onChangeTo}>
-				{maturity ? "Change" : "Rate it"}
-			</button>
 		</div>
 	);
 }

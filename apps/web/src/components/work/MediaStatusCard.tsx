@@ -26,39 +26,90 @@ import { FormatsHint, fileRules, isFileWorkType } from "@anthers/web-shared/cont
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import FileUpload from "@anthers/web-shared/ui/FileUpload";
 import type { WorkUpload } from "@anthers/web-shared/work-uploads";
-import { ArrowPathIcon, CheckIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import {
+	ArrowPathIcon,
+	ArrowUpTrayIcon,
+	CheckIcon,
+	PencilSquareIcon,
+	XMarkIcon,
+} from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import type { WorkDetail } from "./WorkLayout";
 
-/** One chip in the variant row — the three states, as icons beside the name. */
+/**
+ * One chip in the variant row — the three states, as icons beside the name.
+ *
+ * The **Original** chip is the card's one interactive member (Parker's second pass,
+ * 2026-10-13): blue, a touch longer than the others, with a pencil opening a dropdown
+ * that carries the destructive actions — Replace File and Remove File. The actions live
+ * where the file's identity is named, rather than as a button row of their own.
+ */
 function VariantChip({
 	name,
 	ready,
 	running,
+	actions,
 }: {
 	name: string;
 	ready: string | "";
 	running?: boolean;
+	/** The dropdown member: never produced → it still carries the pencil, because there is
+	 *  exactly nothing to replace until it exists; a chip with no actions is passive. */
+	actions?: { onReplace: () => void; onRemove: () => void };
 }) {
+	const chip = ready ? (
+		<CheckIcon className="size-3.5" />
+	) : running ? (
+		<ArrowPathIcon className="size-3.5" />
+	) : (
+		<XMarkIcon className="size-3.5" />
+	);
+	if (!actions) {
+		return (
+			<span
+				className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs ${
+					ready
+						? "border-success/40 bg-success/10 text-success"
+						: running
+							? "border-warning/40 bg-warning/10 text-warning"
+							: "border-base-300 text-base-content/40"
+				}`}
+			>
+				{chip}
+				{name}
+			</span>
+		);
+	}
 	return (
-		<span
-			className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs ${
-				ready
-					? "border-success/40 bg-success/10 text-success"
-					: running
-						? "border-warning/40 bg-warning/10 text-warning"
-						: "border-base-300 text-base-content/40"
-			}`}
-		>
-			{ready ? (
-				<CheckIcon className="size-3.5" />
-			) : running ? (
-				<ArrowPathIcon className="size-3.5" />
-			) : (
-				<XMarkIcon className="size-3.5" />
-			)}
-			{name}
-		</span>
+		<div className="dropdown dropdown-end">
+			<button
+				type="button"
+				tabIndex={0}
+				className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-info/40 bg-info/10 px-3.5 py-0.5 text-xs text-info hover:border-info"
+				title="Replace or remove this Work's file"
+			>
+				{chip}
+				{name}
+				<PencilSquareIcon className="size-3 text-info/70" />
+			</button>
+			<ul
+				tabIndex={0}
+				className="dropdown-content menu z-20 rounded-box w-44 border border-base-300 bg-base-100 p-1 shadow-lg"
+			>
+				<li>
+					<button type="button" onClick={actions.onReplace}>
+						<ArrowUpTrayIcon className="size-4" />
+						Replace File…
+					</button>
+				</li>
+				<li>
+					<button type="button" className="text-error" onClick={actions.onRemove}>
+						<XMarkIcon className="size-4" />
+						Remove File
+					</button>
+				</li>
+			</ul>
+		</div>
 	);
 }
 
@@ -120,6 +171,8 @@ export default function MediaStatusCard({
 	const failed = job?.status === "failed";
 	const uploading = sourceUpload?.status === "uploading" || sourceUpload?.status === "attaching";
 	const depths = useLadderDepths(job?.hlsManifestUrl ?? null);
+	const [replaceOpen, setReplaceOpen] = useState(false);
+	const onOpenReplace = () => setReplaceOpen(true);
 
 	return (
 		<section
@@ -127,24 +180,31 @@ export default function MediaStatusCard({
 			// `status`, not `alert`: the card is the page's persistent media state.
 			className="rounded-box border border-base-300 bg-base-100 px-4 py-3 flex flex-col gap-2 h-full"
 		>
-			<div className="flex items-center justify-between gap-2">
+			<div className="flex items-center gap-2">
 				<h2 className="text-sm font-semibold">Media Status</h2>
 				{(() => {
-					// The card's headline state, in one badge: the row's whole truth at a glance.
+					// Only the failures headline here: the in-flight and ready states are the
+					// chips' own answer, the same fact said once rather than twice (Parker's
+					// second pass, 2026-10-13).
 					if (sourceUpload?.status === "failed")
 						return <span className="badge badge-error badge-sm">Upload failed</span>;
-					if (uploading) return <span className="badge badge-warning badge-sm">Uploading</span>;
-					if (running) return <span className="badge badge-warning badge-sm">Processing</span>;
 					if (failed) return <span className="badge badge-error badge-sm">Processing failed</span>;
-					if (work.sourceKey) return <span className="badge badge-success badge-sm">Ready</span>;
-					return <span className="badge badge-ghost badge-sm">No media yet</span>;
+					return null;
 				})()}
 			</div>
 
 			{type === "video" && (
 				<div className="flex flex-wrap gap-1.5">
-					{/* The original: the one variant that exists the moment the file does. */}
-					<VariantChip name="Original" ready={work.sourceKey ? "ready" : ""} running={uploading} />
+					{/* The original: the one variant that exists the moment the file does, and
+					    the one chip that acts — replace or remove, from its pencil. */}
+					<VariantChip
+						name="Original"
+						ready={work.sourceKey ? "ready" : ""}
+						running={uploading}
+						actions={
+							unpublished ? { onReplace: () => onOpenReplace(), onRemove: onRemove } : undefined
+						}
+					/>
 					<VariantChip name="Audio" ready={job?.audioManifestUrl ?? ""} running={running} />
 					{depths.length > 0 ? (
 						depths.map((h) => <VariantChip key={h} name={`${h}p`} ready="ready" />)
@@ -162,6 +222,16 @@ export default function MediaStatusCard({
 						etaSeconds={job?.etaSeconds ?? undefined}
 						errorMessage={job?.errorMessage ?? undefined}
 					/>
+					{unpublished && (
+						<button
+							type="button"
+							className="btn btn-xs mt-2"
+							onClick={onCancel}
+							disabled={cancelBusy}
+						>
+							{cancelBusy ? "Canceling…" : "Cancel processing"}
+						</button>
+					)}
 				</div>
 			)}
 
@@ -174,66 +244,51 @@ export default function MediaStatusCard({
 				</p>
 			)}
 
-			{unpublished && (
-				<div className="flex flex-wrap items-center gap-2 mt-auto pt-2">
-					{canReplace && <ReplaceDialog type={type} onFile={onReplaceFile} />}
-					{work.sourceKey && (
-						<button
-							type="button"
-							className="btn btn-sm btn-error"
-							onClick={onRemove}
-							disabled={removeBusy}
-						>
-							Remove File
-						</button>
-					)}
-					{running && (
-						<button type="button" className="btn btn-sm" onClick={onCancel} disabled={cancelBusy}>
-							{cancelBusy ? "Canceling…" : "Cancel processing"}
-						</button>
-					)}
-				</div>
+			{canReplace && (
+				<ReplaceDialog
+					type={type}
+					open={replaceOpen}
+					onClose={() => setReplaceOpen(false)}
+					onFile={onReplaceFile}
+				/>
 			)}
 		</section>
 	);
 }
 
 /**
- * Replace the file, asked for deliberately: a button, then a dialog that takes it and
- * states the formats the file must satisfy (the sentence the card carried, said where it
- * is actually needed). The work-uploads store watches the pick, so the dialog close and
- * the progress read are the page's, not this dialog's.
+ * Replace the file, asked for deliberately: the *Original* chip's dropdown opens it, and
+ * it states the formats the file must satisfy (the sentence the card carried, said where
+ * it is actually needed). The work-uploads store watches the pick, so the dialog close
+ * and the progress read are the page's, not this dialog's.
  */
 function ReplaceDialog({
 	type,
+	open,
+	onClose,
 	onFile,
 }: {
 	type: "video" | "image" | "music" | "audio" | "comic" | "ebook";
+	open: boolean;
+	onClose: () => void;
 	onFile: (file: File) => void;
 }) {
-	const [open, setOpen] = useState(false);
 	const pendingRef = useRef<File | null>(null);
 
 	const dialog = useRef<HTMLDialogElement>(null);
 
+	useEffect(() => {
+		if (open) dialog.current?.showModal();
+	}, [open]);
+
 	return (
 		<>
-			<button
-				type="button"
-				className="btn btn-sm"
-				onClick={() => {
-					setOpen(true);
-					dialog.current?.showModal();
-				}}
-			>
-				Replace File…
-			</button>
 			{open && (
 				<dialog
 					ref={dialog}
 					className="modal"
 					onClose={() => {
-						setOpen(false);
+						onClose();
 						pendingRef.current = null;
 					}}
 				>
