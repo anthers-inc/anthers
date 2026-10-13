@@ -35,7 +35,6 @@ import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectPricing from "../components/project/ProjectPricing";
 import WorkReviews from "../components/project/WorkReviews";
 import OwnerWorkEditor, {
-	AccessSummary,
 	CaptionsSummary,
 	ReleaseSummary,
 } from "../components/work/OwnerWorkEditor";

@@ -112,7 +112,6 @@ export default function WorkReviews({
 	// The composer stands open always now; a returning reviewer opens on what they already
 	// said, so editing is a correction rather than a retype (the same intent the verdict
 	// click carried, always on).
-	// biome-ignore lint/correctness/useExhaustiveDependencies: prefill once the aggregate lands, and again on Cancel
 	useEffect(() => {
 		if (!agg || agg.userVerdict == null || draftVerdict !== null) return;
 		setDraftVerdict(agg.userVerdict);

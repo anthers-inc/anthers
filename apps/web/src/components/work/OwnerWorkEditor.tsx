@@ -69,23 +69,23 @@ import {
 	type WorkInput,
 } from "@anthers/web-shared/types";
 import FileUpload from "@anthers/web-shared/ui/FileUpload";
-import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { isUploading, useSourceUpload, workUploads } from "@anthers/web-shared/work-uploads";
-import { CalendarIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
+import { PencilSquareIcon } from "@heroicons/react/24/outline";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import CreditsSection from "../../studio/CreditsSection";
 import RatingMatrix from "../../studio/RatingMatrix";
 import WorkCaptionsEditor from "../../studio/WorkCaptionsEditor";
+import SaveButton from "../library/SaveButton";
 import StickerBar from "../post/StickerBar";
 import WorkReviews from "../project/WorkReviews";
 import { EditingBanner, InlineField } from "./Editing";
 import MediaStatusCard from "./MediaStatusCard";
+import ShareLinkButton from "./ShareLinkButton";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
 import {
 	formatOriginallyReleased,
 	WORK_DESCRIPTION_CLASS,
 	WORK_DETAILS_HEADING_CLASS,
-	WorkAccessChip,
 	WorkByline,
 	WorkColumn,
 	WorkCredits,
@@ -128,9 +128,6 @@ export default function OwnerWorkEditor({
 	// ── The fields, as the row holds them ──
 	const [title, setTitle] = useState(work.title ?? "");
 	const [description, setDescription] = useState(work.description ?? "");
-	// The image an image Work is — not a video field; carried here the day this surface
-	// takes more kinds. Video pass: untouched.
-	const [imageAlt, setImageAlt] = useState(work.imageAlt ?? "");
 	const [thumbnailUrl, setThumbnailUrl] = useState(work.thumbnail ?? "");
 	const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
 		work.thumbnail ? keyToPreview(work.thumbnail) : null,
@@ -168,14 +165,6 @@ export default function OwnerWorkEditor({
 		normalizeMaturityRows(work.maturityRows, gridFor(work.type)),
 	);
 	const grid = gridFor(work.type);
-	/**
-	 * Whether the rows differ from what is saved, and so whether a save sends them. Sent
-	 * unchanged, they would re-declare the rating they add up to, which an operator's
-	 * correction above it would refuse on every save of anything else.
-	 */
-	const rowsChanged =
-		JSON.stringify(normalizeMaturityRows(rows, grid)) !==
-		JSON.stringify(normalizeMaturityRows(work.maturityRows, grid));
 	// The rating the page stands at: what the rows add up to once every row is answered,
 	// and the Work's own rating until then. 🚨 Release and scheduling wait on `fromRows`
 	// rather than on `maturity` — a rated Work has every row answered (Parker, 2026-09-18),
@@ -203,10 +192,6 @@ export default function OwnerWorkEditor({
 		(work.credits ?? []).map((r) => ({ ...r, types: [...r.types] })),
 	);
 	const [showCreditErrors, setShowCreditErrors] = useState(false);
-	const onCreditRowsChange = (next: WorkCredit[]) => {
-		setShowCreditErrors(false);
-		setCreditRows(next);
-	};
 	// A save's (or a decision's) answer is what the page now shows: the editor's rows
 	// follow the row rather than arguing with it. Safe while an edit is open too — the
 	// InlineField copies the saved value into its own draft at open time, so a re-sync
@@ -215,7 +200,6 @@ export default function OwnerWorkEditor({
 		setCreditRows((current.credits ?? []).map((r) => ({ ...r, types: [...r.types] })));
 	}, [current.credits]);
 
-	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	/** Which Info tab is open — lifted, because the header's *Change* rating link opens Rating. */
 	const [activeInfoTab, setActiveInfoTab] = useState("details");
@@ -510,7 +494,6 @@ export default function OwnerWorkEditor({
 				   below is touched, not typed — the check is disabled until one settles. */
 				<ThumbEditor
 					preview={thumbnailPreview}
-					required={needsChosenThumbnail(work.type)}
 					onFile={handleThumbnail}
 					onClear={() => {
 						thumbnailTouched.current = true;
@@ -1039,6 +1022,16 @@ export default function OwnerWorkEditor({
 			    name it (Parker's third pass, 2026-10-13). ── */}
 			<WorkByline
 				work={asRead}
+				// Share and Save ride the maker's line for the creator too (Parker, 2026-10-13):
+				// the centered strip fans out symmetrically, and a creator's line with an empty
+				// right half would sit lopsided. The verbs are a user's; they are what the strip
+				// offers.
+				actions={
+					<div className="flex shrink-0 items-center gap-1">
+						<ShareLinkButton workId={current.id} slug={asRead.slug ?? ""} />
+						<SaveButton workId={current.id} className="shrink-0" />
+					</div>
+				}
 				title={
 					<InlineField<string>
 						label="Title"
@@ -1108,7 +1101,6 @@ export default function OwnerWorkEditor({
  */
 function ThumbEditor({
 	preview,
-	required,
 	onFile,
 	onClear,
 	onFrame,
@@ -1118,7 +1110,6 @@ function ThumbEditor({
 	frameError,
 }: {
 	preview: string | null;
-	required?: boolean;
 	onFile: (file: File) => void;
 	onClear: () => void;
 	onFrame?: () => Promise<boolean> | boolean;
@@ -1401,7 +1392,7 @@ function OwnerAccessChipEditor({
 						</div>
 					</div>
 					<form method="dialog" className="modal-backdrop">
-						<button aria-label="Close the access dialog" />
+						<button type="button" aria-label="Close the access dialog" />
 					</form>
 				</dialog>
 			)}

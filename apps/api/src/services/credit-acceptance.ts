@@ -322,9 +322,11 @@ export type UserWorkCredit = WorkCredit & {
 	 * and is present in both the user and owner shapes, because both presentations show
 	 * a person; the DID stays the record and reads as subtext.
 	 */
-	contributorProfile?:
-		| { handle: string | null; displayName: string | null; avatar: string | null }
-		| null;
+	contributorProfile?: {
+		handle: string | null;
+		displayName: string | null;
+		avatar: string | null;
+	} | null;
 	awaitingYourConfirmation?: true;
 	awaitingContributorConfirmation?: true;
 };
@@ -424,7 +426,12 @@ export async function creditsForUser(
 			// An acceptance implies a users row (acceptance is a signed-in account acting on
 			// its own DID), so a miss is the invariant broken. Withheld rather than named: a
 			// bare `did:` string in public copy is exactly what this overlay exists to prevent.
-			if (name) visible.push({ ...credit, contributor: name, contributorProfile: profileForDid.get(credit.contributor) });
+			if (name)
+				visible.push({
+					...credit,
+					contributor: name,
+					contributorProfile: profileForDid.get(credit.contributor),
+				});
 			else if (isCreator || userDid === credit.contributor) visible.push(credit);
 			continue;
 		}

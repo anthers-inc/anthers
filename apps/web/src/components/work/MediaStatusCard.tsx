@@ -49,6 +49,7 @@ function VariantChip({
 	ready,
 	running,
 	actions,
+	removeBusy,
 }: {
 	name: string;
 	ready: string | "";
@@ -56,6 +57,8 @@ function VariantChip({
 	/** The dropdown member: never produced → it still carries the pencil, because there is
 	 *  exactly nothing to replace until it exists; a chip with no actions is passive. */
 	actions?: { onReplace: () => void; onRemove: () => void };
+	/** The removal in flight, while the dropdown's Remove button waits it out. */
+	removeBusy?: boolean;
 }) {
 	const chip = ready ? (
 		<CheckIcon className="size-3.5" />
@@ -80,22 +83,17 @@ function VariantChip({
 			</span>
 		);
 	}
+	// A native `<details>` disclosure (the FAQ's pattern, and Parker's rule that a
+	// keyboard user be able to open what a pointer user can): no daisyUI tabindex dance,
+	// no :focus-within magic — the chip is the summary, the menu is the content.
 	return (
-		<div className="dropdown dropdown-end">
-			<button
-				type="button"
-				tabIndex={0}
-				className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-info/40 bg-info/10 px-3.5 py-0.5 text-xs text-info hover:border-info"
-				title="Replace or remove this Work's file"
-			>
+		<details className="dropdown dropdown-end">
+			<summary className="list-none inline-flex cursor-pointer items-center gap-1 rounded-full border border-info/40 bg-info/10 px-3.5 py-0.5 text-xs text-info hover:border-info marker:hidden [&::-webkit-details-marker]:hidden">
 				{chip}
 				{name}
 				<PencilSquareIcon className="size-3 text-info/70" />
-			</button>
-			<ul
-				tabIndex={0}
-				className="dropdown-content menu z-20 rounded-box w-44 border border-base-300 bg-base-100 p-1 shadow-lg"
-			>
+			</summary>
+			<ul className="dropdown-content menu z-20 rounded-box w-44 border border-base-300 bg-base-100 p-1 shadow-lg">
 				<li>
 					<button type="button" onClick={actions.onReplace}>
 						<ArrowUpTrayIcon className="size-4" />
@@ -103,20 +101,24 @@ function VariantChip({
 					</button>
 				</li>
 				<li>
-					<button type="button" className="text-error" onClick={actions.onRemove}>
+					<button
+						type="button"
+						className="text-error"
+						onClick={actions.onRemove}
+						disabled={removeBusy}
+					>
 						<XMarkIcon className="size-4" />
-						Remove File
+						{removeBusy ? "Removing…" : "Remove File"}
 					</button>
 				</li>
 			</ul>
-		</div>
+		</details>
 	);
 }
 
 /** The rendition chips a ladder's own master manifest names — read live once it exists. */
 function useLadderDepths(manifestUrl: string | null | undefined): number[] {
 	const [heights, setHeights] = useState<number[]>([]);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: read when the ladder appears, and only then
 	useEffect(() => {
 		if (!manifestUrl) {
 			setHeights([]);
@@ -188,6 +190,7 @@ export default function MediaStatusCard({
 						name="Original"
 						ready={work.sourceKey ? "ready" : ""}
 						running={uploading}
+						removeBusy={removeBusy}
 						actions={
 							unpublished ? { onReplace: () => onOpenReplace(), onRemove: onRemove } : undefined
 						}
@@ -337,7 +340,7 @@ function ReplaceDialog({
 						</div>
 					</div>
 					<form method="dialog" className="modal-backdrop">
-						<button aria-label="Close the replace dialog" />
+						<button type="button" aria-label="Close the replace dialog" />
 					</form>
 				</dialog>
 			)}
