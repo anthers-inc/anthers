@@ -277,6 +277,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
 		editing.thumbnail ? keyToPreview(editing.thumbnail) : null,
 	);
+	/** How many thumbnail uploads are still on the wire; the save below consults it. */
+	const thumbnailInFlight = useRef(0);
 	/**
 	 * Whether the creator changed the thumbnail here, and so whether a save may send it. A ref,
 	 * because the re-reads below run from timers and must see the answer as it is now.
@@ -412,6 +414,17 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		setCurrent((prev) => ({
 			...prev,
 			sourceKey: fresh.sourceKey,
+			// 🚨 `originalUrl` and `durationSeconds` ride the media half too, and this
+			// field set was missing them: the owner shape computes the playable address
+			// at serialize time, so a row re-read before the attach carried
+			// `originalUrl: null` even after `sourceKey` arrived, and the pre-ladder
+			// video branch mounted no player — which is why a landed upload left an
+			// empty deliverable block until the creator happened to save, whose
+			// response was a full serialization. `embedUrl` rides along for the same
+			// shape of omission on an embed Work.
+			originalUrl: fresh.originalUrl,
+			durationSeconds: fresh.durationSeconds,
+			embedUrl: fresh.embedUrl,
 			thumbnail: fresh.thumbnail,
 			assets: fresh.assets,
 			transcoding: fresh.transcoding,
@@ -471,7 +484,10 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			});
 			if (!res.ok) throw new Error(`removal answered ${res.status}`);
 			// An image's face follows its file; clearing the local preview keeps the field
-			// from showing the just-swept object on the way out.
+			// from showing the just-swept object on the way out. A thumbnail upload still
+			// in flight has nothing left to attach to — forget it, so the race guards
+			// above cannot arm a field for a value the Work no longer wants.
+			thumbnailInFlight.current = 0;
 			thumbnailTouched.current = false;
 			setThumbnailUrl("");
 			setThumbnailPreview(null);
@@ -526,6 +542,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 
 	const handleThumbnail = async (file: File) => {
 		thumbnailTouched.current = true;
+		thumbnailInFlight.current += 1;
 		setThumbnailPreview(URL.createObjectURL(file));
 		try {
 			const { url } = await uploadImageFile(file, "thumbnail");
@@ -533,6 +550,12 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			setThumbnailPreview(url);
 		} catch {
 			setThumbnailPreview(thumbnailUrl ? keyToPreview(thumbnailUrl) : null);
+			// A failed upload is not a change: the field still holds what it had, so an
+			// armed-but-unsettled flag here would send the old value (or "" when the
+			// field was empty) and present that as a save of the thing that failed.
+			if (!thumbnailUrl) thumbnailTouched.current = false;
+		} finally {
+			thumbnailInFlight.current -= 1;
 		}
 	};
 
@@ -588,8 +611,17 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			// Sent unconditionally on an image Work, including empty — clearing the
 			// description is a real edit, and an omitted field cannot express it.
 			...(type === "image" ? { imageAlt: imageAlt.trim() } : {}),
-			// Only when changed here: see the header on why a save must not carry what was loaded.
-			...(thumbnailTouched.current ? { thumbnail: thumbnailUrl } : {}),
+			// Only when changed AND settled: an in-flight thumbnail upload has not
+			// produced its URL yet, and sending the field then sends `""` — which the
+			// server accepts as the allowed clear and stores, erasing exactly the
+			// value the in-flight upload is about to hand back (work 23 on
+			// production: the creator's save raced their frame's upload, "saved"
+			// successfully, and the thumbnail was gone). A save that happens while an
+			// upload is still running leaves the field armed, so the next save sends
+			// the settled value.
+			...(thumbnailTouched.current && thumbnailInFlight.current === 0
+				? { thumbnail: thumbnailUrl }
+				: {}),
 			visibility,
 			...(visibility !== "released" && scheduledRelease !== loadedSchedule
 				? { scheduledReleaseAt: scheduledIso }
@@ -691,7 +723,11 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			const { work: updated } = await res.json();
 			setCurrent(updated as Work);
 			setTypeOverride(null);
-			thumbnailTouched.current = false;
+			// Disarm the thumbnail only when nothing is still in flight: a save that
+			// raced an upload leaves the flag holding a value the server has not seen,
+			// and unmarking it here is how the frame that resolved a second later went
+			// silently unsaved.
+			thumbnailTouched.current = thumbnailInFlight.current > 0;
 			setBaseline(null);
 			setSavedAt(Date.now());
 		} catch {
