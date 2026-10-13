@@ -273,12 +273,18 @@ function ReplaceDialog({
 	onClose: () => void;
 	onFile: (file: File) => void;
 }) {
-	const pendingRef = useRef<File | null>(null);
+	// State, not a ref: the Replace button's disabled reads this on every render, and a
+	// ref that changed silently would leave the only way forward disabled (the defect the
+	// fresh walkthrough caught, 2026-10-13).
+	const [pending, setPending] = useState<File | null>(null);
 
 	const dialog = useRef<HTMLDialogElement>(null);
 
 	useEffect(() => {
-		if (open) dialog.current?.showModal();
+		if (open) {
+			setPending(null);
+			dialog.current?.showModal();
+		}
 	}, [open]);
 
 	return (
@@ -289,7 +295,7 @@ function ReplaceDialog({
 					className="modal"
 					onClose={() => {
 						onClose();
-						pendingRef.current = null;
+						setPending(null);
 					}}
 				>
 					<div className="modal-box">
@@ -304,9 +310,7 @@ function ReplaceDialog({
 								maxSize={fileRules(type).maxSize}
 								compact
 								label={type === "image" ? "Choose the image" : "Choose the file"}
-								onFileSelect={(file) => {
-									pendingRef.current = file;
-								}}
+								onFileSelect={setPending}
 							/>
 							<FormatsHint type={type} />
 						</div>
@@ -323,10 +327,10 @@ function ReplaceDialog({
 							<button
 								type="button"
 								className="btn btn-primary btn-sm"
-								disabled={!pendingRef.current}
+								disabled={!pending}
 								onClick={() => {
-									if (pendingRef.current) onFile(pendingRef.current);
-									pendingRef.current = null;
+									if (pending) onFile(pending);
+									setPending(null);
 									dialog.current?.close();
 								}}
 							>

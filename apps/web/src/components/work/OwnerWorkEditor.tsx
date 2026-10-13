@@ -870,13 +870,16 @@ export default function OwnerWorkEditor({
 				</div>
 			)}
 			save={async (draft) => {
-				const changed =
-					JSON.stringify(normalizeMaturityRows(draft, grid)) !==
-					JSON.stringify(normalizeMaturityRows(rows, grid));
+				const next = normalizeMaturityRows(draft, grid);
+				const changed = JSON.stringify(next) !== JSON.stringify(normalizeMaturityRows(rows, grid));
 				// Sent unchanged, they re-declare the rating they add up to, which an
 				// operator's correction refuses — closing without a save is the honest exit.
 				if (!changed) return;
-				await saveFields({ maturityRows: normalizeMaturityRows(draft, grid) });
+				await saveFields({ maturityRows: next });
+				// The read is the user's view: once the rows are the server's, its mirror is
+				// too — the summary says what the rows add up to, not what the page mounted
+				// with (the same mirror rule the title's save keeps, 2026-10-13).
+				setRows(next);
 			}}
 		/>
 	);
