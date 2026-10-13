@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Reviews on a Work — the aggregates, the written reviews, and the form.
- *
- * A verdict cannot be left on its own: choosing one opens a required text field, and nothing
- * is submitted until there are words. That is a deliberate trade of volume for substance —
- * most Works will carry no reviews for a long while, and an honest "no reviews yet" beats a
- * percentage assembled from three drive-by clicks. It also gives moderation something to act
+ * Reviews on a Work — the aggregates, the written reviews, and the composer.
+ * composer stands open for a signed-in user, and the verdict is what makes it
+ * postable: choosing one is a selection, not a reveal, and nothing submits until
+ * there are words. A deliberate trade of volume for substance — most Works carry
+ * no reviews for a long while, and an honest "no reviews yet" beats a percentage
+ * assembled from three drive-by clicks. It also gives moderation something to act
  * on, where a bare thumb is unmoderatable by construction.
  *
  * ⭐ **The aggregate is a proportion and not an average**, because a review recommends a Work
@@ -42,7 +42,7 @@ import {
 import { client } from "@anthers/web-shared/rpc";
 import type { Review, ReviewAggregate } from "@anthers/web-shared/types";
 import { FlagIcon, HandThumbDownIcon, HandThumbUpIcon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import VoteControl from "../post/VoteControl";
 import ReportDialog from "../ui/ReportDialog";
 
@@ -62,8 +62,23 @@ const WINDOW_LABELS: Record<ReviewWindow, string> = {
 /**
  * Reviews for a **Work**. Keyed on the Work's id rather than a post slug, because a review
  * is a verdict on a work and a work is reachable without any post existing.
+ *
+ * The composer stands open for a signed-in user (Parker, 2026-10-13): the text field is
+ * always visible, and choosing a verdict selects it rather than revealing the form — the
+ * "choose one to write a review" instruction is gone, because the selected state and the
+ * disabled post button say the same thing. The verdict buttons split the row evenly, and
+ * a non-recommendation wears red when it is the chosen verdict, so the two verdicts read
+ * like the two answers they are rather than like two flavors of one choice.
  */
-export default function WorkReviews({ workId }: { workId: number }) {
+export default function WorkReviews({
+	workId,
+	aside,
+}: {
+	workId: number;
+	/** A small control that reads with the verdict row — the Sticker give, whose design
+	 *  (2026-09-13) ties a Work's Sticker to its review; the Work page passes the bar. */
+	aside?: ReactNode;
+}) {
 	const { isAuthenticated, user } = useAuth();
 	// A review is a record in the reviewer's own repository, refused without the permission.
 	const permissionMissing = useInteractionPermissionMissing(isAuthenticated) === true;
@@ -93,6 +108,16 @@ export default function WorkReviews({ workId }: { workId: number }) {
 	useEffect(() => {
 		fetchReviews(window);
 	}, [fetchReviews, window]);
+
+	// The composer stands open always now; a returning reviewer opens on what they already
+	// said, so editing is a correction rather than a retype (the same intent the verdict
+	// click carried, always on).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: prefill once the aggregate lands, and again on Cancel
+	useEffect(() => {
+		if (!agg || agg.userVerdict == null || draftVerdict !== null) return;
+		setDraftVerdict(agg.userVerdict);
+		setDraftBody((current) => current || agg.userReview || "");
+	}, [agg, draftVerdict]);
 
 	// Choosing a verdict opens the form; if they have reviewed before, open it on what they
 	// already said so editing is a correction rather than a retype.
@@ -192,72 +217,81 @@ export default function WorkReviews({ workId }: { workId: number }) {
 
 			{isAuthenticated && (
 				<div className="mb-6">
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-2 flex-wrap">
 						{/* Two buttons and no third: somebody who feels neither is meant to post
 						    nothing, because posting a review is an action and having it mean
-						    something is the point. */}
-						<button
-							type="button"
-							className={`btn btn-sm ${chosen === "recommended" ? "btn-primary" : "btn-outline"}`}
-							onClick={() => startReview("recommended")}
-							aria-pressed={chosen === "recommended"}
-						>
-							<HandThumbUpIcon className="w-4 h-4" />
-							Recommend
-						</button>
-						<button
-							type="button"
-							className={`btn btn-sm ${chosen === "not-recommended" ? "btn-primary" : "btn-outline"}`}
-							onClick={() => startReview("not-recommended")}
-							aria-pressed={chosen === "not-recommended"}
-						>
-							<HandThumbDownIcon className="w-4 h-4" />
-							Don't Recommend
-						</button>
-						<span className="text-sm text-base-content/60">
-							{agg.userVerdict !== null
-								? "You've reviewed this — choose again to edit"
-								: "Choose one to write a review"}
-						</span>
+						    something is the point. The split is even — each verdict takes half
+						    this row's width — and the non-recommendation wears its own answer's
+						    color, red, when it is the one chosen. */}
+						<div className="flex flex-1 min-w-64 basis-56 items-center gap-2">
+							<button
+								type="button"
+								className={`btn btn-sm ${chosen === "recommended" ? "btn-primary" : "btn-outline"} flex-1`}
+								onClick={() => startReview("recommended")}
+								aria-pressed={chosen === "recommended"}
+							>
+								<HandThumbUpIcon className="w-4 h-4" />
+								Recommend
+							</button>
+							<button
+								type="button"
+								className={`btn btn-sm ${chosen === "not-recommended" ? "btn-error" : "btn-outline"} flex-1`}
+								onClick={() => startReview("not-recommended")}
+								aria-pressed={chosen === "not-recommended"}
+							>
+								<HandThumbDownIcon className="w-4 h-4" />
+								Don't Recommend
+							</button>
+						</div>
+						{aside && <div className="shrink-0">{aside}</div>}
 					</div>
-
-					{draftVerdict !== null && (
-						<form onSubmit={submit} className="mt-3">
-							<textarea
-								className="textarea textarea-bordered w-full"
-								rows={3}
-								maxLength={REVIEW_MAX}
-								placeholder="What did you think? A verdict on its own doesn't say much."
-								value={draftBody}
-								onChange={(e) => setDraftBody(e.target.value)}
-							/>
-							{error && <p className="mt-1 text-sm text-error">{error}</p>}
-							{permissionMissing && (
-								<p className="mt-1 text-xs text-warning">{INTERACTION_PERMISSION_HINT}</p>
-							)}
-							<div className="mt-2 flex items-center gap-2">
-								<button
-									type="submit"
-									className="btn btn-primary btn-sm"
-									disabled={submitting || tooShort || permissionMissing}
-								>
-									{submitting ? (
-										<span className="loading loading-spinner loading-sm" />
-									) : (
-										"Post review"
-									)}
-								</button>
-								<button
-									type="button"
-									className="btn btn-ghost btn-sm"
-									onClick={() => setDraftVerdict(null)}
-									disabled={submitting}
-								>
-									Cancel
-								</button>
-							</div>
-						</form>
-					)}
+					{/* The field is not gated behind a verdict: it reads with the buttons. A
+					    verdict cannot be left on its own regardless — the post button stays
+					    disabled until both a verdict and enough words are here. */}
+					<form onSubmit={submit} className="mt-3">
+						<textarea
+							className="textarea textarea-bordered w-full"
+							rows={3}
+							maxLength={REVIEW_MAX}
+							placeholder="What did you think? A verdict on its own doesn't say much."
+							value={draftBody}
+							onChange={(e) => {
+								setDraftBody(e.target.value);
+								if (draftVerdict === null && agg?.userVerdict != null) {
+									setDraftVerdict(agg.userVerdict);
+								}
+							}}
+						/>
+						{error && <p className="mt-1 text-sm text-error">{error}</p>}
+						{permissionMissing && (
+							<p className="mt-1 text-xs text-warning">{INTERACTION_PERMISSION_HINT}</p>
+						)}
+						<div className="mt-2 flex items-center gap-2">
+							<button
+								type="submit"
+								className="btn btn-primary btn-sm"
+								disabled={submitting || tooShort || chosen === null || permissionMissing}
+							>
+								{submitting ? (
+									<span className="loading loading-spinner loading-sm" />
+								) : (
+									"Post review"
+								)}
+							</button>
+							<button
+								type="button"
+								className="btn btn-ghost btn-sm"
+								onClick={() => {
+									setDraftVerdict(null);
+									setDraftBody("");
+									setError(null);
+								}}
+								disabled={submitting}
+							>
+								Cancel
+							</button>
+						</div>
+					</form>
 				</div>
 			)}
 

@@ -423,60 +423,112 @@ export default function WorkPage() {
 				<>
 					<section ref={deliverableRef}>
 						{!canAccess ? (
-							<div className="space-y-4">
-								{/* ⚠️ A signed-out visitor is refused the bytes of free work too, and that
-						    is not a lock — the Work is free to everyone and stays free; what is
-						    missing is an account for the time to be attributed to. So the cover
-						    stays unblurred and un-padlocked here, and the card underneath asks
-						    for the account instead. See `presentsAsLocked`. */}
-								{/* The locked preview and the purchase decision are one composition: a
-						    two-up, equal-height pairing (Parker, 2026-10-04, after Vimeo On
-						    Demand's buy panel) — the blurred cover left, the price card right,
-						    both cards' edges aligned. They stack below `sm` with the cover
-						    first. Everything else on the page stays full-width; only this
-						    pairing is two-up. */}
-								{/* ⚠️ `w-full` is load-bearing on both children: a grid item stretched to
-						    the row's height lets `aspect-video` derive its WIDTH from that
-						    height (254 × 16/9 ≈ 452px), overflowing its 424px track — the
-						    aspect ratio silently outranks the track. An explicit width breaks
-						    the derive-back and the cover sizes to its column. Found by
-						    measuring, invisible in the DOM string. */}
-								<div className="sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
+							work.type === "video" ? (
+								/* A locked video is the feed's treatment at page scale (Parker,
+								    2026-10-13): the thumbnail blurred beneath, and the unlock —
+								    whatever it asks for — overlaid on it, rather than a two-up
+								    of cover and card. The underlying cover is the same
+								    `LockedCover` blur the tiles draw; the card overlay rides
+								    above it, centered, on `z-10`. */
+								<div className="relative overflow-hidden rounded-lg">
 									{presentsAsLocked(access) ? (
 										<LockedCover
 											thumbnail={work.thumbnail}
-											className="aspect-video w-full rounded-lg"
-											lockedBy={access ? lockedByBadge(access, creatorName) : null}
+											className="aspect-video w-full"
+											lockedBy={null}
 										/>
 									) : (
 										work.thumbnail && (
 											<img
 												src={work.thumbnail}
 												alt=""
-												className="aspect-video w-full rounded-lg object-cover"
+												className="aspect-video w-full object-cover blur-xl scale-110"
 											/>
 										)
 									)}
-									{access &&
-										(access.requiresPurchase ? (
-											/* Every purchase goes through the basket (Parker, 2026-10-03): the
-									   pricing card offers the two doors into it and nothing about a
-									   card lives on this page. */
-											<ProjectPricing
-												workId={work.id}
-												slug={work.slug ?? ""}
-												access={access}
-												title={work.title ?? "Untitled"}
-												creatorHandle={work.creator?.handle ?? ""}
+									<div className="absolute inset-0 z-10 flex items-center justify-center p-6">
+										{/*
+										 * ⚠️ A user-shape Work always carries an access verdict, which is
+										 * the only shape that reaches this branch — an owner without one
+										 * reads canAccess true above and never gets here. So the card
+										 * here is whichever the verdict asks for.
+										 */}
+										{access && (
+											<div className="w-full max-w-md rounded-lg shadow-lg">
+												{access.requiresPurchase ? (
+													<ProjectPricing
+														workId={work.id}
+														slug={work.slug ?? ""}
+														access={access}
+														title={work.title ?? "Untitled"}
+														creatorHandle={work.creator?.handle ?? ""}
+														thumbnail={work.thumbnail}
+														creatorHasStripe={work.creatorHasStripe ?? false}
+														workType={work.type}
+													/>
+												) : (
+													<InlineUnlock post={work} access={access} />
+												)}
+											</div>
+										)}
+									</div>
+								</div>
+							) : (
+								<div className="space-y-4">
+									{/* ⚠️ A signed-out visitor is refused the bytes of free work too, and that
+						    is not a lock — the Work is free to everyone and stays free; what is
+						    missing is an account for the time to be attributed to. So the cover
+						    stays unblurred and un-padlocked here, and the card underneath asks
+						    for the account instead. See `presentsAsLocked`. */}
+									{/* The locked preview and the purchase decision are one composition: a
+						    two-up, equal-height pairing (Parker, 2026-10-04, after Vimeo On
+						    Demand's buy panel) — the blurred cover left, the price card right,
+						    both cards' edges aligned. They stack below `sm` with the cover
+						    first. Everything else on the page stays full-width; only this
+						    pairing is two-up. */}
+									{/* ⚠️ `w-full` is load-bearing on both children: a grid item stretched to
+						    the row's height lets `aspect-video` derive its WIDTH from that
+						    height (254 × 16/9 ≈ 452px), overflowing its 424px track — the
+						    aspect ratio silently outranks the track. An explicit width breaks
+						    the derive-back and the cover sizes to its column. Found by
+						    measuring, invisible in the DOM string. */}
+									<div className="sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
+										{presentsAsLocked(access) ? (
+											<LockedCover
 												thumbnail={work.thumbnail}
-												creatorHasStripe={work.creatorHasStripe ?? false}
-												workType={work.type}
+												className="aspect-video w-full rounded-lg"
+												lockedBy={access ? lockedByBadge(access, creatorName) : null}
 											/>
 										) : (
-											<InlineUnlock post={work} access={access} />
-										))}
+											work.thumbnail && (
+												<img
+													src={work.thumbnail}
+													alt=""
+													className="aspect-video w-full rounded-lg object-cover"
+												/>
+											)
+										)}
+										{access &&
+											(access.requiresPurchase ? (
+												/* Every purchase goes through the basket (Parker, 2026-10-03): the
+									   pricing card offers the two doors into it and nothing about a
+									   card lives on this page. */
+												<ProjectPricing
+													workId={work.id}
+													slug={work.slug ?? ""}
+													access={access}
+													title={work.title ?? "Untitled"}
+													creatorHandle={work.creator?.handle ?? ""}
+													thumbnail={work.thumbnail}
+													creatorHasStripe={work.creatorHasStripe ?? false}
+													workType={work.type}
+												/>
+											) : (
+												<InlineUnlock post={work} access={access} />
+											))}
+									</div>
 								</div>
-							</div>
+							)
 						) : spentOnThis ? (
 							// The server withheld the deliverable because the allowance is gone, so
 							// there is nothing to render in its place but the reason.
@@ -506,16 +558,7 @@ export default function WorkPage() {
 					    version of the very same information, in the same two columns (2026-10-13);
 					    every other kind keeps the page as it was. */}
 					{work.type === "video" ? (
-						<>
-							{/* A Sticker may be given on any Work, gated or not, purchased or not — it
-							    rides above the columns so a giver meets it right after watching. */}
-							<StickerBar
-								subjectType="work"
-								subjectId={work.id}
-								label={work.title ?? "this Work"}
-							/>
-							<VideoVisitorRecord work={work} refetch={refetch} />
-						</>
+						<VideoVisitorRecord work={work} refetch={refetch} />
 					) : (
 						<>
 							{!isWriting(work.type) && <WorkDescription work={work} />}
@@ -569,7 +612,7 @@ function VideoVisitorRecord({ work, refetch }: { work: WorkDetail; refetch: () =
 	const publicAccess = work.publicAccess ?? false;
 	const rating = work.maturity;
 	return (
-		<div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+		<div className="grid gap-8 lg:grid-cols-2 lg:items-start">
 			<WorkInfoTabs
 				tabs={[
 					{
@@ -579,6 +622,21 @@ function VideoVisitorRecord({ work, refetch }: { work: WorkDetail; refetch: () =
 							<div className="flex flex-col gap-4">
 								<WorkDescription work={work} />
 								<ReleaseSummary work={work} scheduled={work.scheduledReleaseAt ?? null} />
+								{/* Access reads in Details too — the combined tab the editor uses. */}
+								<p className="text-sm">
+									{publicAccess ? (
+										<>
+											<span className="badge badge-sm badge-success badge-outline mr-2">
+												Public Access
+											</span>
+											Free to everyone.
+										</>
+									) : (
+										<span className="text-base-content/60">
+											Not free to everyone — the unlock above says what opens it.
+										</span>
+									)}
+								</p>
 							</div>
 						),
 					},
@@ -586,26 +644,6 @@ function VideoVisitorRecord({ work, refetch }: { work: WorkDetail; refetch: () =
 						key: "credits",
 						label: "Credits",
 						content: <WorkCredits work={work} onCreditDecided={refetch} />,
-					},
-					{
-						key: "access",
-						label: "Access",
-						content: (
-							<p className="text-sm">
-								{publicAccess ? (
-									<>
-										<span className="badge badge-sm badge-success badge-outline mr-2">
-											Public Access
-										</span>
-										Free to everyone.
-									</>
-								) : (
-									<span className="text-base-content/60">
-										Not free to everyone — the unlock above says what opens it.
-									</span>
-								)}
-							</p>
-						),
 					},
 					{
 						key: "rating",
@@ -626,23 +664,36 @@ function VideoVisitorRecord({ work, refetch }: { work: WorkDetail; refetch: () =
 					},
 				]}
 			/>
-			<WorkSideColumn
-				tabs={[
-					{
-						key: "reviews",
-						label: "Reviews",
-						// 🚨 A Work takes no votes and no comments: a review is the only feedback
-						// it accepts (Parker, 2026-09-13).
-						content: <WorkReviews workId={work.id} />,
-					},
-					{
-						key: "showings",
-						label: "Showings",
-						content: <ShowingsStub work={work} />,
-					},
-				]}
-				work={work}
-			/>
+			<div className="lg:border-l lg:border-base-300 lg:pl-8">
+				<WorkSideColumn
+					tabs={[
+						{
+							key: "reviews",
+							label: "Reviews",
+							// 🚨 A Work takes no votes and no comments: a review is the only feedback
+							// it accepts (Parker, 2026-09-13).
+							content: (
+								<WorkReviews
+									workId={work.id}
+									aside={
+										<StickerBar
+											subjectType="work"
+											subjectId={work.id}
+											label={work.title ?? "this Work"}
+										/>
+									}
+								/>
+							),
+						},
+						{
+							key: "showings",
+							label: "Showings",
+							content: <ShowingsStub work={work} />,
+						},
+					]}
+					work={work}
+				/>
+			</div>
 		</div>
 	);
 }

@@ -77,6 +77,7 @@ import CreditsSection from "../../studio/CreditsSection";
 import RatingMatrix from "../../studio/RatingMatrix";
 import WorkCaptionsEditor from "../../studio/WorkCaptionsEditor";
 import WorkReviews from "../project/WorkReviews";
+import StickerBar from "../post/StickerBar";
 import { EditingBanner, InlineField } from "./Editing";
 import MediaStatusCard from "./MediaStatusCard";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
@@ -902,13 +903,17 @@ export default function OwnerWorkEditor({
 			{descriptionField}
 			{releaseField}
 			{originalDateField}
+			{/* Access lives in Details too (Parker's first iteration pass, 2026-10-13): the
+			    combined tab keeps the working surface of the page in one place, and the tabs
+			    stay three (Details · Credits · Rating · Accessibility) unless further combining
+			    moves Credits in as well. */}
+			{accessField}
 		</div>
 	);
 
 	const infoTabs: InfoTab[] = [
 		{ key: "details", label: "Details", content: detailsSection },
 		{ key: "credits", label: "Credits", content: creditsField },
-		{ key: "access", label: "Access", content: accessField },
 		{ key: "rating", label: "Rating", content: ratingField },
 		{ key: "accessibility", label: "Accessibility", content: accessibilityField },
 	];
@@ -930,7 +935,15 @@ export default function OwnerWorkEditor({
 		{
 			key: "reviews",
 			label: "Reviews",
-			content: <WorkReviews workId={current.id} />,
+			// The give rides with the verdict row (the design placement, 2026-09-13) — the
+			// bar itself leaves this page when Stickers attach from the editor itself,
+			// which is its own task.
+			content: (
+				<WorkReviews
+					workId={current.id}
+					aside={<StickerBar subjectType="work" subjectId={current.id} label={current.title ?? "this Work"} />}
+				/>
+			),
 		},
 		{
 			key: "showings",
@@ -943,8 +956,9 @@ export default function OwnerWorkEditor({
 		<WorkColumn type={work.type} wide>
 			<EditingBanner title={current.title} />
 
-			{/* ── Row 1: the header, and the Media Status card in the space beside it ── */}
-			<div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+			{/* ── Row 1: the header and the Media Status card SPLIT the area above the
+			    video (Parker's first iteration pass, 2026-10-13) ── */}
+			<div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
 				<WorkHeader
 					work={asRead}
 					title={
@@ -1027,10 +1041,13 @@ export default function OwnerWorkEditor({
 				)}
 			</section>
 
-			{/* ── Row 3: the two columns — Info tabs, Reviews and Showings ── */}
-			<div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+			{/* ── Row 3: the two columns, evenly split with a rule between them (Parker's
+			    first iteration pass, 2026-10-13) ── */}
+			<div className="grid gap-8 lg:grid-cols-2 lg:items-start">
 				<WorkInfoTabs tabs={infoTabs} activeKey={activeInfoTab} onActiveChange={setActiveInfoTab} />
-				<WorkSideColumn tabs={sideTabs} work={current} />
+				<div className="lg:border-l lg:border-base-300 lg:pl-8">
+					<WorkSideColumn tabs={sideTabs} work={current} />
+				</div>
 			</div>
 
 			{error && <p className="text-sm text-error">{error}</p>}
