@@ -82,6 +82,9 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 	const { work } = (await created.json()) as { work: OwnedWork };
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
+	// The schedule lives in the Release field's edit state, on the Work's page (the
+	// kinds pass, 2026-10-14) — the field saves alone.
+	await page.getByRole("button", { name: "Edit Release" }).click();
 	const releaseTime = page.getByLabel("Release time");
 	await expect(releaseTime).toBeEnabled();
 	await expect(
@@ -99,11 +102,9 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 	await releaseTime.fill(local);
 	await expect(page.getByText(/It releases at this time once it's ready/)).toBeVisible();
 
-	await page.getByRole("button", { name: /save work/i }).click();
-	// Saving keeps the creator on the Work's page, looking at the result (Parker, 2026-09-17).
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
-		timeout: 15_000,
-	});
+	await page.getByRole("button", { name: "Save Release" }).click();
+	// Saving keeps the creator on the Work's page, looking at the result.
+	await expect(page.getByText(/scheduled for/i)).toBeVisible({ timeout: 15_000 });
 	await page.goto("/studio/works");
 	const row = page.locator("tbody tr").filter({ hasText: TITLE });
 	await expect(row).toContainText("Releases");
@@ -118,6 +119,7 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 
 	// Ticking release now clears the schedule in the form, as the server would.
 	await page.goto(`/studio/works/${work.publicId}/edit`);
+	await page.getByRole("button", { name: "Edit Release" }).click();
 	await expect(releaseTime).toHaveValue(local);
 	await page.getByRole("checkbox", { name: /released to my public catalog/i }).check();
 	await expect(page.getByLabel("Release time")).toHaveCount(0);
