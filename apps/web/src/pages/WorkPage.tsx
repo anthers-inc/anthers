@@ -22,7 +22,7 @@ import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { studioEditWorkUrl } from "@anthers/web-shared/studio";
-import { isAccessResult, type TranscodingJob } from "@anthers/web-shared/types";
+import { type AccessResult, isAccessResult, type TranscodingJob } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { MegaphoneIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -34,19 +34,30 @@ import StickerBar from "../components/post/StickerBar";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectPricing from "../components/project/ProjectPricing";
 import WorkReviews from "../components/project/WorkReviews";
+import OwnerWorkEditor, {
+	CaptionsSummary,
+	ReleaseSummary,
+} from "../components/work/OwnerWorkEditor";
 import SharedWorkBanner from "../components/work/SharedWorkBanner";
 import ShareLinkButton from "../components/work/ShareLinkButton";
+import WorkInfoTabs from "../components/work/WorkInfoTabs";
 import {
 	isWriting,
 	pageHoldsTheMeter,
+	WORK_DETAILS_HEADING_CLASS,
+	WorkAccessChip,
+	WorkByline,
 	WorkColumn,
 	WorkCredits,
 	WorkDeliverable,
 	WorkDescription,
 	type WorkDetail,
 	WorkHeader,
+	WorkRating,
 	WorkRecordLink,
 } from "../components/work/WorkLayout";
+
+import WorkSideColumn, { ShowingsStub } from "../components/work/WorkSideColumn";
 import { reportExternalActivity, useAttentionClaim } from "../lib/attention";
 import { useMeteredBudget } from "../lib/public-access";
 import { useShareToken, withShareToken } from "../lib/share-link";
@@ -229,6 +240,13 @@ export default function WorkPage() {
 	 */
 	const canAccess = access ? access.canAccess : isOwner;
 	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
+	/**
+	 * A video's editing surface is the Work's own page now (the unified layout,
+	 * 2026-10-13): its owner edits right here, and the persona preview's purpose is
+	 * exactly that — when one is active the page is the user's rendering, which is what
+	 * the PreviewBar itself says.
+	 */
+	const ownerEditsVideo = work.type === "video" && isOwner && !preview.previewAs;
 
 	// Where this Work has been announced — the other half of an inert reference. Hoisted
 	// so the goods page's two-up layout and the linear one both compose it.
@@ -265,8 +283,19 @@ export default function WorkPage() {
 			</section>
 		) : null;
 
+	if (ownerEditsVideo) {
+		// No column of its own here: the editor renders the page's one WorkColumn, and a
+		// second would double its top padding against the topbar (Parker's fourth pass).
+		return <OwnerWorkEditor work={work} onRefetch={refetch} />;
+	}
+
 	return (
-		<WorkColumn type={work.type}>
+		// A video's views are one width everywhere — the creator's editor, the unlocked
+		// visitor page and the locked one (Parker's second pass, 2026-10-13): the columns
+		// and their divider read the same in all three, and the rule's centering is true
+		// of the player's center because the two areas share one width. The top is tight:
+		// the video starts under the topbar at the section spacing, not the page's.
+		<WorkColumn type={work.type} wide={work.type === "video"} tight={work.type === "video"}>
 			{/* Creator preview — only ever offered to the person who made it, and only ever
 			    able to subtract access (the server guards that per Work). Beside it, the way back
 			    to the Work's Edit page, which is where the preview is usually reached from. */}
@@ -275,9 +304,32 @@ export default function WorkPage() {
 					<div className="flex-1">
 						<PreviewBar />
 					</div>
-					<Link to={studioEditWorkUrl(work.publicId ?? work.id)} className="btn btn-primary btn-sm">
-						Edit This Work
-					</Link>
+					{/* A video's editing surface is the page itself now — the "Edit" affordance
+					    leaves the preview rather than rounding a redirect loop through the
+					    Studio route this page no longer serves for video (2026-10-13). */}
+					{work.type === "video" ? (
+						<button
+							type="button"
+							className="btn btn-primary btn-sm"
+							onClick={() => {
+								const p = new URLSearchParams(window.location.search);
+								p.delete("previewAs");
+								p.delete("previewOwned");
+								navigate(`${window.location.pathname}${p.toString() ? `?${p.toString()}` : ""}`, {
+									replace: true,
+								});
+							}}
+						>
+							Edit This Work
+						</button>
+					) : (
+						<Link
+							to={studioEditWorkUrl(work.publicId ?? work.id)}
+							className="btn btn-primary btn-sm"
+						>
+							Edit This Work
+						</Link>
+					)}
 				</div>
 			)}
 
@@ -290,25 +342,30 @@ export default function WorkPage() {
 				</div>
 			)}
 
-			<WorkHeader
-				work={work}
-				titleAside={
-					// Save sits beside the title rather than under the player, because it applies
-					// to a gated Work too — it keeps the thing, it does not open it. Share is
-					// beside it (Parker, 2026-10-10 — the top is where a share action lives);
-					// the two are the header's quiet corner, not a toolbar.
-					<div className="flex shrink-0 items-center gap-1">
-						{isAuthenticated && !shareToken && (
-							<ShareLinkButton workId={work.id} slug={work.slug ?? ""} />
-						)}
-						<SaveButton workId={work.id} className="shrink-0" />
-					</div>
-				}
-			/>
+			{work.type !== "video" && (
+				<>
+					<WorkHeader
+						work={work}
+						titleAside={
+							// Save sits beside the title rather than under the player, because it applies
+							// to a gated Work too — it keeps the thing, it does not open it. Share is
+							// beside it (Parker, 2026-10-10 — the top is where a share action lives);
+							// the two are the header's quiet corner, not a toolbar.
+							<div className="flex shrink-0 items-center gap-1">
+								{isAuthenticated && !shareToken && (
+									<ShareLinkButton workId={work.id} slug={work.slug ?? ""} />
+								)}
+								<SaveButton workId={work.id} className="shrink-0" />
+							</div>
+						}
+					/>
 
-			{/* The Work's listing on the network, linked for every reader who can see the
-			    Work — the record is public, so the stranger and the creator see one link. */}
-			<WorkRecordLink work={work} />
+					{/* The Work's listing on the network, linked for every reader who can see the
+					    Work — the record is public, so the stranger and the creator see one link.
+					    A video's record link lives in its Details tab now (the byline pass). */}
+					<WorkRecordLink work={work} />
+				</>
+			)}
 
 			{/* A piece of writing's description is its standfirst, under the headline where a user
 			    expects one; every other kind keeps it under the Work, below. */}
@@ -377,60 +434,112 @@ export default function WorkPage() {
 				<>
 					<section ref={deliverableRef}>
 						{!canAccess ? (
-							<div className="space-y-4">
-								{/* ⚠️ A signed-out visitor is refused the bytes of free work too, and that
-						    is not a lock — the Work is free to everyone and stays free; what is
-						    missing is an account for the time to be attributed to. So the cover
-						    stays unblurred and un-padlocked here, and the card underneath asks
-						    for the account instead. See `presentsAsLocked`. */}
-								{/* The locked preview and the purchase decision are one composition: a
-						    two-up, equal-height pairing (Parker, 2026-10-04, after Vimeo On
-						    Demand's buy panel) — the blurred cover left, the price card right,
-						    both cards' edges aligned. They stack below `sm` with the cover
-						    first. Everything else on the page stays full-width; only this
-						    pairing is two-up. */}
-								{/* ⚠️ `w-full` is load-bearing on both children: a grid item stretched to
-						    the row's height lets `aspect-video` derive its WIDTH from that
-						    height (254 × 16/9 ≈ 452px), overflowing its 424px track — the
-						    aspect ratio silently outranks the track. An explicit width breaks
-						    the derive-back and the cover sizes to its column. Found by
-						    measuring, invisible in the DOM string. */}
-								<div className="sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
+							work.type === "video" ? (
+								/* A locked video is the feed's treatment at page scale (Parker,
+								    2026-10-13): the thumbnail blurred beneath, and the unlock —
+								    whatever it asks for — overlaid on it, rather than a two-up
+								    of cover and card. The underlying cover is the same
+								    `LockedCover` blur the tiles draw; the card overlay rides
+								    above it, centered, on `z-10`. */
+								<div className="relative overflow-hidden rounded-lg">
 									{presentsAsLocked(access) ? (
 										<LockedCover
 											thumbnail={work.thumbnail}
-											className="aspect-video w-full rounded-lg"
-											lockedBy={access ? lockedByBadge(access, creatorName) : null}
+											className="aspect-video w-full"
+											lockedBy={null}
 										/>
 									) : (
 										work.thumbnail && (
 											<img
 												src={work.thumbnail}
 												alt=""
-												className="aspect-video w-full rounded-lg object-cover"
+												className="aspect-video w-full object-cover blur-xl scale-110"
 											/>
 										)
 									)}
-									{access &&
-										(access.requiresPurchase ? (
-											/* Every purchase goes through the basket (Parker, 2026-10-03): the
-									   pricing card offers the two doors into it and nothing about a
-									   card lives on this page. */
-											<ProjectPricing
-												workId={work.id}
-												slug={work.slug ?? ""}
-												access={access}
-												title={work.title ?? "Untitled"}
-												creatorHandle={work.creator?.handle ?? ""}
+									<div className="absolute inset-0 z-10 flex items-center justify-center p-6">
+										{/*
+										 * ⚠️ A user-shape Work always carries an access verdict, which is
+										 * the only shape that reaches this branch — an owner without one
+										 * reads canAccess true above and never gets here. So the card
+										 * here is whichever the verdict asks for.
+										 */}
+										{access && (
+											<div className="w-full max-w-md rounded-lg shadow-lg">
+												{access.requiresPurchase ? (
+													<ProjectPricing
+														workId={work.id}
+														slug={work.slug ?? ""}
+														access={access}
+														title={work.title ?? "Untitled"}
+														creatorHandle={work.creator?.handle ?? ""}
+														thumbnail={work.thumbnail}
+														creatorHasStripe={work.creatorHasStripe ?? false}
+														workType={work.type}
+													/>
+												) : (
+													<InlineUnlock post={work} access={access} />
+												)}
+											</div>
+										)}
+									</div>
+								</div>
+							) : (
+								<div className="space-y-4">
+									{/* ⚠️ A signed-out visitor is refused the bytes of free work too, and that
+						    is not a lock — the Work is free to everyone and stays free; what is
+						    missing is an account for the time to be attributed to. So the cover
+						    stays unblurred and un-padlocked here, and the card underneath asks
+						    for the account instead. See `presentsAsLocked`. */}
+									{/* The locked preview and the purchase decision are one composition: a
+						    two-up, equal-height pairing (Parker, 2026-10-04, after Vimeo On
+						    Demand's buy panel) — the blurred cover left, the price card right,
+						    both cards' edges aligned. They stack below `sm` with the cover
+						    first. Everything else on the page stays full-width; only this
+						    pairing is two-up. */}
+									{/* ⚠️ `w-full` is load-bearing on both children: a grid item stretched to
+						    the row's height lets `aspect-video` derive its WIDTH from that
+						    height (254 × 16/9 ≈ 452px), overflowing its 424px track — the
+						    aspect ratio silently outranks the track. An explicit width breaks
+						    the derive-back and the cover sizes to its column. Found by
+						    measuring, invisible in the DOM string. */}
+									<div className="sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
+										{presentsAsLocked(access) ? (
+											<LockedCover
 												thumbnail={work.thumbnail}
-												creatorHasStripe={work.creatorHasStripe ?? false}
-												workType={work.type}
+												className="aspect-video w-full rounded-lg"
+												lockedBy={access ? lockedByBadge(access, creatorName) : null}
 											/>
 										) : (
-											<InlineUnlock post={work} access={access} />
-										))}
+											work.thumbnail && (
+												<img
+													src={work.thumbnail}
+													alt=""
+													className="aspect-video w-full rounded-lg object-cover"
+												/>
+											)
+										)}
+										{access &&
+											(access.requiresPurchase ? (
+												/* Every purchase goes through the basket (Parker, 2026-10-03): the
+									   pricing card offers the two doors into it and nothing about a
+									   card lives on this page. */
+												<ProjectPricing
+													workId={work.id}
+													slug={work.slug ?? ""}
+													access={access}
+													title={work.title ?? "Untitled"}
+													creatorHandle={work.creator?.handle ?? ""}
+													thumbnail={work.thumbnail}
+													creatorHasStripe={work.creatorHasStripe ?? false}
+													workType={work.type}
+												/>
+											) : (
+												<InlineUnlock post={work} access={access} />
+											))}
+									</div>
 								</div>
-							</div>
+							)
 						) : spentOnThis ? (
 							// The server withheld the deliverable because the allowance is gone, so
 							// there is nothing to render in its place but the reason.
@@ -456,37 +565,190 @@ export default function WorkPage() {
 					    invitation that interrupted that would be the funnel this deliberately is not. */}
 					{shareToken && !user && <SharedWorkBanner sharedBy={work.sharedBy ?? null} />}
 
-					{!isWriting(work.type) && <WorkDescription work={work} />}
-
-					{/* The liner notes — who and what made it, public whether or not it is gated. A credit
-					    naming this user's own identity carries the confirm ask, and a decision re-reads
-					    the Work so the credits settle from the server's own answer. */}
-					<WorkCredits work={work} onCreditDecided={refetch} />
-
-					{work.assets.length > 0 && (
-						<ProjectDownloads
-							assets={work.assets}
-							contentType={work.type}
-							workId={work.id}
-							canAccess={canAccess}
+					{/* The byline strip, under the deliverable (Parker's third pass, 2026-10-13):
+					    the title and the maker between the thing and its record — the same strip
+					    the creator's editor renders — with Share and Save to its right, above the
+					    side tabs they've always sat near. */}
+					{work.type === "video" && (
+						<WorkByline
+							work={work}
+							actions={
+								<div className="flex shrink-0 items-center gap-1">
+									{isAuthenticated && !shareToken && (
+										<ShareLinkButton workId={work.id} slug={work.slug ?? ""} />
+									)}
+									<SaveButton workId={work.id} className="shrink-0" />
+								</div>
+							}
+							chips={<WorkAccessChip access={access} />}
 						/>
 					)}
 
-					{/* A Sticker may be given on any Work, gated or not, purchased or not, because it is
-					    a gift to the creator rather than payment for the Work. It moves into the review
-					    composer when Stickers become attachments to reviews, comments and votes. */}
-					<StickerBar subjectType="work" subjectId={work.id} label={work.title ?? "this Work"} />
+					{/* A video gets the SAME tab groups its editor renders — a user's read-only
+					    version of the very same information, in the same two columns (2026-10-13);
+					    every other kind keeps the page as it was. */}
+					{work.type === "video" ? (
+						<VideoVisitorRecord work={work} refetch={refetch} access={access} />
+					) : (
+						<>
+							{!isWriting(work.type) && <WorkDescription work={work} />}
 
-					{/* Reviews — a verdict on the work itself, which is the only thing a review
-					    was ever about. Gated behind access on the server: you can't review what you
-					    haven't been able to see. */}
-					{/* 🚨 A Work takes no votes and no comments: a review is the only feedback it accepts
-					    (Parker, 2026-09-13). */}
-					<WorkReviews workId={work.id} />
+							{/* The liner notes — who and what made it, public whether or not it is gated. A credit
+							    naming this user's own identity carries the confirm ask, and a decision re-reads
+							    the Work so the credits settle from the server's own answer. */}
+							<WorkCredits work={work} onCreditDecided={refetch} />
 
-					{postedAbout}
+							{work.assets.length > 0 && (
+								<ProjectDownloads
+									assets={work.assets}
+									contentType={work.type}
+									workId={work.id}
+									canAccess={canAccess}
+								/>
+							)}
+
+							{/* A Sticker may be given on any Work, gated or not, purchased or not, because it is
+							    a gift to the creator rather than payment for the Work. It moves into the review
+							    composer when Stickers become attachments to reviews, comments and votes. */}
+							<StickerBar
+								subjectType="work"
+								subjectId={work.id}
+								label={work.title ?? "this Work"}
+							/>
+
+							{/* Reviews — a verdict on the work itself, which is the only thing a review
+							    was ever about. Gated behind access on the server: you can't review what you
+							    haven't been able to see. */}
+							{/* 🚨 A Work takes no votes and no comments: a review is the only feedback it accepts
+							    (Parker, 2026-09-13). */}
+							<WorkReviews workId={work.id} />
+
+							{postedAbout}
+						</>
+					)}
 				</>
 			)}
 		</WorkColumn>
+	);
+}
+
+/**
+ * A video Work's information for a viewer — the same Info and side tab groups its owner
+ * edits in (`WorkInfoTabs`/`WorkSideColumn`), read-only. Rough views on purpose, this
+ * pass: Parker reviews the layout in screenshots and the reads get tuned against what
+ * they look like, not against a spec.
+ */
+function VideoVisitorRecord({
+	work,
+	refetch,
+	access,
+}: {
+	work: WorkDetail;
+	refetch: () => void;
+	/** The user's own verdict — the access line's and the chip's truth, not the flag. */
+	access: AccessResult | null | undefined;
+}) {
+	const publicAccess = access ? access.isFree : (work.publicAccess ?? false);
+	const rating = work.maturity;
+	return (
+		// The rule between the halves is its own grid column — the same two-pixel, full-
+		// height divider the creator's editor draws (Parker's third pass, 2026-10-13).
+		<div className="grid lg:grid-cols-[minmax(0,1fr)_2px_minmax(0,1fr)]">
+			<div className="lg:pr-4">
+				<WorkInfoTabs
+					tabs={[
+						{
+							key: "details",
+							label: "Details",
+							content: (
+								// Named parts, as the creator's Details tab is (Parker, 2026-10-13):
+								// what it says, when it came out — with the listing's address — and
+								// who may open it.
+								<div className="flex flex-col gap-6">
+									<section className="flex flex-col gap-2">
+										<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
+										{/* Same prose-margin trim as the editor's read (Parker, 2026-10-13). */}
+										<div className="[&_p]:my-0">
+											<WorkDescription work={work} />
+										</div>
+									</section>
+									<section className="flex flex-col gap-2">
+										<h3 className={WORK_DETAILS_HEADING_CLASS}>Release</h3>
+										<ReleaseSummary work={work} scheduled={work.scheduledReleaseAt ?? null} />
+										<WorkRecordLink work={work} />
+									</section>
+									<section className="flex flex-col gap-2">
+										<h3 className={WORK_DETAILS_HEADING_CLASS}>Access</h3>
+										{/* The chip names this in the byline strip; the line says the terms. */}
+										<p className="text-sm">
+											{publicAccess ? (
+												"Free to everyone."
+											) : (
+												<span className="text-base-content/60">
+													Not free to everyone — the unlock above says what opens it.
+												</span>
+											)}
+										</p>
+									</section>
+								</div>
+							),
+						},
+						{
+							key: "credits",
+							label: "Credits",
+							content: <WorkCredits work={work} onCreditDecided={refetch} />,
+						},
+						{
+							key: "rating",
+							label: "Rating",
+							content:
+								rating === "mature" || rating === "adult" ? (
+									<WorkRating work={work} />
+								) : (
+									<p className="text-sm text-base-content/60">
+										General — users see no rating on a General Work.
+									</p>
+								),
+						},
+						{
+							key: "accessibility",
+							label: "Accessibility",
+							content: <CaptionsSummary captions={work.captions ?? []} />,
+						},
+					]}
+				/>
+			</div>
+			<div aria-hidden className="w-0.5 self-stretch bg-base-content/20 max-lg:hidden" />
+			<div className="lg:pl-4">
+				<WorkSideColumn
+					tabs={[
+						{
+							key: "reviews",
+							label: "Reviews",
+							// 🚨 A Work takes no votes and no comments: a review is the only feedback
+							// it accepts (Parker, 2026-09-13).
+							content: (
+								<WorkReviews
+									workId={work.id}
+									aside={
+										<StickerBar
+											subjectType="work"
+											subjectId={work.id}
+											label={work.title ?? "this Work"}
+										/>
+									}
+								/>
+							),
+						},
+						{
+							key: "showings",
+							label: "Showings",
+							content: <ShowingsStub work={work} />,
+						},
+					]}
+					work={work}
+				/>
+			</div>
+		</div>
 	);
 }

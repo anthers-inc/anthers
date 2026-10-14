@@ -124,29 +124,50 @@ test("a video Work is made from its file and edited while the file uploads", asy
 		buffer: clip(),
 	});
 
-	// ── On the Work's page, while the file is still going up ────────────────
-	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/, { timeout: 15_000 });
-	// No title was typed, so the file's name became one.
-	await expect(page.getByPlaceholder("Work title")).toHaveValue(STEM);
-	await expect(page.getByText(/keep this tab open until it finishes/i)).toBeVisible();
-	// A Work whose file has not arrived cannot be released (`media_missing`), and the control
-	// says so rather than earning the refusal.
+	// ── On the Work's own page, while the file is still going up ────────────
+	// The upload's landing is the Work's page now (2026-10-13): the editing surface a
+	// creator meets while the file is still on the wire is the page itself, in editor mode.
+	await expect(page).toHaveURL(/\/works\/[^/?]+$/, { timeout: 15_000 });
+	await expect(page.getByText("Editing your Work")).toBeVisible();
+	// No title was typed, so the file's name became one — read as the title it is,
+	// not as a form field holding a file name.
+	await expect(page.locator("h1").filter({ hasText: STEM })).toBeVisible();
+	// The in-flight upload says where it is, and that the tab's life is the upload's.
+	await expect(page.getByText(/Keep this tab open/)).toBeVisible();
+	// A Work whose file has not arrived cannot be released (`media_missing`), and the
+	// control says so rather than earning the refusal.
+	await page.getByRole("button", { name: "Edit Release" }).click();
 	await expect(
 		page.getByRole("checkbox", { name: /released to my public catalog/i }),
 	).toBeDisabled();
 
+	// The per-field model is what this walk is about: the description saves THROUGH the
+	// upload, not after it — one field, one save, whatever else is in flight.
+	await page.getByRole("button", { name: "Edit Description" }).click();
 	await page.getByPlaceholder("Describe this Work…").fill("Written while it uploaded.");
+	await page.getByRole("button", { name: "Save Description" }).click();
+	await expect(page.getByText("Written while it uploaded.")).toBeVisible();
 
 	// ── The file lands while the page is open ───────────────────────────────
+	// The chips are the states now, so arrival is read from the row itself — the same
+	// poll the paged walks use.
 	letUploadThrough();
-	await expect(page.getByText("Uploaded", { exact: true })).toBeVisible({ timeout: 30_000 });
+	await expect
+		.poll(
+			async () => {
+				const [work] = (await ownWorks()).filter((w) => w.title === STEM);
+				return work?.sourceKey ? "arrived" : null;
+			},
+			{ timeout: 30_000 },
+		)
+		.toBe("arrived");
 
-	// ── And a save made afterwards keeps it ─────────────────────────────────
-	await page.getByRole("button", { name: /save work/i }).click();
-	// Saving keeps the creator on the Work's page, looking at the result (Parker, 2026-09-17).
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
-		timeout: 15_000,
-	});
+	// And what the page holds after a reload is what the saves made (Parker's per-field
+	// model, 2026-10-13): the description that saved through the upload, and the file.
+	await page.reload();
+	await expect(page.getByText("Written while it uploaded.")).toBeVisible();
+
+	// ── And the server holds the same ───────────────────────────────────────
 	await page.goto("/studio/works");
 	await expect(rowFor(page)).not.toContainText("No file");
 
@@ -239,6 +260,10 @@ test("a Work's page and the Dashboard follow its processing", async ({ page, con
 	});
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
+	// The editing surface is the Work's own page (2026-10-13); the processing reads on
+	// the creator's Manage tab, where the file's machinery lives.
+	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
+	await page.getByRole("tab", { name: "Manage" }).click();
 	await expect(page.getByText("43%", { exact: true })).toBeVisible();
 	await expect(page.getByText("About 3 minutes left")).toBeVisible();
 
@@ -251,6 +276,8 @@ test("a Work's page and the Dashboard follow its processing", async ({ page, con
 	);
 	await expect(row.getByText("About 3 minutes left")).toBeVisible();
 	await page.goto(`/studio/works/${work.publicId}/edit`);
+	// The fresh page's tabs open on Details; the processing lives on Manage.
+	await page.getByRole("tab", { name: "Manage" }).click();
 
 	// The page re-reads the job on its own. An audio or ebook job has no estimate, and the page
 	// says nothing about one rather than an empty "left".

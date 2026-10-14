@@ -109,7 +109,28 @@ export async function uploadMediaFile(
 	);
 }
 
-async function uploadSessionPlan(
+/** How one part goes up — the XHR PUT by default; one half of the suite's injection seam. */
+export type SessionPartPutter = (
+	url: string,
+	blob: Blob,
+	onLoaded: (chunkLoaded: number) => void,
+	signal?: AbortSignal,
+) => Promise<{ etag: string | null; bytes: number }>;
+
+/** The suite's injection seam around the network: how a part goes up and how the
+ *  session finishes. Defaults are the XHR part PUT and the RPC `session.complete`. */
+export interface SessionRunnerIo {
+	put: SessionPartPutter;
+	complete: (
+		parts: Array<{ number: number; etag?: string }>,
+		digest: string,
+		sessionId: string,
+	) => Promise<string>;
+}
+
+/** The session plan's runner, exported for its suite: the held-part accounting, the
+ *  concurrency, the retry loop and the whole-file progress arithmetic all live here. */
+export async function uploadSessionPlan(
 	file: File,
 	plan: {
 		sessionId: string;
@@ -120,6 +141,20 @@ async function uploadSessionPlan(
 	},
 	onProgress?: (percent: number | null) => void,
 	signal?: AbortSignal,
+	io: SessionRunnerIo = {
+		put: xhrUploadPart,
+		complete: async (parts, digest, sessionId) => {
+			const complete = await client.api.content[`media-upload`].session.complete.$post({
+				json: { sessionId, parts, clientSha256: digest },
+			});
+			if (!complete.ok) {
+				const body = (await complete.json().catch(() => null)) as { error?: string } | null;
+				throw new Error(body?.error ?? `The upload refused to complete (${complete.status})`);
+			}
+			const { key } = (await complete.json()) as { key: string };
+			return key;
+		},
+	},
 ): Promise<string> {
 	// An empty plan is a protocol bug the server must never produce — a session with a
 	// sessionId and no parts is a session that completes into nothing.
@@ -153,7 +188,7 @@ async function uploadSessionPlan(
 
 				for (let attempt = 1; attempt <= 3; attempt++) {
 					try {
-						const { etag, bytes } = await xhrUploadPart(
+						const { etag, bytes } = await io.put(
 							next.url,
 							blob,
 							(chunkLoaded) => {
@@ -161,7 +196,17 @@ async function uploadSessionPlan(
 									onProgress(
 										// Progress is whole-file honest: delivered = parts done +
 										// the in-flight part's own loaded counter.
-										percentOf(deliveredBytes + bytes + chunkLoaded, file.size),
+										//
+										// 🚨 `bytes` must NOT join this sum. It is named by this very
+										// destructuring, which is still awaiting — reading it here was
+										// a temporal-dead-zone throw on every progress event (the
+										// production bundle's "Cannot access 'K' before
+										// initialization", browser error event 5359), and it also
+										// double-counted: a part's full size would be added before
+										// that part had finished. The completed parts sit in
+										// `deliveredBytes`, and the in-flight one tells its own
+										// loaded counter.
+										percentOf(deliveredBytes + chunkLoaded, file.size),
 									);
 								}
 							},
@@ -178,18 +223,11 @@ async function uploadSessionPlan(
 		});
 		await Promise.all(workers);
 
-		const complete = await client.api.content["media-upload"].session.complete.$post({
-			json: {
-				sessionId: plan.sessionId,
-				parts: uploaded.filter((p) => p != null),
-				clientSha256: plan.digest,
-			},
-		});
-		if (!complete.ok) {
-			const body = (await complete.json().catch(() => null)) as { error?: string } | null;
-			throw new Error(body?.error ?? `The upload refused to complete (${complete.status})`);
-		}
-		const { key } = (await complete.json()) as { key: string };
+		const key = await io.complete(
+			uploaded.filter((p) => p != null),
+			plan.digest,
+			plan.sessionId,
+		);
 		if (onProgress) onProgress(100);
 		return key;
 	} catch (error) {

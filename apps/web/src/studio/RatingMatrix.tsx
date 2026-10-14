@@ -148,10 +148,6 @@ export default function RatingMatrix({
 					</span>
 				</div>
 			)}
-			<p className="text-xs text-base-content/50">
-				Queer characters, relationships and identity are never a factor in any row, and neither is a
-				difficult subject on its own.
-			</p>
 		</div>
 	);
 }

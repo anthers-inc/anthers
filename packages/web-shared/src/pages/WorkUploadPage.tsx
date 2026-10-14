@@ -14,8 +14,10 @@
 import { acceptedVideoFormatsSentence } from "@anthers/shared/accepted-formats";
 import { useNavigate } from "react-router-dom";
 import WorkUploadForm from "../components/content/WorkUploadForm";
+import { workUrl } from "../lib/postUrl";
 import { Link } from "../lib/router";
 import { studioEditWorkUrl, studioUrl } from "../lib/studio";
+import type { Work } from "../lib/types";
 
 /**
  * The accepted formats, stated where the file is picked rather than discovered by failure —
@@ -56,7 +58,16 @@ export default function WorkUploadPage() {
 				<p className="mt-2 text-xs text-base-content/50">{FORMATS_EXPANSION}</p>
 			</div>
 
-			<WorkUploadForm onCreated={(work) => navigate(studioEditWorkUrl(work.publicId ?? work.id))} />
+			<WorkUploadForm
+				onCreated={(work: Work) =>
+					// A video's editing surface is the Work's OWN page now (the unified
+					// creator/user layout, 2026-10-13) — land there; every other kind
+					// still meets the Studio's editor.
+					navigate(
+						work.type === "video" ? workUrl(work) : studioEditWorkUrl(work.publicId ?? work.id),
+					)
+				}
+			/>
 
 			<div className="mt-6 border-t border-base-300 pt-4">
 				<Link to={studioUrl("/works")} className="btn btn-ghost">

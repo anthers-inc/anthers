@@ -21,7 +21,7 @@ import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
-import type { Work } from "@anthers/web-shared/types";
+import type { AccessResult, Work, WorkCredit } from "@anthers/web-shared/types";
 import { CalendarIcon, ClockIcon } from "@heroicons/react/24/outline";
 import { PlayIcon } from "@heroicons/react/24/solid";
 import { type CSSProperties, type MutableRefObject, type ReactNode, useState } from "react";
@@ -54,6 +54,13 @@ export type WorkDetail = Work & {
 		isPublished: boolean;
 		postedAt: string | null;
 	}[];
+	/**
+	 * Where this Work can be found — the facts of the Showings panel. The creator's
+	 * profile is read off `creator`; the Projects carrying it ride here, in the order
+	 * the project places them. Channels, collections and collaborations follow when
+	 * their machinery exists; the panel's stub text is the promise's current shape.
+	 */
+	shownOn?: { projects: Array<{ slug: string; title: string }> };
 };
 
 /** The title's typography, so a control standing in for the title reads as the title. */
@@ -61,6 +68,10 @@ export const WORK_TITLE_CLASS = "text-3xl font-bold";
 
 /** The public blurb's typography, likewise. */
 export const WORK_DESCRIPTION_CLASS = "prose max-w-none text-base-content/80";
+
+/** The Details tab's section labels — small, named, uppercased (Parker, 2026-10-13). */
+export const WORK_DETAILS_HEADING_CLASS =
+	"text-xs font-semibold uppercase tracking-wider text-base-content/50";
 
 /**
  * Whether a Work is a piece of writing, which reads as an article rather than as a player.
@@ -156,13 +167,22 @@ export function WorkColumn({
 	children,
 	type,
 	wide,
+	tight,
 }: {
 	children: ReactNode;
 	type?: string;
 	wide?: boolean;
+	/** Pull the content to the topbar's edge: a page whose first element is the thing
+	 *  itself (a video's page, whose player starts under the mode banner) wants the top
+	 *  gap the section spacing gives, not the page's own (Parker, 2026-10-13). */
+	tight?: boolean;
 }) {
 	const width = wide ? "max-w-7xl" : type && isWriting(type) ? "max-w-2xl" : "max-w-4xl";
-	return <div className={`${width} mx-auto px-4 py-8 space-y-6`}>{children}</div>;
+	return (
+		<div className={`${width} mx-auto px-4 ${tight ? "pt-6 pb-8" : "py-8"} space-y-6`}>
+			{children}
+		</div>
+	);
 }
 
 interface WorkHeaderProps {
@@ -290,6 +310,108 @@ export function WorkRating({ work }: { work: WorkDetail }) {
 	);
 }
 
+/**
+ * The access chip, for the byline strip: what opening this Work costs, in one badge.
+ *
+ * A user page passes the resolver's own verdict — `isFree` says Public Access, a
+ * purchasable Work its price, a badge-gated one Members — because the *user's* chip
+ * must be the truth they stand in, not the setting behind it (`presentsAsLocked`'s
+ * lesson: a signed-out visitor is refused free bytes too, and calling that "Gated"
+ * would rename the commons). The creator's page passes no verdict and the chip reads
+ * the table's setting instead — their own draft, gated or public by choice.
+ */
+export function WorkAccessChip({
+	publicAccess,
+	access,
+}: {
+	publicAccess?: boolean;
+	access?: AccessResult | null;
+}) {
+	if (access) {
+		if (access.isFree) {
+			return <span className="badge badge-sm badge-outline badge-success">Public Access</span>;
+		}
+		if (access.requiresPurchase && access.price) {
+			return <span className="badge badge-sm badge-outline badge-secondary">${access.price}</span>;
+		}
+		if (!access.canAccess) {
+			return <span className="badge badge-sm badge-outline">Members</span>;
+		}
+		return <span className="badge badge-sm badge-outline">Yours</span>;
+	}
+	return publicAccess ? (
+		<span className="badge badge-sm badge-outline badge-success">Public Access</span>
+	) : (
+		<span className="badge badge-sm badge-outline">Gated</span>
+	);
+}
+
+export interface WorkBylineProps {
+	work: WorkDetail;
+	/** In place of the title, for a control standing in for it. */
+	title?: ReactNode;
+	/** To the title's right, at the page's edge — a signed-in reader's Share and Save. */
+	actions?: ReactNode;
+	/** After the creator, the kind and any chip the page's mode knows first-hand. */
+	chips?: ReactNode;
+}
+
+/**
+ * The byline strip, under the deliverable (Parker, 2026-10-13): the title on the first
+ * line and the person who made it on the second — avatar, name, a rule, the kind — with
+ * the access chip after it. It replaces the header block above the deliverable, whose
+ * position a player owns: what a Work is and who made it now stands *between* the thing
+ * itself and its record, and Share and Save go with it, to the right, above the side
+ * tabs. The rating is deliberately absent — it is the Rating tab's fact.
+ */
+export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
+	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
+	const creatorEl = work.creator && (
+		<Link to={profileUrl(work.creator.handle)} className="flex items-center gap-2 hover:underline">
+			{work.creator.avatar ? (
+				<img
+					src={work.creator.avatar}
+					alt={work.creator.handle}
+					className="size-6 rounded-full object-cover"
+				/>
+			) : (
+				<div className="flex size-6 items-center justify-center rounded-full bg-base-300 text-xs font-bold">
+					{work.creator.handle.charAt(0).toUpperCase()}
+				</div>
+			)}
+			{creatorName}
+		</Link>
+	);
+	return (
+		// Centered, fanning out symmetrically (Parker's fourth pass, 2026-10-13): the
+		// maker's name is always the page's center, a rule on either side of it, the
+		// chips right-aligned to the left one and the actions left-aligned to the right.
+		<header className="space-y-2.5">
+			<div className="text-center">
+				{title ?? (
+					<h1
+						className={`${workTitleTypography(work.type).className} text-center`}
+						style={workTitleTypography(work.type).style}
+					>
+						{work.title || "Untitled"}
+					</h1>
+				)}
+			</div>
+			<div className="grid grid-cols-1 items-center gap-y-2 sm:grid-cols-[1fr_auto_1fr]">
+				<div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end sm:pr-2.5">
+					<ContentTypeBadge contentType={work.type} />
+					{chips}
+					<span aria-hidden className="h-4 w-px bg-base-300 max-sm:hidden" />
+				</div>
+				{creatorEl}
+				<div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:pl-2.5">
+					<span aria-hidden className="h-4 w-px bg-base-300 max-sm:hidden" />
+					{actions}
+				</div>
+			</div>
+		</header>
+	);
+}
 /**
  * The Work itself, for somebody who may open it: the player, the user, the image, the
  * embedded build or the gated prose, whichever the kind has.
@@ -600,6 +722,13 @@ function CreditConfirmationControls({
  * badged rather than buried. Public: any user of a released Work sees these, gated or
  * not, as they see the description. A Work with no credits renders nothing.
  *
+ * ⭐ **A DID credit names a person, not a protocol** (Parker, 2026-10-13): the account
+ * presents as its avatar and display name, and clicking it goes to the person — their
+ * Anthers profile page when their account resolves (`/@handle`), otherwise their Bluesky
+ * profile by the DID, which is the one address a DID always has a way to name. The DID
+ * itself stays on the record as the tooltip's hover text, never the line's face. A
+ * plain-name contributor renders as text and is never a link — it is nobody's identity.
+ *
  * A credit the user's own identity has not confirmed yet renders beside a
  * "You're credited — confirm?" ask with Accept and Decline, because the credit is a
  * public claim about them and their word is what publishes it.
@@ -633,7 +762,7 @@ export function WorkCredits({
 								{credit.contributor && (
 									<>
 										{" "}
-										<span className="text-base-content/70">{credit.contributor}</span>
+										<CreditIdentity credit={credit} />
 									</>
 								)}
 							</span>
@@ -655,4 +784,54 @@ export function WorkCredits({
 			</ul>
 		</section>
 	);
+}
+
+/**
+ * One credit's contributor, presented as the person it names. The profile card rides the
+ * overlay when the DID resolves (both shapes attach it); below it, the DID's own Bluesky
+ * profile is the fallback — the same person, at the address their DID is the key to.
+ */
+function CreditIdentity({ credit }: { credit: WorkCredit }) {
+	const profile = credit.contributorProfile;
+	const isDid = credit.contributor.startsWith("did:");
+	const didAttr = isDid ? credit.contributor : undefined;
+	if (profile?.handle) {
+		return (
+			<Link
+				to={profileUrl(profile.handle)}
+				title={didAttr}
+				className="inline-flex items-baseline gap-1.5"
+			>
+				{profile.avatar ? (
+					<img
+						src={profile.avatar}
+						alt=""
+						className="inline h-5 w-5 self-center rounded-full object-cover"
+					/>
+				) : (
+					<span className="inline-flex h-5 w-5 self-center items-center justify-center rounded-full bg-primary/20 text-xs font-bold">
+						{(profile.displayName || profile.handle).charAt(0).toUpperCase()}
+					</span>
+				)}
+				<span className="text-base-content/70 underline decoration-base-content/20 underline-offset-2 hover:decoration-base-content/60">
+					{profile.displayName || profile.handle}
+				</span>
+			</Link>
+		);
+	}
+	if (isDid) {
+		return (
+			<a
+				href={`https://bsky.app/profile/${credit.contributor}`}
+				title={didAttr}
+				target="_blank"
+				rel="noreferrer"
+				className="text-base-content/70 underline decoration-base-content/20 underline-offset-2 hover:decoration-base-content/60"
+			>
+				{profile?.displayName || credit.contributor}
+			</a>
+		);
+	}
+	// No identity behind it on the network, and no Anthers account: a name as words.
+	return <span className="text-base-content/70">{credit.contributor}</span>;
 }

@@ -238,13 +238,23 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	const userPage = await userContext.newPage();
 	await userPage.goto(`/works/${work.publicId}`);
 
-	// The confirm ask renders, with the credit's own role — and the DID is what the
-	// user sees, not their resolved name, because they have not confirmed yet.
+	// The confirm ask renders, with the credit's own role — and the credit presents as the
+	// person it names (Parker's identity presentation, 2026-10-13): display name and
+	// avatar, with the DID's hover title and the DID never in the line's text, even
+	// before they confirm. Their word is still what publishes it.
 	const ask = userPage.getByText("You're credited — confirm?");
 	await expect(ask).toBeVisible();
 	await expect(userPage.getByRole("button", { name: "Accept", exact: true })).toBeVisible();
 	await expect(userPage.getByRole("button", { name: "Decline", exact: true })).toBeVisible();
-	await expect(userPage.locator("section").filter({ hasText: "Credits" })).toContainText(userDid);
+	const askSection = userPage.locator("section").filter({ hasText: "Credits" });
+	await expect(askSection).toContainText(VIEWER_NAME);
+	// The DID is the hover, not the line: the presented name's link carries it.
+	await expect(
+		askSection
+			.locator("a")
+			.filter({ has: userPage.getByText(VIEWER_NAME) })
+			.last(),
+	).toHaveAttribute("title", userDid);
 
 	// The notification is in their list, pointing at this page.
 	const notificationsRes = await fetch(`${API_URL}/api/accounts/me/notifications`, {

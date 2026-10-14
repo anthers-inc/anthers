@@ -100,7 +100,7 @@ import {
 	RATED_PUBLIC_ACCESS_HELP,
 	showsRatedPublicAccessNotice,
 } from "@anthers/web-shared/rated-public-access";
-import { Link, useParams } from "@anthers/web-shared/router";
+import { Link, Navigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { studioUrl } from "@anthers/web-shared/studio";
 import {
@@ -134,7 +134,6 @@ import {
 	workTitleTypography,
 } from "../components/work/WorkLayout";
 import { useMediaPlayer } from "../lib/media-player";
-import { frameOf } from "../lib/video-frame";
 import CreditsSection from "./CreditsSection";
 import PanelEditor from "./PanelEditor";
 import RatingMatrix from "./RatingMatrix";
@@ -199,6 +198,16 @@ export default function WorkEditPage() {
 			live = false;
 		};
 	}, [publicId, generation]);
+
+	/**
+	 * A video's editing surface is the Work's OWN page now (the unified layout,
+	 * 2026-10-13): the Studio ends at the Works list, and this route's video addresses
+	 * redirect there. Every other kind still meets this editor, until its kind's pass
+	 * moves it onto the same surface.
+	 */
+	if (loaded?.type === "video") {
+		return <Navigate to={workUrl(loaded)} replace />;
+	}
 
 	if (loading) {
 		return (
@@ -277,6 +286,8 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
 		editing.thumbnail ? keyToPreview(editing.thumbnail) : null,
 	);
+	/** How many thumbnail uploads are still on the wire; the save below consults it. */
+	const thumbnailInFlight = useRef(0);
 	/**
 	 * Whether the creator changed the thumbnail here, and so whether a save may send it. A ref,
 	 * because the re-reads below run from timers and must see the answer as it is now.
@@ -286,6 +297,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 	const videoEl = useRef<HTMLVideoElement | null>(null);
 	/** Why taking a frame did not work, said beside the button. */
 	const [frameError, setFrameError] = useState<string | null>(null);
+	const [frameBusy, setFrameBusy] = useState(false);
 
 	const details = useWorkDetails(type, editing);
 
@@ -412,6 +424,17 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 		setCurrent((prev) => ({
 			...prev,
 			sourceKey: fresh.sourceKey,
+			// 🚨 `originalUrl` and `durationSeconds` ride the media half too, and this
+			// field set was missing them: the owner shape computes the playable address
+			// at serialize time, so a row re-read before the attach carried
+			// `originalUrl: null` even after `sourceKey` arrived, and the pre-ladder
+			// video branch mounted no player — which is why a landed upload left an
+			// empty deliverable block until the creator happened to save, whose
+			// response was a full serialization. `embedUrl` rides along for the same
+			// shape of omission on an embed Work.
+			originalUrl: fresh.originalUrl,
+			durationSeconds: fresh.durationSeconds,
+			embedUrl: fresh.embedUrl,
 			thumbnail: fresh.thumbnail,
 			assets: fresh.assets,
 			transcoding: fresh.transcoding,
@@ -471,7 +494,10 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			});
 			if (!res.ok) throw new Error(`removal answered ${res.status}`);
 			// An image's face follows its file; clearing the local preview keeps the field
-			// from showing the just-swept object on the way out.
+			// from showing the just-swept object on the way out. A thumbnail upload still
+			// in flight has nothing left to attach to — forget it, so the race guards
+			// above cannot arm a field for a value the Work no longer wants.
+			thumbnailInFlight.current = 0;
 			thumbnailTouched.current = false;
 			setThumbnailUrl("");
 			setThumbnailPreview(null);
@@ -526,6 +552,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 
 	const handleThumbnail = async (file: File) => {
 		thumbnailTouched.current = true;
+		thumbnailInFlight.current += 1;
 		setThumbnailPreview(URL.createObjectURL(file));
 		try {
 			const { url } = await uploadImageFile(file, "thumbnail");
@@ -533,10 +560,26 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			setThumbnailPreview(url);
 		} catch {
 			setThumbnailPreview(thumbnailUrl ? keyToPreview(thumbnailUrl) : null);
+			// A failed upload is not a change: the field still holds what it had, so an
+			// armed-but-unsettled flag here would send the old value (or "" when the
+			// field was empty) and present that as a save of the thing that failed.
+			if (!thumbnailUrl) thumbnailTouched.current = false;
+		} finally {
+			thumbnailInFlight.current -= 1;
 		}
 	};
 
-	/** Make the frame the video is paused on its thumbnail. See `lib/video-frame.ts`. */
+	/**
+	 * Store the moment the video is paused on as its thumbnail — the SERVER extracts it.
+	 *
+	 * ⚠️ **The click pauses first, so the thumbnail is the frame the creator is looking
+	 * at**: extraction reads the original at `currentTime`, and a playing video's moment
+	 * is the click's instant, which is nobody's choice.
+	 *
+	 * ⚠️ **The route saves the field itself** — its answer is the saved row, one act, no
+	 * client upload in flight (the save-race this closes) — so adopting the row here
+	 * disarms the thumbnail for the very value the server now stores.
+	 */
 	const takeCurrentFrame = async () => {
 		setFrameError(null);
 		const video = videoEl.current;
@@ -544,14 +587,34 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			setFrameError("Play the video to the moment you want first.");
 			return;
 		}
-		let frame: File;
+		if (!video.paused) video.pause();
+		setFrameBusy(true);
 		try {
-			frame = await frameOf(video);
+			const res = await client.api.content.works[":id"]["thumbnail-frame"].$post({
+				param: { id: String(current.id) },
+				json: { atSeconds: video.currentTime },
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => null)) as { error?: string } | null;
+				setFrameError(body?.error || "Taking the frame didn't work. Upload an image instead.");
+				return;
+			}
+			const { work: updated } = (await res.json()) as { work: Work };
+			// The server stored the field, so what came back is settled: adopt the row and
+			// let the frame show up in the thumbnail slot at once.
+			const fresh = updated as Work;
+			setCurrent(fresh);
+			thumbnailTouched.current = false;
+			thumbnailInFlight.current = 0;
+			if (fresh.thumbnail) {
+				setThumbnailUrl(fresh.thumbnail);
+				setThumbnailPreview(keyToPreview(fresh.thumbnail));
+			}
 		} catch {
-			setFrameError("This browser can't take a frame from the video. Upload an image instead.");
-			return;
+			setFrameError("Taking the frame didn't work. Upload an image instead.");
+		} finally {
+			setFrameBusy(false);
 		}
-		await handleThumbnail(frame);
 	};
 
 	/**
@@ -588,8 +651,17 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			// Sent unconditionally on an image Work, including empty — clearing the
 			// description is a real edit, and an omitted field cannot express it.
 			...(type === "image" ? { imageAlt: imageAlt.trim() } : {}),
-			// Only when changed here: see the header on why a save must not carry what was loaded.
-			...(thumbnailTouched.current ? { thumbnail: thumbnailUrl } : {}),
+			// Only when changed AND settled: an in-flight thumbnail upload has not
+			// produced its URL yet, and sending the field then sends `""` — which the
+			// server accepts as the allowed clear and stores, erasing exactly the
+			// value the in-flight upload is about to hand back (work 23 on
+			// production: the creator's save raced their frame's upload, "saved"
+			// successfully, and the thumbnail was gone). A save that happens while an
+			// upload is still running leaves the field armed, so the next save sends
+			// the settled value.
+			...(thumbnailTouched.current && thumbnailInFlight.current === 0
+				? { thumbnail: thumbnailUrl }
+				: {}),
 			visibility,
 			...(visibility !== "released" && scheduledRelease !== loadedSchedule
 				? { scheduledReleaseAt: scheduledIso }
@@ -691,7 +763,11 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 			const { work: updated } = await res.json();
 			setCurrent(updated as Work);
 			setTypeOverride(null);
-			thumbnailTouched.current = false;
+			// Disarm the thumbnail only when nothing is still in flight: a save that
+			// raced an upload leaves the flag holding a value the server has not seen,
+			// and unmarking it here is how the frame that resolved a second later went
+			// silently unsaved.
+			thumbnailTouched.current = thumbnailInFlight.current > 0;
 			setBaseline(null);
 			setSavedAt(Date.now());
 		} catch {
@@ -1113,6 +1189,7 @@ function WorkEditor({ editing, onDiscard }: { editing: Work; onDiscard: () => vo
 							setThumbnailPreview(null);
 						}}
 						onFrame={type === "video" && fileReady ? takeCurrentFrame : undefined}
+						frameBusy={frameBusy}
 						frameError={frameError}
 					/>
 				)}
@@ -1731,6 +1808,7 @@ function Thumbnail({
 	onFile,
 	onClear,
 	onFrame,
+	frameBusy,
 	frameError,
 }: {
 	preview: string | null;
@@ -1738,6 +1816,8 @@ function Thumbnail({
 	onFile: (file: File) => void;
 	onClear: () => void;
 	onFrame?: () => void;
+	/** While the server is extracting the paused moment into the field. */
+	frameBusy: boolean;
 	frameError: string | null;
 }) {
 	return (
@@ -1760,8 +1840,13 @@ function Thumbnail({
 						onClear={onClear}
 					/>
 					{onFrame && (
-						<button type="button" className="btn btn-outline btn-sm" onClick={onFrame}>
-							Use This Frame
+						<button
+							type="button"
+							className="btn btn-outline btn-sm"
+							onClick={onFrame}
+							disabled={frameBusy}
+						>
+							{frameBusy ? "Taking this moment…" : "Use This Frame"}
 						</button>
 					)}
 				</div>
