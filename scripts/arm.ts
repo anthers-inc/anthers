@@ -104,8 +104,15 @@ function gitEnv(): Record<string, string | undefined> {
 	return Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")));
 }
 
-function gh(args: string[]): { stdout: string; stderr: string; status: number } {
-	const result = spawnSync("gh", ["-R", REPO, ...args], { encoding: "utf8" });
+function gh(
+	args: string[],
+	options: { pin?: boolean } = {},
+): { stdout: string; stderr: string; status: number } {
+	// The exception is `api graphql`: its query carries owner and name itself, and gh's
+	// flag parser rejects a prefixed shorthand -R there — those calls stay pinned by
+	// their query instead.
+	const full = options.pin === false ? args : ["-R", REPO, ...args];
+	const result = spawnSync("gh", full, { encoding: "utf8" });
 	return {
 		stdout: result.stdout ?? "",
 		stderr: result.stderr ?? "",
@@ -144,16 +151,19 @@ function prView(pr: number): PrView | null {
 function queuedPrNumbers(): Set<number> | null {
 	const query =
 		"query($owner:String!,$name:String!){ repository(owner:$owner,name:$name){ mergeQueue { entries(first:50){ nodes { pr: pullRequest { number } } } } } }";
-	const result = gh([
-		"api",
-		"graphql",
-		"-f",
-		`query=${query}`,
-		"-f",
-		"owner=anthers-inc",
-		"-f",
-		"name=anthers",
-	]);
+	const result = gh(
+		[
+			"api",
+			"graphql",
+			"-f",
+			`query=${query}`,
+			"-f",
+			"owner=anthers-inc",
+			"-f",
+			"name=anthers",
+		],
+		{ pin: false },
+	);
 	if (result.status !== 0) return null;
 	try {
 		const parsed = JSON.parse(result.stdout) as {
