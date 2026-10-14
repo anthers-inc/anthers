@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A **video Work's editing surface, on the Work's own page** — the unified layout Parker
- * set in motion 2026-10-13: the creator and any user see the SAME page, and the creator's
- * edit controls live inline in the very places the user sees the result.
+ * A **Work's editing surface, on the Work's own page** — the unified layout Parker
+ * set in motion 2026-10-13 and propagated to every kind on 2026-10-14: the creator
+ * and any user see the SAME page, and the creator's edit controls live inline in
+ * the very places the user sees the result.
  *
  * ⭐ **The Studio ends at the Works list.** Editing one Work happens on its page, which is
  * a place users can see; the only things here a user never sees are the things carried in
@@ -10,10 +11,17 @@
  * field's edit state, and the Media Status card.
  *
  * Below the deliverable the page is two columns: the left is the **Info tab group**
- * (Details · Credits · Access · Rating · Accessibility) shared with the user's rendering
- * of the same page (`WorkInfoTabs`), the right is **Reviews · Showings**
+ * (Details · Credits · Rating · Accessibility) shared with the user's rendering
+ * of the same page (`WorkInfoTabs`), the right is **Reviews · Showings · Manage**
  * (`WorkSideColumn`). Each editable thing the user can see is an `InlineField` — pencil
  * opens it, X cancels, checkmark saves the field alone; there is no page-wide Save.
+ *
+ * The deliverable is whatever the kind is: a rendered medium through `WorkDeliverable`,
+ * or the store through `ProjectPricing` for the goods kinds, exactly where every user
+ * meets the same Work — the creator's copy is that view with pencils in it. The one
+ * place the kinds legitimately differ is the **Manage tab**, which carries each kind's
+ * own machinery: a video's media status and thumbnail, a track's file and a comic's
+ * page set, a game's builds and embed, a good's fulfillment details, a writing's body.
  *
  * ⚠️ **Saves are narrow, one field per request, and adopt the response.** The server's
  * own rules (release gates, the rating re-declaration refusal, the media floors) are the
@@ -21,13 +29,15 @@
  * which is what the batch bar's one shared error string could never do. The two deliberate
  * carries from the batch editor: a save NEVER sends `sourceKey`, and the thumbnail is
  * sent only from its settled value (the race into work 23's lost thumbnail).
- *
- * ⚠️ **Video only this pass.** Every other kind keeps the Studio editor it has
- * (`studio/WorkEditPage.tsx`), and moves onto this surface in its own pass; the tab shell
- * and the field pattern here are what that pass will adopt.
  */
 
-import { needsChosenThumbnail } from "@anthers/shared/content";
+import {
+	embedUrlProblem,
+	isEmptyWriting,
+	isOwnThumbnail,
+	isPaged,
+	needsChosenThumbnail,
+} from "@anthers/shared/content";
 import {
 	type ContentNote,
 	contentNoteLabel,
@@ -42,8 +52,10 @@ import {
 } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
 import RatingAppeal from "@anthers/web-shared/content/RatingAppeal";
-import { isFileWorkType } from "@anthers/web-shared/content/work-media";
-import { LIBRARY_TYPE_OPTIONS } from "@anthers/web-shared/content/works";
+import WebBuildSection from "@anthers/web-shared/content/WorkWebBuildSection";
+import { isFileWorkType, WorkFileSection } from "@anthers/web-shared/content/work-media";
+import { isBuildType, LIBRARY_TYPE_OPTIONS, typeLabel } from "@anthers/web-shared/content/works";
+import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
 import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
 import { usePayoutsReady } from "@anthers/web-shared/payouts";
 import AccessTables, {
@@ -69,14 +81,17 @@ import {
 	type WorkInput,
 } from "@anthers/web-shared/types";
 import FileUpload from "@anthers/web-shared/ui/FileUpload";
+import { uploadMediaFile } from "@anthers/web-shared/upload";
 import { isUploading, useSourceUpload, workUploads } from "@anthers/web-shared/work-uploads";
-import { PencilSquareIcon } from "@heroicons/react/24/outline";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import CreditsSection from "../../studio/CreditsSection";
+import PanelEditor from "../../studio/PanelEditor";
 import RatingMatrix from "../../studio/RatingMatrix";
 import WorkCaptionsEditor from "../../studio/WorkCaptionsEditor";
 import SaveButton from "../library/SaveButton";
 import StickerBar from "../post/StickerBar";
+import ProjectPricing from "../project/ProjectPricing";
 import WorkReviews from "../project/WorkReviews";
 import { EditingBanner, InlineField } from "./Editing";
 import MediaStatusCard from "./MediaStatusCard";
@@ -84,8 +99,12 @@ import ShareLinkButton from "./ShareLinkButton";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
 import {
 	formatOriginallyReleased,
+	isGoods,
+	isWriting,
 	WORK_DESCRIPTION_CLASS,
 	WORK_DETAILS_HEADING_CLASS,
+	WORK_LYRICS_CLASS,
+	WORK_LYRICS_HEADING_CLASS,
 	WorkByline,
 	WorkColumn,
 	WorkCredits,
@@ -128,6 +147,18 @@ export default function OwnerWorkEditor({
 	// ── The fields, as the row holds them ──
 	const [title, setTitle] = useState(work.title ?? "");
 	const [description, setDescription] = useState(work.description ?? "");
+	// A piece of writing's body, written in place in the typography it is read in. The
+	// plain-text shadow goes with it, as it does from the post editor, because search
+	// reads that one.
+	const writing = isWriting(work.type);
+	const [bodyHtml, setBodyHtml] = useState(work.bodyHtml ?? "");
+	const [bodyText, setBodyText] = useState(work.body ?? "");
+	// A song's words, edited on the panel the user reads them on.
+	const [lyrics, setLyrics] = useState(work.lyrics ?? "");
+	// The image an image Work is — the description its picture announces to a screen
+	// reader. Empty keeps the reader's title fallback, and sending it unconditionally on
+	// an image Work (including empty) means clearing it is a real edit, as with lyrics.
+	const [imageAlt, setImageAlt] = useState(work.imageAlt ?? "");
 	const [thumbnailUrl, setThumbnailUrl] = useState(work.thumbnail ?? "");
 	const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
 		work.thumbnail ? keyToPreview(work.thumbnail) : null,
@@ -431,29 +462,55 @@ export default function OwnerWorkEditor({
 	const anyoneAllowed = accessRows.some((r) => r.allow);
 	const baselineRow = accessRows.find((r) => r.threshold === 0);
 	const publicAccessNow = !!baselineRow?.allow && Number(baselineRow.price) === 0 && streamEnabled;
-	const fileMissing = !current.sourceKey || fileUploading;
+	const fileMissing = isFileWorkType(work.type) && (!current.sourceKey || fileUploading);
+	// And the same for a piece of writing with nothing in it yet (`text_missing`), the
+	// server's own word for it — the creator's to fix rather than to wait for.
+	const writingEmpty = writing && isEmptyWriting(bodyHtml);
 	const thumbnailMissing = needsChosenThumbnail(work.type) && !thumbnailUrl;
 	const creditsMissing = !creditRows.some((r) => r.types.includes("created"));
 	const releaseBlocked =
 		payoutsReady === false ||
 		((!fromRows ||
 			fileMissing ||
+			writingEmpty ||
 			thumbnailMissing ||
 			creditsMissing ||
 			permissionMissing === true) &&
 			visibility !== "released");
 
 	// ── The Info tabs' contents ──
+	/** The line under an empty deliverable, said per kind; null where nothing is missing. */
+	const deliverablePending = writing
+		? isEmptyWriting(bodyHtml)
+			? "This Work isn't written yet — its Manage tab is where the pen is."
+			: null
+		: isFileWorkType(work.type)
+			? current.sourceKey || fileUploading
+				? null
+				: "This Work has no file yet — Manage, at its right, takes one."
+			: isBuildType(work.type) && !current.embedUrl && (current.assets ?? []).length === 0
+				? "This Work has nothing to run yet — Manage, at its right, takes an embed or a build."
+				: null;
 	/** The kind, while a private draft could still be another kind. */
 	const kindChangeable =
 		current.visibility !== "released" &&
 		visibility !== "released" &&
 		!current.sourceKey &&
 		!current.embedUrl &&
-		!fileUploading;
+		!fileUploading &&
+		// A piece of writing is its body, on the page as on the row: prose typed here
+		// that a save would send counts as existing, and a kind cannot change from
+		// under it (the batch editor's rule, binding here identically).
+		!(writing && !isEmptyWriting(bodyHtml)) &&
+		!current.body;
 
 	const asRead: WorkDetail = {
 		...current,
+		// The image's deliverable reads its key as an address, as the Studio editor's row did.
+		sourceKey:
+			work.type === "image" && current.sourceKey
+				? keyToPreview(current.sourceKey)
+				: current.sourceKey,
 		thumbnail: thumbnailPreview ?? current.thumbnail,
 		creator: user?.handle
 			? {
@@ -546,6 +603,160 @@ export default function OwnerWorkEditor({
 			save={(draft) => {
 				setDescription(draft.trim());
 				return saveFields({ description: draft.trim() });
+			}}
+		/>
+	);
+
+	// A song's words — edited where the user reads them: the deliverable's lyrics slot
+	// takes this field, and the read view is the panel the user already sees.
+	const lyricsField = (
+		<InlineField<string>
+			label="Lyrics"
+			saved={lyrics}
+			renderRead={() =>
+				lyrics ? (
+					<section className={WORK_LYRICS_CLASS}>
+						<h2 className={WORK_LYRICS_HEADING_CLASS}>Lyrics</h2>
+						<p className="whitespace-pre-wrap text-sm leading-relaxed text-base-content/85">
+							{lyrics}
+						</p>
+					</section>
+				) : (
+					<section className={`${WORK_LYRICS_CLASS} text-sm text-base-content/40`}>
+						No lyrics written yet.
+					</section>
+				)
+			}
+			renderEdit={(draft, setDraft) => (
+				<div>
+					<textarea
+						aria-label="Lyrics"
+						className={`${WORK_LYRICS_CLASS} w-full min-h-32 ${GROWS} whitespace-pre-wrap text-sm`}
+						value={draft}
+						onChange={(e) => setDraft(e.target.value)}
+						placeholder="Type the song's words…"
+					/>
+				</div>
+			)}
+			save={(draft) => {
+				setLyrics(draft);
+				return saveFields({ lyrics: draft });
+			}}
+		/>
+	);
+
+	// A piece of writing's body, in the editor it is written with — the article variant,
+	// set in the typography the read prints. It lives in the Manage tab: a rich surface
+	// among tabs, the one heavy control the unified page keeps off the user's read.
+	const bodyField = (
+		<InlineField<string>
+			label="Body"
+			saved={bodyHtml}
+			className="w-full"
+			renderRead={() => {
+				const words = bodyText.trim() ? bodyText.trim().split(/\s+/).length : 0;
+				return (
+					<p className="text-sm text-base-content/60">
+						{words > 0
+							? `${words.toLocaleString("en-US")} ${words === 1 ? "word" : "words"} written — the full read is above, where users meet it.`
+							: "Nothing written yet."}
+					</p>
+				);
+			}}
+			renderEdit={(draft, setDraft) => (
+				<RichTextEditor
+					variant="article"
+					content={draft}
+					onChange={(html) => setDraft(html)}
+					placeholder="Start writing…"
+				/>
+			)}
+			save={async (draft) => {
+				// The plain-text shadow, computed at save the way every keystroke did.
+				const holder = document.createElement("div");
+				holder.innerHTML = draft;
+				const text = holder.textContent ?? "";
+				setBodyHtml(draft);
+				setBodyText(text);
+				await saveFields({ bodyHtml: draft, body: text });
+			}}
+		/>
+	);
+
+	// A game or software's embed address, edited in place. The server refuses the
+	// shapes it refuses; saying so here means the creator hears it beside the field.
+	const embedUrlField = (
+		<InlineField<string>
+			label="Embed URL"
+			saved={current.embedUrl ?? ""}
+			renderRead={() =>
+				current.embedUrl ? (
+					<p className="text-sm break-all">{current.embedUrl}</p>
+				) : (
+					<p className="text-sm text-base-content/40">
+						No embed — a hosted build in Manage plays instead of one.
+					</p>
+				)
+			}
+			renderEdit={(draft, setDraft) => (
+				<div>
+					<input
+						type="url"
+						aria-label="Embed URL"
+						className={`input input-bordered input-sm w-full ${embedUrlProblem(draft.trim()) ? "input-error" : ""}`}
+						value={draft}
+						onChange={(e) => setDraft(e.target.value)}
+						placeholder="https://example.com/embed"
+					/>
+					{embedUrlProblem(draft.trim()) && (
+						<p className="text-xs text-error">{embedUrlProblem(draft.trim())}</p>
+					)}
+					<p className="text-xs text-base-content/50">
+						For a build hosted on another site, at an https:// address. Downloadable builds live in
+						their own section below.
+					</p>
+				</div>
+			)}
+			save={(draft) => {
+				const problem = embedUrlProblem(draft.trim());
+				if (problem) throw new Error(problem);
+				return saveFields({ embedUrl: draft.trim() });
+			}}
+		/>
+	);
+
+	// A physical good or a service's fulfillment details — the one field of the kind's
+	// own, and a creator-only one: the user never sees it, which is why it is here and
+	// not in the Details tab.
+	const detailsNoteField = (
+		<InlineField<string>
+			label="Details"
+			saved={typeof current.metadata?.note === "string" ? current.metadata.note : ""}
+			renderRead={() =>
+				typeof current.metadata?.note === "string" && current.metadata.note ? (
+					<p className="whitespace-pre-wrap text-sm">{current.metadata.note}</p>
+				) : (
+					<p className="text-sm text-base-content/40">Nothing written yet.</p>
+				)
+			}
+			renderEdit={(draft, setDraft) => (
+				<div>
+					<textarea
+						aria-label="Details"
+						className={`textarea textarea-bordered w-full ${GROWS} min-h-20`}
+						value={draft}
+						onChange={(e) => setDraft(e.target.value)}
+						rows={3}
+						placeholder={
+							work.type === "physical"
+								? "Fulfillment notes, dimensions, shipping…"
+								: "What the service includes, turnaround, terms…"
+						}
+					/>
+				</div>
+			)}
+			save={(draft) => {
+				return saveFields({ metadata: { note: draft.trim() } });
 			}}
 		/>
 	);
@@ -861,23 +1072,61 @@ export default function OwnerWorkEditor({
 		/>
 	);
 
-	const accessibilityField = (
-		<InlineField
-			label="Accessibility"
-			saved={current.captions ?? []}
-			renderRead={() => <CaptionsSummary captions={current.captions ?? []} />}
-			renderEdit={() => (
-				<WorkCaptionsEditor
-					workId={current.id}
-					captions={current.captions ?? []}
-					onChanged={() => void refreshMedia()}
-				/>
-			)}
-			save={async () => {
-				/* The caption editor manages its own acts; the check closes the field. */
-			}}
-		/>
-	);
+	// Accessibility, per kind: a video's caption tracks (the editor manages its own acts);
+	// an image's alt text — the description its picture announces to a screen reader, which
+	// is this tab's fact for the kind; kinds with nothing to offer yet say so in one line,
+	// the same silence a tab's absence would have been, named rather than blank.
+	const accessibilityField =
+		work.type === "video" ? (
+			<InlineField
+				label="Accessibility"
+				saved={current.captions ?? []}
+				renderRead={() => <CaptionsSummary captions={current.captions ?? []} />}
+				renderEdit={() => (
+					<WorkCaptionsEditor
+						workId={current.id}
+						captions={current.captions ?? []}
+						onChanged={() => void refreshMedia()}
+					/>
+				)}
+				save={async () => {
+					/* The caption editor manages its own acts; the check closes the field. */
+				}}
+			/>
+		) : work.type === "image" ? (
+			<InlineField<string>
+				label="Alt text"
+				saved={imageAlt}
+				renderRead={() => (
+					<p className="text-sm">
+						{imageAlt || <span className="text-sm text-base-content/40">No alt text yet.</span>}
+					</p>
+				)}
+				renderEdit={(draft, setDraft) => (
+					<div>
+						<textarea
+							aria-label="Alt text"
+							className={`textarea textarea-bordered w-full ${GROWS} min-h-16`}
+							value={draft}
+							onChange={(e) => setDraft(e.target.value)}
+							rows={2}
+							placeholder="What does the picture show?"
+						/>
+						<p className="text-xs text-base-content/50">
+							Read to a screen reader instead of the picture. Empty falls back to the Work's title.
+						</p>
+					</div>
+				)}
+				save={(draft) => {
+					setImageAlt(draft);
+					return saveFields({ imageAlt: draft });
+				}}
+			/>
+		) : (
+			<p className="text-sm text-base-content/40">
+				Nothing to set up here for a {typeLabel(work.type)} yet.
+			</p>
+		);
 
 	const detailsSection = (
 		// Named parts (Parker's third pass, 2026-10-13): the Details tab is the Work's
@@ -966,34 +1215,85 @@ export default function OwnerWorkEditor({
 		},
 		{
 			// The creator's tab — where the record's machinery lives (Parker's third pass,
-			// 2026-10-13): the file's status and its acts, and the thumbnail. A user's page
-			// never renders this tab; the surface is the creator's alone and says so.
+			// 2026-10-13), now per kind (the kinds pass, 2026-10-14). A user's page never
+			// renders this tab; the surface is the creator's alone and says so.
 			key: "manage",
 			label: "Manage",
 			content: (
 				<div className="flex flex-col gap-6">
-					<section className="flex flex-col gap-2">
-						<h3 className={WORK_DETAILS_HEADING_CLASS}>Media Status</h3>
-						<MediaStatusCard
-							work={asRead}
-							sourceUpload={sourceUpload}
-							unpublished={unpublished}
-							cancelBusy={cancelBusy}
-							removeBusy={removalBusy}
-							onCancel={() => void cancelProcessing()}
-							onRemove={() => void removeMedia()}
-							onReplaceFile={(file) =>
-								workUploads.start(current.id, file, { kind: "source", type: "video" })
-							}
-							onRetry={() => {
-								if (sourceUpload) workUploads.retry(sourceUpload.id);
-							}}
-						/>
-					</section>
-					<section className="flex flex-col gap-2">
-						<h3 className={WORK_DETAILS_HEADING_CLASS}>Thumbnail</h3>
-						{thumbnailField}
-					</section>
+					{work.type === "video" && (
+						<section className="flex flex-col gap-2">
+							<h3 className={WORK_DETAILS_HEADING_CLASS}>Media Status</h3>
+							<MediaStatusCard
+								work={asRead}
+								sourceUpload={sourceUpload}
+								unpublished={unpublished}
+								cancelBusy={cancelBusy}
+								removeBusy={removalBusy}
+								onCancel={() => void cancelProcessing()}
+								onRemove={() => void removeMedia()}
+								onReplaceFile={(file) =>
+									workUploads.start(current.id, file, { kind: "source", type: "video" })
+								}
+								onRetry={() => {
+									if (sourceUpload) workUploads.retry(sourceUpload.id);
+								}}
+							/>
+						</section>
+					)}
+					{isFileWorkType(work.type) && work.type !== "video" && (
+						<section className="flex flex-col gap-2">
+							<h3 className={WORK_DETAILS_HEADING_CLASS}>
+								{work.type === "image" ? "Image" : "File"}
+							</h3>
+							<WorkFileSection work={current} />
+						</section>
+					)}
+					{isPaged(work.type) && fileReady && (
+						<section className="flex flex-col gap-2">
+							<h3 className={WORK_DETAILS_HEADING_CLASS}>Pages</h3>
+							<div className="rounded-box border border-base-300 bg-base-200/40 p-5">
+								<PanelEditor workId={current.id} pageCount={current.pageCount ?? 0} />
+							</div>
+						</section>
+					)}
+					{isBuildType(work.type) && (
+						<>
+							<section className="flex flex-col gap-2">
+								<h3 className={WORK_DETAILS_HEADING_CLASS}>Embed</h3>
+								{embedUrlField}
+							</section>
+							<section className="flex flex-col gap-2">
+								<h3 className={WORK_DETAILS_HEADING_CLASS}>Downloadable Builds</h3>
+								<BuildsEditor work={current} onChanged={() => void refreshMedia()} />
+							</section>
+							<section className="flex flex-col gap-2">
+								<h3 className={WORK_DETAILS_HEADING_CLASS}>Hosted Build</h3>
+								<WebBuildSection work={current} onChanged={() => void refreshMedia()} />
+							</section>
+						</>
+					)}
+					{isGoods(work.type) && (
+						<section className="flex flex-col gap-2">
+							<h3 className={WORK_DETAILS_HEADING_CLASS}>Details</h3>
+							{/* The creator-only note (fulfillment, dimensions, terms) — the user
+							    never sees it, which is why it is here rather than in the Details
+							    tab. */}
+							{detailsNoteField}
+						</section>
+					)}
+					{writing && (
+						<section className="flex flex-col gap-2">
+							<h3 className={WORK_DETAILS_HEADING_CLASS}>Body</h3>
+							{bodyField}
+						</section>
+					)}
+					{!isOwnThumbnail(work.type) && (
+						<section className="flex flex-col gap-2">
+							<h3 className={WORK_DETAILS_HEADING_CLASS}>Thumbnail</h3>
+							{thumbnailField}
+						</section>
+					)}
 				</div>
 			),
 		},
@@ -1023,17 +1323,33 @@ export default function OwnerWorkEditor({
 				</aside>
 			)}
 
-			{/* ── The Work itself, full width. Everything above the video is the banner and
+			{/* ── The Work itself, full width. Everything above the work is the banner and
 			    nothing else (Parker's third pass, 2026-10-13): a player wants no header
 			    block above it, and what a Work is and who made it reads under it, between
-			    the thing and its record. ── */}
+			    the thing and its record. A piece of writing keeps its reading measure
+			    centered inside the width; a good's deliverable is the store panel, exactly
+			    where every user meets it. ── */}
 			<section>
-				<WorkDeliverable work={asRead} videoRef={videoEl} />
-				{!current.sourceKey && (
-					<p className="text-sm text-base-content/60">
-						This Work has no file yet — Manage, at its right, takes one.
-					</p>
-				)}
+				<div className={writing ? "mx-auto max-w-2xl" : undefined}>
+					{isGoods(work.type) ? (
+						// The creator's copy of the user's store panel: it mounts without a
+						// verdict, the same absence a creator's own visit has always read.
+						<ProjectPricing
+							workId={current.id}
+							slug={current.slug ?? ""}
+							title={current.title ?? "Untitled"}
+							creatorHandle={asRead.creator?.handle ?? ""}
+							workType={current.type}
+						/>
+					) : (
+						<WorkDeliverable
+							work={asRead}
+							videoRef={videoEl}
+							lyrics={work.type === "music" ? lyricsField : undefined}
+						/>
+					)}
+				</div>
+				{deliverablePending && <p className="text-sm text-base-content/60">{deliverablePending}</p>}
 			</section>
 
 			{/* ── The byline strip: the title (editable in place as everywhere) on the first
@@ -1483,6 +1799,171 @@ export function CaptionsSummary({
 			<span className="text-base-content/60">
 				Closed captions in {captions.map((c) => c.label || c.language).join(", ")}.
 			</span>
+		</div>
+	);
+}
+
+function formatFileSize(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * A game or software's downloadable builds — the table and its add/delete form, moved
+ * whole from the Studio editor's section (the kinds pass, 2026-10-14). These persist the
+ * moment they are added or deleted, as they always have here too: nothing waits a save,
+ * and `onChanged` re-reads the row so the table and the deliverable follow.
+ */
+function BuildsEditor({ work, onChanged }: { work: WorkDetail; onChanged: () => void }) {
+	const assets = work.assets ?? [];
+	const [file, setFile] = useState<File | null>(null);
+	const [platform, setPlatform] = useState("windows");
+	const [version, setVersion] = useState("");
+	const [primary, setPrimary] = useState(false);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const add = async (e: FormEvent) => {
+		e.preventDefault();
+		if (!file) return;
+		setBusy(true);
+		setError(null);
+		try {
+			const fileKey = await uploadMediaFile(file, "asset");
+			const res = await client.api.content.works[":id"].assets.$post({
+				param: { id: String(work.id) },
+				json: {
+					file: fileKey,
+					filename: file.name,
+					fileSize: file.size,
+					mimeType: file.type || "application/octet-stream",
+					platform,
+					version,
+					isPrimary: primary,
+				},
+			});
+			if (!res.ok) throw new Error("Create failed");
+			setFile(null);
+			setVersion("");
+			setPrimary(false);
+			onChanged();
+		} catch {
+			setError("Failed to upload build.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	const remove = async (assetId: number) => {
+		try {
+			const res = await client.api.content.works[":id"].assets[":assetId"].$delete({
+				param: { id: String(work.id), assetId: String(assetId) },
+			});
+			if (!res.ok) throw new Error("Delete failed");
+			onChanged();
+		} catch {
+			setError("Failed to delete build.");
+		}
+	};
+
+	return (
+		<div className="flex flex-col gap-3">
+			<form onSubmit={add} className="flex flex-col gap-2">
+				<div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+					<div className="flex-1">
+						<FileUpload
+							accept="*/*"
+							maxSize={4 * 1024 * 1024 * 1024}
+							compact
+							label="Choose a build file"
+							onFileSelect={setFile}
+						/>
+					</div>
+					<select
+						aria-label="Platform"
+						className="select select-bordered select-sm w-32"
+						value={platform}
+						onChange={(e) => setPlatform(e.target.value)}
+					>
+						<option value="windows">Windows</option>
+						<option value="mac">macOS</option>
+						<option value="linux">Linux</option>
+						<option value="web">Web</option>
+						<option value="android">Android</option>
+						<option value="ios">iOS</option>
+						<option value="other">Other</option>
+					</select>
+					<input
+						type="text"
+						aria-label="Version"
+						className="input input-bordered input-sm w-24"
+						value={version}
+						onChange={(e) => setVersion(e.target.value)}
+						placeholder="1.0.0"
+					/>
+					<button type="submit" className="btn btn-primary btn-sm" disabled={busy || !file}>
+						{busy ? "Adding…" : "Add"}
+					</button>
+				</div>
+				<label className="label cursor-pointer justify-start gap-2 w-fit">
+					<input
+						type="checkbox"
+						className="checkbox checkbox-sm"
+						checked={primary}
+						onChange={(e) => setPrimary(e.target.checked)}
+					/>
+					<span className="label-text text-sm">Primary build</span>
+				</label>
+			</form>
+
+			{error && <p className="text-xs text-error">{error}</p>}
+
+			{assets.length > 0 && (
+				<div className="overflow-x-auto">
+					<table className="table table-sm">
+						<thead>
+							<tr>
+								<th>Filename</th>
+								<th>Platform</th>
+								<th>Version</th>
+								<th>Size</th>
+								<th />
+							</tr>
+						</thead>
+						<tbody>
+							{assets.map((asset) => (
+								<tr key={asset.id}>
+									<td className="font-mono text-xs">
+										{asset.filename}
+										{asset.isPrimary && (
+											<span className="badge badge-primary badge-xs ml-2">Primary</span>
+										)}
+									</td>
+									<td>
+										<span className="badge badge-outline badge-sm capitalize">
+											{asset.platform}
+										</span>
+									</td>
+									<td>{asset.version || "—"}</td>
+									<td className="text-xs text-base-content/60">
+										{formatFileSize(asset.fileSize ?? 0)}
+									</td>
+									<td>
+										<button
+											type="button"
+											className="btn btn-ghost btn-xs text-error"
+											onClick={() => void remove(asset.id)}
+										>
+											<TrashIcon className="size-4" />
+										</button>
+									</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
+				</div>
+			)}
 		</div>
 	);
 }

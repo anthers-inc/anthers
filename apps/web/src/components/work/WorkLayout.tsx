@@ -111,6 +111,14 @@ export function workTitleTypography(type: string): {
 }
 
 /** A music Work's lyrics panel, and its heading, likewise. */
+/**
+ * The goods kinds, whose deliverable is the store — buying, not a rendered medium —
+ * and whose record carries no meter (see `pageHoldsTheMeter`).
+ */
+export function isGoods(type: string): boolean {
+	return type === "physical" || type === "service";
+}
+
 export const WORK_LYRICS_CLASS = "mt-4 rounded-lg bg-base-200/60 p-4";
 export const WORK_LYRICS_HEADING_CLASS =
 	"mb-2 text-xs font-semibold uppercase tracking-wider text-base-content/50";
