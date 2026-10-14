@@ -131,12 +131,12 @@ describe("what each route asks for", () => {
 			reason: "spam",
 		});
 		await restoreSubject({ subjectType: "comment", subjectId: commentId, adminId: operatorId });
-		// The enqueues are fired, not awaited (`queueRecordSync`'s first act is a dynamic
-		// import), so after restore's return both sends can still be in flight — the
-		// route-driven tests below get this flush for free because the awaited request's
-		// remaining work outlives the helper's hops. Drain one macrotask, and both sends
-		// are on the stub in the order they were asked for.
-		await Bun.sleep(0);
+		// The enqueues are fire-and-forget (`void queueRecordSync`), and this is the one
+		// case that drives a service directly, so no route response's round-trip stands in
+		// as the turn the enqueue needs. Read `sent` only after a turn that comes after
+		// EVERY pending turn — a macrotask, not a microtask yield — deterministic here is
+		// the point: this case's greenness once depended on machine timing instead.
+		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(to(QUEUES.SYNC_ATPROTO_RECORD)).toEqual([
 			{ kind: "comment", id: commentId },
 			{ kind: "comment", id: commentId },
