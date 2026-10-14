@@ -131,6 +131,10 @@ describe("what each route asks for", () => {
 			reason: "spam",
 		});
 		await restoreSubject({ subjectType: "comment", subjectId: commentId, adminId: operatorId });
+		// The enqueues are fire-and-forget (`void queueRecordSync` — never a caller's
+		// error to own), whose dynamic import always yields a turn even from cache.
+		// A macrotask tick is the patience the real worker sees; the read waits one.
+		await new Promise((r) => setTimeout(r, 0));
 		expect(to(QUEUES.SYNC_ATPROTO_RECORD)).toEqual([
 			{ kind: "comment", id: commentId },
 			{ kind: "comment", id: commentId },
