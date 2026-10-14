@@ -54,17 +54,18 @@ test("an image Work's description is authored in the Studio and announced by the
 	await page.locator("select").first().selectOption("image");
 	await page.getByPlaceholder("Work title").fill(TITLE);
 	await page.getByRole("button", { name: /skip for now/i }).click();
-	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/, { timeout: 15_000 });
+	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 
-	// The description field sits beside the picture it describes, before the picture
-	// exists as much as after — a draftable word is a word.
-	const field = page.getByRole("textbox", { name: "Image description (alt text)" });
+	// The alt text is the Accessibility tab's field (the kinds pass, 2026-10-14), edited
+	// where a screen reader meets the picture — before the picture exists as much as after.
+	await page.getByRole("tab", { name: "Accessibility" }).click();
+	await page.getByRole("button", { name: "Edit Alt text" }).click();
+	const field = page.getByRole("textbox", { name: "Alt text" });
 	await expect(field).toBeVisible();
 	await field.fill(DESCRIPTION);
-	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
-		timeout: 15_000,
-	});
+	await page.getByRole("button", { name: "Save Alt text" }).click();
+	// The save is the field's own; the read answers it.
+	await expect(page.getByText(DESCRIPTION)).toBeVisible({ timeout: 15_000 });
 
 	// What the save actually stored, from the API the page saves through — the owner
 	// shape, which is the shape the Studio would reload on the next visit.

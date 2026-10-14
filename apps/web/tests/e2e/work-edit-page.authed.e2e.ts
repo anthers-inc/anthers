@@ -191,36 +191,62 @@ test("a piece of writing is written on its page and reads as an article", async 
 	await page.locator("select").first().selectOption("text");
 	await page.getByPlaceholder("Work title").fill(title);
 	await page.getByRole("button", { name: "Create Work" }).click();
-	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
+	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 
-	// Rated, and still not releasable, because there is nothing in it yet (`text_missing`).
+	// Rated, on its own grid, on the Work's page — and still not releasable, because
+	// there is nothing in it yet (`text_missing`).
+	await page.getByRole("tab", { name: "Rating" }).click();
+	await page.getByRole("button", { name: "Edit Rating" }).click();
 	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
+	await page.getByRole("button", { name: "Save Rating" }).click();
 	const released = page.getByRole("checkbox", { name: /released to my public catalog/i });
-	await expect(released).toBeDisabled();
 
 	// And not releasable until a human is credited either (`credits_creator_required`):
-	// one credit row with its Created box ticked, naming the writer.
+	// one credit row with its Created box ticked, naming the writer. The field lives in
+	// the Credits tab; its save adopts the row like every other.
+	await page.getByRole("tab", { name: "Credits" }).click();
+	await page.getByRole("button", { name: "Edit Credits" }).click();
 	await page.getByRole("button", { name: "Add a credit" }).click();
 	await page.getByRole("textbox", { name: "Credit 1 role" }).fill("Written by");
 	await page.getByRole("checkbox", { name: "Credit 1 Created" }).check();
 	await page.getByRole("textbox", { name: "Credit 1 contributor" }).fill("The Walker");
+	await page.getByRole("button", { name: "Save Credits" }).click();
+	await page.getByRole("tab", { name: "Details" }).click();
+	await page.getByRole("button", { name: "Edit Release" }).click();
 	await expect(released).toBeDisabled();
 
-	await page.getByRole("textbox", { name: "Description" }).fill("A standfirst for the walk.");
+	// The standfirst is the Description field, edited in the Details tab where a user
+	// reads it as a line of the record.
+	await page.getByRole("button", { name: "Cancel editing Release" }).click();
+	await page.getByRole("button", { name: "Edit Description" }).click();
+	await page.getByPlaceholder("Describe this Work…").fill("A standfirst for the walk.");
+	await page.getByRole("button", { name: "Save Description" }).click();
+
+	// And a piece of writing is its body, written in the Manage tab in the typography
+	// the read prints.
+	await page.getByRole("tab", { name: /Manage/ }).click();
+	await page.getByRole("button", { name: "Edit Body" }).click();
 	await page.locator(".tiptap").click();
 	await page.keyboard.type("The first hard frost came early this year.");
+	await page.getByRole("button", { name: "Save Body" }).click();
+
+	// The release walk returns to the Details tab, where the release field lives.
+	await page.getByRole("tab", { name: "Details" }).click();
+	await page.getByRole("button", { name: "Edit Release" }).click();
 	await expect(released).toBeEnabled();
 	await released.check();
-	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
+	await page.getByRole("button", { name: "Save Release" }).click();
 
-	const [work] = (await ownWorks()).filter((w) => w.title === title);
-	await page.goto(`/works/${work.publicId}`);
+	// Where the writing is, is the page: the article in the deliverable's reading
+	// measure, the standfirst above it — the body's save adopted the row in place, so
+	// the same page that took the words now shows them set.
 	const article = page.locator("article").filter({ hasText: "The first hard frost" });
-	await expect(article).toBeVisible();
+	await expect(article).toBeVisible({ timeout: 15_000 });
 	expect(await article.evaluate((el) => getComputedStyle(el).fontFamily)).toContain("Spectral");
 	// The standfirst sits above the body, under the headline, rather than after the Work.
-	const standfirst = page.getByText("A standfirst for the walk.");
+	// The description rides in both places now (Parker, 2026-10-14), so the first of the
+	// two is the one above the article — the deliverable's, which the record follows.
+	const standfirst = page.getByText("A standfirst for the walk.").first();
 	const [above, below] = await Promise.all([standfirst.boundingBox(), article.boundingBox()]);
 	expect(above && below && above.y < below.y).toBe(true);
 });

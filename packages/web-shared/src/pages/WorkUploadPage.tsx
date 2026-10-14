@@ -16,7 +16,7 @@ import { useNavigate } from "react-router-dom";
 import WorkUploadForm from "../components/content/WorkUploadForm";
 import { workUrl } from "../lib/postUrl";
 import { Link } from "../lib/router";
-import { studioEditWorkUrl, studioUrl } from "../lib/studio";
+import { studioUrl } from "../lib/studio";
 import type { Work } from "../lib/types";
 
 /**
@@ -60,12 +60,10 @@ export default function WorkUploadPage() {
 
 			<WorkUploadForm
 				onCreated={(work: Work) =>
-					// A video's editing surface is the Work's OWN page now (the unified
-					// creator/user layout, 2026-10-13) — land there; every other kind
-					// still meets the Studio's editor.
-					navigate(
-						work.type === "video" ? workUrl(work) : studioEditWorkUrl(work.publicId ?? work.id),
-					)
+					// Every kind's editing surface is the Work's own page now (the kinds
+					// pass, 2026-10-14): the fill-in happens during the upload, wherever
+					// the kind landed — video, a track, a comic, a piece of writing.
+					navigate(workUrl(work))
 				}
 			/>
 
