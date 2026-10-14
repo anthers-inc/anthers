@@ -101,12 +101,24 @@ function patchReq(workId: number, token: string, body: unknown): Promise<Respons
 	);
 }
 
+/** The profile handle the overlay attaches to a DID credit — the account's own row's
+ *  handle, the one the serializer reads (2026-10-13: a pending credit names the person
+ *  it names too, flag and all; the display name fills at save-resolution time, so only
+ *  the handle is pinned). */
+let contributorHandle: string;
+
 beforeAll(async () => {
 	sendSpy = spyOn(queue, "send").mockImplementation((async () => "job") as typeof queue.send);
 
 	creator = await createAccount(`${RUN}-creator`, { emailVerified: true });
 	contributor = await createAccount(`${RUN}-contributor`, { emailVerified: true });
 	thirdParty = await createAccount(`${RUN}-third`, { emailVerified: true });
+	const [row] = await db
+		.select({ handle: users.atprotoHandle })
+		.from(users)
+		.where(eq(users.atprotoDid, contributor.did))
+		.limit(1);
+	contributorHandle = row.handle;
 }, 30_000);
 
 // ─── The overlay ──────────────────────────────────────────────────────────────
@@ -289,34 +301,44 @@ describe("work serialization", () => {
 	});
 
 	it("shows the pending credit to the named person through the same route", async () => {
+		// The identity presentation (Parker, 2026-10-13): even before the person's word
+		// publishes the credit, it names them — display name and handle on the record,
+		// the DID held as the hover subtext — because the ask has to say who was credited,
+		// not name a protocol address. Their word is still what publishes it, and the
+		// awaiting flag stays the ask's marker. The display name itself is filled when
+		// the save resolves the DID, so the assertion pins the attach, not its timing.
 		const res = await app.request(`/api/content/works/${releasedWork.id}`, {
 			headers: { Cookie: `session=${contributor.token}`, Origin: ORIGIN },
 		});
 		expect(res.status).toBe(200);
 		const body = await res.json();
 		expect(body.work.credits).toEqual([
-			{
+			expect.objectContaining({
 				role: "Written by",
 				contributor: contributor.did,
 				types: ["created"],
 				awaitingYourConfirmation: true,
-			},
+				contributorProfile: expect.objectContaining({ handle: contributorHandle }),
+			}),
 		]);
 	});
 
 	it("shows the pending credit to the creator through the owner shape, flagged as awaiting", async () => {
+		// Same presentation as the named person's own view: the owner shape names the
+		// contributor it is asking about (Parker, 2026-10-13).
 		const res = await app.request(`/api/content/works/${releasedWork.id}`, {
 			headers: { Cookie: `session=${creator.token}`, Origin: ORIGIN },
 		});
 		expect(res.status).toBe(200);
 		const body = await res.json();
 		expect(body.work.credits).toEqual([
-			{
+			expect.objectContaining({
 				role: "Written by",
 				contributor: contributor.did,
 				types: ["created"],
 				awaitingContributorConfirmation: true,
-			},
+				contributorProfile: expect.objectContaining({ handle: contributorHandle }),
+			}),
 		]);
 	});
 
