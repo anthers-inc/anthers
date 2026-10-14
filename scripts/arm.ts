@@ -152,16 +152,7 @@ function queuedPrNumbers(): Set<number> | null {
 	const query =
 		"query($owner:String!,$name:String!){ repository(owner:$owner,name:$name){ mergeQueue { entries(first:50){ nodes { pr: pullRequest { number } } } } } }";
 	const result = gh(
-		[
-			"api",
-			"graphql",
-			"-f",
-			`query=${query}`,
-			"-f",
-			"owner=anthers-inc",
-			"-f",
-			"name=anthers",
-		],
+		["api", "graphql", "-f", `query=${query}`, "-f", "owner=anthers-inc", "-f", "name=anthers"],
 		{ pin: false },
 	);
 	if (result.status !== 0) return null;
