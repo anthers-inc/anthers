@@ -604,10 +604,16 @@ async function runCeremony(pr: number, options: ArmOptions): Promise<ArmDecision
 		}
 
 		// Construct the projected tip — the combination GitHub's merge group will build.
+		// The gate cache resolves once, here, and the same resolved path rides both
+		// construction (whose fresh-tree path invalidates the install stamp) and the
+		// install gate — the incident that earned this: passing the raw option let
+		// production resolve the default separately, and a stale stamp survived a fresh
+		// tree, so the gate skipped its install and ran the tier against no node_modules.
+		const gateCache = options.armGateCache ?? armGateDefault();
 		const constructed = constructProjectedTip({
 			cwd,
 			gatePath: armGatePath(options),
-			armGateCache: options.armGateCache,
+			armGateCache: gateCache,
 			armed,
 			candidateBranch: branch,
 		});
@@ -637,7 +643,7 @@ async function runCeremony(pr: number, options: ArmOptions): Promise<ArmDecision
 		} else {
 			const install = installGate({
 				gatePath: armGatePath(options),
-				armGateCache: options.armGateCache,
+				armGateCache: gateCache,
 			});
 			if (install.error !== undefined) {
 				return bounce("gate-red", install.error, pr, [
