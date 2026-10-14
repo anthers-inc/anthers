@@ -14,6 +14,7 @@
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { useMemo } from "react";
 import type { Work } from "../../lib/types";
+import InfoTip from "../ui/InfoTip";
 import { filterBtnClass, sectionTitleClass } from "./studio-filter-classes";
 import { LIBRARY_TYPE_OPTIONS, TypeIcon, typeLabel } from "./works";
 
@@ -50,7 +51,7 @@ export default function WorksFilterSections({
 	] as const;
 
 	return (
-		<>
+		<div className="flex flex-col gap-5">
 			{/* SEARCH — the video-platform filter box, living here with the rest. */}
 			<section>
 				<h3 className={sectionTitleClass}>Search</h3>
@@ -71,9 +72,17 @@ export default function WorksFilterSections({
 
 			{/* VISIBILITY — what the creator did, not the access ladder beneath it. Vertical,
 			    like the type list below: the four words did not fit one joined row in a
-			    16rem sidebar, and a clipped control is not a control. */}
+			    16rem sidebar, and a clipped control is not a control. The released/private/
+			    withdrawn explainer rides the heading's (i) rather than a paragraph under
+			    the section (Parker, 2026-10-13). */}
 			<section>
-				<h3 className={sectionTitleClass}>Visibility</h3>
+				<h3 className={sectionTitleClass}>
+					Visibility
+					<InfoTip
+						unclipped
+						text="Released means it is in your public Catalog, however its access gates it. Private means only you can see it. Withdrawn means it left circulation, and everything it sold keeps working."
+					/>
+				</h3>
 				<div className="flex flex-col gap-0.5">
 					{VISIBILITIES.map((mode) => (
 						<button
@@ -86,11 +95,6 @@ export default function WorksFilterSections({
 						</button>
 					))}
 				</div>
-				<p className="text-[11px] text-base-content/40 mt-2 leading-snug">
-					Released means it is in your public Catalog, however its access gates it. Private means
-					only you can see it. Withdrawn means it left circulation, and everything it sold keeps
-					working.
-				</p>
 			</section>
 
 			{/* WORK TYPE — the kinds this Catalog holds, in the Studio's own type order. */}
@@ -117,6 +121,6 @@ export default function WorksFilterSections({
 					))}
 				</div>
 			</section>
-		</>
+		</div>
 	);
 }

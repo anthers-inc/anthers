@@ -45,7 +45,7 @@ export default function ProjectsFilterSections({
 	}, [items]);
 
 	return (
-		<>
+		<div className="flex flex-col gap-5">
 			<section>
 				<h3 className={sectionTitleClass}>Search</h3>
 				<label className="input input-bordered input-xs flex items-center gap-1.5 w-full">
@@ -108,6 +108,6 @@ export default function ProjectsFilterSections({
 					))}
 				</div>
 			</section>
-		</>
+		</div>
 	);
 }

@@ -20,7 +20,7 @@ import {
 	Squares2X2Icon,
 	TvIcon,
 } from "@heroicons/react/24/outline";
-import { sidebarRowClass } from "./SharedFilterSections";
+import { sidebarRowClass } from "./sidebar-row-class";
 
 /** Every lens row, in the shared order. ids are page words — each tab's state maps
  *  them to its own param through its adapter, and a row it has not built never enters
