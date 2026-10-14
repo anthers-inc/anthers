@@ -34,7 +34,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	type AppendableEvent,
@@ -409,11 +409,14 @@ export function isReusableReceipt(
 export function constructProjectedTip(options: {
 	cwd: string;
 	gatePath: string;
+	/** When given, a fresh worktree creation invalidates this cache's install stamp — a new tree has no node_modules, whatever its lockfile's content hash says. */
+	armGateCache?: string;
 	armed: ArmedEntry[];
 	candidateBranch: string;
 }): { tip: string; composition: string[] } | { conflict: { branch: string; message: string } } {
 	const { cwd, gatePath, armed, candidateBranch } = options;
-	if (!existsSync(join(gatePath, ".git"))) {
+	const createdFresh = !existsSync(join(gatePath, ".git"));
+	if (createdFresh) {
 		const created = git(["worktree", "add", "--detach", gatePath, "origin/main"], cwd);
 		if (created.status !== 0) {
 			return {
@@ -425,6 +428,15 @@ export function constructProjectedTip(options: {
 							.filter(Boolean)[0] ?? "",
 				},
 			};
+		}
+		// The stamp from a previous gate whose scratch tree was removed does not survive
+		// the removal: a fresh tree has no node_modules until a real install runs, and a
+		// reused stamp would tell the install gate to skip it. (Found in the wild: the
+		// worktree is removed at enqueue when the task ships, and the next ceremony's
+		// gate skipped its install and would have run the fast tier against an empty
+		// tree.)
+		if (options.armGateCache !== undefined) {
+			rmSync(join(options.armGateCache, "last-lock-sha"), { force: true });
 		}
 	} else if (git(["checkout", "--force", "--detach", "origin/main"], gatePath).status !== 0) {
 		return {
@@ -595,6 +607,7 @@ async function runCeremony(pr: number, options: ArmOptions): Promise<ArmDecision
 		const constructed = constructProjectedTip({
 			cwd,
 			gatePath: armGatePath(options),
+			armGateCache: options.armGateCache,
 			armed,
 			candidateBranch: branch,
 		});

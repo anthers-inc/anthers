@@ -182,6 +182,28 @@ describe("the arm ceremony", () => {
 		expect(third.install).toBe("real");
 	});
 
+	test("a fresh arm-gate creation invalidates the install stamp — a new tree has no node_modules", () => {
+		const cache = join(root, "fresh-gate-cache");
+		const gatePath = join(root, "gate-fresh");
+		// A stamp left by a previous gate whose scratch tree was removed (the worktree
+		// is removed at enqueue when a task ships) must not teach the next gate to skip
+		// the install into the brand-new tree.
+		mkdirSync(cache, { recursive: true });
+		writeFileSync(join(cache, "last-lock-sha"), "stale-hash\n");
+		const built = constructProjectedTip({
+			cwd: repo,
+			gatePath,
+			armGateCache: cache,
+			armed: [],
+			candidateBranch: "candidate",
+		});
+		if (!("tip" in built))
+			throw new Error(`construction conflicted unexpectedly: ${JSON.stringify(built)}`);
+		expect(existsSync(join(cache, "last-lock-sha"))).toBe(false);
+		const gate = installGate({ gatePath, armGateCache: cache });
+		expect(gate.install).toBe("real");
+	});
+
 	test("the landing lock is held across acquires and released by the kernel, with wait and acquire events on the ledger", async () => {
 		const first = await holdLandingLock((event) => appendEvent(event, { path: log }), {
 			path: join(root, "landing.lock"),
