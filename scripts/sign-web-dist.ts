@@ -30,9 +30,9 @@
 import {
 	createPrivateKey,
 	createPublicKey,
-	generateKeyPairSync,
 	sign as cryptoSign,
 	verify as cryptoVerify,
+	generateKeyPairSync,
 	type KeyObject,
 } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -49,16 +49,24 @@ const SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 export function generateKeyPair(): { privateKeyPem: string; publicKeyB64: string } {
 	const { publicKey, privateKey } = generateKeyPairSync("ed25519");
 	const raw = (publicKey.export({ type: "spki", format: "der" }) as Buffer).subarray(12);
-	return { privateKeyPem: privateKey.export({ type: "pkcs8", format: "pem" }).toString(), publicKeyB64: raw.toString("base64") };
+	return {
+		privateKeyPem: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+		publicKeyB64: raw.toString("base64"),
+	};
 }
 
 /** Decode the two-line .pub/.sig text form into its raw bytes, size-checked. */
 export function decodeKeyBlock(text: string, expected: number, which: string): Buffer {
-	const lines = text.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+	const lines = text
+		.split("\n")
+		.map((l) => l.trim())
+		.filter((l) => l.length > 0);
 	const data = lines[lines.length - 1];
 	const raw = Buffer.from(data, "base64");
 	if (raw.length !== expected) {
-		throw new Error(`${which}: expected ${expected} bytes after base64 decoding, got ${raw.length}`);
+		throw new Error(
+			`${which}: expected ${expected} bytes after base64 decoding, got ${raw.length}`,
+		);
 	}
 	return raw;
 }
@@ -104,8 +112,12 @@ async function main(): Promise<0 | 1> {
 		writeFileSync(out, privateKeyPem, { mode: 0o600 });
 		// Only the public half is printed — the private PEM stays in the file at
 		// `out`, and the caller moves it into the Actions secret and then deletes it.
-		console.log(`[key] wrote private key to ${out} (PKCS8 PEM); delete it once it is in the secret`);
-		console.log(`[key] public key (raw base64) for the desktop's web-dist-signing.pub:\n${PUB_COMMENT}\n${publicKeyB64}`);
+		console.log(
+			`[key] wrote private key to ${out} (PKCS8 PEM); delete it once it is in the secret`,
+		);
+		console.log(
+			`[key] public key (raw base64) for the desktop's web-dist-signing.pub:\n${PUB_COMMENT}\n${publicKeyB64}`,
+		);
 		return 0;
 	}
 
@@ -140,14 +152,23 @@ async function main(): Promise<0 | 1> {
 			return 1;
 		}
 		const message = Buffer.from(readFileSync(file));
-		const pubKey = createPublicKey(createPrivateKey(secret)).export({ type: "spki", format: "der" }) as Buffer;
+		const pubKey = createPublicKey(createPrivateKey(secret)).export({
+			type: "spki",
+			format: "der",
+		}) as Buffer;
 		const ok = cryptoVerify(
 			null,
 			message,
-			createPublicKey({ key: Buffer.concat([SPKI_PREFIX, pubKey.subarray(12)]), format: "der", type: "spki" }),
+			createPublicKey({
+				key: Buffer.concat([SPKI_PREFIX, pubKey.subarray(12)]),
+				format: "der",
+				type: "spki",
+			}),
 			Buffer.from(decodeKeyBlock(readFileSync(`${file}.sig`, "utf8"), 64, "signature")),
 		);
-		console.log(`[sig] ${ok ? "self-verified against the secret's own public half" : "FAILED self-verify"}: ${file}`);
+		console.log(
+			`[sig] ${ok ? "self-verified against the secret's own public half" : "FAILED self-verify"}: ${file}`,
+		);
 		return ok ? 0 : 1;
 	}
 

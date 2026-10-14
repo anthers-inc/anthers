@@ -7,7 +7,7 @@
 // one over there proves the format is still what it was.
 
 import { describe, expect, it } from "bun:test";
-import { signBuffer, verifyBuffer, generateKeyPair, decodeKeyBlock } from "./sign-web-dist.ts";
+import { decodeKeyBlock, generateKeyPair, signBuffer, verifyBuffer } from "./sign-web-dist.ts";
 
 describe("sign-web-dist", () => {
 	const { privateKeyPem, publicKeyB64 } = generateKeyPair();
