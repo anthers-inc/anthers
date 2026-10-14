@@ -337,3 +337,96 @@ export async function creatorAnalyticsRanges<K extends string>(
 	}
 	return [...groups.values()];
 }
+
+/**
+ * One account's credited time over a window, bucketed by **UTC day and creator** —
+ * the shape the activity history's graph draws. The window is walked one day at a
+ * time and the split is applied WITHIN each day, so a second divides evenly among
+ * exactly the things it was spent with, on the day it happened; a range crossing
+ * midnight contributes to each day it actually occupies, and nothing leaves the
+ * window it is clipped into.
+ *
+ * This exists beside `creditedSeconds` (whole-window) and `creditedSecondsForRollup`
+ * (per work and type, for the retention rollup) rather than reusing either, because
+ * the graph asks a window-level split for each day at the grain of a creator — and
+ * it goes through the same {@link splitOverlappingRanges} and the same range
+ * reconstruction, so a day bar, the meter and the pool all answer "how much time"
+ * with one arithmetic.
+ *
+ * ⚠️ **The UTC day is the bucket because the billing cycle is** (`@anthers/shared/
+ * billing-cycle` keys every cycle to a UTC month); a caller bucketing a display
+ * graph any other way would draw a month whose days disagree with the window their
+ * totals come from.
+ */
+export async function creditedSecondsByDayAndCreator(
+	userId: number,
+	windowStart: Date,
+	windowEnd: Date,
+): Promise<
+	Array<{
+		/** The UTC day, `YYYY-MM-DD`. */
+		day: string;
+		creatorId: number;
+		totalSeconds: number;
+		/** How many stored ranges credited this creator on this day. */
+		rangeCount: number;
+	}>
+> {
+	const rows = await rangesOverlapping(userId, windowStart, windowEnd, []);
+	// The window spans whole UTC days when it is a cycle, but the helper stays
+	// honest about windows that begin or end mid-day.
+	const DAY_MS = 86_400_000;
+	let dayStartMs = windowStart.getTime() - (windowStart.getTime() % DAY_MS);
+	const out = new Map<string, Map<number, { seconds: number; rangeCount: number }>>();
+	for (; dayStartMs < windowEnd.getTime(); dayStartMs += DAY_MS) {
+		const sliceStart = Math.max(dayStartMs, windowStart.getTime());
+		const sliceEnd = Math.min(dayStartMs + DAY_MS, windowEnd.getTime());
+		if (sliceStart >= sliceEnd) continue;
+		const dayRanges = rows
+			.map((r) => ({
+				id: r.id,
+				creatorId: r.creatorId,
+				start: (
+					r.startedAt ?? new Date(r.createdAt.getTime() - (r.durationSeconds ?? 0) * 1_000)
+				).getTime(),
+				end: (r.endedAt ?? r.createdAt).getTime(),
+			}))
+			.filter((r) => r.end > sliceStart && r.start < sliceEnd);
+		if (dayRanges.length === 0) continue;
+		const credited = splitOverlappingRanges(
+			dayRanges.map((r) => ({ id: r.id, startedAt: r.start, endedAt: r.end })),
+			sliceStart,
+			sliceEnd,
+		);
+		const dayKey = new Date(dayStartMs).toISOString().slice(0, 10);
+		let perCreator = out.get(dayKey);
+		if (!perCreator) {
+			perCreator = new Map();
+			out.set(dayKey, perCreator);
+		}
+		for (const r of dayRanges) {
+			const seconds = credited.get(r.id) ?? 0;
+			if (seconds <= 0) continue;
+			const held = perCreator.get(r.creatorId) ?? { seconds: 0, rangeCount: 0 };
+			held.seconds += seconds;
+			held.rangeCount += 1;
+			perCreator.set(r.creatorId, held);
+		}
+	}
+	const flat: Array<{ day: string; creatorId: number; totalSeconds: number; rangeCount: number }> =
+		[];
+	const dayKeys = [...out.keys()].sort();
+	for (const day of dayKeys) {
+		for (const [creatorId, held] of [...out.get(day)!.entries()].sort(
+			(a, b) => b[1].seconds - a[1].seconds,
+		)) {
+			flat.push({
+				day,
+				creatorId,
+				totalSeconds: Math.round(held.seconds),
+				rangeCount: held.rangeCount,
+			});
+		}
+	}
+	return flat;
+}

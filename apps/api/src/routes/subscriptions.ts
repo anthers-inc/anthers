@@ -54,6 +54,7 @@ import {
 	cycleEnd,
 	cycleKeyFor,
 	cycleStart,
+	isCycleKey,
 	nextCycleKey,
 } from "@anthers/shared/billing-cycle";
 import {
@@ -102,7 +103,7 @@ import {
 	resolveAccessSync,
 } from "../services/access.js";
 import { anthersUserId, loadAnthersLadder } from "../services/anthers-badges.js";
-import { creditedSeconds } from "../services/attention-ranges.js";
+import { creditedSeconds, creditedSecondsByDayAndCreator } from "../services/attention-ranges.js";
 import { composeBadgeArt } from "../services/badge-art-compose.js";
 import {
 	ensureAnthersProduct,
@@ -168,6 +169,14 @@ const BADGE_VIEWS = badgeViews();
 
 /** Dollars, rounded the way money is compared here rather than by float chance. */
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** The summary graph's one query param: which billing cycle to draw, or none for the current one. */
+const activitySummaryQuery = z.object({
+	cycle: z
+		.string()
+		.regex(/^\d{4}-\d{2}-01$/)
+		.optional(),
+});
 
 const STICKER_SUBJECTS = ["work", "post", "comment"] as const;
 type StickerSubject = (typeof STICKER_SUBJECTS)[number];
@@ -1390,11 +1399,20 @@ const subscriptionRoutes = new Hono()
 	 * This is the account-settings answer to "what do you hold about what I watch":
 	 * the ranges as reported, with their evidence, unsplit and unsurprised. It paged
 	 * rather than windowed because the point is inspection, not a total.
+	 *
+	 * `day` (an optional `YYYY-MM-DD`, UTC) narrows the record to one day — the
+	 * drill-down a graph bar opens. The filter changes nothing about what a row is:
+	 * the same columns, whole ranges, the same order the record keeps everywhere.
 	 */
 	.get("/attention/history", requireAuth, async (c) => {
 		const user = c.get("user");
 		const page = Math.max(0, Number(c.req.query("page") ?? 0));
 		const pageSize = 50;
+		const day = c.req.query("day");
+		if (day != null && !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+			return c.json({ error: "Bad day" }, 400);
+		}
+		const dayFromMs = day != null ? new Date(`${day}T00:00:00.000Z`).getTime() : null;
 
 		const rows = await db
 			.select({
@@ -1416,7 +1434,18 @@ const subscriptionRoutes = new Hono()
 			})
 			.from(attentionEvents)
 			.leftJoin(works, eq(attentionEvents.workId, works.id))
-			.where(and(eq(attentionEvents.userId, user.id), sql`${attentionEvents.durationSeconds} > 0`))
+			.where(
+				and(
+					eq(attentionEvents.userId, user.id),
+					sql`${attentionEvents.durationSeconds} > 0`,
+					...(dayFromMs != null
+						? [
+								gte(attentionEvents.startedAt, new Date(dayFromMs)),
+								sql`${attentionEvents.startedAt} < ${new Date(dayFromMs + 86_400_000).toISOString()}::timestamptz`,
+							]
+						: []),
+				),
+			)
 			.orderBy(sql`${attentionEvents.startedAt} DESC NULLS LAST, ${attentionEvents.createdAt} DESC`)
 			.limit(pageSize)
 			.offset(page * pageSize);
@@ -1433,6 +1462,84 @@ const subscriptionRoutes = new Hono()
 			hasMore: rows.length === pageSize,
 		});
 	})
+
+	/**
+	 * The activity summary behind the graph the history section draws — per UTC
+	 * day of a billing cycle, per creator, computed for display only, and going
+	 * through the same credited split every other time figure answers with
+	 * (`creditedSecondsByDayAndCreator`); the schema lives at the file's top and
+	 * the route is chained below with its neighbors.
+	 */
+	.get(
+		"/attention/history/summary",
+		requireAuth,
+		zValidator("query", activitySummaryQuery),
+		async (c) => {
+			const user = c.get("user");
+			const query = c.req.valid("query");
+			const cycle = query.cycle && isCycleKey(query.cycle) ? query.cycle : currentCycleKey();
+
+			/**
+			 * Per UTC day of the cycle, per creator: the account's **credited** time —
+			 * the split applied within each day, exactly as the meter spends it and the
+			 * pool pays it — for the bar chart the section renders above the record.
+			 *
+			 * The difference between this and the record route is the whole design. The
+			 * record (/attention/history) is shown exactly as stored, ranges whole,
+			 * nothing computed for display, because that is what the Privacy Policy
+			 * points at. This endpoint exists only to draw a bar chart, and the section
+			 * labels the picture computed wherever it names it. The two agree the way
+			 * evidence and analysis should: the rows the drill-down opens are the whole
+			 * ranges the credited halves come from, so a reader can check any bar
+			 * against the record below it rather than take an aggregate on faith.
+			 */
+			const credited = await creditedSecondsByDayAndCreator(
+				user.id,
+				cycleStart(cycle),
+				cycleEnd(cycle),
+			);
+
+			const creatorIds = [...new Set(credited.map((cr) => cr.creatorId))];
+			const creatorRows = creatorIds.length
+				? await db
+						.select({
+							id: users.id,
+							displayName: users.displayName,
+							atprotoHandle: users.atprotoHandle,
+						})
+						.from(users)
+						.where(inArray(users.id, creatorIds))
+				: [];
+			const nameOf = new Map(
+				creatorRows.map((r) => [
+					r.id,
+					(r.displayName ?? "").trim() ? (r.displayName as string).trim() : r.atprotoHandle,
+				]),
+			);
+
+			const days = [...new Set(credited.map((cr) => cr.day))].sort().map((day) => {
+				const rows = credited.filter((cr) => cr.day === day);
+				return {
+					day,
+					seconds: rows.reduce((s, cr) => s + cr.totalSeconds, 0),
+					ranges: rows.reduce((s, cr) => s + cr.rangeCount, 0),
+					creators: rows.map((cr) => ({
+						creatorId: cr.creatorId,
+						name: nameOf.get(cr.creatorId) ?? "",
+						seconds: cr.totalSeconds,
+						ranges: cr.rangeCount,
+					})),
+				};
+			});
+
+			const totals = {
+				seconds: days.reduce((s, d) => s + d.seconds, 0),
+				creators: creatorIds.length,
+			};
+
+			return c.json({ cycle, days, totals });
+		},
+	)
 
 	// ── Pool Distributions (subscriber view) ─────────────────────────────────
 	.get("/distributions", requireAuth, async (c) => {
