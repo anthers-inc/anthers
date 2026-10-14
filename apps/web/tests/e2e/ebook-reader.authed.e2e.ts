@@ -136,9 +136,7 @@ test("the chrome knows where you are, and turns by arrow and by button", async (
 	await expect.poll(readFraction, { timeout: 10_000 }).toBeLessThan(turnedTo);
 });
 
-test("a turn issued while the book is still opening is honored, not dropped", async ({
-	page,
-}) => {
+test("a turn issued while the book is still opening is honored, not dropped", async ({ page }) => {
 	await page.goto(`/works/${EBOOK.slug}-${EBOOK.publicId}`);
 	const reader = page.locator(READER);
 	const readFraction = async () => {
