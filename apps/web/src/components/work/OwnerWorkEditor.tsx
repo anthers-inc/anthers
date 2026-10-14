@@ -158,7 +158,7 @@ export default function OwnerWorkEditor({
 	// A piece of writing's body, written in place in the typography it is read in. The
 	// plain-text shadow goes with it, as it does from the post editor, because search
 	// reads that one.
-	const writing = isWriting(work.type);
+	const writing = isWriting(current.type);
 	const [bodyHtml, setBodyHtml] = useState(work.bodyHtml ?? "");
 	const [bodyText, setBodyText] = useState(work.body ?? "");
 	// A song's words, edited on the panel the user reads them on.
@@ -201,9 +201,9 @@ export default function OwnerWorkEditor({
 	// (see `studio/WorkEditPage.tsx`'s docblock — the rule binds here identically; a field
 	// that saves alone makes it truer still).
 	const [rows, setRows] = useState<MaturityRows>(() =>
-		normalizeMaturityRows(work.maturityRows, gridFor(work.type)),
+		normalizeMaturityRows(work.maturityRows, gridFor(current.type)),
 	);
-	const grid = gridFor(work.type);
+	const grid = gridFor(current.type);
 	// The rating the page stands at: what the rows add up to once every row is answered,
 	// and the Work's own rating until then. 🚨 Release and scheduling wait on `fromRows`
 	// rather than on `maturity` — a rated Work has every row answered (Parker, 2026-09-18),
@@ -479,18 +479,18 @@ export default function OwnerWorkEditor({
 	 *  nothing of its own is still arriving. (Video plays its original before the ladder —
 	 *  the 2026-10-10/11 delivery ruling; the batch editor's docblock carries why audio
 	 *  and ebooks keep the completed gate.) */
-	const fileReady = isFileWorkType(work.type) && !!current.sourceKey && !fileUploading;
+	const fileReady = isFileWorkType(current.type) && !!current.sourceKey && !fileUploading;
 
 	// ── Release: the facts each control waits on (the batch editor's predicates, against the page as it stands) ──
 	const unpublished = !current.releasedAt && current.visibility !== "withdrawn";
 	const anyoneAllowed = accessRows.some((r) => r.allow);
 	const baselineRow = accessRows.find((r) => r.threshold === 0);
 	const publicAccessNow = !!baselineRow?.allow && Number(baselineRow.price) === 0 && streamEnabled;
-	const fileMissing = isFileWorkType(work.type) && (!current.sourceKey || fileUploading);
+	const fileMissing = isFileWorkType(current.type) && (!current.sourceKey || fileUploading);
 	// And the same for a piece of writing with nothing in it yet (`text_missing`), the
 	// server's own word for it — the creator's to fix rather than to wait for.
 	const writingEmpty = writing && isEmptyWriting(bodyHtml);
-	const thumbnailMissing = needsChosenThumbnail(work.type) && !thumbnailUrl;
+	const thumbnailMissing = needsChosenThumbnail(current.type) && !thumbnailUrl;
 	const creditsMissing = !creditRows.some((r) => r.types.includes("created"));
 	const releaseBlocked =
 		payoutsReady === false ||
@@ -509,20 +509,20 @@ export default function OwnerWorkEditor({
 	 * the media has arrived or not: the strip and the columns below sit where they will
 	 * once the Work itself is here (Parker, 2026-10-14).
 	 */
-	const kindWaiting = running && work.type !== "video" && work.type !== "image";
-	const deliverableEmpty = isGoods(work.type)
+	const kindWaiting = running && current.type !== "video" && current.type !== "image";
+	const deliverableEmpty = isGoods(current.type)
 		? false
 		: writing
 			? isEmptyWriting(bodyHtml)
-			: isFileWorkType(work.type)
+			: isFileWorkType(current.type)
 				? !current.sourceKey || fileUploading
-				: isBuildType(work.type)
+				: isBuildType(current.type)
 					? !current.embedUrl && (current.assets ?? []).length === 0 && !current.webPlayable
 					: false;
 	/** The silhouette's note, said per kind — what fills the box, and where. */
 	const deliverableNote = writing
 		? "Its Manage tab is where the pen is."
-		: isFileWorkType(work.type)
+		: isFileWorkType(current.type)
 			? fileUploading
 				? "It's uploading now — keep this tab open until it lands."
 				: "Manage, at its right, takes one."
@@ -544,7 +544,7 @@ export default function OwnerWorkEditor({
 		...current,
 		// The image's deliverable reads its key as an address, as the Studio editor's row did.
 		sourceKey:
-			work.type === "image" && current.sourceKey
+			current.type === "image" && current.sourceKey
 				? keyToPreview(current.sourceKey)
 				: current.sourceKey,
 		thumbnail: thumbnailPreview ?? current.thumbnail,
@@ -576,7 +576,7 @@ export default function OwnerWorkEditor({
 					    is still the rule — a thumbnail shows in public feeds — but the line
 					    says it plainly rather than excusing itself (Parker, 2026-10-13). */}
 					<p className="max-w-prose text-xs text-base-content/60">
-						{needsChosenThumbnail(work.type) &&
+						{needsChosenThumbnail(current.type) &&
 							"A video needs a thumbnail before it's released: upload an image, or pause the player and use that frame. "}
 						Nothing Mature or Adult in it — it shows in public feeds.
 					</p>
@@ -784,7 +784,7 @@ export default function OwnerWorkEditor({
 						onChange={(e) => setDraft(e.target.value)}
 						rows={3}
 						placeholder={
-							work.type === "physical"
+							current.type === "physical"
 								? "Fulfillment notes, dimensions, shipping…"
 								: "What the service includes, turnaround, terms…"
 						}
@@ -814,7 +814,7 @@ export default function OwnerWorkEditor({
 						))}
 				</div>
 			)}
-			renderEdit={(_draft, _setDraft) => (
+			renderEdit={(draft, setDraft) => (
 				<div className="flex flex-col gap-3">
 					<label className="label cursor-pointer justify-start gap-2">
 						<input
@@ -823,7 +823,12 @@ export default function OwnerWorkEditor({
 							checked={visibility === "released"}
 							disabled={releaseBlocked}
 							onChange={(e) => {
+								// The draft is what Save sends, so the edit writes it as well as
+								// the state — the checkbox is the field's draft (the batch
+								// editor's rule: a save carries the edit, not what the page
+								// opened with).
 								setVisibility(e.target.checked ? "released" : "private");
+								setDraft(e.target.checked ? "released" : "private");
 								// Releasing now supersedes a schedule, as it does on the server.
 								if (e.target.checked) setScheduledRelease("");
 							}}
@@ -1113,7 +1118,7 @@ export default function OwnerWorkEditor({
 	// is this tab's fact for the kind; kinds with nothing to offer yet say so in one line,
 	// the same silence a tab's absence would have been, named rather than blank.
 	const accessibilityField =
-		work.type === "video" ? (
+		current.type === "video" ? (
 			<InlineField
 				label="Accessibility"
 				saved={current.captions ?? []}
@@ -1129,7 +1134,7 @@ export default function OwnerWorkEditor({
 					/* The caption editor manages its own acts; the check closes the field. */
 				}}
 			/>
-		) : work.type === "image" ? (
+		) : current.type === "image" ? (
 			<InlineField<string>
 				label="Alt text"
 				saved={imageAlt}
@@ -1160,7 +1165,7 @@ export default function OwnerWorkEditor({
 			/>
 		) : (
 			<p className="text-sm text-base-content/40">
-				Nothing to set up here for a {typeLabel(work.type)} yet.
+				Nothing to set up here for a {typeLabel(current.type)} yet.
 			</p>
 		);
 
@@ -1172,10 +1177,13 @@ export default function OwnerWorkEditor({
 			{kindChangeable && (
 				<div className="flex items-center gap-2">
 					<span className="text-sm font-medium">Kind</span>
+					{/* The select reads the ROW (current), not the page-load prop: its save
+					    adopts the response, and a refused change stands where it was — the
+					    value is the page's truth here, as every other field's read is. */}
 					<select
 						aria-label="Work kind"
 						className="select select-sm select-bordered"
-						value={work.type}
+						value={current.type}
 						onChange={(e) => void saveKind(e.target.value as UploadableWorkType)}
 					>
 						{LIBRARY_TYPE_OPTIONS.map((opt) => (
@@ -1212,11 +1220,14 @@ export default function OwnerWorkEditor({
 	];
 
 	// The changing-kind save — the row's kind is page-resolved in the batch editor; here
-	// the select saves at once and the row answers (the server rules govern; it may refuse).
+	// the select saves at once and the row answers (the server rules govern; it may
+	// refuse). A carried change unrates the row (the server's own act), so the matrix
+	// the next open reads is the new kind's empty one — the batch editor's setRows({}).
 	const saveKind = async (next: UploadableWorkType) => {
-		if (next === work.type) return;
+		if (next === current.type) return;
 		try {
 			await saveFields({ type: next });
+			setRows({});
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "The kind change didn't save.");
 			// A refused change stands where it was — the next save re-syncs the select.
@@ -1257,7 +1268,7 @@ export default function OwnerWorkEditor({
 			label: "Manage",
 			content: (
 				<div className="flex flex-col gap-6">
-					{work.type === "video" && (
+					{current.type === "video" && (
 						<section className="flex flex-col gap-2">
 							<h3 className={WORK_DETAILS_HEADING_CLASS}>Media Status</h3>
 							<MediaStatusCard
@@ -1277,14 +1288,14 @@ export default function OwnerWorkEditor({
 							/>
 						</section>
 					)}
-					{isFileWorkType(work.type) && work.type !== "video" && (
+					{isFileWorkType(current.type) && current.type !== "video" && (
 						// No section heading of its own: the file section's own label names it,
 						// and the doubled "File / File" was the rhythm reading twice.
 						<section className="flex flex-col gap-2">
 							<WorkFileSection work={current} />
 						</section>
 					)}
-					{isPaged(work.type) && fileReady && (
+					{isPaged(current.type) && fileReady && (
 						<section className="flex flex-col gap-2">
 							<h3 className={WORK_DETAILS_HEADING_CLASS}>Pages</h3>
 							<div className="rounded-box border border-base-300 bg-base-200/40 p-5">
@@ -1292,7 +1303,7 @@ export default function OwnerWorkEditor({
 							</div>
 						</section>
 					)}
-					{isBuildType(work.type) && (
+					{isBuildType(current.type) && (
 						<>
 							<section className="flex flex-col gap-2">
 								<h3 className={WORK_DETAILS_HEADING_CLASS}>Embed</h3>
@@ -1308,7 +1319,7 @@ export default function OwnerWorkEditor({
 							</section>
 						</>
 					)}
-					{isGoods(work.type) && (
+					{isGoods(current.type) && (
 						// Same doubling rule: the InlineField names itself "Details".
 						<section className="flex flex-col gap-2">{detailsNoteField}</section>
 					)}
@@ -1318,7 +1329,7 @@ export default function OwnerWorkEditor({
 							{bodyField}
 						</section>
 					)}
-					{!isOwnThumbnail(work.type) && (
+					{!isOwnThumbnail(current.type) && (
 						<section className="flex flex-col gap-2">
 							<h3 className={WORK_DETAILS_HEADING_CLASS}>Thumbnail</h3>
 							{thumbnailField}
@@ -1330,7 +1341,7 @@ export default function OwnerWorkEditor({
 	];
 
 	return (
-		<WorkColumn type={work.type} wide tight>
+		<WorkColumn type={current.type} wide tight>
 			<EditingBanner title={current.title} />
 
 			{/* The file while it is this tab's life: the upload's progress rides the page's
@@ -1365,7 +1376,7 @@ export default function OwnerWorkEditor({
 					    description still rides in the Details tab; kept in both places on
 					    purpose (Parker, 2026-10-14). */}
 					{writing && <WorkDescription work={asRead} />}
-					{isGoods(work.type) ? (
+					{isGoods(current.type) ? (
 						// The creator's copy of the user's store panel: it mounts without a
 						// verdict, the same absence a creator's own visit has always read.
 						<ProjectPricing
@@ -1378,7 +1389,7 @@ export default function OwnerWorkEditor({
 					) : deliverableEmpty ? (
 						// The silhouette: where the Work will be, drawn at the aspect it will
 						// occupy, so the page below it doesn't jump when the file lands.
-						<WorkPlaceholder type={work.type} note={deliverableNote} />
+						<WorkPlaceholder type={current.type} note={deliverableNote} />
 					) : kindWaiting ? (
 						// The processing the landed file started; the visitor's page shows the
 						// same status in the same place.
@@ -1392,7 +1403,7 @@ export default function OwnerWorkEditor({
 						<WorkDeliverable
 							work={asRead}
 							videoRef={videoEl}
-							lyrics={work.type === "music" ? lyricsField : undefined}
+							lyrics={current.type === "music" ? lyricsField : undefined}
 						/>
 					)}
 				</div>
@@ -1421,8 +1432,8 @@ export default function OwnerWorkEditor({
 						className="w-full min-w-0"
 						renderRead={() => (
 							<h1
-								className={`${workTitleTypography(work.type).className} truncate`}
-								style={workTitleTypography(work.type).style}
+								className={`${workTitleTypography(current.type).className} truncate`}
+								style={workTitleTypography(current.type).style}
 							>
 								{title || "Untitled"}
 							</h1>
@@ -1431,8 +1442,8 @@ export default function OwnerWorkEditor({
 							<textarea
 								aria-label="Title"
 								rows={1}
-								className={`${workTitleTypography(work.type).className} ${IN_PLACE} ${GROWS} w-full min-w-0 flex-1`}
-								style={workTitleTypography(work.type).style}
+								className={`${workTitleTypography(current.type).className} ${IN_PLACE} ${GROWS} w-full min-w-0 flex-1`}
+								style={workTitleTypography(current.type).style}
 								value={draft}
 								onChange={(e) => setDraft(e.target.value.replace(/\n/g, " "))}
 								onKeyDown={(e) => {
@@ -1738,6 +1749,17 @@ function OwnerAccessChipEditor({
 						</p>
 						<div className="mt-4 flex flex-col gap-4">
 							<AccessTables rows={draft} onRowsChange={setDraft} />
+							{/* The release section's warning, live here while the rows are being
+							    cut: the dialog is where the creator makes nobody able to open the
+							    Work, so it says so before the save rather than after. */}
+							{!draft.some((r) => r.allow) && (
+								<div className="alert alert-warning text-sm">
+									<span>
+										Nobody can open this yet — allow <strong>Everyone</strong> at $0 to make it
+										Public Access.
+									</span>
+								</div>
+							)}
 							<DeliverySwitches
 								streamEnabled={streamEnabled}
 								downloadEnabled={downloadEnabled}

@@ -85,25 +85,46 @@ test("a Work rated before the matrix is released only once every row is answered
 	await expect(row.getByRole("button", { name: "Release" })).toBeDisabled();
 
 	await row.getByRole("link", { name: "Rate this" }).click();
-	await expect(page).toHaveURL(new RegExp(`/studio/works/${work.publicId}/edit$`));
-	const released = page.getByLabel("Released to my public Catalog");
+	// The Studio route redirects to the Work's page (every kind's editing surface now);
+	// the incomplete rating is the Rating tab's read, and the release field says why
+	// its own control waits (the kinds pass, 2026-10-14).
+	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
+	await page.getByRole("tab", { name: "Rating" }).click();
 	await expect(
-		page.getByText("This Work is rated General today, but not every row is answered."),
+		page.getByText("A rating exists on this Work, but not every row of its matrix is answered", {
+			exact: false,
+		}),
 	).toBeVisible();
-	await expect(page.getByText("Answer every row of the Rating above first.")).toBeVisible();
+	await page.getByRole("button", { name: "Edit Rating" }).click();
+
+	// The release field waits for the same reason, said beside its control.
+	await page.getByRole("tab", { name: "Details" }).click();
+	await page.getByRole("button", { name: "Edit Release" }).click();
+	const released = page.getByLabel("Released to my public Catalog");
+	await expect(page.getByText(/answer every row of the rating first/i)).toBeVisible();
 	await expect(released).toBeDisabled();
-	await expect(page.getByLabel("Release time")).toBeDisabled();
+	// (The schedule input itself stays offered while unrated, as the batch editor's rule had it.)
 
-	// Answering the rows is the whole fix, and the release goes in the same save.
+	// Answering the rows is the whole fix; the rating saves alone, and then the release
+	// field's own save carries the release. Switching tabs unmounts a field's edit
+	// state, so the rating's edit opens again here.
+	await page.getByRole("tab", { name: "Rating" }).click();
+	await page.getByRole("button", { name: "Edit Rating" }).click();
 	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
-	await expect(released).toBeEnabled();
+	await page.getByRole("button", { name: "Save Rating" }).click();
+	await page.getByRole("tab", { name: "Details" }).click();
+	await page.getByRole("button", { name: "Edit Release" }).click();
+	await expect(released).toBeEnabled({ timeout: 15_000 });
 	await released.check();
-	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
-		timeout: 15_000,
-	});
+	await page.getByRole("button", { name: "Save Release" }).click();
 
+	// POLLED: the DB read waits for what the server holds, rather than racing the save's
+	// response home under a full suite's load.
+	await expect
+		.poll(async () => (await db.select().from(works).where(eq(works.id, work.id)))[0]?.visibility, {
+			message: "the release save never reached the row",
+		})
+		.toBe("released");
 	const [stored] = await db.select().from(works).where(eq(works.id, work.id));
-	expect(stored.visibility).toBe("released");
 	expect(stored.maturityRows).toMatchObject({ violence: "none", language: "none" });
 });
