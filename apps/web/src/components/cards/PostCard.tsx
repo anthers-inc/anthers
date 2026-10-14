@@ -4,6 +4,7 @@ import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import type { PostListItem } from "@anthers/web-shared/types";
 import { LinkIcon } from "@heroicons/react/24/outline";
+import CreatorLink from "./CreatorLink";
 
 export default function PostCard({ post }: { post: PostListItem }) {
 	const date = new Date(post.createdAt).toLocaleDateString("en-US", {
@@ -31,7 +32,13 @@ export default function PostCard({ post }: { post: PostListItem }) {
 						</div>
 					)}
 					<div>
-						<span className="text-sm font-medium">{post.creator?.handle}</span>
+						{/* The name is the creator's way out of the card (CreatorLink
+						    stops the card's own navigation on its click). */}
+						<CreatorLink
+							handle={post.creator?.handle}
+							name={post.creator?.handle ?? ""}
+							className="text-sm font-medium hover:underline"
+						/>
 						<span className="text-xs text-base-content/50 ml-2">{date}</span>
 					</div>
 				</div>

@@ -19,6 +19,7 @@ import { isAccessResult, type Work } from "@anthers/web-shared/types";
 import { MicrophoneIcon, MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
+import CreatorLink from "./CreatorLink";
 
 /** Who the support would go to, for a card's unlock copy. */
 function cardCreatorName(work: WorkCardItem): string {
@@ -169,7 +170,8 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 
 			{/* Card body */}
 			<div className="card-body p-4 gap-2">
-				{/* Creator info */}
+				{/* Creator info — the name is the creator's way out of the card
+				    (CreatorLink stops the card's own navigation on its click). */}
 				<div className="flex items-center gap-2">
 					{post.creator?.avatar ? (
 						<img
@@ -182,7 +184,11 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 							{(post.creator?.handle ?? "?").charAt(0).toUpperCase()}
 						</div>
 					)}
-					<span className="text-sm text-base-content/70">{post.creator?.handle}</span>
+					<CreatorLink
+						handle={post.creator?.handle}
+						name={post.creator?.handle ?? ""}
+						className="text-sm text-base-content/70 hover:underline"
+					/>
 					<span className="text-xs text-base-content/40 ml-auto">{date}</span>
 				</div>
 

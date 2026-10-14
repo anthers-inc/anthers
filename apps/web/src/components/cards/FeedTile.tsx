@@ -58,6 +58,7 @@ import {
 } from "../../lib/tile-preview";
 import { contentTypeMeta } from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
+import CreatorLink from "./CreatorLink";
 import TileHoverPreview from "./TileHoverPreview";
 
 /** One entry of the feed: a release of a Work, or a post. */
@@ -355,10 +356,12 @@ function PostBand({ post }: { post: FeedPost }) {
 
 function MetaRow({
 	avatar,
+	handle,
 	name,
 	date,
 }: {
 	avatar: string | null | undefined;
+	handle: string | null | undefined;
 	name: string;
 	date: string;
 }) {
@@ -371,7 +374,14 @@ function MetaRow({
 					{name.charAt(0).toUpperCase()}
 				</div>
 			)}
-			<span className="text-xs text-base-content/70 truncate">{name}</span>
+			{/* The name is the creator's way out of the tile: a nested link that takes
+			    the click (CreatorLink stops the card's own), so the row's other half —
+			    the date — stays the tile's. */}
+			<CreatorLink
+				handle={handle}
+				name={name}
+				className="text-xs text-base-content/70 truncate hover:underline"
+			/>
 			{date && <span className="text-[11px] text-base-content/40 ml-auto shrink-0">{date}</span>}
 		</div>
 	);
@@ -484,6 +494,7 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 			<TileBody>
 				<MetaRow
 					avatar={work.creator?.avatar}
+					handle={work.creator?.handle}
 					name={creatorLabel(work.creator ?? { handle: "?" })}
 					date={compactDate(work.originallyReleased ?? work.releasedAt)}
 				/>
@@ -539,6 +550,7 @@ function PostTile({ entry }: { entry: FeedEntry }) {
 			<TileBody>
 				<MetaRow
 					avatar={post.creator?.avatar}
+					handle={post.creator?.handle}
 					name={creatorLabel(post.creator ?? { handle: "?" })}
 					date={compactDate(post.publishedAt ?? post.createdAt)}
 				/>

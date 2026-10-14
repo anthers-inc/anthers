@@ -7,7 +7,9 @@
  * and post type; a portrait mockup cropped INTO that band is this spec's strongest
  * witness, because a band that ever sizes itself to its artwork goes unmissably tall.
  * Posts read their excerpt in the preview area and nowhere else; a hovered tile tints
- * with a soft background; only what plays carries a play affordance (a video keeps
+ * with a soft background; the creator's name inside a tile links to the creator's
+ * page rather than the tile's target; only what plays carries a play affordance (a
+ * video keeps
  * one on hover, a shirt never shows one); and the grid fills the content area,
  * flexing to fewer, larger tiles as the window narrows.
  *
@@ -179,6 +181,28 @@ test("no creator suggestions ride the feed, and the post reads one excerpt in it
 		return text.split("deliberately longer than a line").length - 1;
 	});
 	expect(once, "the excerpt appears only in the preview area").toBe(1);
+});
+
+test("the creator name inside a tile links to the creator's page, not the tile's target", async ({
+	page,
+}) => {
+	test.setTimeout(60_000);
+	await page.setViewportSize({ width: 2000, height: 1100 });
+	await page.goto(`${WEB_ORIGIN}/feed`);
+	await expect(page.getByRole("link", { name: /Feed grid walk post/ })).toBeVisible();
+
+	// The name's link is the only anchor inside the tile aimed at a profile path —
+	// the tile's own is the post's. A nested link only navigates to ITS target when
+	// the tile's link yields, which is the wiring a browser is the place to prove:
+	// reading the markup can see the nesting, never the click-through.
+	const postTile = page.getByRole("link", { name: /Feed grid walk post/ });
+	const nameLink = postTile.locator("a[href^='/@']");
+	await expect(nameLink).toHaveCount(1);
+	await nameLink.click();
+	await page.waitForURL(`**/@${creatorHandle}`);
+	// The profile rendered: its handle is spoken where the page is read, not just
+	// reached — a wrong-but-existing page would still pass the URL alone.
+	await expect(page.getByText(`@${creatorHandle}`).first()).toBeVisible();
 });
 
 test("the goods and video tiles keep their band shapes and their hover truths", async ({
