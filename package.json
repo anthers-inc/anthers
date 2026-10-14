@@ -3,7 +3,7 @@
 	"portless": "anthers",
 	"private": true,
 	"version": "0.1.0",
-	"packageManager": "bun@1.3.9",
+	"packageManager": "bun@1.4.3",
 	"license": "Apache-2.0",
 	"workspaces": [
 		"packages/*",

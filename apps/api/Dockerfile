@@ -6,7 +6,7 @@
 # to build with no commit to blame — and with a floating tag, a green CI image build
 # says nothing about what gets built at deploy time. Bump this deliberately; CI builds
 # the image on the PR, so the bump is checked.
-FROM oven/bun:1.3.14
+FROM oven/bun:1.4.3
 
 WORKDIR /app
 
