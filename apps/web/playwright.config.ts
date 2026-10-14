@@ -34,6 +34,21 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
+	// 🚨 **CI's `expect` window is the slow container's honest one, not the fast dev box's.**
+	// The 5s default was written for an idle, fast machine. CI's `browser-media` job is one
+	// runner carrying Chromium, the built SPA, the API, Postgres, Mailpit, the ATProto
+	// network and the media fixtures' ffmpeg — and it runs the suite 3–4x slower than an
+	// idle dev box (8m39s on 2026-10-14's #502 merge group against ~2.5 minutes local).
+	// Traces from that day's failures show healthy expects resolving in single-digit
+	// milliseconds and the failing ones sitting at exactly 5000ms — the assert never got
+	// the chance to see its element, so the window was the defect, not the code. 15s
+	// keeps every assertion that would ever resolve at idle latency honest while giving
+	// the slow runner the time it actually needs. (Retries above stay on for the
+	// crash-recovery class that `ci-api-supervisor.sh`'s restart leaves mid-flight; this
+	// knob covers the class below both — one failing run that day had no crash at all.)
+	expect: {
+		timeout: process.env.CI ? 15_000 : 5_000,
+	},
 	// 🚨 **Local runs cap at a handful of workers, not half the machine.** Playwright's
 	// default is cores/2, which was written for one person on an idle box. This machine
 	// runs several agent sessions at once — each with its own browsers and, since the
@@ -186,7 +201,9 @@ export default defineConfig({
 		// NEVER reused either. A running `make dev` API is current code, but it is the dev
 		// session's database, and a suite that seeds and resets fixtures must not reach it.
 		{
-			// In CI the API is run under a restart loop, because Bun sometimes segfaults it.
+			// In CI the API runs under `ci-api-supervisor.sh`, because Bun sometimes
+			// segfaults it, and Bun's crash handling makes an unsupervised death cost
+			// minutes rather than the seconds a restart should take.
 			//
 			// Observed 2026-08-08 on Bun 1.3.9 — the version pinned specifically to dodge the
 			// 1.3.14 crash — as `panic(main thread): Segmentation fault at address 0x0`, and
@@ -194,19 +211,26 @@ export default defineConfig({
 			// closure. That is inside Bun's own HTTP server; nothing in this repo can prevent
 			// it, and it does not reproduce locally.
 			//
-			// What it cost is out of all proportion to how often it happens. Playwright does
-			// not supervise `webServer`, so the API stayed dead for the rest of the run: every
-			// later request got ECONNRESET, `retries: 2` re-ran tests against a corpse, and the
-			// visible failure was whatever assertion happened to be next — a locked heading
-			// that never rendered, three tests away from the crash. Two separate investigations
-			// chased that symptom to real-but-unrelated bugs before anyone read the server log.
+			// What it cost is out of all proportion to how often it happens — and 2026-10-14
+			// made the shape exact: four failed `browser-media` jobs in one day (two merge
+			// groups ejecting #498 and #502, two head runs of #499 and #501), every
+			// implicated spec green in local isolation. The failed runs' logs carried the
+			// mechanism: the panic prints, its crash handler then **hangs ~81 seconds while
+			// the process stays alive** (`Illegal instruction (core dumped)` is when the
+			// kernel finally reaps it), and every spec whose requests cross that window
+			// fails on whatever assertion sits next — a `toBeVisible` that never renders, a
+			// sign-in lock deadline, tests against a corpse after it — while `retries: 2`
+			// re-runs pass against the supervisor-restarted server. The failing-spec list
+			// rotates because the crash time maps to whichever tests are in flight.
 			//
-			// Restarting turns a doomed run into one flaky test that its retry then passes. The
-			// loop is bounded so a genuinely un-startable API still fails fast rather than
-			// spinning, and each restart prints a line — if these appear, the crash is still
-			// happening and the Bun version is worth revisiting, so do not let it go quiet.
+			// The supervisor (its docblock is the full reasoning) restarts on death and
+			// SIGKILLs a child that goes silent while alive, cutting the dead window to
+			// seconds, and logs every act to stderr — the stream these captured logs do
+			// show. The budget is bounded so a genuinely un-startable API still fails fast.
+			// `process.env.CI` is the same switch the workers/retries knobs use: the
+			// supervisor is CI's shape, a session's direct command is the local one.
 			command: process.env.CI
-				? 'for i in 1 2 3 4 5; do bun src/server.ts && break; echo "[api] exited unexpectedly — restart $i/5"; sleep 1; done'
+				? "../../scripts/ci-api-supervisor.sh"
 				: `${REQUIRE_SESSION} && bun --env-file=../../.env src/server.ts`,
 			cwd: apiDir,
 			url: `http://localhost:${API_PORT}/health`,
