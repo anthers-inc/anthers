@@ -57,6 +57,7 @@ import { isFileWorkType, WorkFileSection } from "@anthers/web-shared/content/wor
 import { isBuildType, LIBRARY_TYPE_OPTIONS, typeLabel } from "@anthers/web-shared/content/works";
 import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
 import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
+import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import { usePayoutsReady } from "@anthers/web-shared/payouts";
 import AccessTables, {
 	type AccessRowDraft,
@@ -82,7 +83,12 @@ import {
 } from "@anthers/web-shared/types";
 import FileUpload from "@anthers/web-shared/ui/FileUpload";
 import { uploadMediaFile } from "@anthers/web-shared/upload";
-import { isUploading, useSourceUpload, workUploads } from "@anthers/web-shared/work-uploads";
+import {
+	isUploading,
+	useSourceUpload,
+	useWorkUploads,
+	workUploads,
+} from "@anthers/web-shared/work-uploads";
 import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import CreditsSection from "../../studio/CreditsSection";
@@ -110,6 +116,7 @@ import {
 	WorkCredits,
 	WorkDeliverable,
 	type WorkDetail,
+	WorkPlaceholder,
 	WorkRecordLink,
 	workTitleTypography,
 } from "./WorkLayout";
@@ -291,6 +298,22 @@ export default function OwnerWorkEditor({
 	// ── The Work's file: the media half of the row re-read as it changes under us ──
 	const sourceUpload = useSourceUpload(current.id);
 	const fileUploading = sourceUpload != null && isUploading(sourceUpload);
+	/**
+	 * An upload landing re-reads the media half of the row — the file attach is a
+	 * separate request whose answer arrives under nobody's cursor, and nothing typed
+	 * should be touched on the way (the Studio editor's landed/readAfter counter,
+	 * carried whole but simpler: per-field saves own the typed fields here). The
+	 * store keeps a settled upload's entry, so each settled id fires once.
+	 */
+	const uploads = useWorkUploads().filter((u) => u.workId === current.id);
+	const landedSeen = useRef<Set<string>>(new Set());
+	const landedNow = uploads.filter((u) => u.status === "done" && !landedSeen.current.has(u.id));
+	// biome-ignore lint/correctness/useExhaustiveDependencies: fires on a landing, and only then
+	useEffect(() => {
+		if (landedNow.length === 0) return;
+		for (const u of landedNow) landedSeen.current.add(u.id);
+		void refreshMedia();
+	}, [uploads]);
 
 	/**
 	 * Re-read the media half of the row when an upload lands — the file section, the
@@ -479,18 +502,30 @@ export default function OwnerWorkEditor({
 			visibility !== "released");
 
 	// ── The Info tabs' contents ──
-	/** The line under an empty deliverable, said per kind; null where nothing is missing. */
-	const deliverablePending = writing
-		? isEmptyWriting(bodyHtml)
-			? "This Work isn't written yet — its Manage tab is where the pen is."
-			: null
+	/**
+	 * Whether the deliverable's place is empty — a draft before its medium exists — so
+	 * the silhouette can hold it. The placeholder keeps the page's proportions whether
+	 * the media has arrived or not: the strip and the columns below sit where they will
+	 * once the Work itself is here (Parker, 2026-10-14).
+	 */
+	const kindWaiting = running && work.type !== "video" && work.type !== "image";
+	const deliverableEmpty = isGoods(work.type)
+		? false
+		: writing
+			? isEmptyWriting(bodyHtml)
+			: isFileWorkType(work.type)
+				? !current.sourceKey || fileUploading
+				: isBuildType(work.type)
+					? !current.embedUrl && (current.assets ?? []).length === 0 && !current.webPlayable
+					: false;
+	/** The silhouette's note, said per kind — what fills the box, and where. */
+	const deliverableNote = writing
+		? "Its Manage tab is where the pen is."
 		: isFileWorkType(work.type)
-			? current.sourceKey || fileUploading
-				? null
-				: "This Work has no file yet — Manage, at its right, takes one."
-			: isBuildType(work.type) && !current.embedUrl && (current.assets ?? []).length === 0
-				? "This Work has nothing to run yet — Manage, at its right, takes an embed or a build."
-				: null;
+			? fileUploading
+				? "It's uploading now — keep this tab open until it lands."
+				: "Manage, at its right, takes one."
+			: "Manage, at its right, takes an embed or a build.";
 	/** The kind, while a private draft could still be another kind. */
 	const kindChangeable =
 		current.visibility !== "released" &&
@@ -1242,10 +1277,9 @@ export default function OwnerWorkEditor({
 						</section>
 					)}
 					{isFileWorkType(work.type) && work.type !== "video" && (
+						// No section heading of its own: the file section's own label names it,
+						// and the doubled "File / File" was the rhythm reading twice.
 						<section className="flex flex-col gap-2">
-							<h3 className={WORK_DETAILS_HEADING_CLASS}>
-								{work.type === "image" ? "Image" : "File"}
-							</h3>
 							<WorkFileSection work={current} />
 						</section>
 					)}
@@ -1274,13 +1308,8 @@ export default function OwnerWorkEditor({
 						</>
 					)}
 					{isGoods(work.type) && (
-						<section className="flex flex-col gap-2">
-							<h3 className={WORK_DETAILS_HEADING_CLASS}>Details</h3>
-							{/* The creator-only note (fulfillment, dimensions, terms) — the user
-							    never sees it, which is why it is here rather than in the Details
-							    tab. */}
-							{detailsNoteField}
-						</section>
+						// Same doubling rule: the InlineField names itself "Details".
+						<section className="flex flex-col gap-2">{detailsNoteField}</section>
 					)}
 					{writing && (
 						<section className="flex flex-col gap-2">
@@ -1341,6 +1370,19 @@ export default function OwnerWorkEditor({
 							creatorHandle={asRead.creator?.handle ?? ""}
 							workType={current.type}
 						/>
+					) : deliverableEmpty ? (
+						// The silhouette: where the Work will be, drawn at the aspect it will
+						// occupy, so the page below it doesn't jump when the file lands.
+						<WorkPlaceholder type={work.type} note={deliverableNote} />
+					) : kindWaiting ? (
+						// The processing the landed file started; the visitor's page shows the
+						// same status in the same place.
+						<TranscodingStatus
+							status={current.transcoding?.status ?? "pending"}
+							progress={current.transcoding?.progress ?? 0}
+							etaSeconds={current.transcoding?.etaSeconds ?? undefined}
+							errorMessage={current.transcoding?.errorMessage ?? undefined}
+						/>
 					) : (
 						<WorkDeliverable
 							work={asRead}
@@ -1349,7 +1391,6 @@ export default function OwnerWorkEditor({
 						/>
 					)}
 				</div>
-				{deliverablePending && <p className="text-sm text-base-content/60">{deliverablePending}</p>}
 			</section>
 
 			{/* ── The byline strip: the title (editable in place as everywhere) on the first

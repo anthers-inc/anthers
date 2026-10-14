@@ -22,7 +22,16 @@ import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
 import type { AccessResult, Work, WorkCredit } from "@anthers/web-shared/types";
-import { CalendarIcon, ClockIcon } from "@heroicons/react/24/outline";
+import {
+	BookOpenIcon,
+	CalendarIcon,
+	ClockIcon,
+	DocumentTextIcon,
+	PhotoIcon,
+	PuzzlePieceIcon,
+	SpeakerWaveIcon,
+	VideoCameraIcon,
+} from "@heroicons/react/24/outline";
 import { PlayIcon } from "@heroicons/react/24/solid";
 import { type CSSProperties, type MutableRefObject, type ReactNode, useState } from "react";
 import { useMediaPlayer } from "../../lib/media-player";
@@ -117,6 +126,90 @@ export function workTitleTypography(type: string): {
  */
 export function isGoods(type: string): boolean {
 	return type === "physical" || type === "service";
+}
+
+/**
+ * The empty deliverable's silhouette, for a draft the creator is looking at before any
+ * file has arrived: an outlined area in the shape and aspect their Work will occupy, so
+ * the page reads as a page rather than nothing, and the one line that says how the box
+ * gets filled. A draft is private, so nothing here is ever shown to a user.
+ */
+type PlaceholderShape = {
+	icon: typeof PhotoIcon;
+	className: string;
+	/** How wide the silhouette draws: a portrait page caps at reading width, or the
+	 *  aspect makes it taller than the viewport on the wide column. */
+	width: string;
+	label: string;
+};
+
+const PLACEHOLDER_SHAPES: Record<string, PlaceholderShape> = {
+	video: {
+		icon: VideoCameraIcon,
+		className: "aspect-video",
+		width: "",
+		label: "The player starts here",
+	},
+	music: {
+		icon: SpeakerWaveIcon,
+		className: "h-24",
+		width: "",
+		label: "The player starts here — the lyrics sit under it",
+	},
+	audio: { icon: SpeakerWaveIcon, className: "h-24", width: "", label: "The player starts here" },
+	image: {
+		icon: PhotoIcon,
+		className: "aspect-[4/3]",
+		width: "max-w-2xl mx-auto",
+		label: "The picture hangs here",
+	},
+	comic: {
+		icon: BookOpenIcon,
+		className: "aspect-[3/4]",
+		width: "max-w-md mx-auto",
+		label: "The pages open here",
+	},
+	ebook: {
+		icon: BookOpenIcon,
+		className: "aspect-[3/4]",
+		width: "max-w-md mx-auto",
+		label: "The book opens here",
+	},
+	text: { icon: DocumentTextIcon, className: "h-48", width: "", label: "The article reads here" },
+	game: {
+		icon: PuzzlePieceIcon,
+		className: "aspect-video",
+		width: "",
+		label: "The game plays here",
+	},
+	software: {
+		icon: PuzzlePieceIcon,
+		className: "aspect-video",
+		width: "",
+		label: "The program runs here",
+	},
+};
+
+export function WorkPlaceholder({ type, note }: { type: string; note: string }) {
+	const shape = PLACEHOLDER_SHAPES[type] ?? {
+		icon: DocumentTextIcon,
+		className: "aspect-video",
+		width: "",
+		label: "The Work goes here",
+	};
+	const Icon = shape.icon;
+	return (
+		<div className={shape.width}>
+			<div
+				role="status"
+				className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-base-300 bg-base-200/40 p-6 text-center ${shape.className}`}
+			>
+				<Icon className="size-10 text-base-content/30" aria-hidden />
+				<p className="text-sm text-base-content/60">{shape.label}.</p>
+				<p className="max-w-prose text-xs text-base-content/40">{note}</p>
+			</div>
+		</div>
+	);
 }
 
 export const WORK_LYRICS_CLASS = "mt-4 rounded-lg bg-base-200/60 p-4";
