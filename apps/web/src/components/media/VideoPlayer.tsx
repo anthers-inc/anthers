@@ -778,17 +778,17 @@ export default function VideoPlayer({
 						onToggleFullscreen={toggleFullscreen}
 						onPodcastThis={podcast ? podcastThis : undefined}
 					/>
-
-					{chapters && chapters.length > 0 && (
-						<ChapterList
-							chapters={chapters}
-							position={position}
-							duration={duration}
-							onSeek={seekTo}
-							dark
-						/>
-					)}
 				</div>
+
+				{chapters && chapters.length > 0 && (
+					<ChapterList
+						chapters={chapters}
+						position={position}
+						duration={duration}
+						onSeek={seekTo}
+						dark
+					/>
+				)}
 			</section>
 			{publicAccess && <PublicAccessFooter />}
 		</>
