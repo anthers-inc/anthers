@@ -136,6 +136,27 @@ test("the chrome knows where you are, and turns by arrow and by button", async (
 	await expect.poll(readFraction, { timeout: 10_000 }).toBeLessThan(turnedTo);
 });
 
+test("a turn issued while the book is still opening is honored, not dropped", async ({ page }) => {
+	await page.goto(`/works/${EBOOK.slug}-${EBOOK.publicId}`);
+	const reader = page.locator(READER);
+	const readFraction = async () => {
+		const text = (await reader.textContent()) ?? "";
+		const m = /· (\d+)%/.exec(text);
+		return m ? Number(m[1]) : null;
+	};
+	// The section label first appears while the view's opening turn is still turning
+	// the book's first page, under the paginator's own lock — and the reader's transport
+	// is live exactly then. Input issued at that instant is the shape that was lost: it
+	// died on the opening turn's lock and the reader froze on its opening fraction
+	// forever. The chrome makes this turn wait behind the opening turn, so the click is
+	// honored after the first one lands, never refused.
+	await expect(reader).toContainText("Section 1 of 3");
+	const stoodAt = await readFraction();
+	expect(stoodAt, "the chrome's fraction display").not.toBeNull();
+	await reader.getByRole("button", { name: "Next page" }).click();
+	await expect.poll(readFraction, { timeout: 10_000 }).toBeGreaterThan(stoodAt);
+});
+
 test("the table of contents navigates the spine", async ({ page }) => {
 	await page.goto(`/works/${EBOOK.slug}-${EBOOK.publicId}`);
 	await expect(page.locator(READER)).toContainText("Section 1 of 3", { timeout: 20_000 });

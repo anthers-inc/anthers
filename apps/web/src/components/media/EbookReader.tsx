@@ -104,9 +104,43 @@ export default function EbookReader({
 	const [fraction, setFraction] = useState(0);
 	const [section, setSection] = useState<{ current: number; total: number } | null>(null);
 
+	// 🚨 **A turn the paginator is locked out of is dropped, and a dropped keypress is
+	// lost input.** The vendored paginator refuses while a turn is in flight (its own
+	// 100ms settle, per upstream), so a keypress, button click or swipe that lands inside
+	// one would evaporate. This chain serializes them: every request — a page turn, a
+	// TOC jump, a seek — turns exactly once, after the previous one lands, instead of
+	// dying on the lock. The open flow below is the chain's first link, not a bypass of
+	// it: the view's `init()` turns the opening page itself, under that same paginator
+	// lock, so a turn queued while the book is still opening waits for the first turn to
+	// land rather than racing it and dying on the lock with the very first click.
+	const turnChain = useRef<Promise<unknown> | null>(null);
+	const queue = useCallback((run: (view: FoliateViewInstance) => Promise<unknown>) => {
+		const view = viewRef.current;
+		if (!view) return;
+		turnChain.current = (turnChain.current ?? Promise.resolve()).then(
+			() => run(view),
+			() => run(view),
+		);
+		return turnChain.current;
+	}, []);
+	const turn = useCallback(
+		(direction: "left" | "right") =>
+			queue((v) => (direction === "left" ? v.goLeft() : v.goRight())),
+		[queue],
+	);
+
+	const goTo = useCallback(
+		(target: string | number | { fraction: number }) =>
+			queue((v) => v.goTo(target).catch(() => {})),
+		[queue],
+	);
+
 	// One open attempt per mount. The element is created, wired, then opened against the
 	// manifest-built book; the persisted position restores through `init` before the
-	// first paint of pages, so a reader returns to where they left off.
+	// first paint of pages, so a reader returns to where they left off. The whole open —
+	// manifest, book build, `open`, and the first-turning `init` — is itself the turn
+	// chain's first link, so nothing the reader surface queues can be dropped by the
+	// paginator's lock while the opening turn is still in flight.
 	useEffect(() => {
 		let live = true;
 		const el = document.createElement("foliate-view") as FoliateViewInstance;
@@ -139,7 +173,7 @@ export default function EbookReader({
 		// itself against its host box during the first navigation.
 		viewHostRef.current?.appendChild(el);
 
-		void (async () => {
+		turnChain.current = (async () => {
 			try {
 				const manifest = await fetchSectionManifest(workId, apiBase, shareToken);
 				if (!live) return;
@@ -194,34 +228,6 @@ export default function EbookReader({
 		}
 		void containerRef.current?.requestFullscreen().catch(() => {});
 	}, []);
-
-	// 🚨 **A turn the paginator is locked out of is dropped, and a dropped keypress is
-	// lost input.** The vendored paginator refuses while a turn is in flight (its own
-	// 100ms settle, per upstream), so a keypress, button click or swipe that lands inside
-	// one would evaporate. This chain serializes them: every request — a page turn, a
-	// TOC jump, a seek — turns exactly once, after the previous one lands, instead of
-	// dying on the lock.
-	const turnChain = useRef<Promise<unknown> | null>(null);
-	const queue = useCallback((run: (view: FoliateViewInstance) => Promise<unknown>) => {
-		const view = viewRef.current;
-		if (!view) return;
-		turnChain.current = (turnChain.current ?? Promise.resolve()).then(
-			() => run(view),
-			() => run(view),
-		);
-		return turnChain.current;
-	}, []);
-	const turn = useCallback(
-		(direction: "left" | "right") =>
-			queue((v) => (direction === "left" ? v.goLeft() : v.goRight())),
-		[queue],
-	);
-
-	const goTo = useCallback(
-		(target: string | number | { fraction: number }) =>
-			queue((v) => v.goTo(target).catch(() => {})),
-		[queue],
-	);
 
 	const toggleFlow = useCallback(() => {
 		const nextFlow: Flow = flow === "paginated" ? "scrolled" : "paginated";
