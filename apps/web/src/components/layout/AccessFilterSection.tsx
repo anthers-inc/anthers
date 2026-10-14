@@ -14,9 +14,6 @@
 
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 
-const sectionTitleClass =
-	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5";
-
 const ACCESS_MODES = [
 	{ id: "", label: "Any" },
 	{ id: "unlocked", label: "Unlocked" },
@@ -32,15 +29,19 @@ export default function AccessFilterSection({
 }) {
 	return (
 		<section>
-			<h3 className={sectionTitleClass}>
-				Access
-				{/* The explainer rides the heading, not the section: it repeats on every tab
-				    and the reach words need it once, not everywhere the section renders. */}
+			{/* The (i) rides BESIDE the heading, never inside it: in the h3 its "More
+			    Information" joins the heading's accessible name, and every exact-match
+			    heading selector — the sidebar specs' `getByRole("heading", { exact: true })`
+			    and the Library spec's `h3.textContent === name` — stops matching. */}
+			<div className="flex items-center gap-1.5 mb-2">
+				<h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40">
+					Access
+				</h3>
 				<InfoTip
 					unclipped
 					text="Unlocked means you can open it: public access, or the purchase or Badge that ungates it is already yours. Locked means you cannot open it yet."
 				/>
-			</h3>
+			</div>
 			<div className="flex rounded-lg bg-base-300/50 p-0.5">
 				{ACCESS_MODES.map((mode) => (
 					<button

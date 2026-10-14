@@ -98,9 +98,16 @@ test("the Library's sidebar reads Lenses, Access, Type, Tags", async ({ page }) 
 		const headings = [...document.querySelectorAll("aside section h3")];
 		const rows = (name: string) => {
 			const s = headings.find((h) => h.textContent === name)?.closest("section");
-			return [...(s?.querySelectorAll("button") ?? [])].map(
-				(b) =>
-					`${b.textContent?.trim()}${b.getAttribute("aria-disabled") === "true" ? " [grayed]" : ""}`,
+			return (
+				[...(s?.querySelectorAll("button") ?? [])]
+					// The heading's (i) explainer is its own control, not one of the section's
+					// selectable rows — and its textContent carries the whole tip copy, shown
+					// or not, so it would read as a fourth mode.
+					.filter((b) => b.getAttribute("aria-label") !== "More Information")
+					.map(
+						(b) =>
+							`${b.textContent?.trim()}${b.getAttribute("aria-disabled") === "true" ? " [grayed]" : ""}`,
+					)
 			);
 		};
 		return { lenses: rows("Lenses"), type: rows("Type"), access: rows("Access") };

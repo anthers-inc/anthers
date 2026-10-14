@@ -75,14 +75,23 @@ export default function WorksFilterSections({
 			    16rem sidebar, and a clipped control is not a control. The released/private/
 			    withdrawn explainer rides the heading's (i) rather than a paragraph under
 			    the section (Parker, 2026-10-13). */}
+			{/* VISIBILITY — what the creator did, not the access ladder beneath it. Vertical,
+			    like the type list below: the four words did not fit one joined row in a
+			    16rem sidebar, and a clipped control is not a control. The released/private/
+			    withdrawn explainer rides the heading's (i) rather than a paragraph under
+			    the section (Parker, 2026-10-13); the (i) sits BESIDE the h3 — inside it, its
+			    accessible name would swallow the heading's and the exact-match heading
+			    selectors stop matching. */}
 			<section>
-				<h3 className={sectionTitleClass}>
-					Visibility
+				<div className="flex items-center gap-1.5 mb-2">
+					<h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40">
+						Visibility
+					</h3>
 					<InfoTip
 						unclipped
 						text="Released means it is in your public Catalog, however its access gates it. Private means only you can see it. Withdrawn means it left circulation, and everything it sold keeps working."
 					/>
-				</h3>
+				</div>
 				<div className="flex flex-col gap-0.5">
 					{VISIBILITIES.map((mode) => (
 						<button
