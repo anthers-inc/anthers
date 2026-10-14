@@ -290,7 +290,10 @@ function ReleaseBand({
 				maturity={work.maturity}
 				notes={(work.maturityNotes ?? []).map(contentNoteLabel)}
 				because={veil.byRung ? undefined : veil.byNotes.map(contentNoteLabel)}
-				className="aspect-video"
+				// Above the tile's stretched overlay (z-10), so the band's click is the
+				// reveal rather than the card's navigation — the veil case of the
+				// overlay rule at the release tile.
+				className="z-10 aspect-video"
 			>
 				{artwork ? (
 					<CoverBand work={work} src={artwork} onDone={onDone} />
@@ -374,9 +377,8 @@ function MetaRow({
 					{name.charAt(0).toUpperCase()}
 				</div>
 			)}
-			{/* The name is the creator's way out of the tile: a nested link that takes
-			    the click (CreatorLink stops the card's own), so the row's other half —
-			    the date — stays the tile's. */}
+			{/* The name is the creator's way out of the tile: it rises past the tile's
+			    stretched overlay (CreatorLink), so the date stays the tile's. */}
 			<CreatorLink
 				handle={handle}
 				name={name}
@@ -480,11 +482,11 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 	};
 
 	const tileClass =
-		"group flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden";
+		"group relative flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden";
 	return (
-		<Link
-			to={workUrl(work)}
+		<div
 			className={tileClass}
+			data-testid="feed-tile"
 			onPointerEnter={onPointerEnter}
 			onPointerLeave={onPointerLeave}
 		>
@@ -521,7 +523,14 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 					) : null}
 				</div>
 			</TileBody>
-		</Link>
+			{/* The tile's own target, stretched over it: painted last (an absolute layer
+			    above every z-auto sibling), it takes a click anywhere on the tile, while
+			    the parts that are links or controls of their own — CreatorLink, an
+			    unrevealed veil — rise past it on a positive z-index and keep their clicks.
+			    The veil case is the one that must NOT pass through: its band's click is the
+			    reveal, exactly as it was when the tile itself was the link. */}
+			<Link to={workUrl(work)} className="absolute inset-0" aria-label={work.title || label} />
+		</div>
 	);
 }
 
@@ -541,9 +550,9 @@ function PostTile({ entry }: { entry: FeedEntry }) {
 	// rounded edge by the tile's own padding, so the tint reads AROUND the preview
 	// the way YouTube's tinted frame reads around a thumbnail.
 	const tileClass =
-		"group flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden";
+		"group relative flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden";
 	return (
-		<Link to={postUrl(post)} className={tileClass}>
+		<div className={tileClass} data-testid="feed-tile">
 			<div className="rounded-lg overflow-hidden">
 				<PostBand post={post} />
 			</div>
@@ -571,7 +580,9 @@ function PostTile({ entry }: { entry: FeedEntry }) {
 					)}
 				</div>
 			</TileBody>
-		</Link>
+			{/* The tile's own target, stretched over it — see the release tile's overlay. */}
+			<Link to={postUrl(post)} className="absolute inset-0" aria-label={post.title || "A post"} />
+		</div>
 	);
 }
 

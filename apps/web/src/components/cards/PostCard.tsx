@@ -14,10 +14,7 @@ export default function PostCard({ post }: { post: PostListItem }) {
 	});
 
 	return (
-		<Link
-			to={postUrl(post)}
-			className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow"
-		>
+		<div className="group relative card bg-base-200 shadow-sm hover:shadow-md transition-shadow">
 			<div className="card-body p-4 gap-2">
 				<div className="flex items-center gap-2">
 					{post.creator?.avatar ? (
@@ -33,7 +30,7 @@ export default function PostCard({ post }: { post: PostListItem }) {
 					)}
 					<div>
 						{/* The name is the creator's way out of the card (CreatorLink
-						    stops the card's own navigation on its click). */}
+						    rises past the card's stretched overlay to take its click). */}
 						<CreatorLink
 							handle={post.creator?.handle}
 							name={post.creator?.handle ?? ""}
@@ -54,6 +51,8 @@ export default function PostCard({ post }: { post: PostListItem }) {
 					</div>
 				)}
 			</div>
-		</Link>
+			{/* The card's own target, stretched over it — see WorkCard's overlay. */}
+			<Link to={postUrl(post)} className="absolute inset-0" aria-label={post.title || "A post"} />
+		</div>
 	);
 }
