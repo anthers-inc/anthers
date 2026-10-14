@@ -309,7 +309,13 @@ jobs:
     needs: precheck
     if: needs.precheck.outputs.skip != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    # 🚨 The suite's wall-clock varies with the runner's day, and the ceiling must hold
+    # through the slow ones: on 2026-10-14 this job's normal ~4m20s became 12m48s on the
+    # same tree in a slow runner window — killed by the 12m budget as an unexamined
+    # cancellation with zero failure output, which red-gated the queue with nothing to
+    # read. The budget exists to bound a hung run, never to be the thing a slow-but-
+    # finishing run dies of; 30m is the slow window's honest shape.
+    timeout-minutes: 30
 
     # Still needed, and worth being clear why when the point of this job is "no external
     # dependencies": the specs drive the real API (see playwright.config.ts webServer), which
@@ -443,7 +449,11 @@ jobs:
     needs: precheck
     if: needs.precheck.outputs.skip != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Same evidence and same shape as `browser` above, with a wider budget: this job
+    # ran 7.5–8.6m in the healthy morning windows of that day and past 20 minutes in a
+    # slow one. The ceiling bounds a hung run; it never decides that a finishing run
+    # must fail.
+    timeout-minutes: 45
     permissions:
       contents: read
       # GHCR publishes this package private by default, so the pull is authenticated below.
