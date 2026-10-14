@@ -248,7 +248,7 @@ fi
 # either way, and a docs-only push never reaches here.
 if stamp_info=$(bun run scripts/verify-stamp.ts check "$push_head" "$target" 2>/dev/null); then
 	printf '\033[36m→ pre-push: the suite already ran green at this head %s (%s) — skipping it\033[0m\n' "$push_head" "$stamp_info"
-	printf '\033[36m  Delete the stamp under ~/.cache/anthers/verify-stamps/%s, or push --no-verify, to force one.\033[0m\n' "$push_head"
+	printf '\033[36m  Delete the stamp under cache/verify-stamps/%s in the main checkout, or push --no-verify, to force one.\033[0m\n' "$push_head"
 	exit 0
 fi
 

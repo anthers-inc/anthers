@@ -13,6 +13,9 @@
  * screen-reader semantics for free. Hand-rolling it from pointer events is how a player
  * ends up unusable without a mouse.
  */
+
+import type { WorkChapter } from "@anthers/shared/chapters";
+import { chapterIndexFor } from "@anthers/shared/chapters";
 import { type ReactNode, useRef, useState } from "react";
 import { formatTime, spokenDuration } from "./format";
 
@@ -20,6 +23,7 @@ export default function SeekBar({
 	position,
 	duration,
 	buffered,
+	chapters,
 	onSeek,
 	onScrubStart,
 	onScrubEnd,
@@ -32,6 +36,12 @@ export default function SeekBar({
 	duration: number;
 	/** Seconds buffered from the start, if the medium knows. Painted on the default rail. */
 	buffered?: number;
+	/**
+	 * The Work's chapter cues, painted as ticks over the default rail and named in the
+	 * hover bubble. A painted `track` hides the rail but keeps the bubble — the
+	 * waveform players pass none, list-side chapters being theirs.
+	 */
+	chapters?: WorkChapter[];
 	onSeek: (seconds: number) => void;
 	/** Called as a drag begins/ends, for players that want to suppress their own updates. */
 	onScrubStart?: () => void;
@@ -76,6 +86,21 @@ export default function SeekBar({
 							className="absolute inset-y-0 left-0 bg-primary"
 							style={{ width: `${played * 100}%` }}
 						/>
+						{/*
+						 * Chapter boundaries, as ticks: where this Work divides. Light on the
+						 * rail's own grays in either theme, and only between the ends — a cue
+						 * named before zero or past the last second marks nothing.
+						 */}
+						{(chapters ?? [])
+							.filter((c) => c.seconds > 0 && c.seconds < duration)
+							.map((c) => (
+								<span
+									key={c.seconds}
+									aria-hidden
+									className="absolute inset-y-0 left-0 w-0.5 -translate-x-1/2 bg-white/80"
+									style={{ left: `${(c.seconds / duration) * 100}%` }}
+								/>
+							))}
 					</div>
 				)}
 			</div>
@@ -89,14 +114,27 @@ export default function SeekBar({
 				/>
 			)}
 
-			{/* Hover time. Suppressed until the duration is known, so it can never offer to
-			    seek somewhere that does not exist yet. */}
+			{/* Hover time, and the chapter it lands in. Suppressed until the duration is
+			    known, so it can never offer to seek somewhere that does not exist yet. */}
 			{hover != null && usable && (
 				<span
 					className="pointer-events-none absolute bottom-full mb-1 -translate-x-1/2 rounded bg-neutral px-1.5 py-0.5 text-[11px] tabular-nums text-neutral-content shadow"
 					style={{ left: `${hover * 100}%` }}
 				>
-					{formatTime(hover * duration)}
+					{(() => {
+						const hovered = chapters ? chapterIndexFor(chapters, hover * duration) : -1;
+						const title = hovered >= 0 ? chapters?.[hovered]?.title : null;
+						return (
+							<>
+								{title && (
+									// Wide enough to be read, clipped where it would collide
+									// with the neighboring bubble — names, not walls of text.
+									<span className="block max-w-40 truncate">{title}</span>
+								)}
+								{formatTime(hover * duration)}
+							</>
+						);
+					})()}
 				</span>
 			)}
 

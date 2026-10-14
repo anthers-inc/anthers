@@ -12,10 +12,10 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	defaultLockPath,
 	HELD_ENV,
 	holdUnitTestLock,
 	isFullUnitTestRun,
-	LOCK_DEFAULT,
 	lockPath,
 } from "./heavy-run.ts";
 
@@ -68,14 +68,16 @@ describe("isFullUnitTestRun", () => {
 
 describe("lockPath", () => {
 	it("answers the shared default when nothing overrides it", () => {
-		// Same default as heavy-run.sh names; the Makefile plumbing test in
-		// verify-stamp.test.ts asserts the two files agree.
-		expect(LOCK_DEFAULT).toContain(join(".cache", "anthers"));
-		expect(LOCK_DEFAULT).toContain("heavy-run.lock");
+		// The repository's shared cache — the same default heavy-run.sh resolves; the
+		// plumbing test in verify-stamp.test.ts asserts the two files resolve it the
+		// same way.
+		const resolved = defaultLockPath({ cwd: process.cwd() });
+		expect(resolved).toContain("heavy-run.lock");
+		expect(resolved).toContain("cache/");
 	});
 
 	it("answers the env override, which is how tests isolate lock state", () => {
-		expect(lockPath()).toBe(process.env.ANTHERS_HEAVY_RUN_LOCK ?? LOCK_DEFAULT);
+		expect(lockPath()).toBe(process.env.ANOTHERS_HEAVY_RUN_LOCK ?? defaultLockPath());
 	});
 });
 

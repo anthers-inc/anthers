@@ -19,6 +19,7 @@
  * look between Chrome and Safari.
  */
 
+import type { WorkChapter } from "@anthers/shared/chapters";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import type { WorkCaptionTrack } from "@anthers/web-shared/types";
 import { PlayIcon } from "@heroicons/react/24/solid";
@@ -28,6 +29,8 @@ import { useAttentionClaim } from "../../lib/attention";
 import { useMediaPlayer } from "../../lib/media-player";
 import type { QueueTrack } from "../../lib/music-queue";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
+import { useBindPlayerSeek } from "../../lib/work-player";
+import ChapterList from "./ChapterList";
 import { PublicAccessFooter, PublicAccessWall } from "./PublicAccessNotice";
 import { useMediaShortcuts } from "./transport/useMediaShortcuts";
 import { useVolume } from "./transport/volume";
@@ -115,6 +118,18 @@ interface VideoPlayerProps {
 	 * is still satisfied.
 	 */
 	captions?: WorkCaptionTrack[];
+	/**
+	 * The Work's chapters, parsed from its description by the shared parser — the rows
+	 * the seek bar segments over and the list this player mounts beneath the picture.
+	 * Absent or empty leaves both out; the transport reads unchanged.
+	 */
+	chapters?: WorkChapter[];
+	/**
+	 * Where the Work opens — the `?t` a timestamp link put in the address, landed back
+	 * at the moment it named. Overrides nothing here (video keeps no resume state);
+	 * the spoken player's resume yields to it.
+	 */
+	startSeconds?: number | null;
 }
 
 export default function VideoPlayer({
@@ -127,6 +142,8 @@ export default function VideoPlayer({
 	podcast,
 	originalUrl,
 	captions,
+	chapters,
+	startSeconds = null,
 	onEnded,
 }: VideoPlayerProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -525,6 +542,21 @@ export default function VideoPlayer({
 		setPosition(video.currentTime);
 	}, []);
 
+	// The page's timestamp links — description and reviews both — seek through here.
+	useBindPlayerSeek(seekTo);
+
+	/**
+	 * A landed `?t` — a shared link or a clicked timestamp. Applied once the element
+	 * has a duration to seek into, once: re-reading it after a source swap would jump
+	 * the viewer back to their entry point every time the quality mode changed.
+	 */
+	const [startApplied, setStartApplied] = useState(false);
+	useEffect(() => {
+		if (startApplied || startSeconds == null || !duration) return;
+		setStartApplied(true);
+		seekTo(startSeconds);
+	}, [duration, startSeconds, startApplied, seekTo]);
+
 	const applyRate = useCallback((next: number) => {
 		const video = videoRef.current;
 		if (!video) return;
@@ -654,6 +686,12 @@ export default function VideoPlayer({
 			 * The container IS the player: focusable, carries the keymap, and the thing
 			 * fullscreen is requested on. A <section> with a label rather than a div with
 			 * role="region" — same semantics, one fewer ARIA attribute to get wrong.
+			 *
+			 * The picture and its controls live in a relative wrapper of their own so
+			 * the chapter list beneath (inside the container, so it stays reachable in
+			 * fullscreen) reads as a section of the player rather than floating under
+			 * the controls' gradient — which is anchored to the picture's own bottom
+			 * edge now instead of the whole section's.
 			 */}
 			<section
 				ref={containerRef}
@@ -663,83 +701,94 @@ export default function VideoPlayer({
 				onPointerMove={wakeControls}
 				onPointerLeave={() => isPlaying && setControlsVisible(false)}
 				aria-label="Video player"
-				className={`group/player relative overflow-hidden rounded-lg bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-					isPlaying && !controlsVisible ? "cursor-none" : ""
-				}`}
+				className={`group/player relative overflow-hidden rounded-lg bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
 			>
-				{/*
-				 * Caption tracks render as children whose src is a blob URL built from the
-				 * app's own authenticated fetch (above), so the track's modes are ours to
-				 * set — the modes are never set from `default`, which would hand the choice
-				 * to the element's load order rather than to the active-selection effect.
-				 */}
-				{/* biome-ignore lint/a11y/useMediaCaption: tracks render as children below whenever the Work carries any; the rule is static and cannot see the conditional.
-				    The tracks are children of THIS element — that is what makes them text tracks
-				    of it — and their src is a blob URL built from the app's own authenticated
-				    fetch (above), so the bytes read no differently from the page. The modes are
-				    never set from `default`, which would hand the choice to the element's load
-				    order rather than to the active-selection effect. */}
-				<video
-					ref={videoRef}
-					poster={poster}
-					playsInline
-					// Clicking the picture plays/pauses AND focuses the container, which is
-					// what makes the keyboard shortcuts reachable without a visible hint.
-					onClick={() => {
-						containerRef.current?.focus();
-						togglePlay();
-					}}
-					className="aspect-video w-full cursor-pointer bg-black"
-				>
-					{(captions ?? [])
-						.filter((t) => trackBlobUrls[t.id])
-						.map((t) => (
-							<track
-								key={t.id}
-								data-caption-track-id={t.id}
-								src={trackBlobUrls[t.id]}
-								kind={t.kind === "subtitles" ? "subtitles" : "captions"}
-								srcLang={t.language}
-								label={t.label || t.language}
-							/>
-						))}
-				</video>
+				<div className={`relative ${isPlaying && !controlsVisible ? "cursor-none" : ""}`}>
+					{/*
+					 * Caption tracks render as children whose src is a blob URL built from the
+					 * app's own authenticated fetch (above), so the track's modes are ours to
+					 * set — the modes are never set from `default`, which would hand the choice
+					 * to the element's load order rather than to the active-selection effect.
+					 */}
+					{/* biome-ignore lint/a11y/useMediaCaption: tracks render as children below whenever the Work carries any; the rule is static and cannot see the conditional.
+					    The tracks are children of THIS element — that is what makes them text tracks
+					    of it — and their src is a blob URL built from the app's own authenticated
+					    fetch (above), so the bytes read no differently from the page. The modes are
+					    never set from `default`, which would hand the choice to the element's load
+					    order rather than to the active-selection effect. */}
+					<video
+						ref={videoRef}
+						poster={poster}
+						playsInline
+						// Clicking the picture plays/pauses AND focuses the container, which is
+						// what makes the keyboard shortcuts reachable without a visible hint.
+						onClick={() => {
+							containerRef.current?.focus();
+							togglePlay();
+						}}
+						className="aspect-video w-full cursor-pointer bg-black"
+					>
+						{(captions ?? [])
+							.filter((t) => trackBlobUrls[t.id])
+							.map((t) => (
+								<track
+									key={t.id}
+									data-caption-track-id={t.id}
+									src={trackBlobUrls[t.id]}
+									kind={t.kind === "subtitles" ? "subtitles" : "captions"}
+									srcLang={t.language}
+									label={t.label || t.language}
+								/>
+							))}
+					</video>
 
-				{/* The big idle affordance. Only while paused, and it never eats the click —
-				    the picture underneath is the button. */}
-				{!isPlaying && (
-					<div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-						<span className="flex size-16 items-center justify-center rounded-full bg-primary/90 text-primary-content shadow-lg transition-transform duration-200 group-hover/player:scale-105">
-							<PlayIcon className="ml-1 size-8" />
-						</span>
-					</div>
+					{/* The big idle affordance. Only while paused, and it never eats the click —
+					    the picture underneath is the button. */}
+					{!isPlaying && (
+						<div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+							<span className="flex size-16 items-center justify-center rounded-full bg-primary/90 text-primary-content shadow-lg transition-transform duration-200 group-hover/player:scale-105">
+								<PlayIcon className="ml-1 size-8" />
+							</span>
+						</div>
+					)}
+
+					<VideoControls
+						playing={isPlaying}
+						position={position}
+						duration={duration}
+						buffered={buffered}
+						rate={rate}
+						levels={levels}
+						currentLevel={currentLevel}
+						autoLevel={mode === "adaptive" && currentLevel === -1}
+						originalActive={mode === "original"}
+						originalAvailable={!!originalUrl}
+						activeLevelHeight={activeLevelHeight}
+						captionTracks={captions ?? []}
+						activeCaptionId={activeCaptionId}
+						fullscreen={fullscreen}
+						visible={controlsVisible || !isPlaying}
+						chapters={chapters ?? []}
+						onTogglePlay={togglePlay}
+						onSeek={seekTo}
+						onRate={applyRate}
+						onLevel={applyLevel}
+						onOriginal={selectOriginal}
+						onCaption={selectCaption}
+						onToggleFullscreen={toggleFullscreen}
+						onPodcastThis={podcast ? podcastThis : undefined}
+					/>
+				</div>
+
+				{chapters && chapters.length > 0 && (
+					<ChapterList
+						chapters={chapters}
+						position={position}
+						duration={duration}
+						onSeek={seekTo}
+						dark
+					/>
 				)}
-
-				<VideoControls
-					playing={isPlaying}
-					position={position}
-					duration={duration}
-					buffered={buffered}
-					rate={rate}
-					levels={levels}
-					currentLevel={currentLevel}
-					autoLevel={mode === "adaptive" && currentLevel === -1}
-					originalActive={mode === "original"}
-					originalAvailable={!!originalUrl}
-					activeLevelHeight={activeLevelHeight}
-					captionTracks={captions ?? []}
-					activeCaptionId={activeCaptionId}
-					fullscreen={fullscreen}
-					visible={controlsVisible || !isPlaying}
-					onTogglePlay={togglePlay}
-					onSeek={seekTo}
-					onRate={applyRate}
-					onLevel={applyLevel}
-					onOriginal={selectOriginal}
-					onCaption={selectCaption}
-					onToggleFullscreen={toggleFullscreen}
-					onPodcastThis={podcast ? podcastThis : undefined}
-				/>
 			</section>
 			{publicAccess && <PublicAccessFooter />}
 		</>

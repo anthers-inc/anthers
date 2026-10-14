@@ -13,6 +13,7 @@
  * question, answered by the server's verdict on the user page and by ownership on the Edit page.
  */
 
+import { workChapters } from "@anthers/shared/chapters";
 import { isListened, isPaged } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import HostedEmbed from "@anthers/web-shared/content/HostedEmbed";
@@ -22,16 +23,33 @@ import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
 import type { AccessResult, Work, WorkCredit } from "@anthers/web-shared/types";
-import { CalendarIcon, ClockIcon } from "@heroicons/react/24/outline";
+import {
+	BookOpenIcon,
+	CalendarIcon,
+	ClockIcon,
+	DocumentTextIcon,
+	PhotoIcon,
+	PuzzlePieceIcon,
+	SpeakerWaveIcon,
+	VideoCameraIcon,
+} from "@heroicons/react/24/outline";
 import { PlayIcon } from "@heroicons/react/24/solid";
-import { type CSSProperties, type MutableRefObject, type ReactNode, useState } from "react";
+import {
+	type CSSProperties,
+	type MutableRefObject,
+	type ReactNode,
+	useMemo,
+	useState,
+} from "react";
 import { useMediaPlayer } from "../../lib/media-player";
 import { trackFromWork } from "../../lib/tracks";
+import { useSeekPlayer, WorkPlayerProvider } from "../../lib/work-player";
 import AudioPlayer from "../media/AudioPlayer";
 import ComicReader from "../media/ComicReader";
 import EbookReader from "../media/EbookReader";
 import { PublicAccessFooter } from "../media/PublicAccessNotice";
 import SpokenPlayer from "../media/SpokenPlayer";
+import TimestampedText from "../media/TimestampedText";
 import VideoPlayer from "../media/VideoPlayer";
 import ProjectEmbed from "../project/ProjectEmbed";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
@@ -111,6 +129,98 @@ export function workTitleTypography(type: string): {
 }
 
 /** A music Work's lyrics panel, and its heading, likewise. */
+/**
+ * The goods kinds, whose deliverable is the store — buying, not a rendered medium —
+ * and whose record carries no meter (see `pageHoldsTheMeter`).
+ */
+export function isGoods(type: string): boolean {
+	return type === "physical" || type === "service";
+}
+
+/**
+ * The empty deliverable's silhouette, for a draft the creator is looking at before any
+ * file has arrived: an outlined area in the shape and aspect their Work will occupy, so
+ * the page reads as a page rather than nothing, and the one line that says how the box
+ * gets filled. A draft is private, so nothing here is ever shown to a user.
+ */
+type PlaceholderShape = {
+	icon: typeof PhotoIcon;
+	className: string;
+	/** How wide the silhouette draws: a portrait page caps at reading width, or the
+	 *  aspect makes it taller than the viewport on the wide column. */
+	width: string;
+	label: string;
+};
+
+const PLACEHOLDER_SHAPES: Record<string, PlaceholderShape> = {
+	video: {
+		icon: VideoCameraIcon,
+		className: "aspect-video",
+		width: "",
+		label: "The player starts here",
+	},
+	music: {
+		icon: SpeakerWaveIcon,
+		className: "h-24",
+		width: "",
+		label: "The player starts here — the lyrics sit under it",
+	},
+	audio: { icon: SpeakerWaveIcon, className: "h-24", width: "", label: "The player starts here" },
+	image: {
+		icon: PhotoIcon,
+		className: "aspect-[4/3]",
+		width: "max-w-2xl mx-auto",
+		label: "The picture hangs here",
+	},
+	comic: {
+		icon: BookOpenIcon,
+		className: "aspect-[3/4]",
+		width: "max-w-md mx-auto",
+		label: "The pages open here",
+	},
+	ebook: {
+		icon: BookOpenIcon,
+		className: "aspect-[3/4]",
+		width: "max-w-md mx-auto",
+		label: "The book opens here",
+	},
+	text: { icon: DocumentTextIcon, className: "h-48", width: "", label: "The article reads here" },
+	game: {
+		icon: PuzzlePieceIcon,
+		className: "aspect-video",
+		width: "",
+		label: "The game plays here",
+	},
+	software: {
+		icon: PuzzlePieceIcon,
+		className: "aspect-video",
+		width: "",
+		label: "The program runs here",
+	},
+};
+
+export function WorkPlaceholder({ type, note }: { type: string; note: string }) {
+	const shape = PLACEHOLDER_SHAPES[type] ?? {
+		icon: DocumentTextIcon,
+		className: "aspect-video",
+		width: "",
+		label: "The Work goes here",
+	};
+	const Icon = shape.icon;
+	return (
+		<div className={shape.width}>
+			<div
+				role="status"
+				className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-base-300 bg-base-200/40 p-6 text-center ${shape.className}`}
+			>
+				<Icon className="size-10 text-base-content/30" aria-hidden />
+				<p className="text-sm text-base-content/60">{shape.label}.</p>
+				<p className="max-w-prose text-xs text-base-content/40">{note}</p>
+			</div>
+		</div>
+	);
+}
+
 export const WORK_LYRICS_CLASS = "mt-4 rounded-lg bg-base-200/60 p-4";
 export const WORK_LYRICS_HEADING_CLASS =
 	"mb-2 text-xs font-semibold uppercase tracking-wider text-base-content/50";
@@ -179,9 +289,14 @@ export function WorkColumn({
 }) {
 	const width = wide ? "max-w-7xl" : type && isWriting(type) ? "max-w-2xl" : "max-w-4xl";
 	return (
-		<div className={`${width} mx-auto px-4 ${tight ? "pt-6 pb-8" : "py-8"} space-y-6`}>
-			{children}
-		</div>
+		// The player scope wraps the whole column: the deliverable that mounts a
+		// player and the description and reviews that link into it are the siblings
+		// this binding exists for — see `lib/work-player.tsx`.
+		<WorkPlayerProvider>
+			<div className={`${width} mx-auto px-4 ${tight ? "pt-6 pb-8" : "py-8"} space-y-6`}>
+				{children}
+			</div>
+		</WorkPlayerProvider>
 	);
 }
 
@@ -422,6 +537,7 @@ export function WorkDeliverable({
 	lyrics,
 	videoRef,
 	onFrameActivity,
+	startSeconds = null,
 }: {
 	work: WorkDetail;
 	shareToken?: string | null;
@@ -435,8 +551,15 @@ export function WorkDeliverable({
 	 * `HostedEmbed`'s `onActivity` and `attention.ts`'s `reportExternalActivity`.
 	 */
 	onFrameActivity?: () => void;
+	/**
+	 * Where to open playback — the `?t` a clicked timestamp put in the bar. Overrides
+	 * a spoken Work's remembered resume: a link that names a moment means that moment.
+	 */
+	startSeconds?: number | null;
 }) {
 	const { playTracks } = useMediaPlayer();
+	/** The chapters the description carries — one parse, shared by every player branch. */
+	const chapters = useMemo(() => workChapters(work.description ?? ""), [work.description]);
 	return (
 		<>
 			{/*
@@ -460,6 +583,8 @@ export function WorkDeliverable({
 					publicAccess={work.publicAccess ?? false}
 					elementRef={videoRef}
 					captions={work.captions}
+					chapters={chapters}
+					startSeconds={startSeconds}
 					// The Podcast-This row: only a video whose audio rendition really shipped
 					// gets one — serialization nulls the URL when `audio.m3u8` is absent.
 					podcast={
@@ -480,6 +605,8 @@ export function WorkDeliverable({
 					publicAccess={work.publicAccess ?? false}
 					elementRef={videoRef}
 					captions={work.captions}
+					chapters={chapters}
+					startSeconds={startSeconds}
 				/>
 			)}
 			{work.type === "music" && work.transcoding?.outputFileUrl && (
@@ -489,6 +616,8 @@ export function WorkDeliverable({
 						waveform={work.transcoding.waveformData ?? undefined}
 						attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 						publicAccess={work.publicAccess ?? false}
+						chapters={chapters}
+						startSeconds={startSeconds}
 						// Hand it to the persistent bar, so listening survives navigating
 						// away — which is the whole reason the bar exists.
 						onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
@@ -516,6 +645,8 @@ export function WorkDeliverable({
 					waveform={work.transcoding.waveformData ?? undefined}
 					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 					publicAccess={work.publicAccess ?? false}
+					chapters={chapters}
+					startSeconds={startSeconds}
 					onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
 				/>
 			)}
@@ -600,6 +731,7 @@ export function WorkDeliverable({
  * of writing it is the standfirst, which the page sets under the headline rather than here.
  */
 export function WorkDescription({ work }: { work: WorkDetail }) {
+	const seek = useSeekPlayer();
 	if (!work.description) return null;
 	if (isWriting(work.type)) {
 		return (
@@ -610,7 +742,14 @@ export function WorkDescription({ work }: { work: WorkDetail }) {
 	}
 	return (
 		<section className={WORK_DESCRIPTION_CLASS}>
-			<p>{work.description}</p>
+			<TimestampedText
+				text={work.description}
+				// Only a Work a player navigates makes its timestamps links — and only
+				// when a player is actually mounted; a locked video's description has
+				// no player to seek, so its timestamps stay text until it is opened.
+				onSeek={work.type === "video" || isListened(work.type) ? seek : null}
+				className="whitespace-pre-line"
+			/>
 		</section>
 	);
 }

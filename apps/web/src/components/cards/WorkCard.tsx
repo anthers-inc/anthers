@@ -19,6 +19,7 @@ import { isAccessResult, type Work } from "@anthers/web-shared/types";
 import { MicrophoneIcon, MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
+import CreatorLink from "./CreatorLink";
 
 /** Who the support would go to, for a card's unlock copy. */
 function cardCreatorName(work: WorkCardItem): string {
@@ -105,7 +106,9 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 					maturity={post.maturity}
 					notes={(post.maturityNotes ?? []).map(contentNoteLabel)}
 					because={cover.byRung ? undefined : cover.byNotes.map(contentNoteLabel)}
-					className="aspect-video"
+					// Above the card's stretched overlay (z-10), so the band's click is the
+					// reveal rather than the card's navigation.
+					className="z-10 aspect-video"
 				>
 					{post.thumbnail || goodsArtwork ? (
 						<img
@@ -169,7 +172,8 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 
 			{/* Card body */}
 			<div className="card-body p-4 gap-2">
-				{/* Creator info */}
+				{/* Creator info — the name is the creator's way out of the card
+				    (CreatorLink rises past the card's stretched overlay to take its click). */}
 				<div className="flex items-center gap-2">
 					{post.creator?.avatar ? (
 						<img
@@ -182,7 +186,11 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 							{(post.creator?.handle ?? "?").charAt(0).toUpperCase()}
 						</div>
 					)}
-					<span className="text-sm text-base-content/70">{post.creator?.handle}</span>
+					<CreatorLink
+						handle={post.creator?.handle}
+						name={post.creator?.handle ?? ""}
+						className="text-sm text-base-content/70 hover:underline"
+					/>
 					<span className="text-xs text-base-content/40 ml-auto">{date}</span>
 				</div>
 
@@ -224,11 +232,20 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 	);
 
 	const cardClass =
-		"card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden text-left";
+		"group relative card bg-base-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden text-left";
 
 	return (
-		<Link to={workUrl(post)} className={cardClass}>
+		<div className={cardClass}>
 			{content}
-		</Link>
+			{/* The card's own target, stretched over it: painted last (an absolute layer
+			    above every z-auto sibling), it takes a click anywhere on the card, while
+			    the parts that are links or controls of their own — CreatorLink, an
+			    unrevealed veil — rise past it on a positive z-index and keep their clicks. */}
+			<Link
+				to={workUrl(post)}
+				className="absolute inset-0"
+				aria-label={post.title || cardCreatorName(post)}
+			/>
+		</div>
 	);
 }

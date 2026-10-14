@@ -7,6 +7,15 @@
  * this repo has spent the day fixing, and one of the three steps is a security decision
  * (the token reaches the child through its ENVIRONMENT, never argv, where `/proc` publishes
  * it for the duration of the call).
+ *
+ * ⚠️ **Any `bws` command run from a shell can print secrets, and `bws secret list` is the
+ * sneaky one.** In bws 2.1.0 its output carries every value beside its key, in bare and JSON
+ * form alike (which is exactly how {@link bwsSecrets} reads them), and `bws secret get`
+ * prints a value by design. So a name-enumeration from a shell filters its output to the
+ * `key` field and pastes nothing raw — a grep of raw list output dumps the whole vault into
+ * whatever transcript is watching, the output-channel leak the agents' credential rule
+ * warns about. A value crosses a process boundary in exactly two ways: injected by
+ * `bws run --`, or returned by {@link bwsSecrets} to an in-process consumer.
  */
 
 /**

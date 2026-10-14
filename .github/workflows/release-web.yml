@@ -53,6 +53,19 @@ jobs:
           tar czf web-dist.tar.gz -C apps/web dist
           echo "packed $(du -h web-dist.tar.gz | cut -f1), $(tar tzf web-dist.tar.gz | wc -l) entries"
 
+      # The desktop refuses a pinned build it cannot verify (fail closed), so a release
+      # that ships without a signature is not a slower download, it is one the desktop
+      # will reject. The script defines the format contract; see its header.
+      - name: Sign the pack
+        env:
+          WEB_DIST_SIGNING_KEY: ${{ secrets.WEB_DIST_SIGNING_KEY }}
+        run: bun run scripts/sign-web-dist.ts web-dist.tar.gz
+
+      - name: Verify the signature at the release's own boundary
+        env:
+          WEB_DIST_SIGNING_KEY: ${{ secrets.WEB_DIST_SIGNING_KEY }}
+        run: bun run scripts/sign-web-dist.ts --self-verify web-dist.tar.gz
+
       - name: Attach to the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -62,4 +75,4 @@ jobs:
           gh release view "$TAG" >/dev/null 2>&1 \
             || gh release create "$TAG" --title "Web build $TAG" \
                  --notes "The built Anthers web app, for \`anthers-desktop\` to bundle. Pin it as \`anthersWeb\` in that repo's package.json."
-          gh release upload "$TAG" web-dist.tar.gz --clobber
+          gh release upload "$TAG" web-dist.tar.gz web-dist.tar.gz.sig --clobber
