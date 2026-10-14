@@ -1003,6 +1003,26 @@ export default function OwnerWorkEditor({
 		<WorkColumn type={work.type} wide tight>
 			<EditingBanner title={current.title} />
 
+			{/* The file while it is this tab's life: the upload's progress rides the page's
+			    top, in front of a creator, while the Manage tab keeps the machinery's long
+			    form. Closing the tab stops the upload, so the line says so while it runs
+			    (the landing's own copy, kept under the landing of its own, 2026-10-13). */}
+			{fileUploading && sourceUpload && (
+				<aside role="status" className="rounded-box border border-info/30 bg-info/10 px-4 py-2.5">
+					<progress
+						className="progress progress-primary w-full"
+						value={sourceUpload.progress ?? undefined}
+						max={100}
+					/>
+					<p className="mt-1 text-xs text-base-content/60">
+						{sourceUpload.status === "attaching"
+							? "Finishing"
+							: `Uploading${sourceUpload.progress == null ? "" : ` — ${sourceUpload.progress}%`}`}
+						. Keep this tab open: closing it stops the upload.
+					</p>
+				</aside>
+			)}
+
 			{/* ── The Work itself, full width. Everything above the video is the banner and
 			    nothing else (Parker's third pass, 2026-10-13): a player wants no header
 			    block above it, and what a Work is and who made it reads under it, between

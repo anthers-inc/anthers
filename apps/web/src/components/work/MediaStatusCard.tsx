@@ -215,6 +215,24 @@ export default function MediaStatusCard({
 				</div>
 			)}
 
+			{/* The file as it goes up: the progress line and the one warning a closed tab
+			    punishes — the upload is this tab's life, so the page says so while it runs. */}
+			{uploading && sourceUpload && (
+				<div className="flex flex-col gap-1.5">
+					<progress
+						className="progress progress-primary w-full"
+						value={sourceUpload.progress ?? undefined}
+						max={100}
+					/>
+					<p className="text-xs text-base-content/50">
+						{sourceUpload.status === "attaching"
+							? "Finishing"
+							: `Uploading${sourceUpload.progress == null ? "" : ` — ${sourceUpload.progress}%`}`}
+						. Keep this tab open: closing it stops the upload.
+					</p>
+				</div>
+			)}
+
 			{running && (
 				<div className="max-w-none">
 					<TranscodingStatus
