@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
+
+import type { WorkChapter } from "@anthers/shared/chapters";
 import { PauseIcon, PlayIcon } from "@heroicons/react/24/solid";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
+import { useBindPlayerSeek } from "../../lib/work-player";
+import ChapterList from "./ChapterList";
 import { PublicAccessFooter, PublicAccessWall } from "./PublicAccessNotice";
 import { formatTime } from "./transport/format";
 import SeekBar from "./transport/SeekBar";
@@ -26,6 +30,10 @@ interface AudioPlayerProps {
 	 * exempt.
 	 */
 	publicAccess?: boolean;
+	/** The Work's chapters, parsed from its description — the list under the transport. */
+	chapters?: WorkChapter[];
+	/** Where the Work opens — the `?t` a timestamp link put in the address. */
+	startSeconds?: number | null;
 }
 
 export default function AudioPlayer({
@@ -34,6 +42,8 @@ export default function AudioPlayer({
 	onPlayInMiniPlayer,
 	attention,
 	publicAccess = false,
+	chapters,
+	startSeconds = null,
 }: AudioPlayerProps) {
 	const audioRef = useRef<HTMLAudioElement>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
@@ -124,13 +134,28 @@ export default function AudioPlayer({
 		}
 	};
 
-	const seekTo = (seconds: number) => {
+	const seekTo = useCallback((seconds: number) => {
 		const audio = audioRef.current;
-		if (audio && duration > 0) {
-			audio.currentTime = Math.min(Math.max(0, seconds), duration);
-			setProgress(audio.currentTime);
-		}
-	};
+		if (!audio) return;
+		/*
+		 * The element's own duration, not the state — the state trails by a
+		 * `durationchange`, and the other two players read it this way.
+		 */
+		const max = Number.isFinite(audio.duration) ? audio.duration : seconds;
+		audio.currentTime = Math.min(Math.max(0, seconds), max);
+		setProgress(audio.currentTime);
+	}, []);
+
+	// The page's timestamp links — description and reviews both — seek through here.
+	useBindPlayerSeek(seekTo);
+
+	// The landed `?t`, applied once the element has a duration to seek into, once.
+	const [startApplied, setStartApplied] = useState(false);
+	useEffect(() => {
+		if (startApplied || startSeconds == null || !duration) return;
+		setStartApplied(true);
+		seekTo(startSeconds);
+	}, [duration, startSeconds, startApplied, seekTo]);
 
 	const defaultWaveform = Array.from({ length: 64 }, () => 0.3 + Math.random() * 0.5);
 	const peaks = waveform && waveform.length > 0 ? waveform : defaultWaveform;
@@ -185,6 +210,12 @@ export default function AudioPlayer({
 					<VolumeControl collapsible size="xs" />
 				</div>
 			</div>
+
+			{/* The creator's chapters from the description, inside the transport — a song
+			    whose creator cues verse and chorus by the clock keeps its listeners there. */}
+			{chapters && chapters.length > 0 && (
+				<ChapterList chapters={chapters} position={progress} duration={duration} onSeek={seekTo} />
+			)}
 
 			{/*
 			 * Hand the track to the persistent bar, which survives navigation.

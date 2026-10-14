@@ -26,6 +26,7 @@
 		"./next-path": "./src/next-path.ts",
 		"./redirect-paths": "./src/redirect-paths.ts",
 		"./handles": "./src/handles.ts",
+		"./chapters": "./src/chapters.ts",
 		"./signup": "./src/signup.ts",
 		"./signup-pow": "./src/signup-pow.ts",
 		"./figures": "./src/figures.generated.ts",

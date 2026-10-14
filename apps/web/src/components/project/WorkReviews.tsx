@@ -24,7 +24,10 @@
  * something says the author thinks it worth reading, so `0` always means a user said no.
  *
  * Bodies render as React text nodes, never as markup — the API stores plain text and nothing
- * here interprets it.
+ * here interprets it. {@link ReviewBody} is the one renderer: a timestamp a reviewer wrote
+ * YouTube-comment style (`starts at 0:00`) reads as a link that seeks the page's player when
+ * there is one — parse-side only, the body still being text the reviewer meant, nothing
+ * structured riding on it.
  */
 
 import {
@@ -43,6 +46,8 @@ import { client } from "@anthers/web-shared/rpc";
 import type { Review, ReviewAggregate } from "@anthers/web-shared/types";
 import { FlagIcon, HandThumbDownIcon, HandThumbUpIcon } from "@heroicons/react/24/outline";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { useSeekPlayer } from "../../lib/work-player";
+import TimestampedText from "../media/TimestampedText";
 import VoteControl from "../post/VoteControl";
 import ReportDialog from "../ui/ReportDialog";
 
@@ -58,6 +63,16 @@ const WINDOW_LABELS: Record<ReviewWindow, string> = {
 	month: "past month",
 	year: "past year",
 };
+
+/**
+ * A review's written body — the one place a body's text renders. A timestamp the
+ * reviewer wrote seeks the page's player through the binding when a player is
+ * mounted on this Work; elsewhere it stays text, exactly as the reviewer wrote it.
+ */
+function ReviewBody({ body }: { body: string }) {
+	const seek = useSeekPlayer();
+	return <TimestampedText text={body} onSeek={seek} className="text-sm mt-1 whitespace-pre-line" />;
+}
 
 /**
  * Reviews for a **Work**. Keyed on the Work's id rather than a post slug, because a review
@@ -429,9 +444,7 @@ export default function WorkReviews({
 											)}
 										</div>
 										{/* "" is a verdict-only review written before text was required. */}
-										{review.body && (
-											<p className="text-sm mt-1 whitespace-pre-line">{review.body}</p>
-										)}
+										{review.body && <ReviewBody body={review.body} />}
 									</div>
 								</div>
 							))}
