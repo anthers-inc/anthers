@@ -11,7 +11,7 @@
  * so every write is cheap and every read is tolerant: a malformed line is reported and
  * skipped, never discarded with the ledger around it.
  *
- * The file is one JSON line per event at `~/.cache/anthers/landing-events.jsonl`
+ * The file is one JSON line per event at the repository's shared `cache/landing-events.jsonl` —
  * (`ANTHERS_LANDING_LOG` overrides for the CLI and the pipeline; functions take an
  * explicit path option, which is what the tests pass — runtime `process.env` mutation
  * does not reach another module's view here, and `verify-stamp`'s options pattern is
@@ -36,11 +36,8 @@
  */
 
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-
-/** Where the event log lives when nothing has overridden it. */
-export const LOG_DEFAULT = join(homedir(), ".cache", "anthers", "landing-events.jsonl");
+import { repoCacheDir } from "./repo-cache.ts";
 
 /** Reads and writes resolve their file here: an explicit option wins, then `ANTHERS_LANDING_LOG`, then the default — the same direction `verify-stamp`'s options take. */
 export interface LogOptions {
@@ -49,7 +46,9 @@ export interface LogOptions {
 }
 
 export function logPath(options: LogOptions = {}): string {
-	return options.path ?? process.env.ANOTHERS_LANDING_LOG ?? LOG_DEFAULT;
+	return (
+		options.path ?? process.env.ANTHERS_LANDING_LOG ?? join(repoCacheDir(), "landing-events.jsonl")
+	);
 }
 
 export type EnvironmentLabel =

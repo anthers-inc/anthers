@@ -266,7 +266,7 @@ stripe-webhooks: ## Forward Stripe test webhooks to the local API (run alongside
 
 # The verify lane's lock: `make verify`, the browser targets and a full `bun test` (through
 # the test preload, `scripts/heavy-run.ts`) take one machine-wide `flock`
-# (`$HOME/.cache/anthers/heavy-run.lock`) and take turns, because two heavyweight suites
+# (the repository's cache/heavy-run.lock, shared by every worktree) and take turns, because two heavyweight suites
 # side by side oversubscribe the machine — the failure was a different untouched spec
 # failing on every side-by-side run, passing in isolation, from 2026-10-03 and again from
 # 2026-10-09. The suites share nothing by design (each brings its own session); only the

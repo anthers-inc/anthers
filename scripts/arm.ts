@@ -6,7 +6,7 @@
  * back to the calling session. Usage: `bun run scripts/arm.ts <PR number>` (also
  * `make arm PR=<n>`; the `/arm` command front door is the session's path).
  *
- * The ceremony holds the landing lock (`~/.cache/anthers/landing.lock`, flock, kernel-
+ * The ceremony holds the landing lock (the repository's shared `cache/landing.lock`, flock, kernel-
  * released on death) across its whole sequence — two builders finishing in the same
  * minute are the pre-queue race it exists to close — and the heavy-run lock needs no
  * ceremony-level handling, because `make verify-fast` takes it inside itself, which
@@ -35,7 +35,6 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import {
 	type AppendableEvent,
@@ -60,9 +59,15 @@ import {
 	summarize,
 	toRadarRunEvent,
 } from "./landing-radar.ts";
+import { repoCacheDir } from "./repo-cache.ts";
 
-export const LANDING_LOCK_DEFAULT = join(homedir(), ".cache", "anthers", "landing.lock");
-export const ARM_GATE_CACHE_DEFAULT = join(homedir(), ".cache", "anthers", "arm-gate");
+function landingLockDefault(): string {
+	return join(repoCacheDir(), "landing.lock");
+}
+
+function armGateDefault(): string {
+	return join(repoCacheDir(), "arm-gate");
+}
 
 export interface ArmOptions {
 	/** The pr being armed. */
@@ -184,7 +189,7 @@ export async function holdLandingLock(
 	append: (event: AppendableEvent) => void,
 	options: { path?: string; pollMs?: number } = {},
 ): Promise<number | null> {
-	const path = options.path ?? LANDING_LOCK_DEFAULT;
+	const path = options.path ?? landingLockDefault();
 	const LOCK_EX = 2;
 	const LOCK_NB = 4;
 	const pollMs = options.pollMs ?? 15_000;
@@ -470,7 +475,7 @@ export function installGate(options: { gatePath: string; armGateCache?: string }
 	install: "real" | "reused";
 	error?: string;
 } {
-	const cacheDir = options.armGateCache ?? ARM_GATE_CACHE_DEFAULT;
+	const cacheDir = options.armGateCache ?? armGateDefault();
 	const lockfile = git(["rev-parse", "HEAD:bun.lock"], options.gatePath);
 	const lockSha = lockfile.status === 0 ? lockfile.stdout.trim() : "";
 	if (lockSha === "")

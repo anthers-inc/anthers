@@ -363,12 +363,15 @@ describe("the Makefile's plumbing", () => {
 		}
 	});
 
-	it("heavy-run.sh and heavy-run.ts name the same lock path and env default", async () => {
+	it("heavy-run.sh and heavy-run.ts resolve the same shared cache lock, and name the env default", async () => {
 		const sh = readFileSync(join(REPO_ROOT, "scripts", "heavy-run.sh"), "utf8");
 		const ts = await Bun.file(join(REPO_ROOT, "scripts", "heavy-run.ts")).text();
-		const lock = ".cache/anthers/heavy-run.lock";
-		expect(sh.replace(/['"${}]/g, "")).toContain(lock);
-		expect(ts).toContain('".cache", "anthers", "heavy-run.lock"');
+		// Both resolve through git's common dir — the one path every worktree shares —
+		// onto cache/heavy-run.lock, and both honor the same env override.
+		expect(sh).toContain("--git-common-dir");
+		expect(sh).toContain("cache/heavy-run.lock");
+		expect(ts).toContain("repoCacheDir");
+		expect(ts).toContain("heavy-run.lock");
 		for (const env of ["ANTHERS_HEAVY_RUN_HELD", "ANTHERS_HEAVY_RUN_LOCK"]) {
 			expect(sh).toContain(env);
 			expect(ts).toContain(env);

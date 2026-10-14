@@ -13,10 +13,10 @@
 # `scripts/heavy-run.ts`, which covers the invocation this cannot see: a bare full
 # `bun test`, taken from the test preload. Both use the same lock file.
 #
-# The lock is one `flock(1)` on a fixed path under the user's cache directory, spanning
-# every worktree and session (no `.worktrees/`-relative path, or every worktree would
-# bring its own lock and serialize nothing). `ANTHERS_HEAVY_RUN_LOCK` overrides the path
-# for tests. Held for the whole lifetime of the tree the command spans — the fd stays
+# The lock is one `flock(1)` on a fixed path in the repository's own `cache/` directory,
+# resolved through git's common dir so every worktree and session shares one file; a
+# `.worktrees/`-relative path would give each worktree its own lock and serialize
+# nothing. `ANTHERS_HEAVY_RUN_LOCK` overrides the path for tests. Held for the whole lifetime of the tree the command spans — the fd stays
 # open across `exec`, so every child inherits it and the kernel releases the lock when
 # the last one exits, crashed or not.
 #
@@ -28,11 +28,19 @@
 # unlocked — degraded to the side-by-side behavior, loud that it did so, because a
 # missing lock must never break a dev machine.
 
-: "${ANTHERS_HEAVY_RUN_LOCK:=${HOME}/.cache/anthers/heavy-run.lock}"
 [ -n "$1" ] || {
 	printf 'usage: heavy-run.sh COMMAND [ARGS...]\n' >&2
 	exit 64
 }
+
+# The lock resolves inside the repository's shared cache: a worktree and the main
+# checkout share one git common dir, so every worktree lands on the same file.
+common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+if [ -z "$common" ] || [ ! -d "$common" ]; then
+	printf '\033[31m→ heavy-run.sh is not inside a repository checkout, so the heavy-run lock cannot be resolved\033[0m\n' >&2
+	exit 64
+fi
+: "${ANTHERS_HEAVY_RUN_LOCK:=$(dirname "$common")/cache/heavy-run.lock}"
 
 if ! command -v flock >/dev/null 2>&1; then
 	printf '\033[33m→ no flock(1) on this system, so the verify lane runs unlocked — two heavy suites side by side may flake each other\033[0m\n' >&2
