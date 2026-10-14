@@ -131,6 +131,10 @@ describe("what each route asks for", () => {
 			reason: "spam",
 		});
 		await restoreSubject({ subjectType: "comment", subjectId: commentId, adminId: operatorId });
+		// The enqueue is fired, not awaited (`queueRecordSync` never throws), and its
+		// dynamic queue import resolves a tick later — the read settles first, which
+		// under a loaded box read as rows that were still in flight.
+		await new Promise((r) => setTimeout(r, 20));
 		expect(to(QUEUES.SYNC_ATPROTO_RECORD)).toEqual([
 			{ kind: "comment", id: commentId },
 			{ kind: "comment", id: commentId },

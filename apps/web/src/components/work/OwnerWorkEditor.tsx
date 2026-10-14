@@ -814,7 +814,7 @@ export default function OwnerWorkEditor({
 						))}
 				</div>
 			)}
-			renderEdit={(draft, setDraft) => (
+			renderEdit={(_draft, setDraft) => (
 				<div className="flex flex-col gap-3">
 					<label className="label cursor-pointer justify-start gap-2">
 						<input
