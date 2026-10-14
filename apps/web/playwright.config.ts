@@ -47,7 +47,7 @@ export default defineConfig({
 	// crash-recovery class that `ci-api-supervisor.sh`'s restart leaves mid-flight; this
 	// knob covers the class below both — one failing run that day had no crash at all.)
 	expect: {
-		timeout: process.env.CI ? 15_000 : 5_000,
+		timeout: 5_000,
 	},
 	// 🚨 **Local runs cap at a handful of workers, not half the machine.** Playwright's
 	// default is cores/2, which was written for one person on an idle box. This machine
