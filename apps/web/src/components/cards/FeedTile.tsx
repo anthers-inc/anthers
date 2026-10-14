@@ -58,6 +58,7 @@ import {
 } from "../../lib/tile-preview";
 import { contentTypeMeta } from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
+import CreatorLink from "./CreatorLink";
 import TileHoverPreview from "./TileHoverPreview";
 
 /** One entry of the feed: a release of a Work, or a post. */
@@ -289,7 +290,10 @@ function ReleaseBand({
 				maturity={work.maturity}
 				notes={(work.maturityNotes ?? []).map(contentNoteLabel)}
 				because={veil.byRung ? undefined : veil.byNotes.map(contentNoteLabel)}
-				className="aspect-video"
+				// Above the tile's stretched overlay (z-10), so the band's click is the
+				// reveal rather than the card's navigation — the veil case of the
+				// overlay rule at the release tile.
+				className="z-10 aspect-video"
 			>
 				{artwork ? (
 					<CoverBand work={work} src={artwork} onDone={onDone} />
@@ -355,10 +359,12 @@ function PostBand({ post }: { post: FeedPost }) {
 
 function MetaRow({
 	avatar,
+	handle,
 	name,
 	date,
 }: {
 	avatar: string | null | undefined;
+	handle: string | null | undefined;
 	name: string;
 	date: string;
 }) {
@@ -371,7 +377,13 @@ function MetaRow({
 					{name.charAt(0).toUpperCase()}
 				</div>
 			)}
-			<span className="text-xs text-base-content/70 truncate">{name}</span>
+			{/* The name is the creator's way out of the tile: it rises past the tile's
+			    stretched overlay (CreatorLink), so the date stays the tile's. */}
+			<CreatorLink
+				handle={handle}
+				name={name}
+				className="text-xs text-base-content/70 truncate hover:underline"
+			/>
 			{date && <span className="text-[11px] text-base-content/40 ml-auto shrink-0">{date}</span>}
 		</div>
 	);
@@ -470,11 +482,11 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 	};
 
 	const tileClass =
-		"group flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden";
+		"group relative flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden";
 	return (
-		<Link
-			to={workUrl(work)}
+		<div
 			className={tileClass}
+			data-testid="feed-tile"
 			onPointerEnter={onPointerEnter}
 			onPointerLeave={onPointerLeave}
 		>
@@ -484,6 +496,7 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 			<TileBody>
 				<MetaRow
 					avatar={work.creator?.avatar}
+					handle={work.creator?.handle}
 					name={creatorLabel(work.creator ?? { handle: "?" })}
 					date={compactDate(work.originallyReleased ?? work.releasedAt)}
 				/>
@@ -510,7 +523,14 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 					) : null}
 				</div>
 			</TileBody>
-		</Link>
+			{/* The tile's own target, stretched over it: painted last (an absolute layer
+			    above every z-auto sibling), it takes a click anywhere on the tile, while
+			    the parts that are links or controls of their own — CreatorLink, an
+			    unrevealed veil — rise past it on a positive z-index and keep their clicks.
+			    The veil case is the one that must NOT pass through: its band's click is the
+			    reveal, exactly as it was when the tile itself was the link. */}
+			<Link to={workUrl(work)} className="absolute inset-0" aria-label={work.title || label} />
+		</div>
 	);
 }
 
@@ -530,15 +550,16 @@ function PostTile({ entry }: { entry: FeedEntry }) {
 	// rounded edge by the tile's own padding, so the tint reads AROUND the preview
 	// the way YouTube's tinted frame reads around a thumbnail.
 	const tileClass =
-		"group flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden";
+		"group relative flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden";
 	return (
-		<Link to={postUrl(post)} className={tileClass}>
+		<div className={tileClass} data-testid="feed-tile">
 			<div className="rounded-lg overflow-hidden">
 				<PostBand post={post} />
 			</div>
 			<TileBody>
 				<MetaRow
 					avatar={post.creator?.avatar}
+					handle={post.creator?.handle}
 					name={creatorLabel(post.creator ?? { handle: "?" })}
 					date={compactDate(post.publishedAt ?? post.createdAt)}
 				/>
@@ -559,7 +580,9 @@ function PostTile({ entry }: { entry: FeedEntry }) {
 					)}
 				</div>
 			</TileBody>
-		</Link>
+			{/* The tile's own target, stretched over it — see the release tile's overlay. */}
+			<Link to={postUrl(post)} className="absolute inset-0" aria-label={post.title || "A post"} />
+		</div>
 	);
 }
 

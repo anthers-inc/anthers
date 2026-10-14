@@ -74,6 +74,11 @@ blob-report/
 .playwright-cli/
 .playwright-mcp/
 
+# ─── Pipeline state ───
+# The landing front half's shared cache (locks, stamps, the landing ledger) — one directory
+# for every worktree and session, resolved through git's common dir (scripts/repo-cache.ts)
+/cache/
+
 # ─── Legacy (Python) ───
 __pycache__/
 *.py[cod]

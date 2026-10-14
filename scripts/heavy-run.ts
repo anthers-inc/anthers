@@ -31,17 +31,20 @@
  */
 
 import { mkdirSync, openSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { repoCacheDir } from "./repo-cache.ts";
 
 /** Set by `scripts/heavy-run.sh` for the command it spans; the preload checks it and locks nothing. */
 export const HELD_ENV = "ANTHERS_HEAVY_RUN_HELD";
 
-/** Where a heavy-run lock lives when nothing has overridden it. `heavy-run.sh` names the same default. */
-export const LOCK_DEFAULT = join(homedir(), ".cache", "anthers", "heavy-run.lock");
+/** Where a heavy-run lock lives when nothing has overridden it. `heavy-run.sh` resolves the same default. */
+/** Where a heavy-run lock lives when nothing has overridden it: the repository's shared cache. */
+export function defaultLockPath(options?: Parameters<typeof repoCacheDir>[0]): string {
+	return join(repoCacheDir(options), "heavy-run.lock");
+}
 
 export function lockPath(): string {
-	return process.env.ANTHERS_HEAVY_RUN_LOCK ?? LOCK_DEFAULT;
+	return process.env.ANTHERS_HEAVY_RUN_LOCK ?? defaultLockPath();
 }
 
 /**

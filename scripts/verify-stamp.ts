@@ -28,7 +28,7 @@
  * does not have to be the one that pushed later; heads are immutable, so the stamp says
  * what its content is regardless of who rereads it.
  *
- * Stamps live under `~/.cache/anthers/verify-stamps/<head>` (tests override with
+ * Stamps live under the repository's shared `cache/verify-stamps/<head>` (tests override with
  * `ANTHERS_VERIFY_STAMPS`) and are trusted for 24 hours — a window, not a proof: the
  * verified content never changes, but the environment around it can. Everything fails
  * closed: a missing, stale, unreadable or unrecognized stamp is the same as no stamp,
@@ -48,10 +48,13 @@ import {
 	statSync,
 	writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { repoCacheDir } from "./repo-cache.ts";
 
-export const STAMP_DIR_DEFAULT = join(homedir(), ".cache", "anthers", "verify-stamps");
+function defaultStampDir(options: { cwd?: string } = {}): string {
+	return join(repoCacheDir(options), "verify-stamps");
+}
+
 export const STAMP_WINDOW_MINUTES = 24 * 60;
 
 /** Which suite a stamp records, or which a check must be satisfied by. */
@@ -76,7 +79,7 @@ export const FULL_STAMP_MARKER = "make verify green at ";
 export const FAST_STAMP_MARKER = "make verify-fast green at ";
 
 function stampDir(options: StampOptions): string {
-	return options.dir ?? process.env.ANTHERS_VERIFY_STAMPS ?? STAMP_DIR_DEFAULT;
+	return options.dir ?? process.env.ANTHERS_VERIFY_STAMPS ?? defaultStampDir(options);
 }
 
 export function stampFileFor(head: string, options: StampOptions = {}): string {

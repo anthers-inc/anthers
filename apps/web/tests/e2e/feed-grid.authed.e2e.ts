@@ -7,7 +7,9 @@
  * and post type; a portrait mockup cropped INTO that band is this spec's strongest
  * witness, because a band that ever sizes itself to its artwork goes unmissably tall.
  * Posts read their excerpt in the preview area and nowhere else; a hovered tile tints
- * with a soft background; only what plays carries a play affordance (a video keeps
+ * with a soft background; the creator's name inside a tile links to the creator's
+ * page rather than the tile's target; only what plays carries a play affordance (a
+ * video keeps
  * one on hover, a shirt never shows one); and the grid fills the content area,
  * flexing to fewer, larger tiles as the window narrows.
  *
@@ -23,13 +25,23 @@
 import { db } from "@anthers/db/client";
 import { merchVariants, users, works } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
-import type { BrowserContext } from "@playwright/test";
+import type { BrowserContext, Locator } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { eq } from "drizzle-orm";
 import { API_URL, signInAsMediaFixture, WEB_ORIGIN } from "./fixtures";
 
 const BODY_TEXT =
 	"The opening of the feed post body sits in the preview band, deliberately longer than a line so the clamp has room to breathe.";
+
+/**
+ * The tile WRAPPER the grid renders, from a tile's link: FeedTile's whole-card
+ * target is a stretched overlay painted over a non-link card (the creator's
+ * name needs a real anchor above that overlay, and an anchor inside an anchor
+ * is invalid HTML the gauntlet's console watch refuses), so the overlay carries
+ * the tile's name and geometry and the wrapper carries the band, the body and
+ * the tint.
+ */
+const tileRoot = (overlay: Locator): Locator => overlay.locator("xpath=..");
 
 /**
  * A deliberately PORTRAIT mockup (200x700): a band that sizes itself to its artwork
@@ -164,9 +176,10 @@ test("no creator suggestions ride the feed, and the post reads one excerpt in it
 
 	const postTile = page.getByRole("link", { name: /Feed grid walk post/ });
 	await expect(postTile).toBeVisible();
+	const postCard = tileRoot(postTile);
 
 	// The preview band is 16:9: wider than tall, whatever artwork it holds.
-	const band = await postTile.evaluate((el) => {
+	const band = await postCard.evaluate((el) => {
 		const inner = (el as HTMLElement).querySelector(":scope > div") as HTMLElement;
 		const r = inner.getBoundingClientRect();
 		return { w: r.width, h: r.height };
@@ -174,11 +187,43 @@ test("no creator suggestions ride the feed, and the post reads one excerpt in it
 	expect(band.w / band.h, "the post tile's band reads 16:9 wide").toBeGreaterThan(1.5);
 
 	// One excerpt: the body's opening appears exactly once in the tile — the band.
-	const once = await postTile.evaluate((el) => {
+	const once = await postCard.evaluate((el) => {
 		const text = (el as HTMLElement).textContent ?? "";
 		return text.split("deliberately longer than a line").length - 1;
 	});
 	expect(once, "the excerpt appears only in the preview area").toBe(1);
+});
+
+test("the creator name inside a tile links to the creator's page, not the tile's target", async ({
+	page,
+}) => {
+	test.setTimeout(60_000);
+	await page.setViewportSize({ width: 2000, height: 1100 });
+	await page.goto(`${WEB_ORIGIN}/feed`);
+	await expect(page.getByRole("link", { name: /Feed grid walk post/ })).toBeVisible();
+
+	// The tile's surface still opens its own target: the stretched overlay takes a
+	// click anywhere on the tile. This half has to be pinned too, because raising the
+	// name past the overlay is exactly the change that could swallow a plain click.
+	const postTile = page.getByRole("link", { name: /Feed grid walk post/ });
+	await postTile.click();
+	await page.waitForURL(`**/posts/${slug}*`);
+	await page.goBack();
+	await page.waitForURL(`**/feed`);
+	await expect(page.getByRole("link", { name: /Feed grid walk post/ })).toBeVisible();
+
+	// The name's link is the only anchor in the tile aimed at a profile path — the
+	// tile's own is the post's, stretched over it as an overlay. The overlay only
+	// navigates because it paints over the card; the name only wins its own click
+	// because it rises past the overlay. Neither is provable by reading the markup,
+	// which is why the pin is clicked in a browser.
+	const nameLink = tileRoot(postTile).locator("a[href^='/@']");
+	await expect(nameLink).toHaveCount(1);
+	await nameLink.click();
+	await page.waitForURL(`**/@${creatorHandle}`);
+	// The profile rendered: its handle is spoken where the page is read, not just
+	// reached — a wrong-but-existing page would still pass the URL alone.
+	await expect(page.getByText(`@${creatorHandle}`).first()).toBeVisible();
 });
 
 test("the goods and video tiles keep their band shapes and their hover truths", async ({
@@ -190,10 +235,11 @@ test("the goods and video tiles keep their band shapes and their hover truths", 
 
 	const shirtTile = page.getByRole("link", { name: /Feed grid shirt/ });
 	await expect(shirtTile).toBeVisible();
+	const shirtCard = tileRoot(shirtTile);
 
 	// The portrait mockup is CROPPED into the same 16:9 band shape — a band that
 	// sized itself to its artwork would stand tall here.
-	const shirtBand = await shirtTile.evaluate((el) => {
+	const shirtBand = await shirtCard.evaluate((el) => {
 		const inner = (el as HTMLElement).querySelector(":scope > div") as HTMLElement;
 		const r = inner.getBoundingClientRect();
 		return { w: r.width, h: r.height };
@@ -206,7 +252,7 @@ test("the goods and video tiles keep their band shapes and their hover truths", 
 	await shirtTile.hover();
 	await page.waitForTimeout(250);
 	expect(
-		await shirtTile.evaluate(
+		await shirtCard.evaluate(
 			(el) =>
 				((el as HTMLElement).querySelector(":scope > div") as HTMLElement)?.querySelectorAll("svg")
 					.length ?? -1,
@@ -214,12 +260,14 @@ test("the goods and video tiles keep their band shapes and their hover truths", 
 		"no play affordance in a goods tile's preview",
 	).toBe(0);
 
-	// A hovered tile tints — the soft highlight every tile shares.
+	// A hovered tile tints — the soft highlight every tile shares (the tint is the
+	// wrapper's; the overlay over it hovers with the wrapper, an ancestor of it).
 	const postTile = page.getByRole("link", { name: /Feed grid walk post/ });
-	const beforeHover = await postTile.evaluate((el) => getComputedStyle(el).backgroundColor);
+	const postCard = tileRoot(postTile);
+	const beforeHover = await postCard.evaluate((el) => getComputedStyle(el).backgroundColor);
 	await postTile.hover();
 	await page.waitForTimeout(300);
-	const afterHover = await postTile.evaluate((el) => getComputedStyle(el).backgroundColor);
+	const afterHover = await postCard.evaluate((el) => getComputedStyle(el).backgroundColor);
 	expect(afterHover, "the hovered tile gains a tinted background").not.toBe(beforeHover);
 
 	// The video keeps its play affordance on hover — it is the one thing that plays.
@@ -227,7 +275,7 @@ test("the goods and video tiles keep their band shapes and their hover truths", 
 	await videoTile.hover();
 	await page.waitForTimeout(250);
 	expect(
-		await videoTile.evaluate(
+		await tileRoot(videoTile).evaluate(
 			(el) =>
 				((el as HTMLElement).querySelector(":scope > div") as HTMLElement)?.querySelectorAll("svg")
 					.length ?? -1,
@@ -250,7 +298,7 @@ test("the grid fills the content area and flexes as the window narrows", async (
 			if (!grid) return null;
 			const first = grid.firstElementChild as HTMLElement | null;
 			const rowTiles = first
-				? [...grid.querySelectorAll(":scope > a")].filter((t) => {
+				? [...grid.querySelectorAll(":scope > [data-testid='feed-tile']")].filter((t) => {
 						const r = (t as HTMLElement).getBoundingClientRect();
 						const f = first.getBoundingClientRect();
 						return Math.abs(r.top - f.top) < 4;
