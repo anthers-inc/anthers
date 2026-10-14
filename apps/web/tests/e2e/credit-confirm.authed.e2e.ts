@@ -20,13 +20,19 @@
  * a shared fixture must come back to empty even when a walk fails halfway.
  */
 
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GAUNTLET_WALKER_USERNAME, gauntletHandle } from "@anthers/db/gauntlet";
-import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
+import {
+	API_URL,
+	expect,
+	leashedExecFileSync,
+	signInAsMediaFixture,
+	test,
+	WEB_ORIGIN,
+} from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 const TITLE_PREFIX = "Credit walk ";
@@ -71,7 +77,7 @@ async function ownWorks(): Promise<OwnedWork[]> {
 async function syncListing(workId: number): Promise<void> {
 	// The same service call `seed-media-fixture.ts` makes to put the fixture's catalog on
 	// the session's network. Run in a child process — importing the API's service from a
-	// web spec would couple the suites — through `execFileSync("bun", …)`, the pattern
+	// web spec would couple the suites — through `leashedExecFileSync("bun", …)`, the pattern
 	// every other spec in this directory uses for its child commands.
 	//
 	// 🚨 Never `Bun.spawn` here: the Playwright worker runs under Node in CI, where the
@@ -101,7 +107,7 @@ process.exit(0);
 	const file = join(dir, `sync-${workId}.ts`);
 	writeFileSync(file, script);
 	try {
-		execFileSync("bun", [file], { cwd: REPO_ROOT, stdio: "ignore" });
+		leashedExecFileSync("bun", [file], { cwd: REPO_ROOT, stdio: "ignore" });
 		const result = JSON.parse(readFileSync(outFile, "utf8")) as { status?: string };
 		expect(result.status, `the released Work's listing sync did not run: ${outFile}`).toBe(
 			"synced",

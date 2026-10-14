@@ -7,11 +7,10 @@
  * read out of the session's inbox, typed into the six boxes, and an account on the other end — for
  * signup, one that holds the handle it asked for as a real identity on the session's network.
  */
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { profileUrl } from "@anthers/web-shared/profile";
 import type { Page } from "@playwright/test";
-import { API_URL, emailedCode, expect, test } from "./fixtures";
+import { API_URL, emailedCode, expect, leashedExecFileSync, test } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 const topSignup = (page: Page) => page.locator('[data-signup="top"]');
@@ -93,7 +92,7 @@ test("an emailed code signs an existing account in from /login", async ({ page }
 	const name = `e2e-login-${stamp()}`.slice(0, 18);
 	const address = `${name}@example.com`;
 	const made = JSON.parse(
-		execFileSync("bun", ["run", "db:local-account", "--name", name, "--email", address], {
+		leashedExecFileSync("bun", ["run", "db:local-account", "--name", name, "--email", address], {
 			cwd: REPO_ROOT,
 			encoding: "utf8",
 		})
@@ -121,7 +120,7 @@ test("an Anthers handle signs in from /login, keyed on the handle alone", async 
 	const name = `e2e-han-${stamp()}`.slice(0, 18);
 	const address = `e2e-handle-${stamp()}@example.com`;
 	const made = JSON.parse(
-		execFileSync("bun", ["run", "db:local-account", "--name", name, "--email", address], {
+		leashedExecFileSync("bun", ["run", "db:local-account", "--name", name, "--email", address], {
 			cwd: REPO_ROOT,
 			encoding: "utf8",
 		})

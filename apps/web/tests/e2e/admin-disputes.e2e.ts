@@ -13,11 +13,10 @@
  * so the large and self-pay flags both fire and the flagged-first sort is asserted
  * against a row that is genuinely flagged.
  */
-import { execFileSync } from "node:child_process";
 import { db } from "@anthers/db/client";
 import { disputes, purchases, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
-import { ADMIN_ORIGIN, expect, test, trackErrorsStrict } from "./fixtures";
+import { ADMIN_ORIGIN, expect, leashedExecFileSync, test, trackErrorsStrict } from "./fixtures";
 
 const RUN = Date.now().toString(36);
 const OPERATOR_EMAIL = `e2e-disputes-${RUN}@example.com`;
@@ -26,7 +25,7 @@ const dpIds: number[] = [];
 const userIds: number[] = [];
 
 test.beforeAll(async () => {
-	execFileSync(
+	leashedExecFileSync(
 		"bun",
 		["run", "admin:account", "create", OPERATOR_EMAIL, "--name", `E2E Ops ${RUN}`],
 		{
@@ -35,7 +34,7 @@ test.beforeAll(async () => {
 		},
 	);
 	const made = JSON.parse(
-		execFileSync("bun", ["run", "db:local-account", "--username", `e2e_disp_${RUN}`], {
+		leashedExecFileSync("bun", ["run", "db:local-account", "--username", `e2e_disp_${RUN}`], {
 			cwd: REPO_ROOT,
 			encoding: "utf8",
 		})

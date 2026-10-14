@@ -51,7 +51,7 @@ import { profileUrl } from "@anthers/web-shared/profile";
 const BUY = `G${2 + BADGE_RUNGS.length}`;
 
 import { expect, type Page, test } from "@playwright/test";
-import { API_URL, trackErrorsStrict, WEB_ORIGIN } from "./fixtures";
+import { API_URL, leashedExecFileSync, trackErrorsStrict, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
@@ -59,7 +59,7 @@ test.describe.configure({ mode: "serial" });
 
 /** Hop the walk user's billing state through the canonical fixture script — instance B. */
 function hop(...args: string[]): void {
-	execFileSync(
+	leashedExecFileSync(
 		"bun",
 		["run", "db:gauntlet:state", "--instance", "walk", "--user", WALK_WALKER_USERNAME, ...args],
 		{
@@ -307,13 +307,13 @@ test.beforeAll(async () => {
 	// touches sessions). Instance A's rows are untouched, so the authed specs could be
 	// running beside this right now; that is the isolation this file's `--instance walk`
 	// buys.
-	execFileSync("bun", ["run", "db:gauntlet", "--instance", "walk", "--ensure-walker"], {
+	leashedExecFileSync("bun", ["run", "db:gauntlet", "--instance", "walk", "--ensure-walker"], {
 		cwd: REPO_ROOT,
 		stdio: "inherit",
 	});
 	// The reset deletes the walk instance's posts and their content items, so real media
 	// has to be re-attached every time — and through the real transcode job, not a staged row.
-	execFileSync("bun", ["run", "db:gauntlet:media", "--instance", "walk"], {
+	leashedExecFileSync("bun", ["run", "db:gauntlet:media", "--instance", "walk"], {
 		cwd: REPO_ROOT,
 		stdio: "inherit",
 	});

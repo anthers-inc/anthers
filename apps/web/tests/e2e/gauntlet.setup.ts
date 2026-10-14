@@ -15,20 +15,19 @@
  * walk itself is unaffected: none of the endpoints it calls set cookies.
  */
 
-import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GAUNTLET_WALKER_EMAIL } from "@anthers/db/gauntlet";
 import { expect, test as setup } from "@playwright/test";
-import { API_URL, AUTH_STATE_PATH, emailedCode, WEB_ORIGIN } from "./fixtures";
+import { API_URL, AUTH_STATE_PATH, emailedCode, leashedExecFileSync, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
 setup("reset the gauntlet fixture and sign the user in", async () => {
 	// Canonical fixture reset. --ensure-walker creates gauntlet_walker on first run and
 	// targets it thereafter, so the walk never touches the dev account.
-	execFileSync("bun", ["run", "db:gauntlet", "--ensure-walker"], {
+	leashedExecFileSync("bun", ["run", "db:gauntlet", "--ensure-walker"], {
 		cwd: REPO_ROOT,
 		stdio: "inherit",
 	});
@@ -47,7 +46,7 @@ setup("reset the gauntlet fixture and sign the user in", async () => {
 	// opening database connections against the same dev Postgres, and the contention showed
 	// up as an unrelated Studio modal timing out on save. A fixture that several specs share
 	// wants one owner, and the setup project is it.
-	execFileSync("bun", ["run", "db:media-fixture"], { cwd: REPO_ROOT, stdio: "inherit" });
+	leashedExecFileSync("bun", ["run", "db:media-fixture"], { cwd: REPO_ROOT, stdio: "inherit" });
 
 	// Sign in by the emailed code, because that is the only way in: ask the signin pair
 	// for one, read it out of the session's mail catcher, spend it for the Set-Cookie.

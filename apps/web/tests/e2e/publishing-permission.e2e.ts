@@ -12,14 +12,13 @@
  * ⚠️ **It runs on `127.0.0.1`**, for the reason `bluesky-door.e2e.ts` gives: a loopback OAuth
  * client's redirect lands on a literal IP, and cookies are host-scoped.
  */
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { db } from "@anthers/db/client";
 import { atprotoSessions, users } from "@anthers/db/schema";
 import { profileUrl } from "@anthers/web-shared/profile";
 import type { Page } from "@playwright/test";
 import { eq } from "drizzle-orm";
-import { emailedCode, expect, test } from "./fixtures";
+import { emailedCode, expect, leashedExecFileSync, test } from "./fixtures";
 
 const ORIGIN = `http://127.0.0.1:${process.env.PREVIEW_PORT ?? 4173}`;
 const API = `http://127.0.0.1:${process.env.API_PORT ?? 8000}`;
@@ -132,7 +131,7 @@ test("a user whose permission lapsed cannot follow until they give it, and comes
 	// name would 404 on the underscores this spec stamps in.
 	const creator = `prc${Date.now().toString(36)}`;
 	const made = JSON.parse(
-		execFileSync("bun", ["run", "db:local-account", "--name", creator, "--creator"], {
+		leashedExecFileSync("bun", ["run", "db:local-account", "--name", creator, "--creator"], {
 			cwd: REPO_ROOT,
 			encoding: "utf8",
 		})
