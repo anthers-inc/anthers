@@ -65,10 +65,6 @@ function landingLockDefault(): string {
 	return join(repoCacheDir(), "landing.lock");
 }
 
-function armGateDefault(): string {
-	return join(repoCacheDir(), "arm-gate");
-}
-
 export interface ArmOptions {
 	/** The pr being armed. */
 	pr: number;
@@ -76,7 +72,6 @@ export interface ArmOptions {
 	cwd?: string;
 	/** Overrides for tests. */
 	landingLockPath?: string;
-	armGateCache?: string;
 }
 
 export interface ArmDecision {
@@ -413,7 +408,8 @@ export function constructProjectedTip(options: {
 	candidateBranch: string;
 }): { tip: string; composition: string[] } | { conflict: { branch: string; message: string } } {
 	const { cwd, gatePath, armed, candidateBranch } = options;
-	if (!existsSync(join(gatePath, ".git"))) {
+	const createdFresh = !existsSync(join(gatePath, ".git"));
+	if (createdFresh) {
 		const created = git(["worktree", "add", "--detach", gatePath, "origin/main"], cwd);
 		if (created.status !== 0) {
 			return {
@@ -467,20 +463,27 @@ export function constructProjectedTip(options: {
 
 /**
  * The install gate: real `bun install` in the scratch tree only when the constructed
- * tip's lockfile content differs from the last gated one — the common re-arm pays no
- * install. The key is the blob sha of `HEAD:bun.lock`, so the comparison is content,
- * never timestamps.
+ * tip's lockfile content differs from the one this tree last installed for — the common
+ * re-arm pays no install. The key is the blob sha of `HEAD:bun.lock`, so the comparison
+ * is content, never timestamps.
+ *
+ * The stamp lives **inside the tree** (`.arm-install-stamp` at its root), not beside it
+ * in a cache directory: a stamp that can outlive the tree it vouches for is worse than
+ * no stamp, and there are two ways a tree dies without its cache knowing — the scratch
+ * worktree is removed when the task ships, and a ceremony can exit mid-construction
+ * leaving a tree that exists but never installed. Both are closed structurally by
+ * binding the record to the tree's own lifetime: no tree, no stamp; a tree without a
+ * stamp simply installs.
  */
-export function installGate(options: { gatePath: string; armGateCache?: string }): {
+export function installGate(options: { gatePath: string }): {
 	install: "real" | "reused";
 	error?: string;
 } {
-	const cacheDir = options.armGateCache ?? armGateDefault();
 	const lockfile = git(["rev-parse", "HEAD:bun.lock"], options.gatePath);
 	const lockSha = lockfile.status === 0 ? lockfile.stdout.trim() : "";
 	if (lockSha === "")
 		return { install: "real", error: "could not read HEAD:bun.lock in the arm-gate worktree" };
-	const stamp = join(cacheDir, "last-lock-sha");
+	const stamp = join(options.gatePath, ".arm-install-stamp");
 	if (existsSync(stamp) && readFileSync(stamp, "utf8").trim() === lockSha)
 		return { install: "reused" };
 	const install = spawnSync("bun", ["install"], { cwd: options.gatePath, encoding: "utf8" });
@@ -494,7 +497,6 @@ export function installGate(options: { gatePath: string; armGateCache?: string }
 					.slice(-1)[0] ?? "bun install failed",
 		};
 	}
-	mkdirSync(cacheDir, { recursive: true });
 	writeFileSync(stamp, `${lockSha}\n`);
 	return { install: "real" };
 }
@@ -624,7 +626,6 @@ async function runCeremony(pr: number, options: ArmOptions): Promise<ArmDecision
 		} else {
 			const install = installGate({
 				gatePath: armGatePath(options),
-				armGateCache: options.armGateCache,
 			});
 			if (install.error !== undefined) {
 				return bounce("gate-red", install.error, pr, [
