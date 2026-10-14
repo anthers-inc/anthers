@@ -4,6 +4,7 @@ import { postUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import type { PostListItem } from "@anthers/web-shared/types";
 import { LinkIcon } from "@heroicons/react/24/outline";
+import CreatorLink from "./CreatorLink";
 
 export default function PostCard({ post }: { post: PostListItem }) {
 	const date = new Date(post.createdAt).toLocaleDateString("en-US", {
@@ -13,10 +14,7 @@ export default function PostCard({ post }: { post: PostListItem }) {
 	});
 
 	return (
-		<Link
-			to={postUrl(post)}
-			className="card bg-base-200 shadow-sm hover:shadow-md transition-shadow"
-		>
+		<div className="group relative card bg-base-200 shadow-sm hover:shadow-md transition-shadow">
 			<div className="card-body p-4 gap-2">
 				<div className="flex items-center gap-2">
 					{post.creator?.avatar ? (
@@ -31,7 +29,13 @@ export default function PostCard({ post }: { post: PostListItem }) {
 						</div>
 					)}
 					<div>
-						<span className="text-sm font-medium">{post.creator?.handle}</span>
+						{/* The name is the creator's way out of the card (CreatorLink
+						    rises past the card's stretched overlay to take its click). */}
+						<CreatorLink
+							handle={post.creator?.handle}
+							name={post.creator?.handle ?? ""}
+							className="text-sm font-medium hover:underline"
+						/>
 						<span className="text-xs text-base-content/50 ml-2">{date}</span>
 					</div>
 				</div>
@@ -47,6 +51,8 @@ export default function PostCard({ post }: { post: PostListItem }) {
 					</div>
 				)}
 			</div>
-		</Link>
+			{/* The card's own target, stretched over it — see WorkCard's overlay. */}
+			<Link to={postUrl(post)} className="absolute inset-0" aria-label={post.title || "A post"} />
+		</div>
 	);
 }
