@@ -77,6 +77,19 @@ export default function WorkPage() {
 	/** Stable string for the preview, so effects re-run on a change of value not identity. */
 	const previewKey = JSON.stringify({ preview, shareToken });
 
+	/**
+	 * Where playback opens — the `?t` a shared timestamp link carried in the bar. Read
+	 * ONCE, at the first load: the canonical-URL settle below rewrites the address and
+	 * a later re-read would yank a viewer who has kept watching in the meantime back to
+	 * their entry point.
+	 */
+	const [startSeconds] = useState(() => {
+		const param = new URLSearchParams(window.location.search).get("t");
+		if (!param) return null;
+		const seconds = Number(param);
+		return Number.isFinite(seconds) && seconds >= 0 ? Math.floor(seconds) : null;
+	});
+
 	const [work, setWork] = useState<WorkDetail | null>(null);
 	const [loading, setLoading] = useState(true);
 
@@ -447,6 +460,7 @@ export default function WorkPage() {
 							work={work}
 							shareToken={shareToken}
 							onFrameActivity={reportExternalActivity}
+							startSeconds={startSeconds}
 						/>
 					)}
 				</div>
