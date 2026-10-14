@@ -15,7 +15,6 @@ import { closeSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-	type ArmEvent,
 	constructProjectedTip,
 	holdLandingLock,
 	installGate,
@@ -23,6 +22,8 @@ import {
 	resolveGreenHolds,
 } from "./arm.ts";
 import {
+	type ArmEvent,
+	type ArmedEntry,
 	appendEvent,
 	type LandingEvent,
 	type RadarHoldEvent,
@@ -35,15 +36,13 @@ let repo: string;
 let log: string;
 let headSha: Record<string, string>;
 
-function arm(branch: string, pr: number, ts: string): ArmEvent {
+function arm(branch: string, pr: number, ts: string): ArmedEntry {
 	return {
-		event: "arm",
-		ts,
 		pr,
 		branch,
 		head: headSha[branch] ?? "",
 		projectedTip: `tip-of-${pr}`,
-		reusedGate: false,
+		armedAt: ts,
 	};
 }
 

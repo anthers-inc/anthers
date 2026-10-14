@@ -38,15 +38,15 @@ import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "no
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
+	type AppendableEvent,
 	type ArmEvent,
+	type ArmedEntry,
 	appendEvent,
 	armedLedger,
 	type EjectionEvent,
 	isRecordedEjection,
 	isRecordedLand,
-	type LockAcquireEvent,
 	type LockReleaseEvent,
-	type LockWaitEvent,
 	type LogOptions,
 	lastArmFor,
 	readEvents,
@@ -180,7 +180,7 @@ function queuedPrNumbers(): Set<number> | null {
  * exists to close — the lock is a correctness layer here, not an optimization.
  */
 export async function holdLandingLock(
-	append: (event: (LockWaitEvent | LockAcquireEvent) & { ts?: string }) => void,
+	append: (event: AppendableEvent) => void,
 	options: { path?: string; pollMs?: number } = {},
 ): Promise<number | null> {
 	const path = options.path ?? LANDING_LOCK_DEFAULT;
@@ -237,7 +237,7 @@ function radarPredictedFrom(
 
 function ejectionFor(
 	events: ReturnType<typeof readEvents>["events"],
-	entry: ArmEvent,
+	entry: ArmedEntry,
 	reason: string,
 ): Omit<EjectionEvent, "ts"> {
 	return {
@@ -245,7 +245,7 @@ function ejectionFor(
 		pr: entry.pr,
 		head: entry.head,
 		reason,
-		radarPredicted: radarPredictedFrom(events, entry.pr, entry.ts),
+		radarPredicted: radarPredictedFrom(events, entry.pr, entry.armedAt),
 		environment: "unknown",
 	};
 }
@@ -258,7 +258,7 @@ function ejectionFor(
  * stale armed-ahead entry is exactly the combination no ceremony ever tested.
  */
 export function reconcile(): {
-	armed: ArmEvent[];
+	armed: ArmedEntry[];
 	lines: string[];
 	fatal?: string;
 } {
@@ -403,7 +403,7 @@ export function isReusableReceipt(
 export function constructProjectedTip(options: {
 	cwd: string;
 	gatePath: string;
-	armed: ArmEvent[];
+	armed: ArmedEntry[];
 	candidateBranch: string;
 }): { tip: string; composition: string[] } | { conflict: { branch: string; message: string } } {
 	const { cwd, gatePath, armed, candidateBranch } = options;

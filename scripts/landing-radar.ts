@@ -40,6 +40,7 @@
 import { spawnSync } from "node:child_process";
 import {
 	armedLedger,
+	type EntryRef,
 	type LandingEvent,
 	type RadarEntry,
 	type RadarFinding,
@@ -333,7 +334,7 @@ export function summarize(report: RadarReport): string[] {
 	return lines;
 }
 
-function describe(entry: RadarEntry): string {
+function describe(entry: EntryRef & { armedRank?: number | null }): string {
 	const pr = entry.pr !== undefined ? `#${entry.pr} ` : "";
 	const rank = entry.armedRank !== null ? ` (armed ${entry.armedRank})` : "";
 	return `${pr}${entry.branch}@${entry.head.slice(0, 7)}${rank}`;

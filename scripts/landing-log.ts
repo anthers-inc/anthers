@@ -205,10 +205,16 @@ export type LandingEvent =
  * directory it did not create: a log the machine cannot write must not break the act it
  * was recording — the failure is printed and the caller continues ungated.
  */
-export function appendEvent<T extends LandingEvent>(
-	event: Omit<T, "ts"> & { ts?: string },
-	options: LogOptions = {},
-): void {
+/**
+ * The appendable shape of a landing event, distributed over the union so each member
+ * contributes its own field set — a collapsed `Omit<LandingEvent, "ts">` keeps only the
+ * keys every member shares, and every call site's pr or receipt then errors as an
+ * excess property against the shared-keys view.
+ */
+export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+export type AppendableEvent = DistributiveOmit<LandingEvent, "ts"> & { ts?: string };
+
+export function appendEvent(event: AppendableEvent, options: LogOptions = {}): void {
 	const line = JSON.stringify({ ts: event.ts ?? new Date().toISOString(), ...event });
 	try {
 		writeLogLine(line, options);
