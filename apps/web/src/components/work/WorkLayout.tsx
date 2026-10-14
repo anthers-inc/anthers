@@ -13,6 +13,7 @@
  * question, answered by the server's verdict on the user page and by ownership on the Edit page.
  */
 
+import { workChapters } from "@anthers/shared/chapters";
 import { isListened, isPaged } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import HostedEmbed from "@anthers/web-shared/content/HostedEmbed";
@@ -24,14 +25,22 @@ import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
 import type { AccessResult, Work, WorkCredit } from "@anthers/web-shared/types";
 import { CalendarIcon, ClockIcon } from "@heroicons/react/24/outline";
 import { PlayIcon } from "@heroicons/react/24/solid";
-import { type CSSProperties, type MutableRefObject, type ReactNode, useState } from "react";
+import {
+	type CSSProperties,
+	type MutableRefObject,
+	type ReactNode,
+	useMemo,
+	useState,
+} from "react";
 import { useMediaPlayer } from "../../lib/media-player";
 import { trackFromWork } from "../../lib/tracks";
+import { useSeekPlayer, WorkPlayerProvider } from "../../lib/work-player";
 import AudioPlayer from "../media/AudioPlayer";
 import ComicReader from "../media/ComicReader";
 import EbookReader from "../media/EbookReader";
 import { PublicAccessFooter } from "../media/PublicAccessNotice";
 import SpokenPlayer from "../media/SpokenPlayer";
+import TimestampedText from "../media/TimestampedText";
 import VideoPlayer from "../media/VideoPlayer";
 import ProjectEmbed from "../project/ProjectEmbed";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
@@ -179,9 +188,14 @@ export function WorkColumn({
 }) {
 	const width = wide ? "max-w-7xl" : type && isWriting(type) ? "max-w-2xl" : "max-w-4xl";
 	return (
-		<div className={`${width} mx-auto px-4 ${tight ? "pt-6 pb-8" : "py-8"} space-y-6`}>
-			{children}
-		</div>
+		// The player scope wraps the whole column: the deliverable that mounts a
+		// player and the description and reviews that link into it are the siblings
+		// this binding exists for — see `lib/work-player.tsx`.
+		<WorkPlayerProvider>
+			<div className={`${width} mx-auto px-4 ${tight ? "pt-6 pb-8" : "py-8"} space-y-6`}>
+				{children}
+			</div>
+		</WorkPlayerProvider>
 	);
 }
 
@@ -422,6 +436,7 @@ export function WorkDeliverable({
 	lyrics,
 	videoRef,
 	onFrameActivity,
+	startSeconds = null,
 }: {
 	work: WorkDetail;
 	shareToken?: string | null;
@@ -435,8 +450,15 @@ export function WorkDeliverable({
 	 * `HostedEmbed`'s `onActivity` and `attention.ts`'s `reportExternalActivity`.
 	 */
 	onFrameActivity?: () => void;
+	/**
+	 * Where to open playback — the `?t` a clicked timestamp put in the bar. Overrides
+	 * a spoken Work's remembered resume: a link that names a moment means that moment.
+	 */
+	startSeconds?: number | null;
 }) {
 	const { playTracks } = useMediaPlayer();
+	/** The chapters the description carries — one parse, shared by every player branch. */
+	const chapters = useMemo(() => workChapters(work.description ?? ""), [work.description]);
 	return (
 		<>
 			{/*
@@ -460,6 +482,8 @@ export function WorkDeliverable({
 					publicAccess={work.publicAccess ?? false}
 					elementRef={videoRef}
 					captions={work.captions}
+					chapters={chapters}
+					startSeconds={startSeconds}
 					// The Podcast-This row: only a video whose audio rendition really shipped
 					// gets one — serialization nulls the URL when `audio.m3u8` is absent.
 					podcast={
@@ -480,6 +504,8 @@ export function WorkDeliverable({
 					publicAccess={work.publicAccess ?? false}
 					elementRef={videoRef}
 					captions={work.captions}
+					chapters={chapters}
+					startSeconds={startSeconds}
 				/>
 			)}
 			{work.type === "music" && work.transcoding?.outputFileUrl && (
@@ -489,6 +515,8 @@ export function WorkDeliverable({
 						waveform={work.transcoding.waveformData ?? undefined}
 						attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 						publicAccess={work.publicAccess ?? false}
+						chapters={chapters}
+						startSeconds={startSeconds}
 						// Hand it to the persistent bar, so listening survives navigating
 						// away — which is the whole reason the bar exists.
 						onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
@@ -516,6 +544,8 @@ export function WorkDeliverable({
 					waveform={work.transcoding.waveformData ?? undefined}
 					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 					publicAccess={work.publicAccess ?? false}
+					chapters={chapters}
+					startSeconds={startSeconds}
 					onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
 				/>
 			)}
@@ -600,6 +630,7 @@ export function WorkDeliverable({
  * of writing it is the standfirst, which the page sets under the headline rather than here.
  */
 export function WorkDescription({ work }: { work: WorkDetail }) {
+	const seek = useSeekPlayer();
 	if (!work.description) return null;
 	if (isWriting(work.type)) {
 		return (
@@ -610,7 +641,14 @@ export function WorkDescription({ work }: { work: WorkDetail }) {
 	}
 	return (
 		<section className={WORK_DESCRIPTION_CLASS}>
-			<p>{work.description}</p>
+			<TimestampedText
+				text={work.description}
+				// Only a Work a player navigates makes its timestamps links — and only
+				// when a player is actually mounted; a locked video's description has
+				// no player to seek, so its timestamps stay text until it is opened.
+				onSeek={work.type === "video" || isListened(work.type) ? seek : null}
+				className="whitespace-pre-line"
+			/>
 		</section>
 	);
 }

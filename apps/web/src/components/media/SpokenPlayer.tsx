@@ -10,6 +10,8 @@
  * `lib/listen-positions.ts` and is deliberately local; the floor and the finish rules
  * there are what keep a resume from feeling creepy.
  */
+
+import type { WorkChapter } from "@anthers/shared/chapters";
 import {
 	ArrowUturnLeftIcon,
 	ArrowUturnRightIcon,
@@ -25,6 +27,8 @@ import {
 } from "../../lib/listen-positions";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { SPOKEN_RATE_EVENT, stepSpokenRate, useSpokenRate } from "../../lib/spoken-rate";
+import { useBindPlayerSeek } from "../../lib/work-player";
+import ChapterList from "./ChapterList";
 import { PublicAccessFooter, PublicAccessWall } from "./PublicAccessNotice";
 import { formatTime } from "./transport/format";
 import SeekBar from "./transport/SeekBar";
@@ -59,6 +63,10 @@ interface SpokenPlayerProps {
 	 * `AudioPlayer` — see there for why gated, bought and own-catalog playback are exempt.
 	 */
 	publicAccess?: boolean;
+	/** The Work's chapters, parsed from its description — the list under the transport. */
+	chapters?: WorkChapter[];
+	/** Where the Work opens — the `?t` a timestamp link put in the address. */
+	startSeconds?: number | null;
 	onPlayInMiniPlayer?: () => void;
 }
 
@@ -69,6 +77,8 @@ export default function SpokenPlayer({
 	remember = true,
 	attention,
 	publicAccess = false,
+	chapters,
+	startSeconds = null,
 	onPlayInMiniPlayer,
 }: SpokenPlayerProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -163,15 +173,17 @@ export default function SpokenPlayer({
 	// Resume once the metadata is there to seek into — before anyone presses play, so
 	// the bar already reads the position when the page settles. Below the floor the
 	// episode starts over, which is the rule in `listen-positions.ts`.
+	// ⚠️ A landed `?t` outranks the resume: a link that names a moment means that
+	// moment, not wherever the listener was last.
 	useEffect(() => {
 		const audio = audioRef.current;
-		if (!audio || !remember || !duration) return;
+		if (!audio || !remember || !duration || startSeconds != null) return;
 		const stored = readPosition(workId);
 		if (stored != null && stored <= duration - LISTEN_RESUME_FLOOR_SECONDS) {
 			audio.currentTime = stored;
 			setProgress(stored);
 		}
-	}, [remember, duration, workId]);
+	}, [remember, duration, workId, startSeconds]);
 
 	// The app-wide remembered volume, so turning a video down turns this down too.
 	useEffect(() => {
@@ -229,6 +241,18 @@ export default function SpokenPlayer({
 		audio.currentTime = Math.min(Math.max(0, seconds), max);
 		setProgress(audio.currentTime);
 	}, []);
+
+	// The page's timestamp links — description and reviews both — seek through here.
+	useBindPlayerSeek(seekTo);
+
+	// The landed `?t`, applied once the element has a duration to seek into, once —
+	// re-applied after a rate change or a stall it would be a second entry point, not one.
+	const [startApplied, setStartApplied] = useState(false);
+	useEffect(() => {
+		if (startApplied || startSeconds == null || !duration) return;
+		setStartApplied(true);
+		seekTo(startSeconds);
+	}, [duration, startSeconds, startApplied, seekTo]);
 
 	const skipBy = useCallback(
 		(seconds: number) => {
@@ -327,6 +351,13 @@ export default function SpokenPlayer({
 					<VolumeControl collapsible size="xs" />
 				</div>
 			</div>
+
+			{/* The creator's chapters, inside the transport — the list that answers "what
+			    am I listening to", and the reason a titled lecture or interview episode
+			    doesn't read as one unbroken bar of waveform. */}
+			{chapters && chapters.length > 0 && (
+				<ChapterList chapters={chapters} position={progress} duration={duration} onSeek={seekTo} />
+			)}
 
 			{/*
 			 * Hand the track to the persistent bar, which survives navigation.

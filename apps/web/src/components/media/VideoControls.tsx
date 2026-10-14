@@ -13,6 +13,9 @@
  * yet everywhere — and this control has to work *inside the fullscreen element*, where a
  * mispositioned popover is not a cosmetic problem but a menu the user cannot reach.
  */
+
+import type { WorkChapter } from "@anthers/shared/chapters";
+import { chapterIndexFor } from "@anthers/shared/chapters";
 import {
 	ArrowsPointingInIcon,
 	ArrowsPointingOutIcon,
@@ -60,6 +63,7 @@ export default function VideoControls({
 	onOriginal,
 	onCaption,
 	onToggleFullscreen,
+	chapters,
 	/**
 	 * The Podcast-This hand-off, present only on a video whose audio rendition exists —
 	 * the `audioManifestUrl` gate lives in VideoPlayer, which owns the unload.
@@ -100,10 +104,15 @@ export default function VideoControls({
 	/** Which track to show, or null to turn captions off. The player writes the preference. */
 	onCaption: (trackId: number | null) => void;
 	onToggleFullscreen: () => void;
+	/** The Work's chapters, for the segmented rail and the now-playing name. */
+	chapters: WorkChapter[];
 	onPodcastThis?: () => void;
 }) {
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const settingsRef = useRef<HTMLDivElement>(null);
+	/** The chapter the playhead is inside, for the name beside the clock. */
+	const currentChapter =
+		chapters.length > 0 ? chapters[chapterIndexFor(chapters, position)] : undefined;
 
 	// Close on an outside click. Bound only while open, so the page carries no listener
 	// for a menu nobody has opened.
@@ -135,6 +144,7 @@ export default function VideoControls({
 				position={position}
 				duration={duration}
 				buffered={buffered}
+				chapters={chapters}
 				onSeek={onSeek}
 				label="Seek video"
 				className="text-white"
@@ -152,6 +162,14 @@ export default function VideoControls({
 				<span className="ml-1 shrink-0 text-xs tabular-nums text-white/80">
 					{formatTime(position)} <span className="text-white/40">/</span> {formatTime(duration)}
 				</span>
+
+				{/* The chapter playing now — YouTube's bottom-left name. Clamped to a strip
+				    of the bar so a long title truncates without pushing the menu out. */}
+				{currentChapter?.title != null && (
+					<span className="min-w-0 max-w-48 truncate text-xs text-white/80">
+						{currentChapter.title}
+					</span>
+				)}
 
 				<div className="flex-1" />
 
