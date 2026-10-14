@@ -11,7 +11,15 @@
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	closeSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -158,11 +166,10 @@ describe("the arm ceremony", () => {
 
 	test("the install gate installs for real when the lockfile content moved, and reuses while it has not", () => {
 		const gatePath = join(root, "gate-order");
-		const cache = join(root, "arm-gate-cache");
-		const first = installGate({ gatePath, armGateCache: cache });
+		const first = installGate({ gatePath });
 		expect(first.install).toBe("real");
 		expect(first.error).toBeUndefined();
-		const second = installGate({ gatePath, armGateCache: cache });
+		const second = installGate({ gatePath });
 		expect(second.install).toBe("reused");
 		// Move the lockfile's content on an armed branch, push the moved head (the
 		// ceremony composes origin/*), re-construct the tip, and the gate must not
@@ -178,30 +185,33 @@ describe("the arm ceremony", () => {
 			candidateBranch: "candidate",
 		});
 		if (!("tip" in rebuilt)) throw new Error("reconstruction conflicted unexpectedly");
-		const third = installGate({ gatePath, armGateCache: cache });
+		const third = installGate({ gatePath });
 		expect(third.install).toBe("real");
 	});
 
-	test("a fresh arm-gate creation invalidates the install stamp — a new tree has no node_modules", () => {
-		const cache = join(root, "fresh-gate-cache");
-		const gatePath = join(root, "gate-fresh");
-		// A stamp left by a previous gate whose scratch tree was removed (the worktree
-		// is removed at enqueue when a task ships) must not teach the next gate to skip
-		// the install into the brand-new tree.
-		mkdirSync(cache, { recursive: true });
-		writeFileSync(join(cache, "last-lock-sha"), "stale-hash\n");
+	test("the install stamp lives inside the tree, so a tree that died takes its stamp with it", () => {
+		// The run-2 incident: a ceremony exits mid-construction leaving a tree that
+		// exists but never installed, and a stamp beside the tree vouched for it. The
+		// stamp is the tree's own file — it appears only after a completed install, so
+		// an installed-but-unstamped tree installs, and a removed tree cannot vouch
+		// for anything.
+		const gatePath = join(root, "gate-never-installed");
+		mkdirSync(gatePath, { recursive: true });
 		const built = constructProjectedTip({
 			cwd: repo,
 			gatePath,
-			armGateCache: cache,
 			armed: [],
 			candidateBranch: "candidate",
 		});
 		if (!("tip" in built))
 			throw new Error(`construction conflicted unexpectedly: ${JSON.stringify(built)}`);
-		expect(existsSync(join(cache, "last-lock-sha"))).toBe(false);
-		const gate = installGate({ gatePath, armGateCache: cache });
-		expect(gate.install).toBe("real");
+		expect(existsSync(join(gatePath, ".arm-install-stamp"))).toBe(false);
+		const first = installGate({ gatePath });
+		expect(first.install).toBe("real");
+		expect(first.error).toBeUndefined();
+		expect(readFileSync(join(gatePath, ".arm-install-stamp"), "utf8").trim()).toMatch(
+			/^[0-9a-f]{40}$/,
+		);
 	});
 
 	test("the landing lock is held across acquires and released by the kernel, with wait and acquire events on the ledger", async () => {
