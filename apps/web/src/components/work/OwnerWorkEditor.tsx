@@ -115,6 +115,7 @@ import {
 	WorkColumn,
 	WorkCredits,
 	WorkDeliverable,
+	WorkDescription,
 	type WorkDetail,
 	WorkPlaceholder,
 	WorkRecordLink,
@@ -1360,6 +1361,10 @@ export default function OwnerWorkEditor({
 			    where every user meets it. ── */}
 			<section>
 				<div className={writing ? "mx-auto max-w-2xl" : undefined}>
+					{/* The writer's standfirst above their body, in the reading measure — the
+					    description still rides in the Details tab; kept in both places on
+					    purpose (Parker, 2026-10-14). */}
+					{writing && <WorkDescription work={asRead} />}
 					{isGoods(work.type) ? (
 						// The creator's copy of the user's store panel: it mounts without a
 						// verdict, the same absence a creator's own visit has always read.

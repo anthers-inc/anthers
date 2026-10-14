@@ -297,6 +297,10 @@ export default function WorkPage() {
 			{/* ── The deliverable, or the gate in front of it ── */}
 			<section ref={deliverableRef}>
 				<div className={isWriting(work.type) ? "mx-auto max-w-2xl" : undefined}>
+					{/* A piece of writing's description is its standfirst, above the article
+					    where a user expects one — and it also rides in the Details tab below,
+					    kept in both places on purpose (Parker, 2026-10-14). */}
+					{isWriting(work.type) && <WorkDescription work={work} />}
 					{isGoods(work.type) ? (
 						/* 🚨 A goods Work's deliverable is the goods themselves (Parker,
 						    2026-10-09): the store panel stands exactly where a player would,
@@ -540,16 +544,17 @@ function VisitorRecord({
 											)}
 										</p>
 									</section>
+									{/* The buyer's files, when the kind carries any: they are part of what
+								    owning this opens, and a record column had them wedged under a
+								    store panel before. No section heading of its own —
+								    `ProjectDownloads` names itself. */}
 									{work.assets.length > 0 && (
-										<section className="flex flex-col gap-2">
-											<h3 className={WORK_DETAILS_HEADING_CLASS}>Downloads</h3>
-											<ProjectDownloads
-												assets={work.assets}
-												contentType={work.type}
-												workId={work.id}
-												canAccess={canAccess}
-											/>
-										</section>
+										<ProjectDownloads
+											assets={work.assets}
+											contentType={work.type}
+											workId={work.id}
+											canAccess={canAccess}
+										/>
 									)}
 								</div>
 							),
