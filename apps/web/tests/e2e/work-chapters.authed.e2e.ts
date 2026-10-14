@@ -38,30 +38,29 @@ type Kind = "audio" | "video";
 
 /** Install the prototype hook that records a media element's `currentTime` writes. */
 async function hookCurrentTime(page: Page, kind: Kind) {
-	await page.addInitScript(
-		(kind: Kind) => {
-			const writes: number[] = [];
-			(window as unknown as { __mediaTimeWrites?: number[] }).__mediaTimeWrites = writes;
-			const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "currentTime")!;
-			Object.defineProperty(HTMLMediaElement.prototype, "currentTime", {
-				get() {
-					return desc.get!.call(this);
-				},
-				set(v: number) {
-					if ((this as HTMLMediaElement).tagName === (kind === "audio" ? "AUDIO" : "VIDEO")) {
-						writes.push(v);
-					}
-					desc.set!.call(this, v);
-				},
-				configurable: true,
-			});
-		},
-		kind,
-	);
+	await page.addInitScript((kind: Kind) => {
+		const writes: number[] = [];
+		(window as unknown as { __mediaTimeWrites?: number[] }).__mediaTimeWrites = writes;
+		const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "currentTime")!;
+		Object.defineProperty(HTMLMediaElement.prototype, "currentTime", {
+			get() {
+				return desc.get!.call(this);
+			},
+			set(v: number) {
+				if ((this as HTMLMediaElement).tagName === (kind === "audio" ? "AUDIO" : "VIDEO")) {
+					writes.push(v);
+				}
+				desc.set!.call(this, v);
+			},
+			configurable: true,
+		});
+	}, kind);
 }
 
 const timeWrites = async (page: Page): Promise<number[]> =>
-	(await page.evaluate(() => (window as unknown as { __mediaTimeWrites?: number[] }).__mediaTimeWrites)) ?? [];
+	(await page.evaluate(
+		() => (window as unknown as { __mediaTimeWrites?: number[] }).__mediaTimeWrites,
+	)) ?? [];
 
 test("an audio Work's page lists the chapters its description carries", async ({ page }) => {
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}`);
@@ -86,7 +85,7 @@ test("a chapter row seeks the player", async ({ page }) => {
 
 	await page.getByRole("button", { name: /The interview begins/ }).click();
 
-	expect((await timeWrites(page))).toContain(2);
+	expect(await timeWrites(page)).toContain(2);
 });
 
 test("a timestamp in the description is a link that seeks the player", async ({ page }) => {
@@ -99,7 +98,7 @@ test("a timestamp in the description is a link that seeks the player", async ({ 
 	await expect(anchor).toBeVisible();
 	await anchor.click();
 
-	expect((await timeWrites(page))).toContain(2);
+	expect(await timeWrites(page)).toContain(2);
 	// The bar now carries the moment, so a copied address lands where the viewer is.
 	await expect(page).toHaveURL(/[*?&]t=2(&|$)/);
 });
@@ -136,7 +135,7 @@ test("the video player carries the chapter list its description segments", async
 	await expect(list.getByRole("button", { name: /The good part/ })).toBeVisible();
 
 	await list.getByRole("button", { name: /The good part/ }).click();
-	expect((await timeWrites(page))).toContain(2);
+	expect(await timeWrites(page)).toContain(2);
 });
 
 test("a review's timestamp is a link that seeks the player", async ({ page }) => {
@@ -156,5 +155,5 @@ test("a review's timestamp is a link that seeks the player", async ({ page }) =>
 	await expect(reviewAnchor).toBeVisible();
 	await reviewAnchor.click();
 
-	expect((await timeWrites(page))).toContain(2);
+	expect(await timeWrites(page)).toContain(2);
 });

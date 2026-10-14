@@ -35,7 +35,9 @@ export default function ChapterList({
 			data-testid="chapter-list"
 			className={`border-t px-4 py-3 ${dark ? "border-white/10" : "border-base-300"}`}
 		>
-			<h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+			<h3
+				className={`text-xs font-semibold uppercase tracking-wider ${dark ? "text-white/60" : "text-base-content/50"}`}
+			>
 				Chapters
 			</h3>
 			{/* The scroll is inside the list: the container must not grow with it, or a
@@ -54,7 +56,13 @@ export default function ChapterList({
 									dark
 										? "text-white/80 hover:bg-white/10"
 										: "text-base-content/80 hover:bg-base-content/10"
-								} ${playing ? "bg-base-content/5 font-medium text-base-content" : ""}`}
+								} ${
+									playing
+										? dark
+											? "bg-white/10 font-medium text-white"
+											: "bg-base-content/5 font-medium text-base-content"
+										: ""
+								}`}
 							>
 								<span className="shrink-0 tabular-nums text-xs opacity-70">
 									{formatTime(chapter.seconds)}
