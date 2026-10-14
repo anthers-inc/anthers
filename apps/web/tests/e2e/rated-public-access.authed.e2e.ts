@@ -71,29 +71,53 @@ test("a creator releasing rated work into Public Access is told who will see it"
 	const { work } = (await created.json()) as { work: { publicId: number } };
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
+	// The editing surface is the Work's page (the kinds pass, 2026-10-14); the release
+	// field, the rating matrix and the access table each carry their own edit state now,
+	// so the walk visits them in turn and re-opens the release read after each change.
 	const note = page.getByText(NOTE);
 	const released = page.getByLabel("Released to my public Catalog");
-	const everyone = page.getByRole("row", { name: /Everyone/ }).getByRole("checkbox");
 
 	// A Mature Work in Public Access that is not being released says nothing yet.
+	await page.getByRole("button", { name: "Edit Release" }).click();
 	await expect(released).toBeEnabled();
 	await expect(note).toHaveCount(0);
 
 	await released.check();
 	await expect(note).toBeVisible();
 
-	// The rating alone never decides it: General is met by every user, and Adult is noted too.
-	// The rating is the rating matrix's, and the Work is Mature from its Violence row, so taking
-	// that row to Not in It leaves every row there and the Work General; Adult is one row reaching it.
+	// The rating alone never decides it: General is met by every user. The walk saves
+	// the rating, so the release field's next edit answers from the rows that stand.
+	await page.getByRole("tab", { name: "Rating" }).click();
+	await page.getByRole("button", { name: "Edit Rating" }).click();
 	await page.getByRole("radio", { name: "Violence: Not in It" }).check();
+	await page.getByRole("button", { name: "Save Rating" }).click();
+	await page.getByRole("tab", { name: "Details" }).click();
+	await page.getByRole("button", { name: "Edit Release" }).click();
 	await expect(note).toHaveCount(0);
+	// General is met by every user; Adult is noted too — the Work goes back to Adult
+	// from its Sexual Content row, and the release edit notes it again.
+	await page.getByRole("tab", { name: "Rating" }).click();
+	await page.getByRole("button", { name: "Edit Rating" }).click();
 	await page.getByRole("radio", { name: "Sexual Content: Adult" }).check();
+	await page.getByRole("button", { name: "Save Rating" }).click();
+	await page.getByRole("tab", { name: "Details" }).click();
+	await page.getByRole("button", { name: "Edit Release" }).click();
 	await expect(note).toBeVisible();
 
-	// Out of Public Access, there is nothing to qualify.
-	await everyone.uncheck();
+	// Out of Public Access, there is nothing to qualify. The access is the byline chip's
+	// dialog; its save is what the release read answers from.
+	await page.getByRole("button", { name: /public access/i }).click();
+	const everyone = page.getByRole("dialog").getByRole("row", { name: /Everyone/ });
+	await everyone.getByRole("checkbox").uncheck();
+	await page.getByRole("button", { name: "Save Access" }).click();
 	await expect(note).toHaveCount(0);
-	await everyone.check();
+	await page.getByRole("button", { name: /gated/i }).click();
+	await page
+		.getByRole("dialog")
+		.getByRole("row", { name: /Everyone/ })
+		.getByRole("checkbox")
+		.check();
+	await page.getByRole("button", { name: "Save Access" }).click();
 	await expect(note).toBeVisible();
 
 	// The link opens the one answer it names, rather than the top of the FAQ.

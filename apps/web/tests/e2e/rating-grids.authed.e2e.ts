@@ -62,7 +62,11 @@ test("a piece of writing is rated on the light grid, where its language can make
 	});
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
-	const matrix = page.locator("#work-rating table");
+	// The Studio route is a redirect for every kind now (the kinds pass, 2026-10-14);
+	// the matrix opens from the Rating tab's edit state.
+	await page.getByRole("tab", { name: "Rating" }).click();
+	await page.getByRole("button", { name: "Edit Rating" }).click();
+	const matrix = page.getByRole("tabpanel", { name: "Rating" }).locator("table");
 	await expect(matrix.getByRole("columnheader", { name: "In It", exact: true })).toBeVisible();
 	await expect(matrix.getByRole("columnheader", { name: "Explicit", exact: true })).toBeVisible();
 	// Only sexual content reaches Adult on this grid.
@@ -71,13 +75,16 @@ test("a piece of writing is rated on the light grid, where its language can make
 
 	await page.getByRole("radio", { name: "Strong Language: Explicit" }).check();
 	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
-	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
-		timeout: 15_000,
-	});
+	await page.getByRole("button", { name: "Save Rating" }).click();
 
+	// POLLED: the DB read races nothing. The save's own response adopted the row, and the
+	// poll waits for what the server holds rather than asserting on the click's wake.
+	await expect
+		.poll(async () => (await db.select().from(works).where(eq(works.id, work.id)))[0]?.maturity, {
+			message: "the rating save never reached the row",
+		})
+		.toBe("mature");
 	const [row] = await db.select().from(works).where(eq(works.id, work.id));
-	expect(row.maturity).toBe("mature");
 	expect(row.maturityRows).toMatchObject({ language: "mature", violence: "none" });
 });
 
@@ -89,7 +96,10 @@ test("a game is rated on the visual grid, where language never rates", async ({
 	const work = await create({ type: "game", title: `${STEM} game` });
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
-	const matrix = page.locator("#work-rating table");
+	// Same redirect, same tab: the visual grid asserts itself in the edit state.
+	await page.getByRole("tab", { name: "Rating" }).click();
+	await page.getByRole("button", { name: "Edit Rating" }).click();
+	const matrix = page.getByRole("tabpanel", { name: "Rating" }).locator("table");
 	await expect(matrix.getByRole("columnheader", { name: "Mature", exact: true })).toBeVisible();
 	await expect(matrix.getByRole("columnheader", { name: "Explicit", exact: true })).toHaveCount(0);
 	await expect(page.getByRole("radio", { name: "Violence: Adult" })).toHaveCount(1);

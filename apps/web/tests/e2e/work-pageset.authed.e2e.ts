@@ -66,7 +66,10 @@ test("a comic's set grows by a multi-pick, reorders and removes", async ({ page,
 	await page.locator("select").first().selectOption("comic");
 	await page.getByPlaceholder("Work title").fill(TITLE);
 	await page.locator('input[type="file"]').setInputFiles(stubPdf("lead page.pdf"));
-	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/, { timeout: 15_000 });
+	// The Work's own page is the landing for every kind now (the kinds pass,
+	// 2026-10-14); the set editor lives in its Manage tab.
+	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
+	await page.getByRole("tab", { name: /Manage/ }).click();
 	await expect(page.getByText(/lead page,?$/)).toBeVisible({ timeout: 30_000 });
 
 	// The set gains two files in one browse — attached in the picked order.

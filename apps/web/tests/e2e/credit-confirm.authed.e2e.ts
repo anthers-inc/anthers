@@ -158,12 +158,19 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	});
 	expect(created.status).toBe(201);
 	const { work } = (await created.json()) as { work: OwnedWork };
-	const editUrl = `/studio/works/${work.publicId}/edit`;
+	// The Work's page is the editing surface for every kind now (the kinds pass);
+	// each field saves itself alone, so the walk visits the tabs in turn.
+	const editUrl = `/works/${work.publicId}`;
 
 	await page.goto(editUrl);
 	// A `service` Work needs no file, so the only release gates are the rating and a
 	// credit naming a human — both of which this walk is setting up anyway.
+	await page.getByRole("tab", { name: "Rating" }).click();
+	await page.getByRole("button", { name: "Edit Rating" }).click();
 	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
+	await page.getByRole("button", { name: "Save Rating" }).click();
+	await page.getByRole("tab", { name: "Credits" }).click();
+	await page.getByRole("button", { name: "Edit Credits" }).click();
 	await page.getByRole("button", { name: "Add a credit" }).click();
 	await page.getByRole("textbox", { name: "Credit 1 role" }).fill(ROLE);
 	await page.getByRole("checkbox", { name: "Credit 1 Created" }).check();
@@ -175,11 +182,13 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	// but the marker appears the moment the save returns the owner overlay's flag.
 	await expect(page.getByText(/waiting on the contributor/i)).toHaveCount(0);
 
-	await page.getByRole("checkbox", { name: /released to my public catalog/i }).check();
-	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
-		timeout: 15_000,
-	});
+	await page.getByRole("button", { name: "Save Credits" }).click();
+	await page.getByRole("tab", { name: "Details" }).click();
+	await page.getByRole("button", { name: "Edit Release" }).click();
+	await page
+		.getByRole("checkbox", { name: /released to my public catalog/i })
+		.check({ timeout: 15_000 });
+	await page.getByRole("button", { name: "Save Release" }).click();
 
 	// The release made the credit public, which is the moment the user is owed the ask.
 	// The listing sync is run by hand here — no worker runs in a browser session (see
@@ -188,11 +197,16 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	await syncListing(work.id);
 
 	// The marker reads the OWNER overlay, which arrives on the LOAD and on a save response —
-	// but the editor's rows are local draft state that a save does not rebuild, so the
-	// marker is asserted after a reload brings the server's own answer in. The flag
-	// survived the draft mapping and the save sent only role, contributor and types, so
-	// the row comes back flagged with its DID intact.
+	// the flag survived the draft mapping and the save sent only role, contributor and
+	// types, so the row comes back flagged with its DID intact. The read shows the flag;
+	// the contributor's textbox is the field's edit state, opened to assert the DID
+	// round-tripped verbatim.
+
 	await page.reload();
+	await page.getByRole("tab", { name: "Credits" }).click();
+	await page.getByRole("button", { name: "Edit Credits" }).click();
+	// The overlay's flag rides the row the load brought in; the marker is the row note
+	// inside the field's edit state, so it is read there.
 	await expect(page.getByText(/waiting on the contributor/i)).toBeVisible();
 	await expect(page.getByRole("textbox", { name: "Credit 1 contributor" })).toHaveValue(userDid);
 
@@ -208,10 +222,7 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	};
 	page.on("request", onRequest);
 	await page.getByRole("textbox", { name: "Credit 1 role" }).fill(`${ROLE} more`);
-	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
-		timeout: 15_000,
-	});
+	await page.getByRole("button", { name: "Save Credits" }).click();
 	page.removeListener("request", onRequest);
 	expect(savedCredits, "the editor's save never sent its credits table").toBeTruthy();
 	expect(Array.isArray(savedCredits)).toBe(true);
@@ -238,15 +249,19 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	const userPage = await userContext.newPage();
 	await userPage.goto(`/works/${work.publicId}`);
 
-	// The confirm ask renders, with the credit's own role — and the credit presents as the
-	// person it names (Parker's identity presentation, 2026-10-13): display name and
-	// avatar, with the DID's hover title and the DID never in the line's text, even
-	// before they confirm. Their word is still what publishes it.
+	// The confirm ask renders in the record's Credits tab — every kind's visitor page is
+	// the tabbed record now (the kinds pass, 2026-10-14) — with the credit's own role —
+	// and the credit presents as the person it names (Parker's identity presentation,
+	// 2026-10-13): display name and avatar, with the DID's hover title and the DID never
+	// in the line's text, even before they confirm. Their word is still what publishes it.
+	await userPage.getByRole("tab", { name: "Credits" }).click();
 	const ask = userPage.getByText("You're credited — confirm?");
 	await expect(ask).toBeVisible();
 	await expect(userPage.getByRole("button", { name: "Accept", exact: true })).toBeVisible();
 	await expect(userPage.getByRole("button", { name: "Decline", exact: true })).toBeVisible();
-	const askSection = userPage.locator("section").filter({ hasText: "Credits" });
+	// The credits tab's panel is one section when mounted; scope to it rather than a
+	// page-wide section name, which the tabbed record's outer regions also match.
+	const askSection = userPage.getByRole("tabpanel", { name: "Credits" });
 	await expect(askSection).toContainText(VIEWER_NAME);
 	// The DID is the hover, not the line: the presented name's link carries it.
 	await expect(
@@ -275,7 +290,7 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	// the user's name is in its place, with no confirm ask left on the page.
 	await userPage.getByRole("button", { name: "Accept", exact: true }).click();
 	await expect(
-		userPage.locator("section").filter({ hasText: "Credits" }),
+		userPage.getByRole("tabpanel", { name: "Credits" }),
 		"the accepted credit did not resolve to the user's name",
 	).toContainText(VIEWER_NAME, { timeout: 15_000 });
 	await expect(userPage.getByText("You're credited — confirm?")).toHaveCount(0);
@@ -289,6 +304,8 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	// The role edit above means the marker-clear read also proves the DID survived a save
 	// made with the flagged row in draft state.
 	await page.reload();
+	await page.getByRole("tab", { name: "Credits" }).click();
+	await page.getByRole("button", { name: "Edit Credits" }).click();
 	await expect(page.getByText(/waiting on the contributor/i)).toHaveCount(0);
 	await expect(page.getByRole("textbox", { name: "Credit 1 role" })).toHaveValue(`${ROLE} more`);
 	await expect(page.getByRole("textbox", { name: "Credit 1 contributor" })).toHaveValue(userDid);
@@ -297,16 +314,13 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	const stranger = await browser.newContext();
 	const strangerPage = await stranger.newPage();
 	await strangerPage.goto(`/works/${work.publicId}`);
+	await strangerPage.getByRole("tab", { name: "Credits" }).click();
 	await expect(strangerPage.getByText("You're credited — confirm?")).toHaveCount(0);
 	await expect(strangerPage.getByRole("button", { name: "Accept", exact: true })).toHaveCount(0);
 	await expect(strangerPage.getByRole("button", { name: "Decline", exact: true })).toHaveCount(0);
 	// The accepted credit renders as the name — never a bare DID to anybody.
-	await expect(strangerPage.locator("section").filter({ hasText: "Credits" })).toContainText(
-		VIEWER_NAME,
-	);
-	await expect(strangerPage.locator("section").filter({ hasText: "Credits" })).not.toContainText(
-		"did:",
-	);
+	await expect(strangerPage.getByRole("tabpanel", { name: "Credits" })).toContainText(VIEWER_NAME);
+	await expect(strangerPage.getByRole("tabpanel", { name: "Credits" })).not.toContainText("did:");
 	await stranger.close();
 
 	await userContext.close();
@@ -363,9 +377,14 @@ test("the contributor field autocompletes the identities Anthers knows and credi
 	const { work } = (await created.json()) as { work: OwnedWork };
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
-	// A `service` Work needs no file; the release gates are the rating and a credit naming
-	// a human — both of which this walk sets up.
+	// A `service` Work needs no file; the release gates are the rating and a credit
+	// naming a human — both of which this walk sets up, in the tabs their fields live in.
+	await page.getByRole("tab", { name: "Rating" }).click();
+	await page.getByRole("button", { name: "Edit Rating" }).click();
 	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
+	await page.getByRole("button", { name: "Save Rating" }).click();
+	await page.getByRole("tab", { name: "Credits" }).click();
+	await page.getByRole("button", { name: "Edit Credits" }).click();
 	await page.getByRole("button", { name: "Add a credit" }).click();
 	await page.getByRole("checkbox", { name: "Credit 1 Created" }).check();
 
@@ -407,12 +426,10 @@ test("the contributor field autocompletes the identities Anthers knows and credi
 	// And the round-trip proves the shape the acceptance keys on: save, reload, the
 	// DID is what the owner overlay sends back untouched.
 	await page.getByRole("textbox", { name: "Credit 1 role" }).fill(ROLE);
-	await page.getByRole("checkbox", { name: /released to my public catalog/i }).check();
-	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
-		timeout: 15_000,
-	});
+	await page.getByRole("button", { name: "Save Credits" }).click();
 	await page.reload();
+	await page.getByRole("tab", { name: "Credits" }).click();
+	await page.getByRole("button", { name: "Edit Credits" }).click();
 	await expect(page.getByRole("textbox", { name: "Credit 1 contributor" })).toHaveValue(userDid);
 
 	// ── Me ──
@@ -427,10 +444,7 @@ test("the contributor field autocompletes the identities Anthers knows and credi
 		ownProfile.user!.atprotoDid!,
 	);
 
-	await page.getByRole("button", { name: /save work/i }).click();
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
-		timeout: 15_000,
-	});
+	await page.getByRole("button", { name: "Save Credits" }).click();
 
 	// ── The guidance copy ──
 	// The point-of-assignment ask, rendered where the creator is choosing.

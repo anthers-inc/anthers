@@ -165,17 +165,21 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// Headroom only: it is NOT the explanation for the flakiness this spec was famous for,
 	// which was the fixture deletion described above. An earlier pass attributed the timeouts
 	// to a loaded machine, which was plausible, unverified and wrong.
-	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/, { timeout: 15_000 });
+	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 
-	// Release appears on the far side of create, at a URL that can be linked to.
-	await expect(page.getByRole("heading", { name: "Release" })).toBeVisible();
+	// Release appears on the far side of create, in the Details tab, at a URL that can
+	// be linked to — the Work's own page is the editing surface (the kinds pass).
+	await expect(page.getByRole("heading", { name: "Release", exact: true })).toBeVisible();
 
 	// ── Unrated, and therefore unreleasable ─────────────────────────────────
 	// A Work is born `unrated` and the server refuses to release one (`maturity_undeclared`),
-	// so the control refuses the click rather than earning the error.
+	// so the control refuses the click rather than earning the error. The release field's
+	// edit state is where the checkbox lives now.
+	await page.getByRole("button", { name: "Edit Release" }).click();
 	await expect(
 		page.getByRole("checkbox", { name: /released to my public catalog/i }),
 	).toBeDisabled();
+	await page.getByRole("button", { name: "Cancel editing Release" }).click();
 
 	await page.goto("/studio/works");
 	// Born private. Not a detail — it is why a Release control has to exist at all.
@@ -190,35 +194,39 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// and the first thing a creator clicks. It is kept out of the accessibility tree because the
 	// title already names the same link, so it is found by its place on the row, not by role.
 	await rowsFor(page).locator('a[aria-hidden="true"]').click();
-	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
+	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/);
 	await page.goto("/studio/works");
 
 	// ── Rate it ─────────────────────────────────────────────────────────────
 	// ⭐ The row's blocked-release hint is a LINK now rather than a tooltip. It could not be
 	// one while the editor had no URL, which is the smallest concrete thing the page bought.
 	await rowsFor(page).getByRole("link", { name: "Rate this" }).click();
-	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
-	// Rated through the matrix: every row answered Not in It is a General Work.
+	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
+	// Rated through the matrix, in the Rating tab's edit state: every row answered Not in
+	// It is a General Work.
+	await page.getByRole("tab", { name: "Rating" }).click();
+	await page.getByRole("button", { name: "Edit Rating" }).click();
 	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
-
-	// The credits, on the same save. Release refuses a Work whose credits name no human
-	// (`credits_creator_required`), and the walk is through the UI rather than around it:
-	// add a credit, tick its Created box, and name the person — the shape every creator
-	// now meets before release.
+	await page.getByRole("button", { name: "Save Rating" }).click();
+	// The credits, in the Credits tab's own field. Release refuses a Work whose credits
+	// name no human (`credits_creator_required`), and the walk is through the UI rather
+	// than around it: add a credit, tick its Created box, and name the person — the
+	// shape every creator now meets before release.
+	await page.getByRole("tab", { name: "Credits" }).click();
+	await page.getByRole("button", { name: "Edit Credits" }).click();
 	await page.getByRole("button", { name: "Add a credit" }).click();
 	await page.getByRole("textbox", { name: "Credit 1 role" }).fill("Made by");
 	await page.getByRole("checkbox", { name: "Credit 1 Created" }).check();
 	await page.getByRole("textbox", { name: "Credit 1 contributor" }).fill(CREATOR);
+	await page.getByRole("button", { name: "Save Credits" }).click();
 
-	// The original release date, on the same save. Its whole reason for existing is
-	// back-dating a catalog, which is what a creator arriving with years of work actually does.
-	await page.getByLabel("Original release date").fill("2015-01-15");
-
-	await page.getByRole("button", { name: /save work/i }).click();
-	// Saving keeps the creator on the Work's page, looking at the result (Parker, 2026-09-17).
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
-		timeout: 15_000,
-	});
+	// The original release date, in its own field beside Release. Its whole reason for
+	// existing is back-dating a catalog, which is what a creator arriving with years of
+	// work actually does.
+	await page.getByRole("tab", { name: "Details" }).click();
+	await page.getByRole("button", { name: "Edit Original release date" }).click();
+	await page.getByRole("textbox", { name: "Original release date" }).fill("2015-01-15");
+	await page.getByRole("button", { name: "Save Original release date" }).click();
 	await page.goto("/studio/works");
 
 	// ── Release ─────────────────────────────────────────────────────────────
@@ -267,18 +275,17 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 
 	// ── The locked state ────────────────────────────────────────────────────
 	await rowsFor(page).getByRole("link", { name: "Edit" }).click();
-	await expect(page).toHaveURL(/\/studio\/works\/\d+\/edit$/);
+	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 
-	// Warning first, while the change is still only in the form — a creator should be told
-	// before they save, not discover it from a user.
-	await page.locator("table").getByRole("checkbox").first().uncheck();
-	await expect(page.getByText(/nobody can open this/i)).toBeVisible();
+	// The access is edited from the chip in the byline strip (the creator's door, the
+	// same dialog the video pass built): its rows are the Access table. Warning first,
+	// while the change is still only in the form — the dialog says what the cut does
+	// before it saves, not after a user finds it.
+	await page.getByRole("button", { name: /public access/i }).click();
+	await page.getByRole("dialog").locator("table").getByRole("checkbox").first().uncheck();
+	await expect(page.getByText(/nobody can open this yet/i)).toBeVisible();
 
-	await page.getByRole("button", { name: /save work/i }).click();
-	// Saving keeps the creator on the Work's page, looking at the result (Parker, 2026-09-17).
-	await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible({
-		timeout: 15_000,
-	});
+	await page.getByRole("button", { name: "Save Access" }).click();
 	await page.goto("/studio/works");
 	await expect(rowsFor(page)).toContainText("Nobody can open");
 
