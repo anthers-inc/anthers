@@ -56,6 +56,7 @@ import {
 	subscribeTilePreview,
 	tilePreviewPlayable,
 } from "../../lib/tile-preview";
+import { usePreviewsEnabled } from "../../lib/tile-preview-settings";
 import { contentTypeMeta } from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
 import CreatorLink from "./CreatorLink";
@@ -428,15 +429,17 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 	// read is what keeps the one-at-a-time rule without any tile knowing another
 	// exists — each tile only ever compares its key to the singleton's.
 	const budget = useMeteredBudget();
+	const previewsEnabled = usePreviewsEnabled();
 	const previewKey = `release-${work.id}`;
 	const previewable = useMemo(
 		() =>
 			tilePreviewPlayable({
+				previewsEnabled,
 				type: work.type,
 				access: isAccessResult(work.access) ? work.access : null,
 				budget,
 			}),
-		[work.type, work.access, budget],
+		[previewsEnabled, work.type, work.access, budget],
 	);
 	// Hover preview is a cursor affordance: a deliberate pointer hover, which
 	// touch never produces (a tap enters and immediately navigates anyway).

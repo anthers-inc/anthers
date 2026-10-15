@@ -10,8 +10,10 @@
  * with a soft background; the creator's name inside a tile links to the creator's
  * page rather than the tile's target; only what plays carries a play affordance (a
  * video keeps
- * one on hover, a shirt never shows one); and the grid fills the content area,
- * flexing to fewer, larger tiles as the window narrows.
+ * one on hover, a shirt never shows one); a preview answers the viewer's stop and a
+ * video preview carries its speaker button, whose click is the persistent hover-audio
+ * answer; and the grid fills the content area, flexing to fewer, larger tiles as the
+ * window narrows.
  *
  * 🚨 **The scratch spec that "verified" #437's drag pinned none of this, and the
  * regressions shipped.** Pins instead of screenshots: structure, ratios, counts.
@@ -282,6 +284,99 @@ test("the goods and video tiles keep their band shapes and their hover truths", 
 		),
 		"the video's play affordance shows on hover",
 	).toBeGreaterThan(0);
+});
+
+test("the preview stop keeps a held hover a poster, and the default still plays", async ({
+	page,
+}) => {
+	test.setTimeout(60_000);
+	const videoName = /A short film that really plays/;
+	// Long enough that the hover debounce (`PREVIEW_HOVER_DELAY_MS` is 500 ms) has
+	// fired and the player would be mounted if any path allowed it.
+	const hold = 1_500;
+
+	// The stop, persisted before the page loads the way the settings page leaves it:
+	// *Play previews as I browse* set off means a deliberate one-and-a-half-second
+	// hold never ships a stream — the wiring guard for `tilePreviewPlayable`'s
+	// first param, which no unit test can carry alone.
+	await page.addInitScript(() => {
+		localStorage.setItem("anthers_tile_previews", "0");
+	});
+	await page.setViewportSize({ width: 2000, height: 1100 });
+	await page.goto(`${WEB_ORIGIN}/feed`);
+	const stoppedTile = page.getByRole("link", { name: videoName });
+	await expect(stoppedTile).toBeVisible();
+	await stoppedTile.hover();
+	await page.waitForTimeout(hold);
+	expect(
+		await tileRoot(stoppedTile).evaluate(
+			(el) => (el as HTMLElement).querySelectorAll("video").length,
+		),
+		"a stopped preview never mounts a player",
+	).toBe(0);
+
+	// The contrast half, from a fresh store so the same run proves the stop — and
+	// not the debounce — is what withheld the preview: with no mark in storage the
+	// same hold mounts the player inside the band.
+	await page.addInitScript(() => {
+		localStorage.removeItem("anthers_tile_previews");
+	});
+	await page.goto(`${WEB_ORIGIN}/feed`);
+	const playingTile = page.getByRole("link", { name: videoName });
+	await expect(playingTile).toBeVisible();
+	await playingTile.hover();
+	await expect(
+		tileRoot(playingTile).locator("video"),
+		"the default still previews on a deliberate hold",
+	).toBeAttached({ timeout: 3_000 });
+});
+
+test("the preview's speaker button turns hover audio on, and that answer persists", async ({
+	page,
+}) => {
+	test.setTimeout(60_000);
+	const videoName = /A short film that really plays/;
+
+	await page.setViewportSize({ width: 2000, height: 1100 });
+	await page.goto(`${WEB_ORIGIN}/feed`);
+	const tile = page.getByRole("link", { name: videoName });
+	await expect(tile).toBeVisible();
+	await tile.hover();
+	const video = tileRoot(tile).locator("video");
+	await expect(video, "the default preview mounts silently").toBeAttached({ timeout: 3_000 });
+	await expect(video).toHaveJSProperty("muted", true);
+
+	// The button rides the preview: it is the one control inside the band, and
+	// flipping it ON is the gesture that un-mutes the same element mid-hover.
+	const speaker = page.getByRole("button", { name: "Play hover previews with sound" });
+	await expect(speaker, "a silent preview carries its speaker button").toBeVisible();
+	await speaker.click();
+	await expect(video, "the click unmutes the playing element").toHaveJSProperty("muted", false, {
+		timeout: 2_000,
+	});
+	expect(
+		await page.evaluate(() => localStorage.getItem("anthers_tile_preview_audio")),
+		"the button writes the persistent answer",
+	).toBe("1");
+
+	// The same button is already reflecting the ON state — its own label swap is
+	// this run's persistence witness, before any navigation asserts the store.
+	const muteButton = page.getByRole("button", { name: "Mute hover previews" });
+	await expect(muteButton).toBeVisible();
+	await expect(muteButton).toHaveAttribute("aria-pressed", "true");
+
+	// A later visit reads the remembered answer: the fresh document has had no
+	// gesture of its own, so the audibility of the element is the browser's call —
+	// what persists is the setting, and the button state carries it.
+	await page.goto(`${WEB_ORIGIN}/feed`);
+	const nextTile = page.getByRole("link", { name: videoName });
+	await expect(nextTile).toBeVisible();
+	await nextTile.hover();
+	await expect(tileRoot(nextTile).locator("video")).toBeAttached({ timeout: 3_000 });
+	await expect(
+		page.getByRole("button", { name: "Mute hover previews" }),
+		"a later visit starts from the remembered on",
+	).toBeVisible();
 });
 
 test("the grid fills the content area and flexes as the window narrows", async ({ page }) => {

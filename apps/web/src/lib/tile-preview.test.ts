@@ -4,9 +4,9 @@
  *
  * The gate is the load-bearing half: these tests pin that a preview exists only
  * where a viewer could *open* the work — locked tiles and a spent meter stay
- * posters — and that only playback media previews at all. Break the gate to a
- * constant `true` and every verdict test below must fail; that is the stub the
- * suite was developed against.
+ * posters — that only playback media previews at all, and that once the viewer's
+ * own stop is set nothing plays. Break the gate to a constant `true` and every
+ * verdict test below must fail; that is the stub the suite was developed against.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -58,36 +58,70 @@ const INTACT: PublicAccessBudget = {
 
 describe("tilePreviewPlayable", () => {
 	test("previews playable, open video", () => {
-		expect(tilePreviewPlayable({ type: "video", access: OPEN, budget: INTACT })).toBe(true);
+		expect(
+			tilePreviewPlayable({ previewsEnabled: true, type: "video", access: OPEN, budget: INTACT }),
+		).toBe(true);
+	});
+
+	test("the viewer's stop keeps every tile a poster, open work or not", () => {
+		expect(
+			tilePreviewPlayable({ previewsEnabled: false, type: "video", access: OPEN, budget: INTACT }),
+		).toBe(false);
+		expect(
+			tilePreviewPlayable({ previewsEnabled: false, type: "music", access: OPEN, budget: null }),
+		).toBe(false);
 	});
 
 	test("previews the listened family", () => {
-		expect(tilePreviewPlayable({ type: "music", access: OPEN, budget: INTACT })).toBe(true);
-		expect(tilePreviewPlayable({ type: "audio", access: OPEN, budget: null })).toBe(true);
+		expect(
+			tilePreviewPlayable({ previewsEnabled: true, type: "music", access: OPEN, budget: INTACT }),
+		).toBe(true);
+		expect(
+			tilePreviewPlayable({ previewsEnabled: true, type: "audio", access: OPEN, budget: null }),
+		).toBe(true);
 	});
 
 	test("never previews a non-playback type", () => {
-		expect(tilePreviewPlayable({ type: "physical", access: OPEN, budget: INTACT })).toBe(false);
-		expect(tilePreviewPlayable({ type: "text", access: OPEN, budget: INTACT })).toBe(false);
+		expect(
+			tilePreviewPlayable({
+				previewsEnabled: true,
+				type: "physical",
+				access: OPEN,
+				budget: INTACT,
+			}),
+		).toBe(false);
+		expect(
+			tilePreviewPlayable({ previewsEnabled: true, type: "text", access: OPEN, budget: INTACT }),
+		).toBe(false);
 	});
 
 	test("a locked tile stays a poster", () => {
-		expect(tilePreviewPlayable({ type: "video", access: GATED, budget: INTACT })).toBe(false);
+		expect(
+			tilePreviewPlayable({ previewsEnabled: true, type: "video", access: GATED, budget: INTACT }),
+		).toBe(false);
 	});
 
 	test("a missing verdict stays a poster", () => {
-		expect(tilePreviewPlayable({ type: "video", access: null, budget: INTACT })).toBe(false);
+		expect(
+			tilePreviewPlayable({ previewsEnabled: true, type: "video", access: null, budget: INTACT }),
+		).toBe(false);
 	});
 
 	test("a spent Public Access meter stays a poster even on open work", () => {
-		expect(tilePreviewPlayable({ type: "video", access: OPEN, budget: SPENT })).toBe(false);
+		expect(
+			tilePreviewPlayable({ previewsEnabled: true, type: "video", access: OPEN, budget: SPENT }),
+		).toBe(false);
 	});
 
 	test("an intact meter previews; no budget at all defers to the access verdict", () => {
-		expect(tilePreviewPlayable({ type: "video", access: OPEN, budget: INTACT })).toBe(true);
+		expect(
+			tilePreviewPlayable({ previewsEnabled: true, type: "video", access: OPEN, budget: INTACT }),
+		).toBe(true);
 		// A null budget means signed out or unlimited — signed out already fails
 		// `canAccess`, so reaching here with a null budget is the unlimited case.
-		expect(tilePreviewPlayable({ type: "video", access: OPEN, budget: null })).toBe(true);
+		expect(
+			tilePreviewPlayable({ previewsEnabled: true, type: "video", access: OPEN, budget: null }),
+		).toBe(true);
 	});
 });
 

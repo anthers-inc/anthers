@@ -14,6 +14,8 @@
  * Access allowance — the user's meter has not spent. A locked tile stays a
  * poster, and so does a spent meter; delivery refuses both cases anyway, and a
  * preview that ships bytes to fail is wasted bytes and a misleading affordance.
+ * The viewer's own stop sits above all of it: *Play previews as I browse*
+ * (`lib/tile-preview-settings.ts`) turned off keeps every tile a poster.
  *
  * ## The crediting ruling
  *
@@ -47,6 +49,12 @@ export const PREVIEW_HOVER_DELAY_MS = 500;
 /**
  * Whether this tile's work may preview for this viewer right now.
  *
+ * The viewer's own stop comes first: *Play previews as I browse* (Parker,
+ * 2026-10-15, per-install in `lib/tile-preview-settings.ts`, defaulting on) answers
+ * `false` and the tile stays a poster no matter how open the work is. The play
+ * affordance on the band is a separate thing — it says "open and play", which a
+ * stopped preview never took away.
+ *
  * Playback types only — the brief's "not a poster animation for other types":
  * video and the listened family play, everything else keeps its static band.
  * The access verdict is `AccessResult` (the user shape — feed entries carry it),
@@ -54,10 +62,14 @@ export const PREVIEW_HOVER_DELAY_MS = 500;
  * what delivery would refuse.
  */
 export function tilePreviewPlayable(params: {
+	previewsEnabled: boolean;
 	type: string;
 	access: AccessResult | null | undefined;
 	budget: PublicAccessBudget | null;
 }): boolean {
+	// The viewer's stop: a preference set to off is a verdict about the cursor,
+	// above every per-work question.
+	if (!params.previewsEnabled) return false;
 	// Playback types only — the brief's "not a poster animation for other types":
 	// video and the listened family play, everything else keeps its static band.
 	if (params.type !== "video" && !isListened(params.type)) return false;

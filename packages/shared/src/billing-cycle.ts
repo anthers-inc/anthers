@@ -15,8 +15,14 @@
  * be the 1st *somewhere specific* once every account in the world renews on it, and Stripe
  * schedules in UTC, so that is the somewhere. Never reach for `getFullYear`/`getMonth` here —
  * they are the local-time users this module exists to replace.
+ *
+ * This module imports nothing but the platform: it is reachable from the web SPA's bundle
+ * graph (its calendar helpers answer `SettingsPage` and friends), so it holds **no
+ * decimal.js** — the money arithmetic that started here, `reductionFor`, lives in
+ * `fees.ts`, the one module allowed to import the library
+ * (`scripts/web-bundle-decimal-guard.test.ts` walks the web import graph and fails the
+ * build the day one appears).
  */
-import Decimal from "decimal.js";
 
 /** `YYYY-MM-01` — the key every per-cycle table is keyed by. */
 export type CycleKey = string;
@@ -84,30 +90,4 @@ export function daysInCycle(key: CycleKey): number {
  */
 export function dayOfCycle(date: Date): number {
 	return date.getUTCDate();
-}
-
-/**
- * What Anthers owes back on a line that started part-way into the month.
- *
- * A line started or raised mid-month is charged **in full** that day — a prorated sliver
- * would let somebody clear a gate for a day's price at the end of a month, take what is
- * behind it and cancel — and the days before it began come off the next charge on the 1st
- * instead. This is that reduction: the monthly amount times the days already gone, over the
- * days in that month.
- *
- * ⭐ **It is exact to the day**, which proration could not be. Proration was going to need
- * half-month steps to keep a prorated charge above the minimum a processor will accept, but
- * a discount only ever *reduces* a charge that already cleared it, so the steps are
- * unnecessary — see the decision this implements.
- *
- * Returns zero on the 1st, where nothing is owed because nothing was missed.
- */
-export function reductionFor(monthlyAmount: Decimal.Value, startedOn: Date): Decimal {
-	const key = cycleKeyFor(startedOn);
-	const daysGone = dayOfCycle(startedOn) - 1;
-	if (daysGone <= 0) return new Decimal(0);
-	return new Decimal(monthlyAmount)
-		.times(daysGone)
-		.dividedBy(daysInCycle(key))
-		.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 }

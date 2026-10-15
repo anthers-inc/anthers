@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import Decimal from "decimal.js";
+import { cycleKeyFor, dayOfCycle, daysInCycle } from "./billing-cycle.js";
 import {
 	ANTHERS_BADGES,
 	type Badge,
@@ -8,6 +9,7 @@ import {
 	CARD_FLAT,
 	CARD_RATE,
 	FOUNDATION_SPLIT,
+	MERCH_BADGE_DISCOUNT,
 	SELF_HOST_FEE,
 	STORAGE_LADDER_GIB,
 	STORAGE_PER_GIB_MONTH,
@@ -66,6 +68,62 @@ export function paymentsSplit(
 	// two shares always reconstruct `total` exactly and creators are never short a cent.
 	const creator = CENTS(total.mul(creatorValue).div(charge));
 	return { total, anthers: total.minus(creator), creator };
+}
+
+// ── Merch ────────────────────────────────────────────────────────────────────
+/**
+ * The Badge discount's multipliers, **as the checkout's Decimal arithmetic reads
+ * them** — 10% → "0.10", derived from the percent dial `MERCH_BADGE_DISCOUNT`,
+ * never retyped beside it.
+ *
+ * Lives here rather than beside its dial in `constants.ts` because the derivation
+ * is decimal arithmetic and **decimal.js may only be imported by this module** —
+ * `constants.ts` is reachable from the web SPA's bundle graph (every page imports a
+ * constant from it), so a decimal import there pulls the whole library into the
+ * bundle (2026-10-15, the decimal-bundle-break task). The SPA never reads this
+ * constant — a buyer-visible discount figure renders from the generated
+ * `MERCH_TABLE`, not from here — and the standing walk of the web import graph
+ * (`scripts/web-bundle-decimal-guard.test.ts`) fails the build the day something
+ * reaches for it anyway.
+ */
+export const MERCH_BADGE_DISCOUNT_RATE: Record<Badge, string> = Object.fromEntries(
+	Object.entries(MERCH_BADGE_DISCOUNT).map(([badge, percent]) => [
+		badge,
+		new Decimal(percent).dividedBy(100).toFixed(2),
+	]),
+) as Record<Badge, string>;
+
+// ── Billing-cycle reduction (moved here 2026-10-15 with the decimal break) ───
+/**
+ * What Anthers owes back on a line that started part-way into the month.
+ *
+ * A line started or raised mid-month is charged **in full** that day — a prorated sliver
+ * would let somebody clear a gate for a day's price at the end of a month, take what is
+ * behind it and cancel — and the days before it began come off the next charge on the 1st
+ * instead. This is that reduction: the monthly amount times the days already gone, over
+ * the days in that month.
+ *
+ * ⭐ **It is exact to the day**, which proration could not be. Proration was going to need
+ * half-month steps to keep a prorated charge above the minimum a processor will accept, but
+ * a discount only ever *reduces* a charge that already cleared it, so the steps are
+ * unnecessary — see the decision this implements.
+ *
+ * Returns zero on the 1st, where nothing is owed because nothing was missed.
+ *
+ * It was born in `billing-cycle.ts` — the one module every cycle-math caller shares — and
+ * moved here so `billing-cycle.ts` stops importing decimal.js: its calendar helpers answer
+ * on pages the SPA ships (`SettingsPage` reads `cycleStart`/`cycleEnd`), and a decimal
+ * import beside them rides the library into the public bundle. The money arithmetic
+ * belongs to the one module allowed to carry it; the calendar stays pure.
+ */
+export function reductionFor(monthlyAmount: Decimal.Value, startedOn: Date): Decimal {
+	const key = cycleKeyFor(startedOn);
+	const daysGone = dayOfCycle(startedOn) - 1;
+	if (daysGone <= 0) return new Decimal(0);
+	return new Decimal(monthlyAmount)
+		.times(daysGone)
+		.dividedBy(daysInCycle(key))
+		.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 }
 
 // ── Support decomposition ─────────────────────────────────────────────────────
