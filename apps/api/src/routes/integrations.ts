@@ -30,7 +30,12 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { creatorAnalyticsRanges } from "../services/attention-ranges.js";
-import { creatorCards, creatorTraffic } from "../services/traffic.js";
+import {
+	creatorCards,
+	creatorTraffic,
+	creatorTrafficSeries,
+	creatorTrafficSources,
+} from "../services/traffic.js";
 
 /** One Work's attention over the analytics period, merged across the raw and rolled-up tables. */
 interface WorkStats {
@@ -342,11 +347,13 @@ const integrationRoutes = new Hono()
 	.get("/analytics/traffic", requireAuth, async (c) => {
 		const user = c.get("user");
 		const period = Math.min(Number(c.req.query("period") ?? 30), 365);
-		const [traffic, cards] = await Promise.all([
+		const [traffic, cards, series, sources] = await Promise.all([
 			creatorTraffic(user.id, period),
 			creatorCards(user.id, period),
+			creatorTrafficSeries(user.id, period),
+			creatorTrafficSources(user.id, period),
 		]);
-		return c.json({ traffic, cards, period });
+		return c.json({ traffic, cards, series, sources, period });
 	})
 
 	// ══════════════════════════════════════════════════════════════════════════

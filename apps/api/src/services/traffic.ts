@@ -34,6 +34,7 @@ import {
 	type ReferrerSource,
 } from "@anthers/shared/traffic";
 import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { rowsOf } from "./rows.js";
 
 /** The handle prefix, written here rather than imported from web-shared: the API must not import a browser package for one character. (Mirror-checked by the traffic tests.) */
@@ -399,6 +400,106 @@ export function workPublicIdFromPath(path: string): number | null {
 	const last = path.split("/").pop() ?? "";
 	const match = /-(\d+)$/.exec(last);
 	return match ? Number.parseInt(match[1]!, 10) : null;
+}
+
+/**
+ * A creator's views by day, over their own pages — profile, works, projects, posts —
+ * read from the same union of raw and rolled-up rows the site-wide reads use, filtered
+ * by the creator's path prefix. The prefix boundary is exact-plus-slash on purpose: a
+ * filter on `LIKE prefix || '%'` would let `/@al` swallow `/@alice`, so the condition
+ * is "the bare profile path, or anything under it."
+ */
+export async function creatorTrafficSeries(
+	creatorId: number,
+	days: number,
+): Promise<TrafficDayEntry[]> {
+	const prefix = await creatorPathPrefix(creatorId);
+	if (!prefix) return [];
+	const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+	const sinceDay = utcDay(since);
+
+	const [raw, rolled] = await Promise.all([
+		db
+			.select({
+				day: sql<string>`to_char(${trafficEvents.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
+				views: sql<number>`count(*)::int`,
+				sessions: sql<number>`count(distinct ${trafficEvents.sessionId})::int`,
+			})
+			.from(trafficEvents)
+			.where(and(gte(trafficEvents.createdAt, since), underCreatorPath(trafficEvents.path, prefix)))
+			.groupBy(sql`1`),
+		db
+			.select({
+				day: trafficDaily.day,
+				views: sql<number>`COALESCE(SUM(${trafficDaily.views}), 0)::int`,
+			})
+			.from(trafficDaily)
+			.where(and(gte(trafficDaily.day, sinceDay), underCreatorPath(trafficDaily.path, prefix)))
+			.groupBy(trafficDaily.day),
+	]);
+
+	const byDay = new Map<string, TrafficDayEntry>();
+	for (const r of rolled) byDay.set(r.day, { day: r.day, views: r.views, sessions: null });
+	for (const r of raw) {
+		byDay.set(r.day, { day: r.day, views: r.views, sessions: r.sessions });
+	}
+	return [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
+}
+
+/**
+ * A creator's views split by referrer source, over their own pages — where their
+ * readers arrived from, as aggregates the raw and rolled-up halves merge. Sources are
+ * classified at intake and stored; nothing here re-derives one.
+ */
+export async function creatorTrafficSources(
+	creatorId: number,
+	days: number,
+): Promise<TrafficSourceEntry[]> {
+	const prefix = await creatorPathPrefix(creatorId);
+	if (!prefix) return [];
+	const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+	const sinceDay = utcDay(since);
+
+	const [raw, rolled] = await Promise.all([
+		db
+			.select({ source: trafficEvents.referrerSource, views: sql<number>`count(*)::int` })
+			.from(trafficEvents)
+			.where(and(gte(trafficEvents.createdAt, since), underCreatorPath(trafficEvents.path, prefix)))
+			.groupBy(trafficEvents.referrerSource),
+		db
+			.select({
+				source: trafficDaily.referrerSource,
+				views: sql<number>`COALESCE(SUM(${trafficDaily.views}), 0)::int`,
+			})
+			.from(trafficDaily)
+			.where(and(gte(trafficDaily.day, sinceDay), underCreatorPath(trafficDaily.path, prefix)))
+			.groupBy(trafficDaily.referrerSource),
+	]);
+
+	const merged = new Map<ReferrerSource, number>();
+	for (const r of raw)
+		merged.set(r.source as ReferrerSource, (merged.get(r.source as ReferrerSource) ?? 0) + r.views);
+	for (const r of rolled)
+		merged.set(r.source as ReferrerSource, (merged.get(r.source as ReferrerSource) ?? 0) + r.views);
+	return [...merged.entries()]
+		.map(([source, views]) => ({ source, views }))
+		.sort((a, b) => b.views - a.views);
+}
+
+/** The creator's path prefix (`/@handle`), or null if the account does not exist. */
+async function creatorPathPrefix(creatorId: number): Promise<string | null> {
+	const [creator] = await db
+		.select({ handle: users.atprotoHandle })
+		.from(users)
+		.where(eq(users.id, creatorId))
+		.limit(1);
+	if (!creator?.handle) return null;
+	return `${HANDLE_PREFIX}${creator.handle}`;
+}
+
+/** The prefix-boundary condition shared by the creator reads: the bare profile path, or anything under it. */
+function underCreatorPath(pathColumn: AnyPgColumn, prefix: string) {
+	return sql`(${pathColumn} = ${prefix} OR ${pathColumn} LIKE ${`${prefix}/%`})`;
 }
 
 /**

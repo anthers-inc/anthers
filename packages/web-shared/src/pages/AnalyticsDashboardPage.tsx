@@ -404,6 +404,13 @@ function FoundationSubsidySection({
 
 // ─── Traffic (first-party, identity-free) ───
 
+const SOURCE_LABELS: Record<string, string> = {
+	direct: "Direct",
+	search: "Search",
+	social: "Social",
+	other: "Other sites",
+};
+
 /**
  * Traffic, and deliberately its own card family: these figures count **visits** —
  * where people arrived from, what they opened — while everything above counts
@@ -423,7 +430,7 @@ function TrafficSection({ period }: { period: string }) {
 	}, [period]);
 
 	if (!data) return null;
-	const { traffic, cards } = data;
+	const { traffic, cards, series, sources } = data;
 	if (traffic.profileViews === 0 && cards.shown === 0) return null;
 
 	const ctr = cards.shown > 0 ? (cards.clicked / cards.shown) * 100 : 0;
@@ -450,6 +457,20 @@ function TrafficSection({ period }: { period: string }) {
 						<div className="text-lg font-bold">{ctr.toFixed(1)}%</div>
 					</div>
 				</div>
+				{series.length > 0 && (
+					<SparkBar data={series.map((d) => d.views)} label="Visits per day" color="bg-primary" />
+				)}
+				{sources.length > 0 && (
+					<div className="flex flex-wrap gap-4 mb-4 mt-2">
+						{sources.map((s) => (
+							<div key={s.source} className="flex items-center gap-1.5">
+								<span className="text-xs text-base-content/70">
+									{SOURCE_LABELS[s.source] ?? s.source}: {formatNumber(s.views)}
+								</span>
+							</div>
+						))}
+					</div>
+				)}
 				{(traffic.topWorks.length > 0 || traffic.topProjects.length > 0) && (
 					<div className="overflow-x-auto">
 						<table className="table table-sm">
@@ -486,7 +507,7 @@ function TrafficSection({ period }: { period: string }) {
 				)}
 				<p className="text-xs text-base-content/40 mt-2">
 					Visits are counted without identity — Anthers never sees who visited, only that pages were
-					visited.
+					visited, and a visit is not a person: the same browser counted twice reads as two visits.
 				</p>
 			</div>
 		</div>
