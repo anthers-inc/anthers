@@ -21,9 +21,10 @@
  * The judgment calls, each made because the decision's table names the accounts but not the
  * arithmetic:
  *
- * 1. **A purchase never moves Due to creators.** The destination charge sent the creator's
+ * 1. **A purchase never moves Due to creators.** The completion transfer sent the creator's
  *    share straight to the creator's own Stripe balance, where it is already theirs — Anthers
- *    never held it, so no liability arises. The purchase debits Stripe clearing for Anthers'
+ *    never held it beyond the seconds between the charge and the transfer, so no liability
+ *    arises. The purchase debits Stripe clearing for Anthers'
  *    share only (the tax plus the fee figures the row recorded — `amount − creator_earnings`
  *    is the platform side of the price), and the fee is CREDITED against payment processing
  *    expense rather than debited: creators bear card processing at cost, so the profit and
@@ -640,7 +641,7 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 		"anthers",
 	);
 
-	// 4. A Work is purchased — Anthers' share only; the destination charge sent the
+	// 4. A Work is purchased — Anthers' share only; the completion transfer sent the
 	//    creator's share straight to the creator's own balance, so no liability arises.
 	const purClearing = purchaseRows.reduce(
 		(s, r) => s.plus(D(r.sales_tax)).plus(D(r.processing_fee)),
@@ -653,7 +654,7 @@ export async function closePackage(rawPeriod: string): Promise<ClosePackageResul
 		"Stripe clearing",
 		"debit",
 		purClearing,
-		"Purchases charged this month — Anthers' share only: the tax plus the platform side of the price. The destination charge sent the creator's share straight to the creator's balance.",
+		"Purchases charged this month — Anthers' share only: the tax plus the platform side of the price. The completion transfer sent the creator's share straight to the creator's balance.",
 	);
 	push(
 		"A Work is purchased",

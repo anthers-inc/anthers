@@ -15,23 +15,26 @@
  *     whole subject: write a `creator_nettings` row, recover it from future earnings at
  *     the transfer step, reverse it when a contested dispute is won.
  *
- * A purchase is a destination charge, so its creator's share is "after the transfer" by
- * construction — the share moved at the moment the charge cleared, pinned by
- * `transfer_data[amount]`. Anthers' clawback attempt on a purchase refund is
- * `refunds.ts`'s `reverse_transfer`, which works only while the money still sits in the
+ * A purchase's creator share reached them as the **completion transfer**
+ * (`services/purchase-split.ts` — the platform charge is split per creator on the charge,
+ * Parker's 2026-10-15 decision), so its share is "after the transfer" by construction.
+ * Anthers' clawback attempt on a purchase refund is `refunds.ts`'s explicit
+ * `reverseCreatorShare`, which works only while the money still sits in the
  * connected account's balance. The seam between "works" and "cannot work" is whether the
  * creator has already paid the money out of Stripe, and Anthers cannot observe that —
- * but Stripe's refund object can, and does: a refund's `source_transfer_reversal` is the
- * transfer reversal the refund created, and it is **present exactly when the reversal
- * happened**. So the honest rule this module implements:
+ * but its own call's outcome can, and does: the reversal **throws exactly when the
+ * connected balance cannot fund it**. So the honest rule this module implements:
  *
- *   • our own `refundPurchase` asks for `reverse_transfer` and reads the reversal off the
- *     refund it made — the share came back at Stripe, and **no netting row is written**.
- *     That is the decision's "before the creator has paid out" case, already handled.
- *   • a refund whose transfer reversal is absent — the connected balance could not fund
- *     it (a paid-out creator) or the refund was issued without one (a dashboard refund
- *     with the box unchecked) — **writes a netting row** for the row's earnings. What
- *     Anthers could not recover at Stripe it recovers from future earnings instead.
+ *   • our own `refundPurchase` and the webhook's dashboard-refund branch both reverse
+ *     the share through the same call and read the outcome — the share came back at
+ *     Stripe, and **no netting row is written**. That is the decision's "before the
+ *     creator has paid out" case, already handled.
+ *   • a reversal that could not be funded — a paid-out creator — **writes a netting
+ *     row** for the row's earnings. What Anthers could not recover at Stripe it
+ *     recovers from future earnings instead.
+ *   • a row with no transfer at all — the share never left, so **nothing is written**:
+ *     there is nothing to recover, and a netting row would bill the creator for money
+ *     they never received.
  *   • a dispute on a purchase **always writes a netting row**: a chargeback debits the
  *     platform balance and reverses nothing on the transfer (Stripe's own expert answer
  *     is that a chargeback does not auto-reverse the transfer), so the creator's share is
@@ -55,14 +58,10 @@
  * concern, and `refunds.ts`'s invariants are load-bearing enough without a second subject
  * inside them.
  *
- * ⚠️ **The Stripe test-mode question this task asked, answered from the documented
- * behavior** (the sandbox could not be run from this build; the sources are Stripe's own
- * docs): *what does `reverse_transfer` do to a purchase refund once the creator has
- * already paid the money out?*
+ * ⚠️ **The Stripe behavior the clawback depends on, recorded from the documented
+ * answer** (the sources are Stripe's own docs): *what happens when Anthers reverses a
+ * purchase transfer's share once the creator has already paid the money out?*
  *
- *   • A destination charge's refund with `reverse_transfer: true` reverses the transfer
- *     **proportionally** ([Refunds API](https://docs.stripe.com/api/refunds/create) —
- *     "The transfer will be reversed proportionally to the amount being refunded").
  *   • A transfer reversal **can only reverse up to the unreversed amount remaining of the
  *     transfer**, and Stripe's docs state the reversal is created from the *connected
  *     account's balance*. Stripe does carry negative connected-account balances in general
@@ -70,11 +69,12 @@
  *     refunds and chargebacks can make one negative, and Stripe then offsets it against
  *     future payments or debits the external account) — but the Tax and Compliance Plan
  *     records the finding that **Stripe does not carry creators' negative balances on
- *     destination charges**, and on a paid-out connected account there is no balance to
- *     reverse from. The expected and recorded answer, in this codebase's own terms: **no
- *     reversal happens that returns the money** — the reversal is absent or unfunded, the
- *     platform's own balance funds the refund, and the creator keeps money for a sale that
- *     no longer exists. That is the hole netting fills.
+ *     purchase charges**, and on a paid-out connected account there is no balance to
+ *     reverse from. The expected and recorded answer, in this codebase's own terms: **the
+ *     reversal call cannot be funded** — it throws, the platform's own balance funds the
+ *     refund, and the creator keeps money for a sale that no longer exists. That is the
+ *     hole netting fills, and `reverseCreatorShare` catches the throw and turns it into
+ *     the netting row's trigger.
  *   • A dispute never touches the transfer at all: Stripe debits the chargeback from the
  *     platform balance (indirect charges — [Connect charges](https://docs.stripe.com/connect/charges)
  *     — negative transactions for indirect charges affect the platform's balance), and
@@ -173,12 +173,12 @@ export async function recordNettingForDispute(
  * Write a netting row for a purchase refund whose transfer reversal did not recover the
  * creator's share — the paid-out case.
  *
- * Called from `settleRefundedPurchase` with the refund's `source_transfer_reversal` (absent
- * on the route's own refund, which asked for `reverse_transfer` and reads it off the Refund
- * object before ever getting here): a refund that comes back with no transfer reversal is
- * money Anthers could not claw back at Stripe, so it becomes a netting row instead. The
- * amount is the row's `creatorEarnings` — the same share `reverse_transfer` would have
- * clawed back, by `refunds.ts`'s settled arithmetic.
+ * Called from `settleRefundedPurchase` with the outcome of `reverseCreatorShare`'s clawback
+ * (and only when the share reached the creator at all — a never-transferred row nets
+ * nothing): a reversal that could not be funded is money Anthers could not claw back at
+ * Stripe, so it becomes a netting row instead. The amount is the row's `creatorEarnings`
+ * — the same share the reversal would have clawed back, by `refunds.ts`'s settled
+ * arithmetic.
  *
  * Idempotent on the refund's Stripe id: a redelivered `charge.refunded` finds the row and
  * changes nothing. A refund with no Stripe id (a legacy row) has no identity to be

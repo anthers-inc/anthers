@@ -33,6 +33,7 @@
  * in the JSX (it owns the page's only form) and sits left (`lg:order-1`).
  */
 
+import { withNextPath } from "@anthers/shared/next-path";
 import { useAuth } from "@anthers/web-shared/auth";
 import { creatorWorkUrl, profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
@@ -70,6 +71,12 @@ interface Quote {
 		/** This line's share of the basket's ONE card fee — the creator group's tooltip reads it. */
 		processingFee: string;
 		price: string;
+	}[];
+	/** One entry per creator the charge covers, with the server-computed receives figure. */
+	creators: {
+		handle: string | null;
+		itemCount: number;
+		receives: string;
 	}[];
 	subtotal: string;
 	processingFee: string;
@@ -109,7 +116,26 @@ export default function BasketPage() {
 	// Cleared with the basket, so a completed purchase never leaves stale numbers up.
 	const handleTotals = useCallback((t: SessionTotals | null) => setSessionTotals(t), []);
 
-	const creator = items[0]?.creatorHandle ?? null;
+	/**
+	 * The creator groups the Basket card renders — one per distinct creator, with each
+	 * group's receives figure read straight off the quote (server-computed, never derived
+	 * here: a receipt that computes its own totals stops reconciling the moment a dial
+	 * moves). The lines join their group through the basket's own items, which are what
+	 * carry the creator handle; a quote line whose Work left the basket mid-render simply
+	 * matches no group and renders nowhere.
+	 */
+	const groups = useMemo(() => {
+		if (!quote) return [];
+		return quote.creators
+			.filter((c) => c.handle != null)
+			.map((c) => ({
+				handle: c.handle as string,
+				receives: c.receives,
+				lines: quote.items.filter(
+					(line) => items.find((i) => i.workId === line.workId)?.creatorHandle === c.handle,
+				),
+			}));
+	}, [items, quote]);
 
 	// 🚨 Derived ONCE per basket content, not per render — `items` is re-read from
 	// storage on every basket event, so `items.map(...)` inline at the use site was a new
@@ -165,7 +191,7 @@ export default function BasketPage() {
 				<EmptyState
 					icon={<ShoppingBagIcon className="w-12 h-12" />}
 					title="Your basket is empty"
-					description="Add a few things from one creator and buy them together — the card fee is charged once per purchase, not once per item, so buying together leaves more with them."
+					description="Add a few things — from one creator or many — and buy them together. The card fee is charged once per purchase, not once per item, so buying together leaves more with them."
 				/>
 			</div>
 		);
@@ -181,10 +207,9 @@ export default function BasketPage() {
 	// total. From the quote before the address lands; from the session after —
 	// `sessionTotals`' dollars, formatted, never recomputed here.
 	//
-	// **Basket** — what the buyer is buying: the items grouped by creator (a basket
-	// holds one creator's work, so this is one group — but the grouping is kept so the
-	// day a multi-creator basket lands, the surface is already honest about who receives
-	// what). Each group is topped by the creator's receives line — the headline of the
+	// **Basket** — what the buyer is buying: the items grouped by creator, one group per
+	// creator the charge covers (any number since 2026-10-15), each topped by the
+	// creator's receives line — the headline of the
 	// group, beside their name — with an (i) naming the card fee taken out of their part
 	// of the basket, pro-rata by item value. Anthers keeps none of it: the fee goes to
 	// the processor, which is exactly what the tooltip says.
@@ -249,81 +274,84 @@ export default function BasketPage() {
 				Basket
 			</h2>
 			<div className="flex flex-col gap-3">
-				{/* One group in practice — a basket holds ONE creator's work. Grouped anyway,
-				    so the display already answers "who receives what" the day the constraint
-				    lifts. */}
-				<div className="rounded-lg bg-base-200/50 px-3 py-1">
-					{/* The group's header: the creator and what they receive, set apart from
-					    the items beneath — larger, semibold, the group's voice — with the
-					    (i) riding the same trailing slot the remove buttons do and a
-					    divider closing the header off from the list. The (i) names the fee
-					    taken OUT of the earnings — the card fee is paid to the processor
-					    out of the price, never kept by Anthers and never added for the
-					    buyer. */}
-					<div className="flex items-center justify-between gap-2 py-2.5">
-						<span className="min-w-0 flex-1 truncate text-[15px] font-semibold">
-							<Link to={profileUrl(creator ?? "")} className="link link-hover">
-								{creator}
-							</Link>{" "}
-							<span className="text-xs font-normal text-base-content/60">receives</span>
-						</span>
-						<span className="shrink-0 text-[15px] font-semibold tabular-nums text-success">
-							<span data-testid="basket-creator-earns">${quote.creatorEarnings}</span>
-						</span>
-						<span className="flex w-6 shrink-0 items-center justify-center">
-							<InfoTip
-								align="right"
-								text={`Each price is all-in: card processing (2.9% + $0.30, at cost) is taken out of it, not added on top. This basket's one fee is split pro-rata by item value; Anthers keeps none of it.`}
-							/>
-						</span>
-					</div>
-					{/* The items nest under the header: indented beside a rule that hangs
-					    off the group's left edge, smaller and quieter than the header —
-					    the receipt's detail lines against the header's voice. The dividers
-					    and the price column stay aligned with the Payment card's. */}
-					<ul
-						className="ml-3 divide-y divide-base-300 border-l border-base-300 pl-3"
-						data-testid="basket-items"
-					>
-						{quote.items.map((item) => {
-							// The list's own item record — the remove buttons work off the
-							// BASKET's items (the source with handles), matched by id.
-							const held = items.find((i) => i.workId === item.workId);
-							return (
-								<li key={item.workId} className="flex items-center justify-between gap-2 py-2">
-									<Link
-										to={creatorWorkUrl(held?.creatorHandle ?? "", item.slug)}
-										className="min-w-0 flex-1 truncate text-sm text-base-content/80 link-hover"
-									>
-										<span className="block truncate">{item.title ?? "Untitled"}</span>
-									</Link>
-									<span className="shrink-0 text-sm tabular-nums text-base-content/80">
-										${item.price}
-									</span>
-									<span className="flex w-6 shrink-0 items-center justify-center">
-										<button
-											type="button"
-											className="btn btn-ghost btn-xs px-0"
-											onClick={() => held && remove(held.workId)}
-											aria-label={`Remove ${item.title ?? "item"}`}
+				{groups.map((group) => (
+					<div key={group.handle} className="rounded-lg bg-base-200/50 px-3 py-1">
+						{/* The group's header: the creator and what they receive, set apart from
+						    the items beneath — larger, semibold, the group's voice — with the
+						    (i) riding the same trailing slot the remove buttons do and a
+						    divider closing the header off from the list. The (i) names the fee
+						    taken OUT of the earnings — the card fee is paid to the processor
+						    out of the price, never kept by Anthers and never added for the
+						    buyer. */}
+						<div className="flex items-center justify-between gap-2 py-2.5">
+							<span className="min-w-0 flex-1 truncate text-[15px] font-semibold">
+								<Link to={profileUrl(group.handle)} className="link link-hover">
+									{group.handle}
+								</Link>{" "}
+								<span className="text-xs font-normal text-base-content/60">receives</span>
+							</span>
+							<span className="shrink-0 text-[15px] font-semibold tabular-nums text-success">
+								<span data-testid="basket-creator-earns">${group.receives}</span>
+							</span>
+							<span className="flex w-6 shrink-0 items-center justify-center">
+								<InfoTip
+									align="right"
+									text={`Each price is all-in: card processing (2.9% + $0.30, at cost) is taken out of it, not added on top. This basket's one fee is split pro-rata by item value; Anthers keeps none of it.`}
+								/>
+							</span>
+						</div>
+						{/* The items nest under the header: indented beside a rule that hangs
+						    off the group's left edge, smaller and quieter than the header —
+						    the receipt's detail lines against the header's voice. The dividers
+						    and the price column stay aligned with the Payment card's. */}
+						<ul
+							className="ml-3 divide-y divide-base-300 border-l border-base-300 pl-3"
+							data-testid="basket-items"
+						>
+							{group.lines.map((item) => {
+								// The list's own item record — the remove buttons work off the
+								// BASKET's items (the source with handles), matched by id.
+								const held = items.find((i) => i.workId === item.workId);
+								return (
+									<li key={item.workId} className="flex items-center justify-between gap-2 py-2">
+										<Link
+											to={creatorWorkUrl(group.handle, item.slug)}
+											className="min-w-0 flex-1 truncate text-sm text-base-content/80 link-hover"
 										>
-											<XMarkIcon className="w-4 h-4" />
-										</button>
-									</span>
-								</li>
-							);
-						})}
-					</ul>
-				</div>
+											<span className="block truncate">{item.title ?? "Untitled"}</span>
+										</Link>
+										<span className="shrink-0 text-sm tabular-nums text-base-content/80">
+											${item.price}
+										</span>
+										<span className="flex w-6 shrink-0 items-center justify-center">
+											<button
+												type="button"
+												className="btn btn-ghost btn-xs px-0"
+												onClick={() => held && remove(held.workId)}
+												aria-label={`Remove ${item.title ?? "item"}`}
+											>
+												<XMarkIcon className="w-4 h-4" />
+											</button>
+										</span>
+									</li>
+								);
+							})}
+						</ul>
+					</div>
+				))}
 				{/*
 				 * Only shown when it is actually non-zero — a "you saved $0.00" on a
 				 * single-item basket would teach the user to ignore the line that
 				 * matters. Anthers keeps nothing either way, so the saving is not ours
-				 * to share: it is entirely the creator's, and the copy says so.
+				 * to share: it is entirely the creators', and the copy says so.
 				 */}
 				{Number(quote.creatorGains) > 0 && (
 					<p className="rounded-lg bg-success/10 p-3 text-sm text-success-content">
-						Buying these together sends <strong>${quote.creatorGains} more</strong> to {creator}{" "}
+						Buying these together sends{" "}
+						<strong>
+							${quote.creatorGains} more to{" "}
+							{groups.length === 1 ? groups[0].handle : "the creators"}
+						</strong>{" "}
 						than buying them one at a time would. The card fee is charged once per purchase rather
 						than once per item, and Anthers keeps none of it either way.
 					</p>
@@ -335,14 +363,18 @@ export default function BasketPage() {
 	return (
 		<div className="container mx-auto max-w-6xl px-4 py-8">
 			<h1 className="text-2xl font-bold mb-1">Your basket</h1>
-			{creator && (
+			{groups.length > 0 && (
 				<p className="text-sm text-base-content/60 mb-6">
 					Work by{" "}
-					<Link to={profileUrl(creator)} className="link link-hover font-medium">
-						{creator}
-					</Link>
-					. Add another creator's work and this basket becomes theirs — one charge can pay out to
-					only one account, so each creator is bought (and paid) separately.
+					{groups.map((group, idx) => (
+						<span key={group.handle}>
+							{idx > 0 && (idx === groups.length - 1 ? " and " : ", ")}
+							<Link to={profileUrl(group.handle)} className="link link-hover font-medium">
+								{group.handle}
+							</Link>
+						</span>
+					))}
+					. One charge buys the whole basket; each creator receives their part.
 				</p>
 			)}
 
@@ -390,7 +422,11 @@ export default function BasketPage() {
 								}}
 							/>
 						) : (
-							<Link to="/login" className="btn btn-primary w-full">
+							// The signed-out detour, with the return trip attached: the buyer lands
+							// back here after signing in or up, one `next` parameter away from the
+							// basket they were about to pay for (the generalized purchase-path fix —
+							// the same open-redirect-safe pattern the locked-post unlock panel uses).
+							<Link to={withNextPath("/login", "/basket")} className="btn btn-primary w-full">
 								Log in to buy
 							</Link>
 						)}

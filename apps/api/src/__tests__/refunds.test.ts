@@ -11,10 +11,11 @@
  * What is actually worth pinning here is the money and the counting, because
  * every one of these is a failure that moves real dollars and shows no error:
  *
- *   • the parameters we hand Stripe — `reverse_transfer` on, application-fee
- *     refund *off*. Those two are the whole reversal, and the second is the easy
- *     one to "fix" wrongly: on a destination charge it would pay the retained
- *     sales tax to the creator on a sale that no longer exists.
+ *   • the calls we hand Stripe — the refund (no `reverse_transfer`: a platform charge
+ *     reverses nothing by itself) and, separately, the transfer reversal that claws
+ *     the creator's share back for exactly the row's earnings. The application-fee
+ *     refund stays *off* — setting it looks like a completeness fix and moves money
+ *     nobody holds.
  *   • the ledger entry, which is the only record that the remainder absorbed
  *     anything. A refund that moves money silently is the same class of bug as
  *     the gross-vs-net one that ran uncovered until 2026-08-08.
@@ -107,6 +108,16 @@ function fakeStripe() {
 		refunds: {
 			create: record("refunds.create", () => ({ id: `re_${uid()}` })),
 			list: record("refunds.list", () => refundList),
+		},
+		transfers: {
+			// The clawback — `reverseCreatorShare` reverses the row's earnings off the
+			// transfer that carried them. A test makes it reject through
+			// `failures["transfers.createReversal"]` to stage the paid-out creator.
+			createReversal: record("transfers.createReversal", (id: string) => ({
+				id: `trr_${uid()}`,
+				object: "transfer_reversal",
+				transfer: id,
+			})),
 		},
 	} as unknown as Stripe;
 
@@ -256,6 +267,9 @@ async function completedPurchase(
 			salesTax: opts.salesTax ?? fees.salesTax.toFixed(2),
 			creatorEarnings: fees.creatorEarnings.toFixed(2),
 			stripePaymentIntentId: `pi_${uid()}`,
+			// The completion transfer that carried the creator's share — the ordinary
+			// state under the split, and the thing the clawback reverses.
+			stripeTransferId: `tr_${uid()}`,
 			status: "completed",
 			downloadedAt: opts.downloadedAt ?? null,
 		})
@@ -359,6 +373,10 @@ describe("A basket refunds one item at a time", () => {
 	/** Three purchases on ONE PaymentIntent, apportioned the way checkout writes them. */
 	async function basketOfThree() {
 		const intent = `pi_basket_${uid()}`;
+		// The one transfer the completion made for the creator this whole basket belongs
+		// to — all three rows share it, and each row's reversal takes its own earnings
+		// from that shared transfer.
+		const transfer = `tr_basket_${uid()}`;
 		const unit = new Decimal("1.00");
 		const subtotal = unit.times(3);
 		const whole = calculateFees(subtotal, { type: "digital" });
@@ -380,6 +398,7 @@ describe("A basket refunds one item at a time", () => {
 					salesTax: share(whole.salesTax).toFixed(2),
 					creatorEarnings: unit.minus(share(whole.processingFee)).toFixed(2),
 					stripePaymentIntentId: intent,
+					stripeTransferId: transfer,
 					status: "completed",
 				})
 				.returning();
@@ -400,7 +419,14 @@ describe("A basket refunds one item at a time", () => {
 			new Decimal(rows[0].amount).plus(rows[0].salesTax).toNumber() * 100,
 		);
 		expect(params.amount).toBe(expected);
-		expect(params.reverse_transfer).toBe(true);
+		// A platform charge reverses nothing on its own — the clawback is its own call,
+		// taking THIS row's earnings off the transfer all three rows share.
+		expect(params.reverse_transfer).toBeUndefined();
+		const reversal = fake.lastCall("transfers.createReversal");
+		expect(reversal?.args[0]).toBe(rows[0].stripeTransferId);
+		expect((reversal?.args[1] as { amount?: number }).amount).toBe(
+			Math.round(new Decimal(rows[0].creatorEarnings).toNumber() * 100),
+		);
 		// A whole-charge refund would be three times this. Stated as an inequality so it
 		// keeps meaning if the fixture's prices change.
 		expect(params.amount).toBeLessThan(expected * 3);
@@ -439,7 +465,7 @@ describe("A basket refunds one item at a time", () => {
 });
 
 describe("The reversal we ask Stripe for", () => {
-	it("reverses the creator's transfer and does NOT refund the application fee", async () => {
+	it("claws the creator's share back explicitly — exactly their earnings, off their transfer", async () => {
 		const purchase = await completedPurchase();
 
 		const res = await refundAs(buyerCookie, purchase.id);
@@ -449,18 +475,51 @@ describe("The reversal we ask Stripe for", () => {
 		const params = call?.args[0] as Stripe.RefundCreateParams;
 		expect(params.payment_intent).toBe(purchase.stripePaymentIntentId);
 
-		// The creator is clawed back exactly their earnings — without this the refund
-		// comes wholly out of the platform balance and the creator keeps money for a
-		// sale that no longer exists.
-		expect(params.reverse_transfer).toBe(true);
+		// 🚨 The clawback is a call of its own now (the split, 2026-10-15): a platform
+		// charge's refund reverses nothing automatically, so `reverseCreatorShare`
+		// reverses the creator's transfer explicitly — for the row's recorded earnings
+		// and never more, so a creator is never billed for someone else's refund and
+		// never shorted a cent of their own.
+		expect(params.reverse_transfer).toBeUndefined();
+		const reversal = fake.lastCall("transfers.createReversal");
+		expect(reversal?.args[0]).toBe(purchase.stripeTransferId);
+		expect((reversal?.args[1] as { amount?: number }).amount).toBe(
+			Math.round(new Decimal(purchase.creatorEarnings).toNumber() * 100),
+		);
+		// The idempotency key is the purchase id — a webhook redelivery of the refund
+		// our own route just made cannot reverse a second cent.
+		expect((reversal?.args[2] as { idempotencyKey?: string }).idempotencyKey).toBe(
+			`refund_reversal_${purchase.id}`,
+		);
 
-		// And the application fee is deliberately left alone. On a destination charge
-		// it never left the platform (it was subtracted from the transfer), so
-		// refunding it would push the retained sales tax and delivery TO the creator.
-		// This assertion exists because setting it looks like a completeness fix.
+		// And the application fee is deliberately left alone. Under a platform charge
+		// the fee is the processor's own deduction, and refunding it would move money
+		// that was never held. This assertion exists because setting it looks like a
+		// completeness fix.
 		expect(params.refund_application_fee).toBeUndefined();
 
 		expect(params.reason).toBe("requested_by_customer");
+	});
+
+	it("leaves the purchase untouched when the refund is rejected but nets nothing when only the clawback fails", async () => {
+		// A rejected REFUND settles nothing — the buyer keeps access and their money
+		// stays where it was, the same no-op it has always been.
+		const rejected = await completedPurchase();
+		fake.failures["refunds.create"] = new Error("card_declined");
+		const res = await refundAs(buyerCookie, rejected.id);
+		expect(res.status).toBe(502);
+		expect((await reload(rejected.id)).status).toBe("completed");
+		expect(await ledgerFor(rejected.id)).toHaveLength(0);
+
+		// A funded refund whose CLAWBACK cannot be funded still settles — the buyer's
+		// money is back; the creator's share is simply unrecovered, and the netting
+		// ledger owns the recovery (pinned in netting.test.ts; here the row settles).
+		fake.reset();
+		const paidOut = await completedPurchase();
+		fake.failures["transfers.createReversal"] = new Error("balance_insufficient: cannot reverse");
+		const settled = await refundAs(buyerCookie, paidOut.id);
+		expect(settled.status).toBe(200);
+		expect((await reload(paidOut.id)).status).toBe("refunded");
 	});
 
 	it("sends an idempotency key derived from the purchase, so a retry can't double-refund", async () => {
@@ -469,19 +528,6 @@ describe("The reversal we ask Stripe for", () => {
 
 		const options = fake.lastCall("refunds.create")?.args[1] as { idempotencyKey?: string };
 		expect(options?.idempotencyKey).toBe(`refund_purchase_${purchase.id}`);
-	});
-
-	it("leaves the purchase untouched when Stripe rejects the refund", async () => {
-		const purchase = await completedPurchase();
-		fake.failures["refunds.create"] = new Error("card_declined");
-
-		const res = await refundAs(buyerCookie, purchase.id);
-		expect(res.status).toBe(502);
-
-		// The row must not claim a refund that never happened — that would revoke the
-		// buyer's access AND leave them unpaid, the worst of both.
-		expect((await reload(purchase.id)).status).toBe("completed");
-		expect(await ledgerFor(purchase.id)).toHaveLength(0);
 	});
 });
 
@@ -841,10 +887,10 @@ describe("charge.refunded — the refund that didn't come through our route", ()
 	it("recovers the refund id and the reversal from Stripe when the live event omits the refunds list", async () => {
 		// The live account's newer API version delivers `charge.refunded` with the
 		// charge's `refunds` list ABSENT (found 2026-10-14, the first live dashboard-path
-		// refund): the settle on the event's shape alone stamps no refund id and reads
-		// the reversal as falsely absent. Stripe's own refund list is the truth, and
-		// the settle reads it — here the transfer came back with the refund, so no
-		// netting row is owed and none may be opened.
+		// refund): the settle on the event's shape alone stamps no refund id. Stripe's
+		// own refund list is the truth, and the settle reads it — here the clawback is
+		// funded (the fake's default), the share came back at Stripe, so no netting row
+		// is owed and none may be opened.
 		const purchase = await completedPurchase({ downloadedAt: new Date() });
 		const refundId = `re_${uid()}`;
 		fake.setRefundList(refundObjects(refundId, `trr_${uid()}`));
@@ -872,15 +918,17 @@ describe("charge.refunded — the refund that didn't come through our route", ()
 		});
 	});
 
-	it("opens the netting when Stripe's list shows no reversal — the paid-out creator case the event shape lost silently", async () => {
+	it("opens the netting when the clawback cannot be funded — the paid-out creator case the event shape lost silently", async () => {
 		// The opposite case, which is the dangerous one: Stripe carries no negative
-		// balance for destination charges, so a creator already paid out cannot have
-		// the transfer reversed — the share did not come back, and the recovery belongs
-		// to the netting ledger. On the event's shape alone this was skipped (no refund
-		// id, no identity), the silent loss the recovered read exists to close.
+		// balance for purchase charges, so a creator already paid out cannot have the
+		// transfer reversed — the clawback call throws, the share did not come back,
+		// and the recovery belongs to the netting ledger. The refund-id read off
+		// Stripe's list is still what gives the netting row its identity, exactly the
+		// silent-loss case the recovered read exists to close.
 		const purchase = await completedPurchase({ downloadedAt: new Date() });
 		const refundId = `re_${uid()}`;
 		fake.setRefundList(refundObjects(refundId));
+		fake.failures["transfers.createReversal"] = new Error("balance_insufficient: cannot reverse");
 
 		await sendWebhook(
 			stripeEvent(

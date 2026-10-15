@@ -11,9 +11,9 @@
  * - **Round trips**: add is idempotent, remove is idempotent, clear empties.
  * - **Account scoping**: account B reads an empty basket on the browser-and-account
  *   shape the defect lived in (two accounts, one flow).
- * - **The replace-on-clash courtesy**: adding a second creator's Work REPLACES the
- *   basket and names the dropped creator — the client's old behavior, kept honest
- *   server-side so the sign-in merge and the button cannot disagree.
+ * - **Multi-creator baskets**: a second creator's Work APPENDS — the basket carries any
+ *   number of creators and the merge folds a mixed scratch in without dropping anything
+ *   (the replace-on-clash rule was removed with the 2026-10-15 split decision).
  * - **Untrusted storage**: quote and checkout re-resolve every id. A Work that is not
  *   buyable (already owned is the easiest to stage) is EXCLUDED from `list` — the badge
  *   never counts a ghost — and a seeded stale row never fails a checkout an honest
@@ -123,7 +123,7 @@ beforeAll(async () => {
 			access: FOR_SALE,
 		})
 	).id;
-	// A third Work by a DIFFERENT creator, for the one-creator rule's replace-on-clash.
+	// A third Work by a DIFFERENT creator, for the multi-creator append pins.
 	const clashingCreator = await createAccount(`bskt_store_clash_${run}`, {
 		fields: { isCreator: true },
 	});
@@ -459,7 +459,7 @@ describe("POST /auth/basket/merge — the scratch basket folds through the add",
 		expect(body.added).toEqual([workA]);
 	});
 
-	it("a mixed-creator MERGE replaces the account basket — the most recent intent wins", async () => {
+	it("a mixed-creator MERGE appends — the basket carries both creators (2026-10-15)", async () => {
 		await clearBasketDirect();
 		// The account's basket ALREADY holds A's creator's work.
 		await req(
@@ -469,9 +469,10 @@ describe("POST /auth/basket/merge — the scratch basket folds through the add",
 				body: JSON.stringify({ workId: workA }),
 			}),
 		);
-		// The scratch carries the OTHER creator's work: the merge's add REPLACE-clashes,
-		// leaving the scratch's item alone — the client's own replace-on-clash behavior,
-		// kept honest server-side, and now both sides agree.
+		// The scratch carries the OTHER creator's work: the merge appends it, because a
+		// basket carries any number of creators — the replace-on-clash rule this test
+		// used to pin is the behavior the multi-creator decision removed, on the client,
+		// in the service and here at the merge, all three agreeing.
 		const res = await req(
 			"/api/auth/basket/merge",
 			authed(buyerCookie, {
@@ -480,10 +481,36 @@ describe("POST /auth/basket/merge — the scratch basket folds through the add",
 			}),
 		);
 		expect(res.status).toBe(200);
-		const body = (await res.json()) as { replacedCreator: string | null };
-		expect(body.replacedCreator).toBeTruthy();
 		const basket = await serverBasket();
-		expect(basket.workIds).toEqual([otherCreatorWorkId]);
+		expect(basket.workIds).toEqual([workA, otherCreatorWorkId]);
+	});
+
+	it("adding a second creator's Work keeps the first — no replace, no announcement", async () => {
+		await clearBasketDirect();
+		await req(
+			"/api/payments/basket/items",
+			authed(buyerCookie, {
+				method: "POST",
+				body: JSON.stringify({ workId: workA }),
+			}),
+		);
+		// The dealbreaker this whole change exists to fix (Parker, 2026-10-15): the add
+		// used to wipe the basket for the new creator's Work. It appends now, and the
+		// response carries no replaced-creator field at all — the announcement's absence
+		// is pinned so the courtesy cannot quietly return.
+		const res = await req(
+			"/api/payments/basket/items",
+			authed(buyerCookie, {
+				method: "POST",
+				body: JSON.stringify({ workId: otherCreatorWorkId }),
+			}),
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { items: { workId: number }[] };
+		expect(body.items.map((i) => i.workId)).toEqual([workA, otherCreatorWorkId]);
+		expect("replacedCreator" in body).toBe(false);
+		const basket = await serverBasket();
+		expect(basket.workIds).toEqual([workA, otherCreatorWorkId]);
 	});
 });
 

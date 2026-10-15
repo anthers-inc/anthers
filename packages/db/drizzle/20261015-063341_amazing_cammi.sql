@@ -1,0 +1,1 @@
+ALTER TABLE "purchases" ADD COLUMN "stripe_transfer_id" text;

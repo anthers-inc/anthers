@@ -42,6 +42,7 @@ import { type IngestEbookData, ingestEbook } from "./ingest-ebook.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
 import { handlePruneAttention, type PruneAttentionData } from "./prune-attention.js";
 import { publishScheduled } from "./publish-scheduled.js";
+import { runPurchaseTransferRetry } from "./purchase-transfer-retry.js";
 import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue, RETIRED_QUEUES } from "./queue.js";
 import { reconcileListings } from "./reconcile-listings.js";
 import { releaseScheduled } from "./release-scheduled.js";
@@ -220,6 +221,17 @@ async function start() {
 			const sweptCount = await runUploadSessionSweep();
 			if (sweptCount > 0) {
 				console.log(`[upload-session-sweep] job ${job.id}: aborted ${sweptCount} open sessions`);
+			}
+		}
+	});
+
+	await queue.work(QUEUES.PURCHASE_TRANSFER_RETRY, async (jobs) => {
+		for (const job of jobs) {
+			const attempted = await runPurchaseTransferRetry();
+			if (attempted > 0) {
+				console.log(
+					`[purchase-transfer-retry] job ${job.id}: re-attempted ${attempted} owed transfer group(s)`,
+				);
 			}
 		}
 	});

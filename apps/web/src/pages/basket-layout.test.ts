@@ -77,12 +77,15 @@ describe("the basket page's two-column layout", () => {
 		// The tax line, by contrast, belongs to the Payment card — before its Total.
 		const taxIdx = source.indexOf("sessionTotals?.tax ?? 0");
 		const totalIdx = source.indexOf('data-testid="basket-total"');
-		const earnsIdx = source.indexOf("quote.creatorEarnings");
+		// The receives figure headlines every one of the Basket card's creator groups —
+		// one per creator since the 2026-10-15 split, each read off the quote's
+		// server-computed group figure rather than derived here.
+		const earnsIdx = source.indexOf("group.receives");
 		expect(paymentIdx).toBeGreaterThan(-1);
 		expect(cardIdx).toBeGreaterThan(-1);
 		expect(taxIdx).toBeGreaterThan(-1);
 		expect(taxIdx).toBeLessThan(totalIdx);
-		// The receives figure headlines the Basket card's creator group.
+		// The receives figure headlines the Basket card's creator groups.
 		expect(earnsIdx).toBeGreaterThan(cardIdx);
 		// The card fee's own line is gone from the page — it is tooltip material now.
 		expect(source).not.toContain("Card processing");

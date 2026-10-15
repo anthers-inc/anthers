@@ -8,13 +8,12 @@
  * so two Works bought together leave more with the creator than the same two bought apart
  * — and Anthers keeps nothing either way, so the whole difference is theirs.
  *
- * ⚠️ A basket holds **one creator at a time** (Stripe's `transfer_data.destination` names
- * a single account). Adding across creators replaces rather than refuses, and says so —
- * finding out at the payment step would be the worst possible moment.
+ * A basket holds any number of creators (2026-10-15): one charge settles it, and the
+ * completion path splits the money per creator, so adding across creators appends
+ * exactly like any other add.
  */
 import { Link } from "@anthers/web-shared/router";
 import { CheckIcon, ShoppingBagIcon } from "@heroicons/react/24/outline";
-import { useState } from "react";
 import { useBasket } from "@/lib/basket";
 
 interface AddToBasketProps {
@@ -28,26 +27,7 @@ interface AddToBasketProps {
 
 export default function AddToBasket(props: AddToBasketProps) {
 	const { add, has, count } = useBasket();
-	const [replaced, setReplaced] = useState<string | null>(null);
 	const inBasket = has(props.workId);
-
-	/**
-	 * 🚨 Rendered ABOVE the branch, not inside the pre-add one.
-	 *
-	 * Adding is exactly what makes `inBasket` true, so the component swaps branches on the
-	 * same tick the message is set — and the first version put this warning in the branch
-	 * that had just stopped rendering. It set state on a view that immediately unmounted:
-	 * the basket was correctly replaced and the user was told nothing, which is the one
-	 * outcome worse than refusing the add. (Same family as the signup ceremony's
-	 * auth-context bug: a view that changes shape in response to the very action whose
-	 * result it needs to report.) Verified in a browser, because nothing about it fails.
-	 */
-	const notice = replaced && (
-		<p className="text-xs text-warning">
-			Your basket held work by {replaced}, so it was replaced — a basket covers one creator at a
-			time, because each is paid directly.
-		</p>
-	);
 
 	if (inBasket) {
 		return (
@@ -60,7 +40,6 @@ export default function AddToBasket(props: AddToBasketProps) {
 						View basket{count > 1 ? ` (${count})` : ""}
 					</Link>
 				</div>
-				{notice}
 			</div>
 		);
 	}
@@ -71,9 +50,9 @@ export default function AddToBasket(props: AddToBasketProps) {
 				type="button"
 				className="btn btn-outline btn-sm w-full"
 				onClick={() => {
-					// `add` is async in server mode (the answer carries the creator clash) and
-					// sync in scratch mode; `Promise` handles both, and the only thing read
-					// off the result is the replaced-creator notice either way.
+					// `add` is async in server mode and sync in scratch mode; `Promise`
+					// handles both, and neither carries anything the button needs back —
+					// a refusal surfaces through the basket's own error state.
 					void Promise.resolve(
 						add({
 							workId: props.workId,
@@ -83,14 +62,11 @@ export default function AddToBasket(props: AddToBasketProps) {
 							creatorHandle: props.creatorHandle,
 							thumbnail: props.thumbnail ?? null,
 						}),
-					).then((r) => {
-						if ("replacedCreator" in r && r.replacedCreator) setReplaced(r.replacedCreator);
-					});
+					);
 				}}
 			>
 				<ShoppingBagIcon className="w-4 h-4" /> Add to basket
 			</button>
-			{notice}
 		</div>
 	);
 }
