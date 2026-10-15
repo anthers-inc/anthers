@@ -5,9 +5,8 @@ import {
 	type ExecFileSyncOptionsWithStringEncoding,
 	execFileSync,
 } from "node:child_process";
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
+
+import { withSignInLock } from "./signin-lock";
 import { fileURLToPath } from "node:url";
 import { GAUNTLET_CREATOR_EMAIL } from "@anthers/db/gauntlet";
 import { MEDIA_FIXTURE_EMAIL } from "@anthers/db/media-fixture";
@@ -83,55 +82,10 @@ export function trackErrorsStrict(page: Page, allow: RegExp[] = []): string[] {
  * One emailed-code sign-in per address at a time, across every worker the run is using.
  *
  * The API keeps **one live code per address** and a re-request replaces it — a security
- * property, not something a test may widen. Two workers signing in as the same shared
- * fixture (`gauntlet_creator`, `media_fixture`) otherwise send `signin/start` together,
- * and the loser's `verify` spends a code the winner's start already replaced: the sign-in
- * fails on timing, and which spec loses wanders run to run. Serializing the start→verify
- * pair per address removes the window rather than narrowing it.
- *
- * A lock *file*, because the workers are separate processes and an in-process map would
- * hold no line between them. Exclusive `wx` create is the lock; a holder that crashed
- * mid-sign-in leaves one, which is what the age check is for.
+ * property, not something a test may widen; the reasoning, the two abandoned-lock
+ * reaps and the staleness-vs-deadline lesson live in `./signin-lock`, which holds the
+ * mechanism and its unit test (also under `bun test`, in `src/signin-lock.test.ts`).
  */
-const SIGNIN_LOCK_MS = 30_000;
-const SIGNIN_LOCK_STALE_MS = 120_000;
-
-function signInLockPath(email: string): string {
-	return path.join(os.tmpdir(), `anthers-e2e-signin-${Buffer.from(email).toString("hex")}.lock`);
-}
-
-async function withSignInLock<T>(email: string, work: () => Promise<T>): Promise<T> {
-	const lockFile = signInLockPath(email);
-	const deadline = Date.now() + SIGNIN_LOCK_MS;
-	for (;;) {
-		try {
-			fs.writeFileSync(lockFile, String(process.pid), { flag: "wx" });
-			break;
-		} catch (err) {
-			const held = err as NodeJS.ErrnoException;
-			if (held.code !== "EEXIST") throw err;
-			// A lock older than any sign-in could take is a crashed holder's, not a live one's.
-			try {
-				if (Date.now() - fs.statSync(lockFile).mtimeMs > SIGNIN_LOCK_STALE_MS) {
-					fs.unlinkSync(lockFile);
-					continue;
-				}
-			} catch {
-				// It vanished between the stat and the unlink — the lock is simply free.
-				continue;
-			}
-			if (Date.now() > deadline) {
-				throw new Error(`timed out waiting for the sign-in lock for ${email}`);
-			}
-			await new Promise((resolve) => setTimeout(resolve, 100));
-		}
-	}
-	try {
-		return await work();
-	} finally {
-		fs.rmSync(lockFile, { force: true });
-	}
-}
 
 /**
  * Sign an account in and put the session on `context`.
