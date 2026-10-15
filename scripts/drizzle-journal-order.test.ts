@@ -23,6 +23,7 @@
  */
 import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
+import { timestampedTag } from "./drizzle-retag.ts";
 
 const REPO = join(import.meta.dir, "..");
 const JOURNAL = join(REPO, "packages", "db", "drizzle", "meta", "_journal.json");
@@ -55,6 +56,53 @@ describe("the migration journal", () => {
 			outOfOrder,
 			"a journal entry older than its predecessor means a migration was renumbered " +
 				"after generate, which production will never apply — regenerate it instead",
+		).toEqual([]);
+	});
+
+	it("tags carry the timestamp shape from the transition onward, and the timestamp is the entry's own truth", async () => {
+		const journal = (await Bun.file(JOURNAL).json()) as { entries: JournalEntry[] };
+		expect(journal.entries.length).toBeGreaterThan(0);
+
+		// The shape boundary: once one tag carries the timestamp shape, every later tag
+		// must, and every earlier tag must be the plain sequence shape — the two number
+		// spaces never interleave backwards.
+		const firstTimestamped = journal.entries.findIndex((entry) => /^\d{8}-\d{6}_/.test(entry.tag));
+		const violations: string[] = [];
+		if (firstTimestamped !== -1) {
+			for (let i = firstTimestamped; i < journal.entries.length; i++) {
+				if (!/^\d{8}-\d{6}_/.test(journal.entries[i].tag)) {
+					violations.push(
+						`${journal.entries[i].tag} (idx ${i}) follows a timestamped tag but does not carry the timestamp prefix — the generator retags every new migration, so a hand-written sequence number here is a renumbering in disguise`,
+					);
+				}
+			}
+			for (let i = 0; i < firstTimestamped; i++) {
+				if (!/^\d{4}_/.test(journal.entries[i].tag)) {
+					violations.push(
+						`${journal.entries[i].tag} (idx ${i}) predates the timestamped naming and does not match it`,
+					);
+				}
+			}
+		}
+		expect(
+			violations,
+			"the migration naming switched schemes mid-journal at a tag boundary",
+		).toEqual([]);
+
+		// The timestamp prefix is not decoration: it must BE the entry's `when`, formatted
+		// the generator formats it — a tag edited by hand is the lie the journal's `when`
+		// cannot show but this check can.
+		const misnamed: string[] = [];
+		for (const entry of journal.entries) {
+			if (!/^\d{8}-\d{6}_/.test(entry.tag)) continue;
+			const expected = timestampedTag(entry.tag, entry.when);
+			if (entry.tag !== expected) {
+				misnamed.push(`${entry.tag} (idx ${entry.idx}) should be ${expected}`);
+			}
+		}
+		expect(
+			misnamed,
+			"a timestamped tag that does not read the entry's own `when` is a hand edit",
 		).toEqual([]);
 	});
 });
