@@ -139,6 +139,28 @@ export const purchases = pgTable(
 		 * the whole charge.
 		 */
 		stripePaymentIntentId: text("stripe_payment_intent_id").notNull(),
+	/**
+	 * The transfer that carried this row's creator's share of the charge, stamped at
+	 * checkout COMPLETION — the same moment the tax and the intent re-key land.
+	 *
+	 * 🚨 **Purchases are platform charges, not destination charges** (Parker,
+	 * 2026-10-15, the multi-creator basket decision): a charge can carry Works by
+	 * several creators, and Stripe's `transfer_data.destination` names exactly one
+	 * connected account, so the split runs as **one transfer per distinct creator
+	 * at completion**, funded by the charge (`source_transaction`). Rows by the same
+	 * creator on one charge share this id; a merch purchase (Anthers' own goods,
+	 * `creatorId` null) and any row whose transfer has not yet succeeded carry null.
+	 *
+	 * The null is load-bearing in two directions. **Refunds:** the reversal of the
+	 * creator's share is an explicit call on this id, and a row with no transfer was
+	 * never paid out — nothing to claw back and, critically, **no netting row**
+	 * (`services/netting.ts` recovers a share that reached the creator, and this
+	 * share never did). **The retry job:** completed rows with a null here and a
+	 * live `creatorId` are the transfer debt the completion webhook left behind,
+	 * re-attempted with the same idempotency key, never for rows that refunded or
+	 * disputed in the window — a refunded-before-transfer row owes no transfer.
+	 */
+	stripeTransferId: text("stripe_transfer_id"),
 		// pending → completed by the webhook; failed when the charge never cleared.
 		// `refunded` by the refund paths, and `disputed` by the dispute webhook — a
 		// chargeback flips the row here to revoke the buyer's access (`resolveAccess`
