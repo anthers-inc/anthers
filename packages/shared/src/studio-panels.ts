@@ -15,9 +15,17 @@
  * layout naming anything else, so a typo cannot be stored and read back forever.
  */
 
+/**
+ * The "schedule" panel reads `work.scheduledReleaseAt` on the owner's works listing and
+ * `post.scheduledFor` on the owner's posts listing — both serialized unconditionally, and
+ * both fetched by the Dashboard whatever the layout says, so the panel needs no new data
+ * source when it is switched on.
+ */
+
 /** Every panel that exists. The stored layout is a subset of these, in the creator's order. */
 export const STUDIO_PANELS = [
 	"processing",
+	"schedule",
 	"earnings",
 	"catalog",
 	"storage",

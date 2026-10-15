@@ -27,6 +27,7 @@ import {
 	cardFee,
 	estimateStorageCost,
 	paymentsSplit,
+	reductionFor,
 	supportBreakdown,
 } from "./fees.js";
 import { BADGE_TABLE } from "./figures.generated.js";
@@ -400,5 +401,56 @@ describe("estimateStorageCost — and the self-hosting branch that inverted unno
 		// 🚨 Margin-neutrality is the property the ruling bought: the charge equals the
 		// provider cost exactly — no multiplier between them, ever.
 		expect(over.total.equals(over.storageCost)).toBe(true);
+	});
+});
+
+// The day-exact mid-month reduction, keyed by `billing-cycle`'s calendar. It lived in
+// `billing-cycle.ts` until the decimal break (2026-10-15) moved the money arithmetic into
+// the one module allowed to import decimal.js; the calendar half stayed behind there.
+describe("reductionFor", () => {
+	const dollars = (d: Decimal) => d.toFixed(2);
+
+	test("owes nothing to somebody who started on the 1st", () => {
+		expect(dollars(reductionFor(12, new Date("2026-09-01T09:00:00Z")))).toBe("0.00");
+	});
+
+	/**
+	 * The worked example from the decision: a $10 creator line started on the 20th of a
+	 * 30-day month is charged $10 that day, and the nineteen days before it are what comes
+	 * off the 1st. `10 × 19 / 30 = 6.333…`, so $6.33.
+	 */
+	test("pays back the days of the month before the line began", () => {
+		expect(dollars(reductionFor(10, new Date("2026-09-20T12:00:00Z")))).toBe("6.33");
+	});
+
+	test("is exact to the day rather than to a step", () => {
+		// Consecutive days differ, which is the property that made half-month steps
+		// unnecessary. A stepped reduction would report the same figure for both.
+		const a = reductionFor(12, new Date("2026-09-10T00:00:00Z"));
+		const b = reductionFor(12, new Date("2026-09-11T00:00:00Z"));
+		expect(dollars(a)).not.toBe(dollars(b));
+		expect(b.greaterThan(a)).toBe(true);
+	});
+
+	test("uses the days in that month, so the same day differs across months", () => {
+		// The 16th of a 30-day month is half of it; the 16th of a 31-day month is not.
+		expect(dollars(reductionFor(30, new Date("2026-09-16T00:00:00Z")))).toBe("15.00");
+		expect(dollars(reductionFor(30, new Date("2026-10-16T00:00:00Z")))).toBe("14.52");
+	});
+
+	test("never owes back more than the line itself", () => {
+		// The last day of the month is the worst case, and it is still short of the whole.
+		const late = reductionFor(12, new Date("2026-09-30T23:00:00Z"));
+		expect(late.lessThan(12)).toBe(true);
+		expect(dollars(late)).toBe("11.60");
+	});
+
+	test("rounds to cents, because a discount is charged in cents", () => {
+		const r = reductionFor(7, new Date("2026-09-14T00:00:00Z"));
+		expect(r.decimalPlaces()).toBeLessThanOrEqual(2);
+	});
+
+	test("owes nothing on a line of nothing", () => {
+		expect(dollars(reductionFor(0, new Date("2026-09-20T00:00:00Z")))).toBe("0.00");
 	});
 });
