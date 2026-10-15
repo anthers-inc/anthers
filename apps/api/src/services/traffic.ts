@@ -20,7 +20,6 @@ import { db } from "@anthers/db/client";
 import {
 	cardImpressions,
 	cardImpressionsDaily,
-	projects,
 	trafficDaily,
 	trafficEvents,
 	users,
@@ -514,31 +513,20 @@ export async function prunableTrafficDays(
 ): Promise<string[]> {
 	const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
 	const cutoffIso = cutoff.toISOString();
-	const rows = await db
-		.select({
-			day: sql<string>`to_char(${trafficEvents.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`,
-		})
-		.from(trafficEvents)
-		.where(sql`${trafficEvents.createdAt} < ${cutoffIso}::timestamptz`)
-		.groupBy(sql`1`)
-		// Oldest first: a backlog drains from its head, and `maxDays` bounds one run.
-		.orderBy(sql`1`)
-		.limit(maxDays);
-	return rows.map((r) => r.day);
-}
-
-/** The card-subject creator lookup the rollup uses, resolved per row at prune time. */
-export async function cardSubjectCreatorId(
-	subjectKind: string,
-	subjectId: number,
-): Promise<number | null> {
-	if (subjectKind === "creator") return subjectId;
-	const [row] = await db
-		.select({ creatorId: projects.creatorId })
-		.from(projects)
-		.where(eq(projects.id, subjectId))
-		.limit(1);
-	return row?.creatorId ?? null;
+	// Both raw tables are pruned by this job, so the day list is the UNION of their
+	// prunable days — a day holding only card displays (no page view got through the
+	// door) is exactly as owed its rollup as one holding views.
+	const result = await db.execute(sql`
+		SELECT day FROM (
+			SELECT DISTINCT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day FROM traffic_events WHERE created_at < ${cutoffIso}::timestamptz
+			UNION
+			SELECT DISTINCT to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day FROM card_impressions WHERE created_at < ${cutoffIso}::timestamptz
+		) prunable
+		-- Oldest first: a backlog drains from its head, and maxDays bounds one run.
+		ORDER BY day
+		LIMIT ${maxDays}
+	`);
+	return rowsOf<{ day: string }>(result).map((r) => r.day);
 }
 
 /** Distinct sessions ever seen in raw rows — an operator's liveness reading, not a published metric. */
