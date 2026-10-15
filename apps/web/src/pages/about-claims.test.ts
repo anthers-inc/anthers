@@ -27,14 +27,15 @@
 // you believe is honest, the question to ask is what a user would conclude, not
 // whether the regex was fair.
 //
-// Scoped to specific pages on purpose. /about is the one live page whose subject
-// is the organization's own money; everything else is the wrong tool:
-// RETIRED_COPY in `scripts/econ-figures.ts` runs repo-wide, and RoadmapPage says
-// "first 990 filed" as a **future milestone on a timeline**, which is exactly
-// correct there. A repo-wide rule would need an `econ:allow` on honest copy,
-// which is how a guard becomes noise people route around. A page whose subject
-// is the organization's own money joins this scan the day it ships — the
-// /resources/revenue drawing was the second such page until 2026-10-15.
+// Scoped to specific pages on purpose. /about and /resources/how-money-moves are
+// the two pages whose subject is the organization's own money; everything else is
+// the wrong tool: RETIRED_COPY in `scripts/econ-figures.ts` runs repo-wide, and
+// RoadmapPage says "first 990 filed" as a **future milestone on a timeline**, which
+// is exactly correct there. A repo-wide rule would need an `econ:allow` on honest
+// copy, which is how a guard becomes noise people route around. A page whose
+// subject is the organization's own money joins this scan the day it ships — the
+// /resources/revenue drawing was the second such page until 2026-10-15, when the
+// mechanism page replaced it.
 //
 // Sources: the wiki's *How Anthers Talks About Itself* § Claims (what may be said), Organizational Structure § Phase 1 (what is true).
 
@@ -57,6 +58,17 @@ const SOURCE = readFileSync(join(import.meta.dir, "AboutPage.tsx"), "utf8");
 // which is the quietest possible way for it to stop working. Found 2026-08-21 when a new
 // assertion failed against copy that was plainly on the page.
 const COPY = SOURCE.replace(/\/\*[\s\S]*?\*\//g, " ")
+	.replace(/^\s*\/\/.*$/gm, " ")
+	.replace(/\s+/g, " ")
+	.toLowerCase();
+
+/**
+ * The mechanism page joins the scan with its own copy (the About half's positive
+ * pins stay About-only below). Same stripping as above, for the same reason: the
+ * page's docblock records the claims rules, and comments must not count.
+ */
+const HOW_SOURCE = readFileSync(join(import.meta.dir, "HowMoneyMovesPage.tsx"), "utf8");
+const HOW_COPY = HOW_SOURCE.replace(/\/\*[\s\S]*?\*\//g, " ")
 	.replace(/^\s*\/\/.*$/gm, " ")
 	.replace(/\s+/g, " ")
 	.toLowerCase();
@@ -227,4 +239,25 @@ describe("/about describes the organization as it is", () => {
 		// who-runs-it fact on its own.)
 		expect(COPY).toContain("anthers team is just parker");
 	});
+});
+
+describe("/resources/how-money-moves makes no premature claim either", () => {
+	it("🚨 scans the mechanism page's copy and not its own explanation", () => {
+		// Guard the guard, the same way the About block does: a comment-stripper
+		// that blanked the file would pass every row below while checking nothing.
+		// The pinned phrase is the page's own visible copy (the receipts' closing
+		// note); if it is rewritten away, repoint this at another copy phrase
+		// rather than dropping it.
+		expect(HOW_COPY).toContain("subscription purchase");
+	});
+
+	for (const { claim, phrases, sayableWhen } of PREMATURE) {
+		it(`makes no claim that ${claim} — sayable when ${sayableWhen}`, () => {
+			for (const phrase of phrases) {
+				expect(`${phrase}: ${HOW_COPY.includes(phrase) ? "on the page" : "absent"}`).toBe(
+					`${phrase}: absent`,
+				);
+			}
+		});
+	}
 });

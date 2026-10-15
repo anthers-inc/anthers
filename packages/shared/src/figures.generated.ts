@@ -113,6 +113,105 @@ export const DIRECTED_SUPPORT_WORST_CASE = {
 } as const;
 
 /**
+ * The money routes behind `/resources/how-money-moves` — the mechanism as it
+ * works today, at representative charges: what an Anthers subscription splits
+ * into (half to the Time Pool by construction, the card line at cost, the rest
+ * the remainder), and what a creator subscription and a purchase pass through
+ * with. The charges named are inputs; every split and percentage is computed
+ * from the checkout's own primitives, with conservation asserted in the
+ * generator. No account mix, no phase, no forecast — the plan's projections
+ * live only in the admin console.
+ */
+export const MONEY_FLOWS = {
+	anthersSub: {
+		badge: "Root",
+		monthly: 3,
+		timePool: 1.5,
+		card: 0.39,
+		remainder: 1.11,
+		timePoolPct: 50,
+		cardPct: 13,
+		remainderPct: 37,
+	},
+	ladder: [
+		{
+			badge: "Root",
+			monthly: 3,
+			timePool: 1.5,
+			card: 0.39,
+			remainder: 1.11,
+			timePoolPct: 50,
+			cardPct: 13,
+			remainderPct: 37,
+		},
+		{
+			badge: "Sprout",
+			monthly: 6,
+			timePool: 3,
+			card: 0.47,
+			remainder: 2.53,
+			timePoolPct: 50,
+			cardPct: 7.8,
+			remainderPct: 42.2,
+		},
+		{
+			badge: "Petal",
+			monthly: 9,
+			timePool: 4.5,
+			card: 0.56,
+			remainder: 3.94,
+			timePoolPct: 50,
+			cardPct: 6.2,
+			remainderPct: 43.8,
+		},
+		{
+			badge: "Blossom",
+			monthly: 12,
+			timePool: 6,
+			card: 0.65,
+			remainder: 5.35,
+			timePoolPct: 50,
+			cardPct: 5.4,
+			remainderPct: 44.6,
+		},
+	],
+	creatorSub: {
+		at: {
+			monthly: 10,
+			card: 0.59,
+			creator: 9.41,
+			cardPct: 5.9,
+			creatorPct: 94.1,
+		},
+		worst: {
+			monthly: 3,
+			card: 0.39,
+			creator: 2.61,
+			cardPct: 13,
+			creatorPct: 87,
+		},
+	},
+	purchase: {
+		at: {
+			item: "An album",
+			price: 10,
+			card: 0.59,
+			creator: 9.41,
+			cardPct: 5.9,
+			creatorPct: 94.1,
+		},
+		worst: {
+			item: "A single track",
+			price: 1,
+			card: 0.33,
+			creator: 0.67,
+			cardPct: 33,
+			creatorPct: 67,
+		},
+	},
+} as const;
+
+/**
  * The storefronts a creator actually compares us with, and their revenue share.
  *
  * Generated rather than typed into the Studio because the wiki's *How Anthers Talks About Itself* § Comparisons binds every
