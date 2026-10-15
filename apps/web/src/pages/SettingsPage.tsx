@@ -42,7 +42,12 @@ import { generateRecoveryKey, type RecoveryKeypair } from "../lib/recovery-key";
 import { getStripe } from "../lib/stripe";
 import { cardElementStyle } from "../lib/stripeCard";
 import { studioUrl } from "../lib/studio";
-import { setPreviewsEnabled, usePreviewsEnabled } from "../lib/tile-preview-settings";
+import {
+	setPreviewAudio,
+	setPreviewsEnabled,
+	usePreviewAudio,
+	usePreviewsEnabled,
+} from "../lib/tile-preview-settings";
 
 interface DeviceSession {
 	id: number;
@@ -138,6 +143,7 @@ function DesktopHomeSection() {
  */
 function MediaPlaySection() {
 	const previewsEnabled = usePreviewsEnabled();
+	const previewAudio = usePreviewAudio();
 
 	return (
 		<div className="card bg-base-200 mt-6">
@@ -164,6 +170,28 @@ function MediaPlaySection() {
 								Holding the cursor on a feed tile plays the work inside its thumbnail, one tile at a
 								time. Turning this off keeps every tile on its poster, and tiles you can still open
 								keep their play affordance.
+							</p>
+						</div>
+					</label>
+				</div>
+
+				<div className="form-control mt-2">
+					{/* The same remembered answer the preview's speaker button flips: sound is
+					    the viewer's gesture, never the hover's, so it defaults off and follows
+					    the media volume the rest of the players share. */}
+					<label className="label cursor-pointer justify-start gap-3">
+						<input
+							type="checkbox"
+							className="toggle toggle-primary"
+							checked={previewAudio}
+							onChange={(e) => setPreviewAudio(e.target.checked)}
+						/>
+						<div>
+							<span className="label-text font-medium">Play audio on hover previews</span>
+							<p className="text-xs text-base-content/50 mt-0.5">
+								Hovered video previews are silent by default. Turning this on plays them with sound
+								at the volume the site's players share, and the speaker button on a preview flips
+								this same setting.
 							</p>
 						</div>
 					</label>
