@@ -365,3 +365,42 @@ export function unresolvedHolds(events: LandingEvent[]): RadarHoldEvent[] {
 function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
+
+/**
+ * The door a non-bun writer walks to append one event — the finisher's run agent and the
+ * machine-side probe write the events their roles produce (the probe's ejection tagging,
+ * a finisher run's refined attribution), and neither carries a second copy of the
+ * append: the JSON lands here, is checked against the known event set, and rides the one
+ * `appendEvent` above. A shape the reader would skip is refused here instead of
+ * silently polluting the ledger.
+ */
+export function main(): number {
+	const args = process.argv.slice(2);
+	if (args[0] !== "append" || args.length !== 2) {
+		console.error("usage: bun run scripts/landing-log.ts append '<event json, ts optional>'");
+		return 64;
+	}
+	try {
+		const parsed = JSON.parse(args[1]) as { event?: unknown };
+		if (typeof parsed?.event !== "string" || !KNOWN_EVENTS.has(parsed.event)) {
+			throw new Error(
+				`"${parsed?.event ?? String(parsed)}" is not one of the landing event shapes`,
+			);
+		}
+		if (parsed.event === "radar-run") {
+			throw new Error(
+				"a radar-run event is the radar's writer to produce (scripts/landing-radar.ts)",
+			);
+		}
+		appendEvent(parsed as AppendableEvent);
+		console.log("→ appended");
+		return 0;
+	} catch (error) {
+		console.error(`landing-log: ${errorText(error)}`);
+		return 64;
+	}
+}
+
+if (import.meta.main) {
+	process.exit(main());
+}

@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { appendEvent } from "./landing-log.ts";
+import { appendEvent, type RadarRunEvent, readEvents } from "./landing-log.ts";
 import {
 	authorityMode,
 	type GhPr,
@@ -19,6 +19,7 @@ import {
 	pairwise,
 	RADAR_HOLD_BLOCKING,
 	type RadarReport,
+	radarCli,
 	runRadar,
 } from "./landing-radar.ts";
 
@@ -180,5 +181,37 @@ describe("the radar", () => {
 		// main has no pr and no arm, so no rank.
 		const main = report.entries.find((entry) => entry.branch === "main")!;
 		expect(main.armedRank).toBeNull();
+	});
+
+	// The CLI records every run on the ledger under its scope — `hand` when the caller
+	// passes none, `probe` when the finisher's probe does — and refuses an unknown
+	// scope before running anything.
+	test("the CLI records its run under --scope, or as a hand run by default, and refuses an unknown scope before running anything", () => {
+		const readLedger = () =>
+			readEvents({ path: log }).events.filter(
+				(event): event is RadarRunEvent => event.event === "radar-run",
+			);
+		expect(
+			radarCli(["--no-fetch"], { logPath: log, runOptions: { cwd: repo, useGh: false } }),
+		).toBe(0);
+		const hand = readLedger().at(-1);
+		expect(hand?.scope).toBe("hand");
+		expect(
+			radarCli(["--no-fetch", "--scope", "probe"], {
+				logPath: log,
+				runOptions: { cwd: repo, useGh: false },
+			}),
+		).toBe(0);
+		const probe = readLedger().at(-1);
+		expect(probe?.scope).toBe("probe");
+		expect(probe?.entries.length).toBeGreaterThan(0);
+		const before = readLedger().length;
+		expect(
+			radarCli(["--no-fetch", "--scope", "everywhere"], {
+				logPath: log,
+				runOptions: { cwd: repo, useGh: false },
+			}),
+		).toBe(64);
+		expect(readLedger().length).toBe(before);
 	});
 });
