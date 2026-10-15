@@ -28,12 +28,12 @@
 
 import { db, readingPositions, works } from "@anthers/db";
 import type { InferSelectModel } from "drizzle-orm";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 export type ReadingPosition = InferSelectModel<typeof readingPositions>;
 
 /** Why a position write was refused, when it was. */
-export type PositionRefusal = "not_found";
+export type PositionRefusal = "not_found" | "not_released";
 
 /**
  * The user's positions, newest-touched first — the shape the rail reads its recency
@@ -63,11 +63,16 @@ export async function upsertPosition(
 	position: Record<string, unknown>,
 ): Promise<{ ok: true } | { ok: false; reason: PositionRefusal }> {
 	const [work] = await db
-		.select({ id: works.id })
+		.select({ id: works.id, visibility: works.visibility, creatorId: works.creatorId })
 		.from(works)
 		.where(eq(works.id, workId))
 		.limit(1);
 	if (!work) return { ok: false, reason: "not_found" };
+	// A creator may keep their own unreleased Work; nobody else can see it to read it —
+	// the same rule `saveWork` applies to the shelf.
+	if (work.visibility === "private" && work.creatorId !== userId) {
+		return { ok: false, reason: "not_released" };
+	}
 
 	const clamped = Math.min(1, Math.max(0, progress));
 	await db
@@ -85,19 +90,9 @@ export async function upsertPosition(
 	return { ok: true };
 }
 
-/**
- * Whether a Work has an unfinished position for the caller — the rail's membership test
- * in its server form. Strictly past zero and strictly short of the end: a finished Work
- * belongs to the shelf below the rail, and an never-really-opened one (a sliver past
- * zero) does not belong on the rail either.
- *
- * ⚠️ Exported for the module's completeness rather than a current caller: the rail reads
- * the client-side store, and this exists so a future server-side rail query has the one
- * place to read the rule from.
- */
-export function isUnfinished(position: ReadingPosition): boolean {
-	return position.progress > 0 && position.progress < 1;
-}
+// The rail's membership rule — strictly past zero, strictly short of the end — is the
+// client's test over these rows, where the rail actually draws: a finished Work belongs
+// to the shelf below the rail, and an never-really-opened one does not belong on it.
 
 /** A user's position for one Work, or null. Own rows only, by construction. */
 export async function findPosition(

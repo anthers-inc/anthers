@@ -7639,7 +7639,7 @@ const contentRoutes = new Hono()
 		),
 		async (c) => {
 			const user = c.get("user");
-			const workId = parseNumericId(c.req.param("id") ?? "");
+			const workId = parseNumericId(c.req.param("workId") ?? "");
 			if (workId == null) return c.json({ error: "Work not found" }, 404);
 			const work = await findWorkRow(String(workId));
 			if (!work) return c.json({ error: "Work not found" }, 404);
@@ -7649,7 +7649,15 @@ const contentRoutes = new Hono()
 
 			const { progress, position } = c.req.valid("json");
 			const result = await upsertPosition(user.id, work.id, progress, position);
-			if (!result.ok) return c.json({ error: "Work not found" }, 404);
+			if (!result.ok) {
+				return c.json(
+					{
+						error:
+							result.reason === "not_released" ? "That isn't released yet." : "That doesn't exist.",
+					},
+					404,
+				);
+			}
 
 			const row = await findPosition(user.id, work.id);
 			return c.json({
