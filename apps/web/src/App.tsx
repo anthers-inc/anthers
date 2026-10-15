@@ -99,6 +99,7 @@ const CreatorMonetizationCalculatorPage = lazy(
 );
 const CreatorPayComparisonPage = lazy(() => import("./pages/CreatorPayComparisonPage"));
 const HowMoneyMovesPage = lazy(() => import("./pages/HowMoneyMovesPage"));
+const MediaMonthCalculatorPage = lazy(() => import("./pages/MediaMonthCalculatorPage"));
 const CreatorProfilePage = lazy(() => import("./pages/CreatorProfilePage"));
 const DesktopAuthorizePage = lazy(() => import("./pages/DesktopAuthorizePage"));
 const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
@@ -404,6 +405,7 @@ export default function App() {
 					    See the vault's "Revisit the public-facing Resources as a whole, a
 					    larger revamp". */}
 					<Route path="/resources/how-money-moves" element={<HowMoneyMovesPage />} />
+					<Route path="/resources/media-month" element={<MediaMonthCalculatorPage />} />
 					<Route path="/resources/video-storage" element={<VideoStorageCalculatorPage />} />
 					<Route
 						path="/resources/creator-monetization"

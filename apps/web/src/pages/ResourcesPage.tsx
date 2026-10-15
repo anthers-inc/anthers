@@ -64,6 +64,14 @@ interface ResourceCard {
 /** The interactive tools — put numbers in, get numbers out. */
 const CALCULATORS: ResourceCard[] = [
 	{
+		to: "/resources/media-month",
+		title: "Your media month",
+		blurb:
+			"The spend calculator: build your month out of what you already pay — subscriptions, purchases, pledges — and see what each line pays out today (with the gaps standing where nothing is published) against the same money on Anthers, computed exactly.",
+		tag: "Money",
+		icon: BanknotesIcon,
+	},
+	{
 		to: "/resources/video-storage",
 		title: "Video Storage Calculator",
 		blurb:
