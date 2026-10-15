@@ -62,6 +62,7 @@ import {
 	createCheckoutSession,
 	createConnectAccount,
 	listCheckoutSessions,
+	listRefundsForCharge,
 	paymentsConfigured,
 	retrieveConnectAccount,
 	retrieveConnectBalance,
@@ -1987,17 +1988,34 @@ const paymentRoutes = new Hono()
 				// Stripe dashboard, which reaches us no other way — and that is an
 				// operator action, so it books as platform-initiated and does not spend
 				// the buyer's automatic allowance.
+				//
+				// The two facts below read off the event's refund objects. **The live API
+				// version's event snapshot omits the `refunds` list entirely** — found
+				// 2026-10-14 by the first live dashboard-path refund, when the settle
+				// stamped no refund id and read the reversal as absent, and the netting
+				// ledger's no-identity guard skipped the netting row (`services/netting.ts`):
+				// the harmless direction here, because the transfer really was reversed,
+				// but the same shape in the paid-out-creator case silently loses the
+				// recovery row. When the snapshot carries no refund objects, read Stripe's
+				// truth instead — the charge's own refund list, through the processor
+				// boundary. That read carries no `.catch` on purpose: an API failure fails
+				// this webhook delivery, Stripe redelivers, and the settle runs on
+				// recovered facts rather than on the event's degraded shape.
+				let refundObjects = charge.refunds?.data ?? [];
+				if (refundObjects.length === 0 && typeof charge.id === "string") {
+					refundObjects = (await listRefundsForCharge(charge.id))?.data ?? [];
+				}
+				const firstRefund = refundObjects[0];
 				for (const purchase of refundedRows)
 					await settleRefundedPurchase(purchase, {
 						initiator: "platform",
 						reason: "Refunded at Stripe",
-						stripeRefundId:
-							typeof charge.refunds?.data?.[0]?.id === "string" ? charge.refunds.data[0].id : null,
+						stripeRefundId: typeof firstRefund?.id === "string" ? firstRefund.id : null,
 						// Whether the dashboard refund reversed the creator's transfer — read
-						// off the event's own refund objects, the same fact `refundPurchase` reads
-						// off the Refund object it made. Absent, the creator's share did not come
+						// off the refund object, the same fact `refundPurchase` reads off the
+						// Refund object it made. Absent, the creator's share did not come
 						// back and the netting ledger takes the recovery (`services/netting.ts`).
-						transferReversed: charge.refunds?.data?.[0]?.source_transfer_reversal != null,
+						transferReversed: firstRefund?.source_transfer_reversal != null,
 					});
 
 				// The dashboard refund reached nobody in the routes, so the receipts go out
