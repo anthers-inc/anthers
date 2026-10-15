@@ -22,6 +22,15 @@
  *   tab) that cannot re-identify anybody and cannot follow them across sessions,
  *   devices or visits. Signed-in status is irrelevant to traffic, by design: the
  *   funnel is an aggregate, never a join.
+ * - **It does not know where you are, and that is a decision, not a gap.** Cloudflare
+ *   hands every request a country code derived from your IP, and stamping it at intake
+ *   would be one column — but the Privacy Policy's measurement sentence holds that no
+ *   IP address enters the record, and an attribute derived from your IP on every
+ *   request is the one compromise that would weaken that sentence. The un-parking
+ *   condition is a real creator demand signal (a creator asking where their readers
+ *   are), and the day it comes it takes a policy wording pass, a column at intake, and
+ *   a disclosed creator surface — never a quiet default. Until then, site-level
+ *   geography is answerable from Cloudflare's own aggregate dashboards.
  */
 
 /** How a request's referrer classifies for grouping. */
