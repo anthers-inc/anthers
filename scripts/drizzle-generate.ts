@@ -1,27 +1,9 @@
-// SPDX-License-Identifier: Apache-2.0
-/**
- * `drizzle-kit generate`, driven through a pty so it can run unattended.
- *
- * 🚨 Why this exists. When a table gains and loses columns in the same change, drizzle-kit
- * cannot tell an add-plus-drop from a rename, so it asks — and it asks on a **tty**, with
- * raw keypresses. Piping answers into it does nothing: the process simply waits, and a
- * `bun run db:generate` from any non-interactive context hangs until it is killed. That
- * makes the ordinary act of adding a column unautomatable, which is how this repository
- * ended up with two hand-written migrations and a snapshot two versions behind.
- *
- * ⭐ **The answers do not matter, and that is what makes driving it safe.** A rename and an
- * add-plus-drop describe the *same end state*, so the choice changes only the generated
- * SQL, never the snapshot the next diff is taken against. This script therefore accepts the
- * highlighted default for every question and prints how many it answered — and if you are
- * hand-writing the SQL anyway, the generated statements are discarded and the choice is
- * moot in both directions.
- *
- * ⚠️ Read the generated SQL before applying it. This automates the *prompt*, not the
- * judgment; a destructive statement is still destructive because a default was accepted.
- */
-export {}; // top-level await needs this file to be a module
+import { join } from "node:path";
+import { retagNewestMigration } from "./drizzle-retag.ts";
 
 const args = process.argv.slice(2);
+/** The stamp every freshness gate keys on: the moment this run began. */
+const runStarted = Date.now();
 
 // `script` supplies the pty. Bun has no pty binding, and util-linux `script` is the
 // portable way to give a child one while keeping its stdin reachable from here.
@@ -115,4 +97,21 @@ console.log(`drizzle-generate: answered ${answered} rename question(s)`);
 if (!interesting.length) {
 	console.error("drizzle-generate: drizzle-kit produced no recognizable outcome");
 	process.exit(1);
+}
+
+// The retag: the migration's file carries a timestamp prefix instead of the sequence
+// number, so two parallel schema branches can never generate the same name and the
+// merge queue never sees the double-bounce collision this pipeline taught. See
+// `retagNewestMigration` — it runs here, after drizzle-kit's own file and journal
+// entry exist, gated to the entry this run created, and its outcome joins the
+// wrapper's output.
+const retag = retagNewestMigration(
+	join(import.meta.dir, "..", "packages", "db", "drizzle"),
+	runStarted,
+);
+if (retag.error) console.error(`drizzle-generate: ${retag.error}`);
+if (retag.retagged) {
+	console.log(`drizzle-generate: retagged ${retag.oldTag} → ${retag.tag}`);
+} else if (retag.tag && !retag.error) {
+	console.log("drizzle-generate: no sequence-numbered migration to retag");
 }
