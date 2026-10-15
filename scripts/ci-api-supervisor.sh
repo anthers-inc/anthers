@@ -73,11 +73,21 @@ while [ "$restarts" -lt "$MAX_RESTARTS" ]; do
 	healthy=0
 	misses=0
 	wedge_killed=0
+	beats=0
 	while kill -0 "$child" 2>/dev/null; do
 		sleep 3
+		beats=$((beats + 1))
 		if health_answered; then
 			healthy=1
 			misses=0
+			# A heartbeat every 20 polls (~1 minute): the run's own timeline. A silent
+			# suite window that outlives these beats carries its start and length in the
+			# log itself — the 2026-10-14 stall gave 26 minutes of captured silence with
+			# nothing to read between its first line and the ceiling, and this beat is
+			# what makes the next one readable to the second.
+			if [ $((beats % 20)) = 0 ]; then
+				echo "[api] supervisor: t+$((beats * 3))s — child alive, ${HEALTH_URL} answering" >&2
+			fi
 		elif [ "$healthy" = 1 ]; then
 			misses=$((misses + 1))
 			if [ "$misses" -ge "$WEDGED_POLLS" ] && [ "$wedge_killed" = 0 ]; then
