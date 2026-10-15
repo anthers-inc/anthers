@@ -97,7 +97,31 @@ describe("statusReport", () => {
 		expect(report.external.state).toBe("down");
 		// The hub itself is answering (it is, famously, answering this request).
 		expect(report.state).toBe("degraded");
-		expect(report.components.find((c) => c.name === "Outside view")?.state).toBe("down");
+		expect(report.components.find((c) => c.name === "Website")?.state).toBe("down");
+	});
+});
+
+describe("GET /api/status/history through the app", () => {
+	it("answers the window and its incident feed, and mutates nothing", async () => {
+		const res = await app.fetch(new Request("http://localhost/api/status/history"));
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			windowDays: number;
+			components: { component: string; name: string; days: unknown[] }[];
+			incidents: unknown[];
+			generatedAt: string;
+		};
+		expect(body.windowDays).toBe(90);
+		// A read, never a sampler: a fetch of the history answer leaves the record
+		// exactly as it was — the read-back is compared without the answer's own stamp.
+		const again = (await (
+			await app.fetch(new Request("http://localhost/api/status/history"))
+		).json()) as typeof body;
+		const { generatedAt: first, ...rest } = body;
+		const { generatedAt: second, ...restAgain } = again;
+		expect(restAgain).toEqual(rest);
+		expect(first).toBeTruthy();
+		expect(second).toBeTruthy();
 	});
 });
 

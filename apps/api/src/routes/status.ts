@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The status routes — the public read the /status page polls, and the droplet's ingest.
+ * The status routes — the public reads the /status page drives, and the droplet's ingest.
  *
  * 🚨 **GET /api/status is the public answer and carries nothing but states and sentences.**
  * The deepened `/health` holds the numeric truth (probe timings, queue depths); anything
@@ -18,6 +18,7 @@
 import { Hono } from "hono";
 import { type HeartbeatVerdict, recordHeartbeat } from "../services/heartbeat.js";
 import { statusReport } from "../services/status.js";
+import { statusPageHistory } from "../services/status-history.js";
 
 /** The bearer header's token, as the heartbeat route reads it. */
 function heartbeatToken(header: string | undefined): string | null {
@@ -33,6 +34,14 @@ export const statusRoutes = new Hono()
 		// No cache, no rate limit needed: this is the route the page polls, and every probe
 		// it makes is a read. Answered from the composed reports in services/status.ts.
 		return c.json(await statusReport());
+	})
+	.get("/history", async (c) => {
+		// 🚨 **Same states-and-sentences rule as `/`, one table over.** The record the page's
+		// bars and Past Incidents render from — day-grain states and the sampler's own
+		// incident transitions; the sampler (not a route) is its only writer, so a read here
+		// mutates nothing and carries nothing numeric but the availability percentages the
+		// page exists to show. Reads like `/` — no cache, no rate limit, both probes reads.
+		return c.json(await statusPageHistory());
 	})
 	.post("/heartbeat", async (c) => {
 		// 🚨 Constant-time comparison, not string equality — the same discipline any

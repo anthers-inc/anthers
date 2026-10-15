@@ -52,6 +52,7 @@ import { rescanOwed } from "./rescan-owed.js";
 import { markBenignInterrupted, resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
+import { statusSample } from "./status-sample.js";
 import { runStorageUsageSweep } from "./storage-usage.js";
 import { type SyncAtprotoRecordData, syncAtprotoRecordJob } from "./sync-atproto-record.js";
 import { type SyncWorkListingData, syncWorkListingJob } from "./sync-work-listing.js";
@@ -437,6 +438,16 @@ async function start() {
 		for (const job of jobs) {
 			const sent = await rescanOwed();
 			if (sent > 0) console.log(`[rescan-owed] job ${job.id}: re-queued ${sent} scan(s)`);
+		}
+	});
+
+	// The status sampler: one composed answer per pass, into the record the public page's
+	// bars and Past Incidents render from. Always quiet in the log — a pass that stores
+	// only tallies has nothing a person would read, and the record's own gaps do the
+	// talking (an unrecorded day renders as an empty cell, never as all-clear).
+	await queue.work(QUEUES.STATUS_SAMPLE, async (jobs) => {
+		for (const _job of jobs) {
+			await statusSample();
 		}
 	});
 
