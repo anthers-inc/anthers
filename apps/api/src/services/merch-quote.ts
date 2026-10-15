@@ -25,8 +25,8 @@ import {
 	CLOTHING_TAX_CODE,
 	heldBadgeName,
 	MERCH_BADGE_DISCOUNT,
-	MERCH_BADGE_DISCOUNT_RATE,
 } from "@anthers/shared/constants";
+import { MERCH_BADGE_DISCOUNT_RATE } from "@anthers/shared/fees";
 import { SHIPPING_TAX_CODE } from "@anthers/shared/tax-codes";
 import Decimal from "decimal.js";
 import { and, eq } from "drizzle-orm";
