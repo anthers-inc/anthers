@@ -343,34 +343,47 @@ async function saveFixtureWork(page: Page, key: string) {
 }
 
 test("the Bookshelf lens stands the saved comic up as a spine", async ({ page }) => {
-	const comic = await saveFixtureWork(page, "comic");
-	const pageCount = comic.pageCount ?? 0;
-	expect(pageCount, "the fixture comic renders pages — no pages, no spine ribbon").toBeGreaterThan(
-		1,
-	);
+	// The ribbon reads the further-along of the device's keys and the user's row, and
+	// this file's walks share the media fixture user with every reader walk — whose
+	// legitimate page turns write rows past this walk's local seed. So the assertion
+	// runs on its own throwaway account, whose comic row nothing else writes, and the
+	// seeded device keys are the only position the account carries.
+	const account = makeRailAccount(`spine_${Date.now().toString(36)}`);
+	try {
+		await signInThroughUi(page, account.email);
+		const comic = await saveFixtureWork(page, "comic");
+		const pageCount = comic.pageCount ?? 0;
+		expect(pageCount, "the fixture comic renders pages — no pages, no spine ribbon").toBeGreaterThan(
+			1,
+		);
 
-	// Seed where this device last got in it — the store `lib/reading-positions.ts`
-	// owns, written by the comic reader on navigation. The spine marker is the shelf's
-	// read of the same data: page 2 of the fixture's pages, as a ribbon on the spine.
-	await page.addInitScript(
-		(seed) => {
-			localStorage.setItem("anthers_reading_progress", JSON.stringify({ [String(seed.id)]: 2 }));
-		},
-		{ id: comic.id },
-	);
+		// Seed where this device last got in it — the store `lib/reading-positions.ts`
+		// owns, written by the comic reader on navigation. The spine marker is the
+		// shelf's read of the same data: page 2 of the fixture's pages, as a ribbon on
+		// the spine. The account holds no row for the comic, so this device's seed is
+		// the whole story.
+		await page.addInitScript(
+			(seed) => {
+				localStorage.setItem("anthers_reading_progress", JSON.stringify({ [String(seed.id)]: 2 }));
+			},
+			{ id: comic.id },
+		);
 
-	await page.goto("/library?lens=bookshelf");
-	await expect(page.getByRole("heading", { name: "Bookshelf" })).toBeVisible();
-	await expect(page.getByText("A comic that really turns").first()).toBeVisible();
+		await page.goto("/library?lens=bookshelf");
+		await expect(page.getByRole("heading", { name: "Bookshelf" })).toBeVisible();
+		await expect(page.getByText("A comic that really turns").first()).toBeVisible();
 
-	// The ribbon, at the depth the device got to: round(2 / pageCount) percent. Scoped
-	// to the shelf's own rows — an unfinished position rides the rail above too, so its
-	// spine carries a second, equal marker this walk is not about.
-	const expected = `${Math.round((2 / pageCount) * 100)}%`;
-	await expect(page.getByTestId("bookshelf-shelf").getByTestId("spine-marker")).toHaveAttribute(
-		"style",
-		new RegExp(`height:\\s*${expected.replace("%", "")}%`),
-	);
+		// The ribbon, at the depth the device got to: round(2 / pageCount) percent.
+		// Scoped to the shelf's own rows — an unfinished position rides the rail above
+		// too, so its spine carries a second, equal marker this walk is not about.
+		const expected = `${Math.round((2 / pageCount) * 100)}%`;
+		await expect(page.getByTestId("bookshelf-shelf").getByTestId("spine-marker")).toHaveAttribute(
+			"style",
+			new RegExp(`height:\\s*${expected.replace("%", "")}%`),
+		);
+	} finally {
+		await purgeRailAccount(account.id);
+	}
 });
 
 /**
