@@ -13,6 +13,7 @@ import {
 	projectItems,
 	projectPosts,
 	projects,
+	readingPositions,
 	reviews,
 	storageUsage,
 	transcodingJobs,
@@ -181,6 +182,11 @@ export const webBuildFilesRelations = relations(webBuildFiles, ({ one }) => ({
 export const workSavesRelations = relations(workSaves, ({ one }) => ({
 	user: one(users, { fields: [workSaves.userId], references: [users.id] }),
 	work: one(works, { fields: [workSaves.workId], references: [works.id] }),
+}));
+
+export const readingPositionsRelations = relations(readingPositions, ({ one }) => ({
+	user: one(users, { fields: [readingPositions.userId], references: [users.id] }),
+	work: one(works, { fields: [readingPositions.workId], references: [works.id] }),
 }));
 
 export const transcodingJobsRelations = relations(transcodingJobs, ({ one }) => ({

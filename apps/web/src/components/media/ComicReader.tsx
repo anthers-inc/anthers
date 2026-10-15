@@ -20,7 +20,15 @@ import {
 } from "@heroicons/react/24/solid";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type PanelPage, type PanelPosition, usePanelNavigation } from "@/lib/panel-navigation";
-import { readPage, readStoredPanel, writePage, writePanel } from "@/lib/reading-positions";
+import {
+	onReadingPositionsChange,
+	readPage,
+	readStoredPage,
+	readStoredPanel,
+	refreshReadingPositions,
+	writePage,
+	writePanel,
+} from "@/lib/reading-positions";
 import SeekBar from "./transport/SeekBar";
 import TransportButton from "./transport/TransportButton";
 
@@ -64,6 +72,26 @@ export default function ComicReader({
 	const [panelZoom, setPanelZoom] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
+	// Cross-device resume: when this device holds no position and the server's row does,
+	// the store's adoption writes it into the local keys and this re-reads them — once.
+	// A device already holding a position IS the current position while reading, so it
+	// never gets argued with; after the re-read this device holds one and every later
+	// refresh is a no-op here.
+	const hadLocalPosition = useRef(
+		readStoredPage(workId) != null || readStoredPanel(workId) != null,
+	);
+	useEffect(() => {
+		void refreshReadingPositions();
+		return onReadingPositionsChange(() => {
+			if (hadLocalPosition.current) return;
+			const adopted = readStoredPage(workId);
+			if (adopted != null) {
+				hadLocalPosition.current = true;
+				setPage(Math.min(Math.max(1, adopted), Math.max(pageCount, 1)));
+			}
+		});
+	}, [workId, pageCount]);
+
 	const pageUrl = useCallback(
 		(n: number) => {
 			const url = `${apiBase}/api/content/works/${workId}/pages/${n}`;
@@ -106,7 +134,7 @@ export default function ComicReader({
 		(n: number) => {
 			const clamped = Math.min(Math.max(1, n), Math.max(pageCount, 1));
 			setPage(clamped);
-			writePage(workId, clamped);
+			writePage(workId, clamped, pageCount);
 		},
 		[pageCount, workId],
 	);
@@ -133,27 +161,28 @@ export default function ComicReader({
 		panelPages ?? [],
 		useCallback(
 			(pos: PanelPosition) => {
-				writePanel(workId, { page: pos.pageNumber, panel: pos.panelNumber });
+				writePanel(workId, { page: pos.pageNumber, panel: pos.panelNumber }, pageCount);
 				setPage(pos.pageNumber);
 			},
-			[workId],
+			[workId, pageCount],
 		),
 		{ pageNumber: initialPanel.page, panelNumber: initialPanel.panel },
 	);
 
 	// Restore the saved panel position when panel geometry first arrives — once, not on
-	// every render. The initial values come from the `useState` initializer above, so they
-	// are the mount-time snapshot; an effect that re-ran on later renders would re-restore
-	// after every navigation, fighting the click the user just took.
+	// every render. Read at restore time rather than mount time, so a position adopted
+	// from the server between mount and the first panel view lands too; the values the
+	// reader was mounted with come from the `useState` initializer, so an effect that
+	// re-ran on later renders would re-restore after every navigation, fighting the
+	// click the user just took.
 	const didRestorePanels = useRef(false);
-	const restorePage = initialPanel.page;
-	const restorePanel = initialPanel.panel;
 	useEffect(() => {
 		if (didRestorePanels.current) return;
 		if (!panelPages || panelPages.length === 0) return;
 		didRestorePanels.current = true;
-		panelNav.goTo({ pageNumber: restorePage, panelNumber: restorePanel });
-	}, [panelPages, panelNav.goTo, restorePage, restorePanel]);
+		const pos = readStoredPanel(workId) ?? { page: 1, panel: 1 };
+		panelNav.goTo({ pageNumber: pos.page, panelNumber: pos.panel });
+	}, [panelPages, panelNav.goTo, workId]);
 
 	const panelNext = useCallback(() => {
 		panelNav.next();

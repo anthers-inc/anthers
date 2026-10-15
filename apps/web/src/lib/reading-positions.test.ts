@@ -10,10 +10,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
 	readPage,
 	readPageFraction,
+	readScrollFraction,
 	readStoredPage,
 	readStoredPanel,
 	writePage,
 	writePanel,
+	writeScroll,
 } from "./reading-positions";
 
 /** A localStorage-shaped store a test can watch and break. */
@@ -134,5 +136,29 @@ describe("the shelf's page fraction", () => {
 		// marker backwards.
 		writePage(3, 6);
 		expect(readPageFraction(3, 10)).toBe(9 / 10);
+	});
+});
+
+describe("scroll positions", () => {
+	test("a written depth reads back, clamped into 0–1", () => {
+		writeScroll(1, 0.42);
+		expect(readScrollFraction(1)).toBe(0.42);
+
+		writeScroll(1, 1.7);
+		expect(readScrollFraction(1)).toBe(1);
+
+		writeScroll(1, -0.2);
+		expect(readScrollFraction(1)).toBe(0);
+	});
+
+	test("a sliver of scroll still records locally — depth is depth", () => {
+		// The floor decides whether the row ever hears about it; the device never lies
+		// about where the reader got, even if the row is not told.
+		writeScroll(2, 0.004);
+		expect(readScrollFraction(2)).toBe(0.004);
+	});
+
+	test("a store the reader never wrote reads as never opened", () => {
+		expect(readScrollFraction(3)).toBeNull();
 	});
 });

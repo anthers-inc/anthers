@@ -30,7 +30,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import "@/vendor/foliate-js/view.js";
 import { buildEbookBook, fetchSectionManifest, LadderRefusal, SECTION_CSP } from "@/lib/ebook-book";
-import { readStoredReflow, writeReflow } from "@/lib/reading-positions";
+import { readStoredReflow, refreshReadingPositions, writeReflow } from "@/lib/reading-positions";
 import SeekBar from "./transport/SeekBar";
 import TransportButton from "./transport/TransportButton";
 
@@ -186,6 +186,11 @@ export default function EbookReader({
 				await el.open(book);
 				if (!live) return;
 				setToc((book as BuiltBook).toc);
+				// Cross-device resume: the pull lands before the position is read, so on a
+				// device that has never read this book, the row adopted in that load hands
+				// `readStoredReflow` here the last device's CFI. Total under failure — an
+				// unreachable store resolves empty and the device reads its own state.
+				await refreshReadingPositions();
 				const stored = readStoredReflow(workId);
 				await el.init(stored?.cfi ? { lastLocation: stored.cfi } : {});
 				if (!live) {
