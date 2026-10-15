@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * What a month is, and what starting part-way into one costs.
+ * What a month is — the calendar half of `billing-cycle.ts`.
  *
- * Two things are being pinned here and only one of them is arithmetic. The arithmetic is
- * `reductionFor`, which decides how much of somebody's next charge comes back to them. The
- * other is the **time zone**, which is not a detail once every account in the world renews on
- * the same day: four functions computed this key in local time while the crons that consume it
- * run in UTC, so on a machine behind UTC the last hours of a month keyed the month that had
- * already ended at Stripe. Those assertions are the ones that would have caught it.
+ * The arithmetic here is the cycle keys themselves and the boundaries they open and close;
+ * the other thing that makes the keys non-trivial is the **time zone**, which is not a detail
+ * once every account in the world renews on the same day: four functions computed this key in
+ * local time while the crons that consume it run in UTC, so on a machine behind UTC the last
+ * hours of a month keyed the month that had already ended at Stripe. Those assertions are the
+ * ones that would have caught it. (The money reduction keyed by these days, `reductionFor`,
+ * lives in `fees.ts` since the decimal break and is covered by `economics.test.ts`.)
  */
 import { describe, expect, it } from "bun:test";
-import type Decimal from "decimal.js";
 import {
 	cycleEnd,
 	cycleKeyFor,
@@ -20,7 +20,6 @@ import {
 	isCycleKey,
 	nextCycleKey,
 	previousCycleKey,
-	reductionFor,
 } from "./billing-cycle";
 
 describe("the cycle key", () => {
@@ -120,53 +119,5 @@ describe("the cycle's bounds", () => {
 	it("numbers the day of the month from one", () => {
 		expect(dayOfCycle(new Date("2026-09-01T00:00:00Z"))).toBe(1);
 		expect(dayOfCycle(new Date("2026-09-20T18:30:00Z"))).toBe(20);
-	});
-});
-
-describe("the day-exact reduction", () => {
-	const dollars = (d: Decimal) => d.toFixed(2);
-
-	it("owes nothing to somebody who started on the 1st", () => {
-		expect(dollars(reductionFor(12, new Date("2026-09-01T09:00:00Z")))).toBe("0.00");
-	});
-
-	/**
-	 * The worked example from the decision: a $10 creator line started on the 20th of a
-	 * 30-day month is charged $10 that day, and the nineteen days before it are what comes
-	 * off the 1st. `10 × 19 / 30 = 6.333…`, so $6.33.
-	 */
-	it("pays back the days of the month before the line began", () => {
-		expect(dollars(reductionFor(10, new Date("2026-09-20T12:00:00Z")))).toBe("6.33");
-	});
-
-	it("is exact to the day rather than to a step", () => {
-		// Consecutive days differ, which is the property that made half-month steps
-		// unnecessary. A stepped reduction would report the same figure for both.
-		const a = reductionFor(12, new Date("2026-09-10T00:00:00Z"));
-		const b = reductionFor(12, new Date("2026-09-11T00:00:00Z"));
-		expect(dollars(a)).not.toBe(dollars(b));
-		expect(b.greaterThan(a)).toBe(true);
-	});
-
-	it("uses the days in that month, so the same day differs across months", () => {
-		// The 16th of a 30-day month is half of it; the 16th of a 31-day month is not.
-		expect(dollars(reductionFor(30, new Date("2026-09-16T00:00:00Z")))).toBe("15.00");
-		expect(dollars(reductionFor(30, new Date("2026-10-16T00:00:00Z")))).toBe("14.52");
-	});
-
-	it("never owes back more than the line itself", () => {
-		// The last day of the month is the worst case, and it is still short of the whole.
-		const late = reductionFor(12, new Date("2026-09-30T23:00:00Z"));
-		expect(late.lessThan(12)).toBe(true);
-		expect(dollars(late)).toBe("11.60");
-	});
-
-	it("rounds to cents, because a discount is charged in cents", () => {
-		const r = reductionFor(7, new Date("2026-09-14T00:00:00Z"));
-		expect(r.decimalPlaces()).toBeLessThanOrEqual(2);
-	});
-
-	it("owes nothing on a line of nothing", () => {
-		expect(dollars(reductionFor(0, new Date("2026-09-20T00:00:00Z")))).toBe("0.00");
 	});
 });
