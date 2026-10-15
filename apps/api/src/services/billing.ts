@@ -1222,21 +1222,31 @@ export async function applyBadgeRecurrence(
 		return;
 	}
 
-	// No subscription: create one anchored on the next 1st, charging nothing today.
+	// No subscription: create one whose first billing lands on the next 1st, charging
+	// nothing today.
+	//
+	// ⚠️ **PROBED 2026-10-15, and the anchor shape did not survive the probe.** A
+	// `billing_cycle_anchor` on the next 1st attempts a PRORATION STUB charge today
+	// (creation → anchor, ~$3.10 on a $6 rung, left `open` by `default_incomplete` —
+	// but the subscription itself sat in `incomplete`, and the stub was a second charge
+	// on top of the first Month the checkout already carried). The shape that gives
+	// "no charge today, the full rung on the next 1st" is a TRIAL ending there: the
+	// creation invoices $0 immediately (a bookkeeping row, never attempted), the
+	// subscription is `trialing` until the 1st, and the first real invoice — drafted at
+	// the trial's end with the FULL rung, reason `subscription_cycle`, covered by the
+	// day-exact reduction the caller recorded — is an ordinary renewal that auto-bills
+	// the saved card and lapses honestly when it fails.
 	const customerId = await ensureStripeCustomer(userId, "");
-	const anchor = Math.floor(cycleStart(nextCycleKey(currentCycleKey())).getTime() / 1000);
-	// ⚠️ PROBE: the future-anchor shape (status, first invoice `billing_reason`, no charge
-	// before the anchor) is verified in test mode before ship — see the build plan. The
-	// saved card rides as the subscription's default payment method, so the anchor's
-	// first invoice can bill off-session; without one (the probe's fallback), the renewal
-	// fails the honest way — Stripe retries, the account lapses visibly, Manage Billing
-	// fixes it.
+	const trialEnd = Math.floor(cycleStart(nextCycleKey(currentCycleKey())).getTime() / 1000);
 	await createSubscription({
 		customer: customerId,
 		items: picks.map(lineOf),
 		automatic_tax: { enabled: true },
-		billing_cycle_anchor: anchor,
-		payment_behavior: "default_incomplete",
+		trial_end: trialEnd,
+		// The saved card rides as the subscription's default payment method, so the
+		// trial's first invoice can bill off-session; without one (the save offered
+		// none), the renewal fails the honest way — Stripe retries, the account lapses
+		// visibly, Manage Billing fixes it.
 		...(pmId ? { default_payment_method: pmId } : {}),
 		metadata: { userId: String(userId) },
 	});

@@ -2605,7 +2605,7 @@ describe("Webhook: the Badge first transaction's completion", () => {
 		expect(fake.callsTo("transfers.create")).toHaveLength(0);
 	});
 
-	it("creates a future-anchored subscription for a buyer with none — the saved card riding it", async () => {
+	it("creates a TRIAL to the next 1st for a buyer with none — the saved card riding it, no invoice today", async () => {
 		const buyer = await freshBuyer("fresh_buyer");
 		const { sessionId, event } = completedSession(buyer);
 		const savedMethod = (event.data.object as { payment_method: string }).payment_method;
@@ -2615,10 +2615,10 @@ describe("Webhook: the Badge first transaction's completion", () => {
 
 		const createCall = fake.lastCall("subscriptions.create");
 		const params = createCall?.args[0] as Stripe.SubscriptionCreateParams;
-		expect(params.billing_cycle_anchor).toBe(
-			Math.floor(cycleStart(nextCycleKey(cycleKeyFor(new Date()))).getTime() / 1000),
-		);
-		expect(params.payment_behavior).toBe("default_incomplete");
+		// The trial is the shape that charges nothing today and bills the FULL rung at the
+		// next 1st (the probe killed the future-anchor's stub charge — see billing.ts).
+		expect(params.trial_end).toBe(Math.floor(cycleStart(nextCycleKey(cycleKeyFor(new Date()))).getTime() / 1000));
+		expect(params.billing_cycle_anchor).toBeUndefined();
 		expect(params.default_payment_method).toBe(savedMethod);
 		const line = (params.items as { metadata?: { destination?: string } }[])[0];
 		expect(line.metadata?.destination).toBe(String(issuerId));
