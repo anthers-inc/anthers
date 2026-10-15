@@ -16,8 +16,8 @@
  * 🚨 **The staleness verdict must never outlive the waiter's deadline.** The original
  * shape waited 30s for the lock but only treated a lock older than 120s as stale, so a
  * holder that died mid-ceremony (a test timeout abandoning a sign-in in flight — the
- * exact 2026-10-15 CI shape, `work-image-alt` red-gating #499's merge group and a push
- * to `main` with `timed out waiting for the sign-in lock`) left a lock that waited for
+ * exact 2026-10-15 CI shape, `work-image-alt` red-gating #499's changes while a push
+ * to `main` ran with `timed out waiting for the sign-in lock`) left a lock that waited for
  * a reap its waiters could not live long enough to receive: every ceremony after the
  * crash burned its 30s deadline against a 120s threshold and failed, several specs in
  * a row. The fix is two reaps, and a deadline that is honest about the first: a holder

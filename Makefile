@@ -88,21 +88,22 @@ hooks: ## Point git at the repo's tracked hooks (.githooks/)
 # REAL environment variables, and those beat Bun's `.env` loading, so a stale line left in
 # `.env` cannot shadow the vault.
 #
-# The fallback is warned rather than silent, and it is safe to have here for a reason worth
-# stating: getting it wrong costs you a dev server missing its secrets, which is loud
-# and local. That is the opposite of `spec-apply`, where a wrong source reaches production —
-# which is why that one refuses instead of falling back.
+# When bws is unavailable this refuses, on the same reasoning as `spec-apply`: the vault is
+# the secrets' one home and this Makefile's lanes read from nothing else, so there is
+# nothing to fall back to. Dev used to keep a fill-the-keys-into-`.env` list here, which is
+# exactly the hole the test lanes strip against — `scripts/stripe-secrets-off.ts` — and a
+# refusal at the source is what leaves that strip as the *only* consumer of a filled-in line.
 dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 	@if command -v bws >/dev/null 2>&1 && [ -s "$$HOME/.config/bws/anthers-dev-token" ]; then \
 		PID=$$(bun run scripts/bws-project-id.ts dev) || exit 1; \
 		BWS_ACCESS_TOKEN=$${BWS_ACCESS_TOKEN:-$$(cat $$HOME/.config/bws/anthers-dev-token)} \
 			bws run --project-id $$PID -- '$(MAKE) dev-local'; \
 	else \
-		echo "  -> bws unavailable; secrets must come from .env, which no longer holds them"; \
-		echo "     by default. Expect missing secrets unless you filled these in yourself:"; \
-		echo "       STRIPE_SECRET_KEY  STRIPE_WEBHOOK_SECRET  RESEND_API_KEY"; \
-		echo "       (use DEV values, never prod's)"; \
-		$(MAKE) dev-local; \
+		echo "  -> bws is unavailable, and dev secrets live in the \"Anthers Dev\" Bitwarden"; \
+		echo "     project — never in .env any more, so there is nothing to fall back to."; \
+		echo "     Restore the dev machine account (its token belongs at"; \
+		echo "     ~/.config/bws/anthers-dev-token) and run make dev again."; \
+		exit 1; \
 	fi
 
 # 🚨 **Every `make dev` starts from nothing and leaves nothing.** `scripts/session.ts` brings up a
@@ -135,7 +136,7 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 # The setup that makes this work is one command per machine — see
 # `packages/web-shared/src/lib/rpc.ts` beside the `portless.json` at the root for what
 # lands where.
-dev-local: ## Start dev reading secrets from .env (offline, or no vault access)
+dev-local: ## Start dev without the vault wrapper (internal; what make dev runs)
 	@for PIDFILE in .dev.pid .dev-api.pid; do \
 		DEV_PID=$$(cat $$PIDFILE 2>/dev/null); \
 		if [ -n "$$DEV_PID" ] && kill -0 $$DEV_PID 2>/dev/null; then \
@@ -255,12 +256,9 @@ gauntlet-clean: ## Remove the User Gauntlet fixture from the running dev session
 sessions-clean: ## Remove every session container and directory whose run has ended
 	@bun -e 'import { clearAbandonedSessions } from "./scripts/session.ts"; await clearAbandonedSessions()'
 
-stripe-webhooks: ## Forward Stripe test webhooks to the local API (run alongside `make dev`; needs the Stripe CLI)
+stripe-webhooks: ## Forward Stripe test webhooks to the local API (run alongside `make dev`; needs the Stripe CLI; key from the vault)
 	@command -v stripe >/dev/null 2>&1 || { echo "  Stripe CLI not found — install it (and optionally run 'stripe login')."; exit 1; }
-	@KEY=$$(grep -E '^STRIPE_SECRET_KEY=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'"); \
-	if [ -n "$$KEY" ]; then export STRIPE_API_KEY="$$KEY"; fi; \
-	echo "  Forwarding Stripe webhooks -> localhost:$(API_PORT)/api/payments/stripe/webhook"; \
-	stripe listen --forward-to localhost:$(API_PORT)/api/payments/stripe/webhook
+	@API_PORT=$(API_PORT) bun run scripts/stripe-webhooks-forward.ts
 
 # ─── Quality ───
 
@@ -275,16 +273,8 @@ stripe-webhooks: ## Forward Stripe test webhooks to the local API (run alongside
 # lock-free: editing, `make dev`, scoped `bun test <path>` runs, and the cheap checks.
 
 verify: ## Run everything CI runs: typecheck, lint, unit tests, full Playwright (heavy — waits behind another session's run when one is live)
+	@test -z "$(E2E_FILES)" || { echo "make verify never scopes the browser suites — the push gate runs every suite; unset E2E_FILES or scope an interactive run with make test-e2e" >&2; exit 64; }
 	@sh scripts/heavy-run.sh make --no-print-directory verify-inner
-
-# The arm ceremony, reached through the same script its `/arm` front door calls. It holds
-# the landing lock, reconciles and radars, constructs the projected tip, and runs the
-# whole suite (`make verify`, browser suites included) against it — see scripts/arm.ts.
-# It never merges directly and never touches the board: on green it prints the receipt
-# for the session to stamp.
-arm: ## Arm a PR through the landing front half's ceremony: make arm PR=<number>
-	@test -n "$(PR)" || { echo 'usage: make arm PR=<number>'; exit 64; }
-	@bun run scripts/arm.ts "$(PR)"
 
 # `verify`'s inner body, under the lock the wrapper above holds. Never run it directly —
 # `make verify` is the serialized door. The green run stamps the tree it ran
@@ -303,12 +293,12 @@ verify-inner:
 	bun run scripts/verify-stamp.ts write verify
 
 # `verify-fast` is what a push to a task branch verifies at the gate: everything except
-# what spins up Playwright. The browser suites still run — in CI, on the PR head and on
-# every merge group — where they are the responsibility of the pipeline rather than of the
-# session pushing. The tier's stamp is a fast stamp, which satisfies only a fast push; the
+# what spins up Playwright. The browser suites still run — in CI, on the PR head — where
+# they run parallel and free, rather than serializing under the machine-wide lock the way
+# a local run does. The tier's stamp is a fast stamp, which satisfies only a fast push; the
 # full suite's stamp satisfies everything (see scripts/verify-stamp.ts). Pushes to
 # `main` or `release` keep the whole `verify` regardless of what they change: `release` is
-# the deploy gate, and `main` is the branch every merge group is built on.
+# the deploy gate, and `main` is the branch every pull request lands on.
 verify-fast: ## Run what a task-branch push verifies: typecheck, lint, the unit suites — no Playwright (the browser suites run in CI)
 	@sh scripts/heavy-run.sh make --no-print-directory verify-fast-inner
 
@@ -480,20 +470,30 @@ test-e2e: e2e-preflight ## Run the Playwright e2e suite in its own session (heav
 
 # Inner bodies of the browser targets, under the lock the wrappers above hold — run the
 # make target, never these.
+#
+# `E2E_FILES` scopes a run to a space-separated list of specs, forwarded as Playwright's
+# positional file filter (`make test-e2e E2E_FILES="tests/e2e/login-code.e2e.ts"`), with
+# paths resolving against apps/web, where the session wrapper cds. Empty by default — the
+# token expands to nothing and the run is the full suite. The command-line or environment
+# form feeds the inner recipe directly (MAKEFLAGS / env), which is why the wrapper's argv
+# carries nothing about scope. The gate (`make verify`) refuses the variable on purpose:
+# a push verifies every suite. A scoped run still holds the heavy-run lock — the lane's
+# footprint (browsers, servers, the API's session) is what the lock is sized to, so the
+# scoping trims specs, never the lane.
 test-e2e-inner:
-	$(SESSION_BROWSER) bunx playwright test
+	$(SESSION_BROWSER) bunx playwright test $(E2E_FILES)
 
 test-e2e-ui: e2e-preflight ## Run the Playwright e2e suite in UI mode, in its own session (heavy — waits)
 	@sh scripts/heavy-run.sh make --no-print-directory test-e2e-ui-inner
 
 test-e2e-ui-inner:
-	$(SESSION_BROWSER) bunx playwright test --ui
+	$(SESSION_BROWSER) bunx playwright test --ui $(E2E_FILES)
 
 test-gauntlet: e2e-preflight ## Run the User Gauntlet spec pass in its own session (heavy — waits)
 	@sh scripts/heavy-run.sh make --no-print-directory test-gauntlet-inner
 
 test-gauntlet-inner:
-	$(SESSION_BROWSER) bunx playwright test --project=gauntlet
+	$(SESSION_BROWSER) bunx playwright test --project=gauntlet $(E2E_FILES)
 
 
 # ─── Desktop Studio (Tauri) ───

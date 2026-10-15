@@ -10,7 +10,7 @@
  * reaped *immediately* rather than waited out; and an unreadable lock falls back to the
  * age check. The reaping pins the 2026-10-15 fix: at the old thresholds a 30s waiter
  * could never outlive a 120s staleness verdict, so one dead holder poisoned every later
- * ceremony for the rest of the run (#499's merge group, the `main` push after it).
+ * ceremony for the rest of the run (#499's failed check, the `main` push after it).
  */
 
 import { describe, expect, it } from "bun:test";

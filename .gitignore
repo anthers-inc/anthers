@@ -75,7 +75,7 @@ blob-report/
 .playwright-mcp/
 
 # ─── Pipeline state ───
-# The landing front half's shared cache (locks, stamps, the landing ledger) — one directory
+# The verify lane's shared cache (the heavy-run lock, the verify stamps) — one directory
 # for every worktree and session, resolved through git's common dir (scripts/repo-cache.ts)
 /cache/
 

@@ -35,6 +35,7 @@ import { runRetentionSweep } from "../services/retention.js";
 import { sweepSignupChallenges } from "../services/signup-challenges.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
+import { runConnectionCensus } from "./connection-census.js";
 import { runDeadlineReminderSweep } from "./deadline-reminders.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
 import { runHlsOrphanSweep } from "./hls-orphan-sweep.js";
@@ -52,6 +53,7 @@ import { rescanOwed } from "./rescan-owed.js";
 import { markBenignInterrupted, resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
+import { statusSample } from "./status-sample.js";
 import { runStorageUsageSweep } from "./storage-usage.js";
 import { type SyncAtprotoRecordData, syncAtprotoRecordJob } from "./sync-atproto-record.js";
 import { type SyncWorkListingData, syncWorkListingJob } from "./sync-work-listing.js";
@@ -433,10 +435,35 @@ async function start() {
 		}
 	});
 
+	// The connection census: one email a day at most when the cluster nears exhaustion or
+	// refuses to be read, and nothing at all when it is healthy — silence is the signal that
+	// the watch is on and untroubled, and the sweep's own module docblock carries the two
+	// incidents that bought it. The handler logs only when the sweep alerted.
+	await queue.work(QUEUES.CONNECTION_CENSUS, async (jobs) => {
+		for (const job of jobs) {
+			const result = await runConnectionCensus();
+			if (result.alerted) {
+				console.log(
+					`[connection-census] job ${job.id}: alerted (${result.used} of ${result.usable} usable in use${result.error ? `; read failed: ${result.error}` : ""})`,
+				);
+			}
+		}
+	});
+
 	await queue.work(QUEUES.RESCAN_OWED, async (jobs) => {
 		for (const job of jobs) {
 			const sent = await rescanOwed();
 			if (sent > 0) console.log(`[rescan-owed] job ${job.id}: re-queued ${sent} scan(s)`);
+		}
+	});
+
+	// The status sampler: one composed answer per pass, into the record the public page's
+	// bars and Past Incidents render from. Always quiet in the log — a pass that stores
+	// only tallies has nothing a person would read, and the record's own gaps do the
+	// talking (an unrecorded day renders as an empty cell, never as all-clear).
+	await queue.work(QUEUES.STATUS_SAMPLE, async (jobs) => {
+		for (const _job of jobs) {
+			await statusSample();
 		}
 	});
 
