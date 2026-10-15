@@ -14,9 +14,10 @@
  * - **The login merge**: a basket built while logged OUT survives sign-in — the one place
  *   the anonymous scratch basket survives — after which the browser holds nothing, so B's
  *   basket following it is impossible by construction.
- * - **The mixed-creator merge**: the scratch held creator X's work and the account's
- *   basket holds creator Y's — the most recent intent wins (the add's replace-on-clash),
- *   the same rule the Work page's button has always kept.
+ * - **The mixed-creator merge**: the scratch held one creator's work and the account's
+ *   basket holds another's — both land (2026-10-15's decision ended the add's
+ *   replace-on-clash, so the basket carries any number of creators and the merge is
+ *   additive), and both the banner and the server read say so.
  *
  * The accounts are throwaways made with `db:local-account` and signed in through the
  * REAL `/login` UI — the emailed code off the session's mail catcher. The merge is wired
@@ -305,7 +306,7 @@ test("an anonymous scratch basket survives sign-in — the merge, then the scrat
 	await anon.close();
 });
 
-test("a mixed-creator merge — the scratch's most recent intent wins, and both sides say so", async ({
+test("a mixed-creator sign-in merge keeps both the account's and the scratch's intents, and both sides say so", async ({
 	browser,
 }) => {
 	if (!workX || !workY) throw new Error("the walk Works were not created");
@@ -379,15 +380,16 @@ test("a mixed-creator merge — the scratch's most recent intent wins, and both 
 	await scratchPage.getByRole("button", { name: /Add to basket/ }).click();
 	await expect(scratchPage.getByText("In your basket")).toBeVisible();
 
-	// Sign back in as A, whose basket holds X (creator X): the merge's add of the
-	// scratch item (creator Y) REPLACES the basket — most recent intent — and the
-	// account ends with Y alone.
+	// Sign back in as A. The account's basket holds X (creator X) and the scratch holds
+	// the other creator's Work: the merge is additive — a basket carries any number of
+	// creators (2026-10-15), so both intents land and the account ends with X and Y.
+	// The banner says so before the server read does.
 	await signInThroughUi(scratchPage, buyerAEmail);
 	await scratchPage.goto("/feed");
 	await expect(
-		scratchPage.getByRole("banner").getByRole("link", { name: /Basket \(1 item\)/ }),
+		scratchPage.getByRole("banner").getByRole("link", { name: /Basket \(2 items\)/ }),
 	).toBeVisible();
 	const after = await serverBasket(buyerACookie);
-	expect(after.workIds).toEqual([otherWork.id]);
+	expect(after.workIds).toEqual([workX.id, otherWork.id]);
 	await anon.close();
 });
