@@ -44,6 +44,7 @@ import { handlePruneAttention, type PruneAttentionData } from "./prune-attention
 import { publishScheduled } from "./publish-scheduled.js";
 import { runPurchaseTransferRetry } from "./purchase-transfer-retry.js";
 import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue, RETIRED_QUEUES } from "./queue.js";
+import { runConnectionCensus } from "./connection-census.js";
 import { reconcileListings } from "./reconcile-listings.js";
 import { releaseScheduled } from "./release-scheduled.js";
 import { type RemoveAtprotoRecordData, removeAtprotoRecordJob } from "./remove-atproto-record.js";
@@ -428,6 +429,21 @@ async function start() {
 				console.log(
 					`[watch-identities] job ${job.id}: ${alerts} ALERT(S), ${recorded} newly watched, ` +
 						`${checked} identity(ies) checked`,
+				);
+			}
+		}
+	});
+
+	// The connection census: one email a day at most when the cluster nears exhaustion or
+	// refuses to be read, and nothing at all when it is healthy — silence is the signal that
+	// the watch is on and untroubled, and the sweep's own module docblock carries the two
+	// incidents that bought it. The handler logs only when the sweep alerted.
+	await queue.work(QUEUES.CONNECTION_CENSUS, async (jobs) => {
+		for (const job of jobs) {
+			const result = await runConnectionCensus();
+			if (result.alerted) {
+				console.log(
+					`[connection-census] job ${job.id}: alerted (${result.used} of ${result.usable} usable in use${result.error ? `; read failed: ${result.error}` : ""})`,
 				);
 			}
 		}
