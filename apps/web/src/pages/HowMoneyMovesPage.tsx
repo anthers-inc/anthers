@@ -240,16 +240,19 @@ const LINK_DEFS: LinkDef[] = [
 	{ from: "card", to: "processor", value: cardTotal, group: "card", stroke: C.card },
 ];
 
-// Columns read largest to smallest within their stream (Parker's subtree ordering,
-// carried from the admin diagram): sources by kind, the Anthers subscription's ways
-// out by width, the terminals by width. `sort={false}` makes the array the order.
-const inColumn = (names: string[]) =>
-	NODE_DEFS.filter((n) => names.includes(n.name)).sort((a, b) => b.value - a.value);
+// Columns draw in narrative order, streams kept whole: the Anthers subscription
+// first (the hero strand — the only one feeding a pool), then the two pass-through
+// charges; the subscription's ways out and the terminals sort widest-first.
+// `sort={false}` makes the array the order.
+const inColumn = (names: string[], bySize: boolean) =>
+	bySize
+		? NODE_DEFS.filter((n) => names.includes(n.name)).sort((a, b) => b.value - a.value)
+		: NODE_DEFS.filter((n) => names.includes(n.name));
 
 const NODE_ORDER = [
-	...inColumn(["sA", "sD", "sP"]),
-	...inColumn(["card", "timePool", "remainder"]),
-	...inColumn(["creators", "processor", "programs"]),
+	...inColumn(["sA", "sD", "sP"], false),
+	...inColumn(["card", "timePool", "remainder"], true),
+	...inColumn(["creators", "processor", "programs"], true),
 ];
 
 const idx = new Map(NODE_ORDER.map((n, i) => [n.name, i] as const));
@@ -312,11 +315,11 @@ function FlowDiagram() {
 
 	return (
 		<figure className="my-6 w-full">
-			<ResponsiveContainer width="100%" height={560}>
+			<ResponsiveContainer width="100%" height={640}>
 				<Sankey
 					data={data}
 					nodeWidth={18}
-					nodePadding={18}
+					nodePadding={26}
 					align="left"
 					linkCurvature={0.55}
 					sort={false}
@@ -335,9 +338,9 @@ function FlowDiagram() {
 				/>
 			</ResponsiveContainer>
 			<p className="mt-1 text-xs text-base-content/60">
-				Three example charges, drawn all the way out. The figures on each capsule are the three
-				charges together; the percentages on the ribbons are each charge's own split, computed from
-				the same math the checkout runs. Hover any capsule or ribbon to light its stream.
+				Three example charges, drawn all the way out. The figures beside the deeper capsules are the
+				three charges together; the percentages on the ribbons are each charge's own split, computed
+				from the same math the checkout runs. Hover any capsule or ribbon to light its stream.
 			</p>
 		</figure>
 	);
@@ -525,7 +528,7 @@ export default function HowMoneyMovesPage() {
 						<tr>
 							<td>+ any amount beyond the top</td>
 							<td colSpan={3}>
-								— half to the Time Pool, the card line at cost, the rest the programs&rsquo;
+								— half to the Time Pool, the card line at cost, and the rest funds the programs
 							</td>
 						</tr>
 					</tbody>
