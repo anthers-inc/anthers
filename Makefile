@@ -88,21 +88,22 @@ hooks: ## Point git at the repo's tracked hooks (.githooks/)
 # REAL environment variables, and those beat Bun's `.env` loading, so a stale line left in
 # `.env` cannot shadow the vault.
 #
-# The fallback is warned rather than silent, and it is safe to have here for a reason worth
-# stating: getting it wrong costs you a dev server missing its secrets, which is loud
-# and local. That is the opposite of `spec-apply`, where a wrong source reaches production —
-# which is why that one refuses instead of falling back.
+# When bws is unavailable this refuses, on the same reasoning as `spec-apply`: the vault is
+# the secrets' one home and this Makefile's lanes read from nothing else, so there is
+# nothing to fall back to. Dev used to keep a fill-the-keys-into-`.env` list here, which is
+# exactly the hole the test lanes strip against — `scripts/stripe-secrets-off.ts` — and a
+# refusal at the source is what leaves that strip as the *only* consumer of a filled-in line.
 dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 	@if command -v bws >/dev/null 2>&1 && [ -s "$$HOME/.config/bws/anthers-dev-token" ]; then \
 		PID=$$(bun run scripts/bws-project-id.ts dev) || exit 1; \
 		BWS_ACCESS_TOKEN=$${BWS_ACCESS_TOKEN:-$$(cat $$HOME/.config/bws/anthers-dev-token)} \
 			bws run --project-id $$PID -- '$(MAKE) dev-local'; \
 	else \
-		echo "  -> bws unavailable; secrets must come from .env, which no longer holds them"; \
-		echo "     by default. Expect missing secrets unless you filled these in yourself:"; \
-		echo "       STRIPE_SECRET_KEY  STRIPE_WEBHOOK_SECRET  RESEND_API_KEY"; \
-		echo "       (use DEV values, never prod's)"; \
-		$(MAKE) dev-local; \
+		echo "  -> bws is unavailable, and dev secrets live in the \"Anthers Dev\" Bitwarden"; \
+		echo "     project — never in .env any more, so there is nothing to fall back to."; \
+		echo "     Restore the dev machine account (its token belongs at"; \
+		echo "     ~/.config/bws/anthers-dev-token) and run make dev again."; \
+		exit 1; \
 	fi
 
 # 🚨 **Every `make dev` starts from nothing and leaves nothing.** `scripts/session.ts` brings up a
@@ -135,7 +136,7 @@ dev: ## Start dev with secrets from the "Anthers Dev" Bitwarden project
 # The setup that makes this work is one command per machine — see
 # `packages/web-shared/src/lib/rpc.ts` beside the `portless.json` at the root for what
 # lands where.
-dev-local: ## Start dev reading secrets from .env (offline, or no vault access)
+dev-local: ## Start dev without the vault wrapper (internal; what make dev runs)
 	@for PIDFILE in .dev.pid .dev-api.pid; do \
 		DEV_PID=$$(cat $$PIDFILE 2>/dev/null); \
 		if [ -n "$$DEV_PID" ] && kill -0 $$DEV_PID 2>/dev/null; then \
@@ -255,12 +256,9 @@ gauntlet-clean: ## Remove the User Gauntlet fixture from the running dev session
 sessions-clean: ## Remove every session container and directory whose run has ended
 	@bun -e 'import { clearAbandonedSessions } from "./scripts/session.ts"; await clearAbandonedSessions()'
 
-stripe-webhooks: ## Forward Stripe test webhooks to the local API (run alongside `make dev`; needs the Stripe CLI)
+stripe-webhooks: ## Forward Stripe test webhooks to the local API (run alongside `make dev`; needs the Stripe CLI; key from the vault)
 	@command -v stripe >/dev/null 2>&1 || { echo "  Stripe CLI not found — install it (and optionally run 'stripe login')."; exit 1; }
-	@KEY=$$(grep -E '^STRIPE_SECRET_KEY=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'"); \
-	if [ -n "$$KEY" ]; then export STRIPE_API_KEY="$$KEY"; fi; \
-	echo "  Forwarding Stripe webhooks -> localhost:$(API_PORT)/api/payments/stripe/webhook"; \
-	stripe listen --forward-to localhost:$(API_PORT)/api/payments/stripe/webhook
+	@API_PORT=$(API_PORT) bun run scripts/stripe-webhooks-forward.ts
 
 # ─── Quality ───
 
