@@ -767,3 +767,49 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BEFORE: ${{ github.event.before }}
         run: bash scripts/release-notes.sh
+
+      # ─── The desktop's web build ───
+      #
+      # The desktop shell bundles a web-app build rather than pointing at the site, and
+      # the pinned asset its resolver downloads is the signed dist of THIS release,
+      # attached here. A promote's own tag is the blessing — no separate `web-v*` release
+      # channel and naming, and the blessed build is exactly the one production is live
+      # on. `anthers-desktop/package.json`'s `anthersWeb` pins one of these tags; the
+      # desktop verifies the archive's signature against its pinned key before it will
+      # unpack, so a release that ships without one is a release the desktop refuses.
+      #
+      # Runs after the tag and the notes, so the release exists to carry the assets, and
+      # only ever for a build production has already verified serving.
+      - uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build the web app
+        run: cd apps/web && bun run build
+      # `-C apps/web dist` puts entries under `dist/`, which is what the desktop
+      # resolver's `--strip-components=1` expects. Changing either without the other
+      # produces an archive that unpacks to the wrong depth and a window that loads
+      # nothing, with no error from tar.
+      - name: Pack the web dist
+        run: |
+          set -euo pipefail
+          test -f apps/web/dist/index.html || { echo "::error::no index.html in the build"; exit 1; }
+          tar czf web-dist.tar.gz -C apps/web dist
+          echo "packed $(du -h web-dist.tar.gz | cut -f1), $(tar tzf web-dist.tar.gz | wc -l) entries"
+      - name: Sign the web dist
+        env:
+          WEB_DIST_SIGNING_KEY: ${{ secrets.WEB_DIST_SIGNING_KEY }}
+        run: bun run scripts/sign-web-dist.ts web-dist.tar.gz
+      - name: Verify the signature at the release's own boundary
+        env:
+          WEB_DIST_SIGNING_KEY: ${{ secrets.WEB_DIST_SIGNING_KEY }}
+        run: bun run scripts/sign-web-dist.ts --self-verify web-dist.tar.gz
+      - name: Attach the signed web dist to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(awk -F'"' '/export const APP_VERSION/ {print $2}' packages/shared/src/version.ts)
+          test -f "web-dist.tar.gz.sig" || { echo "::error::no signature beside the packed web dist"; exit 1; }
+          gh release view "v${VERSION}" >/dev/null 2>&1 \
+            || { echo "::error::the release v${VERSION} does not exist — the notes step must create it first"; exit 1; }
+          gh release upload "v${VERSION}" web-dist.tar.gz web-dist.tar.gz.sig --clobber
