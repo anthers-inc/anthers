@@ -20,14 +20,16 @@ import { ArrowDownIcon, ArrowUpIcon, PlusIcon, XMarkIcon } from "@heroicons/reac
 import type { ReactNode } from "react";
 import { postUrl } from "../../lib/postUrl";
 import { Link } from "../../lib/router";
-import { studioEditWorkUrl, studioUrl } from "../../lib/studio";
+import { studioEditPostUrl, studioEditWorkUrl, studioUrl } from "../../lib/studio";
 import type { CreatorEarnings, PostListItem, Project, StorageReading, Work } from "../../lib/types";
 import type { WorkUpload } from "../../lib/work-uploads";
 import { processingQueue } from "./processing";
+import { buildSchedule } from "./studio-schedule";
 import { accessState } from "./work-state";
 
 export const PANEL_LABELS: Record<StudioPanel, string> = {
 	processing: "Processing",
+	schedule: "Schedule",
 	earnings: "Earnings",
 	catalog: "Catalog",
 	storage: "Storage",
@@ -99,6 +101,46 @@ export function StudioPanelBody({ panel, data }: { panel: StudioPanel; data: Pan
 										}`}
 									>
 										{row.detail}
+									</span>
+								</li>
+							))}
+						</ul>
+					)}
+				</Panel>
+			);
+		}
+
+		case "schedule": {
+			const items = buildSchedule({
+				works: data.works,
+				posts: data.posts,
+				editWorkUrl: (w) => studioEditWorkUrl(w.publicId ?? w.id),
+				editPostUrl: (p) => studioEditPostUrl(p.slug),
+			});
+			return (
+				<Panel title="Schedule">
+					{items.length === 0 ? (
+						<p className="text-sm text-base-content/60">
+							Nothing is scheduled. A Work can carry a release time in the Catalog, and a post a
+							publish time in its form — either goes out on its own when the time arrives.
+						</p>
+					) : (
+						<ul className="flex flex-col gap-1 text-sm">
+							{items.map((item) => (
+								<li key={item.id} className="flex items-center gap-2">
+									<Link to={item.href} className="link link-hover flex-1 truncate">
+										{item.title}
+									</Link>
+									<span className="badge badge-info badge-sm whitespace-nowrap">
+										{item.kind === "release" ? "Release" : "Post"}
+									</span>
+									<span className="whitespace-nowrap text-xs text-base-content/60">
+										{item.waiting
+											? "As soon as it's ready"
+											: new Date(item.at).toLocaleString(undefined, {
+													dateStyle: "medium",
+													timeStyle: "short",
+												})}
 									</span>
 								</li>
 							))}
