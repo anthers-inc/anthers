@@ -119,5 +119,15 @@ export const csrfProtection = createMiddleware(async (c, next) => {
  * delivery shape is safe by the same argument the desktop bearer's is: a same-page
  * attacker forges nothing that matters, because the write records *the attacker's own
  * error*, not the victim's state. See the route's docblock for the full ruling.
+ *
+ * The two traffic beacons (`routes/traffic.ts`) sit in this set for the same reason:
+ * a same-page attacker forges nothing that matters — the write records a page view and
+ * a card display, no state, no money, nothing addressed toward anyone. Their routes
+ * re-check Origin against the same allowlist, admitting an absent one (the one shape a
+ * plain `fetch` can lack) and refusing a present-but-foreign one outright.
  */
-const CSRF_EXEMPT_MUTATIONS = new Set(["/api/errors/browser"]);
+const CSRF_EXEMPT_MUTATIONS = new Set([
+	"/api/errors/browser",
+	"/api/traffic/page-view",
+	"/api/traffic/card",
+]);

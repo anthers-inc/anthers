@@ -24,6 +24,7 @@ import type {
 	AnalyticsOverview,
 	ContentAnalyticsItem,
 	CreatorEarnings,
+	CreatorTrafficResponse,
 	CrfSubsidy,
 	TimeseriesEntry,
 } from "../lib/types";
@@ -401,6 +402,118 @@ function FoundationSubsidySection({
 	);
 }
 
+// ─── Traffic (first-party, identity-free) ───
+
+const SOURCE_LABELS: Record<string, string> = {
+	direct: "Direct",
+	search: "Search",
+	social: "Social",
+	other: "Other sites",
+};
+
+/**
+ * Traffic, and deliberately its own card family: these figures count **visits** —
+ * where people arrived from, what they opened — while everything above counts
+ * **seconds** (attention, which pays). One number never restates the other, because
+ * a creator reading "3,400 pageviews" beside "40 hours" needs to know the two were
+ * measured by different pipelines for different purposes, and Anthers' traffic rows
+ * carry no identity at all: this is what Anthers measured, not who it measured.
+ */
+function TrafficSection({ period }: { period: string }) {
+	const [data, setData] = useState<CreatorTrafficResponse | null>(null);
+
+	useEffect(() => {
+		apiFetch(`/api/integrations/analytics/traffic?period=${period}`)
+			.then((res) => res.json())
+			.then((d) => setData(d as CreatorTrafficResponse))
+			.catch(() => {});
+	}, [period]);
+
+	if (!data) return null;
+	const { traffic, cards, series, sources } = data;
+	if (traffic.profileViews === 0 && cards.shown === 0) return null;
+
+	const ctr = cards.shown > 0 ? (cards.clicked / cards.shown) * 100 : 0;
+
+	return (
+		<div className="card bg-base-200 mb-8">
+			<div className="card-body p-4">
+				<h3 className="font-semibold text-sm mb-3">Traffic</h3>
+				<div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+					<div>
+						<div className="text-xs text-base-content/50">Profile Visits</div>
+						<div className="text-lg font-bold">{formatNumber(traffic.profileViews)}</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50">Cards Shown on Discover</div>
+						<div className="text-lg font-bold">{formatNumber(cards.shown)}</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50">Card Click-Throughs</div>
+						<div className="text-lg font-bold">{formatNumber(cards.clicked)}</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50">Click-Through Rate</div>
+						<div className="text-lg font-bold">{ctr.toFixed(1)}%</div>
+					</div>
+				</div>
+				{series.length > 0 && (
+					<SparkBar data={series.map((d) => d.views)} label="Visits per day" color="bg-primary" />
+				)}
+				{sources.length > 0 && (
+					<div className="flex flex-wrap gap-4 mb-4 mt-2">
+						{sources.map((s) => (
+							<div key={s.source} className="flex items-center gap-1.5">
+								<span className="text-xs text-base-content/70">
+									{SOURCE_LABELS[s.source] ?? s.source}: {formatNumber(s.views)}
+								</span>
+							</div>
+						))}
+					</div>
+				)}
+				{(traffic.topWorks.length > 0 || traffic.topProjects.length > 0) && (
+					<div className="overflow-x-auto">
+						<table className="table table-sm">
+							<thead>
+								<tr>
+									<th>Page</th>
+									<th className="text-right">Visits</th>
+								</tr>
+							</thead>
+							<tbody>
+								{traffic.topWorks.map((w) => (
+									<tr key={w.path}>
+										<td>
+											<Link to={w.path} className="link link-hover text-sm">
+												{w.path}
+											</Link>
+										</td>
+										<td className="text-right text-sm">{formatNumber(w.views)}</td>
+									</tr>
+								))}
+								{traffic.topProjects.map((p) => (
+									<tr key={p.path}>
+										<td>
+											<Link to={p.path} className="link link-hover text-sm">
+												{p.path}
+											</Link>
+										</td>
+										<td className="text-right text-sm">{formatNumber(p.views)}</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					</div>
+				)}
+				<p className="text-xs text-base-content/40 mt-2">
+					Visits are counted without identity — Anthers never sees who visited, only that pages were
+					visited, and a visit is not a person: the same browser counted twice reads as two visits.
+				</p>
+			</div>
+		</div>
+	);
+}
+
 // ─── Main Page ───
 
 export default function AnalyticsDashboardPage() {
@@ -481,6 +594,7 @@ export default function AnalyticsDashboardPage() {
 					<EventBreakdown overview={overview} />
 					<TimeseriesCharts timeseries={timeseries} />
 					<ContentPerformanceTable content={content} />
+					<TrafficSection period={period} />
 					<RevenueSection earnings={earnings} />
 					<FoundationSubsidySection crfStatus={crfStatus} />
 				</>
