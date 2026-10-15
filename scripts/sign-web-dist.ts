@@ -17,9 +17,10 @@
 //       untrusted comment: anthers web-dist Ed25519 signing key
 //       <base64 of the 32-byte raw public key>
 //
-// The private key lives ONLY in this repository's Actions secrets, as
-// `WEB_DIST_SIGNING_KEY`, in PKCS8 PEM form. It is not a file in either repository,
-// and it is never passed on a command line or printed. Rotating it is: generate a
+// The private key lives in this repository's Actions secrets, as
+// `WEB_DIST_SIGNING_KEY`, in PKCS8 PEM form, with a recovery copy in the team's
+// credential store outside both repositories. It is never a committed file, and it
+// is never passed on a command line or printed. Rotating it is: generate a
 // new pair with `--generate`, replace the secret, and replace the desktop's `.pub`
 // file — a single active key; if a consumer ever wants a ring, add it here first.
 //
