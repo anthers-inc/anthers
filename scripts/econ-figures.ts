@@ -78,12 +78,6 @@ import {
 	TIME_POOL_RATE,
 	timePoolFor,
 } from "../packages/shared/src/constants.js";
-import { anthersSupportBreakdown, paymentsSplit } from "../packages/shared/src/fees.js";
-import {
-	DEFAULT_PLAN_PHASES,
-	PLAN_DEFAULTS,
-	planLedgerFor,
-} from "../packages/shared/src/financial-plan.js";
 import {
 	insideOrganization as insideOrganizationAt,
 	organizationDir,
@@ -264,112 +258,11 @@ async function formatted(source: string): Promise<string> {
 }
 
 // ── 1. The generated module the app reads ────────────────────────────────────
-/**
- * The plan's path, per phase, decomposed for the public resource — the drawing
- * behind "where does Anthers revenue go" (`/resources/revenue`) and anything
- * else that quotes the plan.
- *
- * The public page may not import `financial-plan.ts` (the decimal chain through
- * growth → fees), so it draws THESE numbers — computed here from the authored
- * plan in shared, the same rows the admin tool seeds, with the per-rung counts
- * read from `modelAt` itself (`payersByRung`) and each rung's money split
- * composed from the same published primitives (`anthersSupportBreakdown`,
- * `paymentsSplit`). No formula is authored twice.
- *
- * The conservation asserts are the point: inflows must equal the three
- * obligations-plus-remainder, the remainder must equal what the plan ledger
- * computes, and the hierarchy inside it (Admin + Programs, then the programs
- * within Programs) must close. A drift in ANY of the shared math fails this
- * generator — which `make verify` runs — rather than quietly publishing a
- * drawing whose strands don't add up.
- */
-function planPathFigure() {
-	/** Badge names by monthly amount — `Root $3`, `Sprout $6`, and so on. */
-	const names = new Map<number, string>(
-		badgeTable().map((r) => [Number(r.monthly), r.badge as string]),
-	);
-	const round = (n: number) => Math.round(n * 100) / 100;
-
-	return DEFAULT_PLAN_PHASES.map((row) => {
-		const L = planLedgerFor(row, PLAN_DEFAULTS);
-		const inflows = L.payersByRung
-			.filter((r) => r.accounts > 0)
-			.map((r) => ({
-				/** The rung's monthly amount; the name is resolved by the reader UI. */
-				rung: r.amount,
-				accounts: r.accounts,
-				/** Gross $/mo — the whole of what those accounts give. */
-				given: round(r.amount * r.accounts),
-				badge: names.get(r.amount) ?? null,
-			}));
-
-		// Each rung's split, from the published primitives — the same call
-		// `modelAt` makes per rung, so the sums ARE the ledger's.
-		let support = 0;
-		let card = 0;
-		let pools = 0;
-		for (const r of L.payersByRung) {
-			const bd = anthersSupportBreakdown(r.amount, {
-				payments: paymentsSplit(r.amount, 0).anthers,
-			});
-			support += bd.given.toNumber() * r.accounts;
-			card += bd.payments.toNumber() * r.accounts;
-			pools += bd.timePool.toNumber() * r.accounts;
-		}
-		const close = (a: number, b: number, what: string) => {
-			if (Math.abs(a - b) > 1e-6) throw new Error(`plan path conservation — ${what}: ${a} ≠ ${b}`);
-		};
-		close(support, card + pools + L.charitableRevenue, "inflows into commitments + remainder");
-		close(pools, L.timePoolToCreators - L.freeAccess, "paying pools beside the Fund's free pools");
-		close(L.adminBudget + L.programs, L.charitableRevenue, "remainder into admin + programs");
-		close(
-			L.freeAccess + L.freeStorage + L.otherPrograms,
-			L.programs,
-			"programs into Free Access + Free Storage + Other Programs",
-		);
-
-		return {
-			phase: row.phase,
-			label: row.label,
-			accounts: row.accounts,
-			creators: Math.round(L.creators),
-			payingAccounts: L.payingAccounts,
-			freeAccounts: Math.max(0, Math.round(L.freeAccounts)),
-			payingShare: row.payingShare,
-			inflows,
-			card: round(card),
-			payingPools: round(pools),
-			remainder: round(L.charitableRevenue),
-			adminBudget: round(L.adminBudget),
-			adminSpending: {
-				infrastructure: round(L.spending.infrastructure),
-				staff: round(L.spending.staff),
-				tooling: round(L.spending.tooling),
-				services: round(L.spending.services),
-				reserves: round(L.spending.reserves),
-				headroom: round(L.spending.headroom),
-			},
-			adminWithinCeiling: L.adminWithinCeiling,
-			adminCeiling: L.adminCeiling,
-			programs: round(Math.max(0, L.programs)),
-			freeAccess: round(L.freeAccess),
-			freePools: round(L.freeAccess),
-			freeSlice: round(L.freeSlice),
-			freeCatalog: round(L.spending.freeCatalog),
-			payingAllowances: round(L.spending.payingAllowances),
-			otherPrograms: round(Math.max(0, L.otherPrograms)),
-			solvent: L.solvent,
-		};
-	});
-}
-
-// ── 1. The generated module the app reads ────────────────────────────────────
 function renderModule(): string {
 	const badges = badgeTable();
 	const sales = saleTable();
 	const receipt = sampleReceipt();
 	const seed = directedSupportWorstCase();
-	const planPath = planPathFigure();
 	const j = (v: unknown) => JSON.stringify(v, null, "\t").replace(/\n/g, "\n");
 	return `// SPDX-License-Identifier: Apache-2.0
 //
@@ -397,20 +290,6 @@ export const SAMPLE_RECEIPT = ${j(receipt)} as const;
 
 /** A lone $3 to one creator — the worst case, and what creator-facing copy quotes. */
 export const DIRECTED_SUPPORT_WORST_CASE = ${j(seed)} as const;
-
-/**
- * The financial plan's path, per phase — the drawing behind
- * \`/resources/revenue\`, "where does Anthers revenue go". Computed from the
- * authored plan in \`financial-plan.ts\` (the same rows the admin tool seeds)
- * through \`planLedgerFor\`, with each phase's inflows by Badge rung and the
- * commitments carved out before the remainder. Conservation is asserted in the
- * generator: the inflows sum to processing + pools + remainder, and the
- * remainder closes into Admin + Programs and the programs within them.
- *
- * ⚠️ **Targets and estimates, never actuals** — this is the PLAN, not a report
- * of money that has moved, and the page that draws it says so.
- */
-export const PLAN_PATH = ${j(planPath)} as const;
 
 /**
  * The storefronts a creator actually compares us with, and their revenue share.
