@@ -98,6 +98,7 @@ const CreatorMonetizationCalculatorPage = lazy(
 	() => import("./pages/CreatorMonetizationCalculatorPage"),
 );
 const CreatorPayComparisonPage = lazy(() => import("./pages/CreatorPayComparisonPage"));
+const HowMoneyMovesPage = lazy(() => import("./pages/HowMoneyMovesPage"));
 const CreatorProfilePage = lazy(() => import("./pages/CreatorProfilePage"));
 const DesktopAuthorizePage = lazy(() => import("./pages/DesktopAuthorizePage"));
 const DiscoverPage = lazy(() => import("./pages/DiscoverPage"));
@@ -396,11 +397,13 @@ export default function App() {
 					<Route path="/resources/pay-comparison" element={<CreatorPayComparisonPage />} />
 					{/* `/resources/revenue` was deleted on 2026-10-15. It drew the financial
 					    plan's projections, and projections this early and this in flux make
-					    a public page muddier rather than more transparent. A "right now"
-					    resource — how a gift and a purchase actually split, drawn as
-					    percentages — replaces it in the resources revamp; the projections
-					    stay in the admin console's plan tool. See the vault's
-					    "Revisit the public-facing Resources as a whole, a larger revamp". */}
+					    a public page muddier rather than more transparent. The mechanism
+					    page replaces it: how a monthly subscription's money splits and how
+					    a purchase passes through, drawn in percentages — no plan phases, no
+					    account mix. The projections stay in the admin console's plan tool.
+					    See the vault's "Revisit the public-facing Resources as a whole, a
+					    larger revamp". */}
+					<Route path="/resources/how-money-moves" element={<HowMoneyMovesPage />} />
 					<Route path="/resources/video-storage" element={<VideoStorageCalculatorPage />} />
 					<Route
 						path="/resources/creator-monetization"
