@@ -7,11 +7,12 @@
  * 🚨 **Every defense on this route is load-bearing, and each one answers a named shape:**
  *
  *   • **Origin allowlist, re-checked here** — present-but-foreign refused, absent
- *     admitted (the same ruling `routes/errors.ts` carries; a beacon's `fetch` always
- *     sets Origin, but a missing one is a client quirk, not an attack). This route is
- *     deliberately NOT exempted in `middleware/csrf.ts`: unlike the error beacon, our
- *     beacons reliably carry Origin, so the blanket check applies and the route's own
- *     re-check is the strictness, not a substitute for an exemption.
+ *     admitted. The route is exempted in `middleware/csrf.ts` for the same reason the
+ *     error beacon is (the blanket check refuses an absent Origin; the write is not
+ *     cookie-forgeable to any effect — a page view records nothing addressed toward
+ *     anyone), and the route's own re-check is the strictness that replaces it: a
+ *     plain `fetch` always sets Origin, so the one shape that can arrive without one
+ *     is a client quirk, not an attack.
  *
  *   • **Per-IP rate limit, shared storage** — door `traffic-beacon`, the same limiter
  *     every other door uses. A real tab fires one beacon per page view; the cap is

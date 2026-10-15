@@ -77,6 +77,10 @@ const ANALYTICS_ROUTES = [
 	"/api/integrations/analytics/overview",
 	"/api/integrations/analytics/content",
 	"/api/integrations/analytics/timeseries",
+	// Traffic (2026-10-15) — measured site-wide with no identity on the rows at all,
+	// so a leak here would be a visitor's shape, not one of these two accounts'. The
+	// route joins the walk so the property extends to the new surface by construction.
+	"/api/integrations/analytics/traffic",
 ] as const;
 
 /**

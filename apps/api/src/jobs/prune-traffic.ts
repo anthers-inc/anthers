@@ -115,7 +115,7 @@ export async function pruneTraffic(data: PruneTrafficData = {}): Promise<PruneTr
 				LEFT JOIN projects p ON p.id = ci.subject_id AND ci.subject_kind = 'project'
 				WHERE to_char(ci.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') = ${day}
 				  AND ci.created_at < ${cutoffIso}::timestamptz
-				GROUP BY ci.subject_kind, ci.subject_id, ci.surface
+				GROUP BY ci.subject_kind, ci.subject_id, ci.surface, p.creator_id
 				ON CONFLICT (day, subject_kind, subject_id, surface) DO UPDATE SET
 					shown = excluded.shown,
 					clicked = excluded.clicked,
