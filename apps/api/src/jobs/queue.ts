@@ -342,6 +342,11 @@ export const QUEUES = {
 	// `connection-census.ts` for why the dedupe is in memory rather than in a table.
 	CONNECTION_CENSUS: "connection-census",
 	PURCHASE_TRANSFER_RETRY: "purchase-transfer-retry",
+	// Sample every component of the composed public status answer into the recorded
+	// history — the day tallies behind the status page's uptime bars and the transitions
+	// behind its Past Incidents. See status-sample.ts and services/status-history.ts,
+	// the tables' only writer.
+	STATUS_SAMPLE: "status-sample",
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -639,6 +644,11 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// so the retry cadence is minutes, not the small hours. The scan is one query on an
 	// empty worklist, so the cadence is free when nothing is owed.
 	[QUEUES.PURCHASE_TRANSFER_RETRY, "*/15 * * * *"],
+	// Every five minutes — the record's grain. The public status page renders history at
+	// day grain from these samples, and the minute-level alarm that must notice a short
+	// outage is the droplet heartbeat's (a different failure domain with its own cron),
+	// so sampling at the heartbeat's cadence would buy nothing the page can show.
+	[QUEUES.STATUS_SAMPLE, "*/5 * * * *"],
 	// Every fifteen minutes because the two incidents this watches for were minutes long:
 	// the 10-10 stall lasted about five, and a census that runs hourly can sit out a whole
 	// failure. The read is one cheap query pair, and the alarm's day budget already bounds

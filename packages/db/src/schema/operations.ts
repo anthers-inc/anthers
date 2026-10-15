@@ -237,3 +237,110 @@ export const errorEvents = pgTable(
 		index("idx_error_events_first_seen").on(table.firstSeenAt),
 	],
 );
+
+// org — public status telemetry, the same classification as `resource_snapshots`: the record
+// behind the status page's uptime bars and Past Incidents section. The row's subject is
+// Anthers' own infrastructure; nothing here is about a creator or a visitor's anything.
+/**
+ * One component's availability tallies for one UTC day, the record the status page's
+ * uptime bars and percentages render from.
+ *
+ * 🚨 **The day bucket, not the sample, is the public surface's grain.** The sampler
+ * (`jobs/status-sample.ts`, every five minutes) upserts one row per component per day,
+ * incrementing the tallies; the bars' per-day worst state and the availability percentage
+ * both derive from these counts, and no raw sample ever persists — a 90-day × 5-minute
+ * sample history is 78k rows a stranger-facing page does not need, while these counts are
+ * exactly the two things the page renders. `day` is ISO `YYYY-MM-DD` text in UTC, the
+ * convention every billing date in this schema carries.
+ *
+ * ⚠️ **The percent uptime the page shows counts degraded samples against it** —
+ * `(checks − degraded − down) / checks`, the convention a professional status page's own
+ * availability figure carries, not a claim that degraded is downtime.
+ */
+export const statusHistory = pgTable(
+	"status_history",
+	{
+		id: serial("id").primaryKey(),
+		/**
+		 * The component's stable history key (`api`, `worker`, `database`, …), from
+		 * `HISTORY_COMPONENTS` in `services/status-history.ts` — the one place that maps
+		 * the status answer's display names onto these keys, so a rename is a deliberate
+		 * edit there rather than a silent fork of the record.
+		 */
+		component: text("component").notNull(),
+		/** The UTC day the tallies cover, `YYYY-MM-DD`. */
+		day: text("day").notNull(),
+		/** Samples recorded this day for this component, all states. */
+		checks: integer("checks").notNull().default(0),
+		/** Samples that answered `degraded`. */
+		degraded: integer("degraded").notNull().default(0),
+		/** Samples that answered `down`. */
+		down: integer("down").notNull().default(0),
+	},
+	(table) => [
+		// The sampler's upsert target and the read feed's walk; the prune's walk is by day.
+		uniqueIndex("idx_status_history_component_day").on(table.component, table.day),
+		index("idx_status_history_day").on(table.day),
+	],
+);
+
+// org — the public status page's incident record, and a row's subject is an outage window of
+// Anthers' own infrastructure — the same classification the two tables above carry.
+/**
+ * One incident window: from the first non-operational sample a component gave the sampler
+ * until its first operational one. The writer is `services/status-history.ts`'s
+ * `recordStatusSample` alone — the sampler's transitions are the only thing that opens,
+ * escalates or resolves a row, and no route mutates this table (a page renders it; an
+ * operator's narrative updates are the follow-up, not this design's).
+ *
+ * **The window's bounds are the sampler's, not the outage's.** Incidents shorter than the
+ * sampling cadence are invisible here entirely, and both edges of a recorded window land
+ * at sample times — the record is honest about being a five-minute-grain reading, which
+ * is the minute-level alert email's complement rather than its rival.
+ */
+export const statusIncidents = pgTable(
+	"status_incidents",
+	{
+		id: serial("id").primaryKey(),
+		/** The component's stable history key, as `status_history.component`. */
+		component: text("component").notNull(),
+		/** The worst state the window reached: `degraded` or `down` (nothing else opens a row). */
+		severity: text("severity").notNull(),
+		/** When the component's first non-operational sample in this window was recorded. */
+		openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+		/** When the first operational sample closed the window. Null while the incident is ongoing. */
+		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+	},
+	(table) => [
+		// The feed reads a window (newest first); resolution is the open-incident lookup's half.
+		index("idx_status_incidents_component_opened").on(table.component, table.openedAt),
+		index("idx_status_incidents_resolved").on(table.resolvedAt),
+	],
+);
+
+// org — one recorded transition inside an incident window, the dated timeline a reader
+// scrolls under the incident's title. Written only beside the window's own transitions by
+// the same writer `status_incidents` has, never after the fact.
+export const statusIncidentUpdates = pgTable(
+	"status_incident_updates",
+	{
+		id: serial("id").primaryKey(),
+		incidentId: integer("incident_id")
+			.notNull()
+			.references(() => statusIncidents.id, { onDelete: "cascade" }),
+		/** When the transition was recorded — the timeline's display stamp. */
+		at: timestamp("at", { withTimezone: true }).notNull(),
+		/** The state the component entered at this transition: `degraded`, `down`, or `operational` on the one that resolves. */
+		severity: text("severity").notNull(),
+		/**
+		 * The component's own detail sentence at the transition, when it carried one —
+		 * stored as sampled, rendered verbatim. Empty when the state had nothing to say
+		 * (an operational resolution usually does not).
+		 */
+		note: text("note").notNull().default(""),
+	},
+	(table) => [
+		// The feed reads one incident's updates in order.
+		index("idx_status_incident_updates_incident_at").on(table.incidentId, table.at),
+	],
+);

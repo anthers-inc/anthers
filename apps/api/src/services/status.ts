@@ -98,10 +98,13 @@ export async function statusReport(): Promise<StatusReport> {
 	// and a down one degrades the page's overall state rather than claiming all-clear.
 	// Its `since` is when its present answer began — the last report's own timestamp,
 	// whether that report named trouble or has merely gone stale — so the page can say
-	// how long the outside check has been saying this, not only that it is.
+	// how long the check has been saying this, not only that it is. The name is the
+	// reader's question ("is the site up?") rather than the machinery's ("how the answer
+	// was measured"): a row's name names the product, the pill says its state, and any
+	// detail about where the answer came from renders only when it is not fine.
 	const externalState = heartbeatComponentState(heartbeat.state);
 	components.push({
-		name: "Outside view",
+		name: "Website",
 		state: externalState,
 		...(heartbeat.detail ? { detail: heartbeat.detail } : {}),
 		...(externalState !== "operational" && heartbeat.lastReportAt

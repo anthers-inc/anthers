@@ -50,8 +50,6 @@ fi
 mkdir -p "$(dirname "$ANTHERS_HEAVY_RUN_LOCK")"
 exec 9>>"$ANTHERS_HEAVY_RUN_LOCK"
 
-exec 9>>"$ANTHERS_HEAVY_RUN_LOCK"
-
 # Say "waiting" the moment the lane is found held, then every 15s while still held — a
 # watcher reading a silent, queued run as a hang is the same failure the push hook's
 # per-step announcements exist to stop. The lock itself is released by the kernel the
