@@ -278,9 +278,10 @@ verify: ## Run everything CI runs: typecheck, lint, unit tests, full Playwright 
 	@sh scripts/heavy-run.sh make --no-print-directory verify-inner
 
 # The arm ceremony, reached through the same script its `/arm` front door calls. It holds
-# the landing lock, reconciles and radars, constructs the projected tip, and runs the fast
-# tier against it — see scripts/arm.ts. It never merges directly and never touches the
-# board: on green it prints the receipt for the session to stamp.
+# the landing lock, reconciles and radars, constructs the projected tip, and runs the
+# whole suite (`make verify`, browser suites included) against it — see scripts/arm.ts.
+# It never merges directly and never touches the board: on green it prints the receipt
+# for the session to stamp.
 arm: ## Arm a PR through the landing front half's ceremony: make arm PR=<number>
 	@test -n "$(PR)" || { echo 'usage: make arm PR=<number>'; exit 64; }
 	@bun run scripts/arm.ts "$(PR)"
