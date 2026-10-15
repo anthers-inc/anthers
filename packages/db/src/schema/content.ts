@@ -1029,6 +1029,63 @@ export const workSaves = pgTable(
 );
 
 /**
+ * Where a reader got to in a book Work — one row per account and Work, carrying both
+ * the resume pointer the readers open at and the 0–1 progress the Bookshelf's rail and
+ * spine ribbons draw.
+ *
+ * 🚨 **Authoritative and unpublished** — arrangement three of *Where the Data Is Canonical*,
+ * by the page's own three-question test: a reading position is per-person consumption state,
+ * so it never becomes an `org.anthers.*` record, it carries **no `atproto_uri` column, and
+ * none may ever join it**. The row is the user's own state beside the shelf, read and written
+ * through `requireAuth` routes that only ever touch the caller's own rows (`services/
+ * reading-positions.ts` is the one writer). It is kept deliberately OUT of the analytics
+ * estate: no creator surface, no rollup, nothing derived that survives the account — and it
+ * does not touch the Privacy Policy's attention-event deletion promise, which governs
+ * `attention_events` and its rollup, not the user's own resume pointers.
+ *
+ * **Newest-write-wins, and that is the whole conflict rule.** Whatever a device pushed last
+ * is where the reader is; a row exists to say "resume here", and resume means where the
+ * reader most recently actually was — not the furthest they once got, which would refuse a
+ * re-read by dragging the opening back to the high-water mark. (The further-along rule between
+ * the page and panel keys on one device is the marker's local reconciliation and stays local;
+ * the server never arbitrates modes.)
+ *
+ * **The pointer is opaque to the server** — `{ page, panel }` for a paged Work, `{ cfi }` for
+ * a reflow one, `{}` for a text Work whose fraction is the whole position. The server stores
+ * and returns it; only the client's readers interpret it, which keeps each reader's own shape
+ * out of the schema.
+ */
+// org — the user's records (same reasoning as `libraryItems`: the user has no node in
+// the current topology). The row is about one Work, but it is not the creator's content
+// and is invisible to them — a pointer a person keeps, not a content record.
+export const readingPositions = pgTable("reading_positions", {
+	id: serial("id").primaryKey(),
+	userId: integer("user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
+	// Cascade, like `workSaves`: a position is a preference pointing at its Work, so it
+	// goes when the Work goes — and a withdrawn Work keeps its row, because withdrawal is
+	// visibility, not deletion.
+	workId: integer("work_id")
+		.notNull()
+		.references(() => works.id, { onDelete: "cascade" }),
+	/** How far the reader got across the whole Work, 0–1 — the one currency every spine
+	 *  ribbon reads, whatever the reader's native shape (pages, CFI, scroll). The rail's
+	 *  membership test reads this column and nothing else. */
+	progress: real("progress").notNull(),
+	/** The type-specific resume pointer, opaque to the server — see the table's docblock. */
+	position: jsonb("position").$type<Record<string, unknown>>().notNull().default({}),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	// The newest-write-wins column: an upsert sets it, and the rail's recency order reads it.
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+	// A reading position per (account, Work) — the rail's whole interface in one index.
+	uniqueIndex("uq_reading_positions_user_work").on(table.userId, table.workId),
+	// Recency is the rail's order; the list reads the user's rows by it.
+	index("idx_reading_positions_user_updated").on(table.userId, table.updatedAt),
+]);
+
+/**
  * Comments, polymorphic over what they're attached to.
  *
  * A comment hangs off a **Post** (discussion of an announcement) or a **Work** (discussion

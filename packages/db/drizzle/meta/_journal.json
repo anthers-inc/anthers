@@ -1030,6 +1030,13 @@
       "when": 1792087944717,
       "tag": "20261015-181224_known_sentry",
       "breakpoints": true
+    },
+    {
+      "idx": 147,
+      "version": "7",
+      "when": 1792099289897,
+      "tag": "20261015-212129_lethal_purple_man",
+      "breakpoints": true
     }
   ]
 }
