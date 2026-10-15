@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: Apache-2.0
-import Decimal from "decimal.js";
 
 export const APP_NAME = "Anthers";
 
@@ -172,15 +171,6 @@ export const MERCH_BADGE_DISCOUNT: Record<Badge, string> = {
 	petal: "20",
 	blossom: "25",
 };
-
-/** The discount's multipliers, as the checkout's Decimal arithmetic reads them — 10% → "0.10". */
-/** The discount's multipliers, as the checkout's Decimal arithmetic reads them — 10% → "0.10". */
-export const MERCH_BADGE_DISCOUNT_RATE: Record<Badge, string> = Object.fromEntries(
-	Object.entries(MERCH_BADGE_DISCOUNT).map(([badge, percent]) => [
-		badge,
-		new Decimal(percent).dividedBy(100).toFixed(2),
-	]),
-) as Record<Badge, string>;
 
 /**
  * **Free is the absence of a Badge, not a Badge at $0** (Parker, 2026-10-03, reversing the

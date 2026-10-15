@@ -20,6 +20,7 @@
 import { afterAll } from "bun:test";
 import { holdUnitTestLock, isFullUnitTestRun } from "./heavy-run.ts";
 import { reusesSession, startSession } from "./session.ts";
+import "./stripe-secrets-off.ts";
 
 // The verify lane's machine-wide lock, before any session starts (the session boot is part
 // of the run that must not overlap another session's). `heavy-run.ts` covers the
@@ -57,19 +58,10 @@ if (!reusesSession(process.env.ANTHERS_SESSION, "test")) {
 }
 
 // 🚨 **A test session runs with Stripe unconfigured, whatever the checkout's `.env` holds.**
-// Bun auto-reads `.env` into this process before any preload runs, so a developer's real
-// dev-session secrets (`STRIPE_SECRET_KEY` and the webhook secrets) arrive here with it — and
-// every suite that pins unconfigured payments by the `paymentsConfigured()` 503
-// (`basket-storage.test.ts` is the shape: "the refusal paths run without Stripe") then walks
-// past the 503 into the connected-account refusals and fails on a machine it once passed on,
-// while CI's env-less container keeps passing. The Stripe-faking suites need nothing from the
-// environment — they inject through `setStripeClient` — and no suite reads the key itself, so
-// the honest test environment is "no processor unless a suite fakes one". Deleted here, before
-// the first test file loads, on both session paths (a CI container carries none anyway);
-// `make dev` and the browser-session kinds are unaffected — this file is the unit-test lane.
-delete process.env.STRIPE_SECRET_KEY;
-delete process.env.STRIPE_WEBHOOK_SECRET;
-delete process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+// The deletes and their reasoning are owned by ./stripe-secrets-off.ts, which this preload
+// imports — the unit lane's half of the invariant. The browser lane's half sits at its API
+// webServer launch (`apps/web/playwright.config.ts` preloads the same module into the API
+// process); `make dev` is the legitimate consumer the deletes must not touch.
 
 // The Anthers Badge ladder is platform state, and every test session needs it: any suite
 // that reads "what does this account hold on Anthers' ladder" throws loudly when the

@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The repository's shared cache — the one directory every worktree and every session
- * resolves for pipeline state: the heavy-run lock, the verify stamps, the landing
- * ledger and lock, the arm-gate scratch cache.
+ * resolves for pipeline state: the heavy-run lock and the verify stamps.
  *
  * It lives at `cache/` in the main checkout, gitignored, so the pipeline's state is
  * encapsulated inside the project that owns it rather than scattered under the user's

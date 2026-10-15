@@ -22,8 +22,9 @@
  */
 import { db } from "@anthers/db/client";
 import { billingAccounts, supportReductions, users } from "@anthers/db/schema";
-import { cycleKeyFor, nextCycleKey, reductionFor } from "@anthers/shared/billing-cycle";
+import { cycleKeyFor, nextCycleKey } from "@anthers/shared/billing-cycle";
 import { STRIPE_MIN_CHARGE } from "@anthers/shared/constants";
+import { reductionFor } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type Stripe from "stripe";

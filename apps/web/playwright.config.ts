@@ -230,9 +230,19 @@ export default defineConfig({
 			// loop is bounded so a genuinely un-startable API still fails fast rather than
 			// spinning, and each restart prints a line — if these appear, the crash is still
 			// happening and the Bun version is worth revisiting, so do not let it go quiet.
+			// 🚨 **The API loads a checkout's `.env` itself** — `--env-file` stays, for the
+			// non-secret config that legitimately lives there — so the processor's secrets
+			// are deleted in the API's own process, not in this runner: the command preloads
+			// `scripts/stripe-secrets-off.ts`, whose deletes run after the file load and
+			// before the entry imports the Stripe client it would otherwise bake in. The
+			// unit lane's half of the same invariant is the module's other consumer (through
+			// `session-preload.ts`); `make dev` is the one legitimate consumer it must not
+			// touch. Without this, a checkout whose `.env` ever carries `STRIPE_SECRET_KEY`
+			// hands the suite a live-configured payments stack and the "not configured" 503
+			// assertions walk past their own guard.
 			command: process.env.CI
 				? 'for i in 1 2 3 4 5; do bun src/server.ts && break; echo "[api] exited unexpectedly — restart $i/5"; sleep 1; done'
-				: `${REQUIRE_SESSION} && bun --env-file=../../.env src/server.ts`,
+				: `${REQUIRE_SESSION} && bun --env-file=../../.env --preload=../../scripts/stripe-secrets-off.ts src/server.ts`,
 			cwd: apiDir,
 			url: `http://localhost:${API_PORT}/health`,
 			/*
