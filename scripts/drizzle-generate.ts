@@ -100,8 +100,8 @@ if (!interesting.length) {
 }
 
 // The retag: the migration's file carries a timestamp prefix instead of the sequence
-// number, so two parallel schema branches can never generate the same name and the
-// merge queue never sees the double-bounce collision this pipeline taught. See
+// number, so two parallel schema branches can never generate the same name, closing the
+// double-bounce collision this pipeline taught. See
 // `retagNewestMigration` — it runs here, after drizzle-kit's own file and journal
 // entry exist, gated to the entry this run created, and its outcome joins the
 // wrapper's output.

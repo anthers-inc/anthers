@@ -33,14 +33,6 @@ on:
   push:
     branches: [main, release]
   pull_request:
-  # The merge queue ("Require merge queue" in `main`'s branch protection) validates
-  # each queued group on a temporary `gh-readonly-queue/main/…` branch and dispatches a
-  # `merge_group` event. The five required checks must be reported on that event, or the
-  # queue times every entry out while waiting for checks that never arrive — so no job
-  # that reports one may be renamed, moved behind a filter that misses this event, or
-  # skipped on it. `deploy` stays push-and-`release`-only by its own `if`; a merge group
-  # is a candidate, not a landing.
-  merge_group:
 
 jobs:
   # Has this code already been tested?
@@ -312,9 +304,8 @@ jobs:
     # 🚨 The suite's wall-clock varies with the runner's day, and the ceiling must hold
     # through the slow ones: on 2026-10-14 this job's normal ~4m20s became 12m48s on the
     # same tree in a slow runner window — killed by the 12m budget as an unexamined
-    # cancellation with zero failure output, which red-gated the queue with nothing to
-    # read. The budget exists to bound a hung run, never to be the thing a slow-but-
-    # finishing run dies of; 30m is the slow window's honest shape.
+    # cancellation with zero failure output. The budget exists to bound a hung run, never
+    # to be the thing a slow-but-finishing run dies of; 30m is the slow window's honest shape.
     timeout-minutes: 30
 
     # Still needed, and worth being clear why when the point of this job is "no external
