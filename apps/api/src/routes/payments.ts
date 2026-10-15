@@ -225,12 +225,15 @@ async function resolvePurchase(slug: string, userId: number) {
  *   than quoted at zero, because a zero delta is not a discount, it is a no-op.
  *
  * One ladder per basket line and one line per ladder are the basket service's rules; the
- * money refusals are all here, at the door where they are honest.
+ * money refusals are all here, at the door where they are honest. ⚠️ The Stripe-side
+ * half — the rung's Product — is priced only when the caller will build a session
+ * (`needsProduct`): a quote names prices the database knows, so a quote stays free of
+ * processor calls the same way a Work's quote always was.
  */
 async function resolveBadgePurchase(
 	badgeId: number,
 	userId: number,
-	opts?: { atCheckout?: boolean },
+	opts?: { atCheckout?: boolean; needsProduct?: boolean },
 ) {
 	const [badge] = await db.select().from(badges).where(eq(badges.id, badgeId)).limit(1);
 	if (!badge) return { ok: false as const, status: 404 as const, error: "Badge not found" };
@@ -313,8 +316,10 @@ async function resolveBadgePurchase(
 	// The Stripe Product the first-transaction line and the recurrence both bill against
 	// — the rung's own, created on first use, carrying the rung's own tax code (the
 	// most-taxable thing the rung delivers). One Product per rung, re-stamped when the
-	// rung's kinds change — `ensureBadgeProduct` owns all of that.
-	const product = await ensureBadgeProduct(badgeId, badge.label, issuer.handle);
+	// rung's kinds change — `ensureBadgeProduct` owns all of that. A quote skips it:
+	// pricing the line is the database's read, not the processor's.
+	const product =
+		opts?.needsProduct === false ? null : await ensureBadgeProduct(badgeId, badge.label, issuer.handle);
 
 	return { ok: true as const, badge, issuer, held, threshold, amount, product };
 }
@@ -342,7 +347,8 @@ type ResolvedLine =
 			held: Decimal;
 			threshold: Decimal;
 			amount: Decimal;
-			product: string;
+			/** The rung's Stripe Product, when the resolution priced one — a quote's is null. */
+			product: string | null;
 			lineFee: Decimal;
 	  };
 
@@ -378,7 +384,7 @@ export type StoredBasketRow =
 async function resolveStoredBasket(
 	rows: StoredBasketRow[],
 	userId: number,
-	opts?: { atCheckout?: boolean },
+	opts?: { atCheckout?: boolean; needsProduct?: boolean },
 ): Promise<
 	| { ok: false; status: 400 | 404 | 409; error: string; code?: string; itemId?: number | string }
 	| {
@@ -847,10 +853,7 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 	// settles through the cycle distribution, and this split only ever sees purchase rows.
 	const latestCharge =
 		typeof pi.latest_charge === "string" ? pi.latest_charge : (pi.latest_charge?.id ?? null);
-	await splitChargeToCreators(
-		{ id: pi.id, latestCharge },
-		stamped.map(({ row }) => row),
-	);
+	await splitChargeToCreators({ id: pi.id, latestCharge }, stamped.map(({ row }) => row));
 
 	// ── Link the checkout's Customer, after the rows are stamped ─────────────
 	// Under the 2026-10-11 posture a session without a saved customer carries one only
@@ -1072,7 +1075,9 @@ async function resolvedBasketItems(userId: number): Promise<ResolvedBasketItem[]
 	const items: ResolvedBasketItem[] = [];
 	for (const row of rows) {
 		if (row.kind === "badge") {
-			const b = await resolveBadgePurchase(row.badgeId, userId);
+			// Display-only: pricing is the database's read (the holdings), never a
+			// processor call — the product step is the session builder's job.
+			const b = await resolveBadgePurchase(row.badgeId, userId, { needsProduct: false });
 			if (!b.ok) continue;
 			items.push({
 				kind: "badge",
@@ -2038,7 +2043,7 @@ const paymentRoutes = new Hono()
 					? { kind: "badge", badgeId: item.badgeId as number }
 					: { kind: "work", workId: item.workId as number, slug: item.slug as string },
 		);
-		const q = await resolveStoredBasket(rows, user.id);
+		const q = await resolveStoredBasket(rows, user.id, { needsProduct: false });
 		if (!q.ok) return c.json({ error: q.error, code: "code" in q ? q.code : undefined }, q.status);
 
 		// What the same items would have cost bought one at a time. Not decoration: it is
@@ -2147,7 +2152,13 @@ const paymentRoutes = new Hono()
 					? { kind: "badge", badgeId: item.badgeId as number }
 					: { kind: "work", workId: item.workId as number, slug: item.slug as string },
 		);
-		const q = await resolveStoredBasket(rows, user.id, { atCheckout: true });
+		// The resolution runs BEFORE the processor guard — the refusals are the database's
+		// business and must fire without Stripe — and the rung's Product, the one
+		// processor-dependent piece, is priced only when a session could be built at all.
+		const q = await resolveStoredBasket(rows, user.id, {
+			atCheckout: true,
+			needsProduct: paymentsConfigured(),
+		});
 		if (!q.ok) return c.json({ error: q.error, code: "code" in q ? q.code : undefined }, q.status);
 
 		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
@@ -2195,6 +2206,10 @@ const paymentRoutes = new Hono()
 					return c.json({ error: "This work can't be taxed yet, so it can't be sold." }, 400);
 				lineItems.push(workLineItem(work, Math.round(amount.toNumber() * 100), taxCode));
 			} else {
+				// The product was priced when the processor was configured (the guard above
+				// runs before the resolution, with `needsProduct` on its answer); the belt
+				// refuses rather than building a session with an unnamed product.
+				if (!item.product) return c.json({ error: "Payments are not configured." }, 503);
 				lineItems.push(badgeLineItem(item.product, Math.round(item.amount.toNumber() * 100)));
 			}
 		}
@@ -2327,7 +2342,14 @@ const paymentRoutes = new Hono()
 		if (!Number.isInteger(badgeId) || badgeId <= 0)
 			return c.json({ error: "Badge not found" }, 404);
 
-		const one = await resolveBadgePurchase(badgeId, user.id, { atCheckout: true });
+		// Same discipline as the basket checkout: the resolution (and its refusals) is the
+		// database's business and never needs the processor; the rung's Product is priced
+		// only when a session could be built at all, and the guard below answers for the
+		// unconfigured case after the refusals had their word.
+		const one = await resolveBadgePurchase(badgeId, user.id, {
+			atCheckout: true,
+			needsProduct: paymentsConfigured(),
+		});
 		if (!one.ok) return c.json({ error: one.error, code: one.code }, one.status);
 		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
@@ -2346,7 +2368,11 @@ const paymentRoutes = new Hono()
 
 		// One line, the whole charge — the fee's full share is its line share, the same
 		// worst case a lone monthly support charge bears ($3.00 gross → $2.61 to the
-		// creator, and the arithmetic says so below without a second opinion).
+		// creator, and the arithmetic says so below without a second opinion). The
+		// product is priced when the processor is configured — the guard above — so a
+		// null can no longer reach here; the belt refuses rather than building a session
+		// with an unnamed product.
+		if (!one.product) return c.json({ error: "Payments are not configured." }, 503);
 		const fees = calculateFees(one.amount, { type: "digital" });
 		const lineItems = [badgeLineItem(one.product, Math.round(one.amount.toNumber() * 100))];
 

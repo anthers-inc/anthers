@@ -23,20 +23,24 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { db } from "@anthers/db/client";
 import {
 	assets,
+	badgeCharges,
 	badges,
 	billingAccounts,
 	crfLedger,
 	purchases,
 	stripeAccounts,
+	supportReductions,
 	userBadges,
 	users,
 } from "@anthers/db/schema";
-import { calculateFees, cardFee } from "@anthers/shared/fees";
+import { cycleKeyFor, cycleStart, nextCycleKey } from "@anthers/shared/billing-cycle";
+import { calculateFees, cardFee, reductionFor } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import Stripe from "stripe";
 import app from "../index";
 import { getStripe, setStripeClient } from "../lib/stripe";
+import { anthersUserId } from "../services/anthers-badges";
 import { retryFailedTransfers } from "../services/purchase-split.js";
 import { createAccount } from "./account-fixture";
 import { ensureAnthersLadder } from "./anthers-ladder-fixture";
@@ -137,6 +141,17 @@ function fakeStripe() {
 		},
 		customers: {
 			create: record("customers.create", () => ({ id: `cus_${uid()}` })),
+		},
+		products: {
+			// The badge rung's Product (`ensureBadgeProduct`): created on first use with the
+			// rung's tax code, listed to find orphans, updated when the tax code changes.
+			list: record("products.list", () => ({ data: [] })),
+			create: record("products.create", (params: { name?: string; tax_code?: string }) => ({
+				id: `prod_${uid()}`,
+				name: params.name ?? "",
+				tax_code: params.tax_code,
+			})),
+			update: record("products.update", (id: string) => ({ id })),
 		},
 		paymentMethods: {
 			list: record("paymentMethods.list", () => ({ data: [] })),
@@ -2391,5 +2406,684 @@ describe("Checkout — what isn't for sale", () => {
 		}
 		// And nothing was charged for either.
 		expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
+	});
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The Badge first transaction — the checkout rail of support money (2026-10-15).
+//
+// A Badge bought from a creator page is a purchase: charged on the one checkout
+// session, recorded in `badge_charges`, and at completion it writes the holding,
+// moves the issuer's recurring line under proration none, records the day-exact
+// reduction — and never transfers (support settles through the cycle distribution).
+// The cases below send the real webhook for a pending session and assert everything
+// the completion wrote, against the same model helpers the code derives from.
+
+describe("Webhook: the Badge first transaction's completion", () => {
+	let issuerId = 0;
+	let rungId = 0;
+	let workCreatorId = 0;
+	let basketWorkId = 0;
+
+	beforeAll(async () => {
+		issuerId = (await signUp(`badge_issuer_${run}`)).id;
+		rungId = (
+			await db
+				.insert(badges)
+				.values({
+					creatorId: issuerId,
+					threshold: "6.00",
+					label: "Sprout",
+					description: "A fixture rung the badge suite holds.",
+				})
+				.returning({ id: badges.id })
+		)[0].id;
+		// A second creator selling a Work, connected — the mixed-charge case needs the
+		// transfer path live beside the badge line. The ISSUER is connected too: the
+		// completion's split must never receive badge money even when the issuer COULD
+		// take a transfer, which is exactly the shape the mixed-charge test pins.
+		workCreatorId = (await signUp(`badge_wcreator_${run}`)).id;
+		await db.insert(stripeAccounts).values({
+			userId: workCreatorId,
+			stripeAccountId: `acct_${uid()}`,
+			chargesEnabled: true,
+			payoutsEnabled: true,
+			onboardingComplete: true,
+		});
+		await db.insert(stripeAccounts).values({
+			userId: issuerId,
+			stripeAccountId: `acct_badgeissuer_${uid()}`,
+			chargesEnabled: true,
+			payoutsEnabled: true,
+			onboardingComplete: true,
+		});
+		basketWorkId = (
+			await insertWork({
+				creatorId: workCreatorId,
+				type: "game",
+				title: `Badge basket work ${run}`,
+				streamEnabled: false,
+				downloadEnabled: true,
+				access: FOR_SALE,
+			})
+		).id;
+	}, DB_SETUP_TIMEOUT);
+
+	beforeEach(() => {
+		// The fake's calls accumulate across the file's describes; every test here
+		// asserts on what IT made Stripe do, so each starts from a clean record.
+		fake.reset();
+		delete fake.responses["subscriptions.retrieve"];
+	});
+
+	afterEach(() => {
+		delete fake.responses["subscriptions.retrieve"];
+	});
+
+	/** A buyer fresh to this test, so no test's writes can be another test's state. */
+	async function freshBuyer(name: string): Promise<number> {
+		return (await signUp(`badge_${name}_${run}`)).id;
+	}
+
+	/** One pending badge charge, keyed to a session — the state `.post("/basket/checkout")` leaves. */
+	async function pendingBadgeCharge(
+		buyer: number,
+		sessionId: string,
+		opts: Partial<typeof badgeCharges.$inferInsert> = {},
+	) {
+		await db.insert(badgeCharges).values({
+			buyerId: buyer,
+			badgeId: opts.badgeId ?? rungId,
+			creatorId: opts.creatorId ?? issuerId,
+			badgeLabel: opts.badgeLabel ?? "Sprout",
+			threshold: opts.threshold ?? "6.00",
+			chargedAmount: opts.chargedAmount ?? "6.00",
+			processingFee: opts.processingFee ?? "0.48",
+			billingCycle: opts.billingCycle ?? cycleKeyFor(new Date()),
+			stripePaymentIntentId: sessionId,
+			status: "pending",
+		});
+	}
+
+	/**
+	 * A completed payment intent + the session the completion resolves from — including
+	 * the metadata the checkout stamped (`buyerId`), which is what the badge half is
+	 * addressed by, and the saved payment method when one rode the charge.
+	 */
+	function completedSession(
+		buyer: number,
+		opts: { taxCents?: number; paymentMethod?: boolean } = {},
+	) {
+		const piId = `pi_${uid()}`;
+		const sessionId = `cs_${uid()}`;
+		// The saved card rides the session and the intent alike — what the completion
+		// reads as the renewal's payment method.
+		const session = fakeSessionFor(piId, { taxCents: opts.taxCents ?? 0 }) as ReturnType<
+			typeof fakeSessionFor
+		> & { payment_method?: string };
+		session.id = sessionId;
+		if (opts.paymentMethod ?? true) {
+			session.payment_method = `pm_${uid()}`;
+		}
+		fake.responses["checkout.sessions.list"] = asyncList([session]);
+		const event = stripeEvent("payment_intent.succeeded", {
+			id: piId,
+			object: "payment_intent",
+			// The split's funding read and the badge half's card read both come off
+			// the intent Stripe gave the webhook — a real one carries its charge.
+			latest_charge: `ch_${uid()}`,
+			metadata: { buyerId: String(buyer) },
+			...((opts.paymentMethod ?? true) ? { payment_method: session.payment_method } : {}),
+		});
+		return { sessionId, event };
+	}
+
+	it("🚨 completes a pending badge charge: the row, the holding, the proration-none line, the day-exact reduction — and NO transfer", async () => {
+		const buyer = await freshBuyer("sub_buyer");
+		const subId = `sub_${uid()}`;
+		// The buyer's subscription is live, with no line for the issuer yet — the existing
+		// subscription's issuer line join, the badge-purchase half of the raise.
+		await db
+			.insert(billingAccounts)
+			.values({ userId: buyer, stripeCustomerId: `cus_${uid()}`, stripeSubscriptionId: subId })
+			.onConflictDoUpdate({ target: billingAccounts.userId, set: { stripeSubscriptionId: subId } });
+		fake.responses["subscriptions.retrieve"] = subscription({ id: subId, anthers: 3 });
+
+		const { sessionId, event } = completedSession(buyer, { paymentMethod: false });
+		await pendingBadgeCharge(buyer, sessionId);
+		expect((await sendWebhook(event)).status).toBe(200);
+
+		// The row moved on the same latch, re-keyed to the intent — the completion's
+		// whole job, read by the intent like every other post-completion read here.
+		const piId = (event.data.object as { id: string }).id;
+		const [row] = await db
+			.select()
+			.from(badgeCharges)
+			.where(eq(badgeCharges.stripePaymentIntentId, piId));
+		expect(row.status).toBe("completed");
+
+		// The holding is the rung the row names, for the cycle the completion ran in.
+		const [holding] = await db
+			.select()
+			.from(userBadges)
+			.where(
+				and(eq(userBadges.userId, buyer), eq(userBadges.billingCycle, cycleKeyFor(new Date()))),
+			);
+		expect(holding.badgeId).toBe(rungId);
+
+		// The recurrence line: moved UNDER proration none (the checkout carried the
+		// charge today), stamped for the issuer, and the buyer's cancellation cleared.
+		const updateCall = fake.lastCall("subscriptions.update");
+		expect(updateCall?.args[0]).toBe(subId);
+		const params = updateCall?.args[1] as Stripe.SubscriptionUpdateParams;
+		expect(params.proration_behavior).toBe("none");
+		expect(params.cancel_at_period_end).toBe(false);
+		expect((params as { metadata?: { userId?: string } }).metadata?.userId).toBe(String(buyer));
+		const line = (
+			params.items as {
+				metadata?: { destination?: string };
+				price_data?: { unit_amount?: number };
+			}[]
+		)[0];
+		expect(line.metadata?.destination).toBe(String(issuerId));
+		expect(line.price_data?.unit_amount).toBe(600);
+		// And no subscription was created — the buyer's exists, the line joined it.
+		expect(fake.callsTo("subscriptions.create")).toHaveLength(0);
+
+		// The day-exact missed-days reduction, keyed to the next cycle — the exact
+		// figure the model's own raise path records.
+		const owed = await db
+			.select()
+			.from(supportReductions)
+			.where(eq(supportReductions.userId, buyer));
+		expect(owed).toHaveLength(1);
+		expect(owed[0].billingCycle).toBe(nextCycleKey(cycleKeyFor(new Date())));
+		expect(new Decimal(owed[0].amount).toFixed(2)).toBe(reductionFor(6, new Date()).toFixed(2));
+
+		// 🚨 And NO transfer: badge money settles through the cycle distribution, not a
+		// completion split — the completion never touches the transfer job for badge rows.
+		expect(fake.callsTo("transfers.create")).toHaveLength(0);
+	});
+
+	it("creates a future-anchored subscription for a buyer with none — the saved card riding it", async () => {
+		const buyer = await freshBuyer("fresh_buyer");
+		const { sessionId, event } = completedSession(buyer);
+		const savedMethod = (event.data.object as { payment_method: string }).payment_method;
+		await pendingBadgeCharge(buyer, sessionId);
+
+		await sendWebhook(event);
+
+		const createCall = fake.lastCall("subscriptions.create");
+		const params = createCall?.args[0] as Stripe.SubscriptionCreateParams;
+		expect(params.billing_cycle_anchor).toBe(
+			Math.floor(cycleStart(nextCycleKey(cycleKeyFor(new Date()))).getTime() / 1000),
+		);
+		expect(params.payment_behavior).toBe("default_incomplete");
+		expect(params.default_payment_method).toBe(savedMethod);
+		const line = (params.items as { metadata?: { destination?: string } }[])[0];
+		expect(line.metadata?.destination).toBe(String(issuerId));
+		// And the existing-subscription branch never ran for this buyer.
+		expect(fake.callsTo("subscriptions.update")).toHaveLength(0);
+	});
+
+	it("🚨 on a MIXED charge never moves a transfer for badge money — and apportion the charge's one tax across both tables, summing exactly", async () => {
+		const buyer = await freshBuyer("mixed_buyer");
+		const { sessionId, event } = completedSession(buyer, { taxCents: 100, paymentMethod: false });
+		// Two works rows + one badge row, the odd amounts the pro-rata split has to work on.
+		await db.insert(purchases).values([
+			{
+				buyerId: buyer,
+				workId: basketWorkId,
+				creatorId: workCreatorId,
+				workTitle: "Mixed row A",
+				workType: "game",
+				type: "digital",
+				amount: "3.00",
+				processingFee: "0.19",
+				creatorEarnings: "2.81",
+				stripePaymentIntentId: sessionId,
+				status: "pending",
+			},
+			{
+				buyerId: buyer,
+				workId: basketWorkId,
+				creatorId: workCreatorId,
+				workTitle: "Mixed row B",
+				workType: "game",
+				type: "digital",
+				amount: "7.00",
+				processingFee: "0.50",
+				creatorEarnings: "6.50",
+				stripePaymentIntentId: sessionId,
+				status: "pending",
+			},
+		]);
+		await pendingBadgeCharge(buyer, sessionId, {
+			chargedAmount: "6.00",
+			threshold: "6.00",
+			processingFee: "0.24",
+		});
+
+		await sendWebhook(event);
+
+		// The tax the completion stamped: three rows sum to EXACTLY what the session
+		// collected. ($1.00 across $16 — 0.19 + 0.44 + the badge row absorbing 0.37.)
+		// Post-completion reads go by the intent — the rows were re-keyed to it.
+		const piId = (event.data.object as { id: string }).id;
+		const purchaseRows = await db
+			.select()
+			.from(purchases)
+			.where(and(eq(purchases.stripePaymentIntentId, piId), eq(purchases.status, "completed")));
+		const badgeRow = await db
+			.select()
+			.from(badgeCharges)
+			.where(eq(badgeCharges.stripePaymentIntentId, piId));
+		expect(purchaseRows.map((r) => new Decimal(r.salesTax).toFixed(2)).sort()).toEqual([
+			"0.19",
+			"0.44",
+		]);
+		expect(badgeRow[0].status).toBe("completed");
+		expect(new Decimal(badgeRow[0].salesTax).toFixed(2)).toBe("0.37");
+
+		// The works' money moved; the badge's did not — one transfer, funded by the
+		// charge, to the works creator only.
+		const transfers = fake.callsTo("transfers.create");
+		expect(transfers).toHaveLength(1);
+	});
+
+	it("is a no-op on redelivery — the re-key and the pending latch both cover the badge half", async () => {
+		const buyer = await freshBuyer("redelivery_buyer");
+		// An existing subscription, so the line move (not the create) is the branch the
+		// latch has to protect from a second delivery's half-run.
+		const subId = `sub_${uid()}`;
+		await db
+			.insert(billingAccounts)
+			.values({ userId: buyer, stripeSubscriptionId: subId })
+			.onConflictDoUpdate({ target: billingAccounts.userId, set: { stripeSubscriptionId: subId } });
+		fake.responses["subscriptions.retrieve"] = subscription({ id: subId, anthers: 3 });
+
+		const { sessionId, event } = completedSession(buyer, { paymentMethod: false });
+		await pendingBadgeCharge(buyer, sessionId);
+
+		expect((await sendWebhook(event)).status).toBe(200);
+		expect(
+			await db.select().from(supportReductions).where(eq(supportReductions.userId, buyer)),
+		).toHaveLength(1);
+
+		// A second delivery may write nothing: the row is completed, so the badge half
+		// never runs again — no second reduction, no second line move.
+		expect((await sendWebhook(event)).status).toBe(200);
+		expect(
+			await db.select().from(supportReductions).where(eq(supportReductions.userId, buyer)),
+		).toHaveLength(1);
+		expect(fake.callsTo("subscriptions.update")).toHaveLength(1);
+
+		// And the holding is ONE row (upsert convergence — the pick replaces, never adds).
+		const holdings = await db
+			.select()
+			.from(userBadges)
+			.where(
+				and(eq(userBadges.userId, buyer), eq(userBadges.billingCycle, cycleKeyFor(new Date()))),
+			);
+		expect(holdings).toHaveLength(1);
+	});
+
+	/**
+	 * ⭐ The Anthers ladder rides the same rail and the same vocabulary: an issuer's id,
+	 * whoever the issuer is. Raising the Anthers line through a badge purchase hits the
+	 * existing stamped item by the SAME read every other issuer's line uses.
+	 */
+	it("raises the Anthers line through its own badge the way it raises any issuer's", async () => {
+		const buyer = await freshBuyer("anthers_buyer");
+		const anthersId = await anthersUserId();
+		// (the Anthers ladder's $9 rung, seeded by the fixture the file loaded at import)
+		const [anthersRung] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.creatorId, anthersId), eq(badges.threshold, "9.00")))
+			.limit(1);
+		const rung = anthersRung.id;
+
+		const subId = `sub_${uid()}`;
+		await db
+			.insert(billingAccounts)
+			.values({ userId: buyer, stripeSubscriptionId: subId })
+			.onConflictDoUpdate({ target: billingAccounts.userId, set: { stripeSubscriptionId: subId } });
+		// The Anthers line exists, stamped "anthers" — the retired literal still read as it.
+		fake.responses["subscriptions.retrieve"] = subscription({ id: subId, anthers: 3 });
+
+		const { sessionId, event } = completedSession(buyer, { paymentMethod: false });
+		await pendingBadgeCharge(buyer, sessionId, {
+			badgeId: rung,
+			creatorId: anthersId,
+			threshold: "9.00",
+			chargedAmount: "6.00",
+			badgeLabel: "Petal",
+		});
+		await sendWebhook(event);
+
+		// The pick found the EXISTING anthers line and updated it in place — the delta
+		// $6 badge charge carrying the raise of a $3 line to $9, no second line written.
+		const params = fake.lastCall("subscriptions.update")
+			?.args[1] as Stripe.SubscriptionUpdateParams;
+		const line = (
+			params.items as {
+				id?: string;
+				metadata?: { destination?: string };
+				price_data?: { unit_amount?: number };
+			}[]
+		)[0];
+		expect(line.id).toBeDefined();
+		expect(line.metadata?.destination).toBe(String(anthersId));
+		expect(line.price_data?.unit_amount).toBe(900);
+		// The holding is the Anthers rung — the same row shape as any issuer's, one per
+		// issuer within the cycle (the issuer pick replaces).
+		const holding = await db
+			.select()
+			.from(userBadges)
+			.where(
+				and(eq(userBadges.userId, buyer), eq(userBadges.billingCycle, cycleKeyFor(new Date()))),
+			);
+		expect(holding.filter((h) => h.badgeId === rung)).toHaveLength(1);
+	});
+});
+
+/**
+ * The badge checkout surfaces — quote, basket checkout, buy-now — at the route level,
+ * against the same recording fake: what the session was built WITH is the whole test.
+ */
+describe("The badge checkout routes", () => {
+	let cookie: string;
+	let buyerId2 = 0;
+	let issuerCookie: string;
+	let issuerId2 = 0;
+	let issuerRungId = 0;
+	const issuerHandle = `route_badge_issuer_${run}`;
+
+	beforeAll(async () => {
+		({ cookie, id: buyerId2 } = await signUp(`route_badge_buyer_${run}`));
+		({ cookie: issuerCookie, id: issuerId2 } = await signUp(issuerHandle));
+		issuerRungId = (
+			await db
+				.insert(badges)
+				.values({
+					creatorId: issuerId2,
+					threshold: "6.00",
+					label: "Route rung",
+					description: "A fixture rung the badge routes hold.",
+				})
+				.returning({ id: badges.id })
+		)[0].id;
+		await db.insert(stripeAccounts).values({
+			userId: issuerId2,
+			stripeAccountId: `acct_${uid()}`,
+			chargesEnabled: true,
+			payoutsEnabled: true,
+			onboardingComplete: true,
+		});
+	}, DB_SETUP_TIMEOUT);
+
+	beforeEach(() => {
+		// Same discipline as the completion describe: the fake's record is per-test, and
+		// the subscription stubs never outlive the test that set them.
+		fake.reset();
+		delete fake.responses["subscriptions.retrieve"];
+	});
+
+	afterEach(() => {
+		delete fake.responses["subscriptions.retrieve"];
+	});
+
+	it("🚨 buy-now builds the one-line session: the rung's Product, the full fee pinned, the saved card — and the basket untouched", async () => {
+		const res = await req("/api/payments/badges/checkout", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			body: JSON.stringify({ badgeId: issuerRungId }),
+		});
+		expect(res.status).toBe(200);
+
+		const params = fake.lastCall("checkout.sessions.create")
+			?.args[0] as Stripe.Checkout.SessionCreateParams;
+		const line = params.line_items?.[0] as {
+			price_data: { unit_amount?: number; product?: string; tax_behavior?: string };
+		};
+		expect(line.price_data.unit_amount).toBe(600);
+		expect(line.price_data.product).toMatch(/^prod_/);
+		expect(line.price_data.tax_behavior).toBe("exclusive");
+		// The card rides — a buyer with no subscription has a renewal to bill.
+		expect(params.payment_intent_data?.setup_future_usage).toBe("off_session");
+		const metadata = params.payment_intent_data?.metadata as Record<string, string>;
+		expect(metadata.kind).toBe("direct_purchase_badge");
+		expect(metadata.badgeIds).toBe(String(issuerRungId));
+
+		// The row the completion will find: pending, keyed to the session, the fee the
+		// lone line's share — the whole charge's fee — and the cycle today's. (The
+		// fake mints the session id on its side, so the row is found by the buyer's
+		// latest — this suite runs its describes in order and the buyer here is
+		// otherwise rowless.)
+		const [row] = await db
+			.select()
+			.from(badgeCharges)
+			.where(eq(badgeCharges.buyerId, buyerId2))
+			.orderBy(desc(badgeCharges.id))
+			.limit(1);
+		expect(row).toBeDefined();
+		expect(row.status).toBe("pending");
+		expect(row.threshold).toBe("6.00");
+		expect(row.chargedAmount).toBe("6.00");
+		expect(new Decimal(row.processingFee).toFixed(2)).toBe(cardFee(6).toFixed(2));
+		expect(row.billingCycle).toBe(cycleKeyFor(new Date()));
+
+		// Buy-now bypassed the basket: whatever the buyer had parked is still parked.
+		// (This buyer parked nothing; the invariant is the route never calls clearBasket —
+		// asserted by the counts below.)
+		const after = await req("/api/payments/basket", { headers: { Cookie: cookie } });
+		expect(((await after.json()) as { count: number }).count).toBe(0);
+	});
+
+	it("🚨 quotes the badge line with the first transaction's price beside the monthly one", async () => {
+		const add = await req("/api/payments/basket/items", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			body: JSON.stringify({ badgeId: issuerRungId }),
+		});
+		expect(add.status).toBe(200);
+
+		const res = await req("/api/payments/basket/quote", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			body: "{}",
+		});
+		expect(res.status).toBe(200);
+		const quote = (await res.json()) as {
+			items: {
+				kind: string;
+				badgeId?: number;
+				price: string;
+				recurring: string | null;
+				title?: string | null;
+			}[];
+			creators: { itemCount: number; receives: string }[];
+			subtotal: string;
+			processingFee: string;
+			feeSeparately: string;
+		};
+		const line = quote.items.find((i) => i.kind === "badge") as {
+			badgeId: number;
+			price: string;
+			recurring: string | null;
+			title?: string | null;
+		};
+		expect(line.badgeId).toBe(issuerRungId);
+		// The whole threshold — the buyer holds nothing from this issuer yet.
+		expect(line.price).toBe("6.00");
+		expect(line.recurring).toBe("6.00");
+		expect(quote.items).toHaveLength(1);
+		// The lone line's fee share is the whole charge's fee, and the issuer receives
+		// the remainder — read off the server, never derived here.
+		expect(quote.subtotal).toBe("6.00");
+		expect(new Decimal(quote.processingFee).toFixed(2)).toBe(cardFee(6).toFixed(2));
+		expect(quote.creators[0].itemCount).toBe(1);
+		expect(quote.creators[0].receives).toBe("5.53");
+
+		// And the basket read answers the same shape the page renders from.
+		const read = await req("/api/payments/basket", { headers: { Cookie: cookie } });
+		const items = (
+			(await read.json()) as {
+				items: { kind: string; badgeId?: number; recurring?: string | null; price: string }[];
+			}
+		).items;
+		expect(items[0].kind).toBe("badge");
+		expect(items[0].badgeId).toBe(issuerRungId);
+		expect(items[0].recurring).toBe("6.00");
+	});
+
+	it("🚨 carries the badge line into the basket checkout — and saves the card, because a renewal awaits and nothing else does", async () => {
+		const res = await req("/api/payments/basket/checkout", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			body: "{}",
+		});
+		expect(res.status).toBe(200);
+
+		const params = fake.lastCall("checkout.sessions.create")
+			?.args[0] as Stripe.Checkout.SessionCreateParams;
+		const line = params.line_items?.[0] as {
+			price_data: { unit_amount?: number; product?: string };
+		};
+		expect(line.price_data.unit_amount).toBe(600);
+		expect(line.price_data.product).toMatch(/^prod_/);
+		// The save — a Badge ride with no existing subscription is the one payment a
+		// purchase checkout may leave a card behind for.
+		expect(params.payment_intent_data?.setup_future_usage).toBe("off_session");
+		const metadata = params.payment_intent_data?.metadata as Record<string, string>;
+		expect(metadata.kind).toBe("direct_purchase_basket");
+		expect(metadata.badgeIds).toBe(String(issuerRungId));
+
+		// The row keyed to the session id the fake minted; the basket cleared at checkout.
+		const [row] = await db
+			.select()
+			.from(badgeCharges)
+			.where(eq(badgeCharges.buyerId, buyerId2))
+			.orderBy(desc(badgeCharges.id))
+			.limit(1);
+		expect(row.status).toBe("pending");
+		const after = await req("/api/payments/basket", { headers: { Cookie: cookie } });
+		expect(((await after.json()) as { count: number }).count).toBe(0);
+	});
+
+	it("never saves a card on a plain works-only basket — the 2026-10-06 posture, not the badge's", async () => {
+		const fresh = await signUp(`route_work_buyer_${run}`);
+		const work = await insertWork({
+			creatorId: issuerId2,
+			type: "game",
+			title: `Badge route work ${run}`,
+			streamEnabled: false,
+			downloadEnabled: true,
+			access: FOR_SALE,
+		});
+		await req("/api/payments/basket/items", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: fresh.cookie },
+			body: JSON.stringify({ workId: work.id }),
+		});
+
+		const res = await req("/api/payments/basket/checkout", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: fresh.cookie },
+			body: "{}",
+		});
+		expect(res.status).toBe(200);
+		const params = fake.lastCall("checkout.sessions.create")
+			?.args[0] as Stripe.Checkout.SessionCreateParams;
+		// A buyer with no subscription buying only Works: nothing to recur, so nothing
+		// is saved — the posture that kept the Link consent block off every purchase.
+		expect(params.payment_intent_data?.setup_future_usage).toBeUndefined();
+		// And no badge rows were written for it.
+		const rows = await db
+			.select()
+			.from(badgeCharges)
+			.where(eq(badgeCharges.buyerId, fresh.id))
+			.orderBy(desc(badgeCharges.id))
+			.limit(1);
+		expect(rows).toHaveLength(0);
+	});
+
+	it("refuses a badge ride from a buyer whose subscription renewal has failed", async () => {
+		const pastBuyer = await signUp(`route_past_${run}`);
+		const subId = `sub_${uid()}`;
+		await db
+			.insert(billingAccounts)
+			.values({ userId: pastBuyer.id, stripeSubscriptionId: subId })
+			.onConflictDoUpdate({ target: billingAccounts.userId, set: { stripeSubscriptionId: subId } });
+		fake.responses["subscriptions.retrieve"] = subscription({ id: subId, status: "past_due" });
+
+		const res = await req("/api/payments/badges/checkout", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: pastBuyer.cookie },
+			body: JSON.stringify({ badgeId: issuerRungId }),
+		});
+		expect(res.status).toBe(409);
+		expect(((await res.json()) as { code?: string }).code).toBe("payment_past_due");
+		expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
+		delete fake.responses["subscriptions.retrieve"];
+	});
+
+	it("🚨 refuses the buyer's own ladder", async () => {
+		const res = await req("/api/payments/badges/checkout", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: issuerCookie },
+			body: JSON.stringify({ badgeId: issuerRungId }),
+		});
+		expect(res.status).toBe(400);
+		expect(((await res.json()) as { error?: string }).error).toMatch(/own Badge/i);
+		expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
+	});
+
+	it("🚨 refuses at-or-below the ratchet — what the buyer already holds is not purchasable", async () => {
+		const ratchetBuyer = await signUp(`route_ratchet_${run}`);
+		await db.insert(userBadges).values({
+			userId: ratchetBuyer.id,
+			badgeId: issuerRungId,
+			billingCycle: cycleKeyFor(new Date()),
+		});
+		// A LOWER hypothetical rung would be refused the same way; the exact-rung case is
+		// the sharpest (already-held = the same money re-charged for nothing).
+		const res = await req("/api/payments/badges/checkout", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ratchetBuyer.cookie },
+			body: JSON.stringify({ badgeId: issuerRungId }),
+		});
+		expect(res.status).toBe(400);
+		expect(((await res.json()) as { error?: string }).error).toMatch(/already hold/i);
+	});
+
+	it("skips the connected-account precondition for Anthers as the issuer — its money is already platform-side", async () => {
+		// (no stripe_accounts row for the Anthers account — the rung checkout works, because
+		// the Anthers ladder's money never needs a transfer to be receivable)
+		const anthersId = await anthersUserId();
+		const [anthersRung] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.creatorId, anthersId), eq(badges.threshold, "3.00")))
+			.limit(1);
+
+		const res = await req("/api/payments/badges/checkout", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			body: JSON.stringify({ badgeId: anthersRung.id }),
+		});
+		expect(res.status).toBe(200);
+		const params = fake.lastCall("checkout.sessions.create")
+			?.args[0] as Stripe.Checkout.SessionCreateParams;
+		const metadata = params.payment_intent_data?.metadata as Record<string, string>;
+		expect(metadata.badgeIds).toBe(String(anthersRung.id));
+		const [row] = await db
+			.select()
+			.from(badgeCharges)
+			.where(eq(badgeCharges.buyerId, buyerId2))
+			.orderBy(desc(badgeCharges.id))
+			.limit(1);
+		expect(row.creatorId).toBe(anthersId);
 	});
 });
