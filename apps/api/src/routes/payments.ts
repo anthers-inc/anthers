@@ -48,10 +48,9 @@ import {
 	isChargeableAmount,
 	MAX_BASKET_ITEMS,
 	MERCH_BADGE_DISCOUNT,
-	MERCH_BADGE_DISCOUNT_RATE,
 	REFUND_AUTO_CAP,
 } from "@anthers/shared/constants";
-import { calculateFees } from "@anthers/shared/fees";
+import { calculateFees, MERCH_BADGE_DISCOUNT_RATE } from "@anthers/shared/fees";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import type { WorkType } from "@anthers/shared/tax-codes";
 import { purchaseTaxCode } from "@anthers/shared/tax-codes";
