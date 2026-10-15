@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import {
+	type ExecFileSyncOptions,
+	type ExecFileSyncOptionsWithStringEncoding,
+	execFileSync,
+} from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -284,4 +289,42 @@ export async function emailedCode(
 		if (Date.now() > deadline) throw new Error(`no code arrived for ${address}`);
 		await new Promise((resolve) => setTimeout(resolve, 250));
 	}
+}
+
+/**
+ * A leashed blocking spawn for the fixture's child processes.
+ *
+ * 🚨 Every fixture-side child spawn is synchronous (`execFileSync`), and a synchronous
+ * spawn that hangs wedges the worker it runs in: a blocked event loop fires **no timer
+ * the runner owns** — not the test timeout, not a hook's, not the reporter's — so the
+ * whole run sits silently until the job's `timeout-minutes` ceiling kills it with
+ * nothing examined. That is the exact 2026-10-14 stall, twice over the same day: both
+ * Playwright CI jobs ran their fast openings (about eighty tests in under three
+ * minutes) and then produced nothing for ten-plus minutes before eating their budget,
+ * with the gauntlet walk's hop child (a `db:` script that never returned) the visible
+ * last act on the media side. A child that hangs has to die at the leash — the
+ * sync-spawn timeout fires natively inside the blocked wait (`spawnSync sleep
+ * ETIMEDOUT`, proven locally) — and the test fails with the child's real error instead.
+ *
+ * 300s is the default leash: the heaviest legitimate child (the media fixture's ffmpeg
+ * seeds) finishes well inside it even on CI's slow runners, and a hung child dies long
+ * after its work could not possibly still be pending.
+ */
+export function leashedExecFileSync(
+	cmd: string,
+	args: readonly string[],
+	opts: ExecFileSyncOptions,
+): Buffer;
+export function leashedExecFileSync(
+	cmd: string,
+	args: readonly string[],
+	opts: ExecFileSyncOptionsWithStringEncoding,
+): string;
+export function leashedExecFileSync(
+	cmd: string,
+	args: readonly string[],
+	opts: ExecFileSyncOptions = {},
+	timeoutMs = 300_000,
+): string | Buffer {
+	return execFileSync(cmd, args, { timeout: timeoutMs, ...opts }) as string | Buffer;
 }

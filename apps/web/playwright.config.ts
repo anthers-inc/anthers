@@ -45,6 +45,13 @@ export default defineConfig({
 	// E2E_WORKERS overrides when a deliberately quiet machine wants the speed back.
 	workers: process.env.CI ? 1 : Number(process.env.E2E_WORKERS ?? 4),
 	reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
+	// The stall timeline: a hung suite at 1 worker otherwise leaves the captured log
+	// without a single timestamped event between "Running N tests" and the ceiling —
+	// the 2026-10-14 browser job gave 26 silent minutes and the log could not say what
+	// the suite was inside even after the fact. reportSlowTests prints every test that
+	// is still running past the threshold, in-run, with its file and title — so the next
+	// silence names its site to the second instead of giving the hunt a blank page.
+	reportSlowTests: process.env.CI ? { max: 20, threshold: 10_000 } : undefined,
 	use: {
 		baseURL: `http://localhost:${PORT}`,
 		trace: "on-first-retry",

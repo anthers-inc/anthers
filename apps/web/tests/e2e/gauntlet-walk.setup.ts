@@ -21,13 +21,18 @@
  * walk itself is unaffected: none of the endpoints it calls set cookies.
  */
 
-import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WALK_WALKER_EMAIL } from "@anthers/db/gauntlet-walk";
 import { expect, test as setup } from "@playwright/test";
-import { API_URL, emailedCode, WALK_AUTH_STATE_PATH, WEB_ORIGIN } from "./fixtures";
+import {
+	API_URL,
+	emailedCode,
+	leashedExecFileSync,
+	WALK_AUTH_STATE_PATH,
+	WEB_ORIGIN,
+} from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
@@ -35,7 +40,7 @@ setup("reset the walk's gauntlet fixture and sign its user in", async () => {
 	// Canonical fixture reset, for instance B. --ensure-walker creates walk-walker on
 	// first run and targets it thereafter, so the walk never touches the dev account
 	// or instance A's gauntlet_walker.
-	execFileSync("bun", ["run", "db:gauntlet", "--instance", "walk", "--ensure-walker"], {
+	leashedExecFileSync("bun", ["run", "db:gauntlet", "--instance", "walk", "--ensure-walker"], {
 		cwd: REPO_ROOT,
 		stdio: "inherit",
 	});
