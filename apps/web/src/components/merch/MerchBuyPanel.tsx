@@ -8,12 +8,15 @@
  * mounts the session on an in-page checkout surface that is the ONLY CheckoutElements
  * provider of the merch flow, rendering nothing of its own but the form.
  *
- * The price rows are the decision's transparency rule as the buyer sees it: the list
- * price (Printful's own retail price for the variant), the Badge discount beside it when
- * the buyer holds one, Printful's shipping added at checkout, and tax resolved at the
- * session. **The print cost is never a buyer-visible figure** — the transparency prose
- * ("about $20 to print, the rest funds Anthers' programs") lives in the wiki's copy, not
- * in a checkout.
+ * The price lines are the decision's transparency rule as the buyer sees it, in two
+ * places: the picker's size buttons carry the discounted price, and, once a pick is
+ * made, the quote box below them shows the checkout's own figures before it starts —
+ * the discounted goods, Printful's live shipping rate, and, when the buyer has saved a
+ * billing address (the 2026-10-11 opt-in), Stripe Tax quoted against it. **The print
+ * cost is never a buyer-visible figure** — the transparency prose ("about $20 to print,
+ * the rest funds Anthers' programs") lives in the wiki's copy, not in a checkout.
+ * The checkout form remains the authority: it re-resolves every figure from the session,
+ * whose tax the address the buyer delivers to settles.
  */
 
 import { withNextPath } from "@anthers/shared/next-path";
@@ -23,15 +26,24 @@ import { client } from "@anthers/web-shared/rpc";
 import {
 	CheckoutElementsProvider,
 	PaymentElement,
+	type StripeUseCheckoutElementsResult,
 	useCheckoutElements,
 } from "@stripe/react-stripe-js/checkout";
-import { useEffect, useRef, useState } from "react";
+import type { StripeCheckoutContact } from "@stripe/stripe-js";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getStripe } from "../../lib/stripe";
 import CheckoutBillingAddressBlock from "../payments/CheckoutBillingAddressBlock";
+import UsBillingAddressForm, {
+	EMPTY_ADDRESS,
+	isAddressComplete,
+	toCheckoutContact,
+	type UsAddressInput,
+} from "../payments/UsBillingAddressForm";
 import { useSavedBillingAddress } from "../payments/useSavedBillingAddress";
 import {
 	mayConfirm,
 	sessionTotalsFrom,
+	TAX_RESOLVE_DEBOUNCE_MS,
 	useSessionBillingAddress,
 } from "../payments/useSessionBillingAddress";
 
@@ -69,6 +81,26 @@ interface MerchQuote {
 	clientSecret: string;
 }
 
+/**
+ * The store panel's live estimate for the picked pick — the quote route's answer. The
+ * figures are the same lines the checkout will charge (the shared server derivation);
+ * `tax` and `buyerTotal` are null when the buyer has no saved billing address (or the
+ * tax estimate could not resolve), where the box falls back to the checkout's own
+ * authority rather than a guessed figure.
+ */
+interface MerchEstimate {
+	color: string;
+	size: string;
+	listPrice: string;
+	goodsPrice: string;
+	discount: { badge: string; percent: string; saved: string } | null;
+	shipping: string;
+	shippingName: string;
+	tax: string | null;
+	buyerTotal: string | null;
+	quotedTo: { city: string; state: string; postalCode: string } | null;
+}
+
 export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 	const { isAuthenticated } = useAuth();
 	const location = useLocation();
@@ -79,6 +111,9 @@ export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 	const [session, setSession] = useState<MerchQuote | null>(null);
 	const [sessionError, setSessionError] = useState<string | null>(null);
 	const [creating, setCreating] = useState(false);
+	// The store panel's live estimate, one per settled pick — the quote box below.
+	const [estimate, setEstimate] = useState<MerchEstimate | null>(null);
+	const [estimateLoading, setEstimateLoading] = useState(false);
 
 	// The color/size list, per Work — fetched unconditionally (hooks order), read by
 	// the branches below.
@@ -126,6 +161,39 @@ export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 	// sizes row shows from the start). One with no row in the picked color greys out
 	// rather than vanishing: the shape of the range stays visible.
 	const allSizes = [...new Set((colors ?? []).flatMap((g) => g.sizes.map((v) => v.size)))];
+
+	// The live estimate, one settled pick at a time. A pick is a discrete click, so one
+	// fetch per click — the latest response wins (an earlier fetch's cleanup marks it
+	// canceled), and a failed estimate degrades to no box: the checkout POST is the
+	// authority and carries its own refusals. Signed out, the box waits — the Badge
+	// discount and the saved billing zip it quotes from are account facts.
+	useEffect(() => {
+		if (!isAuthenticated || !color || !size) {
+			setEstimate(null);
+			setEstimateLoading(false);
+			return;
+		}
+		let canceled = false;
+		setEstimateLoading(true);
+		client.api.payments.merch.quote[":slug"]
+			.$get({ param: { slug }, query: { color, size } })
+			.then(async (res) => {
+				if (canceled) return;
+				const body = (await res.json().catch(() => null)) as
+					| (MerchEstimate & { error?: string })
+					| null;
+				setEstimate(res.ok && body ? body : null);
+			})
+			.catch(() => {
+				if (!canceled) setEstimate(null);
+			})
+			.finally(() => {
+				if (!canceled) setEstimateLoading(false);
+			});
+		return () => {
+			canceled = true;
+		};
+	}, [isAuthenticated, color, size, slug]);
 
 	const createSession = async () => {
 		if (!size || !color) return;
@@ -292,14 +360,17 @@ export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 					)}
 				</div>
 
-				{/* The list/shipping/tax box is GONE for now (Parker, 2026-10-10, stopgap 2):
-				    with a pick made it only restated the list price already shown and said
-				    "added/calculated at checkout" for the other two lines. Its better form —
-				    always visible, quoted live per the buyer's default delivery address —
-				    folds into the saved-payment-and-address decision (the Active task
-				    "Decide how We Manage Saved Payment and Address Data"), which is where a
-				    default-zip read comes from. Until then the size buttons carry the price
-				    and checkout reveals the rest. */}
+				{/* The quote box's better form (the 2026-10-10 stopgap retired): once a
+				    pick is made, the panel quotes the checkout's real figures live — the
+				    discounted goods, Printful's own shipping rate, and, from the buyer's
+				    saved billing address (the 2026-10-11 opt-in), Stripe Tax itself. The
+				    checkout remains the authority: its session resolves tax from the
+				    address the buyer delivers to, which this estimate stands in with
+				    billing. Signed out, the discount and the saved zip it quotes from
+				    are account facts, so the box waits for the account. */}
+				{isAuthenticated && (
+					<MerchQuoteBox color={color} size={size} estimate={estimate} loading={estimateLoading} />
+				)}
 
 				{sessionError && (
 					<div className="alert alert-error text-sm w-full">
@@ -339,6 +410,107 @@ export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 	);
 }
 
+/**
+ * The store panel's estimate for the currently picked (color, size) — the quote route's
+ * answer rendered as the shop's price box. Renders nothing while there is no pick to
+ * price, nothing signed out, and nothing on a failed estimate: the buy door and the
+ * checkout POST carry the honest errors. With no saved billing address the tax line
+ * says where it resolves instead of showing a figure.
+ */
+function MerchQuoteBox({
+	color,
+	size,
+	estimate,
+	loading,
+}: {
+	color: string | null;
+	size: string | null;
+	estimate: MerchEstimate | null;
+	loading: boolean;
+}) {
+	// No pick (or signed out) — the box prices nothing yet, by design.
+	if (!color || !size) return null;
+	if (loading && !estimate) {
+		return (
+			<div className="w-full rounded-lg bg-base-100 p-3 space-y-1.5" aria-hidden="true">
+				<div className="skeleton h-4 w-full" />
+				<div className="skeleton h-4 w-4/5" />
+				<div className="skeleton h-4 w-3/5" />
+			</div>
+		);
+	}
+	if (!estimate) return null;
+	const taxed = estimate.tax != null;
+	return (
+		<div
+			className="w-full rounded-lg bg-base-100 border border-base-300 p-3 text-sm space-y-1.5"
+			data-testid="merch-quote-box"
+		>
+			<dl className="space-y-1.5">
+				<div className="flex justify-between text-base-content/60">
+					<dt>
+						The shirt{estimate.color ? `, ${estimate.color}` : ""}, size {estimate.size}
+					</dt>
+					<dd className="tabular-nums">
+						{estimate.discount ? <s>${estimate.listPrice}</s> : null} ${estimate.goodsPrice}
+					</dd>
+				</div>
+				{estimate.discount && (
+					<div className="flex justify-between text-success">
+						<dt>
+							Badge discount <span className="text-xs">({estimate.discount.percent}% off)</span>
+						</dt>
+						<dd className="tabular-nums">−${estimate.discount.saved}</dd>
+					</div>
+				)}
+				<div className="flex justify-between text-base-content/60">
+					<dt>Shipping (Printful's)</dt>
+					<dd className="tabular-nums">${estimate.shipping}</dd>
+				</div>
+				{taxed ? (
+					<div className="flex justify-between">
+						<dt>Sales tax</dt>
+						<dd className="tabular-nums">${estimate.tax}</dd>
+					</div>
+				) : (
+					<div className="flex justify-between text-base-content/60">
+						<dt>Sales tax</dt>
+						<dd className="text-xs">calculated at checkout</dd>
+					</div>
+				)}
+			</dl>
+			{estimate.buyerTotal != null && (
+				<div className="flex justify-between border-t border-base-300 pt-1.5 font-semibold">
+					<span>Estimated total</span>
+					<span className="tabular-nums">${estimate.buyerTotal}</span>
+				</div>
+			)}
+			{estimate.quotedTo ? (
+				<p className="text-base-content/60 text-xs" data-testid="merch-quote-source">
+					Quoted live to your saved address in {estimate.quotedTo.city}, {estimate.quotedTo.state} —
+					checkout recalculates from the address you deliver to.
+				</p>
+			) : (
+				<p className="text-base-content/60 text-xs">
+					{/* No saved address (or a rate that couldn't resolve just now): the
+					    checkout's own session is where tax resolves, and the settings card
+					    is where the address that quotes here comes from. */}
+					Checkout calculates tax from your delivery address.{" "}
+					<Link to="/settings" className="link text-xs pointer-events-auto">
+						Save a billing address
+					</Link>{" "}
+					to quote your total here.
+				</p>
+			)}
+		</div>
+	);
+}
+
+/** The stable identity of an address value sent to the session — the resolve dedupe's key. */
+function contactKey(contact: StripeCheckoutContact): string {
+	return JSON.stringify(contact);
+}
+
 function MerchCheckoutForm({
 	quote,
 	onCancel,
@@ -362,6 +534,116 @@ function MerchCheckoutForm({
 	const [succeeded, setSucceeded] = useState(false);
 	const onCancelStable = useRef(onCancel).current;
 
+	// ── The delivery address ─────────────────────────────────────────────
+	// The merch session collects a SHIPPING address — the delivery destination, which
+	// tax resolves from and Printful ships to. **Stripe's form renders no shipping
+	// fields at all in elements mode** (found live 2026-10-15: the Payment Element
+	// shows the card and nothing else) — so the session's delivery address exists only
+	// through the headless `updateShippingAddress` write, which is Anthers' own UI's
+	// job. The 2026-10-11 decision keeps shipping per-order: the checkbox (defaulting
+	// checked once a saved billing address exists, step 5 of that decision) delivers to
+	// the address the billing form put on the session; unchecking shows Anthers' own
+	// US-only form, which resolves on settle into the same headless write.
+	const [sameAsBilling, setSameAsBilling] = useState(false);
+	const decidedRef = useRef(false);
+	useEffect(() => {
+		if (decidedRef.current || savedPrefill === undefined) return;
+		// The defaulting moment happens once: a saved address checks the box; nothing
+		// saved leaves it unchecked. A later-toggle is always the buyer's.
+		decidedRef.current = true;
+		if (savedPrefill !== null) setSameAsBilling(true);
+	}, [savedPrefill]);
+
+	// Whether the session has ACCEPTED the delivery address — the confirm gate's
+	// shipping half, so a buyer cannot pay against a session that carries no
+	// destination (or one they abandoned mid-edit). The accepted value's key is what
+	// re-arms a resolve after an edit, exactly as the billing half does.
+	const [shippingAcceptedKey, setShippingAcceptedKey] = useState<string | null>(null);
+	const [shippingError, setShippingError] = useState<string | null>(null);
+	// The override form's typed value; null while the checkbox is checked (the push
+	// owns the session's address then).
+	const [typedShipping, setTypedShipping] = useState<UsAddressInput | null>(null);
+
+	// The current session object, read through a ref — the hook above records why: the
+	// session object's identity churns, and a resolve must arm on the address, not
+	// the tick.
+	const checkoutRef = useRef<
+		Extract<StripeUseCheckoutElementsResult, { type: "success" }>["checkout"] | null
+	>(null);
+	useEffect(() => {
+		checkoutRef.current = checkoutState.type === "success" ? checkoutState.checkout : null;
+	});
+
+	// One headless write: `updateShippingAddress` on the session, with Stripe's own
+	// answer deciding accepted (false = refused; the error surfaces beside the form).
+	const pushShipping = useCallback(async (contact: StripeCheckoutContact) => {
+		const checkout = checkoutRef.current;
+		if (!checkout) return false;
+		const result = await checkout.updateShippingAddress(contact).catch(() => null);
+		if (!result || result.type === "error") {
+			setShippingError(result?.type === "error" ? result.error.message || null : null);
+			return false;
+		}
+		setShippingError(null);
+		return true;
+	}, []);
+
+	useEffect(() => {
+		if (!sameAsBilling) return;
+		if (checkoutState.type !== "success") return;
+		if (!billing.accepted || billing.acceptedAddress == null) return;
+		let canceled = false;
+		const contact = toCheckoutContact(billing.acceptedAddress);
+		const key = contactKey(contact);
+		if (shippingAcceptedKey === key) return;
+		const timer = setTimeout(() => {
+			void (async () => {
+				// A resolved re-fire after an edit re-runs this same shape; a stale push
+				// (the box untoggled mid-flight) is dropped by its cleanup flag.
+				const ok = await pushShipping(contact);
+				if (ok && !canceled) setShippingAcceptedKey(key);
+			})();
+		}, TAX_RESOLVE_DEBOUNCE_MS);
+		return () => {
+			canceled = true;
+			clearTimeout(timer);
+		};
+		// `checkoutState.type` is the session's arrival flip, not a value the body
+		// tracks beyond the guard; `billing.acceptedAddress`'s settlement is the event
+		// a push answers, and `shippingAcceptedKey` the dedupe.
+	}, [
+		sameAsBilling,
+		billing.accepted,
+		billing.acceptedAddress,
+		checkoutState.type,
+		shippingAcceptedKey,
+		pushShipping,
+	]);
+
+	useEffect(() => {
+		// Unchecking hands the delivery address to the override form: nothing is
+		// withdrawn from the session (a session that requires shipping refuses a null
+		// address), so the buyer's next settled resolve replaces the value instead.
+		if (!sameAsBilling) setTypedShipping((t) => t ?? EMPTY_ADDRESS);
+	}, [sameAsBilling]);
+
+	// The override form's resolve — every settled complete US address lands on the
+	// session (one accepted value per change, the billing resolve's own shape).
+	useEffect(() => {
+		if (sameAsBilling || typedShipping == null) return;
+		if (!isAddressComplete(typedShipping)) return;
+		const contact = toCheckoutContact(typedShipping);
+		const key = contactKey(contact);
+		if (shippingAcceptedKey === key) return;
+		const timer = setTimeout(() => {
+			void (async () => {
+				const ok = await pushShipping(contact);
+				if (ok) setShippingAcceptedKey(key);
+			})();
+		}, TAX_RESOLVE_DEBOUNCE_MS);
+		return () => clearTimeout(timer);
+	}, [sameAsBilling, typedShipping, shippingAcceptedKey, pushShipping]);
+
 	const totals =
 		checkoutState.type === "success"
 			? sessionTotalsFrom(
@@ -372,7 +654,8 @@ function MerchCheckoutForm({
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (checkoutState.type !== "success" || !billing.accepted) return;
+		if (checkoutState.type !== "success" || !billing.accepted || shippingAcceptedKey == null)
+			return;
 		setProcessing(true);
 		setError(null);
 		try {
@@ -413,11 +696,62 @@ function MerchCheckoutForm({
 	const canConfirm =
 		checkoutState.type === "success" &&
 		mayConfirm(checkoutState.checkout.canConfirm, billing.accepted) &&
+		// The session's delivery address is accepted by SOME resolve (the checkbox's
+		// push or the override form's) — without it, Stripe's readiness alone would let
+		// a buyer pay a session that carries no destination at all.
+		shippingAcceptedKey != null &&
 		totals?.buyerTotal != null;
 
 	return (
 		<form onSubmit={handleSubmit} className="space-y-3">
 			<CheckoutBillingAddressBlock billing={billing} />
+			{/*
+			    "Ship to my billing address" — the delivery address collected by Stripe's
+			    rendered shipping fields, filled headlessly from the address the billing
+			    form put on the session while this is checked (the defaulting rule:
+			    checked once a saved address exists, per the 2026-10-11 decision's step 5).
+			*/}
+			{/*
+			    The delivery address — the checkbox is its two modes: same as billing (the
+			    session's address is the billing form's, pushed headlessly), or the
+			    override form below (Anthers' own US-only form, the same shape the billing
+			    block renders, resolving onto the session the same way tax does).
+			*/}
+			<div className="bg-base-100 border border-base-300 rounded-lg p-3">
+				<label
+					className="flex items-center gap-2 text-sm cursor-pointer"
+					data-testid="shipping-same-as-billing"
+				>
+					<input
+						type="checkbox"
+						className="checkbox checkbox-sm"
+						checked={sameAsBilling}
+						onChange={(e) => {
+							setShippingError(null);
+							setSameAsBilling(e.target.checked);
+						}}
+					/>
+					<span>Ship to my billing address</span>
+				</label>
+				{!sameAsBilling && (
+					<div className="mt-3" data-testid="shipping-address-form">
+						<p className="font-semibold text-sm mb-2">Delivery address</p>
+						<UsBillingAddressForm
+							kind="shipping"
+							value={typedShipping ?? EMPTY_ADDRESS}
+							onChange={setTypedShipping}
+						/>
+						<p className="text-base-content/60 text-xs mt-2">
+							Where the shirt ships — tax resolves from this address, and Printful delivers to it.
+						</p>
+					</div>
+				)}
+				{shippingError && (
+					<p className="text-error text-xs mt-2" data-testid="shipping-address-error">
+						{shippingError}
+					</p>
+				)}
+			</div>
 			<div className="rounded-lg border border-base-300 p-3">
 				<PaymentElement options={{ fields: { billingDetails: "never" } }} />
 			</div>
@@ -444,7 +778,16 @@ function MerchCheckoutForm({
 				</div>
 				<div className="flex justify-between text-base-content/60">
 					<dt>Sales tax</dt>
-					<dd className="text-xs">from your address</dd>
+					{/* The figure, once the session has resolved it from the delivery
+					    address; before that, where it comes from. `totals.tax` is the
+					    session's own exclusive-tax figure (see `sessionTotalsFrom`). */}
+					<dd className="tabular-nums">
+						{totals?.tax != null ? (
+							`$${totals.tax.toFixed(2)}`
+						) : (
+							<span className="text-xs">from your address</span>
+						)}
+					</dd>
 				</div>
 			</dl>
 			{error && (

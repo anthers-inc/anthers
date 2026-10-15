@@ -16,7 +16,13 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { merchFulfillments, merchVariants, purchases, users } from "@anthers/db/schema";
+import {
+	billingAccounts,
+	merchFulfillments,
+	merchVariants,
+	purchases,
+	users,
+} from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import type Stripe from "stripe";
 import app from "../index";
@@ -52,9 +58,16 @@ const printfulCalls: PrintfulCall[] = [];
 let printfulAnswer: (call: PrintfulCall) => unknown = () => null;
 let realFetch: typeof globalThis.fetch | undefined;
 
-/** A fake Stripe client covering the checkout path the merch route takes. */
+/** A fake Stripe client covering the checkout and quote paths the merch routes take. */
 function fakeStripeCheckout() {
 	const stripeObject = { id: "cs_test_merch", client_secret: "cs_test_merch_secret_123" };
+	/** The tax calculation's recorded params, answered by `taxState`. */
+	const taxCalls: unknown[] = [];
+	const taxState: { value: { tax_amount_exclusive: number } | null; fail: boolean } = {
+		value: { tax_amount_exclusive: 234 },
+		fail: false,
+	};
+	const customerState: { customer: Record<string, unknown> | null } = { customer: null };
 	return {
 		// Cast: the merch paths read only the session create's return, and the full
 		// Stripe surface is the Stripe suite's subject with its own shaped fake.
@@ -64,7 +77,25 @@ function fakeStripeCheckout() {
 					create: async () => stripeObject,
 				},
 			},
+			customers: {
+				retrieve: async (id: string) => {
+					if (!customerState.customer) return null;
+					return { id, ...customerState.customer };
+				},
+			},
+			tax: {
+				calculations: {
+					create: async (params: unknown) => {
+						taxCalls.push(params);
+						if (taxState.fail) throw new Error("Stripe cannot resolve that address");
+						return taxState.value ?? { tax_amount_exclusive: 0 };
+					},
+				},
+			},
 		} as unknown as Stripe,
+		taxCalls,
+		taxState,
+		customerState,
 	};
 }
 
@@ -106,7 +137,6 @@ let buyerCookie = "";
 let buyerId = 0;
 let fake: ReturnType<typeof fakeStripeCheckout>;
 let realClient: ReturnType<typeof getStripe>;
-
 afterAll(async () => {
 	// Clean up everything written: the merch rows by work id, the purchase, the buyer.
 	const written = await db
@@ -191,6 +221,240 @@ describe("Merch not configured — every guard refuses", () => {
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { merchConfigured: boolean };
 		expect(body.merchConfigured).toBe(false);
+	});
+});
+
+describe("The merch quote — the store panel's live estimate", () => {
+	/**
+	 * The quote route answers, for one (color, size) pick against the buyer's account:
+	 * the discounted goods figure, Printful's live shipping rate, and — when the buyer
+	 * HAS a saved billing address — the Stripe Tax figure and the tax-inclusive total.
+	 * Nothing is charged and no purchase row exists after any of these.
+	 */
+
+	/** The two-rate answer the 2026-10-09 probe found — the offset choice preferred by id. */
+	const twoRates = [
+		{
+			id: "STANDARD",
+			name: "Standard",
+			rate: "5.99",
+			currency: "USD",
+			minDeliveryDays: 4,
+			maxDeliveryDays: 7,
+		},
+		{
+			id: "STANDARD_CARBON_OFFSET",
+			name: "Standard (CO2 offset)",
+			rate: "6.49",
+			currency: "USD",
+			minDeliveryDays: 4,
+			maxDeliveryDays: 7,
+		},
+	];
+
+	async function saveQuoteAddress() {
+		// The saved address lives on the buyer's Stripe Customer (PR #465); the fake's
+		// customer state holds it, and the billing row is the only thing Anthers keeps.
+		// California, deliberately: a rate call quoting THIS state (not the checkout's
+		// representative CO) is the proof that the quote prices from the buyer's own
+		// saved address.
+		fake.customerState.customer = {
+			name: "Parker Davis",
+			deleted: false,
+			address: {
+				line1: "123 Main St",
+				city: "San Francisco",
+				state: "CA",
+				postal_code: "94103",
+				country: "US",
+			},
+		};
+		await db
+			.insert(billingAccounts)
+			.values({ userId: buyerId, stripeCustomerId: `cus_quote_${run}` });
+	}
+
+	it("401s a buyer with no account", async () => {
+		const work = await makeMerchWork([4061]);
+		const res = await req(`/api/payments/merch/quote/${work.slug}?color=black&size=S4061`, {
+			headers: { Origin: ORIGIN }, // no cookie
+		});
+		expect(res.status).toBe(401);
+	});
+
+	it("503s when Printful is not configured, like the checkout", async () => {
+		const work = await makeMerchWork([4062]);
+		const res = await req(`/api/payments/merch/quote/${work.slug}?color=black&size=S4062`, {
+			headers: { Origin: ORIGIN, Cookie: buyerCookie },
+		});
+		expect(res.status).toBe(503);
+	});
+
+	it("refuses a pick with no row, with the checkout's own sentence", async () => {
+		process.env.PRINTFUL_TOKEN = "not_a_real_printful_token";
+		try {
+			const work = await makeMerchWork([4063]);
+			printfulAnswer = (call) => {
+				if (call.path.startsWith("/shipping")) return twoRates;
+				return null;
+			};
+			const res = await req(`/api/payments/merch/quote/${work.slug}?color=black&size=NOSUCH`, {
+				headers: { Origin: ORIGIN, Cookie: buyerCookie },
+			});
+			expect(res.status).toBe(400);
+			const body = (await res.json()) as { error?: string };
+			expect(body.error).toBe("Choose a color and size first.");
+		} finally {
+			delete process.env.PRINTFUL_TOKEN;
+			printfulCalls.length = 0;
+		}
+	});
+
+	it("quotes goods and shipping live, with no saved address answering tax null", async () => {
+		process.env.PRINTFUL_TOKEN = "not_a_real_printful_token";
+		try {
+			const work = await makeMerchWork([4064]);
+			printfulAnswer = (call) => {
+				if (call.path.startsWith("/shipping")) return twoRates;
+				return null;
+			};
+			const res = await req(`/api/payments/merch/quote/${work.slug}?color=black&size=S4064`, {
+				headers: { Origin: ORIGIN, Cookie: buyerCookie },
+			});
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as {
+				listPrice: string;
+				goodsPrice: string;
+				discount: unknown;
+				shipping: string;
+				shippingName: string;
+				tax: string | null;
+				buyerTotal: string | null;
+				addressSaved: boolean;
+				quotedTo: unknown;
+			};
+			expect(body.listPrice).toBe("30.00");
+			expect(body.goodsPrice).toBe("30.00"); // no Badge — the undiscounted list
+			expect(body.discount).toBeNull();
+			// The offset rate is the standing choice, carried by id.
+			expect(body.shipping).toBe("6.49");
+			expect(body.shippingName).toBe("Standard (CO2 offset)");
+			// No saved billing address: the tax is honest about where it resolves, and
+			// there is no total to show.
+			expect(body.tax).toBeNull();
+			expect(body.buyerTotal).toBeNull();
+			expect(body.addressSaved).toBe(false);
+			expect(body.quotedTo).toBeNull();
+			// The estimate is Stripe Tax's — no tax call happened without an address.
+			expect(fake.taxCalls).toHaveLength(0);
+			// The rate was asked live, one item, one shirt — the saved address being
+			// absent, the representative state is what the call priced from.
+			const rates = printfulCalls.find((c) => c.path.startsWith("/shipping"));
+			expect(rates).toBeTruthy();
+			expect(rates?.body).toMatchObject({
+				recipient: { country_code: "US", state_code: "CO" },
+				items: [{ variant_id: expect.any(Number), quantity: 1 }],
+			});
+		} finally {
+			delete process.env.PRINTFUL_TOKEN;
+			printfulCalls.length = 0;
+		}
+	});
+
+	it("quotes tax from the saved billing address, and the total adds it", async () => {
+		process.env.PRINTFUL_TOKEN = "not_a_real_printful_token";
+		try {
+			const work = await makeMerchWork([4065]);
+			printfulAnswer = (call) => {
+				if (call.path.startsWith("/shipping")) return twoRates;
+				return null;
+			};
+			fake.taxCalls.length = 0;
+			await saveQuoteAddress();
+			const res = await req(`/api/payments/merch/quote/${work.slug}?color=black&size=S4065`, {
+				headers: { Origin: ORIGIN, Cookie: buyerCookie },
+			});
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as {
+				shipping: string;
+				tax: string | null;
+				buyerTotal: string | null;
+				addressSaved: boolean;
+				quotedTo: { city: string; state: string; postalCode: string } | null;
+			};
+			// 30.00 goods + 6.49 shipping + 2.34 tax.
+			expect(body.tax).toBe("2.34");
+			expect(body.buyerTotal).toBe("38.83");
+			expect(body.addressSaved).toBe(true);
+			expect(body.quotedTo).toMatchObject({
+				city: "San Francisco",
+				state: "CA",
+				postalCode: "94103",
+			});
+
+			// The calculation's lines are the session's lines — goods at the clothing
+			// code and the shipping line at the delivery code, both exclusive.
+			expect(fake.taxCalls).toHaveLength(1);
+			const [params] = fake.taxCalls as Array<{
+				line_items: Array<{ amount: number; tax_code: string; tax_behavior: string }>;
+				shipping_cost: { amount: number; tax_code: string };
+				customer_details: {
+					address: Record<string, string>;
+					address_source: string;
+				};
+			}>;
+			expect(params.line_items[0]).toMatchObject({
+				amount: 3000,
+				tax_code: "txcd_30011000",
+				tax_behavior: "exclusive",
+			});
+			expect(params.shipping_cost).toMatchObject({
+				amount: 649,
+				tax_code: "txcd_92010001",
+			});
+			expect(params.customer_details.address).toMatchObject({
+				postal_code: "94103",
+				country: "US",
+			});
+			expect(params.customer_details.address_source).toBe("shipping");
+
+			// The rate call priced from the buyer's own saved state, not the checkout's
+			// representative one.
+			const [rateCall] = printfulCalls.filter((c) => c.path.startsWith("/shipping"));
+			expect(rateCall?.body).toMatchObject({
+				recipient: { country_code: "US", state_code: "CA" },
+			});
+		} finally {
+			delete process.env.PRINTFUL_TOKEN;
+			printfulCalls.length = 0;
+			fake.customerState.customer = null;
+			await db.delete(billingAccounts).where(eq(billingAccounts.userId, buyerId));
+		}
+	});
+
+	it("degrades a failed tax estimate to null, not a refusal — the box is a convenience", async () => {
+		process.env.PRINTFUL_TOKEN = "not_a_real_printful_token";
+		try {
+			const work = await makeMerchWork([4066]);
+			printfulAnswer = (call) => {
+				if (call.path.startsWith("/shipping")) return twoRates;
+				return null;
+			};
+			fake.taxState.fail = true;
+			await saveQuoteAddress();
+			const res = await req(`/api/payments/merch/quote/${work.slug}?color=black&size=S4066`, {
+				headers: { Origin: ORIGIN, Cookie: buyerCookie },
+			});
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as { tax: string | null; addressSaved: boolean };
+			expect(body.tax).toBeNull();
+			expect(body.addressSaved).toBe(true);
+		} finally {
+			fake.taxState.fail = false;
+			delete process.env.PRINTFUL_TOKEN;
+			printfulCalls.length = 0;
+			await db.delete(billingAccounts).where(eq(billingAccounts.userId, buyerId));
+		}
 	});
 });
 
