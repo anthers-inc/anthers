@@ -41,6 +41,7 @@ import {
 import { useMemo, useState } from "react";
 import AccessFilterSection from "./AccessFilterSection";
 import { CONTENT_TYPES, TAGS_BY_TYPE } from "./ContentFilterSections";
+import { sidebarRowClass } from "./sidebar-row-class";
 
 /**
  * The unified type vocabulary every tab's sidebar shows. `CONTENT_TYPES`' All stays
@@ -56,16 +57,6 @@ export const SHARED_FILTER_TYPES = [
 
 const sectionTitleClass =
 	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5";
-
-/** The sidebar row a selectable list renders with — the same shape the nav's own
- *  rows carry, so every selectable list in the sidebar reads as one control family.
- *  Exported for the shared Lenses section and any per-tab section that follows. */
-export const sidebarRowClass = (isActive: boolean) =>
-	`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full ${
-		isActive
-			? "bg-secondary/10 text-secondary font-medium"
-			: "text-base-content/70 hover:bg-base-300/50 hover:text-base-content"
-	}`;
 
 export default function SharedFilterSections({
 	type,
@@ -111,7 +102,7 @@ export default function SharedFilterSections({
 	const removeTag = (t: string) => onTags(selected.filter((s) => s !== t).join(","));
 
 	return (
-		<>
+		<div className="flex flex-col gap-5">
 			{/* ACCESS — first among the shared filters, where the tab consumes access. */}
 			{access?.value != null && (
 				<AccessFilterSection access={access.value} onAccess={access.onAccess} />
@@ -201,6 +192,6 @@ export default function SharedFilterSections({
 					</div>
 				)}
 			</section>
-		</>
+		</div>
 	);
 }

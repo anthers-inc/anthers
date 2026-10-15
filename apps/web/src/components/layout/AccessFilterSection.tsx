@@ -8,11 +8,11 @@
  *
  * Carried over from the feed-bound component this shared section came from — the
  * explainer's copy is the one that a NEW user needs: "unlocked" is a reach verdict,
- * not a price.
+ * not a price. That copy moved to the heading's (i) (Parker, 2026-10-13) — a hoverable
+ * beside a section that repeats on every tab, rather than a paragraph pinned under it.
  */
 
-const sectionTitleClass =
-	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5";
+import InfoTip from "@anthers/web-shared/ui/InfoTip";
 
 const ACCESS_MODES = [
 	{ id: "", label: "Any" },
@@ -29,7 +29,19 @@ export default function AccessFilterSection({
 }) {
 	return (
 		<section>
-			<h3 className={sectionTitleClass}>Access</h3>
+			{/* The (i) rides BESIDE the heading, never inside it: in the h3 its "More
+			    Information" joins the heading's accessible name, and every exact-match
+			    heading selector — the sidebar specs' `getByRole("heading", { exact: true })`
+			    and the Library spec's `h3.textContent === name` — stops matching. */}
+			<div className="flex items-center gap-1.5 mb-2">
+				<h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40">
+					Access
+				</h3>
+				<InfoTip
+					unclipped
+					text="Unlocked means you can open it: public access, or the purchase or Badge that ungates it is already yours. Locked means you cannot open it yet."
+				/>
+			</div>
 			<div className="flex rounded-lg bg-base-300/50 p-0.5">
 				{ACCESS_MODES.map((mode) => (
 					<button
@@ -46,10 +58,6 @@ export default function AccessFilterSection({
 					</button>
 				))}
 			</div>
-			<p className="text-[11px] text-base-content/40 mt-2 leading-snug">
-				Unlocked means you can open it: public access, or the purchase or Badge that ungates it is
-				already yours. Locked means you cannot open it yet.
-			</p>
 		</section>
 	);
 }

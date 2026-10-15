@@ -16,6 +16,7 @@ import { useSearchParams } from "react-router-dom";
 import CreatorCard from "../components/cards/CreatorCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import ContentFilterSections from "../components/layout/ContentFilterSections";
+import { sidebarRowClass } from "../components/layout/sidebar-row-class";
 
 // Exploration modes
 const EXPLORE_MODES = [
@@ -78,13 +79,6 @@ function DiscoverSidebarContent({
 	tag: string;
 	onUpdateParams: (updates: Record<string, string>) => void;
 }) {
-	const filterBtnClass = (isActive: boolean) =>
-		`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full ${
-			isActive
-				? "bg-secondary/10 text-secondary font-medium"
-				: "text-base-content/70 hover:bg-base-300/50 hover:text-base-content"
-		}`;
-
 	return (
 		<div className="flex flex-col gap-5">
 			{/* Exploration mode */}
@@ -97,7 +91,7 @@ function DiscoverSidebarContent({
 						<button
 							key={mode.id}
 							type="button"
-							className={filterBtnClass(exploreMode === mode.id)}
+							className={sidebarRowClass(exploreMode === mode.id)}
 							onClick={() => onUpdateParams({ mode: mode.id === "browse" ? "" : mode.id })}
 							title={mode.description}
 						>

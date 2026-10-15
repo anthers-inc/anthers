@@ -48,6 +48,7 @@
 		"./ui/LoadingSpinner": "./src/components/ui/LoadingSpinner.tsx",
 		"./ui/FileUpload": "./src/components/ui/FileUpload.tsx",
 		"./ui/EmptyState": "./src/components/ui/EmptyState.tsx",
+		"./ui/InfoTip": "./src/components/ui/InfoTip.tsx",
 		"./editor/RichTextEditor": "./src/components/editor/RichTextEditor.tsx",
 		"./post/AccessTables": "./src/components/post/AccessTables.tsx",
 		"./post/BadgeMaker": "./src/components/post/BadgeMaker.tsx",

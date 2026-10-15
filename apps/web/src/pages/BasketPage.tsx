@@ -38,12 +38,12 @@ import { creatorWorkUrl, profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
+import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { ShoppingBagIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useBasket } from "@/lib/basket";
 import BasketCheckout, { workIdsKey } from "../components/basket/BasketCheckout";
-import InfoTip from "../components/payments/InfoTip";
 
 /**
  * The Sales Tax tooltip's sentence, in the two states the derivation can be in: before

@@ -22,6 +22,7 @@ import {
 	WrenchScrewdriverIcon,
 } from "@heroicons/react/24/outline";
 import { useId } from "react";
+import { sidebarRowClass } from "./sidebar-row-class";
 
 // ---------------------------------------------------------------------------
 // Shared constants
@@ -159,13 +160,6 @@ interface ContentFilterSectionsProps extends ContentFilterParams {
 // Component
 // ---------------------------------------------------------------------------
 
-const filterBtnClass = (isActive: boolean) =>
-	`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full ${
-		isActive
-			? "bg-secondary/10 text-secondary font-medium"
-			: "text-base-content/70 hover:bg-base-300/50 hover:text-base-content"
-	}`;
-
 export default function ContentFilterSections({
 	contentType,
 	pricing,
@@ -180,7 +174,7 @@ export default function ContentFilterSections({
 	// At most one type-specific select renders at a time, so one id names whichever it is.
 	const filterSelectId = useId();
 	return (
-		<>
+		<div className="flex flex-col gap-5">
 			{/* Content type */}
 			<section>
 				<h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2">
@@ -191,7 +185,7 @@ export default function ContentFilterSections({
 						<button
 							key={type.id}
 							type="button"
-							className={filterBtnClass(contentType === type.id)}
+							className={sidebarRowClass(contentType === type.id)}
 							onClick={() => onUpdateParams({ media_type: type.id })}
 						>
 							<type.icon className="w-5 h-5 shrink-0" />
@@ -376,6 +370,6 @@ export default function ContentFilterSections({
 					))}
 				</div>
 			</section>
-		</>
+		</div>
 	);
 }

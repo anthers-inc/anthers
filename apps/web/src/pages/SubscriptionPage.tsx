@@ -31,8 +31,8 @@ import type {
 	CreatorEarnings,
 	PoolDistribution,
 } from "@anthers/web-shared/types";
+import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import InfoTip from "../components/payments/InfoTip";
 import { useAnthersLadder } from "../lib/anthers-ladder";
 
 /* ------------------------------------------------------------------ */
@@ -84,7 +84,7 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 /* ------------------------------------------------------------------ */
-/*  InfoTip lives in components/payments — shared with /basket.        */
+/*  InfoTip lives in @anthers/web-shared/ui — shared with /basket.     */
 /* ------------------------------------------------------------------ */
 
 /* ------------------------------------------------------------------ */
