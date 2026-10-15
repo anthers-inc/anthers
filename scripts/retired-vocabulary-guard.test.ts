@@ -55,6 +55,18 @@ const RETIRED = [
 	// compound words and out of reach, and the storage ladder's *"its keepers"* usage is
 	// lowercase too. What this matches is the platform-governance noun.
 	/\bKeepers?\b/,
+	// The landing machinery, retired 2026-10-15 — the worktree's own verify tier and the
+	// PR's checks are what a change ships on now, and nothing queues or arms. Specific
+	// phrases, so ordinary English ("queue the work", "arm the suite") cannot trip them.
+	/\bmerge queue\b/i,
+	/\bmerge group\b/i,
+	/\barm ceremony\b/i,
+	/\blanding radar\b/i,
+	/\blanding ledger\b/i,
+	/\blanding lock\b/i,
+	/\bprojected tip\b/i,
+	/\btrain finisher\b/i,
+	/\blanding front half\b/i,
 ];
 
 const ROOTS = [
