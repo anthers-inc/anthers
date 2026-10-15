@@ -6,10 +6,10 @@
 // The continue-reading rail's membership rule is pinned beside it: strictly past zero
 // and strictly short of the end, server row first, device keys as the fallback.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { writePage, type ServerPosition } from "../../lib/reading-positions";
+import type { Work } from "@anthers/web-shared/types";
+import { type ServerPosition, writePage } from "../../lib/reading-positions";
 import { compareByTitle, continueReading } from "./BookshelfLens";
 import type { LensItem } from "./MusicLens";
-import type { Work } from "@anthers/web-shared/types";
 
 /** A localStorage-shaped store, as `reading-positions.test.ts` runs against. */
 class MemoryStorage {
@@ -86,7 +86,11 @@ function row(workId: number, progress: number, updatedAt: string): [number, Serv
 }
 
 describe("continueReading", () => {
-	const books = [bookItem(1, "A Comic", 100), bookItem(2, "A Novel"), bookItem(3, "Another Book", 40)];
+	const books = [
+		bookItem(1, "A Comic", 100),
+		bookItem(2, "A Novel"),
+		bookItem(3, "Another Book", 40),
+	];
 
 	test("unfinished server rows ride; finished and never-opened do not", () => {
 		const rail = continueReading(books, new Map([row(1, 0.5, "2026-10-15T10:00:00Z")]));
@@ -101,10 +105,7 @@ describe("continueReading", () => {
 	test("order follows last touch, newest first", () => {
 		const rail = continueReading(
 			books,
-			new Map([
-				row(1, 0.5, "2026-10-15T10:00:00Z"),
-				row(3, 0.9, "2026-10-15T12:00:00Z"),
-			]),
+			new Map([row(1, 0.5, "2026-10-15T10:00:00Z"), row(3, 0.9, "2026-10-15T12:00:00Z")]),
 		);
 		expect(rail.map((r) => r.item.id)).toEqual([3, 1]);
 	});

@@ -364,9 +364,7 @@ test("the Bookshelf lens stands the saved comic up as a spine", async ({ page })
 	// to the shelf's own rows — an unfinished position rides the rail above too, so its
 	// spine carries a second, equal marker this walk is not about.
 	const expected = `${Math.round((2 / pageCount) * 100)}%`;
-	await expect(
-		page.getByTestId("bookshelf-shelf").getByTestId("spine-marker"),
-	).toHaveAttribute(
+	await expect(page.getByTestId("bookshelf-shelf").getByTestId("spine-marker")).toHaveAttribute(
 		"style",
 		new RegExp(`height:\\s*${expected.replace("%", "")}%`),
 	);
@@ -416,7 +414,7 @@ test("the continue-reading rail stands the unfinished readings up, newest first"
 	// the walk just pushed, which no local key on this device ever carried.
 	await expect(rail.locator('[data-testid="spine-marker"]').first()).toHaveAttribute(
 		"style",
-		RegExp(`height:\\s*30%`),
+		/height:\s*30%/,
 	);
 
 	// The rail never replaces the shelf: the same Works stand below on the shelf rows.

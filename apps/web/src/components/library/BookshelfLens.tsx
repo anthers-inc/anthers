@@ -195,7 +195,10 @@ export default function BookshelfLens({ items }: { items: LensItem[] }) {
 					<h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-base-content/50">
 						Continue reading
 					</h2>
-					<ol data-testid="continue-reading" className="mb-10 flex flex-nowrap items-end gap-x-1 overflow-x-auto pb-2">
+					<ol
+						data-testid="continue-reading"
+						className="mb-10 flex flex-nowrap items-end gap-x-1 overflow-x-auto pb-2"
+					>
 						{rail.map(({ item, fraction }) => {
 							const work = item.work!;
 							const to =
