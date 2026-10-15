@@ -18,6 +18,7 @@
  */
 
 import { PgBoss } from "pg-boss";
+import { isConnectionExhaustionError, reportConnectionAlarm } from "./connection-census.js";
 
 const CONNECTION = process.env.DATABASE_URL ?? "postgres://anthers:anthers@localhost:5432/anthers";
 
@@ -95,7 +96,19 @@ class JobQueue {
 			: new PgBoss({ connectionString: CONNECTION, max: 3 });
 		// pg-boss surfaces background failures via the error event; without a
 		// listener these would become unhandled 'error' emissions.
-		this.boss.on("error", (err) => console.error("[queue] pg-boss error:", err));
+		this.boss.on("error", (err) => {
+			// A poll or fetch that failed on connection exhaustion is the 10-10 stall's own
+			// shape, and the census alarm — not a console line nobody watches — is what that
+			// failure owes the operator. Same one-per-day budget as the sweep; never awaited,
+			// because the listener is a synchronous event callback.
+			if (isConnectionExhaustionError(err)) {
+				void reportConnectionAlarm(err).catch((alarmErr) =>
+					console.error("[queue] connection alarm failed:", alarmErr),
+				);
+				return;
+			}
+			console.error("[queue] pg-boss error:", err);
+		});
 	}
 
 	async start(): Promise<void> {
@@ -321,6 +334,13 @@ export const QUEUES = {
 	// rows stay `stripe_transfer_id`-null and this sweep re-runs them through the same
 	// idempotency key, so the money an outage delayed is money still owed rather than
 	// money lost. See purchase-transfer-retry.ts and services/purchase-split.ts.
+	// The connection census — the standing check the 2026-10-10 burst stall bought. The
+	// sweep is the watch: quiet when the cluster is inside its budget (it sits near 8 of
+	// 22 at rest), one email a day at most when the usable slots are nearly gone or the
+	// cluster refuses to be read at all, and the boss error listener raises the same
+	// alarm when a poll or fetch hits the exhaustion shape itself. See
+	// `connection-census.ts` for why the dedupe is in memory rather than in a table.
+	CONNECTION_CENSUS: "connection-census",
 	PURCHASE_TRANSFER_RETRY: "purchase-transfer-retry",
 	// Sample every component of the composed public status answer into the recorded
 	// history — the day tallies behind the status page's uptime bars and the transitions
@@ -629,4 +649,9 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// outage is the droplet heartbeat's (a different failure domain with its own cron),
 	// so sampling at the heartbeat's cadence would buy nothing the page can show.
 	[QUEUES.STATUS_SAMPLE, "*/5 * * * *"],
+	// Every fifteen minutes because the two incidents this watches for were minutes long:
+	// the 10-10 stall lasted about five, and a census that runs hourly can sit out a whole
+	// failure. The read is one cheap query pair, and the alarm's day budget already bounds
+	// what repetition costs.
+	[QUEUES.CONNECTION_CENSUS, "*/15 * * * *"],
 ] as const;
