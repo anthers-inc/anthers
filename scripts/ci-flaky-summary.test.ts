@@ -7,27 +7,18 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { summarize } from "./ci-flaky-summary.ts";
+import { type JsonReport, summarize } from "./ci-flaky-summary.ts";
 
 interface Attempt {
 	status: string;
-}
-interface Synthetic {
-	stats: { total: number; flaky?: number };
-	suites: {
-		title: string;
-		file?: string;
-		suites?: unknown[];
-		tests: { title: string; results: Attempt[] }[];
-	}[];
 }
 
 function synthetic(
 	specs: { title: string; attempts: Attempt[] }[],
 	statsFlaky?: number,
-): Synthetic {
+): JsonReport {
 	return {
-		stats: { total: specs.length, flaky: statsFlaky },
+		stats: statsFlaky === undefined ? undefined : { total: specs.length, flaky: statsFlaky },
 		suites: [
 			{
 				title: "a suite",

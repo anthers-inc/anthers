@@ -26,12 +26,13 @@ interface JsonReportTest {
 	location?: { file?: string };
 	results?: { status?: string }[];
 }
-interface JsonReportSuite {
+export interface JsonReportSuite {
 	title?: string;
+	file?: string;
 	suites?: JsonReportSuite[];
 	tests?: JsonReportTest[];
 }
-interface JsonReport {
+export interface JsonReport {
 	stats?: { flaky?: number; total?: number };
 	suites?: JsonReportSuite[];
 }
