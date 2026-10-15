@@ -40,12 +40,24 @@ export default defineConfig({
 	// pre-push hook verifies every push, its own full-suite runs — and at cores/2 the
 	// suite's timeout-adjacent assertions flake in rotating sets under the contention.
 	// A busy box must degrade into a slower run, never a false-red gate: the gate's
-	// redness is the signal every push trusts, so it has to mean the code is red. CI
-	// stays at 1 worker; it pays for certainty in wall-clock on a quiet runner.
-	// E2E_WORKERS overrides when a deliberately quiet machine wants the speed back.
-	workers: process.env.CI ? 1 : Number(process.env.E2E_WORKERS ?? 4),
+	// redness is the signal every push trusts, so it has to mean the code is red.
+	//
+	// ⭐ **CI runs 2 workers (2026-10-15), up from 1, because the measured case says it
+	// can and the wall clock pays for it.** The old comment gave certainty as the reason
+	// (1 worker, "quiet runner") — but the authed project already runs at 4 workers on
+	// the shared fixtures on this machine every day (146–150 specs in 1.1 minutes,
+	// measured on this branch's work), so the specs' data isolation holds well beyond
+	// what CI's 1 worker trusted. What 1 worker bought was a ~8-minute media job that a
+	// slow runner window stretched past the job ceiling — the 2026-10-14 incident, where
+	// a finishing run died by budget with zero failure output and ejected its merge
+	// group. 2 workers on a 4-vCPU runner halves the room the slow windows have to
+	// multiply into while keeping the runner's own load (API, Postgres, ffmpeg) well
+	// inside its cores; local stays 4.
+	// E2E_WORKERS overrides when a deliberately quiet machine wants the speed back —
+	// in CI as well as on it.
+	workers: Number(process.env.E2E_WORKERS ?? (process.env.CI ? 2 : 4)),
 	reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
-	// The stall timeline: a hung suite at 1 worker otherwise leaves the captured log
+	// The stall timeline: a hung suite otherwise leaves the captured log
 	// without a single timestamped event between "Running N tests" and the ceiling —
 	// the 2026-10-14 browser job gave 26 silent minutes and the log could not say what
 	// the suite was inside even after the fact. reportSlowTests prints every test that
