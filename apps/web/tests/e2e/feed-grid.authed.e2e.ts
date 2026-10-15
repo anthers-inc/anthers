@@ -284,6 +284,51 @@ test("the goods and video tiles keep their band shapes and their hover truths", 
 	).toBeGreaterThan(0);
 });
 
+test("the preview stop keeps a held hover a poster, and the default still plays", async ({
+	page,
+}) => {
+	test.setTimeout(60_000);
+	const videoName = /A short film that really plays/;
+	// Long enough that the hover debounce (`PREVIEW_HOVER_DELAY_MS` is 500 ms) has
+	// fired and the player would be mounted if any path allowed it.
+	const hold = 1_500;
+
+	// The stop, persisted before the page loads the way the settings page leaves it:
+	// *Play previews as I browse* set off means a deliberate one-and-a-half-second
+	// hold never ships a stream — the wiring guard for `tilePreviewPlayable`'s
+	// first param, which no unit test can carry alone.
+	await page.addInitScript(() => {
+		localStorage.setItem("anthers_tile_previews", "0");
+	});
+	await page.setViewportSize({ width: 2000, height: 1100 });
+	await page.goto(`${WEB_ORIGIN}/feed`);
+	const stoppedTile = page.getByRole("link", { name: videoName });
+	await expect(stoppedTile).toBeVisible();
+	await stoppedTile.hover();
+	await page.waitForTimeout(hold);
+	expect(
+		await tileRoot(stoppedTile).evaluate(
+			(el) => (el as HTMLElement).querySelectorAll("video").length,
+		),
+		"a stopped preview never mounts a player",
+	).toBe(0);
+
+	// The contrast half, from a fresh store so the same run proves the stop — and
+	// not the debounce — is what withheld the preview: with no mark in storage the
+	// same hold mounts the player inside the band.
+	await page.addInitScript(() => {
+		localStorage.removeItem("anthers_tile_previews");
+	});
+	await page.goto(`${WEB_ORIGIN}/feed`);
+	const playingTile = page.getByRole("link", { name: videoName });
+	await expect(playingTile).toBeVisible();
+	await playingTile.hover();
+	await expect(
+		tileRoot(playingTile).locator("video"),
+		"the default still previews on a deliberate hold",
+	).toBeAttached({ timeout: 3_000 });
+});
+
 test("the grid fills the content area and flexes as the window narrows", async ({ page }) => {
 	test.setTimeout(60_000);
 	await page.setViewportSize({ width: 2000, height: 1100 });
