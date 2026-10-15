@@ -8,8 +8,11 @@
 // own contract: what a first visit reads, and what a stop writes.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+	previewAudio,
 	previewsEnabled,
+	readStoredPreviewAudio,
 	readStoredPreviews,
+	setPreviewAudio,
 	setPreviewsEnabled,
 	subscribe,
 } from "./tile-preview-settings";
@@ -32,9 +35,10 @@ beforeEach(() => {
 
 afterEach(() => {
 	Object.assign(globalThis, { localStorage: realStorage });
-	// Restore the on default, so a later reader of the module state sees the first-
-	// visit answer rather than a leaked stop from one of these tests.
+	// Restore the defaults, so a later reader of the module state sees the first-
+	// visit answers rather than a leaked stop or a leaked sound from these tests.
 	setPreviewsEnabled(true);
+	setPreviewAudio(false);
 });
 
 describe("readStoredPreviews", () => {
@@ -85,5 +89,46 @@ describe("setPreviewsEnabled", () => {
 		setPreviewsEnabled(true);
 		stop();
 		expect(heard).toEqual([false, true]);
+	});
+});
+
+describe("the hover-audio setting", () => {
+	test("nothing stored means silent, which is the whole preview rule", () => {
+		expect(readStoredPreviewAudio()).toBe(false);
+		expect(previewAudio()).toBe(false);
+	});
+
+	test("a stored on mark turns audio on", () => {
+		localStorage.setItem("anthers_tile_preview_audio", "1");
+		expect(readStoredPreviewAudio()).toBe(true);
+	});
+
+	test("anything other than the on mark is off — sound is opt-in", () => {
+		localStorage.setItem("anthers_tile_preview_audio", "0");
+		expect(readStoredPreviewAudio()).toBe(false);
+		// A corrupted value cannot accidentally turn sound on.
+		localStorage.setItem("anthers_tile_preview_audio", "yes");
+		expect(readStoredPreviewAudio()).toBe(false);
+	});
+
+	test("storage that refuses to answer still defaults to off", () => {
+		Object.assign(globalThis, {
+			localStorage: {
+				getItem: () => {
+					throw new Error("private mode");
+				},
+				setItem: () => {},
+			},
+		});
+		expect(readStoredPreviewAudio()).toBe(false);
+	});
+
+	test("a turn-on is written through and heard", () => {
+		const heard: boolean[] = [];
+		const stop = subscribe(() => heard.push(previewAudio()));
+		setPreviewAudio(true);
+		stop();
+		expect(localStorage.getItem("anthers_tile_preview_audio")).toBe("1");
+		expect(heard).toEqual([true]);
 	});
 });
