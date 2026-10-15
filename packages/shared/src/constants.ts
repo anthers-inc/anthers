@@ -785,6 +785,106 @@ export function cardFeeDisplay(amount: number): number {
 	return Math.round((amount * CARD_RATE + CARD_FLAT) * 100) / 100;
 }
 
+/**
+ * A charge with sales tax added, in floats, for **display only** — the illustration
+ * rate, `ILLUSTRATIVE_SALES_TAX_RATE`, added the way the wiki's comparison tables add
+ * it: on both sides the same, as the one thing on top. Float copy of the decimal
+ * `money(total.times(1 + rate))` — decimal's `toFixed` rounds half-up, and float
+ * representation of the rate reads a true tie (5.00 × 1.065 = 5.325) as barely-below,
+ * so the pre-round epsilon keeps the copy saying what the wiki's table says. The
+ * epsilon sits inside the tie's own noise band; this is display arithmetic, and never
+ * what anyone is paid.
+ */
+export function withTaxDisplay(amount: number): number {
+	return Math.round(amount * (1 + ILLUSTRATIVE_SALES_TAX_RATE) * 100 + 1e-6) / 100;
+}
+
+/**
+ * The whole monthly support charge, in floats, for **display only** — the spend
+ * calculator's re-pointed month (`/resources/media-month`). `supportBreakdown` in
+ * `fees.ts` is the money version and the source of truth; like `cardFeeDisplay`
+ * above, this is its float copy, because the SPA must never import `fees.ts` (the
+ * decimal.js chain). `economics.test.ts` pins it to the money version to the cent
+ * across a grid of charges; if that test ever fails, the money one wins.
+ *
+ * The shape mirrors the generated `user-cases` table exactly, because that is what
+ * the copy beside the calculator promises: the reader's whole month — their Anthers
+ * side and what they direct at creators — rides ONE monthly charge, so the single
+ * at-cost card fee is paid once and split pro-rata between the two sides, the
+ * fee's rounding remainder landing on the Anthers side (creators are never short a
+ * cent — mirrored from `paymentsSplit`). Sales tax is the only thing added, and it
+ * is added in the display too, at the illustration rate, because the wiki's tables
+ * apply it on both sides the same way.
+ *
+ * Faithful to the money version down to the shape of its zero: with nothing given
+ * to Anthers, `timePool` carries the platform's own free-account pool, which the
+ * reader does not pay for — the calculator must not silently fold that into a
+ * reader-financed flow.
+ *
+ * Never compute what anyone is actually paid from this.
+ */
+export function supportBreakdownDisplay(
+	anthersDollars: number,
+	creatorDollars: number,
+): {
+	anthers: number;
+	directed: number;
+	/** The whole monthly charge, before tax. */
+	charge: number;
+	/** The single at-cost card fee, inside the charge. */
+	card: number;
+	cardOnAnthers: number;
+	cardOnDirected: number;
+	/** Half of what goes to Anthers, on every amount — paid to creators by time spent. */
+	timePool: number;
+	/** What is left of the Anthers side, funding the charitable programs. */
+	remainder: number;
+	/** What the directed money reaches its creators for, after its pro-rata slice of the card fee. */
+	directedNet: number;
+	toCreators: number;
+	/** Sales tax on top, at the illustration rate — the only thing added. */
+	tax: number;
+	chargedWithTax: number;
+} {
+	const anthers = supportAmount(anthersDollars);
+	const directed = supportAmount(creatorDollars);
+	const charge = anthers + directed;
+	const card = cardFeeDisplay(charge);
+	// The pro-rata split mirrors `paymentsSplit`'s rounding exactly: the directed
+	// side's share is rounded first (round of `card × directed ÷ charge`), the
+	// Anthers side takes the remainder. Multiplication-then-division, as decimal
+	// multiplies-then-divides. And both cent rounds here — this one and the tax
+	// step below — mirror the money version's ROUND_HALF_UP: float representation
+	// of the rates turns a true tie (5.00 × 1.065 = 5.325) into barely-below,
+	// which Math.round alone would read DOWN where the wiki's table says UP. The
+	// epsilon sits inside the tie's own noise band; this is display arithmetic and
+	// never what anyone is paid.
+	const cardOnDirected =
+		charge > 0 ? Math.round(((card * directed) / charge) * 100 + 1e-6) / 100 : 0;
+	const cardOnAnthers = Math.round((card - cardOnDirected) * 100) / 100;
+	const timePool = timePoolFor(anthers);
+	// Mirrors the money version's explicit zero: with nothing given to Anthers the
+	// charge is subsidized — foundation is 0, not the negative that `0 − pool − 0`
+	// would produce.
+	const remainder = anthers === 0 ? 0 : anthers - timePool - cardOnAnthers;
+	const directedNet = directed - cardOnDirected;
+	const chargedWithTax = withTaxDisplay(charge);
+	return {
+		anthers,
+		directed,
+		charge,
+		card,
+		cardOnAnthers,
+		cardOnDirected,
+		timePool,
+		remainder,
+		directedNet,
+		toCreators: directedNet + timePool,
+		tax: chargedWithTax - charge,
+		chargedWithTax,
+	};
+}
+
 // ── Refunds ──────────────────────────────────────────────────────────────────
 /**
  * How many refunds **after download** are issued automatically, per buyer, in a

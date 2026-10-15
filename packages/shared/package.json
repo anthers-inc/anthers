@@ -7,6 +7,7 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./fees": "./src/fees.ts",
+		"./scenarios": "./src/scenarios.ts",
 		"./constants": "./src/constants.ts",
 		"./attention": "./src/attention.ts",
 		"./traffic": "./src/traffic.ts",

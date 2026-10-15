@@ -101,6 +101,7 @@ import {
 	purchaseCase,
 	purchaseExamples,
 	RIVAL_MEMBERSHIPS,
+	RIVAL_SPEND,
 	RIVAL_STOREFRONTS,
 	salaryLandmarks,
 	saleTable,
@@ -413,6 +414,31 @@ export const MONEY_FLOWS = ${j(flows)} as const;
  * (checked 2026-08-03). Generation guarantees the arithmetic, never the inputs.
  */
 export const RIVAL_STOREFRONTS = ${j(RIVAL_STOREFRONTS)} as const;
+
+/**
+ * The spend calculator's rival lines — the monthly spending lines a reader builds
+ * their own media month from, with what each platform publishes about the split.
+ *
+ * Hand-maintained in \`scenarios.ts\` beside \`RIVAL_STOREFRONTS\` (same discipline:
+ * sources and checked dates are part of the data, and a \`null\` split is a finding
+ * the page states rather than a number it estimates). Re-exported through the
+ * generated module because the browser bundle reads only this module.
+ *
+ * ⚠️ **The rates and prices are perishable** — generation guarantees the arithmetic,
+ * never the inputs. Each row carries its own \`checkedOn\`; re-check before anything
+ * ships.
+ */
+export const RIVAL_SPEND = ${j(RIVAL_SPEND)} as const;
+
+/**
+ * The purchase crossover, against the storefront cut \`purchaseCase\` defaults to
+ * (Steam's 30%): below this list price a storefront that absorbs processing returns
+ * MORE to the creator than Anthers does, and the page concedes it. Computed by
+ * walking up in cents from \`FLAT / (CUT − RATE)\` until Anthers actually wins once
+ * both sides are rounded — not roundable from a formula, because the concession
+ * turns on whose rounding wins.
+ */
+export const STOREFRONT_CROSSOVER = ${j(purchaseCase().crossover)} as const;
 `;
 }
 

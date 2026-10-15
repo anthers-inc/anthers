@@ -12,10 +12,13 @@ import Decimal from "decimal.js";
 import {
 	BADGE_ORDER,
 	cardFeeDisplay,
+	FREE_TIME_POOL,
+	ILLUSTRATIVE_SALES_TAX_RATE,
 	PUBLIC_ACCESS_PRICE,
 	SELF_HOST_FEE,
 	STORAGE_LADDER_GIB,
 	STORAGE_PER_GIB_MONTH,
+	supportBreakdownDisplay,
 	TIME_POOL_RATE,
 	thresholdForBadge,
 	timePoolFor,
@@ -170,6 +173,56 @@ describe("cardFeeDisplay — the browser's copy of the formula", () => {
 		expect(cardFeeDisplay(0)).toBe(0);
 		expect(cardFeeDisplay(-5)).toBe(0);
 		expect(cardFee(0).toNumber()).toBe(0);
+	});
+});
+
+describe("supportBreakdownDisplay — the spend calculator's copy of the whole charge", () => {
+	/**
+	 * Same hazard as `cardFeeDisplay` directly above: the media-month calculator
+	 * cannot import `fees.ts`, so it computes from this float copy — and the copy's
+	 * entire value is that it reproduces the money version to the cent, including
+	 * the pro-rata card-fee split whose rounding order the money version chose on
+	 * purpose (the directed side's share rounds first, and the fee's remainder
+	 * lands on the Anthers side so creators are never short a cent).
+	 */
+	test("agrees with supportBreakdown() to the cent across a grid of charges", () => {
+		const anthersSides = [0, 0.5, 3, 6, 9, 12, 25.5, 100];
+		const directedSides = [0, 0.01, 1, 2, 7, 10, 25.5, 33.33, 100, 250];
+		const toCent = (n: number) => Math.round(n * 100) / 100;
+		for (const a of anthersSides) {
+			for (const d of directedSides) {
+				const money = supportBreakdown({ anthersDollars: a, creatorDollars: d });
+				const s = supportBreakdownDisplay(a, d);
+				expect(toCent(s.charge)).toBe(money.supportSubtotal.toNumber());
+				expect(toCent(s.card)).toBe(money.payments.toNumber());
+				// The split, by way of the money version's own derivation:
+				// cardOnDirected is creatorDirect − creatorNet, and the two halves
+				// must reconstruct the whole fee.
+				expect(toCent(s.cardOnDirected)).toBe(
+					money.creatorDirect.minus(money.creatorNet).toNumber(),
+				);
+				expect(toCent(s.cardOnAnthers + s.cardOnDirected)).toBe(money.payments.toNumber());
+				expect(s.timePool).toBeCloseTo(money.timePool.toNumber(), 8);
+				expect(s.remainder).toBeCloseTo(money.foundation.toNumber(), 8);
+				expect(toCent(s.directedNet)).toBe(money.creatorNet.toNumber());
+				expect(s.toCreators).toBeCloseTo(money.toCreators.toNumber(), 8);
+				// And a PAID charge must reconstruct from its own pieces. The subsidized
+				// zero cannot: there `timePool` is the platform's own free-account pool,
+				// not part of what was given, and `foundation` is 0 by construction.
+				if (s.anthers > 0) {
+					expect(s.timePool + s.remainder + s.cardOnAnthers).toBeCloseTo(s.anthers, 8);
+				} else {
+					expect(s.timePool).toBe(FREE_TIME_POOL);
+					expect(s.remainder).toBe(0);
+				}
+				// Sales tax, at the illustration rate, matches the way the wiki's
+				// tables tax the charge.
+				const taxedWithDecimal = Number(
+					money.total.times(1 + ILLUSTRATIVE_SALES_TAX_RATE).toFixed(2),
+				);
+				expect(toCent(s.chargedWithTax)).toBe(taxedWithDecimal);
+			}
+		}
 	});
 });
 

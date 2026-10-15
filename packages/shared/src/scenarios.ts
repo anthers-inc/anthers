@@ -523,6 +523,120 @@ function membershipNet(monthly: Decimal, r: (typeof RIVAL_MEMBERSHIPS)[number]):
 		.minus(recurring);
 }
 
+// ── The spend calculator's rival lines ──────────────────────────────────────
+//
+// Rates shared with the sets above rather than retyped: if a rival's published rate
+// changes, the correction happens once — in RIVAL_STOREFRONTS or RIVAL_MEMBERSHIPS —
+// and both comparisons move together. A row here that nobody above carries (the two
+// subscription platforms) types its own rate with its source and checked date.
+
+const spendSteam = RIVAL_STOREFRONTS.find((r) => r.name === "Steam");
+if (!spendSteam) throw new Error("RIVAL_SPEND — the Steam row is gone from RIVAL_STOREFRONTS");
+const spendPatreon = RIVAL_MEMBERSHIPS.find((r) => r.name === "Patreon");
+if (!spendPatreon) throw new Error("RIVAL_SPEND — the Patreon row is gone from RIVAL_MEMBERSHIPS");
+
+/**
+ * The spend calculator's rival set — the monthly lines a reader builds their current
+ * media month from on `/resources/media-month`, and what each platform publishes
+ * about where the money goes.
+ *
+ * Same discipline as {@link RIVAL_STOREFRONTS}: hand-maintained competitor research,
+ * each rate with its source and the date it was last checked, re-checked before
+ * anything ships; the generated module re-exports it because the browser bundle reads
+ * only that module. Rates overlap the sets above rather than re-typing them — the
+ * storefront line is Steam's share, the direct line is Patreon's — so one correction
+ * here is one edit.
+ *
+ * What a row can claim: `creatorShare` / `platformCut` are **published** per-user
+ * splits, or `null` — and a null is a finding, not a missing datum. The tool's whole
+ * honesty rule is that where the split is not published, the row says so and the gap
+ * is shown in the reader's own totals rather than estimated away (the wiki's *What It
+ * Costs, Against What You Pay Now* § What Can Be Known is the authority). `known`
+ * carries what IS published, stated so the gap reads as a gap.
+ */
+export const RIVAL_SPEND: {
+	key: string;
+	name: string;
+	/** The line's published list price, US individual — 0 where the reader supplies the amount (a storefront average, a Patreon total). */
+	price: number;
+	/** The published share of the reader's money that reaches creators, or null when not published. */
+	creatorShare: number | null;
+	/** The published share the platform keeps, or null. */
+	platformCut: number | null;
+	/** What is published, and thereby what is not. */
+	known: string;
+	/** Where the rates came from. */
+	source: string;
+	/** The day this row was last verified against its source — re-check before anything ships. */
+	checkedOn: string;
+	/** The platform's cut already covers its own card processing (Steam's model). */
+	absorbsProcessing?: boolean;
+	/** Each recipient is billed its own separate charge, flat fee and all (Patreon's model). */
+	perCreatorCharge?: boolean;
+	/** Card processing billed to the creator per pledge, as published in their fee schedule — US card. */
+	processingRate?: number;
+	processingFlat?: number;
+}[] = [
+	{
+		key: "video",
+		name: "YouTube Premium",
+		price: 15.99,
+		creatorShare: null,
+		platformCut: null,
+		known:
+			'creators are paid from Premium revenue "based on how much members watch your content" — no percentage and no pool size is published',
+		source: "youtube.com/premium; YouTube Help",
+		checkedOn: "2026-10-15",
+	},
+	{
+		key: "music",
+		name: "Spotify Premium",
+		price: 12.99,
+		creatorShare: null,
+		platformCut: null,
+		known:
+			"aggregate payouts to the industry are published; what any one artist receives depends on their label deal, which is not Spotify's to disclose",
+		source: "spotify.com/us/premium",
+		checkedOn: "2026-10-15",
+	},
+	{
+		key: "storefront",
+		name: "Storefront purchases",
+		price: 0,
+		creatorShare: 1 - spendSteam.share,
+		platformCut: spendSteam.share,
+		known: "the storefront's cut is published, and Steam's covers card processing",
+		source: "Valve's published tiers; shared with RIVAL_STOREFRONTS",
+		checkedOn: "2026-10-15",
+		absorbsProcessing: true,
+	},
+	{
+		key: "direct",
+		name: "Patreon",
+		price: 0,
+		creatorShare: 1 - spendPatreon.share,
+		platformCut: spendPatreon.share,
+		known:
+			"the 10% platform fee is the rate for creators joining today (older pages sit at 5%, 8% or 11%, grandfathered); each pledge also carries card processing billed to the creator — 2.9% plus a flat fee per charge on a US card — which Patreon publishes in its fee schedule",
+		source: "Patreon Help — Creator fees overview; shared with RIVAL_MEMBERSHIPS",
+		checkedOn: "2026-10-15",
+		perCreatorCharge: true,
+		processingRate: 0.029,
+		processingFlat: 0.3,
+	},
+	{
+		key: "free",
+		name: "The free, ad-supported month",
+		price: 0,
+		creatorShare: null,
+		platformCut: null,
+		known:
+			"creators receive 55% of the ad revenue long-form videos generate — and per-user advertising revenue is not published by anyone, so the per-hour figure cannot be computed",
+		source: "YouTube Help",
+		checkedOn: "2026-10-15",
+	},
+];
+
 /**
  * Creator take-home at each rung of Anthers' own ladder, against the membership platforms.
  *

@@ -238,3 +238,87 @@ export const RIVAL_STOREFRONTS = [
 		maxPrice: 20,
 	},
 ] as const;
+
+/**
+ * The spend calculator's rival lines — the monthly spending lines a reader builds
+ * their own media month from, with what each platform publishes about the split.
+ *
+ * Hand-maintained in `scenarios.ts` beside `RIVAL_STOREFRONTS` (same discipline:
+ * sources and checked dates are part of the data, and a `null` split is a finding
+ * the page states rather than a number it estimates). Re-exported through the
+ * generated module because the browser bundle reads only this module.
+ *
+ * ⚠️ **The rates and prices are perishable** — generation guarantees the arithmetic,
+ * never the inputs. Each row carries its own `checkedOn`; re-check before anything
+ * ships.
+ */
+export const RIVAL_SPEND = [
+	{
+		key: "video",
+		name: "YouTube Premium",
+		price: 15.99,
+		creatorShare: null,
+		platformCut: null,
+		known:
+			'creators are paid from Premium revenue "based on how much members watch your content" — no percentage and no pool size is published',
+		source: "youtube.com/premium; YouTube Help",
+		checkedOn: "2026-10-15",
+	},
+	{
+		key: "music",
+		name: "Spotify Premium",
+		price: 12.99,
+		creatorShare: null,
+		platformCut: null,
+		known:
+			"aggregate payouts to the industry are published; what any one artist receives depends on their label deal, which is not Spotify's to disclose",
+		source: "spotify.com/us/premium",
+		checkedOn: "2026-10-15",
+	},
+	{
+		key: "storefront",
+		name: "Storefront purchases",
+		price: 0,
+		creatorShare: 0.7,
+		platformCut: 0.3,
+		known: "the storefront's cut is published, and Steam's covers card processing",
+		source: "Valve's published tiers; shared with RIVAL_STOREFRONTS",
+		checkedOn: "2026-10-15",
+		absorbsProcessing: true,
+	},
+	{
+		key: "direct",
+		name: "Patreon",
+		price: 0,
+		creatorShare: 0.9,
+		platformCut: 0.1,
+		known:
+			"the 10% platform fee is the rate for creators joining today (older pages sit at 5%, 8% or 11%, grandfathered); each pledge also carries card processing billed to the creator — 2.9% plus a flat fee per charge on a US card — which Patreon publishes in its fee schedule",
+		source: "Patreon Help — Creator fees overview; shared with RIVAL_MEMBERSHIPS",
+		checkedOn: "2026-10-15",
+		perCreatorCharge: true,
+		processingRate: 0.029,
+		processingFlat: 0.3,
+	},
+	{
+		key: "free",
+		name: "The free, ad-supported month",
+		price: 0,
+		creatorShare: null,
+		platformCut: null,
+		known:
+			"creators receive 55% of the ad revenue long-form videos generate — and per-user advertising revenue is not published by anyone, so the per-hour figure cannot be computed",
+		source: "YouTube Help",
+		checkedOn: "2026-10-15",
+	},
+] as const;
+
+/**
+ * The purchase crossover, against the storefront cut `purchaseCase` defaults to
+ * (Steam's 30%): below this list price a storefront that absorbs processing returns
+ * MORE to the creator than Anthers does, and the page concedes it. Computed by
+ * walking up in cents from `FLAT / (CUT − RATE)` until Anthers actually wins once
+ * both sides are rounded — not roundable from a formula, because the concession
+ * turns on whose rounding wins.
+ */
+export const STOREFRONT_CROSSOVER = "1.11" as const;
