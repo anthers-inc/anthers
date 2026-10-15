@@ -51,7 +51,8 @@ describe("the generator's retag", () => {
 		expect(timestampedTag("0145_lucky_sersi", when)).toMatch(/^\d{8}-\d{6}_lucky_sersi$/);
 
 		// The file moved and the journal agrees; the journal's other fields are untouched.
-		expect(readJournal().entries[0]?.tag).toBe(result.tag);
+		const retagged = result.tag ?? "(untagged)";
+		expect(readJournal().entries[0]?.tag).toBe(retagged);
 	});
 
 	test("a no-changes generate (the entry predates the run) retags nothing, ever", () => {
