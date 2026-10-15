@@ -16,9 +16,12 @@
  * (`sidebar-structure.authed.e2e.ts`) pins the structure; this one pins the Library's
  * content: the lens rows, the dial, and the graying.
  */
+import { fileURLToPath } from "node:url";
 import { MEDIA_FIXTURE_PROJECT, mediaFixtureWork } from "@anthers/db/media-fixture";
 import type { Page } from "@playwright/test";
-import { API_URL, expect, test, WEB_ORIGIN } from "./fixtures";
+import { API_URL, emailedCode, expect, leashedExecFileSync, test, WEB_ORIGIN } from "./fixtures";
+
+const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
 const TRACK = mediaFixtureWork("track1");
 
@@ -340,32 +343,146 @@ async function saveFixtureWork(page: Page, key: string) {
 }
 
 test("the Bookshelf lens stands the saved comic up as a spine", async ({ page }) => {
-	const comic = await saveFixtureWork(page, "comic");
-	const pageCount = comic.pageCount ?? 0;
-	expect(pageCount, "the fixture comic renders pages — no pages, no spine ribbon").toBeGreaterThan(
-		1,
-	);
+	// The ribbon reads the further-along of the device's keys and the user's row, and
+	// this file's walks share the media fixture user with every reader walk — whose
+	// legitimate page turns write rows past this walk's local seed. So the assertion
+	// runs on its own throwaway account, whose comic row nothing else writes, and the
+	// seeded device keys are the only position the account carries.
+	const account = makeRailAccount(`spine_${Date.now().toString(36)}`);
+	try {
+		await signInThroughUi(page, account.email);
+		const comic = await saveFixtureWork(page, "comic");
+		const pageCount = comic.pageCount ?? 0;
+		expect(
+			pageCount,
+			"the fixture comic renders pages — no pages, no spine ribbon",
+		).toBeGreaterThan(1);
 
-	// Seed where this device last got in it — the store `lib/reading-positions.ts`
-	// owns, written by the comic reader on navigation. The spine marker is the shelf's
-	// read of the same data: page 2 of the fixture's pages, as a ribbon on the spine.
-	await page.addInitScript(
-		(seed) => {
-			localStorage.setItem("anthers_reading_progress", JSON.stringify({ [String(seed.id)]: 2 }));
+		// Seed where this device last got in it — the store `lib/reading-positions.ts`
+		// owns, written by the comic reader on navigation. The spine marker is the
+		// shelf's read of the same data: page 2 of the fixture's pages, as a ribbon on
+		// the spine. The account holds no row for the comic, so this device's seed is
+		// the whole story.
+		await page.addInitScript(
+			(seed) => {
+				localStorage.setItem("anthers_reading_progress", JSON.stringify({ [String(seed.id)]: 2 }));
+			},
+			{ id: comic.id },
+		);
+
+		await page.goto("/library?lens=bookshelf");
+		await expect(page.getByRole("heading", { name: "Bookshelf" })).toBeVisible();
+		await expect(page.getByText("A comic that really turns").first()).toBeVisible();
+
+		// The ribbon, at the depth the device got to: round(2 / pageCount) percent.
+		// Scoped to the shelf's own rows — an unfinished position rides the rail above
+		// too, so its spine carries a second, equal marker this walk is not about.
+		const expected = `${Math.round((2 / pageCount) * 100)}%`;
+		await expect(page.getByTestId("bookshelf-shelf").getByTestId("spine-marker")).toHaveAttribute(
+			"style",
+			new RegExp(`height:\\s*${expected.replace("%", "")}%`),
+		);
+	} finally {
+		await purgeRailAccount(account.id);
+	}
+});
+
+/**
+ * Push one real position row through the routes the readers write through.
+ *
+ * The rail's rows are per-user value state, and this file's walks share the media
+ * fixture user with every reader walk in the project — so the rail assertions run
+ * against their own throwaway account, whose rows nothing else writes:
+ * `makeRailAccount` makes it, `/login` signs it, and it is purged before the test
+ * ends, its rows cascading with it.
+ */
+async function putReadingPosition(page: Page, workId: number, progress: number) {
+	const cookies = await page.context().cookies();
+	const session = cookies.find((c) => c.name === "session")?.value;
+	expect(session, "the signed-in page should carry a session cookie").toBeTruthy();
+	const res = await fetch(`${API_URL}/api/content/reading-positions/${workId}`, {
+		method: "PUT",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${session}`,
 		},
-		{ id: comic.id },
-	);
+		body: JSON.stringify({ progress, position: {} }),
+	});
+	expect(res.status, "the signed-in user writes their own row").toBe(200);
+}
 
-	await page.goto("/library?lens=bookshelf");
-	await expect(page.getByRole("heading", { name: "Bookshelf" })).toBeVisible();
-	await expect(page.getByText("A comic that really turns").first()).toBeVisible();
+/** A throwaway account, made the canonical way (`db:local-account`), as the basket spec does. */
+function makeRailAccount(name: string): { email: string; id: number } {
+	const address = `${name}@example.com`;
+	const out = JSON.parse(
+		leashedExecFileSync("bun", ["run", "db:local-account", "--name", name, "--email", address], {
+			cwd: REPO_ROOT,
+			encoding: "utf8",
+		})
+			.trim()
+			.split("\n")
+			.at(-1) as string,
+	) as { handle: string; userId: number };
+	return { email: address, id: out.userId };
+}
 
-	// The ribbon, at the depth the device got to: round(2 / pageCount) percent.
-	const expected = `${Math.round((2 / pageCount) * 100)}%`;
-	await expect(page.getByTestId("spine-marker")).toHaveAttribute(
-		"style",
-		new RegExp(`height:\\s*${expected.replace("%", "")}%`),
-	);
+async function purgeRailAccount(id: number): Promise<void> {
+	const { purgeAccountIds } = await import("../../../api/src/__tests__/purge");
+	await purgeAccountIds([id]);
+}
+
+/** Sign in through the real /login UI — the throwaway account's own ceremony. */
+async function signInThroughUi(page: Page, email: string): Promise<void> {
+	await page.goto("/login");
+	await page.locator('input[autocomplete="username"]').fill(email);
+	await page.getByRole("button", { name: /^continue$/i }).click();
+	await expect(page.locator('input[aria-label="Code character 1 of 6"]')).toBeFocused();
+	await page.keyboard.type(await emailedCode(email));
+	await expect
+		.poll(() => page.url(), { message: `sign-in as ${email} never landed`, timeout: 15_000 })
+		.not.toContain("/login");
+}
+
+test("the continue-reading rail stands the unfinished readings up, newest first", async ({
+	page,
+}) => {
+	const account = makeRailAccount(`rail_${Date.now().toString(36)}`);
+	try {
+		await signInThroughUi(page, account.email);
+
+		const comic = await saveFixtureWork(page, "comic");
+		const ebook = await saveFixtureWork(page, "ebook");
+
+		// Rows through the real route, this account's own: the ebook touched first, the
+		// comic most recently — so the comic stands first on the rail.
+		await putReadingPosition(page, ebook.id, 0.8);
+		await putReadingPosition(page, comic.id, 0.3);
+
+		await page.goto("/library?lens=bookshelf");
+		await expect(page.getByRole("heading", { name: "Continue reading" })).toBeVisible();
+
+		// Unfinished positions on book-like Works only — the two rows, nothing else —
+		// headed by the last one touched. The account opened exactly two Works, so the
+		// count is exact rather than "at least".
+		const rail = page.getByTestId("continue-reading");
+		const railSpines = rail.getByRole("listitem");
+		await expect(railSpines).toHaveCount(2);
+		await expect(railSpines.first().getByText("A comic that really turns")).toBeVisible();
+
+		// The ribbon follows the row, not this device: the comic reads 30% from the row
+		// pushed moments ago, which no local key here ever carried.
+		await expect(rail.locator('[data-testid="spine-marker"]').first()).toHaveAttribute(
+			"style",
+			/height:\s*30%/,
+		);
+
+		// The rail never replaces the shelf: the same Works stand below on the shelf rows.
+		await expect(page.getByRole("heading", { name: "Bookshelf" })).toBeVisible();
+	} finally {
+		// The account's rows cascade with it; the shelf entries go with the account too.
+		await purgeRailAccount(account.id);
+	}
 });
 
 test("the Channel Guide lens puts a channel per creator and its timeline under them", async ({
