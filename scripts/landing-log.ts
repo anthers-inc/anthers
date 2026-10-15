@@ -143,7 +143,7 @@ export interface BounceEvent {
 	pr?: number;
 	reason: BounceReason;
 	detail: string;
-	disposition: "1 - In Progress";
+	disposition: "2 - In Progress";
 }
 
 export interface EjectionEvent {

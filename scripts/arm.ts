@@ -16,7 +16,7 @@
  * on green this script prints the projected-tip receipt and the stamp instruction, and
  * the session stamps `0 - Queued` + `pr-ref` through the vault tooling exactly as
  * today's enqueue protocol; on a bounce it prints what the tooling said and the session
- * writes the dated task line and moves the task to `1 - In Progress`. This split keeps
+ * writes the dated task line and moves the task to `2 - In Progress`. This split keeps
  * every board write behind the vault CLI layer the rules guard, and keeps this file
  * runnable headless if the step-3 landing loop ever wants it.
  *
@@ -341,9 +341,9 @@ function bounce(
 	lines: string[],
 ): ArmDecision {
 	if (pr !== undefined) {
-		appendEvent({ event: "bounce", pr, reason, detail, disposition: "1 - In Progress" });
+		appendEvent({ event: "bounce", pr, reason, detail, disposition: "2 - In Progress" });
 	} else {
-		appendEvent({ event: "bounce", reason, detail, disposition: "1 - In Progress" });
+		appendEvent({ event: "bounce", reason, detail, disposition: "2 - In Progress" });
 	}
 	return { outcome: "bounce", lines };
 }
