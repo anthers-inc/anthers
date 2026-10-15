@@ -363,6 +363,20 @@ describe("the Makefile's plumbing", () => {
 		}
 	});
 
+	it("the inner bodies forward a scoped file list, and the gate refuses one", () => {
+		// The whole of the scoping mechanism: the inner recipes carry `$(E2E_FILES)`,
+		// which make expands to nothing when unset. Its absence from a recipe would
+		// recreate the original defect — make silently ignoring a variable the
+		// invoker read as honored.
+		for (const target of ["test-e2e-inner", "test-e2e-ui-inner", "test-gauntlet-inner"]) {
+			expect(recipe(target)).toContain("$(E2E_FILES)");
+		}
+		// And the two directions of refusing: the gate never honors the variable…
+		expect(recipe("verify")).toContain('test -z "$(E2E_FILES)"');
+		// …with the loudness exit the usage-error targets use.
+		expect(recipe("verify")).toContain("exit 64");
+	});
+
 	it("heavy-run.sh and heavy-run.ts resolve the same shared cache lock, and name the env default", async () => {
 		const sh = readFileSync(join(REPO_ROOT, "scripts", "heavy-run.sh"), "utf8");
 		const ts = await Bun.file(join(REPO_ROOT, "scripts", "heavy-run.ts")).text();
