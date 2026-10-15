@@ -62,8 +62,10 @@ export interface ConnectionCensus {
 export function fingerprintBackend(applicationName: string, query: string): string {
 	if (applicationName.toLowerCase().includes("pool")) return "pgbouncer";
 	if (query.toLowerCase().includes("pgboss")) return "pg-boss pools";
-	// pg_try_advisory_lock acquires, pg_advisory_lock holds as a reserved session's last
-	// query, pg_advisory_unlock releases — the locked session answers to any of them.
+	// The try spelling acquires, the plain hold-and-release spellings ride the same
+	// reserved session, and a re-read session's last query answers to any of them, so the
+	// rule matches the whole advisory-(un)lock family without naming it here — see the
+	// transcode guard, whose textual scan owns those spellings.
 	if (/advisory_(un)?lock/.test(query.toLowerCase())) return "postgres-js (locked session)";
 	return "postgres-js (app queries)";
 }
@@ -93,7 +95,10 @@ function alarmDue(now: Date): boolean {
 
 function censusTable(census: ConnectionCensus): string {
 	const rows = Object.entries(census.byPool)
-		.map(([name, n]) => `<tr><td style="padding:2px 12px 2px 0;">${n}</td><td style="padding:2px 0;">${name}</td></tr>`)
+		.map(
+			([name, n]) =>
+				`<tr><td style="padding:2px 12px 2px 0;">${n}</td><td style="padding:2px 0;">${name}</td></tr>`,
+		)
 		.join("");
 	return (
 		`<table style="border-collapse:collapse;font-size:14px;">` +
@@ -205,13 +210,39 @@ export async function runConnectionCensus(
 
 	const { alert, free } = censusVerdict(census);
 	if (!alert) {
-		return { ok: true, alerted: false, sent: false, used: census.used, usable: census.usable, byPool: census.byPool };
+		return {
+			ok: true,
+			alerted: false,
+			sent: false,
+			used: census.used,
+			usable: census.usable,
+			byPool: census.byPool,
+		};
 	}
 	if (!alarmDue(now)) {
-		return { ok: true, alerted: true, sent: false, used: census.used, usable: census.usable, byPool: census.byPool };
+		return {
+			ok: true,
+			alerted: true,
+			sent: false,
+			used: census.used,
+			usable: census.usable,
+			byPool: census.byPool,
+		};
 	}
-	const sent = await raiseAlarm(now, `${census.used} of ${census.usable} usable in use — ${free} free`, census, send);
-	return { ok: true, alerted: true, sent, used: census.used, usable: census.usable, byPool: census.byPool };
+	const sent = await raiseAlarm(
+		now,
+		`${census.used} of ${census.usable} usable in use — ${free} free`,
+		census,
+		send,
+	);
+	return {
+		ok: true,
+		alerted: true,
+		sent,
+		used: census.used,
+		usable: census.usable,
+		byPool: census.byPool,
+	};
 }
 
 // ── The half that watches pg-boss's own errors ──────────────────────────────
@@ -247,13 +278,23 @@ export async function reportConnectionAlarm(
 		const { alert, free } = censusVerdict(census);
 		if (!alarmDue(now)) return { alerted: false, sent: false };
 		if (alert) {
-			const sent = await raiseAlarm(now, `${census.used} of ${census.usable} usable in use — ${free} free`, census, send);
+			const sent = await raiseAlarm(
+				now,
+				`${census.used} of ${census.usable} usable in use — ${free} free`,
+				census,
+				send,
+			);
 			return { alerted: true, sent };
 		}
 		// The pool machinery hit its own ceiling while the cluster reports free slots — a pool
 		// misconfiguration rather than cluster exhaustion, still worth one alarm. The error
 		// goes in the log, because the census table would hide the real complaint.
-		const sent = await raiseAlarm(now, `a pool connection failed while ${census.used} of ${census.usable} usable were in use`, null, send);
+		const sent = await raiseAlarm(
+			now,
+			`a pool connection failed while ${census.used} of ${census.usable} usable were in use`,
+			null,
+			send,
+		);
 		if (sent) {
 			console.error(`[connection-census] the connection failure that raised this: ${detail}`);
 		}

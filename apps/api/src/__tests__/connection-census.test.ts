@@ -18,8 +18,8 @@ import {
 	fingerprintBackend,
 	isConnectionExhaustionError,
 	readCensus,
-	resetAlarmStateForTest,
 	reportConnectionAlarm,
+	resetAlarmStateForTest,
 	runConnectionCensus,
 } from "../jobs/connection-census.js";
 import { CRON_SCHEDULES, QUEUES } from "../jobs/queue.js";
@@ -31,7 +31,10 @@ function censusOf(used: number) {
 		usable: 22,
 		used,
 		free: 22 - used,
-		byPool: { "pg-boss pools": Math.min(used, 6), "postgres-js (app queries)": Math.max(0, used - 6) },
+		byPool: {
+			"pg-boss pools": Math.min(used, 6),
+			"postgres-js (app queries)": Math.max(0, used - 6),
+		},
 	};
 }
 
@@ -72,7 +75,9 @@ describe("censusVerdict", () => {
 describe("fingerprintBackend", () => {
 	it("sorts the pools the census email reports", () => {
 		expect(fingerprintBackend("", "select * from pgboss.job fetch")).toBe("pg-boss pools");
-		expect(fingerprintBackend("", "select pg_try_advisory_lock(1)")).toBe("postgres-js (locked session)");
+		expect(fingerprintBackend("", "select pg_try_advisory_lock(1)")).toBe(
+			"postgres-js (locked session)",
+		);
 		expect(fingerprintBackend("pool", "select 1")).toBe("pgbouncer");
 		expect(fingerprintBackend("", "update works set title = $1")).toBe("postgres-js (app queries)");
 	});
@@ -97,12 +102,20 @@ describe("runConnectionCensus", () => {
 		expect(calls[0].subject).toContain("21 of 22 usable in use — 1 free");
 		expect(calls[0].html).toContain("pg-boss pools");
 
-		const withinDay = await runConnectionCensus(new Date(base.getTime() + 5 * HOUR), send, async () => censusOf(21));
+		const withinDay = await runConnectionCensus(
+			new Date(base.getTime() + 5 * HOUR),
+			send,
+			async () => censusOf(21),
+		);
 		expect(withinDay.alerted).toBeTrue();
 		expect(withinDay.sent).toBeFalse();
 		expect(calls).toHaveLength(1);
 
-		const afterDay = await runConnectionCensus(new Date(base.getTime() + ALARM_COOLDOWN_MS + HOUR), send, async () => censusOf(21));
+		const afterDay = await runConnectionCensus(
+			new Date(base.getTime() + ALARM_COOLDOWN_MS + HOUR),
+			send,
+			async () => censusOf(21),
+		);
 		expect(afterDay.sent).toBeTrue();
 		expect(calls).toHaveLength(2);
 	});
@@ -128,13 +141,23 @@ describe("runConnectionCensus", () => {
 
 describe("isConnectionExhaustionError", () => {
 	it("recognizes the messages production has actually produced", () => {
-		expect(isConnectionExhaustionError(new Error("pg-pool: timeout exceeded when trying to connect"))).toBeTrue();
 		expect(
-			isConnectionExhaustionError(new Error('remaining connection slots are reserved for roles with the "SUPERUSER" attribute')),
+			isConnectionExhaustionError(new Error("pg-pool: timeout exceeded when trying to connect")),
 		).toBeTrue();
-		expect(isConnectionExhaustionError(new Error("FATAL: sorry, too many clients already"))).toBeTrue();
-		expect(isConnectionExhaustionError(new Error("syntax error at or near \"from\""))).toBeFalse();
-		expect(isConnectionExhaustionError(new Error("relation \"pgboss.job\" does not exist"))).toBeFalse();
+		expect(
+			isConnectionExhaustionError(
+				new Error(
+					'remaining connection slots are reserved for roles with the "SUPERUSER" attribute',
+				),
+			),
+		).toBeTrue();
+		expect(
+			isConnectionExhaustionError(new Error("FATAL: sorry, too many clients already")),
+		).toBeTrue();
+		expect(isConnectionExhaustionError(new Error('syntax error at or near "from"'))).toBeFalse();
+		expect(
+			isConnectionExhaustionError(new Error('relation "pgboss.job" does not exist')),
+		).toBeFalse();
 	});
 });
 
@@ -148,7 +171,12 @@ describe("reportConnectionAlarm", () => {
 		expect(first.sent).toBeTrue();
 		expect(calls[0].subject).toContain("21 of 22 usable in use");
 
-		const second = await reportConnectionAlarm(err, new Date(base.getTime() + HOUR), send, async () => censusOf(21));
+		const second = await reportConnectionAlarm(
+			err,
+			new Date(base.getTime() + HOUR),
+			send,
+			async () => censusOf(21),
+		);
 		expect(second.alerted).toBeFalse();
 		expect(second.sent).toBeFalse();
 		expect(calls).toHaveLength(1);
