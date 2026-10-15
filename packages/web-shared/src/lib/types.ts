@@ -1361,6 +1361,10 @@ export interface CreatorTrafficCards {
 export interface CreatorTrafficResponse {
 	traffic: CreatorTraffic;
 	cards: CreatorTrafficCards;
+	/** The creator's page visits per day — the same day-shape the site-wide series uses. */
+	series: Array<{ day: string; views: number; sessions: number | null }>;
+	/** Visits to the creator's pages, split by referrer source. */
+	sources: Array<{ source: string; views: number }>;
 	period: number;
 }
 

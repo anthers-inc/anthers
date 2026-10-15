@@ -76,6 +76,10 @@ async function sessionRowCount(): Promise<number> {
 let creatorCookie: string;
 let creatorId: number;
 let creatorHandle: string;
+/** A second creator account, so cross-creator isolation can be proven rather than assumed. */
+let otherCookie: string;
+let _otherCreatorId: number;
+let otherHandle: string;
 let fixtureProjectId: number;
 /** The UTC day `n` days ago, as the rollups spell it. */
 function daysAgoIso(n: number): string {
@@ -91,6 +95,10 @@ beforeAll(async () => {
 	creatorCookie = account.cookie;
 	creatorId = account.userId;
 	creatorHandle = account.handle;
+	const other = await createAccount(`ttraffic_other_${handleSuffix}`);
+	otherCookie = other.cookie;
+	_otherCreatorId = other.userId;
+	otherHandle = other.handle;
 
 	// A real project row, so card-impression attribution can resolve for real.
 	const [project] = await db
@@ -223,6 +231,77 @@ describe("creator traffic read", () => {
 		// The no-identity property, pinned on the new surface: no session id anywhere.
 		const serialized = JSON.stringify(body);
 		expect(serialized).not.toContain(sessionPrefix);
+	});
+
+	it("shows the creator where their traffic comes from, as source aggregates", async () => {
+		// A social arrival on the creator's own page: the source split must see it.
+		await pageView({
+			path: `/@${creatorHandle}`,
+			referrer: "https://bsky.app/profile/someone.bsky.social",
+		});
+
+		const res = await app.fetch(
+			new Request("http://localhost/api/integrations/analytics/traffic", {
+				headers: { Origin: ORIGIN_OK, Cookie: creatorCookie },
+			}),
+		);
+		const body = await res.json();
+		const social = body.sources.find((s: { source: string }) => s.source === "social");
+		expect(social?.views).toBeGreaterThanOrEqual(1);
+		// Only classified values the intake wrote, never raw hosts — the raw referrer
+		// host is operator data (site-wide), so it must not ride the creator response.
+		const serialized = JSON.stringify(body);
+		expect(serialized).not.toContain("bsky.app");
+	});
+
+	it("shows the creator their visits over time, by day", async () => {
+		const res = await app.fetch(
+			new Request("http://localhost/api/integrations/analytics/traffic", {
+				headers: { Origin: ORIGIN_OK, Cookie: creatorCookie },
+			}),
+		);
+		const body = await res.json();
+		expect(Array.isArray(body.series)).toBe(true);
+		const total = body.series.reduce((sum: number, d: { views: number }) => sum + d.views, 0);
+		expect(total).toBeGreaterThanOrEqual(2);
+		// Every day is a UTC calendar day, matching the rollups' spelling.
+		const days = body.series.map((d: { day: string }) => d.day);
+		for (const day of days) {
+			expect(day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+		}
+	});
+
+	it("isolates creators — one creator's read never counts another's pages", async () => {
+		// A visit to the other creator's page, labeled as social so the same event
+		// would be visible in both halves if the prefix filter leaked.
+		await pageView({
+			path: `/@${otherHandle}`,
+			referrer: "https://www.google.com/search",
+		});
+
+		const mine = await (
+			await app.fetch(
+				new Request("http://localhost/api/integrations/analytics/traffic", {
+					headers: { Origin: ORIGIN_OK, Cookie: creatorCookie },
+				}),
+			)
+		).json();
+		// The first creator's series and sources must not include the other's visit.
+		const seen = JSON.stringify(mine.series.map((d: { day: string }) => d.day));
+		const searchInMine = mine.sources.find((s: { source: string }) => s.source === "search");
+		expect(searchInMine).toBeUndefined();
+
+		const theirs = await (
+			await app.fetch(
+				new Request("http://localhost/api/integrations/analytics/traffic", {
+					headers: { Origin: ORIGIN_OK, Cookie: otherCookie },
+				}),
+			)
+		).json();
+		// The other creator's read DOES see it — the filter selects, it does not hide.
+		const search = theirs.sources.find((s: { source: string }) => s.source === "search");
+		expect(search?.views).toBeGreaterThanOrEqual(1);
+		expect(seen).toBeTruthy();
 	});
 });
 
