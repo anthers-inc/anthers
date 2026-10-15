@@ -353,9 +353,10 @@ test("the Bookshelf lens stands the saved comic up as a spine", async ({ page })
 		await signInThroughUi(page, account.email);
 		const comic = await saveFixtureWork(page, "comic");
 		const pageCount = comic.pageCount ?? 0;
-		expect(pageCount, "the fixture comic renders pages — no pages, no spine ribbon").toBeGreaterThan(
-			1,
-		);
+		expect(
+			pageCount,
+			"the fixture comic renders pages — no pages, no spine ribbon",
+		).toBeGreaterThan(1);
 
 		// Seed where this device last got in it — the store `lib/reading-positions.ts`
 		// owns, written by the comic reader on navigation. The spine marker is the
