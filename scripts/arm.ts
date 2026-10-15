@@ -2,14 +2,21 @@
 /**
  * The arm ceremony — the landing front half's gate, run in place of today's bare
  * enqueue: fetch, reconcile the arm ledger, radar, construct the projected tip, the
- * fast tier against that tip, and only then arm the pull request and hand the receipt
+ * whole suite against that tip, and only then arm the pull request and hand the receipt
  * back to the calling session. Usage: `bun run scripts/arm.ts <PR number>` (also
  * `make arm PR=<n>`; the `/arm` command front door is the session's path).
+ *
+ * The gate is `make verify` — typecheck, lint, the unit suites and the full browser
+ * suite — because the composite is the whole point: the browser suites are where the
+ * pipeline's reds actually came from, and an arm that left them to CI re-creates the
+ * PR-window red class the landing front half exists to close (2026-10-15, the
+ * browser-suite-at-the-gate task). The receipt-reuse rule and the lockfile install
+ * gate are what keep the added cost bounded.
  *
  * The ceremony holds the landing lock (the repository's shared `cache/landing.lock`, flock, kernel-
  * released on death) across its whole sequence — two builders finishing in the same
  * minute are the pre-queue race it exists to close — and the heavy-run lock needs no
- * ceremony-level handling, because `make verify-fast` takes it inside itself, which
+ * ceremony-level handling, because `make verify` takes it inside itself, which
  * lands the design's fixed acquisition order (landing, then heavy-run) by construction.
  *
  * **The script owns git and GitHub only.** The board is the calling session's channel:
@@ -527,9 +534,9 @@ export function installGate(options: { gatePath: string }): {
 	return { install: "real" };
 }
 
-function fastTier(gatePath: string): { result: "green" | "red"; durationMs: number } {
+function gateTier(gatePath: string): { result: "green" | "red"; durationMs: number } {
 	const started = Date.now();
-	const result = spawnSync("make", ["verify-fast"], { cwd: gatePath, stdio: "inherit" });
+	const result = spawnSync("make", ["verify"], { cwd: gatePath, stdio: "inherit" });
 	return { result: result.status === 0 ? "green" : "red", durationMs: Date.now() - started };
 }
 
@@ -661,7 +668,7 @@ async function runCeremony(pr: number, options: ArmOptions): Promise<ArmDecision
 			log(
 				`→ bun.lock ${install.install === "reused" ? "unchanged — install reused" : "moved — installing for real"}`,
 			);
-			const gate = fastTier(armGatePath(options));
+			const gate = gateTier(armGatePath(options));
 			appendEvent({
 				event: "gate-run",
 				projectedTip: tip,
@@ -671,13 +678,13 @@ async function runCeremony(pr: number, options: ArmOptions): Promise<ArmDecision
 				durationMs: gate.durationMs,
 			});
 			if (gate.result === "red") {
-				return bounce("gate-red", `the fast tier is red at the projected tip`, pr, [
-					`→ the gate is red: the fast tier failed against the projected tip (${tip.slice(0, 7)}), not this branch's own push`,
+				return bounce("gate-red", `the suite is red at the projected tip`, pr, [
+					`→ the gate is red: make verify failed against the projected tip (${tip.slice(0, 7)}), not this branch's own push`,
 					"→ the composition includes the armed entries ahead, so the failure may be an interaction — read the run's output above before touching this branch",
 					"→ answered in code or argued back with a reason; the gate is greened by fixing the tree, never by touching tests to pass",
 				]);
 			}
-			log(`→ the fast tier is green at the projected tip (${Math.round(gate.durationMs / 1000)}s)`);
+			log(`→ the suite is green at the projected tip (${Math.round(gate.durationMs / 1000)}s)`);
 		}
 
 		const armResult = gh(["pr", "merge", String(pr), "--squash", "--auto"]);
