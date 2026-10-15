@@ -153,7 +153,7 @@ async function supportersIn(month: string, only?: number): Promise<number[]> {
 interface PaidCharge extends MonthCharge {
 	/** The invoice row, when the charge is one — null for a checkout's badge charges. */
 	invoiceId: number | null;
-	/** What this charge bore: Stripe's own figure, or the pinned badge shares summed. */
+	/** What the charge actually bore: Stripe's own figure, or the pinned shares summed. */
 	processingFee: Decimal;
 }
 
@@ -224,12 +224,19 @@ async function paidChargesFor(userId: number, month: string): Promise<PaidCharge
 			charge = {
 				invoiceId: null,
 				processingFee: new Decimal(0),
+				pinnedFee: new Decimal(0),
 				anthers: new Decimal(0),
 				directed: new Map(),
 			};
 			byIntent.set(row.stripePaymentIntentId, charge);
 		}
+		// The same summed figure under both names, by construction: the pinned shares ARE
+		// the checkout rail's actual fee. They are two NAMES because they do two JOBS —
+		// `processingFee` is the remainder's input (its contribution reads zero here:
+		// everything the pinned fee covered went to the lines' creators), `pinnedFee` the
+		// creator credit's.
 		charge.processingFee = charge.processingFee.plus(new Decimal(row.processingFee));
+		charge.pinnedFee = charge.pinnedFee!.plus(new Decimal(row.processingFee));
 		if (row.creatorId == null) continue;
 		charge.directed.set(
 			row.creatorId,
@@ -256,11 +263,14 @@ function anthersFeeShare(charges: PaidCharge[]): Decimal {
 		);
 		const model = paymentsSplit(anthers, directed.toNumber());
 		// The creator side is the ONE arithmetic `computeMonth` credits against — see
-		// `creatorFeeShare` in `fees.ts`. A checkout charge carries its own pinned fee
-		// shares, so its contribution reads zero here (everything its fee covered went to
-		// the lines' creators; the badge money never enters this remainder at all).
-		const creator = creatorFeeShare(anthers, directed.toNumber(), charge.processingFee);
-		let actual = charge.processingFee ?? new Decimal(0);
+		// `creatorFeeShare` in `fees.ts`. An invoice's creators bear the MODEL's share of
+		// their take-home display (the decision the remainder cases pin), so its pinned
+		// fee is null; a checkout's pinned shares are the charge's own and read as them.
+		const creator =
+			charge.pinnedFee != null
+				? creatorFeeShare(anthers, directed.toNumber(), charge.pinnedFee)
+				: model.creator;
+		let actual = charge.processingFee;
 		if (actual.lte(0) && model.total.gt(0)) {
 			console.warn(
 				`settle: invoice ${charge.invoiceId ?? "charge"} has no recorded processing fee; using the model's $${cardFee(new Decimal(anthers).plus(directed)).toFixed(2)}`,

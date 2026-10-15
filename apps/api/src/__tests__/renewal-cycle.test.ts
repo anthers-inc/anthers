@@ -944,6 +944,30 @@ describe("the reduction is spent on the draft renewal", () => {
 		expect(applied).toBe(0);
 	});
 
+	/**
+	 * ⭐ **A Badge bought through the basket creates the buyer's FIRST subscription on the
+	 * next 1st** (2026-10-15): the checkout already carried the first Month, so the sub is
+	 * anchored on the cycle whose charge is still to come — and its first invoice, reasons
+	 * as `subscription_create`, is the renewal-shaped charge the missed-days reduction
+	 * reduces. Without admitting it here that discount never lands and the buyer overpays
+	 * their first renewal.
+	 */
+	it("spends against a subscription_create invoice the day-exact reduction a future anchor owes", async () => {
+		// The badge charge ran this month (October), so the reduction is keyed to
+		// November — the cycle the future-anchored first invoice pays for.
+		await owe(String(ANTHERS_ID), "3.80", cycleKeyFor(new Date(Date.UTC(2026, 10, 1))));
+		const applied = await applyReductionsToInvoice(
+			draftInvoice({
+				lines: [{ destination: String(ANTHERS_ID), dollars: 6 }],
+				paysFor: Math.floor(Date.UTC(2026, 10, 1) / 1000),
+				billingReason: "subscription_create",
+			}),
+		);
+		expect(applied).toBe(1);
+		const coupon = fake.lastCall("coupons.create")?.args[0] as Stripe.CouponCreateParams;
+		expect(coupon.amount_off).toBe(380);
+	});
+
 	it("does nothing when the account is owed nothing, which is nearly every invoice", async () => {
 		const applied = await applyReductionsToInvoice(
 			draftInvoice({ lines: [{ destination: String(ANTHERS_ID), dollars: 6 }] }),

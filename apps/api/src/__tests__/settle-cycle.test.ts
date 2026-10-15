@@ -18,6 +18,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
+	badgeCharges,
 	badges,
 	billingAccounts,
 	creatorCredits,
@@ -510,5 +511,163 @@ describe("the month's rows and its marker", () => {
 			.from(monthSettlements)
 			.where(eq(monthSettlements.billingCycle, month));
 		expect(marker?.settledAt.getTime()).toBe(inFebruary.getTime());
+	});
+});
+
+/**
+ * The Badge purchase rail settles beside the invoices (2026-10-15). A Badge bought through
+ * the basket is this month's support money on a Checkout charge with no invoice row — its
+ * own record is `badge_charges`, its fee is the PINNED pro-rata share the charge apportioned
+ * at checkout, and the credit the issuer receives is the charged amount net of that share:
+ * never the model's recomputation, because the charge may also have carried Works whose
+ * shares amortized the flat fee with it.
+ *
+ * 🚨 **The invariant the cases below exist for is double rail accounting**: a badge line's
+ * money must be credited exactly once, from ITS OWN charge's figures — not folded into an
+ * invoice's split (where its presence would change the model's anthers share) and not
+ * double-counted beside the holdings the estimate may already have credited.
+ */
+describe("settling the Badge purchase rail beside the invoices", () => {
+	/** A completed Badge first transaction, as checkout's completion left it. */
+	async function badgeCharge(
+		userId: number,
+		creatorId: number,
+		opts: {
+			charged: number;
+			threshold: number;
+			/** The pinned share of the charge's ONE card fee, as checkout wrote it. */
+			feeShare: number;
+			status?: string;
+			cycle?: string;
+		} = { charged: 6, threshold: 6, feeShare: 0.48 },
+	) {
+		await db.insert(badgeCharges).values({
+			buyerId: userId,
+			badgeId: null,
+			creatorId,
+			badgeLabel: "Sprout",
+			threshold: opts.threshold.toFixed(2),
+			chargedAmount: opts.charged.toFixed(2),
+			processingFee: opts.feeShare.toFixed(2),
+			salesTax: "0.00",
+			billingCycle: opts.cycle ?? MONTH,
+			stripePaymentIntentId: `pi_EXAMPLE_${crypto.randomUUID().slice(0, 10)}`,
+			status: opts.status ?? "completed",
+		});
+	}
+
+	it("🚨 credits a badge-only month net of the PINNED fee share — charged once, from the row", async () => {
+		const creator = await makeUser("creator");
+		const { userId, accountId } = await makeSupporter(6);
+		// The account's $6 Anthers rung is held, but the month's only paid money is a Badge
+		// bought through the basket: charged $6.00, pinned fee $0.48, and settled net.
+		await badgeCharge(userId, creator, { charged: 6, threshold: 6, feeShare: 0.48 });
+		// The Sticker is the observable paid-ness: the allowance opens on a month
+		// something was collected, whatever rail carried it.
+		await db.insert(stickers).values({
+			giverId: userId,
+			creatorId: creator,
+			subjectType: "work",
+			subjectId: 1,
+			billingCycle: MONTH,
+			amount: "1.00",
+		});
+		await watch(userId, creator, 1800);
+		await distributePool({ accountId });
+
+		await settle(userId);
+
+		const { rows, total } = await creditsFrom(userId);
+		expect(total(creator, "support")).toBe("5.52");
+		expect(total(creator, "sticker")).toBe("1.00");
+		// The estimate credited the FULL threshold gross (its model has no checkout rail
+		// to read); settlement recomputed from the charge and the month carries a
+		// support row of its own — one, from one charge.
+		expect(rows.filter((r) => r.kind === "support")).toHaveLength(1);
+	});
+
+	it("settles an invoice and a badge charge side by side, each charge's fee its own", async () => {
+		const creatorA = await makeUser("creator");
+		const creatorB = await makeUser("creator");
+		const { userId } = await makeSupporter(6);
+		await paidInvoice(userId, { anthers: 6, directed: [{ creatorId: creatorA, amount: 4 }] });
+		// The badge rode a mixed basket, so its pinned share is a fraction of the charge's
+		// total fee — smaller than a lone-charge model fee on $6 by the amortized part.
+		await badgeCharge(userId, creatorB, { charged: 6, threshold: 6, feeShare: 0.24 });
+		await watch(userId, creatorA, 1800);
+
+		await settle(userId);
+
+		const { total } = await creditsFrom(userId);
+		// The invoice's creator share, from the model — an invoice carries no pinned fee.
+		expect(total(creatorA, "support")).toBe(
+			new Decimal(4).minus(paymentsSplit(6, 4).creator).toFixed(2),
+		);
+		// The badge charge's creator share, from its PINS — not paymentsSplit(0, 6),
+		// whose $0.48 model fee would overstate by the amortization the works beside it
+		// paid for.
+		expect(total(creatorB, "support")).toBe("5.76");
+		// Anthers' remainder is booked per charge: the invoice's own minus the free pool —
+		// the badge charge contributes nothing to the remainder (its whole pinned fee went
+		// to its creator), which is why it is NOT paymentsSplit(6, 10)'s anthers share.
+		const remainder = new Decimal(6)
+			.minus(timePoolFor(6))
+			.minus(paymentsSplit(6, 4).anthers)
+			.toFixed(2);
+		expect(await inflowFrom(userId)).toBe(remainder);
+
+		// And the badge-only charge leaves no invoice row to stamp — the settled stamp
+		// touches only the invoice-backed charges.
+		const stamped = await db
+			.select({ settledAt: invoices.settledAt })
+			.from(invoices)
+			.where(eq(invoices.userId, userId));
+		expect(stamped).toHaveLength(1);
+		expect(stamped[0].settledAt).not.toBeNull();
+	});
+
+	it("ignores a badge charge still pending — a built checkout is not money", async () => {
+		const creator = await makeUser("creator");
+		const { userId, accountId } = await makeSupporter(6);
+		await badgeCharge(userId, creator, {
+			charged: 6,
+			threshold: 6,
+			feeShare: 0.48,
+			status: "pending",
+		});
+		// The Sticker is where a month's paid-ness shows: an uncollected badge row must
+		// not open the allowance, exactly as an uncollected renewal does not.
+		await db.insert(stickers).values({
+			giverId: userId,
+			creatorId: creator,
+			subjectType: "work",
+			subjectId: 1,
+			billingCycle: MONTH,
+			amount: "1.00",
+		});
+		await watch(userId, creator, 1800);
+		await distributePool({ accountId });
+
+		await settle(userId);
+
+		// Nothing was paid on this rail — the buyer left the tab at the Pay screen.
+		expect((await creditsFrom(userId)).total(creator, "support")).toBe("0.00");
+		expect((await creditsFrom(userId)).total(creator, "sticker")).toBe("0.00");
+	});
+
+	it("is idempotent — a badge charge settles once, like an invoice", async () => {
+		const creator = await makeUser("creator");
+		const { userId, accountId } = await makeSupporter(6);
+		await badgeCharge(userId, creator, { charged: 6, threshold: 6, feeShare: 0.48 });
+		await watch(userId, creator, 1800);
+		await distributePool({ accountId });
+
+		await settle(userId);
+		const first = await creditsFrom(userId);
+		await settle(userId, LATER);
+
+		const second = await creditsFrom(userId);
+		expect(second.rows).toHaveLength(first.rows.length);
+		expect(second.total(creator, "support")).toBe("5.52");
 	});
 });

@@ -72,34 +72,35 @@ export function paymentsSplit(
 
 /**
  * The creator side of ONE charge's card fee — the model's split, or the charge's own
- * actual fee apportioned by the same value rule when the charge carries it.
+ * pinned per-line shares when it carries them.
  *
- * The one caller pair that must never come apart are
- * `computeMonth` (which credits a creator net of this figure) and `settle-cycle`'s
- * `anthersFeeShare` (which books Anthers' remainder as what the charge took minus this
- * figure) — if the two split by different arithmetic, the ledger and the model disagree
- * by the difference with nothing anywhere to see it. So this is that arithmetic, and both
- * call it.
+ * The one caller pair that must never come apart are `computeMonth` (which credits a
+ * creator net of this figure) and `settle-cycle`'s `anthersFeeShare` (which books
+ * Anthers' remainder as what the charge took minus this figure) — if the two split by
+ * different arithmetic, the ledger and the model disagree by the difference with nothing
+ * anywhere to see it. So this is that arithmetic, and both call it.
  *
- * `processingFee` rides when the charge carries its OWN recorded fee — a Checkout
- * Session's badge lines pin their pro-rata share of the whole charge's fee at checkout
- * (the flat $0.30 amortized over everything the buyer bought beside them), and that is
- * the fee the charge actually carried; an invoice has none, and the model computes it
- * from the composition. The remainder lands with the Anthers side exactly as
- * `paymentsSplit` gives it, and a zero-value charge shares zero.
+ * `pinnedFee` rides when the charge carries its OWN recorded per-line shares — a
+ * Checkout Session's badge lines pin their pro-rata share of the whole charge's fee at
+ * checkout (the flat $0.30 amortized over everything the buyer bought beside them), and
+ * the charged amount settles net of exactly that. An invoice has none, and the model
+ * computes the creator's share from the composition — the take-home display's figure; an
+ * invoice's recorded fee is the remainder's business, never the creator credit's. The
+ * remainder lands with the Anthers side exactly as `paymentsSplit` gives it, and a
+ * zero-value charge shares zero.
  */
 export function creatorFeeShare(
 	anthersDollars: number,
 	creatorDollars: number,
-	processingFee?: Decimal | null,
+	pinnedFee?: Decimal | null,
 ): Decimal {
-	if (processingFee != null) {
-		if (new Decimal(processingFee).lte(0)) return new Decimal(0);
+	if (pinnedFee != null) {
+		if (new Decimal(pinnedFee).lte(0)) return new Decimal(0);
 		const anthers = new Decimal(supportAmount(anthersDollars));
 		const creator = new Decimal(supportAmount(creatorDollars));
 		const charge = anthers.plus(creator);
 		if (charge.lte(0)) return new Decimal(0);
-		return CENTS(new Decimal(processingFee).mul(creator).div(charge));
+		return CENTS(new Decimal(pinnedFee).mul(creator).div(charge));
 	}
 	return paymentsSplit(anthersDollars, creatorDollars).creator;
 }

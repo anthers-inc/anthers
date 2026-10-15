@@ -109,13 +109,15 @@ export interface MonthCharge {
 	/** GROSS dollars directed at each creator on this charge, before its card fee. */
 	directed: Map<number, Decimal>;
 	/**
-	 * The charge's OWN fee, when it carries one recorded — a Checkout Session's badge
-	 * lines pin their pro-rata shares at the charge, and settlement reads them summed.
-	 * Null on a subscription invoice, where the model computes the fee from the
-	 * composition. Read by `creatorFeeShare` in `fees.ts`, which both the credit pass and
-	 * the remainder's booking call — never split this arithmetic at a call site again.
+	 * The PINNED per-line fee shares the charge's creators settle net of, summed — a
+	 * Checkout Session's badge lines pin their pro-rata share of the charge's ONE fee at
+	 * checkout, and settlement credits the charged amount net of it. Null on a
+	 * subscription invoice, whose creators bear the MODEL's share of what their take-home
+	 * display showed them (the remainder cases pin that decision; an invoice's recorded
+	 * fee is the remainder's business, never the creator credit's). Read by
+	 * `creatorFeeShare` in `fees.ts` — never split this arithmetic at a call site again.
 	 */
-	processingFee?: Decimal | null;
+	pinnedFee?: Decimal | null;
 }
 
 /** A supporter's month, split among creators. */
@@ -238,12 +240,12 @@ export async function computeMonth(input: {
 		if (grossDirected.gt(0)) {
 			const anthersGross = Decimal.max(0, charge.anthers);
 			// 🚨 One arithmetic, one caller: `creatorFeeShare` decides the model's split
-			// from the charge's composition, or the charge's own recorded fee when it
-			// carries one (a checkout's pinned shares) — see `fees.ts`.
+			// from the charge's composition, or the charge's own pinned per-line shares
+			// when it carries them (a checkout's badge lines) — see `fees.ts`.
 			const creatorFee = creatorFeeShare(
 				supportAmount(anthersGross.toNumber()),
 				grossDirected.toNumber(),
-				charge.processingFee ?? null,
+				charge.pinnedFee ?? null,
 			);
 			if (creatorFee.gt(0)) {
 				for (const d of onCharge.values()) {
