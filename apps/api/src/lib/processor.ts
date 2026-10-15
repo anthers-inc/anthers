@@ -283,6 +283,25 @@ export async function issueRefund(
 	return (await getStripe()?.refunds.create(params, options)) ?? null;
 }
 
+/**
+ * Mirrors `stripe.refunds.list` — the refunds on a charge, as Stripe's auto-paginating list.
+ *
+ * The caller is the webhook's `charge.refunded` dashboard path, and it must read Stripe's
+ * truth rather than trust the event: the live account's newer API version delivers the
+ * event's charge snapshot with the `refunds` list omitted entirely (found 2026-10-14 by
+ * the first live dashboard-path refund, when the settle stamped no refund id and read the
+ * reversal as absent — `services/netting.ts`'s no-identity guard then skipped a netting
+ * the transfer's actual reversal made unnecessary, which is the coincidence this defends).
+ * Deliberately no `.catch`: an API failure here should fail the webhook delivery so Stripe
+ * redelivers and the settle runs on recovered facts, rather than settling on the event's
+ * degraded shape.
+ */
+export async function listRefundsForCharge(
+	chargeId: string,
+): Promise<Stripe.ApiList<Stripe.Refund> | null> {
+	return (await getStripe()?.refunds.list({ charge: chargeId })) ?? null;
+}
+
 /** Mirrors `stripe.coupons.create` — the coupon a reduction's discount is carried on. */
 export async function createCoupon(
 	params: Stripe.CouponCreateParams,

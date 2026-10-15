@@ -28,7 +28,7 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, crfLedger, purchases, users } from "@anthers/db/schema";
+import { assets, creatorNettings, crfLedger, purchases, users } from "@anthers/db/schema";
 import { REFUND_AUTO_CAP, REFUND_CAP_WINDOW_MONTHS } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
@@ -65,6 +65,27 @@ interface Call {
 	args: unknown[];
 }
 
+/**
+ * The refund list the fake's `refunds.list` answers with. `refundObjects(chargeId)`
+ * builds the shape from id pairs, so a test can name the refund and the reversal
+ * together; empty by default, matching an unconfigured nothing.
+ */
+let refundList: Stripe.ApiList<Stripe.Refund>;
+
+function refundObjects(
+	refundId?: string,
+	transferReversal?: string,
+): Stripe.ApiList<Stripe.Refund> {
+	return {
+		object: "list",
+		data: refundId
+			? [{ id: refundId, source_transfer_reversal: transferReversal ?? null } as Stripe.Refund]
+			: [],
+		has_more: false,
+		url: "/v1/refunds",
+	};
+}
+
 function fakeStripe() {
 	const calls: Call[] = [];
 	const failures: Record<string, Error | undefined> = {};
@@ -79,10 +100,13 @@ function fakeStripe() {
 			return Promise.resolve((fallback as (...a: unknown[]) => unknown)(...args));
 		};
 
+	refundList = refundObjects();
+
 	const client = {
 		webhooks: real.webhooks,
 		refunds: {
 			create: record("refunds.create", () => ({ id: `re_${uid()}` })),
+			list: record("refunds.list", () => refundList),
 		},
 	} as unknown as Stripe;
 
@@ -90,11 +114,15 @@ function fakeStripe() {
 		client,
 		calls,
 		failures,
+		setRefundList: (list: Stripe.ApiList<Stripe.Refund>) => {
+			refundList = list;
+		},
 		callsTo: (method: string) => calls.filter((c) => c.method === method),
 		lastCall: (method: string) => calls.filter((c) => c.method === method).at(-1),
 		reset: () => {
 			calls.length = 0;
 			for (const k of Object.keys(failures)) delete failures[k];
+			refundList = refundObjects();
 		},
 	};
 }
@@ -287,6 +315,9 @@ beforeEach(async () => {
 			),
 		);
 	}
+	// Netting rows survive their purchase too (`purchase_id` is `set null`), so they
+	// go before the purchases do, or they dangle into every later run.
+	await db.delete(creatorNettings).where(eq(creatorNettings.creatorId, creatorId));
 	await db.delete(purchases).where(eq(purchases.buyerId, buyerId));
 	await db.delete(purchases).where(eq(purchases.buyerId, otherId));
 });
@@ -727,7 +758,13 @@ describe("The cap on refunds after download", () => {
 });
 
 describe("charge.refunded — the refund that didn't come through our route", () => {
-	function charge(opts: { intent: string; refunded: boolean; refundId?: string }) {
+	function charge(opts: {
+		intent: string;
+		refunded: boolean;
+		refundId?: string;
+		/** The LIVE event shape: no `refunds` field on the charge object at all. */
+		noRefundsList?: boolean;
+	}) {
 		return {
 			id: `ch_${uid()}`,
 			object: "charge",
@@ -735,8 +772,15 @@ describe("charge.refunded — the refund that didn't come through our route", ()
 			refunded: opts.refunded,
 			amount: 530,
 			amount_refunded: opts.refunded ? 530 : 100,
-			refunds: { object: "list", data: [{ id: opts.refundId ?? `re_${uid()}` }] },
+			...(opts.noRefundsList
+				? {}
+				: { refunds: { object: "list", data: [{ id: opts.refundId ?? `re_${uid()}` }] } }),
 		};
+	}
+
+	/** The netting rows a refund of this purchase produced, read straight off the ledger. */
+	async function nettingFor(purchaseId: number) {
+		return db.select().from(creatorNettings).where(eq(creatorNettings.purchaseId, purchaseId));
 	}
 
 	it("settles a purchase refunded from the Stripe dashboard, as platform-initiated", async () => {
@@ -792,6 +836,71 @@ describe("charge.refunded — the refund that didn't come through our route", ()
 		expect(row.refundInitiator).toBe("buyer");
 		expect(await ledgerFor(purchase.id)).toHaveLength(1);
 		expect(await refundsAfterDownloadInWindow(buyerId)).toBe(1);
+	});
+
+	it("recovers the refund id and the reversal from Stripe when the live event omits the refunds list", async () => {
+		// The live account's newer API version delivers `charge.refunded` with the
+		// charge's `refunds` list ABSENT (found 2026-10-14, the first live dashboard-path
+		// refund): the settle on the event's shape alone stamps no refund id and reads
+		// the reversal as falsely absent. Stripe's own refund list is the truth, and
+		// the settle reads it — here the transfer came back with the refund, so no
+		// netting row is owed and none may be opened.
+		const purchase = await completedPurchase({ downloadedAt: new Date() });
+		const refundId = `re_${uid()}`;
+		fake.setRefundList(refundObjects(refundId, `trr_${uid()}`));
+
+		const res = await sendWebhook(
+			stripeEvent(
+				"charge.refunded",
+				charge({
+					intent: purchase.stripePaymentIntentId,
+					refunded: true,
+					noRefundsList: true,
+				}),
+			),
+		);
+		expect(res.status).toBe(200);
+
+		const row = await reload(purchase.id);
+		expect(row.status).toBe("refunded");
+		expect(row.stripeRefundId).toBe(refundId);
+		expect(row.refundInitiator).toBe("platform");
+		expect(await nettingFor(purchase.id)).toHaveLength(0);
+		// The recovery named the charge the event spoke of, not some other one.
+		expect(fake.lastCall("refunds.list")?.args[0]).toMatchObject({
+			charge: expect.any(String),
+		});
+	});
+
+	it("opens the netting when Stripe's list shows no reversal — the paid-out creator case the event shape lost silently", async () => {
+		// The opposite case, which is the dangerous one: Stripe carries no negative
+		// balance for destination charges, so a creator already paid out cannot have
+		// the transfer reversed — the share did not come back, and the recovery belongs
+		// to the netting ledger. On the event's shape alone this was skipped (no refund
+		// id, no identity), the silent loss the recovered read exists to close.
+		const purchase = await completedPurchase({ downloadedAt: new Date() });
+		const refundId = `re_${uid()}`;
+		fake.setRefundList(refundObjects(refundId));
+
+		await sendWebhook(
+			stripeEvent(
+				"charge.refunded",
+				charge({
+					intent: purchase.stripePaymentIntentId,
+					refunded: true,
+					noRefundsList: true,
+				}),
+			),
+		);
+
+		const row = await reload(purchase.id);
+		expect(row.status).toBe("refunded");
+		expect(row.stripeRefundId).toBe(refundId);
+		const nettings = await nettingFor(purchase.id);
+		expect(nettings).toHaveLength(1);
+		expect(nettings[0].stripeRefundId).toBe(refundId);
+		// The netting's amount is the row's own earnings, never the whole charge.
+		expect(nettings[0].amount).toBe(fees.creatorEarnings.toFixed(2));
 	});
 });
 
