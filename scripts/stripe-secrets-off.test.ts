@@ -63,16 +63,28 @@ describe("the lanes' Stripe strip", () => {
 		expect(bare.exitCode, "a bun process without the preload should SEE the planted keys").toBe(3);
 	});
 
-	it("keeps the browser lane's API webServer preloading the strip beside its --env-file", async () => {
-		const config = (await import("../apps/web/playwright.config.ts")).default;
-		const servers: readonly { command: string }[] = Array.isArray(config.webServer)
-			? (config.webServer as { command: string }[])
-			: [config.webServer as { command: string }];
-		const api = servers.find((server) => server.command.includes("src/server.ts"));
-		expect(api, "the API webServer entry moved or vanished from the config").toBeDefined();
-		expect(api?.command).toContain("--env-file=../../.env");
+	it("keeps the browser lane's API webServer preloading the strip beside its --env-file", () => {
+		// Read the config's source rather than importing it: the imported object resolves the
+		// branch at import time, and under CI that is the restart-loop command, which
+		// legitimately carries neither flag (no .env loading in CI at all) — a guard that
+		// imports it would be green at the desk and red in CI, or the reverse.
+		const source = readFileSync(
+			new URL("../apps/web/playwright.config.ts", import.meta.url),
+			"utf8",
+		);
+		const nonCi = source
+			.split("\n")
+			.find((line) => line.includes("src/server.ts") && line.includes("REQUIRE_SESSION"));
 		expect(
-			api?.command,
+			nonCi,
+			"the non-CI API webServer command moved — update this guard in the same change",
+		).toBeDefined();
+		expect(
+			nonCi,
+			"the API's legitimate non-secret config — --env-file must stay beside the strip",
+		).toContain("--env-file=../../.env");
+		expect(
+			nonCi,
 			"the API webServer command no longer strips the processor's secrets — restore --preload=…/stripe-secrets-off.ts",
 		).toContain(`--preload=../../scripts/stripe-secrets-off.ts`);
 	});
