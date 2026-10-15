@@ -42,6 +42,7 @@ import { runHlsOrphanSweep } from "./hls-orphan-sweep.js";
 import { type IngestEbookData, ingestEbook } from "./ingest-ebook.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
 import { handlePruneAttention, type PruneAttentionData } from "./prune-attention.js";
+import { handlePruneTraffic, type PruneTrafficData } from "./prune-traffic.js";
 import { publishScheduled } from "./publish-scheduled.js";
 import { runPurchaseTransferRetry } from "./purchase-transfer-retry.js";
 import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue, RETIRED_QUEUES } from "./queue.js";
@@ -298,6 +299,13 @@ async function start() {
 		for (const job of jobs) {
 			console.log(`[prune-attention] Processing job ${job.id}`);
 			await handlePruneAttention(job.data ?? {});
+		}
+	});
+
+	await queue.work<PruneTrafficData>(QUEUES.PRUNE_TRAFFIC, async (jobs) => {
+		for (const job of jobs) {
+			console.log(`[prune-traffic] Processing job ${job.id}`);
+			await handlePruneTraffic(job.data ?? {});
 		}
 	});
 

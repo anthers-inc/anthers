@@ -12,6 +12,7 @@ import ProtectedRoute from "./components/ui/ProtectedRoute";
 import RootRedirect from "./components/ui/RootRedirect";
 import StudioRedirect from "./components/ui/StudioRedirect";
 import { installBrowserErrorCapture } from "./lib/error-beacon";
+import { useTrafficBeacon } from "./lib/traffic";
 
 /**
  * The Studio — the creator authoring surface, merged in from `apps/studio-web` on
@@ -164,6 +165,11 @@ export default function App() {
 	useEffect(() => {
 		installBrowserErrorCapture();
 	}, []);
+
+	// The traffic beacon rides the router's location: one first-party page view per
+	// entry and per SPA navigation, no identity, no retry — lib/traffic.ts carries
+	// what it deliberately does not do.
+	useTrafficBeacon();
 
 	return (
 		<RouteSuspense>
