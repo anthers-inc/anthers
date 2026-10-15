@@ -28,7 +28,7 @@
 
 import { db, readingPositions, works } from "@anthers/db";
 import type { InferSelectModel } from "drizzle-orm";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 export type ReadingPosition = InferSelectModel<typeof readingPositions>;
 

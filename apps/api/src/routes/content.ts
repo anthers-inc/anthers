@@ -210,11 +210,7 @@ import {
 } from "../services/post-markdown.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { publishRefusal } from "../services/publish-refusal.js";
-import {
-	findPosition,
-	listPositions,
-	upsertPosition,
-} from "../services/reading-positions.js";
+import { findPosition, listPositions, upsertPosition } from "../services/reading-positions.js";
 import { queueRecordSync } from "../services/record-sync.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
 import { scanInlineUpload } from "../services/safety-scan.js";

@@ -19,10 +19,10 @@
  */
 
 import { beforeAll, describe, expect, it } from "bun:test";
-import { and, eq, sql } from "drizzle-orm";
 import { db } from "@anthers/db/client";
 import { readingPositions } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
+import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -87,11 +87,7 @@ async function makeWork(title: string, access: unknown, released = true): Promis
 	return workId;
 }
 
-function put(
-	workId: number,
-	body: Record<string, unknown>,
-	cookies: Record<string, string>,
-) {
+function put(workId: number, body: Record<string, unknown>, cookies: Record<string, string>) {
 	return req(`/api/content/reading-positions/${workId}`, {
 		method: "PUT",
 		headers: cookies,
@@ -138,18 +134,22 @@ describe("reading positions", () => {
 	it("refuses both doors without an account", async () => {
 		const listed = await req("/api/content/reading-positions");
 		expect(listed.status).toBe(401);
-		const pushed = await put(freeWorkId, { progress: 0.5, position: {} }, { "Content-Type": "application/json", Origin: ORIGIN });
+		const pushed = await put(
+			freeWorkId,
+			{ progress: 0.5, position: {} },
+			{ "Content-Type": "application/json", Origin: ORIGIN },
+		);
 		expect(pushed.status).toBe(401);
 	});
 
 	it("writes a position and reads it back — and only that caller ever sees it", async () => {
-		const pushed = await put(
-			freeWorkId,
-			{ progress: 0.4, position: { page: 40 } },
-			aAuth,
-		);
+		const pushed = await put(freeWorkId, { progress: 0.4, position: { page: 40 } }, aAuth);
 		expect(pushed.status).toBe(200);
-		const row = (await pushed.json()) as { workId: number; progress: number; position: Record<string, unknown> };
+		const row = (await pushed.json()) as {
+			workId: number;
+			progress: number;
+			position: Record<string, unknown>;
+		};
 		expect(row.workId).toBe(freeWorkId);
 		expect(row.progress).toBe(0.4);
 		expect(row.position).toEqual({ page: 40 });

@@ -1058,32 +1058,36 @@ export const workSaves = pgTable(
 // org — the user's records (same reasoning as `libraryItems`: the user has no node in
 // the current topology). The row is about one Work, but it is not the creator's content
 // and is invisible to them — a pointer a person keeps, not a content record.
-export const readingPositions = pgTable("reading_positions", {
-	id: serial("id").primaryKey(),
-	userId: integer("user_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	// Cascade, like `workSaves`: a position is a preference pointing at its Work, so it
-	// goes when the Work goes — and a withdrawn Work keeps its row, because withdrawal is
-	// visibility, not deletion.
-	workId: integer("work_id")
-		.notNull()
-		.references(() => works.id, { onDelete: "cascade" }),
-	/** How far the reader got across the whole Work, 0–1 — the one currency every spine
-	 *  ribbon reads, whatever the reader's native shape (pages, CFI, scroll). The rail's
-	 *  membership test reads this column and nothing else. */
-	progress: real("progress").notNull(),
-	/** The type-specific resume pointer, opaque to the server — see the table's docblock. */
-	position: jsonb("position").$type<Record<string, unknown>>().notNull().default({}),
-	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	// The newest-write-wins column: an upsert sets it, and the rail's recency order reads it.
-	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [
-	// A reading position per (account, Work) — the rail's whole interface in one index.
-	uniqueIndex("uq_reading_positions_user_work").on(table.userId, table.workId),
-	// Recency is the rail's order; the list reads the user's rows by it.
-	index("idx_reading_positions_user_updated").on(table.userId, table.updatedAt),
-]);
+export const readingPositions = pgTable(
+	"reading_positions",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// Cascade, like `workSaves`: a position is a preference pointing at its Work, so it
+		// goes when the Work goes — and a withdrawn Work keeps its row, because withdrawal is
+		// visibility, not deletion.
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** How far the reader got across the whole Work, 0–1 — the one currency every spine
+		 *  ribbon reads, whatever the reader's native shape (pages, CFI, scroll). The rail's
+		 *  membership test reads this column and nothing else. */
+		progress: real("progress").notNull(),
+		/** The type-specific resume pointer, opaque to the server — see the table's docblock. */
+		position: jsonb("position").$type<Record<string, unknown>>().notNull().default({}),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		// The newest-write-wins column: an upsert sets it, and the rail's recency order reads it.
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// A reading position per (account, Work) — the rail's whole interface in one index.
+		uniqueIndex("uq_reading_positions_user_work").on(table.userId, table.workId),
+		// Recency is the rail's order; the list reads the user's rows by it.
+		index("idx_reading_positions_user_updated").on(table.userId, table.updatedAt),
+	],
+);
 
 /**
  * Comments, polymorphic over what they're attached to.
