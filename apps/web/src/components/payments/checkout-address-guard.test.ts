@@ -30,6 +30,11 @@ import { join } from "node:path";
 
 const surfaces = {
 	BasketCheckout: "src/components/basket/BasketCheckout.tsx",
+	// The merch checkout form is the physical Work's purchase surface — it rides
+	// MerchBuyPanel's file (2026-10-15) rather than one of its own, and it is in every
+	// way a purchase form: the same billing block, the same confirm gate, the same
+	// never-ask-again Payment Element options.
+	MerchBuyPanel: "src/components/merch/MerchBuyPanel.tsx",
 } as const;
 
 /**

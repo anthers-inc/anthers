@@ -124,6 +124,21 @@ export function listCheckoutSessions(
 	return getStripe()?.checkout.sessions.list(params) ?? null;
 }
 
+/**
+ * Mirrors `stripe.tax.calculations.create` — a Stripe Tax quotation against a typed
+ * address, no session and no charge. This is the store panel's live tax line: an ESTIMATE
+ * by construction, because the checkout session's own tax resolves from the address the
+ * buyer actually delivers to, which the quote can only stand in for. Returns null when
+ * payments are unconfigured; a Stripe refusal (an address Stripe cannot resolve, most
+ * often) propagates to the caller, which decides whether a failed estimate degrades to
+ * "calculated at checkout" or refuses the surface.
+ */
+export async function createTaxCalculation(
+	params: Stripe.Tax.CalculationCreateParams,
+): Promise<Stripe.Tax.Calculation | null> {
+	return (await getStripe()?.tax.calculations.create(params)) ?? null;
+}
+
 /** Mirrors `stripe.webhooks.constructEventAsync` — signature verification for an inbound event. */
 export async function verifyWebhookSignature(
 	payload: string,

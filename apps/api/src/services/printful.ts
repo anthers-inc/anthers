@@ -197,8 +197,11 @@ export async function getStoreProduct(storeProductId: number): Promise<{
 
 /**
  * Shipping options for a recipient country + a set of catalog variants — the quote's
- * live source. Only country/state is required; Printful's US rates are flat per product
- * category, so the figure is real without the buyer's ZIP. Rates are dynamic and are not
+ * live source. **A US state code is required** — the live API refuses the bare-country
+ * call with 400 "State code is missing" (found 2026-10-15, on the dev store's token) —
+ * and the rates are flat per product category across states (verified the same day
+ * across CO, CA, OR, ID, NY and WA: one rate figure each, the same everywhere), so the
+ * figure is real at whichever state the caller names. Rates are dynamic and are not
  * cached — the docs' warning about mismatched displayed vs charged rates is read as
  * binding for a checkout path.
  */

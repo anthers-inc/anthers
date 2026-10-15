@@ -1907,10 +1907,14 @@ describe("Basket checkout — one charge, one card fee", () => {
 			expect(line.price_data.unit_amount).toBe(333);
 		}
 
-		// 🚨 The buyer's email is ON the session — the buyer is a verified account, no
-		// surface collects an email, and Stripe refuses to confirm a session without a
-		// customer email (`canConfirm` stays false, the greyed Pay button, 2026-10-06).
-		expect(params.customer_email).toBe(`${buyerName}@example.com`);
+		// 🚨 Customer and customer_email are either-or — Stripe refuses the pair (found
+		// live 2026-10-15 as a 500 on every buyer holding a Customer). This buyer holds
+		// one, so the session names it and takes its email from the Customer (every door
+		// that creates one passes the account's email): the 2026-10-06 greyed-Pay-button
+		// rule is met through the Customer, and the email param rides only when there is
+		// no Customer to carry it.
+		expect(params.customer).toBeTruthy();
+		expect(params.customer_email).toBeUndefined();
 
 		// 🚨 The split shape (Parker, 2026-10-15): the session charges the PLATFORM — no
 		// `transfer_data` rides it, because a destination charge names exactly one
@@ -2105,9 +2109,13 @@ describe("Checkout — session construction under automatic tax", () => {
 		const created = fake.lastCall("checkout.sessions.create");
 		const params = created?.args[0] as Stripe.Checkout.SessionCreateParams;
 		expect(params.line_items).toHaveLength(1);
-		// The buyer's email rides the session — Stripe requires one to confirm, and no
-		// purchase surface collects one (same defect the basket path fixed, 2026-10-06).
-		expect(params.customer_email).toBe(`${buyerName}@example.com`);
+		// 🚨 Customer and customer_email are either-or — Stripe refuses the pair (found
+		// live 2026-10-15 as a 500 on every buyer holding a Customer). This buyer holds
+		// one, so the session names it and takes its email from the Customer (every door
+		// that creates one passes the account's email); the email param rides only when
+		// there is no Customer to carry it.
+		expect(params.customer).toBeTruthy();
+		expect(params.customer_email).toBeUndefined();
 		// The PaymentIntent's metadata — where the route carries the purchase facts — is
 		// nested under `payment_intent_data`, not at the top level.
 		expect(
@@ -2132,6 +2140,9 @@ describe("Checkout — session construction under automatic tax", () => {
 			?.args[0] as Stripe.Checkout.SessionCreateParams;
 		expect(none.customer_creation).toBe("if_required");
 		expect(none.customer).toBeUndefined();
+		// The either-or's positive half: no Customer, so the verified account's email
+		// rides the session — the 2026-10-06 greyed-Pay-button rule.
+		expect(none.customer_email).toBe(`${buyerName}@example.com`);
 
 		const savedId = `cus_saved_${uid()}`;
 		await db
@@ -2144,6 +2155,9 @@ describe("Checkout — session construction under automatic tax", () => {
 			?.args[0] as Stripe.Checkout.SessionCreateParams;
 		expect(reuse.customer).toBe(savedId);
 		expect(reuse.customer_creation).toBeUndefined();
+		// And the pair's refusal shape never appears: no `customer_email` beside a
+		// named Customer.
+		expect(reuse.customer_email).toBeUndefined();
 	});
 
 	// The branch this replaces used to charge the buyer and hold the money on the platform

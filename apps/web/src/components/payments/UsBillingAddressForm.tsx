@@ -103,10 +103,37 @@ interface UsBillingAddressFormProps {
 	/** Where the buyer's typed fields live — the parent owns the form state. */
 	value: UsAddressInput;
 	onChange: (next: UsAddressInput) => void;
+	/**
+	 * Which address this form collects. `"billing"` (the default) keeps the exact labels
+	 * and autocomplete tokens every existing purchase surface renders; `"shipping"` asks
+	 * for the recipient and their delivery address — the merch checkout's override form,
+	 * which is Anthers' own US-only form for the same reason the billing one is.
+	 */
+	kind?: "billing" | "shipping";
 }
 
 const inputClass = "input input-bordered w-full";
 const labelClass = "form-control";
+
+/**
+ * The labels and autocomplete tokens a form of `kind` carries. The tokens are the
+ * WHAT-WAS-TYPED-HERE contract (see the comment in the JSX below — a missing token is an
+ * unfilled field, not a style nit), and a shipping form's contract is shipping: the
+ * password manager that fills `cc-name` from a billing token is the wrong helper for a
+ * recipient's name.
+ */
+function vocabularyFor(kind: "billing" | "shipping") {
+	const shipping = kind === "shipping";
+	return {
+		nameLabel: shipping ? "Recipient's name" : "Name on card",
+		nameAutocomplete: shipping ? "shipping name" : "cc-name",
+		line1Autocomplete: shipping ? "shipping address-line1" : "billing address-line1",
+		line2Autocomplete: shipping ? "shipping address-line2" : "billing address-line2",
+		cityAutocomplete: shipping ? "shipping address-level2" : "billing address-level2",
+		stateAutocomplete: shipping ? "shipping address-level1" : "billing address-level1",
+		zipAutocomplete: shipping ? "shipping postal-code" : "billing postal-code",
+	};
+}
 
 /**
  * The US billing address a purchase's sales tax resolves from — Anthers' own form, not
@@ -123,8 +150,13 @@ const labelClass = "form-control";
  * (`checkout.updateBillingAddress`) before the buyer confirms, which is what makes the
  * session resolve — and show — the real tax-inclusive total.
  */
-export default function UsBillingAddressForm({ value, onChange }: UsBillingAddressFormProps) {
+export default function UsBillingAddressForm({
+	value,
+	onChange,
+	kind = "billing",
+}: UsBillingAddressFormProps) {
 	const [touched, setTouched] = useState(false);
+	const words = vocabularyFor(kind);
 	const set =
 		(field: keyof UsAddressInput) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
 			onChange({ ...value, [field]: e.target.value });
@@ -136,13 +168,14 @@ export default function UsBillingAddressForm({ value, onChange }: UsBillingAddre
 			    checkout filled only Address line 1 — Name on Card, City and State stayed
 			    empty — because these three had no `name` attribute and, for the state
 			    `<select>`, no token at all. The tokens are the WHAT-WAS-TYPED-HERE
-			    contract; a missing one is an unfilled field, not a style nit. */}
+			    contract; a missing one is an unfilled field, not a style nit. The tokens
+			    switch with `kind` (see the vocabulary above). */}
 			<label className={labelClass}>
-				<span className="label-text mb-1">Name on card</span>
+				<span className="label-text mb-1">{words.nameLabel}</span>
 				<input
 					className={inputClass}
-					name="cc-name"
-					autoComplete="cc-name"
+					name={kind === "shipping" ? "ship-name" : "cc-name"}
+					autoComplete={words.nameAutocomplete}
 					value={value.name}
 					onChange={set("name")}
 					onBlur={() => setTouched(true)}
@@ -153,8 +186,8 @@ export default function UsBillingAddressForm({ value, onChange }: UsBillingAddre
 				<span className="label-text mb-1">Street address</span>
 				<input
 					className={inputClass}
-					name="address"
-					autoComplete="billing address-line1"
+					name={kind === "shipping" ? "ship-address" : "address"}
+					autoComplete={words.line1Autocomplete}
 					value={value.line1}
 					onChange={set("line1")}
 					onBlur={() => setTouched(true)}
@@ -165,8 +198,8 @@ export default function UsBillingAddressForm({ value, onChange }: UsBillingAddre
 				<span className="label-text mb-1">Apartment, suite, etc. (optional)</span>
 				<input
 					className={inputClass}
-					name="address2"
-					autoComplete="billing address-line2"
+					name={kind === "shipping" ? "ship-address2" : "address2"}
+					autoComplete={words.line2Autocomplete}
 					value={value.line2}
 					onChange={set("line2")}
 				/>
@@ -176,8 +209,8 @@ export default function UsBillingAddressForm({ value, onChange }: UsBillingAddre
 					<span className="label-text mb-1">City</span>
 					<input
 						className={inputClass}
-						name="city"
-						autoComplete="billing address-level2"
+						name={kind === "shipping" ? "ship-city" : "city"}
+						autoComplete={words.cityAutocomplete}
 						value={value.city}
 						onChange={set("city")}
 						onBlur={() => setTouched(true)}
@@ -188,8 +221,8 @@ export default function UsBillingAddressForm({ value, onChange }: UsBillingAddre
 					<span className="label-text mb-1">State</span>
 					<select
 						className="select select-bordered w-full"
-						name="state"
-						autoComplete="billing address-level1"
+						name={kind === "shipping" ? "ship-state" : "state"}
+						autoComplete={words.stateAutocomplete}
 						value={value.state}
 						onChange={set("state")}
 						onBlur={() => setTouched(true)}
@@ -210,8 +243,8 @@ export default function UsBillingAddressForm({ value, onChange }: UsBillingAddre
 				<span className="label-text mb-1">ZIP code</span>
 				<input
 					className={inputClass}
-					name="zip"
-					autoComplete="billing postal-code"
+					name={kind === "shipping" ? "ship-zip" : "zip"}
+					autoComplete={words.zipAutocomplete}
 					value={value.postalCode}
 					onChange={set("postalCode")}
 					onBlur={() => setTouched(true)}
