@@ -275,6 +275,7 @@ stripe-webhooks: ## Forward Stripe test webhooks to the local API (run alongside
 # lock-free: editing, `make dev`, scoped `bun test <path>` runs, and the cheap checks.
 
 verify: ## Run everything CI runs: typecheck, lint, unit tests, full Playwright (heavy — waits behind another session's run when one is live)
+	@test -z "$(E2E_FILES)" || { echo "make verify never scopes the browser suites — the push gate runs every suite; unset E2E_FILES or scope an interactive run with make test-e2e" >&2; exit 64; }
 	@sh scripts/heavy-run.sh make --no-print-directory verify-inner
 
 # The arm ceremony, reached through the same script its `/arm` front door calls. It holds
@@ -480,20 +481,30 @@ test-e2e: e2e-preflight ## Run the Playwright e2e suite in its own session (heav
 
 # Inner bodies of the browser targets, under the lock the wrappers above hold — run the
 # make target, never these.
+#
+# `E2E_FILES` scopes a run to a space-separated list of specs, forwarded as Playwright's
+# positional file filter (`make test-e2e E2E_FILES="tests/e2e/login-code.e2e.ts"`), with
+# paths resolving against apps/web, where the session wrapper cds. Empty by default — the
+# token expands to nothing and the run is the full suite. The command-line or environment
+# form feeds the inner recipe directly (MAKEFLAGS / env), which is why the wrapper's argv
+# carries nothing about scope. The gate (`make verify`) refuses the variable on purpose:
+# a push verifies every suite. A scoped run still holds the heavy-run lock — the lane's
+# footprint (browsers, servers, the API's session) is what the lock is sized to, so the
+# scoping trims specs, never the lane.
 test-e2e-inner:
-	$(SESSION_BROWSER) bunx playwright test
+	$(SESSION_BROWSER) bunx playwright test $(E2E_FILES)
 
 test-e2e-ui: e2e-preflight ## Run the Playwright e2e suite in UI mode, in its own session (heavy — waits)
 	@sh scripts/heavy-run.sh make --no-print-directory test-e2e-ui-inner
 
 test-e2e-ui-inner:
-	$(SESSION_BROWSER) bunx playwright test --ui
+	$(SESSION_BROWSER) bunx playwright test --ui $(E2E_FILES)
 
 test-gauntlet: e2e-preflight ## Run the User Gauntlet spec pass in its own session (heavy — waits)
 	@sh scripts/heavy-run.sh make --no-print-directory test-gauntlet-inner
 
 test-gauntlet-inner:
-	$(SESSION_BROWSER) bunx playwright test --project=gauntlet
+	$(SESSION_BROWSER) bunx playwright test --project=gauntlet $(E2E_FILES)
 
 
 # ─── Desktop Studio (Tauri) ───
