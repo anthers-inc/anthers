@@ -23,7 +23,7 @@
  * needing inner content goes through the view's own events, not around the shadow.
  */
 import { mediaFixtureWork } from "@anthers/db/media-fixture";
-import { expect, test } from "./fixtures";
+import { expect, resetReadingPosition, test } from "./fixtures";
 
 const EBOOK = mediaFixtureWork("ebook");
 const SCRIPTED = mediaFixtureWork("ebook-scripted");
@@ -32,6 +32,7 @@ const READER = 'section[aria-label^="Ebook reader:"]';
 test.describe.configure({ mode: "serial" });
 
 test("🚨 a scripted EPUB cannot execute or reach the network", async ({ page }) => {
+	await resetReadingPosition(page, SCRIPTED);
 	// ⚠️ Chromium emits a `request` event even for subresource loads the renderer refuse —
 	// a CSP-blocked image may still show up in `request` — so the network half of this
 	// test asserts OUTCOMES (no response, no reach-the-network failure), and the posture
@@ -75,6 +76,7 @@ test("reads through the ladder — one checked section at a time, never the cont
 	const requested: string[] = [];
 	page.on("request", (r) => requested.push(r.url()));
 
+	await resetReadingPosition(page, EBOOK);
 	await page.goto(`/works/${EBOOK.slug}-${EBOOK.publicId}`);
 	await expect(page.locator(READER)).toBeVisible();
 	await expect(page.locator(READER)).toContainText("Section 1 of 3", { timeout: 20_000 });
@@ -102,6 +104,7 @@ test("reads through the ladder — one checked section at a time, never the cont
 });
 
 test("the chrome knows where you are, and turns by arrow and by button", async ({ page }) => {
+	await resetReadingPosition(page, EBOOK);
 	await page.goto(`/works/${EBOOK.slug}-${EBOOK.publicId}`);
 	await expect(page.locator(READER)).toContainText(/Section \d of 3/, { timeout: 20_000 });
 
@@ -137,6 +140,7 @@ test("the chrome knows where you are, and turns by arrow and by button", async (
 });
 
 test("a turn issued while the book is still opening is honored, not dropped", async ({ page }) => {
+	await resetReadingPosition(page, EBOOK);
 	await page.goto(`/works/${EBOOK.slug}-${EBOOK.publicId}`);
 	const reader = page.locator(READER);
 	const readFraction = async () => {
@@ -158,6 +162,7 @@ test("a turn issued while the book is still opening is honored, not dropped", as
 });
 
 test("the table of contents navigates the spine", async ({ page }) => {
+	await resetReadingPosition(page, EBOOK);
 	await page.goto(`/works/${EBOOK.slug}-${EBOOK.publicId}`);
 	await expect(page.locator(READER)).toContainText("Section 1 of 3", { timeout: 20_000 });
 
@@ -169,6 +174,7 @@ test("the table of contents navigates the spine", async ({ page }) => {
 });
 
 test("it reopens where you stopped reading", async ({ page }) => {
+	await resetReadingPosition(page, EBOOK);
 	await page.goto(`/works/${EBOOK.slug}-${EBOOK.publicId}`);
 	const reader = page.locator(READER);
 	await expect(reader).toContainText(/Section \d of 3/, { timeout: 20_000 });
@@ -187,6 +193,7 @@ test("it reopens where you stopped reading", async ({ page }) => {
 });
 
 test("the seek bar moves through the book by fraction", async ({ page }) => {
+	await resetReadingPosition(page, EBOOK);
 	await page.goto(`/works/${EBOOK.slug}-${EBOOK.publicId}`);
 	const reader = page.locator(READER);
 	await expect(page.locator(READER)).toContainText("Section 1 of 3");
@@ -199,6 +206,7 @@ test("the seek bar moves through the book by fraction", async ({ page }) => {
 });
 
 test("the flow toggle switches to the continuous scroll", async ({ page }) => {
+	await resetReadingPosition(page, EBOOK);
 	await page.goto(`/works/${EBOOK.slug}-${EBOOK.publicId}`);
 	const reader = page.locator(READER);
 	await expect(page.locator(READER)).toContainText("Section 1 of 3");

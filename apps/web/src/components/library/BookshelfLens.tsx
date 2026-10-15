@@ -72,10 +72,10 @@ export function localFraction(work: Work): number | null {
 /**
  * The continue-reading rail's membership and order — the lens's rail in one testable
  * function. An item rides the rail exactly while its position is strictly past zero and
- * strictly short of the end, reading the server store when it has the Work and this
- * device's keys otherwise; order is last-touched first, with device-only positions
- * keeping their shelf order behind the server's, which is the only stable fact either
- * store holds.
+ * strictly short of the end, reading the server store beside this device's keys; order
+ * is last-touched first on the row's own timestamps, with device-only positions keeping
+ * their shelf order behind the server's, which is the only stable fact either store
+ * holds.
  */
 export function continueReading(
 	books: LensItem[],
@@ -90,13 +90,30 @@ export function continueReading(
 	for (const item of books) {
 		const work = item.work!;
 		const position = positions.get(work.id) ?? null;
-		const fraction = position?.progress ?? localFraction(work);
+		const fraction = spineFraction(work, position);
 		if (fraction == null || !(fraction > 0 && fraction < 1)) continue;
 		entries.push({ item, position, fraction, key: position?.updatedAt ?? "" });
 	}
 	return entries
 		.sort((a, b) => b.key.localeCompare(a.key) || a.item.id - b.item.id)
 		.map(({ item, position, fraction }) => ({ item, position, fraction }));
+}
+
+/**
+ * A spine's ribbon fraction: the **further-along of this device's position and the
+ * user's row**. The shelf marker has never gone backwards on this device (the
+ * panel-over-page reconciliation), so it does not go backwards across the two stores
+ * either: a device that read further than the row shows its own, and a device that has
+ * never read the Work shows the row. Zero means never opened, and renders no ribbon.
+ */
+export function spineFraction(work: Work, position: ServerPosition | null = null): number | null {
+	const local = localFraction(work);
+	const row = position?.progress ?? null;
+	if (local == null && row == null) return null;
+	// Zero, the shared "never really opened" answer of both stores, renders no ribbon
+	// rather than a zero-height one.
+	const fraction = Math.max(local ?? 0, row ?? 0);
+	return fraction > 0 ? fraction : null;
 }
 
 /** One spine, face-out with cover art or as a dust jacket without it — the rail's and the shelf's shared atom. */
@@ -256,8 +273,9 @@ export default function BookshelfLens({ items }: { items: LensItem[] }) {
 							: null;
 					const locked = isAccessResult(work.access) && work.access.canAccess === false;
 					// The user's position when the store has it — the same on every device —
-					// and this device's keys otherwise.
-					const fraction = positions.get(work.id)?.progress ?? localFraction(work);
+					// and this device's keys otherwise, each spine showing the further-along
+					// of the two, never a backwards step.
+					const fraction = spineFraction(work, positions.get(work.id) ?? null);
 					const spine = (
 						<Spine work={work} fraction={fraction} purchased={!!item.purchased} locked={locked} />
 					);

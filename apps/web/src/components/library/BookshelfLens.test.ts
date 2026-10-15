@@ -119,6 +119,14 @@ describe("continueReading", () => {
 		expect(rail[0].position).toBe(null);
 	});
 
+	test("the spine shows the further-along of the two stores, never a backwards step", () => {
+		// This device got to 40% once, another device pushed 20% later from the row's
+		// newest-write-wins: the ribbon holds at 40%.
+		writePage(1, 40, 100);
+		const rail = continueReading(books, new Map([row(1, 0.2, "2026-10-15T10:00:00Z")]));
+		expect(rail[0].fraction).toBe(0.4);
+	});
+
 	test("a Work with no position anywhere never rides, whatever its shelf order", () => {
 		const rail = continueReading(books, new Map([row(3, 0.9, "2026-10-15T12:00:00Z")]));
 		expect(rail.map((r) => r.item.id)).toEqual([3]);

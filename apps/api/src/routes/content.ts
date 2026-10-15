@@ -7635,9 +7635,10 @@ const contentRoutes = new Hono()
 		),
 		async (c) => {
 			const user = c.get("user");
-			const workId = parseNumericId(c.req.param("workId") ?? "");
-			if (workId == null) return c.json({ error: "Work not found" }, 404);
-			const work = await findWorkRow(String(workId));
+			// The param is whatever findWorkRow resolves — a bare id, a publicId, or the
+			// slug-publicId form — because the route only needs the row, and the readers'
+			// own callers name Works both ways.
+			const work = await findWorkRow(c.req.param("workId") ?? "");
 			if (!work) return c.json({ error: "Work not found" }, 404);
 
 			const access = await workAccessFor(c, work);

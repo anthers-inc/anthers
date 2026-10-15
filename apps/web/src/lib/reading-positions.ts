@@ -22,9 +22,11 @@
  *   row fills the absence through {@link refreshReadingPositions}'s adoption, so a new
  *   device opens where the last one left off. A device with no entry of its own never
  *   fights the row it is adopting.
- * - **The shelf** (the rail and ribbons): the server row when it exists, the local keys
- *   otherwise — the store the continue-reading rail reads is the user's, so it is the
- *   same on every device; signed-out readers keep exactly what this device knows.
+ * - **The shelf** (the rail and ribbons): the *further-along* of the device's keys and
+ *   the row — the shelf's marker never goes backwards on one device (the page-over-panel
+ *   reconciliation), so it does not go backwards across the two stores either, and a
+ *   device that has never read the Work shows the row. Signed-out readers keep
+ *   exactly what this device knows, which this module answers for.
  *
  * Nothing here carries a clock comparison: which device pushed last is the server's
  * fact, and the adoption rule only fires on absence, so the stores never disagree about

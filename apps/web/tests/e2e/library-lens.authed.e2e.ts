@@ -16,9 +16,12 @@
  * (`sidebar-structure.authed.e2e.ts`) pins the structure; this one pins the Library's
  * content: the lens rows, the dial, and the graying.
  */
+import { fileURLToPath } from "node:url";
 import { MEDIA_FIXTURE_PROJECT, mediaFixtureWork } from "@anthers/db/media-fixture";
 import type { Page } from "@playwright/test";
-import { API_URL, expect, test, WEB_ORIGIN } from "./fixtures";
+import { API_URL, emailedCode, expect, leashedExecFileSync, test, WEB_ORIGIN } from "./fixtures";
+
+const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
 const TRACK = mediaFixtureWork("track1");
 
@@ -370,11 +373,19 @@ test("the Bookshelf lens stands the saved comic up as a spine", async ({ page })
 	);
 });
 
-/** Push one real position row through the routes the readers write through. */
+/**
+ * Push one real position row through the routes the readers write through.
+ *
+ * The rail's rows are per-user value state, and this file's walks share the media
+ * fixture user with every reader walk in the project — so the rail assertions run
+ * against their own throwaway account, whose rows nothing else writes:
+ * `makeRailAccount` makes it, `/login` signs it, and it is purged before the test
+ * ends, its rows cascading with it.
+ */
 async function putReadingPosition(page: Page, workId: number, progress: number) {
 	const cookies = await page.context().cookies();
 	const session = cookies.find((c) => c.name === "session")?.value;
-	expect(session, "the authed project should carry a session cookie").toBeTruthy();
+	expect(session, "the signed-in page should carry a session cookie").toBeTruthy();
 	const res = await fetch(`${API_URL}/api/content/reading-positions/${workId}`, {
 		method: "PUT",
 		headers: {
@@ -384,41 +395,80 @@ async function putReadingPosition(page: Page, workId: number, progress: number) 
 		},
 		body: JSON.stringify({ progress, position: {} }),
 	});
-	expect([200, 401]).toContain(res.status);
 	expect(res.status, "the signed-in user writes their own row").toBe(200);
+}
+
+/** A throwaway account, made the canonical way (`db:local-account`), as the basket spec does. */
+function makeRailAccount(name: string): { email: string; id: number } {
+	const address = `${name}@example.com`;
+	const out = JSON.parse(
+		leashedExecFileSync("bun", ["run", "db:local-account", "--name", name, "--email", address], {
+			cwd: REPO_ROOT,
+			encoding: "utf8",
+		})
+			.trim()
+			.split("\n")
+			.at(-1) as string,
+	) as { handle: string; userId: number };
+	return { email: address, id: out.userId };
+}
+
+async function purgeRailAccount(id: number): Promise<void> {
+	const { purgeAccountIds } = await import("../../../api/src/__tests__/purge");
+	await purgeAccountIds([id]);
+}
+
+/** Sign in through the real /login UI — the throwaway account's own ceremony. */
+async function signInThroughUi(page: Page, email: string): Promise<void> {
+	await page.goto("/login");
+	await page.locator('input[autocomplete="username"]').fill(email);
+	await page.getByRole("button", { name: /^continue$/i }).click();
+	await expect(page.locator('input[aria-label="Code character 1 of 6"]')).toBeFocused();
+	await page.keyboard.type(await emailedCode(email));
+	await expect
+		.poll(() => page.url(), { message: `sign-in as ${email} never landed`, timeout: 15_000 })
+		.not.toContain("/login");
 }
 
 test("the continue-reading rail stands the unfinished readings up, newest first", async ({
 	page,
 }) => {
-	const comic = await saveFixtureWork(page, "comic");
-	const ebook = await saveFixtureWork(page, "ebook");
+	const account = makeRailAccount(`rail_${Date.now().toString(36)}`);
+	try {
+		await signInThroughUi(page, account.email);
 
-	// Rows through the real route, the user's own: the ebook touched first, the comic
-	// most recently — so the comic stands first on the rail.
-	await putReadingPosition(page, ebook.id, 0.8);
-	await putReadingPosition(page, comic.id, 0.3);
+		const comic = await saveFixtureWork(page, "comic");
+		const ebook = await saveFixtureWork(page, "ebook");
 
-	await page.goto("/library?lens=bookshelf");
-	await expect(page.getByRole("heading", { name: "Continue reading" })).toBeVisible();
+		// Rows through the real route, this account's own: the ebook touched first, the
+		// comic most recently — so the comic stands first on the rail.
+		await putReadingPosition(page, ebook.id, 0.8);
+		await putReadingPosition(page, comic.id, 0.3);
 
-	// Unfinished positions on book-like Works only — the two rows, nothing else —
-	// headed by the last one touched.
-	const rail = page.getByTestId("continue-reading");
-	const railSpines = rail.getByRole("listitem");
-	await expect(railSpines).toHaveCount(2);
-	const first = railSpines.first();
-	await expect(first.getByText("A comic that really turns")).toBeVisible();
+		await page.goto("/library?lens=bookshelf");
+		await expect(page.getByRole("heading", { name: "Continue reading" })).toBeVisible();
 
-	// The ribbon follows the row, not this device: the comic reads 30% from the row
-	// the walk just pushed, which no local key on this device ever carried.
-	await expect(rail.locator('[data-testid="spine-marker"]').first()).toHaveAttribute(
-		"style",
-		/height:\s*30%/,
-	);
+		// Unfinished positions on book-like Works only — the two rows, nothing else —
+		// headed by the last one touched. The account opened exactly two Works, so the
+		// count is exact rather than "at least".
+		const rail = page.getByTestId("continue-reading");
+		const railSpines = rail.getByRole("listitem");
+		await expect(railSpines).toHaveCount(2);
+		await expect(railSpines.first().getByText("A comic that really turns")).toBeVisible();
 
-	// The rail never replaces the shelf: the same Works stand below on the shelf rows.
-	await expect(page.getByRole("heading", { name: "Bookshelf" })).toBeVisible();
+		// The ribbon follows the row, not this device: the comic reads 30% from the row
+		// pushed moments ago, which no local key here ever carried.
+		await expect(rail.locator('[data-testid="spine-marker"]').first()).toHaveAttribute(
+			"style",
+			/height:\s*30%/,
+		);
+
+		// The rail never replaces the shelf: the same Works stand below on the shelf rows.
+		await expect(page.getByRole("heading", { name: "Bookshelf" })).toBeVisible();
+	} finally {
+		// The account's rows cascade with it; the shelf entries go with the account too.
+		await purgeRailAccount(account.id);
+	}
 });
 
 test("the Channel Guide lens puts a channel per creator and its timeline under them", async ({
