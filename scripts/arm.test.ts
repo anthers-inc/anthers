@@ -23,6 +23,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	armRefusalIsAlreadyArm,
 	constructProjectedTip,
 	holdLandingLock,
 	installGate,
@@ -251,6 +252,18 @@ describe("the arm ceremony", () => {
 		expect(isReusableReceipt(last, "h2", "t1")).toBe(false);
 		expect(isReusableReceipt(last, "h1", "t2")).toBe(false);
 		expect(isReusableReceipt(undefined, "h1", "t1")).toBe(false);
+	});
+
+	test("a re-arm accepts exactly GitHub's already-enqueued family of refusals, and nothing else", () => {
+		expect(armRefusalIsAlreadyArm("Pull request #1 is already enqueued to merge with squash")).toBe(
+			true,
+		);
+		expect(armRefusalIsAlreadyArm("Auto-merge is already enabled for this pull request")).toBe(
+			true,
+		);
+		expect(armRefusalIsAlreadyArm("the base branch policy prohibits the merge")).toBe(false);
+		expect(armRefusalIsAlreadyArm("not found")).toBe(false);
+		expect(armRefusalIsAlreadyArm("")).toBe(false);
 	});
 
 	test("a green gate resolves the radar holds that named this entry, and only those", () => {

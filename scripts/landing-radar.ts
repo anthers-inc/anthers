@@ -39,6 +39,7 @@
 
 import { spawnSync } from "node:child_process";
 import {
+	appendEvent,
 	armedLedger,
 	type EntryRef,
 	type LandingEvent,
@@ -46,6 +47,7 @@ import {
 	type RadarFinding,
 	type RadarMode,
 	type RadarRunEvent,
+	type RadarScope,
 	readEvents,
 } from "./landing-log.ts";
 
@@ -340,21 +342,59 @@ function describe(entry: EntryRef & { armedRank?: number | null }): string {
 	return `${pr}${entry.branch}@${entry.head.slice(0, 7)}${rank}`;
 }
 
-async function main(): Promise<number> {
-	const args = process.argv.slice(2);
+interface RadarCliOptions {
+	/** The ledger path the CLI's recording writes to (tests pass one). */
+	logPath?: string;
+	/** Overrides for the underlying radar run (tests pass `useGh: false`); the plain CLI leaves the defaults. */
+	runOptions?: Partial<Parameters<typeof runRadar>[0]>;
+}
+
+/**
+ * The CLI's body, exported so the tests drive it directly with the GitHub side off.
+ * One recording rule, from the front-half doc: every run lands on the ledger under its
+ * scope — a plain call is a session's own hand run, the probe passes `--scope probe`,
+ * and the ceremony keeps appending through its direct `runRadar` call, which is the
+ * division that stops one act being recorded twice.
+ */
+export function radarCli(args: string[], cliOptions: RadarCliOptions = {}): number {
 	const json = args.includes("--json");
 	const fetch = !args.includes("--no-fetch");
+	let scope: RadarScope | undefined;
+	for (let i = 0; i < args.length; i++) {
+		if (args[i] === "--scope") {
+			const value = args[i + 1];
+			if (value !== "hand" && value !== "probe") {
+				console.error(
+					"usage: bun run scripts/landing-radar.ts [--json] [--no-fetch] [--scope hand|probe]",
+				);
+				return 64;
+			}
+			scope = value;
+			args.splice(i, 2);
+			break;
+		}
+	}
 	if (args.some((arg) => !arg.startsWith("--") || !["--json", "--no-fetch"].includes(arg))) {
-		console.error("usage: bun run scripts/landing-radar.ts [--json] [--no-fetch]");
+		console.error(
+			"usage: bun run scripts/landing-radar.ts [--json] [--no-fetch] [--scope hand|probe]",
+		);
 		return 64;
 	}
-	const report = runRadar({ fetch });
+	const report = runRadar({ fetch, ...cliOptions.runOptions });
+	appendEvent(
+		toRadarRunEvent(report, scope ?? "hand"),
+		cliOptions.logPath ? { path: cliOptions.logPath } : {},
+	);
 	if (json) {
 		console.log(JSON.stringify(report, null, 2));
 	} else {
 		for (const line of summarize(report)) console.log(line);
 	}
 	return 0;
+}
+
+async function main(): Promise<number> {
+	return radarCli(process.argv.slice(2));
 }
 
 if (import.meta.main) {

@@ -68,6 +68,14 @@ function landingLockDefault(): string {
 export interface ArmOptions {
 	/** The pr being armed. */
 	pr: number;
+	/**
+	 * The ceremony's mode: `arm` is the builder's gate-then-enqueue; `rearm` is the
+	 * finisher's door — an already-armed pr whose head moved (the receipt the board
+	 * recorded is stale) and the re-enqueue of an ejected pr both ride it. The re-arm
+	 * recomputes the receipt under the same lock, the same radar, the same gate, and
+	 * accepts GitHub's "already enqueued" refusal as the queue still owning the pr.
+	 */
+	mode?: "arm" | "rearm";
 	/** The repository root the ceremony runs against (the branch's own worktree is the normal caller). */
 	cwd?: string;
 	/** Overrides for tests. */
@@ -340,6 +348,16 @@ function bounce(
 	return { outcome: "bounce", lines };
 }
 
+/**
+ * GitHub refusals that mean "the arm is already set", which a `rearm` accepts as
+ * success: the queue already owns the pr, the auto-merge needs no second act, and the
+ * re-arm's fresh receipt is the ledger's new truth. Matched by message, never by exit
+ * code alone (gh's exit for it is nonzero like every other refusal).
+ */
+export function armRefusalIsAlreadyArm(stderr: string): boolean {
+	return /already enqueued|auto-merge is already enabled|already been enqueued/i.test(stderr);
+}
+
 /** Preconditions that need only the pr's own view and the calling checkout. Each refusal names its fix. */
 export function preconditions(options: ArmOptions): { view: PrView } | ArmDecision {
 	const pr = options.pr;
@@ -369,9 +387,17 @@ export function preconditions(options: ArmOptions): { view: PrView } | ArmDecisi
 		]);
 	}
 	if (view.autoMergeRequest !== null && view.autoMergeRequest !== undefined) {
-		return refusal([
-			`→ #${pr} is already armed — the queue owns it now; it is stuck, \`/finish-train\` is the path`,
-		]);
+		if (options.mode !== "rearm") {
+			return refusal([
+				`→ #${pr} is already armed — the queue owns it now; it is stuck, \`/finish-train\` is the path`,
+			]);
+		}
+		// A re-arm of an already-armed pr is the head-moved-while-armed case the finisher
+		// owns: the auto-merge stays the queue's to finish, and the receipt below is what
+		// the re-arm restores.
+		log(
+			`→ #${pr} is already armed (a head move superseded its receipt) — the re-arm refreshes the receipt`,
+		);
 	}
 	return { view };
 }
@@ -655,7 +681,10 @@ async function runCeremony(pr: number, options: ArmOptions): Promise<ArmDecision
 		}
 
 		const armResult = gh(["pr", "merge", String(pr), "--squash", "--auto"]);
-		if (armResult.status !== 0) {
+		if (
+			armResult.status !== 0 &&
+			!(options.mode === "rearm" && armRefusalIsAlreadyArm(armResult.stderr || armResult.stdout))
+		) {
 			return bounce(
 				"pr-state",
 				(armResult.stderr || "gh refused").split("\n").filter(Boolean)[0] ?? "gh refused",
@@ -665,6 +694,11 @@ async function runCeremony(pr: number, options: ArmOptions): Promise<ArmDecision
 						`GitHub refused the arm: ${(armResult.stderr || armResult.stdout).split("\n").filter(Boolean)[0] ?? ""}`,
 					),
 				],
+			);
+		}
+		if (armResult.status !== 0) {
+			log(
+				"→ GitHub says the pr is already enqueued — the auto-merge stands, the receipt is the re-arm's product",
 			);
 		}
 		appendEvent({
@@ -714,13 +748,23 @@ function line(text: string): string {
 }
 
 export async function main(): Promise<number> {
-	const arg = process.argv[2];
-	const pr = Number(arg);
-	if (!arg || !Number.isInteger(pr) || pr <= 0) {
-		console.error("usage: bun run scripts/arm.ts <PR number>   (or: make arm PR=<n>)");
+	const argv = process.argv.slice(2);
+	const pr = Number(argv[0]);
+	if (
+		!argv[0] ||
+		!Number.isInteger(pr) ||
+		pr <= 0 ||
+		argv.some((a) => a !== argv[0] && a !== "--rearm")
+	) {
+		console.error("usage: bun run scripts/arm.ts <PR number> [--rearm]   (or: make arm PR=<n>)");
 		return 64;
 	}
-	const decision = await runCeremony(pr, { pr });
+	const mode = argv.includes("--rearm") ? "rearm" : "arm";
+	if (mode === "rearm")
+		log(
+			"→ rearm: the finisher's door — the receipt is recomputed under the landing lock, and GitHub's already-enqueued answer is accepted",
+		);
+	const decision = await runCeremony(pr, { pr, mode });
 	for (const l of decision.lines) console.log(l);
 	if (decision.outcome === "armed" && decision.stamp) {
 		console.log(

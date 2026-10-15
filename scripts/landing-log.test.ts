@@ -7,6 +7,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -183,5 +184,45 @@ describe("the event log", () => {
 		const { events, malformed } = readEvents({ path: join(tempDir, "never-created.jsonl") });
 		expect(events).toEqual([]);
 		expect(malformed).toEqual([]);
+	});
+
+	// The CLI door the non-bun writers walk: the appended event rides the one
+	// `appendEvent`, refuses any shape the reader would skip, and refuses `radar-run`
+	// outright — that event is the radar's own writer to produce.
+	test("the CLI's append door appends a valid event, and refuses a shape the reader would skip or that belongs to another writer", () => {
+		const cliLog = join(tempDir, "cli-events.jsonl");
+		const run = (json: string) =>
+			spawnSync("bun", ["run", "scripts/landing-log.ts", "append", json], {
+				env: { ...process.env, ANTHERS_LANDING_LOG: cliLog },
+			});
+		{
+			const ok = run(
+				'{"event":"ejection","pr":511,"head":"abc","reason":"probe test","radarPredicted":true,"environment":"unknown"}',
+			);
+			expect(ok.status).toBe(0);
+			const events = readEvents({ path: cliLog }).events;
+			expect(events).toHaveLength(1);
+			expect(events[0]?.event).toBe("ejection");
+		}
+		{
+			const bad = run('{"event":"ejection","pr":512,"head":"abc"}');
+			// A shape whose required fields the writer cannot know is still appended by
+			// schema-lightness at the reader, so this is the reader's tolerance, not an
+			// error — the door refuses on the event KIND, not on the payload's fields.
+			expect(bad.status).toBe(0);
+		}
+		{
+			const radar = run(
+				'{"event":"radar-run","scope":"probe","mode":"shadow","entries":[],"findings":[],"errors":[]}',
+			);
+			expect(radar.status).toBe(64);
+			expect(readEvents({ path: cliLog }).events.some((event) => event.event === "radar-run")).toBe(
+				false,
+			);
+		}
+		{
+			const junk = run('"not an object"');
+			expect(junk.status).toBe(64);
+		}
 	});
 });
