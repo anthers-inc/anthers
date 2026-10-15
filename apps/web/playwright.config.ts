@@ -56,7 +56,13 @@ export default defineConfig({
 	// E2E_WORKERS overrides when a deliberately quiet machine wants the speed back —
 	// in CI as well as on it.
 	workers: Number(process.env.E2E_WORKERS ?? (process.env.CI ? 2 : 4)),
-	reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
+	reporter: process.env.CI
+		? [
+				["github"],
+				["html", { open: "never" }],
+				["json", { outputFile: "playwright-report/report.json" }],
+			]
+		: "list",
 	// The stall timeline: a hung suite otherwise leaves the captured log
 	// without a single timestamped event between "Running N tests" and the ceiling —
 	// the 2026-10-14 browser job gave 26 silent minutes and the log could not say what
