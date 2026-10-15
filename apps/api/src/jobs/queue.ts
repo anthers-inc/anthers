@@ -257,6 +257,7 @@ export const QUEUES = {
 	// the release gate a formality rather than a gate. See `worksOwedScans`.
 	RESCAN_OWED: "rescan-owed",
 	PRUNE_ATTENTION: "prune-attention", // Roll raw attention into daily totals, then delete it
+	PRUNE_TRAFFIC: "prune-traffic", // Roll raw traffic into daily totals, then delete it
 	RUN_DELETIONS: "run-deletions", // Erase accounts whose deletion grace period has elapsed
 	// Lift suspensions whose `suspended_until` has passed. Each lift is its own
 	// transaction and its own `moderation_actions` row with both actor columns null,
@@ -450,6 +451,11 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 2,
 		expireInMinutes: 30,
 	},
+	[QUEUES.PRUNE_TRAFFIC]: {
+		// Same safety story as PRUNE_ATTENTION: per-day transactions, overwriting upserts.
+		retryLimit: 2,
+		expireInMinutes: 30,
+	},
 	[QUEUES.CALCULATE_CRF]: {
 		retryLimit: 1,
 		expireInMinutes: 30,
@@ -586,6 +592,11 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// the ordinary case — but it must not go unnoticed for a week.
 	[QUEUES.RECONCILE_LISTINGS, "20 4 * * *"],
 	[QUEUES.PRUNE_ATTENTION, "0 3 * * *"],
+	// 3:45 AM daily. No ordering dependency — traffic pays nobody, so it cannot
+	// strand earnings the way prune-attention would have run ahead of distribute-pool
+	// — and traffic runs last among the night's sweeps purely by convention: raw
+	// traffic rows are thirty days old when pruned, so a day of latency is invisible.
+	[QUEUES.PRUNE_TRAFFIC, "45 3 * * *"],
 	// 3:30 AM daily. Nothing depends on the ordering — an expired session is dead to every
 	// user the moment it expires, so this only reclaims the row and the IP on it.
 	[QUEUES.PRUNE_CREDENTIALS, "30 3 * * *"],

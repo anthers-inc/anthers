@@ -18,7 +18,13 @@ interface NavItem {
 }
 
 const SECTIONS: { title: string; items: NavItem[]; superAdminOnly?: boolean }[] = [
-	{ title: "Overview", items: [{ to: "/", label: "Home", end: true }] },
+	{
+		title: "Overview",
+		items: [
+			{ to: "/", label: "Home", end: true },
+			{ to: "/traffic", label: "Traffic" },
+		],
+	},
 	{
 		title: "Legal",
 		items: [
