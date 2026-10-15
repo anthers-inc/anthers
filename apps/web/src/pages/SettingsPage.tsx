@@ -42,6 +42,7 @@ import { generateRecoveryKey, type RecoveryKeypair } from "../lib/recovery-key";
 import { getStripe } from "../lib/stripe";
 import { cardElementStyle } from "../lib/stripeCard";
 import { studioUrl } from "../lib/studio";
+import { setPreviewsEnabled, usePreviewsEnabled } from "../lib/tile-preview-settings";
 
 interface DeviceSession {
 	id: number;
@@ -120,6 +121,51 @@ function DesktopHomeSection() {
 								Your Catalog, uploads and drafts
 							</span>
 						</span>
+					</label>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Media & Play — the per-install playback preferences (Parker, 2026-10-15).
+ *
+ * These are browser settings rather than account settings: a preference about how
+ * *this* browser behaves while browsing, remembered in `localStorage` beside the
+ * desktop home and the media volume, which is why the copy says so. New feed and
+ * playback preferences join this card rather than growing new ones.
+ */
+function MediaPlaySection() {
+	const previewsEnabled = usePreviewsEnabled();
+
+	return (
+		<div className="card bg-base-200 mt-6">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Media &amp; Play</h3>
+				<p className="text-sm text-base-content/60">
+					How playback behaves while you browse. These are remembered in this browser.
+				</p>
+
+				<div className="form-control mt-2">
+					{/* The stop *Your Feed* commits every feed signal to: previews are the
+					    cursor's doing, and they stay that way by being stoppable. Turning this
+					    off mid-hover stops the playing preview on the same render. */}
+					<label className="label cursor-pointer justify-start gap-3">
+						<input
+							type="checkbox"
+							className="toggle toggle-primary"
+							checked={previewsEnabled}
+							onChange={(e) => setPreviewsEnabled(e.target.checked)}
+						/>
+						<div>
+							<span className="label-text font-medium">Play previews as I browse</span>
+							<p className="text-xs text-base-content/50 mt-0.5">
+								Holding the cursor on a feed tile plays the work inside its thumbnail, one tile at a
+								time. Turning this off keeps every tile on its poster, and tiles you can still open
+								keep their play affordance.
+							</p>
+						</div>
 					</label>
 				</div>
 			</div>
@@ -2262,6 +2308,10 @@ export default function SettingsPage() {
 					{/* The saved billing address — the account's one opt-in payment-side record,
 					    read-only everywhere except this page. */}
 					<BillingAddressSection />
+
+					{/* The per-install playback preferences — the feed-tile preview stop *Your
+					    Feed* promises, among the other remembered-by-browser settings. */}
+					<MediaPlaySection />
 
 					{/* Creator tools live in the Studio (payouts, connections, Badges). */}
 					{isCreator && (
