@@ -5,12 +5,11 @@ import {
 	type ExecFileSyncOptionsWithStringEncoding,
 	execFileSync,
 } from "node:child_process";
-
-import { withSignInLock } from "./signin-lock";
 import { fileURLToPath } from "node:url";
 import { GAUNTLET_CREATOR_EMAIL } from "@anthers/db/gauntlet";
 import { MEDIA_FIXTURE_EMAIL } from "@anthers/db/media-fixture";
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { withSignInLock } from "./signin-lock";
 
 /**
  * The static preview the browser loads (playwright.config.ts webServer #1), on the port the
