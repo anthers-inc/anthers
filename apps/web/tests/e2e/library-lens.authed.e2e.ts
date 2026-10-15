@@ -360,12 +360,67 @@ test("the Bookshelf lens stands the saved comic up as a spine", async ({ page })
 	await expect(page.getByRole("heading", { name: "Bookshelf" })).toBeVisible();
 	await expect(page.getByText("A comic that really turns").first()).toBeVisible();
 
-	// The ribbon, at the depth the device got to: round(2 / pageCount) percent.
+	// The ribbon, at the depth the device got to: round(2 / pageCount) percent. Scoped
+	// to the shelf's own rows — an unfinished position rides the rail above too, so its
+	// spine carries a second, equal marker this walk is not about.
 	const expected = `${Math.round((2 / pageCount) * 100)}%`;
-	await expect(page.getByTestId("spine-marker")).toHaveAttribute(
+	await expect(
+		page.getByTestId("bookshelf-shelf").getByTestId("spine-marker"),
+	).toHaveAttribute(
 		"style",
 		new RegExp(`height:\\s*${expected.replace("%", "")}%`),
 	);
+});
+
+/** Push one real position row through the routes the readers write through. */
+async function putReadingPosition(page: Page, workId: number, progress: number) {
+	const cookies = await page.context().cookies();
+	const session = cookies.find((c) => c.name === "session")?.value;
+	expect(session, "the authed project should carry a session cookie").toBeTruthy();
+	const res = await fetch(`${API_URL}/api/content/reading-positions/${workId}`, {
+		method: "PUT",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${session}`,
+		},
+		body: JSON.stringify({ progress, position: {} }),
+	});
+	expect([200, 401]).toContain(res.status);
+	expect(res.status, "the signed-in user writes their own row").toBe(200);
+}
+
+test("the continue-reading rail stands the unfinished readings up, newest first", async ({
+	page,
+}) => {
+	const comic = await saveFixtureWork(page, "comic");
+	const ebook = await saveFixtureWork(page, "ebook");
+
+	// Rows through the real route, the user's own: the ebook touched first, the comic
+	// most recently — so the comic stands first on the rail.
+	await putReadingPosition(page, ebook.id, 0.8);
+	await putReadingPosition(page, comic.id, 0.3);
+
+	await page.goto("/library?lens=bookshelf");
+	await expect(page.getByRole("heading", { name: "Continue reading" })).toBeVisible();
+
+	// Unfinished positions on book-like Works only — the two rows, nothing else —
+	// headed by the last one touched.
+	const rail = page.getByTestId("continue-reading");
+	const railSpines = rail.getByRole("listitem");
+	await expect(railSpines).toHaveCount(2);
+	const first = railSpines.first();
+	await expect(first.getByText("A comic that really turns")).toBeVisible();
+
+	// The ribbon follows the row, not this device: the comic reads 30% from the row
+	// the walk just pushed, which no local key on this device ever carried.
+	await expect(rail.locator('[data-testid="spine-marker"]').first()).toHaveAttribute(
+		"style",
+		RegExp(`height:\\s*30%`),
+	);
+
+	// The rail never replaces the shelf: the same Works stand below on the shelf rows.
+	await expect(page.getByRole("heading", { name: "Bookshelf" })).toBeVisible();
 });
 
 test("the Channel Guide lens puts a channel per creator and its timeline under them", async ({

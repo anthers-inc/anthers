@@ -38,10 +38,20 @@ import {
 	type CSSProperties,
 	type MutableRefObject,
 	type ReactNode,
+	type RefObject,
+	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
 import { useMediaPlayer } from "../../lib/media-player";
+import {
+	readScrollFraction,
+	refreshReadingPositions,
+	SCROLL_OPEN_FLOOR,
+	serverPositionOf,
+	writeScroll,
+} from "../../lib/reading-positions";
 import { trackFromWork } from "../../lib/tracks";
 import { useSeekPlayer, WorkPlayerProvider } from "../../lib/work-player";
 import AudioPlayer from "../media/AudioPlayer";
@@ -703,7 +713,7 @@ export function WorkDeliverable({
 			) : null}
 			{work.bodyHtml &&
 				(isWriting(work.type) ? (
-					<WorkArticle html={work.bodyHtml} />
+					<WorkArticle html={work.bodyHtml} workId={work.id} />
 				) : (
 					<article className="prose max-w-none">
 						<SanitizedHtml html={work.bodyHtml} />
@@ -754,10 +764,79 @@ export function WorkDescription({ work }: { work: WorkDetail }) {
 	);
 }
 
+/**
+ * A text Work's scroll position: how deep into the article the reader has gotten, as the
+ * reading-positions module's third currency (pages, CFIs, and now depth-scrolled).
+ *
+ * **Depth-scrolled is the whole position** — a scroll has no pages to have stopped on, so
+ * the fraction is defined once here and everything else (the rail's membership, the
+ * spine's ribbon, the resume) reads it the same way it reads a page fraction. The
+ * measure is the article element against the window: when the viewport's bottom edge has
+ * passed that depth of the piece, the reader has seen that much of it. (An article that
+ * fits on one screen is read as soon as it has been seen at all, which the clamp to 1
+ * states honestly.)
+ *
+ * **Never written on mount.** The same contract the paged readers keep: opening a piece
+ * records nothing; scrolling it does. A resume lands at the recorded depth with the
+ * read point set a fifth of a viewport below the top edge, so what comes next is ahead
+ * of where the eye expects it rather than a line half-hidden at the ceiling.
+ *
+ * A nudge of scroll (below `SCROLL_OPEN_FLOOR`) still records locally — depth is depth —
+ * but is never pushed, so an accidental jiggle never puts a Work on the rail.
+ */
+function useArticleScrollProgress(
+	workId: number | undefined,
+	ref: RefObject<HTMLElement | null>,
+): void {
+	useEffect(() => {
+		if (!workId || !ref.current) return;
+		void refreshReadingPositions();
+		const el = ref.current;
+
+		let restored = false;
+		const resumeAt = (fraction: number) => {
+			const target = el.offsetTop + fraction * el.offsetHeight - window.innerHeight * 0.8;
+			window.scrollTo(0, Math.max(0, target));
+		};
+
+		// Resume from the device's own depth, or — on a device that has never read this
+		// piece — from the server row the refresh adopts. One resume per mount only.
+		const restoredFraction = readScrollFraction(workId) ?? serverPositionOf(workId)?.progress;
+		if (restoredFraction != null && restoredFraction >= SCROLL_OPEN_FLOOR) {
+			restored = true;
+			resumeAt(restoredFraction);
+		} else {
+			void refreshReadingPositions().then(() => {
+				if (restored) return;
+				const adoptedFraction = readScrollFraction(workId) ?? serverPositionOf(workId)?.progress;
+				if (adoptedFraction != null && adoptedFraction >= SCROLL_OPEN_FLOOR) {
+					restored = true;
+					resumeAt(adoptedFraction);
+				}
+			});
+		}
+
+		let lastWrite = 0;
+		const onScroll = () => {
+			const now = Date.now();
+			if (now - lastWrite < 1000) return;
+			lastWrite = now;
+			const height = el.offsetHeight;
+			if (height <= 0) return;
+			const depth = (window.scrollY + window.innerHeight - el.offsetTop) / height;
+			writeScroll(workId, Math.min(1, Math.max(0, depth)));
+		};
+		window.addEventListener("scroll", onScroll, { passive: true });
+		return () => window.removeEventListener("scroll", onScroll);
+	}, [workId, ref]);
+}
+
 /** A piece of writing's body, set for reading. */
-export function WorkArticle({ html }: { html: string }) {
+export function WorkArticle({ html, workId }: { html: string; workId?: number }) {
+	const ref = useRef<HTMLElement>(null);
+	useArticleScrollProgress(workId, ref);
 	return (
-		<article className={WRITING_ARTICLE_CLASS} style={WRITING_BODY_STYLE}>
+		<article ref={ref} className={WRITING_ARTICLE_CLASS} style={WRITING_BODY_STYLE}>
 			<SanitizedHtml html={html} />
 		</article>
 	);
