@@ -38,6 +38,7 @@
 import { db } from "@anthers/db";
 import {
 	accountCycles,
+	badgeCharges,
 	creatorCredits,
 	crfLedger,
 	invoiceLines,
@@ -53,7 +54,7 @@ import {
 	previousCycleKey,
 } from "@anthers/shared/billing-cycle";
 import { supportAmount } from "@anthers/shared/constants";
-import { cardFee, paymentsSplit } from "@anthers/shared/fees";
+import { cardFee, creatorFeeShare, paymentsSplit } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq, inArray, isNotNull, isNull, like, lt, notInArray, or, sql } from "drizzle-orm";
 import { computeMonth, type MonthCharge } from "./distribute-pool.js";
@@ -150,8 +151,9 @@ async function supportersIn(month: string, only?: number): Promise<number[]> {
 
 /** A paid invoice for the month, as the charges `computeMonth` splits. */
 interface PaidCharge extends MonthCharge {
-	invoiceId: number;
-	/** What Stripe actually took, or zero where it could not be read. */
+	/** The invoice row, when the charge is one — null for a checkout's badge charges. */
+	invoiceId: number | null;
+	/** What this charge bore: Stripe's own figure, or the pinned badge shares summed. */
 	processingFee: Decimal;
 }
 
@@ -195,7 +197,47 @@ async function paidChargesFor(userId: number, month: string): Promise<PaidCharge
 				(charge.directed.get(row.creatorId) ?? new Decimal(0)).plus(amount),
 			);
 	}
-	return [...byInvoice.values()];
+
+	// ── Badge first transactions ride in beside the invoices (2026-10-15) ────
+	// A Badge bought through the basket is this month's support money on a second rail:
+	// `badge_charges` rows completed this month, grouped by their charge. The fee they
+	// carry is their Pinned pro-rata shares summed (`creatorFeeShare` reads it as the
+	// charge's own), and the directed line is the charged amount — an upgrade's delta,
+	// never the rung's whole threshold, for exactly the reason `planItemChange.started`
+	// carries the delta: the line's other half (the rung's base) is the original
+	// subscription charge's, and this charge carries only what was newly paid.
+	const badgeRows = await db
+		.select()
+		.from(badgeCharges)
+		.where(
+			and(
+				eq(badgeCharges.buyerId, userId),
+				eq(badgeCharges.billingCycle, month),
+				eq(badgeCharges.status, "completed"),
+			),
+		);
+
+	const byIntent = new Map<string, PaidCharge>();
+	for (const row of badgeRows) {
+		let charge = byIntent.get(row.stripePaymentIntentId);
+		if (!charge) {
+			charge = {
+				invoiceId: null,
+				processingFee: new Decimal(0),
+				anthers: new Decimal(0),
+				directed: new Map(),
+			};
+			byIntent.set(row.stripePaymentIntentId, charge);
+		}
+		charge.processingFee = charge.processingFee.plus(new Decimal(row.processingFee));
+		if (row.creatorId == null) continue;
+		charge.directed.set(
+			row.creatorId,
+			(charge.directed.get(row.creatorId) ?? new Decimal(0)).plus(new Decimal(row.chargedAmount)),
+		);
+	}
+
+	return [...byInvoice.values(), ...byIntent.values()];
 }
 
 /**
@@ -213,14 +255,19 @@ function anthersFeeShare(charges: PaidCharge[]): Decimal {
 			new Decimal(0),
 		);
 		const model = paymentsSplit(anthers, directed.toNumber());
-		let actual = charge.processingFee;
+		// The creator side is the ONE arithmetic `computeMonth` credits against — see
+		// `creatorFeeShare` in `fees.ts`. A checkout charge carries its own pinned fee
+		// shares, so its contribution reads zero here (everything its fee covered went to
+		// the lines' creators; the badge money never enters this remainder at all).
+		const creator = creatorFeeShare(anthers, directed.toNumber(), charge.processingFee);
+		let actual = charge.processingFee ?? new Decimal(0);
 		if (actual.lte(0) && model.total.gt(0)) {
 			console.warn(
-				`settle: invoice ${charge.invoiceId} has no recorded processing fee; using the model's $${cardFee(new Decimal(anthers).plus(directed)).toFixed(2)}`,
+				`settle: invoice ${charge.invoiceId ?? "charge"} has no recorded processing fee; using the model's $${cardFee(new Decimal(anthers).plus(directed)).toFixed(2)}`,
 			);
 			actual = model.total;
 		}
-		total = total.plus(actual.minus(model.creator));
+		total = total.plus(actual.minus(creator));
 	}
 	return total;
 }
@@ -453,18 +500,15 @@ async function settleSupporterMonth(userId: number, month: string, now: Date): P
 		// mechanism — would find the invoice settled and credit nothing. The stamp lands
 		// on that later run instead, when the withheld share is credited with the rest.
 		if (paid && suspendedIds.length === 0) {
-			await tx
-				.update(invoices)
-				.set({ settledAt: now, updatedAt: now })
-				.where(
-					and(
-						inArray(
-							invoices.id,
-							charges.map((c) => c.invoiceId),
-						),
-						isNull(invoices.settledAt),
-					),
-				);
+			// Only the invoice-backed charges carry an invoice id to stamp — a Badge
+			// charge's money has no invoice row; it is this charge's own record.
+			const invoiceIds = charges.map((c) => c.invoiceId).filter((id): id is number => id != null);
+			if (invoiceIds.length > 0) {
+				await tx
+					.update(invoices)
+					.set({ settledAt: now, updatedAt: now })
+					.where(and(inArray(invoices.id, invoiceIds), isNull(invoices.settledAt)));
+			}
 		}
 
 		return deltas.length > 0 || !inflowDelta.isZero();

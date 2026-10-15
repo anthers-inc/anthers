@@ -112,11 +112,27 @@ interface Owed {
 export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise<number> {
 	if (!paymentsConfigured()) return 0;
 
-	// Only a draft can still be changed, and only a renewal has lines a reduction belongs
-	// against. The invoice for a mid-month raise is deliberately excluded: it is the charge
-	// the reduction exists to compensate for, and discounting it here would be paying the
-	// money back before it was taken.
-	if (invoice.status !== "draft" || invoice.billing_reason !== "subscription_cycle") return 0;
+	// Only a draft can still be changed, and only an invoice the reduction belongs
+	// against. The invoice for a mid-month raise is deliberately excluded (its
+	// billing reason is `subscription_update`): it is the charge the reduction exists to
+	// compensate for, and discounting it here would be paying the money back before it was
+	// taken.
+	//
+	// ⚠️ **A first invoice joins the renewal (2026-10-15).** A subscription created for a
+	// Badge bought through the basket carries `billing_reason: "subscription_create"` —
+	// and when that creation is anchored on the next 1st (the no-prior-subscription
+	// Badge buyer's shape), the first invoice is the renewal-shaped invoice the
+	// missed-days reduction reduces. Admitting it is safe for the ordinary backdated
+	// creation too: its invoice pays for the cycle it was created in, and
+	// `recordReductions` keys every reduction it writes to the NEXT cycle, so the owed
+	// set here is empty and the pass no-ops. Reductions match by the cycle the
+	// invoice pays for (`cycleInvoicePaysFor`), which is what keeps the two shapes apart.
+	if (
+		invoice.status !== "draft" ||
+		(invoice.billing_reason !== "subscription_cycle" &&
+			invoice.billing_reason !== "subscription_create")
+	)
+		return 0;
 	if (!invoice.id) return 0;
 
 	const subscriptionId = subscriptionOf(invoice);

@@ -22,7 +22,7 @@ import {
 import { adminAccounts } from "./admin.js";
 import { users } from "./auth.js";
 import { works } from "./content.js";
-import { creatorCredits, invoices } from "./subscriptions.js";
+import { badges, creatorCredits, invoices } from "./subscriptions.js";
 
 // org — a creator's Stripe Connect account. Money; org-only.
 export const stripeAccounts = pgTable("stripe_accounts", {
@@ -413,7 +413,7 @@ export const disputes = pgTable(
 );
 
 /**
- * org — the signed-in buyer's basket, one row per (user, Work). A **scratchpad, not a
+ * org — the signed-in buyer's basket, one row per (user, item). A **scratchpad, not a
  * record** — nothing here is money and nothing is an entitlement — but it is the buyer's,
  * not the browser's (Parker, 2026-10-03): the basket is scoped to the account, so a second
  * account signing in on the same machine starts empty. It moved out of client-side
@@ -423,12 +423,12 @@ export const disputes = pgTable(
  *
  * 🚨 **Never trusted.** The rows are ids, not facts: every id is re-resolved server-side
  * through `resolveBasket` at quote and checkout (price, release state, ownership, the
- * one-creator rule, the item cap — all the refusals that fired on the client-supplied list
- * still fire on these rows), and `list` returns only what still resolves — so a Work that
- * stopped being buyable between add and checkout counts on no badge and charges in no
- * checkout. A tampered table buys nothing it shouldn't.
+ * item cap — all the refusals that fired on the client-supplied list still fire on these
+ * rows), and `list` returns only what still resolves — so an item that stopped being
+ * buyable between add and checkout counts on no badge and charges in no checkout. A
+ * tampered table buys nothing it shouldn't.
  *
- * ⚠️ **The rows do not self-clean.** A Work that stops being buyable leaves its row here
+ * ⚠️ **The rows do not self-clean.** An item that stops being buyable leaves its row here
  * until the buyer removes it or the basket clears at a completed checkout. That is
  * deliberate: resolution is what the reads are for, and a sweeper job is one more thing
  * that can disagree with them.
@@ -439,8 +439,14 @@ export const disputes = pgTable(
  * connected account, and the platform-charge split (`services/purchase-split.ts`) is
  * what removed it. See `resolveBasket` in `routes/payments.ts`.
  *
- * Cascade on both sides, like `library_items`: a basket is a preference, not a record —
- * it dies with the account and with the Work, and never outlives either.
+ * **Since the same day, a second item kind: a Badge's first Month** (the creator-page
+ * purchase, Parker 2026-10-14/15). A line names a Work or a Badge rung, never both
+ * (`basket_items_exactly_one_kind`); a second rung from one issuer replaces the first, the
+ * one-holding-per-issuer rule's basket shape. Money columns live none here all the same:
+ * a Badge line's price, its fee share and its settlement are `badge_charges`' business.
+ *
+ * Cascade on every side, like `library_items`: a basket is a preference, not a record —
+ * it dies with the account, the Work, and the Badge, and never outlives any of them.
  */
 // org — a buyer's basket is the buyer's record (same reasoning as `libraryItems`: the
 // user has no node in the current topology, so their preferences are org-side rows).
@@ -457,20 +463,122 @@ export const basketItems = pgTable(
 		// must outlive the Work; a basket entry is scratch and must not name a Work that
 		// no longer exists. resolveBasket would refuse the row anyway — this just is not
 		// in the business of remembering it.
-		workId: integer("work_id")
-			.notNull()
-			.references(() => works.id, { onDelete: "cascade" }),
+		//
+		// Nullable since the basket grew a second item kind (the Badge purchase, 2026-10-15):
+		// exactly one of `work_id`/`badge_id` is set on any row, the check below holds it.
+		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
+		// A Badge's first Month — the rung the buyer picked. Cascade for the same reason
+		// as `work_id`: a basket entry is scratch, and a rung its creator deleted was
+		// never bought. The money's record lives in `badge_charges`, not here.
+		badgeId: integer("badge_id").references(() => badges.id, { onDelete: "cascade" }),
 		// Insertion order is the basket's display order — the client's old array order —
-		// and no column reorders it: newest Work at the end, like a physical basket.
+		// and no column reorders it: newest item at the end, like a physical basket.
 		addedAt: timestamp("added_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
-		// A Work sits in an account's basket once. Both columns are NOT NULL, so unlike
-		// `library_items`' partial uniques this one is plain.
-		uniqueIndex("uq_basket_items_user_work").on(table.userId, table.workId),
-		// The cascade's read side: deleting a Work finds its basket rows here. The user
-		// list is covered by the uniques's leading column.
+		// Exactly one item kind per row — a basket line names a Work or a Badge, never
+		// both and never neither. A CHECK, because the service cannot defend a shape the
+		// table itself tolerates (the sign-in merge and the buy-now clear both write).
+		check(
+			"basket_items_exactly_one_kind",
+			sql`(${table.workId} IS NOT NULL) <> (${table.badgeId} IS NOT NULL)`,
+		),
+		// An item sits in an account's basket once. Both uniques are PARTIAL (the plain
+		// forms would let two NULLs collide the wrong way): a given Work may appear once,
+		// and a given Badge rung once — adding a different rung from the same issuer is
+		// the service-level replacement (the pick replaces, one holding per issuer).
+		uniqueIndex("uq_basket_items_user_work")
+			.on(table.userId, table.workId)
+			.where(sql`${table.workId} IS NOT NULL`),
+		uniqueIndex("uq_basket_items_user_badge")
+			.on(table.userId, table.badgeId)
+			.where(sql`${table.badgeId} IS NOT NULL`),
+		// The cascades' read side: deleting a Work or a Badge finds its basket rows here.
+		// The user list is covered by the uniques' leading column.
 		index("idx_basket_items_work").on(table.workId),
+		index("idx_basket_items_badge").on(table.badgeId),
+	],
+);
+
+/**
+ * org — a Badge first transaction's money record: the checkout's Badge line, from the
+ * moment the charge exists to the moment the cycle settles it. The purchase of a Badge is
+ * the raise's charge half (Parker, 2026-10-14: **a Badge is a purchase like any other** —
+ * it is the monthly recurring subscription, but it starts with a first transaction, and
+ * that first transaction is batchable with anything else in the basket) — so this table is
+ * the payments-side sibling of `purchases`, kept SEPARATE from it deliberately:
+ *
+ * 🚨 **A Badge line never transfers at completion.** Purchase money moves out per creator
+ * on the charge's completion (`splitChargeToCreators`); a Badge's money is SUPPORT, and it
+ * settles through the cycle distribution, like every other month of directed support — the
+ * holding the completion writes is one input, and `settle-cycle` feeds the charges into
+ * `computeMonth` as their own `MonthCharge` entries. One table per money rail is what keeps
+ * `purchases`' status/transfer/refund predicates from ever seeing a row they cannot settle.
+ *
+ * Money columns and FKs follow the `purchases` pattern: everything set null, a payment
+ * record outlives the account, the rung and the issuer alike.
+ */
+// org — money. The buyer's charge record for a Badge's first Month; org-only by the
+// treasury rule (it carries the settlement a creator's payout is worked off).
+export const badgeCharges = pgTable(
+	"badge_charges",
+	{
+		id: serial("id").primaryKey(),
+		// SET NULL, not cascade — the reasoning at `purchases.buyerId` is verbatim this
+		// row's: Anthers is the merchant of record and must be able to evidence what it
+		// collected, which it cannot do from a row no longer there.
+		buyerId: integer("buyer_id").references(() => users.id, { onDelete: "set null" }),
+		// SET NULL + the snapshot columns: like `purchases.work_id` at `0016`, a charge
+		// record outlives the rung its creator later deleted or re-priced.
+		badgeId: integer("badge_id").references(() => badges.id, { onDelete: "set null" }),
+		// The issuer the support is directed at, denormalized onto the row — it must
+		// survive the rung's deletion (`purchases.creatorId`'s reasoning: reachable only
+		// through the join once meant a deleted rung erased the payee's identity from the
+		// row). The Anthers issuer's own line names the Anthers creator account exactly
+		// like any other issuer's — one vocabulary, every destination a user id.
+		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
+		// A snapshot of what was bought, as it was at the time of sale, for the same
+		// reason a purchase row copies the Work's title: the receipt records the
+		// transaction, not the catalog's later state.
+		badgeLabel: text("badge_label"),
+		// 🚨 **GROSS — the rung's monthly price.** The threshold the recurrence bills and
+		// the holding is held at, never the first transaction's price alone.
+		threshold: numeric("threshold").notNull(),
+		// The first transaction's price: the full threshold for an issuer the buyer does
+		// not back, the DELTA (threshold minus what they already give this issuer) for an
+		// upgrade — the same split `planItemChange.started` records. This is what the
+		// charge carried, and what settlement credits to the issuer through
+		// `computeMonth`'s per-charge netting.
+		chargedAmount: numeric("charged_amount").notNull(),
+		// The line's PINNED share of the charge's card fee — apportioned pro-rata at
+		// checkout over every line of the charge (Works and Badges alike, the last line
+		// absorbing the rounding remainder), because the flat $0.30 is per charge. The
+		// cycle's settlement credits the issuer this figure's complement of the
+		// charged amount; the row is the record, never a recomputation.
+		processingFee: numeric("processing_fee").notNull(),
+		// Sales tax is the ONE thing added on top, and per-line tax share exists for the
+		// same remittance reason `purchases.salesTax` exists: the charge's collected tax
+		// must reconcile line by line, Badge lines included. Zero at checkout, stamped at
+		// completion from the session once the buyer's address resolved it.
+		salesTax: numeric("sales_tax").notNull().default("0.00"),
+		// The calendar cycle the first Month covers — the current cycle at checkout. The
+		// holding this charge writes is this cycle's, and settlement reads the row
+		// against it.
+		billingCycle: text("billing_cycle").notNull(),
+		// The session that carried the charge, re-keyed to its PaymentIntent at
+		// completion — the same shape the purchase rows use, for the same reason (the
+		// session id does not exist when the intent's metadata is written).
+		stripePaymentIntentId: text("stripe_payment_intent_id").notNull(),
+		// pending → completed on the same latch the purchase rows use: only pending rows
+		// move at completion, so a redelivered webhook event is a no-op.
+		status: text("status").notNull().default("pending"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		index("idx_badge_charges_buyer").on(table.buyerId),
+		index("idx_badge_charges_cycle").on(table.billingCycle),
+		index("idx_badge_charges_intent").on(table.stripePaymentIntentId),
 	],
 );
 

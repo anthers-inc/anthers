@@ -55,7 +55,7 @@ import {
 } from "@anthers/db/schema";
 import { currentCycleKey, cycleEnd, cycleKeyFor, cycleStart } from "@anthers/shared/billing-cycle";
 import { supportAmount, timePoolFor } from "@anthers/shared/constants";
-import { paymentsSplit } from "@anthers/shared/fees";
+import { creatorFeeShare } from "@anthers/shared/fees";
 import { SHARE_LINK_POOL_FRACTION } from "@anthers/shared/public-access";
 import Decimal from "decimal.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -108,6 +108,14 @@ export interface MonthCharge {
 	anthers: Decimal;
 	/** GROSS dollars directed at each creator on this charge, before its card fee. */
 	directed: Map<number, Decimal>;
+	/**
+	 * The charge's OWN fee, when it carries one recorded — a Checkout Session's badge
+	 * lines pin their pro-rata shares at the charge, and settlement reads them summed.
+	 * Null on a subscription invoice, where the model computes the fee from the
+	 * composition. Read by `creatorFeeShare` in `fees.ts`, which both the credit pass and
+	 * the remainder's booking call — never split this arithmetic at a call site again.
+	 */
+	processingFee?: Decimal | null;
 }
 
 /** A supporter's month, split among creators. */
@@ -228,10 +236,15 @@ export async function computeMonth(input: {
 		// charge is paid more. Worst case is a lone directed $3 on its own charge: $3.00 gross
 		// → $2.61 net.
 		if (grossDirected.gt(0)) {
-			const creatorFee = paymentsSplit(
-				supportAmount(Decimal.max(0, charge.anthers).toNumber()),
+			const anthersGross = Decimal.max(0, charge.anthers);
+			// 🚨 One arithmetic, one caller: `creatorFeeShare` decides the model's split
+			// from the charge's composition, or the charge's own recorded fee when it
+			// carries one (a checkout's pinned shares) — see `fees.ts`.
+			const creatorFee = creatorFeeShare(
+				supportAmount(anthersGross.toNumber()),
 				grossDirected.toNumber(),
-			).creator;
+				charge.processingFee ?? null,
+			);
 			if (creatorFee.gt(0)) {
 				for (const d of onCharge.values()) {
 					// Each creator bears the fee in proportion to what was directed at them.
