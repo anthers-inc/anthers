@@ -582,8 +582,29 @@ function purchaseSession(params: {
 		// completion webhook links it via `linkCheckoutCustomer` so the next purchase
 		// reuses it. Before the decision, every one-time buyer kept a permanent
 		// customer object with their address and email on it.
+		//
+		// ⚠️ **Two riders go only with the customer, found by the probe (2026-10-15,
+		// test mode):**
+		// - `saved_payment_method_options` is REFUSED on a customerless session outright
+		//   ("requires a customer") — so the suppression pair below rides only when a
+		//   customer does. A customerless session renders no save UI to suppress
+		//   (nothing is on file to save, and the client's own `enableSave: "never"`
+		//   governs what the element would offer), so the suppression is redundant
+		//   there, and required here.
+		// - `customer_update[address]` is what makes checkout's collected address SAVE
+		//   onto the Customer (and what automatic_tax requires a customer-carried
+		//   session to carry when that customer has no address yet — the same probe's
+		//   second rejection). The saved-billing-address door reads the customer's
+		//   address, so this is the persistence path as well as the acceptance one.
 		...(params.customerId
-			? { customer: params.customerId }
+			? {
+					customer: params.customerId,
+					customer_update: { address: "auto" as const },
+					saved_payment_method_options: {
+						payment_method_save: "disabled",
+						payment_method_remove: "disabled",
+					},
+			  }
 			: { customer_creation: "if_required" as const }),
 		// 🚨 Card-only is the account-wide Default configuration (Parker, 2026-10-06:
 		// the Dashboard's Default narrowed to card and nothing else, matching the
@@ -602,25 +623,25 @@ function purchaseSession(params: {
 		...(process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim()
 			? { payment_method_configuration: process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION.trim() }
 			: {}),
-		// 🚨 **Payment-method saves are off by default on this flow.** A plain purchase never
-		// stores a card (`setup_future_usage` is nowhere), so the session does not ask to
-		// save — and Checkout renders Link's consent block ("Save my information for faster
-		// checkout", an email + MOBILE NUMBER sub-form, checkbox checked by default)
-		// whenever a Customer rides the session: a saved one passed in, or one Stripe
-		// created. A buyer who ignores the block left the phone field empty and Stripe held
-		// `canConfirm` false forever: the fully-filled form with a greyed Pay button
-		// (2026-10-06, live payment_method collection blocked all day; the client-side
-		// `savedPaymentMethod.enableSave: "never"` below removes the sub-form from its side
-		// too). The suppression stays regardless of which way a Customer got there.
+		// 🚨 **The Link consent block is suppressed on the sessions it could render on.** A
+		// plain purchase never stores a card (`setup_future_usage` is nowhere), so the
+		// session does not ask to save — and Checkout renders Link's consent block ("Save
+		// my information for faster checkout", an email + MOBILE NUMBER sub-form, checkbox
+		// checked by default) whenever a Customer rides the session: a saved one passed
+		// in, or one Stripe created. A buyer who ignores the block left the phone field
+		// empty and Stripe held `canConfirm` false forever: the fully-filled form with a
+		// greyed Pay button (2026-10-06, live payment_method collection blocked all day;
+		// the client-side `savedPaymentMethod.enableSave: "never"` below removes the
+		// sub-form from its side too). The suppression is the customer-riding branch's
+		// rider — on a customerless session there is no save UI to suppress (nothing is
+		// on file, and the probe showed the pair itself is refused there).
 		//
-		// ⚠️ The one exception is `saveCard` — set when a Badge's recurrence awaits and the
-		// buyer has no active subscription (Parker, 2026-10-15). See the parameter above
-		// for the probe; the suppression below does not fight it (a save driven through
-		// `setup_future_usage` needs no consent block to ask permission for).
-		saved_payment_method_options: {
-			payment_method_save: "disabled",
-			payment_method_remove: "disabled",
-		},
+		// ⚠️ The one exception is `saveCard` — set when a Badge's recurrence awaits and
+		// the buyer has no active subscription (Parker, 2026-10-15). The suppression pair
+		// is the customer-riding branch's rider now (`saved_payment_method_options` is
+		// REFUSED on a customerless session — the probe's finding above); a save driven
+		// through `setup_future_usage` asks no consent question, and the client's
+		// `savedPaymentMethod.enableSave: "never"` governs the element's side either way.
 		line_items: params.lineItems,
 		automatic_tax: { enabled: true },
 		payment_intent_data: {
@@ -1705,12 +1726,19 @@ const paymentRoutes = new Hono()
 				billing_address_collection: "required",
 				// The 2026-10-11 customer posture, same as every purchase surface: a buyer
 				// with a Customer on file pays on it; no Customer, no created one unless
-				// `if_required` requires it and the webhook links it.
-				...(customerId ? { customer: customerId } : { customer_creation: "if_required" as const }),
-				saved_payment_method_options: {
-					payment_method_save: "disabled",
-					payment_method_remove: "disabled",
-				},
+				// `if_required` requires it and the webhook links it. The suppression pair
+				// rides WITH the customer (`saved_payment_method_options` is refused on a
+				// customerless session — the badge probe's finding, 2026-10-15); a
+				// customerless session has no save UI to suppress.
+				...(customerId
+					? {
+							customer: customerId,
+							saved_payment_method_options: {
+								payment_method_save: "disabled",
+								payment_method_remove: "disabled",
+							},
+						}
+					: { customer_creation: "if_required" as const }),
 				line_items: [
 					{
 						price_data: {
