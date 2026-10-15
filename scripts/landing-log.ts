@@ -23,7 +23,7 @@
  * global sequence, because two writers' clocks are the only ordering they share and a
  * millisecond is finer than any two landing acts are apart in practice.
  *
- * The nine event families and what each carries are the event-log schema of
+ * The thirteen event families and what each carries are the event-log schema of
  * *Local Merge Queue Design*; this docblock names only the load-bearing choices. Two
  * families exist purely for the ledger's own arithmetic: `radar-run` (a hold issued
  * without its report cannot be resolved as a true collision or a false alarm) and
@@ -156,6 +156,43 @@ export interface EjectionEvent {
 	environment: EnvironmentLabel;
 }
 
+/**
+ * A pull request sitting armed outside the queue with a concluded-bad mergeable state —
+ * the probe's stuck-armed leg (BLOCKED on armed-but-unadmitted, UNSTABLE, DIRTY), the
+ * #517 class. This is the PR window's own detection record: an ejection has an event for
+ * why the queue removed an entry, and until this family existed an armed head red the
+ * same way left no ledger record at all, which is why flake versus regression in the PR
+ * window could be argued but not measured. `failingCheck` is named only when the
+ * detecting run could read it (the finisher's rerun discovery can; the probe's
+ * mergeStateStatus read cannot), so its absence means nothing.
+ */
+export interface StuckArmedEvent {
+	event: "stuck-armed";
+	ts: string;
+	pr: number;
+	head: string;
+	mergeStateStatus: "UNSTABLE" | "DIRTY" | "BLOCKED";
+	failingCheck?: string;
+	environment: EnvironmentLabel;
+}
+
+/**
+ * One bounded failed-job rerun the finisher granted itself (one per (pr, head), per the
+ * rules document); `requested` is written when the finisher re-rolls the job, and a
+ * later pass that reads the rerun's result appends `green` or `red` at the same (pr,
+ * head, check). `green` is the ledger's own definition of a transient red — a flake the
+ * gate re-roll cleared, counted per check rather than argued — and a red that parks is
+ * the park's evidence, readable as two `rerun` events plus the `stuck-armed` record.
+ */
+export interface RerunEvent {
+	event: "rerun";
+	ts: string;
+	pr: number;
+	head: string;
+	check: string;
+	outcome: "requested" | "green" | "red";
+}
+
 export interface LandEvent {
 	event: "land";
 	ts: string;
@@ -194,6 +231,8 @@ export type LandingEvent =
 	| ArmEvent
 	| BounceEvent
 	| EjectionEvent
+	| StuckArmedEvent
+	| RerunEvent
 	| LandEvent
 	| LockWaitEvent
 	| LockAcquireEvent
@@ -250,6 +289,8 @@ const KNOWN_EVENTS = new Set([
 	"arm",
 	"bounce",
 	"ejection",
+	"stuck-armed",
+	"rerun",
 	"land",
 	"lock-wait",
 	"lock-acquire",

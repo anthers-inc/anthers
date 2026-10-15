@@ -438,6 +438,16 @@ jobs:
           CI: "true"
         run: bun run ../../scripts/ci-network.ts -- bunx playwright test $(bun run scripts/e2e-projects.ts hermetic)
 
+      # The retries CI runs are the harness's answer to a flaky spec, but they double-mute:
+      # the run shows green and the fact a test failed before passing vanishes. This reads
+      # the run's JSON report and prints every such test, per spec, as a notice — the
+      # flake rate a measured number instead of an argument. Scripts/ci-flaky-summary.ts;
+      # the count is never a gate, and a missing report is a printed line rather than a
+      # failure, because a run with no report is already red on its own account.
+      - name: Surface the flake the retries absorbed
+        if: ${{ !cancelled() }}
+        run: bun run scripts/ci-flaky-summary.ts apps/web/playwright-report/report.json
+
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
@@ -575,6 +585,11 @@ jobs:
         env:
           CI: "true"
         run: bun run ../../scripts/ci-network.ts -- bunx playwright test $(bun run scripts/e2e-projects.ts media)
+
+      # The retry-absorbed flake summary, same shape and reason as the hermetic job's.
+      - name: Surface the flake the retries absorbed
+        if: ${{ !cancelled() }}
+        run: bun run scripts/ci-flaky-summary.ts apps/web/playwright-report/report.json
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

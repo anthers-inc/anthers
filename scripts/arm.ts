@@ -14,7 +14,7 @@
  *
  * **The script owns git and GitHub only.** The board is the calling session's channel:
  * on green this script prints the projected-tip receipt and the stamp instruction, and
- * the session stamps `6 - Queued` + `pr-ref` through the vault tooling exactly as
+ * the session stamps `0 - Queued` + `pr-ref` through the vault tooling exactly as
  * today's enqueue protocol; on a bounce it prints what the tooling said and the session
  * writes the dated task line and moves the task to `1 - In Progress`. This split keeps
  * every board write behind the vault CLI layer the rules guard, and keeps this file
@@ -716,7 +716,7 @@ async function runCeremony(pr: number, options: ArmOptions): Promise<ArmDecision
 			outcome: "armed",
 			receipt: tip,
 			reusedGate: reusable,
-			stamp: { status: "6 - Queued", prRef: `anthers-inc/anthers#${pr}` },
+			stamp: { status: "0 - Queued", prRef: `anthers-inc/anthers#${pr}` },
 			lines: [
 				line(
 					`armed #${pr} at the projected tip ${tip.slice(0, 7)} — the receipt the board's progress line carries`,

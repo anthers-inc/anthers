@@ -44,7 +44,13 @@ export default defineConfig({
 	// stays at 1 worker; it pays for certainty in wall-clock on a quiet runner.
 	// E2E_WORKERS overrides when a deliberately quiet machine wants the speed back.
 	workers: process.env.CI ? 1 : Number(process.env.E2E_WORKERS ?? 4),
-	reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
+	reporter: process.env.CI
+		? [
+				["github"],
+				["html", { open: "never" }],
+				["json", { outputFile: "playwright-report/report.json" }],
+			]
+		: "list",
 	// The stall timeline: a hung suite at 1 worker otherwise leaves the captured log
 	// without a single timestamped event between "Running N tests" and the ceiling —
 	// the 2026-10-14 browser job gave 26 silent minutes and the log could not say what
