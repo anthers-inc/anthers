@@ -35,6 +35,7 @@ import { runRetentionSweep } from "../services/retention.js";
 import { sweepSignupChallenges } from "../services/signup-challenges.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
+import { runConnectionCensus } from "./connection-census.js";
 import { runDeadlineReminderSweep } from "./deadline-reminders.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
 import { runHlsOrphanSweep } from "./hls-orphan-sweep.js";
@@ -44,7 +45,6 @@ import { handlePruneAttention, type PruneAttentionData } from "./prune-attention
 import { publishScheduled } from "./publish-scheduled.js";
 import { runPurchaseTransferRetry } from "./purchase-transfer-retry.js";
 import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue, RETIRED_QUEUES } from "./queue.js";
-import { runConnectionCensus } from "./connection-census.js";
 import { reconcileListings } from "./reconcile-listings.js";
 import { releaseScheduled } from "./release-scheduled.js";
 import { type RemoveAtprotoRecordData, removeAtprotoRecordJob } from "./remove-atproto-record.js";
