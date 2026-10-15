@@ -7,17 +7,22 @@
  * vendor must stay swappable and why every new payment operation belongs there rather
  * than here as `stripe.<resource>.<op>`.
  *
- * Direct purchases run as Stripe destination charges, through a **Checkout Session in
- * elements mode with automatic tax** — a PaymentIntent cannot carry a product tax code,
- * so it cannot charge real tax, and real tax is what every charge now owes. Since
- * 2026-08-03 the listed price IS the advertised price: card processing comes **out of**
- * it, and sales tax is the only thing added on top — resolved by Stripe Tax from the
- * buyer's billing address at the session, per the product tax code each line carries
- * (the posture's What Gets Taxed table). The creator's connected account receives the
- * price less that at-cost deduction, pinned by `transfer_data[amount]` so it never
- * varies with the buyer's location; the tax lands on the platform side by construction,
- * because Anthers is the marketplace facilitator and the liability. Anthers keeps $0.
- * A creator with no connected account is a hard 409, not a platform-held fallback.
+ * Direct purchases run as **platform charges with a per-creator split at completion**
+ * (Parker, 2026-10-15, the multi-creator basket decision) — a Checkout Session in
+ * elements mode with automatic tax, charged to the platform; then each distinct creator's
+ * share moves out as one transfer funded by the charge (`services/purchase-split.ts` is
+ * the one writer of that half). The destination-charge shape this replaces pinned one
+ * creator's transfer inside the charge (`transfer_data[amount]`), which named exactly one
+ * connected account — the constraint that forced the one-creator basket, removed rather
+ * than accepted; the counsel brief's "A basket spanning two creators" decision record
+ * (Internal Wiki doc 26) carries the reasoning, the precedent and the accepted cost.
+ * Since 2026-08-03 the listed price IS the advertised price: card processing comes
+ * **out of** it, and sales tax is the only thing added on top — resolved by Stripe Tax
+ * from the buyer's billing address at the session, per the product tax code each line
+ * carries (the posture's What Gets Taxed table). The tax lands on the platform side by
+ * construction, because Anthers is the marketplace facilitator and the liability. Anthers
+ * keeps $0. A creator with no connected account is a hard 409, not a platform-held
+ * fallback.
  *
  * A digital sale also carried the first download's bandwidth at cost until
  * 2026-08-12. Delivery is free on R2, so `deliveryFee` is now always $0.00 and every
@@ -84,6 +89,7 @@ import { saveOnPurchase } from "../services/library.js";
 import { recordNettingForDispute, reverseNettingForWonDispute } from "../services/netting.js";
 import { stripeFlagPatchFromAccount } from "../services/payouts.js";
 import { getShippingRates, printfulConfigured } from "../services/printful.js";
+import { splitChargeToCreators } from "../services/purchase-split.js";
 import {
 	sendPurchaseReceipts,
 	sendRefundReceipts,
@@ -92,6 +98,7 @@ import {
 import {
 	refundPurchase,
 	refundsAfterDownloadInWindow,
+	reverseCreatorShare,
 	settleRefundedPurchase,
 } from "../services/refunds.js";
 import { addTopUpToInvoice } from "../services/storage-topup.js";
@@ -183,20 +190,20 @@ async function resolvePurchase(slug: string, userId: number) {
 /**
  * The same resolution for a **basket** of Works bought on one charge.
  *
- * 🚨 **One creator per basket, and that is forced rather than chosen.** Stripe's
- * `transfer_data.destination` names exactly one connected account, so a basket spanning
- * two creators cannot be a single destination charge. The alternative — separate charges
- * and transfers — parks the buyers' money in a **platform balance** before paying it out,
- * which is precisely what `/checkout/:slug` refuses to do, and it is the *conduit* framing
- * the counsel brief (Payments and Exempt-Purpose Counsel Brief) says makes both the money-transmission answer and the 501(c)(3) story harder.
- * That is a question for counsel, not a thing to decide in a route handler. Until it is
- * answered, a multi-creator basket is refused with `mixed_creators` and the client checks
- * out one creator at a time.
- *
- * What the basket buys is the **fixed $0.30**, which is per *charge* and not per item:
- * five $1 tracks pay $1.65 in card fees separately and $0.45 together, and the whole
- * $1.20 goes to the creator because Anthers keeps nothing either way. Same mechanism as
- * batching a month's support onto one transaction (the wiki's *How Money Moves*).
+ * 🚨 **A basket carries any number of creators, settled as one platform charge plus one
+ * transfer per creator at completion** (Parker, 2026-10-15). The one-creator rule this
+ * function used to enforce — `mixed_creators` — existed because a Stripe **destination
+ * charge** names exactly one connected account in `transfer_data`, so a basket spanning
+ * two creators could not be a single destination charge. The split decision removed that
+ * constraint rather than accepting it: the charge is made to the platform and the money
+ * moves out per creator on the charge's completion (`completeSessionPurchases` below,
+ * funded by the charge), which is the same merchant-of-record posture monthly support
+ * already runs — the counsel brief's "A basket spanning two creators" decision record
+ * carries the reasoning and the accepted cost. What the basket buys is the **fixed
+ * $0.30**, which is per *charge* and not per item: five $1 tracks pay $1.65 in card fees
+ * separately and $0.45 together, and the whole $1.20 goes to the creator because Anthers
+ * keeps nothing either way. Same mechanism as batching a month's support onto one
+ * transaction (the wiki's *How Money Moves*).
  */
 async function resolveBasket(workIds: number[], userId: number) {
 	const unique = [...new Set(workIds)];
@@ -222,20 +229,14 @@ async function resolveBasket(workIds: number[], userId: number) {
 		items.push({ work: one.work, amount: one.amount });
 	}
 
-	const creatorIds = new Set(items.map((i) => i.work.creatorId));
-	if (creatorIds.size > 1)
-		return {
-			ok: false as const,
-			status: 400 as const,
-			error: "A basket can only hold work from one creator at a time",
-			code: "mixed_creators" as const,
-		};
-
 	// 🚨 Fees on the SUM, once — computing per item and adding would charge the flat
 	// $0.30 per Work and defeat the entire point of the basket.
 	const subtotal = items.reduce((acc, i) => acc.plus(i.amount), new Decimal(0));
 	const fees = calculateFees(subtotal, { type: "digital" });
-	return { ok: true as const, items, subtotal, fees, creatorId: items[0].work.creatorId };
+	// The distinct creators the charge covers — the checkout's connected-account
+	// precondition and the completion path's transfer step both read this.
+	const creatorIds = [...new Set(items.map((i) => i.work.creatorId))];
+	return { ok: true as const, items, subtotal, fees, creatorIds };
 }
 
 /**
@@ -243,18 +244,23 @@ async function resolveBasket(workIds: number[], userId: number) {
  * carry a product tax code, and so the only path a purchase has been charged through since
  * real tax calculation landed (2026-09-29).
  *
- * 🚨 **`transfer_data[amount]`, not `application_fee_amount` — the destination-charge
- * structure this switch exists for.** A static application fee was workable only while the
- * tax was a flat figure Anthers computed itself, because the fee had to be
- * `buyerTotal − creatorEarnings` and both were known at session creation. Under automatic
- * tax the amount varies with the buyer's address, so nothing static can capture it. Instead
- * the creator's transfer is pinned to their **earnings** — `price − cardFee(price)`, fixed
- * and location-independent — and whatever tax Stripe adds lands on the platform side by
- * construction, because it never entered the transfer. Anthers is the marketplace
- * facilitator and the tax liability (the Creator Terms say so), so `automatic_tax` carries
- * no `liability`: plain `enabled: true` keeps the liability on the platform, where the
- * Creator Terms already put it. `refund_application_fee` in `services/refunds.ts` stays
- * unset for the same reason.
+ * 🚨 **A platform charge, not a destination charge** (Parker, 2026-10-15, the multi-creator
+ * basket decision). A destination charge pinned the creator's transfer through
+ * `transfer_data[amount]` — one connected account per charge, which is exactly the
+ * constraint that forced the one-creator basket. The split decision removed the constraint
+ * rather than accepting it: the charge is made to the platform, and the completion path
+ * moves each creator's share out as one transfer per creator, funded by the charge
+ * (`completeSessionPurchases`), amounts read off the rows' pinned earnings so they never
+ * vary with the buyer's location. The money's dwell on the platform balance is seconds, not
+ * the ~six-week hold monthly support already runs, and the merchant-of-record posture is
+ * the one that decision records — see the counsel brief's "A basket spanning two
+ * creators" callout for the reasoning and the accepted cost.
+ *
+ * The tax mechanics are unchanged by the split. `automatic_tax` resolves from the buyer's
+ * address per line's product tax code, the tax lands on the platform side by construction
+ * (it never entered a transfer), and Anthers remains the marketplace facilitator and the
+ * liability — the Creator Terms say so — so plain `enabled: true` keeps the liability on
+ * the platform, where it already was.
  *
  * ⚠️ **US billing addresses only, enforced client-side by construction, backstopped
  * here.** The purchase surfaces collect the address through Anthers' own US-only form
@@ -274,10 +280,6 @@ function purchaseSession(params: {
 	origin: string;
 	/** One line per Work, each carrying the tax code for what the buyer receives. */
 	lineItems: Stripe.Checkout.SessionCreateParams.LineItem[];
-	/** The creator's connected account. */
-	destination: string;
-	/** The creator's earnings in cents — the fixed, location-independent transfer. */
-	transferAmountCents: number;
 	/**
 	 * The buyer's existing Stripe Customer id, when one is on file — the session reuses
 	 * it rather than building a second one. Null for a buyer whose first money door this
@@ -359,11 +361,6 @@ function purchaseSession(params: {
 		line_items: params.lineItems,
 		automatic_tax: { enabled: true },
 		payment_intent_data: {
-			// The creator's earnings, fixed at session creation — see the header.
-			transfer_data: {
-				destination: params.destination,
-				amount: params.transferAmountCents,
-			},
 			metadata: params.metadata,
 		},
 		// Where a redirect-based payment method sends the buyer back; cards don't use it,
@@ -500,6 +497,19 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 			})
 			.where(and(eq(purchases.id, row.id), eq(purchases.status, "pending")));
 	}
+
+	// ── The split, after the rows are keyed to the intent ─────────────────────
+	// The platform charge collected everyone's money; now each creator's share moves out,
+	// one transfer per creator funded by the charge. The amounts are the rows' pinned
+	// earnings, so a failure leaves a row unstamped and the retry job the owner of the
+	// debt — `services/purchase-split.ts` carries the whole reasoning, including why a
+	// refund in the window must never transfer.
+	const latestCharge =
+		typeof pi.latest_charge === "string" ? pi.latest_charge : (pi.latest_charge?.id ?? null);
+	await splitChargeToCreators(
+		{ id: pi.id, latestCharge },
+		stamped.map(({ row }) => row),
+	);
 
 	// ── Link the checkout's Customer, after the rows are stamped ─────────────
 	// Under the 2026-10-11 posture a session without a saved customer carries one only
@@ -1337,12 +1347,10 @@ const paymentRoutes = new Hono()
 		}
 
 		const totalCents = Math.round(fees.buyerTotal.toNumber() * 100);
-		// The creator's transfer: their earnings in cents — the price less the at-cost card
-		// processing, FIXED at session creation. This is the destination-charge structure
-		// under automatic tax: `transfer_data[amount]` pins what reaches the creator so it
-		// never varies with the buyer's location, and whatever tax Stripe adds stays on
-		// the platform side by construction. See `purchaseSession`.
-		const transferCents = Math.round(fees.creatorEarnings.toNumber() * 100);
+		// The creator's share is not pinned here any more — the completion path reads it
+		// off the row's recorded earnings and moves it as a transfer funded by the charge
+		// (`completeSessionPurchases`). This route's job ends at the precondition above:
+		// Anthers does not sell a creator's work when the money cannot reach them.
 
 		// 🚨 Every line carries the product tax code for what the buyer receives, per the
 		// posture's What Gets Taxed table. The connected-creator and type refusals above
@@ -1359,8 +1367,6 @@ const paymentRoutes = new Hono()
 				origin:
 					process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000",
 				lineItems: [workLineItem(work, totalCents, taxCode)],
-				destination: creatorAccount.stripeAccountId,
-				transferAmountCents: transferCents,
 				customerId: await stripeCustomerIdFor(user.id),
 				customerEmail: user.email,
 				metadata: {
@@ -1455,9 +1461,9 @@ const paymentRoutes = new Hono()
 		}
 		// Answer with the post-add basket so the client's optimistic update can reconcile
 		// against the truth in one round trip — each item resolved exactly as `/basket`
-		// resolves it, plus whose basket the add replaced (null on an ordinary add).
+		// resolves it.
 		const items = await resolvedBasketItems(user.id);
-		return c.json({ items, replacedCreator: result.replacedCreatorHandle });
+		return c.json({ items });
 	})
 
 	.delete("/basket/items/:workId", requireAuth, async (c) => {
@@ -1513,6 +1519,33 @@ const paymentRoutes = new Hono()
 			return share;
 		});
 
+		// The creator groups the basket page renders — one per distinct creator, each with
+		// a receives figure summed from that creator's own lines (price less the line's
+		// fee share), so the groups reconstruct the whole basket's `creatorEarnings`
+		// exactly: the last line's rounding remainder lands wherever the last line's
+		// creator is, and the per-group sums still add up. A basket carries any number of
+		// creators (2026-10-15), and the page renders these server figures rather than
+		// deriving its own — a receipt that computes its own totals stops reconciling the
+		// moment a dial moves.
+		const byCreator = new Map<
+			number,
+			{ receives: Decimal; itemCount: number }
+		>();
+		q.items.forEach((i, idx) => {
+			const cid = i.work.creatorId as number;
+			const group = byCreator.get(cid) ?? { receives: new Decimal(0), itemCount: 0 };
+			group.receives = group.receives.plus(i.amount).minus(lineFees[idx]);
+			group.itemCount += 1;
+			byCreator.set(cid, group);
+		});
+		const creatorIdList = [...byCreator.keys()];
+		const handleRows = creatorIdList.length
+			? await db
+					.select({ id: users.id, handle: users.atprotoHandle })
+					.from(users)
+					.where(inArray(users.id, creatorIdList))
+			: [];
+
 		return c.json({
 			items: q.items.map((i, idx) => ({
 				workId: i.work.id,
@@ -1526,6 +1559,12 @@ const paymentRoutes = new Hono()
 				// taken out of this creator's part of the basket.
 				processingFee: lineFees[idx].toFixed(2),
 				price: i.amount.toFixed(2),
+			})),
+			// One entry per creator the charge covers, in the order the basket named them.
+			creators: creatorIdList.map((cid) => ({
+				handle: handleRows.find((r) => r.id === cid)?.handle ?? null,
+				itemCount: byCreator.get(cid)!.itemCount,
+				receives: byCreator.get(cid)!.receives.toFixed(2),
 			})),
 			subtotal: q.subtotal.toFixed(2),
 			processingFee: q.fees.processingFee.toFixed(2),
@@ -1561,16 +1600,21 @@ const paymentRoutes = new Hono()
 
 		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
-		// Same hard precondition as a single purchase: Anthers does not sell a creator's
-		// work when the money cannot reach them.
-		if (q.creatorId == null) return c.json({ error: "This work is no longer for sale." }, 409);
-		const [creatorAccount] = await db
+		// Same hard precondition as a single purchase, now per creator: Anthers does not
+		// sell a creator's work when the money cannot reach them — and a basket can ask
+		// for several creators' money to move at once, so every one of them must be
+		// reachable before the buyer is charged.
+		if (q.creatorIds.some((id) => id == null))
+			return c.json({ error: "This work is no longer for sale." }, 409);
+		const accounts = await db
 			.select()
 			.from(stripeAccounts)
-			.where(eq(stripeAccounts.userId, q.creatorId))
-			.limit(1);
-		if (!creatorAccount?.onboardingComplete || !creatorAccount.payoutsEnabled) {
-			return c.json({ error: "This creator can't accept payments yet." }, 409);
+			.where(inArray(stripeAccounts.userId, q.creatorIds as number[]));
+		for (const creatorId of q.creatorIds as number[]) {
+			const account = accounts.find((a) => a.userId === creatorId);
+			if (!account?.onboardingComplete || !account.payoutsEnabled) {
+				return c.json({ error: "This creator can't accept payments yet." }, 409);
+			}
 		}
 
 		// One line per Work, each with its own tax code — a basket can span media, and a
@@ -1590,10 +1634,6 @@ const paymentRoutes = new Hono()
 				origin:
 					process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000",
 				lineItems,
-				destination: creatorAccount.stripeAccountId,
-				// The whole basket's earnings, on the sum — the fixed $0.30 is per charge,
-				// which is the entire point of the basket.
-				transferAmountCents: Math.round(q.fees.creatorEarnings.toNumber() * 100),
 				customerId: await stripeCustomerIdFor(user.id),
 				customerEmail: user.email,
 				metadata: {
@@ -2006,17 +2046,22 @@ const paymentRoutes = new Hono()
 					refundObjects = (await listRefundsForCharge(charge.id))?.data ?? [];
 				}
 				const firstRefund = refundObjects[0];
-				for (const purchase of refundedRows)
+				for (const purchase of refundedRows) {
+					// The dashboard refund reversed nothing on its own — a platform charge's
+					// per-creator transfers are Anthers' calls to make (`services/purchase-split.ts`)
+					// — so the clawback is attempted here, per row, through the same
+					// `reverseCreatorShare` the refund route uses, and the outcome feeds the
+					// settle: recovered needs nothing further; unrecovered-but-paid hands the
+					// share to the netting ledger; never-transferred owes nobody anything.
+					const clawback = await reverseCreatorShare(purchase);
 					await settleRefundedPurchase(purchase, {
 						initiator: "platform",
 						reason: "Refunded at Stripe",
 						stripeRefundId: typeof firstRefund?.id === "string" ? firstRefund.id : null,
-						// Whether the dashboard refund reversed the creator's transfer — read
-						// off the refund object, the same fact `refundPurchase` reads off the
-						// Refund object it made. Absent, the creator's share did not come
-						// back and the netting ledger takes the recovery (`services/netting.ts`).
-						transferReversed: firstRefund?.source_transfer_reversal != null,
+						transferReversed: clawback.reversed,
+						creatorWasPaid: clawback.creatorWasPaid,
 					});
+				}
 
 				// The dashboard refund reached nobody in the routes, so the receipts go out
 				// here. The rows are RE-READ rather than reused: a refund issued by our own

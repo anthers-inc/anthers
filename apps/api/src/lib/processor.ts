@@ -366,6 +366,32 @@ export async function retrieveTransfer(transferId: string): Promise<Stripe.Trans
 }
 
 /**
+ * Mirrors `stripe.transfers.createReversal` — reversing some or all of a transfer the
+ * completion path made, the clawback half of the split.
+ *
+ * The sole caller is `services/refunds.ts`: a purchase refund returns the buyer's
+ * money at the charge and then reverses the creator's share off the transfer that
+ * carried it, for the row's own earnings — never more, so a creator is never billed
+ * for someone else's refund (the module's first invariant, unchanged by the split).
+ * The idempotency key is the caller's to derive, from the purchase id, for the same
+ * crash-window reason `refundPurchase` derives its refund key.
+ *
+ * ⚠️ **Reversals draw from the connected account's balance.** A creator who has
+ * already paid the money out cannot fund one — the call throws (Stripe's
+ * `balance_insufficient`) — and that failure is not an error state but the observable
+ * the netting ledger keys on: the share did not come back, so recovery moves to the
+ * creator's later earnings (`services/netting.ts`). The caller catches and books
+ * rather than retries.
+ */
+export async function createTransferReversal(
+	transferId: string,
+	params: Stripe.TransferCreateReversalParams,
+	options?: Stripe.RequestOptions,
+): Promise<Stripe.TransferReversal | null> {
+	return (await getStripe()?.transfers.createReversal(transferId, params, options)) ?? null;
+}
+
+/**
  * Mirrors `stripe.disputes.update` — submitting evidence to a dispute. The contest path
  * (`services/disputes.ts`, the admin route's only door to this) is the sole caller, and it
  * sends `submit: true` so the evidence goes to the bank rather than staging in the

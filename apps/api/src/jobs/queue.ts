@@ -317,6 +317,11 @@ export const QUEUES = {
 	// incomplete multipart uploads while they are held, so an abandoned session is a
 	// meter running rather than idle bytes. See upload-session-sweep.ts.
 	UPLOAD_SESSION_SWEEP: "upload-session-sweep",
+	// Re-attempt the creator shares a purchase's completion could not transfer — the
+	// rows stay `stripe_transfer_id`-null and this sweep re-runs them through the same
+	// idempotency key, so the money an outage delayed is money still owed rather than
+	// money lost. See purchase-transfer-retry.ts and services/purchase-split.ts.
+	PURCHASE_TRANSFER_RETRY: "purchase-transfer-retry",
 } as const;
 
 export const JOB_OPTIONS: Record<string, SendOptions> = {
@@ -449,6 +454,14 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 2,
 		retryDelay: 300,
 		expireInMinutes: 30,
+	},
+	[QUEUES.PURCHASE_TRANSFER_RETRY]: {
+		// The sweep is its own retry: every run re-derives the whole owed worklist, so a
+		// failed job costs fifteen minutes of latency rather than a lost share. Small
+		// retry budget for the same reason — the next cron firing is the real retry.
+		retryLimit: 1,
+		retryDelay: 60,
+		expireInMinutes: 10,
 	},
 	[QUEUES.PUBLISH_SCHEDULED]: {
 		retryLimit: 1,
@@ -601,4 +614,9 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// 7:15 AM daily, after the prefix sweep — the same family (storage nobody can
 	// reach and nobody is billed against by a client), just later off-hours.
 	[QUEUES.UPLOAD_SESSION_SWEEP, "15 7 * * *"],
+	// Every fifteen minutes: an owed purchase share is a creator's earned money sitting
+	// on the platform balance, which is the posture the split decision keeps to seconds —
+	// so the retry cadence is minutes, not the small hours. The scan is one query on an
+	// empty worklist, so the cadence is free when nothing is owed.
+	[QUEUES.PURCHASE_TRANSFER_RETRY, "*/15 * * * *"],
 ] as const;

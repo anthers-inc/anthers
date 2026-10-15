@@ -866,9 +866,9 @@ export async function sendPurchaseReceiptEmail(args: {
 
 /**
  * A creator's copy of the same purchase: what sold, and what reaches them after the
- * processor's at-cost fee. The earnings figure is what the transfer pinned at
- * session creation (`transfer_data[amount]`), so the number in the email is the number
- * Stripe moved, not one derived again.
+ * processor's at-cost fee. The earnings figure is the row's recorded share — the
+ * amount the completion transfer moved (`services/purchase-split.ts`), so the
+ * number in the email is the number Stripe moved, not one derived again.
  *
  * Off by the creator's receipt preference by the *caller* (`services/receipts.ts`),
  * not here: this module renders and sends, it does not decide who is told.

@@ -268,12 +268,9 @@ const SERVER_API = {
 				const body = (await res.json().catch(() => null)) as { error?: string } | null;
 				return { ok: false as const, error: body?.error ?? "Couldn't add to your basket." };
 			}
-			const body = (await res.json()) as unknown as {
-				items: ServerItem[];
-				replacedCreator: string | null;
-			};
+			const body = (await res.json()) as unknown as { items: ServerItem[] };
 			publishServer({ items: body.items });
-			return { ok: true as const, replacedCreator: body.replacedCreator };
+			return { ok: true as const };
 		} catch {
 			publishServer(prev);
 			return { ok: false as const, error: "Couldn't add to your basket." };
@@ -313,13 +310,11 @@ function scratchApi(scratchItems: BasketItem[]): BasketApi {
 		add: (item: BasketItem) => {
 			const current = read();
 			if (current.some((i) => i.workId === item.workId)) return { ok: true as const };
-			// A different creator means a different charge. Replace rather than reject: the
-			// buyer's most recent intent is the one to honor, and telling them at the moment
-			// they click is far better than at checkout.
-			const clashed = current.length > 0 && current[0].creatorHandle !== item.creatorHandle;
-			const next = clashed ? [item] : [...current, item];
-			write(next);
-			return { ok: true as const, replacedCreator: clashed ? current[0].creatorHandle : null };
+			// A basket carries any number of creators (2026-10-15) — the shared charge is
+			// settled at checkout, so the scratchpad appends exactly as the server's basket
+			// does, and the sign-in merge folds it in the same way.
+			write([...current, item]);
+			return { ok: true as const };
 		},
 		remove: (workId: number) => write(read().filter((i) => i.workId !== workId)),
 		clear: () => write([]),
@@ -330,12 +325,7 @@ function scratchApi(scratchItems: BasketItem[]): BasketApi {
 export interface BasketApi {
 	items: BasketItem[];
 	count: number;
-	add: (
-		item: BasketItem,
-	) =>
-		| { ok: true; replacedCreator?: string | null }
-		| { ok: false; error: string }
-		| Promise<{ ok: true; replacedCreator: string | null } | { ok: false; error: string }>;
+	add: (item: BasketItem) => { ok: true } | { ok: false; error: string } | Promise<{ ok: true } | { ok: false; error: string }>;
 	remove: (workId: number) => void | Promise<void>;
 	clear: () => void | Promise<void>;
 	has: (workId: number) => boolean;

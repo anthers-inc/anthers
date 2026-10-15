@@ -992,13 +992,14 @@ const authRoutes = new Hono()
 	 *
 	 * The scratch arrives as the client told us, and is treated exactly as the scratchpad
 	 * always deserved: each item goes through `addBasketItem` — the same function the Work
-	 * page's button calls — so the one-creator rule (a clash REPLACES, most recent intent
-	 * wins), the item cap and the existence check all fire rather than being bypassed by a
-	 * bulk insert. Unbuyable items in the scratch are still merged (they are intent, and
-	 * quote/checkout re-resolve everything anyway); a Work that no longer exists is not.
+	 * page's button calls — so the item cap and the existence check all fire rather than
+	 * being bypassed by a bulk insert. Unbuyable items in the scratch are still merged
+	 * (they are intent, and quote/checkout re-resolve everything anyway); a Work that no
+	 * longer exists is not.
 	 *
-	 * The merge order is scratch order, so "most recent intent" means the LAST scratch item
-	 * on a creator clash — which is what the buyer clicked last.
+	 * The merge order is scratch order, so the scratch appends after whatever the account's
+	 * basket already holds — and a basket carries any number of creators (2026-10-15), so
+	 * nothing clashes and nothing replaces anything.
 	 */
 	.post(
 		"/basket/merge",
@@ -1007,16 +1008,14 @@ const authRoutes = new Hono()
 		async (c) => {
 			const user = c.get("user");
 			const added: number[] = [];
-			let replacedCreator: string | null = null;
 			for (const item of c.req.valid("json").items) {
 				const result = await addBasketItem(user.id, item.workId);
 				if (!result.ok) continue; // gone from the catalog — not an intent anyone can honor
 				added.push(item.workId);
-				if (result.replacedCreatorHandle) replacedCreator = result.replacedCreatorHandle;
 			}
 			// The scratchpad is the client's to clear, and it clears it below on `ok` — but the
 			// contract is server-stated all the same: once answered, the browser's copy is dead.
-			return c.json({ added, replacedCreator });
+			return c.json({ added });
 		},
 	)
 

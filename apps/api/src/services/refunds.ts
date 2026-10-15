@@ -11,10 +11,10 @@
  * Three invariants, and each of them is a way to get money wrong:
  *
  *   • **The creator is reversed to exactly their earnings and never below zero.**
- *     `reverse_transfer` claws back the transfer and no more, so a creator is never
- *     billed for someone else's refund — that would be a cut, just a negative one
- *     they cannot predict or price around, and it would contradict "Anthers takes
- *     no cut".
+ *     The transfer reversal claws back the row's recorded share and no more, so a
+ *     creator is never billed for someone else's refund — that would be a cut, just a
+ *     negative one they cannot predict or price around, and it would contradict
+ *     "Anthers takes no cut".
  *
  *     🚨 **"Full refunds only" means full refunds of an ITEM, not of a charge**
  *     (clarified 2026-08-13, Parker; this used to read "full refunds only, for
@@ -27,8 +27,15 @@
  *
  *     Per-item refunds are safe because the proportion resolves exactly. Both the
  *     card fee and the tax are apportioned pro-rata by item value, so reversing
- *     `itemShare ÷ charge` of the transfer lands on `aᵢ(S − p)/S` — precisely that
- *     row's recorded earnings. See `refundPurchase` for the derivation.
+ *     exactly `aᵢ(S − p)/S` of the transfer lands on that row's recorded earnings
+ *     — which is the amount this module reverses, by name, off the row.
+ *
+ *     ⚠️ **The reversal is an explicit call, not a refund side effect** (the
+ *     2026-10-15 split): purchases are platform charges whose per-creator transfer
+ *     was made at completion (`services/purchase-split.ts`), so the refund of the
+ *     charge reverses nothing on its own. The clawback is `createTransferReversal`
+ *     on the row's transfer, for the row's earnings — the same amount, the same
+ *     invariant, one more API call.
  *
  *   • **Anthers absorbs the shortfall, and it is booked.** Stripe does not return
  *     its processing fee on a refund. That unrecoverable amount comes out of the
@@ -52,7 +59,7 @@ import { crfLedger, purchases } from "@anthers/db/schema";
 import { REFUND_AUTO_CAP, REFUND_CAP_WINDOW_MONTHS } from "@anthers/shared/constants";
 import Decimal from "decimal.js";
 import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
-import { issueRefund, paymentsConfigured } from "../lib/processor.js";
+import { createTransferReversal, issueRefund, paymentsConfigured } from "../lib/processor.js";
 import { recordNettingForRefund } from "./netting.js";
 import { unwindMerchOrder } from "./printful.js";
 
@@ -122,6 +129,41 @@ export function refundShortfall(purchase: Purchase): Decimal {
 }
 
 /**
+ * Attempt the clawback of one purchase's creator share: reverse the row's recorded
+ * earnings off the transfer that carried them. The one reversal mechanism, shared by
+ * `refundPurchase` and the webhook's dashboard-refund branch, because the two doors must
+ * leave the money in the same state — the single-writer rule the basket storage follows,
+ * pointed at Stripe instead of a table.
+ *
+ * Returns whether the share came back. `reversed: false` on a row WITH a transfer is the
+ * paid-out creator (the connected balance cannot fund the reversal) and hands recovery to
+ * the netting ledger; on a row with NO transfer the share never left, and the caller skips
+ * netting for the same reason. The idempotency key is the purchase id, so a webhook
+ * redelivery of a refund our own route already clawed back cannot reverse a second cent.
+ */
+export async function reverseCreatorShare(purchase: Purchase): Promise<{
+	/** Whether the reversal recovered the share at Stripe. */
+	reversed: boolean;
+	/** Whether the creator's share ever reached them — false on a never-transferred row. */
+	creatorWasPaid: boolean;
+}> {
+	if (purchase.stripeTransferId == null) return { reversed: false, creatorWasPaid: false };
+	try {
+		const reversal = await createTransferReversal(
+			purchase.stripeTransferId,
+			{ amount: Math.round(new Decimal(purchase.creatorEarnings).toNumber() * 100) },
+			{ idempotencyKey: `refund_reversal_${purchase.id}` },
+		);
+		if (reversal == null) throw new Error("The transfer reversal could not be processed.");
+		return { reversed: true, creatorWasPaid: true };
+	} catch {
+		// The connected account's balance could not fund the reversal — the paid-out
+		// creator — so recovery moves to the netting ledger (`services/netting.ts`).
+		return { reversed: false, creatorWasPaid: true };
+	}
+}
+
+/**
  * Reverse a purchase: refund the buyer at Stripe, claw the creator's transfer
  * back, flip the row, and book the shortfall against the remainder.
  *
@@ -185,32 +227,12 @@ export async function refundPurchase(
 	 * the sales tax, which is exactly what the buyer paid for it — the tax share read off
 	 * the row, where completion stamped what Stripe Tax actually collected.
 	 *
-	 * **The transfer reversal then lands exactly right, and that is arithmetic rather than
-	 * luck.** `reverse_transfer` on a partial refund reverses *proportionally*, and
-	 * because both the card fee and the tax are apportioned pro-rata by item value, the
-	 * proportion resolves to the item's own earnings:
-	 *
-	 *     reversal = E × [aᵢ(1 + t/S)] ÷ (S + t) = aᵢE/S = the row's earnings
-	 *
-	 * (S = subtotal, t = tax, aᵢ = this item's price, E = the pinned transfer — the
-	 * creator's earnings on the whole charge, fixed at session creation by
-	 * `transfer_data[amount]`.) Rounding can leave a cent between Stripe's proportion
-	 * and the row's stored figure; that lands in the shortfall the ledger already books,
-	 * which is what the remainder is for.
-	 *
 	 * **A lone purchase still sends no `amount` at all.** Its share *is* the whole charge,
 	 * so the two are equivalent — and the whole charge's refund returns the whole tax
 	 * with it, on Stripe's side, automatically: the tax was part of what the buyer paid,
 	 * so refunding it in full hands every cent back. The no-amount call is the
 	 * long-tested path for the overwhelmingly common case, and there is no reason to
 	 * move it onto a new one for symmetry's sake.
-	 *
-	 * ⚠️ **`reverse_transfer` reverses the pinned transfer, never more.** The creator's
-	 * transfer is their earnings, decoupled from the tax by the session's construction,
-	 * so a full refund claws back exactly their earnings and the tax returns from the
-	 * platform side — Anthers' own liability, as the facilitator. The refund record
-	 * keeps the row's `sales_tax` figure, which is what the return worksheet nets a
-	 * refund against.
 	 */
 	const siblingCount = (
 		await db
@@ -225,22 +247,13 @@ export async function refundPurchase(
 
 	let refundId: string;
 	let transferReversed = false;
+	/** Whether the creator's share ever reached them — a row with no transfer was never paid. */
+	let creatorWasPaid = true;
 	try {
 		const refund = await issueRefund(
 			{
 				payment_intent: purchase.stripePaymentIntentId,
 				...(itemCents !== undefined ? { amount: itemCents } : {}),
-				// Claw the creator's transfer back. Without this the refund comes
-				// entirely out of the platform balance and the creator keeps money for a
-				// sale that no longer exists.
-				reverse_transfer: true,
-				// `refund_application_fee` is deliberately NOT set. On a destination
-				// charge the application fee never left the platform — it was subtracted
-				// from the transfer — so refunding it would push the retained sales tax
-				// and delivery *to the creator* on a sale that was just undone. What the
-				// platform is left holding after a full refund plus a full transfer
-				// reversal is exactly Stripe's sunk processing fee, which is the
-				// documented outcome — see the module note above.
 				reason: opts.initiator === "buyer" ? "requested_by_customer" : undefined,
 				metadata: {
 					purchaseId: String(purchase.id),
@@ -254,14 +267,19 @@ export async function refundPurchase(
 		);
 		refundId = refund?.id ?? "";
 		if (!refundId) throw new Error("The refund could not be processed.");
-		// Did Stripe actually reverse the creator's transfer? The reversal is present
-		// exactly when the connected account's balance funded it — the "before the
-		// creator paid out" case, where the share came back at Stripe and netting is
-		// owed nothing. Absent, the share did not come back (a paid-out creator, on whom
-		// Stripe does not carry negative balances for destination charges — the Tax and
-		// Compliance Plan's recorded finding), and the after-transfer recovery belongs
-		// to the netting ledger instead.
-		transferReversed = refund?.source_transfer_reversal != null;
+
+		// ── The creator's share: the explicit clawback, after the buyer's money moved ──
+		// Purchases are platform charges (2026-10-15), so the refund above reversed
+		// nothing on its own — the creator's share moved out at completion as a transfer
+		// (`services/purchase-split.ts`), and `reverseCreatorShare` reverses exactly the
+		// row's recorded earnings off it. Never more, so a creator is never billed for
+		// someone else's refund; and a row that was never transferred owes no clawback
+		// and no netting, because that share never left. A reversal that cannot be
+		// funded (the paid-out creator) is the netting ledger's case, not an error
+		// here — the refund itself succeeded.
+		const clawback = await reverseCreatorShare(purchase);
+		transferReversed = clawback.reversed;
+		creatorWasPaid = clawback.creatorWasPaid;
 	} catch (err) {
 		return {
 			ok: false,
@@ -291,6 +309,7 @@ export async function refundPurchase(
 		reason: opts.reason,
 		stripeRefundId: refundId,
 		transferReversed,
+		creatorWasPaid,
 		now,
 	});
 }
@@ -303,17 +322,19 @@ export async function refundPurchase(
  * close the same way whichever door the refund came through.
  *
  * ⭐ **The netting write lives here, on the after-transfer case only** (Parker,
- * 2026-09-14, "Money That Came Back"). A purchase is a destination charge, so the
- * creator's share already reached them; whether Anthers clawed it back is exactly one
- * observable fact — did the refund's transfer reversal happen? `refundPurchase` reads it
- * off the Refund object it made and passes `transferReversed`; the webhook reads it off
- * the event's refund objects. **Reversed: no netting row** — the share came back at
- * Stripe, the before-transfer mechanism did its job. **Not reversed: a netting row**
- * (`recordNettingForRefund`) — the creator had already paid the money out, nothing came
- * back, and recovery moves to the creator's later earnings instead. `refunds.ts`'s
- * module invariant holds either way: the creator is reversed to exactly their earnings
- * and never below zero, because the netting amount is the row's own earnings and the
- * netting ledger itself never bills.
+ * 2026-09-14, "Money That Came Back"). A purchase's creator's share reached them as the
+ * completion-path transfer (`services/purchase-split.ts`), so whether Anthers clawed it
+ * back is exactly one observable fact — did the refund's explicit transfer reversal
+ * happen? `refundPurchase` makes the call and passes the outcome; the webhook makes the
+ * same call per refunded row and passes the same outcome. **Reversed: no netting row** —
+ * the share came back at Stripe, the before-transfer mechanism did its job. **Not
+ * reversed: a netting row** (`recordNettingForRefund`) — the creator had already paid the
+ * money out, nothing came back, and recovery moves to the creator's later earnings
+ * instead. **Never paid — no transfer id on the row: nothing** — the share never left,
+ * so there is nothing to recover and a netting row would bill the creator for money they
+ * never received. `refunds.ts`'s module invariant holds in every case: the creator is
+ * reversed to exactly their earnings and never below zero, because the netting amount is
+ * the row's own earnings and the netting ledger itself never bills.
  *
  * The netting is written only when the flip succeeds (not on `alreadyRefunded`), so the
  * row's own status predicate is the netting's latch against a double webhook delivery —
@@ -327,6 +348,16 @@ export async function settleRefundedPurchase(
 		stripeRefundId?: string | null;
 		/** Whether the refund's transfer reversal actually recovered the creator's share at Stripe. */
 		transferReversed?: boolean;
+		/**
+		 * Whether the creator's share ever reached them at all. False on a row whose
+		 * transfer was never made (a completion-path failure the retry job owns) — the
+		 * share cannot be recovered because it never left, so it must not NET either:
+		 * the netting ledger recovers money the creator received, and this share never
+		 * was. Defaults true — the historical rows' transfers all happened, at the
+		 * moment of their charges, under the destination-charge shape this column never
+		 * knew about.
+		 */
+		creatorWasPaid?: boolean;
 		now?: Date;
 	},
 ): Promise<RefundResult> {
@@ -359,8 +390,11 @@ export async function settleRefundedPurchase(
 
 	// The creator's share did not come back at Stripe — recover it from later earnings
 	// instead. The refund id is the netting row's own identity, so a replayed or
-	// redelivered anything finds the row and changes nothing.
-	if (!opts.transferReversed) {
+	// redelivered anything finds the row and changes nothing. Skipped when the share
+	// never reached the creator at all (`creatorWasPaid` false): recovering money
+	// somebody never received is the one netting write that would bill the creator
+	// for a sale that paid them nothing.
+	if (!opts.transferReversed && (opts.creatorWasPaid ?? true)) {
 		await recordNettingForRefund(updated, opts.stripeRefundId ?? updated.stripeRefundId, now);
 	}
 

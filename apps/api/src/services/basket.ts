@@ -4,37 +4,26 @@
  *
  * Single-writer for the same reason `services/library.ts` is: several doors reach this
  * table (the buyer pressing Add, the sign-in merge, the checkout's clear-at-completion)
- * and they must leave it in the same state. The one-creator rule lives HERE rather than
- * at each call site, so the merge at sign-in and the button on a Work page cannot
- * disagree about what a second creator's Work means.
+ * and they must leave it in the same state.
  *
  * 🚨 **Nothing here prices anything and nothing here grants access.** The table holds
  * ids; every quote, checkout and listing re-resolves them through `resolveBasket` /
  * `resolvePurchase` in `routes/payments.ts`, which is where the refusals live (unbuyable,
- * already-owned, mixed creators, the item cap). This module trusts the ids for nothing —
- * it only decides which ids are in the basket and whose they belong to.
+ * already-owned, the item cap). This module trusts the ids for nothing — it only decides
+ * which ids are in the basket.
  *
- * The one-creator rule: **replace, not reject** (Parker's client-side ruling, kept
- * honest server-side). A buyer reaching for a second creator's Work has said their most
- * recent intent, and discovering the conflict at the payment step is the worst possible
- * moment — so `addItem` swaps the basket to the new creator's Work and says what it did,
- * and the surface tells the buyer. Same reasoning the client comment carried before the
- * storage moved server-side.
+ * **The basket holds any number of creators' Works** (Parker, 2026-10-15, the multi-creator
+ * decision). The replace-on-clash rule this module used to enforce — a second creator's
+ * Work wiping the basket — was the dealbreaker the decision removed: a cart is for
+ * carrying several creators' purchases, and the charge they share is settled at
+ * completion, one transfer per creator (`completeSessionPurchases` in
+ * `routes/payments.ts`, whose docblock carries the money reasoning and the counsel-brief
+ * pointer).
  */
 
 import { basketItems, db, users, works } from "@anthers/db";
 import { MAX_BASKET_ITEMS } from "@anthers/shared/constants";
 import { and, asc, eq } from "drizzle-orm";
-
-/** The creator id a work row carries, resolved to its handle — null when the account is gone. */
-async function handleOf(creatorId: number): Promise<string | null> {
-	const [row] = await db
-		.select({ handle: users.atprotoHandle })
-		.from(users)
-		.where(eq(users.id, creatorId))
-		.limit(1);
-	return row?.handle ?? null;
-}
 
 /** Everything `list` answers with — what a badge counts and what the basket page reads. */
 export interface BasketRow {
@@ -79,8 +68,8 @@ export async function listBasket(userId: number): Promise<BasketRow[]> {
 export type BasketAddRefusal = "not_found" | "at_capacity";
 
 /**
- * Add one Work to the buyer's basket — or REPLACE the basket when the Work belongs to a
- * different creator.
+ * Add one Work to the buyer's basket. Any creator's — the basket carries as many
+ * creators as the buyer wants, and the checkout settles them on one charge.
  *
  * The Work must exist here and now (a 404 button is how a deleted Work should feel), but
  * nothing else about it is checked: whether it is buyable, by this buyer, at a price the
@@ -94,52 +83,30 @@ export type BasketAddRefusal = "not_found" | "at_capacity";
 export async function addBasketItem(
 	userId: number,
 	workId: number,
-): Promise<
-	{ ok: true; replacedCreatorHandle: string | null } | { ok: false; reason: BasketAddRefusal }
-> {
+): Promise<{ ok: true } | { ok: false; reason: BasketAddRefusal }> {
 	const [work] = await db
 		.select({ id: works.id, creatorId: works.creatorId })
 		.from(works)
 		.where(eq(works.id, workId))
 		.limit(1);
-	if (!work) return { ok: false, reason: "not_found" };
+	// 🚨 A creatorless Work can never be charged (there is no payee), so it is refused
+	// here exactly as the checkout's refusal would — the add is where a buyer learns it,
+	// the same moment-rule the cap keeps below.
+	if (!work || work.creatorId == null) return { ok: false, reason: "not_found" };
 
 	const current = await listBasket(userId);
 
 	// Already in — adding twice is a no-op, because the button is the kind people press
 	// again when they are not sure it worked.
-	if (current.some((row) => row.workId === workId))
-		return { ok: true, replacedCreatorHandle: null };
+	if (current.some((row) => row.workId === workId)) return { ok: true };
 
 	// 🚨 The item cap, from the same constant `resolveBasket` enforces — the add is where a
 	// buyer learns the basket is full rather than at checkout, the same moment-rule the
-	// creator clause below keeps.
+	// creatorless refusal above keeps.
 	if (current.length >= MAX_BASKET_ITEMS) return { ok: false, reason: "at_capacity" };
 
-	// 🚨 One creator per basket. A Work by a DIFFERENT creator replaces the whole basket —
-	// the buyer's latest intent — and the caller is told whose work was dropped, so the
-	// surface can say so. Comparison is by creator ACCOUNT, resolved live rather than
-	// trusted from the caller: the stored rows carry handles, but the arriving Work's
-	// creator is what decides. A creatorless Work can never be charged, so it is refused
-	// here too (an empty basket may still take one — removing it later costs the same
-	// single click it always did, and the checkout's refusal already names why).
-	if (current.length > 0 && work.creatorId != null) {
-		const first = current[0];
-		if (first.creatorHandle != null) {
-			const incoming = await handleOf(work.creatorId);
-			if (incoming == null) return { ok: false, reason: "not_found" };
-			if (incoming !== first.creatorHandle) {
-				await db.delete(basketItems).where(eq(basketItems.userId, userId));
-				await db.insert(basketItems).values({ userId, workId });
-				return { ok: true, replacedCreatorHandle: first.creatorHandle };
-			}
-		}
-	} else if (current.length > 0) {
-		return { ok: false, reason: "not_found" };
-	}
-
 	await db.insert(basketItems).values({ userId, workId });
-	return { ok: true, replacedCreatorHandle: null };
+	return { ok: true };
 }
 
 /** Remove one Work from the buyer's basket. Idempotent — absence is already the goal. */
