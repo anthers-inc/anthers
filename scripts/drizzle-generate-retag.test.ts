@@ -19,7 +19,7 @@ import { retagNewestMigration, timestampedTag } from "./drizzle-retag.ts";
 
 let root: string;
 
-function journalOf(entries: { idx: number; when: number; tag: string }[]): void {
+function journalOf(entries: { idx: number; when?: number; tag: string; breakpoints?: boolean }[]): void {
 	writeFileSync(
 		join(root, "meta", "_journal.json"),
 		`${JSON.stringify({ version: "7", entries }, null, 2)}\n`,
