@@ -42,6 +42,7 @@ import { type IngestEbookData, ingestEbook } from "./ingest-ebook.js";
 import { type ProcessAudioData, processAudio } from "./process-audio.js";
 import { handlePruneAttention, type PruneAttentionData } from "./prune-attention.js";
 import { publishScheduled } from "./publish-scheduled.js";
+import { runPurchaseTransferRetry } from "./purchase-transfer-retry.js";
 import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue, RETIRED_QUEUES } from "./queue.js";
 import { reconcileListings } from "./reconcile-listings.js";
 import { releaseScheduled } from "./release-scheduled.js";
@@ -57,7 +58,6 @@ import { type SyncWorkListingData, syncWorkListingJob } from "./sync-work-listin
 import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
 import { type TransferHeldCreditsData, transferHeldCredits } from "./transfer-held-credits.js";
 import { runUploadSessionSweep } from "./upload-session-sweep.js";
-import { runPurchaseTransferRetry } from "./purchase-transfer-retry.js";
 import { watchHostedIdentities } from "./watch-identities.js";
 import { runWithdrawnSweep } from "./withdrawn-sweep.js";
 

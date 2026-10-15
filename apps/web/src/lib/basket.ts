@@ -325,7 +325,12 @@ function scratchApi(scratchItems: BasketItem[]): BasketApi {
 export interface BasketApi {
 	items: BasketItem[];
 	count: number;
-	add: (item: BasketItem) => { ok: true } | { ok: false; error: string } | Promise<{ ok: true } | { ok: false; error: string }>;
+	add: (
+		item: BasketItem,
+	) =>
+		| { ok: true }
+		| { ok: false; error: string }
+		| Promise<{ ok: true } | { ok: false; error: string }>;
 	remove: (workId: number) => void | Promise<void>;
 	clear: () => void | Promise<void>;
 	has: (workId: number) => boolean;

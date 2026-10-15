@@ -14,8 +14,10 @@
  *   • a dispute on a purchase writes a netting row for the row's EARNINGS — never the
  *     buyer's full charge, never the tax, never the platform's share;
  *   • a refund whose transfer reversal recovered the share writes NO netting row (the
- *     `reverse_transfer` case, the before-transfer mechanism that already works);
- *   • a refund whose reversal is absent — the paid-out creator — writes one;
+ *     funded clawback, the before-transfer mechanism that already works);
+ *   • a clawback that cannot be funded — the paid-out creator — writes one;
+ *   • a row that was never transferred nets nothing: the share never left, and a
+ *     netting row would bill the creator for money they never received;
  *   • netting that exceeds held credits transfers NOTHING and stays open;
  *   • partial netting reduces the transfer and writes application rows;
  *   • a won dispute reverses the netting: nothing applied cancels the row, some applied
@@ -177,6 +179,11 @@ async function completedPurchase(
 			salesTax: "0.00",
 			creatorEarnings: earnings,
 			stripePaymentIntentId: `pi_${uid()}`,
+			// The completion transfer landed — the ordinary state under the split, and
+			// the state the clawback and the netting write both hinge on: a row with a
+			// transfer is a creator who was paid, and whether the share comes back is
+			// decided by `transfers.createReversal`'s outcome below.
+			stripeTransferId: `tr_${uid()}`,
 			status: "completed",
 		})
 		.returning();
@@ -218,10 +225,23 @@ function fakeStripe() {
 				calls.push({ method: "transfers.retrieve", args });
 				return Promise.resolve({ id: args[0] } as Stripe.Transfer);
 			},
+			// The clawback `reverseCreatorShare` drives. The knob this suite's refund
+			// tests turn on: a funded reversal returns the share (no netting row), a
+			// rejected one is the paid-out creator (the netting row).
+			createReversal: (...args: unknown[]) => {
+				calls.push({ method: "transfers.createReversal", args });
+				if (reversalFails) return Promise.reject(new Error("balance_insufficient: cannot reverse"));
+				const [transferId] = args as [string];
+				return Promise.resolve({
+					id: `trr_${uid()}`,
+					object: "transfer_reversal",
+					transfer: transferId,
+				} as unknown as Stripe.TransferReversal);
+			},
 		},
-		// The refunds surface `refundPurchase` drives, with the transfer-reversal fact the
-		// netting write turns on: a reversal object present says the share came back at
-		// Stripe; null (the paid-out creator) says it did not.
+		// The refunds surface `refundPurchase` drives. The clawback's outcome lives on
+		// `transfers.createReversal` above — the refund of a platform charge reverses
+		// nothing by itself.
 		refunds: {
 			create: (...args: unknown[]) => {
 				calls.push({ method: "refunds.create", args });
@@ -229,7 +249,6 @@ function fakeStripe() {
 					id: `re_${uid()}`,
 					object: "refund",
 					status: "succeeded",
-					source_transfer_reversal: refundReversal,
 				} as unknown as Stripe.Refund);
 			},
 		},
@@ -245,8 +264,8 @@ function fakeStripe() {
 	};
 }
 
-/** What the next fake refund's `source_transfer_reversal` reads. */
-let refundReversal: unknown = null;
+/** Whether the next clawback attempt can be funded — false is the paid-out creator. */
+let reversalFails = false;
 let fake: ReturnType<typeof fakeStripe>;
 
 beforeAll(() => {
@@ -257,6 +276,7 @@ beforeAll(() => {
 beforeEach(() => {
 	fake = fakeStripe();
 	setStripeClient(fake.client);
+	reversalFails = false;
 });
 
 afterAll(async () => {
@@ -441,17 +461,23 @@ describe("writing netting rows", () => {
 		});
 		const purchase = await completedPurchase(creatorId, buyer.userId, work.id);
 
-		// The before-transfer case: the reversal is present, the share came back at Stripe.
-		refundReversal = { id: `trr_${uid()}`, object: "transfer_reversal", amount: 455 };
+		// The before-transfer case: the clawback call is funded, the share came back at
+		// Stripe. The purchase row carries the transfer the completion made, which is
+		// what says the creator was paid at all.
 		await refundPurchase(purchase, { initiator: "buyer", reason: "test" });
 
+		// The clawback happened — the reversal call carries the row's own transfer and
+		// its exact earnings, never more.
+		const reversal = fake.calls.find((c) => c.method === "transfers.createReversal");
+		expect(reversal?.args[0]).toBe(purchase.stripeTransferId);
+		expect((reversal?.args[1] as { amount?: number }).amount).toBe(455);
 		expect(
 			(await db.select().from(creatorNettings).where(eq(creatorNettings.purchaseId, purchase.id)))
 				.length,
 		).toBe(0);
 	});
 
-	it("🚨 a refund whose reversal is absent — the paid-out creator — writes one", async () => {
+	it("🚨 a clawback that cannot be funded — the paid-out creator — writes one", async () => {
 		const { userId: creatorId } = await makeCreator();
 		const buyer = await createAccount(`${tag}_buyer_r2`);
 		madeUserIds.push(buyer.userId);
@@ -462,9 +488,9 @@ describe("writing netting rows", () => {
 		});
 		const purchase = await completedPurchase(creatorId, buyer.userId, work.id);
 
-		// The after-transfer case: no reversal came back — the connected balance could not
-		// fund it, and netting takes the recovery.
-		refundReversal = null;
+		// The after-transfer case: the connected balance cannot fund the reversal —
+		// the creator already paid the money out — so recovery moves to netting.
+		reversalFails = true;
 		await refundPurchase(purchase, { initiator: "buyer", reason: "test" });
 
 		const rows = await db
@@ -474,6 +500,33 @@ describe("writing netting rows", () => {
 		expect(rows).toHaveLength(1);
 		expect(rows[0].amount).toBe("4.55");
 		expect(rows[0].stripeRefundId).toBeTruthy();
+	});
+
+	it("🚨 a row that was never transferred nets nothing — the creator was never paid", async () => {
+		const { userId: creatorId } = await makeCreator();
+		const buyer = await createAccount(`${tag}_buyer_r3`);
+		madeUserIds.push(buyer.userId);
+		const work = await insertWork({
+			creatorId,
+			type: "game",
+			title: `Netting work ${uid()}`,
+		});
+		const purchase = await completedPurchase(creatorId, buyer.userId, work.id);
+		// The completion transfer never landed — the retry job's debt. The share never
+		// left, so a refund has nothing to claw back and, critically, nothing to
+		// recover from the creator: a netting row here would bill them for a sale
+		// that paid them nothing.
+		await db.update(purchases).set({ stripeTransferId: null }).where(eq(purchases.id, purchase.id));
+		const [untransferred] = await db.select().from(purchases).where(eq(purchases.id, purchase.id));
+
+		reversalFails = true; // even a failing clawback must not produce a row
+		const result = await refundPurchase(untransferred, { initiator: "buyer", reason: "test" });
+		expect(result.ok).toBe(true);
+
+		expect(
+			(await db.select().from(creatorNettings).where(eq(creatorNettings.purchaseId, purchase.id)))
+				.length,
+		).toBe(0);
 	});
 });
 

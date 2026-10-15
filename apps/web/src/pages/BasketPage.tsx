@@ -33,11 +33,11 @@
  * in the JSX (it owns the page's only form) and sits left (`lg:order-1`).
  */
 
+import { withNextPath } from "@anthers/shared/next-path";
 import { useAuth } from "@anthers/web-shared/auth";
 import { creatorWorkUrl, profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import { withNextPath } from "@anthers/shared/next-path";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
@@ -132,8 +132,7 @@ export default function BasketPage() {
 				handle: c.handle as string,
 				receives: c.receives,
 				lines: quote.items.filter(
-					(line) =>
-						items.find((i) => i.workId === line.workId)?.creatorHandle === c.handle,
+					(line) => items.find((i) => i.workId === line.workId)?.creatorHandle === c.handle,
 				),
 			}));
 	}, [items, quote]);
@@ -314,10 +313,7 @@ export default function BasketPage() {
 								// BASKET's items (the source with handles), matched by id.
 								const held = items.find((i) => i.workId === item.workId);
 								return (
-									<li
-										key={item.workId}
-										className="flex items-center justify-between gap-2 py-2"
-									>
+									<li key={item.workId} className="flex items-center justify-between gap-2 py-2">
 										<Link
 											to={creatorWorkUrl(group.handle, item.slug)}
 											className="min-w-0 flex-1 truncate text-sm text-base-content/80 link-hover"

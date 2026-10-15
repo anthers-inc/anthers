@@ -24,7 +24,6 @@ import { db } from "@anthers/db/client";
 import {
 	assets,
 	badges,
-	basketItems,
 	billingAccounts,
 	crfLedger,
 	purchases,
@@ -38,6 +37,7 @@ import { and, eq, sql } from "drizzle-orm";
 import Stripe from "stripe";
 import app from "../index";
 import { getStripe, setStripeClient } from "../lib/stripe";
+import { retryFailedTransfers } from "../services/purchase-split.js";
 import { createAccount } from "./account-fixture";
 import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -148,6 +148,29 @@ function fakeStripe() {
 				const id = `pi_${uid()}`;
 				return { id, client_secret: `${id}_secret_test` };
 			}),
+			// The purchase-split retry resolves an intent's charge live; the fake answers
+			// with a charge id so a retried transfer can be funded by one.
+			retrieve: record("paymentIntents.retrieve", (id: string) => ({
+				id,
+				object: "payment_intent",
+				latest_charge: `ch_${uid()}`,
+			})),
+		},
+		transfers: {
+			// The purchase split — one transfer per distinct creator at completion
+			// (`services/purchase-split.ts`). A fresh id per call, recorded so a test
+			// asserts the amount, the funding charge and the destination.
+			create: record("transfers.create", () => {
+				const id = `tr_${uid()}`;
+				return { id, object: "transfer", amount: 0, currency: "usd" };
+			}),
+			// The refund clawback — `reverseCreatorShare` reverses the row's earnings
+			// off the transfer that carried them.
+			createReversal: record("transfers.createReversal", (id: string) => ({
+				id: `trr_${uid()}`,
+				object: "transfer_reversal",
+				transfer: id,
+			})),
 		},
 		checkout: {
 			sessions: {
@@ -1014,6 +1037,259 @@ describe("Webhook: payment_intent.succeeded", () => {
 	});
 });
 
+describe("Webhook: the per-creator split at completion", () => {
+	// Two connected creators, one Work each — the minimum shape that exercises
+	// grouping: one charge, two creators' shares to move, one transfer each. Both are
+	// THIS describe's own users, deliberately not the shared `creatorId`: several other
+	// describes insert `stripe_accounts` rows for it, and a describe-level connect here
+	// would race theirs on the table's one-account-per-user shape.
+	let firstCreatorId = 0;
+	let firstWorkId = 0;
+	let secondCreatorId = 0;
+	let secondWorkId = 0;
+	let firstAcctId = "";
+	let secondAcctId = "";
+
+	async function connect(userId: number, acctId: string) {
+		await db.delete(stripeAccounts).where(eq(stripeAccounts.userId, userId));
+		await db.insert(stripeAccounts).values({
+			userId,
+			stripeAccountId: acctId,
+			chargesEnabled: true,
+			payoutsEnabled: true,
+			onboardingComplete: true,
+		});
+	}
+
+	beforeAll(async () => {
+		const { id: a } = await signUp(`split_first_${run}`);
+		firstCreatorId = a;
+		firstAcctId = `acct_${uid()}`;
+		await connect(firstCreatorId, firstAcctId);
+		firstWorkId = (
+			await insertWork({
+				creatorId: firstCreatorId,
+				type: "game",
+				title: `Split first ${run}`,
+				streamEnabled: false,
+				downloadEnabled: true,
+				access: FOR_SALE,
+			})
+		).id;
+
+		const { id: b } = await signUp(`split_other_${run}`);
+		secondCreatorId = b;
+		secondAcctId = `acct_${uid()}`;
+		await connect(secondCreatorId, secondAcctId);
+		secondWorkId = (
+			await insertWork({
+				creatorId: secondCreatorId,
+				type: "game",
+				title: `Split other ${run}`,
+				streamEnabled: false,
+				downloadEnabled: true,
+				access: FOR_SALE,
+			})
+		).id;
+	}, DB_SETUP_TIMEOUT);
+
+	/**
+	 * One pending row per creator, keyed by the session id — exactly the state
+	 * `/basket/checkout` leaves behind, with the per-item fee shares already
+	 * apportioned by the route (the last row absorbing the rounding remainder, which
+	 * is why the two earnings figures sum to one charge's worth less one fee).
+	 */
+	async function seedSplitBasket(sessionId: string) {
+		await db.insert(purchases).values([
+			{
+				buyerId,
+				workId: firstWorkId,
+				creatorId: firstCreatorId,
+				workTitle: "Split row A",
+				workType: "game",
+				type: "digital",
+				amount: "5.00",
+				processingFee: "0.45",
+				creatorEarnings: "4.55",
+				stripePaymentIntentId: sessionId,
+				status: "pending",
+			},
+			{
+				buyerId,
+				workId: secondWorkId,
+				creatorId: secondCreatorId,
+				workTitle: "Split row B",
+				workType: "game",
+				type: "digital",
+				amount: "5.00",
+				processingFee: "0.44",
+				creatorEarnings: "4.56",
+				stripePaymentIntentId: sessionId,
+				status: "pending",
+			},
+		]);
+	}
+
+	it("moves each creator's share out as one transfer, funded by the charge", async () => {
+		const piId = `pi_${uid()}`;
+		const sessionId = `cs_${uid()}`;
+		const chargeId = `ch_${uid()}`;
+		await seedSplitBasket(sessionId);
+
+		const session = fakeSessionFor(piId);
+		session.id = sessionId;
+		fake.responses["checkout.sessions.list"] = asyncList([session]);
+		const event = stripeEvent("payment_intent.succeeded", {
+			id: piId,
+			object: "payment_intent",
+			latest_charge: chargeId,
+		});
+		expect((await sendWebhook(event)).status).toBe(200);
+
+		// One transfer per DISTINCT creator — two rows, two creators, two calls — each
+		// for that creator's own summed earnings, funded by the charge the buyer paid
+		// (`source_transaction`), keyed by (intent, creator) so a retry replays rather
+		// than duplicates.
+		const transfers = fake.callsTo("transfers.create");
+		expect(transfers).toHaveLength(2);
+		const keyOf = (i: number) =>
+			(transfers[i].args[1] as { idempotencyKey?: string }).idempotencyKey;
+		const byDest = new Map(
+			transfers.map((c) => [
+				(c.args[0] as Stripe.TransferCreateParams).destination,
+				c.args[0] as Stripe.TransferCreateParams,
+			]),
+		);
+		expect(byDest.get(firstAcctId)?.amount).toBe(455);
+		expect(byDest.get(secondAcctId)?.amount).toBe(456);
+		for (const c of byDest.values()) expect(c.source_transaction).toBe(chargeId);
+		expect(new Set(transfers.map((_, i) => keyOf(i))).size).toBe(2);
+
+		// The rows are stamped with their creator's transfer — the column refunds read
+		// and the retry job owes its worklist to.
+		const rows = await db.select().from(purchases).where(eq(purchases.stripePaymentIntentId, piId));
+		expect(rows).toHaveLength(2);
+		const stamped = new Map(rows.map((r) => [r.creatorId, r.stripeTransferId]));
+		expect(stamped.get(firstCreatorId)).toMatch(/^tr_/);
+		expect(stamped.get(secondCreatorId)).toMatch(/^tr_/);
+		expect(stamped.get(firstCreatorId)).not.toBe(stamped.get(secondCreatorId));
+
+		// Redelivery is a no-op for the split too: the pending predicate is the latch,
+		// and the idempotency keys mean even a racing re-run replays the same transfers.
+		expect((await sendWebhook(event)).status).toBe(200);
+		expect(fake.callsTo("transfers.create")).toHaveLength(2);
+	});
+
+	it("a transfer that fails leaves the debt to the retry job, which pays it with the same key", async () => {
+		// The fake answers with a transfer shaped object missing its id — the failure
+		// `transferCreatorShare` treats as "Stripe returned nothing usable".
+		fake.responses["transfers.create"] = {};
+		try {
+			const piId = `pi_${uid()}`;
+			const sessionId = `cs_${uid()}`;
+			await seedSplitBasket(sessionId);
+			const session = fakeSessionFor(piId);
+			session.id = sessionId;
+			fake.responses["checkout.sessions.list"] = asyncList([session]);
+			const event = stripeEvent("payment_intent.succeeded", {
+				id: piId,
+				object: "payment_intent",
+				latest_charge: `ch_${uid()}`,
+			});
+			expect((await sendWebhook(event)).status).toBe(200);
+
+			// Completed and unstamped — the debt the retry job exists to pay.
+			const rows = await db
+				.select()
+				.from(purchases)
+				.where(eq(purchases.stripePaymentIntentId, piId));
+			expect(rows).toHaveLength(2);
+			expect(rows.every((r) => r.stripeTransferId == null && r.status === "completed")).toBe(true);
+
+			// Re-arm the fake to succeed, then run the retry exactly as the cron does.
+			// The charge is resolved live (`paymentIntents.retrieve`, faked to answer
+			// one), and the idempotency key is the SAME one the completion attempt
+			// used — a crash between Stripe's call and the stamping is the case the key
+			// exists for, and this is that case rebuilt. The scan is global over
+			// untransferred shares (as it is in production), so the assertions pin
+			// THIS intent's keys and stamps rather than global counts.
+			fake.reset();
+			delete fake.responses["transfers.create"];
+			const attempted = await retryFailedTransfers();
+			expect(attempted).toBeGreaterThanOrEqual(2);
+			const keys = fake
+				.callsTo("transfers.create")
+				.map((c) => (c.args[1] as { idempotencyKey?: string }).idempotencyKey);
+			expect(keys).toContain(`purchase_transfer_${piId}_${firstCreatorId}`);
+			expect(keys).toContain(`purchase_transfer_${piId}_${secondCreatorId}`);
+			for (const c of fake.callsTo("transfers.create")) {
+				expect((c.args[0] as Stripe.TransferCreateParams).source_transaction).toMatch(/^ch_/);
+			}
+
+			const after = await db
+				.select()
+				.from(purchases)
+				.where(eq(purchases.stripePaymentIntentId, piId));
+			expect(after.every((r) => r.stripeTransferId != null)).toBe(true);
+		} finally {
+			delete fake.responses["transfers.create"];
+		}
+	});
+
+	it("never transfers a refunded row's share — the retry skips the dead purchase", async () => {
+		// The safety property of the retry's predicate: only `completed` rows match, so
+		// a purchase that refunded in the window between the failed transfer and the
+		// retry owes nobody anything — the buyer's money for that item is already gone
+		// from the charge the transfer would draw from.
+		fake.responses["transfers.create"] = {};
+		try {
+			const piId = `pi_${uid()}`;
+			const sessionId = `cs_${uid()}`;
+			await seedSplitBasket(sessionId);
+			const session = fakeSessionFor(piId);
+			session.id = sessionId;
+			fake.responses["checkout.sessions.list"] = asyncList([session]);
+			const event = stripeEvent("payment_intent.succeeded", {
+				id: piId,
+				object: "payment_intent",
+				latest_charge: `ch_${uid()}`,
+			});
+			expect((await sendWebhook(event)).status).toBe(200);
+
+			// Creator A's buyer refunds before the retry lands.
+			await db
+				.update(purchases)
+				.set({ status: "refunded" })
+				.where(
+					and(eq(purchases.stripePaymentIntentId, piId), eq(purchases.creatorId, firstCreatorId)),
+				);
+
+			fake.reset();
+			delete fake.responses["transfers.create"];
+			const attempted = await retryFailedTransfers();
+			expect(attempted).toBeGreaterThanOrEqual(1);
+			// The refunded creator's key is ABSENT — the whole safety property — and
+			// the surviving creator's share is paid.
+			const keys = fake
+				.callsTo("transfers.create")
+				.map((c) => (c.args[1] as { idempotencyKey?: string }).idempotencyKey);
+			expect(keys).not.toContain(`purchase_transfer_${piId}_${firstCreatorId}`);
+			expect(keys).toContain(`purchase_transfer_${piId}_${secondCreatorId}`);
+
+			// The refunded row stays unstamped forever — there is nothing left to move.
+			const [refundedRow] = await db
+				.select()
+				.from(purchases)
+				.where(
+					and(eq(purchases.stripePaymentIntentId, piId), eq(purchases.creatorId, firstCreatorId)),
+				);
+			expect(refundedRow.stripeTransferId).toBeNull();
+		} finally {
+			delete fake.responses["transfers.create"];
+		}
+	});
+});
+
 describe("Webhook: payment_intent.payment_failed", () => {
 	it("marks a pending purchase failed", async () => {
 		const piId = `pi_${uid()}`;
@@ -1514,9 +1790,8 @@ describe("Basket checkout — one charge, one card fee", () => {
 	 * Put the given Works into the buyer's SERVER-side basket (one add per Work, through
 	 * the route the Work page's own button calls), then act on the basket the way the
 	 * client now does — with no body naming ids, because the stored basket is what is
-	 * bought. The replace-on-clash courtesy lives in the add; a caller that wants a
-	 * mixed-creator basket for the refusal test seeds both creators' Works in sequence
-	 * and the ADD is what replaces — so `seed` here must not re-clear per call.
+	 * bought. `fresh` clears first; without it the adds append, which a mixed-creator
+	 * basket relies on: any number of creators coexist since the 2026-10-15 split.
 	 */
 	async function seedBasket(newIds: number[], { fresh = false } = {}) {
 		if (fresh) await clearBasketDirect();
@@ -1637,12 +1912,18 @@ describe("Basket checkout — one charge, one card fee", () => {
 		// customer email (`canConfirm` stays false, the greyed Pay button, 2026-10-06).
 		expect(params.customer_email).toBe(`${buyerName}@example.com`);
 
-		// The transfer is the whole basket's earnings, on the sum — the fixed $0.30 is per
-		// charge, which is the entire point of the basket.
-		const expected = calculateFees(new Decimal(UNIT).times(3), { type: "digital" });
+		// 🚨 The split shape (Parker, 2026-10-15): the session charges the PLATFORM — no
+		// `transfer_data` rides it, because a destination charge names exactly one
+		// connected account and that constraint is what this basket used to be refused
+		// over. The creator's share moves at completion, as one transfer per creator
+		// funded by the charge, pinned in the completion tests below.
 		expect(
-			(params.payment_intent_data as { transfer_data?: { amount?: number } }).transfer_data?.amount,
-		).toBe(Math.round(expected.creatorEarnings.toNumber() * 100));
+			(params.payment_intent_data as { transfer_data?: unknown }).transfer_data,
+		).toBeUndefined();
+		// The earnings the response reports are still the whole basket's, on the sum —
+		// the fee is per charge, which is the entire point of the basket.
+		const expected = calculateFees(new Decimal(UNIT).times(3), { type: "digital" });
+		expect(body.creatorEarnings).toBe(expected.creatorEarnings.toFixed(2));
 		// No tax figure in the response: the rate is resolved at the session.
 		expect(body.salesTax).toBeNull();
 		expect(body.buyerTotal).toBeNull();
@@ -1681,32 +1962,58 @@ describe("Basket checkout — one charge, one card fee", () => {
 		expect(sum((r) => r.salesTax).toFixed(2)).toBe("0.00");
 	});
 
-	it("refuses a basket spanning two creators, and creates no session", async () => {
-		// Seed X's Works, then Y's — the ADD of Y's Work REPLACES the basket (the
-		// one-creator courtesy), so to get a mixed table the mixed state must be reached
-		// past the add. It cannot be, which is the honesty being tested: assert the add
-		// itself replaced, then restore X's basket and confirm quote stays clean.
-		await seedBasket([otherCreatorWorkId], { fresh: true });
-		const clash = await req("/api/payments/basket/items", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: buyerCookie },
-			body: JSON.stringify({ workId: items[0].id }),
-		});
-		expect(clash.status).toBe(200);
-		const listed = await req("/api/payments/basket", {
+	it("carries two creators on one charge — the dealbreaker, fixed (2026-10-15)", async () => {
+		// The behavior this whole change exists to deliver: a basket holding two
+		// creators' Works checks out as ONE session, ONE charge, and never wiped the
+		// first creator's items on the second creator's add. The add is the ordinary
+		// route now — no seeded-table hack, because the mixed state is no longer a race
+		// only SQL could produce.
+		await seedBasket([items[0].id, otherCreatorWorkId], { fresh: true });
+		const added = await req("/api/payments/basket", {
 			headers: { Origin: ORIGIN, Cookie: buyerCookie },
 		});
-		const after = (await listed.json()) as { items: { workId: number }[] };
-		expect(after.items.map((i) => i.workId)).toEqual([items[0].id]);
+		expect(((await added.json()) as { count: number }).count).toBe(2);
 
-		// The mixed-creator REFUSAL is still live at checkout for the state a race could
-		// still produce (a creator account deleted mid-basket is the only path; the
-		// resolver's guard is what the unit suite pins — drive it through a seeded
-		// two-creator table written directly, the way the race would leave it).
-		await db.insert(basketItems).values({ userId: buyerId, workId: otherCreatorWorkId });
 		const { res, body } = await basket([]);
-		expect(res.status).toBe(400);
-		expect(body.code).toBe("mixed_creators");
+		expect(res.status).toBe(200);
+		const params = fake.lastCall("checkout.sessions.create")
+			?.args[0] as Stripe.Checkout.SessionCreateParams;
+		expect(params.line_items).toHaveLength(2);
+		expect(
+			(params.payment_intent_data as { transfer_data?: unknown }).transfer_data,
+		).toBeUndefined();
+
+		// One pending row per Work, each carrying its own creator — the completion path
+		// groups by exactly this column to split the charge.
+		const sessionId = String(body.clientSecret).split("_secret")[0];
+		const rows = await db
+			.select()
+			.from(purchases)
+			.where(eq(purchases.stripePaymentIntentId, sessionId));
+		expect(rows).toHaveLength(2);
+		expect(new Set(rows.map((r) => r.creatorId)).size).toBe(2);
+	});
+
+	it("refuses the basket when either creator cannot take the money", async () => {
+		// The precondition, now per creator: Anthers does not sell a creator's work
+		// when the money cannot reach them, and a mixed basket asks for several
+		// creators' money to move at once — every one of them must be reachable
+		// before the buyer is charged. A third creator with no connected account.
+		const { id: unconnected } = await signUp(`bskt_unconnected_${run}`);
+		const strandedWorkId = (
+			await insertWork({
+				creatorId: unconnected,
+				type: "game",
+				title: `Unconnected creator ${run}`,
+				streamEnabled: false,
+				downloadEnabled: true,
+				access: ODD,
+			})
+		).id;
+		await seedBasket([items[0].id, strandedWorkId], { fresh: true });
+		const { res, body } = await basket([]);
+		expect(res.status).toBe(409);
+		expect(body.error).toBe("This creator can't accept payments yet.");
 		expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
 	});
 
@@ -1936,8 +2243,8 @@ describe("Checkout — session construction under automatic tax", () => {
 		}
 	});
 
-	it("pins the creator's transfer to their earnings, location-independent", async () => {
-		const acctId = await connectCreator();
+	it("charges the platform — the creator's share is pinned on the row, not the session", async () => {
+		await connectCreator();
 
 		const { res, body } = await checkout();
 		expect(res.status).toBe(200);
@@ -1945,27 +2252,22 @@ describe("Checkout — session construction under automatic tax", () => {
 		const params = fake.lastCall("checkout.sessions.create")?.args[0] as
 			| Stripe.Checkout.SessionCreateParams
 			| undefined;
-		const transfer = (
-			params?.payment_intent_data as { transfer_data?: { destination?: string; amount?: number } }
-		)?.transfer_data;
+		const intentData = params?.payment_intent_data as {
+			transfer_data?: unknown;
+			application_fee_amount?: number;
+		};
 
-		// The assertion that matters, stated in STRIPE's terms rather than ours: the
-		// creator's transfer is PINNED to their earnings rather than left as "everything
-		// that is not the application fee", because under automatic tax the tax varies
-		// with the buyer's address and no static fee can capture it. Whatever tax Stripe
-		// adds stays on the platform side by construction, so the creator's take-home
-		// never depends on where the buyer lives.
-		//
-		// And deliberately NO `application_fee_amount` anywhere: a static fee was the
-		// old structure's way of holding the tax back, and resurrecting it beside a
-		// pinned transfer would double-count the same money.
-		expect(transfer).toEqual({
-			destination: acctId,
-			amount: Math.round(expected.creatorEarnings.toNumber() * 100),
-		});
-		expect(
-			(params?.payment_intent_data as { application_fee_amount?: number }).application_fee_amount,
-		).toBeUndefined();
+		// The split shape (Parker, 2026-10-15): the session charges the PLATFORM and the
+		// creator's share moves at completion as one transfer per creator, funded by the
+		// charge — so nothing about the destination rides the session. The earnings the
+		// completion transfer will move are pinned where the money's record lives, the
+		// purchase row, at the price the creator set: location-independent by the same
+		// construction the old `transfer_data[amount]` pin bought, one door further on.
+		expect(intentData.transfer_data).toBeUndefined();
+		// And deliberately NO `application_fee_amount` either: a static fee was the old
+		// structure's way of holding the tax back, and it has no meaning under a platform
+		// charge — whatever tax Stripe adds stays on the platform side by construction.
+		expect(intentData.application_fee_amount).toBeUndefined();
 		expect(body.creatorEarnings).toBe(expected.creatorEarnings.toFixed(2));
 	});
 

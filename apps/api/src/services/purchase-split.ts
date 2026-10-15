@@ -64,7 +64,10 @@ async function transferCreatorShare(
 	creatorId: number,
 	rows: Purchase[],
 ): Promise<string | null> {
-	const earnings = rows.reduce((acc, r) => acc.plus(new Decimal(r.creatorEarnings)), new Decimal(0));
+	const earnings = rows.reduce(
+		(acc, r) => acc.plus(new Decimal(r.creatorEarnings)),
+		new Decimal(0),
+	);
 	if (earnings.lte(0)) return null;
 
 	const [account] = await db
@@ -82,15 +85,26 @@ async function transferCreatorShare(
 		return null;
 	}
 
+	// Funded by the charge and by nothing else — `source_transaction` is load-bearing, not
+	// decoration: without it the transfer draws from the platform balance generally rather
+	// than from this buyer's payment, which is exactly the conduit shape the decision
+	// exists to avoid. A PaymentIntent whose charge cannot be named (the event shape
+	// degraded, a retrieve that failed) is therefore NOT transferable yet: skip, log, and
+	// the retry job resolves the charge live and pays the debt.
+	if (!charge.latestCharge) {
+		console.error(
+			`purchase split: no charge to fund the transfer for ${charge.id}, creator ${creatorId} — the retry job owns it`,
+		);
+		return null;
+	}
+
 	try {
 		const transfer = await createTransfer(
 			{
 				amount: Math.round(earnings.toNumber() * 100),
 				currency: "usd",
 				destination: account.stripeAccountId,
-				// Funded by the charge — the split moves the buyer's payment onward rather
-				// than drawing from any balance Anthers holds for other purposes.
-				...(charge.latestCharge ? { source_transaction: charge.latestCharge } : {}),
+				source_transaction: charge.latestCharge,
 				metadata: {
 					kind: "purchase_split",
 					paymentIntentId: charge.id,
@@ -103,7 +117,12 @@ async function transferCreatorShare(
 		await db
 			.update(purchases)
 			.set({ stripeTransferId: transfer.id, updatedAt: new Date() })
-			.where(inArray(purchases.id, rows.map((r) => r.id)));
+			.where(
+				inArray(
+					purchases.id,
+					rows.map((r) => r.id),
+				),
+			);
 		return transfer.id;
 	} catch (err) {
 		console.error(

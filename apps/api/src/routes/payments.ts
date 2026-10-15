@@ -1425,11 +1425,10 @@ const paymentRoutes = new Hono()
 	 * `list` returns only what resolves, so a badge counts Work the buyer could actually be
 	 * charged for and nothing else.
 	 *
-	 * The one-creator rule keeps the client's courtesy (`add` REPLACES on a clash and says
-	 * so) in `services/basket.ts` — the sign-in merge and the Work-page button go through
-	 * the same function, so they cannot disagree; quote and checkout still refuse a
-	 * `mixed_creators` basket on top, because the table can only be made to clash by a
-	 * race (a creator account deleted mid-basket) and Stripe would refuse the charge.
+	 * The basket carries any number of creators (Parker, 2026-10-15): `add` appends in
+	 * `services/basket.ts` — the sign-in merge and the Work-page button go through the
+	 * same function, so they cannot disagree — and the one charge the checkout builds is
+	 * settled per creator at completion (`services/purchase-split.ts`).
 	 */
 	// What the header badge and the basket page read. Resolved live, per read: a Work
 	// that stopped being buyable does not count — the buyer is never teased with a badge
@@ -1527,10 +1526,7 @@ const paymentRoutes = new Hono()
 		// creators (2026-10-15), and the page renders these server figures rather than
 		// deriving its own — a receipt that computes its own totals stops reconciling the
 		// moment a dial moves.
-		const byCreator = new Map<
-			number,
-			{ receives: Decimal; itemCount: number }
-		>();
+		const byCreator = new Map<number, { receives: Decimal; itemCount: number }>();
 		q.items.forEach((i, idx) => {
 			const cid = i.work.creatorId as number;
 			const group = byCreator.get(cid) ?? { receives: new Decimal(0), itemCount: 0 };
