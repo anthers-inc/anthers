@@ -12,17 +12,18 @@
 #
 # **What the gate runs depends on where the push is going.** A push to `main` or `release`
 # verifies in full (`make verify`) — `release` is the deploy gate and `main` is the branch
-# every merge group is built on, so nothing cheap may stand in for the whole suite there.
+# every pull request lands on, so nothing cheap may stand in for the whole suite there.
 # A push to a task branch verifies the fast tier (`make verify-fast`: typecheck, lint, the
-# unit suites, no Playwright), because the browser suites are the pipeline's job now: CI
-# runs them on the PR head and on every merge group, and the queue blocks on the result.
-# This is the 2026-10-11 rebalance, and the reasoning must say what changed: the gate once
-# ran a subset on every push (`bun test` alone is the unit suites, and `--project=gauntlet`
-# skips the project the marketing specs live in) and a copy change sailed through it and
-# failed in CI anyway — because CI then ran nothing a red result would block. It is a true
-# gate now, and the merge group checks the combined state, so the failures a subset misses
-# are caught by something with teeth. The split is tested (`scripts/pre-push-hook.test.ts`
-# refuses a release push handed the fast tier), not a promise.
+# unit suites, no Playwright), because the browser suites are CI's job: the worktree runs
+# them local-only under the machine-wide lock, and CI runs them parallel and free on the
+# PR head, where the branch's required checks block on the result. The reasoning must say
+# what changed: the gate once ran a subset on every push (`bun test` alone is the unit
+# suites, and `--project=gauntlet` skips the project the marketing specs live in) and a
+# copy change sailed through it and failed in CI anyway — because CI then ran nothing a
+# red result would block. It is a true gate now, and the PR's required checks answer the
+# combined state, so the failures a subset misses are caught by something with teeth. The
+# split is tested (`scripts/pre-push-hook.test.ts` refuses a release push handed the fast
+# tier), not a promise.
 #
 # The one content-based exception is a push whose every changed file is markdown, which
 # runs `make verify-docs` — the checks that read markdown at all — instead. See
@@ -159,7 +160,7 @@ printf '\033[36m→ pre-push: %s — running `make %s` before pushing\033[0m\n' 
 if [ "$target" = "verify" ]; then
 	printf '\033[36m→ pre-push: this is the whole suite (typecheck, lint, migrate, unit, full Playwright) — minutes, not seconds\033[0m\n'
 else
-	printf '\033[36m→ pre-push: this is the fast tier (typecheck, lint, migrate, unit) — minutes, but no Playwright; the browser suites run in CI on the PR head and every merge group\033[0m\n'
+	printf '\033[36m→ pre-push: this is the fast tier (typecheck, lint, migrate, unit) — minutes, but no Playwright; the browser suites run in CI on the PR head\033[0m\n'
 fi
 
 worktree_dir=".worktrees/pre-push-verify-$$"

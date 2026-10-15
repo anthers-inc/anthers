@@ -275,15 +275,6 @@ stripe-webhooks: ## Forward Stripe test webhooks to the local API (run alongside
 verify: ## Run everything CI runs: typecheck, lint, unit tests, full Playwright (heavy — waits behind another session's run when one is live)
 	@sh scripts/heavy-run.sh make --no-print-directory verify-inner
 
-# The arm ceremony, reached through the same script its `/arm` front door calls. It holds
-# the landing lock, reconciles and radars, constructs the projected tip, and runs the
-# whole suite (`make verify`, browser suites included) against it — see scripts/arm.ts.
-# It never merges directly and never touches the board: on green it prints the receipt
-# for the session to stamp.
-arm: ## Arm a PR through the landing front half's ceremony: make arm PR=<number>
-	@test -n "$(PR)" || { echo 'usage: make arm PR=<number>'; exit 64; }
-	@bun run scripts/arm.ts "$(PR)"
-
 # `verify`'s inner body, under the lock the wrapper above holds. Never run it directly —
 # `make verify` is the serialized door. The green run stamps the tree it ran
 # (scripts/verify-stamp.ts, only when tracked files are clean) so the next push of this
@@ -301,12 +292,12 @@ verify-inner:
 	bun run scripts/verify-stamp.ts write verify
 
 # `verify-fast` is what a push to a task branch verifies at the gate: everything except
-# what spins up Playwright. The browser suites still run — in CI, on the PR head and on
-# every merge group — where they are the responsibility of the pipeline rather than of the
-# session pushing. The tier's stamp is a fast stamp, which satisfies only a fast push; the
+# what spins up Playwright. The browser suites still run — in CI, on the PR head — where
+# they run parallel and free, rather than serializing under the machine-wide lock the way
+# a local run does. The tier's stamp is a fast stamp, which satisfies only a fast push; the
 # full suite's stamp satisfies everything (see scripts/verify-stamp.ts). Pushes to
 # `main` or `release` keep the whole `verify` regardless of what they change: `release` is
-# the deploy gate, and `main` is the branch every merge group is built on.
+# the deploy gate, and `main` is the branch every pull request lands on.
 verify-fast: ## Run what a task-branch push verifies: typecheck, lint, the unit suites — no Playwright (the browser suites run in CI)
 	@sh scripts/heavy-run.sh make --no-print-directory verify-fast-inner
 

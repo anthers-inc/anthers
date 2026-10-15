@@ -8,8 +8,8 @@
  * 🚨 The naming decision in full: a generated migration carries a **timestamp prefix**
  * (`20261015-214200_lucky_sersi` — the UTC `when` its journal entry records, then
  * drizzle-kit's codename) instead of the sequence number, so two parallel schema
- * branches can never generate the same name and the merge queue never sees the
- * double-bounce collision its first weeks taught (`0139`, twice). Lexicographic order
+ * branches can never generate the same name, which is what closed the double-bounce
+ * collision its first weeks taught (`0139`, twice). Lexicographic order
  * equals chronological order, and every timestamped name sorts after every
  * sequence-numbered name (`0…` < `2…`), so the old and new number spaces interleave
  * correctly with no history rewrite — the transition needed none and took none.
