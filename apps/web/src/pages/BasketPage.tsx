@@ -43,8 +43,8 @@ import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { ShoppingBagIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useBasket } from "@/lib/basket";
-import BasketCheckout, { workIdsKey } from "../components/basket/BasketCheckout";
+import { basketContentKey, useBasket } from "@/lib/basket";
+import BasketCheckout from "../components/basket/BasketCheckout";
 
 /**
  * The Sales Tax tooltip's sentence, in the two states the derivation can be in: before
@@ -64,14 +64,33 @@ function salesTaxDerivation(totals: SessionTotals | null, quote: Quote): string 
 }
 
 interface Quote {
-	items: {
-		workId: number;
-		slug: string;
-		title: string | null;
-		/** This line's share of the basket's ONE card fee — the creator group's tooltip reads it. */
-		processingFee: string;
-		price: string;
-	}[];
+	/**
+	 * The receipt's lines, in basket order — a Work or a Badge rung each, discriminated.
+	 * A Badge line carries the rung's monthly price beside the first transaction's, so an
+	 * upgrade line can read as the upgrade it is.
+	 */
+	items: (
+		| {
+				kind: "work";
+				workId: number;
+				slug: string;
+				title: string | null;
+				type: string;
+				thumbnail: string | null;
+				processingFee: string;
+				price: string;
+				recurring: null;
+		  }
+		| {
+				kind: "badge";
+				badgeId: number;
+				title: string | null;
+				thumbnail: null;
+				processingFee: string;
+				price: string;
+				recurring: string;
+		  }
+	)[];
 	/** One entry per creator the charge covers, with the server-computed receives figure. */
 	creators: {
 		handle: string | null;
@@ -121,7 +140,7 @@ export default function BasketPage() {
 	 * group's receives figure read straight off the quote (server-computed, never derived
 	 * here: a receipt that computes its own totals stops reconciling the moment a dial
 	 * moves). The lines join their group through the basket's own items, which are what
-	 * carry the creator handle; a quote line whose Work left the basket mid-render simply
+	 * carry the creator handle; a quote line whose item left the basket mid-render simply
 	 * matches no group and renders nowhere.
 	 */
 	const groups = useMemo(() => {
@@ -131,27 +150,29 @@ export default function BasketPage() {
 			.map((c) => ({
 				handle: c.handle as string,
 				receives: c.receives,
-				lines: quote.items.filter(
-					(line) => items.find((i) => i.workId === line.workId)?.creatorHandle === c.handle,
-				),
+				lines: quote.items.filter((line) => {
+					const held =
+						line.kind === "badge"
+							? items.find((i) => i.kind === "badge" && i.badgeId === line.badgeId)
+							: items.find((i) => i.kind === "work" && i.workId === line.workId);
+					return held?.creatorHandle === c.handle;
+				}),
 			}));
 	}, [items, quote]);
 
 	// 🚨 Derived ONCE per basket content, not per render — `items` is re-read from
-	// storage on every basket event, so `items.map(...)` inline at the use site was a new
+	// storage on every basket event, so an inline mapping at the use site was a new
 	// array identity on every render, and the checkout's session POST keyed on that
 	// identity re-fired on the totals-reporting re-render, remounting the Payment
 	// Element mid-fill (the first live checkout's worst defect). Stable identity here is
-	// the belt; BasketCheckout keys on sorted CONTENT (the suspenders).
-	const workIds = useMemo(() => items.map((i) => i.workId), [items]);
-	/** The basket's CONTENT identity — what a re-quote actually keys on. */
-	const contentKey = workIdsKey(workIds);
+	// the belt; BasketCheckout keys on sorted CONTENT by the same key (the suspenders).
+	const contentKey = basketContentKey(items);
 
-	// The quote's re-fire trigger is the basket's CONTENT — the sorted-id key below —
+	// The quote's re-fire trigger is the basket's CONTENT — the kind-tagged sorted key above —
 	// and never the `items` array identity, whose churn is exactly the re-firing the
 	// first live checkout paid for. `useExhaustiveDependencies` wants the body's own
 	// reads listed; the key is deliberately NOT one of them, so the suppression is the
-	// honest form and the deps below carry only `workIds.length` beside it.
+	// honest form and the deps below carry only `items.length` beside it.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the trigger is basket CONTENT, not a body value
 	const refresh = useCallback(async () => {
 		if (items.length === 0) {
@@ -179,7 +200,7 @@ export default function BasketPage() {
 		} finally {
 			setLoading(false);
 		}
-	}, [contentKey, workIds.length]);
+	}, [contentKey, items.length]);
 
 	useEffect(() => {
 		void refresh();
@@ -311,15 +332,40 @@ export default function BasketPage() {
 							{group.lines.map((item) => {
 								// The list's own item record — the remove buttons work off the
 								// BASKET's items (the source with handles), matched by id.
-								const held = items.find((i) => i.workId === item.workId);
+								const held =
+									item.kind === "badge"
+										? items.find((i) => i.kind === "badge" && i.badgeId === item.badgeId)
+										: items.find((i) => i.kind === "work" && i.workId === item.workId);
+								if (!held) return null;
+								const isBadge = item.kind === "badge";
+								const upgraded = isBadge && item.recurring !== item.price;
 								return (
-									<li key={item.workId} className="flex items-center justify-between gap-2 py-2">
-										<Link
-											to={creatorWorkUrl(group.handle, item.slug)}
-											className="min-w-0 flex-1 truncate text-sm text-base-content/80 link-hover"
-										>
-											<span className="block truncate">{item.title ?? "Untitled"}</span>
-										</Link>
+									<li
+										key={isBadge ? `b${item.badgeId}` : `w${item.workId}`}
+										className="flex items-center justify-between gap-2 py-2"
+									>
+										{isBadge ? (
+											<Link
+												to={`${profileUrl(group.handle)}?tab=badges`}
+												className="min-w-0 flex-1 truncate text-sm text-base-content/80 link-hover"
+											>
+												<span className="block truncate">
+													{item.title ?? "A Badge"}
+													{upgraded && (
+														<span className="ml-1.5 text-xs text-base-content/50">
+															${item.recurring}/mo after
+														</span>
+													)}
+												</span>
+											</Link>
+										) : (
+											<Link
+												to={creatorWorkUrl(group.handle, item.slug)}
+												className="min-w-0 flex-1 truncate text-sm text-base-content/80 link-hover"
+											>
+												<span className="block truncate">{item.title ?? "Untitled"}</span>
+											</Link>
+										)}
 										<span className="shrink-0 text-sm tabular-nums text-base-content/80">
 											${item.price}
 										</span>
@@ -327,7 +373,13 @@ export default function BasketPage() {
 											<button
 												type="button"
 												className="btn btn-ghost btn-xs px-0"
-												onClick={() => held && remove(held.workId)}
+												onClick={() =>
+													remove(
+														item.kind === "badge"
+															? { kind: "badge", badgeId: item.badgeId }
+															: { kind: "work", workId: item.workId },
+													)
+												}
 												aria-label={`Remove ${item.title ?? "item"}`}
 											>
 												<XMarkIcon className="w-4 h-4" />
@@ -409,7 +461,7 @@ export default function BasketPage() {
 					<section className="order-3 lg:order-1" data-testid="basket-checkout-column">
 						{user ? (
 							<BasketCheckout
-								workIds={workIds}
+								contentKey={contentKey}
 								buyerTotal={quote.subtotal}
 								onTotals={handleTotals}
 								onComplete={() => {

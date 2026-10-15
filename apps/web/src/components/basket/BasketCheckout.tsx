@@ -4,24 +4,23 @@
  * 2026-10-03: payments are the one place that cannot be rough around the edges).
  *
  * Since the Work page's inline checkout was retired, this is the ONLY place in the app
- * where `CheckoutElementsProvider` mounts and the only purchase form that exists. A
- * single Work bought with "Buy Now" lands here exactly as a five-item basket does — the
- * flow is one flow, exercised at every count.
+ * where `CheckoutElementsProvider` mounts and the only purchase form that exists. Every
+ * purchase — a single Work, a five-item basket, a Badge's first Month beside Works —
+ * lands here; the flow is one flow, exercised at every count and every kind.
  *
  * The session is created server-side (`POST /basket/checkout`) and confirmed in place
  * with Stripe's Checkout-flavored Payment Element. The billing address is Anthers' own
  * US-only form (`CheckoutBillingAddressBlock`) writing to the session as the buyer types
  * (no address button — see `useSessionBillingAddress`), so Stripe Tax resolves the rate
  * and the buyer sees the tax-inclusive total BEFORE confirming. Nothing here prices
- * anything: the server builds the line items, the tax codes and the transfer; this
+ * anything: the server builds the line items, the tax codes and the transfers; this
  * component reports what they resolved to.
  *
  * 🚨 **The session POST fires once per basket content — never per render.** The first
- * live checkout remounted this whole subtree every time the parent re-rendered (totals
- * reporting up, the quote refreshing), because a fresh `workIds` array identity reached
- * the fetch effect and re-fired it: the address the buyer had typed was wiped mid-fill.
- * See `workIdsKey` for how the identity is pinned now, and the failing case the session
- * remount test exists to keep out.
+ * live checkout remounted this whole subtree every time the parent re-rendered, because
+ * a fresh id-array identity reached the fetch effect and re-fired it — see
+ * `useBasketClientSecret` for how the identity is pinned now, by the parent's content
+ * key, and the failing case the session remount test exists to keep out.
  *
  * 🚨 **Reliability rules this file owns** (each paid for by the first live checkout,
  * 2026-10-03):
@@ -50,7 +49,14 @@ import {
 } from "../payments/useSessionBillingAddress";
 
 interface BasketCheckoutProps {
-	workIds: number[];
+	/**
+	 * The basket's CONTENT identity — every line's id, kind-tagged, sorted and joined
+	 * (`basketContentKey` in `lib/basket.ts` computes it; the parent derives it once per
+	 * basket content). The session POST fires when this changes, and never on identity
+	 * churn; the body carries nothing either way (the server buys the account's own
+	 * stored basket).
+	 */
+	contentKey: string;
 	/** Server-quoted subtotal, shown until the session's real total resolves. */
 	buyerTotal: string;
 	/**
@@ -72,17 +78,11 @@ interface BasketCheckoutProps {
 	onComplete: () => void;
 }
 
-/**
- * A content identity for the basket the session is being created for: the ids sorted and
- * joined. Two arrays of the same ids are the same basket, whatever their identity — this
- * is the value the fetch effect keys on, because the page renders from `localStorage`
- * reads whose array identity churns on every render.
- */
-export function workIdsKey(workIds: number[]): string {
-	return [...workIds].sort((a, b) => a - b).join(",");
-}
-
-function CheckoutForm({ buyerTotal, onComplete, onTotals }: Omit<BasketCheckoutProps, "workIds">) {
+function CheckoutForm({
+	buyerTotal,
+	onComplete,
+	onTotals,
+}: Omit<BasketCheckoutProps, "contentKey">) {
 	const checkoutState = useCheckoutElements();
 	const savedPrefill = useSavedBillingAddress();
 	const billing = useSessionBillingAddress(checkoutState, savedPrefill);
@@ -149,7 +149,7 @@ function CheckoutForm({ buyerTotal, onComplete, onTotals }: Omit<BasketCheckoutP
 
 		try {
 			// The session was already created by the provider's client secret fetch — the
-			// server built its line items, tax codes and transfer when that happened, so
+			// server built its line items, tax codes and transfers when that happened, so
 			// confirming is all that is left. Stripe's own message is shown on failure —
 			// "Your card was declined", "insufficient funds" — never a paraphrase.
 			const result = await checkoutState.checkout.confirm();
@@ -240,22 +240,21 @@ function CheckoutForm({ buyerTotal, onComplete, onTotals }: Omit<BasketCheckoutP
  * road back was a reload — which on the page holding the money reads as "the payment
  * broke". The server's own `{ error }` text renders verbatim, and retrying re-fires
  * the same POST without touching anything else on the page.
+ *
+ * 🚨 **The POST fires once per basket content, by CONTENT rather than by dependency
+ * identity.** The first live checkout keyed this effect on a `workIds` array — a fresh
+ * array identity from `items.map(...)` on every render — so the totals-reporting
+ * re-render that follows a tax resolution re-fired the POST and remounted the Element
+ * tree from scratch: card cleared, address reset, resolved tax discarded. The buyer read
+ * that as "the page refreshed and wiped my form". The parent-derived CONTENT key ends
+ * that class entirely: the parent may render as often as it likes, and the POST re-fires
+ * only when the sorted, kind-tagged contents actually changed (a Badge line added to a
+ * basket of Works re-fires it too — the charge is a new one).
  */
-function useBasketClientSecret(workIds: number[]) {
+function useBasketClientSecret(contentKey: string) {
 	const [secret, setSecret] = useState<string | null>(null);
 	const [failed, setFailed] = useState<string | null>(null);
 	const [fetching, setFetching] = useState(true);
-
-	// 🚨 The POST fires once per basket content, by CONTENT rather than by dependency
-	// identity. The first live checkout keyed this effect on `workIds` — a fresh array
-	// from `items.map(...)` on every render — so the totals-reporting re-render that
-	// follows a tax resolution re-fired the POST and remounted the Element tree from
-	// scratch: card cleared, address reset, resolved tax discarded. The buyer read that
-	// as "the page refreshed and wiped my form". The ref pin means the parent may render
-	// a fresh array as often as it likes; the effect below re-runs on every re-render
-	// (so a genuinely NEW basket — an id added or removed — is still picked up the
-	// moment it arrives) but fires only when the sorted contents actually changed.
-	const workIdsRef = useRef(workIds);
 	const sentKeyRef = useRef<string | null>(null);
 
 	const fetchSecret = useCallback(async () => {
@@ -287,10 +286,8 @@ function useBasketClientSecret(workIds: number[]) {
 	}, []);
 
 	useEffect(() => {
-		workIdsRef.current = workIds;
-		const key = workIdsKey(workIds);
-		if (sentKeyRef.current === key) return;
-		sentKeyRef.current = key;
+		if (sentKeyRef.current === contentKey) return;
+		sentKeyRef.current = contentKey;
 		void fetchSecret();
 	});
 
@@ -298,7 +295,7 @@ function useBasketClientSecret(workIds: number[]) {
 }
 
 export default function BasketCheckout(props: BasketCheckoutProps) {
-	const { secret, failed, fetching, retry } = useBasketClientSecret(props.workIds);
+	const { secret, failed, fetching, retry } = useBasketClientSecret(props.contentKey);
 	if (failed) {
 		return (
 			<div className="alert alert-warning text-sm">
@@ -324,7 +321,10 @@ export default function BasketCheckout(props: BasketCheckoutProps) {
 				// field empty and Stripe held `canConfirm` false forever: the fully-filled
 				// form with a greyed Pay button (2026-10-06). `never` removes the block —
 				// Link saved-payment-methods are a future decision, and Anthers' checkout
-				// asks for exactly what the charge needs.
+				// asks for exactly what the charge needs. (The Badge checkout's own save —
+				// a recurrence needing a card on file — is `setup_future_usage` on the
+				// session, which saves without this sub-form; the probe records the exact
+				// behavior. See the basket checkout's server-side note.)
 				elementsOptions: {
 					savedPaymentMethod: { enableSave: "never", enableRedisplay: "never" },
 				},
