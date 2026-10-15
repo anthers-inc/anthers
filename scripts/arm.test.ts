@@ -25,6 +25,7 @@ import { join } from "node:path";
 import {
 	armRefusalIsAlreadyArm,
 	constructProjectedTip,
+	entryInQueue,
 	holdLandingLock,
 	installGate,
 	isReusableReceipt,
@@ -297,5 +298,14 @@ describe("the arm ceremony", () => {
 		expect(
 			events.some((event) => event.event === "hold-resolution" && event.holdId === "hold-this"),
 		).toBe(true);
+	});
+});
+
+describe("the arm's queue-ingestion verification", () => {
+	test("entryInQueue reads the queue's own entries, keyed on the pr", () => {
+		const entries = [{ pullRequest: { number: 518 } }, { pullRequest: { number: 520 } }];
+		expect(entryInQueue(entries, 520)).toBe(true);
+		expect(entryInQueue(entries, 521)).toBe(false);
+		expect(entryInQueue([], 520)).toBe(false);
 	});
 });

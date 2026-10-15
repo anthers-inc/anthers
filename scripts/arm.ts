@@ -23,7 +23,7 @@
  * on green this script prints the projected-tip receipt and the stamp instruction, and
  * the session stamps `0 - Queued` + `pr-ref` through the vault tooling exactly as
  * today's enqueue protocol; on a bounce it prints what the tooling said and the session
- * writes the dated task line and moves the task to `1 - In Progress`. This split keeps
+ * writes the dated task line and moves the task to `2 - In Progress`. This split keeps
  * every board write behind the vault CLI layer the rules guard, and keeps this file
  * runnable headless if the step-3 landing loop ever wants it.
  *
@@ -348,9 +348,9 @@ function bounce(
 	lines: string[],
 ): ArmDecision {
 	if (pr !== undefined) {
-		appendEvent({ event: "bounce", pr, reason, detail, disposition: "1 - In Progress" });
+		appendEvent({ event: "bounce", pr, reason, detail, disposition: "2 - In Progress" });
 	} else {
-		appendEvent({ event: "bounce", reason, detail, disposition: "1 - In Progress" });
+		appendEvent({ event: "bounce", reason, detail, disposition: "2 - In Progress" });
 	}
 	return { outcome: "bounce", lines };
 }
@@ -541,6 +541,77 @@ function gateTier(gatePath: string): { result: "green" | "red"; durationMs: numb
 }
 
 /**
+ * The gate's other skip: the tip already carries a full green stamp, from any tracked-
+ * clean checkout that ran the suite at exactly that commit within the stamp window —
+ * which is the re-arm-after-a-dropped-arm case in practice (a bounced arm's gate wrote
+ * its stamp at this same tip). The tier rule is the pre-push hook's own: a full stamp
+ * satisfies only the full tier, and this gate IS the full tier; a fast stamp never
+ * stands in.
+ */
+export function fullStampAt(tip: string): boolean {
+	const check = spawnSync("bun", ["run", "scripts/verify-stamp.ts", "check", tip, "verify"], {
+		encoding: "utf8",
+	});
+	return check.status === 0;
+}
+
+/**
+ * The queue's own answer for whether an armed pr was ingested — read from
+ * `repository.mergeQueue.entries`, never from the PR's auto-merge field: the field
+ * clears while a merge group is being tested (the 2026-10-12 predicate incident), and
+ * it alone both false-alarms in-flight groups and false-confirms an arm that was
+ * silently dropped.
+ */
+export interface QueueEntry {
+	pullRequest: { number: number };
+}
+
+export function entryInQueue(entries: QueueEntry[], pr: number): boolean {
+	return entries.some((entry) => entry.pullRequest.number === pr);
+}
+
+export function readQueueEntries(): { nodes: QueueEntry[] } | undefined {
+	const result = gh(
+		[
+			"api",
+			"graphql",
+			"-f",
+			'query={ repository(owner: "anthers-inc", name: "anthers") { mergeQueue { entries(first: 60) { nodes { pullRequest { number } } } } } }',
+		],
+		{ pin: false },
+	);
+	if (result.status !== 0) return undefined;
+	try {
+		return (
+			JSON.parse(result.stdout) as {
+				data?: { repository?: { mergeQueue?: { entries?: { nodes: QueueEntry[] } } } };
+			}
+		).data?.repository?.mergeQueue?.entries;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * How long the ceremony waits for the queue to show an arm it was handed. Ingestion is
+ * near-instant when it happens at all; the polls exist so a slow GraphQL read is not
+ * mistaken for a dropped arm. A check still pending minutes away is the bounce's
+ * business, never the poller's.
+ */
+const INGEST_POLLS = 6;
+const INGEST_POLL_SECONDS = 5;
+
+export async function awaitIngest(pr: number): Promise<boolean> {
+	for (let attempt = 0; attempt < INGEST_POLLS; attempt++) {
+		if (attempt > 0)
+			await new Promise((resolve) => setTimeout(resolve, INGEST_POLL_SECONDS * 1000));
+		const read = readQueueEntries();
+		if (read && entryInQueue(read.nodes, pr)) return true;
+	}
+	return false;
+}
+
+/**
  * When this candidate gates green, every radar hold whose finding named this entry is
  * answered `collision-avoided`: the pair was either tested clean in the composite or
  * made moot by the other side's landing, which is what "dodged" means in the ledger.
@@ -656,6 +727,10 @@ async function runCeremony(pr: number, options: ArmOptions): Promise<ArmDecision
 			log(
 				`→ the tip is the receipt of the last arm — the composite already gated green, no second ticket`,
 			);
+		} else if (fullStampAt(tip)) {
+			log(
+				`→ the tip carries a full verify stamp — the composite already ran green, no second ticket`,
+			);
 		} else {
 			const install = installGate({
 				gatePath: armGatePath(options),
@@ -706,6 +781,31 @@ async function runCeremony(pr: number, options: ArmOptions): Promise<ArmDecision
 		if (armResult.status !== 0) {
 			log(
 				"→ GitHub says the pr is already enqueued — the auto-merge stands, the receipt is the re-arm's product",
+			);
+		}
+		// ⭐ The arm is an enqueue only when the queue says so. `gh pr merge --squash
+		// --auto` on a queued repository can silently do nothing and exit 0: an arm
+		// issued while the PR's own checks are still pending is accepted and dropped,
+		// leaving no entry and no auto-merge field — a green composite that no queue
+		// ever ingests (#520, 2026-10-15, the trap's first live occurrence here; the
+		// settled remedy is re-issue on green, verified against entries). So the ceremony
+		// verifies the entry before it records or reports an arm: the arm event and the
+		// receipt are written only for a PR the queue actually took, and an un-ingested
+		// arm bounces with the re-arm door named.
+		const ingested = await awaitIngest(pr);
+		if (!ingested) {
+			return bounce(
+				"pr-state",
+				"the arm's gh pr merge was accepted but the queue never ingested the pr — the pending-checks silent no-op",
+				pr,
+				[
+					line(
+						`→ the arm ran while #${pr}'s own checks were still pending; GitHub accepted the request and dropped it silently`,
+					),
+					line(
+						`→ re-run /arm (or arm.ts <n> --rearm) once #${pr}'s checks report green — the gate at the same tip reuses this run's full verify stamp, so the re-arm is seconds`,
+					),
+				],
 			);
 		}
 		appendEvent({
