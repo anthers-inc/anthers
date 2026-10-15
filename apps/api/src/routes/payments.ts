@@ -41,20 +41,16 @@ import {
 	works,
 } from "@anthers/db/schema";
 import { cycleEnd, cycleStart } from "@anthers/shared/billing-cycle";
-import type { Badge } from "@anthers/shared/constants";
 import {
 	CLOTHING_TAX_CODE,
-	heldBadgeName,
 	isChargeableAmount,
 	MAX_BASKET_ITEMS,
-	MERCH_BADGE_DISCOUNT,
-	MERCH_BADGE_DISCOUNT_RATE,
 	REFUND_AUTO_CAP,
 } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import type { WorkType } from "@anthers/shared/tax-codes";
-import { purchaseTaxCode } from "@anthers/shared/tax-codes";
+import { purchaseTaxCode, SHIPPING_TAX_CODE } from "@anthers/shared/tax-codes";
 import { zValidator } from "@hono/zod-validator";
 import Decimal from "decimal.js";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
@@ -76,19 +72,27 @@ import {
 import { getOptionalUserId, requireAuth, requireVerified } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
 import { resolveAccess } from "../services/access.js";
-import { heldAnthersBadgeAmount } from "../services/anthers-badges.js";
 import { addBasketItem, clearBasket, listBasket, removeBasketItem } from "../services/basket.js";
 import {
 	linkCheckoutCustomer,
+	savedBillingAddress,
 	stripeCustomerIdFor,
 	syncSubscriptionToAccount,
 } from "../services/billing.js";
 import { recordDisputeClosed, recordDisputeCreated } from "../services/disputes.js";
 import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoices.js";
 import { saveOnPurchase } from "../services/library.js";
+import {
+	type MerchPricedPick,
+	MerchQuoteError,
+	merchBadgeDiscount,
+	merchGoodsPrice,
+	priceMerchPick,
+	quoteMerchTax,
+} from "../services/merch-quote.js";
 import { recordNettingForDispute, reverseNettingForWonDispute } from "../services/netting.js";
 import { stripeFlagPatchFromAccount } from "../services/payouts.js";
-import { getShippingRates, printfulConfigured } from "../services/printful.js";
+import { printfulConfigured } from "../services/printful.js";
 import { splitChargeToCreators } from "../services/purchase-split.js";
 import {
 	sendPurchaseReceipts,
@@ -309,7 +313,16 @@ function purchaseSession(params: {
 		// both want it anyway. Found as the disabled Pay button (2026-10-06): all three
 		// address fields resolved a real tax, the card was filled, and the button never
 		// un-greyed.
-		customer_email: params.customerEmail,
+		//
+		// 🚨 **`customer` and `customer_email` are either-or, never both** — Stripe refuses
+		// the pair outright ("You may only specify one of these parameters"), found live
+		// 2026-10-15: a buyer with a Customer on file — which the saved billing address
+		// now routinely creates — 500s the checkout the moment both ride the create. With
+		// a Customer named, the session takes its email from the Customer (every door that
+		// creates one passes the account's email — `ensureStripeCustomer`), so the email
+		// requirement is met through it; without a Customer, the account's own verified
+		// email rides the session.
+		...(params.customerId ? {} : { customer_email: params.customerEmail }),
 		// The buyer's billing address is what tax resolves from, and it is required in full
 		// because local tax is address-level rather than state-level — the same full street
 		// address the return worksheets and the threshold forecast later read off the row.
@@ -720,6 +733,29 @@ async function resolveMerchPurchase(
 	return { ok: true as const, work };
 }
 
+/**
+ * How a merch surface refuses a pick that failed to price — the shared map from
+ * `MerchQuoteError`'s kinds to each refusal sentence and status, so the quote route and
+ * the checkout say the same thing for the same failure. An error that is not the quote
+ * module's own is the store being unavailable.
+ */
+function merchQuoteRefusal(e: unknown): { error: string; status: 400 | 503 } {
+	if (e instanceof MerchQuoteError) {
+		switch (e.kind) {
+			case "noPick":
+				return { error: "Choose a color and size first.", status: 400 };
+			case "ambiguousPick":
+			case "unseededLadder":
+				return { error: "Merch isn't available right now.", status: 503 };
+			case "noRate":
+				return { error: "Shipping is not available right now.", status: 503 };
+		}
+	}
+	// An error that is not the quote module's own is logged: a silent 503 hides a bug.
+	console.error("merch quote: unmapped error", e);
+	return { error: "Merch isn't available right now.", status: 503 };
+}
+
 /** The body a merch checkout names: the size label, and nothing else. */
 const merchCheckoutSchema = z.object({
 	color: z.string().trim().min(1).max(40),
@@ -1015,25 +1051,24 @@ const paymentRoutes = new Hono()
 			.where(eq(merchVariants.workId, work.id))
 			.orderBy(merchVariants.id);
 		// The Badge resolves once — for a signed-in buyer only; every row prices
-		// against it. `free` holds no discount — only Badge keys index the ladder.
-		let heldBadge: Badge | null = null;
+		// against it (the shared Badge read in `services/merch-quote.ts`).
+		// `free` holds no discount — only Badge keys index the ladder.
+		let held: Awaited<ReturnType<typeof merchBadgeDiscount>> = null;
 		if (userId != null) {
 			try {
-				const badge = heldBadgeName(await heldAnthersBadgeAmount(userId));
-				if (badge !== "free") heldBadge = badge;
+				held = await merchBadgeDiscount(userId);
 			} catch {
-				heldBadge = null; // unseeded ladder — prices answer undiscounted
+				held = null; // unseeded ladder — prices answer undiscounted
 			}
 		}
 		const price = (v: typeof merchVariants.$inferSelect) => {
 			const list = new Decimal(v.listPrice);
-			const discountRate = heldBadge ? MERCH_BADGE_DISCOUNT_RATE[heldBadge] : "0";
-			const amount = list.minus(list.times(discountRate)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+			const amount = merchGoodsPrice(list, held?.rate ?? "0");
 			return {
 				listPrice: list.toFixed(2),
 				amount: amount.toFixed(2),
 				// The whole percent for copy ("25"), rendered "25% off" client-side.
-				discount: heldBadge ? MERCH_BADGE_DISCOUNT[heldBadge] : null,
+				discount: held?.percent ?? null,
 				inStock: true, // stock state is Printful's; the order creation reports it
 			};
 		};
@@ -1057,6 +1092,78 @@ const paymentRoutes = new Hono()
 		});
 	})
 
+	// ── Merch quote ──────────────────────────────────────────────────────────
+	/**
+	 * The store panel's live quote for one pick, against the buyer's saved billing zip —
+	 * the merch box's "better form" (the 2026-10-10 stopgap's retirement): the
+	 * Badge-discounted goods figure, Printful's live shipping rate priced from the
+	 * buyer's own saved state, and — when the buyer has the opt-in saved billing address
+	 * (`savedBillingAddress`, PR #465) — the real Stripe Tax figure that address
+	 * resolves, and the tax-inclusive total.
+	 *
+	 * 🚨 **Nothing is charged and no session or purchase is created here** — the quote is
+	 * the panel's estimate, and the checkout is its own authority (the session's tax
+	 * resolves from the address the buyer delivers to, which billing stands in for). An
+	 * unconfigured processor or store, a failed rate or a failed pick refuse with the
+	 * sentences the checkout uses; a *failed tax estimate* is not a refusal — it answers
+	 * `tax: null` and the panel shows "calculated at checkout", the shape a buyer with
+	 * no saved address sees anyway.
+	 *
+	 * Authenticated without `requireVerified` deliberately: the quote is a display, not
+	 * a charge, and the checkout keeps its verified-email gate.
+	 */
+	.get(
+		"/merch/quote/:slug",
+		requireAuth,
+		zValidator("query", merchCheckoutSchema, invalidBody),
+		async (c) => {
+			const user = c.get("user");
+			const q = await resolveMerchPurchase(c.req.param("slug") ?? "", user.id);
+			if (!q.ok) return c.json({ error: q.error }, q.status);
+
+			if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
+			if (!printfulConfigured()) return c.json({ error: "Merch isn't available right now." }, 503);
+
+			// The saved address, read once: its state is the rate quote's exact input, its
+			// full shape is the tax quote's stand-in delivery address, and nothing-saved
+			// makes both fall back to the checkout's own authority.
+			const saved = await savedBillingAddress(user.id);
+			const { color, size } = c.req.valid("query");
+			let priced: MerchPricedPick;
+			try {
+				priced = await priceMerchPick(user.id, q.work.id, color, size, {
+					// Printful's US rates are flat per category, but the exact state is
+					// what the figure claims to quote from — pass it when there is one.
+					...(saved ? { stateCode: saved.state } : {}),
+				});
+			} catch (e) {
+				const refusal = merchQuoteRefusal(e);
+				return c.json({ error: refusal.error }, refusal.status);
+			}
+			const { tax, quotedTo, addressSaved } = saved
+				? await quoteMerchTax(saved, {
+						goodsPrice: priced.goodsPrice,
+						shippingPrice: priced.shippingPrice,
+					})
+				: { tax: null, quotedTo: null, addressSaved: false };
+
+			return c.json({
+				color,
+				size,
+				listPrice: priced.listPrice.toFixed(2),
+				goodsPrice: priced.goodsPrice.toFixed(2),
+				discount: priced.discount,
+				shipping: priced.shippingPrice.toFixed(2),
+				shippingName: priced.rate.name,
+				tax,
+				buyerTotal:
+					tax == null ? null : priced.goodsPrice.plus(priced.shippingPrice).plus(tax).toFixed(2),
+				addressSaved,
+				quotedTo,
+			});
+		},
+	)
+
 	// ── Merch checkout ───────────────────────────────────────────────────────
 	/**
 	 * Buy one merch Work in one size, on one charge: a goods line (print cost + margin,
@@ -1072,11 +1179,11 @@ const paymentRoutes = new Hono()
 	 *   exists from completion onward — placed from the session's own shipping details.
 	 *
 	 * 🚨 **The size and the Printful variant are resolved HERE, never trusted from the
-	 * client.** The body names a `size` label only; the variant row that maps it to a
-	 * Printful catalog id is re-read server-side, so a tampered size buys nothing that
-	 * does not exist. The list price is derived from Printful's catalog price + the
-	 * margin constant at this moment, so a Printful price change is reflected before a
-	 * buyer is charged rather than discovered by them.
+	 * client.** The body names a `size` label only; the pricing (`priceMerchPick`,
+	 * shared with the picker and the quote route) re-reads the variant row that maps it
+	 * to a Printful catalog id, so a tampered size buys nothing that does not exist, and
+	 * the list price — Printful's own stamped retail price — is read fresh, so a Printful
+	 * price change is reflected before a buyer is charged rather than discovered by them.
 	 */
 	.post(
 		"/merch/checkout/:slug",
@@ -1096,70 +1203,32 @@ const paymentRoutes = new Hono()
 			const customerId = await stripeCustomerIdFor(user.id);
 
 			// The body names only the color and size labels — never a price, never a
-			// variant id. The (color, size) pair must name exactly one row; a Work's
-			// picker shows a size per color, so two rows matching would be a data error
-			// refused here rather than an arbitrary pick.
+			// variant id. The (color, size) pair must name exactly one row, and the
+			// pricing is the shared derivation (`services/merch-quote.ts`) — the same
+			// code the picker and the quote route read, so no merch surface prices
+			// alone and a tampered size buys nothing that does not exist.
 			const { color, size } = c.req.valid("json");
 
-			const { merchVariants } = await import("@anthers/db/schema");
-			const matches = await db
-				.select()
-				.from(merchVariants)
-				.where(
-					and(
-						eq(merchVariants.workId, work.id),
-						eq(merchVariants.color, color),
-						eq(merchVariants.size, size),
-					),
-				)
-				.limit(2);
-			if (matches.length === 0) return c.json({ error: "Choose a color and size first." }, 400);
-			if (matches.length > 1) return c.json({ error: "Merch isn't available right now." }, 503);
-			const [variant] = matches;
-
-			// The live shipping rate — quoted now, priced into the session as a fixed
-			// shipping option. Printful's US rates are flat per product category, so the
-			// figure is real without the buyer's ZIP yet. **The offset rate is The
-			// choice** (Parker, 2026-10-09: "always do the co2 offset") — picked by id,
-			// falling back to the first rate only if Printful stops offering one, so a
-			// rate-list change degrades to shipping without the offset rather than
-			// failing the store.
-			const rates = await getShippingRates({ country_code: "US" }, [
-				{ catalogVariantId: variant.catalogVariantId, quantity: 1 },
-			]);
-			const rate = rates?.find((r) => r.id === "STANDARD_CARBON_OFFSET") ?? rates?.[0];
-			if (!rate) return c.json({ error: "Shipping is not available right now." }, 503);
-
-			// 🚨 **The list price is Printful's own retail price, stamped at setup** (Parker,
-			// 2026-10-08: the store uses what Printful carries — one pricing source, edited
-			// on the Printful side and restamped by the setup script's re-run). Printing
-			// costs nothing here. The Badge discount is the one adjustment the checkout
-			// makes to it, on the goods line alone: shipping is Printful's charge, which
-			// Anthers does not control and never discounts (the decision's own rule).
-			// The Badge held this cycle resolves via its threshold — the same read the
-			// subscription routes take (`heldAnthersBadgeAmount` → `heldBadgeName`).
-			// An unseeded ladder throws inside the service, so the discount resolution
-			// is guarded: no ladder, no discount, and the 503 the store deserves.
-			// `free` holds no discount — only Badge keys index the ladder.
-			let discountRate = "0";
-			let heldBadge: Badge | null = null;
+			let priced: MerchPricedPick;
 			try {
-				const badge = heldBadgeName(await heldAnthersBadgeAmount(user.id));
-				if (badge !== "free") {
-					heldBadge = badge;
-					discountRate = MERCH_BADGE_DISCOUNT_RATE[badge];
-				}
-			} catch {
-				return c.json({ error: "Merch isn't available right now." }, 503);
+				priced = await priceMerchPick(user.id, work.id, color, size);
+			} catch (e) {
+				const refusal = merchQuoteRefusal(e);
+				return c.json({ error: refusal.error }, refusal.status);
 			}
-			const listPrice = new Decimal(variant.listPrice);
-			const goodsPrice = listPrice
-				.minus(listPrice.times(discountRate))
-				.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+			const {
+				variant,
+				listPrice,
+				goodsPrice,
+				discount: held,
+				shippingPrice,
+				amountBeforeTax,
+			} = priced;
+			const rate = priced.rate;
 
 			// The buyer's visible figure before tax: discounted goods + Printful's shipping.
-			const shipping = new Decimal(rate.rate);
-			const amount = goodsPrice.plus(shipping); // tax on top at the session
+			const shipping = shippingPrice;
+			const amount = amountBeforeTax; // tax on top at the session
 
 			// The same sub-floor guard the generic checkout keeps, on the whole charge.
 			if (!isChargeableAmount(amount.toNumber())) {
@@ -1173,15 +1242,29 @@ const paymentRoutes = new Hono()
 			}
 
 			// The goods line's tax code is `CLOTHING_TAX_CODE`, set inline below where the
-			// line is built. The shipping option's own line tax code is not carried by this
-			// API version's shipping_rate_data — the delivery line is taxed through the
-			// session's automatic tax as part of the tangible-goods sale, which is the
-			// documented behavior for shipping charges in conjunction with goods.
+			// line is built, and the shipping option carries `SHIPPING_TAX_CODE` the same
+			// way — the delivery line of a tangible-goods sale, separately stated (the
+			// Tax and Compliance Plan's Colorado rule). The quote route's tax calculation
+			// carries the same pair, so the panel's estimate and the session resolve the
+			// shipping line identically.
 
 			const session = await createCheckoutSession({
 				mode: "payment",
 				ui_mode: "elements",
-				customer_email: user.email,
+				// 🚨 Customer and customer_email are either-or (Stripe refuses the pair —
+				// found live 2026-10-15); with a Customer named, the session takes its
+				// email from the Customer, which the doors that create one always carry.
+				...(customerId
+					? {
+							// And the named Customer needs the session's permission to take
+							// the shipping address back ("Automatic tax calculation uses
+							// fields saved on the Customer", found live the same day): the
+							// delivery address the buyer types is exactly the fact this
+							// flow wants on their Customer, so `auto` it is. Stripe-side
+							// record only — Anthers stores no addresses.
+							customer_update: { shipping: "auto" as const },
+						}
+					: { customer_email: user.email }),
 				billing_address_collection: "required",
 				// The 2026-10-11 customer posture, same as every purchase surface: a buyer
 				// with a Customer on file pays on it; no Customer, no created one unless
@@ -1215,13 +1298,16 @@ const paymentRoutes = new Hono()
 						shipping_rate_data: {
 							type: "fixed_amount",
 							fixed_amount: {
-								amount: Math.round(new Decimal(rate.rate).toNumber() * 100),
+								amount: Math.round(shippingPrice.toNumber() * 100),
 								currency: "usd",
 							},
 							display_name: rate.name,
-							// The tax code rides the delivery estimate's own param set where the
-							// API version allows it; where it does not, the session's tax note
-							// below covers the posture.
+							// The delivery line's tax posture carried explicitly — the
+							// dahlia API version carries `tax_code` on `shipping_rate_data`
+							// (the comment above records the pair), so the session does not
+							// depend on the account's default shipping tax code to match
+							// the quote.
+							tax_code: SHIPPING_TAX_CODE,
 							...(!Number.isNaN(Number(rate.minDeliveryDays)) &&
 							Number.isFinite(rate.minDeliveryDays)
 								? {
@@ -1291,20 +1377,14 @@ const paymentRoutes = new Hono()
 				status: "pending",
 				merchSize: size,
 				// The Badge the discount resolved from — the receipt's discount line names it.
-				...(heldBadge ? { merchDiscountBadge: heldBadge } : {}),
+				...(held ? { merchDiscountBadge: held.badge } : {}),
 			});
 
 			return c.json({
 				amount: amount.toFixed(2),
 				listPrice: listPrice.toFixed(2),
 				goodsPrice: goodsPrice.toFixed(2),
-				discount: heldBadge
-					? {
-							badge: heldBadge,
-							percent: MERCH_BADGE_DISCOUNT[heldBadge],
-							saved: listPrice.minus(goodsPrice).toFixed(2),
-						}
-					: null,
+				discount: held,
 				shipping: shipping.toFixed(2),
 				size,
 				salesTax: null,
