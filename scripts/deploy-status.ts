@@ -254,9 +254,10 @@ const liveLine = () =>
  * against production returned 400 for a secret that should have worked.
  *
  * Behind-ness is NOT a fault on its own: promoting `main` to `release` is a deliberate act,
- * and merged-but-unshipped is a normal mid-flight state. So this reports rather than fails —
- * with its own exit code, so a caller can decide. Making it red by default would put the
- * hourly watcher in a permanent alarm state during ordinary development, and a watcher that
+ * and merged-but-unshipped is a normal mid-flight state. So it leaves through its own exit
+ * code (3) — nonzero, so a human cannot miss it, and one the hourly watch reads as the
+ * ordinary case rather than a failure. Making every behind a red result would put that
+ * watcher in a permanent alarm state during ordinary development, and a watcher that
  * cries wolf gets muted, which is how this repo lost the last one.
  */
 const PROMOTE_FROM =

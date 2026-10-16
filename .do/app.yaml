@@ -314,10 +314,6 @@ envs:
   # already on the network — held under a permission Anthers declined to use, on records it
   # could no longer withdraw. Closing the door decides who walks through it next.
   #
-  # ⚠️ **Off because the scope is unadvertised, not because it is unproven.** bsky.social
-  # honored a narrow `repo:` permission on 2026-09-11 and still does not list it in its
-  # published metadata, with guidance to hold off on production changes until more is
-  # documented. Turning this on is the decision to take that bet in front of real creators.
   # ⭐ Open because the permissions are asked for as published permission sets —
   # `org.anthers.userPermissions` and `org.anthers.creatorPermissions` — which bsky.social
   # resolves and expands, so the consent screen shows a sentence rather than a raw scope string.

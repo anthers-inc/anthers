@@ -37,9 +37,13 @@ export type AccountWriterResult =
  * creator will see it — `publishingPermissionRefusal`, and the banner reading `publishingStateFor`
  * — so a job meeting one has nothing to add, and a sweep that logged every such account would
  * train whoever reads its output to skim. The reasons that matter would then go past unread too.
+ *
+ * ⚠️ **`no_identity` left this set when the last account without an identity did** — every
+ * account holds one, so the writer can never answer it. It stays in the reason union for the
+ * typecheck, and a job meeting one now logs it, because it would mean an account invariant broke.
  */
 export function isOrdinary(reason: NoAccountWriterReason): boolean {
-	return reason === "no_identity" || reason === "not_granted";
+	return reason === "not_granted";
 }
 
 /**

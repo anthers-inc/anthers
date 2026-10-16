@@ -91,15 +91,16 @@ import { queueWorkListingSync, takeDownCreatorRecords } from "./work-listing.js"
 export const DELETION_GRACE_DAYS = 7;
 
 export interface DeletionPreview {
-	/** Destroyed outright. */
+	/** Destroyed outright — including reviews, which carry the person's written verdict and
+	 * are destroyed with it rather than tombstoned (the table at the top of this file). */
 	follows: number;
 	bookmarks: number;
 	blocks: number;
 	viewingEvents: number;
 	sessions: number;
+	reviews: number;
 	/** Kept, with the author removed. */
 	comments: number;
-	reviews: number;
 	posts: number;
 	/** Works split by whether anyone bought them. */
 	worksDeleted: number;
