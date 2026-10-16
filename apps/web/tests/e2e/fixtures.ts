@@ -6,7 +6,7 @@ import {
 	execFileSync,
 } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { GAUNTLET_CREATOR_EMAIL } from "@anthers/db/gauntlet";
+import { GAUNTLET_CREATOR_EMAIL, GAUNTLET_WALKER_EMAIL } from "@anthers/db/gauntlet";
 import { MEDIA_FIXTURE_EMAIL } from "@anthers/db/media-fixture";
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 import { withSignInLock } from "./signin-lock";
@@ -161,6 +161,15 @@ async function signInAs(context: BrowserContext, email: string): Promise<string>
 		]);
 		return token as string;
 	});
+}
+
+/**
+ * Sign in as the gauntlet WALKER — the ordinary audience account the harness owns, neither
+ * a creator nor an Anthers-side one, so a test needing a giver that is somebody else's
+ * subject reaches for this one.
+ */
+export function signInAsWalker(context: BrowserContext): Promise<string> {
+	return signInAs(context, GAUNTLET_WALKER_EMAIL);
 }
 
 /**
