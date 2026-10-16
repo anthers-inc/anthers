@@ -165,6 +165,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 			notificationDelivery: userPreferences.notificationDelivery,
 			notificationUnsubscribeToken: userPreferences.notificationUnsubscribeToken,
 			homeNavOrder: userPreferences.homeNavOrder,
+			persistentMiniplayer: userPreferences.persistentMiniplayer,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
@@ -185,6 +186,8 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		// The nav order rides the payload like the theme: the shell reads both at boot,
 		// before any route has rendered.
 		homeNavOrder: prefs?.homeNavOrder ?? null,
+		// Where audio playback lives — null means "never said", the client reads on.
+		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
 		atprotoDid: user.atprotoDid,
 		createdAt: user.createdAt,
 		// Surfaced on /me because the cancel path runs through signing back in: someone
@@ -379,6 +382,11 @@ const updateProfileSchema = z.object({
 			z.enum(["app", "email", "both"]),
 		)
 		.optional(),
+	/**
+	 * Whether audio playback rides the persistent footer bar. A whole write (the client
+	 * knows the switch's own state), null = never said, client default on.
+	 */
+	persistentMiniplayer: z.boolean().optional(),
 });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -466,6 +474,9 @@ const accountRoutes = new Hono()
 			);
 			prefUpdates.notificationDelivery = cleaned;
 		}
+		if (data.persistentMiniplayer !== undefined) {
+			prefUpdates.persistentMiniplayer = data.persistentMiniplayer;
+		}
 		if (Object.keys(prefUpdates).length > 1) {
 			// The key exists only so the `> 1` test means "something was set"; the row's own
 			// `user_id` is what the insert carries.
@@ -476,6 +487,9 @@ const accountRoutes = new Hono()
 					? { notificationDelivery: prefUpdates.notificationDelivery as Record<string, string> }
 					: {}),
 				...(data.homeNavOrder !== undefined ? { homeNavOrder: data.homeNavOrder } : {}),
+				...(data.persistentMiniplayer !== undefined
+					? { persistentMiniplayer: data.persistentMiniplayer }
+					: {}),
 			};
 			await db
 				.insert(userPreferences)

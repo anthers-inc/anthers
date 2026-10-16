@@ -308,6 +308,7 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		.select({
 			themePreference: userPreferences.themePreference,
 			homeNavOrder: userPreferences.homeNavOrder,
+			persistentMiniplayer: userPreferences.persistentMiniplayer,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
@@ -328,6 +329,9 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		// The home sidebar's nav order — read at boot like the theme, so the landing
 		// redirect needs no second call.
 		homeNavOrder: (prefs?.homeNavOrder as string[] | null) ?? null,
+		// Where audio playback lives (the persistent footer bar or the page's player).
+		// Null means "never said" and the client reads that as on.
+		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
 		atprotoDid: user.atprotoDid,
 		createdAt: user.createdAt,
 		// Null until the first run accepts the terms on `/welcome` — the signal every

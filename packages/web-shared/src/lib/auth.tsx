@@ -26,6 +26,13 @@ export interface User {
 	 * null = never rearranged, so the default order stands and `/` lands on the feed.
 	 */
 	homeNavOrder: string[] | null;
+	/**
+	 * Whether audio playback rides the persistent footer bar rather than a Work page's
+	 * own player. Null = never answered, and the reader treats that as **on** — the
+	 * column never bakes the default in, so a later default change would not have to
+	 * rewrite rows.
+	 */
+	persistentMiniplayer: boolean | null;
 	/** Every account holds exactly one ATProto identity, so it is always present. */
 	atprotoDid: string;
 	/** When the terms (and the 13+ assertion) were accepted; null until `/welcome` finishes onboarding. */

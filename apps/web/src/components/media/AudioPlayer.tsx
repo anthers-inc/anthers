@@ -1,4 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
+/**
+ * The music player — the on-page surface for a music Work: a waveform scrubber you
+ * can click, chapters if the creator cued them, lyrics under it.
+ *
+ * The player has two ownership modes and only one renders an element:
+ *
+ * - **Local** (default): the page owns a `<audio>` element, an attention claim, the
+ *   meter's wall and the full element wiring. This is the Studio preview's mode, and
+ *   the Work page's when the account's Use Persistent Miniplayer is off.
+ * - **Bar-driven** (`persistent` set to the Work's queue track): pressing play queues
+ *   the track into `MediaPlayerProvider` — the persistent footer bar, which survives
+ *   navigation — and everything below mirrors the bar instead of owning a second
+ *   element. Two elements playing one Work at once is the double-claim bug whose
+ *   hand-off comment this design retires: the bar is the single engine, so it cannot
+ *   come back.
+ *
+ * The element's state and the bar's mirror are both named `isPlaying` / `progress` /
+ * `duration` below so the transport JSX never branches on mode.
+ */
 
 import type { WorkChapter } from "@anthers/shared/chapters";
 import {
@@ -9,6 +28,8 @@ import {
 } from "@heroicons/react/24/solid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
+import { useMediaPlayer } from "../../lib/media-player";
+import type { QueueTrack } from "../../lib/music-queue";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { useBindPlayerSeek } from "../../lib/work-player";
 import ChapterList from "./ChapterList";
@@ -27,10 +48,16 @@ const SKIP_SECONDS = 10;
 interface AudioPlayerProps {
 	src: string;
 	waveform?: number[] | null;
-	onPlayInMiniPlayer?: () => void;
+	/**
+	 * The Work's queue track (`trackFromWork`), present only when the persistent bar
+	 * owns this page's playback — the account's Use Persistent Miniplayer setting.
+	 * Nothing renders the bar itself; the player just drives and mirrors it.
+	 */
+	persistent?: QueueTrack;
 	/**
 	 * Whose Time Pool minutes this playback earns. Omit on surfaces where playback
 	 * shouldn't be credited (previews, the Studio); the player then just plays.
+	 * Bar-driven playback claims through the bar instead, so this never double-claims.
 	 */
 	attention?: { creatorId: number | null; workId: number | null };
 	/**
@@ -48,20 +75,38 @@ interface AudioPlayerProps {
 export default function AudioPlayer({
 	src,
 	waveform,
-	onPlayInMiniPlayer,
+	persistent,
 	attention,
 	publicAccess = false,
 	chapters,
 	startSeconds = null,
 }: AudioPlayerProps) {
 	const audioRef = useRef<HTMLAudioElement>(null);
-	const [isPlaying, setIsPlaying] = useState(false);
-	const [progress, setProgress] = useState(0);
-	const [duration, setDuration] = useState(0);
+	const [elPlaying, setElPlaying] = useState(false);
+	const [elProgress, setElProgress] = useState(0);
+	const [elDuration, setElDuration] = useState(0);
 	/** Delivery refused — the backstop for an allowance emptied between flushes. */
 	const [refused, setRefused] = useState(false);
 	const budget = useMeteredBudget();
 	const { volume, effective: effectiveVolume, setLevel, toggleMuted } = useVolume();
+
+	// The bar to drive in persistent mode — a ref because the callbacks below must
+	// stay stable (the seek binding and the shortcuts re-bind on identity changes)
+	// while the context re-renders on every playback tick.
+	const player = useMediaPlayer();
+	const playerRef = useRef(player);
+	playerRef.current = player;
+	const trackRef = useRef<QueueTrack | null>(persistent ?? null);
+	trackRef.current = persistent ?? null;
+	/** The bar is currently carrying this Work's track. */
+	const onBar = persistent != null && player.currentTrack?.workId === persistent.workId;
+
+	// Local mode reads the element; bar-driven mode reads the bar. When the bar holds
+	// some *other* track (an album queued from the Library, say), the page transport
+	// reads zeros — nothing is playing *here* — and its play button queues this Work.
+	const isPlaying = persistent ? onBar && player.isPlaying : elPlaying;
+	const progress = persistent ? (onBar ? player.progress : 0) : elProgress;
+	const duration = persistent ? (onBar ? player.duration : 0) : elDuration;
 
 	/*
 	 * Decided from the budget, not from the element's error.
@@ -84,25 +129,27 @@ export default function AudioPlayer({
 
 	// Audio credits time only while it is actually playing — and keeps crediting
 	// in a hidden tab, because listening while working elsewhere is real listening.
+	// Bar-driven playback claims through the bar's own hook; claiming here too would
+	// put two claims on one (creator, Work).
 	useAttentionClaim({
 		creatorId: attention?.creatorId ?? null,
 		workId: attention?.workId ?? null,
 		contentType: "audio",
 		playing: isPlaying,
-		active: !!attention,
+		active: !!attention && persistent == null,
 	});
 
 	useEffect(() => {
 		const audio = audioRef.current;
 		if (!audio) return;
 
-		const onTimeUpdate = () => setProgress(audio.currentTime);
-		const onDurationChange = () => setDuration(audio.duration || 0);
-		const onEnded = () => setIsPlaying(false);
+		const onTimeUpdate = () => setElProgress(audio.currentTime);
+		const onDurationChange = () => setElDuration(audio.duration || 0);
+		const onEnded = () => setElPlaying(false);
 		// Mirror the element's own state so pausing via anything other than our
 		// button (media keys, another tab claiming audio focus) is reflected.
-		const onPlay = () => setIsPlaying(true);
-		const onPause = () => setIsPlaying(false);
+		const onPlay = () => setElPlaying(true);
+		const onPause = () => setElPlaying(false);
 		// The element cannot say 402, so treat any load failure on a Public Access Work
 		// as worth re-reading the budget for. If the allowance is intact the store is
 		// unchanged and this stays silent, which is the correct outcome for a genuine
@@ -127,11 +174,12 @@ export default function AudioPlayer({
 			audio.removeEventListener("ended", onEnded);
 			audio.removeEventListener("play", onPlay);
 			audio.removeEventListener("pause", onPause);
-			setIsPlaying(false);
+			setElPlaying(false);
 		};
 	}, [publicAccess]);
 
 	// The app-wide remembered volume, so turning a video down turns this down too.
+	// Bar-driven playback gets its volume from the bar, which reads the same store.
 	useEffect(() => {
 		const audio = audioRef.current;
 		if (!audio) return;
@@ -139,19 +187,50 @@ export default function AudioPlayer({
 		audio.muted = volume.muted;
 	}, [effectiveVolume, volume.muted]);
 
-	const togglePlay = () => {
+	const togglePlay = useCallback(() => {
+		const track = trackRef.current;
+		if (track) {
+			const bar = playerRef.current;
+			if (bar.currentTrack?.workId === track.workId && startSeconds == null) {
+				// The bar already carries this Work: the button is its transport.
+				if (bar.isPlaying) {
+					bar.pause();
+				} else {
+					bar.resume();
+				}
+			} else {
+				// Queue the Work into the bar — including again, when `?t` says the
+				// moment a link named has to land even though the bar holds the track.
+				bar.playTracks([track], 0, startSeconds != null ? { startAt: startSeconds } : {});
+			}
+			return;
+		}
 		const audio = audioRef.current;
 		if (!audio) return;
-		if (isPlaying) {
+		if (elPlaying) {
 			audio.pause();
-			setIsPlaying(false);
+			setElPlaying(false);
 		} else {
 			audio.play().catch(() => {});
-			setIsPlaying(true);
+			setElPlaying(true);
 		}
-	};
+	}, [startSeconds, elPlaying]);
 
 	const seekTo = useCallback((seconds: number) => {
+		const track = trackRef.current;
+		if (track) {
+			const bar = playerRef.current;
+			if (bar.currentTrack?.workId === track.workId) {
+				bar.seek(seconds);
+			} else {
+				// The bar holds no track of this Work, and the page has no element of
+				// its own: a seek that names a moment starts listening at it. A
+				// chapter cue or a timestamp link that did nothing would be a page
+				// whose links lie, so "start here" is what the unreachable seek means.
+				bar.playTracks([track], 0, { startAt: seconds });
+			}
+			return;
+		}
 		const audio = audioRef.current;
 		if (!audio) return;
 		/*
@@ -160,11 +239,23 @@ export default function AudioPlayer({
 		 */
 		const max = Number.isFinite(audio.duration) ? audio.duration : seconds;
 		audio.currentTime = Math.min(Math.max(0, seconds), max);
-		setProgress(audio.currentTime);
+		setElProgress(audio.currentTime);
 	}, []);
 
 	const skipBy = useCallback(
 		(seconds: number) => {
+			const track = trackRef.current;
+			if (track) {
+				const bar = playerRef.current;
+				if (bar.currentTrack?.workId === track.workId) {
+					bar.seek(bar.progress + seconds);
+				} else {
+					// Nothing in the bar: the skip starts the Work at its stepped
+					// moment, the same meaning the seek bar's unreachable drag has.
+					bar.playTracks([track], 0, { startAt: Math.max(0, seconds) });
+				}
+				return;
+			}
 			seekTo((audioRef.current?.currentTime ?? 0) + seconds);
 		},
 		[seekTo],
@@ -172,10 +263,12 @@ export default function AudioPlayer({
 
 	// The keyboard keymap, scoped to the player — see useMediaShortcuts.ts. Arrows nudge
 	// five seconds and j/l take the buttons' ten, which for a song's skips is the whole map.
+	// Bar-driven playback reads the bar's duration for the percentage seek and drives the
+	// bar's transport for everything else.
 	const onKeyDown = useMediaShortcuts({
 		togglePlay,
 		nudge: skipBy,
-		seekFraction: (fraction) => seekTo(fraction * (audioRef.current?.duration ?? 0)),
+		seekFraction: (fraction) => seekTo(fraction * (audioRef.current?.duration ?? duration ?? 0)),
 		adjustVolume: (delta) => setLevel(volume.level + delta),
 		toggleMuted,
 	});
@@ -184,15 +277,18 @@ export default function AudioPlayer({
 	useBindPlayerSeek(seekTo);
 
 	// The landed `?t`, applied once the element has a duration to seek into, once.
+	// (Bar-driven playback opens at it through `playTracks`' `startAt` instead — and
+	// a seek naming a moment starts the bar there, via seekTo above.)
 	const [startApplied, setStartApplied] = useState(false);
 	useEffect(() => {
-		if (startApplied || startSeconds == null || !duration) return;
+		if (persistent || startApplied || startSeconds == null || !duration) return;
 		setStartApplied(true);
 		seekTo(startSeconds);
-	}, [duration, startSeconds, startApplied, seekTo]);
+	}, [persistent, duration, startSeconds, startApplied, seekTo]);
 
 	// Stop the buffered tail rather than letting it run on under the wall — otherwise the
-	// limit visibly does not apply, and attention keeps being credited past it.
+	// limit visibly does not apply, and attention keeps being credited past it. The bar
+	// pauses its own element for bar-driven playback.
 	useEffect(() => {
 		if (spent) audioRef.current?.pause();
 	}, [spent]);
@@ -207,8 +303,11 @@ export default function AudioPlayer({
 			data-testid="audio-player"
 			className="rounded-lg bg-base-200 p-4 focus-visible:outline-primary/50 sm:p-5"
 		>
-			{/* biome-ignore lint/a11y/useMediaCaption: Anthers has no caption tracks to offer yet — the `captions` roadmap entry. The element has no native controls; everything a person uses is the transport below. */}
-			<audio ref={audioRef} src={src} preload="metadata" />
+			{/* Bar-driven mode renders no element — the bar owns the one <audio>. */}
+			{!persistent && (
+				// biome-ignore lint/a11y/useMediaCaption: Anthers has no caption tracks to offer yet — the `captions` roadmap entry. The element has no native controls; everything a person uses is the transport below.
+				<audio ref={audioRef} src={src} preload="metadata" />
+			)}
 
 			<div className="flex flex-wrap items-center gap-x-4 gap-y-3">
 				{/* ── Transport: skip, play (the card's own centerpiece), skip ── */}
@@ -288,29 +387,6 @@ export default function AudioPlayer({
 			    whose creator cues verse and chorus by the clock keeps its listeners there. */}
 			{chapters && chapters.length > 0 && (
 				<ChapterList chapters={chapters} position={progress} duration={duration} onSeek={seekTo} />
-			)}
-
-			{/*
-			 * Hand the track to the persistent bar, which survives navigation.
-			 *
-			 * ⚠️ This player pauses ITSELF first, here rather than in the caller. Two
-			 * elements playing the same track at once is not merely untidy — both register
-			 * an attention claim on the same (creator, Work), and although the policy
-			 * resolves that centrally rather than double-crediting, the listener hears the
-			 * song twice, slightly out of phase. Leaving it to every caller to remember is
-			 * how one of them eventually doesn't.
-			 */}
-			{onPlayInMiniPlayer && (
-				<button
-					type="button"
-					onClick={() => {
-						audioRef.current?.pause();
-						onPlayInMiniPlayer();
-					}}
-					className="btn btn-ghost btn-xs mt-3"
-				>
-					Listen while you browse
-				</button>
 			)}
 
 			{publicAccess && <PublicAccessFooter />}

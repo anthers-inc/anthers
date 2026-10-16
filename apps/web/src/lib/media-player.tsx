@@ -86,8 +86,14 @@ interface MediaPlayerContextValue {
 	 */
 	allowanceSpent: boolean;
 
-	/** Play a list of tracks from `startIndex` — an album, a shelf, a single track. */
-	playTracks: (tracks: QueueTrack[], startIndex?: number, options?: { shuffle?: boolean }) => void;
+	/** Play a list of tracks from `startIndex` — an album, a shelf, a single track.
+	 *  `startAt` is where to open (the `?t` a clicked timestamp landed with); it wins
+	 *  over a spoken Work's remembered position and is consumed by the src effect. */
+	playTracks: (
+		tracks: QueueTrack[],
+		startIndex?: number,
+		options?: { shuffle?: boolean; startAt?: number },
+	) => void;
 	pause: () => void;
 	resume: () => void;
 	seek: (time: number) => void;
@@ -104,6 +110,15 @@ const MediaPlayerContext = createContext<MediaPlayerContextValue | null>(null);
 export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 	const audioRef = useRef<HTMLAudioElement | null>(null);
 	const [state, setState] = useState<QueueState>(EMPTY_QUEUE);
+	/**
+	 * A bump for every `playTracks`, so the src effect below re-runs even when the
+	 * element's source did not change — re-queueing the track already playing means
+	 * "start it again" (a `?t` landing has to mean that moment), which the old
+	 * src-keyed effect could not see.
+	 */
+	const [playSerial, setPlaySerial] = useState(0);
+	/** The moment `?t` named — set by `playTracks`, consumed once by the src effect. */
+	const startAtRef = useRef<number | null>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [progress, setProgress] = useState(0);
 	const [duration, setDuration] = useState(0);
@@ -221,6 +236,7 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 	 * timeupdate survivable.
 	 */
 	const src = current?.src ?? null;
+	// biome-ignore lint/correctness/useExhaustiveDependencies: playSerial is a deliberate extra dependency — it makes the effect re-run even when the element's source did not change, because re-queueing the track already playing means "start it again" (a landed ?t has to mean that moment). See playTracks.
 	useEffect(() => {
 		const audio = audioRef.current;
 		if (!audio) return;
@@ -229,6 +245,13 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 		setRefused(false);
 		setProgress(0);
 		setDuration(0);
+		// One consumption point for the moment `?t` named — cleared here so a later
+		// src change can never re-land there.
+		const startAt = startAtRef.current;
+		startAtRef.current = null;
+		// The opened moment outranks a spoken Work's remembered position, exactly as
+		// the page players rule it: a link that names a moment means that moment.
+		const target = startAt ?? (current?.kind === "audio" ? readPosition(current.workId) : null);
 		if (!src) {
 			audio.pause();
 			audio.removeAttribute("src");
@@ -268,14 +291,11 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 				});
 				hls.loadSource(src);
 				hls.attachMedia(audio);
-				if (current?.kind === "audio") {
+				if (current?.kind === "audio" && target != null) {
 					// Resume once the manifest has given the element a duration to seek into.
-					const stored = readPosition(current.workId);
-					if (stored != null) {
-						hls.on(Hls.Events.MANIFEST_PARSED, () => {
-							audio.currentTime = stored;
-						});
-					}
+					hls.on(Hls.Events.MANIFEST_PARSED, () => {
+						audio.currentTime = target;
+					});
 				}
 				audio.addEventListener("canplay", () => void audio.play().catch(() => {}), { once: true });
 			});
@@ -289,28 +309,25 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 		}
 
 		audio.src = src;
-		// A spoken track resumes where the listener left it; a song never does — an album
-		// track does not restart mid-song across sessions. The floor and the finish rules
-		// are `listen-positions.ts`'s.
-		if (current?.kind === "audio") {
-			const stored = readPosition(current.workId);
+		// A spoken track resumes where the listener left it and a song never does — an
+		// album track does not restart mid-song across sessions — unless play named a
+		// moment. The floor and the finish rules are `listen-positions.ts`'s.
+		if (target != null) {
 			const seekOnce = () => {
-				if (stored != null && Number.isFinite(audio.duration) && audio.duration > 0) {
-					audio.currentTime = Math.min(stored, audio.duration);
+				if (Number.isFinite(audio.duration) && audio.duration > 0) {
+					audio.currentTime = Math.min(target, audio.duration);
 				}
 			};
 			// Setting currentTime before metadata lands is clamped to zero by some
 			// engines, so seek on `loadedmetadata` as well as immediately.
-			if (stored != null) {
-				seekOnce();
-				audio.addEventListener("loadedmetadata", seekOnce, { once: true });
-			}
+			seekOnce();
+			audio.addEventListener("loadedmetadata", seekOnce, { once: true });
 		}
 		void audio.play().catch(() => {
 			// Autoplay refusal (no user gesture yet) is not an error worth surfacing — the
 			// bar simply shows a paused track with a play button, which is the truth.
 		});
-	}, [src, current?.kind, current?.workId]);
+	}, [src, current?.kind, current?.workId, playSerial]);
 
 	// The app-wide remembered volume, shared with both inline players.
 	useEffect(() => {
@@ -361,7 +378,13 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
 	// ── Controls ──────────────────────────────────────────────────────────────
 
 	const playTracks = useCallback(
-		(tracks: QueueTrack[], startIndex = 0, options: { shuffle?: boolean } = {}) => {
+		(
+			tracks: QueueTrack[],
+			startIndex = 0,
+			options: { shuffle?: boolean; startAt?: number } = {},
+		) => {
+			startAtRef.current = options.startAt ?? null;
+			setPlaySerial((n) => n + 1);
 			setState((s) => startQueue(s, tracks, startIndex, options));
 		},
 		[],

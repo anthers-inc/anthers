@@ -202,6 +202,75 @@ function MediaPlaySection() {
 }
 
 /**
+ * Persistent Miniplayer — an account-level playback preference (Parker, 2026-10-16),
+ * unlike the Media & Play card above, which remembers per-browser.
+ *
+ * Whether pressing play on an audio Work hands playback to the persistent footer bar,
+ * which survives navigation, instead of leaving it in the Work page's own player, which
+ * dies on it. Account-level on purpose: where a person's playback lives is *how they
+ * listen*, so it follows the account beside the theme and the nav order rather than this
+ * browser — an embedded frame has no bar, and the Studio preview stays inline regardless.
+ */
+function MiniPlayerSection() {
+	const { user, refreshUser } = useAuth();
+	// Null = never answered and means on; the column never bakes the default in.
+	const current = user?.persistentMiniplayer ?? true;
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const choose = async (on: boolean) => {
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/accounts/me", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ persistentMiniplayer: on }),
+			});
+			if (!res.ok) throw new Error();
+			await refreshUser();
+		} catch {
+			setError("That preference couldn't be saved.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="card bg-base-200 mt-6">
+			<div className="card-body">
+				<h3 className="card-title text-lg">The Miniplayer</h3>
+				<p className="text-sm text-base-content/60">
+					Where audio plays while you browse. This one is saved to your account, so it follows you
+					to another device.
+				</p>
+
+				<div className="form-control mt-2">
+					<label className="label cursor-pointer justify-start gap-3">
+						<input
+							type="checkbox"
+							className="toggle toggle-primary"
+							checked={current}
+							onChange={(e) => choose(e.target.checked)}
+							disabled={busy}
+						/>
+						<div>
+							<span className="label-text font-medium">Use the persistent miniplayer</span>
+							<p className="text-xs text-base-content/50 mt-0.5">
+								Audio you play lives in the bar at the foot of the page and keeps playing while you
+								browse. Turning this off plays each Work inside its own page, which stops when you
+								navigate away.
+							</p>
+							{error && <p className="text-xs text-error mt-1">{error}</p>}
+						</div>
+					</label>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+/**
  * Devices — the revocation surface for signed-in sessions.
  *
  * This is what makes a long-lived desktop token safe to hand out: a stolen laptop is
@@ -2342,6 +2411,10 @@ export default function SettingsPage() {
 					{/* The per-install playback preferences — the feed-tile preview stop *Your
 					    Feed* promises, among the other remembered-by-browser settings. */}
 					<MediaPlaySection />
+
+					{/* The account-level playback preference — where audio lives: the
+					    persistent footer bar or the page's own player. */}
+					<MiniPlayerSection />
 
 					{/* Creator Tools live in the Studio (payouts, connections, Badges). */}
 					{isCreator && (

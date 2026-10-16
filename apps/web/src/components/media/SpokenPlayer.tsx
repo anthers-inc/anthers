@@ -9,6 +9,18 @@
  * must stay usable in any stacking context. Resume state lives in
  * `lib/listen-positions.ts` and is deliberately local; the floor and the finish rules
  * there are what keep a resume from feeling creepy.
+ *
+ * ## Two ownership modes, and only one renders an element
+ *
+ * - **Local** (default): the page owns a `<audio>` element, a claim, resume writes and
+ *   the meter's wall — the Studio preview's mode, and the Work page's when the account's
+ *   Use Persistent Miniplayer is off.
+ * - **Bar-driven** (`persistent` set to the Work's queue track): pressing play queues
+ *   the track into `MediaPlayerProvider` — the persistent footer bar, which survives
+ *   navigation — and everything below mirrors the bar instead of owning a second
+ *   element. The bar already carries the spoken resume, the rate and the position
+ *   writes, so mirroring it is not a second engine; claiming here too would put two
+ *   claims on one (creator, Work), and two elements would play the episode twice.
  */
 
 import type { WorkChapter } from "@anthers/shared/chapters";
@@ -25,6 +37,8 @@ import {
 	readPosition,
 	writePosition,
 } from "../../lib/listen-positions";
+import { useMediaPlayer } from "../../lib/media-player";
+import type { QueueTrack } from "../../lib/music-queue";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { SPOKEN_RATE_EVENT, stepSpokenRate, useSpokenRate } from "../../lib/spoken-rate";
 import { useBindPlayerSeek } from "../../lib/work-player";
@@ -49,6 +63,11 @@ interface SpokenPlayerProps {
 	workId: number;
 	waveform?: number[] | null;
 	/**
+	 * The Work's queue track (`trackFromWork`), present only when the persistent bar
+	 * owns this page's playback — the account's Use Persistent Miniplayer setting.
+	 */
+	persistent?: QueueTrack;
+	/**
 	 * Restore from a remembered position and persist as it moves. Off only where resume
 	 * would be a lie — the Studio's own preview, which is not the listening the Work is for.
 	 */
@@ -56,6 +75,7 @@ interface SpokenPlayerProps {
 	/**
 	 * Whose Time Pool minutes this playback earns. Omit on surfaces where playback
 	 * shouldn't be credited (previews, the Studio); the player then just plays.
+	 * Bar-driven playback claims through the bar instead, so this never double-claims.
 	 */
 	attention?: { creatorId: number | null; workId: number | null };
 	/**
@@ -67,30 +87,47 @@ interface SpokenPlayerProps {
 	chapters?: WorkChapter[];
 	/** Where the Work opens — the `?t` a timestamp link put in the address. */
 	startSeconds?: number | null;
-	onPlayInMiniPlayer?: () => void;
 }
 
 export default function SpokenPlayer({
 	src,
 	workId,
 	waveform,
+	persistent,
 	remember = true,
 	attention,
 	publicAccess = false,
 	chapters,
 	startSeconds = null,
-	onPlayInMiniPlayer,
 }: SpokenPlayerProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const audioRef = useRef<HTMLAudioElement>(null);
-	const [isPlaying, setIsPlaying] = useState(false);
-	const [progress, setProgress] = useState(0);
-	const [duration, setDuration] = useState(0);
+	const [elPlaying, setElPlaying] = useState(false);
+	const [elProgress, setElProgress] = useState(0);
+	const [elDuration, setElDuration] = useState(0);
 	/** Delivery refused — the backstop for an allowance emptied between flushes. */
 	const [refused, setRefused] = useState(false);
 	const budget = useMeteredBudget();
 	const { volume, effective: effectiveVolume } = useVolume();
 	const [rate, setRate] = useSpokenRate();
+
+	// The bar to drive in persistent mode — a ref because the callbacks below must
+	// stay stable (the seek binding and the shortcuts re-bind on identity changes)
+	// while the context re-renders on every playback tick.
+	const player = useMediaPlayer();
+	const playerRef = useRef(player);
+	playerRef.current = player;
+	const trackRef = useRef<QueueTrack | null>(persistent ?? null);
+	trackRef.current = persistent ?? null;
+	/** The bar is currently carrying this Work's track. */
+	const onBar = persistent != null && player.currentTrack?.workId === persistent.workId;
+
+	// Local mode reads the element; bar-driven mode reads the bar. When the bar holds
+	// some *other* track, the transport reads zeros — nothing is playing *here* — and
+	// its play button queues this Work.
+	const isPlaying = persistent ? onBar && player.isPlaying : elPlaying;
+	const progress = persistent ? (onBar ? player.progress : 0) : elProgress;
+	const duration = persistent ? (onBar ? player.duration : 0) : elDuration;
 
 	/*
 	 * Decided from the budget, not from the element's error.
@@ -105,12 +142,14 @@ export default function SpokenPlayer({
 
 	// Audio credits time only while it is actually playing — and keeps crediting
 	// in a hidden tab, because listening while working elsewhere is real listening.
+	// Bar-driven playback claims through the bar's own hook; claiming here too would
+	// put two claims on one (creator, Work).
 	useAttentionClaim({
 		creatorId: attention?.creatorId ?? null,
 		workId: attention?.workId ?? null,
 		contentType: "audio",
 		playing: isPlaying,
-		active: !!attention,
+		active: !!attention && persistent == null,
 	});
 
 	useEffect(() => {
@@ -118,20 +157,20 @@ export default function SpokenPlayer({
 		if (!audio) return;
 
 		const onTimeUpdate = () => {
-			setProgress(audio.currentTime);
+			setElProgress(audio.currentTime);
 			if (remember) writePosition(workId, audio.currentTime, audio.duration || null);
 		};
-		const onDurationChange = () => setDuration(audio.duration || 0);
+		const onDurationChange = () => setElDuration(audio.duration || 0);
 		const onEnded = () => {
-			setIsPlaying(false);
+			setElPlaying(false);
 			if (remember)
 				writePosition(workId, audio.currentTime, audio.duration || null, { force: true });
 		};
-		const onPlay = () => setIsPlaying(true);
+		const onPlay = () => setElPlaying(true);
 		// Mirror the element's own state so pausing via anything other than our button
 		// (media keys, another tab claiming audio focus) is reflected and flushed.
 		const onPause = () => {
-			setIsPlaying(false);
+			setElPlaying(false);
 			if (remember)
 				writePosition(workId, audio.currentTime, audio.duration || null, { force: true });
 		};
@@ -166,7 +205,7 @@ export default function SpokenPlayer({
 			audio.removeEventListener("play", onPlay);
 			audio.removeEventListener("pause", onPause);
 			window.removeEventListener("pagehide", onPageHide);
-			setIsPlaying(false);
+			setElPlaying(false);
 		};
 	}, [publicAccess, remember, workId]);
 
@@ -177,15 +216,16 @@ export default function SpokenPlayer({
 	// moment, not wherever the listener was last.
 	useEffect(() => {
 		const audio = audioRef.current;
-		if (!audio || !remember || !duration || startSeconds != null) return;
+		if (!audio || !remember || !elDuration || startSeconds != null) return;
 		const stored = readPosition(workId);
-		if (stored != null && stored <= duration - LISTEN_RESUME_FLOOR_SECONDS) {
+		if (stored != null && stored <= elDuration - LISTEN_RESUME_FLOOR_SECONDS) {
 			audio.currentTime = stored;
-			setProgress(stored);
+			setElProgress(stored);
 		}
-	}, [remember, duration, workId, startSeconds]);
+	}, [remember, elDuration, workId, startSeconds]);
 
 	// The app-wide remembered volume, so turning a video down turns this down too.
+	// Bar-driven playback gets its volume from the bar, which reads the same store.
 	useEffect(() => {
 		const audio = audioRef.current;
 		if (!audio) return;
@@ -210,24 +250,56 @@ export default function SpokenPlayer({
 	}, []);
 
 	// Stop the buffered tail rather than letting it run on under the wall — otherwise the
-	// limit visibly does not apply, and attention keeps being credited past it.
+	// limit visibly does not apply, and attention keeps being credited past it. The bar
+	// pauses its own element for bar-driven playback.
 	useEffect(() => {
 		if (spent) audioRef.current?.pause();
 	}, [spent]);
 
-	const togglePlay = () => {
+	const togglePlay = useCallback(() => {
+		const track = trackRef.current;
+		if (track) {
+			const bar = playerRef.current;
+			if (bar.currentTrack?.workId === track.workId && startSeconds == null) {
+				// The bar already carries this Work: the button is its transport.
+				if (bar.isPlaying) {
+					bar.pause();
+				} else {
+					bar.resume();
+				}
+			} else {
+				// Queue the Work into the bar — including again, when `?t` says the
+				// moment a link named has to land even though the bar holds the track.
+				bar.playTracks([track], 0, startSeconds != null ? { startAt: startSeconds } : {});
+			}
+			return;
+		}
 		const audio = audioRef.current;
 		if (!audio) return;
-		if (isPlaying) {
+		if (elPlaying) {
 			audio.pause();
-			setIsPlaying(false);
+			setElPlaying(false);
 		} else {
 			audio.play().catch(() => {});
-			setIsPlaying(true);
+			setElPlaying(true);
 		}
-	};
+	}, [startSeconds, elPlaying]);
 
 	const seekTo = useCallback((seconds: number) => {
+		const track = trackRef.current;
+		if (track) {
+			const bar = playerRef.current;
+			if (bar.currentTrack?.workId === track.workId) {
+				bar.seek(seconds);
+			} else {
+				// The bar holds no track of this Work, and the page has no element of
+				// its own: a seek that names a moment starts listening at it. A
+				// chapter cue or a timestamp link that did nothing would be a page
+				// whose links lie, so "start here" is what the unreachable seek means.
+				bar.playTracks([track], 0, { startAt: seconds });
+			}
+			return;
+		}
 		const audio = audioRef.current;
 		if (!audio) return;
 		/*
@@ -239,7 +311,7 @@ export default function SpokenPlayer({
 		 */
 		const max = Number.isFinite(audio.duration) ? audio.duration : seconds;
 		audio.currentTime = Math.min(Math.max(0, seconds), max);
-		setProgress(audio.currentTime);
+		setElProgress(audio.currentTime);
 	}, []);
 
 	// The page's timestamp links — description and reviews both — seek through here.
@@ -247,15 +319,29 @@ export default function SpokenPlayer({
 
 	// The landed `?t`, applied once the element has a duration to seek into, once —
 	// re-applied after a rate change or a stall it would be a second entry point, not one.
+	// (Bar-driven playback opens at it through `playTracks`' `startAt` instead — and
+	// a seek naming a moment starts the bar there, via seekTo above.)
 	const [startApplied, setStartApplied] = useState(false);
 	useEffect(() => {
-		if (startApplied || startSeconds == null || !duration) return;
+		if (persistent || startApplied || startSeconds == null || !duration) return;
 		setStartApplied(true);
 		seekTo(startSeconds);
-	}, [duration, startSeconds, startApplied, seekTo]);
+	}, [persistent, duration, startSeconds, startApplied, seekTo]);
 
 	const skipBy = useCallback(
 		(seconds: number) => {
+			const track = trackRef.current;
+			if (track) {
+				const bar = playerRef.current;
+				if (bar.currentTrack?.workId === track.workId) {
+					bar.seek(bar.progress + seconds);
+				} else {
+					// Nothing in the bar: the skip starts the Work at its stepped
+					// moment, the same meaning the seek bar's unreachable drag has.
+					bar.playTracks([track], 0, { startAt: Math.max(0, seconds) });
+				}
+				return;
+			}
 			seekTo((audioRef.current?.currentTime ?? 0) + seconds);
 		},
 		[seekTo],
@@ -291,8 +377,11 @@ export default function SpokenPlayer({
 			tabIndex={-1}
 			data-testid="spoken-player"
 		>
-			{/* biome-ignore lint/a11y/useMediaCaption: Anthers has no caption tracks to offer yet — the `captions` roadmap entry. The element has no native controls; everything a person uses is the transport below. */}
-			<audio ref={audioRef} src={src} preload="metadata" />
+			{/* Bar-driven mode renders no element — the bar owns the one <audio>. */}
+			{!persistent && (
+				// biome-ignore lint/a11y/useMediaCaption: Anthers has no caption tracks to offer yet — the `captions` roadmap entry. The element has no native controls; everything a person uses is the transport below.
+				<audio ref={audioRef} src={src} preload="metadata" />
+			)}
 
 			<div className="flex items-center gap-3">
 				<TransportButton
@@ -360,27 +449,6 @@ export default function SpokenPlayer({
 			    doesn't read as one unbroken bar of waveform. */}
 			{chapters && chapters.length > 0 && (
 				<ChapterList chapters={chapters} position={progress} duration={duration} onSeek={seekTo} />
-			)}
-
-			{/*
-			 * Hand the track to the persistent bar, which survives navigation.
-			 *
-			 * ⚠️ This player pauses ITSELF first, here rather than in the caller — the same
-			 * reasoning `AudioPlayer` carries: two elements playing the same Work at once is
-			 * not merely untidy, both register an attention claim on it and the listener
-			 * hears the episode twice, slightly out of phase.
-			 */}
-			{onPlayInMiniPlayer && (
-				<button
-					type="button"
-					onClick={() => {
-						audioRef.current?.pause();
-						onPlayInMiniPlayer();
-					}}
-					className="btn btn-ghost btn-xs mt-2"
-				>
-					Listen while you browse
-				</button>
 			)}
 
 			{publicAccess && <PublicAccessFooter />}

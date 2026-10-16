@@ -4,11 +4,18 @@
  *
  * The YouTube model (Parker, 2026-10-13): the creator types timestamps into the
  * description; every one of them is a chapter cue; the timestamps render as links
- * that seek the page's mounted player — the description's and a review's alike,
+ * that reach the page's mounted player — the description's and a review's alike,
  * both being plain text under the same scope — while the players segment their seek
  * bar over the cues and mount a chapter list in their own transport. Every one of
  * these can break silently on a page where the media still plays, which is the
  * failure shape the player specs were written against.
+ *
+ * ⚠️ **The audio Work's player below runs bar-driven** (the account's Use Persistent
+ * Miniplayer, whose default reading is on): the page renders no element, so a cue or
+ * a timestamp link *starts the bar at the moment it names* — which the prototype hook
+ * still catches, because it replaces HTMLMediaElement's own accessor and the bar's
+ * `new Audio()` element goes through it. The video keeps the page-local player, so
+ * its seek assertions read the video element's writes unchanged.
  *
  * The fixtures are the media fixture's episode (spoken) and clip (video), whose
  * descriptions carry `0:00` and `0:02` cues — the fixture clips are seconds long,
@@ -33,6 +40,7 @@ import { expect, test } from "./fixtures";
 
 const EPISODE = mediaFixtureWork("episode");
 const CLIP = mediaFixtureWork("video");
+const BAR = "[data-testid=player-bar]";
 
 type Kind = "audio" | "video";
 
@@ -78,17 +86,30 @@ test("an audio Work's page lists the chapters its description carries", async ({
 	);
 });
 
-test("a chapter row seeks the player", async ({ page }) => {
+test("a chapter row starts the bar at the moment it names", async ({ page }) => {
+	/*
+	 * Bar-driven playback (the account default's reading is on) owns no page element:
+	 * the hook below catches the BAR's `new Audio()` element too, because it replaces
+	 * the prototype's accessor, so the moment's write is still the observable.
+	 */
 	await hookCurrentTime(page, "audio");
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}`);
 	await expect(page.getByTestId("chapter-list")).toBeVisible();
 
 	await page.getByRole("button", { name: /The interview begins/ }).click();
 
-	expect(await timeWrites(page)).toContain(2);
+	// The seek naming a moment starts listening at it — the same meaning an
+	// unreachable element seek always had, now routed through the bar.
+	await expect(page.locator(BAR)).toBeVisible();
+	await expect
+		.poll(() => timeWrites(page), { message: "the cue never reached the bar" })
+		.toContain(2);
+	await expect(page.locator(`${BAR} [data-testid=now-playing-title]`)).toHaveText(EPISODE.title);
 });
 
-test("a timestamp in the description is a link that seeks the player", async ({ page }) => {
+test("a timestamp in the description is a link that starts the bar at the moment it names", async ({
+	page,
+}) => {
 	await hookCurrentTime(page, "audio");
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}`);
 
@@ -98,22 +119,29 @@ test("a timestamp in the description is a link that seeks the player", async ({ 
 	await expect(anchor).toBeVisible();
 	await anchor.click();
 
-	expect(await timeWrites(page)).toContain(2);
-	// The bar now carries the moment, so a copied address lands where the viewer is.
+	await expect(page.locator(BAR)).toBeVisible();
+	await expect
+		.poll(() => timeWrites(page), { message: "the link never reached the bar" })
+		.toContain(2);
+	// The address keeps carrying the moment, so a copy lands where the viewer is.
 	await expect(page).toHaveURL(/[*?&]t=2(&|$)/);
 });
 
-test("a ?t address lands the player at the moment it names, not at the resume", async ({
-	page,
-}) => {
+test("a ?t address plays from the moment it names, not from the resume", async ({ page }) => {
 	await hookCurrentTime(page, "audio");
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}?t=2`);
 	await expect(page.getByTestId("chapter-list")).toBeVisible();
 
-	// The only time write the entry needs is the moment itself; whatever position a
-	// previous run remembered must NOT appear instead — startSeconds outranking the
-	// resume is the rule. Polled: duration metadata lands a little after the list
-	// renders, and the seek rides it.
+	// Bar-driven playback loads nothing until something is pressed, so the ?t rides
+	// the play. The only element write it should produce is the moment itself — the
+	// seekOnce the provider runs writes the target exactly once — so whatever
+	// position a previous run remembered must NOT appear in its place: startSeconds
+	// outranking the resume is the rule.
+	await page
+		.locator("[data-testid=spoken-player]")
+		.getByRole("button", { name: "Play", exact: true })
+		.click();
+	await expect(page.locator(BAR)).toBeVisible();
 	await expect
 		.poll(() => timeWrites(page), { message: "the ?t seek never wrote currentTime" })
 		.toContain(2);
@@ -138,7 +166,9 @@ test("the video player carries the chapter list its description segments", async
 	expect(await timeWrites(page)).toContain(2);
 });
 
-test("a review's timestamp is a link that seeks the player", async ({ page }) => {
+test("a review's timestamp is a link that starts the bar at the moment it names", async ({
+	page,
+}) => {
 	await hookCurrentTime(page, "audio");
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}`);
 	await expect(page.getByTestId("chapter-list")).toBeVisible();
@@ -155,5 +185,8 @@ test("a review's timestamp is a link that seeks the player", async ({ page }) =>
 	await expect(reviewAnchor).toBeVisible();
 	await reviewAnchor.click();
 
-	expect(await timeWrites(page)).toContain(2);
+	await expect(page.locator(BAR)).toBeVisible();
+	await expect
+		.poll(() => timeWrites(page), { message: "the review link never reached the bar" })
+		.toContain(2);
 });
