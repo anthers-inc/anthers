@@ -29,11 +29,8 @@
  * here; it wants the recording Stripe fake from `payments-stripe.test.ts`.
  */
 import { describe, expect, it } from "bun:test";
+import { creatorFeeShare, paymentsSplit } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
-import {
-	creatorFeeShare,
-	paymentsSplit,
-} from "@anthers/shared/fees";
 import {
 	anthersSupportFromSub,
 	directedPicksFromSub,

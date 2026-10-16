@@ -319,7 +319,9 @@ async function resolveBadgePurchase(
 	// rung's kinds change — `ensureBadgeProduct` owns all of that. A quote skips it:
 	// pricing the line is the database's read, not the processor's.
 	const product =
-		opts?.needsProduct === false ? null : await ensureBadgeProduct(badgeId, badge.label, issuer.handle);
+		opts?.needsProduct === false
+			? null
+			: await ensureBadgeProduct(badgeId, badge.label, issuer.handle);
 
 	return { ok: true as const, badge, issuer, held, threshold, amount, product };
 }
@@ -604,7 +606,7 @@ function purchaseSession(params: {
 						payment_method_save: "disabled",
 						payment_method_remove: "disabled",
 					},
-			  }
+				}
 			: { customer_creation: "if_required" as const }),
 		// 🚨 Card-only is the account-wide Default configuration (Parker, 2026-10-06:
 		// the Dashboard's Default narrowed to card and nothing else, matching the
@@ -874,7 +876,10 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 	// settles through the cycle distribution, and this split only ever sees purchase rows.
 	const latestCharge =
 		typeof pi.latest_charge === "string" ? pi.latest_charge : (pi.latest_charge?.id ?? null);
-	await splitChargeToCreators({ id: pi.id, latestCharge }, stamped.map(({ row }) => row));
+	await splitChargeToCreators(
+		{ id: pi.id, latestCharge },
+		stamped.map(({ row }) => row),
+	);
 
 	// ── Link the checkout's Customer, after the rows are stamped ─────────────
 	// Under the 2026-10-11 posture a session without a saved customer carries one only

@@ -2617,7 +2617,9 @@ describe("Webhook: the Badge first transaction's completion", () => {
 		const params = createCall?.args[0] as Stripe.SubscriptionCreateParams;
 		// The trial is the shape that charges nothing today and bills the FULL rung at the
 		// next 1st (the probe killed the future-anchor's stub charge — see billing.ts).
-		expect(params.trial_end).toBe(Math.floor(cycleStart(nextCycleKey(cycleKeyFor(new Date()))).getTime() / 1000));
+		expect(params.trial_end).toBe(
+			Math.floor(cycleStart(nextCycleKey(cycleKeyFor(new Date()))).getTime() / 1000),
+		);
 		expect(params.billing_cycle_anchor).toBeUndefined();
 		expect(params.default_payment_method).toBe(savedMethod);
 		const line = (params.items as { metadata?: { destination?: string } }[])[0];
