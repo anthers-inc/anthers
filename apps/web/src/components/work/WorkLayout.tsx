@@ -53,6 +53,11 @@ import {
 } from "../../lib/reading-positions";
 import { trackFromWork } from "../../lib/tracks";
 import { useSeekPlayer, WorkPlayerProvider } from "../../lib/work-player";
+import LyricsCard, { WORK_LYRICS_CLASS, WORK_LYRICS_HEADING_CLASS } from "./LyricsCard";
+
+// ⭐ The lyrics classes live beside the card that owns them; re-exported for the Studio's InlineField.
+export { WORK_LYRICS_CLASS, WORK_LYRICS_HEADING_CLASS };
+
 import AudioPlayer from "../media/AudioPlayer";
 import ComicReader from "../media/ComicReader";
 import EbookReader from "../media/EbookReader";
@@ -247,10 +252,6 @@ export function WorkPlaceholder({
 		</div>
 	);
 }
-
-export const WORK_LYRICS_CLASS = "mt-4 rounded-lg bg-base-200/60 p-4";
-export const WORK_LYRICS_HEADING_CLASS =
-	"mb-2 text-xs font-semibold uppercase tracking-wider text-base-content/50";
 
 /**
  * The creator-asserted original release date, formatted as a plain date.
@@ -667,18 +668,11 @@ export function WorkDeliverable({
 						// away — which is the whole reason the bar exists.
 						onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
 					/>
-					{/* A song's words, under the player. Gated with the audio: the API blanks
-					    them for a user without access, so reaching this branch at all
-					    means the user may read them. */}
-					{lyrics ??
-						(work.lyrics?.trim() && (
-							<section className={WORK_LYRICS_CLASS}>
-								<h2 className={WORK_LYRICS_HEADING_CLASS}>Lyrics</h2>
-								<p className="whitespace-pre-wrap text-sm leading-relaxed text-base-content/85">
-									{work.lyrics}
-								</p>
-							</section>
-						))}
+					{/* A song's words, under the player — a collapsed-by-default card (see
+					    LyricsCard). Gated with the audio: the API blanks them for a user
+					    without access, so reaching this branch at all means the user may
+					    read them. */}
+					{lyrics ?? (work.lyrics?.trim() ? <LyricsCard lyrics={work.lyrics ?? ""} /> : null)}
 				</>
 			)}
 			{/* Spoken word takes its own player — listening to talk wants fixed-step skips,
