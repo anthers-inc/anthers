@@ -265,7 +265,7 @@ export async function adultAccessFor(userId: number | null): Promise<AdultAccess
  * from a user who has not opted in.
  *
  * 🚨 **A kind of content the user hides is an allow-list too**: a Work is listed only when its
- * creator answered that row *Not in It*, so a row marked at any rung hides it and so does a row
+ * creator answered that row *None*, so a row marked at any rung hides it and so does a row
  * nobody answered (`mayContain` in `@anthers/shared/content-rating` is the same rule for the
  * browser). It is the user's own filter and never an access rule, exactly like a hidden rung: the
  * Work stays reachable by a direct link, listed for everyone else, and earning.

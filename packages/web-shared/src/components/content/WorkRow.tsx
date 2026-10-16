@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * One Work in the creator's Works table as a row: thumbnail, title and description, the
- * release and access state, the processing state, the upload date and the counts.
+ * One Work in the creator's Works table as a row: thumbnail and title, the description as
+ * its own column beside it, the release and access state, the processing state, the upload
+ * date and the counts.
  *
  * This carries forward the card's reasoning, which it replaced (the Works listing stopped
  * being a grid): Release is in the table because the common case is uploading a back
@@ -93,11 +94,11 @@ export default function WorkRow({
 
 	return (
 		<tr className="border-b border-base-300/50 hover:bg-base-200/40 align-middle">
-			{/* WORK — the thumbnail, the title and the description, as one link target like the
+			{/* WORK — the thumbnail and the title, as one link target like the
 			    video column the table is modeled on. The thumbnail is out of the accessibility
 			    tree because the title already names the same place. */}
 			<td className="py-2.5 pr-4">
-				<div className="flex items-center gap-3 max-w-md">
+				<div className="flex items-center gap-3">
 					<Link
 						to={editUrl}
 						tabIndex={-1}
@@ -118,14 +119,20 @@ export default function WorkRow({
 								{item.title || "Untitled"}
 							</Link>
 						</p>
-						<p className="text-xs text-base-content/60 line-clamp-2 break-words">
-							{item.description || "No description"}
-						</p>
 						<div className="mt-0.5">
 							<TypeBadge type={item.type} />
 						</div>
 					</div>
 				</div>
+			</td>
+
+			{/* DESCRIPTION — its own column beside the title (Parker, 2026-10-16): the row had
+			    the room, and a back catalog's descriptions read in place rather than on the edit
+			    page. The empty case keeps the row's quiet register instead of rendering nothing. */}
+			<td className="py-2.5 pr-4">
+				<p className="text-xs text-base-content/60 line-clamp-2 break-words max-w-lg">
+					{item.description || "No description"}
+				</p>
 			</td>
 
 			{/* VISIBILITY — the release state first, the access ladder beneath it, and the

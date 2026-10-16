@@ -275,7 +275,7 @@ export const works = pgTable(
 		maturityNotes: jsonb("maturity_notes").$type<string[]>().notNull().default([]),
 		// The rating matrix as its creator marked it: each kind of content (`RATING_ROWS`) as
 		// `none` or the rung it reaches, and a row absent from the object not yet answered. The
-		// difference between `none` and absent is the point of storing it: *Not in it* is a
+		// difference between `none` and absent is the point of storing it: *None* is a
 		// statement a user's own filter can rely on, and an unanswered row is not (Parker,
 		// 2026-09-18). `maturity` is the highest row once every row is answered, and an
 		// incomplete matrix changes no rating, so a rated Work is never un-rated by one.

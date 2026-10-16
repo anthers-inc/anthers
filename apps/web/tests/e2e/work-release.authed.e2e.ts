@@ -202,11 +202,14 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// one while the editor had no URL, which is the smallest concrete thing the page bought.
 	await rowsFor(page).getByRole("link", { name: "Rate this" }).click();
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
-	// Rated through the matrix, in the Rating tab's edit state: every row answered Not in
-	// It is a General Work.
+	// Rated through the table, in the tab itself (always open, Parker, 2026-10-16): every
+	// row answered None is a General Work.
 	await page.getByRole("tab", { name: "Rating" }).click();
-	await page.getByRole("button", { name: "Edit Rating" }).click();
-	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
+	await page
+		.getByRole("tabpanel", { name: "Rating" })
+		.locator("table")
+		.getByRole("button", { name: "None", exact: true })
+		.click();
 	await page.getByRole("button", { name: "Save Rating" }).click();
 	// The credits, in the Credits tab's own field. Release refuses a Work whose credits
 	// name no human (`credits_creator_required`), and the walk is through the UI rather

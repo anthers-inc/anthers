@@ -149,14 +149,19 @@ test("the column headers sort, and repeat clicks flip the direction", async ({ p
 
 	// A second column takes the same direction a user expects its data to read — views
 	// high first — and then the repeat click flips it, the whole sorting UI contract.
+	// The aria-sort assertions ride the clicked header's own th rather than a column
+	// index, so the column order can move without them.
 	const viewsHeader = page.getByRole("button", { name: "Views" });
 	await viewsHeader.click();
 	await expect(viewsHeader.locator("span")).toHaveText("↓");
-	await expect(page.locator("th").nth(4)).toHaveAttribute("aria-sort", "descending");
+	const viewsTh = viewsHeader.locator("xpath=ancestor-or-self::th[1]");
+	await expect(viewsTh).toHaveAttribute("aria-sort", "descending");
 	await viewsHeader.click();
 	await expect(viewsHeader.locator("span")).toHaveText("↑");
-	await expect(page.locator("th").nth(4)).toHaveAttribute("aria-sort", "ascending");
+	await expect(viewsTh).toHaveAttribute("aria-sort", "ascending");
 
 	// And the previously sorted column stops claiming a sort.
-	await expect(page.locator("th").nth(3)).not.toHaveAttribute("aria-sort");
+	await expect(dateHeader.locator("xpath=ancestor-or-self::th[1]")).not.toHaveAttribute(
+		"aria-sort",
+	);
 });
