@@ -93,7 +93,7 @@ function creditToRecord(
 		};
 	}
 
-	// Blank contributor (an anonymous `licensed`/`ai` row): omit the field rather than emit an
+	// Blank contributor (an anonymous `generated` row): omit the field rather than emit an
 	// empty-named contributor — the API guarantees a `created` row names someone, so a blank
 	// contributor can only be a credit that is allowed to be anonymous.
 	if (contributorStr === "") {

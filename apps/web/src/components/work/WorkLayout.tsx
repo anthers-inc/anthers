@@ -897,17 +897,18 @@ export function WorkArticle({ html, workId }: { html: string; workId?: number })
 }
 
 /**
- * How a single credit's AI involvement is labeled. A bare AI row is simply **AI**, with no
- * contributor — an AI credit never names the model, because a tool owns nothing and is
- * granted nothing; the type records that the role was machine-made and no more. A
- * created+ai blend is labeled **AI blended**, because the human it names is real and the
- * machine's part is part of the same credit. A pure licensed row is **Licensed** and may
- * carry its source as the contributor.
+ * How a single credit's machine involvement is badged. A bare `generated` row is simply
+ * **AI** — the readers' own word for a machine-made part (Parker, 2026-10-16: the badge is
+ * reader copy, not the stored vocabulary) — with no contributor, since a generated credit
+ * never names the model, because a machine makes nothing anyone owns; the type records that
+ * the role was machine-made and no more. A `created+generated` blend is labeled
+ * **Human + AI**, because the human it names is real and the machine's part is part of the
+ * same credit.
  */
-function creditBadges(types: string[]): { ai: boolean; blended: boolean; licensed: boolean } {
-	const ai = types.includes("ai");
+function creditBadges(types: string[]): { ai: boolean; blended: boolean } {
+	const ai = types.includes("generated");
 	const created = types.includes("created");
-	return { ai, blended: ai && created, licensed: types.includes("licensed") && !ai && !created };
+	return { ai, blended: ai && created };
 }
 
 /**
@@ -1042,7 +1043,6 @@ export function WorkCredits({
 							{badges.ai && !badges.blended && (
 								<span className="badge badge-xs badge-outline">AI</span>
 							)}
-							{badges.licensed && <span className="badge badge-xs badge-ghost">Licensed</span>}
 							{awaiting && (
 								<CreditConfirmationControls
 									work={work}
