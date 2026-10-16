@@ -30,7 +30,10 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 
 const PENCIL =
-	"btn btn-ghost btn-xs text-base-content/40 hover:text-base-content/80 opacity-0 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100";
+	// Always visible (Parker, 2026-10-16) — hover-reveal was the rule while an unfilled field
+	// could leave nothing to hover; every field now renders its structure at every value,
+	// so the pencil sits in the open as the edit affordance it is.
+	"btn btn-ghost btn-xs text-base-content/40 hover:text-base-content/80";
 
 /**
  * One editable field: what a user reads, with a pencil that opens it, an X that cancels
