@@ -22,10 +22,7 @@
  */
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
 import { isListened } from "@anthers/shared/content";
-<<<<<<< HEAD
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
-=======
->>>>>>> origin/main
 import { Link, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { isAccessResult } from "@anthers/web-shared/types";
@@ -152,7 +149,6 @@ export default function EmbedWorkPage() {
 						// deliverable — the reason is all there is to render.
 						<PublicAccessWall budget={meterBudget} />
 					) : encoding && !playsOriginal ? (
-<<<<<<< HEAD
 						// The processing note, held inside the kind's silhouette rather than replacing
 						// it (the placeholder task, 2026-10-16): an embed's own box does not collapse to
 						// a sentence while the deliverable is being made.
@@ -168,9 +164,6 @@ export default function EmbedWorkPage() {
 								/>
 							}
 						/>
-=======
-						<p className="py-12 text-center text-sm text-base-content/60">Processing…</p>
->>>>>>> origin/main
 					) : (
 						<WorkDeliverable work={work} shareToken={token ?? null} />
 					)}
