@@ -354,7 +354,7 @@ export const ROADMAP: RoadmapGroup[] = [
 					{
 						id: "analytics",
 						title: "Your Own Numbers",
-						blurb: "Views, purchases and time spent, charted per Work.",
+						blurb: "Views and time spent, charted per Work.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						doc: { id: "70.05", title: "How Attention Is Counted" },
@@ -395,7 +395,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						id: "contests",
 						title: "Contests and Calls for Content",
 						blurb:
-							"Open calls across every medium, with judging and prizes held where neither side controls them.",
+							"Open calls across every medium, judged by third parties and never paid from the Time Pool.",
 						bucket: "planned",
 					},
 				],
@@ -661,7 +661,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						id: "reporting",
 						title: "Reporting Something, and Blocking Somebody",
 						blurb:
-							"Report a comment, a rating, a person or a Work, and block anybody from anywhere they appear.",
+							"Report a comment, a review, a person or a Work, and block anybody from anywhere they appear.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						doc: { id: "51.01", title: "Reporting Something" },
