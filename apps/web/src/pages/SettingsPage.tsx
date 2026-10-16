@@ -1200,7 +1200,9 @@ interface ActivityEntry {
  * rather than a summary somebody chose to write.
  *
  * Above that record sits a picture, and the difference between the two is the section's
- * whole design (Parker, 2026-10-13, after the treatments in `scratch/activity-graph-mock.html`):
+ * whole design (Parker, 2026-10-13, after the treatments in the Anthers vault's
+ * `Internal Wiki/Transient/Activity Graph Mocks 20261013.html`, recorded in the task note
+ * that carried the work):
  * a stacked bar per UTC day of a **billing cycle** — defaulting to the current one, the same
  * key `settle-cycle` settles on — with each day's stored ranges added up **per creator, in
  * full**. The picture is computed for display and says so; the drill-down it opens is not
