@@ -348,9 +348,10 @@ export default function WorksPage() {
 					<table className="table w-full">
 						<thead>
 							<tr className="border-base-300/50 text-xs text-base-content/50">
-								<th scope="col" className="w-2/5" aria-sort={ariaSort(sort, "title")}>
+								<th scope="col" aria-sort={ariaSort(sort, "title")}>
 									<SortButton label="Work" k="title" sort={sort} onSort={onSort} />
 								</th>
+								<th scope="col" className="min-w-[14rem]">Description</th>
 								<th scope="col">Visibility</th>
 								<th scope="col">Status</th>
 								<th scope="col" aria-sort={ariaSort(sort, "date")}>

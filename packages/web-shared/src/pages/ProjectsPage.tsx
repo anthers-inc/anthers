@@ -9,13 +9,13 @@
  * not a grid: the substance lives on the Works it holds.
  *
  * The listing is a **table of tall rows** (Parker, 2026-10-11), the Works table's treatment
- * with room for a different row: the project's header image and its title and description
- * down the left, and a grid of the works it holds on the right — a project described by
- * what it contains. The rows sort by header and filter from the left sidebar below the
- * Studio nav, the Works page's mechanism; the filters and the sort are
- * `projects-list.ts`'s, extracted so a suite can fail on them. The works in the grid come
- * from the owner listing's batched `worksSummary`; a Work's tile opens its Edit page, the
- * place a creator acts on it.
+ * with room for a different row: the project's header image and its title down the left,
+ * the description as its own column beside the title (2026-10-16), and a grid of the works
+ * it holds on the right — a project described by what it contains. The rows sort by header
+ * and filter from the left sidebar below the Studio nav, the Works page's mechanism; the
+ * filters and the sort are `projects-list.ts`'s, extracted so a suite can fail on them. The
+ * works in the grid come from the owner listing's batched `worksSummary`; a Work's tile
+ * opens its Edit page, the place a creator acts on it.
  *
  * The wiki's *Projects* carries the model: what joins what, and how finely a body of work
  * splits.
@@ -190,9 +190,10 @@ export default function ProjectsPage() {
 					<table className="table w-full">
 						<thead>
 							<tr className="border-base-300/50 text-xs text-base-content/50">
-								<th scope="col" className="w-1/3" aria-sort={ariaSort(sort, "title")}>
+								<th scope="col" aria-sort={ariaSort(sort, "title")}>
 									<SortableHeader label="Project" sortKey="title" sort={sort} onSort={onSort} />
 								</th>
+								<th scope="col" className="min-w-[14rem]">Description</th>
 								<th scope="col">Works</th>
 								<th scope="col">Status</th>
 								<th scope="col" aria-sort={ariaSort(sort, "date")}>
@@ -263,8 +264,9 @@ export default function ProjectsPage() {
 }
 
 /**
- * One Project as a tall row: the header image and the title and description on the left,
- * the works it holds as a thumbnail grid on the right (Parker's sketch, 2026-10-11).
+ * One Project as a tall row: the header image and the title on the left, the description as
+ * its own column beside the title, the works it holds as a thumbnail grid on the right
+ * (Parker's sketch, 2026-10-11; the description column, 2026-10-16).
  */
 function ProjectRow({
 	project,
@@ -285,11 +287,11 @@ function ProjectRow({
 
 	return (
 		<tr className="border-b border-base-300/50 hover:bg-base-200/40 align-top">
-			{/* PROJECT — the header image above the name and the description, the row's left zone.
+			{/* PROJECT — the header image above the name, the row's left zone.
 			    The image carries the same link the title does, the Works table's pattern, and sits
 			    out of the accessibility tree because the title already names the same place. */}
 			<td className="py-3 pr-4">
-				<div className="max-w-xs w-64">
+				<div className="w-64">
 					<Link
 						to={projectUrl}
 						tabIndex={-1}
@@ -313,10 +315,15 @@ function ProjectRow({
 							{project.title || "Untitled"}
 						</Link>
 					</p>
-					<p className="text-xs text-base-content/60 line-clamp-3 break-words">
-						{project.description || "No description"}
-					</p>
 				</div>
+			</td>
+
+			{/* DESCRIPTION — its own column beside the title (Parker, 2026-10-16), the Works
+			    table's same treatment; the tall row leaves the room beside the header image. */}
+			<td className="py-3 pr-4">
+				<p className="text-xs text-base-content/60 line-clamp-3 break-words max-w-lg">
+					{project.description || "No description"}
+				</p>
 			</td>
 
 			{/* WORKS — the row's right zone: the shelf's contents as a grid of thumbnails,
