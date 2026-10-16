@@ -16,6 +16,12 @@
  * (`WorkSideColumn`). Each editable thing the user can see is an `InlineField` — pencil
  * opens it, X cancels, checkmark saves the field alone; there is no page-wide Save.
  *
+ * ⭐ **The pencils are always visible, and the Rating tab is no pencil's** (Parker,
+ * 2026-10-16). Hover-reveal was retired because an unfilled field left nothing to hover
+ * for it; every field now renders its full structure at any value, so the pencil sits in
+ * the open. The Rating tab is its own exception for a structural reason: the table is the
+ * field, it saves as one act, and it is always open — see `studio/RatingMatrix.tsx`.
+ *
  * The deliverable is whatever the kind is: a rendered medium through `WorkDeliverable`,
  * or the store through `ProjectPricing` for the goods kinds, exactly where every user
  * meets the same Work — the creator's copy is that view with pencils in it. The one
@@ -89,7 +95,7 @@ import {
 	useWorkUploads,
 	workUploads,
 } from "@anthers/web-shared/work-uploads";
-import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { ExclamationTriangleIcon, PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import CreditsSection from "../../studio/CreditsSection";
 import PanelEditor from "../../studio/PanelEditor";
@@ -216,6 +222,39 @@ export default function OwnerWorkEditor({
 		? notesFromRows(rows)
 		: normalizeContentNotes(current.maturityNotes ?? []);
 	const maturityLocked = current.maturityLocked ?? false;
+
+	// The Rating tab IS the matrix, always visible and always answering (Parker, 2026-10-16,
+	// replacing the hover-in pencil field, whose read view could not show a table that did
+	// not exist yet): the draft rides the saved rows the credits' way — a save adopts the
+	// response, and the sync clears the tab's own dirty bar underneath it.
+	const [ratingDraft, setRatingDraft] = useState<MaturityRows>(rows);
+	useEffect(() => setRatingDraft(rows), [rows]);
+	const ratingNext = normalizeMaturityRows(ratingDraft, grid);
+	const ratingDirty =
+		JSON.stringify(ratingNext) !== JSON.stringify(normalizeMaturityRows(rows, grid));
+	const [ratingSaving, setRatingSaving] = useState(false);
+	const [ratingError, setRatingError] = useState<string | null>(null);
+	const saveRating = async () => {
+		if (ratingSaving) return;
+		setRatingSaving(true);
+		setRatingError(null);
+		const changed =
+			JSON.stringify(ratingNext) !== JSON.stringify(normalizeMaturityRows(rows, grid));
+		if (!changed) {
+			// Sent unchanged, they re-declare the rating they add up to, which an operator's
+			// correction refuses — an unchanged save returns the tab to its read instead.
+			setRatingSaving(false);
+			return;
+		}
+		try {
+			await saveFields({ maturityRows: ratingNext });
+			setRows(ratingNext);
+		} catch (err) {
+			setRatingError(err instanceof Error ? err.message : "Couldn't save the rating just now.");
+		} finally {
+			setRatingSaving(false);
+		}
+	};
 
 	// Access. The creator's Badge ladder is fetched below because rungs live on the
 	// creator, not on the Work — `buildAccessRows` merges the Work's stored rows onto
@@ -570,7 +609,12 @@ export default function OwnerWorkEditor({
 							className="w-40 rounded-lg object-cover"
 						/>
 					) : (
-						<p className="text-sm text-base-content/60">No thumbnail yet.</p>
+						/* The value at its empty state: a placeholder shaped like the real thing
+						    (Parker, 2026-10-16), so the field is something a creator can hover,
+						    not a sentence about a field that isn't there. */
+						<div className="flex aspect-video w-40 items-center justify-center rounded-lg border border-dashed border-base-300 text-xs text-base-content/40">
+							No thumbnail yet.
+						</div>
 					)}
 					{/* Creator's own tab: the terms without the sanitizing preamble. The rule
 					    is still the rule — a thumbnail shows in public feeds — but the line
@@ -1014,6 +1058,16 @@ export default function OwnerWorkEditor({
 			saved={creditRows}
 			renderRead={(() => {
 				const shown: WorkDetail = { ...asRead, credits: creditRows };
+				if (creditRows.length === 0) {
+					// The full structure, at its empty value (Parker, 2026-10-16): credits are a
+					// list, so an empty one is said where its lines would sit, not as an absent
+					// field — a creator hunting for the release floor finds it at first glance.
+					return () => (
+						<p className="text-sm text-base-content/40">
+							No credits yet — at least one with its Created box ticked before release.
+						</p>
+					);
+				}
 				return () => <WorkCredits work={shown} />;
 			})()}
 			renderEdit={(draft, setDraft) => (
@@ -1072,45 +1126,53 @@ export default function OwnerWorkEditor({
 	);
 
 	const ratingField = (
-		<InlineField<MaturityRows>
-			label="Rating"
-			saved={rows}
-			renderRead={() => (
-				<RatingSummary
-					maturity={maturity}
-					notes={contentNotes}
-					incomplete={!!storedMaturity && !fromRows}
-				/>
-			)}
-			renderEdit={(draft, setDraft) => (
-				<div className="flex flex-col gap-3">
-					<RatingMatrix grid={grid} rows={draft} onChange={setDraft} />
-					{maturityLocked && (
-						<div className="alert alert-info text-sm">
-							<span>
-								An operator set this rating. You can make it more cautious at any time — to lower
-								it, appeal below and tell us why.
-							</span>
-						</div>
-					)}
-					{maturityLocked && (
-						<RatingAppeal workId={current.id} corrected={current.maturity ?? "mature"} />
-					)}
+		<div className="flex flex-col gap-3">
+			{/* The summary first — Unrated with its warning icon, or the rating the rows add
+			    up to — then the table, which is the tab's reason to exist and is always here. */}
+			<RatingSummary
+				maturity={maturity}
+				notes={contentNotes}
+				incomplete={!!storedMaturity && !fromRows}
+			/>
+			<RatingMatrix grid={grid} rows={ratingDraft} onChange={setRatingDraft} />
+			{maturityLocked && (
+				<div className="alert alert-info text-sm">
+					<span>
+						An operator set this rating. You can make it more cautious at any time — to lower it,
+						appeal below and tell us why.
+					</span>
 				</div>
 			)}
-			save={async (draft) => {
-				const next = normalizeMaturityRows(draft, grid);
-				const changed = JSON.stringify(next) !== JSON.stringify(normalizeMaturityRows(rows, grid));
-				// Sent unchanged, they re-declare the rating they add up to, which an
-				// operator's correction refuses — closing without a save is the honest exit.
-				if (!changed) return;
-				await saveFields({ maturityRows: next });
-				// The read is the user's view: once the rows are the server's, its mirror is
-				// too — the summary says what the rows add up to, not what the page mounted
-				// with (the same mirror rule the title's save keeps, 2026-10-13).
-				setRows(next);
-			}}
-		/>
+			{maturityLocked && (
+				<RatingAppeal workId={current.id} corrected={current.maturity ?? "mature"} />
+			)}
+			{/* The table saves as one act, because one heading click answers every row; the
+			    bar is the tab's own, shown while the draft stands away from the saved rows. */}
+			{(ratingDirty || ratingError) && (
+				<div className="flex flex-wrap items-center gap-2">
+					<button
+						type="button"
+						className="btn btn-primary btn-sm"
+						disabled={ratingSaving}
+						onClick={() => void saveRating()}
+					>
+						{ratingSaving ? "Saving…" : "Save Rating"}
+					</button>
+					<button
+						type="button"
+						className="btn btn-ghost btn-sm"
+						disabled={ratingSaving}
+						onClick={() => {
+							setRatingDraft(rows);
+							setRatingError(null);
+						}}
+					>
+						Discard
+					</button>
+					{ratingError && <span className="text-xs text-error">{ratingError}</span>}
+				</div>
+			)}
+		</div>
 	);
 
 	// Accessibility, per kind: a video's caption tracks (the editor manages its own acts);
@@ -1804,7 +1866,12 @@ function OwnerAccessChipEditor({
 	);
 }
 
-/** The rating read view: the badge (or the answered state) as a user meets it. */
+/**
+ * The rating's summary line, above the always-visible table. An unrated Work is not a blank:
+ * "Unrated" said in a badge with the warning icon is what the table's waiting rows mean
+ * (Parker, 2026-10-16) — the creator sees the Work needs its rows before it releases, at the
+ * glance the empty tab used to turn into a hunt.
+ */
 function RatingSummary({
 	maturity,
 	notes,
@@ -1824,9 +1891,15 @@ function RatingSummary({
 	}
 	if (!maturity) {
 		return (
-			<p className="text-sm text-warning">
-				Not rated yet — nothing releases until every row has an answer.
-			</p>
+			<div className="flex flex-wrap items-center gap-2">
+				<span className="badge badge-sm badge-warning gap-1">
+					<ExclamationTriangleIcon className="size-3.5" />
+					Unrated
+				</span>
+				<span className="text-sm text-base-content/60">
+					Nothing releases until every row has an answer.
+				</span>
+			</div>
 		);
 	}
 	return (
