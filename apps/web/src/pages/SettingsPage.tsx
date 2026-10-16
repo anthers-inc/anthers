@@ -90,7 +90,7 @@ function DesktopHomeSection() {
 	return (
 		<div className="card bg-base-200 mt-6">
 			<div className="card-body">
-				<h3 className="card-title text-lg">When Anthers opens</h3>
+				<h3 className="card-title text-lg">When Anthers Opens</h3>
 				<p className="text-sm text-base-content/60">
 					Where the app starts. This is set per computer, so you can read here and author somewhere
 					else.
@@ -581,7 +581,7 @@ function MatureContentSection() {
 }
 
 /**
- * Blocked accounts — and the only place a block can be lifted.
+ * Blocked Accounts — and the only place a block can be lifted.
  *
  * It has to exist for the feature to be honest. Blocking makes the other person's
  * profile 404 for you, so the page you blocked them from can no longer name them —
@@ -624,7 +624,7 @@ function BlockedSection() {
 	return (
 		<div className="card bg-base-200 mt-6">
 			<div className="card-body">
-				<h3 className="card-title text-lg">Blocked accounts</h3>
+				<h3 className="card-title text-lg">Blocked Accounts</h3>
 				<p className="text-sm text-base-content/60">
 					You and a blocked account don't see each other around Anthers. Unblocking doesn't restore
 					any follows that existed before — you'd need to follow again.
@@ -1200,7 +1200,9 @@ interface ActivityEntry {
  * rather than a summary somebody chose to write.
  *
  * Above that record sits a picture, and the difference between the two is the section's
- * whole design (Parker, 2026-10-13, after the treatments in `scratch/activity-graph-mock.html`):
+ * whole design (Parker, 2026-10-13, after the treatments in the Anthers vault's
+ * `Internal Wiki/Transient/Activity Graph Mocks 20261013.html`, recorded in the task note
+ * that carried the work):
  * a stacked bar per UTC day of a **billing cycle** — defaulting to the current one, the same
  * key `settle-cycle` settles on — with each day's stored ranges added up **per creator, in
  * full**. The picture is computed for display and says so; the drill-down it opens is not
@@ -1515,7 +1517,7 @@ function ActivityHistorySection() {
 	return (
 		<div className="card bg-base-200 mb-6">
 			<div className="card-body">
-				<h3 className="card-title text-lg">Your activity history</h3>
+				<h3 className="card-title text-lg">Your Activity History</h3>
 				<p className="text-sm text-base-content/60">
 					Every stretch of time Anthers holds about what you watched, read, heard or played —
 					exactly as it is stored. This record is also what the Time Pool divides by and what your
@@ -1785,13 +1787,13 @@ function NotificationsSection() {
 
 	const GROUP_COPY: Record<string, { label: string; hint: string }> = {
 		conversation: {
-			label: "Replies and comments",
+			label: "Replies and Comments",
 			hint: "Somebody replied to your comment, or commented on your post.",
 		},
 		reviews: { label: "Reviews", hint: "Somebody reviewed a Work of yours." },
 		followers: { label: "Followers", hint: "Somebody followed you." },
 		credits: { label: "Credits", hint: "You were credited on a Work." },
-		reportAnswers: { label: "Report answers", hint: "What we did about a report you filed." },
+		reportAnswers: { label: "Report Answers", hint: "What we did about a report you filed." },
 	};
 
 	const MODE_LABELS: Record<NotificationDeliveryMode, string> = {
@@ -1872,7 +1874,7 @@ interface DeletionState {
 }
 
 /**
- * Your data — the export button and the deletion flow.
+ * Your Data — the export button and the deletion flow.
  *
  * 🚨 **This section is what makes two published sentences true.** Privacy Policy has said since it
  * was written that getting a copy of your data and deleting your account are things you
@@ -1974,7 +1976,7 @@ function DataSection() {
 	return (
 		<div className="card bg-base-200 mt-6">
 			<div className="card-body">
-				<h3 className="card-title text-lg">Your data</h3>
+				<h3 className="card-title text-lg">Your Data</h3>
 
 				{error && (
 					<div className="alert alert-error alert-sm">
@@ -2341,11 +2343,11 @@ export default function SettingsPage() {
 					    Feed* promises, among the other remembered-by-browser settings. */}
 					<MediaPlaySection />
 
-					{/* Creator tools live in the Studio (payouts, connections, Badges). */}
+					{/* Creator Tools live in the Studio (payouts, connections, Badges). */}
 					{isCreator && (
 						<div className="card bg-base-200 mt-6">
 							<div className="card-body">
-								<h3 className="card-title text-lg">Creator tools</h3>
+								<h3 className="card-title text-lg">Creator Tools</h3>
 								<p className="text-sm text-base-content/60">
 									Manage payouts, platform connections, and your Badges in your Studio.
 								</p>
@@ -2380,7 +2382,7 @@ export default function SettingsPage() {
 					    to lock them. */}
 					<ParentalControlsSection />
 
-					{/* Blocked accounts — the only place a block can be lifted, since a blocked
+					{/* Blocked Accounts — the only place a block can be lifted, since a blocked
 					    profile no longer resolves. */}
 					<BlockedSection />
 				</>

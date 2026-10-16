@@ -1004,25 +1004,13 @@ export interface BadgeView {
 
 /**
  * The user's billing-machinery row (`billing_accounts`): what Stripe needs to charge and
- * reconcile, and the directed balance the Badge picker draws against. Nothing here is an
- * amount the user gives — under the Badge model those dollars are `user_badges` holdings,
- * and `/subscriptions/me` reports the held Badge beside this row.
+ * reconcile. Nothing here is an amount the user gives — under the Badge model those
+ * dollars are `user_badges` holdings, and `/subscriptions/me` reports the held Badge
+ * beside this row.
  */
 export interface Account {
 	id?: number;
 	userId?: number;
-	/**
-	 * The directed balance this cycle, as a **money string** — what the user's
-	 * subscription's directed items add up to, which the Badge picker draws down against.
-	 *
-	 * 🚨 **String, not number, and typing it `number` produces a silently wrong
-	 * comparison.** A `numeric` column arrives as `"3.00"`: `"3.00" >= 3` is true by
-	 * coercion and `"10.00" >= 9` is **false** by string ordering. So the type says string
-	 * and callers parse. The held Anthers Badge's worth — the number this row's old
-	 * `anthersSupport`/`creatorSupportTotal` fields used to carry — is
-	 * `AccountResponse.anthersSupport` beside it, derived from the holding.
-	 */
-	directedBudget: string;
 	isSelfHosting: boolean;
 	stripeCustomerId?: string | null;
 	stripeSubscriptionId?: string | null;
@@ -1154,12 +1142,9 @@ export interface BadgeHolding {
 	};
 }
 
-/** Response of GET /subscriptions/my-badges — the user's holdings plus the budget they ride in. */
+/** Response of GET /subscriptions/my-badges — the Badges the user holds this cycle. */
 export interface BadgeHoldingsResponse {
 	badges: BadgeHolding[];
-	budget: string;
-	allocated: string;
-	remaining: string;
 }
 
 /** Response of GET /subscriptions/access/:postId (post-scoped access check). */

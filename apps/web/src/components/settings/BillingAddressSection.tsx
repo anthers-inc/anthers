@@ -108,7 +108,7 @@ export default function BillingAddressSection() {
 	return (
 		<div className="card bg-base-200 mb-6" data-testid="billing-address-section">
 			<div className="card-body">
-				<h3 className="card-title text-lg">Billing address</h3>
+				<h3 className="card-title text-lg">Billing Address</h3>
 				<p className="text-sm text-base-content/60">
 					Save an address and future checkouts fill it in for you. It is stored at Stripe, with your
 					payment records rather than on Anthers' servers, and checkout only ever reads it.

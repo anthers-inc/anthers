@@ -519,9 +519,10 @@ const authRoutes = new Hono()
 				);
 			}
 
-			// Opportunistic rather than scheduled. `prune-credentials` sweeps these overnight
-			// too; doing it here as well means the table cannot grow unboundedly between runs on
-			// the one route that creates rows in it.
+			// Opportunistic rather than scheduled: no nightly job prunes pending signups —
+			// `prune-credentials` covers sessions, codes and challenges — so doing it here
+			// means the table cannot grow unboundedly between runs on the one route that
+			// creates rows in it.
 			void sweepExpiredPendingSignups().catch(() => {});
 
 			const previousToken = getCookie(c, PENDING_SIGNUP_COOKIE);

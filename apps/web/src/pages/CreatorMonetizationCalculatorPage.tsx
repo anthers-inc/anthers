@@ -775,7 +775,7 @@ export default function CreatorMonetizationCalculatorPage() {
 			<Reveal>
 				<CalcPageHeader
 					eyebrow="Time Pool · time → revenue"
-					title="How time with a creator becomes revenue"
+					title="How Time with a Creator Becomes Revenue"
 					lede={
 						<>
 							On Anthers, your <b className="text-base-content">Time Pool</b> (set by the Badge you
@@ -828,7 +828,7 @@ export default function CreatorMonetizationCalculatorPage() {
 							</ul>
 						</div>
 						<div>
-							<h4 className="font-semibold text-base-content/80 mb-1">What it leaves out</h4>
+							<h4 className="font-semibold text-base-content/80 mb-1">What It Leaves Out</h4>
 							<ul className="list-disc pl-5 space-y-1">
 								<li>
 									The audience builder counts just what each segment directs to you. One-time /

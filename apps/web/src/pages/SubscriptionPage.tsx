@@ -6,11 +6,13 @@
  * The user gives Anthers a monthly amount, which names their Badge (free/root/
  * sprout/petal/blossom at $0/$3/$6/$9/$12). This page surfaces:
  *   1. That Badge, and where the amount goes (Time Pool + Supports Anthers).
- *   2. The budget for creators + the Badges held from them (GET /my-badges).
+ *   2. The Badges held from creators (GET /my-badges) — written by the subscription
+ *      itself, so this page displays them rather than picking them.
  *   3. Pool distributions (poolAmount + badgeAmount) and, for creators, earnings.
  *
- * The amount to Anthers is changed on /signup; here it is directed at creators.
- * There is no bandwidth line — streaming and downloads are unlimited and free.
+ * The amount to Anthers is changed on /signup; a creator's Badge is bought on
+ * that creator's page. There is no bandwidth line — streaming and downloads
+ * are unlimited and free.
  */
 
 import { timePoolFor } from "@anthers/shared/constants";
@@ -260,12 +262,8 @@ export default function SubscriptionPage() {
 	const [success, setSuccess] = useState<string | null>(null);
 	const [selectedCycle, setSelectedCycle] = useState(getCurrentCycle());
 
-	// Pending Badge picks (creatorId → the rung picked), applied on *Give*.
-	const [pendingPicks, setPendingPicks] = useState<Map<number, number>>(new Map());
-
 	const sessionId = searchParams.get("session_id");
 	const viewMode = viewModeFor(selectedCycle);
-	const canEdit = viewMode === "current" || viewMode === "next";
 
 	// ── Data fetching ──
 
@@ -304,7 +302,7 @@ export default function SubscriptionPage() {
 			const rows = dist.value.distributions;
 			setDistributions(rows);
 
-			// Fetch each creator's ladder for the rung chips and the pick UI.
+			// Fetch each creator's ladder for the held-rung chips.
 			const handles = rows.map((d) => d.creator?.handle).filter(Boolean) as string[];
 			const ladders = new Map<string, CreatorBadge[]>();
 			const ladderResults = await Promise.allSettled(
@@ -318,8 +316,6 @@ export default function SubscriptionPage() {
 			}
 			setLaddersMap(ladders);
 		}
-
-		setPendingPicks(new Map());
 	}, []);
 
 	useEffect(() => {
@@ -401,77 +397,18 @@ export default function SubscriptionPage() {
 		}
 		for (const row of map.values()) {
 			const rungs = laddersMap.get(row.handle) ?? [];
-			const picked = pendingPicks.get(row.creatorId);
-			row.pendingBadge =
-				picked === undefined
-					? row.pendingBadge
-					: (rungs.find((r) => Number(r.threshold) === picked) ?? null);
 			row.rungs = rungs;
 		}
 		return Array.from(map.values()).sort(
 			(a, b) => b.poolAmount + b.committedBadge - (a.poolAmount + a.committedBadge),
 		);
-	}, [distributions, holdings, pendingPicks, laddersMap]);
+	}, [distributions, holdings, laddersMap]);
 
 	const totalTime = rows.reduce((s, r) => s + r.timeSeconds, 0);
 	const totalPool = rows.reduce((s, r) => s + r.poolAmount, 0);
 
-	const badgeBudget = Number(holdings?.budget ?? 0);
-	const allocatedBadges = rows.reduce(
-		(s, r) => s + (r.pendingBadge ? Number(r.pendingBadge.threshold) : 0),
-		0,
-	);
-	const remainingBudget = Math.max(0, badgeBudget - allocatedBadges);
-
-	const hasPendingPicks = useMemo(() => pendingPicks.size > 0, [pendingPicks]);
-
 	const isPaid = badge !== "free";
 	const isCanceling = account ? !!account.canceledAt : false;
-
-	// ── Badge pick handlers ──
-	// A pick is a RUNG, never a typed amount: holding a creator's Badge is what a
-	// subscription is, and the ladder's thresholds are the whole of what can be held.
-
-	/** Record a pending rung pick for one creator. The committed rung clears the pick. */
-	const handleBadgeChange = (creatorId: number, threshold: number) => {
-		const committed = rows.find((r) => r.creatorId === creatorId)?.committedBadge ?? 0;
-		setPendingPicks((prev) => {
-			const next = new Map(prev);
-			if (threshold === committed) next.delete(creatorId);
-			else next.set(creatorId, threshold);
-			return next;
-		});
-	};
-
-	const handleSaveBadges = async () => {
-		setActionLoading("badges");
-		setError(null);
-		try {
-			for (const [creatorId, threshold] of pendingPicks) {
-				const row = rows.find((r) => r.creatorId === creatorId);
-				const rung = row?.rungs.find((r) => Number(r.threshold) === threshold);
-				if (!rung) continue;
-				const res = await client.api.subscriptions["my-badges"].$post({
-					json: {
-						badgeId: rung.id,
-						...(selectedCycle !== getCurrentCycle() ? { cycle: selectedCycle } : {}),
-					},
-				});
-				if (!res.ok) {
-					const data = (await res.json()) as { error?: string };
-					setError(data.error ?? "Failed to save.");
-					break;
-				}
-			}
-			setSuccess("Your Badges are saved.");
-			setPendingPicks(new Map());
-			await fetchCycleData(selectedCycle);
-		} catch {
-			setError("Failed to save.");
-		} finally {
-			setActionLoading(null);
-		}
-	};
 
 	// ── Account actions ──
 
@@ -725,31 +662,16 @@ export default function SubscriptionPage() {
 							</div>
 						</div>
 
-						{/* Directed support */}
+						{/* Directed support — the Badges you hold, written by the subscription
+						    itself. There is nothing to pick here: a holding changes where the
+						    subscription changes (signup and checkout), not a pick inside the
+						    dashboard. */}
 						<div className="flex flex-col">
 							<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">
 								To creators
 							</p>
 
-							{/* Budget summary */}
-							<div className="mb-3">
-								<div className="flex items-center justify-between text-xs text-base-content/60 mb-1">
-									<span>{fmt(badgeBudget)} total</span>
-									<span>
-										{fmt(allocatedBadges)} held · {fmt(remainingBudget)} left
-									</span>
-								</div>
-								<div className="relative h-2 bg-base-300 rounded-full overflow-hidden">
-									<div
-										className="absolute inset-y-0 left-0 bg-success/80 rounded-full"
-										style={{
-											width: `${badgeBudget > 0 ? Math.min(100, (allocatedBadges / badgeBudget) * 100) : 0}%`,
-										}}
-									/>
-								</div>
-							</div>
-
-							{badgeBudget <= 0 ? (
+							{holdings && holdings.badges.length === 0 ? (
 								<div className="text-sm text-base-content/50 text-center py-4">
 									<p>You hold no Badges from creators this cycle.</p>
 									<Link to="/signup" className="link link-primary text-sm">
@@ -758,115 +680,51 @@ export default function SubscriptionPage() {
 								</div>
 							) : (
 								<div className="space-y-2">
-									{rows.map((row, i) => {
-										const committed = row.committedBadge;
-										// The ratchet: within the current cycle a holding never goes
-										// down, so a lower rung is not offered. Next month's is free to
-										// pick, and affordability is what the rung chips below say.
-										const floor = viewMode === "current" ? committed : 0;
-										const othersHeld =
-											allocatedBadges - (row.pendingBadge ? Number(row.pendingBadge.threshold) : 0);
-										const pickOptions = row.rungs.filter(
-											(r) =>
-												Number(r.threshold) >= floor &&
-												Number(r.threshold) <= othersHeld + remainingBudget,
-										);
-										const pickedThreshold = row.pendingBadge
-											? Number(row.pendingBadge.threshold)
-											: null;
-										const changed = pickedThreshold !== null && pickedThreshold !== committed;
-										return (
-											<div key={row.creatorId} className="rounded-lg p-2 bg-base-100/40">
-												<div className="flex items-center gap-2">
-													<div
-														className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
-														style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
-													>
-														{row.avatar ? (
-															<img
-																src={row.avatar}
-																alt=""
-																className="w-5 h-5 rounded-full object-cover"
-															/>
-														) : (
-															initials(row)
-														)}
-													</div>
-													<Link
-														to={profileUrl(row.handle)}
-														className="text-xs text-base-content/70 truncate flex-1 link-hover"
-													>
-														{row.displayName || row.handle}
-													</Link>
-													{canEdit && pickOptions.length > 0 ? (
-														<select
-															className="select select-bordered select-xs"
-															value={pickedThreshold ?? ""}
-															aria-label={`Badge held from ${row.displayName || row.handle}`}
-															onChange={(e) =>
-																handleBadgeChange(row.creatorId, Number(e.target.value))
-															}
-															disabled={!!actionLoading}
-														>
-															{/* A held rung can never be un-picked within the cycle
-															    (the API refuses a decrease), so the placeholder is
-															    disabled once there is a holding to keep. */}
-															<option value="" disabled={committed > 0}>
-																{committed > 0 ? fmt(committed) : "Choose a Badge"}
-															</option>
-															{pickOptions.map((rung) => (
-																<option key={rung.id} value={Number(rung.threshold)}>
-																	{rung.label} · {fmt(rung.threshold)}/mo
-																</option>
-															))}
-														</select>
+									{rows.map((row, i) => (
+										<div key={row.creatorId} className="rounded-lg p-2 bg-base-100/40">
+											<div className="flex items-center gap-2">
+												<div
+													className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+													style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+												>
+													{row.avatar ? (
+														<img
+															src={row.avatar}
+															alt=""
+															className="w-5 h-5 rounded-full object-cover"
+														/>
 													) : (
-														<span className="text-sm text-success tabular-nums">
-															{fmt(row.settledBadge || committed)}
-														</span>
+														initials(row)
 													)}
-													{changed && <span className="text-[9px] text-primary">(pending)</span>}
 												</div>
-												{row.rungs.length > 0 && (
-													<div className="mt-1 pl-7 flex flex-wrap gap-1">
-														{row.rungs.map((rung) => {
-															const held = row.pendingBadge?.id === rung.id;
-															return (
-																<span
-																	key={rung.id}
-																	className={`badge badge-xs ${held ? "badge-success" : "badge-ghost"}`}
-																	title={rung.description ?? undefined}
-																>
-																	{held ? "✓" : "○"} {rung.label} (${rung.threshold})
-																</span>
-															);
-														})}
-													</div>
-												)}
+												<Link
+													to={profileUrl(row.handle)}
+													className="text-xs text-base-content/70 truncate flex-1 link-hover"
+												>
+													{row.displayName || row.handle}
+												</Link>
+												<span className="text-sm text-success tabular-nums">
+													{fmt(row.settledBadge || row.committedBadge)}
+												</span>
 											</div>
-										);
-									})}
-
-									{canEdit && (
-										<div className="flex gap-2 pt-1">
-											<button
-												type="button"
-												className={`btn btn-primary btn-sm ${actionLoading === "badges" ? "btn-disabled" : ""}`}
-												onClick={handleSaveBadges}
-												disabled={!hasPendingPicks || !!actionLoading}
-											>
-												{actionLoading === "badges" ? "Holding…" : "Hold"}
-											</button>
-											<button
-												type="button"
-												className="btn btn-ghost btn-sm"
-												onClick={() => setPendingPicks(new Map())}
-												disabled={!hasPendingPicks}
-											>
-												Discard
-											</button>
+											{row.rungs.length > 0 && (
+												<div className="mt-1 pl-7 flex flex-wrap gap-1">
+													{row.rungs.map((rung) => {
+														const held = row.pendingBadge?.id === rung.id;
+														return (
+															<span
+																key={rung.id}
+																className={`badge badge-xs ${held ? "badge-success" : "badge-ghost"}`}
+																title={rung.description ?? undefined}
+															>
+																{held ? "✓" : "○"} {rung.label} (${rung.threshold})
+															</span>
+														);
+													})}
+												</div>
+											)}
 										</div>
-									)}
+									))}
 								</div>
 							)}
 						</div>

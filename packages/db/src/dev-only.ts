@@ -11,8 +11,8 @@
  *
  * ⚠️ **The obvious repair does not work here, and that is the interesting part.** The API's
  * three sites detect a public deployment from an https `FRONTEND_URL` (`lib/deployment.ts`),
- * which is the right answer for them — but `FRONTEND_URL` is declared on the **api component
- * only**, so the PRE_DEPLOY migrate job, which runs from this same image, has no such
+ * which is the right answer for them — but `FRONTEND_URL` is declared on the api component and
+ * the worker only, so the PRE_DEPLOY migrate job, which runs from this same image, has no such
  * variable. A guard built on it would have been false there too: the original defect, fixed
  * one level up and shipped again.
  *

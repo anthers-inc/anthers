@@ -256,15 +256,6 @@ async function heldOnOrgLadder(userId: number): Promise<number> {
 	return Number(held?.held ?? 0);
 }
 
-/** The picker's budget as the billing row carries it. */
-async function budgetOf(userId: number): Promise<string> {
-	const [acct] = await db
-		.select({ directedBudget: billingAccounts.directedBudget })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId));
-	return acct?.directedBudget ?? "0.00";
-}
-
 function setSupport(body: object) {
 	return req("/api/subscriptions/account", {
 		method: "POST",
@@ -554,14 +545,10 @@ describe("what is in force does not drop until the cycle turns", () => {
 			.set({
 				stripeCustomerId: "cus_under_test",
 				currentPeriodStart: new Date(SEPT * 1000),
-				// The stored budget participates in the held-over guard, same as the old
-				// amounts columns did; $12 is the September charge.
-				directedBudget: "12.00",
 			})
 			.where(eq(billingAccounts.userId, supporterId));
 		// The in-force Badge fixture: a $12 Anthers rung held this cycle. What the webhooks
-		// find "in force" is this holding — read by `heldOnOrgLadder` below — beside the
-		// stored budget.
+		// find "in force" is this holding, read by `heldOnOrgLadder` below.
 		await holdOrgRung(supporterId, "12.00");
 	});
 
@@ -572,10 +559,8 @@ describe("what is in force does not drop until the cycle turns", () => {
 		await syncSubscriptionToAccount(
 			subscription({ anthers: 3, periodStart: SEPT, periodEnd: OCT }),
 		);
-		// Held over: the $3 holding is NOT applied on top of the $12 within the cycle, and
-		// the budget's stored figure participates the same way.
+		// Held over: the $3 holding is NOT applied on top of the $12 within the cycle.
 		expect(await heldOnOrgLadder(supporterId)).toBe(12);
-		expect(await budgetOf(supporterId)).toBe("12.00");
 	});
 
 	it("takes the lower amount once the period has moved on", async () => {
@@ -587,10 +572,8 @@ describe("what is in force does not drop until the cycle turns", () => {
 			}),
 		);
 		// The period turned, so the items ($3) are the whole truth: the webhook re-stamps
-		// the holding at $3, and the budget — which carries only the DIRECTED side, and
-		// these items carry none — zeroes with it.
+		// the holding at $3.
 		expect(await heldOnOrgLadder(supporterId)).toBe(3);
-		expect(await budgetOf(supporterId)).toBe("0.00");
 	});
 
 	it("applies a raise immediately, because a raise is charged in full today", async () => {
@@ -642,7 +625,6 @@ describe("a renewal that fails", () => {
 			.set({
 				currentPeriodStart: new Date(monthStart * 1000),
 				isActive: true,
-				directedBudget: "5.00",
 			})
 			.where(eq(billingAccounts.userId, supporterId));
 		// The supporter's holding on the creator: a $5 Badge, held this cycle. Under the
@@ -709,7 +691,7 @@ describe("a renewal that fails", () => {
 	it("keeps the Badge and this month's gates through Stripe's retries", async () => {
 		await syncSubscriptionToAccount(thisMonth("past_due"));
 
-		// `past_due` changes nothing: the Anthers rung stays held, the budget stays written.
+		// `past_due` changes nothing: the Anthers rung stays held.
 		expect(await heldOnOrgLadder(supporterId)).toBe(12);
 		expect(await holdingsThisMonth()).toHaveLength(1);
 	});
@@ -717,18 +699,16 @@ describe("a renewal that fails", () => {
 	it("🚨 takes the Badge and this month's gates away once Stripe marks it unpaid", async () => {
 		await syncSubscriptionToAccount(thisMonth("unpaid"));
 
-		// The benefits lapse: the holdings go, and the budget zeroes with them — the two
-		// lives the old amounts columns lived, now on the shapes that carry them.
+		// The benefits lapse: the holdings go — one life the old amounts columns had,
+		// now on the shape that carries them.
 		expect(await heldOnOrgLadder(supporterId)).toBe(0);
 		expect(await holdingsThisMonth()).toHaveLength(0);
 		const [acct] = await db
 			.select({
-				budget: billingAccounts.directedBudget,
 				subId: billingAccounts.stripeSubscriptionId,
 			})
 			.from(billingAccounts)
 			.where(eq(billingAccounts.userId, supporterId));
-		expect(acct.budget).toBe("0.00");
 		// Kept, so that paying what is owed makes the same subscription active again.
 		expect(acct.subId).toBe(SUB_ID);
 	});

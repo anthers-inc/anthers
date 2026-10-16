@@ -265,16 +265,16 @@ export default function ForCreatorsPage() {
 					</Reveal>
 					<Reveal delay={110} className="h-full">
 						<div className="flex h-full flex-col justify-center gap-6">
-							<PricePoint icon={<ShieldCheckIcon className="h-5 w-5" />} title="No percentage cut">
+							<PricePoint icon={<ShieldCheckIcon className="h-5 w-5" />} title="No Percentage Cut">
 								The creator's price is the creator's revenue. Full stop.
 							</PricePoint>
-							<PricePoint icon={<EyeIcon className="h-5 w-5" />} title="Full visibility">
+							<PricePoint icon={<EyeIcon className="h-5 w-5" />} title="Full Visibility">
 								Every fee is itemized and explained. Buyers understand what they're paying for.
 								Creators understand what they're earning.
 							</PricePoint>
 							<PricePoint
 								icon={<ServerStackIcon className="h-5 w-5" />}
-								title="No fee on your sales"
+								title="No Fee on Your Sales"
 							>
 								Anthers takes <strong>nothing</strong> from a sale or from monthly support. The only
 								charge that touches a creator is storage past your Badge's allowance, at cost: from
@@ -373,49 +373,49 @@ export default function ForCreatorsPage() {
 					<Reveal delay={0}>
 						<Feature
 							icon={<PaintBrushIcon className="h-6 w-6" />}
-							title="Rich project pages"
+							title="Rich Project Pages"
 							description="Thumbnails, screenshots, detailed descriptions, and download links. Each project gets a dedicated page that adapts to its media type, platform-grouped downloads for games, embedded players for audio and video."
 						/>
 					</Reveal>
 					<Reveal delay={80}>
 						<Feature
 							icon={<ArrowDownTrayIcon className="h-6 w-6" />}
-							title="Build management"
+							title="Build Management"
 							description="Upload builds for multiple platforms. Label versions as stable, beta, or prerelease. Your audience downloads from organized, clearly labeled files, not a confusing pile of .zips."
 						/>
 					</Reveal>
 					<Reveal delay={160}>
 						<Feature
 							icon={<ChatBubbleLeftRightIcon className="h-6 w-6" />}
-							title="Devlogs and posts"
+							title="Devlogs and Posts"
 							description="Write updates, announcements, and essays. Link posts to specific projects as devlogs, or publish standalone. Your audience follows your work in a unified feed, like Patreon but alongside your actual projects."
 						/>
 					</Reveal>
 					<Reveal delay={240}>
 						<Feature
 							icon={<StarIcon className="h-6 w-6" />}
-							title="Reviews and comments"
+							title="Reviews and Comments"
 							description="Community feedback built into every page. Reviews, always written, help the best work surface, and comments under your posts carry the conversation."
 						/>
 					</Reveal>
 					<Reveal delay={400}>
 						<Feature
 							icon={<ChartBarIcon className="h-6 w-6" />}
-							title="Creator dashboard"
+							title="Creator Dashboard"
 							description="See your projects, posts, follower count, and content at a glance. Manage drafts and published work from one place. Create and edit projects with rich forms, upload builds, and manage screenshots."
 						/>
 					</Reveal>
 					<Reveal delay={480}>
 						<Feature
 							icon={<UserGroupIcon className="h-6 w-6" />}
-							title="Creator profiles"
+							title="Creator Profiles"
 							description="Your own anther on Anthers: header image, bio, links, and all your work in one place. Audiences follow you, not individual projects. Like a Patreon page and an itch.io profile combined."
 						/>
 					</Reveal>
 					<Reveal delay={560}>
 						<Feature
 							icon={<ArrowPathIcon className="h-6 w-6" />}
-							title="Follow and feed"
+							title="Follow and Feed"
 							// ⚠️ "Game jam entry?" sat in this list until 2026-08-17. Jams were retired
 							// tables and all (migration 0037), so a feed item type named after them
 							// claims a feature Anthers doesn't have — the distinction the retirement
@@ -488,7 +488,7 @@ export default function ForCreatorsPage() {
 				</Reveal>
 				<div className="mx-auto mt-10 grid max-w-4xl gap-8 text-left sm:grid-cols-2">
 					<Reveal delay={0} className="h-full">
-						<SignpostCard step="1" title="Direct support — 0% cut" tone="creator">
+						<SignpostCard step="1" title="Direct Support — 0% Cut" tone="creator">
 							And the part we'll state flatly: nothing is taken.
 							<ul>
 								<li>
@@ -510,7 +510,7 @@ export default function ForCreatorsPage() {
 						</SignpostCard>
 					</Reveal>
 					<Reveal delay={110} className="h-full">
-						<SignpostCard step="2" title="The Anthers commons — the Time Pool" tone="anthers">
+						<SignpostCard step="2" title="The Anthers Commons — the Time Pool" tone="anthers">
 							Fans also point a monthly amount at{" "}
 							<strong className="font-semibold text-base-content/85">the platform itself</strong>.
 							Here's what that does:
@@ -873,9 +873,9 @@ type Line = { label: string; amount: string };
 type Combo = { scenario: string; rows: Deal[]; note?: string; breakdown: Line[] };
 
 const ACTIONS = [
-	{ key: "purchase", label: "Purchases your work" },
-	{ key: "badge", label: "Backs you monthly" },
-	{ key: "stream", label: "Streams your work" },
+	{ key: "purchase", label: "Purchases Your Work" },
+	{ key: "badge", label: "Backs You Monthly" },
+	{ key: "stream", label: "Streams Your Work" },
 ] as const;
 type ActionKey = (typeof ACTIONS)[number]["key"];
 
@@ -996,39 +996,39 @@ const anthers = (creator: string, platform: string, platformNote: string): Deal 
 const streamReceipt: Line[] = [
 	{ label: "To you — your share of the fan's Time Pool, by time", amount: STREAM_HR_PAY },
 	{
-		label: "Card processing — their share of the at-cost card fee, to the processor",
+		label: "Card Processing — Their Share of the At-Cost Card Fee, to the Processor",
 		amount: STREAM_HR_CARD,
 	},
 	{
-		label: "Charitable programs — what's left of their support for Anthers, across the month",
+		label: "Charitable Programs — what's left of their support for Anthers, across the month",
 		amount: STREAM_HR_FOUNDATION,
 	},
-	{ label: "Anthers profit", amount: "$0.00" },
+	{ label: "Anthers Profit", amount: "$0.00" },
 ];
 /** A sale. `net` is your take-home; `card` is the only deduction, and it is paid to
  * Stripe. Anthers charges nothing on a purchase (the fee that used to sit here was
  * removed 2026-08-03) and delivery costs nothing (removed 2026-08-12). */
 const purchaseReceipt = (net: string, card: string): Line[] => [
-	{ label: "To you — the listed price, less the card cost below", amount: net },
-	{ label: "Card processing — to the payment processor", amount: card },
-	{ label: "Delivery — every download, on every device, forever", amount: "$0.00" },
-	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
+	{ label: "To You — the Listed Price, less the Card Cost Below", amount: net },
+	{ label: "Card Processing — to the Payment Processor", amount: card },
+	{ label: "Delivery — Every Download, on Every Device, Forever", amount: "$0.00" },
+	{ label: "Anthers — No Cut, No Profit", amount: "$0.00" },
 ];
 const merchReceipt: Line[] = [
 	{
-		label: `To you — your $${SALE_25_PHYSICAL.price} listed, less the card cost`,
+		label: `To You — Your $${SALE_25_PHYSICAL.price} Listed, less the Card Cost`,
 		amount: `$${SALE_25_PHYSICAL.creatorReceives}`,
 	},
 	{
-		label: "Card processing — to the payment processor",
+		label: "Card Processing — to the Payment Processor",
 		amount: `$${SALE_25_PHYSICAL.cardFee}`,
 	},
-	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
+	{ label: "Anthers — No Cut, No Profit", amount: "$0.00" },
 ];
 const badgeReceipt: Line[] = [
-	{ label: "To you — what the Badge pays, less the at-cost card share", amount: BADGE_NET_STR },
-	{ label: "Card processing — one fee on the fan's whole monthly charge", amount: BADGE_CARD_STR },
-	{ label: "Anthers — no cut, no profit", amount: "$0.00" },
+	{ label: "To You — What the Badge Pays, less the At-Cost Card Share", amount: BADGE_NET_STR },
+	{ label: "Card Processing — one fee on the fan's whole monthly charge", amount: BADGE_CARD_STR },
+	{ label: "Anthers — No Cut, No Profit", amount: "$0.00" },
 ];
 
 /** The Anthers take-home + receipt for a sale, derived from constants: the list price
@@ -1355,7 +1355,7 @@ function SolutionExplorer() {
 							</p>
 							<dl className="flex flex-col gap-1.5 text-sm">
 								{combo.breakdown.map((line) => {
-									const isProfit = line.label === "Anthers profit";
+									const isProfit = line.label === "Anthers Profit";
 									return (
 										<div
 											key={line.label}

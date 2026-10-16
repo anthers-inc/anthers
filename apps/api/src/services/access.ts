@@ -589,7 +589,7 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		 * than at the top of the resolver.** What is public is the Work's *page* — title,
 		 * cover, duration, and the verdict itself — and what requires an account is
 		 * **delivery**. A signed-out visitor still learns that this Work is free to everyone,
-		 * which is what makes the page worth sharing and worth unfurling; they simply are not
+		 * which is what makes the page worth sharing; they simply are not
 		 * handed the bytes. `serializeWorkForUser` reads `canAccess` for the deliverable and
 		 * `isFree` for the Public Access badge, so both halves of that sentence land.
 		 *

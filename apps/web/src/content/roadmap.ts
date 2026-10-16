@@ -354,10 +354,19 @@ export const ROADMAP: RoadmapGroup[] = [
 					{
 						id: "analytics",
 						title: "Your Own Numbers",
-						blurb: "Views, purchases and time spent, charted per Work.",
+						blurb: "Views and time spent, charted per Work.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						doc: { id: "70.05", title: "How Attention Is Counted" },
+					},
+					{
+						id: "traffic",
+						title: "Where Your Readers Come From",
+						blurb:
+							"Which sites visits to your pages come from, and how visits move over time, measured by Anthers in its own database.",
+						bucket: "launched",
+						quarter: "Q4 2026",
+						note: "No analytics service, no cookies, and no IP address ever enters the record.",
 					},
 					{
 						id: "notifications",
@@ -386,7 +395,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						id: "contests",
 						title: "Contests and Calls for Content",
 						blurb:
-							"Open calls across every medium, with judging and prizes held where neither side controls them.",
+							"Open calls across every medium, judged by third parties and never paid from the Time Pool.",
 						bucket: "planned",
 					},
 				],
@@ -585,7 +594,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						blurb:
 							"Giving above the Public Access price buys no more access, by design. What it carries instead must make nobody else poorer.",
 						bucket: "active",
-						note: "Stickers work; creator Badge perks too. Storage, merch, preservation: not built.",
+						note: "Stickers, the ruled storage ladder, merch and purchase preservation are built.",
 						doc: { id: "21.01", title: "Badges" },
 					},
 				],
@@ -652,7 +661,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						id: "reporting",
 						title: "Reporting Something, and Blocking Somebody",
 						blurb:
-							"Report a comment, a rating, a person or a Work, and block anybody from anywhere they appear.",
+							"Report a comment, a review, a person or a Work, and block anybody from anywhere they appear.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						doc: { id: "51.01", title: "Reporting Something" },
@@ -696,7 +705,6 @@ export const ROADMAP: RoadmapGroup[] = [
 							"A registered agent, a public notice form, counter-notices, clocks on a timer, and every buyer refunded if a notice becomes final.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
-						note: "A counter-notice is not yet forwarded to whoever filed the notice.",
 						doc: { id: "54.01", title: "Filing a Notice" },
 					},
 					{
@@ -783,7 +791,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						blurb:
 							"More than one director, and governance documents adopted rather than merely written.",
 						bucket: "active",
-						note: "Seven policies drafted, none adopted. The board is one person.",
+						note: "Seven policies adopted at the organizational meeting. The board is one person.",
 						doc: { id: "63.00", title: "Policies" },
 					},
 					{
@@ -800,7 +808,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						blurb:
 							"The corporation's bank account, and live payments — among the last things before opening.",
 						bucket: "active",
-						note: "Payments run in test mode, so nothing here can charge you.",
+						note: "Card charges and refunds run in live mode since the October cutover.",
 						doc: { id: "70.09", title: "How Money Moves" },
 					},
 				],
@@ -911,7 +919,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						blurb:
 							"How the model works, what the policies say, what the standards are, and why each was chosen.",
 						bucket: "active",
-						note: "Written and thorough, and not yet served from this site.",
+						note: "Live at anthers.wiki, with the roadmap and task board beside it.",
 					},
 					{
 						id: "public-planning",
@@ -919,7 +927,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						blurb:
 							"The roadmap and the task board published from the same place they are written, rather than summarized by hand.",
 						bucket: "active",
-						note: "Decided and not built. This page is hand-written today.",
+						note: "Served at anthers.wiki; this page is still hand-written.",
 					},
 					{
 						id: "release-notes",

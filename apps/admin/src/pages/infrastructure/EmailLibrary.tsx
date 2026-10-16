@@ -42,7 +42,7 @@ interface SendResult {
 function EmailPreview({ html }: { html: string }) {
 	return (
 		<iframe
-			title="Email preview"
+			title="Email Preview"
 			srcDoc={html}
 			sandbox=""
 			className="mt-2 h-[560px] w-full rounded border border-base-300 bg-white"

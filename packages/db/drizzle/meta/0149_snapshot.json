@@ -1,5 +1,5 @@
 {
-  "id": "3f39d9a0-65a1-4e17-9dfc-9a288d260e74",
+  "id": "286aa613-f52d-48d9-b339-fdf43c9468fe",
   "prevId": "0945e8b3-d65e-4a72-8499-fbf3699e943f",
   "version": "7",
   "dialect": "postgresql",
@@ -1307,193 +1307,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.badge_charges": {
-      "name": "badge_charges",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "buyer_id": {
-          "name": "buyer_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "badge_id": {
-          "name": "badge_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "creator_id": {
-          "name": "creator_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "badge_label": {
-          "name": "badge_label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "threshold": {
-          "name": "threshold",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "charged_amount": {
-          "name": "charged_amount",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "processing_fee": {
-          "name": "processing_fee",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "sales_tax": {
-          "name": "sales_tax",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0.00'"
-        },
-        "billing_cycle": {
-          "name": "billing_cycle",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "stripe_payment_intent_id": {
-          "name": "stripe_payment_intent_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_badge_charges_buyer": {
-          "name": "idx_badge_charges_buyer",
-          "columns": [
-            {
-              "expression": "buyer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_badge_charges_cycle": {
-          "name": "idx_badge_charges_cycle",
-          "columns": [
-            {
-              "expression": "billing_cycle",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_badge_charges_intent": {
-          "name": "idx_badge_charges_intent",
-          "columns": [
-            {
-              "expression": "stripe_payment_intent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "badge_charges_buyer_id_users_id_fk": {
-          "name": "badge_charges_buyer_id_users_id_fk",
-          "tableFrom": "badge_charges",
-          "tableTo": "users",
-          "columnsFrom": [
-            "buyer_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "badge_charges_badge_id_badges_id_fk": {
-          "name": "badge_charges_badge_id_badges_id_fk",
-          "tableFrom": "badge_charges",
-          "tableTo": "badges",
-          "columnsFrom": [
-            "badge_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "badge_charges_creator_id_users_id_fk": {
-          "name": "badge_charges_creator_id_users_id_fk",
-          "tableFrom": "badge_charges",
-          "tableTo": "users",
-          "columnsFrom": [
-            "creator_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.basket_items": {
       "name": "basket_items",
       "schema": "",
@@ -1514,13 +1327,7 @@
           "name": "work_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false
-        },
-        "badge_id": {
-          "name": "badge_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "added_at": {
           "name": "added_at",
@@ -1548,29 +1355,6 @@
             }
           ],
           "isUnique": true,
-          "where": "\"basket_items\".\"work_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "uq_basket_items_user_badge": {
-          "name": "uq_basket_items_user_badge",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "badge_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"basket_items\".\"badge_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1580,21 +1364,6 @@
           "columns": [
             {
               "expression": "work_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_basket_items_badge": {
-          "name": "idx_basket_items_badge",
-          "columns": [
-            {
-              "expression": "badge_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1632,30 +1401,12 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
-        },
-        "basket_items_badge_id_badges_id_fk": {
-          "name": "basket_items_badge_id_badges_id_fk",
-          "tableFrom": "basket_items",
-          "tableTo": "badges",
-          "columnsFrom": [
-            "badge_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "basket_items_exactly_one_kind": {
-          "name": "basket_items_exactly_one_kind",
-          "value": "(\"basket_items\".\"work_id\" IS NOT NULL) <> (\"basket_items\".\"badge_id\" IS NOT NULL)"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.creator_netting_applications": {
@@ -6546,13 +6297,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "directed_budget": {
-          "name": "directed_budget",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0.00'"
         },
         "stripe_customer_id": {
           "name": "stripe_customer_id",

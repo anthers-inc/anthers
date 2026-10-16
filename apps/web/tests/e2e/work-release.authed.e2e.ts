@@ -287,7 +287,7 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 
 	await page.getByRole("button", { name: "Save Access" }).click();
 	await page.goto("/studio/works");
-	await expect(rowsFor(page)).toContainText("Nobody can open");
+	await expect(rowsFor(page)).toContainText("Nobody Can Open");
 
 	// Still released, and now genuinely shut: the server drops it from what a user sees.
 	// Polled for the same reason as the read after Release — and note this direction was

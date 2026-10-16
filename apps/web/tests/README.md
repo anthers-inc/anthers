@@ -1,17 +1,17 @@
-# Browser testing
+# Browser Testing
 
 Playwright-based browser tooling for the web app, in three layers. All of it
 drives Playwright's own bundled Chromium — it does **not** use any browser you
 have installed. This environment runs Bun (no Node), so the Playwright CLI is
 invoked with `bunx`.
 
-## One-time setup
+## One-Time Setup
 
 ```
 make e2e-install        # downloads the Chromium build Playwright drives
 ```
 
-## Tier 0 — screenshots / smoke (`scripts/screenshot.ts`)
+## Tier 0 — Screenshots / Smoke (`scripts/screenshot.ts`)
 
 Fast visual check: builds, serves the preview, screenshots each route, and
 flags real page/console errors (ignoring the expected no-backend API
@@ -25,14 +25,14 @@ make screenshots ROUTES="/ /for-users"    # any routes you like
 Exit code is non-zero if any route had a real error, so it doubles as a smoke
 test.
 
-## Tier 1 — Playwright MCP (interactive)
+## Tier 1 — Playwright MCP (Interactive)
 
 `.mcp.json` (repo root) registers the official Playwright MCP server, giving the
 agent browser tools (navigate, click, snapshot, screenshot) without writing a
 script. It starts headless; drop `--headless` in `.mcp.json` to watch it. Claude
 Code picks up `.mcp.json` on session start.
 
-## Tier 2 — e2e suite (`tests/e2e/*.e2e.ts`)
+## Tier 2 — e2e Suite (`tests/e2e/*.e2e.ts`)
 
 Durable regression tests run by the Playwright runner. The config's `webServer`
 auto-builds and serves the app. Specs are

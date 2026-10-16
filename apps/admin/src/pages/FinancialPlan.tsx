@@ -281,7 +281,7 @@ export default function FinancialPlan() {
 		try {
 			if (!(await flushAll())) throw new Error(AUTO_SAVE_ERROR);
 			await send("/api/admin/financial-plan/phases", "POST", {
-				label: "New phase",
+				label: "New Phase",
 				accounts: Math.max(1_000, Math.round(((last?.accounts ?? 1_000) || 1_000) * 1.5)),
 				payingShare: last?.payingShare ?? 0.3,
 				staff: 0,
@@ -751,7 +751,7 @@ function SettingsEditor({
 	return (
 		<div className="mb-6 flex flex-wrap items-end gap-4 rounded-box border border-base-300 bg-base-100 p-4">
 			<label className="text-sm" htmlFor="fp-admin-share">
-				<div>Admin budget (share of revenue)</div>
+				<div>Admin Budget (share of revenue)</div>
 				<input
 					className="input input-bordered input-sm mt-1 w-28 tabular-nums"
 					type="number"
@@ -1061,7 +1061,7 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 		name: "admin",
 		fill: C.admin,
 		group: "admin",
-		label: `Admin budget ${usd(L.adminBudget)}`,
+		label: `Admin Budget ${usd(L.adminBudget)}`,
 		value: L.adminBudget,
 		...(L.adminWithinCeiling ? {} : { warn: "opsOver" as const }),
 	};

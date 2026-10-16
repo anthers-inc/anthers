@@ -794,11 +794,7 @@ export async function clearSavedBillingAddress(
  * what the subscription's directed items buy is written by `applyDirectedSupportFromSub`
  * below, and what the Anthers line buys is resolved by reading the Anthers-ladder
  * holding at whatever the ledger needs it for. What this function still owns is the
- * Stripe machinery:
- * the subscription id, the period pair, activity and cancellation, plus the directed
- * balance the Badge picker draws against (`billing_accounts.directed_budget` — the
- * subscription's directed items ARE that balance, so the webhook is the writer that
- * knows it).
+ * Stripe machinery: the subscription id, the period pair, activity and cancellation.
  */
 export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promise<void> {
 	const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
@@ -844,7 +840,6 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 			.update(billingAccounts)
 			.set({
 				isActive: false,
-				directedBudget: "0.00",
 				updatedAt: new Date(),
 			})
 			.where(eq(billingAccounts.id, acct.id));
@@ -868,10 +863,7 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 	 *
 	 * So within a cycle the higher of the two wins, and the new value is taken outright once
 	 * the cycle turns. A raise is unaffected, since a raise is charged in full today and is
-	 * therefore genuinely in force today. ⭐ **This is the rule `applyDirectedSupport`
-	 * already applies per creator with its add-only-upsert** — allocation is add-only within
-	 * a cycle — rather than a new idea; what this column adds is the account-level half for
-	 * the *budget*, which is the number the picker draws down against.
+	 * therefore genuinely in force today.
 	 *
 	 * 🚨 **The held-over Anthers amount is read off the HOLDING, not the items.** The
 	 * in-force rule on a mid-cycle decrease lives on the badge holding now: the holding
@@ -892,17 +884,6 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 	// The held Anthers badge's threshold — the "stored" half of the in-force comparison,
 	// read from the Anthers-ladder holding rather than from a dead amount column.
 	const heldAnthers = await heldAnthersBadgeAmountForSync(acct.userId);
-	// The paid-for directed balance is what the subscription's directed items add up to,
-	// held over the same way — a supporter who drops a creator on the 10th has already
-	// paid that creator for the month. The stored figure participates only while the
-	// period has not turned; past that the items are the whole truth.
-	const directedTotal = inForce(
-		directedSupportFromSub(sub, anthersId),
-		// A stored read participates in the held-over guard only, same as the amount
-		// columns this replaced; the budget rides the billing row, which is where the
-		// picker reads it back.
-		acct.directedBudget,
-	);
 
 	await db
 		.update(billingAccounts)
@@ -917,13 +898,6 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 		.where(eq(billingAccounts.id, acct.id));
 
 	if (active) {
-		// ⚠️ The budget's held-over write needs `currentPeriodStart` to have been read BEFORE
-		// the update above stamped the new period — ordering that matters, so the in-force
-		// total goes through one more update that carries it.
-		await db
-			.update(billingAccounts)
-			.set({ directedBudget: directedTotal.toFixed(2), updatedAt: new Date() })
-			.where(eq(billingAccounts.id, acct.id));
 		// The in-force Anthers figure — possibly the higher, held-over one — is what the
 		// holding gets stamped with, and what the snapshot records for the cycle.
 		const anthersInForce = inForce(
@@ -948,8 +922,11 @@ export async function syncSubscriptionToAccount(sub: Stripe.Subscription): Promi
 		);
 		await applyDirectedSupport(acct.userId, picks);
 		// The cycle snapshot keeps its history columns — pass the numbers this run
-		// computed; the columns are the record, never a read source for live state.
-		await snapshotCycle(acct.userId, anthersInForce, directedTotal.toNumber());
+		// computed; the columns are the record, never a read source for live state. The
+		// creator total is the raw item sum here: a mid-cycle decrease's held-over
+		// protection lives on the holdings, and settlement later records what the
+		// cycle's charges actually directed.
+		await snapshotCycle(acct.userId, anthersInForce, directedSupportFromSub(sub, anthersId));
 	}
 }
 
@@ -1068,8 +1045,8 @@ export async function applyDirectedSupport(
 				.returning({ id: badges.id });
 		}
 		// 🚨 **One holding per issuer per cycle — the pick REPLACES the issuer's other
-		// rungs rather than sitting beside them**, the same rule the picker's POST
-		// enforces and the one the dissolved Anthers special path carried. Without the
+		// rungs rather than sitting beside them**, the rule the dissolved picker's POST
+		// carried and the one the dissolved Anthers special path carried. Without the
 		// delete, a webhook after a re-price stacks the new rung beside the old one and
 		// every MAX-reading surface reports the higher — a user who lowered from $12
 		// to $3 would keep reading $12 the moment the cycle turned, with no error
@@ -1096,15 +1073,15 @@ export async function applyDirectedSupport(
 				set: { updatedAt: new Date() },
 			});
 		// ⭐ **Subscribing to a creator's Badge follows the creator** (Parker, 2026-10-11) —
-		// the automatic consequence the route arm of the picker carries too
-		// (`routes/subscriptions.ts`, and the reasoning lives in `services/follows.ts`'s
-		// docblock). The Anthers ladder is not a creator pick — the picker's route refuses
-		// it with exactly that reasoning — so holding a rung on Anthers' own Badges never
-		// follows anything, and anything else here is a creator the subscriber has just
-		// decided to support. `ensureFollow` is idempotent, so a replayed webhook makes
-		// nothing of the repeat, and the refused cases (a block, an ungranted repository)
-		// are silent to this arm: the holding is the act, the follow rides along when it
-		// can. A cancellation never walks this back — see the docblock.
+		// the automatic consequence of the act, and the reasoning lives in
+		// `services/follows.ts`'s docblock. The Anthers ladder is not a creator pick —
+		// money on it is the subscription's Anthers line — so holding a rung on Anthers'
+		// own Badges never follows anything, and anything else here is a creator the
+		// subscriber has just decided to support. `ensureFollow` is idempotent, so a
+		// replayed webhook makes nothing of the repeat, and the refused cases (a block,
+		// an ungranted repository) are silent to this door: the holding is the act, the
+		// follow rides along when it can. A cancellation never walks this back — see the
+		// docblock.
 		//
 		// 🚨 **The follow service is imported lazily, and that is load-bearing.** A static
 		// import of `./follows.js` closed an import-time cycle: this module is evaluated

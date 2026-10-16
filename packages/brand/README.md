@@ -12,14 +12,14 @@ provenance.json   Who drew each icon and under what license — generated from t
 ```
 
 
-# Where the icons come from
+# Where the Icons Come From
 
 The botanical icons behind `iconSvg`/`iconGroup`/`iconDataUri` are Noun Project icons, used under Anthers' NounPro license, which requires no attribution. Each one is an SVG in `svg/`, and `src/generated/icons.ts` inlines its normalized `viewBox` and path markup, so `src/` never reads an SVG and the app builds without running the codegen. `svg/` holds only what the register names, so the repository carries no art the product does not use.
 
 **Everything the codegen reads is committed**, so a fork can regenerate the icons as well as build the app. `bun run build --check` regenerates in memory and fails if `src/generated/icons.ts` no longer matches `svg/`, and `scripts/noun/authoring-time.test.ts` runs it.
 
 
-# Adding an icon
+# Adding an Icon
 
 🚨 **The codegen runs at AUTHORING time and must never become a build-time fetch.** `src/generated/icons.ts` and `svg/` are committed precisely so the app builds, and the icons regenerate, with no credentials and no network call — the reason a fork of this repository is genuinely buildable. `brand:search` and `brand:add` are **scripts a person runs and commits the output of**, exactly as this codegen is. Wiring a fetch into `bun run build` would put a vendor key on the deploy path for artwork that changes twice a year, cost an API call per asset on every cold build, and give that property away. `scripts/noun/authoring-time.test.ts` fails if the credential's name ever appears anywhere but `scripts/`.
 
@@ -55,7 +55,7 @@ The codegen strips XML noise, `<title>`/`<metadata>`, and baked-in solid fills s
 🚨 **Restart the web dev server after a rebuild, or you get a stale bundle and a baffling error.** Bun's dev server watches `apps/web/src` and **not** `packages/brand`, so a regenerated `src/generated/icons.ts` does not reach a running server. The symptom is not "my new icon is missing" — it is `Cannot read properties of undefined (reading 'viewBox')`, thrown from wherever the icon is composed, which reads like a bug in the consumer rather than a stale build. (The `@anthers/brand` helpers warn-and-noop on an unknown id, so an id that is genuinely wrong fails quietly and differently; this one throws.)
 
 
-# Using it
+# Using It
 
 Framework-agnostic on purpose — it exports geometry and string helpers, not components:
 
@@ -74,7 +74,7 @@ icons.bee;                                    // { viewBox, inner } — build yo
 - **Email decor**: `emailVineTileDataUri` / `emailGrassFloorDataUri` are the compact variants email HTML can carry — each a few KB encoded against Gmail's ~102 KB clip, and no off-origin request when embedded, which is the rule Anthers' email is held to. The page-scale builders are far too large for a message. `packages/brand/src/email-decor.test.ts` pins those budgets.
 
 
-# The logo
+# The Logo
 
 `logo/` is Anthers' official logo and **the only place it is ever edited**. The art the site ships and the files it is made from live together here, so they are one copy rather than two to keep in step.
 

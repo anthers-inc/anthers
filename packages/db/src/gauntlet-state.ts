@@ -15,7 +15,6 @@
  *
  * Usage (flags compose; each is applied only when passed):
  *   bun run db:gauntlet:state --user gauntlet_walker --anthers-support 3   # $3/mo to Anthers
- *   bun run db:gauntlet:state --user gauntlet_walker --support-budget 6        # $6 of budget
  *   bun run db:gauntlet:state --user gauntlet_walker --give 2               # $2 to the creator
  *   bun run db:gauntlet:state --user gauntlet_walker --purchase gauntlet-paid-download
  *   bun run db:gauntlet:state --user gauntlet_walker --watched-minutes 570
@@ -40,22 +39,9 @@ import {
 	GAUNTLET_SLUG_PREFIX,
 	GAUNTLET_WALKER_USERNAME,
 } from "./gauntlet.js";
-import {
-	anthersUserIdOfSession,
-	applyAnthersSupport,
-	applySupportBudget,
-} from "./gauntlet-support.js";
+import { anthersUserIdOfSession, applyAnthersSupport } from "./gauntlet-support.js";
 import { WALK_CREATOR_USERNAME, WALK_SLUG_PREFIX, WALK_WALKER_USERNAME } from "./gauntlet-walk.js";
-import {
-	attentionEvents,
-	badges,
-	billingAccounts,
-	db,
-	purchases,
-	userBadges,
-	users,
-	works,
-} from "./index.js";
+import { attentionEvents, badges, db, purchases, userBadges, users, works } from "./index.js";
 
 const TAG = "[gauntlet-state]";
 
@@ -196,7 +182,6 @@ async function main(): Promise<void> {
 	);
 
 	const anthersSupport = numFlag("--anthers-support", 0, 300);
-	const supportBudget = numFlag("--support-budget", 0, 300);
 	const give = numFlag("--give", 0, 300);
 	const purchaseSlug = flagValue("--purchase");
 	/**
@@ -216,15 +201,9 @@ async function main(): Promise<void> {
 
 	// Billing rows: the facts the subscription webhooks would write. `--anthers-support`
 	// gives the user the Anthers Badge at that amount (a holding on the Anthers ladder —
-	// see `applyAnthersSupport` in `gauntlet-support.ts`), and `--support-budget` places
-	// the directed balance the Badge picker draws against (see `applySupportBudget`).
-	if (anthersSupport !== undefined || supportBudget !== undefined) {
-		if (anthersSupport !== undefined) {
-			await applyAnthersSupport(userId, anthersSupport.toFixed(2));
-		}
-		if (supportBudget !== undefined) {
-			await applySupportBudget(userId, supportBudget.toFixed(2));
-		}
+	// see `applyAnthersSupport` in `gauntlet-support.ts`).
+	if (anthersSupport !== undefined) {
+		await applyAnthersSupport(userId, anthersSupport.toFixed(2));
 	}
 
 	// Public Access consumption, as events rather than as a stored number.
@@ -378,11 +357,6 @@ async function main(): Promise<void> {
 			),
 		)
 		.limit(1);
-	const [acct] = await db
-		.select({ directedBudget: billingAccounts.directedBudget })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId))
-		.limit(1);
 	// The user's holdings on the gauntlet creator this cycle, summed through the
 	// badge thresholds — the number the old allocation row's `amount` used to carry.
 	const [alloc] = await db
@@ -408,9 +382,7 @@ async function main(): Promise<void> {
 	console.log(
 		`${TAG} ${walkerUsername}: $${support.toFixed(2)}/mo to Anthers (${badgeLabel(
 			heldBadgeName(support),
-		)}) · budget $${Number(acct?.directedBudget ?? 0).toFixed(2)} · given $${Number(
-			alloc?.amount ?? 0,
-		).toFixed(2)} to ${inst.creatorUsername} · Public Access watched ${(
+		)}) · given $${Number(alloc?.amount ?? 0).toFixed(2)} to ${inst.creatorUsername} · Public Access watched ${(
 			watchedSeconds / 3600
 		).toFixed(2)}h`,
 	);

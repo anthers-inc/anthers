@@ -51,19 +51,6 @@ export const billingAccounts = pgTable("billing_accounts", {
 		.unique()
 		.references(() => users.id, { onDelete: "cascade" }),
 	isSelfHosting: boolean("is_self_hosting").notNull().default(false), // creator self-hosts → flat fee, no storage charge
-	/**
-	 * The directed balance this cycle — the dollars the user's subscription directs at
-	 * creators, which the Badge picker draws down against (`/my-badges`' `budget`).
-	 *
-	 * ⚠️ **A Badge-model read target written by the fixture and by the webhook.** The
-	 * balance used to live on the old accounts table's directed-support column, which
-	 * the split deleted; the Badge-model home for it is this row (it is subscription
-	 * state — what the subscription's directed items add to — so it rides beside the
-	 * period columns). The issuer pass re-pointed `routes/subscriptions.ts`' budget
-	 * check at this column and made the subscription webhook write it; the gauntlet's
-	 * budget hop also writes it (`gauntlet-support.ts` carries that note).
-	 */
-	directedBudget: numeric("directed_budget").notNull().default("0.00"),
 	stripeCustomerId: text("stripe_customer_id").default(""),
 	/**
 	 * This creator's Stripe Product, for the line on a supporter's invoice.
@@ -786,9 +773,9 @@ export const attentionDaily = pgTable(
 // billingCycle is stored as an ISO date string (YYYY-MM-DD) — first of the month.
 // A user's Badge holdings — one row per (user, badge, cycle). A holding is a discrete
 // pick of a named Badge: the Badge's threshold IS the amount, and its owner (the
-// creator, or Anthers itself for its own set) is reachable through the badge. The
-// directed balance the picker draws against rides `billing_accounts.directed_budget`
-// now; the gross/net money reasoning lives on `pool_distributions.badge_amount`, which
+// creator, or Anthers itself for its own set) is reachable through the badge. Holdings
+// are written by the subscription webhook from the subscription's items; the
+// gross/net money reasoning lives on `pool_distributions.badge_amount`, which
 // is the figure the pool actually pays out.
 // org — the billing contract a subscription purchases is org-side. The `atprotoUri`
 // column is for the day `org.anthers.support` exists — the fact that somebody

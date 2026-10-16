@@ -19,7 +19,7 @@
  * TODO to tidy up. It is one field per document in `content/legal`, and a test pins
  * every one of them to `null` so that dating a document has to be deliberate.
  *
- * Canonical text lives in the vault (`Privacy Policy`, `Terms of Service`, `Creator Terms`); this is the rendered
+ * Canonical text lives in `apps/web/src/content/legal/index.ts`; this is the rendered
  * copy with the internal apparatus removed — no `⚠️ NOT YET BUILT` markers, no
  * DO-NOT-PUBLISH banner, and none of the "Notes for us" section, which is reasoning
  * rather than terms.
