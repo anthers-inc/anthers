@@ -16,6 +16,7 @@
 
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
 import { isListened } from "@anthers/shared/content";
+import { gridFor, normalizeMaturityRows } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import { LockedCover, lockedByBadge, presentsAsLocked } from "@anthers/web-shared/post/unlock";
@@ -55,11 +56,11 @@ import {
 	WorkRating,
 	WorkRecordLink,
 } from "../components/work/WorkLayout";
-
 import WorkSideColumn, { ShowingsStub } from "../components/work/WorkSideColumn";
 import { reportExternalActivity, useAttentionClaim } from "../lib/attention";
 import { useMeteredBudget } from "../lib/public-access";
 import { useShareToken, withShareToken } from "../lib/share-link";
+import { RatingMatrixReadOnly } from "../studio/RatingMatrix";
 
 export default function WorkPage() {
 	const { slug } = useParams<{ slug: string }>();
@@ -520,6 +521,10 @@ function VisitorRecord({
 }) {
 	const publicAccess = access ? access.isFree : (work.publicAccess ?? false);
 	const rating = work.maturity;
+	// The rating on its grid, unanswered rows left unanswered — a released Work carries none,
+	// and the read-only table is the answer as its creator marked it.
+	const ratingGrid = gridFor(work.type);
+	const ratingRows = normalizeMaturityRows(work.maturityRows, ratingGrid);
 	return (
 		// The rule between the halves is its own grid column — the same two-pixel, full-
 		// height divider the creator's editor draws (Parker's third pass, 2026-10-13).
@@ -585,14 +590,21 @@ function VisitorRecord({
 						{
 							key: "rating",
 							label: "Rating",
-							content:
-								rating === "mature" || rating === "adult" ? (
-									<WorkRating work={work} />
-								) : (
-									<p className="text-sm text-base-content/60">
-										General — users see no rating on a General Work.
-									</p>
-								),
+							// The full table, read-only, whatever the Work is rated (Parker,
+							// 2026-10-16): the tab exists for the table, and a General Work's
+							// all-General table says the rating in the same shape the other rungs
+							// say theirs in. The badge above still carries the user-facing words.
+							content: (
+								<div className="flex flex-col gap-3">
+									{(rating === "mature" || rating === "adult") && <WorkRating work={work} />}
+									{rating === "general" && (
+										<p className="text-sm text-base-content/60">
+											General — users see no rating on a General Work.
+										</p>
+									)}
+									<RatingMatrixReadOnly grid={ratingGrid} rows={ratingRows} />
+								</div>
+							),
 						},
 						{
 							key: "accessibility",

@@ -673,7 +673,7 @@ describe("content ratings", () => {
 			expect(row.maturity).toBe("mature");
 			expect(row.maturitySource).toBe("creator");
 			expect(row.maturityNotes).toEqual(["violence", "language"]);
-			// Stored as marked, Not in It and all, which is what a user's filter can rely on.
+			// Stored as marked, None and all, which is what a user's filter can rely on.
 			expect(row.maturityRows).toMatchObject({ violence: "mature", horror: "none" });
 		});
 
@@ -713,7 +713,7 @@ describe("content ratings", () => {
 
 		it("gives the creator their matrix back, and a user the rows their own filter reads", async () => {
 			// A user's filter by kind of content blurs in the browser, so the user's copy carries
-			// the rows. They restate the public notes plus which rows are Not in It, and what stays
+			// the rows. They restate the public notes plus which rows are None, and what stays
 			// behind is who set the rating, asserted above.
 			const workId = await makeWork();
 			// Released, so the stranger is answered with the user's shape rather than a 404.
