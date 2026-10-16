@@ -64,6 +64,7 @@ import {
 	COMMENT_MAX,
 	type CommentSubjectType,
 	embedUrlProblem,
+	isListened,
 	isOwnThumbnail,
 	isPaged,
 	isReviewVerdict,
@@ -1338,11 +1339,12 @@ async function serializeWork(
 		sourceKey: item.sourceKey,
 		// The owner's own original, at the access-checked route, for the same ruling the
 		// user shape carries (70.06 — playable from the moment the Work exists): an
-		// owner previews their video before any ladder exists, so the Studio needs
-		// this address the way a viewer's play page does. Without a delivery context,
-		// the stored key is already the playable address.
+		// owner previews their video — and, since 2026-10-16, their track — before any
+		// processed deliverable exists, so the Studio needs this address the way a
+		// viewer's play page does. Without a delivery context, the stored key is
+		// already the playable address.
 		originalUrl:
-			item.type === "video" && item.sourceKey
+			(item.type === "video" || isListened(item.type)) && item.sourceKey
 				? delivery
 					? withShare(`${delivery.origin}/api/content/works/${item.id}/original`, delivery)
 					: item.sourceKey
@@ -2255,17 +2257,18 @@ async function serializeWorkForUser(
 		// budget attached. Withholding the URL here as well would be a second, weaker
 		// mechanism for something already enforced — and the player decides what to render
 		// from the budget it holds, not from a missing URL.
-		// The original file's play address, for a video Work: the 2026-10-11 ruling's
-		// baseline, playable from the moment the Work exists and delivered as the
-		// bytes the creator uploaded, with the ladder as the upgrade that arrives
-		// later (wiki 70.06). The same posture as the transcoding URLs below —
-		// withheld when the user may not reach the Work, and enforced at the
-		// endpoint (`/works/:id/original`), which minted the signed URL fresh per
-		// request only after the meter and household limit answered. Without a
-		// delivery context (local mode), the stored key is already the playable
-		// address, exactly as `userTranscoding` treats its own URLs.
+		// The original file's play address, for a video Work and — since 2026-10-16 —
+		// for the listened kinds: the 2026-10-11 ruling's baseline, playable from the
+		// moment the Work exists and delivered as the bytes the creator uploaded,
+		// with the processed deliverable as the upgrade that arrives later (wiki
+		// 70.06). The same posture as the transcoding URLs below — withheld when the
+		// user may not reach the Work, and enforced at the endpoint
+		// (`/works/:id/original`), which minted the signed URL fresh per request only
+		// after the meter and household limit answered. Without a delivery context
+		// (local mode), the stored key is already the playable address, exactly as
+		// `userTranscoding` treats its own URLs.
 		originalUrl:
-			canAccess && work.type === "video" && work.sourceKey
+			canAccess && (work.type === "video" || isListened(work.type)) && work.sourceKey
 				? delivery
 					? withShare(`${delivery.origin}/api/content/works/${work.id}/original`, delivery)
 					: work.sourceKey
@@ -3888,21 +3891,26 @@ const contentRoutes = new Hono()
 		return c.redirect(url, 302);
 	})
 
-	// ── Video original delivery (access-checked, signed) ─────────────────────────
+	// ── Original delivery (access-checked, signed) ───────────────────────────────
 	//
-	// A video Work is playable from the moment it exists, and what plays is this
-	// Work's own stored original — the exact bytes the creator uploaded, ranged-
-	// streamed over a short-lived signed address. Same gate ladder as the audio
-	// route above: access, the Public Access meter, the household limit; a fresh
-	// signed URL minted only after every gate answered. The ladder stays the
-	// offered experience when one exists, and this route is what the client falls
-	// back to before one does.
+	// A Work's original is playable from the moment it exists — the 2026-10-11
+	// ruling for video (wiki 70.06), widened to the listened kinds on 2026-10-16 so
+	// a track under processing plays the bytes the creator uploaded while its MP3
+	// rendition and waveform are made. What plays here is the Work's own stored
+	// original, ranged-streamed over a short-lived signed address. Same gate ladder
+	// as the audio route above: access, the Public Access meter, the household
+	// limit; a fresh signed URL minted only after every gate answered. The
+	// processed deliverable stays the offered experience when it exists, and this
+	// route is what the client falls back to before one does — or permanently, for
+	// an original whose processing failed.
 	.get("/works/:id/original", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
-		// The original is the video deliverable; other kinds' originals are either
-		// their own routes' territory (audio) or not a play surface at all.
-		if (work.type !== "video" || !work.sourceKey) return c.json({ error: "Not found" }, 404);
+		// The original is the play surface for a video and for the listened kinds;
+		// a paged or written kind's source is not a play surface at all.
+		if ((work.type !== "video" && !isListened(work.type)) || !work.sourceKey) {
+			return c.json({ error: "Not found" }, 404);
+		}
 
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);

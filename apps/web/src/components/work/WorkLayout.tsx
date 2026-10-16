@@ -619,6 +619,29 @@ export function WorkDeliverable({
 					startSeconds={startSeconds}
 				/>
 			)}
+			{/*
+			 * A track's processed MP3 is the offered experience, and the original is the
+			 * baseline underneath it — the same shape the video's two branches take above:
+			 * the processed deliverable keeps today's behavior once it exists, and a
+			 * track before its MP3 — or whose processing failed — plays its original
+			 * through this fallback (2026-10-16; wiki 70.06, widened to the listened
+			 * kinds). The same access rules, meter and attention wiring apply in both,
+			 * because what differs is only the address.
+			 *
+			 * No waveform (the MP3 carries the peaks; it does not exist yet, so the
+			 * player's own default fills), and no mini-player hand-off — `trackFromWork`'s
+			 * `src` is the processed endpoint and is null until processing completes, so
+			 * the button would queue a track that cannot play.
+			 */}
+			{work.type === "music" && !work.transcoding?.outputFileUrl && work.originalUrl && (
+				<AudioPlayer
+					src={work.originalUrl}
+					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+					publicAccess={work.publicAccess ?? false}
+					chapters={chapters}
+					startSeconds={startSeconds}
+				/>
+			)}
 			{work.type === "music" && work.transcoding?.outputFileUrl && (
 				<>
 					<AudioPlayer
@@ -647,7 +670,20 @@ export function WorkDeliverable({
 				</>
 			)}
 			{/* Spoken word takes its own player — listening to talk wants fixed-step skips,
-			    a rate control and a remembered position, none of which a song does. */}
+			    a rate control and a remembered position, none of which a song does. Its
+			    original plays the same fallback the song branch does above, for the same
+			    reasons: no waveform, and no mini-player hand-off while the processed
+			    deliverable does not exist. */}
+			{work.type === "audio" && !work.transcoding?.outputFileUrl && work.originalUrl && (
+				<SpokenPlayer
+					src={work.originalUrl}
+					workId={work.id}
+					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+					publicAccess={work.publicAccess ?? false}
+					chapters={chapters}
+					startSeconds={startSeconds}
+				/>
+			)}
 			{work.type === "audio" && work.transcoding?.outputFileUrl && (
 				<SpokenPlayer
 					src={work.transcoding.outputFileUrl}

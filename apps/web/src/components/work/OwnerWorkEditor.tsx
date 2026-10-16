@@ -40,6 +40,7 @@
 import {
 	embedUrlProblem,
 	isEmptyWriting,
+	isListened,
 	isOwnThumbnail,
 	isPaged,
 	needsChosenThumbnail,
@@ -515,9 +516,13 @@ export default function OwnerWorkEditor({
 	};
 
 	/** Whether the Work itself can be shown as a user sees it: its file is attached and
-	 *  nothing of its own is still arriving. (Video plays its original before the ladder —
-	 *  the 2026-10-10/11 delivery ruling; the batch editor's docblock carries why audio
-	 *  and ebooks keep the completed gate.) */
+	 *  nothing of its own is still arriving. A video plays its original before the ladder
+	 *  (the 2026-10-10/11 delivery ruling), and since 2026-10-16 a track does the same
+	 *  while its MP3 and waveform process — so neither gates here; what stands in the
+	 *  deliverable's place while the Work's own shape has not arrived is `kindWaiting`
+	 *  below, which the paged kinds (pages, the reflow reader) still read. The retired
+	 *  batch editor's "audio and ebooks keep the completed gate" reasoning died with the
+	 *  move, its premise having never considered the original as the deliverable. */
 	const fileReady = isFileWorkType(current.type) && !!current.sourceKey && !fileUploading;
 
 	// ── Release: the facts each control waits on (the batch editor's predicates, against the page as it stands) ──
@@ -543,12 +548,22 @@ export default function OwnerWorkEditor({
 
 	// ── The Info tabs' contents ──
 	/**
+	 * Whether the Work itself is still forming — its file is in and processing, and
+	 * nothing the player can carry exists yet — so the processing block stands in the
+	 * deliverable's place. A video is out (it plays its original before the ladder, the
+	 * 2026-10-10/11 ruling), and since 2026-10-16 the listened kinds are out too: a
+	 * track under processing plays its own original. What remains is the paged and
+	 * written kinds, whose processing products — page images, the reflow reader —
+	 * genuinely do not exist until the job finishes.
+	 */
+	const kindWaiting =
+		running && current.type !== "video" && current.type !== "image" && !isListened(current.type);
+	/**
 	 * Whether the deliverable's place is empty — a draft before its medium exists — so
 	 * the silhouette can hold it. The placeholder keeps the page's proportions whether
 	 * the media has arrived or not: the strip and the columns below sit where they will
 	 * once the Work itself is here (Parker, 2026-10-14).
 	 */
-	const kindWaiting = running && current.type !== "video" && current.type !== "image";
 	const deliverableEmpty = isGoods(current.type)
 		? false
 		: writing

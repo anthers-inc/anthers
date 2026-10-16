@@ -21,6 +21,7 @@
  * player and nothing else.
  */
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
+import { isListened } from "@anthers/shared/content";
 import { Link, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { isAccessResult } from "@anthers/web-shared/types";
@@ -130,8 +131,8 @@ export default function EmbedWorkPage() {
 	const canAccess = isAccessResult(work.access) && work.access.canAccess;
 	const jobStatus = work.transcoding?.status;
 	const encoding = jobStatus != null && jobStatus !== "completed" && jobStatus !== "failed";
-	/** A video whose original is not on hand yet — the encoder status is what shows. */
-	const videoWithoutOriginal = work.type === "video" && !work.originalUrl;
+	/** A Work whose original cannot play — the processing note is what shows. */
+	const playsOriginal = (work.type === "video" || isListened(work.type)) && !!work.originalUrl;
 
 	return (
 		<div className="mx-auto max-w-3xl p-3">
@@ -141,7 +142,7 @@ export default function EmbedWorkPage() {
 						// The sharer's relay allowance is gone, so the server withheld the
 						// deliverable — the reason is all there is to render.
 						<PublicAccessWall budget={meterBudget} />
-					) : encoding && !videoWithoutOriginal ? (
+					) : encoding && !playsOriginal ? (
 						<p className="py-12 text-center text-sm text-base-content/60">Processing…</p>
 					) : (
 						<WorkDeliverable work={work} shareToken={token ?? null} />
