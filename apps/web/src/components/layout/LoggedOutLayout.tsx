@@ -4,7 +4,7 @@ import { MeadowVines } from "@anthers/web-shared/decor/MeadowVines";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link, Outlet } from "@anthers/web-shared/router";
 import Logo from "@anthers/web-shared/ui/Logo";
-import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
+import ThemeSelect from "@anthers/web-shared/ui/ThemeSelect";
 import { Bars3Icon, GlobeAltIcon } from "@heroicons/react/24/outline";
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
@@ -151,7 +151,7 @@ export default function LoggedOutLayout() {
 							</ul>
 						</div>
 					)}
-					<ThemeToggle />
+					<ThemeSelect />
 				</div>
 
 				{/* Main nav — brand on the left, page links centered, a single CTA on the
@@ -186,7 +186,7 @@ export default function LoggedOutLayout() {
 								<li className="mt-1 border-t border-base-content/10 pt-1">
 									<div className="flex items-center justify-between">
 										<span className="text-base-content/70">Theme</span>
-										<ThemeToggle />
+										<ThemeSelect />
 									</div>
 								</li>
 							</ul>

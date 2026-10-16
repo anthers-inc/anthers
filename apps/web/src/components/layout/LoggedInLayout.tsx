@@ -7,7 +7,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from "@anthers/web-sh
 import { client } from "@anthers/web-shared/rpc";
 import { SidebarProvider, useSidebar } from "@anthers/web-shared/sidebar";
 import Logo from "@anthers/web-shared/ui/Logo";
-import ThemeToggle from "@anthers/web-shared/ui/ThemeToggle";
+import ThemeSelect from "@anthers/web-shared/ui/ThemeSelect";
 import {
 	Bars3Icon,
 	MagnifyingGlassIcon,
@@ -194,7 +194,7 @@ function LoggedInLayoutInner() {
 					    count riding the shared store so one poll serves every surface. Studio mode
 					    leaves it out with search and the basket: creator chrome, not reader chrome. */}
 					{!studio && <NotificationBell />}
-					<ThemeToggle />
+					<ThemeSelect />
 					<div className="dropdown dropdown-end">
 						{/* daisyUI's dropdown is CSS-only: `.dropdown-content` stays `display:none`
 						    until the enclosing `.dropdown` matches `:focus-within`, so the trigger
