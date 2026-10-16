@@ -353,7 +353,7 @@ export default function FinishSignupPage() {
 			if (!res.ok) {
 				// The account is made and signed in, so this is not a failed signup — it is a
 				// charge that could not be quoted. Onboarding is still owed either way, and the
-				// support can be added from `/subscription` afterwards.
+				// support can be added from `/badges` afterwards.
 				setError("We couldn't load the charge details — you can add support from Settings.");
 				await leave(withNextPath("/welcome", landing));
 				return;
@@ -776,7 +776,7 @@ export default function FinishSignupPage() {
 						// The card was declined or dismissed — but the account exists and is signed
 						// in, because confirming the address made it. That is the correct outcome
 						// and takes no unwinding: they have a free account, and support can be
-						// added from `/subscription` afterwards.
+						// added from `/badges` afterwards.
 						void leave(withNextPath("/welcome", destination.current));
 					}}
 				/>

@@ -42,7 +42,7 @@ test("the header avatar opens the account menu", async ({ page }) => {
 	await trigger.click();
 	await expect(profile, "clicking the avatar did not open the account menu").toBeVisible();
 
-	for (const name of ["Subscription", "Purchases", "Settings"]) {
+	for (const name of ["Badges", "Purchases", "Settings"]) {
 		await expect(header(page).getByRole("link", { name }), `${name} missing`).toBeVisible();
 	}
 	await expect(header(page).getByRole("button", { name: "Log out" })).toBeVisible();
