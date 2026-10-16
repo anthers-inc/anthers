@@ -37,7 +37,13 @@ const KEY = "anthers_basket";
 /** Bumped when the stored shape changes, so an old basket is dropped rather than parsed. */
 const VERSION = 1;
 
-export interface BasketItem {
+/**
+ * A Work line — the only kind the anonymous scratchpad ever holds (a visitor picking a
+ * Badge rung is detoured through sign-in/up before anything is held, so no scratch
+ * Badge exists), and the stored shape.
+ */
+export interface BasketWorkItem {
+	kind: "work";
 	workId: number;
 	slug: string;
 	title: string;
@@ -46,17 +52,44 @@ export interface BasketItem {
 	thumbnail?: string | null;
 }
 
-interface StoredBasket {
-	version: number;
-	items: BasketItem[];
+/**
+ * A Badge line — the rung the buyer picked, joined from the account basket only. Its
+ * `price` is the FIRST transaction's figure (a delta when the buyer upgrades from a
+ * lower rung) and `recurring` is the rung's monthly price the line begins — together,
+ * because an upgrade line reads as the upgrade it is rather than a discount.
+ */
+export interface BasketBadgeItem {
+	kind: "badge";
+	badgeId: number;
+	title: string;
+	price: string;
+	/** The rung's monthly threshold, always present for a Badge line. */
+	recurring: string;
+	creatorHandle: string;
 }
 
-function read(): BasketItem[] {
+export type BasketItem = BasketWorkItem | BasketBadgeItem;
+
+/** The basket's CONTENT identity — every line's id, kind-tagged, sorted. */
+export function basketContentKey(items: BasketItem[]): string {
+	return items
+		.map((i) => (i.kind === "badge" ? `b${i.badgeId}` : `w${i.workId}`))
+		.sort()
+		.join(",");
+}
+
+interface StoredBasket {
+	version: number;
+	items: BasketWorkItem[];
+}
+
+function read(): BasketWorkItem[] {
 	try {
 		const raw = localStorage.getItem(KEY);
 		if (!raw) return [];
 		const parsed = JSON.parse(raw) as StoredBasket;
 		if (parsed?.version !== VERSION || !Array.isArray(parsed.items)) return [];
+		// Version 1 stored only Works; the type is the contract.
 		return parsed.items;
 	} catch {
 		// A corrupt basket is an empty basket. Never throw out of storage access —
@@ -65,7 +98,7 @@ function read(): BasketItem[] {
 	}
 }
 
-function write(items: BasketItem[]) {
+function write(items: BasketWorkItem[]) {
 	try {
 		localStorage.setItem(KEY, JSON.stringify({ version: VERSION, items } satisfies StoredBasket));
 	} catch {
@@ -77,15 +110,30 @@ function write(items: BasketItem[]) {
 }
 
 const EVENT = "anthers:basket";
-/** The server's answer for `/basket` reads — cached here so every subscriber shares one fetch. */
-interface ServerItem {
-	workId: number;
-	slug: string;
-	title: string | null;
-	price: string;
-	creatorHandle: string;
-	thumbnail: string | null;
-}
+/**
+ * The server's answer for `/basket` reads — cached here so every subscriber shares one
+ * fetch, and discriminated: the server resolves both kinds live (price, handle, only
+ * what a checkout could accept — a Badge line carries the rung's monthly price beside
+ * the first transaction's).
+ */
+type ServerItem =
+	| {
+			kind: "work";
+			workId: number;
+			slug: string;
+			title: string | null;
+			price: string;
+			creatorHandle: string;
+			thumbnail: string | null;
+	  }
+	| {
+			kind: "badge";
+			badgeId: number;
+			title: string | null;
+			price: string;
+			recurring: string | null;
+			creatorHandle: string;
+	  };
 interface ServerBasket {
 	items: ServerItem[];
 }
@@ -182,7 +230,7 @@ export function useBasket(): BasketApi {
 	const { user } = useAuth();
 	const authenticated = user != null;
 
-	const [scratchItems, setScratchItems] = useState<BasketItem[]>([]);
+	const [scratchItems, setScratchItems] = useState<BasketWorkItem[]>([]);
 	const [serverItems, setServerItems] = useState<ServerBasket | null>(serverCurrent);
 
 	// Scratch mode's subscriptions: unchanged from the client-side design. The effect
@@ -220,21 +268,34 @@ export function useBasket(): BasketApi {
 	if (authenticated) {
 		// Read through the subscription state so a publish re-renders; the verbs below
 		// read the same module store, so the render and the verbs cannot disagree.
-		const items: BasketItem[] = (serverItems?.items ?? []).map((i) => ({
-			workId: i.workId,
-			slug: i.slug,
-			title: i.title ?? "Untitled",
-			price: i.price,
-			creatorHandle: i.creatorHandle,
-			thumbnail: i.thumbnail,
-		}));
+		const items: BasketItem[] = (serverItems?.items ?? []).map((i) =>
+			i.kind === "badge"
+				? {
+						kind: "badge" as const,
+						badgeId: i.badgeId,
+						title: i.title ?? "A Badge",
+						price: i.price,
+						recurring: i.recurring ?? i.price,
+						creatorHandle: i.creatorHandle,
+					}
+				: {
+						kind: "work" as const,
+						workId: i.workId,
+						slug: i.slug,
+						title: i.title ?? "Untitled",
+						price: i.price,
+						creatorHandle: i.creatorHandle,
+						thumbnail: i.thumbnail,
+					},
+		);
 		return {
 			items,
 			count: items.length,
 			add: SERVER_API.add,
 			remove: SERVER_API.remove,
 			clear: SERVER_API.clear,
-			has: (workId: number) => items.some((i) => i.workId === workId),
+			has: (workId: number) => items.some((i) => i.kind === "work" && i.workId === workId),
+			hasBadge: (badgeId: number) => items.some((i) => i.kind === "badge" && i.badgeId === badgeId),
 		} satisfies BasketApi;
 	}
 	return scratchApi(scratchItems);
@@ -243,12 +304,33 @@ export function useBasket(): BasketApi {
 /** The verbs over the server-backed store. Stable identities at module scope. */
 const SERVER_API = {
 	async add(item: BasketItem) {
+		// A Badge add skips the optimistic half on purpose: the first transaction's price
+		// is the server's resolution (a delta, known nowhere on the client), and the POST
+		// answers with the resolved basket anyway — showing a guessed price for the half
+		// second the POST takes would be a wrong number, which is worse than a spinner.
+		if (item.kind === "badge") {
+			try {
+				const res = await client.api.payments.basket.items.$post({
+					json: { badgeId: item.badgeId },
+				});
+				if (!res.ok) {
+					const body = (await res.json().catch(() => null)) as { error?: string } | null;
+					return { ok: false as const, error: body?.error ?? "Couldn't add to your basket." };
+				}
+				const body = (await res.json()) as unknown as { items: ServerItem[] };
+				publishServer({ items: body.items });
+				return { ok: true as const };
+			} catch {
+				return { ok: false as const, error: "Couldn't add to your basket." };
+			}
+		}
 		// Optimistic: show the Work in the basket now, reconcile on the answer.
 		const prev = serverCurrent;
 		publishServer({
 			items: [
-				...(prev?.items ?? []).filter((i) => i.workId !== item.workId),
+				...(prev?.items ?? []).filter((i) => !(i.kind === "work" && i.workId === item.workId)),
 				{
+					kind: "work" as const,
 					workId: item.workId,
 					slug: item.slug,
 					title: item.title,
@@ -276,15 +358,26 @@ const SERVER_API = {
 			return { ok: false as const, error: "Couldn't add to your basket." };
 		}
 	},
-	async remove(workId: number) {
+	async remove(id: { kind: "work"; workId: number } | { kind: "badge"; badgeId: number }) {
 		const prev = serverCurrent;
-		if (prev) {
-			publishServer({ items: prev.items.filter((i) => i.workId !== workId) });
-		}
-		try {
-			await client.api.payments.basket.items[":workId"].$delete({
-				param: { workId: String(workId) },
+		if (prev)
+			publishServer({
+				items: prev.items.filter((i) =>
+					i.kind === "badge"
+						? !(id.kind === "badge" && i.badgeId === id.badgeId)
+						: !(id.kind === "work" && i.workId === id.workId),
+				),
 			});
+		try {
+			if (id.kind === "badge") {
+				await client.api.payments.basket.badges[":badgeId"].$delete({
+					param: { badgeId: String(id.badgeId) },
+				});
+			} else {
+				await client.api.payments.basket.items[":workId"].$delete({
+					param: { workId: String(id.workId) },
+				});
+			}
 		} catch {
 			// Reconcile on the next read either way.
 		}
@@ -303,22 +396,32 @@ const SERVER_API = {
 };
 
 /** The scratchpad verbs, per-hook (they close over the hook's state list). */
-function scratchApi(scratchItems: BasketItem[]): BasketApi {
+function scratchApi(scratchItems: BasketWorkItem[]): BasketApi {
 	return {
 		items: scratchItems,
 		count: scratchItems.length,
 		add: (item: BasketItem) => {
+			// A scratch add is a Work add: a visitor picking a Badge rung is detoured
+			// through sign-in/up before anything is held, so no Badge line exists in the
+			// anonymous half (and this cast is never a lie).
+			const work = item as BasketWorkItem;
 			const current = read();
-			if (current.some((i) => i.workId === item.workId)) return { ok: true as const };
+			if (current.some((i) => i.workId === work.workId)) return { ok: true as const };
 			// A basket carries any number of creators (2026-10-15) — the shared charge is
 			// settled at checkout, so the scratchpad appends exactly as the server's basket
 			// does, and the sign-in merge folds it in the same way.
-			write([...current, item]);
+			write([...current, work]);
 			return { ok: true as const };
 		},
-		remove: (workId: number) => write(read().filter((i) => i.workId !== workId)),
+		remove: (id) => {
+			// The scratchpad is works-only (a Badge remove names nothing that was ever
+			// scratchable — the anonymous flow detours before anything is held).
+			if (id.kind === "badge") return;
+			write(read().filter((i) => i.workId !== id.workId));
+		},
 		clear: () => write([]),
 		has: (workId: number) => scratchItems.some((i) => i.workId === workId),
+		hasBadge: () => false,
 	};
 }
 
@@ -331,9 +434,13 @@ export interface BasketApi {
 		| { ok: true }
 		| { ok: false; error: string }
 		| Promise<{ ok: true } | { ok: false; error: string }>;
-	remove: (workId: number) => void | Promise<void>;
+	remove: (
+		id: { kind: "work"; workId: number } | { kind: "badge"; badgeId: number },
+	) => void | Promise<void>;
 	clear: () => void | Promise<void>;
 	has: (workId: number) => boolean;
+	/** Whether the rung is already in the basket — signed-in mode only; false while anonymous. */
+	hasBadge: (badgeId: number) => boolean;
 }
 
 /**
