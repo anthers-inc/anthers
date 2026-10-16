@@ -18,9 +18,9 @@ import {
 	setSessionCookie,
 } from "../lib/cookies.js";
 import { requireAuth } from "../middleware/auth.js";
-import { allowedOrigins } from "../origins.js";
 import { bearerToken } from "../middleware/bearer.js";
 import { invalidBody } from "../middleware/validate.js";
+import { allowedOrigins } from "../origins.js";
 import {
 	authorizeDesktopAuth,
 	cleanupDesktopAuthRequests,
@@ -59,13 +59,13 @@ import {
 } from "../services/pending-signups.js";
 import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 import { issueSignupChallenge, spendSignupChallenge } from "../services/signup-challenges.js";
+import type { CodeFailure } from "../services/signup-codes.js";
 import {
 	burnCodeWork,
 	checkSignupCode,
 	issueSignInCode,
 	issueSignupCode,
 } from "../services/signup-codes.js";
-import type { CodeFailure } from "../services/signup-codes.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
@@ -1210,12 +1210,7 @@ const authRoutes = new Hono()
 
 			// The same guess door /signin/verify uses: the code service caps one code's
 			// guesses, this caps one guesser's pace across them.
-			const limited = await checkRate(
-				"auth-code-verify",
-				clientIp(c.req.raw.headers),
-				20,
-				3600,
-			);
+			const limited = await checkRate("auth-code-verify", clientIp(c.req.raw.headers), 20, 3600);
 			if (!limited.ok) return limitResponse(limited);
 
 			// The resolution repeats deliberately, as /signin/verify records: the client
