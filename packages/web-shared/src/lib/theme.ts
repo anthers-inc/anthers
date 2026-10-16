@@ -10,9 +10,9 @@
 //      (no flash). That snippet can't import from the bundle, so it hard-codes THEME_KEY
 //      and the default — keep it in sync with the constants here.
 //   2. This module reads/writes that device choice (localStorage) and reflects it onto
-//      the document; <ThemeToggle> and useTheme() ride it at runtime.
+//      the document; <ThemeSelect> and useTheme() ride it at runtime.
 //   3. When signed in, the account's saved preference overrides the device choice —
-//      AuthProvider applies it on load and the toggle persists changes back (see below).
+//      AuthProvider applies it on load and the picker persists changes back (see below).
 
 import { useSyncExternalStore } from "react";
 import { client } from "./rpc";
@@ -24,6 +24,31 @@ export const THEME_KEY = "anthers_theme";
 
 /** The default when nothing is stored. Mirrored in each index.html and theme.css (:root). */
 export const DEFAULT_THEME: Theme = "light";
+
+// ── The theme catalog, which the picker renders ─────────────────────────────
+
+/** Which group of the theme picker an option sits in. A group heading rather than a
+ *  state: modes are how the list is sorted, while a theme is a whole palette. */
+export type ThemeGroup = "Light" | "Dark";
+
+export interface ThemeDefinition {
+	/** The stored value — and the `data-theme` attribute the stylesheet keys the palette on. */
+	value: Theme;
+	/** The theme's name as the picker shows it. Variants of one palette family share a
+	 *  name and are sorted apart by their group headers. */
+	label: string;
+	group: ThemeGroup;
+}
+
+/**
+ * Every available theme, in picker order. A new theme joins by adding a value to
+ * `Theme`, a block to theme.css, and an entry here — the picker derives its grouped
+ * list from this table and nothing else.
+ */
+export const THEMES: readonly ThemeDefinition[] = [
+	{ value: "light", label: "Meadow", group: "Light" },
+	{ value: "dark", label: "Meadow", group: "Dark" },
+];
 
 /** The stored device theme, defaulting to {@link DEFAULT_THEME} when unset/unavailable. */
 export function getStoredTheme(): Theme {

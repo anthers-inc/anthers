@@ -44,7 +44,7 @@
 		"./content/RatingAppeal": "./src/components/content/RatingAppeal.tsx",
 		"./content/RecordLink": "./src/components/content/RecordLink.tsx",
 		"./ui/Logo": "./src/components/ui/Logo.tsx",
-		"./ui/ThemeToggle": "./src/components/ui/ThemeToggle.tsx",
+		"./ui/ThemeSelect": "./src/components/ui/ThemeSelect.tsx",
 		"./ui/FormField": "./src/components/ui/FormField.tsx",
 		"./ui/LoadingSpinner": "./src/components/ui/LoadingSpinner.tsx",
 		"./ui/FileUpload": "./src/components/ui/FileUpload.tsx",
