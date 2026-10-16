@@ -14,8 +14,7 @@
  *
  * The cycle card beneath is the accounting record — where the month's money went — and
  * the cycle navigation lives there, because reviewing a closed cycle is accounting work
- * rather than the page's subject. There is no bandwidth line — streaming and downloads
- * are unlimited and free.
+ * rather than the page's subject.
  *
  * A creator's Badge emblem renders through the same BadgeMark Anthers' own Badges render
  * through (CreatorBadgeMark), so both ladders read as one collection.
