@@ -121,12 +121,11 @@ export default function LoggedOutLayout() {
 		// sticky nav stays on top (z-40).
 		<div className="relative isolate min-h-screen flex flex-col">
 			<header className="py-1 nav-edge bg-base-200/50 backdrop-blur-md sticky top-0 z-40">
-				{/* Language utilities, floated into the page's top-right corner —
-					deliberately outside the centered nav. Desktop only; on mobile the
-					language picker drops into the hamburger menu below. (The theme picker
-					lived here beside it while it was a circle icon; as a ~90px dropdown
-					select it stands in the nav's right cluster instead, where the flex
-					flow makes room for it — a float this wide overlaps Log In.) */}
+				{/* Theme + language utilities, floated into the page's top-right corner —
+					deliberately outside the centered nav. Desktop only; on mobile the theme
+					picker drops into the hamburger menu below. (The picker stands in the
+					flow of the nav's right cluster only while its closed trigger is wider
+					than a circle icon; icon-only, the corner fits it again.) */}
 				<div className="absolute inset-y-0 right-0 z-10 hidden items-center gap-1 pr-8 lg:flex">
 					{/* Language picker — hidden until localization is actually implemented
 						(the menu is inert). Gated by LOCALIZATION_ENABLED, not deleted, so it
@@ -154,6 +153,10 @@ export default function LoggedOutLayout() {
 							</ul>
 						</div>
 					)}
+					{/* Icon-only trigger, in this float again: a closed circle is what the corner
+					    was sized for. The theme names live in the dropdown's menu, so the
+					    topbar never carries them. */}
+					<ThemeSelect />
 				</div>
 
 				{/* Main nav — brand on the left, page links centered, a single CTA on the
@@ -184,7 +187,7 @@ export default function LoggedOutLayout() {
 								<li className="sm:hidden">
 									<Link to="/login">Log In</Link>
 								</li>
-								{/* Theme toggle for mobile (the corner utilities are desktop-only) */}
+								{/* Theme picker for mobile (the corner utilities are desktop-only) */}
 								<li className="mt-1 border-t border-base-content/10 pt-1">
 									<div className="flex items-center justify-between">
 										<span className="text-base-content/70">Theme</span>
@@ -243,16 +246,10 @@ export default function LoggedOutLayout() {
 						free forever by charter rather than by pricing decision (the wiki's *How Anthers Talks About Itself*), and the
 						page it lands on states the monthly Public Access limit in the same breath.
 
-						⚠️ Sign Up Free now sits FIRST, with Log In to its right. Reading order and
-						visual weight agree this way — the primary act comes first — where before
-						the eye met the quiet button on its way to the loud one. */}
+						⚠️ Log In sits FIRST, with Sign Up Free closing the corner (flipped 2026-10-16
+						per Parker): reading order runs the quiet door first, and the primary act
+						lands last, nearest the corner's theme and language utilities. */}
 					<div className="flex flex-1 items-center justify-end gap-1 sm:gap-2">
-						<Link
-							to="/signup"
-							className="scale-95 btn btn-primary rounded-lg px-7 shadow-[0_0_10px_color-mix(in_oklch,var(--color-primary)_50%,transparent)] transition-shadow hover:shadow-[0_0_16px_color-mix(in_oklch,var(--color-primary)_65%,transparent)]"
-						>
-							Sign Up Free
-						</Link>
 						{/* Hidden below `sm` — it is in the mobile menu instead, because two buttons
 						    beside the hamburger and the wordmark overflow a 390px navbar. */}
 						<Link
@@ -261,13 +258,12 @@ export default function LoggedOutLayout() {
 						>
 							Log In
 						</Link>
-						{/* The theme picker — topbar-visible from lg up only, matching where the
-						    corner toggle it replaced stood: below lg the mobile menu's labeled
-						    row carries it instead. In the flow (not floated into the corner,
-						    where it sat) because the closed select is ~90px wide and a float
-						    that wide overlaps Log In at exactly the widest non-max-w-6xl
-						    viewports. */}
-						<ThemeSelect className="hidden lg:block" />
+						<Link
+							to="/signup"
+							className="scale-95 btn btn-primary rounded-lg px-7 shadow-[0_0_10px_color-mix(in_oklch,var(--color-primary)_50%,transparent)] transition-shadow hover:shadow-[0_0_16px_color-mix(in_oklch,var(--color-primary)_65%,transparent)]"
+						>
+							Sign Up Free
+						</Link>
 					</div>
 				</div>
 			</header>
