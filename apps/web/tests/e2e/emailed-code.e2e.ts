@@ -52,7 +52,7 @@ test("an emailed code finishes a signup, and the account holds the handle it ask
 	// ProtectedRoute, which sends an unfinished account straight back here — so on this
 	// page the nav is a list of dead ends, and LoggedInLayout leaves it out until there
 	// is an account to navigate with. (Pinned here because this is the one existing walk
-	// that lands on /welcome with terms still owed; the toggle lives in the header.)
+	// that lands on /welcome with terms still owed; the toggle rides the sidebar's edge.)
 	//
 	// Asserted by the aria-hidden state rather than an absence, and through a locator
 	// rather than getByRole (which hides aria-hidden elements from the query entirely).
