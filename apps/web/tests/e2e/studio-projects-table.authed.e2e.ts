@@ -128,11 +128,9 @@ test("the works grid renders the project's summary thumbnails as a way into each
 
 	await page.goto("/studio/projects");
 	const publishedRow = page.locator("tbody tr").filter({ hasText: PUBLISHED_TITLE });
-	// A tile carries the Work's title, and it is the way into the Work.
-	const tile = publishedRow
-		.locator("td")
-		.nth(1)
-		.getByTitle(/Chapter one/);
+	// A tile carries the Work's title, and it is the way into the Work — scoped to the
+	// title itself rather than a cell index, so the row's column order can move without it.
+	const tile = publishedRow.getByTitle(/Chapter one/);
 	await expect(tile).toHaveCount(1);
 	await tile.click();
 	await expect(page).toHaveURL(new RegExp(`/studio/works/${made.publicId}/edit$`));
