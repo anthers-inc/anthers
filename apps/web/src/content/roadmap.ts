@@ -800,7 +800,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						blurb:
 							"The corporation's bank account, and live payments — among the last things before opening.",
 						bucket: "active",
-						note: "Payments run in test mode, so nothing here can charge you.",
+						note: "Card charges and refunds run in live mode since the October cutover.",
 						doc: { id: "70.09", title: "How Money Moves" },
 					},
 				],
