@@ -43,6 +43,7 @@ export default function BuyNow(props: BuyNowProps) {
 				// navigating first would race the POST the page's own GET then answers.
 				void Promise.resolve(
 					add({
+						kind: "work",
 						workId: props.workId,
 						slug: props.slug,
 						title: props.title,

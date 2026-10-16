@@ -1051,6 +1051,13 @@
       "when": 1792109933425,
       "tag": "20261016-001853_famous_mister_sinister",
       "breakpoints": true
+    },
+    {
+      "idx": 150,
+      "version": "7",
+      "when": 1792170138766,
+      "tag": "20261016-170218_lethal_the_hunter",
+      "breakpoints": true
     }
   ]
 }

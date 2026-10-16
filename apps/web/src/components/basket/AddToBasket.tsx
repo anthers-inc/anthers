@@ -55,6 +55,7 @@ export default function AddToBasket(props: AddToBasketProps) {
 					// a refusal surfaces through the basket's own error state.
 					void Promise.resolve(
 						add({
+							kind: "work",
 							workId: props.workId,
 							slug: props.slug,
 							title: props.title,

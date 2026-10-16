@@ -31,16 +31,20 @@
 
 import { db } from "@anthers/db/client";
 import {
+	badgeCharges,
+	badges,
+	billingAccounts,
 	crfLedger,
 	crfSubsidies,
 	disputes,
 	invoices,
 	purchases,
 	stripeAccounts,
+	userBadges,
 	users,
 	works,
 } from "@anthers/db/schema";
-import { cycleEnd, cycleStart } from "@anthers/shared/billing-cycle";
+import { currentCycleKey, cycleEnd, cycleStart } from "@anthers/shared/billing-cycle";
 import {
 	CLOTHING_TAX_CODE,
 	isChargeableAmount,
@@ -67,13 +71,26 @@ import {
 	paymentsConfigured,
 	retrieveConnectAccount,
 	retrieveConnectBalance,
+	retrieveSubscription,
 	verifyWebhookSignature,
 } from "../lib/processor.js";
 import { getOptionalUserId, requireAuth, requireVerified } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
 import { resolveAccess } from "../services/access.js";
-import { addBasketItem, clearBasket, listBasket, removeBasketItem } from "../services/basket.js";
+import { anthersUserId } from "../services/anthers-badges.js";
 import {
+	addBasketBadge,
+	addBasketItem,
+	clearBasket,
+	listBasket,
+	removeBasketBadge,
+	removeBasketItem,
+} from "../services/basket.js";
+import {
+	applyBadgeRecurrence,
+	applyDirectedSupport,
+	ensureBadgeProduct,
+	ensureCreatorProduct,
 	linkCheckoutCustomer,
 	savedBillingAddress,
 	stripeCustomerIdFor,
@@ -106,7 +123,7 @@ import {
 	settleRefundedPurchase,
 } from "../services/refunds.js";
 import { addTopUpToInvoice } from "../services/storage-topup.js";
-import { applyReductionsToInvoice } from "../services/support-reductions.js";
+import { applyReductionsToInvoice, recordReductions } from "../services/support-reductions.js";
 
 /**
  * Shared purchase resolution for checkout and quote: find the Work, confirm it's
@@ -192,7 +209,154 @@ async function resolvePurchase(slug: string, userId: number) {
 }
 
 /**
- * The same resolution for a **basket** of Works bought on one charge.
+ * The Badge purchase resolution — the same job `resolvePurchase` does for a Work, for the
+ * rung a buyer picked: confirm it may be held by this buyer, and pin the money.
+ *
+ * 🚨 **A Badge is a purchase like any other, and its first transaction prices like the
+ * raise it is** (Parker, 2026-10-14/15). What the buyer already give this issuer this
+ * cycle is the raise's base read off the HOLDING — the in-force truth the activation
+ * webhook keeps — so:
+ *
+ * - holding none → the first transaction charges the rung's full threshold;
+ * - holding a lower rung → it charges the DELTA (threshold − held), the amount a request
+ *   through the subscription would have raised the line by, and `recordReductions`
+ *   credits the same missed-days figure at the renewal;
+ * - holding that threshold or higher → nothing to buy (the ratchet), refused here rather
+ *   than quoted at zero, because a zero delta is not a discount, it is a no-op.
+ *
+ * One ladder per basket line and one line per ladder are the basket service's rules; the
+ * money refusals are all here, at the door where they are honest. ⚠️ The Stripe-side
+ * half — the rung's Product — is priced only when the caller will build a session
+ * (`needsProduct`): a quote names prices the database knows, so a quote stays free of
+ * processor calls the same way a Work's quote always was.
+ */
+async function resolveBadgePurchase(
+	badgeId: number,
+	userId: number,
+	opts?: { atCheckout?: boolean; needsProduct?: boolean },
+) {
+	const [badge] = await db.select().from(badges).where(eq(badges.id, badgeId)).limit(1);
+	if (!badge) return { ok: false as const, status: 404 as const, error: "Badge not found" };
+
+	// 🚨 Nobody holds their own Badge — the same refusal every holding door answers.
+	if (badge.creatorId === userId)
+		return { ok: false as const, status: 400 as const, error: "You cannot hold your own Badge" };
+
+	// The issuer the support is directed at, with the handle the receipt and the basket
+	// page name — reachable only through the badge until it is read here.
+	const [issuer] = await db
+		.select({ id: users.id, handle: users.atprotoHandle })
+		.from(users)
+		.where(eq(users.id, badge.creatorId))
+		.limit(1);
+	if (!issuer) return { ok: false as const, status: 404 as const, error: "Badge not found" };
+
+	// What the buyer already gives this issuer this cycle — MAX over the holdings, the
+	// same read the sync uses for its in-force comparisons, for the same reason: several
+	// rows would only ever mean the ratchet's climb, and the largest rung is the truth.
+	const [heldRow] = await db
+		.select({ held: sql<string>`COALESCE(MAX(${badges.threshold}), '0.00')` })
+		.from(userBadges)
+		.innerJoin(badges, eq(badges.id, userBadges.badgeId))
+		.where(
+			and(
+				eq(userBadges.userId, userId),
+				eq(userBadges.billingCycle, currentCycleKey()),
+				eq(badges.creatorId, badge.creatorId),
+			),
+		);
+	const held = new Decimal(heldRow?.held ?? "0.00");
+
+	const threshold = new Decimal(badge.threshold);
+	// 🚨 The ratchet at the money door: a rung at or below what the buyer holds is not a
+	// purchase, it is a no-op — refusing reads much truer than quoting a $0.00 line.
+	if (threshold.lte(held))
+		return {
+			ok: false as const,
+			status: 400 as const,
+			error: "You already hold this rung or higher from this creator.",
+		};
+	const amount = threshold.minus(held);
+
+	// 🚨 A price the processor will not accept — the same catch `resolvePurchase` keeps for
+	// a Work, for the same reasons: the refusal surfaces where the buyer can read it, names
+	// what is true and nothing more, and nothing rewrites the creator's number.
+	if (!isChargeableAmount(amount.toNumber()))
+		return {
+			ok: false as const,
+			status: 409 as const,
+			error:
+				"This Badge's upgrade is priced below what a card payment can process, so it can't be bought right now. Only the creator can change that.",
+		};
+
+	// 🚨 A buyer whose subscription renewal has failed is refused, never sold to: the
+	// recurrence could not bill either. The same refusal the support-change path answers
+	// with, and the same remedy (pay what is owed in Manage Billing). The Stripe read is
+	// the checkout's job — `atCheckout` gates it, so a quote stays free of processor calls.
+	if (opts?.atCheckout) {
+		const [acct] = await db
+			.select({ stripeSubscriptionId: billingAccounts.stripeSubscriptionId })
+			.from(billingAccounts)
+			.where(eq(billingAccounts.userId, userId))
+			.limit(1);
+		if (acct?.stripeSubscriptionId) {
+			const sub = await retrieveSubscription(acct.stripeSubscriptionId);
+			if (sub && (sub.status === "past_due" || sub.status === "unpaid")) {
+				return {
+					ok: false as const,
+					status: 409 as const,
+					code: "payment_past_due" as const,
+					error:
+						"Your last payment didn't go through. Update your card in Manage Billing, and you can change your support once it has.",
+				};
+			}
+		}
+	}
+
+	// The Stripe Product the first-transaction line and the recurrence both bill against
+	// — the rung's own, created on first use, carrying the rung's own tax code (the
+	// most-taxable thing the rung delivers). One Product per rung, re-stamped when the
+	// rung's kinds change — `ensureBadgeProduct` owns all of that. A quote skips it:
+	// pricing the line is the database's read, not the processor's.
+	const product =
+		opts?.needsProduct === false
+			? null
+			: await ensureBadgeProduct(badgeId, badge.label, issuer.handle);
+
+	return { ok: true as const, badge, issuer, held, threshold, amount, product };
+}
+
+/** One resolved line of a basket, in the order the buyer built it. */
+type ResolvedLine =
+	| {
+			kind: "work";
+			/** The full Work row, as the single-purchase path resolves it. */
+			work: typeof works.$inferSelect;
+			amount: Decimal;
+			/** This line's share of the charge's ONE card fee — pro-rata, last line absorbs. */
+			lineFee: Decimal;
+	  }
+	| {
+			kind: "badge";
+			badge: {
+				id: number;
+				creatorId: number;
+				threshold: string;
+				label: string | null;
+			};
+			issuer: { id: number; handle: string | null };
+			/** What the buyer already holds from this issuer this cycle, as a money string. */
+			held: Decimal;
+			threshold: Decimal;
+			amount: Decimal;
+			/** The rung's Stripe Product, when the resolution priced one — a quote's is null. */
+			product: string | null;
+			lineFee: Decimal;
+	  };
+
+/**
+ * The same resolution for a **basket** of items bought on one charge — Works and Badge
+ * first transactions alike.
  *
  * 🚨 **A basket carries any number of creators, settled as one platform charge plus one
  * transfer per creator at completion** (Parker, 2026-10-15). The one-creator rule this
@@ -203,43 +367,113 @@ async function resolvePurchase(slug: string, userId: number) {
  * moves out per creator on the charge's completion (`completeSessionPurchases` below,
  * funded by the charge), which is the same merchant-of-record posture monthly support
  * already runs — the counsel brief's "A basket spanning two creators" decision record
- * carries the reasoning and the accepted cost. What the basket buys is the **fixed
- * $0.30**, which is per *charge* and not per item: five $1 tracks pay $1.65 in card fees
- * separately and $0.45 together, and the whole $1.20 goes to the creator because Anthers
- * keeps nothing either way. Same mechanism as batching a month's support onto one
- * transaction (the wiki's *How Money Moves*).
+ * carries the reasoning and the accepted cost.
+ *
+ * **Badge lines ride the same charge and settle by a different rail** (2026-10-15): a
+ * Badge's money never transfers at completion — support settles through the cycle
+ * distribution (`settle-cycle.ts` reads `badge_charges` alongside the invoices) — so
+ * `creatorIds` below means "whose money is on the charge", of which the purchase split
+ * moves only the Works' shares. An issuer whose connected account cannot take a payout is
+ * refused here exactly as a Work's creator is, Anthers' own ladder excepted (its money
+ * already sits on the platform balance by construction; there is nowhere for a transfer
+ * to go).
  */
-async function resolveBasket(workIds: number[], userId: number) {
-	const unique = [...new Set(workIds)];
-	if (unique.length === 0)
-		return { ok: false as const, status: 400 as const, error: "Your basket is empty" };
-	if (unique.length > MAX_BASKET_ITEMS)
+/** One stored basket line, as the buyer built it — a Work or a Badge rung. */
+export type StoredBasketRow =
+	| { kind: "work"; workId: number; slug: string }
+	| { kind: "badge"; badgeId: number };
+
+async function resolveStoredBasket(
+	rows: StoredBasketRow[],
+	userId: number,
+	opts?: { atCheckout?: boolean; needsProduct?: boolean },
+): Promise<
+	| { ok: false; status: 400 | 404 | 409; error: string; code?: string; itemId?: number | string }
+	| {
+			ok: true;
+			items: ResolvedLine[];
+			subtotal: Decimal;
+			fees: ReturnType<typeof calculateFees>;
+			/** Every issuer's id the charge covers — Works' creators and Badge issuers alike. */
+			creatorIds: (number | null)[];
+	  }
+> {
+	// Deduplicated by identity: adding the same Work or rung twice is one line (the adds
+	// already no-op on duplicates; this is the same defense at this door).
+	const deduped: StoredBasketRow[] = Object.values(
+		rows.reduce<Record<string, StoredBasketRow>>((acc, row) => {
+			acc[row.kind === "work" ? `w${row.workId}` : `b${row.badgeId}`] = row;
+			return acc;
+		}, {}),
+	);
+	if (deduped.length === 0) return { ok: false, status: 400, error: "Your basket is empty" };
+	if (deduped.length > MAX_BASKET_ITEMS)
 		return {
-			ok: false as const,
-			status: 400 as const,
+			ok: false,
+			status: 400,
 			error: `A basket holds at most ${MAX_BASKET_ITEMS} items`,
 		};
 
-	const rows = await db.select().from(works).where(inArray(works.id, unique));
-	if (rows.length !== unique.length)
-		return { ok: false as const, status: 404 as const, error: "Work not found" };
-
-	// Resolved per Work, through the same path a single purchase takes — the basket
-	// changes who pays the flat fee, never who may buy what.
-	const items: { work: (typeof rows)[number]; amount: Decimal }[] = [];
-	for (const work of rows) {
-		const one = await resolvePurchase(work.slug, userId);
-		if (!one.ok) return { ...one, workId: work.id };
-		items.push({ work: one.work, amount: one.amount });
+	// Resolved per item, in the order the buyer built the basket — the line fee shares
+	// below are pinned in this order, and the receipt reads in it. The basket changes who
+	// pays the flat fee, never who may buy what.
+	// The items list with line shares assigned by the apportionment pass below — read at
+	// push as zeros, never consumed before that pass runs.
+	const items: ResolvedLine[] = [];
+	for (const row of deduped) {
+		if (row.kind === "work") {
+			const one = await resolvePurchase(row.slug, userId);
+			if (!one.ok) return { ...one, itemId: row.workId };
+			items.push({ kind: "work", work: one.work, amount: one.amount, lineFee: new Decimal(0) });
+		} else {
+			const one = await resolveBadgePurchase(row.badgeId, userId, opts);
+			if (!one.ok) return { ...one, itemId: row.badgeId };
+			items.push({
+				kind: "badge",
+				badge: {
+					id: one.badge.id,
+					creatorId: one.badge.creatorId,
+					threshold: String(one.badge.threshold),
+					label: one.badge.label,
+				},
+				issuer: one.issuer,
+				held: one.held,
+				threshold: one.threshold,
+				amount: one.amount,
+				product: one.product,
+				lineFee: new Decimal(0),
+			});
+		}
 	}
 
 	// 🚨 Fees on the SUM, once — computing per item and adding would charge the flat
-	// $0.30 per Work and defeat the entire point of the basket.
+	// $0.30 per item and defeat the entire point of the basket (Works and Badges amortize
+	// it identically; the Badge's money follows the settlement rail, the fee's share is
+	// pinned on the row either way).
 	const subtotal = items.reduce((acc, i) => acc.plus(i.amount), new Decimal(0));
 	const fees = calculateFees(subtotal, { type: "digital" });
-	// The distinct creators the charge covers — the checkout's connected-account
-	// precondition and the completion path's transfer step both read this.
-	const creatorIds = [...new Set(items.map((i) => i.work.creatorId))];
+
+	// 🚨 The per-line fee shares are APPORTIONED, not recomputed — pro-rata by item value
+	// with the last line absorbing the rounding remainder, so the parts always reconstruct
+	// the whole exactly. `badge_charges.processing_fee` and the purchase rows' fee both
+	// read their share from these, so the rows and the quote cannot disagree.
+	let allocatedFee = new Decimal(0);
+	for (let idx = 0; idx < items.length; idx++) {
+		items[idx].lineFee =
+			idx === items.length - 1
+				? fees.processingFee.minus(allocatedFee)
+				: fees.processingFee.times(items[idx].amount).dividedBy(subtotal).toDecimalPlaces(2);
+		if (idx < items.length - 1) allocatedFee = allocatedFee.plus(items[idx].lineFee);
+	}
+
+	// The distinct issuers the charge covers. Anthers' own ladder is NOT excluded here —
+	// the checkout's connected-account precondition below skips it explicitly, and the
+	// purchase split skips an issuer with no connected account by the same rule — because
+	// `creatorIds` is the read-side vocabulary of "whose money is on this charge", and for
+	// Anthers that is true in the same sense it is for every issuer.
+	const creatorIds = [
+		...new Set(items.map((i) => (i.kind === "work" ? i.work.creatorId : i.issuer.id))),
+	];
 	return { ok: true as const, items, subtotal, fees, creatorIds };
 }
 
@@ -299,6 +533,20 @@ function purchaseSession(params: {
 	 * greyed-out Pay button Parker found on the live checkout (2026-10-06). See below.
 	 */
 	customerEmail: string;
+	/**
+	 * 🚨 **Set ONLY when a Badge's recurrence awaits and no active subscription exists**
+	 * (the checkout computes it — see the basket route's note). A purchase checkout keeps
+	 * `payment_method_save: "disabled"` and never offers a save; this is the one payment
+	 * a checkout is allowed to leave a card behind for, because a Badge line created on
+	 * the platform charge has to renew against something on file.
+	 *
+	 * ⚠️ PROBE at implementation (2026-10-15): whether `setup_future_usage` on a
+	 * `mode: "payment"` session saves the confirming card WITHOUT re-introducing Link's
+	 * consent block — the 2026-10-06 incident (the block's empty phone field held
+	 * `canConfirm` false all day) lives in this exact interplay. If the block reappears,
+	 * the alternative is a SetupIntent ride-along at completion, and the probe decides.
+	 */
+	saveCard?: boolean;
 	metadata: Record<string, string>;
 }): Stripe.Checkout.SessionCreateParams {
 	return {
@@ -336,8 +584,29 @@ function purchaseSession(params: {
 		// completion webhook links it via `linkCheckoutCustomer` so the next purchase
 		// reuses it. Before the decision, every one-time buyer kept a permanent
 		// customer object with their address and email on it.
+		//
+		// ⚠️ **Two riders go only with the customer, found by the probe (2026-10-15,
+		// test mode):**
+		// - `saved_payment_method_options` is REFUSED on a customerless session outright
+		//   ("requires a customer") — so the suppression pair below rides only when a
+		//   customer does. A customerless session renders no save UI to suppress
+		//   (nothing is on file to save, and the client's own `enableSave: "never"`
+		//   governs what the element would offer), so the suppression is redundant
+		//   there, and required here.
+		// - `customer_update[address]` is what makes checkout's collected address SAVE
+		//   onto the Customer (and what automatic_tax requires a customer-carried
+		//   session to carry when that customer has no address yet — the same probe's
+		//   second rejection). The saved-billing-address door reads the customer's
+		//   address, so this is the persistence path as well as the acceptance one.
 		...(params.customerId
-			? { customer: params.customerId }
+			? {
+					customer: params.customerId,
+					customer_update: { address: "auto" as const },
+					saved_payment_method_options: {
+						payment_method_save: "disabled",
+						payment_method_remove: "disabled",
+					},
+				}
 			: { customer_creation: "if_required" as const }),
 		// 🚨 Card-only is the account-wide Default configuration (Parker, 2026-10-06:
 		// the Dashboard's Default narrowed to card and nothing else, matching the
@@ -356,25 +625,32 @@ function purchaseSession(params: {
 		...(process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION?.trim()
 			? { payment_method_configuration: process.env.STRIPE_PAYMENT_METHOD_CONFIGURATION.trim() }
 			: {}),
-		// 🚨 **No payment-method saves are offered on this flow.** Anthers never stores a
-		// card for reuse (`setup_future_usage` is nowhere in this route), so the session
-		// does not ask to save — and Checkout renders Link's consent block ("Save my
-		// information for faster checkout", an email + MOBILE NUMBER sub-form, checkbox
+		// 🚨 **The Link consent block is suppressed on the sessions it could render on.** A
+		// plain purchase never stores a card (`setup_future_usage` is nowhere), so the
+		// session does not ask to save — and Checkout renders Link's consent block ("Save
+		// my information for faster checkout", an email + MOBILE NUMBER sub-form, checkbox
 		// checked by default) whenever a Customer rides the session: a saved one passed
 		// in, or one Stripe created. A buyer who ignores the block left the phone field
-		// empty and Stripe held `canConfirm` false forever: the fully-filled form with
-		// a greyed Pay button (2026-10-06, live payment_method collection blocked all
-		// day; the client-side `savedPaymentMethod.enableSave: "never"` below removes
-		// the sub-form from its side too). The suppression stays regardless of which
-		// way a Customer got there.
-		saved_payment_method_options: {
-			payment_method_save: "disabled",
-			payment_method_remove: "disabled",
-		},
+		// empty and Stripe held `canConfirm` false forever: the fully-filled form with a
+		// greyed Pay button (2026-10-06, live payment_method collection blocked all day;
+		// the client-side `savedPaymentMethod.enableSave: "never"` below removes the
+		// sub-form from its side too). The suppression is the customer-riding branch's
+		// rider — on a customerless session there is no save UI to suppress (nothing is
+		// on file, and the probe showed the pair itself is refused there).
+		//
+		// ⚠️ The one exception is `saveCard` — set when a Badge's recurrence awaits and
+		// the buyer has no active subscription (Parker, 2026-10-15). The suppression pair
+		// is the customer-riding branch's rider now (`saved_payment_method_options` is
+		// REFUSED on a customerless session — the probe's finding above); a save driven
+		// through `setup_future_usage` asks no consent question, and the client's
+		// `savedPaymentMethod.enableSave: "never"` governs the element's side either way.
 		line_items: params.lineItems,
 		automatic_tax: { enabled: true },
 		payment_intent_data: {
 			metadata: params.metadata,
+			// The one save a purchase checkout may make — a Badge's recurrence needs the
+			// card on file, and the confirmation is where it lives. See `saveCard` above.
+			...(params.saveCard ? { setup_future_usage: "off_session" as const } : {}),
 		},
 		// Where a redirect-based payment method sends the buyer back; cards don't use it,
 		// but the session requires it when one is enabled. `STRIPE_RETURN_PATHS` owns every
@@ -416,6 +692,52 @@ function workLineItem(
 }
 
 /**
+ * One line item for a Badge's first Month, against the rung's own Stripe Product —
+ * `ensureBadgeProduct` created it carrying the rung's own tax code (the most-taxable
+ * thing the rung delivers), so the line needs nothing beside the product reference and
+ * the first transaction's amount: the full threshold, or an upgrade's delta.
+ */
+function badgeLineItem(
+	product: string,
+	amountCents: number,
+): Stripe.Checkout.SessionCreateParams.LineItem {
+	return {
+		price_data: {
+			currency: "usd",
+			// US prices are tax-exclusive: the buyer's total varies with their location,
+			// which is the point of automatic tax — the same behavior every purchase line
+			// and every subscription line carries.
+			tax_behavior: "exclusive",
+			unit_amount: amountCents,
+			product,
+		},
+		quantity: 1,
+	};
+}
+
+/**
+ * Whether the buyer carries a support subscription Stripe can still bill — the test the
+ * card-save decision makes (a Badge's recurrence rides that subscription's payment
+ * method when it exists, so the checkout need not save one) and the completion's
+ * decision between "add the line to the existing subscription" and "create one".
+ *
+ * ⚠️ Deliberately narrow: `active` and `trialing` are the only YES. A past-due or unpaid
+ * subscription cannot take a new line (the checkout refuses a Badge ride at
+ * `atCheckout` for exactly that), and no subscription at all is the ordinary Badge-buyer
+ * case the card save exists for.
+ */
+async function hasActiveSupportSubscription(userId: number): Promise<boolean> {
+	const [acct] = await db
+		.select({ stripeSubscriptionId: billingAccounts.stripeSubscriptionId })
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, userId))
+		.limit(1);
+	if (!acct?.stripeSubscriptionId) return false;
+	const sub = await retrieveSubscription(acct.stripeSubscriptionId);
+	return sub?.status === "active" || sub?.status === "trialing";
+}
+
+/**
  * Complete the purchases a Checkout Session was created for: re-key the rows from the
  * session id to the PaymentIntent it produced, and stamp the tax Stripe Tax collected plus
  * the buyer's resolved billing address.
@@ -425,6 +747,9 @@ function workLineItem(
  * and buyer location — retrofitting onto past charges is the expensive direction, which is
  * why the columns are stamped here rather than derived later. `salesTax` was zero at
  * checkout because Anthers' arithmetic cannot know the buyer's location; the session can.
+ * Since the Badge purchase rides the same checkout, `badge_charges` rows are stamped by
+ * the same latch and share the charge's ONE tax figure (apportioned across the union of
+ * everything the charge carried).
  *
  * ⚠️ **US billing only, enforced here as the backstop.** The buy surfaces collect the
  * address through Anthers' own US-only form — there is no country field to enter
@@ -434,7 +759,8 @@ function workLineItem(
  * leaves the rows `pending` and the money to be returned by hand. Refusing loudly beats
  * collecting tax Anthers is not registered to collect.
  *
- * Idempotent by the same latch the rest of the webhook uses: only `pending` rows move.
+ * Idempotent by the same latch the rest of the webhook uses: only `pending` rows move —
+ * in both tables.
  */
 async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void> {
 	// The session id does not exist when the PaymentIntent's metadata is written (Stripe
@@ -472,27 +798,46 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 
 	// Re-key the rows onto the PaymentIntent, stamping the location and the tax. Only
 	// `pending` rows move, so a redelivered event is a no-op — the same latch the
-	// PI-keyed branch below relies on.
+	// PI-keyed branch below relies on. Both tables ride the latch: a charge that carried
+	// Badge lines completes them alongside the purchase rows.
 	const rows = await db
 		.select()
 		.from(purchases)
 		.where(and(eq(purchases.stripePaymentIntentId, session.id), eq(purchases.status, "pending")));
-	if (rows.length === 0) return;
+	const badgesPending = await db
+		.select()
+		.from(badgeCharges)
+		.where(
+			and(eq(badgeCharges.stripePaymentIntentId, session.id), eq(badgeCharges.status, "pending")),
+		);
+	if (rows.length === 0 && badgesPending.length === 0) return;
 
-	// A basket splits the whole charge's tax pro-rata by item value, the same split the
-	// card fee gets at checkout, so the rows sum to what Stripe collected exactly. The
-	// last row absorbs the rounding remainder, for the same reason it does there.
-	const subtotal = rows.reduce((acc, r) => acc.plus(new Decimal(r.amount)), new Decimal(0));
+	// The charge's ONE tax figure apportioned across EVERYTHING it carried — purchase
+	// rows and Badge charge rows together, pro-rata by item value, the very last line of
+	// the union absorbing the rounding remainder, so the rows of both tables sum to what
+	// Stripe collected exactly. (Purchases first, Badges after: the historical order —
+	// a no-Badge charge apportions over its purchase rows exactly as before.)
+	const union = [
+		...rows.map((row) => ({ kind: "purchase" as const, row, amount: row.amount })),
+		...badgesPending.map((row) => ({ kind: "badge" as const, row, amount: row.chargedAmount })),
+	];
+	const subtotal = union.reduce((acc, e) => acc.plus(new Decimal(e.amount)), new Decimal(0));
 	const taxTotal = new Decimal(tax);
 	let allocated = new Decimal(0);
-	const stamped = rows.map((row, idx) => {
-		const isLast = idx === rows.length - 1;
+	const stampedUnion = union.map((entry, idx) => {
+		const isLast = idx === union.length - 1;
 		const share = isLast
 			? taxTotal.minus(allocated)
-			: taxTotal.times(new Decimal(row.amount)).dividedBy(subtotal).toDecimalPlaces(2);
+			: taxTotal.times(new Decimal(entry.amount)).dividedBy(subtotal).toDecimalPlaces(2);
 		if (!isLast) allocated = allocated.plus(share);
-		return { row, share };
+		return { ...entry, share };
 	});
+	const stamped = stampedUnion.filter(
+		(e): e is Exclude<(typeof stampedUnion)[number], { kind: "badge" }> => e.kind === "purchase",
+	);
+	const stampedBadges = stampedUnion.filter(
+		(e): e is Extract<(typeof stampedUnion)[number], { kind: "badge" }> => e.kind === "badge",
+	);
 
 	for (const { row, share } of stamped) {
 		await db
@@ -510,13 +855,25 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 			})
 			.where(and(eq(purchases.id, row.id), eq(purchases.status, "pending")));
 	}
+	for (const { row, share } of stampedBadges) {
+		await db
+			.update(badgeCharges)
+			.set({
+				stripePaymentIntentId: intentId,
+				salesTax: share.toFixed(2),
+				status: "completed",
+				updatedAt: new Date(),
+			})
+			.where(and(eq(badgeCharges.id, row.id), eq(badgeCharges.status, "pending")));
+	}
 
 	// ── The split, after the rows are keyed to the intent ─────────────────────
 	// The platform charge collected everyone's money; now each creator's share moves out,
 	// one transfer per creator funded by the charge. The amounts are the rows' pinned
 	// earnings, so a failure leaves a row unstamped and the retry job the owner of the
 	// debt — `services/purchase-split.ts` carries the whole reasoning, including why a
-	// refund in the window must never transfer.
+	// refund in the window must never transfer. Badge lines never transfer: support
+	// settles through the cycle distribution, and this split only ever sees purchase rows.
 	const latestCharge =
 		typeof pi.latest_charge === "string" ? pi.latest_charge : (pi.latest_charge?.id ?? null);
 	await splitChargeToCreators(
@@ -530,12 +887,91 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 	// NEXT purchase reuse that one instead of leaving a second customer object behind.
 	// No-op when the session carries no customer (the ordinary opted-out buyer) and
 	// never overwrites the id `billingAccounts` already holds. The buyer's own id rides
-	// the intent's metadata, which every purchase surface stamps.
+	// the intent's metadata, which every purchase surface stamps. A Badge's recurrence
+	// needs this link done BEFORE the support half below runs — it looks the customer id
+	// up through the same column.
 	const linkCustomerId =
 		typeof session.customer === "string" ? session.customer : (session.customer?.id ?? null);
 	const buyerUserId = Number(pi.metadata?.buyerId ?? NaN);
 	if (linkCustomerId && Number.isFinite(buyerUserId)) {
 		await linkCheckoutCustomer(buyerUserId, linkCustomerId);
+	}
+
+	// ── The Badge half — the support side of a completed first transaction ────
+	// The holding (find-or-create rung, one per issuer, the pick replaces —
+	// `applyDirectedSupport`, which rides the follow along), the recurrence line (no
+	// charge today — the checkout carried the first transaction), and the day-exact
+	// missed-days reduction on the next renewal. The money never transfers here; the
+	// cycle's settlement reads these rows beside the invoices. A redelivered event finds
+	// no pending rows and is a no-op by the same latch.
+	if (stampedBadges.length > 0 && Number.isFinite(buyerUserId)) {
+		const completable = stampedBadges.filter(({ row }) => row.creatorId != null);
+		const orphans = stampedBadges.length - completable.length;
+		if (orphans > 0)
+			console.error(
+				`badge completion: ${orphans} row(s) on charge ${pi.id} lost their issuer — settled by hand`,
+			);
+		if (completable.length > 0) {
+			await applyDirectedSupport(
+				buyerUserId,
+				completable.map(({ row }) => ({
+					creatorId: row.creatorId as number,
+					amount: Number(row.threshold),
+				})),
+			);
+			// The recurrence lines, with each rung's own Product; a row whose rung was
+			// deleted between checkout and completion bills against the issuer's
+			// per-creator Product instead (the rung's tax-code subtlety is gone with the
+			// rung — the buyer paid, and the line exists to recur).
+			const products: string[] = [];
+			for (const { row } of completable) {
+				const [issuer] = await db
+					.select({ handle: users.atprotoHandle })
+					.from(users)
+					.where(eq(users.id, row.creatorId as number))
+					.limit(1);
+				const handle = issuer?.handle ?? "unknown";
+				if (row.badgeId != null) {
+					const product = await ensureBadgeProduct(
+						row.badgeId,
+						row.badgeLabel ?? `$${row.threshold}`,
+						handle,
+					);
+					if (product) products.push(product);
+					continue;
+				}
+				const product = await ensureCreatorProduct(row.creatorId as number, handle);
+				if (product) products.push(product);
+			}
+			await applyBadgeRecurrence(
+				buyerUserId,
+				completable
+					.map(({ row }, idx) => ({
+						issuerId: row.creatorId as number,
+						product: products[idx],
+						threshold: Number(row.threshold),
+					}))
+					// A rung that produced no Product (Stripe unconfigured) is skipped —
+					// the holding stands, the line joins on a later pass of the same job.
+					.filter((pick) => Boolean(pick.product)),
+				// The confirmed payment method — what a no-subscription buyer's new
+				// subscription bills with. Null when the charge carried none (the buyer
+				// already had a subscription): the existing-sub branch needs nothing, and
+				// the fresh creation falls back to the honest failed-renewal path.
+				typeof pi.payment_method === "string" ? pi.payment_method : null,
+			);
+			// The day-exact missed-days reduction — a Badge's first transaction charged a
+			// full rung today through the charge, so the days before today come off the
+			// next renewal exactly as a subscription-side raise records them.
+			await recordReductions(
+				buyerUserId,
+				new Date(),
+				completable.map(({ row }) => ({
+					creatorId: row.creatorId as number,
+					amount: Number(row.chargedAmount),
+				})),
+			);
+		}
 	}
 
 	// ── Merch fulfillment, after the money has moved ──────────────────────────
@@ -548,14 +984,14 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 	// (This Stripe version moved the session's collected address under
 	// `collected_information`; the billing read above still reads `customer_details`.)
 	const shipping = session.collected_information?.shipping_details ?? null;
-	const merchRows = stamped.filter(({ row }) => row.type === "physical");
+	const merchRows = stamped.filter(({ row }) => row.type === "physical").map(({ row }) => row);
 	if (shipping && merchRows.length > 0) {
 		const addr = shipping.address;
 		// The checkout's metadata — where the placement facts were resolved and stashed
 		// (see `resolveMerchCheckout`): merchandise goods price, shipping method, and
 		// Printful's Sync Variant id.
 		const meta = pi.metadata ?? {};
-		for (const { row } of merchRows) {
+		for (const row of merchRows) {
 			if (!row.workId) continue;
 			// The purchase recorded the size at checkout; the fulfillment is placed from
 			// the metadata's resolved facts and the session's shipping address.
@@ -630,39 +1066,66 @@ async function resolveMerchCheckout(
 
 // ─── Basket storage: the shared read the storage routes answer with ─────────
 
-/** The basket item shape every storage route answers with — the resolution `/basket` returns. */
-interface ResolvedBasketItem {
-	workId: number;
-	slug: string;
+/**
+ * The account's basket, each row resolved to what the buyer could actually buy — Works
+ * and Badge lines alike, each with the money the checkout would charge.
+ *
+ * 🚨 **A stale row answers by absence, never by error.** The table may hold an item that
+ * stopped being buyable after it was added (a Work withdrawn, owned, or priced out; a
+ * rung deleted, re-priced past the buyer, or fallen behind the ratchet; a buyer's
+ * subscription gone past due) — this read is where it stops being visible. Returning it
+ * with an error flag would make every subscriber (the badge first) into a place that has
+ * to know the rules; the basket page rendering only what a checkout could charge is the
+ * honest shape, and the refusals keep firing where money is at stake — at quote and
+ * checkout. See `resolveBadgePurchase` and `resolvePurchase`.
+ */
+export interface ResolvedBasketItem {
+	kind: "work" | "badge";
+	/** The Work's id, when this is a Work row. */
+	workId?: number;
+	/** The rung's id, when this is a Badge row. */
+	badgeId?: number;
+	slug?: string;
+	/** The Work's title, or the rung's own label. */
 	title: string | null;
+	/** The first transaction's price — the full threshold, or an upgrade's delta. */
 	price: string;
+	/** The monthly price this line begins — the rung's threshold, null for a Work. */
+	recurring: string | null;
 	creatorHandle: string;
 	thumbnail: string | null;
 }
 
-/**
- * The account's basket, each row resolved to what the buyer could actually buy.
- *
- * 🚨 **A stale row answers by absence, never by error.** The table may hold a Work that
- * stopped being buyable after it was added (withdrawn, already owned, moved behind a
- * higher gate, creator unconnected, deleted from the catalog outright) — this read is
- * where it stops being visible. Returning it with an error flag would make every
- * subscriber (the badge first) into a place that has to know the rules; the basket page
- * rendering only what a checkout could charge is the honest shape, and the refusals keep
- * firing where money is at stake — at quote and checkout. See `resolveBasket`.
- */
 async function resolvedBasketItems(userId: number): Promise<ResolvedBasketItem[]> {
 	const rows = await listBasket(userId);
 	const items: ResolvedBasketItem[] = [];
 	for (const row of rows) {
+		if (row.kind === "badge") {
+			// Display-only: pricing is the database's read (the holdings), never a
+			// processor call — the product step is the session builder's job.
+			const b = await resolveBadgePurchase(row.badgeId, userId, { needsProduct: false });
+			if (!b.ok) continue;
+			items.push({
+				kind: "badge",
+				badgeId: row.badgeId,
+				title: row.label,
+				price: b.amount.toFixed(2),
+				recurring: b.threshold.toFixed(2),
+				creatorHandle: row.issuerHandle ?? "",
+				thumbnail: null,
+			});
+			continue;
+		}
 		if (!row.slug || !row.creatorHandle) continue;
 		const q = await resolvePurchase(row.slug, userId);
 		if (!q.ok) continue;
 		items.push({
+			kind: "work",
 			workId: row.workId,
 			slug: row.slug,
 			title: row.title,
 			price: q.amount.toFixed(2),
+			recurring: null,
 			creatorHandle: row.creatorHandle,
 			thumbnail: row.thumbnail,
 		});
@@ -1268,12 +1731,19 @@ const paymentRoutes = new Hono()
 				billing_address_collection: "required",
 				// The 2026-10-11 customer posture, same as every purchase surface: a buyer
 				// with a Customer on file pays on it; no Customer, no created one unless
-				// `if_required` requires it and the webhook links it.
-				...(customerId ? { customer: customerId } : { customer_creation: "if_required" as const }),
-				saved_payment_method_options: {
-					payment_method_save: "disabled",
-					payment_method_remove: "disabled",
-				},
+				// `if_required` requires it and the webhook links it. The suppression pair
+				// rides WITH the customer (`saved_payment_method_options` is refused on a
+				// customerless session — the badge probe's finding, 2026-10-15); a
+				// customerless session has no save UI to suppress.
+				...(customerId
+					? {
+							customer: customerId,
+							saved_payment_method_options: {
+								payment_method_save: "disabled",
+								payment_method_remove: "disabled",
+							},
+						}
+					: { customer_creation: "if_required" as const }),
 				line_items: [
 					{
 						price_data: {
@@ -1524,19 +1994,37 @@ const paymentRoutes = new Hono()
 	.post("/basket/items", requireAuth, async (c) => {
 		const user = c.get("user");
 		const body = await c.req.json().catch(() => null);
+		// A line names a Work or a Badge rung — never both. The Badge add carries its own
+		// refusal (nobody buys their own ladder), answered the same moment the click asks.
 		const workId = Number(body?.workId);
-		if (!Number.isInteger(workId) || workId <= 0)
-			return c.json({ error: "A Work id is required." }, 400);
+		const badgeId = Number(body?.badgeId);
+		const hasWork = Number.isInteger(workId) && workId > 0;
+		const hasBadge = Number.isInteger(badgeId) && badgeId > 0;
+		if (hasWork === hasBadge)
+			return c.json({ error: "Name exactly one thing: a Work id or a Badge id." }, 400);
 
-		const result = await addBasketItem(user.id, workId);
-		if (!result.ok) {
-			// 404 names the Work (gone before it could be held); 409 names the basket (full).
-			// Both are refusals the buyer can act on at the moment of the click, which is
-			// the whole courtesy — the alternative was discovering both at checkout.
-			if (result.reason === "at_capacity") {
-				return c.json({ error: "Your basket is full.", code: "at_capacity" }, 409);
+		if (hasBadge) {
+			const result = await addBasketBadge(user.id, badgeId);
+			if (!result.ok) {
+				if (result.reason === "at_capacity") {
+					return c.json({ error: "Your basket is full.", code: "at_capacity" }, 409);
+				}
+				if (result.reason === "own_ladder") {
+					return c.json({ error: "You cannot hold your own Badge.", code: result.reason }, 400);
+				}
+				return c.json({ error: "Badge not found", code: result.reason }, 404);
 			}
-			return c.json({ error: "Work not found", code: result.reason }, 404);
+		} else {
+			const result = await addBasketItem(user.id, workId);
+			if (!result.ok) {
+				// 404 names the Work (gone before it could be held); 409 names the basket (full).
+				// Both are refusals the buyer can act on at the moment of the click, which is
+				// the whole courtesy — the alternative was discovering both at checkout.
+				if (result.reason === "at_capacity") {
+					return c.json({ error: "Your basket is full.", code: "at_capacity" }, 409);
+				}
+				return c.json({ error: "Work not found", code: result.reason }, 404);
+			}
 		}
 		// Answer with the post-add basket so the client's optimistic update can reconcile
 		// against the truth in one round trip — each item resolved exactly as `/basket`
@@ -1553,6 +2041,15 @@ const paymentRoutes = new Hono()
 		return c.json({ items: await resolvedBasketItems(user.id) });
 	})
 
+	.delete("/basket/badges/:badgeId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const badgeId = Number(c.req.param("badgeId"));
+		if (!Number.isInteger(badgeId) || badgeId <= 0)
+			return c.json({ error: "Badge not found" }, 404);
+		await removeBasketBadge(user.id, badgeId);
+		return c.json({ items: await resolvedBasketItems(user.id) });
+	})
+
 	.delete("/basket", requireAuth, async (c) => {
 		const user = c.get("user");
 		await clearBasket(user.id);
@@ -1566,51 +2063,45 @@ const paymentRoutes = new Hono()
 	 */
 	.post("/basket/quote", requireAuth, async (c) => {
 		const user = c.get("user");
-		// 🚨 **The resolved basket is the source of `workIds`; the request body never was.**
-		// The account's table is asked for its ids through the SAME resolution `/basket`
-		// answers with — so a row that stopped being buyable is excluded here exactly as
-		// the badge excluded it, and the buyer is never failed by an item they cannot see
-		// or remove. What remains is then re-resolved by `resolveBasket` below, whose
-		// refusal paths (mixed creators, the cap, the per-Work rules) keep firing.
+		// 🚨 **The resolved basket is the source of the ids; the request body never was.**
+		// The account's table is asked through the SAME resolution `/basket` answers with —
+		// so a row that stopped being buyable is excluded here exactly as the badge
+		// excluded it, and the buyer is never failed by an item they cannot see or remove.
+		// What remains is then re-resolved by `resolveStoredBasket` below, whose refusal
+		// paths (the cap, the per-item rules, the ratchet) keep firing.
 		const stored = await resolvedBasketItems(user.id);
-		const workIds = stored.map((row) => row.workId);
-		const q = await resolveBasket(workIds.map(Number).filter(Number.isFinite), user.id);
+		const rows = stored.map(
+			(item): StoredBasketRow =>
+				item.kind === "badge"
+					? { kind: "badge", badgeId: item.badgeId as number }
+					: { kind: "work", workId: item.workId as number, slug: item.slug as string },
+		);
+		const q = await resolveStoredBasket(rows, user.id, { needsProduct: false });
 		if (!q.ok) return c.json({ error: q.error, code: "code" in q ? q.code : undefined }, q.status);
 
 		// What the same items would have cost bought one at a time. Not decoration: it is
 		// the number that makes the basket legible, and it is derived rather than typed —
-		// `cardFee` per item, summed, against one `cardFee` on the subtotal.
+		// `cardFee` per item, summed, against one `cardFee` on the subtotal. Badge lines
+		// count identically: a Badge's first Month bought beside a Work shares the flat
+		// fee, which is the saving Parker's batching decision priced.
 		const separately = q.items.reduce(
 			(acc, i) => acc.plus(calculateFees(i.amount, { type: "digital" }).processingFee),
 			new Decimal(0),
 		);
 
-		// 🚨 The per-line fee shares are APPORTIONED, not recomputed — the same split the
-		// purchase rows are written with: pro-rata by item value, the last line absorbing
-		// the rounding remainder, so the parts always reconstruct the whole exactly. A
-		// simple per-line `times(...).div(...)` rounds each line independently and a
-		// three-evenly-split $0.59 fee summed to $0.60 (found by this suite).
-		let allocatedFee = new Decimal(0);
-		const lineFees = q.items.map((i, idx) => {
-			if (idx === q.items.length - 1) return q.fees.processingFee.minus(allocatedFee);
-			const share = q.fees.processingFee.times(i.amount).dividedBy(q.subtotal).toDecimalPlaces(2);
-			allocatedFee = allocatedFee.plus(share);
-			return share;
-		});
-
 		// The creator groups the basket page renders — one per distinct creator, each with
 		// a receives figure summed from that creator's own lines (price less the line's
-		// fee share), so the groups reconstruct the whole basket's `creatorEarnings`
-		// exactly: the last line's rounding remainder lands wherever the last line's
-		// creator is, and the per-group sums still add up. A basket carries any number of
-		// creators (2026-10-15), and the page renders these server figures rather than
-		// deriving its own — a receipt that computes its own totals stops reconciling the
-		// moment a dial moves.
+		// pinned fee share), so the groups reconstruct the whole basket's take exactly: the
+		// last line's rounding remainder lands wherever the last line's issuer is, and the
+		// per-group sums still add up. The line shares are pinned IN the resolution now, so
+		// the quote, the checkout's rows and the badge rows all read the same figures. Badge
+		// lines carry their issuer's receives figure too — the money settles through the
+		// cycle distribution rather than a transfer, and it is the same arithmetic either way.
 		const byCreator = new Map<number, { receives: Decimal; itemCount: number }>();
-		q.items.forEach((i, idx) => {
-			const cid = i.work.creatorId as number;
+		q.items.forEach((i) => {
+			const cid = i.kind === "work" ? (i.work.creatorId as number) : i.issuer.id;
 			const group = byCreator.get(cid) ?? { receives: new Decimal(0), itemCount: 0 };
-			group.receives = group.receives.plus(i.amount).minus(lineFees[idx]);
+			group.receives = group.receives.plus(i.amount).minus(i.lineFee);
 			group.itemCount += 1;
 			byCreator.set(cid, group);
 		});
@@ -1623,19 +2114,36 @@ const paymentRoutes = new Hono()
 			: [];
 
 		return c.json({
-			items: q.items.map((i, idx) => ({
-				workId: i.work.id,
-				slug: i.work.slug,
-				title: i.work.title,
-				type: i.work.type,
-				thumbnail: i.work.thumbnail,
-				// This line's own share of the basket's ONE card fee — pro-rata by value,
-				// the same apportionment the purchase rows are written with. The receipt's
-				// creator group reads it, so the receives line's tooltip can name what was
-				// taken out of this creator's part of the basket.
-				processingFee: lineFees[idx].toFixed(2),
-				price: i.amount.toFixed(2),
-			})),
+			items: q.items.map((i) =>
+				i.kind === "work"
+					? {
+							kind: "work" as const,
+							workId: i.work.id,
+							slug: i.work.slug,
+							title: i.work.title,
+							type: i.work.type,
+							thumbnail: i.work.thumbnail,
+							// This line's own share of the basket's ONE card fee — pro-rata by value,
+							// the same apportionment the purchase rows are written with. The
+							// receipt's creator group reads it, so the receives line's tooltip can
+							// name what was taken out of this creator's part of the basket.
+							processingFee: i.lineFee.toFixed(2),
+							price: i.amount.toFixed(2),
+							recurring: null,
+						}
+					: {
+							kind: "badge" as const,
+							badgeId: i.badge.id,
+							title: i.badge.label,
+							thumbnail: null,
+							processingFee: i.lineFee.toFixed(2),
+							price: i.amount.toFixed(2),
+							// The monthly price this line begins — the rung's threshold — beside
+							// the first transaction's price, so an upgrade line reads as the
+							// upgrade it is rather than a discount.
+							recurring: i.threshold.toFixed(2),
+						},
+			),
 			// One entry per creator the charge covers, in the order the basket named them.
 			creators: creatorIdList.map((cid) => ({
 				handle: handleRows.find((r) => r.id === cid)?.handle ?? null,
@@ -1654,39 +2162,62 @@ const paymentRoutes = new Hono()
 	})
 
 	/**
-	 * Buy a basket on one charge — one Checkout Session, one card fee, one row per Work.
+	 * Buy a basket on one charge — one Checkout Session, one card fee, one row per item.
 	 *
 	 * Deliberately a sibling of `/checkout/:slug` rather than a replacement: a single
 	 * purchase is the overwhelming case and there is no reason to make it travel through
 	 * a list. What the two must share is the *money*, and they do — both quote
-	 * `calculateFees`, both charge through a Checkout Session with automatic tax, and
-	 * both pin the creator's transfer to their earnings via `transfer_data[amount]`.
+	 * `calculateFees`, both charge through a Checkout Session with automatic tax. The
+	 * creator's money does not ride the session any more: it moves out per creator at
+	 * completion, funded by the charge (the platform-charge split).
 	 */
 	.post("/basket/checkout", requireAuth, requireVerified, async (c) => {
 		const user = c.get("user");
 		// Same rule as quote: the account's resolved basket is what's bought — an item
 		// that stopped being buyable is excluded by the same resolution the page showed,
-		// and what remains is re-resolved by `resolveBasket` below, whose refusal paths
-		// keep firing on it. Nothing trusts the table further than the client's old word
-		// was trusted.
+		// and what remains is re-resolved by `resolveStoredBasket` below, whose refusal
+		// paths keep firing on it. Nothing trusts the table further than the client's old
+		// word was trusted.
 		const stored = await resolvedBasketItems(user.id);
-		const workIds = stored.map((row) => row.workId);
-		const q = await resolveBasket(workIds.map(Number).filter(Number.isFinite), user.id);
+		const rows = stored.map(
+			(item): StoredBasketRow =>
+				item.kind === "badge"
+					? { kind: "badge", badgeId: item.badgeId as number }
+					: { kind: "work", workId: item.workId as number, slug: item.slug as string },
+		);
+		// The resolution runs BEFORE the processor guard — the refusals are the database's
+		// business and must fire without Stripe — and the rung's Product, the one
+		// processor-dependent piece, is priced only when a session could be built at all.
+		const q = await resolveStoredBasket(rows, user.id, {
+			atCheckout: true,
+			needsProduct: paymentsConfigured(),
+		});
 		if (!q.ok) return c.json({ error: q.error, code: "code" in q ? q.code : undefined }, q.status);
 
 		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
 
-		// Same hard precondition as a single purchase, now per creator: Anthers does not
+		// Same hard precondition as a single purchase, now per issuer: Anthers does not
 		// sell a creator's work when the money cannot reach them — and a basket can ask
 		// for several creators' money to move at once, so every one of them must be
-		// reachable before the buyer is charged.
+		// reachable before the buyer is charged. A Badge issuer's reachability matters just
+		// as much (their share moves at the cycle's settlement) — the one exception is
+		// Anthers' own ladder, whose money is already platform-side by construction and for
+		// whom no transfer exists to be blocked.
+		const anthersId = await anthersUserId();
 		if (q.creatorIds.some((id) => id == null))
 			return c.json({ error: "This work is no longer for sale." }, 409);
-		const accounts = await db
-			.select()
-			.from(stripeAccounts)
-			.where(inArray(stripeAccounts.userId, q.creatorIds as number[]));
-		for (const creatorId of q.creatorIds as number[]) {
+		// The null case is refused above; the type guard is what keeps the Stripe read's
+		// array honest rather than the check doing it silently.
+		const creatorsToCheck = q.creatorIds.filter(
+			(id): id is number => id != null && id !== anthersId,
+		);
+		const accounts = creatorsToCheck.length
+			? await db
+					.select()
+					.from(stripeAccounts)
+					.where(inArray(stripeAccounts.userId, creatorsToCheck))
+			: [];
+		for (const creatorId of creatorsToCheck) {
 			const account = accounts.find((a) => a.userId === creatorId);
 			if (!account?.onboardingComplete || !account.payoutsEnabled) {
 				return c.json({ error: "This creator can't accept payments yet." }, 409);
@@ -1694,16 +2225,45 @@ const paymentRoutes = new Hono()
 		}
 
 		// One line per Work, each with its own tax code — a basket can span media, and a
-		// video and an image are not taxed as the same thing in every jurisdiction.
+		// video and an image are not taxed as the same thing in every jurisdiction. A
+		// Badge line names its rung's own Product, whose tax code the rung's own kinds
+		// stamped (`ensureBadgeProduct`).
 		const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
-		for (const { work, amount } of q.items) {
-			const taxCode = purchaseTaxCode(work.type as WorkType);
-			// `resolvePurchase` already refused the types with no code, so this is the
-			// belt on a door the single-purchase path refuses at.
-			if (!taxCode)
-				return c.json({ error: "This work can't be taxed yet, so it can't be sold." }, 400);
-			lineItems.push(workLineItem(work, Math.round(amount.toNumber() * 100), taxCode));
+		for (const item of q.items) {
+			if (item.kind === "work") {
+				const { work, amount } = item;
+				const taxCode = purchaseTaxCode(work.type as WorkType);
+				// `resolvePurchase` already refused the types with no code, so this is the
+				// belt on a door the single-purchase path refuses at.
+				if (!taxCode)
+					return c.json({ error: "This work can't be taxed yet, so it can't be sold." }, 400);
+				lineItems.push(workLineItem(work, Math.round(amount.toNumber() * 100), taxCode));
+			} else {
+				// The product was priced when the processor was configured (the guard above
+				// runs before the resolution, with `needsProduct` on its answer); the belt
+				// refuses rather than building a session with an unnamed product.
+				if (!item.product) return c.json({ error: "Payments are not configured." }, 503);
+				lineItems.push(badgeLineItem(item.product, Math.round(item.amount.toNumber() * 100)));
+			}
 		}
+
+		// 🚨 **The card rides only when a Badge's recurrence needs it.** A charge that carries
+		// a Badge starts a monthly subscription's line at the next 1st, and a buyer without
+		// a support subscription has nothing on file to bill it with — purchase checkouts
+		// never save a card for a plain purchase (2026-10-06), and they keep not saving one
+		// where no recurrence awaits. When a Badge rides and no active subscription exists,
+		// the session saves the payment method; the completion links it to the subscription
+		// it builds. Probe the consent block at implementation (the 2026-10-06 Link incident
+		// lives exactly here).
+		const saveCard =
+			q.items.some((i) => i.kind === "badge") && !(await hasActiveSupportSubscription(user.id));
+
+		const workLines = q.items.filter(
+			(i): i is Extract<typeof i, { kind: "work" }> => i.kind === "work",
+		);
+		const badgeLines = q.items.filter(
+			(i): i is Extract<typeof i, { kind: "badge" }> => i.kind === "badge",
+		);
 
 		const session = await createCheckoutSession(
 			purchaseSession({
@@ -1712,9 +2272,11 @@ const paymentRoutes = new Hono()
 				lineItems,
 				customerId: await stripeCustomerIdFor(user.id),
 				customerEmail: user.email,
+				saveCard,
 				metadata: {
 					kind: "direct_purchase_basket",
-					workIds: q.items.map((i) => i.work.id).join(","),
+					workIds: workLines.map((i) => i.work.id).join(","),
+					badgeIds: badgeLines.map((i) => i.badge.id).join(","),
 					buyerId: String(user.id),
 				},
 			}),
@@ -1726,32 +2288,18 @@ const paymentRoutes = new Hono()
 		 * the buyer's Library are all **per Work** and must stay that way. The basket is a
 		 * property of the *charge*, not of the entitlement.
 		 *
-		 * 🚨 The per-item money is apportioned, not recomputed. `calculateFees` on a $1
-		 * item would attach a fresh $0.30 to it, so the rows would sum to far more than
-		 * was charged and every downstream user — earnings, the tax remittance record,
-		 * refunds — would be wrong. The fee is split **pro-rata by item value**, with the
-		 * last row absorbing the rounding remainder so the parts sum to the whole exactly.
+		 * 🚨 The per-item money is the resolution's PINNED line share, not a recomputation —
+		 * `calculateFees` on a $1 item would attach a fresh $0.30 to it, so the rows would
+		 * sum to far more than was charged and every downstream user — earnings, the tax
+		 * remittance record, refunds — would be wrong. The fee is split **pro-rata by item
+		 * value across every line of the charge** (Works and Badges alike), with the last
+		 * row absorbing the rounding remainder so the parts sum to the whole exactly.
 		 */
-		const rows = q.items.map(({ work, amount }, idx) => {
-			const isLast = idx === q.items.length - 1;
-			const share = (total: Decimal) =>
-				isLast
-					? total.minus(
-							q.items
-								.slice(0, -1)
-								.reduce(
-									(acc, it) =>
-										acc.plus(total.times(it.amount).dividedBy(q.subtotal).toDecimalPlaces(2)),
-									new Decimal(0),
-								),
-						)
-					: total.times(amount).dividedBy(q.subtotal).toDecimalPlaces(2);
-			const processing = share(q.fees.processingFee);
+		const purchaseRows = workLines.map(({ work, amount, lineFee }) => {
 			// The session's tax is stamped per charge at completion and apportioned across
 			// the rows then; at checkout every row is zero, because Anthers' arithmetic
 			// knows no buyer location. The apportioning still runs so the shape of the
 			// row building is unchanged, and a zero total apportions to zero exactly.
-			const tax = share(q.fees.salesTax);
 			return {
 				buyerId: user.id,
 				workId: work.id,
@@ -1761,16 +2309,37 @@ const paymentRoutes = new Hono()
 				workPublicId: work.publicId,
 				type: "digital" as const,
 				amount: amount.toFixed(2),
-				processingFee: processing.toFixed(2),
-				salesTax: tax.toFixed(2),
-				creatorEarnings: amount.minus(processing).toFixed(2),
+				processingFee: lineFee.toFixed(2),
+				salesTax: "0.00",
+				creatorEarnings: amount.minus(lineFee).toFixed(2),
 				// The session id, as on the single-purchase path — the PaymentIntent is
 				// resolved from the session at completion and the rows re-keyed to it.
 				stripePaymentIntentId: session.id,
 				status: "pending" as const,
 			};
 		});
-		await db.insert(purchases).values(rows);
+		if (purchaseRows.length > 0) await db.insert(purchases).values(purchaseRows);
+
+		/**
+		 * One row per Badge — the first transaction's money record, `badge_charges`. The
+		 * line share is the resolution's pinned figure, the cycle is the one the first
+		 * Month covers (today's — a checkout left pending past a cycle turn is the
+		 * webbhook's problem, rows keyed `pending` waiting for it), and status rides the
+		 * same pending latch the purchase rows use: the completion owns every stamp.
+		 */
+		const badgeChargeRows = badgeLines.map((item) => ({
+			buyerId: user.id,
+			badgeId: item.badge.id,
+			creatorId: item.issuer.id,
+			badgeLabel: item.badge.label,
+			threshold: item.threshold.toFixed(2),
+			chargedAmount: item.amount.toFixed(2),
+			processingFee: item.lineFee.toFixed(2),
+			billingCycle: currentCycleKey(),
+			stripePaymentIntentId: session.id,
+			status: "pending" as const,
+		}));
+		if (badgeChargeRows.length > 0) await db.insert(badgeCharges).values(badgeChargeRows);
 
 		// The basket has been bought — emptied now, at the moment the charge exists, rather
 		// than waiting on the webhook: a buyer who closes the tab at the Pay screen holds a
@@ -1787,6 +2356,98 @@ const paymentRoutes = new Hono()
 			creatorEarnings: q.fees.creatorEarnings.toFixed(2),
 			buyerTotal: null,
 			itemCount: q.items.length,
+			// The Checkout Session's client secret — the browser mounts Checkout from it.
+			clientSecret: session.client_secret,
+		});
+	})
+
+	/**
+	 * **Buy a Badge now** — the rung's first Month, on its own charge, bypassing the
+	 * basket. Same money as a basket checkout of one Badge line: the rung's Product, the
+	 * delta-first-transaction pricing, the same rows, the same completion. The basket the
+	 * buyer already carries is untouched — buy-now is the one item the buyer pointed at,
+	 * not a replacement of what they were assembling.
+	 */
+	.post("/badges/checkout", requireAuth, requireVerified, async (c) => {
+		const user = c.get("user");
+		const body = await c.req.json().catch(() => null);
+		const badgeId = Number(body?.badgeId);
+		if (!Number.isInteger(badgeId) || badgeId <= 0)
+			return c.json({ error: "Badge not found" }, 404);
+
+		// Same discipline as the basket checkout: the resolution (and its refusals) is the
+		// database's business and never needs the processor; the rung's Product is priced
+		// only when a session could be built at all, and the guard below answers for the
+		// unconfigured case after the refusals had their word.
+		const one = await resolveBadgePurchase(badgeId, user.id, {
+			atCheckout: true,
+			needsProduct: paymentsConfigured(),
+		});
+		if (!one.ok) return c.json({ error: one.error, code: one.code }, one.status);
+		if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
+
+		// The Issuer's connected account — the Anthers ladder takes no transfer (its money
+		// is already platform-side), so it is the one issuer this precondition skips; the
+		// basket checkout's loop carries the same exception with the same reason.
+		if (one.issuer.id !== (await anthersUserId())) {
+			const [account] = await db
+				.select()
+				.from(stripeAccounts)
+				.where(eq(stripeAccounts.userId, one.issuer.id))
+				.limit(1);
+			if (!account?.onboardingComplete || !account.payoutsEnabled)
+				return c.json({ error: "This creator can't accept payments yet." }, 409);
+		}
+
+		// One line, the whole charge — the fee's full share is its line share, the same
+		// worst case a lone monthly support charge bears ($3.00 gross → $2.61 to the
+		// creator, and the arithmetic says so below without a second opinion). The
+		// product is priced when the processor is configured — the guard above — so a
+		// null can no longer reach here; the belt refuses rather than building a session
+		// with an unnamed product.
+		if (!one.product) return c.json({ error: "Payments are not configured." }, 503);
+		const fees = calculateFees(one.amount, { type: "digital" });
+		const lineItems = [badgeLineItem(one.product, Math.round(one.amount.toNumber() * 100))];
+
+		// The card rides when the recurrence needs it — see the basket checkout's note; a
+		// Badge bought now must recur for the same reason one saved to a basket must.
+		const saveCard = !(await hasActiveSupportSubscription(user.id));
+
+		const session = await createCheckoutSession(
+			purchaseSession({
+				origin:
+					process.env.PUBLIC_WEB_URL?.trim() || c.req.header("origin") || "http://localhost:3000",
+				lineItems,
+				customerId: await stripeCustomerIdFor(user.id),
+				customerEmail: user.email,
+				saveCard,
+				metadata: {
+					kind: "direct_purchase_badge",
+					badgeIds: String(one.badge.id),
+					buyerId: String(user.id),
+				},
+			}),
+		);
+		if (!session?.client_secret) return c.json({ error: "Payments are not configured." }, 503);
+
+		await db.insert(badgeCharges).values({
+			buyerId: user.id,
+			badgeId: one.badge.id,
+			creatorId: one.issuer.id,
+			badgeLabel: one.badge.label,
+			threshold: one.threshold.toFixed(2),
+			chargedAmount: one.amount.toFixed(2),
+			processingFee: fees.processingFee.toFixed(2),
+			billingCycle: currentCycleKey(),
+			stripePaymentIntentId: session.id,
+			status: "pending",
+		});
+
+		return c.json({
+			subtotal: one.amount.toFixed(2),
+			processingFee: fees.processingFee.toFixed(2),
+			salesTax: null,
+			buyerTotal: null,
 			// The Checkout Session's client secret — the browser mounts Checkout from it.
 			clientSecret: session.client_secret,
 		});
