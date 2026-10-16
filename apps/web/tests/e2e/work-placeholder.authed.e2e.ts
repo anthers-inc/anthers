@@ -26,7 +26,6 @@ const STEM = `${TITLE_PREFIX}${Date.now()}`;
 
 let session = "";
 let workId = 0;
-let publicId = 0;
 
 test.afterAll(async () => {
 	if (!session || !workId) return;
@@ -52,12 +51,11 @@ test("a Work mid-processing holds its shape on both surfaces", async ({ page, co
 		headers: { Cookie: `session=${session}` },
 	});
 	const { works: owned } = (await created.json()) as {
-		works: { id: number; title: string; publicId: number }[];
+		works: { id: number; title: string }[];
 	};
 	const work = owned.find((w) => w.title === STEM);
 	expect(work, "the drafted Work is in the creator's listing").toBeTruthy();
 	workId = work.id;
-	publicId = work.publicId;
 
 	await db
 		.update(works)
@@ -79,7 +77,10 @@ test("a Work mid-processing holds its shape on both surfaces", async ({ page, co
 	// ── The editor: the box keeps the kind's proportions, the progress rides inside it ──
 	await page.reload();
 	await expect(page.getByText("The pages open here.")).toBeVisible({ timeout: 20_000 });
-	await expect(page.getByText("Processing… 40%")).toBeVisible();
+	// The status's spinner line and its percent are separate text nodes (the progress
+	// walk reads the percent alone for the same reason).
+	await expect(page.getByText("Processing…")).toBeVisible();
+	await expect(page.getByText("40%", { exact: true })).toBeVisible();
 
 	// ── The viewer's read view: the same box ──
 	// (Signed-out shape shows the locked cover — an unauthenticated request cannot
@@ -89,7 +90,8 @@ test("a Work mid-processing holds its shape on both surfaces", async ({ page, co
 	await page.getByRole("button", { name: "Signed in" }).click();
 	await page.waitForTimeout(1_500);
 	await expect(page.getByText("The pages open here.")).toBeVisible();
-	await expect(page.getByText("Processing… 40%")).toBeVisible();
+	await expect(page.getByText("Processing…")).toBeVisible();
+	await expect(page.getByText("40%", { exact: true })).toBeVisible();
 
 	// And the shape the finished Work becomes is the same box: the status block was
 	// riding inside the deliverable's proportions, so the reader that replaces it
