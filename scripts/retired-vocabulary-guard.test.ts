@@ -109,7 +109,6 @@ const BUDGET: Record<string, number> = {
 	"apps/web/src/content/faq.test.ts": 1,
 	"apps/web/src/pages/ForCreatorsPage.tsx": 1,
 	"apps/web/src/pages/CreatorMonetizationCalculatorPage.tsx": 1,
-	"apps/web/src/pages/SubscriptionPage.tsx": 1,
 	"apps/web/src/components/creator/PreviewBar.tsx": 1,
 	"packages/shared/src/badges.test.ts": 1,
 	"packages/shared/src/figures.generated.ts": 1,

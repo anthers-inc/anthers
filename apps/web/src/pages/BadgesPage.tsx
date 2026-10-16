@@ -1,22 +1,32 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /*
- * Account dashboard — the support model.
+ * The Badges page — what the person holds, and what it does.
  *
- * The user gives Anthers a monthly amount, which names their Badge (free/root/
- * sprout/petal/blossom at $0/$3/$6/$9/$12). This page surfaces:
- *   1. That Badge, and where the amount goes (Time Pool + Supports Anthers).
- *   2. The Badges held from creators (GET /my-badges) — written by the subscription
- *      itself, so this page displays them rather than picking them.
- *   3. Pool distributions (poolAmount + badgeAmount) and, for creators, earnings.
+ * A Badge is the monthly amount somebody gives a creator, and also the emblem they hold
+ * while giving it. Two ladders live here, and they are one kind of object:
+ *   1. The Badge held from Anthers — the monthly amount to Anthers, which lifts the
+ *      Public Access limit at $3 and funds the Time Pool and the programs. Changed on
+ *      /signup; this page displays and manages the subscription around it.
+ *   2. The Badges held from creators — written by the subscription itself at the rung
+ *      each creator names, clearing their ladder with no platform cut. Held and changed
+ *      on the creator's own page; this page displays them.
  *
- * The amount to Anthers is changed on /signup; a creator's Badge is bought on
- * that creator's page. There is no bandwidth line — streaming and downloads
- * are unlimited and free.
+ * The cycle card beneath is the accounting record — where the month's money went — and
+ * the cycle navigation lives there, because reviewing a closed cycle is accounting work
+ * rather than the page's subject.
+ *
+ * A creator's Badge emblem renders through the same BadgeMark Anthers' own Badges render
+ * through (CreatorBadgeMark), so both ladders read as one collection.
  */
 
+// The narrower `Badge` (Anthers' own four, no "free") is what `AnthersBadgeMark` keys on —
+// both types carry the name, and the disambiguation keeps the cast honest.
+import type { Badge as IssuerBadge } from "@anthers/shared/constants";
 import { timePoolFor } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
+import { AnthersBadgeMark } from "@anthers/web-shared/economics";
+import { CreatorBadgeMark } from "@anthers/web-shared/economics/CreatorBadgeMark";
 import { EarningsBasis } from "@anthers/web-shared/economics/EarningsBasis";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
@@ -86,22 +96,19 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 /* ------------------------------------------------------------------ */
-/*  InfoTip lives in @anthers/web-shared/ui — shared with /basket.     */
+/*  Cycle selector — the accounting card's control, small by design.   */
 /* ------------------------------------------------------------------ */
 
-/* ------------------------------------------------------------------ */
-/*  Month Selector                                                     */
-/* ------------------------------------------------------------------ */
-
-function MonthSelector({ cycle, onChange }: { cycle: string; onChange: (c: string) => void }) {
+function CycleSelector({ cycle, onChange }: { cycle: string; onChange: (c: string) => void }) {
 	const current = getCurrentCycle();
 	const nextCycle = offsetCycle(current, 1);
 	const mode = viewModeFor(cycle);
 	return (
-		<div className="flex items-center justify-center gap-3">
+		<div className="flex items-center gap-1">
 			<button
 				type="button"
 				className="btn btn-ghost btn-xs"
+				aria-label="Earlier cycle"
 				onClick={() => onChange(offsetCycle(cycle, -1))}
 			>
 				&larr;
@@ -115,6 +122,7 @@ function MonthSelector({ cycle, onChange }: { cycle: string; onChange: (c: strin
 				<button
 					type="button"
 					className="btn btn-ghost btn-xs"
+					aria-label="Later cycle"
 					onClick={() => onChange(offsetCycle(cycle, 1))}
 				>
 					&rarr;
@@ -127,85 +135,12 @@ function MonthSelector({ cycle, onChange }: { cycle: string; onChange: (c: strin
 }
 
 /* ------------------------------------------------------------------ */
-/*  Pie chart of time distribution                                     */
-/* ------------------------------------------------------------------ */
-
-const PIE_COLORS = [
-	"#6d28d9",
-	"#2563eb",
-	"#0891b2",
-	"#059669",
-	"#d97706",
-	"#dc2626",
-	"#c026d3",
-	"#4f46e5",
-];
-
-function TimePoolPie({ rows, totalTime }: { rows: CreatorRow[]; totalTime: number }) {
-	const size = 200;
-	const cx = size / 2;
-	const cy = size / 2;
-	const radius = 75;
-	const strokeWidth = 30;
-
-	if (totalTime === 0 || rows.length === 0) {
-		return (
-			<div className="flex items-center justify-center h-[200px]">
-				<div className="text-sm text-base-content/30 text-center">
-					<p>No time data yet</p>
-				</div>
-			</div>
-		);
-	}
-
-	const arcPath = (startAngle: number, endAngle: number, r: number) => {
-		const start = { x: cx + r * Math.cos(startAngle), y: cy + r * Math.sin(startAngle) };
-		const end = { x: cx + r * Math.cos(endAngle), y: cy + r * Math.sin(endAngle) };
-		const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
-		return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`;
-	};
-
-	let angleOffset = -Math.PI / 2;
-	const slices = rows.map((row, i) => {
-		const pct = row.timeSeconds / totalTime;
-		const sliceAngle = pct * 2 * Math.PI;
-		const startAngle = angleOffset;
-		const endAngle = angleOffset + Math.min(sliceAngle, 2 * Math.PI - 0.001);
-		angleOffset += sliceAngle;
-		if (pct === 0) return null;
-		return (
-			<path
-				key={row.creatorId}
-				d={arcPath(startAngle, endAngle, radius)}
-				fill="none"
-				stroke={PIE_COLORS[i % PIE_COLORS.length]}
-				strokeWidth={strokeWidth}
-				strokeLinecap="butt"
-			/>
-		);
-	});
-
-	return (
-		<div className="flex items-center justify-center">
-			<svg role="img" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-				<title>Time distribution by creator</title>
-				{slices}
-				<text x={cx} y={cy - 6} textAnchor="middle" className="fill-base-content text-lg font-bold">
-					{formatHours(totalTime)}
-				</text>
-				<text x={cx} y={cy + 12} textAnchor="middle" className="fill-base-content/50 text-[10px]">
-					total time
-				</text>
-			</svg>
-		</div>
-	);
-}
-
-/* ------------------------------------------------------------------ */
 /*  Row model                                                          */
 /* ------------------------------------------------------------------ */
 
 interface CreatorRow {
+	/** The row's own merge key (creator id, or a negative synthetic key for a gone creator) — the React key. */
+	mapKey: number;
 	creatorId: number;
 	handle: string;
 	displayName: string | null;
@@ -218,7 +153,7 @@ interface CreatorRow {
 	committedBadge: number;
 	/** The rung held or picked, including local pending edits. */
 	pendingBadge: CreatorBadge | null;
-	/** The creator's ladder, for the pick UI and the rung chips. */
+	/** The creator's ladder, for the rung chips and the held emblem's fallback. */
 	rungs: CreatorBadge[];
 }
 
@@ -235,13 +170,13 @@ function initials(row: CreatorRow): string {
 /*  Page Component                                                     */
 /* ------------------------------------------------------------------ */
 
-export default function SubscriptionPage() {
+export default function BadgesPage() {
 	const [searchParams] = useSearchParams();
 
-	// The seeded ladder, for what this page quotes: the InfoTip's claim about what a
-	// fan's support funds, and the comparison that names the price lifting the Public
-	// Access limit. The constants stand in until the fetch lands.
-	const { publicAccessPrice } = useAnthersLadder();
+	// The seeded ladder, for what this page quotes: the rungs strip (the rows are the
+	// source of truth for each rung's label and price) and the InfoTip's claim about what
+	// a Badge to Anthers funds. The constants stand in until the fetch lands.
+	const { rungs: anthersRungs, publicAccessPrice } = useAnthersLadder();
 
 	// Account + Badge + earnings
 	const [account, setAccount] = useState<Account | null>(null);
@@ -345,6 +280,7 @@ export default function SubscriptionPage() {
 			// rather than blanked: the person is gone, what you paid is not.
 			const key = d.creatorId ?? -d.id;
 			map.set(key, {
+				mapKey: key,
 				creatorId: d.creatorId ?? 0,
 				handle: d.creator?.handle ?? "",
 				displayName: d.creator?.displayName ?? (d.creatorId === null ? "Deleted creator" : null),
@@ -382,6 +318,7 @@ export default function SubscriptionPage() {
 				existing.pendingBadge = heldRung;
 			} else {
 				map.set(-h.id, {
+					mapKey: -h.id,
 					creatorId: -h.id,
 					handle: h.creator.handle,
 					displayName: h.creator.displayName ?? null,
@@ -404,8 +341,8 @@ export default function SubscriptionPage() {
 		);
 	}, [distributions, holdings, laddersMap]);
 
-	const totalTime = rows.reduce((s, r) => s + r.timeSeconds, 0);
 	const totalPool = rows.reduce((s, r) => s + r.poolAmount, 0);
+	const totalTime = rows.reduce((s, r) => s + r.timeSeconds, 0);
 
 	const isPaid = badge !== "free";
 	const isCanceling = account ? !!account.canceledAt : false;
@@ -486,10 +423,17 @@ export default function SubscriptionPage() {
 		// Without `w-full`, `mx-auto` on a flex item disables the default
 		// `align-self: stretch`, so the wrapper falls back to its content's
 		// intrinsic width (up to the cap), which can push past the mobile
-		// viewport. The wide-screen cap is `max-w-[72rem]` (was an inline
-		// style, which wins over `max-w-full` and so defeated the cap below the
-		// cap).
-		<div className="mx-auto min-w-0 w-full max-w-full max-w-[72rem] px-4 py-8">
+		// viewport. The page takes a reading measure rather than a dashboard
+		// width — what it holds is lists and a card, not a wide grid.
+		<div className="mx-auto min-w-0 w-full max-w-full max-w-4xl px-4 py-8">
+			<div className="mb-2">
+				<h1 className="text-2xl font-bold">Badges</h1>
+				{/* The one page title; the cards below carry their own section titles. */}
+				<p className="text-sm text-base-content/50">
+					Badges mark how you back Anthers and the creators you choose — held while you're giving,
+					at the amount you pick.
+				</p>
+			</div>
 			{error && (
 				<div className="alert alert-error mb-4">
 					<span>{error}</span>
@@ -501,79 +445,65 @@ export default function SubscriptionPage() {
 				</div>
 			)}
 
-			{/* ── Header ── */}
+			{/* ── The Badge from Anthers ── */}
 			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
-				<div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-					<div className="flex flex-col gap-2 md:w-40 order-2 md:order-1">
-						{viewMode === "current" && (
-							<>
-								<button
-									type="button"
-									className={`btn btn-sm ${actionLoading === "portal" ? "btn-disabled" : "btn-neutral"}`}
-									onClick={handleBillingPortal}
-									disabled={!!actionLoading}
-								>
-									{actionLoading === "portal" ? "Opening…" : "Manage Billing"}
-								</button>
-								{isPaid &&
-									(isCanceling ? (
-										<button
-											type="button"
-											className={`btn btn-success btn-sm ${actionLoading === "resume" ? "btn-disabled" : ""}`}
-											onClick={handleResume}
-											disabled={!!actionLoading}
-										>
-											{actionLoading === "resume" ? "Resuming…" : "Resume supporting"}
-										</button>
-									) : (
-										<button
-											type="button"
-											className={`btn btn-outline btn-error btn-sm ${actionLoading === "cancel" ? "btn-disabled" : ""}`}
-											onClick={handleCancel}
-											disabled={!!actionLoading}
-										>
-											{actionLoading === "cancel" ? "Stopping…" : "Stop supporting"}
-										</button>
-									))}
-							</>
-						)}
-					</div>
-
-					<div className="text-center flex-1 order-1 md:order-2">
-						<h1 className="text-2xl font-bold mb-1">Your Anthers — {cycleLabel(selectedCycle)}</h1>
-						<p className="text-sm text-base-content/60 mb-2">
-							<strong>{badgeView.name}</strong>
-							<span className="text-base-content/40"> · {fmt(badgeView.price)}/mo</span>
-							{isCanceling && (
-								<span className="text-error ml-1">(reverts to Free at period end)</span>
-							)}
-						</p>
-						<MonthSelector cycle={selectedCycle} onChange={setSelectedCycle} />
-						{/* Fixed-height so switching months changes the text without shifting the layout. */}
-						<p className="text-xs text-base-content/50 mt-1.5 min-h-[1rem]">
-							{viewMode === "past"
-								? "Read-only view of a closed cycle."
-								: viewMode === "next"
-									? "Preview — you can direct next month's support now."
-									: ""}
-						</p>
-					</div>
-
-					<div className="md:w-40 flex md:justify-end order-3">
-						<Link to="/signup" className="btn btn-primary btn-sm">
-							Adjust support
-						</Link>
-					</div>
-				</div>
-
-				{/* Where the month's support goes */}
-				<div className="divider text-sm text-base-content/50 my-3">
-					What your support for Anthers funds
+				<div className="divider text-sm text-base-content/50 mt-0 mb-4">
+					Your Badge from Anthers
 					<InfoTip
 						text={`What you give Anthers funds the Time Pool ($${timePoolFor(publicAccessPrice).toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds the charitable programs — free access included). The card fee is inside the price. Downloads are unlimited and cost nothing, and $${publicAccessPrice} a month lifts the ${FREE_PUBLIC_ACCESS_HOURS}-hour monthly limit on Public Access.`}
 					/>
 				</div>
-				<div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+
+				<div className="flex items-start gap-4">
+					{badge !== "free" && <AnthersBadgeMark badge={badge} size="h-16 w-16" />}
+					<div className="flex-1 min-w-0">
+						<div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+							<span className="text-lg font-bold">{badgeView.name}</span>
+							<span className="text-base-content/60 tabular-nums">{fmt(badgeView.price)}/mo</span>
+							{isCanceling && (
+								<span className="text-error text-sm">(reverts to Free at period end)</span>
+							)}
+						</div>
+					</div>
+					{viewMode === "current" && (
+						<div className="flex flex-col items-end gap-2 shrink-0">
+							<button
+								type="button"
+								className={`btn btn-sm ${actionLoading === "portal" ? "btn-disabled" : "btn-neutral"}`}
+								onClick={handleBillingPortal}
+								disabled={!!actionLoading}
+							>
+								{actionLoading === "portal" ? "Opening…" : "Manage Billing"}
+							</button>
+							{isPaid &&
+								(isCanceling ? (
+									<button
+										type="button"
+										className={`btn btn-success btn-sm ${actionLoading === "resume" ? "btn-disabled" : ""}`}
+										onClick={handleResume}
+										disabled={!!actionLoading}
+									>
+										{actionLoading === "resume" ? "Resuming…" : "Resume supporting"}
+									</button>
+								) : (
+									<button
+										type="button"
+										className={`btn btn-outline btn-error btn-sm ${actionLoading === "cancel" ? "btn-disabled" : ""}`}
+										onClick={handleCancel}
+										disabled={!!actionLoading}
+									>
+										{actionLoading === "cancel" ? "Stopping…" : "Stop supporting"}
+									</button>
+								))}
+							<Link to="/signup" className="btn btn-primary btn-sm">
+								Adjust support
+							</Link>
+						</div>
+					)}
+				</div>
+
+				{/* Where the month's support goes */}
+				<div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-5">
 					<div>
 						<div className="text-xs text-base-content/50 uppercase">Time Pool</div>
 						<div className="text-lg font-bold text-success">{fmt(badgeView.timePool)}</div>
@@ -610,127 +540,157 @@ export default function SubscriptionPage() {
 						</div>
 					</div>
 				</div>
+
+				{/* The ladder, as the seeded rows state it — the held rung lit, the rest shown
+				    as what raising the amount would hold. Free renders no mark (a mark IS a
+				    Badge and Free is the absence of one); the strip is still what $3+ buys. */}
+				<div className="flex flex-wrap items-center gap-x-6 gap-y-3 mt-5 pt-4 border-t border-base-content/10">
+					{anthersRungs.map((rung) => {
+						const held = rung.name === badge;
+						return (
+							<div
+								key={rung.name}
+								className="flex items-center gap-2"
+								title={rung.description ?? undefined}
+							>
+								<AnthersBadgeMark badge={rung.name as IssuerBadge} lit={held} size="h-9 w-9" />
+								<div className="text-xs leading-tight">
+									<div className={held ? "font-bold" : "text-base-content/60"}>{rung.label}</div>
+									<div className="text-base-content/40 tabular-nums">{fmt(rung.threshold)}/mo</div>
+								</div>
+							</div>
+						);
+					})}
+					<Link to="/signup" className="link link-primary text-sm ml-auto">
+						{isPaid ? "Raise your support" : "Support Anthers"}
+					</Link>
+				</div>
+
+				{account.currentPeriodEnd && viewMode === "current" && (
+					<p className="text-xs text-base-content/40 text-center mt-4">
+						{isCanceling ? "Support ends" : "Next renewal"}:{" "}
+						{new Date(account.currentPeriodEnd).toLocaleDateString("en-US", {
+							month: "long",
+							day: "numeric",
+							year: "numeric",
+						})}
+					</p>
+				)}
 			</div>
 
-			{/* ── Time Pool + the Badges you hold ── */}
+			{/* ── The Badges held from creators ── */}
 			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
 				<div className="divider text-sm text-base-content/50 mt-0 mb-1">
-					Creators You Back
-					<InfoTip text="Two ways money reaches creators: the Time Pool (automatic, split by your time — video, audio, reading, and gameplay all count equally) and the Badges you hold from specific creators, at the rung each one names, with no platform cut — only the at-cost card processing comes out)." />
+					Badges You Hold
+					<InfoTip text="A Badge from a creator is the monthly amount you give them — held while you're giving, clearing the rung on their ladder, with no platform cut; only the at-cost card processing comes out. Pick one on the creator's own page, and it renews monthly alongside your support for Anthers." />
 				</div>
+
+				{holdings && holdings.badges.length > 0 ? (
+					<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+						{rows.map((row) => (
+							<CreatorBadgeCard key={row.mapKey} row={row} />
+						))}
+					</div>
+				) : (
+					<div className="py-4 text-center text-sm text-base-content/50">
+						<p>
+							{isPaid
+								? "You hold no Badges from creators this cycle."
+								: "You don't hold any Badges yet."}
+						</p>
+						<p className="mt-1 text-base-content/40">
+							A Badge from a creator is the monthly amount you give them, picked on their own page.
+						</p>
+						<Link to="/discover" className="btn btn-primary btn-sm mt-3">
+							Find creators to back
+						</Link>
+					</div>
+				)}
+			</div>
+
+			{/* ── Where the month went — the accounting record ── */}
+			<div className="card bg-base-200/60 shadow-xl p-5 mb-6">
+				<div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-1">
+					<div className="divider text-sm text-base-content/50 mt-0 mb-0 flex-1 sm:mb-0 justify-start">
+						Where Your Month Went
+					</div>
+					<div className="self-end sm:self-auto">
+						<CycleSelector cycle={selectedCycle} onChange={setSelectedCycle} />
+					</div>
+				</div>
+				{/* Fixed-height so switching months changes the text without shifting the layout. */}
+				<p className="text-xs text-base-content/50 min-h-[1rem]">
+					{viewMode === "past"
+						? "Read-only view of a closed cycle."
+						: viewMode === "next"
+							? "Preview — you can direct next month's support now."
+							: ""}
+				</p>
 				{attention && (
-					<p className="text-xs text-base-content/40 text-center mb-3">
+					<p className="text-xs text-base-content/40 mb-3">
 						{attention.hoursUsed} hrs of time with creators this cycle
 					</p>
 				)}
 
 				{rows.length > 0 ? (
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-						{/* Time Pool */}
-						<div className="flex flex-col">
-							<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">
-								Time Pool
-							</p>
-							<TimePoolPie rows={rows} totalTime={totalTime} />
-							<div className="mt-3 space-y-1">
-								{rows.map((row, i) => {
-									const pct = totalTime > 0 ? Math.round((row.timeSeconds / totalTime) * 100) : 0;
-									return (
-										<div
-											key={row.creatorId}
-											className="flex items-center gap-2 text-xs px-1 py-0.5"
-										>
-											<div
-												className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-												style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
-											/>
-											<Link
-												to={profileUrl(row.handle)}
-												className="text-base-content/70 truncate flex-1 link-hover"
-											>
-												{row.displayName || row.handle}
-											</Link>
-											<span className="text-base-content/40 tabular-nums">{pct}%</span>
-											<span className="tabular-nums text-success">{fmt(row.poolAmount)}</span>
-										</div>
-									);
-								})}
-							</div>
-							<div className="flex items-center justify-between text-sm border-t border-base-content/10 mt-2 pt-2">
-								<span className="text-base-content/60">Time Pool total</span>
-								<strong className="text-success">{fmt(totalPool)}</strong>
-							</div>
+					<div>
+						<div className="flex items-center gap-3 text-[10px] text-base-content/40 uppercase tracking-wider px-1 pb-1 border-b border-base-content/10">
+							<div className="w-7" />
+							<span className="flex-1">Creator</span>
+							<span className="text-right hidden sm:block">Time</span>
+							<span className="w-16 text-right">Time Pool</span>
+							<span className="w-16 text-right">Badge</span>
 						</div>
-
-						{/* Directed support — the Badges you hold, written by the subscription
-						    itself. There is nothing to pick here: a holding changes where the
-						    subscription changes (signup and checkout), not a pick inside the
-						    dashboard. */}
-						<div className="flex flex-col">
-							<p className="text-xs text-base-content/40 uppercase tracking-wider mb-2 text-center">
-								To creators
-							</p>
-
-							{holdings && holdings.badges.length === 0 ? (
-								<div className="text-sm text-base-content/50 text-center py-4">
-									<p>You hold no Badges from creators this cycle.</p>
-									<Link to="/signup" className="link link-primary text-sm">
-										Upgrade to back creators
+						{rows.map((row) => {
+							const pct = totalTime > 0 ? Math.round((row.timeSeconds / totalTime) * 100) : 0;
+							return (
+								<div key={row.mapKey} className="flex items-center gap-3 text-sm px-1 py-1.5">
+									<div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 bg-base-300 overflow-hidden">
+										{row.avatar ? (
+											<img src={row.avatar} alt="" className="w-7 h-7 rounded-full object-cover" />
+										) : (
+											initials(row)
+										)}
+									</div>
+									<Link
+										to={profileUrl(row.handle)}
+										className="text-base-content/70 truncate flex-1 link-hover min-w-0"
+									>
+										{row.displayName || row.handle}
 									</Link>
+									{/* Two ways money reaches a creator: the Time Pool, by your time —
+									    video, audio, reading, and gameplay all count equally — and the
+									    Badge you hold from them. */}
+									<span className="text-base-content/40 text-xs tabular-nums text-right hidden sm:block">
+										{row.timeSeconds > 0 ? (
+											<>
+												{formatHours(row.timeSeconds)}
+												{pct > 0 ? ` (${pct}%)` : ""}
+											</>
+										) : (
+											"—"
+										)}
+									</span>
+									<span className="text-success tabular-nums w-16 text-right">
+										{fmt(row.poolAmount)}
+									</span>
+									<span
+										className={`tabular-nums w-16 text-right ${row.settledBadge || row.committedBadge ? "" : "text-base-content/25"}`}
+									>
+										{row.settledBadge || row.committedBadge
+											? fmt(row.settledBadge || row.committedBadge)
+											: "—"}
+									</span>
 								</div>
-							) : (
-								<div className="space-y-2">
-									{rows.map((row, i) => (
-										<div key={row.creatorId} className="rounded-lg p-2 bg-base-100/40">
-											<div className="flex items-center gap-2">
-												<div
-													className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
-													style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
-												>
-													{row.avatar ? (
-														<img
-															src={row.avatar}
-															alt=""
-															className="w-5 h-5 rounded-full object-cover"
-														/>
-													) : (
-														initials(row)
-													)}
-												</div>
-												<Link
-													to={profileUrl(row.handle)}
-													className="text-xs text-base-content/70 truncate flex-1 link-hover"
-												>
-													{row.displayName || row.handle}
-												</Link>
-												<span className="text-sm text-success tabular-nums">
-													{fmt(row.settledBadge || row.committedBadge)}
-												</span>
-											</div>
-											{row.rungs.length > 0 && (
-												<div className="mt-1 pl-7 flex flex-wrap gap-1">
-													{row.rungs.map((rung) => {
-														const held = row.pendingBadge?.id === rung.id;
-														return (
-															<span
-																key={rung.id}
-																className={`badge badge-xs ${held ? "badge-success" : "badge-ghost"}`}
-																title={rung.description ?? undefined}
-															>
-																{held ? "✓" : "○"} {rung.label} (${rung.threshold})
-															</span>
-														);
-													})}
-												</div>
-											)}
-										</div>
-									))}
-								</div>
-							)}
+							);
+						})}
+						<div className="flex items-center justify-between text-sm border-t border-base-content/10 mt-2 pt-2">
+							<span className="text-base-content/60">Time Pool total</span>
+							<strong className="text-success tabular-nums">{fmt(totalPool)}</strong>
 						</div>
 					</div>
 				) : (
-					<div className="py-6 text-center text-sm text-base-content/40">
+					<div className="py-4 text-center text-sm text-base-content/40">
 						<p>No time with creators yet this cycle.</p>
 						<p className="mt-1">
 							Your Time Pool is distributed by time — video, audio, text, and gameplay all count
@@ -791,16 +751,83 @@ export default function SubscriptionPage() {
 					)}
 				</div>
 			)}
+		</div>
+	);
+}
 
-			{account.currentPeriodEnd && viewMode === "current" && (
-				<p className="text-xs text-base-content/40 text-center">
-					{isCanceling ? "Support ends" : "Next renewal"}:{" "}
-					{new Date(account.currentPeriodEnd).toLocaleDateString("en-US", {
-						month: "long",
-						day: "numeric",
-						year: "numeric",
+/* ------------------------------------------------------------------ */
+/*  One held creator card                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A creator the person backs, as a Badge they hold: their patch — the emblem IS the
+ * Badge they hold — beside the rung's label and price, the rest of the ladder beneath as
+ * the rungs a raised amount would hold. Buying and changing a Badge happens on the
+ * creator's own page; this card links there and picks nothing.
+ */
+function CreatorBadgeCard({ row }: { row: CreatorRow }) {
+	const held = row.pendingBadge;
+	const heldIndex =
+		held && row.rungs.length > 0 ? row.rungs.findIndex((r) => r.id === held.id) : -1;
+	const name = row.displayName || row.handle || "Deleted creator";
+
+	return (
+		<div className="rounded-lg p-3 bg-base-100/40 flex flex-col gap-2">
+			<div className="flex items-center gap-3">
+				{held && heldIndex >= 0 ? (
+					<CreatorBadgeMark
+						badgeId={held.id}
+						index={heldIndex}
+						label={`${held.label} badge`}
+						art={{
+							artShape: held.artShape,
+							artColor: held.artColor,
+							hasArt: held.hasArt,
+						}}
+						size="h-12 w-12"
+					/>
+				) : (
+					<div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 bg-base-300 overflow-hidden">
+						{row.avatar ? (
+							<img src={row.avatar} alt="" className="w-7 h-7 rounded-full object-cover" />
+						) : (
+							initials(row)
+						)}
+					</div>
+				)}
+				<div className="flex-1 min-w-0">
+					{row.handle ? (
+						<Link
+							to={`${profileUrl(row.handle)}?tab=badges`}
+							className="text-sm font-medium link-hover block truncate"
+						>
+							{name}
+						</Link>
+					) : (
+						<span className="text-sm font-medium block truncate">{name}</span>
+					)}
+					{held && (
+						<span className="text-xs text-base-content/50 tabular-nums">
+							{held.label} · {fmt(held.threshold)}/mo
+						</span>
+					)}
+				</div>
+			</div>
+			{row.rungs.length > 0 && (
+				<div className="flex flex-wrap gap-1">
+					{row.rungs.map((rung) => {
+						const isHeld = held?.id === rung.id;
+						return (
+							<span
+								key={rung.id}
+								className={`badge badge-xs ${isHeld ? "badge-success" : "badge-ghost"}`}
+								title={rung.description ?? undefined}
+							>
+								{isHeld ? "✓" : "○"} {rung.label} (${rung.threshold})
+							</span>
+						);
 					})}
-				</p>
+				</div>
 			)}
 		</div>
 	);

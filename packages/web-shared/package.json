@@ -33,6 +33,7 @@
 		"./decor/sections": "./src/components/decor/sections.tsx",
 		"./economics": "./src/components/economics/economics.tsx",
 		"./economics/EarningsBasis": "./src/components/economics/EarningsBasis.tsx",
+		"./economics/CreatorBadgeMark": "./src/components/economics/CreatorBadgeMark.tsx",
 		"./economics/TakeHome": "./src/components/economics/TakeHome.tsx",
 		"./media/TranscodingStatus": "./src/components/media/TranscodingStatus.tsx",
 		"./content/works": "./src/components/content/works.tsx",
