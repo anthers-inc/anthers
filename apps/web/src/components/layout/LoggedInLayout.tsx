@@ -234,7 +234,7 @@ function LoggedInLayoutInner() {
 							</li>
 							<div className="divider my-0 px-2" />
 							<li>
-								<Link to="/subscription">Subscription</Link>
+								<Link to="/badges">Badges</Link>
 							</li>
 							<li>
 								<Link to="/purchases">Purchases</Link>
@@ -436,8 +436,8 @@ function LoggedInLayoutInner() {
 										<Link to="/library" className="link link-hover">
 											Library
 										</Link>
-										<Link to="/subscription" className="link link-hover">
-											Subscription
+										<Link to="/badges" className="link link-hover">
+											Badges
 										</Link>
 									</nav>
 									{/* Roadmap and Release Notes in their own column, matching the logged-out

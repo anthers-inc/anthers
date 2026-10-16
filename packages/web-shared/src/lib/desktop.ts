@@ -105,6 +105,45 @@ export function takePendingCode(): Promise<string | null> {
 	return invoke<string | null>("take_pending_code");
 }
 
+/**
+ * Who the emailed sign-in code is being asked for, in `/signin/start`'s own shape:
+ * a typed address, or a hosted handle the API resolves to the account's mailbox.
+ * The browser never learns the mailbox behind a handle — this object is forwarded
+ * verbatim and the server does the resolving.
+ */
+export type EmailContact = { email: string } | { handle: string };
+
+/**
+ * Open the in-app emailed-code sign-in: register the PKCE challenge with the API
+ * and remember its verifier in the shell. No browser opens — the flow continues
+ * with `emailSignInCode()` and `completeEmailSignIn()` in this window.
+ */
+export function startEmailSignIn(label: string): Promise<void> {
+	return invoke<void>("start_email_sign_in", { label });
+}
+
+/** Ask the API to email a sign-in code for this contact. */
+export function emailSignInCode(contact: EmailContact): Promise<void> {
+	return invoke<void>("send_email_sign_in_code", { contact });
+}
+
+/**
+ * Spend the emailed code inside the app: the shell verifies it against its pending
+ * challenge and parks the resulting session in the keychain, exactly as the browser
+ * handoff's redemption does. Returns the token it installed.
+ */
+export async function completeEmailSignIn(
+	contact: EmailContact,
+	code: string,
+): Promise<{ token: string; persistence: Persistence }> {
+	const result = await invoke<{ token: string; persistence: Persistence }>(
+		"verify_email_sign_in_code",
+		{ contact, code },
+	);
+	bridge()?.setToken(result.token);
+	return result;
+}
+
 /** Drop the local credential. Safe to call even if the server-side sign-out failed. */
 export async function desktopSignOut(): Promise<void> {
 	await invoke<void>("sign_out");
