@@ -450,13 +450,14 @@ test("the contributor field autocompletes the identities Anthers knows and credi
 		ownProfile.user!.atprotoDid!,
 	);
 
-	await page.getByRole("button", { name: "Save Credits" }).click();
-
 	// ── The guidance copy ──
-	// The point-of-assignment ask, rendered where the creator is choosing.
+	// The point-of-assignment ask, rendered where the creator is choosing — asserted
+	// while the editor is open, because a save closes it (and a fast save on CI's own
+	// Postgres closes it before the read-back would look).
 	await expect(
 		page.getByText(/A blend \(Created and AI together\) is a genuine mixed credit/),
 	).toBeVisible();
+	await page.getByRole("button", { name: "Save Credits" }).click();
 });
 
 /** The media fixture's handle, resolved the way the walker's is. */
