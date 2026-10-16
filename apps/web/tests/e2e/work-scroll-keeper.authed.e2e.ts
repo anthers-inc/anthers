@@ -13,8 +13,11 @@
  * `locator.click()`. Playwright's actionability scrolls a below-the-fold target into
  * view before activating it, which is a scroll the keeper cannot undo (its captured
  * offset already carries it), so a locator-driven walk would be testing the harness's
- * own scrolling. A reader clicks only what they can already see; so does this walk,
- * and each click asserts its target was on screen before it was made.
+ * own scrolling. A reader clicks only what they can already see; so does this walk:
+ * each target is centered in its container by the walk's own JS scroll first, the
+ * offset is measured immediately before the click, and the assertion is that the same
+ * offset survives the toggle. The viewport's dimensions belong to whichever project
+ * runs the walk, never to this file.
  *
  * Runs on `media_fixture`'s own video, whose page is tall enough to scroll.
  */
@@ -22,17 +25,27 @@ import { expect, signInAsMediaFixture, test } from "./fixtures";
 
 test.describe.configure({ mode: "serial" });
 
-const OFFSET = 450;
 const scrollTop = (page: import("@playwright/test").Page) =>
 	page.evaluate(() => Math.round(document.querySelector("main")?.scrollTop ?? -1));
 
-/** A raw mouse click at a target's center, refusing targets not currently on screen.
- *  On-screen is measured against the page's own scroll container's visible box — the
- *  viewport's dimensions belong to whichever project runs the walk, never to this file. */
-async function clickAt(
+/** Center a target in its scroll container, by this walk's own JS scroll. */
+async function centerIntoView(
 	page: import("@playwright/test").Page,
 	locator: import("@playwright/test").Locator,
-) {
+): Promise<void> {
+	await locator.evaluate((el) =>
+		(el as HTMLElement).scrollIntoView({ block: "center", behavior: "instant" }),
+	);
+	await page.waitForTimeout(150);
+}
+
+/** A raw mouse click at a target's center, refusing targets not currently on screen.
+ *  On-screen is measured against the page's own scroll container's visible box, with a
+ *  small inset for the sticky header that sits over its top. */
+async function mouseClickAt(
+	page: import("@playwright/test").Page,
+	locator: import("@playwright/test").Locator,
+): Promise<void> {
 	const box = await locator.boundingBox();
 	expect(box, "the toggle's target has a box").not.toBeNull();
 	const onScreen = await page.evaluate(
@@ -40,12 +53,25 @@ async function clickAt(
 			const main = document.querySelector("main");
 			if (!main) return false;
 			const r = main.getBoundingClientRect();
-			return x >= r.left && y >= r.top && x + w <= r.right && y + h <= r.bottom;
+			return x >= r.left && y >= r.top + 8 && x + w <= r.right && y + (h as number) <= r.bottom;
 		},
 		[box.x, box.y, box.width, box.height],
 	);
-	expect(onScreen, `the target is on screen unscrolled (at ${JSON.stringify(box)})`).toBe(true);
+	expect(onScreen, `the target is on screen (at ${JSON.stringify(box)})`).toBe(true);
 	await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+/** The toggle's whole rhythm: center the control, hold the offset measured there, click,
+ *  and expect the offset the toggle started from to be the offset it left. */
+async function clickHoldingPlace(
+	page: import("@playwright/test").Page,
+	locator: import("@playwright/test").Locator,
+) {
+	await centerIntoView(page, locator);
+	const before = await scrollTop(page);
+	await mouseClickAt(page, locator);
+	await page.waitForTimeout(900);
+	expect(await scrollTop(page), "the place survives the toggle").toBe(before);
 }
 
 test("the creator's place survives every toggle that changes the page's height", async ({
@@ -59,50 +85,34 @@ test("the creator's place survives every toggle that changes the page's height",
 	// Deep enough that both the growth and the shrink of the edit state are real.
 	const scrollable = await page.evaluate(() => {
 		const main = document.querySelector("main");
-		return !!main && main.scrollHeight > main.clientHeight;
+		return !!main && main.scrollHeight - main.clientHeight > 200;
 	});
 	expect(scrollable, "the walk's page is expected to be scrollable").toBe(true);
-	await page.evaluate(() => document.querySelector("main")?.scrollTo({ top: 450 }));
+	await page.evaluate(() => document.querySelector("main")?.scrollTo({ top: 300 }));
 	await page.waitForTimeout(400);
-	expect(await scrollTop(page)).toBe(OFFSET);
 
 	// Open the description for edit: much taller.
-	await clickAt(page, page.getByLabel("Edit Description"));
-	await page.waitForTimeout(900);
-	expect(await scrollTop(page)).toBe(OFFSET);
+	await clickHoldingPlace(page, page.getByLabel("Edit Description"));
 
-	// Enter-activated close: a keyboard path's close.
+	// Enter-activated close: the keyboard path.
+	const beforeEnter = await scrollTop(page);
 	await page.getByLabel("Cancel editing Description").focus({ preventScroll: true });
 	await page.keyboard.press("Enter");
 	await page.waitForTimeout(900);
-	expect(await scrollTop(page)).toBe(OFFSET);
+	expect(await scrollTop(page), "the place survives the Enter close").toBe(beforeEnter);
 
 	// Re-open and close by pointer click, both directions.
-	await clickAt(page, page.getByLabel("Edit Description"));
-	await page.waitForTimeout(900);
-	expect(await scrollTop(page)).toBe(OFFSET);
-	await clickAt(page, page.getByLabel("Cancel editing Description"));
-	await page.waitForTimeout(900);
-	expect(await scrollTop(page)).toBe(OFFSET);
+	await clickHoldingPlace(page, page.getByLabel("Edit Description"));
+	await clickHoldingPlace(page, page.getByLabel("Cancel editing Description"));
 
 	// A save is a close too (the field's own save path, then the read).
-	await clickAt(page, page.getByLabel("Edit Description"));
-	await page.waitForTimeout(900);
-	expect(await scrollTop(page)).toBe(OFFSET);
-	await clickAt(page, page.getByRole("button", { name: "Save Description" }));
-	await page.waitForTimeout(900);
-	expect(await scrollTop(page)).toBe(OFFSET);
+	await clickHoldingPlace(page, page.getByLabel("Edit Description"));
+	await clickHoldingPlace(page, page.getByRole("button", { name: "Save Description" }));
 
 	// Tab switches of both groups.
-	await clickAt(page, page.getByRole("tab", { name: "Rating" }));
-	await page.waitForTimeout(900);
-	expect(await scrollTop(page)).toBe(OFFSET);
-	await clickAt(page, page.getByRole("tab", { name: "Details" }));
-	await page.waitForTimeout(900);
-	expect(await scrollTop(page)).toBe(OFFSET);
-	await clickAt(page, page.getByRole("tab", { name: "Manage" }));
-	await page.waitForTimeout(900);
-	expect(await scrollTop(page)).toBe(OFFSET);
+	await clickHoldingPlace(page, page.getByRole("tab", { name: "Rating" }));
+	await clickHoldingPlace(page, page.getByRole("tab", { name: "Details" }));
+	await clickHoldingPlace(page, page.getByRole("tab", { name: "Manage" }));
 });
 
 test("the read view shows the line breaks the edit textarea holds", async ({ page, context }) => {
