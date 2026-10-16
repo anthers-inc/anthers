@@ -82,6 +82,7 @@ import {
 	type WorkInput,
 } from "@anthers/web-shared/types";
 import FileUpload from "@anthers/web-shared/ui/FileUpload";
+import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import { uploadMediaFile } from "@anthers/web-shared/upload";
 import {
 	isUploading,
@@ -89,7 +90,7 @@ import {
 	useWorkUploads,
 	workUploads,
 } from "@anthers/web-shared/work-uploads";
-import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { PencilSquareIcon, PhotoIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import CreditsSection from "../../studio/CreditsSection";
 import PanelEditor from "../../studio/PanelEditor";
@@ -179,8 +180,6 @@ export default function OwnerWorkEditor({
 	 */
 	const thumbnailTouched = useRef(false);
 	const thumbnailInFlight = useRef(0);
-	/** The video's `<video>` element, once it renders, for *Use This Frame*. */
-	const videoEl = useRef<HTMLVideoElement | null>(null);
 	/** Why taking a frame did not work, said beside the button. */
 	const [frameError, setFrameError] = useState<string | null>(null);
 	const [frameBusy, setFrameBusy] = useState(false);
@@ -240,6 +239,10 @@ export default function OwnerWorkEditor({
 	}, [current.credits]);
 
 	const [error, setError] = useState<string | null>(null);
+	/** Which of the two thumbnail pickers is open — the frame's or the upload's. */
+	const [thumbPicker, setThumbPicker] = useState<"none" | "frame" | "upload">("none");
+	/** Whether the upload failed, said beside the thumbnail and inside the upload modal. */
+	const [thumbError, setThumbError] = useState<string | null>(null);
 	/** Which Info tab is open — lifted, because the header's *Change* rating link opens Rating. */
 	const [activeInfoTab, setActiveInfoTab] = useState("details");
 
@@ -287,13 +290,6 @@ export default function OwnerWorkEditor({
 		}
 		const { work: updated } = await res.json();
 		adopt(updated as Work);
-	};
-
-	/** The thumbnail's own save — sent only from a settled value (the touched race's rule). */
-	const saveThumbnail = async (next: string): Promise<void> => {
-		if (thumbnailInFlight.current > 0) throw new Error("The thumbnail is still uploading.");
-		await saveFields({ thumbnail: next });
-		thumbnailTouched.current = false;
 	};
 
 	// ── The Work's file: the media half of the row re-read as it changes under us ──
@@ -371,30 +367,45 @@ export default function OwnerWorkEditor({
 	}, []);
 
 	// ── The thumbnail itself ──
+	/**
+	 * Upload an image and treat the settled result as the edit: the act saves the field
+	 * itself once the stored URL is in hand, the way the frame act always has. The
+	 * settled-value guard (`thumbnailInFlight`) blocks the row save until the upload
+	 * answers — the same race the batch editor lost (work 23's lost thumbnail).
+	 */
 	const handleThumbnail = async (file: File) => {
 		thumbnailTouched.current = true;
 		thumbnailInFlight.current += 1;
+		setThumbError(null);
 		setThumbnailPreview(URL.createObjectURL(file));
 		try {
 			const { url } = await uploadImageFile(file, "thumbnail");
 			setThumbnailUrl(url);
 			setThumbnailPreview(url);
-		} catch {
+			await saveFields({ thumbnail: url });
+			thumbnailTouched.current = false;
+			setThumbPicker("none");
+		} catch (err) {
 			setThumbnailPreview(thumbnailUrl ? keyToPreview(thumbnailUrl) : null);
 			if (!thumbnailUrl) thumbnailTouched.current = false;
+			setThumbError(
+				err instanceof Error && err.message
+					? err.message
+					: "The image didn't make it up. Try again.",
+			);
 		} finally {
 			thumbnailInFlight.current -= 1;
 		}
 	};
 
 	/**
-	 * Store the moment the video is paused on as its thumbnail — the SERVER extracts it.
-	 * ⚠️ The click pauses first, so the thumbnail is the frame the creator is looking at;
-	 * the route saves the field itself (one act, no client upload in flight).
+	 * Store the frame the picker's player is paused on as the thumbnail — the SERVER
+	 * extracts it, so the answering route is the save (one act, no client upload in
+	 * flight). The picker carries its own player: any moment of the original, seekable
+	 * in the modal, is what the route saves.
 	 */
-	const takeCurrentFrame = async (): Promise<boolean> => {
+	const takeCurrentFrame = async (video: HTMLVideoElement | null): Promise<boolean> => {
 		setFrameError(null);
-		const video = videoEl.current;
 		if (!video?.videoWidth) {
 			setFrameError("Play the video to the moment you want first.");
 			return false;
@@ -480,6 +491,9 @@ export default function OwnerWorkEditor({
 	 *  the 2026-10-10/11 delivery ruling; the batch editor's docblock carries why audio
 	 *  and ebooks keep the completed gate.) */
 	const fileReady = isFileWorkType(current.type) && !!current.sourceKey && !fileUploading;
+	/** The frame picker can open: only a video has frames to take, and only its original
+	 *  file (the picker's own player plays that) answers a frame's moment. */
+	const frameChoosable = current.type === "video" && fileReady && !!current.originalUrl;
 
 	// ── Release: the facts each control waits on (the batch editor's predicates, against the page as it stands) ──
 	const unpublished = !current.releasedAt && current.visibility !== "withdrawn";
@@ -558,50 +572,51 @@ export default function OwnerWorkEditor({
 	};
 
 	const thumbnailField = (
-		<InlineField<string>
-			label="Thumbnail"
-			saved={thumbnailUrl}
-			renderRead={() => (
-				<div className="flex items-center gap-4">
-					{thumbnailPreview ? (
-						<img
-							src={thumbnailPreview}
-							alt="The Work's thumbnail"
-							className="w-40 rounded-lg object-cover"
-						/>
-					) : (
-						<p className="text-sm text-base-content/60">No thumbnail yet.</p>
-					)}
-					{/* Creator's own tab: the terms without the sanitizing preamble. The rule
-					    is still the rule — a thumbnail shows in public feeds — but the line
-					    says it plainly rather than excusing itself (Parker, 2026-10-13). */}
-					<p className="max-w-prose text-xs text-base-content/60">
-						{needsChosenThumbnail(current.type) &&
-							"A video needs a thumbnail before it's released: upload an image, or pause the player and use that frame. "}
-						Nothing Mature or Adult in it — it shows in public feeds.
-					</p>
+		<div className="flex flex-wrap items-start gap-4">
+			{thumbnailPreview ? (
+				<img
+					src={thumbnailPreview}
+					alt="The Work's thumbnail"
+					className="w-40 rounded-lg object-cover"
+				/>
+			) : (
+				/* The blank frame the thumbnail fills: a picker's answer or an upload lands
+				   here, and until then the empty box says a thumbnail's place (Parker,
+				   2026-10-16 — the read state acts, no pencil and no edit state; each
+				   button is the act, and each saves the field itself). */
+				<div
+					aria-hidden="true"
+					className="flex aspect-video w-40 items-center justify-center rounded-lg border border-dashed border-base-content/25 bg-base-200/30 text-base-content/25"
+				>
+					<PhotoIcon className="h-7 w-7" />
 				</div>
 			)}
-			renderEdit={(_draft, _setDraft, close) => (
-				/* The upload and the paused-frame act are what the edit state IS; the value
-				   below is touched, not typed — the check is disabled until one settles. */
-				<ThumbEditor
-					preview={thumbnailPreview}
-					onFile={handleThumbnail}
-					onClear={() => {
-						thumbnailTouched.current = true;
-						setThumbnailUrl("");
-						setThumbnailPreview(null);
+			<div className="flex flex-col gap-2">
+				{frameChoosable && (
+					<button
+						type="button"
+						className="btn btn-outline btn-sm"
+						onClick={() => {
+							setFrameError(null);
+							setThumbPicker("frame");
+						}}
+					>
+						Choose from Work
+					</button>
+				)}
+				<button
+					type="button"
+					className="btn btn-outline btn-sm"
+					onClick={() => {
+						setThumbError(null);
+						setThumbPicker("upload");
 					}}
-					onFrame={fileReady ? takeCurrentFrame : undefined}
-					onFrameTaken={close}
-					frameBusy={frameBusy}
-					inFlight={thumbnailInFlight.current > 0}
-					frameError={frameError}
-				/>
-			)}
-			save={(next) => saveThumbnail(next)}
-		/>
+				>
+					Upload an Image
+				</button>
+			</div>
+			{thumbError && <p className="w-full text-xs text-error">{thumbError}</p>}
+		</div>
 	);
 
 	const descriptionField = (
@@ -612,10 +627,11 @@ export default function OwnerWorkEditor({
 				// `[&_p]:my-0`: prose adds a paragraph's own margins, which opened a gap
 				// between the section's heading and its text no other section has (Parker,
 				// 2026-10-13) — the heading's gap is the section's, and it is the section's
-				// everywhere.
+				// everywhere. `whitespace-pre-line` keeps the line breaks the edit textarea
+				// wrote, as the user's own renderer (`WorkDescription`) already does.
 				<section className={`${WORK_DESCRIPTION_CLASS} [&_p]:my-0`}>
 					{description ? (
-						<p>{description}</p>
+						<p className="whitespace-pre-line">{description}</p>
 					) : (
 						<p className="text-sm text-base-content/40">Nothing written yet.</p>
 					)}
@@ -1331,7 +1347,12 @@ export default function OwnerWorkEditor({
 					)}
 					{!isOwnThumbnail(current.type) && (
 						<section className="flex flex-col gap-2">
-							<h3 className={WORK_DETAILS_HEADING_CLASS}>Thumbnail</h3>
+							{/* The terms ride the (i) now (Parker, 2026-10-16) — a hoverable beside
+							    the heading instead of a paragraph the section always carried. */}
+							<h3 className={`${WORK_DETAILS_HEADING_CLASS} flex items-center`}>
+								Thumbnail
+								<InfoTip text="All works need thumbnails. You can choose one from the work (e.g., a frame of video) or upload a custom thumbnail." />
+							</h3>
 							{thumbnailField}
 						</section>
 					)}
@@ -1402,7 +1423,6 @@ export default function OwnerWorkEditor({
 					) : (
 						<WorkDeliverable
 							work={asRead}
-							videoRef={videoEl}
 							lyrics={current.type === "music" ? lyricsField : undefined}
 						/>
 					)}
@@ -1481,6 +1501,33 @@ export default function OwnerWorkEditor({
 			</div>
 
 			{error && <p className="text-sm text-error">{error}</p>}
+
+			{/* The thumbnail's two pickers. Each is an overlay, so opening one changes
+			    nothing about the page's height — the scroll-keeper's concern is the
+			    section's buttons and the tabs, not these. */}
+			{thumbPicker === "frame" && frameChoosable && (
+				<ThumbFramePicker
+					// Local mode hands the stored key as the original's address; `keyToPreview`
+					// passes a real URL through and resolves a key onto the API's content
+					// route, so a key does not resolve against the page URL (the silent
+					// HTML-not-video fetch a bare key becomes).
+					src={keyToPreview(current.originalUrl as string)}
+					captions={current.captions}
+					busy={frameBusy}
+					inFlight={thumbnailInFlight.current > 0}
+					error={frameError}
+					onTake={takeCurrentFrame}
+					onClose={() => setThumbPicker("none")}
+				/>
+			)}
+			{thumbPicker === "upload" && (
+				<ThumbUploadModal
+					inFlight={thumbnailInFlight.current > 0}
+					error={thumbError}
+					onFile={handleThumbnail}
+					onClose={() => setThumbPicker("none")}
+				/>
+			)}
 		</WorkColumn>
 	);
 }
@@ -1488,59 +1535,144 @@ export default function OwnerWorkEditor({
 /* ── The read views and small controls the tabs and header use ─────────────── */
 
 /**
- * The thumbnail's edit state: the upload and the paused-frame act are what the edit IS.
- * The check stays disabled until one settles — and the field read state shows the settled
- * (or first) value, so a saved thumbnail vanishes from here the moment it lands.
+ * The thumbnail's **frame picker** — its own player over the Work's original, seekable
+ * to any moment, with the act that hands the paused second to the server. The route
+ * extracts the frame and saves the field itself, so a settled `Use This Frame` IS the
+ * save, and the picker's close rides the act's own success.
  */
-function ThumbEditor({
-	preview,
-	onFile,
-	onClear,
-	onFrame,
-	onFrameTaken,
-	frameBusy,
+function ThumbFramePicker({
+	src,
+	captions,
+	busy,
 	inFlight,
-	frameError,
+	error,
+	onTake,
+	onClose,
 }: {
-	preview: string | null;
-	onFile: (file: File) => void;
-	onClear: () => void;
-	onFrame?: () => Promise<boolean> | boolean;
-	/** The field's close — the frame act saves itself, so its close is the field's own. */
-	onFrameTaken?: () => void;
-	frameBusy: boolean;
+	src: string;
+	/** The Work's caption tracks, played as they are over the Work wherever it goes. */
+	captions?: { id: number; language: string; label: string; kind: string; url: string }[];
+	busy: boolean;
 	inFlight: boolean;
-	frameError: string | null;
+	error: string | null;
+	onTake: (video: HTMLVideoElement | null) => Promise<boolean>;
+	onClose: () => void;
 }) {
+	const videoRef = useRef<HTMLVideoElement | null>(null);
+
+	// Escape closes, for the keyboard half of the door (the pattern ReportDialog set);
+	// the pointer half is the ✕.
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") onClose();
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [onClose]);
+
 	return (
-		<div className="flex flex-wrap items-start gap-4">
-			<div className="w-48 flex flex-col gap-2">
+		<div className="modal modal-open" role="dialog" aria-label="Thumbnail from this Work">
+			<div className="modal-box max-w-2xl">
+				<button
+					type="button"
+					className="btn btn-ghost btn-sm btn-circle absolute right-2 top-2"
+					aria-label="Close"
+					onClick={onClose}
+				>
+					<XMarkIcon className="h-4 w-4" />
+				</button>
+				<h3 className="text-lg font-semibold">Thumbnail from this Work</h3>
+				<p className="mt-1 text-xs text-base-content/60">
+					Play or drag the video to the moment you want, then take that frame.
+				</p>
+				{/* biome-ignore lint/a11y/useMediaCaption: the caption tracks render from the
+				    Work's own captions below; a video without any has none to provide. */}
+				<video ref={videoRef} src={src} controls className="mt-3 w-full rounded-lg bg-black">
+					{(captions ?? []).map((track) => (
+						<track
+							key={track.id}
+							kind="captions"
+							src={track.url}
+							srcLang={track.language}
+							label={track.label}
+						/>
+					))}
+				</video>
+				<div className="mt-4 flex items-center justify-end gap-3">
+					{(busy || inFlight) && (
+						<span className="text-xs text-base-content/60">Taking this moment…</span>
+					)}
+					<button
+						type="button"
+						className="btn btn-primary btn-sm"
+						disabled={busy || inFlight}
+						onClick={() => {
+							// The act saves itself; the close rides its own success.
+							void onTake(videoRef.current).then((taken) => {
+								if (taken) onClose();
+							});
+						}}
+					>
+						Use This Frame
+					</button>
+				</div>
+				{error && <p className="mt-2 text-xs text-warning">{error}</p>}
+			</div>
+		</div>
+	);
+}
+
+/**
+ * The thumbnail's **upload modal** — the file picker, in a modal rather than in the
+ * section: the section keeps its read shape while the image makes its way to storage,
+ * and the modal closes when the upload and its save both settle. A failure stays open
+ * and says so; the creator can press again or leave with the field as it was.
+ */
+function ThumbUploadModal({
+	inFlight,
+	error,
+	onFile,
+	onClose,
+}: {
+	inFlight: boolean;
+	error: string | null;
+	onFile: (file: File) => void;
+	onClose: () => void;
+}) {
+	// Escape closes, for the keyboard half of the door (the pattern ReportDialog set).
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") onClose();
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [onClose]);
+
+	return (
+		<div className="modal modal-open" role="dialog" aria-label="Upload a thumbnail image">
+			<div className="modal-box">
+				<button
+					type="button"
+					className="btn btn-ghost btn-sm btn-circle absolute right-2 top-2"
+					aria-label="Close"
+					onClick={onClose}
+				>
+					<XMarkIcon className="h-4 w-4" />
+				</button>
+				<h3 className="text-lg font-semibold">Upload an Image</h3>
+				<p className="mt-1 mb-3 text-xs text-base-content/60">
+					JPEG, PNG or WebP up to 10 MB. The upload saves itself as the thumbnail once it lands.
+				</p>
 				<FileUpload
 					accept="image/*"
 					maxSize={10 * 1024 * 1024}
-					preview={preview}
-					label="Upload a thumbnail"
-					compact
+					label="Choose an image for the thumbnail"
+					preview={null}
 					onFileSelect={onFile}
-					onClear={onClear}
 				/>
-				{onFrame && (
-					<button
-						type="button"
-						className="btn btn-outline btn-sm"
-						onClick={async () => {
-							// The frame act saved the field server-side; its close is the field's
-							// own return to the read state rather than a save to press.
-							if (await onFrame()) onFrameTaken?.();
-						}}
-						disabled={frameBusy || inFlight}
-					>
-						{frameBusy ? "Taking this moment…" : "Use This Frame"}
-					</button>
-				)}
-				{inFlight && <p className="text-xs text-base-content/60">The image is uploading…</p>}
+				{inFlight && <p className="mt-3 text-xs text-base-content/60">The image is uploading…</p>}
+				{error && <p className="mt-3 text-xs text-error">{error}</p>}
 			</div>
-			{frameError && <p className="w-full text-xs text-warning">{frameError}</p>}
 		</div>
 	);
 }
