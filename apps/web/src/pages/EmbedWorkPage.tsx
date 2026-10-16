@@ -22,6 +22,7 @@
  */
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
 import { isListened } from "@anthers/shared/content";
+import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import { Link, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { isAccessResult } from "@anthers/web-shared/types";
@@ -29,7 +30,12 @@ import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useRef, useState } from "react";
 import { PublicAccessWall } from "../components/media/PublicAccessNotice";
 import SharedWorkBanner from "../components/work/SharedWorkBanner";
-import { pageHoldsTheMeter, WorkDeliverable, type WorkDetail } from "../components/work/WorkLayout";
+import {
+	pageHoldsTheMeter,
+	WorkDeliverable,
+	type WorkDetail,
+	WorkPlaceholder,
+} from "../components/work/WorkLayout";
 import { useAttentionClaim } from "../lib/attention";
 import { useMeteredBudget } from "../lib/public-access";
 import { withShareToken } from "../lib/share-link";
@@ -143,7 +149,21 @@ export default function EmbedWorkPage() {
 						// deliverable — the reason is all there is to render.
 						<PublicAccessWall budget={meterBudget} />
 					) : encoding && !playsOriginal ? (
-						<p className="py-12 text-center text-sm text-base-content/60">Processing…</p>
+						// The processing note, held inside the kind's silhouette rather than replacing
+						// it (the placeholder task, 2026-10-16): an embed's own box does not collapse to
+						// a sentence while the deliverable is being made.
+						<WorkPlaceholder
+							type={work.type}
+							note=""
+							status={
+								<TranscodingStatus
+									status={work.transcoding?.status ?? "pending"}
+									progress={work.transcoding?.progress ?? 0}
+									etaSeconds={work.transcoding?.etaSeconds ?? undefined}
+									errorMessage={work.transcoding?.errorMessage ?? undefined}
+								/>
+							}
+						/>
 					) : (
 						<WorkDeliverable work={work} shareToken={token ?? null} />
 					)}

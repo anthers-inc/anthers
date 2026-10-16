@@ -1468,13 +1468,22 @@ export default function OwnerWorkEditor({
 						// occupy, so the page below it doesn't jump when the file lands.
 						<WorkPlaceholder type={current.type} note={deliverableNote} />
 					) : kindWaiting ? (
-						// The processing the landed file started; the visitor's page shows the
-						// same status in the same place.
-						<TranscodingStatus
-							status={current.transcoding?.status ?? "pending"}
-							progress={current.transcoding?.progress ?? 0}
-							etaSeconds={current.transcoding?.etaSeconds ?? undefined}
-							errorMessage={current.transcoding?.errorMessage ?? undefined}
+						// The processing the landed file started, held INSIDE the silhouette the
+						// empty states draw (the placeholder task, 2026-10-16): the box keeps the
+						// kind's proportions and the progress rides in it, rather than the box
+						// being replaced by a status card. The visitor's page shows the same
+						// shape through its own call site.
+						<WorkPlaceholder
+							type={current.type}
+							note=""
+							status={
+								<TranscodingStatus
+									status={current.transcoding?.status ?? "pending"}
+									progress={current.transcoding?.progress ?? 0}
+									etaSeconds={current.transcoding?.etaSeconds ?? undefined}
+									errorMessage={current.transcoding?.errorMessage ?? undefined}
+								/>
+							}
 						/>
 					) : (
 						<WorkDeliverable

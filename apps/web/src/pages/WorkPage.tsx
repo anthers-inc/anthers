@@ -53,6 +53,7 @@ import {
 	WorkDeliverable,
 	WorkDescription,
 	type WorkDetail,
+	WorkPlaceholder,
 	WorkRating,
 	WorkRecordLink,
 } from "../components/work/WorkLayout";
@@ -454,11 +455,20 @@ export default function WorkPage() {
 						// there is nothing to render in its place but the reason.
 						<PublicAccessWall budget={meterBudget} />
 					) : encoding && !playsOriginal ? (
-						<TranscodingStatus
-							status={work.transcoding?.status ?? "pending"}
-							progress={work.transcoding?.progress ?? 0}
-							etaSeconds={work.transcoding?.etaSeconds ?? undefined}
-							errorMessage={work.transcoding?.errorMessage ?? undefined}
+						// The processing block, held inside the kind's silhouette rather than replacing
+						// it (the placeholder task, 2026-10-16): the page's proportions do not move
+						// while the Work's processed deliverable is being made.
+						<WorkPlaceholder
+							type={work.type}
+							note=""
+							status={
+								<TranscodingStatus
+									status={work.transcoding?.status ?? "pending"}
+									progress={work.transcoding?.progress ?? 0}
+									etaSeconds={work.transcoding?.etaSeconds ?? undefined}
+									errorMessage={work.transcoding?.errorMessage ?? undefined}
+								/>
+							}
 						/>
 					) : (
 						<WorkDeliverable

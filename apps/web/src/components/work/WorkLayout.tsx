@@ -151,7 +151,15 @@ export function isGoods(type: string): boolean {
  * The empty deliverable's silhouette, for a draft the creator is looking at before any
  * file has arrived: an outlined area in the shape and aspect their Work will occupy, so
  * the page reads as a page rather than nothing, and the one line that says how the box
- * gets filled. A draft is private, so nothing here is ever shown to a user.
+ * gets filled. A draft is private, so the note here is never shown to a user.
+ *
+ * `status` is the shape's second tenant (the placeholder task, 2026-10-16): the state
+ * between "nothing attached" and "the deliverable exists" — the landed file under
+ * processing — renders here rather than in the deliverable's place, so the box the
+ * creator was looking at keeps its proportions and the progress lives inside it
+ * (SoundCloud's greyed cloud, status inside, while the track processes). Visitors see
+ * this form too, on a Work whose pages are still being made; with no note passed, the
+ * label alone says what the box becomes.
  */
 type PlaceholderShape = {
 	icon: typeof PhotoIcon;
@@ -209,7 +217,16 @@ const PLACEHOLDER_SHAPES: Record<string, PlaceholderShape> = {
 	},
 };
 
-export function WorkPlaceholder({ type, note }: { type: string; note: string }) {
+export function WorkPlaceholder({
+	type,
+	note,
+	status,
+}: {
+	type: string;
+	note: string;
+	/** The processing block that replaced the box, now riding inside it — see the docblock. */
+	status?: ReactNode;
+}) {
 	const shape = PLACEHOLDER_SHAPES[type] ?? {
 		icon: DocumentTextIcon,
 		className: "aspect-video",
@@ -225,7 +242,8 @@ export function WorkPlaceholder({ type, note }: { type: string; note: string }) 
 			>
 				<Icon className="size-10 text-base-content/30" aria-hidden />
 				<p className="text-sm text-base-content/60">{shape.label}.</p>
-				<p className="max-w-prose text-xs text-base-content/40">{note}</p>
+				{note && <p className="max-w-prose text-xs text-base-content/40">{note}</p>}
+				{status}
 			</div>
 		</div>
 	);
