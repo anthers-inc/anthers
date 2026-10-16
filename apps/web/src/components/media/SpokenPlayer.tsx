@@ -18,7 +18,7 @@ import {
 	PauseIcon,
 	PlayIcon,
 } from "@heroicons/react/24/solid";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
 import {
 	LISTEN_RESUME_FLOOR_SECONDS,
@@ -274,7 +274,10 @@ export default function SpokenPlayer({
 		stepRate,
 	});
 
-	const defaultWaveform = Array.from({ length: 64 }, () => 0.3 + Math.random() * 0.5);
+	const defaultWaveform = useMemo(
+		() => Array.from({ length: 64 }, () => 0.3 + Math.random() * 0.5),
+		[],
+	);
 	const peaks = waveform && waveform.length > 0 ? waveform : defaultWaveform;
 
 	if (spent && budget) return <PublicAccessWall budget={budget} />;

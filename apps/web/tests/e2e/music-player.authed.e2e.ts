@@ -168,9 +168,25 @@ test("listening survives navigating away", async ({ page }) => {
 
 test("lyrics show on a free track and never on a gated one", async ({ page }) => {
 	await page.goto(`/works/${FREE_WITH_LYRICS.slug}-${FREE_WITH_LYRICS.publicId}`);
-	await expect(page.getByText("Lyrics", { exact: true })).toBeVisible();
+
+	/*
+	 * 🚨 The card is collapsed out of the box (Parker, 2026-10-16): the toggle is the
+	 * header, and until it is opened the words are absent from the page entirely —
+	 * asserted here in both directions, because a card that rendered them regardless
+	 * would pass everything below and the collapse would be theater.
+	 */
+	const toggle = page.getByRole("button", { name: "Lyrics" });
+	await expect(toggle).toBeVisible();
+	await expect(toggle).toHaveAttribute("aria-expanded", "false");
+	await expect(page.getByText("First verse, second line")).toHaveCount(0);
+
+	await toggle.click();
 	// The line breaks are the content: `whitespace-pre-wrap`, not a paragraph.
 	await expect(page.getByText("First verse, second line")).toBeVisible();
+
+	// And it toggles back to nothing.
+	await toggle.click();
+	await expect(page.getByText("First verse, second line")).toHaveCount(0);
 
 	await page.goto(`/works/${GATED.slug}-${GATED.publicId}`);
 	// 🚨 The negative one. The fixture's gated track has lyrics in the database, so this
@@ -178,4 +194,36 @@ test("lyrics show on a free track and never on a gated one", async ({ page }) =>
 	// the positive case above and this one, which is why both exist.
 	await expect(page.getByText(GATED.lyrics ?? "")).toHaveCount(0);
 	await expect(page.getByText("Lyrics", { exact: true })).toHaveCount(0);
+});
+
+test("the Work-page player's transport skips, and the times bracket the waveform", async ({
+	page,
+}) => {
+	await page.goto(`/works/${FREE_WITH_LYRICS.slug}-${FREE_WITH_LYRICS.publicId}`);
+
+	// One skip step moves the elapsed readout — deterministic from the control's own
+	// seek, with no dependence on the audio actually playing.
+	const SKIP = "Skip forward 10 seconds";
+	await expect(page.getByRole("button", { name: SKIP })).toBeVisible();
+	const before = (await page.locator("[data-testid=audio-elapsed]").textContent()) ?? "";
+	await page.getByRole("button", { name: SKIP }).click();
+	await expect(page.locator("[data-testid=audio-elapsed]")).not.toHaveText(before);
+
+	// The remaining read is time-left, a minus in front of a clock — the same shape the
+	// waveform brackets on both ends.
+	await expect(page.locator("[data-testid=audio-remaining]")).toContainText("-");
+
+	/*
+	 * The keymap is scoped to the player's own container: focus it (not a click — the
+	 * container's center is the invisible seek input, and focusing the input would be a
+	 * different, deliberate contract) and press `m`, which the shared map answers with a
+	 * mute. That is the wiring proof; space-then-Pause is not asserted against a fixture
+	 * track only seconds long, where the ended transition would race the assertion.
+	 * (Toggled back — the volume store is app-wide and remembered.)
+	 */
+	await page.locator("[data-testid=audio-player]").focus();
+	await page.keyboard.press("m");
+	await expect(page.getByRole("button", { name: "Unmute" })).toBeVisible();
+	await page.keyboard.press("m");
+	await expect(page.getByRole("button", { name: "Mute" })).toBeVisible();
 });
