@@ -382,19 +382,16 @@ describe("Desktop auth — the emailed-code method (in-app sign-in)", () => {
 		await db.delete(signupCodes).where(like(signupCodes.email, `${MAIL_PREFIX}-%`));
 	});
 
-	function startEnrollment() {
+	async function startEnrollment() {
 		const verifier = hex();
-		const challenge = pkceChallenge(verifier);
-		return challenge.then((c) =>
-			req("/api/auth/desktop/start", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ challenge: c }),
-			}).then((res) => {
-				expect(res.status).toBe(201);
-				return { verifier, challenge: c };
-			}),
-		);
+		const challenge = await pkceChallenge(verifier);
+		const res = await req("/api/auth/desktop/start", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ challenge }),
+		});
+		expect(res.status).toBe(201);
+		return { verifier, challenge };
 	}
 	function sendEmailCode(email: string, challenge: string) {
 		// NO Origin header, exactly like the other two app-driven calls: the packaged
@@ -488,6 +485,7 @@ describe("Desktop auth — the emailed-code method (in-app sign-in)", () => {
 		// the property, not an implementation detail.
 		const email = `${MAIL_PREFIX}-nomint@example.com`;
 		const issued = await issueSignupCode(email);
+		if (!issued.code) throw new Error(`unexpected issued-code absence for ${email}`);
 
 		const { challenge } = await startEnrollment();
 		const sent = await sendEmailCode(email, challenge);
