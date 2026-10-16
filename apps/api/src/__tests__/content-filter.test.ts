@@ -9,7 +9,7 @@
  * fail the second.
  *
  * ⚠️ **An unanswered row counts as containing the content.** The filter is an allow-list: a Work is
- * listed for a user hiding Violence only when its creator answered Violence *Not in It*, so a Work
+ * listed for a user hiding Violence only when its creator answered Violence *None*, so a Work
  * released before the matrix existed, with no rows, is absent for that user. The legacy fixture
  * here is that case.
  */
@@ -177,7 +177,7 @@ describe("a user's filter by kind of content", () => {
 			await setPreferences({ notes: { violence: "show" } });
 		});
 
-		it("keeps out a Work marked at any rung, even General, and keeps one marked Not in It", async () => {
+		it("keeps out a Work marked at any rung, even General, and keeps one marked None", async () => {
 			const listed = await catalog(userCookie);
 			expect(listed).not.toContain(CARTOON);
 			expect(listed).toContain(GENTLE);

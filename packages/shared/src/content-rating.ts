@@ -327,7 +327,7 @@ export const MATURITY_DISPLAY_CHOICES: readonly MaturityDisplayDef[] = [
  *
  * ⭐ **A note is a row of the rating matrix marked at any rung**, so the notes and the rating
  * are one answer rather than two (Parker, 2026-09-18): a creator marks each kind of content
- * *Not in it*, General, Mature or Adult, the Work takes the highest rung any row reaches, and
+ * *None*, General, Mature or Adult, the Work takes the highest rung any row reaches, and
  * every row marked at a rung is a note. A note still carries no access consequence of its own.
  * The identifiers are the stored values and outlived the labels, so `sexual-themes` is labeled
  * *Sexual Content* after the Rating Standard's row.
@@ -350,13 +350,13 @@ export type RowLevel = "none" | DeclarableMaturity;
  * - `visual` — the full grid, for what a Work shows: video, images, comics, games, software,
  *   physical goods and services.
  * - `light` — for what a Work says or sounds like: writing, books, music and other audio. Each
- *   kind of content is answered *Not in It*, *In It* or *Explicit*, because *"people are used to
+ *   kind of content is answered *None*, *General* or *Explicit*, because *"people are used to
  *   the fact that music ratings are really just 'explicit or not'"*, and only sexual content
  *   reaches Adult.
  *
  * ⭐ **Both grids ask about the same six kinds of content**, because a user's filter reads them.
  * A grid that skipped a row would leave the filter to treat the missing answer either as present,
- * hiding every song from a user who hides horror, or as *Not in It*, which nobody said. So the
+ * hides every song from a user who hides horror, or as *None*, which nobody said. So the
  * grids differ only in which answers each row offers and where each begins, and they store the
  * same values: *In It* is `general` and *Explicit* is `mature`.
  */
@@ -377,11 +377,26 @@ export function gridFor(type: string | null | undefined): RatingGrid {
 	return (LIGHT_GRID_TYPES as readonly string[]).includes(type ?? "") ? "light" : "visual";
 }
 
-/** What each answer is called on each grid. The value stored for it is the same on both. */
+/**
+ * What each answer is called on each grid. The value stored for it is the same on both.
+ *
+ * Parker, 2026-10-16: **"Not in It" is "None" and "In It" is "General".** The labels name the
+ * rung rather than the editorial act — a table column reads faster when it says what the row
+ * now means than when it says what the creator did to it, and the same word on both grids
+ * keeps the two grids' answers in one vocabulary wherever they land side by side.
+ */
 export const GRID_ANSWER_LABELS: Record<RatingGrid, Record<RowLevel, string>> = {
-	visual: { none: "Not in It", general: "General", mature: "Mature", adult: "Adult" },
-	light: { none: "Not in It", general: "In It", mature: "Explicit", adult: "Adult" },
+	visual: { none: "None", general: "General", mature: "Mature", adult: "Adult" },
+	light: { none: "None", general: "General", mature: "Explicit", adult: "Adult" },
 };
+
+/**
+ * The published standard at the wiki — *The Rating Standard*. The page the rating surfaces'
+ * *Learn More About Our Ratings* link opens in a new tab, and the authority every cell's
+ * ⓘ line is a transcription of. A real address, not a route: the wiki publishes at its own
+ * domain, `anthers.wiki`, separate from the site's own SPA.
+ */
+export const RATINGS_WIKI_URL = "https://anthers.wiki/safety-conduct/the-rating-standard";
 
 /**
  * One row of the rating matrix: a kind of content, and where each rung begins on it on each grid.
@@ -565,7 +580,7 @@ export function normalizeMaturityRows(input: unknown, grid: RatingGrid): Maturit
 
 /**
  * The rating the rows add up to: the highest rung any row reaches, and General when every row
- * is *Not in it* or General. Null until every row is answered, because an unanswered row is not
+ * is *None* or General. Null until every row is answered, because an unanswered row is not
  * a declaration of anything, and a rating assembled from half a matrix would be the editor
  * answering the rest on the creator's behalf.
  *
@@ -586,12 +601,13 @@ export function ratingFromRows(rows: MaturityRows): DeclarableMaturity | null {
 /**
  * Whether every row of the matrix is answered, which is what being rated means.
  *
- * 🚨 **A rated Work has every row answered, with no exceptions** (Parker, 2026-09-18). *Not in
- * It* exists so that General means only a General-acceptable form of the content rather than
- * also "none of it", and a user's filter relies on that. So release asks this rather than
- * whether `maturity` holds a value: a rating assigned any other way (before the matrix existed,
- * or written straight into the database) is not a declaration the rows can stand behind. An
- * operator's correction sets the rating over the rows and does not answer them.
+ * 🚨 **A rated Work has every row answered, with no exceptions** (Parker, 2026-09-18). *None*
+ * exists so that General means only a General-acceptable form of the content rather than
+ * also "none of it", and a user's filter relies on that — and release asks this rather than
+ * whether `maturity` holds a value: a rating assigned
+ * any other way (before the matrix existed, or written straight into the database) is not a
+ * declaration the rows can stand behind. An operator's correction sets the rating over the rows
+ * and does not answer them.
  */
 export function isRatingComplete(rows: MaturityRows | null | undefined, grid: RatingGrid): boolean {
 	return ratingFromRows(normalizeMaturityRows(rows, grid)) !== null;
@@ -607,7 +623,7 @@ export function notesFromRows(rows: MaturityRows): ContentNote[] {
 
 /**
  * Whether a Work may contain a kind of content, as a user's filter reads it: yes, unless its
- * creator answered that row *Not in It*.
+ * creator answered that row *None*.
  *
  * 🚨 **An unanswered row counts as containing it.** A user who hides a kind of content relies on
  * the filter, so it must not let through a Work nobody has said is free of it, which is the same
@@ -617,6 +633,30 @@ export function notesFromRows(rows: MaturityRows): ContentNote[] {
  */
 export function mayContain(rows: MaturityRows | null | undefined, note: ContentNote): boolean {
 	return rows?.[note] !== "none";
+}
+
+/**
+ * The rung to set a row at when one click answers the whole table — the closest one the row
+ * actually reaches at or below `target` (Parker, 2026-10-16: the column heading *sets that
+ * rating, or the closest rating*).
+ *
+ * `target` of `none` answers the row `none` — it is reachable by construction, the one answer
+ * a row always takes. Any other `target` reads the row's own rungs for the grid: a row that
+ * never reaches the target answers at the highest rung it does reach below it, which is why
+ * Adult sets Violence to Explicit on the light grid, and why a row whose only rung is General
+ * (language, on the visual grid) answers General when anything higher is asked of it. `general`
+ * is reachable on every row, so a target with no reachable rung below it still always has one
+ * at `general` — the function never has to invent a rung.
+ */
+export function closestRungLevel(row: RatingRowDef, grid: RatingGrid, target: RowLevel): RowLevel {
+	if (target === "none") return "none";
+	const targetCaution = CAUTION[target];
+	let best: RowLevel = "general";
+	for (const level of ["general", "mature", "adult"] as const) {
+		if (CAUTION[level] > targetCaution) break;
+		if (row.rungs[grid][level] !== null) best = level;
+	}
+	return best;
 }
 
 /** How a user has asked to meet each kind of content, whatever a Work's rating. */

@@ -2,7 +2,7 @@
 /**
  * A user's filter by kind of content, walked in a browser: set Violence to Blur in Settings and
  * a creator's Work marked with violence is covered on their profile, naming Violence; set it to
- * Hide and the Work is gone, while one marked Not in It stays uncovered throughout.
+ * Hide and the Work is gone, while one marked None stays uncovered throughout.
  *
  * 🚨 **The API tests cannot see the browser half.** A blur is the browser's job, from the rows the
  * user's copy of a Work carries, so a card that ignored them would pass every route test and

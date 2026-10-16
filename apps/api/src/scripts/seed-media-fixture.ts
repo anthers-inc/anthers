@@ -518,7 +518,7 @@ async function ensureWork(spec: MediaFixtureWork, creator: number): Promise<numb
 			// declared rating with every row of its matrix answered AND on a credit naming a
 			// human (`credits_creator_required`) — released states neither gate would produce.
 			credits: [{ role: "Made by", contributor: "The Fixture Creator", types: ["created"] }],
-			// Every row Not in It, which is General.
+			// Every row None, which is General.
 			maturity: "general",
 			maturityRows: rowsRatedAs("general"),
 			maturitySource: "creator",
