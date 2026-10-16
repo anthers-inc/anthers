@@ -121,9 +121,12 @@ export default function LoggedOutLayout() {
 		// sticky nav stays on top (z-40).
 		<div className="relative isolate min-h-screen flex flex-col">
 			<header className="py-1 nav-edge bg-base-200/50 backdrop-blur-md sticky top-0 z-40">
-				{/* Theme + language utilities, floated into the page's top-right corner —
-					deliberately outside the centered nav. Desktop only; on mobile the theme
-					toggle drops into the hamburger menu below. */}
+				{/* Language utilities, floated into the page's top-right corner —
+					deliberately outside the centered nav. Desktop only; on mobile the
+					language picker drops into the hamburger menu below. (The theme picker
+					lived here beside it while it was a circle icon; as a ~90px dropdown
+					select it stands in the nav's right cluster instead, where the flex
+					flow makes room for it — a float this wide overlaps Log In.) */}
 				<div className="absolute inset-y-0 right-0 z-10 hidden items-center gap-1 pr-8 lg:flex">
 					{/* Language picker — hidden until localization is actually implemented
 						(the menu is inert). Gated by LOCALIZATION_ENABLED, not deleted, so it
@@ -151,7 +154,6 @@ export default function LoggedOutLayout() {
 							</ul>
 						</div>
 					)}
-					<ThemeSelect />
 				</div>
 
 				{/* Main nav — brand on the left, page links centered, a single CTA on the
@@ -259,6 +261,13 @@ export default function LoggedOutLayout() {
 						>
 							Log In
 						</Link>
+						{/* The theme picker — topbar-visible from lg up only, matching where the
+						    corner toggle it replaced stood: below lg the mobile menu's labeled
+						    row carries it instead. In the flow (not floated into the corner,
+						    where it sat) because the closed select is ~90px wide and a float
+						    that wide overlaps Log In at exactly the widest non-max-w-6xl
+						    viewports. */}
+						<ThemeSelect className="hidden lg:block" />
 					</div>
 				</div>
 			</header>

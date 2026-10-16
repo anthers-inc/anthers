@@ -36,10 +36,13 @@ export default function ThemeSelect({ className = "" }: { className?: string }) 
 	}
 
 	return (
+		// w-36 pins the closed control at one width on every surface that mounts it —
+		// DaisyUI's select stretches inside flex containers, and a select that grows
+		// to fill the topbar slot reads like a filter control rather than a utility.
 		<select
 			value={theme}
 			onChange={(event) => pick(event.target.value)}
-			className={`select select-bordered select-sm ${className}`}
+			className={`select select-bordered select-sm w-36 shrink-0 ${className}`}
 			aria-label="Color theme"
 		>
 			{THEME_GROUPS.map((group) => (
