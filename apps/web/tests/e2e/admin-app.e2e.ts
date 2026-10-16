@@ -193,7 +193,7 @@ test.describe
 
 			// The recorded actions read as the sequence: suspend, then the review, then the lift.
 			await expect(
-				detail.getByRole("cell", { name: /Suspended — Spam or advertising/ }),
+				detail.getByRole("cell", { name: /Suspended — Spam or Advertising/ }),
 			).toBeVisible();
 			await expect(detail.getByRole("cell", { name: /Earnings review concluded/ })).toBeVisible();
 
