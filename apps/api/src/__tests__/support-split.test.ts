@@ -29,6 +29,8 @@
  * here; it wants the recording Stripe fake from `payments-stripe.test.ts`.
  */
 import { describe, expect, it } from "bun:test";
+import { creatorFeeShare, paymentsSplit } from "@anthers/shared/fees";
+import Decimal from "decimal.js";
 import {
 	anthersSupportFromSub,
 	directedPicksFromSub,
@@ -37,6 +39,48 @@ import {
 	periodEndFromSub,
 	totalSupportFromSub,
 } from "../services/billing";
+
+/**
+ * The creator side of ONE charge's card fee — the split the settlement and the ledger
+ * must agree on (2026-10-15, the Badge purchase). A checkout's badge lines carry their
+ * own pinned pro-rata fee shares, and a subscription invoice has none; if the credit
+ * pass and the remainder's booking split by different arithmetic, the ledger and the
+ * model disagree by the difference with nothing anywhere to see it — so this is that
+ * arithmetic, and both call it.
+ */
+describe("creatorFeeShare — one arithmetic for both callers", () => {
+	it("is the model's split when the charge carries no fee of its own", () => {
+		expect(creatorFeeShare(3, 9).toFixed(2)).toBe(paymentsSplit(3, 9).creator.toFixed(2));
+	});
+
+	it("apportions a charge's own recorded fee by value — the checkout's pinned shares", () => {
+		// A badge charge whose rows pinned $1.04 of the card fee: the creator side is the
+		// whole of it when the charge carries no Anthers money — everything the fee
+		// covered went to the lines' creators.
+		expect(creatorFeeShare(0, 9.07, new Decimal("1.04")).toFixed(2)).toBe("1.04");
+	});
+
+	it("splits a charge's own fee when it carries an Anthers line too", () => {
+		// $1.04 pinned across $3 to Anthers and $9 to creators → creators bear 3/4.
+		expect(creatorFeeShare(3, 9, new Decimal("1.04")).toFixed(2)).toBe("0.78");
+	});
+
+	it("answers zero for a pinned fee of zero, so the remainder's booking adds nothing", () => {
+		expect(creatorFeeShare(0, 9.07, new Decimal("0")).toFixed(2)).toBe("0.00");
+	});
+
+	it("keeps the two callers from coming apart — the invariant the docblock names", () => {
+		// Whatever the composition, the model path is paymentsSplit's creator share.
+		for (const [a, c] of [
+			[0, 3],
+			[3, 9],
+			[6, 4],
+			[0, 18],
+		] as const) {
+			expect(creatorFeeShare(a, c).toFixed(2)).toBe(paymentsSplit(a, c).creator.toFixed(2));
+		}
+	});
+});
 
 /** The Anthers creator account's id, as the issuer pass stamps it. */
 const ANTHERS_ID = 7;

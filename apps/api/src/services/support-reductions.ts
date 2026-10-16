@@ -116,6 +116,13 @@ export async function applyReductionsToInvoice(invoice: Stripe.Invoice): Promise
 	// against. The invoice for a mid-month raise is deliberately excluded: it is the charge
 	// the reduction exists to compensate for, and discounting it here would be paying the
 	// money back before it was taken.
+	//
+	// ⚠️ **Why a first invoice is not special-cased (probed 2026-10-15).** A subscription
+	// created for a Badge bought through the basket is created as a TRIAL ending on the
+	// next 1st (see `billing.ts`) — its first real invoice comes at the trial's end as an
+	// ordinary `subscription_cycle` renewal, admitted without new clauses, and the only
+	// invoice creation itself produces is the $0 bookkeeping row, never a draft: nothing
+	// here would spend against it even if it arrived.
 	if (invoice.status !== "draft" || invoice.billing_reason !== "subscription_cycle") return 0;
 	if (!invoice.id) return 0;
 

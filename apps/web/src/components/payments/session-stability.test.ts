@@ -23,10 +23,24 @@
  * the checkout goes stale fails right beside a fix that doesn't pin it at all.
  */
 import { afterEach, describe, expect, test } from "bun:test";
-import BasketCheckout, { workIdsKey } from "../basket/BasketCheckout";
+import { type BasketItem, basketContentKey } from "../../lib/basket";
+import BasketCheckout from "../basket/BasketCheckout";
 import { act, createElement, render } from "./render-hooks";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A work item, as the basket store answers with — the scratchpad shape. */
+function workItem(workId: number): BasketItem {
+	return {
+		kind: "work",
+		workId,
+		slug: `work-${workId}`,
+		title: `Work ${workId}`,
+		price: "3.00",
+		creatorHandle: "creator",
+		thumbnail: null,
+	};
+}
 
 // ── The fake transport: count the session POSTs ──────────────────────────────
 
@@ -51,21 +65,21 @@ function fakeFetch(input: string | URL | Request): Promise<Response> {
 // ── The parent harness: a BasketPage-shaped parent re-rendering shapes ───────
 
 interface HarnessProps {
-	workIds: number[];
+	items: BasketItem[];
 	/** Fires on every parent render when `pulseRender` was called — the live failure's shape. */
 	reportTotalsPulse: boolean;
 }
 
 /**
- * The parent, as BasketPage renders it: `workIds` from a fresh `items.map(...)` per
- * render — deliberately REBUILDING the array rather than memoizing, so the test proves
- * content-keying inside the hook, not cooperation from the page. `reportTotalsPulse`
- * adds a state change to the parent between renders, reproducing the exact sequence
- * that remounted the checkout live.
+ * The parent, as BasketPage renders it: `contentKey` derived fresh per render from the
+ * items — deliberately REBUILDING the array rather than memoizing, so the test proves
+ * content-keying inside the hook, not cooperation from the page. The VALUE is what keys:
+ * identical contents derive identical keys, so a render burst re-POSTs nothing. Every
+ * call site below passes a fresh array for exactly that reason.
  */
-function Parent({ workIds, reportTotalsPulse }: HarnessProps) {
+function Parent({ items, reportTotalsPulse }: HarnessProps) {
 	return createElement(BasketCheckout, {
-		workIds: workIds.map((id) => id), // fresh array identity every render
+		contentKey: basketContentKey([...items]), // a fresh derivation every render
 		buyerTotal: "9.99",
 		onTotals: reportTotalsPulse ? () => undefined : undefined,
 		onComplete: () => undefined,
@@ -92,15 +106,31 @@ afterEach(() => {
 	POST_PATHS.length = 0;
 });
 
-describe("workIdsKey", () => {
-	test("the same ids in different orders are the same basket", () => {
-		expect(workIdsKey([3, 1, 2])).toBe(workIdsKey([1, 2, 3]));
-		expect(workIdsKey([3, 1, 2])).toBe("1,2,3");
+describe("basketContentKey", () => {
+	test("the same contents in different orders are the same basket", () => {
+		expect(basketContentKey([workItem(3), workItem(1), workItem(2)])).toBe(
+			basketContentKey([workItem(1), workItem(2), workItem(3)]),
+		);
 	});
 
 	test("a different basket is a different key", () => {
-		expect(workIdsKey([1, 2])).not.toBe(workIdsKey([1, 3]));
-		expect(workIdsKey([1, 2])).not.toBe(workIdsKey([2, 1, 2]));
+		expect(basketContentKey([workItem(1), workItem(2)])).not.toBe(
+			basketContentKey([workItem(1), workItem(3)]),
+		);
+	});
+
+	test("a badge line joins the key, kind-tagged — a badge added to a work basket is a new basket", () => {
+		const withBadge: BasketItem = {
+			kind: "badge",
+			badgeId: 9,
+			title: "Sprout",
+			price: "3.00",
+			recurring: "6.00",
+			creatorHandle: "creator",
+		};
+		expect(basketContentKey([withBadge])).toBe("b9");
+		// A badge cannot collide with a work id by number: kinds never merge keys.
+		expect(basketContentKey([workItem(9), withBadge])).toBe("b9,w9");
 	});
 });
 
@@ -109,7 +139,7 @@ describe("one session POST per basket content", () => {
 		POST_PATHS.length = 0;
 		globalThis.fetch = fakeFetch as typeof fetch;
 
-		const h = mountParent({ workIds: [101], reportTotalsPulse: false });
+		const h = mountParent({ items: [workItem(101)], reportTotalsPulse: false });
 		try {
 			// The session POST fires on mount.
 			await act(async () => {
@@ -121,7 +151,7 @@ describe("one session POST per basket content", () => {
 			// the sequence that wiped the form live. The parent re-renders (its internal
 			// state changes), `workIds` identity churns, and the checkout must not care.
 			for (let i = 0; i < 20; i++) {
-				h.rerender(createElement(Parent, { workIds: [101], reportTotalsPulse: true }));
+				h.rerender(createElement(Parent, { items: [workItem(101)], reportTotalsPulse: true }));
 				await act(async () => {
 					await wait(10);
 				});
@@ -137,7 +167,7 @@ describe("one session POST per basket content", () => {
 		POST_PATHS.length = 0;
 		globalThis.fetch = fakeFetch as typeof fetch;
 
-		const h = mountParent({ workIds: [202, 203], reportTotalsPulse: false });
+		const h = mountParent({ items: [workItem(202), workItem(203)], reportTotalsPulse: false });
 		try {
 			await act(async () => {
 				await wait(50);
@@ -149,9 +179,9 @@ describe("one session POST per basket content", () => {
 			// renders identical to a quote refresh, none of which may POST again.
 			for (let i = 0; i < 20; i++) {
 				// Same contents, different array — both the identity churn and the
-				// reorder: a basket carried as [202, 203] must equal [203, 202].
-				const ids = i % 2 === 0 ? [202, 203] : [203, 202];
-				h.rerender(createElement(Parent, { workIds: ids, reportTotalsPulse: false }));
+				// reorder: a basket carried in either order must equal the other.
+				const items = i % 2 === 0 ? [workItem(202), workItem(203)] : [workItem(203), workItem(202)];
+				h.rerender(createElement(Parent, { items, reportTotalsPulse: false }));
 				await act(async () => {
 					await wait(10);
 				});
@@ -167,12 +197,12 @@ describe("one session POST per basket content", () => {
 		POST_PATHS.length = 0;
 		globalThis.fetch = fakeFetch as typeof fetch;
 
-		const h = mountParent({ workIds: [303], reportTotalsPulse: true });
+		const h = mountParent({ items: [workItem(303)], reportTotalsPulse: true });
 		try {
 			// Re-render in the same tick as the mount, before the fetch resolves — the
 			// in-flight POST must not be judged stale and fire again.
 			for (let i = 0; i < 5; i++) {
-				h.rerender(createElement(Parent, { workIds: [303], reportTotalsPulse: true }));
+				h.rerender(createElement(Parent, { items: [workItem(303)], reportTotalsPulse: true }));
 				await act(async () => {
 					await wait(5);
 				});
@@ -191,16 +221,28 @@ describe("one session POST per basket content", () => {
 		POST_PATHS.length = 0;
 		globalThis.fetch = fakeFetch as typeof fetch;
 
-		const h = mountParent({ workIds: [404], reportTotalsPulse: false });
+		const h = mountParent({ items: [workItem(404)], reportTotalsPulse: false });
 		try {
 			await act(async () => {
 				await wait(50);
 			});
 			expect(POST_PATHS).toHaveLength(1);
 
-			// The buyer removes an item: genuinely new contents, so the checkout MUST
-			// re-create the session (the server prices a different basket).
-			h.rerender(createElement(Parent, { workIds: [], reportTotalsPulse: false }));
+			// The buyer adds a Badge to the basket beside the Work: genuinely new
+			// contents (a new charge — the Badge's first Month joins it), so the checkout
+			// MUST re-create the session. Kind-tagged keys are what make a badge change a
+			// change at all.
+			const withBadge: BasketItem = {
+				kind: "badge",
+				badgeId: 7,
+				title: "Root",
+				price: "3.00",
+				recurring: "3.00",
+				creatorHandle: "creator",
+			};
+			h.rerender(
+				createElement(Parent, { items: [workItem(404), withBadge], reportTotalsPulse: false }),
+			);
 			await act(async () => {
 				await wait(50);
 			});
