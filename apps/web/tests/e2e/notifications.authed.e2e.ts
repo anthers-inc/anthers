@@ -138,13 +138,21 @@ test("a reply lands, the feed lists it, and reading it marks it read", async ({
 
 	// The page marked everything read behind its render: the reply's row now carries a
 	// readAt. A count held up over entries the person has seen is the bell lying about
-	// its own state — the DB read is where the truth lives.
-	const [newest] = await db
-		.select({ readAt: notifications.readAt })
-		.from(notifications)
-		.where(like(notifications.linkPath, `%${POST_SLUG}%`));
-	expect(newest, "the reply's notification row exists").toBeTruthy();
-	expect(newest!.readAt, "opening the feed marked it read").not.toBeNull();
+	// its own state — the DB read is where the truth lives. The read-back polls: the
+	// marking is the page-open's own round-trip, and a straight read here raced it (a
+	// `readAt` of null read the row a frame before the request landed).
+	await expect
+		.poll(
+			async () => {
+				const [row] = await db
+					.select({ readAt: notifications.readAt })
+					.from(notifications)
+					.where(like(notifications.linkPath, `%${POST_SLUG}%`));
+				return row?.readAt ?? null;
+			},
+			{ timeout: 15_000, message: "opening the feed marked it read" },
+		)
+		.not.toBeNull();
 	// And it went to the right person: the creator, not the walker who replied.
 	const [told] = await db
 		.select({ userId: notifications.userId })

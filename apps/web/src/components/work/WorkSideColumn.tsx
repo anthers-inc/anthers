@@ -15,7 +15,8 @@ import { postUrl } from "@anthers/web-shared/postUrl";
 import { creatorProjectUrl, profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { MegaphoneIcon } from "@heroicons/react/24/outline";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
+import { keepScroll } from "./scrollKeeper";
 import type { WorkDetail } from "./WorkLayout";
 
 export interface SideTab {
@@ -27,10 +28,12 @@ export interface SideTab {
 export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: WorkDetail }) {
 	const [active, setActive] = useState(tabs[0]?.key ?? "");
 	const current = tabs.find((t) => t.key === active) ?? tabs[0];
+	/** The group's root, the anchor `keepScroll` measures the page's scroller from. */
+	const rootRef = useRef<HTMLElement | null>(null);
 	if (!current) return null;
 
 	return (
-		<aside aria-label="Reviews and showings" className="flex flex-col gap-4">
+		<aside ref={rootRef} aria-label="Reviews and showings" className="flex flex-col gap-4">
 			<div
 				role="tablist"
 				aria-label="Reviews and showings"
@@ -45,7 +48,7 @@ export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: 
 						aria-controls={`work-side-${tab.key}`}
 						id={`work-side-button-${tab.key}`}
 						className={`btn btn-xs sm:btn-sm join-item flex-1 ${tab.key === current.key ? "btn-active" : ""}`}
-						onClick={() => setActive(tab.key)}
+						onClick={() => keepScroll(rootRef.current, () => setActive(tab.key))}
 					>
 						{tab.label}
 					</button>
