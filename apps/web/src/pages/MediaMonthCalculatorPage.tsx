@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Resource: "Your media month" — the spend calculator, the user-facing flagship of
+// Resource: "Your Media Month" — the spend calculator, the user-facing flagship of
 // the resources revamp, and the interactive form of the wiki's *What It Costs,
 // Against What You Pay Now* (11.05): that page's five fixed cases become the
 // reader's own month, built line by line, and it answers the two things a fixed
@@ -127,7 +127,7 @@ export default function MediaMonthCalculatorPage() {
 		<div className="max-w-5xl min-w-0 w-full mx-auto px-4 pb-16">
 			<CalcPageHeader
 				eyebrow="For users · the spend calculator"
-				title="Your media month"
+				title="Your Media Month"
 				lede={
 					<>
 						You already pay for media — a video subscription, a music subscription, items bought
@@ -573,16 +573,16 @@ function FlowAnthers({
 
 	const chargeItems: { label: string; value: number; sub?: string }[] = [
 		{ label: "Given to Anthers", value: breakdown.anthers },
-		{ label: "Directed at creators", value: breakdown.directed },
+		{ label: "Directed at Creators", value: breakdown.directed },
 		{
-			label: "The one card fee, at cost",
+			label: "The One Card Fee, at Cost",
 			value: breakdown.card,
 			sub: "Paid to the processor — the whole charge's fee, once, split pro-rata.",
 		},
-		{ label: "Directed money reaches", value: breakdown.directedNet },
-		{ label: "The Time Pool — by time spent", value: breakdown.timePool },
-		{ label: "The remainder — funds the charitable programs", value: breakdown.remainder },
-		{ label: "You pay, with tax", value: breakdown.chargedWithTax },
+		{ label: "Directed Money Reaches", value: breakdown.directedNet },
+		{ label: "The Time Pool — by Time Spent", value: breakdown.timePool },
+		{ label: "The Remainder — Funds the Charitable Programs", value: breakdown.remainder },
+		{ label: "You Pay, with Tax", value: breakdown.chargedWithTax },
 	];
 
 	return (
@@ -653,7 +653,7 @@ function FlowAnthers({
 						)}
 
 						<div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
-							<StatCard label="You pay, with tax" value={money2(paid)} />
+							<StatCard label="You Pay, with Tax" value={money2(paid)} />
 							<StatCard
 								label="Reaches creators — exactly"
 								value={money2(reachCreators)}

@@ -47,7 +47,7 @@ export default function UnsubscribePage() {
 						</>
 					) : (
 						<>
-							<h1 className="card-title text-xl">Unsubscribe from notification emails</h1>
+							<h1 className="card-title text-xl">Unsubscribe from Notification Emails</h1>
 							<p className="text-sm text-base-content/70 mt-2">
 								This page is where the links in Anthers' notification emails land. If you got here
 								by typing the address, there's nothing to do — the link in the email is what turns a

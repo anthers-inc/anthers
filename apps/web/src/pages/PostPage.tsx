@@ -243,10 +243,10 @@ export default function PostPage() {
 					</div>
 				)}
 
-				{/* Edit history (public — the "Edited …" link toggles it). */}
+				{/* Edit History (public — the "Edited …" link toggles it). */}
 				{showHistory && edits.length > 0 && (
 					<div className="rounded-lg border border-base-300 bg-base-200/50 p-4 mb-6 text-sm">
-						<h3 className="font-semibold mb-2">Edit history</h3>
+						<h3 className="font-semibold mb-2">Edit History</h3>
 						<ul className="flex flex-col gap-1">
 							{edits.map((e) => (
 								<li

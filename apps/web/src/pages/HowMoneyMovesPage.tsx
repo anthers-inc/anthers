@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Resource: "How the money moves" — the mechanism, drawn. One question: a person
+// Resource: "How the Money Moves" — the mechanism, drawn. One question: a person
 // pays Anthers (or a creator) a monthly amount; where does it go, and what does it
 // buy? The page draws every way money arrives on Anthers and every way it leaves,
 // at three representative charges — a Root subscription to Anthers, a subscription
@@ -92,7 +92,7 @@ const NODE_DEFS: FlowNode[] = [
 		name: "sA",
 		fill: C.anthers,
 		group: "anthers",
-		label: `An Anthers subscription · Root ${usd(F.anthersSub.monthly)}/mo`,
+		label: `An Anthers Subscription · Root ${usd(F.anthersSub.monthly)}/mo`,
 		value: F.anthersSub.monthly,
 		labelRight: true,
 	},
@@ -100,7 +100,7 @@ const NODE_DEFS: FlowNode[] = [
 		name: "sD",
 		fill: C.creator,
 		group: "creatorSub",
-		label: `A subscription to a creator · ${usd(F.creatorSub.at.monthly)}/mo`,
+		label: `A Subscription to a Creator · ${usd(F.creatorSub.at.monthly)}/mo`,
 		value: F.creatorSub.at.monthly,
 		labelRight: true,
 	},
@@ -108,7 +108,7 @@ const NODE_DEFS: FlowNode[] = [
 		name: "sP",
 		fill: C.purchase,
 		group: "purchase",
-		label: `A purchase · ${usd(F.purchase.at.price)}`,
+		label: `A Purchase · ${usd(F.purchase.at.price)}`,
 		value: F.purchase.at.price,
 		labelRight: true,
 	},
@@ -116,7 +116,7 @@ const NODE_DEFS: FlowNode[] = [
 		name: "card",
 		fill: C.card,
 		group: "card",
-		label: `Card processing, at cost · ${usd(cardTotal)}/mo`,
+		label: `Card Processing, at Cost · ${usd(cardTotal)}/mo`,
 		value: cardTotal,
 	},
 	{
@@ -130,28 +130,28 @@ const NODE_DEFS: FlowNode[] = [
 		name: "remainder",
 		fill: C.remainder,
 		group: "remainder",
-		label: `The remainder · ${usd(F.anthersSub.remainder)}/mo`,
+		label: `The Remainder · ${usd(F.anthersSub.remainder)}/mo`,
 		value: F.anthersSub.remainder,
 	},
 	{
 		name: "creators",
 		fill: C.creatorPay,
 		group: "creators",
-		label: `To creators · ${usd(creatorsTotal)}/mo`,
+		label: `To Creators · ${usd(creatorsTotal)}/mo`,
 		value: creatorsTotal,
 	},
 	{
 		name: "processor",
 		fill: C.processor,
 		group: "processor",
-		label: `The payment processor · ${usd(cardTotal)}/mo`,
+		label: `The Payment Processor · ${usd(cardTotal)}/mo`,
 		value: cardTotal,
 	},
 	{
 		name: "programs",
 		fill: C.programs,
 		group: "programs",
-		label: `The charitable programs · ${usd(F.anthersSub.remainder)}/mo`,
+		label: `The Charitable Programs · ${usd(F.anthersSub.remainder)}/mo`,
 		value: F.anthersSub.remainder,
 	},
 ];
@@ -325,7 +325,7 @@ function FlowDiagram() {
 					sort={false}
 					margin={{ top: 8, right: 220, bottom: 8, left: 8 }}
 					role="img"
-					aria-label="How the money moves: three ways money arrives — a Root subscription to Anthers, a subscription pointed at a creator, and a purchase. Card processing leaves every one at cost, paid to the processor. Half of an Anthers subscription goes to the Time Pool, paid to creators by time spent; its remainder merges into one pool funding the charitable programs. A creator subscription and a purchase pass through to their creator in full, minus the card line."
+					aria-label="How the Money Moves: three ways money arrives — a Root subscription to Anthers, a subscription pointed at a creator, and a purchase. Card processing leaves every one at cost, paid to the processor. Half of an Anthers subscription goes to the Time Pool, paid to creators by time spent; its remainder merges into one pool funding the charitable programs. A creator subscription and a purchase pass through to their creator in full, minus the card line."
 					node={(props) => <FlowNodeCapsule {...props} dim={dim} />}
 					link={(props) => <FlowRibbon {...props} dim={dim} />}
 					onMouseEnter={(item, type) => {
@@ -421,7 +421,7 @@ export default function HowMoneyMovesPage() {
 		<div>
 			<CalcPageHeader
 				eyebrow="The mechanism"
-				title="How the money moves"
+				title="How the Money Moves"
 				lede={
 					<>
 						A person&rsquo;s money reaches Anthers one of three ways — a monthly subscription to
@@ -455,7 +455,7 @@ export default function HowMoneyMovesPage() {
 			<FlowDiagram />
 
 			<div className="mt-12 prose prose-sm max-w-none prose-headings:mb-3">
-				<h2>Reading the drawing</h2>
+				<h2>Reading the Drawing</h2>
 				<p>
 					Read it obligations-first. Card processing leaves every charge at cost, paid to the
 					processor at their published rate, with nothing added. An Anthers subscription splits into
@@ -465,7 +465,7 @@ export default function HowMoneyMovesPage() {
 					creator, and a purchase, pass straight through to their creator in full: those two ribbons
 					never touch a pool, because Anthers takes no cut of creator money.
 				</p>
-				<h2>One pool, not buckets</h2>
+				<h2>One Pool, Not Buckets</h2>
 				<p>
 					The remainder strands all merge before anything is spent, and no revenue line is reserved
 					against a purpose. What Anthers commits to is the outflow side: the programs are budgeted
@@ -475,7 +475,7 @@ export default function HowMoneyMovesPage() {
 					every account&rsquo;s ten free hours a month, and the pools that pay the creators whose
 					work is watched and played for free, are what that strand pays for.
 				</p>
-				<h2>What the drawing leaves out</h2>
+				<h2>What the Drawing Leaves Out</h2>
 				<p>
 					Storage top-ups pass through at cost: every byte past a held rung&rsquo;s allowance is
 					charged at the provider&rsquo;s own rate with no mark-up, so those dollars fund nothing
@@ -484,7 +484,7 @@ export default function HowMoneyMovesPage() {
 					going only where the giver directed it, because a real charitable contribution&rsquo;s
 					restriction binds in a way nothing budgeted here does.
 				</p>
-				<h2>Right now — and nothing else</h2>
+				<h2>Right Now — and Nothing Else</h2>
 				<p>
 					Nothing here is a projection. There is no account mix, no growth phase, and no forecast:
 					each strand is one charge&rsquo;s arithmetic, and the percentages a subscription splits
@@ -493,7 +493,7 @@ export default function HowMoneyMovesPage() {
 					money moves rather than a report of where it went.
 				</p>
 
-				<h2>The receipts</h2>
+				<h2>The Receipts</h2>
 				<p>
 					The same routes as numbers, per charge. Everything below is generated from the
 					platform&rsquo;s own code, and the build fails if a figure and its source ever disagree.

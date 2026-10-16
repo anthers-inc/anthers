@@ -106,7 +106,7 @@ export const COMPLIANCE_OBLIGATIONS: readonly ComplianceObligation[] = [
 	},
 	{
 		id: "form-990",
-		title: "Form 990 for the short year 2026-08-07 → 2026-12-31",
+		title: "Form 990 for the Short Year 2026-08-07 → 2026-12-31",
 		consequence:
 			"Three consecutive misses is automatic revocation of exempt status under IRC § 6033(j) — no notice, no hearing.",
 		terminal: true,
@@ -117,7 +117,7 @@ export const COMPLIANCE_OBLIGATIONS: readonly ComplianceObligation[] = [
 	},
 	{
 		id: "charity-registration-renewal",
-		title: "Colorado charity registration renewal",
+		title: "Colorado Charity Registration Renewal",
 		consequence: "A $60 fine, and suspension of solicitation authority.",
 		terminal: false,
 		note: "An automatic 3-month extension is available, and a second on request. Same day as the 990 — the single-date coincidence is the reason December 31 was chosen.",
@@ -153,7 +153,7 @@ export const COMPLIANCE_OBLIGATIONS: readonly ComplianceObligation[] = [
 	},
 	{
 		id: "form-1023",
-		title: "Form 1023 — the full 1023, not the EZ",
+		title: "Form 1023 — the Full 1023, Not the EZ",
 		consequence:
 			"Exemption runs from the submission date instead of 2026-08-07: Form 1120 exposure for the gap, non-deductible donations, no retroactive donor benefit.",
 		terminal: false,
@@ -162,7 +162,7 @@ export const COMPLIANCE_OBLIGATIONS: readonly ComplianceObligation[] = [
 	},
 	{
 		id: "dmca-designated-agent",
-		title: "DMCA designated agent designation expires (Copyright Office DMCA-1078418)",
+		title: "DMCA Designated Agent Designation Expires (Copyright Office DMCA-1078418)",
 		consequence:
 			"An expired designation is an invalid one. § 512(c) safe harbor lapses from that moment — not reduced, gone — for a platform whose entire content model is user uploads.",
 		terminal: true,
@@ -171,7 +171,7 @@ export const COMPLIANCE_OBLIGATIONS: readonly ComplianceObligation[] = [
 	},
 	{
 		id: "ncmec-contact-review",
-		title: "Re-confirm the NCMEC ESP contact details",
+		title: "Re-Confirm the NCMEC ESP Contact Details",
 		consequence:
 			"§ 2258A(a) makes the mailing address, phone, email and named individual part of the duty, so keeping them accurate is required while the review itself is ours to schedule. The thing most likely to go stale is the named human.",
 		terminal: false,

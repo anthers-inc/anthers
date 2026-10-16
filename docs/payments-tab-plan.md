@@ -1,9 +1,9 @@
-# The Studio Payments tab — build plan
+# The Studio Payments Tab — Build Plan
 
 Working notes for the build; the durable findings graduate to the task note and the wiki
 when the work lands. Nothing here is a rule; the task note and the pointer files are.
 
-## What is being built, and what it is deliberately not
+## What Is Being Built, and What It Is Deliberately Not
 
 A **Payments** tab in the Studio, its own nav entry beside Settings, at `/studio/payments`.
 It replaces the Payouts section of Studio settings as the place payout setup happens and
@@ -27,7 +27,7 @@ can answer honestly:
 - **Balance and recent transfers** — available/pending balance, and the creator's
   transfers record (held/transferred, which the earnings endpoint already computes).
 
-## Decisions made in the build
+## Decisions Made in the Build
 
 - **The GET route returns the fuller object and nothing changes about the POST.**
   Extending `GET /stripe/onboard` rather than a sibling route: the client already fetches
@@ -54,7 +54,7 @@ can answer honestly:
   so does the tab's own route: no redirect machinery needed.
 - **Nav gains "Payments"** in the studio nav, owning `/studio/payments`.
 
-## The e2e and guard updates
+## The e2e and Guard Updates
 
 - `stripe-redirect-guard.test.ts` — no change needed (it only refuses inline URLs).
 - `stripe-return-paths.authed.e2e.ts` — the expectations for connectReturn and
@@ -72,7 +72,7 @@ can answer honestly:
   the "open Stripe dashboard" button's enablement).
 - Browser: the Payments tab walk (renders, nav ownership, the summary card links to it).
 
-## Copy surfaces to check before shipping
+## Copy Surfaces to Check before Shipping
 
 - `payoutRefusalMessage` (services/payouts.ts) — names the place.
 - `studio-worklist.ts`'s payout item (message + action + href).

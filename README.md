@@ -27,7 +27,7 @@ In the meantime:
 - **Reading, forking and learning from the code** is exactly what the license is for.
 - **Questions** are welcome at [contact@anthers.org](mailto:contact@anthers.org).
 
-## How the money works
+## How the Money Works
 
 One primitive: a **monthly amount**, in dollars. What varies is who you give it to and what you get back.
 
@@ -69,7 +69,7 @@ A directed $3.00 a month is the same shape: $3.00 gross, $0.39 card, **$2.61** t
 
 Sales tax is the only thing ever added on top of a displayed price. The full model, with its reasoning, is at [anthers.org/faq](https://anthers.org/faq).
 
-## What's in here
+## What's in Here
 
 A Bun workspace monorepo. Four packages, three apps, one deployment. (The desktop app lives in [anthers-desktop](https://github.com/anthers-inc/anthers-desktop) — it consumes this app's *build*, not its packages.)
 
@@ -85,7 +85,7 @@ A Bun workspace monorepo. Four packages, three apps, one deployment. (The deskto
 
 Beyond those: `content/` is local dev object storage, `scripts/` holds the repo's own tooling, `.do/app.yaml` is the deployment spec, and the `Makefile` is the front door to nearly everything.
 
-## What the platform does
+## What the Platform Does
 
 **Publishing.** A creator keeps a **Catalog** of **Works** — video, audio, comics and ebooks, games, software, images and prose. A Work carries its own visibility, its own dates (uploaded, released, and the creator's own claim about when it was *made*, at whatever precision they know it), its own access gates, its own comments and reviews, and its own earnings. Uploads are transcoded server-side: HLS ladders for video, loudness-normalized audio with precomputed waveforms, page-rasterized comics. A Work can be released, gated, discussed and paid for without a post ever existing.
 
@@ -101,7 +101,7 @@ Beyond those: `content/` is local dev object storage, `scripts/` holds the repo'
 
 Anthers is not *federated*: there is one hub, one database and one treasury, and no creator runs a node. That is a separate axis from the protocol, which is not optional here — a work's listing belongs in its creator's repository, and the parts that stay put (the works themselves, money, access control) stay put for reasons the wiki's *The AT Protocol* sets out rather than for want of building.
 
-## How it's built
+## How It's Built
 
 | Layer | Technology |
 |---|---|
@@ -123,7 +123,7 @@ A few choices worth knowing before reading the code:
 - **Access is resolved in one place** and delivery is scoped to the Work, so nothing else has to be trusted to get it right.
 - **The app makes no off-origin request.** Fonts are self-hosted, the payment SDK is loaded only when it is actually needed, and a test enforces it — a document that claims an absence needs something to keep the absence true.
 
-## Running it locally
+## Running It Locally
 
 You need [Bun](https://bun.sh), [FFmpeg](https://ffmpeg.org), and Docker (for the dev Postgres). Poppler is optional — without it, everything works except rasterizing an uploaded comic or ebook.
 

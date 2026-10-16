@@ -189,7 +189,7 @@ export default function CopyrightPage() {
 				</div>
 			</div>
 
-			<Section title="DMCA designated agent">
+			<Section title="DMCA Designated Agent">
 				{agent?.registered ? (
 					<div className="alert alert-info">
 						{/* 🚨 ONE child, deliberately. daisyUI's `.alert` is a grid with
@@ -198,7 +198,7 @@ export default function CopyrightPage() {
 						    one 56px past a 390px viewport. Nothing errors and it looks fine on a
 						    desktop, which is why `mobile-overflow.e2e.ts` is what found it. */}
 						<div>
-							<p>Our DMCA designated agent, registered with the U.S. Copyright Office:</p>
+							<p>Our DMCA Designated Agent, registered with the U.S. Copyright Office:</p>
 							<div className="mt-2 text-sm">
 								<p className="font-semibold">{agent.agentName}</p>
 								<p>{agent.agentAddress}</p>
@@ -234,7 +234,7 @@ export default function CopyrightPage() {
 				)}
 			</Section>
 
-			<Section title="How to file a copyright notice">
+			<Section title="How to File a Copyright Notice">
 				<p>
 					A DMCA notice under 17 U.S.C. § 512(c)(3)(A) must include <strong>all six</strong> of the
 					following elements. You can file using the form below, or by email to our designated
@@ -264,7 +264,7 @@ export default function CopyrightPage() {
 				<DmcaNoticeForm attestation={attestation?.notice ?? null} />
 			</Section>
 
-			<Section title="What happens after you file">
+			<Section title="What Happens After You File">
 				<ol className="list-decimal space-y-2 pl-6">
 					<li>We review your notice. A human looks at every one — nothing is automated.</li>
 					<li>
@@ -287,7 +287,7 @@ export default function CopyrightPage() {
 				</ol>
 			</Section>
 
-			<Section title="If you bought something that is taken down">
+			<Section title="If You Bought Something That Is Taken Down">
 				<p>
 					Everywhere else on Anthers, <strong>what you buy, you keep</strong>. A copyright takedown
 					is the one case where a third party — not you, and not the creator — can take that away,
@@ -335,7 +335,7 @@ export default function CopyrightPage() {
 				</p>
 			</Section>
 
-			<Section title="Repeat-infringer policy">
+			<Section title="Repeat-Infringer Policy">
 				<p>
 					We terminate the accounts of users who repeatedly infringe copyright, in appropriate
 					circumstances. What counts as "appropriate circumstances" is a human decision, made case
@@ -360,7 +360,7 @@ export default function CopyrightPage() {
 				</p>
 			</Section>
 
-			<Section title="What we do not do">
+			<Section title="What We Do Not Do">
 				<ul className="list-disc space-y-1 pl-6">
 					<li>
 						<strong>No automated removal.</strong> § 512(m) means we owe nobody a filter, and a
@@ -418,7 +418,7 @@ function MyNotices({ notices, attestation }: { notices: MyNotice[]; attestation:
 	if (notices.length === 0) return null;
 
 	return (
-		<Section title="Notices about your work">
+		<Section title="Notices About Your Work">
 			<p>
 				These are copyright notices filed against Works you published. Nobody else can see this
 				section.
@@ -651,7 +651,7 @@ function TransparencySection({ counts }: { counts: DmcaCounts | null }) {
 	if (!counts) return null;
 
 	const rows: { label: string; value: number; hint: string }[] = [
-		{ label: "Notices received", value: counts.total, hint: "Every notice filed, by any route." },
+		{ label: "Notices Received", value: counts.total, hint: "Every notice filed, by any route." },
 		{
 			label: "Acted on",
 			value: counts.actioned,

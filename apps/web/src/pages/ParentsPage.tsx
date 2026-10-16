@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * For parents and guardians.
+ * For Parents and Guardians.
  *
  * This page exists because of what Anthers **declined** to do. Patreon and others
  * carry a guardian-permission rule for under-18s; Anthers doesn't, on the grounds that
@@ -49,7 +49,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default function ParentsPage() {
 	return (
 		<div className="container mx-auto max-w-3xl px-4 py-10">
-			<h1 className="text-3xl font-bold">For parents and guardians</h1>
+			<h1 className="text-3xl font-bold">For Parents and Guardians</h1>
 			<p className="mt-3 text-lg text-base-content/70">
 				If someone in your family uses Anthers, here is what it is, in plain language, including the
 				parts we can't promise.
@@ -109,7 +109,7 @@ export default function ParentsPage() {
 				</p>
 			</Section>
 
-			<Section title="What a teenager can encounter">
+			<Section title="What a Teenager Can Encounter">
 				<p>
 					Anthers hosts work by adults, and comments and reviews written by other people. That means
 					the ordinary risks of any space where people talk to each other: rudeness, arguments, and
@@ -148,7 +148,7 @@ export default function ParentsPage() {
 				</p>
 			</Section>
 
-			<Section title="Why the gate works this way">
+			<Section title="Why the Gate Works This Way">
 				<p>
 					A lot of places are being pushed toward age verification that means uploading a driver's
 					license, or letting a camera guess how old your face looks. Those systems work by
@@ -171,7 +171,7 @@ export default function ParentsPage() {
 				</p>
 			</Section>
 
-			<Section title="Parental controls">
+			<Section title="Parental Controls">
 				<p>
 					Any account can be given a <strong>pin</strong>, from its settings page. Once it's set,
 					the pin is required for every change below (including turning the controls off), so they
@@ -211,7 +211,7 @@ export default function ParentsPage() {
 				</p>
 			</Section>
 
-			<Section title="What they can do about someone">
+			<Section title="What They Can Do about Someone">
 				<p>
 					<strong>Blocking.</strong> Anyone can block anyone, from that person's profile. It takes
 					effect immediately, nobody reviews it, and it works in both directions; afterwards neither
@@ -225,7 +225,7 @@ export default function ParentsPage() {
 				</p>
 			</Section>
 
-			<Section title="What we hold, and how to get rid of it">
+			<Section title="What We Hold, and How to Get Rid of It">
 				<p>
 					We keep what's needed to run the place and pay creators: an account, what was published,
 					what was bought, and a record of what was watched or played and for how long (which is how
@@ -249,7 +249,7 @@ export default function ParentsPage() {
 				</p>
 			</Section>
 
-			<Section title="What we can't do">
+			<Section title="What We Can't Do">
 				<p>
 					We can't tell you whether your child has an account, or show you their activity. We don't
 					know who is related to whom, and building that would mean collecting exactly the identity
@@ -264,7 +264,7 @@ export default function ParentsPage() {
 				</p>
 			</Section>
 
-			<Section title="Reaching a human">
+			<Section title="Reaching a Human">
 				<p>
 					You can email{" "}
 					<a className="link link-primary" href="mailto:privacy@anthers.org">

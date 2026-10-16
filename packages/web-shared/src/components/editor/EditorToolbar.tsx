@@ -132,7 +132,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 			<ToolbarButton
 				onClick={() => editor.chain().focus().toggleBulletList().run()}
 				isActive={editor.isActive("bulletList")}
-				title="Bullet list"
+				title="Bullet List"
 			>
 				<ListBulletIcon className="w-4 h-4" />
 			</ToolbarButton>
@@ -140,7 +140,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 			<ToolbarButton
 				onClick={() => editor.chain().focus().toggleOrderedList().run()}
 				isActive={editor.isActive("orderedList")}
-				title="Numbered list"
+				title="Numbered List"
 			>
 				<span className="text-xs font-mono">1.</span>
 			</ToolbarButton>
@@ -150,7 +150,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 			<ToolbarButton
 				onClick={() => editor.chain().focus().toggleCodeBlock().run()}
 				isActive={editor.isActive("codeBlock")}
-				title="Code block"
+				title="Code Block"
 			>
 				<CodeBracketIcon className="w-4 h-4" />
 			</ToolbarButton>
@@ -159,7 +159,7 @@ export default function EditorToolbar({ editor }: EditorToolbarProps) {
 				<LinkIcon className="w-4 h-4" />
 			</ToolbarButton>
 
-			<ToolbarButton onClick={handleImageUpload} title="Insert image" disabled={uploading}>
+			<ToolbarButton onClick={handleImageUpload} title="Insert Image" disabled={uploading}>
 				<PhotoIcon className="w-4 h-4" />
 			</ToolbarButton>
 

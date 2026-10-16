@@ -190,7 +190,7 @@ export default function BasketPage() {
 			<div className="container mx-auto max-w-2xl px-4 py-12">
 				<EmptyState
 					icon={<ShoppingBagIcon className="w-12 h-12" />}
-					title="Your basket is empty"
+					title="Your Basket is empty"
 					description="Add a few things — from one creator or many — and buy them together. The card fee is charged once per purchase, not once per item, so buying together leaves more with them."
 				/>
 			</div>
@@ -362,7 +362,7 @@ export default function BasketPage() {
 
 	return (
 		<div className="container mx-auto max-w-6xl px-4 py-8">
-			<h1 className="text-2xl font-bold mb-1">Your basket</h1>
+			<h1 className="text-2xl font-bold mb-1">Your Basket</h1>
 			{groups.length > 0 && (
 				<p className="text-sm text-base-content/60 mb-6">
 					Work by{" "}

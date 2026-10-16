@@ -2,7 +2,7 @@
 
 Anthers handles people's money, people's creative work, and people's personal data. Security reports are welcome from anyone, at any time, whether or not the platform is accepting other kinds of contribution.
 
-## Reporting a vulnerability
+## Reporting a Vulnerability
 
 Email **[security@anthers.org](mailto:security@anthers.org)**. Please include:
 
@@ -14,7 +14,7 @@ If you would rather report privately through GitHub, [open a draft security advi
 
 **Please do not open a public issue for a vulnerability.** That is the one report we would rather receive slowly than publicly.
 
-### What to expect
+### What to Expect
 
 Anthers is run by one person right now, so we will not pretend to a pager rotation we do not have. What we commit to:
 
@@ -25,7 +25,7 @@ Anthers is run by one person right now, so we will not pretend to a pager rotati
 
 If you do not hear back within 3 business days, assume the mail went astray and send it again — that is a failure on our end, not a signal to escalate publicly.
 
-## Safe harbor
+## Safe Harbor
 
 We will not pursue or support legal action against anyone who makes a good-faith effort to follow this policy. Good faith means:
 
@@ -55,6 +55,6 @@ Things we care about especially, because of what they guard:
 - Vulnerabilities in third-party services (Stripe, Cloudflare, DigitalOcean) — report those to the vendor.
 - Anything requiring physical access to a user's unlocked device, or a compromised browser or operating system.
 
-## Supported versions
+## Supported Versions
 
 There is one deployment and it runs from `main`. Fixes land there; there are no maintained release branches to backport to. Anyone self-hosting a fork should track `main`.

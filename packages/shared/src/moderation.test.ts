@@ -85,7 +85,7 @@ describe("Report taxonomy", () => {
 		// `moderation_reports.reason` holds `sexual` verbatim on rows written while it was
 		// the code the form steered a child-safety reporter toward. An operator opening one
 		// has to see what the reporter picked; nothing may write another.
-		expect(moderationReasonLabel("sexual")).toBe("Sexual content");
+		expect(moderationReasonLabel("sexual")).toBe("Sexual Content");
 		expect(isModerationReason("sexual")).toBe(false);
 	});
 
@@ -111,7 +111,7 @@ describe("Report taxonomy", () => {
 	});
 
 	it("labels a known code and falls back to the code itself for an unknown one", () => {
-		expect(moderationReasonLabel("spam")).toBe("Spam or advertising");
+		expect(moderationReasonLabel("spam")).toBe("Spam or Advertising");
 		// Forward compatibility: a client on an older bundle renders a code it has
 		// never heard of as the code, not as blank.
 		expect(moderationReasonLabel("future-reason")).toBe("future-reason");

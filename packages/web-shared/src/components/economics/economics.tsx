@@ -333,7 +333,7 @@ export function SubscriptionCalculator() {
 				{price > 0 && (
 					<div className="flex items-center justify-between gap-3 text-sm">
 						<span className="text-base-content/75">
-							<span className="font-medium text-base-content/90">Sales tax</span>
+							<span className="font-medium text-base-content/90">Sales Tax</span>
 							<span className="text-base-content/55">
 								{" "}
 								— added on top, varies by location, set at checkout{" "}
@@ -389,21 +389,21 @@ export function PurchaseExample({
 
 	const segments: Seg[] = [
 		{
-			label: "To the creator",
+			label: "To the Creator",
 			desc: "what the seller receives — Anthers takes nothing",
 			amount: creator,
 			bar: "bg-primary",
 			dot: "bg-primary",
 		},
 		{
-			label: "Card processing",
+			label: "Card Processing",
 			desc: "paid to the payment processor, at cost",
 			amount: card,
 			bar: "bg-base-content/15",
 			dot: "bg-base-content/20",
 		},
 		{
-			label: "Sales tax",
+			label: "Sales Tax",
 			// The real rate varies by location and is calculated at checkout — this is the
 			// illustrative average, named as one in the tooltip.
 			desc: (

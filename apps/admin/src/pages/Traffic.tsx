@@ -217,7 +217,7 @@ export default function Traffic() {
 			</div>
 
 			<div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-				<StatCard title="Raw retention" value="30 days" sub="Then aggregated, raw rows deleted" />
+				<StatCard title="Raw Retention" value="30 days" sub="Then aggregated, raw rows deleted" />
 				<StatCard title="Identity" value="None" sub="Session id only, dying with the tab" />
 				<StatCard title="Impressions" value="Own tables" sub="Never on attention_events" />
 			</div>

@@ -1742,7 +1742,7 @@ function OwnerAccessChipEditor({
 			{open && (
 				<dialog ref={dialog} className="modal" onClose={() => setOpen(false)}>
 					<div className="modal-box max-w-2xl">
-						<h3 className="text-lg font-semibold">Who can open this Work</h3>
+						<h3 className="text-lg font-semibold">Who Can Open This Work</h3>
 						<p className="mt-1 text-xs text-base-content/60">
 							The Access table decides who pays what. The chip above answers from these rows: Public
 							Access is Everyone at $0.

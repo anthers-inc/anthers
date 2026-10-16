@@ -123,14 +123,14 @@ export const BADGE_SHAPES: BadgeShape[] = [
 	},
 	{
 		id: "triangle-down",
-		label: "Inverted triangle",
+		label: "Inverted Triangle",
 		path: "M8 3h84a6 6 0 0 1 5 9l-42 83a6 6 0 0 1-10 0L3 12a6 6 0 0 1 5-9Z",
 		emblemBox: { x: 34, y: 12, size: 32 },
 		artBox: { x: 20, y: 15, size: 60 },
 	},
 	{
 		id: "rounded",
-		label: "Rounded square",
+		label: "Rounded Square",
 		path: "M26 6h48a20 20 0 0 1 20 20v48a20 20 0 0 1-20 20H26A20 20 0 0 1 6 74V26A20 20 0 0 1 26 6Z",
 		emblemBox: { x: 24, y: 24, size: 52 },
 		artBox: { x: 16, y: 16, size: 68 },
@@ -229,19 +229,19 @@ export const BADGE_COLORS: BadgeColor[] = [
 export const BADGE_PERK_KINDS = [
 	{
 		id: "physical_good",
-		label: "A physical good",
+		label: "A Physical Good",
 		friendly: "Something you ship to supporters — a print, a zine, a sticker sheet.",
 		taxCode: "txcd_99999999",
 	},
 	{
 		id: "service",
-		label: "A service",
+		label: "A Service",
 		friendly: "Something you do for supporters — feedback on a track, a lesson, a commission slot.",
 		taxCode: "txcd_20030000",
 	},
 	{
 		id: "community",
-		label: "Community access",
+		label: "Community Access",
 		friendly: "A private community — a Discord server, a members' chat, a community-only stream.",
 		taxCode: "txcd_20030000",
 	},
