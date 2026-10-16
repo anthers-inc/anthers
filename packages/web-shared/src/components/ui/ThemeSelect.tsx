@@ -55,7 +55,11 @@ export default function ThemeSelect({ className = "" }: { className?: string }) 
 			>
 				<SwatchIcon className="w-5 h-5" />
 			</button>
-			<ul className="menu menu-sm dropdown-content z-50 mt-1 w-36 p-2 shadow bg-base-200 rounded-box">
+			<ul className="menu menu-sm dropdown-content z-50 mt-1 w-36 border border-base-content/10 p-2 shadow bg-base-200 rounded-box">
+				{/* The border: base-200 sits only two steps above the cream page it floats
+				    over, so the panel's edge can dissolve at light themes (Parker,
+				    2026-10-16) — the shadow alone doesn't state the box the way this
+				    hairline does. */}
 				{THEME_GROUPS.map((group) => (
 					<Fragment key={group}>
 						<li className="menu-title px-2 pb-0.5 pt-2">
