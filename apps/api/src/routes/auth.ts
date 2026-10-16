@@ -20,6 +20,7 @@ import {
 import { requireAuth } from "../middleware/auth.js";
 import { bearerToken } from "../middleware/bearer.js";
 import { invalidBody } from "../middleware/validate.js";
+import { allowedOrigins } from "../origins.js";
 import {
 	authorizeDesktopAuth,
 	cleanupDesktopAuthRequests,
@@ -58,6 +59,7 @@ import {
 } from "../services/pending-signups.js";
 import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 import { issueSignupChallenge, spendSignupChallenge } from "../services/signup-challenges.js";
+import type { CodeFailure } from "../services/signup-codes.js";
 import {
 	burnCodeWork,
 	checkSignupCode,
@@ -163,16 +165,31 @@ const signupIdentitySchema = z.object({
 	hostedHandle: z.string().min(1).max(300),
 });
 
+/**
+ * Six characters from the code alphabet, case-insensitively.
+ *
+ * Loose on purpose — the exact alphabet is `services/signup-codes.ts`'s business and
+ * a stricter regex here would leak it into the 400s, telling an attacker which
+ * symbols are worth trying. This only rejects a shape that cannot be a code at all.
+ *
+ * Every spender of an emailed code validates with this one const, so a shape change
+ * lands on all of the ceremony's doors together.
+ */
+/**
+ * Six characters from the code alphabet, case-insensitively.
+ *
+ * Loose on purpose — the exact alphabet is `services/signup-codes.ts`'s business and
+ * a stricter regex here would leak it into the 400s, telling an attacker which
+ * symbols are worth trying. This only rejects a shape that cannot be a code at all.
+ *
+ * Every spender of an emailed code validates with this one const, so a shape change
+ * lands on all of the ceremony's doors together.
+ */
+const sixCharacterCode = z.string().trim().length(6);
+
 const emailCodeVerifySchema = z.object({
 	email: z.string().email().max(254),
-	/**
-	 * Six characters from the code alphabet, case-insensitively.
-	 *
-	 * Loose on purpose — the exact alphabet is `services/signup-codes.ts`'s business and
-	 * a stricter regex here would leak it into the 400s, telling an attacker which
-	 * symbols are worth trying. This only rejects a shape that cannot be a code at all.
-	 */
-	code: z.string().trim().length(6),
+	code: sixCharacterCode,
 });
 
 /**
@@ -192,8 +209,29 @@ const signInStartSchema = z
 	.or(z.object({ handle: z.string().trim().min(1).max(253) }));
 
 const signInVerifySchema = z
-	.object({ email: z.string().email().max(254), code: z.string().trim().length(6) })
-	.or(z.object({ handle: z.string().trim().min(1).max(253), code: z.string().trim().length(6) }));
+	.object({ email: z.string().email().max(254), code: sixCharacterCode })
+	.or(z.object({ handle: z.string().trim().min(1).max(253), code: sixCharacterCode }));
+
+/**
+ * The one failure response every spender of an emailed code returns, wherever the
+ * code is spent — signup, sign-in and the desktop app's in-app verify alike.
+ * Distinguishing "no code for this address" from "wrong code" would confirm
+ * registration to anyone who asked, which is the leak `/signup/start` is careful to
+ * avoid; closing it there and reopening it anywhere else would be worse than never
+ * closing it, so all of the ceremony's doors answer alike by construction.
+ */
+function emailedCodeRefusal(c: Context, result: { ok: false; reason: CodeFailure }) {
+	return c.json(
+		{
+			error:
+				result.reason === "too_many_attempts"
+					? "Too many attempts. Ask for a new code."
+					: "That code didn't work. Check it, or ask for a new one.",
+			reason: result.reason,
+		},
+		result.reason === "too_many_attempts" ? 429 : 400,
+	);
+}
 
 /**
  * The only claim onboarding makes. `acceptTerms` must be literally `true` — the schema
@@ -230,6 +268,31 @@ const desktopExchangeSchema = z.object({
 	code: hexToken,
 	verifier: hexToken,
 });
+
+/**
+ * The desktop app's in-app emailed-code sign-in: the person types the code their
+ * mailbox received straight into the app, and no browser round trip happens. The
+ * contact shape is `/signin/start`'s exactly — typed address, or a hosted handle the
+ * route resolves to the account's own mailbox — because this desktop door is the same
+ * ceremony on the same tables; only who calls it and what success means differ.
+ */
+const desktopEmailStartSchema = z
+	.object({ challenge: hexToken, email: z.string().email().max(254) })
+	.or(z.object({ challenge: hexToken, handle: z.string().trim().min(1).max(253) }));
+
+const desktopEmailVerifySchema = z
+	.object({
+		challenge: hexToken,
+		email: z.string().email().max(254),
+		code: sixCharacterCode,
+	})
+	.or(
+		z.object({
+			challenge: hexToken,
+			handle: z.string().trim().min(1).max(253),
+			code: sixCharacterCode,
+		}),
+	);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -694,23 +757,7 @@ const authRoutes = new Hono()
 		if (!limited.ok) return limitResponse(limited);
 
 		const result = await checkSignupCode(email, code);
-		if (!result.ok) {
-			// One message for every failure. Distinguishing "no code for this address"
-			// from "wrong code" would confirm registration to anyone who asked, which is
-			// the leak `/signup/start` is careful to avoid — closing it there and
-			// reopening it here would be worse than never closing it.
-			const status = result.reason === "too_many_attempts" ? 429 : 400;
-			return c.json(
-				{
-					error:
-						result.reason === "too_many_attempts"
-							? "Too many attempts. Ask for a new code."
-							: "That code didn't work. Check it, or ask for a new one.",
-					reason: result.reason,
-				},
-				status,
-			);
-		}
+		if (!result.ok) return emailedCodeRefusal(c, result);
 
 		const minted = await mintFromProvedAddress(
 			c,
@@ -863,21 +910,7 @@ const authRoutes = new Hono()
 		}
 
 		const result = await checkSignupCode(email, code);
-		if (!result.ok) {
-			// The same one message `/signup/verify` gives, for the same reason: two doors
-			// onto one code table are only as quiet as the louder of them.
-			const status = result.reason === "too_many_attempts" ? 429 : 400;
-			return c.json(
-				{
-					error:
-						result.reason === "too_many_attempts"
-							? "Too many attempts. Ask for a new code."
-							: "That code didn't work. Check it, or ask for a new one.",
-					reason: result.reason,
-				},
-				status,
-			);
-		}
+		if (!result.ok) return emailedCodeRefusal(c, result);
 
 		const [user] = await db.select().from(users).where(eq(users.email, result.email)).limit(1);
 		if (user?.suspendedAt) {
@@ -1044,10 +1077,13 @@ const authRoutes = new Hono()
 	})
 
 	// ── Desktop Enrollment ────────────────────────────────────────────────────
-	// The desktop Studio never sees a password. It opens the authorize page in the
-	// SYSTEM browser, where the creator already holds a cookie session, and one
-	// confirm click mints an independently revocable desktop token. PKCE binds the
-	// app that started the flow to the app that redeems it. See `apps/api/src/middleware/bearer.ts`.
+	// The desktop app signs in two ways and one ceremony: the in-app emailed-code
+	// pair below is the default (the person types the code from their mailbox straight
+	// into the app — the same proof the site's own signup and login accept), and the
+	// SYSTEM-browser handoff remains for Bluesky, whose OAuth cannot complete inside
+	// the app's webview. Both carry a PKCE challenge through the same steps 1 and 4,
+	// and both land in `authorizeDesktopAuth`, so the session is the same
+	// independently-revocable desktop credential either way. See `apps/api/src/middleware/bearer.ts`.
 
 	// Step 1 — the app opens the flow with only a PKCE challenge. Deliberately
 	// unauthenticated: no session exists yet and no user is implied.
@@ -1080,6 +1116,151 @@ const authRoutes = new Hono()
 
 			const code = await authorizeDesktopAuth(
 				challenge,
+				user.id,
+				c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP") ?? null,
+				c.req.header("User-Agent") ?? null,
+			);
+			if (!code) return c.json({ error: "This sign-in request has expired" }, 404);
+
+			return c.json({ code });
+		},
+	)
+
+	// Steps 3, in-app — the emailed-code method, added 2026-10-16 (Parker): sign in
+	// without leaving the app. Each route below is `/signin/*`'s own ceremony wearing a
+	// third caller: the same resolution (`signinAddressForHostedHandle`) before the
+	// issuer runs, the same code tables and throttle doors, and the same silence about
+	// whether an address has an account. Only what success means differs — the code
+	// authorizes the pending PKCE challenge instead of setting a cookie — and success
+	// calls the SAME `authorizeDesktopAuth` the browser confirm uses, so steps 1 and 4
+	// and everything downstream of the minted session are shared.
+	//
+	// Why the send route answers 404 for a stale challenge: the person typed the code
+	// into a window whose enrollment row has expired, and the only honest next step is
+	// to restart sign-in. `getPendingDesktopAuth`'s answer says nothing about any
+	// address, so the "is this person on Anthers?" silence below is unaffected — it
+	// governs what a LIVE request does, and there it holds exactly as `/signin/start`
+	// holds it.
+	.post(
+		"/desktop/email/start",
+		zValidator("json", desktopEmailStartSchema, invalidBody),
+		async (c) => {
+			const typed = c.req.valid("json");
+
+			// Origin: present-but-foreign refused, absent admitted — this route is CSRF-
+			// exempt by list, and this check is what replaces the blanket ruling. The
+			// packaged app sends no Origin at all; a cross-site forgery through a
+			// victim's browser always does. See middleware/csrf.ts's bullet above.
+			const origin = c.req.header("Origin");
+			if (origin && !allowedOrigins().includes(origin)) {
+				return c.json({ error: "CSRF validation failed" }, 403);
+			}
+
+			// The same send door `/signin/start` uses: one budget for one address-sender,
+			// and the desktop app is only a third trigger of the same mail.
+			const limited = await checkRate("auth-code-send", clientIp(c.req.raw.headers), 10, 3600);
+			if (!limited.ok) return limitResponse(limited);
+
+			const pending = await getPendingDesktopAuth(typed.challenge);
+			if (!pending) return c.json({ error: "This sign-in request has expired" }, 404);
+
+			try {
+				const email =
+					"handle" in typed ? await signinAddressForHostedHandle(typed.handle) : typed.email;
+				if (email === null) {
+					await burnCodeWork();
+				} else {
+					const issued = await issueSignInCode(email);
+					if (issued.code) {
+						// Off the response path for the same measurability reason
+						// `/signin/start` states: the answer must not time the account query.
+						void sendSignInCodeEmail(email, issued.code).catch((err) => {
+							console.error("[desktop/email/start] failed to send the code:", err);
+						});
+					}
+				}
+			} catch (err) {
+				console.error("[desktop/email/start] failed to issue a code:", err);
+			}
+
+			// The identical-body rule, intact: unknown address, throttled resend, mail
+			// outage — all answer this same body.
+			return c.json({ success: true });
+		},
+	)
+
+	// Step 3's confirmation — spend the emailed code against the pending challenge.
+	// The failure voices are /signin/verify's: one message for every wrong or missing
+	// code, suspension answered truthfully with no session minted, and a code for an
+	// address with no account creating nothing.
+	.post(
+		"/desktop/email/verify",
+		zValidator("json", desktopEmailVerifySchema, invalidBody),
+		async (c) => {
+			const typed = c.req.valid("json");
+
+			// Origin: absent admitted, present-but-foreign refused — the same shape the
+			// send half states; this route is exempt by list and this replaces the
+			// blanket ruling. The proof beyond it is possession of the emailed code,
+			// which the browser forger cannot contribute.
+			const origin = c.req.header("Origin");
+			if (origin && !allowedOrigins().includes(origin)) {
+				return c.json({ error: "CSRF validation failed" }, 403);
+			}
+
+			// The same guess door /signin/verify uses: the code service caps one code's
+			// guesses, this caps one guesser's pace across them.
+			const limited = await checkRate("auth-code-verify", clientIp(c.req.raw.headers), 20, 3600);
+			if (!limited.ok) return limitResponse(limited);
+
+			// The resolution repeats deliberately, as /signin/verify records: the client
+			// never learns the mailbox a handle-driven code is keyed on, so this route
+			// re-resolves the same way its send step did.
+			const email =
+				"handle" in typed ? await signinAddressForHostedHandle(typed.handle) : typed.email;
+			if (email === null) {
+				return c.json(
+					{
+						error: "That code didn't work. Check it, or ask for a new one.",
+						reason: "no_code",
+					},
+					400,
+				);
+			}
+
+			const result = await checkSignupCode(email, typed.code);
+			if (!result.ok) return emailedCodeRefusal(c, result);
+
+			const [user] = await db.select().from(users).where(eq(users.email, result.email)).limit(1);
+			if (user?.suspendedAt) {
+				// The holder proved the mailbox, so the suspension is told truthfully and
+				// no session is created — the same refusal /signin/verify gives.
+				return c.json(
+					{
+						error: "This account is suspended.",
+						reason: "account_suspended",
+						suspendedUntil: user.suspendedUntil?.toISOString() ?? null,
+						user: null,
+						resume: false,
+					},
+					403,
+				);
+			}
+			if (!user) {
+				// 🚨 Creates nothing, ever. No resumption handshake here either:
+				// /signin/verify hands a pending-signup row to *that browser* through a
+				// pending-signup cookie, a mechanism the desktop app has no equivalent of
+				// and must not invent. The bundled signup flow is a first-class in-app
+				// surface already, so the message's direction points somewhere real.
+				return c.json(
+					{ error: "There's no Anthers account for that address yet — sign up to create one." },
+					404,
+				);
+			}
+
+			// Success is the browser confirm's function, verbatim.
+			const code = await authorizeDesktopAuth(
+				typed.challenge,
 				user.id,
 				c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP") ?? null,
 				c.req.header("User-Agent") ?? null,
