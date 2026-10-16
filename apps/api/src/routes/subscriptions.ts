@@ -6,8 +6,7 @@
  * pick in `user_badges`, whose threshold IS the amount, read wherever it is needed
  * through `heldAnthersBadgeAmount`. What they direct at creators is a set of **Badge
  * holdings** in `user_badges` — one discrete pick per issuer per cycle, each row naming
- * the Badge whose threshold is the amount; the balance they direct from is
- * `billing_accounts.directed_budget`, written by the subscription webhook.
+ * the Badge whose threshold is the amount, written by the subscription webhook.
  *
  * There is no delivery line — delivery is free at any volume. This file also
  * serves time (attention) tracking, pool distributions, creator Badges, and access.
@@ -55,7 +54,6 @@ import {
 	cycleKeyFor,
 	cycleStart,
 	isCycleKey,
-	nextCycleKey,
 } from "@anthers/shared/billing-cycle";
 import {
 	amountMeets,
@@ -117,7 +115,6 @@ import {
 	taxCodeForBadge,
 } from "../services/billing.js";
 import { commentAncestry, rootOfAncestry } from "../services/comment-thread.js";
-import { ensureFollow } from "../services/follows.js";
 import { canBePaid } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { scanInlineUpload } from "../services/safety-scan.js";
@@ -406,25 +403,6 @@ async function ensureAccount(userId: number) {
 	return created;
 }
 
-/**
- * The directed dollars this user has this cycle — what the Badge picker draws against.
- *
- * 🚨 **Read off `billing_accounts.directed_budget`, never recomputed here.** The
- * subscription webhook is the writer (`syncSubscriptionToAccount`): what the subscription's
- * directed items add up to is Stripe-side truth about what was *paid for*, and a number
- * derived at read time from a subscription fetch would answer a request Stripe has not
- * validated and cost a round trip on every pick. The held-over rule on decreases lives in
- * that write, so every user of this figure shares one answer.
- */
-async function directedBudgetFor(userId: number): Promise<number> {
-	const [acct] = await db
-		.select({ directedBudget: billingAccounts.directedBudget })
-		.from(billingAccounts)
-		.where(eq(billingAccounts.userId, userId))
-		.limit(1);
-	return Number(acct?.directedBudget ?? 0);
-}
-
 // 🚨 A private, cookie-only `getOptionalUserId` lived here until 2026-08-28, having outlived
 // the consolidation that `middleware/auth.ts` documents as having removed it. It never read
 // the `Authorization: Bearer` header, so a packaged desktop Studio session read as signed out
@@ -645,7 +623,6 @@ const subscriptionRoutes = new Hono()
 					currentPeriodStart: null,
 					currentPeriodEnd: null,
 					canceledAt: null,
-					directedBudget: "0.00",
 				},
 				anthersSupport,
 				// Derived rather than typed as the literal "free": inside `c.json` a string
@@ -1685,20 +1662,14 @@ const subscriptionRoutes = new Hono()
 	})
 
 	// ── The user's own Badge holdings ────────────────────────────────────────
-	// What this user holds this cycle: one discrete Badge per creator. The budget is
-	// the balance the user holds this cycle to direct at creators — what the
-	// subscription's directed items add up to, which is the webhook-synced
-	// `billing_accounts.directed_budget` — and Anthers takes no cut of it. Holding a
-	// creator's Badge clears that creator's gates at the Badge's threshold and below.
+	// What this user holds this cycle: one discrete Badge per creator, written by the
+	// activation webhook from the subscription's directed items. Holding a creator's
+	// Badge clears that creator's gates at the Badge's threshold and below.
 	// (What actually reaches the creator is net of the threshold's pro-rata share of
 	// the at-cost card fee — see the discrepancy note in `distribute-pool.ts`.)
 	.get("/my-badges", requireAuth, async (c) => {
 		const user = c.get("user");
 		const cycle = c.req.query("cycle") ?? currentCycleKey();
-
-		// The Anthers creator account, so its rungs can be excluded from the directed
-		// budget's arithmetic — see `allocated` below for why.
-		const anthers = await anthersUserId();
 
 		const result = await db
 			.select({
@@ -1711,19 +1682,6 @@ const subscriptionRoutes = new Hono()
 			.innerJoin(badges, eq(badges.id, userBadges.badgeId))
 			.innerJoin(users, eq(users.id, badges.creatorId))
 			.where(and(eq(userBadges.userId, user.id), eq(userBadges.billingCycle, cycle)));
-
-		const budget = await directedBudgetFor(user.id);
-		// 🚨 **The budget is CREATOR-DIRECTED dollars, so the Anthers account's own rungs are
-		// not "allocated" against it.** `directedBudget` is written from the charge's
-		// creator-destination items (`directedSupportFromSub` filters to
-		// `creatorId !== anthersId` — every destination is a user id now, so the exclusion
-		// is by the Anthers account's id), so the money the user holds on Anthers' own
-		// ladder draws from the subscription's Anthers line and never from this budget.
-		// Summing it here would double-count the same charge and quietly shrink the picker
-		// until a mid-ladder walk ran out of "budget" the user had paid for.
-		const allocated = result
-			.filter((r) => r.badge.creatorId !== anthers)
-			.reduce((sum, r) => sum + Number(r.badge.threshold), 0);
 
 		return c.json({
 			badges: result.map((r) => ({
@@ -1741,166 +1699,8 @@ const subscriptionRoutes = new Hono()
 					displayName: r.creatorDisplayName,
 				},
 			})),
-			budget: budget.toFixed(2),
-			allocated: allocated.toFixed(2),
-			remaining: (budget - allocated).toFixed(2),
 		});
 	})
-
-	.post(
-		"/my-badges",
-		requireAuth,
-		requireVerified,
-		zValidator(
-			"json",
-			z.object({
-				/** The Badge to hold — a discrete pick, not an amount. */
-				badgeId: z.number().int().positive(),
-				cycle: z
-					.string()
-					.regex(/^\d{4}-\d{2}-01$/)
-					.optional(),
-			}),
-		),
-		async (c) => {
-			const user = c.get("user");
-			const { badgeId, cycle: requestedCycle } = c.req.valid("json");
-			const currentCycle = currentCycleKey();
-			const cycle = requestedCycle ?? currentCycle;
-
-			// Only allow editing current or next month.
-			const nextCycle = nextCycleKey(currentCycle);
-
-			if (cycle !== currentCycle && cycle !== nextCycle) {
-				return c.json({ error: "Can only pick Badges for the current or next billing cycle" }, 400);
-			}
-
-			const budget = await directedBudgetFor(user.id);
-
-			if (budget <= 0) {
-				return c.json({ error: "You have nothing to give this cycle" }, 400);
-			}
-
-			// The Anthers creator account, for the allocation check's exclusion — see the comment
-			// beside `currentAllocated` below.
-			const anthers = await anthersUserId();
-
-			// The Badge itself: its threshold is the amount this pick directs, and the
-			// route never takes a number from the request — the pick names the rung.
-			const [badge] = await db.select().from(badges).where(eq(badges.id, badgeId)).limit(1);
-			if (!badge) return c.json({ error: "No such Badge" }, 404);
-			if (badge.creatorId === user.id) {
-				return c.json({ error: "You cannot hold your own Badge" }, 400);
-			}
-			// 🚨 **Anthers' own Badges are not a directed pick.** Money on Anthers' own ladder
-			// is the subscription's Anthers line, changed where the Anthers amount is
-			// changed (signup and the dashboard's Anthers side) — routing it through the
-			// directed picker would draw it from the creator budget, which is the same
-			// conflation the allocation check excludes the Anthers account from.
-			if (badge.creatorId === anthers) {
-				return c.json(
-					{ error: "Anthers' own Badges are chosen with your Anthers amount, not a creator pick" },
-					400,
-				);
-			}
-			const amountNum = Number(badge.threshold);
-
-			// Current month: a holding locks — a user may move up this cycle, never down.
-			if (cycle === currentCycle) {
-				const [existing] = await db
-					.select({ threshold: badges.threshold })
-					.from(userBadges)
-					.innerJoin(badges, eq(badges.id, userBadges.badgeId))
-					.where(
-						and(
-							eq(userBadges.userId, user.id),
-							eq(badges.creatorId, badge.creatorId),
-							eq(userBadges.billingCycle, cycle),
-						),
-					)
-					.limit(1);
-
-				if (existing && amountNum < Number(existing.threshold)) {
-					return c.json(
-						{ error: "Cannot reduce what you have already given in this billing cycle" },
-						400,
-					);
-				}
-			}
-
-			// Check total allocated (excluding this creator's holding) against the budget.
-			// 🚨 **The Anthers account's own rungs are not "allocated" against the directed
-			// budget** — the same exclusion `/my-badges` GET applies, for the same reason:
-			// the budget is the charge's creator-destination items, and money held on
-			// Anthers' own ladder draws from the subscription's Anthers line. Counting it
-			// here would let an Anthers Badge shrink a budget the user paid separately for.
-			const [currentAllocated] = await db
-				.select({
-					total: sql<string>`COALESCE(SUM(${badges.threshold}), 0)`,
-				})
-				.from(userBadges)
-				.innerJoin(badges, eq(badges.id, userBadges.badgeId))
-				.where(
-					and(
-						eq(userBadges.userId, user.id),
-						eq(userBadges.billingCycle, cycle),
-						sql`${badges.creatorId} != ${badge.creatorId}`,
-						sql`${badges.creatorId} != ${anthers}`,
-					),
-				);
-
-			const otherAllocated = Number(currentAllocated.total);
-			if (otherAllocated + amountNum > budget) {
-				return c.json({ error: "Exceeds what you are giving this cycle" }, 400);
-			}
-
-			// 🚨 **One holding per issuer per cycle — the pick REPLACES the issuer's other
-			// rungs rather than sitting beside them.** The "cannot reduce" check above
-			// already assumes the shape (a user raising $3 → $6 has ONE holding, at $6),
-			// and the access/distribution reads enforce it defensively with MAX(threshold).
-			// An insert that left the old rung beside the new one would overstate the
-			// allocation against the cycle's budget — the e2e walk hit exactly that, ending
-			// a $3 → $21 climb holding $39 of rungs — while reading right only because
-			// every user takes the max. Delete the issuer's other holdings for this
-			// cycle, then upsert the picked one.
-			await db
-				.delete(userBadges)
-				.where(
-					and(
-						eq(userBadges.userId, user.id),
-						eq(userBadges.billingCycle, cycle),
-						ne(userBadges.badgeId, badgeId),
-						sql`${userBadges.badgeId} IN (SELECT id FROM badges WHERE creator_id = ${badge.creatorId})`,
-					),
-				);
-
-			// Upsert the holding. The unique key is (user, badge, cycle), so a repeated pick
-			// of the same rung is a no-op.
-			await db
-				.insert(userBadges)
-				.values({
-					userId: user.id,
-					badgeId,
-					billingCycle: cycle,
-				})
-				.onConflictDoUpdate({
-					target: [userBadges.userId, userBadges.badgeId, userBadges.billingCycle],
-					set: { updatedAt: new Date() },
-				});
-
-			// ⭐ **Subscribing to a creator's Badge follows the creator** (Parker,
-			// 2026-10-11) — the automatic consequence purchasing a Work has (it saves). The
-			// webhook arm of the same rule lives in `applyDirectedSupport`; the ceremony,
-			// the refusal semantics and the cancellation decision live in
-			// `services/follows.ts`'s docblock. The guards above have already 400'd a
-			// self-holding and Anthers' own ladder, so what reaches here is always a real
-			// creator; the refused cases (a block, an ungranted repository) are silent —
-			// the pick is what the account did, and the follow rides along when it can.
-			await ensureFollow(user.id, badge.creatorId);
-
-			return c.json({ success: true });
-		},
-	)
 
 	// ── Creator Badges — the ladder a creator defines ─────────────────────────
 	.get("/badges", async (c) => {

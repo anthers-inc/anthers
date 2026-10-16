@@ -136,9 +136,9 @@ describe("Stripe's minimum charge floors what a creator can set", () => {
 
 	// ── What must stay unfloored ──────────────────────────────────────────────
 
-	// ⭐ The directed-support allocation test that lived here is retired by the
-	// discrete-picks decision: `POST /my-badges` takes a Badge id rather than an amount,
-	// so there is no amount on the route for a floor to wrongly reject. The property it
-	// guarded (allocating an already-paid balance charges nothing, so no Stripe minimum
-	// applies) has no amount left to test.
+	// ⭐ The directed-support allocation test that lived here is retired twice over: the
+	// discrete-picks decision took the amount off the pick (a holding names a Badge,
+	// whose threshold the creator already floored), and the pick-within-budget route
+	// went with the retired allocation model entirely — holdings come from the
+	// subscription's items. No amount is left anywhere for a floor to wrongly reject.
 });

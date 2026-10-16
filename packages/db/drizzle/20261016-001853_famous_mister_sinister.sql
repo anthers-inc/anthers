@@ -1,0 +1,1 @@
+ALTER TABLE "billing_accounts" DROP COLUMN "directed_budget";
