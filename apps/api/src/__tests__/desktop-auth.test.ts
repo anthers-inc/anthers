@@ -368,6 +368,15 @@ describe("Desktop auth", () => {
 // deletable by the same shape no matter how far a failing test got.
 const MAIL_PREFIX = `deskmail_${id}`;
 
+/** The spend routes need a non-null code; a suite whose issue came back throttled should fail loudly, not typecheck-loosely. */
+function issuedCodeFor(email: string) {
+	return issueSignInCode(email).then((issued) => {
+		if (!issued.code)
+			throw new Error(`unexpected issued-code absence for ${email}: throttled=${issued.throttled}`);
+		return issued.code;
+	});
+}
+
 describe("Desktop auth — the emailed-code method (in-app sign-in)", () => {
 	afterAll(async () => {
 		await db.delete(signupCodes).where(like(signupCodes.email, `${MAIL_PREFIX}-%`));
@@ -415,8 +424,8 @@ describe("Desktop auth — the emailed-code method (in-app sign-in)", () => {
 		// runner), and the code service throttles per-address resends, so the spend is
 		// driven with a directly-issued code — exactly how the sign-in ceremony's
 		// suite drives `/signin/verify`. The send semantics have their own test below.
-		const issued = await issueSignInCode(email);
-		const verified = await verifyEmailCode(email, challenge, issued.code);
+		const issued = await issuedCodeFor(email);
+		const verified = await verifyEmailCode(email, challenge, issued);
 		expect(verified.status).toBe(200);
 		const { code } = (await verified.json()) as { code: string };
 
@@ -501,8 +510,8 @@ describe("Desktop auth — the emailed-code method (in-app sign-in)", () => {
 			.where(eq(users.id, account.userId));
 
 		const { challenge } = await startEnrollment();
-		const issued = await issueSignInCode(email);
-		const res = await verifyEmailCode(email, challenge, issued.code);
+		const issued = await issuedCodeFor(email);
+		const res = await verifyEmailCode(email, challenge, issued);
 
 		expect(res.status).toBe(403);
 		const body = (await res.json()) as { reason: string; suspendedUntil: string | null };
