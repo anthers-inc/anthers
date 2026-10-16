@@ -114,6 +114,7 @@ import StickerBar from "../post/StickerBar";
 import ProjectPricing from "../project/ProjectPricing";
 import WorkReviews from "../project/WorkReviews";
 import { EditingBanner, InlineField } from "./Editing";
+import LyricsCard from "./LyricsCard";
 import MediaStatusCard from "./MediaStatusCard";
 import ShareLinkButton from "./ShareLinkButton";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
@@ -124,7 +125,6 @@ import {
 	WORK_DESCRIPTION_CLASS,
 	WORK_DETAILS_HEADING_CLASS,
 	WORK_LYRICS_CLASS,
-	WORK_LYRICS_HEADING_CLASS,
 	WorkByline,
 	WorkColumn,
 	WorkCredits,
@@ -728,12 +728,7 @@ export default function OwnerWorkEditor({
 			saved={lyrics}
 			renderRead={() =>
 				lyrics ? (
-					<section className={WORK_LYRICS_CLASS}>
-						<h2 className={WORK_LYRICS_HEADING_CLASS}>Lyrics</h2>
-						<p className="whitespace-pre-wrap text-sm leading-relaxed text-base-content/85">
-							{lyrics}
-						</p>
-					</section>
+					<LyricsCard lyrics={lyrics} />
 				) : (
 					<section className={`${WORK_LYRICS_CLASS} text-sm text-base-content/40`}>
 						No lyrics written yet.
