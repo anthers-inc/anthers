@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The Resources marketing page — the Meadow-styled hub for everything that shows
-// our work: explainers (the mechanism, drawn), calculators (run it yourself) and
-// comparisons (how we stack up). The page is wrapped in the shared <MeadowDecor>
-// (pollen + woven side vines) at the route level, so this file styles content only.
-//
-// Two axes, kept deliberately separate — the section says what *format* a resource
-// is, the card's tag says what *subject* it covers. Don't tag a card with its own
-// section name; that collapses the axes and is what made this page read as a pile
-// of posts.
+// our work, organized by audience rather than by format (the revamp's ruling): one
+// section apiece for the two people the money questions belong to — For Users, For
+// Creators — one for the organization's own money (Inside Anthers), and the
+// comparisons, which both audiences read, in a strip of their own. Each of the three
+// categories opens with its flagship resource.
 //
 // ⚠️ **A resource builds against the shared model, or it does not exist.** The
 // three /demo-* pages were deleted on 2026-08-30 because each modeled the
@@ -16,12 +13,17 @@
 // every generated figure on the site stayed right. The same rule took down the
 // revenue drawing on 2026-10-15 from the other side: its figures were generated,
 // but they were the financial plan's *projections*, and projections this early and
-// this in flux make a public page muddier rather than more transparent. What
-// replaced it is the opposite of a projection: the mechanism page — how a monthly
-// subscription's money splits and how a purchase passes through, in percentages —
-// which is the one card the Explainers section holds. The landing as a whole is
-// still being redesigned (see the vault's "Revisit the public-facing Resources as
-// a whole, a larger revamp").
+// this in flux make a public page muddier rather than more transparent.
+//
+// 🚨 **Nothing unbuilt is described in the present tense here.** The creator
+// category's flagship — one financials calculator joining the explanation to the
+// numbers — is its own build (the board task "Build the creator financials
+// calculator, absorbing the monetization and storage pages"), so this page stages
+// the two incumbent calculators it will absorb until it lands, and says nothing on
+// the public page about the one that is coming.
+//
+// The page is wrapped in the shared <MeadowDecor> (pollen + woven side vines) at
+// the route level, so this file styles content only.
 
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -39,55 +41,25 @@ import {
 
 const serif = { fontFamily: FONTS.fraunces };
 
-/** The drawn resources: they explain rather than compute, and they build against
- * the shared model — the rule out of the demos' deletion (see the file's header). */
-const EXPLAINERS: ResourceCard[] = [
-	{
-		to: "/resources/how-money-moves",
-		title: "How the Money Moves",
-		blurb:
-			"The whole flow, drawn to the percentage: what a monthly subscription to Anthers splits into, what a subscription to a creator and a purchase pass through with, and what funds the charitable programs. Right now, with no projections — hold it to the arithmetic.",
-		tag: "Money",
-		icon: BanknotesIcon,
-	},
-];
-
 interface ResourceCard {
 	to: string;
 	title: string;
 	blurb: string;
-	/** The card's *subject*, never its format — the section heading carries that. */
+	/** The card's *subject*, never its audience — the section heading carries that. */
 	tag: string;
 	icon: typeof CircleStackIcon;
 }
 
-/** The interactive tools — put numbers in, get numbers out. */
-const CALCULATORS: ResourceCard[] = [
-	{
-		to: "/resources/media-month",
-		title: "Your Media Month",
-		blurb:
-			"The spend calculator: build your month out of what you already pay — subscriptions, purchases, pledges — and see what each line pays out today (with the gaps standing where nothing is published) against the same money on Anthers, computed exactly.",
-		tag: "Money",
-		icon: BanknotesIcon,
-	},
-	{
-		to: "/resources/video-storage",
-		title: "Video Storage Calculator",
-		blurb:
-			"What it costs to store a source video plus its full AV1 transcode ladder, per source-hour and across a whole library.",
-		tag: "Infrastructure",
-		icon: CircleStackIcon,
-	},
-	{
-		to: "/resources/creator-monetization",
-		title: "Creator Monetization Calculator",
-		blurb:
-			"How time with a creator becomes revenue under the Time Pool + support model — from one user up to a creator's monthly earnings.",
-		tag: "Economics",
-		icon: BanknotesIcon,
-	},
-];
+/** The user category's flagship: the reader's own spending, compared, which the
+ * wiki's *What It Costs, Against What You Pay Now* links to from its page. */
+const USER_FLAGSHIP: ResourceCard = {
+	to: "/resources/media-month",
+	title: "Your Media Month",
+	blurb:
+		"The spend calculator: build your month out of what you already pay — subscriptions, purchases, pledges — and see what each line pays out today (with the gaps standing where nothing is published) against the same money on Anthers, computed exactly.",
+	tag: "Money",
+	icon: BanknotesIcon,
+};
 
 /**
  * Head-to-heads. The two /compare/* pages previously surfaced only in the footer,
@@ -120,6 +92,38 @@ const COMPARISONS: ResourceCard[] = [
 	},
 ];
 
+/** The two creator calculators, staged as this category's cards until their flagship —
+ * one financials calculator absorbing both — replaces them (see the file header). */
+const CREATOR_RESOURCES: ResourceCard[] = [
+	{
+		to: "/resources/creator-monetization",
+		title: "Creator Monetization Calculator",
+		blurb:
+			"How time with a creator becomes revenue under the Time Pool + support model — from one user up to a creator's monthly earnings.",
+		tag: "Economics",
+		icon: BanknotesIcon,
+	},
+	{
+		to: "/resources/video-storage",
+		title: "Video Storage Calculator",
+		blurb:
+			"What it costs to store a source video plus its full AV1 transcode ladder, per source-hour and across a whole library.",
+		tag: "Infrastructure",
+		icon: CircleStackIcon,
+	},
+];
+
+/** The Anthers category's flagship: the mechanism, drawn — the one page whose
+ * subject is the organization's own money, no projections. */
+const ANOTHERS_FLAGSHIP: ResourceCard = {
+	to: "/resources/how-money-moves",
+	title: "How the Money Moves",
+	blurb:
+		"The whole flow, drawn to the percentage: what a monthly subscription to Anthers splits into, what a subscription to a creator and a purchase pass through with, and what funds the charitable programs. Right now, with no projections — hold it to the arithmetic.",
+	tag: "Money",
+	icon: BanknotesIcon,
+};
+
 export default function ResourcesPage() {
 	return (
 		<div>
@@ -140,19 +144,45 @@ export default function ResourcesPage() {
 					</Reveal>
 					<Reveal delay={150}>
 						<Lede>
-							Everything behind Anthers, in the open — what it costs to host the work, how time with
-							a creator turns into money that reaches them, and how that compares to the platforms
-							you are already using. No login, no sign-up: run the numbers yourself, and hold us to
-							them.
+							Everything behind Anthers, in the open — what your money does as a user and as a
+							creator, and where the organization's own share of it goes. No login, no sign-up: run
+							the numbers yourself, and hold us to them.
 						</Lede>
 					</Reveal>
 				</div>
 			</header>
 
-			{/* Explainers — the mechanism, drawn; plain between the tinted hero and the calculators. */}
+			{/* For Users — the reader's own money, flagship first. */}
 			<Section>
 				<Reveal>
-					<Eyebrow>Explainers</Eyebrow>
+					<Eyebrow>For Users</Eyebrow>
+					<H2>Follow your own money</H2>
+					<Lede>
+						What you already pay for the work you watch, hear, read and play — laid out line by
+						line, against what the same money would do on Anthers.
+					</Lede>
+				</Reveal>
+				<FlagshipCard r={USER_FLAGSHIP} />
+			</Section>
+
+			{/* For Creators — the numbers to run before bringing work here. The two
+			    incumbent calculators stage this category until their flagship absorbs them. */}
+			<Section tint>
+				<Reveal>
+					<Eyebrow>For Creators</Eyebrow>
+					<H2>What working here pays</H2>
+					<Lede>
+						How an audience's support and purchases become money that reaches you, and what storing
+						your catalog costs. Run the numbers against your own situation.
+					</Lede>
+				</Reveal>
+				<ResourceGrid cards={CREATOR_RESOURCES} />
+			</Section>
+
+			{/* Inside Anthers — the mechanism, drawn; the organization's own money. */}
+			<Section>
+				<Reveal>
+					<Eyebrow>Inside Anthers</Eyebrow>
 					<H2>The mechanism, drawn</H2>
 					<Lede>
 						How money actually moves on Anthers today — where a subscription goes, what a purchase
@@ -160,24 +190,11 @@ export default function ResourcesPage() {
 						math the checkout runs.
 					</Lede>
 				</Reveal>
-				<ResourceGrid cards={EXPLAINERS} />
+				<FlagshipCard r={ANOTHERS_FLAGSHIP} />
 			</Section>
 
-			{/* Calculators */}
+			{/* Comparisons — both audiences read these, so they keep a strip of their own. */}
 			<Section tint>
-				<Reveal>
-					<Eyebrow>Calculators</Eyebrow>
-					<H2>Run the numbers yourself</H2>
-					<Lede>
-						Open planning tools with our real rates wired in. Change the assumptions and watch the
-						totals move — every figure on this site comes out of the same math.
-					</Lede>
-				</Reveal>
-				<ResourceGrid cards={CALCULATORS} />
-			</Section>
-
-			{/* Comparisons */}
-			<Section>
 				<Reveal>
 					<Eyebrow>Comparisons</Eyebrow>
 					<H2>How we stack up</H2>
@@ -190,7 +207,7 @@ export default function ResourcesPage() {
 			</Section>
 
 			{/* The way onward when the tools above don't have the answer. */}
-			<Section tint>
+			<Section>
 				<Reveal>
 					<Eyebrow>Still looking?</Eyebrow>
 					<H2>Not finding what you need?</H2>
@@ -215,7 +232,7 @@ export default function ResourcesPage() {
 	);
 }
 
-/** The card grid shared by every section — staggered reveal, equal-height tiles. */
+/** The card grid shared by the multi-card sections — staggered reveal, equal-height tiles. */
 function ResourceGrid({ cards }: { cards: ResourceCard[] }) {
 	return (
 		<div className="mt-12 grid grid-cols-1 gap-6 text-left sm:grid-cols-2 lg:grid-cols-3">
@@ -228,7 +245,7 @@ function ResourceGrid({ cards }: { cards: ResourceCard[] }) {
 	);
 }
 
-/** A single resource card — a clickable Meadow rounded card. */
+/** A resource card in a grid — a clickable Meadow rounded card. */
 function ResourceTile({ r }: { r: ResourceCard }) {
 	const Icon = r.icon;
 	return (
@@ -254,5 +271,41 @@ function ResourceTile({ r }: { r: ResourceCard }) {
 				</span>
 			</Card>
 		</Link>
+	);
+}
+
+/** The full-width, primary-accented card a category opens with — the section's
+ * flagship resource, carrying its blurb at a larger size than a grid tile. */
+function FlagshipCard({ r }: { r: ResourceCard }) {
+	const Icon = r.icon;
+	return (
+		<Reveal>
+			<Link to={r.to} className="group mx-auto mt-12 block max-w-4xl text-left">
+				<Card className="border-primary/30 bg-primary/[0.04] transition-colors hover:border-primary/50">
+					<div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-7">
+						<span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+							<Icon className="h-6 w-6" />
+						</span>
+						<div className="flex-1">
+							<div className="flex flex-wrap items-center gap-3">
+								<h3
+									style={serif}
+									className="text-xl font-medium transition-colors group-hover:text-primary sm:text-2xl"
+								>
+									{r.title}
+								</h3>
+								<span className="rounded-full bg-base-200 px-3 py-1 text-xs font-medium text-base-content/55">
+									{r.tag}
+								</span>
+							</div>
+							<p className="mt-2 text-sm leading-relaxed text-base-content/65">{r.blurb}</p>
+						</div>
+						<span className="hidden items-center gap-1 text-sm font-medium text-primary sm:inline-flex">
+							Open <ArrowRightIcon className="h-4 w-4" />
+						</span>
+					</div>
+				</Card>
+			</Link>
+		</Reveal>
 	);
 }
