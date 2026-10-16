@@ -6,10 +6,10 @@
  * explicit `POST /users/:handle/follow`, and the automatic consequence of an act the
  * account already chose — **subscribing to a creator's Badge follows the creator**
  * (Parker, 2026-10-11), which is the mirror of purchasing a Work saving it
- * (`saveOnPurchase` in `services/library.ts`). The Badge holding is written at two
- * places — the picker's route and the webhook's `applyDirectedSupport` — and both call
- * into here, so the ceremony (block refusal, repository permission, record sync, the
- * new-follower notification) can never diverge between the doors.
+ * (`saveOnPurchase` in `services/library.ts`). The Badge holding is written by the
+ * webhook's `applyDirectedSupport`, which calls into here, so the ceremony (block
+ * refusal, repository permission, record sync, the new-follower notification) has one
+ * automatic door and cannot diverge between it and the explicit route.
  *
  * 🚨 **Every refused case is silent to the automatic doors.** Money and access are the
  * pick's own consequence; the follow rides along when it can. A pair with a block

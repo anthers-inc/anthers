@@ -32,7 +32,7 @@ import {
 	NoSymbolIcon,
 	PencilIcon,
 } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import PostCard from "../components/cards/PostCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import WorkCard from "../components/cards/WorkCard";
@@ -50,144 +50,6 @@ type Tab = "all" | "posts" | "games" | "videos" | "audio" | "writing" | "badges"
 function badgeNameFor(id: string): string {
 	if (id === "none" || id === "free" || !id) return "Free";
 	return id.charAt(0).toUpperCase() + id.slice(1);
-}
-
-/* ------------------------------------------------------------------ */
-/*  Support this creator                                              */
-/* ------------------------------------------------------------------ */
-
-/**
- * Back this creator — the entry point where the intent actually forms.
- *
- * The subscription dashboard can only list creators it already knows about (settled pool
- * distributions unioned with holdings), so a creator you just followed can't be reached
- * from there at all. This is the door for that case.
- *
- * Under the Badge model the pick is a RUNG, never a typed amount: holding a creator's
- * Badge is what a subscription is, and the ladder below this card is the whole of what
- * can be held. One API rule shapes the control rather than being discovered as an error:
- * holdings RATCHET within a cycle (a lower rung is rejected), so a rung at or below what
- * you already hold this cycle is not offered.
- */
-function GiveBadgeCard({
-	creatorName,
-	rungs,
-	heldThreshold,
-	onGiven,
-}: {
-	creatorName: string;
-	/** The creator's ladder, threshold-ascending. */
-	rungs: CreatorBadge[];
-	/** The threshold currently held this cycle, as a money string ("0.00" = nothing). */
-	heldThreshold: string;
-	onGiven: () => void | Promise<void>;
-}) {
-	const held = supportAmount(heldThreshold);
-	const [budget, setBudget] = useState<number | null>(null);
-	const [remaining, setRemaining] = useState(0);
-	const [pending, setPending] = useState<number | null>(null);
-	const [saving, setSaving] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-
-	/** The user's directed budget and what's still unallocated across all creators. */
-	const loadBudget = useCallback(async () => {
-		const res = await client.api.subscriptions["my-badges"].$get();
-		if (!res.ok) return;
-		const data = await res.json();
-		setBudget(Number(data.budget));
-		setRemaining(Number(data.remaining));
-	}, []);
-
-	useEffect(() => {
-		loadBudget();
-	}, [loadBudget]);
-
-	// Only Free has nothing to direct, and the tab's upgrade prompt already makes that
-	// case — rendering our own "give" CTA here would just duplicate it.
-	if (budget === null || budget <= 0) return null;
-
-	// A rung can be held when it is affordable with what's left, and must clear the
-	// ratchet: the cycle's holding never goes down.
-	const reachable = rungs.filter(
-		(r) => Number(r.threshold) > held && Number(r.threshold) <= held + remaining,
-	);
-	const pick = pending;
-	const chosen = rungs.find((r) => Number(r.threshold) === pick) ?? null;
-
-	const give = async () => {
-		if (chosen === null) return;
-		setSaving(true);
-		setError(null);
-		try {
-			const res = await client.api.subscriptions["my-badges"].$post({
-				json: { badgeId: chosen.id },
-			});
-			if (!res.ok) {
-				const body = (await res.json()) as { error?: string };
-				throw new Error(body.error ?? "Could not update your support.");
-			}
-			// Both halves have to move: `onGiven` re-reads the ladder and the holding
-			// (so a tier flips to Unlocked), and `loadBudget` re-reads what's left to give.
-			// Refreshing only the ladder leaves the budget line stating a total the user
-			// has already spent.
-			await Promise.all([onGiven(), loadBudget()]);
-			setPending(null);
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Could not update your support.");
-		} finally {
-			setSaving(false);
-		}
-	};
-
-	if (reachable.length === 0) {
-		return null;
-	}
-
-	return (
-		<div className="card bg-base-200">
-			<div className="card-body py-4 px-5 gap-3">
-				<div>
-					<h4 className="font-medium">Hold one of {creatorName}&rsquo;s Badges</h4>
-					<p className="text-xs text-base-content/50 mt-0.5">
-						Badges are the monthly subscription — a discrete rung, not an amount. You have $
-						{remaining.toFixed(2)} of ${budget.toFixed(2)} left to direct this month.
-					</p>
-				</div>
-
-				<div className="flex flex-wrap gap-2">
-					{reachable.map((rung) => (
-						<button
-							type="button"
-							key={rung.id}
-							aria-pressed={pending === Number(rung.threshold)}
-							className={`btn btn-xs rounded-full ${pending === Number(rung.threshold) ? "btn-primary" : "btn-outline"}`}
-							onClick={() => setPending(Number(rung.threshold))}
-						>
-							{rung.label} · {amountLabel(rung.threshold)}/mo
-						</button>
-					))}
-				</div>
-
-				{held > 0 && (
-					<p className="text-xs text-base-content/50">
-						You hold {amountLabel(heldThreshold)} of {creatorName}&rsquo;s Badges this month. A rung
-						can be raised mid-month but not taken back — next month&rsquo;s is yours to redirect.
-					</p>
-				)}
-
-				{error && <p className="text-xs text-error">{error}</p>}
-
-				<button
-					type="button"
-					className="btn btn-primary btn-sm w-fit"
-					disabled={chosen === null || saving}
-					onClick={give}
-				>
-					{saving ? "Holding…" : chosen ? `Hold ${chosen.label}` : "Hold"}
-				</button>
-			</div>
-		</div>
-	);
 }
 
 /**
@@ -218,17 +80,12 @@ function BadgesTab({
 	heldBadge,
 	heldAmount,
 	creatorName,
-	canBack,
-	onGiven,
 }: {
 	rungs: CreatorBadge[];
 	unlockedBadges: number[];
 	heldBadge: string;
 	heldAmount: string;
 	creatorName: string;
-	/** Signed in, and not looking at your own profile — you can't back yourself. */
-	canBack: boolean;
-	onGiven: () => void | Promise<void>;
 }) {
 	// Every rung the ladder holds is this creator's own Badge — there is no `gateType` to
 	// filter on, and no cross-issuer rung to exclude.
@@ -271,16 +128,6 @@ function BadgesTab({
 					<p className="text-sm text-base-content/50 mb-3">
 						Badges set by {creatorName}. Hold one to unlock what sits behind it.
 					</p>
-					{canBack && (
-						<div className="mb-3">
-							<GiveBadgeCard
-								creatorName={creatorName}
-								rungs={rungs}
-								heldThreshold={heldAmount}
-								onGiven={onGiven}
-							/>
-						</div>
-					)}
 					<div className="space-y-2">
 						{rungs.map((rung) => {
 							const unlocked = unlockedSet.has(rung.id);
@@ -424,18 +271,6 @@ export default function CreatorProfilePage() {
 	// lives. So this records a zero-duration visit (the analytics signal that someone
 	// browsed this creator's catalog) and earns nothing, mirroring ProjectPage's pattern.
 	useReportVisit({ creatorId: creator?.id ?? null });
-
-	/**
-	 * Re-read the user's standing with this creator. Holding a Badge changes which rungs
-	 * are unlocked, and the whole point of the control is watching a tier flip to Unlocked —
-	 * so the ladder has to reflect it without a reload.
-	 */
-	const refreshCreatorStatus = useCallback(async () => {
-		if (!handle) return;
-		const res = await apiFetch(`/api/subscriptions/creator-status/${handle}`, {});
-		if (!res.ok) return;
-		setCreatorStatus((await res.json()) as CreatorStatus);
-	}, [handle]);
 
 	// Edit mode state
 	const [editing, setEditing] = useState(false);
@@ -1139,8 +974,6 @@ export default function CreatorProfilePage() {
 							heldBadge={creatorStatus?.badge ?? "free"}
 							heldAmount={creatorStatus?.badgeAmount ?? "0.00"}
 							creatorName={creator.displayName || creator.handle}
-							canBack={isAuthenticated && !isOwnProfile}
-							onGiven={refreshCreatorStatus}
 						/>
 					)}
 

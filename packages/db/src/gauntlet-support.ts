@@ -13,7 +13,7 @@
  */
 import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import { and, eq, sql } from "drizzle-orm";
-import { badges, billingAccounts, db, userBadges, users } from "./index.js";
+import { badges, db, userBadges, users } from "./index.js";
 
 /** The app's billing-cycle key — UTC, via the shared helper, never a local-time read. */
 function cycleKey(): string {
@@ -78,36 +78,6 @@ export async function applyAnthersSupport(userId: number, dollars: string): Prom
 		badgeId: rung.id,
 		billingCycle: cycleKey(),
 	});
-}
-
-/**
- * The `--support-budget` hop: set the directed balance the Badge picker draws against.
- *
- * **Writes `billing_accounts.directed_budget`** — the column this split put on the
- * subscription-machinery row for exactly this balance, since the balance is
- * subscription state (what the subscription's directed items add to) riding beside the
- * period columns. **The dependency the split left:** the budget check —
- * `routes/subscriptions.ts`, `GET/POST /my-badges` — read the old accounts table's
- * directed-support column, which died with the split; the issuer pass re-pointed it at
- * `billing_accounts.directed_budget` and made the subscription webhook write it
- * (`syncSubscriptionToAccount` knows the directed total already).
- *
- * The hop carries enough of the row to stand for the webhook's write on its own: a
- * freshly created dev user has no `billing_accounts` row (the table is lazily created),
- * so the upsert is the hop, not an update behind a lookup.
- */
-export async function applySupportBudget(userId: number, dollars: string): Promise<void> {
-	await db
-		.insert(billingAccounts)
-		.values({
-			userId: userId,
-			directedBudget: dollars,
-			isActive: true,
-		})
-		.onConflictDoUpdate({
-			target: billingAccounts.userId,
-			set: { directedBudget: dollars, updatedAt: new Date() },
-		});
 }
 
 /**

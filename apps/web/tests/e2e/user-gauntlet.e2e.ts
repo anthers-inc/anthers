@@ -9,14 +9,14 @@
  * the walk's OWN instance of the fixture. This spec adds what neither can: the real app,
  * a real session, and the transitions between states.
  *
- * HYBRID MODE (the default). The support model made billing real: changing what is given
- * to Anthers and topping up the creator budget are Stripe charges with
- * webhook-driven sync — 503 without Stripe configured, and needing a running
- * `stripe listen` forwarder with it. So this spec UI-walks every transition that
- * doesn't bill (follow, comment, the giving stepper) and hops the billing facts
- * through `db:gauntlet:state` — the canonical script, the same columns the webhooks
- * would write. The observational pass (and an eventual GAUNTLET_STRIPE mode) covers
- * the real billing UI; the staircase itself is asserted identically either way.
+ * HYBRID MODE (the default). The support model made billing real: changing what a user
+ * gives — Anthers or any creator — is a Stripe charge with webhook-driven sync — 503
+ * without Stripe configured, and needing a running `stripe listen` forwarder with it.
+ * So this spec UI-walks every transition that doesn't bill (follow, comment) and hops
+ * the billing facts through `db:gauntlet:state` — the canonical script, the same
+ * columns the webhooks would write. The observational pass (and an eventual
+ * GAUNTLET_STRIPE mode) covers the real billing UI; the staircase itself is asserted
+ * identically either way.
  *
  * Serial on purpose: it is one stateful walk, not independent tests — and the walk runs
  * on its OWN fixture instance (instance B: the `walk-creator` / `walk-walker` accounts
@@ -480,27 +480,18 @@ test("rung 3 — comment on the free post", async ({ page }) => {
 	expect(errors).toEqual([]);
 });
 
-// ── The Badge ladder, through the real Badge picker ──────────────────────────
-test("rung 4 — the directed budget alone unlocks nothing", async ({ page }) => {
-	const errors = trackErrorsStrict(page, ALLOWED);
-	// Enough budget for the whole ladder. Holding budget is not holding a Badge — the
-	// staircase must still read exactly as it did before.
-	hop("--support-budget", String(BADGE_RUNGS[BADGE_RUNGS.length - 1]));
-	await expectStaircase(page, "Blossom, nothing given");
-	expect(errors).toEqual([]);
-});
+// ── The Badge ladder, placed by the harness ──────────────────────────────────
 
 /**
- * The walk holds each rung through the real Badge picker, and hops the between-rung
- * states through the fixture script.
+ * The walk places each holding through the fixture script and asserts the staircase
+ * after every transition.
  *
  * ⭐ **The Badge model made the pick discrete**: a holding names a rung, and a
- * between-rung amount is no longer expressible in the UI — the stepper the walk used
- * to fill is gone with it. So the rungs are UI-walked (pressing the rung the model
- * offers), while the BETWEEN states — which exist to prove the resolver does not
- * over-grant from a list position — are hopped through `--give`, which is the same
- * write the picker's POST would produce at the rung and the one way a between state
- * can exist at all now.
+ * between-rung amount is no longer expressible anywhere — the stepper the walk used
+ * to fill went with the retired allocation model's picker, and a holding is written
+ * when the subscription changes (signup and checkout), not by a pick inside a page.
+ * So every state is hopped through `--give`, which writes the same row shape the
+ * webhook would have.
  */
 for (const [i, seeds] of BADGE_WALK.entries()) {
 	const rungIndex = BADGE_RUNGS.indexOf(seeds as (typeof BADGE_RUNGS)[number]);
@@ -510,31 +501,13 @@ for (const [i, seeds] of BADGE_WALK.entries()) {
 	// of the ladder, where there is nothing left to stay locked.
 	const nextIndex = BADGE_RUNGS.findIndex((t) => t > seeds);
 	const stillLocked = nextIndex >= 0 ? `G${2 + nextIndex}` : null;
-	const onRung = rungIndex >= 0;
 
 	test(`rung 4 — at $${seeds} given: ${unlocked ? "exactly one more post unlocks" : "nothing new unlocks (between rungs)"}`, async ({
 		page,
 	}) => {
 		const errors = trackErrorsStrict(page, ALLOWED);
 
-		if (onRung) {
-			await page.goto(`${profileUrl(creatorHandle)}?tab=badges`);
-			// The picker offers the creator's named rungs; each button's accessible name
-			// is the rung's label and price together ("$3 · $3/mo" — the gauntlet's
-			// fixture labels rungs with their own threshold), so match on the price
-			// half rather than the whole name.
-			const shown = Number.isInteger(seeds) ? String(seeds) : seeds.toFixed(2);
-			await page.getByRole("button", { name: new RegExp(`^.*\\$${shown}/mo$`) }).click();
-			// Confirm the pick, then wait for the confirm control to leave — the pick
-			// has settled when there is nothing left to confirm.
-			await page.getByRole("button", { name: /^Hold / }).click();
-			await expect(page.getByRole("button", { name: /^Hold / })).toHaveCount(0);
-		} else {
-			// A between-rung state: unrepresentable as a pick, and reachable only as a
-			// holding the model no longer writes — so the hop stands in for the retired
-			// stepper, writing the same row shape with the fixture script.
-			hop("--give", String(seeds));
-		}
+		hop("--give", String(seeds));
 
 		if (unlocked) await expectPostUnlocked(page, unlocked);
 		if (stillLocked) await expectPostLocked(page, stillLocked);
@@ -542,16 +515,6 @@ for (const [i, seeds] of BADGE_WALK.entries()) {
 		expect(errors).toEqual([]);
 	});
 }
-
-test("rung 4 — the ratchet: a lower rung is not offered once it is held", async ({ page }) => {
-	const errors = trackErrorsStrict(page, ALLOWED);
-	await page.goto(`${profileUrl(creatorHandle)}?tab=badges`);
-	// The full ladder is committed; within the cycle a holding never goes down, so
-	// every offered rung sits at or above the one held.
-	const held = BADGE_RUNGS[BADGE_RUNGS.length - 1];
-	await expect(page.getByRole("button", { name: new RegExp(`.*$${held}/mo`) })).toHaveCount(0);
-	expect(errors).toEqual([]);
-});
 
 // ── The purchase rung ────────────────────────────────────────────────────────
 test("rung 5 — purchases go through the basket, and only a purchase unlocks the download", async ({
