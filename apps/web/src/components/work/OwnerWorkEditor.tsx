@@ -1340,6 +1340,7 @@ export default function OwnerWorkEditor({
 							subjectType="work"
 							subjectId={current.id}
 							label={current.title ?? "this Work"}
+							align="end"
 						/>
 					}
 				/>

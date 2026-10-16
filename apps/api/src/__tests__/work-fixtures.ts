@@ -122,8 +122,8 @@ export interface WorkFixture {
 	 * The credits table. Defaults to one `created` row naming the fixture, because a fixture
 	 * Work stands for one that can be released and release is refused while no credit names a
 	 * human (`credits_creator_required`) — credits are asserted, and a fixture asserting none
-	 * would be an unreleaseable state staged silently. Pass `[]` explicitly, or only `ai` /
-	 * `licensed` rows, when the credits gate is what is being tested.
+	 * would be an unreleaseable state staged silently. Pass `[]` explicitly, or only
+	 * `generated` rows, when the credits gate is what is being tested.
 	 */
 	credits?: WorkCredit[];
 	originallyReleased?: Date | null;

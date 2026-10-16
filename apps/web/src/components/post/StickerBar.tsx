@@ -14,20 +14,21 @@
  *
  * 🚨 **The amount directed comes out of the giver's OWN Time Pool and is not new money.**
  * A surface that shows both a rung's Time Pool and its Sticker allowance is showing one
- * sum twice unless it says so; this control quotes only what is left to direct.
+ * sum twice unless it says so; this picker names only what each drawing is worth and how
+ * many of that denomination the giver still has left this month.
+ *
+ * The picker is an overlaid dropdown, not an inline expansion (Parker, 2026-10-16): giving
+ * must never shift the layout under it. Each row carries the money it directs and the
+ * count still affordable, so the giver can compare the three denominations without doing
+ * division in their head.
  */
 
-import {
-	ALL_STICKER_ART,
-	CURRENT_BATCH,
-	STICKER_BATCHES,
-	type StickerArt,
-	stickerArt,
-} from "@anthers/shared/stickers";
+import { CURRENT_BATCH, type StickerArt, stickerArt } from "@anthers/shared/stickers";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BadgeMark } from "@anthers/web-shared/economics";
 import { client } from "@anthers/web-shared/rpc";
-import { useCallback, useEffect, useState } from "react";
+import { PlusIcon } from "@heroicons/react/24/outline";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type StickerSubject = "work" | "post" | "comment";
 
@@ -48,23 +49,48 @@ interface Allowance {
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 
+/**
+ * How many Stickers at one denomination the remaining allowance can still afford.
+ *
+ * Exported for {@link ./sticker-picker.test | its suite}. The floor is the honest
+ * answer — affording a $0.50 Sticker with $0.25 left would spend money that is not
+ * there — and the epsilon absorbs float drift from the arithmetic the allowance
+ * travels through, so a true $0.75 never reads as two affordable $0.25s.
+ * `remaining` arrives as a binary-float number over JSON; every denomination here is a
+ * quarter or a half, which is exactly the value drift puts *just below* an integer.
+ */
+export function stickersLeftFor(remaining: number, amount: number): number {
+	if (remaining <= 0) return 0;
+	return Math.floor(remaining / amount + 1e-9);
+}
+
 export default function StickerBar({
 	subjectType,
 	subjectId,
 	label,
+	align = "start",
 }: {
 	subjectType: StickerSubject;
 	subjectId: number;
 	/** What the Sticker is being given to, for a screen reader. */
 	label: string;
+	/** Which side the dropdown hugs — the Work's bar sits at the right of the verdict row. */
+	align?: "start" | "end";
 }) {
 	const { isAuthenticated } = useAuth();
 	const [groups, setGroups] = useState<StickerGroup[]>([]);
 	const [allowance, setAllowance] = useState<Allowance | null>(null);
-	const [picking, setPicking] = useState(false);
-	const [showAll, setShowAll] = useState(false);
+	const [open, setOpen] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [problem, setProblem] = useState<string | null>(null);
+	const detailsRef = useRef<HTMLDetailsElement | null>(null);
+
+	/** Programmatic close: assigning `open` fires `toggle`, which syncs the React state. */
+	const close = useCallback(() => {
+		const details = detailsRef.current;
+		if (details) details.open = false;
+		setOpen(false);
+	}, []);
 
 	const loadStickers = useCallback(async () => {
 		const res = await client.api.subscriptions.stickers.$get({
@@ -81,12 +107,32 @@ export default function StickerBar({
 	// a page needs, and fetching it on every render of every Work would be a request per
 	// card for a control most users never touch.
 	useEffect(() => {
-		if (!picking || !isAuthenticated || allowance) return;
+		if (!open || !isAuthenticated || allowance) return;
 		void (async () => {
 			const res = await client.api.subscriptions.stickers.allowance.$get();
 			if (res.ok) setAllowance((await res.json()) as Allowance);
 		})();
-	}, [picking, isAuthenticated, allowance]);
+	}, [open, isAuthenticated, allowance]);
+
+	// A native <details> dropdown never closes on its own — not for a click outside it,
+	// not for Escape. Both are what a picker this ordinary owes its reader: the outside
+	// click because the picker covers content below the trigger, Escape because a
+	// keyboard user needs a way out that is not Tab-ordering past the last row.
+	useEffect(() => {
+		if (!open) return;
+		const onPointerDown = (e: PointerEvent) => {
+			if (!detailsRef.current?.contains(e.target as Node)) close();
+		};
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") close();
+		};
+		document.addEventListener("pointerdown", onPointerDown);
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("pointerdown", onPointerDown);
+			document.removeEventListener("keydown", onKeyDown);
+		};
+	}, [open, close]);
 
 	async function give(artKey: string) {
 		setBusy(true);
@@ -100,11 +146,12 @@ export default function StickerBar({
 				setProblem(body.error ?? "That did not go through.");
 				return;
 			}
-			setPicking(false);
 			// Both, because giving changes the wall and what is left to give. Refetched
 			// rather than adjusted locally: somebody else may have given one since load,
-			// and a count that drifts from its rows looks exactly like a count.
+			// and a count that drifts from its rows looks exactly like a count. The
+			// allowance is dropped entirely; the next open refetches it whole.
 			setAllowance(null);
+			close();
 			await loadStickers();
 		} finally {
 			setBusy(false);
@@ -129,16 +176,16 @@ export default function StickerBar({
 		}
 	}
 
-	const total = groups.reduce((n, g) => n + g.count, 0);
-
 	/**
-	 * ⚠️ **Nothing is ever retired from giving** (Parker, 2026-09-04), so this list grows by
-	 * three every quarter and cannot simply be rendered flat. The current batch leads and
-	 * everything before it is one click away — which keeps the ordinary choice three wide
-	 * while honoring the rule that a Sticker somebody liked never stops being giveable.
+	 * ⚠️ **Nothing is ever retired from giving** (Parker, 2026-09-04), so this picker grows
+	 * by three every quarter. Today the only batch is the current one and the picker is
+	 * simply its whole flat list — no batch-name heading, either (Parker, 2026-10-16):
+	 * how named sticker groups display is a conversation that happens when a second batch
+	 * exists, and reaching earlier batches then is part of that same conversation.
 	 */
-	const older = STICKER_BATCHES.filter((b) => b.id !== CURRENT_BATCH.id);
-	const pickable: StickerArt[] = showAll ? ALL_STICKER_ART.slice() : CURRENT_BATCH.art.slice();
+	const pickable = CURRENT_BATCH.art as readonly StickerArt[];
+
+	const total = groups.reduce((n, g) => n + g.count, 0);
 
 	return (
 		<div className="flex flex-wrap items-center gap-2">
@@ -177,42 +224,31 @@ export default function StickerBar({
 				);
 			})}
 
-			{isAuthenticated && !picking && (
-				<button
-					type="button"
-					className="btn btn-ghost btn-xs"
-					onClick={() => setPicking(true)}
-					aria-label={`Add a Sticker to ${label}`}
+			{isAuthenticated && (
+				<details
+					ref={detailsRef}
+					className={`dropdown ${align === "end" ? "dropdown-end" : "dropdown-start"}`}
+					onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
 				>
-					{total === 0 ? "Add a Sticker" : "＋"}
-				</button>
-			)}
+					{/* The trigger reads as an offer to give, not an edit control: a pill,
+					    slightly tinted toward the primary, so it sits beside the votes without
+					    pretending to be one of the controls that act on the subject. */}
+					<summary
+						className="btn btn-sm border-primary/40 bg-primary/5 gap-1 rounded-full text-primary marker:hidden hover:border-primary [&::-webkit-details-marker]:hidden"
+						aria-label={`Add a Sticker to ${label}`}
+					>
+						<PlusIcon className="size-4" aria-hidden />
+						Sticker
+						{total > 0 ? <span className="sr-only">— you gave {total}</span> : null}
+					</summary>
 
-			{picking && (
-				<div className="flex w-full flex-col gap-2 rounded-box border border-base-300 p-3">
-					<div className="flex items-center justify-between">
-						<span className="font-medium text-sm">
-							Add a Sticker{showAll ? "" : ` — ${CURRENT_BATCH.name}`}
-						</span>
-						<button
-							type="button"
-							className="btn btn-ghost btn-xs"
-							onClick={() => setPicking(false)}
-						>
-							Cancel
-						</button>
-					</div>
-
-					{/* Says whose money this is, because it is the giver's own Time Pool being
-					    pointed at one creator rather than anything extra being charged. */}
-					<p className="text-base-content/60 text-xs">
-						This directs part of the support you already give Anthers to this creator. It does not
-						charge you anything more.
-					</p>
-
-					<div className="flex flex-wrap gap-3">
+					<div className="dropdown-content z-20 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">
 						{pickable.map((art: StickerArt) => {
-							const tooDear = allowance ? art.amount > allowance.remaining + 0.001 : false;
+							// `null` while the allowance is still loading, so rows stay enabled
+							// and the server is the authority on what is left — the counts are
+							// orientation for the giver, not the gate.
+							const left = allowance ? stickersLeftFor(allowance.remaining, art.amount) : null;
+							const tooDear = left === 0;
 							return (
 								<button
 									key={art.key}
@@ -220,10 +256,10 @@ export default function StickerBar({
 									disabled={busy || tooDear}
 									onClick={() => give(art.key)}
 									aria-label={`${art.label}, ${money(art.amount)}`}
-									title={tooDear ? "More than you have left to direct this month" : art.label}
-									className={`flex flex-col items-center gap-1 rounded-box border p-2 ${
-										tooDear ? "opacity-40" : "hover:border-primary"
-									} border-base-300`}
+									title={tooDear ? "None left at this amount this month" : art.label}
+									className={`flex w-full items-center gap-2.5 rounded-btn p-1.5 text-left ${
+										tooDear ? "opacity-40" : "hover:bg-base-200"
+									}`}
 								>
 									<BadgeMark
 										shape={art.shape}
@@ -231,35 +267,24 @@ export default function StickerBar({
 										emblem={art.emblem}
 										label={art.label}
 										clipId={`sticker-pick-${subjectType}-${subjectId}-${art.key}`}
-										size="h-10 w-10"
+										size="h-8 w-8 shrink-0"
 									/>
-									<span className="text-xs tabular-nums">{money(art.amount)}</span>
+									<span className="tabular-nums text-sm">{money(art.amount)}</span>
+									{left !== null && (
+										<span className="text-base-content/60 text-xs tabular-nums">({left} left)</span>
+									)}
 								</button>
 							);
 						})}
+
+						{allowance && allowance.allowance <= 0 && (
+							<p className="text-base-content/60 px-1 pt-2 text-xs">
+								A free account has no Time Pool to direct by hand.
+							</p>
+						)}
+						{problem && <p className="text-error px-1 pt-2 text-xs">{problem}</p>}
 					</div>
-
-					{older.length > 0 && (
-						<button
-							type="button"
-							className="btn btn-ghost btn-xs self-start"
-							onClick={() => setShowAll((v) => !v)}
-						>
-							{showAll
-								? `Just ${CURRENT_BATCH.name.toLowerCase()}`
-								: `Earlier Stickers (${older.reduce((n, b) => n + b.art.length, 0)})`}
-						</button>
-					)}
-
-					{allowance && (
-						<p className="text-base-content/60 text-xs">
-							{allowance.allowance <= 0
-								? "A free account has no Time Pool to direct by hand."
-								: `${money(allowance.remaining)} left to direct this month, of ${money(allowance.allowance)}.`}
-						</p>
-					)}
-					{problem && <p className="text-error text-xs">{problem}</p>}
-				</div>
+				</details>
 			)}
 		</div>
 	);

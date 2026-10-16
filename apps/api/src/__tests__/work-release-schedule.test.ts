@@ -161,12 +161,9 @@ describe("scheduling a release", () => {
 		expect((await row(workId)).scheduledReleaseAt).not.toBeNull();
 	});
 
-	it("refuses a time for a Work whose only credits are AI or licensed sources", async () => {
+	it("refuses a time for a Work whose only credit is generated", async () => {
 		const workId = await stage(creator.id, {
-			credits: [
-				{ role: "Voiceover", contributor: "", types: ["ai"] },
-				{ role: "Sample pack", contributor: "", types: ["licensed"] },
-			],
+			credits: [{ role: "Voiceover", contributor: "", types: ["generated"] }],
 		});
 		const res = await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
 			scheduledReleaseAt: inAnHour(),
@@ -175,9 +172,9 @@ describe("scheduling a release", () => {
 		expect((await res.json()).code).toBe("credits_creator_required");
 	});
 
-	it("accepts a blended created+ai credit — one human-made part is enough", async () => {
+	it("accepts a blended created+generated credit — one human-made part is enough", async () => {
 		const workId = await stage(creator.id, {
-			credits: [{ role: "Cut by", contributor: "The Editor", types: ["created", "ai"] }],
+			credits: [{ role: "Cut by", contributor: "The Editor", types: ["created", "generated"] }],
 		});
 		const res = await call("PATCH", `/api/content/works/${workId}`, creator.cookie, {
 			scheduledReleaseAt: inAnHour(),

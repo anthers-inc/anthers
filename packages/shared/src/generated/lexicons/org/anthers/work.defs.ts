@@ -39,7 +39,7 @@ type Main = { $type: "org.anthers.work";
   "description"?:string;"access"?:Access;
 
   /**
-   * Who made this work and what of it they made — the creator's own liner notes. Optional and additive: a work with no credits simply lists none, which says nothing against it (credits are asserted, never assumed). A credit naming an on-network identity by DID is withheld until that identity accepts it (see `org.anthers.creditAcceptance`), because a public claim about a third party should not be made in their name without their consent. The `types` flags are published exactly as the creator entered them — including `ai` — so a stranger can build a real filter on machine-made work.
+   * Who made this work and what of it they made — the creator's own liner notes. Optional and additive: a work with no credits simply lists none, which says nothing against it (credits are asserted, never assumed). A credit naming an on-network identity by DID is withheld until that identity accepts it (see `org.anthers.creditAcceptance`), because a public claim about a third party should not be made in their name without their consent. The `types` flags are published exactly as the creator entered them — including `generated` — so a stranger can build a real filter on machine-made work.
    */
   "credits"?:(Credit)[] };
 
@@ -122,23 +122,23 @@ export { namedContributor };
 type Credit = { $type?: "org.anthers.work#credit";
 
   /**
-   * The contribution this credit names, as a freeform title in the industry's own words — 'Written by', 'Cut by', 'Sound recording'. Freeform rather than a fixed list, because the useful roles differ by medium and a closed set would force every work into categories that fit none of them. Optional: a credit that is only a type assertion (a bare `ai` row, or an anonymous license) may leave the role unnamed.
+   * The contribution this credit names, as a freeform title in the industry's own words — 'Written by', 'Cut by', 'Sound recording'. Freeform rather than a fixed list, because the useful roles differ by medium and a closed set would force every work into categories that fit none of them. Optional: a credit that is only a type assertion (a bare `generated` row) may leave the role unnamed.
    */
   "role"?:string;
 
   /**
-   * Who is credited. A DID names an on-network identity and is withheld until that identity accepts (see `org.anthers.creditAcceptance`); a name names an off-network contributor and is published as entered. A union rather than a bare string or a single object, so a third contributor kind can join later as a permitted addition. Optional: a credit with no `created` among its types may name nobody — a license or a machine makes nothing a person owns. Required whenever `created` is among the types, alone or in a blend — anything a human made must name who.
+   * Who is credited. A DID names an on-network identity and is withheld until that identity accepts (see `org.anthers.creditAcceptance`); a name names an off-network contributor and is published as entered. A union rather than a bare string or a single object, so a third contributor kind can join later as a permitted addition. Optional: a credit with no `created` among its types may name nobody — a machine makes nothing a person owns, and material brought in unnamed is not credited rather than credited anonymously. Required whenever `created` is among the types, alone or in a blend — anything a human made must name who.
    */
   "contributor"?:l.$Typed<DidContributor> | l.$Typed<NamedContributor> | l.Unknown$TypedObject;
 
   /**
-   * The kind(s) of contribution, published as entered. `created` — a person made this part. `licensed` — this part is pre-existing material used under a right (the source may be named or not, at the creator's choice; many licenses do not require attribution). `ai` — this part was machine-made: it records THAT it was, never which model, because a model owns nothing and can be granted nothing. An open set on purpose: a `created+ai` blend and the other non-empty subsets each mean what they say, and Anthers blesses no canonical 'counts as AI' reading of a blend — whether one clears a filter is the user's own call, and two filters reading a blend opposite ways is a feature, not a defect.
+   * The kind(s) of contribution, published as entered. `created` — a person, or another entity capable of authorship in the copyright sense, made this part, and the part names them. Work-for-hire, licensed-in and public-domain source material all assert this one way, because the deal behind a credit is not the reader's question — who is responsible for the part is. `generated` — a machine not capable of authorship made this part: it records THAT it was, never which model, because a model owns nothing and can be granted nothing. ⚠️ First-edition values, which records published before October 2026 still carry: `ai` is what `generated` was called, with exactly its meaning, and `licensed` marked pre-existing material used under a right, its source named or not at the creator's choice — a named one reads as `created`, and an unnamed one has no successor, since material brought in unnamed is not credited rather than credited anonymously. An open set on purpose: a `created+generated` blend and the other non-empty subsets each mean what they say, and Anthers blesses no canonical 'counts as machine-made' reading of a blend — whether one clears a filter is the user's own call, and two filters reading a blend opposite ways is a feature, not a defect.
    */
-  "types":("created" | "licensed" | "ai" | l.UnknownString)[] };
+  "types":("created" | "licensed" | "ai" | "generated" | l.UnknownString)[] };
 
 export type { Credit };
 
 /** One credit on the work: a contribution, its kind, and where a person made it, who. The three parts answer different questions and are kept apart so each can be absent on its own terms. `types` is the only required one — a credit must assert something. */
-const credit = /*#__PURE__*/ l.typedObject<Credit>($nsid, "credit", /*#__PURE__*/ l.object({"role":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":120,"maxLength":1200})),"contributor":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.typedUnion([/*#__PURE__*/ l.typedRef<DidContributor>((() => didContributor) as any),/*#__PURE__*/ l.typedRef<NamedContributor>((() => namedContributor) as any)], false)),"types":/*#__PURE__*/ l.array(/*#__PURE__*/ l.string<{"knownValues":["created","licensed","ai"],"maxLength":16}>({"maxLength":16}), {"minLength":1})}));
+const credit = /*#__PURE__*/ l.typedObject<Credit>($nsid, "credit", /*#__PURE__*/ l.object({"role":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":120,"maxLength":1200})),"contributor":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.typedUnion([/*#__PURE__*/ l.typedRef<DidContributor>((() => didContributor) as any),/*#__PURE__*/ l.typedRef<NamedContributor>((() => namedContributor) as any)], false)),"types":/*#__PURE__*/ l.array(/*#__PURE__*/ l.string<{"knownValues":["created","licensed","ai","generated"],"maxLength":16}>({"maxLength":16}), {"minLength":1})}));
 
 export { credit };

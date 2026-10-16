@@ -851,15 +851,15 @@ const accessRowSchema = z.object({
  * One credit row — creator-asserted provenance (`WorkCredit` in the schema).
  *
  * Two rules are enforced rather than trusted. A credit must assert SOMETHING — an empty
- * `types` is not a credit — and a `created` assertion must name its human: anything a
- * person made, alone or blended with AI or a license, says who made it. A pure `licensed`
- * or `ai` row may stay anonymous; an AI credit never names a model, because a model owns
- * nothing and is granted nothing.
+ * `types` is not a credit — and a `created` assertion must name its human or entity: anything
+ * a person made, alone or blended with a machine, says who made it. A pure `generated` row
+ * may stay anonymous; a generated credit never names a model, because a model owns nothing
+ * and is granted nothing.
  */
 const workCreditRowSchema = z.object({
 	role: z.string().max(255),
 	contributor: z.string().max(255).default(""),
-	types: z.array(z.enum(["created", "licensed", "ai"])).min(1),
+	types: z.array(z.enum(["created", "generated"])).min(1),
 });
 
 /** Every credit asserting `created` names its contributor. */

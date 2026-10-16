@@ -641,6 +641,7 @@ function VisitorRecord({
 											subjectType="work"
 											subjectId={work.id}
 											label={work.title ?? "this Work"}
+											align="end"
 										/>
 									}
 								/>
