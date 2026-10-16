@@ -2,9 +2,13 @@
 /**
  * What an upvote and a downvote add up to, and when a comment folds away.
  *
- * ⭐ **One number is published, and it is the net** (Parker, 2026-09-04). Neither count is
- * shown on its own: a downvote does visible work by pulling the score down, and a pile-on
- * gets no downvote counter to run up. Parker rejected hiding the downvote outright —
+ * ⭐ **What is shown, and where.** The comment thread and the review list publish the net
+ * — one number, floored at zero, with no count shown on its own (Parker, 2026-09-04): a
+ * downvote does visible work by pulling the score down, and a pile-on gets no downvote
+ * counter to run up. The post page's vote buttons publish the pair instead (Parker,
+ * 2026-10-16 — the numbers ride the buttons, YouTube's shape with the down side filled
+ * in too), revising that display for this surface only: a thread's payload still sends
+ * the raw counts to a row's author alone. Parker rejected hiding the downvote outright —
  * *"YouTube's decision to not show dislikes is pretty universally disdained by audiences…
  * Having a dislike that has no visible impact on a value the user can see is the worst case
  * scenario."*
@@ -12,8 +16,8 @@
  * ⭐ **A vote is named for its effect rather than for a feeling** (Parker, 2026-09-12). It is
  * the input to ranking — *more people should see this*, or *fewer should* — and calling it
  * approval invites the bind where somebody withholds a vote from work they think is important
- * but did not enjoy. Both directions are published as records; what Anthers shows is the net
- * below, and a creator sees the raw counts.
+ * but did not enjoy. Both directions are published as records; buttons carrying their
+ * counts, a user can account for the net they see from the pair beside it.
  *
  * 🚨 **Everything that decides an order is a number the user can see** (Parker,
  * 2026-09-04: *"there's nothing ranking stuff that the users can't see"*). That is why

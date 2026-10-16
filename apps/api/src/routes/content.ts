@@ -301,51 +301,6 @@ function tooManyVotesFrom(userId: number): boolean {
  * can read. Moderation state is checked here for the same reason every public read checks
  * it, and forgetting it is the quiet version of the same bug.
  */
-/**
- * Whether this user authored the thing being reacted to.
- *
- * ⭐ **Authorship, not the post's creator.** A creator seeing the breakdown on *their own*
- * post is what Parker asked for (2026-09-04: *"the creator should have full
- * visibility into exact like values and dislike values, not just the net"*). Extending it to
- * every comment under their post would be showing them a dislike count on somebody else's
- * words, which is a different thing and was not asked for.
- *
- * 🚨 **This is the only gate on the raw counts.** Everything else in the vote path
- * publishes one number precisely so a pile-on has no counter to run up; getting this
- * predicate wrong hands that counter to everybody.
- */
-async function ownsSubject(
-	subjectType: VoteSubject,
-	subjectId: number,
-	userId: number | null,
-): Promise<boolean> {
-	if (userId === null) return false;
-	if (subjectType === "comment") {
-		const [row] = await db
-			.select({ userId: comments.userId })
-			.from(comments)
-			.where(eq(comments.id, subjectId))
-			.limit(1);
-		return row?.userId === userId;
-	}
-	if (subjectType === "review") {
-		// The reviewer is the subject's author: they see the raw counts exactly as a
-		// commenter does on their own comment.
-		const [row] = await db
-			.select({ userId: reviews.userId })
-			.from(reviews)
-			.where(eq(reviews.id, subjectId))
-			.limit(1);
-		return row?.userId === userId;
-	}
-	const [row] = await db
-		.select({ creatorId: posts.creatorId })
-		.from(posts)
-		.where(eq(posts.id, subjectId))
-		.limit(1);
-	return row?.creatorId === userId;
-}
-
 async function votableExists(subjectType: VoteSubject, subjectId: number): Promise<boolean> {
 	if (subjectType === "comment") {
 		const [row] = await db
@@ -3321,19 +3276,25 @@ const contentRoutes = new Hono()
 	 * three lines in four places for a control that can ask for itself. A comment thread
 	 * still gets its scores inline, because the list already fetches them in one grouped
 	 * query and a request per comment would not be a trade at all.
+	 *
+	 * ⭐ **The counts go to every reader (Parker, 2026-10-16 — the numbers ride the
+	 * buttons).** The post page's vote buttons carry the up and down counts themselves,
+	 * YouTube-style, so this read serves the figures behind both to anybody who asks.
+	 * That revises the earlier author-only read: a creator's full visibility on their own
+	 * thing is subsumed by counts nobody is withheld from. The comment thread's payload
+	 * still carries no raw counts — it draws the net, and nothing there renders the pair.
 	 */
 	.get("/votes", zValidator("query", voteQuerySchema), async (c) => {
 		const { subjectType, subjectId } = c.req.valid("query");
 		const userId = await getOptionalUserId(c);
 		const { tallies, mine } = await voteTallies(subjectType, [subjectId], userId);
 		const tally = tallies.get(subjectId) ?? NO_VOTES;
-		// The author sees what it is made of; everybody else sees the one number.
-		const owner = await ownsSubject(subjectType, subjectId, userId);
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
 			userVote: mine.get(subjectId) ?? null,
-			...(owner ? { up: tally.up, down: tally.down } : {}),
+			up: tally.up,
+			down: tally.down,
 		});
 	})
 
@@ -3376,16 +3337,17 @@ const contentRoutes = new Hono()
 
 		const { tallies } = await voteTallies(subjectType, [subjectId], null);
 		const tally = tallies.get(subjectId) ?? NO_VOTES;
-		// ⚠️ The breakdown comes back from a WRITE too, not only from the read. An author
-		// reacting to their own thing would otherwise watch the score move while the figures
-		// behind it sat still until a reload — two numbers on screen disagreeing, which is
-		// worse than either being absent.
-		const owner = await ownsSubject(subjectType, subjectId, user.id);
+		// ⚠️ The counts come back from a WRITE too, not only from the read. A user reacting
+		// to a subject with a buttoned control would otherwise watch the numbers sit still
+		// until a reload — two figures on screen disagreeing, which is worse than either
+		// being absent. They go to every reader now, as on the read above (Parker,
+		// 2026-10-16).
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
 			userVote: direction,
-			...(owner ? { up: tally.up, down: tally.down } : {}),
+			up: tally.up,
+			down: tally.down,
 		});
 	})
 
@@ -3417,12 +3379,14 @@ const contentRoutes = new Hono()
 		}
 		const { tallies } = await voteTallies(subjectType, [subjectId], null);
 		const tally = tallies.get(subjectId) ?? NO_VOTES;
-		const owner = await ownsSubject(subjectType, subjectId, user.id);
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
 			userVote: null,
-			...(owner ? { up: tally.up, down: tally.down } : {}),
+			// The counts go to every reader, as on the read and the write above (Parker,
+			// 2026-10-16 — the numbers ride the buttons).
+			up: tally.up,
+			down: tally.down,
 		});
 	})
 
@@ -3569,8 +3533,8 @@ const contentRoutes = new Hono()
 						...r,
 						body: r.body ?? "",
 						// The scorer hides nothing. A reviewer's net shows like a commenter's does,
-						// and they see their own raw counts the same way — `ownsSubject` already
-						// treats a review's author as its owner.
+						// and the exact figures behind it ride the single-subject read for every
+						// reader now (Parker, 2026-10-16 — the numbers ride the buttons).
 						score: commentScore(tallies.get(r.id) ?? NO_VOTES),
 						userVote: mine.get(r.id) ?? null,
 						/** The review's public record link (the widening task, 2026-10-10); null while there is none, which is ordinary. */
