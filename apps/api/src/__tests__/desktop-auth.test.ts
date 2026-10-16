@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Desktop auth — the bearer transport and the browser-handoff enrollment that mints it.
+ * Desktop auth — the bearer transport, the browser-handoff enrollment, and the
+ * in-app emailed-code method, which all mint the same session.
  *
  * These are the three things a packaged Tauri window breaks (`apps/api/src/middleware/bearer.ts`):
  * the session cookie is never sent from `tauri://localhost`, every mutation 403s on
@@ -8,10 +9,12 @@
  * a cookie. So the suite drives requests the way the desktop app really will — bearer
  * header, NO cookie, NO Origin — and asserts the browser's CSRF posture is untouched.
  */
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { sql } from "drizzle-orm";
+import { signupCodes, users } from "@anthers/db/schema";
+import { eq, like, sql } from "drizzle-orm";
 import app from "../index";
+import { issueSignInCode, issueSignupCode } from "../services/signup-codes";
 import { pkceChallenge } from "../services/auth";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -358,5 +361,152 @@ describe("Desktop auth", () => {
 
 		const browser = await req("/api/auth/me", { headers: { Cookie: cookie } });
 		expect((await browser.json()).user.handle).toContain(userName.replace(/_/g, "-"));
+	});
+});
+
+// The emailed-code method's own emails carry the suite's prefix, so the code rows are
+// deletable by the same shape no matter how far a failing test got.
+const MAIL_PREFIX = `deskmail_${id}`;
+
+describe("Desktop auth — the emailed-code method (in-app sign-in)", () => {
+	afterAll(async () => {
+		await db.delete(signupCodes).where(like(signupCodes.email, `${MAIL_PREFIX}-%`));
+	});
+
+	function startEnrollment() {
+		const verifier = hex();
+		const challenge = pkceChallenge(verifier);
+		return challenge.then((c) =>
+			req("/api/auth/desktop/start", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ challenge: c }),
+			}).then((res) => {
+				expect(res.status).toBe(201);
+				return { verifier, challenge: c };
+			}),
+		);
+	}
+	function sendEmailCode(email: string, challenge: string) {
+		// NO Origin header, exactly like the other two app-driven calls: the packaged
+		// app cannot send an allowed one, so a rule that needed one could never work.
+		return req("/api/auth/desktop/email/start", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ challenge, email }),
+		});
+	}
+
+	function verifyEmailCode(email: string, challenge: string, code: string) {
+		return req("/api/auth/desktop/email/verify", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ challenge, email, code }),
+		});
+	}
+
+	it("signs in from inside the app and mints the same desktop credential", async () => {
+		const email = `${MAIL_PREFIX}-happy@example.com`;
+		await createAccount(`${MAIL_PREFIX}-happy`, { email });
+
+		const { verifier, challenge } = await startEnrollment();
+
+		// The route issues its own code (the mail itself is refused under the test
+		// runner), and the code service throttles per-address resends, so the spend is
+		// driven with a directly-issued code — exactly how the sign-in ceremony's
+		// suite drives `/signin/verify`. The send semantics have their own test below.
+		const issued = await issueSignInCode(email);
+		const verified = await verifyEmailCode(email, challenge, issued.code);
+		expect(verified.status).toBe(200);
+		const { code } = (await verified.json()) as { code: string };
+
+		const exchange = await req("/api/auth/desktop/exchange", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ code, verifier }),
+		});
+		expect(exchange.status).toBe(200);
+		const { token } = (await exchange.json()) as { token: string };
+		expect(token).toMatch(/^[0-9a-f]{64}$/);
+
+		// The credential the browser confirm mints and this one mints are the same
+		// substance: a bearer session the app can hold.
+		const me = await desktopReq("/api/auth/me", token);
+		expect(me.status).toBe(200);
+	});
+
+	it("acknowledges a code request silently on a live challenge", async () => {
+		const email = `${MAIL_PREFIX}-send@example.com`;
+		await createAccount(`${MAIL_PREFIX}-send`, { email });
+
+		const { challenge } = await startEnrollment();
+		const sent = await sendEmailCode(email, challenge);
+
+		expect(sent.status).toBe(200);
+		expect(await sent.json()).toEqual({ success: true });
+	});
+
+	it("answers 404 when the enrollment behind the code request has expired", async () => {
+		await createAccount(`${MAIL_PREFIX}-stale`, { email: `${MAIL_PREFIX}-stale@example.com` });
+		const res = await sendEmailCode(`${MAIL_PREFIX}-stale@example.com`, await pkceChallenge(hex()));
+		expect(res.status).toBe(404);
+	});
+
+	it("speaks /signin/verify's refusal — one message for wrong and missing codes", async () => {
+		const email = `${MAIL_PREFIX}-refusal@example.com`;
+		await createAccount(`${MAIL_PREFIX}-refusal`, { email });
+
+		const { challenge } = await startEnrollment();
+
+		const missing = await verifyEmailCode(email, challenge, "111111");
+		expect(missing.status).toBe(400);
+		const missingBody = (await missing.json()) as { error: string; reason: string };
+		expect(missingBody.reason).toBe("no_code");
+		expect(missingBody.error).toBe("That code didn't work. Check it, or ask for a new one.");
+
+		await issueSignInCode(email);
+		const wrong = await verifyEmailCode(email, challenge, "222222");
+		expect(wrong.status).toBe(400);
+		const wrongBody = (await wrong.json()) as { error: string; reason: string };
+		// Reason differs; the message must not.
+		expect(wrongBody.reason).toBe("wrong_code");
+		expect(wrongBody.error).toBe(missingBody.error);
+	});
+
+	it("creates nothing for an address with no account, and says where signup lives", async () => {
+		// A code minted at /signup typed into the sign-in door — the same shape
+		// `/signin/verify` refuses, so the desktop door refusing it the same way is
+		// the property, not an implementation detail.
+		const email = `${MAIL_PREFIX}-nomint@example.com`;
+		const issued = await issueSignupCode(email);
+
+		const { challenge } = await startEnrollment();
+		const sent = await sendEmailCode(email, challenge);
+		expect(sent.status).toBe(200);
+
+		const res = await verifyEmailCode(email, challenge, issued.code);
+		expect(res.status).toBe(404);
+		expect(res.headers.get("Set-Cookie") ?? "").not.toContain("session=");
+		const rows = await db.select().from(users).where(eq(users.email, email));
+		expect(rows).toHaveLength(0);
+	});
+
+	it("refuses a suspended account truthfully and mints no session", async () => {
+		const email = `${MAIL_PREFIX}-suspended@example.com`;
+		const name = `${MAIL_PREFIX}-suspended`.replaceAll("_", "-");
+		const account = await createAccount(name, { email });
+		await db
+			.update(users)
+			.set({ suspendedAt: new Date(), suspendedUntil: new Date(Date.now() + 86_400_000) })
+			.where(eq(users.id, account.userId));
+
+		const { challenge } = await startEnrollment();
+		const issued = await issueSignInCode(email);
+		const res = await verifyEmailCode(email, challenge, issued.code);
+
+		expect(res.status).toBe(403);
+		const body = (await res.json()) as { reason: string; suspendedUntil: string | null };
+		expect(body.reason).toBe("account_suspended");
+		expect(body.suspendedUntil).not.toBeNull();
 	});
 });
