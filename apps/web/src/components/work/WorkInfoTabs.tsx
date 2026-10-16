@@ -14,7 +14,8 @@
  * visitor is likeliest to want first; the creator's editor passes the same order.
  */
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
+import { keepScroll } from "./scrollKeeper";
 
 export interface InfoTab {
 	key: string;
@@ -35,10 +36,13 @@ export default function WorkInfoTabs({
 	const [localActive, setActive] = useState(tabs[0]?.key ?? "");
 	const active = controlledActive ?? localActive;
 	const current = tabs.find((t) => t.key === active) ?? tabs[0];
+	/** The group's root, the anchor `keepScroll` measures the page's scroller from: a tab
+	 *  switch swaps panels of different heights, and the reader's place stays through it. */
+	const rootRef = useRef<HTMLElement | null>(null);
 	if (!current) return null;
 
 	return (
-		<section aria-label="About this Work" className="flex flex-col gap-4">
+		<section ref={rootRef} aria-label="About this Work" className="flex flex-col gap-4">
 			{/* The shadow marks the bar as its own object — heavier at the bottom edge where
 			    the panels hang from it (Parker's fourth pass, 2026-10-13). */}
 			<div
@@ -55,10 +59,12 @@ export default function WorkInfoTabs({
 						aria-controls={`work-tab-${tab.key}`}
 						id={`work-tab-button-${tab.key}`}
 						className={`btn btn-xs sm:btn-sm join-item flex-1 ${tab.key === current.key ? "btn-active" : ""}`}
-						onClick={() => {
-							setActive(tab.key);
-							onActiveChange?.(tab.key);
-						}}
+						onClick={() =>
+							keepScroll(rootRef.current, () => {
+								setActive(tab.key);
+								onActiveChange?.(tab.key);
+							})
+						}
 					>
 						{tab.label}
 					</button>
