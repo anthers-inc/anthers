@@ -46,7 +46,7 @@ describe("coverFor", () => {
 			byRung: false,
 			byNotes: ["violence"],
 		});
-		// Marked Not in It, it is not what the user asked about.
+		// Marked None, it is not what the user asked about.
 		expect(coverFor(asking({ violence: "blur" }), general)).toBeNull();
 	});
 

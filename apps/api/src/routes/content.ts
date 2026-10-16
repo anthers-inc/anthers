@@ -2184,7 +2184,7 @@ async function serializeWorkForUser(
 		maturity: work.maturity,
 		maturityNotes: work.maturityNotes ?? [],
 		// The matrix too, so a user's own filter can blur by kind of content in the browser. It
-		// restates the notes plus which rows are Not in It, so it tells a user nothing the notes
+		// restates the notes plus which rows are None, so it tells a user nothing the notes
 		// do not, except that a creator said something is absent.
 		maturityRows: work.maturityRows ?? {},
 		originallyReleased: work.originallyReleased,

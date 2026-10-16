@@ -90,12 +90,13 @@ test("a Work rated before the matrix is released only once every row is answered
 	// its own control waits (the kinds pass, 2026-10-14).
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 	await page.getByRole("tab", { name: "Rating" }).click();
+	// The table is the tab, open without an edit state (Parker, 2026-10-16); this Work's
+	// kind of state is the summary's line above it, and the row of unanswered rows in it.
 	await expect(
 		page.getByText("A rating exists on this Work, but not every row of its matrix is answered", {
 			exact: false,
 		}),
 	).toBeVisible();
-	await page.getByRole("button", { name: "Edit Rating" }).click();
 
 	// The release field waits for the same reason, said beside its control.
 	await page.getByRole("tab", { name: "Details" }).click();
@@ -105,12 +106,12 @@ test("a Work rated before the matrix is released only once every row is answered
 	await expect(released).toBeDisabled();
 	// (The schedule input itself stays offered while unrated, as the batch editor's rule had it.)
 
-	// Answering the rows is the whole fix; the rating saves alone, and then the release
-	// field's own save carries the release. Switching tabs unmounts a field's edit
-	// state, so the rating's edit opens again here.
+	// Answering the rows is the whole fix: the None heading answers them all in one click,
+	// the tab's save carries the table alone, and then the release field's own save carries
+	// the release.
 	await page.getByRole("tab", { name: "Rating" }).click();
-	await page.getByRole("button", { name: "Edit Rating" }).click();
-	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
+	const matrix = page.getByRole("tabpanel", { name: "Rating" }).locator("table");
+	await matrix.getByRole("button", { name: "None", exact: true }).click();
 	await page.getByRole("button", { name: "Save Rating" }).click();
 	await page.getByRole("tab", { name: "Details" }).click();
 	await page.getByRole("button", { name: "Edit Release" }).click();

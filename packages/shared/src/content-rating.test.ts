@@ -12,6 +12,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	ACCEPTED_MATURITY_RATINGS,
 	CONTENT_NOTES,
+	closestRungLevel,
 	contentNoteLabel,
 	GRID_ANSWER_LABELS,
 	gridFor,
@@ -368,13 +369,13 @@ describe("the rating matrix", () => {
 		expect(ratingFromRows(rows)).toBeNull();
 	});
 
-	it("keeps Not in It distinct from unanswered", () => {
+	it("keeps None distinct from unanswered", () => {
 		const rows = normalizeMaturityRows({ violence: "none" }, "visual");
 		expect(rows.violence).toBe("none");
 		expect(rows.horror).toBeUndefined();
 	});
 
-	it("notes every row marked at a rung, and none marked Not in It", () => {
+	it("notes every row marked at a rung, and none marked None", () => {
 		const rows = normalizeMaturityRows(
 			{
 				...all("none"),
@@ -415,10 +416,10 @@ describe("the light grid, for writing, books, music and other audio", () => {
 		expect(adultRows).toEqual(["sexual-themes"]);
 	});
 
-	it("calls its answers In It and Explicit, and stores them as General and Mature", () => {
+	it("names its answers None, General and Explicit, and stores them as none, general and mature", () => {
 		expect(GRID_ANSWER_LABELS.light).toEqual({
-			none: "Not in It",
-			general: "In It",
+			none: "None",
+			general: "General",
 			mature: "Explicit",
 			adult: "Adult",
 		});
@@ -444,5 +445,45 @@ describe("the light grid, for writing, books, music and other audio", () => {
 		}
 		const adult = normalizeMaturityRows({ ...all("none"), "sexual-themes": "adult" }, "light");
 		expect(ratingFromRows(adult)).toBe("adult");
+	});
+});
+
+describe("closestRungLevel — the heading click that answers the whole table", () => {
+	// The Rating tab's column headings set every row at once (Parker, 2026-10-16), at the
+	// closest rung the row actually reaches. These pin the two examples the rule was written
+	// from, and the edge that keeps it from ever inventing a rung.
+	const rowOf = (note: string) => RATING_ROWS.find((r) => r.note === note)!;
+
+	it("answers none at none, on both grids", () => {
+		for (const grid of ["visual", "light"] as const) {
+			for (const row of RATING_ROWS) {
+				expect(closestRungLevel(row, grid, "none"), row.note).toBe("none");
+			}
+		}
+	});
+
+	it("sets Adult at Adult where the row reaches it, and drops to the closest rung where it does not", () => {
+		// Violence reaches Adult on the visual grid and is explicitly denied it on the light
+		// one — that denial is the example Parker named: light-grid Adult sets violence to
+		// the Explicit rung, because there is no Adult rung for violence to set.
+		expect(closestRungLevel(rowOf("violence"), "visual", "adult")).toBe("adult");
+		expect(closestRungLevel(rowOf("violence"), "light", "adult")).toBe("mature");
+		expect(closestRungLevel(rowOf("sexual-themes"), "light", "adult")).toBe("adult");
+		// Self-harm and horror stop at Mature on both grids; language stops at General
+		// on the visual one.
+		expect(closestRungLevel(rowOf("self-harm"), "visual", "adult")).toBe("mature");
+		expect(closestRungLevel(rowOf("language"), "visual", "adult")).toBe("general");
+	});
+
+	it("never asks a rung below General, which every row reaches", () => {
+		for (const grid of ["visual", "light"] as const) {
+			for (const row of RATING_ROWS) {
+				expect(closestRungLevel(row, grid, "general"), row.note).toBe("general");
+				// Mature rounds down to General exactly where the row never rates at Mature —
+				// the visual grid's language row being the one.
+				const expected = row.rungs[grid].mature === null ? "general" : "mature";
+				expect(closestRungLevel(row, grid, "mature"), row.note).toBe(expected);
+			}
+		}
 	});
 });
