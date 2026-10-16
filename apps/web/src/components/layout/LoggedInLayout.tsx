@@ -10,6 +10,7 @@ import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeSelect from "@anthers/web-shared/ui/ThemeSelect";
 import {
 	Bars3Icon,
+	ChevronLeftIcon,
 	MagnifyingGlassIcon,
 	RectangleStackIcon,
 	RssIcon,
@@ -63,16 +64,17 @@ function orderedNavLinks(saved: string[] | null | undefined): readonly NavLinkIt
 
 /**
  * The switch between the two modes, at the top of the sidebar, shown only to an account with
- * creator mode on (Parker, 2026-09-17). Each side goes to its mode's home, since the mode of
+ * creator mode on (Parker, 2026-09-17). The sides name the person rather than the product —
+ * User|Creator (Parker, 2026-10-16) — and each side goes to its mode's home, since the mode of
  * the page on screen is decided by where it is (`app-mode.ts`).
  */
 function ModeSwitch({ mode }: { mode: AppMode }) {
 	const sides = [
-		{ to: "/feed", label: "Anthers", on: mode === "user" },
-		{ to: studioUrl("/"), label: "Studio", on: mode === "studio" },
+		{ to: "/feed", label: "User", on: mode === "user" },
+		{ to: studioUrl("/"), label: "Creator", on: mode === "studio" },
 	];
 	return (
-		<nav className="join w-full" aria-label="Anthers or the Studio">
+		<nav className="join w-full" aria-label="User or Creator">
 			{sides.map(({ to, label, on }) => (
 				<Link
 					key={label}
@@ -139,27 +141,11 @@ function LoggedInLayoutInner() {
 
 	return (
 		<div className="h-screen flex flex-col overflow-hidden">
-			{/* Top bar: hamburger and brand on the left, account on the right. It is the one header
-			    in both modes; studio mode names itself beside the logo and leaves out search and
-			    the basket, which belong to user mode. */}
+			{/* Top bar: brand on the left, account on the right. It is the one header in both modes;
+		    studio mode leaves out search and the basket, which belong to user mode. The sidebar's
+		    own toggle used to live here too and moved onto the sidebar's edge (2026-10-16). */}
 			<header className="navbar nav-edge bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40 h-14 min-h-0">
 				<div className="navbar-start gap-1">
-					{/* Kept MOUNTED through the auth load as invisible rather than removed from
-					    the tree: a button that appears after auth resolves remounts navbar-start's
-					    children, and that remounts the drawer-closed state over the one the
-					    provider already opened. `sidebar-phone.authed.e2e.ts` is the guard —
-					    it measures the sidebar's width, and the remount's signature there is a
-					    closed sidebar on a desktop that should have started open. */}
-					<button
-						type="button"
-						className={`btn btn-ghost btn-sm btn-square ${chromeHidden ? "invisible pointer-events-none" : ""}`}
-						onClick={toggleSidebar}
-						aria-label="Toggle sidebar"
-						aria-hidden={chromeHidden || undefined}
-						tabIndex={chromeHidden ? -1 : undefined}
-					>
-						<Bars3Icon className="w-5 h-5" />
-					</button>
 					{/* A plain flex link rather than a `btn`, for the same reason as the brand link in
 					    LoggedOutLayout: the ghost button's hover background draws a rectangle the trimmed
 					    logo artwork doesn't fill. */}
@@ -259,6 +245,30 @@ function LoggedInLayoutInner() {
 
 			{/* Body: sidebar + main content */}
 			<div className="relative flex flex-1 overflow-hidden">
+				{/* The sidebar's own toggle, riding its right edge level with the mode pair
+				    (Parker, 2026-10-16): chevron-left over the edge collapses the sidebar, and
+				    when it is closed the button sits on the page's left edge as chevron-right.
+				    ONE button in ONE DOM position across the whole life of the layout — kept
+				    MOUNTED through the auth load as invisible rather than removed from the
+				    tree, because a button that appears after auth resolves remounts the
+				    drawer-closed state over the one the provider already opened. Its old
+				    header home had this same treatment; `sidebar-phone.authed.e2e.ts` is the
+				    guard — it measures the sidebar's width, and the remount's signature there
+				    is a closed sidebar on a desktop that should have started open. */}
+				<button
+					type="button"
+					onClick={toggleSidebar}
+					aria-label="Toggle sidebar"
+					aria-hidden={chromeHidden || undefined}
+					tabIndex={chromeHidden ? -1 : undefined}
+					className={`btn btn-xs btn-circle border-base-300/60 bg-base-100 shadow-md absolute top-4 z-40 transition-all duration-200 ease-in-out ${
+						sidebarOpen ? "left-64 -translate-x-1/2" : "left-0 translate-x-0"
+					} ${chromeHidden ? "invisible pointer-events-none" : ""}`}
+				>
+					<ChevronLeftIcon
+						className={`w-3.5 h-3.5 transition-transform duration-200 ${sidebarOpen ? "" : "rotate-180"}`}
+					/>
+				</button>
 				{/* Persistent sidebar. From `md` up it sits beside the page; below that it is
 				    lifted out of the flex row and laid over the page, so opening it on a phone
 				    never squeezes what it covers. The breakpoint is `SIDEBAR_BESIDE_QUERY`'s, which

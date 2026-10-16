@@ -102,7 +102,7 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	await signInAsCreator(context);
 	const studioSidebar = page.getByRole("navigation", { name: "Studio", exact: true });
 	const userSidebar = page.getByRole("navigation", { name: "Anthers", exact: true });
-	const modeSwitch = page.getByRole("navigation", { name: "Anthers or the Studio" });
+	const modeSwitch = page.getByRole("navigation", { name: "User or Creator" });
 	const header = page.getByRole("banner");
 
 	await page.goto("/studio");
@@ -127,7 +127,7 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	await expect(studioSidebar).toBeVisible();
 
 	// The switch leaves for the Feed, and user mode is sticky the same way.
-	await modeSwitch.getByRole("link", { name: "Anthers", exact: true }).click();
+	await modeSwitch.getByRole("link", { name: "User", exact: true }).click();
 	await expect(page).toHaveURL(/\/feed$/);
 	await expect(userSidebar).toBeVisible();
 	await expect(studioSidebar).toHaveCount(0);
@@ -140,7 +140,7 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	await expect(studioSidebar).toHaveCount(0);
 
 	// And back again, from the same switch.
-	await modeSwitch.getByRole("link", { name: "Studio", exact: true }).click();
+	await modeSwitch.getByRole("link", { name: "Creator", exact: true }).click();
 	await expect(page).toHaveURL(/\/studio$/);
 	await expect(studioSidebar).toBeVisible();
 });
@@ -150,7 +150,7 @@ test("an account without creator mode has no Studio to switch to", async ({ page
 	// sidebar, so its absence is also the absence of a door they would be turned back from.
 	await page.goto("/feed");
 	await expect(page.getByRole("navigation", { name: "Anthers", exact: true })).toBeVisible();
-	await expect(page.getByRole("navigation", { name: "Anthers or the Studio" })).toHaveCount(0);
+	await expect(page.getByRole("navigation", { name: "User or Creator" })).toHaveCount(0);
 });
 
 test("every Studio tab lands on its own route", async ({ page, context }) => {
