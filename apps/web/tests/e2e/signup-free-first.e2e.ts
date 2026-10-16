@@ -353,7 +353,7 @@ test.describe("/signup leads with the free door", () => {
 });
 
 test.describe("the way in is named as free", () => {
-	test("the navbar button says so, and Log In sits after it", async ({ page }) => {
+	test("the navbar button says so, and Log In sits before it", async ({ page }) => {
 		await page.goto("/");
 
 		const signUp = page.getByRole("link", { name: /sign up free/i }).first();
@@ -361,10 +361,11 @@ test.describe("the way in is named as free", () => {
 		await expect(signUp).toBeVisible();
 		await expect(signUp).toHaveAttribute("href", "/signup");
 
-		// Reading order and visual weight should agree: the primary act first.
+		// Reading order runs the quiet door first and the primary act last (Parker,
+		// 2026-10-16): Sign Up Free closes the corner, nearest the theme utilities.
 		const signUpBox = await signUp.boundingBox();
 		const logInBox = await logIn.boundingBox();
 		if (!signUpBox || !logInBox) throw new Error("both header links should be visible");
-		expect(signUpBox.x).toBeLessThan(logInBox.x);
+		expect(logInBox.x).toBeLessThan(signUpBox.x);
 	});
 });
