@@ -476,6 +476,10 @@ export default function WorkPage() {
 							shareToken={shareToken}
 							onFrameActivity={reportExternalActivity}
 							startSeconds={startSeconds}
+							// The account's Use Persistent Miniplayer — an account-level
+							// setting, so null (never answered) reads as on. Signed-out, there
+							// is no bar preference at all and the page plays inline.
+							persistentMiniPlayer={isAuthenticated ? (user?.persistentMiniplayer ?? true) : false}
 						/>
 					)}
 				</div>

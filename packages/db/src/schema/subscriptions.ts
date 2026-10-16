@@ -234,6 +234,20 @@ export const userPreferences = pgTable("user_preferences", {
 	 */
 	homeNavOrder: jsonb("home_nav_order").$type<string[]>(),
 
+	/**
+	 * Whether audio playback rides the persistent footer bar (PlayerBar) rather than the
+	 * page's own player: pressing play on an audio Work hands the track to the bar, which
+	 * survives navigation. Null = never answered, and the client reads that as **on** —
+	 * the same "absent reads as the default" rule `matureDisplay` and `adultDisplay`
+	 * carry, so the column never bakes the default in.
+	 *
+	 * An account-level setting on purpose (Parker, 2026-10-16), not a per-install one:
+	 * where a person's playback lives is how they listen, and it follows the account the
+	 * way the theme does. The per-browser Media & Play card is for what genuinely differs
+	 * per device; the placement of the playback chrome is not that.
+	 */
+	persistentMiniplayer: boolean("persistent_miniplayer"),
+
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

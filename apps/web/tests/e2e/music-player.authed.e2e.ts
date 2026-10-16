@@ -179,3 +179,21 @@ test("lyrics show on a free track and never on a gated one", async ({ page }) =>
 	await expect(page.getByText(GATED.lyrics ?? "")).toHaveCount(0);
 	await expect(page.getByText("Lyrics", { exact: true })).toHaveCount(0);
 });
+
+test("playing a music Work queues it into the persistent bar — the account default", async ({
+	page,
+}) => {
+	// The music page's player is a separate component from the spoken one (a song wants
+	// none of its skips or rate), so the hand-off is pinned on its own spec: pressing
+	// play on the Work's page IS the hand-off, no link, and the bar carries the title.
+	await page.goto(`/works/${FREE_WITH_LYRICS.slug}-${FREE_WITH_LYRICS.publicId}`);
+	await page
+		.locator("[data-testid=audio-player]")
+		.getByRole("button", { name: "Play", exact: true })
+		.click();
+
+	await expect(page.locator(BAR)).toBeVisible();
+	await expect.poll(() => playing(page)).toBe(FREE_WITH_LYRICS.title);
+	// One engine, structurally: the page player renders no element of its own.
+	await expect(page.locator("[data-testid=audio-player] audio")).toHaveCount(0);
+});

@@ -9,11 +9,18 @@
  * where the audio still plays, which is the failure shape video-player.authed.e2e.ts
  * was written against.
  *
+ * It also pins the persistent miniplayer's two ownership modes (the account's Use
+ * Persistent Miniplayer, defaulting on): with it on, pressing play on the Work page
+ * queues the episode into the footer bar and the page player renders no element of its
+ * own — one engine, so the double-claim this replaces cannot happen; with it off, the
+ * episode plays in the page's own element and no bar rises. The setting rides the shared
+ * authed account, so the off-mode walks set it and put it back.
+ *
  * The fixture is the media fixture's `episode` — a Work of type `audio`, free and
  * streaming, so none of it is behind a gate and the player it exercises is the real one.
  */
 import { mediaFixtureWork } from "@anthers/db/media-fixture";
-import { expect, test } from "./fixtures";
+import { API_URL, expect, test, WEB_ORIGIN } from "./fixtures";
 
 const EPISODE = mediaFixtureWork("episode");
 const PLAYER = "[data-testid=spoken-player]";
@@ -25,6 +32,15 @@ async function position(page: import("@playwright/test").Page): Promise<number> 
 		const el = document.querySelector(`${selector} audio`) as HTMLAudioElement | null;
 		return el?.currentTime ?? -1;
 	}, PLAYER);
+}
+
+/** Write the account's Use Persistent Miniplayer — the switch this spec walks. */
+async function setMiniPlayer(request: import("@playwright/test").APIRequestContext, on: boolean) {
+	const res = await request.patch(`${API_URL}/api/accounts/me`, {
+		headers: { Origin: WEB_ORIGIN },
+		data: { persistentMiniplayer: on },
+	});
+	expect(res.status()).toBe(200);
 }
 
 test.describe.configure({ mode: "serial" });
@@ -53,6 +69,9 @@ test("an audio Work page renders the spoken transport — skips and a speed menu
 });
 
 test("the skip buttons move the position by their fixed step", async ({ page }) => {
+	// The element-owned mode: the miniplayer is off, so the page owns the <audio> the
+	// skips write into. The default (never answered) is on; it is turned back on below.
+	await setMiniPlayer(page.request, false);
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}`);
 	await expect(page.locator(PLAYER)).toBeVisible();
 
@@ -91,17 +110,50 @@ test("the skip buttons move the position by their fixed step", async ({ page }) 
 		() => (window as unknown as { __ctWrites?: number[] }).__ctWrites ?? [],
 	);
 	expect(writes.length, "skip onClick did not write audio.currentTime").toBeGreaterThan(0);
+
+	// Back to the default reading for the walks below (and the account after them).
+	await setMiniPlayer(page.request, true);
 });
 
-test("Listen while you browse hands the episode to the bar", async ({ page }) => {
+test("with the miniplayer off, the episode plays in its own page and no bar rises", async ({
+	page,
+}) => {
+	await setMiniPlayer(page.request, false);
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}`);
-	await page
-		.locator(PLAYER)
-		.getByRole("button", { name: /listen while you browse/i })
-		.click();
+	await page.locator(PLAYER).getByRole("button", { name: "Play", exact: true }).click();
+
+	// The page's own element is playing — its transport reads Pause — and the
+	// persistent bar never appears to claim the track.
+	await expect(
+		page.locator(PLAYER).getByRole("button", { name: "Pause", exact: true }),
+	).toBeVisible();
+	await expect(page.locator(BAR)).toHaveCount(0);
+
+	await setMiniPlayer(page.request, true);
+});
+
+test("playing an audio Work queues it into the persistent bar — the account default", async ({
+	page,
+}) => {
+	/*
+	 * Asserted from the CONTROL, not from a DOM query on the bar's own audio — the
+	 * provider builds its element with `new Audio()`, which is never in the document,
+	 * so a query for it is a tautology; see music-player.authed.e2e.ts for the incident.
+	 */
+	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}`);
+	await page.locator(PLAYER).getByRole("button", { name: "Play", exact: true }).click();
 
 	await expect(page.locator(BAR)).toBeVisible();
 	await expect(page.locator(`${BAR} [data-testid=now-playing-title]`)).toHaveText(EPISODE.title);
+
+	// One engine, structurally: the page player renders no element of its own, so
+	// two elements cannot play one Work and two claims cannot ride one (creator, Work).
+	await expect(page.locator(`${PLAYER} audio`)).toHaveCount(0);
+	// The transport underneath mirrors the bar — it reads "Pause" while the bar plays
+	// and its seek drives the same track.
+	await expect(
+		page.locator(PLAYER).getByRole("button", { name: "Pause", exact: true }),
+	).toBeVisible();
 });
 
 // Resume-from-position is covered where it is decidable: `src/lib/listen-positions.test.ts`

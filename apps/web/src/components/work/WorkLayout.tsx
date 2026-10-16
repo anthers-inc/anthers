@@ -43,7 +43,6 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { useMediaPlayer } from "../../lib/media-player";
 import {
 	readScrollFraction,
 	refreshReadingPositions,
@@ -564,6 +563,7 @@ export function WorkDeliverable({
 	lyrics,
 	onFrameActivity,
 	startSeconds = null,
+	persistentMiniPlayer = false,
 }: {
 	work: WorkDetail;
 	shareToken?: string | null;
@@ -580,10 +580,19 @@ export function WorkDeliverable({
 	 * a spoken Work's remembered resume: a link that names a moment means that moment.
 	 */
 	startSeconds?: number | null;
+	/**
+	 * Audio playback rides the persistent footer bar instead of the page — the
+	 * account's Use Persistent Miniplayer setting, decided by the routes: the user's
+	 * Work page passes it, the embed and the Studio preview do not, because an
+	 * embedded frame has no bar and a preview should not take over the creator's
+	 * bar as they type.
+	 */
+	persistentMiniPlayer?: boolean;
 }) {
-	const { playTracks } = useMediaPlayer();
 	/** The chapters the description carries — one parse, shared by every player branch. */
 	const chapters = useMemo(() => workChapters(work.description ?? ""), [work.description]);
+	/** The Work's own track, for the bar-driven modes of the audio players — see them. */
+	const track = persistentMiniPlayer ? trackFromWork(work) : undefined;
 	return (
 		<>
 			{/*
@@ -641,9 +650,9 @@ export function WorkDeliverable({
 			 * because what differs is only the address.
 			 *
 			 * No waveform (the MP3 carries the peaks; it does not exist yet, so the
-			 * player's own default fills), and no mini-player hand-off — `trackFromWork`'s
+			 * player's own default fills), and not bar-driven — `trackFromWork`'s
 			 * `src` is the processed endpoint and is null until processing completes, so
-			 * the button would queue a track that cannot play.
+			 * the bar would be handed a track that cannot play.
 			 */}
 			{work.type === "music" && !work.transcoding?.outputFileUrl && work.originalUrl && (
 				<AudioPlayer
@@ -663,9 +672,7 @@ export function WorkDeliverable({
 						publicAccess={work.publicAccess ?? false}
 						chapters={chapters}
 						startSeconds={startSeconds}
-						// Hand it to the persistent bar, so listening survives navigating
-						// away — which is the whole reason the bar exists.
-						onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
+						persistent={track}
 					/>
 					{/* A song's words, under the player. Gated with the audio: the API blanks
 					    them for a user without access, so reaching this branch at all
@@ -684,8 +691,8 @@ export function WorkDeliverable({
 			{/* Spoken word takes its own player — listening to talk wants fixed-step skips,
 			    a rate control and a remembered position, none of which a song does. Its
 			    original plays the same fallback the song branch does above, for the same
-			    reasons: no waveform, and no mini-player hand-off while the processed
-			    deliverable does not exist. */}
+			    reasons: no waveform, and not bar-driven while the processed deliverable
+			    does not exist. */}
 			{work.type === "audio" && !work.transcoding?.outputFileUrl && work.originalUrl && (
 				<SpokenPlayer
 					src={work.originalUrl}
@@ -705,7 +712,7 @@ export function WorkDeliverable({
 					publicAccess={work.publicAccess ?? false}
 					chapters={chapters}
 					startSeconds={startSeconds}
-					onPlayInMiniPlayer={() => playTracks([trackFromWork(work)])}
+					persistent={track}
 				/>
 			)}
 			{isPaged(work.type) &&
