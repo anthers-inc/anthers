@@ -26,15 +26,24 @@ const OFFSET = 450;
 const scrollTop = (page: import("@playwright/test").Page) =>
 	page.evaluate(() => Math.round(document.querySelector("main")?.scrollTop ?? -1));
 
-/** A raw mouse click at a target's center, refusing targets not currently on screen. */
+/** A raw mouse click at a target's center, refusing targets not currently on screen.
+ *  On-screen is measured against the page's own scroll container's visible box — the
+ *  viewport's dimensions belong to whichever project runs the walk, never to this file. */
 async function clickAt(
 	page: import("@playwright/test").Page,
 	locator: import("@playwright/test").Locator,
 ) {
 	const box = await locator.boundingBox();
 	expect(box, "the toggle's target has a box").not.toBeNull();
-	const onScreen =
-		box && box.y >= 58 && box.y + box.height <= 719 && box.x > 0 && box.x + box.width < 1280;
+	const onScreen = await page.evaluate(
+		([x, y, w, h]) => {
+			const main = document.querySelector("main");
+			if (!main) return false;
+			const r = main.getBoundingClientRect();
+			return x >= r.left && y >= r.top && x + w <= r.right && y + h <= r.bottom;
+		},
+		[box.x, box.y, box.width, box.height],
+	);
 	expect(onScreen, `the target is on screen unscrolled (at ${JSON.stringify(box)})`).toBe(true);
 	await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
