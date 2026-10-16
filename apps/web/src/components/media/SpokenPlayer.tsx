@@ -289,7 +289,15 @@ export default function SpokenPlayer({
 		const track = trackRef.current;
 		if (track) {
 			const bar = playerRef.current;
-			if (bar.currentTrack?.workId === track.workId) bar.seek(seconds);
+			if (bar.currentTrack?.workId === track.workId) {
+				bar.seek(seconds);
+			} else {
+				// The bar holds no track of this Work, and the page has no element of
+				// its own: a seek that names a moment starts listening at it. A
+				// chapter cue or a timestamp link that did nothing would be a page
+				// whose links lie, so "start here" is what the unreachable seek means.
+				bar.playTracks([track], 0, { startAt: seconds });
+			}
 			return;
 		}
 		const audio = audioRef.current;
@@ -311,7 +319,8 @@ export default function SpokenPlayer({
 
 	// The landed `?t`, applied once the element has a duration to seek into, once —
 	// re-applied after a rate change or a stall it would be a second entry point, not one.
-	// (Bar-driven playback opens at it through `playTracks`' `startAt` instead.)
+	// (Bar-driven playback opens at it through `playTracks`' `startAt` instead — and
+	// a seek naming a moment starts the bar there, via seekTo above.)
 	const [startApplied, setStartApplied] = useState(false);
 	useEffect(() => {
 		if (persistent || startApplied || startSeconds == null || !duration) return;
@@ -324,7 +333,13 @@ export default function SpokenPlayer({
 			const track = trackRef.current;
 			if (track) {
 				const bar = playerRef.current;
-				if (bar.currentTrack?.workId === track.workId) bar.seek(bar.progress + seconds);
+				if (bar.currentTrack?.workId === track.workId) {
+					bar.seek(bar.progress + seconds);
+				} else {
+					// Nothing in the bar: the skip starts the Work at its stepped
+					// moment, the same meaning the seek bar's unreachable drag has.
+					bar.playTracks([track], 0, { startAt: Math.max(0, seconds) });
+				}
 				return;
 			}
 			seekTo((audioRef.current?.currentTime ?? 0) + seconds);

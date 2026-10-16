@@ -203,7 +203,15 @@ export default function AudioPlayer({
 		const track = trackRef.current;
 		if (track) {
 			const bar = playerRef.current;
-			if (bar.currentTrack?.workId === track.workId) bar.seek(seconds);
+			if (bar.currentTrack?.workId === track.workId) {
+				bar.seek(seconds);
+			} else {
+				// The bar holds no track of this Work, and the page has no element of
+				// its own: a seek that names a moment starts listening at it. A
+				// chapter cue or a timestamp link that did nothing would be a page
+				// whose links lie, so "start here" is what the unreachable seek means.
+				bar.playTracks([track], 0, { startAt: seconds });
+			}
 			return;
 		}
 		const audio = audioRef.current;
@@ -221,7 +229,8 @@ export default function AudioPlayer({
 	useBindPlayerSeek(seekTo);
 
 	// The landed `?t`, applied once the element has a duration to seek into, once.
-	// (Bar-driven playback opens at it through `playTracks`' `startAt` instead.)
+	// (Bar-driven playback opens at it through `playTracks`' `startAt` instead — and
+	// a seek naming a moment starts the bar there, via seekTo above.)
 	const [startApplied, setStartApplied] = useState(false);
 	useEffect(() => {
 		if (persistent || startApplied || startSeconds == null || !duration) return;
