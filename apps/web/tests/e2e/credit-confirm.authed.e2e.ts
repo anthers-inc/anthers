@@ -465,7 +465,7 @@ test("the contributor field autocompletes the identities Anthers knows and credi
 	// while the editor is open, because a save closes it (and a fast save on CI's own
 	// Postgres closes it before the read-back would look).
 	await expect(
-		page.getByText(/A blend \(Created and AI together\) is a genuine mixed credit/),
+		page.getByText(/A blend \(Created and Generated together\) is a genuine mixed credit/),
 	).toBeVisible();
 	await page.getByRole("button", { name: "Save Credits" }).click();
 });

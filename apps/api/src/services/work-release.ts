@@ -196,7 +196,7 @@ export async function releaseRefusal(
 	// payout gate above rather than overriding it: every released Work earns, and a Work with
 	// no credited human has nobody the earnings belong to — so there is no "released with no
 	// human credited" state, and no resolver-side free-only exception is needed. Zero credits
-	// and only-AI/licensed credits both refuse, because neither names a human; any blend
+	// and only-generated credits both refuse, because neither names a human; any blend
 	// carrying `created` passes, since the API requires that row to name its contributor.
 	if (!(work.credits ?? []).some((credit) => credit.types.includes("created"))) {
 		return {

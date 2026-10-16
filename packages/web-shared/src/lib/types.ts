@@ -70,13 +70,13 @@ export interface AccessRow {
 
 /** One row of a Work's access table — the only name; see the column's own note. */
 
-/** What a credit asserts about its role: a human made it, a source licensed it, or a machine did. */
-export type WorkCreditType = "created" | "licensed" | "ai";
+/** What a credit asserts about its role: a person or copyright-capable entity made it (`created`), or a machine did (`generated`). */
+export type WorkCreditType = "created" | "generated";
 
 /**
  * One row of a Work's credits — the creator saying who or what made which part. Public
- * liner notes. A `created` credit always names its contributor; a pure `licensed`/`ai` row
- * may not. Mirrors `WorkCredit` in `packages/db/src/schema/content.ts` — the two are one
+ * liner notes. A `created` credit always names its contributor — whoever made the part,
+ * however the publisher got it — while a pure `generated` row may stay anonymous. Mirrors `WorkCredit` in `packages/db/src/schema/content.ts` — the two are one
  * shape and change together, except for the two flag fields below, which the API's credit
  * overlay emits and no database stores.
  *

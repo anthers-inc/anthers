@@ -60,8 +60,8 @@ export interface AccessRow {
 	price: string;
 }
 
-/** What a credit asserts about its role: a human made it, a source licensed it, or a machine did. */
-export type WorkCreditType = "created" | "licensed" | "ai";
+/** What a credit asserts about its role: a person or copyright-capable entity made it (`created`), or a machine did (`generated`). */
+export type WorkCreditType = "created" | "generated";
 
 /**
  * One row of a Work's credits — creator-asserted provenance, shown as public liner notes.
@@ -71,10 +71,12 @@ export type WorkCreditType = "created" | "licensed" | "ai";
  *
  * Contributor-asserted facts: `role` is the freeform contribution ("Written by");
  * `types` is any non-empty combination asserting what made it. `"created"` forces a
- * `contributor` — a human-made part names its human — while a pure `licensed` or `ai`
- * row may stay anonymous (a machine owns nothing, so an `ai` credit never names a model). A
- * Work is released only when some credit carries `created` — a released Work earns, and one
- * with no credited human has nobody the earnings belong to (`work-release.ts`).
+ * `contributor` — anything a person made names the person, whether they made it for this
+ * Work, licensed it in or wrote it two centuries ago — while a pure `generated` row may
+ * stay anonymous (a machine makes nothing anyone owns, so a generated credit never names
+ * a model). A Work is released only when some credit carries `created` — a released Work
+ * earns, and one with no credited human has nobody the earnings belong to
+ * (`work-release.ts`).
  */
 export interface WorkCredit {
 	role: string;
