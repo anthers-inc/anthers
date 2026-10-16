@@ -24,8 +24,8 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 		// ⚠️ **Two links here pointed at demo pages deleted on 2026-08-30** — "Creator Hubs"
 		// at `/demo-creator-page` and "Creator Economics" at `/demo-creator-breakdown`. They
 		// are replaced by the creator terms rather than by a substitute demo: a footer is
-		// where someone goes for the document, and the economics question belongs to the
-		// resources pages the site's copy links individually.
+		// where someone goes for the document, and the economics question belongs to
+		// /resources, which the Support column carries.
 		title: "Creators",
 		links: [
 			["For Creators", "/for-creators"],
@@ -52,10 +52,7 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 		title: "Support",
 		links: [
 			["FAQ", "/faq"],
-			// The Resources landing is unlisted while its redesign is worked — it still
-			// answers at /resources for direct links, and the calculators keep their
-			// pages linked from the site's copy. Revisit task on the board owns the
-			// return decision.
+			["Resources", "/resources"],
 			// Under Support rather than Legal (Parker, 2026-08-27). A parent looking for this
 			// is looking for help understanding the place, not for a policy document — and
 			// filing it beside Terms made it read as one.
@@ -179,6 +176,9 @@ export default function LoggedOutLayout() {
 									<Link to="/for-creators">For Creators</Link>
 								</li>
 								<li>
+									<Link to="/resources">Resources</Link>
+								</li>
+								<li>
 									<Link to="/about">About Us</Link>
 								</li>
 								{/* Log In lives here as well as in the corner, because the corner button is
@@ -219,6 +219,9 @@ export default function LoggedOutLayout() {
 						</li>
 						<li>
 							<Link to="/for-creators">For Creators</Link>
+						</li>
+						<li>
+							<Link to="/resources">Resources</Link>
 						</li>
 						<li>
 							<Link to="/about">About Us</Link>

@@ -28,14 +28,14 @@ test.describe("Resources calculators", () => {
 		await page.goto("/resources");
 		await expect(page.getByRole("heading", { name: "Check our math" })).toBeVisible();
 
-		// The groups the page is organized into. Section = format, tag = subject; these
-		// headings are the structure, so guard them against a silent regression.
+		// The groups the page is organized into — one per audience, flagship-led, with the
+		// comparisons as the strip both audiences read. These headings are the structure, so
+		// guard them against a silent regression.
 		// (<Reveal> only fades content in on scroll, but it animates opacity — which
 		// Playwright still counts as visible — so below-fold assertions hold here.)
-		//
-		// ⚠️ A third group, "How the model works", led this page until 2026-08-30; it held
-		// the `/demo-*` explainers and went with them.
-		await expect(page.getByRole("heading", { name: "Run the numbers yourself" })).toBeVisible();
+		await expect(page.getByRole("heading", { name: "Follow your own money" })).toBeVisible();
+		await expect(page.getByRole("heading", { name: "What working here pays" })).toBeVisible();
+		await expect(page.getByRole("heading", { name: "The mechanism, drawn" })).toBeVisible();
 		await expect(page.getByRole("heading", { name: "How we stack up" })).toBeVisible();
 
 		// 🚨 **A dangling `/demo-*` card is not visible from this page's other assertions.**
@@ -45,6 +45,10 @@ test.describe("Resources calculators", () => {
 		const demoLinks = await page.locator('a[href*="/demo-"]').count();
 		expect(demoLinks, "the resources index links to a retired demo page").toBe(0);
 
+		// Each audience category opens on its flagship card, full-width; the creator
+		// category's two staging calculators follow as grid cards.
+		await expect(page.getByRole("link", { name: "Your Media Month" }).first()).toBeVisible();
+		await expect(page.getByRole("link", { name: "How the Money Moves" }).first()).toBeVisible();
 		await expect(page.getByRole("heading", { name: "Video Storage Calculator" })).toBeVisible();
 		await expect(
 			page.getByRole("heading", { name: "Creator Monetization Calculator" }),

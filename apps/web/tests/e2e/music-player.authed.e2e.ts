@@ -159,11 +159,9 @@ test("listening survives navigating away", async ({ page }) => {
 	await expect.poll(() => playing(page)).toBe(MEDIA_FIXTURE_TRACKS[0].title);
 
 	// A client-side navigation, which is the case that matters: the provider sits above
-	// the router, so the element is never torn down. (Was the Resources nav link until
-	// the landing came off the nav while its redesign is worked — any footer link
-	// exercises the same case.)
-	await page.getByRole("link", { name: "About Us" }).first().click();
-	await expect(page).toHaveURL(/\/about/);
+	// the router, so the element is never torn down.
+	await page.getByRole("link", { name: "Resources" }).first().click();
+	await expect(page).toHaveURL(/\/resources/);
 	await expect(page.locator(BAR)).toBeVisible();
 	expect(await playing(page)).toBe(MEDIA_FIXTURE_TRACKS[0].title);
 });
