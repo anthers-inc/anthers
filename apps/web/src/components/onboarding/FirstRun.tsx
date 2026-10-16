@@ -149,7 +149,7 @@ export default function FirstRun({ arrival, handle }: { arrival: Arrival; handle
 				    with — which is the thing that decides where their money actually goes. */}
 				<Actions
 					primary={["Find more creators", "/discover"]}
-					secondary={["See your Badges", "/subscription"]}
+					secondary={["See your Badges", "/badges"]}
 				/>
 			</div>
 		);

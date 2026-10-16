@@ -124,7 +124,7 @@ const UnsubscribePage = lazy(() => import("./pages/UnsubscribePage"));
 const SupportersPage = lazy(() => import("./pages/SupportersPage"));
 const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
 const SignupPage = lazy(() => import("./pages/SignupPage"));
-const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
+const BadgesPage = lazy(() => import("./pages/BadgesPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const VideoStorageCalculatorPage = lazy(() => import("./pages/VideoStorageCalculatorPage"));
 const WorkPage = lazy(() => import("./pages/WorkPage"));
@@ -298,13 +298,16 @@ export default function App() {
 					 */}
 					<Route path="/basket" element={<BasketPage />} />
 					<Route
-						path="/subscription"
+						path="/badges"
 						element={
 							<ProtectedRoute>
-								<SubscriptionPage />
+								<BadgesPage />
 							</ProtectedRoute>
 						}
 					/>
+					{/* Legacy name — the page was the subscription's, and the Badges page is
+					    what it became; the old address follows, for anything still holding it. */}
+					<Route path="/subscription" element={<Navigate to="/badges" replace />} />
 					<Route
 						path="/purchases"
 						element={
