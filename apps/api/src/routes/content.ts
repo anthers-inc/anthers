@@ -3638,7 +3638,7 @@ const contentRoutes = new Hono()
 	 *
 	 * 🚨 **`requireAuth` on all four, since 2026-08-28. Consuming a Work requires an
 	 * account.** The line is the page versus the bytes: `GET /works/:id` stays open to
-	 * everybody, so a Work's page is shareable, indexable and unfurls properly, and these —
+	 * everybody, so a Work's page is shareable and indexable, and these —
 	 * the routes that actually hand something over — are the ones that ask who is calling.
 	 *
 	 * Anonymous delivery was never a decision. It was the absence of this middleware, which
@@ -7059,8 +7059,8 @@ const contentRoutes = new Hono()
 		const buffer = Buffer.from(await file.arrayBuffer());
 		await storage.upload(key, buffer, file.type, acl);
 
-		// 🚨 **Scanned inline, and this is the door the child-safety coverage map, which is deliberately not public § *The shape* has always claimed
-		// scanned.** The bytes are fully buffered here, so there is nothing to defer to a
+		// 🚨 **Scanned inline, and this is the door the child-safety coverage map describes as
+		// the inline path.** The bytes are fully buffered here, so there is nothing to defer to a
 		// job — and unlike a Work there is no release gate behind which a queued scan could
 		// catch up, because an avatar is visible the moment the row points at it.
 		//

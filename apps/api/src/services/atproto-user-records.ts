@@ -24,9 +24,10 @@ import { isVoteDirection } from "@anthers/shared/votes";
  * Why a user's row has no record.
  *
  * ⚠️ **`no_author` is the tombstone case and it is common rather than exceptional.** Comments
- * and reviews keep their row with a null author when an account is deleted, so that a thread
- * other people took part in stays readable. There is no repository left to write into, and
- * writing one into somebody else's would be a lie about who said it.
+ * keep their row with a null author when an account is deleted, so that a thread other people
+ * took part in stays readable. There is no repository left to write into, and writing one into
+ * somebody else's would be a lie about who said it. A review is destroyed with the account
+ * instead — the deletion table's reason: an anonymous written verdict nobody knows to distrust.
  *
  * 🚨 **`subject_unpublished` is the compounding condition.** A record names its subject by
  * address, so an interaction can only be published once the thing it is about has a record of

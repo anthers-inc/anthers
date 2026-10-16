@@ -23,7 +23,7 @@
  *
  * **The line is the page versus the bytes**, and both halves are asserted here. A Work's
  * page stays public — title, cover, duration, the access verdict, `publicAccess: true` —
- * so it is shareable, indexable and unfurls properly. Delivery is what asks who is calling.
+ * so it is shareable and indexable. Delivery is what asks who is calling.
  *
  * ⚠️ **Two independent guards, and neither is redundant.** `requireAuth` covers the four
  * routes that hand over media. `resolveAccessSync` refusing a null user covers text,

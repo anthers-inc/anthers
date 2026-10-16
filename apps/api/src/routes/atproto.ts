@@ -446,7 +446,8 @@ const atprotoRoutes = new Hono()
 				// answer `{email: "someone-else@example.com", emailConfirmed: true}`. The prize
 				// is an Anthers account bound to an address they do not control — receipts and
 				// account notices to an innocent third party, and a squatted handle. Recoverable
-				// (the real owner can sign in by code and unlink) but not worth having.
+				// — the signup's code arrives at that address, so the real owner can prove it —
+				// but not worth having.
 				//
 				// ⚠️ **An allowlist of trusted PDS hosts was the obvious alternative and was
 				// rejected on principle**: "we trust Bluesky's server and not yours" is precisely

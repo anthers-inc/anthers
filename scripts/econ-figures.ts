@@ -1335,20 +1335,24 @@ const BLOCKS: Block[] = [
 // the defect eventually does.
 
 /**
- * ⚠️ **`packages/db/src` is here for the seed data, and joined the list 2026-08-16.**
- * Not a page, but the seeds and the gauntlet are prose a developer reads to learn what
- * the model supports — and they had drifted exactly as the README did, for exactly the
- * same reason: outside the scan, so nothing looked. The demo seeder carried a `pwyw` pricing
- * type and a work blurb promising pay-what-you-want, for a mechanism that has never
- * existed; the gauntlet printed a user's support as a Seed count. One sweep, then this
- * line, so it is the last time.
- *
- * Cheap to include because the scan blanks comments first: the schema identifiers that
- * legitimately say "seed" (`seed_allocations`, `BADGE_RUNGS`, `seedGatedAccess`) are code,
- * and every `RETIRED_COPY` pattern matches the word as prose rather than as an
- * identifier. Adding the root found one line and no false positives.
+ * ⚠️ **The seed scripts are here, and are why this list stopped at web roots.** Not a page,
+ * but the seeds and the gauntlet are prose a developer reads to learn what the model
+ * supports — and they had drifted exactly as the README did, for exactly the same reason:
+ * outside the scan, so nothing looked. The demo seeder carried a `pwyw` pricing type and a
+ * work blurb promising pay-what-you-want, for a mechanism that has never existed; the
+ * gauntlet printed a user's support as a Seed count. One sweep, then this list, so it is
+ * the last time. The seeds lived in `packages/db/src` when the scan first reached them
+ * (2026-08-16) and moved to `apps/api/src/scripts` (#224, which also deleted the demo
+ * seeder that gave the entry its first catch) — the boundary follows them, and the scan
+ * blanks comments first, so the schema identifiers that legitimately say "seed"
+ * (`seed_allocations`, `BADGE_RUNGS`, `seedGatedAccess`) are code and never a hit.
  */
-const APP_ROOTS = ["apps/web/src", "apps/admin/src", "packages/web-shared/src", "packages/db/src"];
+const APP_ROOTS = [
+	"apps/web/src",
+	"apps/admin/src",
+	"packages/web-shared/src",
+	"apps/api/src/scripts",
+];
 
 /**
  * Markdown in this repo that is read by outsiders, and so is held to the same standard

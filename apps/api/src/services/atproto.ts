@@ -96,7 +96,8 @@ export async function getBlueskyProfile(
  *
  * ⚠️ **Nothing writes one any more** — the ceremony below never creates an account without
  * a real address. It is still read, because rows created before the ceremony existed are
- * still rows, and the unlink guard has to keep recognizing them.
+ * still rows, and `hasReachableEmail` has to keep refusing those addresses rather than
+ * sending a sign-in code to a mailbox that cannot exist.
  */
 const PLACEHOLDER_EMAIL_DOMAIN = "atproto.invalid";
 
