@@ -26,8 +26,8 @@ import { usePayoutsReady } from "@anthers/web-shared/payouts";
 import { Link, useNavigate } from "@anthers/web-shared/router";
 import { studioUrl } from "@anthers/web-shared/studio";
 import { CheckIcon, EyeIcon, PencilSquareIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import type { ReactNode } from "react";
-import { useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
+import { keepScroll } from "./scrollKeeper";
 
 const PENCIL =
 	// Always visible (Parker, 2026-10-16) — hover-reveal was the rule while an unfilled field
@@ -74,6 +74,8 @@ export function InlineField<V>({
 	const [mode, setMode] = useState<"read" | "edit" | "busy">("read");
 	const [draft, setDraft] = useState<V>(saved);
 	const [error, setError] = useState<string | null>(null);
+	/** The field's own root, the anchor `keepScroll` measures the page's scroller from. */
+	const rootRef = useRef<HTMLDivElement | null>(null);
 
 	const commit = async () => {
 		if (mode === "busy") return;
@@ -81,7 +83,9 @@ export function InlineField<V>({
 		setError(null);
 		try {
 			await save(draft);
-			setMode("read");
+			// Saved — back to the read view. The saved field is shorter than the working
+			// one usually, and a shorter page must not cost the reader their place.
+			keepScroll(rootRef.current, () => setMode("read"));
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Couldn't save this just now.");
 			setMode("edit");
@@ -89,7 +93,7 @@ export function InlineField<V>({
 	};
 
 	return (
-		<div className={`group relative ${className}`}>
+		<div ref={rootRef} className={`group relative ${className}`}>
 			{mode === "read" ? (
 				<>
 					{renderRead()}
@@ -99,11 +103,15 @@ export function InlineField<V>({
 							aria-label={`Edit ${label}`}
 							title={`Edit ${label}`}
 							className={mode === "read" ? `${PENCIL} absolute -top-1 right-0` : PENCIL}
-							onClick={() => {
-								setDraft(saved);
-								setError(null);
-								setMode("edit");
-							}}
+							onClick={() =>
+								// Opening for edit usually makes the page taller — and whatever it
+								// does to the height, the place stays (scroll-keeper's rule).
+								keepScroll(rootRef.current, () => {
+									setDraft(saved);
+									setError(null);
+									setMode("edit");
+								})
+							}
 						>
 							<PencilSquareIcon className="size-4" />
 						</button>
@@ -116,9 +124,12 @@ export function InlineField<V>({
 			) : (
 				<div className="space-y-2">
 					{renderEdit(draft, setDraft, () => {
-						setDraft(saved);
-						setError(null);
-						setMode("read");
+						// Cancel — the field shrinks back to its read view; the place stays.
+						keepScroll(rootRef.current, () => {
+							setDraft(saved);
+							setError(null);
+							setMode("read");
+						});
 					})}
 					{error && <p className="text-xs text-error">{error}</p>}
 					<div className="flex items-center gap-1">
@@ -131,11 +142,13 @@ export function InlineField<V>({
 									aria-label={`Cancel editing ${label}`}
 									title="Discard"
 									className="btn btn-ghost btn-xs"
-									onClick={() => {
-										setDraft(saved);
-										setError(null);
-										setMode("read");
-									}}
+									onClick={() =>
+										keepScroll(rootRef.current, () => {
+											setDraft(saved);
+											setError(null);
+											setMode("read");
+										})
+									}
 								>
 									<XMarkIcon className="size-4" />
 								</button>

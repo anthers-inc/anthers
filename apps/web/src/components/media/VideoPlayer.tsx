@@ -89,8 +89,8 @@ interface VideoPlayerProps {
 	 */
 	onEnded?: () => void;
 	/**
-	 * Handed the `<video>` element, for a caller that reads the picture it is showing — the
-	 * Studio's *Use This Frame*, which draws the paused frame into a thumbnail.
+	 * Handed the `<video>` element, for a caller that reads what it is showing — the
+	 * page's attention wiring uses it for the presence half of a claim (attention.ts).
 	 */
 	elementRef?: MutableRefObject<HTMLVideoElement | null>;
 	/**

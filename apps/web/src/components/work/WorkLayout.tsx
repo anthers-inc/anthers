@@ -36,7 +36,6 @@ import {
 import { PlayIcon } from "@heroicons/react/24/solid";
 import {
 	type CSSProperties,
-	type MutableRefObject,
 	type ReactNode,
 	type RefObject,
 	useEffect,
@@ -321,7 +320,7 @@ export function WorkColumn({
 		// player and the description and reviews that link into it are the siblings
 		// this binding exists for — see `lib/work-player.tsx`.
 		<WorkPlayerProvider>
-			<div className={`${width} mx-auto px-4 ${tight ? "pt-6 pb-8" : "py-8"} space-y-6`}>
+			<div className={`${width} mx-auto px-4 ${tight ? "pt-6 pb-16" : "py-8 pb-16"} space-y-6`}>
 				{children}
 			</div>
 		</WorkPlayerProvider>
@@ -563,7 +562,6 @@ export function WorkDeliverable({
 	work,
 	shareToken = null,
 	lyrics,
-	videoRef,
 	onFrameActivity,
 	startSeconds = null,
 }: {
@@ -571,8 +569,6 @@ export function WorkDeliverable({
 	shareToken?: string | null;
 	/** In place of a music Work's lyrics, for a control standing in for them. */
 	lyrics?: ReactNode;
-	/** Handed a video's `<video>` element, for the Studio to take a frame from. */
-	videoRef?: MutableRefObject<HTMLVideoElement | null>;
 	/**
 	 * Fed the hosted frame's presence heartbeats, for the page's idle detector — the
 	 * in-frame input signal that otherwise never leaves the frame. See
@@ -609,7 +605,6 @@ export function WorkDeliverable({
 					poster={work.thumbnail ?? undefined}
 					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 					publicAccess={work.publicAccess ?? false}
-					elementRef={videoRef}
 					captions={work.captions}
 					chapters={chapters}
 					startSeconds={startSeconds}
@@ -631,7 +626,6 @@ export function WorkDeliverable({
 					poster={work.thumbnail ?? undefined}
 					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
 					publicAccess={work.publicAccess ?? false}
-					elementRef={videoRef}
 					captions={work.captions}
 					chapters={chapters}
 					startSeconds={startSeconds}
