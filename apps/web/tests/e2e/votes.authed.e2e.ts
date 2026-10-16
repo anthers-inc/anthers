@@ -114,7 +114,10 @@ test.afterAll(async () => {
 	await db.delete(comments).where(inArray(comments.id, [buriedId, ordinaryId]));
 });
 
-test("🚨 the post carries a vote control at all, with a score on it", async ({ page, context }) => {
+test("🚨 the post carries a vote control at all, with the counts on its buttons", async ({
+	page,
+	context,
+}) => {
 	await signInAsCreator(context);
 	await page.goto(`/posts/${POST_SLUG}`);
 	// Named for the post, so this cannot pass by finding a comment's control instead — the
@@ -122,9 +125,13 @@ test("🚨 the post carries a vote control at all, with a score on it", async ({
 	const control = page.getByRole("button", { name: /^Upvote Anyone can read this$/ });
 	await expect(control).toBeVisible();
 
-	// ⭐ This post is the signed-in creator's own, so they are owed the figures behind the
-	// net. Everybody else gets one number, and the server does not send the keys at all.
-	await expect(page.getByText(/\d+ up, \d+ down/).first()).toBeVisible();
+	// ⭐ The numbers ride the buttons now (Parker, 2026-10-16), and the read that answers
+	// carries the counts to every reader — this post being the signed-in creator's own
+	// used to change what they were owed, and no longer does. Each direction therefore
+	// shows its own count, whatever it is.
+	await expect(control).toContainText(/^\d+$/);
+	const down = page.getByRole("button", { name: /^Downvote Anyone can read this$/ });
+	await expect(down).toContainText(/^\d+$/);
 });
 
 test("⭐ an upvote moves the number the user can see", async ({ page, context }) => {
