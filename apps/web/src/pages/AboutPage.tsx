@@ -222,14 +222,14 @@ export default function AboutPage() {
 				<div className="mx-auto mt-12 grid max-w-5xl gap-6 md:grid-cols-2">
 					<Reveal className="h-full">
 						<FactCard
-							title="What's already true"
+							title="What's Already True"
 							note="Since incorporation as a Colorado nonprofit"
 							items={BINDING_NOW}
 						/>
 					</Reveal>
 					<Reveal delay={110} className="h-full">
 						<FactCard
-							title="What that means soon"
+							title="What That Means Soon"
 							note="Once the IRS determination letter arrives"
 							items={BINDING_SOON}
 						/>

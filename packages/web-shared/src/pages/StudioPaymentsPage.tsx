@@ -214,7 +214,7 @@ export default function PaymentsPage() {
 
 				<div className="card bg-base-200">
 					<div className="card-body gap-4">
-						<h2 className="card-title text-lg">Payout setup</h2>
+						<h2 className="card-title text-lg">Payout Setup</h2>
 
 						{state === "connected" && (
 							<>
@@ -296,7 +296,7 @@ export default function PaymentsPage() {
 				{balanceRows && (balanceRows.available.length > 0 || balanceRows.pending.length > 0) ? (
 					<div className="card bg-base-200">
 						<div className="card-body">
-							<h2 className="card-title text-lg">Stripe balance</h2>
+							<h2 className="card-title text-lg">Stripe Balance</h2>
 							<div className="grid grid-cols-2 gap-4">
 								<div>
 									<div className="text-xs uppercase text-base-content/50">Available</div>
@@ -328,7 +328,7 @@ export default function PaymentsPage() {
 				{earnings && parseFloat(earnings.heldTotal) > 0 ? (
 					<div className="card bg-base-200">
 						<div className="card-body">
-							<h2 className="card-title text-lg">Anthers ledger</h2>
+							<h2 className="card-title text-lg">Anthers Ledger</h2>
 							<div className="grid grid-cols-2 gap-4">
 								<div>
 									<div className="text-xs uppercase text-base-content/50">Held</div>

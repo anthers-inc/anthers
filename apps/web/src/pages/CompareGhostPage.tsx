@@ -222,35 +222,35 @@ export default function CompareGhostPage() {
 					<Reveal delay={0}>
 						<DiffCard
 							icon={<CurrencyDollarIcon className="h-6 w-6" />}
-							title="Revenue model"
+							title="Revenue Model"
 							description="Ghost charges a monthly hosting fee (published plans run from $18/mo) and takes 0% of membership revenue. Anthers is free to use and takes 0% of sales; real costs are passed through as transparent line items to the buyer. Both platforms let creators keep what they earn."
 						/>
 					</Reveal>
 					<Reveal delay={100}>
 						<DiffCard
 							icon={<EyeIcon className="h-6 w-6" />}
-							title="Publishing approach"
+							title="Publishing Approach"
 							description="Ghost gives you a full website with custom themes, SEO tools, and email newsletter delivery; it's a CMS. Anthers gives you a creator profile with project pages, devlogs, and a built-in audience; it's a marketplace and community platform."
 						/>
 					</Reveal>
 					<Reveal delay={200}>
 						<DiffCard
 							icon={<UserGroupIcon className="h-6 w-6" />}
-							title="Audience model"
+							title="Audience Model"
 							description="Ghost's audience model is email-first: visitors become newsletter subscribers, then paid members. Anthers' model is follow-first: users follow creators and see their work in a personalized feed, with subscription pools distributing revenue by time."
 						/>
 					</Reveal>
 					<Reveal delay={300}>
 						<DiffCard
 							icon={<CodeBracketIcon className="h-6 w-6" />}
-							title="Open-source approach"
+							title="Open-Source Approach"
 							description="Ghost is fully open-source (MIT license) and self-hostable, and their non-profit foundation has been building in the open since 2013, a decade of earned credibility. Anthers is open source under the Apache-2.0 license and holds the same principle: hosting with us is meant to be a convenience, never a requirement."
 						/>
 					</Reveal>
 					<Reveal delay={400}>
 						<DiffCard
 							icon={<TrophyIcon className="h-6 w-6" />}
-							title="Community features"
+							title="Community Features"
 							description="Ghost focuses on the creator-to-reader relationship: write, publish, deliver via email. Anthers adds community mechanics around the works themselves (project reviews, comments, and follow/feed), built for the kind of interactive, collaborative community that forms around indie games and creative projects."
 						/>
 					</Reveal>
@@ -298,7 +298,7 @@ export default function CompareGhostPage() {
 								<CompRow feature="Audio / music hosting" anthers />
 								<CompRow feature="Reviews & comments" anthers />
 								<CompRow feature="Follow & feed system" anthers />
-								<CompRow feature="Creator profiles" anthers />
+								<CompRow feature="Creator Profiles" anthers />
 								<CompRow feature="Subscription pool model" anthers />
 								<CompRow feature="Transparent itemized fees" anthers />
 								<CompRow feature="0% platform revenue share" anthers ghost />

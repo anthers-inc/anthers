@@ -1,4 +1,4 @@
-# Brand assets referenced from outside this app
+# Brand Assets Referenced from Outside This App
 
 🚨 **These paths are stable on purpose and must not be renamed, moved, or run through the
 bundler.** Everything the build imports is content-hashed — `lockup-oneline-light-mpamxr9x.png`

@@ -79,7 +79,7 @@ describe("accessState", () => {
 		// The shirts the store launched with: baseline open at $0 — which for a shirt is
 		// "the public may see the page", never "this shirt costs nothing" (the goods-works
 		// rule: the store's own prices are the price). The categorization error the rule
-		// retired is a shirt wearing "Free download".
+		// retired is a shirt wearing "Free Download".
 		expect(
 			accessState({
 				visibility: "released",

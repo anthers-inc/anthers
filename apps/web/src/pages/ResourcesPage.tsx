@@ -44,7 +44,7 @@ const serif = { fontFamily: FONTS.fraunces };
 const EXPLAINERS: ResourceCard[] = [
 	{
 		to: "/resources/how-money-moves",
-		title: "How the money moves",
+		title: "How the Money Moves",
 		blurb:
 			"The whole flow, drawn to the percentage: what a monthly subscription to Anthers splits into, what a subscription to a creator and a purchase pass through with, and what funds the charitable programs. Right now, with no projections — hold it to the arithmetic.",
 		tag: "Money",
@@ -65,7 +65,7 @@ interface ResourceCard {
 const CALCULATORS: ResourceCard[] = [
 	{
 		to: "/resources/media-month",
-		title: "Your media month",
+		title: "Your Media Month",
 		blurb:
 			"The spend calculator: build your month out of what you already pay — subscriptions, purchases, pledges — and see what each line pays out today (with the gaps standing where nothing is published) against the same money on Anthers, computed exactly.",
 		tag: "Money",
@@ -96,7 +96,7 @@ const CALCULATORS: ResourceCard[] = [
 const COMPARISONS: ResourceCard[] = [
 	{
 		to: "/resources/pay-comparison",
-		title: "How our pay compares",
+		title: "How Our Pay Compares",
 		blurb:
 			"What reaches you on Anthers versus YouTube, Spotify, Steam, Bandcamp, Patreon, and Substack — our current math, head to head.",
 		tag: "Economics",

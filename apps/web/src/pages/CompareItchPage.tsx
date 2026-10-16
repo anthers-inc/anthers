@@ -151,21 +151,21 @@ export default function CompareItchPage() {
 					<Reveal delay={300}>
 						<DiffCard
 							icon={<LockOpenIcon className="h-6 w-6" />}
-							title="Open, and yours to leave"
+							title="Open, and Yours to Leave"
 							description="The whole platform is open source under the Apache-2.0 license, and you can download everything you've made in one click. Hosting with Anthers is meant to be a convenience, never a requirement. You sign up with an identity on the AT Protocol (one Anthers issues you, or one you already have), and each work you release gets a public listing in a repository you own, readable by anyone's software whether or not Anthers is still here."
 						/>
 					</Reveal>
 					<Reveal delay={400}>
 						<DiffCard
 							icon={<UserGroupIcon className="h-6 w-6" />}
-							title="Subscription model that funds creators"
+							title="Subscription Model That Funds Creators"
 							description="Beyond individual sales, Anthers offers a subscription pool: half of what subscribers give Anthers (the Time Pool) is distributed to creators by time spent across what people play, watch, read, and listen to, and the rest, after the card cost, funds the charitable programs. It rewards engagement, not just transactions."
 						/>
 					</Reveal>
 					<Reveal delay={500}>
 						<DiffCard
 							icon={<ChartBarIcon className="h-6 w-6" />}
-							title="Unified creator dashboard"
+							title="Unified Creator Dashboard"
 							description="Manage all your projects, posts, analytics, and audience from one place. itch.io's dashboard is focused on game sales and analytics. Anthers' dashboard covers your entire creative output (games, posts, audio, video), with follow and feed mechanics built in."
 						/>
 					</Reveal>
@@ -260,14 +260,14 @@ export default function CompareItchPage() {
 					<Reveal delay={200} className="h-full">
 						<MediaCard
 							icon={<MusicalNoteIcon className="h-7 w-7" />}
-							title="Audio (hosted to stream)"
+							title="Audio (Hosted to Stream)"
 							supported="anthers"
 						/>
 					</Reveal>
 					<Reveal delay={300} className="h-full">
 						<MediaCard
 							icon={<DocumentTextIcon className="h-7 w-7" />}
-							title="Writing (a built-in reader)"
+							title="Writing (a Built-in Reader)"
 							supported="anthers"
 						/>
 					</Reveal>
@@ -376,21 +376,21 @@ export default function CompareItchPage() {
 					<Reveal delay={0}>
 						<PortabilityPoint
 							icon={<ArrowPathIcon className="h-6 w-6" />}
-							title="Take your work with you"
+							title="Take Your Work with You"
 						>
 							One button in Settings and you get a file with everything you've made: works, posts,
 							purchases, the lot. Today, not eventually.
 						</PortabilityPoint>
 					</Reveal>
 					<Reveal delay={110}>
-						<PortabilityPoint icon={<LockOpenIcon className="h-6 w-6" />} title="Open source">
+						<PortabilityPoint icon={<LockOpenIcon className="h-6 w-6" />} title="Open Source">
 							The whole platform is open source under the Apache-2.0 license, and every version
 							published stays available to anybody who wants to run it. Hosting with us is meant to
 							be a convenience rather than a requirement.
 						</PortabilityPoint>
 					</Reveal>
 					<Reveal delay={220}>
-						<PortabilityPoint icon={<GlobeAltIcon className="h-6 w-6" />} title="On the network">
+						<PortabilityPoint icon={<GlobeAltIcon className="h-6 w-6" />} title="On the Network">
 							Your identity is an AT Protocol one, and each work you release gets a public listing
 							in a repository you own, so other people's software can read your catalog without
 							asking us. Running your own server is the part we haven't built yet, and we'd rather

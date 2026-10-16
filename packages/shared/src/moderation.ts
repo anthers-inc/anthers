@@ -172,7 +172,7 @@ export interface ModerationReason {
  * confirmation whose control switches the selection**. Removing any one of those three
  * re-opens the hole.
  *
- * ⭐ **"Pornographic material" is the operative term and "sexually explicit" is the
+ * ⭐ **"Pornographic Material" is the operative term and "sexually explicit" is the
  * definition, rather than the other way round** (Parker). The retired label leaned on
  * "explicit" to carry a distinction the word does not carry on its own and then defined it
  * in one word anyway. What the hint leans on instead is Anthers' own settled distinction
@@ -193,13 +193,13 @@ export const MODERATION_REASONS: readonly ModerationReason[] = [
 	{
 		value: "csam",
 		group: "law",
-		label: "Child sexual abuse or exploitation",
-		hint: "Sexual content involving anyone under 18, or an adult soliciting a minor. Reported to authorities, not only to us.",
+		label: "Child Sexual Abuse or Exploitation",
+		hint: "Sexual Content involving anyone under 18, or an adult soliciting a minor. Reported to authorities, not only to us.",
 	},
 	{
 		value: "violence",
 		group: "law",
-		label: "Threats or violence",
+		label: "Threats or Violence",
 		hint: "Threats of harm, incitement, or graphic violence.",
 	},
 	{
@@ -207,13 +207,13 @@ export const MODERATION_REASONS: readonly ModerationReason[] = [
 		group: "law",
 		// ⚠️ "Appears" stays. A reporter is not a lawyer, and the heading speaks to how the
 		// report is handled rather than to how certain they have to be.
-		label: "Something else against the law",
+		label: "Something Else against the Law",
 		hint: "Anything else that appears to break the law, excluding copyright infringement (see below).",
 	},
 	{
 		value: "pornography",
 		group: "rules",
-		label: "Pornographic material",
+		label: "Pornographic Material",
 		hint: "Sexually explicit material beyond what Anthers allows at all. The distinction is not the subject matter but how it's treated: art that deals with sex, nudity or the body is allowed on Anthers; material made to function as pornography is not. Before reporting this, please be considerate of the notion that your personal discomfort level with a piece of mature content doesn't necessarily make it pornographic.",
 		confirm: {
 			question:
@@ -240,19 +240,19 @@ export const MODERATION_REASONS: readonly ModerationReason[] = [
 	{
 		value: "harassment",
 		group: "rules",
-		label: "Harassment or hate",
+		label: "Harassment or Hate",
 		hint: "Targeted abuse, or attacks on a person or group.",
 	},
 	{
 		value: "spam",
 		group: "rules",
-		label: "Spam or advertising",
+		label: "Spam or Advertising",
 		hint: "Unsolicited promotion, scams, or repetitive posting.",
 	},
 	{
 		value: "other",
 		group: "rules",
-		label: "Something else",
+		label: "Something Else",
 		hint: "Tell us what's wrong and an operator will read it.",
 	},
 ] as const;
@@ -277,7 +277,7 @@ export const RETIRED_MODERATION_REASONS: readonly ModerationReason[] = [
 	{
 		value: "sexual",
 		group: "law",
-		label: "Sexual content",
+		label: "Sexual Content",
 		hint: "Explicit sexual material, or any sexual content involving minors.",
 	},
 ] as const;

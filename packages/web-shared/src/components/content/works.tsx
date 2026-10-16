@@ -154,7 +154,7 @@ const ACCESS_BADGES: Record<AccessState, { label: string; className: string; tit
 		title: "Only you can see this. Release it to put it in your public Catalog.",
 	},
 	locked: {
-		label: "Nobody can open",
+		label: "Nobody Can Open",
 		className: "badge-error",
 		title: "Released, but no access row allows anyone in. Set access on this Work.",
 	},
@@ -164,13 +164,13 @@ const ACCESS_BADGES: Record<AccessState, { label: string; className: string; tit
 		title: "Free to everyone, nothing to clear. Earns from the Time Pool.",
 	},
 	free: {
-		label: "Free download",
+		label: "Free Download",
 		className: "badge-success badge-outline",
 		title: "Free to everyone, but it doesn't stream — so it isn't Public Access.",
 	},
-	sale: { label: "For sale", className: "badge-info", title: "Anyone can buy this." },
+	sale: { label: "For Sale", className: "badge-info", title: "Anyone can buy this." },
 	gated: {
-		label: "Badge gated",
+		label: "Badge Gated",
 		className: "badge-info badge-outline",
 		title: "Reachable by people supporting you at one of your Badge levels.",
 	},

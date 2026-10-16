@@ -469,13 +469,13 @@ function anthersReading(amount: number, entryPrice: number): { segments: Segment
 				{
 					tone: "pool",
 					amount: timePoolFor(amount),
-					label: "To creators, by time",
+					label: "To Creators, by Time",
 					desc: "split by the share of your time each one earned",
 				},
 				{
 					tone: "mission",
 					amount: amount - timePoolFor(amount) - cardFeeDisplay(amount),
-					label: "Charitable programs",
+					label: "Charitable Programs",
 					desc: "funds Anthers' charitable programs (free access included), which keeps other people's accounts free",
 				},
 				{
@@ -493,13 +493,13 @@ function anthersReading(amount: number, entryPrice: number): { segments: Segment
 			{
 				tone: "pool",
 				amount: FREE_TIME_POOL,
-				label: "To creators, by time",
+				label: "To Creators, by Time",
 				desc: "split by the share of your time each one earned, funded by Anthers, not by you",
 			},
 			{
 				tone: "mission",
 				amount: 0,
-				label: "Charitable programs",
+				label: "Charitable Programs",
 				desc: "funded by the rungs above, which is what pays for your account",
 			},
 			{
@@ -844,7 +844,7 @@ function BadgeLadder(props: LadderProps) {
 		// shrink below the widest thing inside it — and the widest thing inside this one is a
 		// table with a `min-w` on it. Without this the page itself scrolls sideways.
 		<fieldset className="mx-auto mt-8 min-w-0 max-w-7xl">
-			<legend className="sr-only">What to give Anthers each month</legend>
+			<legend className="sr-only">What to Give Anthers Each Month</legend>
 			{fits ? <BadgeMatrix {...props} /> : <BadgeCards {...props} />}
 		</fieldset>
 	);
@@ -1359,7 +1359,7 @@ const ANTHERS_ECHO_SIZERS = RUNG_AMOUNTS.filter((amount) => amount > 0).map(anth
  * The account's own row in the closing summary, at whichever rung is chosen.
  *
  * 🚨 **One row rather than two, because the free account and the Anthers rung are the same
- * fact** (Parker, 2026-08-25). The summary listed a permanent *"Free account · 10 hours of
+ * fact** (Parker, 2026-08-25). The summary listed a permanent *"Free Account · 10 hours of
  * Public Access a month"* and then grew a second row when somebody chose a Badge, which cost
  * two things. The card got 73px taller under a control most of a page above it, sliding every
  * bee in `MeadowVines` — they sit at a percentage of page height — and the permanent row went
@@ -1377,7 +1377,7 @@ function accountLineFor(amount: number): PickLine {
 	if (amount > 0) return anthersLineFor(amount);
 	return {
 		key: null,
-		label: "Free account",
+		label: "Free Account",
 		sub: `${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month`,
 		amount: 0,
 	};
@@ -2898,7 +2898,7 @@ export default function SignupPage() {
 								{
 									tone: "pool",
 									amount: CREATOR_WORST_CASE_NET,
-									label: "Straight to the creator",
+									label: "Straight to the Creator",
 									desc: "recurring support, and it clears whichever of their levels it reaches",
 								},
 								{

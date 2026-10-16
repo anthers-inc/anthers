@@ -242,7 +242,7 @@ export interface AuthoredPlanPhase {
 export const DEFAULT_PLAN_PHASES: readonly AuthoredPlanPhase[] = [
 	{
 		phase: 1,
-		label: "Launch — covering out-of-pocket",
+		label: "Launch — Covering Out-of-Pocket",
 		accounts: 1_000,
 		payingShare: 0.3,
 		staff: 0,
@@ -253,7 +253,7 @@ export const DEFAULT_PLAN_PHASES: readonly AuthoredPlanPhase[] = [
 	},
 	{
 		phase: 2,
-		label: "First tooling",
+		label: "First Tooling",
 		accounts: 2_000,
 		payingShare: 0.3,
 		staff: 0,
@@ -275,7 +275,7 @@ export const DEFAULT_PLAN_PHASES: readonly AuthoredPlanPhase[] = [
 	},
 	{
 		phase: 4,
-		label: "Token stipend",
+		label: "Token Stipend",
 		accounts: 10_000,
 		payingShare: 0.3,
 		staff: 800,
@@ -308,7 +308,7 @@ export const DEFAULT_PLAN_PHASES: readonly AuthoredPlanPhase[] = [
 	},
 	{
 		phase: 7,
-		label: "Near full-time",
+		label: "Near Full-Time",
 		accounts: 30_000,
 		payingShare: 0.3,
 		staff: 3_600,
@@ -319,7 +319,7 @@ export const DEFAULT_PLAN_PHASES: readonly AuthoredPlanPhase[] = [
 	},
 	{
 		phase: 8,
-		label: "INFLECTION 1 — full-time",
+		label: "INFLECTION 1 — Full-Time",
 		accounts: 40_000,
 		payingShare: 0.3,
 		staff: 6_700,
@@ -330,7 +330,7 @@ export const DEFAULT_PLAN_PHASES: readonly AuthoredPlanPhase[] = [
 	},
 	{
 		phase: 9,
-		label: "Full-time, room to spare",
+		label: "Full-Time, Room to Spare",
 		accounts: 60_000,
 		payingShare: 0.3,
 		staff: 6_700,

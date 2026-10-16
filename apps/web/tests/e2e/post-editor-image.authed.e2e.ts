@@ -116,7 +116,7 @@ test("a picked file becomes an image in the editor and a gap a return drew survi
 	const registered = page.waitForEvent("response", (res) =>
 		res.url().includes("/api/content/inline-images"),
 	);
-	await page.getByRole("button", { name: "Insert image" }).click();
+	await page.getByRole("button", { name: "Insert Image" }).click();
 	const chooser = await chooserPromise;
 	await chooser.setFiles([{ name: "art.png", mimeType: "image/png", buffer: artwork() }]);
 	const registration = await registered;
@@ -183,7 +183,7 @@ test("an oversized image says so in the editor rather than failing silently", as
 	// Over the ceiling the endpoint holds, and rejected in the editor before any request
 	// leaves the page — so no response to wait for, only the message.
 	const chooserPromise = page.waitForEvent("filechooser");
-	await page.getByRole("button", { name: "Insert image" }).click();
+	await page.getByRole("button", { name: "Insert Image" }).click();
 	const chooser = await chooserPromise;
 	await chooser.setFiles([
 		{ name: "big.png", mimeType: "image/png", buffer: Buffer.alloc(10 * 1024 * 1024 + 1) },

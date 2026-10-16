@@ -135,7 +135,7 @@ export default function VideoStorageCalculatorPage() {
 			<Reveal>
 				<CalcPageHeader
 					eyebrow="Original master + AV1 ladder · storage cost"
-					title="Video storage cost per source-hour"
+					title="Video Storage Cost per Source-Hour"
 					lede={
 						<>
 							Pick the master resolution and framerate, and how the original was exported. The tool
