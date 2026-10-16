@@ -125,6 +125,13 @@ import {
 	quarantineSummary,
 	quarantineWork,
 } from "../services/quarantine.js";
+import {
+	rawSessionCount,
+	trafficBySource,
+	trafficFunnel,
+	trafficTimeseries,
+	trafficTopPaths,
+} from "../services/traffic.js";
 import { editWorkListing, notifyListingCorrected } from "../services/work-edit.js";
 import { adminAccountRoutes } from "./admin-accounts.js";
 import { adminAuthRoutes } from "./admin-auth.js";
@@ -409,6 +416,32 @@ const adminRoutes = new Hono<AdminEnv>()
 			},
 			uploads: { total: s.uploads_total ?? 0 },
 			series,
+		});
+	})
+
+	// ── Traffic — first-party, site-wide measurement ─────────────────────────
+	// Where visitors came from and what they opened, from the traffic pipeline's own
+	// tables (services/traffic.ts is its only writer). Read-only, like Activity above
+	// it, and deliberately small: one endpoint answers the whole Traffic page.
+	.get("/traffic", async (c) => {
+		const period = Math.min(Number(c.req.query("period") ?? 30), 365);
+		const [timeseries, sources, topPaths, funnel, sessionsSeen] = await Promise.all([
+			trafficTimeseries(period),
+			trafficBySource(period),
+			trafficTopPaths(period, 25),
+			trafficFunnel(period),
+			rawSessionCount(),
+		]);
+		return c.json({
+			period,
+			timeseries,
+			sources,
+			topPaths,
+			funnel,
+			// Distinct sessions the raw window has ever seen — a liveness reading while
+			// the site is small, not a published metric; it dies with raw retention by
+			// design (services/traffic.ts's union note says why it cannot be summed).
+			sessionsSeen,
 		});
 	})
 

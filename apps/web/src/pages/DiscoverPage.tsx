@@ -13,6 +13,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import CardImpressionBoundary from "../components/cards/CardImpressionBoundary";
 import CreatorCard from "../components/cards/CreatorCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import ContentFilterSections from "../components/layout/ContentFilterSections";
@@ -288,7 +289,9 @@ export default function DiscoverPage() {
 				<>
 					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
 						{projects.map((project) => (
-							<ProjectCard key={project.id} project={project} />
+							<CardImpressionBoundary key={project.id} subjectKind="project" subjectId={project.id}>
+								<ProjectCard project={project} />
+							</CardImpressionBoundary>
 						))}
 					</div>
 
@@ -298,7 +301,13 @@ export default function DiscoverPage() {
 							<h2 className="text-lg font-semibold mb-4">Creators</h2>
 							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 								{creators.slice(0, 6).map((creator) => (
-									<CreatorCard key={creator.id} creator={creator} />
+									<CardImpressionBoundary
+										key={creator.id}
+										subjectKind="creator"
+										subjectId={creator.id}
+									>
+										<CreatorCard creator={creator} />
+									</CardImpressionBoundary>
 								))}
 							</div>
 						</section>

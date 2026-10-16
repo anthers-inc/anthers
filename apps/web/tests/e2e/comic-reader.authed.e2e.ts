@@ -14,7 +14,7 @@
  */
 import { mediaFixtureWork } from "@anthers/db/media-fixture";
 import type { Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, resetReadingPosition, test } from "./fixtures";
 
 const COMIC = mediaFixtureWork("comic");
 const READER = 'section[aria-label^="Comic reader:"]';
@@ -53,6 +53,7 @@ test("🚨 the source PDF is never fetched — pages are, one at a time", async 
 	const requested: string[] = [];
 	page.on("request", (r) => requested.push(r.url()));
 
+	await resetReadingPosition(page, COMIC);
 	await openReader(page);
 	await page.locator(READER).getByRole("button", { name: "Next page" }).click();
 	await expect.poll(() => shownPages(page)).toEqual([2]);
@@ -72,6 +73,7 @@ test("🚨 the source PDF is never fetched — pages are, one at a time", async 
 });
 
 test("pages turn, and the reader knows where it is", async ({ page }) => {
+	await resetReadingPosition(page, COMIC);
 	await openReader(page);
 	expect(await shownPages(page)).toEqual([1]);
 	// "1 / 4" — the count comes from the serialized Work, which is what made the
@@ -91,6 +93,7 @@ test("pages turn, and the reader knows where it is", async ({ page }) => {
 });
 
 test("arrow keys turn pages once the reader has focus", async ({ page }) => {
+	await resetReadingPosition(page, COMIC);
 	await openReader(page);
 	await page.locator(READER).focus();
 
@@ -107,6 +110,7 @@ test("arrow keys turn pages once the reader has focus", async ({ page }) => {
 });
 
 test("the spread view shows two pages at once", async ({ page }) => {
+	await resetReadingPosition(page, COMIC);
 	await openReader(page);
 	await page.locator(READER).getByRole("button", { name: "Two-page spread" }).click();
 	await expect.poll(() => shownPages(page)).toEqual([1, 2]);
@@ -117,6 +121,7 @@ test("the spread view shows two pages at once", async ({ page }) => {
 });
 
 test("it reopens where you stopped reading", async ({ page }) => {
+	await resetReadingPosition(page, COMIC);
 	await openReader(page);
 	await page.locator(READER).getByRole("button", { name: "Next page" }).click();
 	await page.locator(READER).getByRole("button", { name: "Next page" }).click();
@@ -125,6 +130,7 @@ test("it reopens where you stopped reading", async ({ page }) => {
 	// A chapter is one Work, so "continue reading" ACROSS a book belongs to the library
 	// experience — but reopening the chapter you were in the middle of is this reader's
 	// job, and losing your place on a reload is the thing that makes a reader feel cheap.
+	await resetReadingPosition(page, COMIC);
 	await openReader(page);
 	expect(await shownPages(page)).toEqual([3]);
 });

@@ -7,8 +7,10 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./fees": "./src/fees.ts",
+		"./scenarios": "./src/scenarios.ts",
 		"./constants": "./src/constants.ts",
 		"./attention": "./src/attention.ts",
+		"./traffic": "./src/traffic.ts",
 		"./billing-cycle": "./src/billing-cycle.ts",
 		"./badge-art": "./src/badge-art.ts",
 		"./votes": "./src/votes.ts",

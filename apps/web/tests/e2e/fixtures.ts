@@ -187,6 +187,37 @@ export function signInAsMediaFixture(context: BrowserContext): Promise<string> {
 	return signInAs(context, MEDIA_FIXTURE_EMAIL);
 }
 
+/**
+ * Reset the reading-position row for one Work, through the route the readers write
+ * through — the precondition every fresh-open assertion in the reader walks stands on.
+ *
+ * Rows are per-USER state, and every browser walk here shares one account, so a spec
+ * that turns a page leaves the Work's row where *it* left it: without the reset, the
+ * next walk in line adopts that row and opens mid-book (retries included — a failed
+ * attempt's own clicks come home to its retry through the row, with localStorage no
+ * longer the only store). The reset is progress 0 with an empty pointer: enough to
+ * answer the rail's membership test "never opened" and to write nothing the readers
+ * resume from, because the pointer carries neither page, panel, nor CFI.
+ */
+export async function resetReadingPosition(
+	page: Page,
+	work: { slug: string; publicId: number },
+): Promise<void> {
+	const cookies = await page.context().cookies();
+	const session = cookies.find((c) => c.name === "session")?.value;
+	expect(session, "the authed project should carry a session cookie").toBeTruthy();
+	const res = await fetch(`${API_URL}/api/content/reading-positions/${work.publicId}`, {
+		method: "PUT",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN, // CSRF checks Origin
+			Cookie: `session=${session}`,
+		},
+		body: JSON.stringify({ progress: 0, position: {} }),
+	});
+	expect(res.status, "resetting the reading position should answer 200").toBe(200);
+}
+
 export { expect };
 
 /** The browser session's mail catcher, where every email the API sends lands. */

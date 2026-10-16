@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The Resources marketing page — the Meadow-styled hub for everything that shows
-// our work: calculators (run it yourself) and comparisons (how we stack up). The
-// page is wrapped in the shared <MeadowDecor> (pollen + woven side vines) at the
-// route level, so this file styles content only.
+// our work: explainers (the mechanism, drawn), calculators (run it yourself) and
+// comparisons (how we stack up). The page is wrapped in the shared <MeadowDecor>
+// (pollen + woven side vines) at the route level, so this file styles content only.
 //
 // Two axes, kept deliberately separate — the section says what *format* a resource
 // is, the card's tag says what *subject* it covers. Don't tag a card with its own
@@ -16,11 +16,12 @@
 // every generated figure on the site stayed right. The same rule took down the
 // revenue drawing on 2026-10-15 from the other side: its figures were generated,
 // but they were the financial plan's *projections*, and projections this early and
-// this in flux make a public page muddier rather than more transparent. A "right
-// now" resource — how a gift and a purchase actually split today, drawn as
-// percentages — replaces it; until then this page holds the tools, and the
-// landing as a whole is being redesigned (see the vault's "Revisit the
-// public-facing Resources as a whole, a larger revamp").
+// this in flux make a public page muddier rather than more transparent. What
+// replaced it is the opposite of a projection: the mechanism page — how a monthly
+// subscription's money splits and how a purchase passes through, in percentages —
+// which is the one card the Explainers section holds. The landing as a whole is
+// still being redesigned (see the vault's "Revisit the public-facing Resources as
+// a whole, a larger revamp").
 
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -38,6 +39,19 @@ import {
 
 const serif = { fontFamily: FONTS.fraunces };
 
+/** The drawn resources: they explain rather than compute, and they build against
+ * the shared model — the rule out of the demos' deletion (see the file's header). */
+const EXPLAINERS: ResourceCard[] = [
+	{
+		to: "/resources/how-money-moves",
+		title: "How the money moves",
+		blurb:
+			"The whole flow, drawn to the percentage: what a monthly subscription to Anthers splits into, what a subscription to a creator and a purchase pass through with, and what funds the charitable programs. Right now, with no projections — hold it to the arithmetic.",
+		tag: "Money",
+		icon: BanknotesIcon,
+	},
+];
+
 interface ResourceCard {
 	to: string;
 	title: string;
@@ -49,6 +63,14 @@ interface ResourceCard {
 
 /** The interactive tools — put numbers in, get numbers out. */
 const CALCULATORS: ResourceCard[] = [
+	{
+		to: "/resources/media-month",
+		title: "Your media month",
+		blurb:
+			"The spend calculator: build your month out of what you already pay — subscriptions, purchases, pledges — and see what each line pays out today (with the gaps standing where nothing is published) against the same money on Anthers, computed exactly.",
+		tag: "Money",
+		icon: BanknotesIcon,
+	},
 	{
 		to: "/resources/video-storage",
 		title: "Video Storage Calculator",
@@ -127,8 +149,22 @@ export default function ResourcesPage() {
 				</div>
 			</header>
 
-			{/* Calculators — plain first, so it alternates against the tinted hero. */}
+			{/* Explainers — the mechanism, drawn; plain between the tinted hero and the calculators. */}
 			<Section>
+				<Reveal>
+					<Eyebrow>Explainers</Eyebrow>
+					<H2>The mechanism, drawn</H2>
+					<Lede>
+						How money actually moves on Anthers today — where a subscription goes, what a purchase
+						passes through with, and what funds the programs — every figure generated from the same
+						math the checkout runs.
+					</Lede>
+				</Reveal>
+				<ResourceGrid cards={EXPLAINERS} />
+			</Section>
+
+			{/* Calculators */}
+			<Section tint>
 				<Reveal>
 					<Eyebrow>Calculators</Eyebrow>
 					<H2>Run the numbers yourself</H2>
@@ -141,7 +177,7 @@ export default function ResourcesPage() {
 			</Section>
 
 			{/* Comparisons */}
-			<Section tint>
+			<Section>
 				<Reveal>
 					<Eyebrow>Comparisons</Eyebrow>
 					<H2>How we stack up</H2>
@@ -154,7 +190,7 @@ export default function ResourcesPage() {
 			</Section>
 
 			{/* The way onward when the tools above don't have the answer. */}
-			<Section>
+			<Section tint>
 				<Reveal>
 					<Eyebrow>Still looking?</Eyebrow>
 					<H2>Not finding what you need?</H2>

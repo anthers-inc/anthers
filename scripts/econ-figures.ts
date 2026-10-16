@@ -78,6 +78,7 @@ import {
 	TIME_POOL_RATE,
 	timePoolFor,
 } from "../packages/shared/src/constants.js";
+import { supportBreakdown } from "../packages/shared/src/fees.js";
 import {
 	insideOrganization as insideOrganizationAt,
 	organizationDir,
@@ -100,6 +101,7 @@ import {
 	purchaseCase,
 	purchaseExamples,
 	RIVAL_MEMBERSHIPS,
+	RIVAL_SPEND,
 	RIVAL_STOREFRONTS,
 	salaryLandmarks,
 	saleTable,
@@ -258,11 +260,108 @@ async function formatted(source: string): Promise<string> {
 }
 
 // ── 1. The generated module the app reads ────────────────────────────────────
+/**
+ * The money routes behind "how the money moves" (`/resources/how-money-moves`)
+ * — the mechanism as it works today, in percentages. Where the retired
+ * `PLAN_PATH` drew the plan's ledger at modeled scale, these figures carry no
+ * account mix, no phase and no forecast: each route is one charge's arithmetic,
+ * computed from the checkout's own primitives, so a strand's percentages hold
+ * whatever the platform's size turns out to be.
+ *
+ * The charges named are INPUTS, the same kind `SALE_SCENARIOS` authors — the
+ * rungs of the ladder, a $10 representative (and $3 worst-case) creator
+ * subscription, the $10 album and $1 single track from `PURCHASE_EXAMPLES` —
+ * and everything downstream of them is computed. Conservation is asserted
+ * here: every route's shares reconstruct its charge, and each route's
+ * percentages sum to 100.
+ */
+function moneyFlowsFigure() {
+	const pctOf = (n: number, of: number) => Math.round((n / of) * 1000) / 10;
+	const close = (a: number, b: number, what: string) => {
+		if (Math.abs(a - b) > 0.051) throw new Error(`money flows — ${what}: ${a} ≠ ${b}`);
+	};
+
+	/** Each paying rung: half to the Time Pool by construction, the card line at cost, the rest the remainder. */
+	const ladder = badgeTable()
+		.map((r) => ({ badge: r.badge as string, monthly: Number(r.monthly) }))
+		.filter((r) => r.monthly > 0)
+		.map((r) => {
+			const s = supportBreakdown({ anthersDollars: r.monthly, creatorDollars: 0 });
+			return {
+				badge: r.badge,
+				monthly: r.monthly,
+				timePool: Number(s.timePool.toFixed(2)),
+				card: Number(s.payments.toFixed(2)),
+				remainder: Number(s.foundation.toFixed(2)),
+				timePoolPct: pctOf(s.timePool.toNumber(), r.monthly),
+				cardPct: pctOf(s.payments.toNumber(), r.monthly),
+				remainderPct: pctOf(s.foundation.toNumber(), r.monthly),
+			};
+		});
+	for (const r of ladder) {
+		close(r.timePool + r.card + r.remainder, r.monthly, `rung ${r.badge} conservation`);
+		close(r.timePoolPct + r.cardPct + r.remainderPct, 100, `rung ${r.badge} percents`);
+	}
+
+	/** A monthly subscription pointed at one creator: the charge's card fee is its whole deduction. */
+	const directed = (monthly: number) => {
+		const s = supportBreakdown({ anthersDollars: 0, creatorDollars: monthly });
+		return {
+			monthly,
+			card: Number(s.payments.toFixed(2)),
+			creator: Number(s.creatorNet.toFixed(2)),
+			cardPct: pctOf(s.payments.toNumber(), monthly),
+			creatorPct: pctOf(s.creatorNet.toNumber(), monthly),
+		};
+	};
+	const sumCheck = (t: { cardPct: number; creatorPct: number }, what: string) =>
+		close(t.cardPct + t.creatorPct, 100, `${what} percents`);
+	const creatorSub = { at: directed(10), worst: directed(3) };
+	sumCheck(creatorSub.at, "creator subscription at $10");
+	sumCheck(creatorSub.worst, "creator subscription at $3");
+
+	const album = purchaseExamples().find((p) => Number(p.price) === 10);
+	const track = purchaseExamples().find((p) => Number(p.price) === 1);
+	if (!album || !track) {
+		throw new Error(
+			"money flows — the $10 and $1 purchase examples are gone from PURCHASE_EXAMPLES",
+		);
+	}
+	const purchase = {
+		at: {
+			item: album.item,
+			price: Number(album.price),
+			card: Number(album.cardFee),
+			creator: Number(album.creatorReceives),
+			cardPct: pctOf(Number(album.cardFee), Number(album.price)),
+			creatorPct: pctOf(Number(album.creatorReceives), Number(album.price)),
+		},
+		worst: {
+			item: track.item,
+			price: Number(track.price),
+			card: Number(track.cardFee),
+			creator: Number(track.creatorReceives),
+			cardPct: pctOf(Number(track.cardFee), Number(track.price)),
+			creatorPct: pctOf(Number(track.creatorReceives), Number(track.price)),
+		},
+	};
+	sumCheck(purchase.at, "purchase at $10");
+	sumCheck(purchase.worst, "purchase at $1");
+
+	// The drawing's Anthers-side strand is Root — the calculator's default rung.
+	const anthersSub = ladder.find((r) => r.badge === "Root");
+	if (!anthersSub) throw new Error("money flows — no Root rung on the badge table");
+
+	return { anthersSub, ladder, creatorSub, purchase };
+}
+
+// ── 1. The generated module the app reads ────────────────────────────────────
 function renderModule(): string {
 	const badges = badgeTable();
 	const sales = saleTable();
 	const receipt = sampleReceipt();
 	const seed = directedSupportWorstCase();
+	const flows = moneyFlowsFigure();
 	const j = (v: unknown) => JSON.stringify(v, null, "\t").replace(/\n/g, "\n");
 	return `// SPDX-License-Identifier: Apache-2.0
 //
@@ -292,6 +391,18 @@ export const SAMPLE_RECEIPT = ${j(receipt)} as const;
 export const DIRECTED_SUPPORT_WORST_CASE = ${j(seed)} as const;
 
 /**
+ * The money routes behind \`/resources/how-money-moves\` — the mechanism as it
+ * works today, at representative charges: what an Anthers subscription splits
+ * into (half to the Time Pool by construction, the card line at cost, the rest
+ * the remainder), and what a creator subscription and a purchase pass through
+ * with. The charges named are inputs; every split and percentage is computed
+ * from the checkout's own primitives, with conservation asserted in the
+ * generator. No account mix, no phase, no forecast — the plan's projections
+ * live only in the admin console.
+ */
+export const MONEY_FLOWS = ${j(flows)} as const;
+
+/**
  * The storefronts a creator actually compares us with, and their revenue share.
  *
  * Generated rather than typed into the Studio because the wiki's *How Anthers Talks About Itself* § Comparisons binds every
@@ -303,6 +414,31 @@ export const DIRECTED_SUPPORT_WORST_CASE = ${j(seed)} as const;
  * (checked 2026-08-03). Generation guarantees the arithmetic, never the inputs.
  */
 export const RIVAL_STOREFRONTS = ${j(RIVAL_STOREFRONTS)} as const;
+
+/**
+ * The spend calculator's rival lines — the monthly spending lines a reader builds
+ * their own media month from, with what each platform publishes about the split.
+ *
+ * Hand-maintained in \`scenarios.ts\` beside \`RIVAL_STOREFRONTS\` (same discipline:
+ * sources and checked dates are part of the data, and a \`null\` split is a finding
+ * the page states rather than a number it estimates). Re-exported through the
+ * generated module because the browser bundle reads only this module.
+ *
+ * ⚠️ **The rates and prices are perishable** — generation guarantees the arithmetic,
+ * never the inputs. Each row carries its own \`checkedOn\`; re-check before anything
+ * ships.
+ */
+export const RIVAL_SPEND = ${j(RIVAL_SPEND)} as const;
+
+/**
+ * The purchase crossover, against the storefront cut \`purchaseCase\` defaults to
+ * (Steam's 30%): below this list price a storefront that absorbs processing returns
+ * MORE to the creator than Anthers does, and the page concedes it. Computed by
+ * walking up in cents from \`FLAT / (CUT − RATE)\` until Anthers actually wins once
+ * both sides are rounded — not roundable from a formula, because the concession
+ * turns on whose rounding wins.
+ */
+export const STOREFRONT_CROSSOVER = ${j(purchaseCase().crossover)} as const;
 `;
 }
 

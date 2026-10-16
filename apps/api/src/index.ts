@@ -28,6 +28,7 @@ import { paymentRoutes } from "./routes/payments.js";
 import { createPlayPageRoutes } from "./routes/play-page.js";
 import { statusRoutes } from "./routes/status.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
+import { trafficRoutes } from "./routes/traffic.js";
 import { webBuildRoutes } from "./routes/web-builds.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { alertDue, alertOperational, captureError, redactRoute } from "./services/error-tracker.js";
@@ -138,7 +139,8 @@ const app = new Hono()
 	.route("/api/admin", adminRoutes)
 	.route("/api/webhooks", webhookRoutes)
 	.route("/api/status", statusRoutes)
-	.route("/api/errors", errorCaptureRoutes);
+	.route("/api/errors", errorCaptureRoutes)
+	.route("/api/traffic", trafficRoutes);
 
 /**
  * The dev-only build-delivery harness, registered only from a checkout. Keeping the mount

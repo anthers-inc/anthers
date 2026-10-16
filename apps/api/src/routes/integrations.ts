@@ -30,6 +30,12 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { creatorAnalyticsRanges } from "../services/attention-ranges.js";
+import {
+	creatorCards,
+	creatorTraffic,
+	creatorTrafficSeries,
+	creatorTrafficSources,
+} from "../services/traffic.js";
 
 /** One Work's attention over the analytics period, merged across the raw and rolled-up tables. */
 interface WorkStats {
@@ -323,6 +329,31 @@ const integrationRoutes = new Hono()
 			timeseries: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
 			period,
 		});
+	})
+
+	// ══════════════════════════════════════════════════════════════════════════
+	// TRAFFIC — where visitors came from and what they opened
+	// ══════════════════════════════════════════════════════════════════════════
+
+	/**
+	 * ⚠️ **Traffic is a different measurement from attention, and this endpoint keeps
+	 * them visually apart on purpose.** Attention above is seconds on content and what
+	 * pays; traffic is visits, referrers and card displays and pays nobody — the
+	 * figures never share a card or a chart. What a creator sees is their profile's,
+	 * works' and projects' recorded traffic (resolved from paths — `services/traffic.ts`
+	 * carries the reasoning and its cost) plus their impressions against click-through.
+	 * Nothing here can identify a visitor: the tables have no identity to give.
+	 */
+	.get("/analytics/traffic", requireAuth, async (c) => {
+		const user = c.get("user");
+		const period = Math.min(Number(c.req.query("period") ?? 30), 365);
+		const [traffic, cards, series, sources] = await Promise.all([
+			creatorTraffic(user.id, period),
+			creatorCards(user.id, period),
+			creatorTrafficSeries(user.id, period),
+			creatorTrafficSources(user.id, period),
+		]);
+		return c.json({ traffic, cards, series, sources, period });
 	})
 
 	// ══════════════════════════════════════════════════════════════════════════

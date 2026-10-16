@@ -210,6 +210,7 @@ import {
 } from "../services/post-markdown.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { publishRefusal } from "../services/publish-refusal.js";
+import { findPosition, listPositions, upsertPosition } from "../services/reading-positions.js";
 import { queueRecordSync } from "../services/record-sync.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
 import { scanInlineUpload } from "../services/safety-scan.js";
@@ -825,6 +826,18 @@ const saveBlobSchema = z.object({
 	runtime: z.string().max(40).optional().default(""),
 	note: z.string().max(2000).optional().default(""),
 });
+
+/**
+ * A reading position's pointer — the type-specific half of a position, opaque to the
+ * server: `{ page, panel }` for a paged Work, `{ cfi }` for a reflow one, `{}` for a text
+ * Work. Only the client's readers assign the keys meaning; here it is bounded by entry
+ * count and serialized size so a bloated payload cannot ride a shape nobody interprets.
+ */
+const positionPointerSchema = z
+	.record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+	.refine((p) => Object.keys(p).length <= 8 && JSON.stringify(p).length <= 2048, {
+		message: "That position is over the size limit.",
+	});
 
 /** An image Work is its own thumbnail and takes no other (`isOwnThumbnail`). */
 const IMAGE_THUMBNAIL_REFUSAL = {
@@ -7564,6 +7577,94 @@ const contentRoutes = new Hono()
 		}
 		return c.json({ error: "Not found" }, 404);
 	})
+
+	// ── Reading positions ────────────────────────────────────────────────────────
+	//
+	// Where the caller got to in each Work — the Bookshelf rail's data and the
+	// readers' cross-device resume, one row per account and Work. The access and
+	// privacy reasoning is on the table itself (`reading_positions` in
+	// `packages/db/src/schema/content.ts`) and in `services/reading-positions.ts`,
+	// the one writer. Two doors, both the user's own rows:
+	//
+	// 🚨 **Only the caller's rows, ever.** No route here takes a user id or a share
+	// link. The positions are the user's private consumption state, and they are
+	// readable by exactly one person — the same rule that keeps a creator's
+	// analytics estate away from them. The pointer's own validator sits at module
+	// scope beside the other schemas.
+
+	/**
+	 * The caller's positions across every Work, newest-touched first.
+	 *
+	 * The list is the whole store, not a page of it: a user's positions number in the
+	 * dozens (one per book-like Work they ever opened), and the rail filters, orders and
+	 * joins them against the shelf client-side.
+	 */
+	.get("/reading-positions", requireAuth, async (c) => {
+		const user = c.get("user");
+		const positions = await listPositions(user.id);
+		return c.json({
+			positions: positions.map((row) => ({
+				workId: row.workId,
+				progress: row.progress,
+				position: row.position,
+				updatedAt: row.updatedAt,
+			})),
+		});
+	})
+
+	/**
+	 * Upsert the caller's position for one Work — the newest-write-wins write the
+	 * readers make behind their local writes.
+	 *
+	 * The route carries the access check (the same shape `workSaves`' routes use): you
+	 * record a position only in a Work you can reach, so a signed-in account cannot
+	 * seed noise rows about Work it has no door to.
+	 *
+	 * ⚠️ No rate limiter joins these routes, deliberately: writes are upserts keyed on
+	 * the caller's own (user, Work) pair — a user cannot mint more rows than they can
+	 * reach Work for — and the client throttles pushes to one per few seconds. The
+	 * limiter exists for doors a stranger can knock on; this one is inside the house.
+	 */
+	.put(
+		"/reading-positions/:workId",
+		requireAuth,
+		zValidator(
+			"json",
+			z.object({ progress: z.number().finite(), position: positionPointerSchema }),
+			invalidBody,
+		),
+		async (c) => {
+			const user = c.get("user");
+			// The param is whatever findWorkRow resolves — a bare id, a publicId, or the
+			// slug-publicId form — because the route only needs the row, and the readers'
+			// own callers name Works both ways.
+			const work = await findWorkRow(c.req.param("workId") ?? "");
+			if (!work) return c.json({ error: "Work not found" }, 404);
+
+			const access = await workAccessFor(c, work);
+			if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
+
+			const { progress, position } = c.req.valid("json");
+			const result = await upsertPosition(user.id, work.id, progress, position);
+			if (!result.ok) {
+				return c.json(
+					{
+						error:
+							result.reason === "not_released" ? "That isn't released yet." : "That doesn't exist.",
+					},
+					404,
+				);
+			}
+
+			const row = await findPosition(user.id, work.id);
+			return c.json({
+				workId: row!.workId,
+				progress: row!.progress,
+				position: row!.position,
+				updatedAt: row!.updatedAt,
+			});
+		},
+	)
 
 	// ── The keeping election ─────────────────────────────────────────────────────
 	//

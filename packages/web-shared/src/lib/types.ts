@@ -1338,6 +1338,36 @@ export interface TimeseriesEntry {
 	listens: number;
 }
 
+// ─── Traffic Types ───
+
+/**
+ * The creator's traffic, from the first-party pipeline (`/api/integrations/analytics/
+ * traffic`). Reads beside attention analytics but is never merged with them: these
+ * figures count visits, attention counts seconds, and putting one inside the other's
+ * card is how "3,400 pageviews vs 40 hours" support questions are born.
+ */
+export interface CreatorTraffic {
+	profileViews: number;
+	topWorks: Array<{ workId: number | null; path: string; views: number }>;
+	topProjects: Array<{ path: string; views: number }>;
+}
+
+export interface CreatorTrafficCards {
+	shown: number;
+	clicked: number;
+	bySubject: Array<{ subjectKind: string; subjectId: number; shown: number; clicked: number }>;
+}
+
+export interface CreatorTrafficResponse {
+	traffic: CreatorTraffic;
+	cards: CreatorTrafficCards;
+	/** The creator's page visits per day — the same day-shape the site-wide series uses. */
+	series: Array<{ day: string; views: number; sessions: number | null }>;
+	/** Visits to the creator's pages, split by referrer source. */
+	sources: Array<{ source: string; views: number }>;
+	period: number;
+}
+
 // ─── Hosting-subsidy Types ───
 
 export interface CrfSubsidy {

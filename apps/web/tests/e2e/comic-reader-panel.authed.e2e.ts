@@ -8,7 +8,7 @@
  * after a reload.
  */
 import { mediaFixtureWork } from "@anthers/db/media-fixture";
-import { expect, test } from "./fixtures";
+import { expect, resetReadingPosition, test } from "./fixtures";
 
 const COMIC = mediaFixtureWork("comic");
 const READER = "[aria-label='Comic reader: A comic that really turns']";
@@ -25,6 +25,7 @@ async function panelIndicator(page: import("@playwright/test").Page) {
 }
 
 test("panel mode enters and shows the first panel", async ({ page }) => {
+	await resetReadingPosition(page, COMIC);
 	await openComic(page);
 
 	await page.getByRole("button", { name: "Panel mode" }).click();
@@ -36,6 +37,7 @@ test("panel mode enters and shows the first panel", async ({ page }) => {
 });
 
 test("next advances panels within a page and wraps to page 2", async ({ page }) => {
+	await resetReadingPosition(page, COMIC);
 	await openComic(page);
 	await page.getByRole("button", { name: "Panel mode" }).click();
 	const next = page.getByRole("button", { name: "Next panel" });
@@ -51,6 +53,7 @@ test("next advances panels within a page and wraps to page 2", async ({ page }) 
 });
 
 test("z toggles zoom without leaving panel mode", async ({ page }) => {
+	await resetReadingPosition(page, COMIC);
 	await openComic(page);
 	await page.getByRole("button", { name: "Panel mode" }).click();
 	await expect(await panelIndicator(page)).toBeVisible();
@@ -63,6 +66,7 @@ test("z toggles zoom without leaving panel mode", async ({ page }) => {
 });
 
 test("a reload restores the saved panel position", async ({ page }) => {
+	await resetReadingPosition(page, COMIC);
 	await openComic(page);
 	await page.getByRole("button", { name: "Panel mode" }).click();
 	await page.getByRole("button", { name: "Next panel" }).click();
