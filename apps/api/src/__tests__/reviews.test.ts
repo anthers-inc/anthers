@@ -299,19 +299,18 @@ describe("Helpfulness — reviews sort by it and are never weighted by it", () =
 		expect(asVoter.recommendedPercent).toBe(100);
 		expect(asVoter.count).toBe(1);
 
-		// The reviewer sees the figures behind it, as a commenter does on their own.
-		const own = await req(`/api/content/votes?subjectType=review&subjectId=${reviewId}`, {
-			headers: { Cookie: _userB },
-		});
-		expect(own.status).toBe(200);
-		const ownJson = await own.json();
-		expect(ownJson).toHaveProperty("up");
-		expect(ownJson).toHaveProperty("down");
-		// And nobody else does.
-		const other = await req(`/api/content/votes?subjectType=review&subjectId=${reviewId}`, {
-			headers: { Cookie: cookies[0] },
-		});
-		expect(await other.json()).not.toHaveProperty("up");
+		// The reviewer sees the figures behind it — and so does every reader now: the
+		// single-subject read serves the counts to whoever can see the thing (Parker,
+		// 2026-10-16 — the numbers ride the buttons).
+		for (const cookie of [_userB, cookies[0]]) {
+			const other = await req(`/api/content/votes?subjectType=review&subjectId=${reviewId}`, {
+				headers: { Cookie: cookie },
+			});
+			expect(other.status).toBe(200);
+			const otherJson = await other.json();
+			expect(otherJson).toHaveProperty("up");
+			expect(otherJson).toHaveProperty("down");
+		}
 	});
 
 	it("refuses a vote on a hidden review, which would be voting on something no user can see", async () => {

@@ -64,6 +64,7 @@ import {
 	COMMENT_MAX,
 	type CommentSubjectType,
 	embedUrlProblem,
+	isListened,
 	isOwnThumbnail,
 	isPaged,
 	isReviewVerdict,
@@ -300,51 +301,6 @@ function tooManyVotesFrom(userId: number): boolean {
  * can read. Moderation state is checked here for the same reason every public read checks
  * it, and forgetting it is the quiet version of the same bug.
  */
-/**
- * Whether this user authored the thing being reacted to.
- *
- * ⭐ **Authorship, not the post's creator.** A creator seeing the breakdown on *their own*
- * post is what Parker asked for (2026-09-04: *"the creator should have full
- * visibility into exact like values and dislike values, not just the net"*). Extending it to
- * every comment under their post would be showing them a dislike count on somebody else's
- * words, which is a different thing and was not asked for.
- *
- * 🚨 **This is the only gate on the raw counts.** Everything else in the vote path
- * publishes one number precisely so a pile-on has no counter to run up; getting this
- * predicate wrong hands that counter to everybody.
- */
-async function ownsSubject(
-	subjectType: VoteSubject,
-	subjectId: number,
-	userId: number | null,
-): Promise<boolean> {
-	if (userId === null) return false;
-	if (subjectType === "comment") {
-		const [row] = await db
-			.select({ userId: comments.userId })
-			.from(comments)
-			.where(eq(comments.id, subjectId))
-			.limit(1);
-		return row?.userId === userId;
-	}
-	if (subjectType === "review") {
-		// The reviewer is the subject's author: they see the raw counts exactly as a
-		// commenter does on their own comment.
-		const [row] = await db
-			.select({ userId: reviews.userId })
-			.from(reviews)
-			.where(eq(reviews.id, subjectId))
-			.limit(1);
-		return row?.userId === userId;
-	}
-	const [row] = await db
-		.select({ creatorId: posts.creatorId })
-		.from(posts)
-		.where(eq(posts.id, subjectId))
-		.limit(1);
-	return row?.creatorId === userId;
-}
-
 async function votableExists(subjectType: VoteSubject, subjectId: number): Promise<boolean> {
 	if (subjectType === "comment") {
 		const [row] = await db
@@ -1338,11 +1294,12 @@ async function serializeWork(
 		sourceKey: item.sourceKey,
 		// The owner's own original, at the access-checked route, for the same ruling the
 		// user shape carries (70.06 — playable from the moment the Work exists): an
-		// owner previews their video before any ladder exists, so the Studio needs
-		// this address the way a viewer's play page does. Without a delivery context,
-		// the stored key is already the playable address.
+		// owner previews their video — and, since 2026-10-16, their track — before any
+		// processed deliverable exists, so the Studio needs this address the way a
+		// viewer's play page does. Without a delivery context, the stored key is
+		// already the playable address.
 		originalUrl:
-			item.type === "video" && item.sourceKey
+			(item.type === "video" || isListened(item.type)) && item.sourceKey
 				? delivery
 					? withShare(`${delivery.origin}/api/content/works/${item.id}/original`, delivery)
 					: item.sourceKey
@@ -2184,7 +2141,7 @@ async function serializeWorkForUser(
 		maturity: work.maturity,
 		maturityNotes: work.maturityNotes ?? [],
 		// The matrix too, so a user's own filter can blur by kind of content in the browser. It
-		// restates the notes plus which rows are Not in It, so it tells a user nothing the notes
+		// restates the notes plus which rows are None, so it tells a user nothing the notes
 		// do not, except that a creator said something is absent.
 		maturityRows: work.maturityRows ?? {},
 		originallyReleased: work.originallyReleased,
@@ -2255,17 +2212,18 @@ async function serializeWorkForUser(
 		// budget attached. Withholding the URL here as well would be a second, weaker
 		// mechanism for something already enforced — and the player decides what to render
 		// from the budget it holds, not from a missing URL.
-		// The original file's play address, for a video Work: the 2026-10-11 ruling's
-		// baseline, playable from the moment the Work exists and delivered as the
-		// bytes the creator uploaded, with the ladder as the upgrade that arrives
-		// later (wiki 70.06). The same posture as the transcoding URLs below —
-		// withheld when the user may not reach the Work, and enforced at the
-		// endpoint (`/works/:id/original`), which minted the signed URL fresh per
-		// request only after the meter and household limit answered. Without a
-		// delivery context (local mode), the stored key is already the playable
-		// address, exactly as `userTranscoding` treats its own URLs.
+		// The original file's play address, for a video Work and — since 2026-10-16 —
+		// for the listened kinds: the 2026-10-11 ruling's baseline, playable from the
+		// moment the Work exists and delivered as the bytes the creator uploaded,
+		// with the processed deliverable as the upgrade that arrives later (wiki
+		// 70.06). The same posture as the transcoding URLs below — withheld when the
+		// user may not reach the Work, and enforced at the endpoint
+		// (`/works/:id/original`), which minted the signed URL fresh per request only
+		// after the meter and household limit answered. Without a delivery context
+		// (local mode), the stored key is already the playable address, exactly as
+		// `userTranscoding` treats its own URLs.
 		originalUrl:
-			canAccess && work.type === "video" && work.sourceKey
+			canAccess && (work.type === "video" || isListened(work.type)) && work.sourceKey
 				? delivery
 					? withShare(`${delivery.origin}/api/content/works/${work.id}/original`, delivery)
 					: work.sourceKey
@@ -3318,19 +3276,25 @@ const contentRoutes = new Hono()
 	 * three lines in four places for a control that can ask for itself. A comment thread
 	 * still gets its scores inline, because the list already fetches them in one grouped
 	 * query and a request per comment would not be a trade at all.
+	 *
+	 * ⭐ **The counts go to every reader (Parker, 2026-10-16 — the numbers ride the
+	 * buttons).** The post page's vote buttons carry the up and down counts themselves,
+	 * YouTube-style, so this read serves the figures behind both to anybody who asks.
+	 * That revises the earlier author-only read: a creator's full visibility on their own
+	 * thing is subsumed by counts nobody is withheld from. The comment thread's payload
+	 * still carries no raw counts — it draws the net, and nothing there renders the pair.
 	 */
 	.get("/votes", zValidator("query", voteQuerySchema), async (c) => {
 		const { subjectType, subjectId } = c.req.valid("query");
 		const userId = await getOptionalUserId(c);
 		const { tallies, mine } = await voteTallies(subjectType, [subjectId], userId);
 		const tally = tallies.get(subjectId) ?? NO_VOTES;
-		// The author sees what it is made of; everybody else sees the one number.
-		const owner = await ownsSubject(subjectType, subjectId, userId);
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
 			userVote: mine.get(subjectId) ?? null,
-			...(owner ? { up: tally.up, down: tally.down } : {}),
+			up: tally.up,
+			down: tally.down,
 		});
 	})
 
@@ -3373,16 +3337,17 @@ const contentRoutes = new Hono()
 
 		const { tallies } = await voteTallies(subjectType, [subjectId], null);
 		const tally = tallies.get(subjectId) ?? NO_VOTES;
-		// ⚠️ The breakdown comes back from a WRITE too, not only from the read. An author
-		// reacting to their own thing would otherwise watch the score move while the figures
-		// behind it sat still until a reload — two numbers on screen disagreeing, which is
-		// worse than either being absent.
-		const owner = await ownsSubject(subjectType, subjectId, user.id);
+		// ⚠️ The counts come back from a WRITE too, not only from the read. A user reacting
+		// to a subject with a buttoned control would otherwise watch the numbers sit still
+		// until a reload — two figures on screen disagreeing, which is worse than either
+		// being absent. They go to every reader now, as on the read above (Parker,
+		// 2026-10-16).
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
 			userVote: direction,
-			...(owner ? { up: tally.up, down: tally.down } : {}),
+			up: tally.up,
+			down: tally.down,
 		});
 	})
 
@@ -3414,12 +3379,14 @@ const contentRoutes = new Hono()
 		}
 		const { tallies } = await voteTallies(subjectType, [subjectId], null);
 		const tally = tallies.get(subjectId) ?? NO_VOTES;
-		const owner = await ownsSubject(subjectType, subjectId, user.id);
 		return c.json({
 			score: commentScore(tally),
 			collapsed: isCollapsed(tally),
 			userVote: null,
-			...(owner ? { up: tally.up, down: tally.down } : {}),
+			// The counts go to every reader, as on the read and the write above (Parker,
+			// 2026-10-16 — the numbers ride the buttons).
+			up: tally.up,
+			down: tally.down,
 		});
 	})
 
@@ -3566,8 +3533,8 @@ const contentRoutes = new Hono()
 						...r,
 						body: r.body ?? "",
 						// The scorer hides nothing. A reviewer's net shows like a commenter's does,
-						// and they see their own raw counts the same way — `ownsSubject` already
-						// treats a review's author as its owner.
+						// and the exact figures behind it ride the single-subject read for every
+						// reader now (Parker, 2026-10-16 — the numbers ride the buttons).
 						score: commentScore(tallies.get(r.id) ?? NO_VOTES),
 						userVote: mine.get(r.id) ?? null,
 						/** The review's public record link (the widening task, 2026-10-10); null while there is none, which is ordinary. */
@@ -3888,21 +3855,26 @@ const contentRoutes = new Hono()
 		return c.redirect(url, 302);
 	})
 
-	// ── Video original delivery (access-checked, signed) ─────────────────────────
+	// ── Original delivery (access-checked, signed) ───────────────────────────────
 	//
-	// A video Work is playable from the moment it exists, and what plays is this
-	// Work's own stored original — the exact bytes the creator uploaded, ranged-
-	// streamed over a short-lived signed address. Same gate ladder as the audio
-	// route above: access, the Public Access meter, the household limit; a fresh
-	// signed URL minted only after every gate answered. The ladder stays the
-	// offered experience when one exists, and this route is what the client falls
-	// back to before one does.
+	// A Work's original is playable from the moment it exists — the 2026-10-11
+	// ruling for video (wiki 70.06), widened to the listened kinds on 2026-10-16 so
+	// a track under processing plays the bytes the creator uploaded while its MP3
+	// rendition and waveform are made. What plays here is the Work's own stored
+	// original, ranged-streamed over a short-lived signed address. Same gate ladder
+	// as the audio route above: access, the Public Access meter, the household
+	// limit; a fresh signed URL minted only after every gate answered. The
+	// processed deliverable stays the offered experience when it exists, and this
+	// route is what the client falls back to before one does — or permanently, for
+	// an original whose processing failed.
 	.get("/works/:id/original", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
-		// The original is the video deliverable; other kinds' originals are either
-		// their own routes' territory (audio) or not a play surface at all.
-		if (work.type !== "video" || !work.sourceKey) return c.json({ error: "Not found" }, 404);
+		// The original is the play surface for a video and for the listened kinds;
+		// a paged or written kind's source is not a play surface at all.
+		if ((work.type !== "video" && !isListened(work.type)) || !work.sourceKey) {
+			return c.json({ error: "Not found" }, 404);
+		}
 
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);

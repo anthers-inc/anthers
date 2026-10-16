@@ -201,7 +201,11 @@ describe("votes", () => {
 		expect(own.score).toBe(own.up - own.down);
 	});
 
-	it("🚨 gives the counts to the author through the single-subject read, and to nobody else", async () => {
+	it("🚨 the single-subject read carries the counts to every reader", async () => {
+		// The numbers ride the boxed buttons now (Parker, 2026-10-16), so this read is
+		// what a post page asks and the figures behind both directions go out to anybody
+		// who can see the thing. The thread payload's author-only spread above is the
+		// rule that still stands — a thread draws the net.
 		const read = async (cookie?: string) => {
 			const res = await req(
 				`/api/content/votes?subjectType=comment&subjectId=${likedId}`,
@@ -210,10 +214,11 @@ describe("votes", () => {
 			expect(res.status).toBe(200);
 			return (await res.json()) as { score: number; up?: number; down?: number };
 		};
-		expect(await read(creatorCookie)).toHaveProperty("up");
-		// The voter has reacted to it, which is the closest anybody gets to a claim on it.
-		expect(await read(voterCookies[0])).not.toHaveProperty("up");
-		expect(await read()).not.toHaveProperty("up");
+		for (const cookie of [undefined, creatorCookie, voterCookies[0]]) {
+			const data = await read(cookie);
+			expect(data.up).toBeGreaterThan(0);
+			expect(data.down).toBe(0);
+		}
 	});
 
 	it("shows a user their own vote, and shows nobody else's", async () => {

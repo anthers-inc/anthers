@@ -150,7 +150,15 @@ export function isGoods(type: string): boolean {
  * The empty deliverable's silhouette, for a draft the creator is looking at before any
  * file has arrived: an outlined area in the shape and aspect their Work will occupy, so
  * the page reads as a page rather than nothing, and the one line that says how the box
- * gets filled. A draft is private, so nothing here is ever shown to a user.
+ * gets filled. A draft is private, so the note here is never shown to a user.
+ *
+ * `status` is the shape's second tenant (the placeholder task, 2026-10-16): the state
+ * between "nothing attached" and "the deliverable exists" — the landed file under
+ * processing — renders here rather than in the deliverable's place, so the box the
+ * creator was looking at keeps its proportions and the progress lives inside it
+ * (SoundCloud's greyed cloud, status inside, while the track processes). Visitors see
+ * this form too, on a Work whose pages are still being made; with no note passed, the
+ * label alone says what the box becomes.
  */
 type PlaceholderShape = {
 	icon: typeof PhotoIcon;
@@ -208,7 +216,16 @@ const PLACEHOLDER_SHAPES: Record<string, PlaceholderShape> = {
 	},
 };
 
-export function WorkPlaceholder({ type, note }: { type: string; note: string }) {
+export function WorkPlaceholder({
+	type,
+	note,
+	status,
+}: {
+	type: string;
+	note: string;
+	/** The processing block that replaced the box, now riding inside it — see the docblock. */
+	status?: ReactNode;
+}) {
 	const shape = PLACEHOLDER_SHAPES[type] ?? {
 		icon: DocumentTextIcon,
 		className: "aspect-video",
@@ -224,7 +241,8 @@ export function WorkPlaceholder({ type, note }: { type: string; note: string }) 
 			>
 				<Icon className="size-10 text-base-content/30" aria-hidden />
 				<p className="text-sm text-base-content/60">{shape.label}.</p>
-				<p className="max-w-prose text-xs text-base-content/40">{note}</p>
+				{note && <p className="max-w-prose text-xs text-base-content/40">{note}</p>}
+				{status}
 			</div>
 		</div>
 	);
@@ -613,6 +631,29 @@ export function WorkDeliverable({
 					startSeconds={startSeconds}
 				/>
 			)}
+			{/*
+			 * A track's processed MP3 is the offered experience, and the original is the
+			 * baseline underneath it — the same shape the video's two branches take above:
+			 * the processed deliverable keeps today's behavior once it exists, and a
+			 * track before its MP3 — or whose processing failed — plays its original
+			 * through this fallback (2026-10-16; wiki 70.06, widened to the listened
+			 * kinds). The same access rules, meter and attention wiring apply in both,
+			 * because what differs is only the address.
+			 *
+			 * No waveform (the MP3 carries the peaks; it does not exist yet, so the
+			 * player's own default fills), and no mini-player hand-off — `trackFromWork`'s
+			 * `src` is the processed endpoint and is null until processing completes, so
+			 * the button would queue a track that cannot play.
+			 */}
+			{work.type === "music" && !work.transcoding?.outputFileUrl && work.originalUrl && (
+				<AudioPlayer
+					src={work.originalUrl}
+					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+					publicAccess={work.publicAccess ?? false}
+					chapters={chapters}
+					startSeconds={startSeconds}
+				/>
+			)}
 			{work.type === "music" && work.transcoding?.outputFileUrl && (
 				<>
 					<AudioPlayer
@@ -641,7 +682,20 @@ export function WorkDeliverable({
 				</>
 			)}
 			{/* Spoken word takes its own player — listening to talk wants fixed-step skips,
-			    a rate control and a remembered position, none of which a song does. */}
+			    a rate control and a remembered position, none of which a song does. Its
+			    original plays the same fallback the song branch does above, for the same
+			    reasons: no waveform, and no mini-player hand-off while the processed
+			    deliverable does not exist. */}
+			{work.type === "audio" && !work.transcoding?.outputFileUrl && work.originalUrl && (
+				<SpokenPlayer
+					src={work.originalUrl}
+					workId={work.id}
+					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+					publicAccess={work.publicAccess ?? false}
+					chapters={chapters}
+					startSeconds={startSeconds}
+				/>
+			)}
 			{work.type === "audio" && work.transcoding?.outputFileUrl && (
 				<SpokenPlayer
 					src={work.transcoding.outputFileUrl}

@@ -172,8 +172,13 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	// A `service` Work needs no file, so the only release gates are the rating and a
 	// credit naming a human — both of which this walk is setting up anyway.
 	await page.getByRole("tab", { name: "Rating" }).click();
-	await page.getByRole("button", { name: "Edit Rating" }).click();
-	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
+	// The tab IS the table, always open (Parker, 2026-10-16); the None heading answers
+	// every row at once, which is what Mark the Rest used to do for the unanswered ones.
+	await page
+		.getByRole("tabpanel", { name: "Rating" })
+		.locator("table")
+		.getByRole("button", { name: "None", exact: true })
+		.click();
 	await page.getByRole("button", { name: "Save Rating" }).click();
 	await page.getByRole("tab", { name: "Credits" }).click();
 	await page.getByRole("button", { name: "Edit Credits" }).click();
@@ -386,8 +391,13 @@ test("the contributor field autocompletes the identities Anthers knows and credi
 	// A `service` Work needs no file; the release gates are the rating and a credit
 	// naming a human — both of which this walk sets up, in the tabs their fields live in.
 	await page.getByRole("tab", { name: "Rating" }).click();
-	await page.getByRole("button", { name: "Edit Rating" }).click();
-	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
+	// The tab IS the table, always open (Parker, 2026-10-16); the None heading answers
+	// every row at once, which is what Mark the Rest used to do for the unanswered ones.
+	await page
+		.getByRole("tabpanel", { name: "Rating" })
+		.locator("table")
+		.getByRole("button", { name: "None", exact: true })
+		.click();
 	await page.getByRole("button", { name: "Save Rating" }).click();
 	await page.getByRole("tab", { name: "Credits" }).click();
 	await page.getByRole("button", { name: "Edit Credits" }).click();

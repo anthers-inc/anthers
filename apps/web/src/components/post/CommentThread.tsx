@@ -158,7 +158,9 @@ export default function CommentThread({ subject }: CommentThreadProps) {
 	};
 
 	return (
-		<div className="border-t border-base-300 pt-6">
+		// No top border of its own: the post renders as one bordered card, and the edge
+		// under it is already the boundary this thread used to draw.
+		<div className="pt-6">
 			<h2 className="text-xl font-bold mb-4">Comments ({count})</h2>
 
 			{isAuthenticated && (

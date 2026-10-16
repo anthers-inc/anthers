@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useAuth } from "@anthers/web-shared/auth";
-import RecordLinkLine from "@anthers/web-shared/content/RecordLink";
+import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
@@ -94,10 +94,12 @@ export default function PostPage() {
 		);
 	}
 
-	const date = new Date(post.createdAt).toLocaleDateString("en-US", {
+	const stamp = new Date(post.createdAt).toLocaleString("en-US", {
 		month: "long",
 		day: "numeric",
 		year: "numeric",
+		hour: "numeric",
+		minute: "2-digit",
 	});
 
 	const linkedWorks = post.linkedWorks ?? [];
@@ -155,53 +157,61 @@ export default function PostPage() {
 
 	return (
 		<div className="container mx-auto px-4 py-8 max-w-3xl">
-			<article>
-				{/* Post header */}
-				{post.title && <h1 className="text-3xl font-bold mb-3">{post.title}</h1>}
-				<div className="flex items-center gap-3 mb-6 text-sm">
-					{post.creator?.avatar ? (
-						<img
-							src={post.creator.avatar}
-							alt={post.creator?.handle}
-							className="w-10 h-10 rounded-full object-cover"
-						/>
-					) : (
-						<div className="w-10 h-10 rounded-full bg-base-300 flex items-center justify-center font-bold">
-							{(post.creator?.handle ?? "?").charAt(0).toUpperCase()}
-						</div>
-					)}
-					<div>
+			{/* The post as one bordered card (Parker, 2026-10-16): the post content — header,
+			    body, works and the row that reacts to it — reads as one thing, with the
+			    comments below it outside. */}
+			<article className="rounded-xl border border-base-300 bg-base-100 p-6 sm:p-8 mb-8">
+				{/* The creator carries the header (Parker, 2026-10-16): avatar and name above
+				    the title, the byline strip's shape the Work page draws. */}
+				{post.creator && (
+					<div className="mb-4">
 						<Link
-							to={profileUrl(post.creator?.handle ?? "")}
-							className="font-medium link link-hover"
+							to={profileUrl(post.creator.handle ?? "")}
+							className="inline-flex items-center gap-3 hover:underline"
 						>
-							{post.creator?.displayName || post.creator?.handle}
-						</Link>
-						<p className="text-base-content/50 text-xs">
-							{date}
-							{edits.length > 0 && (
-								<>
-									{" · "}
-									<button
-										type="button"
-										className="link link-hover"
-										onClick={() => setShowHistory((v) => !v)}
-									>
-										Edited{" "}
-										{new Date(edits[0].editedAt).toLocaleDateString("en-US", {
-											month: "short",
-											day: "numeric",
-											year: "numeric",
-										})}
-									</button>
-								</>
+							{post.creator.avatar ? (
+								<img
+									src={post.creator.avatar}
+									alt={post.creator?.handle}
+									className="w-10 h-10 rounded-full object-cover"
+								/>
+							) : (
+								<div className="w-10 h-10 rounded-full bg-base-300 flex items-center justify-center font-bold">
+									{(post.creator?.handle ?? "?").charAt(0).toUpperCase()}
+								</div>
 							)}
-						</p>
-						{/* The post's listing on the network — the same record link every kind
-						    carries (the widening task, 2026-10-10); nothing for a post with no
-						    record, which is ordinary. */}
-						<RecordLinkLine recordUrl={post.recordUrl} />
+							<span className="font-medium">
+								{post.creator?.displayName || post.creator?.handle}
+							</span>
+						</Link>
 					</div>
+				)}
+
+				{post.title && <h1 className="text-3xl font-bold mb-2">{post.title}</h1>}
+
+				{/* The stamp carries the record button beside it — the standard icon form
+				    ({@link RecordLinkButton}); nothing renders when the post has no record,
+				    which is ordinary. */}
+				<div className="flex flex-wrap items-center gap-2 mb-6 text-sm text-base-content/60">
+					<span>{stamp}</span>
+					{edits.length > 0 && (
+						<>
+							<span aria-hidden="true">·</span>
+							<button
+								type="button"
+								className="link link-hover"
+								onClick={() => setShowHistory((v) => !v)}
+							>
+								Edited{" "}
+								{new Date(edits[0].editedAt).toLocaleDateString("en-US", {
+									month: "short",
+									day: "numeric",
+									year: "numeric",
+								})}
+							</button>
+						</>
+					)}
+					<RecordLinkButton recordUrl={post.recordUrl} />
 				</div>
 
 				{/* Owner status + controls (only the creator reaches an unpublished post). */}
@@ -274,7 +284,7 @@ export default function PostPage() {
 				    it is stored as; react-markdown without rehype-raw skips any raw HTML a
 				    stored body somehow carries, so the words show and nothing executes. */}
 				{post.body && (
-					<div className="prose prose-sm max-w-none flush mb-8">
+					<div className="prose prose-sm max-w-none flush post-body mb-8">
 						<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
 					</div>
 				)}
@@ -294,6 +304,19 @@ export default function PostPage() {
 						</div>
 					</section>
 				)}
+
+				{/* The reaction row: the votes and the Sticker button on one line — the work
+				    page's review row's shape (Parker, 2026-10-16), with the votes carrying
+				    their counts on the buttons. */}
+				<footer className="flex flex-wrap items-center gap-3">
+					<VoteControl
+						variant="boxed"
+						subjectType="post"
+						subjectId={post.id}
+						label={post.title ?? "this post"}
+					/>
+					<StickerBar subjectType="post" subjectId={post.id} label={post.title ?? "this post"} />
+				</footer>
 			</article>
 
 			{/* Delete confirmation (with an offer to purge now-orphaned library media). */}
@@ -353,10 +376,6 @@ export default function PostPage() {
 					/>
 				</div>
 			)}
-
-			<VoteControl subjectType="post" subjectId={post.id} label={post.title ?? "this post"} />
-
-			<StickerBar subjectType="post" subjectId={post.id} label={post.title ?? "this post"} />
 
 			<CommentThread subject={{ kind: "post", slug: post.slug }} />
 		</div>

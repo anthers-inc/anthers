@@ -196,8 +196,13 @@ test("a piece of writing is written on its page and reads as an article", async 
 	// Rated, on its own grid, on the Work's page — and still not releasable, because
 	// there is nothing in it yet (`text_missing`).
 	await page.getByRole("tab", { name: "Rating" }).click();
-	await page.getByRole("button", { name: "Edit Rating" }).click();
-	await page.getByRole("button", { name: 'Mark the Rest "Not in It"' }).click();
+	// The tab IS the table, always open (Parker, 2026-10-16); the None heading answers
+	// every row at once, which is what Mark the Rest used to do for the unanswered ones.
+	await page
+		.getByRole("tabpanel", { name: "Rating" })
+		.locator("table")
+		.getByRole("button", { name: "None", exact: true })
+		.click();
 	await page.getByRole("button", { name: "Save Rating" }).click();
 	const released = page.getByRole("checkbox", { name: /released to my public catalog/i });
 
