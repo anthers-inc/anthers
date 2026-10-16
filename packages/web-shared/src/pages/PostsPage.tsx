@@ -10,39 +10,40 @@
  * A post announces and carries no access of its own — see the wiki's *What You Can Publish*.
  * Nothing here gates, prices or releases anything, and that absence is the model rather than
  * an omission.
+ *
+ * The listing is a **table of tall rows** (Parker, 2026-10-11), the Works table's treatment:
+ * the treatment the third listing's plain rows were missing, so the three Studio listings —
+ * Works, Projects, Posts — read as one product. The filters live in the left sidebar below
+ * the Studio nav and ride the URL as query parameters; the table re-derives client-side over
+ * the loaded list. Filtering and sorting are `posts-list.ts`'s, extracted so a suite can fail
+ * on them; the row is `PostRow.tsx`'s.
+ *
+ * ⚠️ **No `isCreator` gates on this page** — the Studio's `StudioAuthGate` already admits
+ * only signed-in creators, so gating the New button again was checking the same thing the
+ * gate did, one layer late; the Works and Projects pages carry no such gate.
  */
 
-import { EyeSlashIcon, PencilSquareIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { PencilSquareIcon, PlusIcon } from "@heroicons/react/24/outline";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import PostRow from "../components/content/PostRow";
+import PostsFilterSections from "../components/content/posts-filters";
+import {
+	arrangePosts,
+	DEFAULT_POSTS_SORT,
+	type PostsSortKey,
+} from "../components/content/posts-list";
+import SortableHeader, { ariaSort } from "../components/content/SortableHeader";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { useAuth } from "../lib/auth";
-import { postUrl } from "../lib/postUrl";
-import { Link } from "../lib/router";
+import { Link, useSearchParams } from "../lib/router";
 import { client } from "../lib/rpc";
-import { studioEditPostUrl, studioNewPostUrl } from "../lib/studio";
+import { useSidebar } from "../lib/sidebar";
+import { studioNewPostUrl } from "../lib/studio";
 import type { PostListItem } from "../lib/types";
 
-/** Draft · Scheduled · Published, as one filter over the list. */
-type Filter = "all" | "published" | "scheduled" | "draft";
-
-const FILTERS: { value: Filter; label: string }[] = [
-	{ value: "all", label: "All" },
-	{ value: "published", label: "Published" },
-	{ value: "scheduled", label: "Scheduled" },
-	{ value: "draft", label: "Drafts" },
-];
-
-function stateOf(post: PostListItem): Exclude<Filter, "all"> {
-	if (post.isPublished) return "published";
-	return post.scheduledFor ? "scheduled" : "draft";
-}
-
 export default function PostsPage() {
-	const { user } = useAuth();
 	const [posts, setPosts] = useState<PostListItem[]>([]);
 	const [loading, setLoading] = useState(true);
-	const [filter, setFilter] = useState<Filter>("all");
 
 	const [deleteTarget, setDeleteTarget] = useState<PostListItem | null>(null);
 	const [orphanMedia, setOrphanMedia] = useState<
@@ -50,6 +51,42 @@ export default function PostsPage() {
 	>([]);
 	const [purgeMedia, setPurgeMedia] = useState(false);
 	const [actioning, setActioning] = useState(false);
+
+	// The filters and the sort ride the URL, the Works page's pattern — shareable, and
+	// visible in the address bar when a creator has filtered to one state.
+	const [searchParams, setSearchParams] = useSearchParams();
+	const q = searchParams.get("q") ?? "";
+	const status = searchParams.get("status") ?? "";
+	const [sort, setSort] = useState<{ key: PostsSortKey; dir: "asc" | "desc" }>(DEFAULT_POSTS_SORT);
+
+	const updateParams = useCallback(
+		(updates: Record<string, string>) => {
+			setSearchParams(
+				(prev) => {
+					const next = new URLSearchParams(prev);
+					for (const [key, value] of Object.entries(updates)) {
+						if (value) {
+							next.set(key, value);
+						} else {
+							next.delete(key);
+						}
+					}
+					return next;
+				},
+				{ replace: true },
+			);
+		},
+		[setSearchParams],
+	);
+
+	// Repeat click on a sorted column flips it; a new column starts the way users expect
+	// its data to read — names A→Z, numbers and dates high first.
+	const onSort = (key: PostsSortKey) =>
+		setSort((prev) =>
+			prev.key === key
+				? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+				: { key, dir: key === "title" ? "asc" : "desc" },
+		);
 
 	useEffect(() => {
 		let live = true;
@@ -104,6 +141,7 @@ export default function PostsPage() {
 		}
 	};
 
+	/** Move a published post back to drafts, from the row — the switch under its badge. */
 	const unpublish = async (post: PostListItem) => {
 		setActioning(true);
 		try {
@@ -123,6 +161,20 @@ export default function PostsPage() {
 		}
 	};
 
+	// The sidebar's filter sections, below the Studio nav — registered here, the Feed
+	// page's mechanism by way of the Works page. The sections read the URL, so they
+	// re-register as it changes.
+	const { setPageContent } = useSidebar();
+	const filters = useMemo(() => ({ q, status }), [q, status]);
+	useEffect(() => {
+		setPageContent(
+			<PostsFilterSections q={filters.q} status={filters.status} onUpdateParams={updateParams} />,
+		);
+		return () => setPageContent(null);
+	}, [setPageContent, filters, updateParams]);
+
+	const rows = arrangePosts(posts, filters, sort.key, sort.dir);
+
 	if (loading) {
 		return (
 			<div className="flex justify-center py-16">
@@ -131,17 +183,13 @@ export default function PostsPage() {
 		);
 	}
 
-	const shown = filter === "all" ? posts : posts.filter((p) => stateOf(p) === filter);
-
 	return (
-		<div className="max-w-5xl mx-auto px-4 py-8">
-			<div className="flex items-center justify-between mb-6">
-				<h1 className="text-2xl font-bold">Posts</h1>
-				{user?.isCreator && (
-					<Link to={studioNewPostUrl()} className="btn btn-primary btn-sm">
-						<PlusIcon className="w-4 h-4" /> New Post
-					</Link>
-				)}
+		<div className="w-full px-6 py-6">
+			<div className="flex items-center justify-between mb-4">
+				<h2 className="text-lg font-semibold">Posts</h2>
+				<Link to={studioNewPostUrl()} className="btn btn-primary btn-sm">
+					<PlusIcon className="w-4 h-4" /> New Post
+				</Link>
 			</div>
 
 			{posts.length === 0 ? (
@@ -150,111 +198,57 @@ export default function PostsPage() {
 					title="No posts yet"
 					description="A post announces — a devlog, a release note, an update. It carries no access of its own, so what it is about lives in your Catalog as a Work."
 					action={
-						user?.isCreator ? (
-							<Link to={studioNewPostUrl()} className="btn btn-primary btn-sm">
-								Write a Post
-							</Link>
-						) : undefined
+						<Link to={studioNewPostUrl()} className="btn btn-primary btn-sm">
+							Write a Post
+						</Link>
 					}
 				/>
+			) : rows.length === 0 ? (
+				/* Every post is filtered out — distinguishable from an empty list, and
+				   its remedy is a click, not a new post. */
+				<div className="text-sm text-base-content/60">
+					<p className="mb-2">No posts match these filters.</p>
+					<button
+						type="button"
+						className="btn btn-ghost btn-sm"
+						onClick={() => updateParams({ q: "", status: "" })}
+					>
+						Clear filters
+					</button>
+				</div>
 			) : (
-				<>
-					{/* One list with a filter rather than three sections: a draft becomes a
-					    scheduled post becomes a published one, and splitting the list moves a post
-					    between tables as it goes. */}
-					<div role="tablist" className="tabs tabs-bordered mb-4">
-						{FILTERS.map(({ value, label }) => {
-							const count =
-								value === "all" ? posts.length : posts.filter((p) => stateOf(p) === value).length;
-							return (
-								<button
-									key={value}
-									type="button"
-									role="tab"
-									className={`tab ${filter === value ? "tab-active" : ""}`}
-									onClick={() => setFilter(value)}
-								>
-									{label}
-									<span className="ml-1.5 text-xs text-base-content/50">{count}</span>
-								</button>
-							);
-						})}
-					</div>
-
-					{shown.length === 0 ? (
-						<p className="py-12 text-center text-sm text-base-content/50">No {filter} posts.</p>
-					) : (
-						<div className="overflow-x-auto">
-							<table className="table table-sm">
-								<thead>
-									<tr>
-										<th>Title</th>
-										<th>Status</th>
-										<th>Date</th>
-										<th>Actions</th>
-									</tr>
-								</thead>
-								<tbody>
-									{shown.map((post) => (
-										<tr key={post.id}>
-											<td>
-												<Link to={postUrl(post)} className="link link-hover font-medium">
-													{post.title || "Untitled"}
-												</Link>
-											</td>
-											<td>
-												{post.isPublished ? (
-													<span className="badge badge-sm badge-success">Published</span>
-												) : post.scheduledFor ? (
-													<span
-														className="badge badge-sm badge-info"
-														title={`Scheduled for ${new Date(post.scheduledFor).toLocaleString()}`}
-													>
-														Scheduled
-													</span>
-												) : (
-													<span className="badge badge-sm badge-warning">Draft</span>
-												)}
-											</td>
-											<td className="text-sm text-base-content/50">
-												{new Date(post.createdAt).toLocaleDateString()}
-											</td>
-											<td className="flex gap-1">
-												<Link
-													to={studioEditPostUrl(post.slug)}
-													className="btn btn-ghost btn-xs"
-													title="Edit"
-												>
-													<PencilSquareIcon className="w-4 h-4" />
-												</Link>
-												{post.isPublished && (
-													<button
-														type="button"
-														className="btn btn-ghost btn-xs"
-														title="Unpublish"
-														onClick={() => unpublish(post)}
-														disabled={actioning}
-													>
-														<EyeSlashIcon className="w-4 h-4" />
-													</button>
-												)}
-												<button
-													type="button"
-													className="btn btn-ghost btn-xs text-error"
-													title="Delete"
-													onClick={() => openDelete(post)}
-													disabled={actioning}
-												>
-													<TrashIcon className="w-4 h-4" />
-												</button>
-											</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
-					)}
-				</>
+				<div className="overflow-x-auto">
+					<table className="table w-full">
+						<thead>
+							<tr className="border-base-300/50 text-xs text-base-content/50">
+								<th scope="col" className="w-2/5" aria-sort={ariaSort(sort, "title")}>
+									<SortableHeader label="Post" sortKey="title" sort={sort} onSort={onSort} />
+								</th>
+								<th scope="col">Status</th>
+								<th scope="col" aria-sort={ariaSort(sort, "date")}>
+									<SortableHeader label="Date" sortKey="date" sort={sort} onSort={onSort} />
+								</th>
+								<th scope="col" aria-sort={ariaSort(sort, "views")}>
+									<SortableHeader label="Views" sortKey="views" sort={sort} onSort={onSort} />
+								</th>
+								<th scope="col">
+									<span className="sr-only">Actions</span>
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+							{rows.map((post) => (
+								<PostRow
+									key={post.id}
+									post={post}
+									onDelete={(p) => openDelete(p)}
+									onUnpublish={unpublish}
+									busy={actioning}
+								/>
+							))}
+						</tbody>
+					</table>
+				</div>
 			)}
 
 			{/* Delete confirmation (with an offer to purge now-orphaned library media). */}
