@@ -117,6 +117,10 @@ test("a music Work plays its original while processing runs", async ({ page, con
 	// The deliverable's place holds the player, not the status block. The old page put
 	// "Waiting to process…" there; the ruled page mounts the original and lets the
 	// Manage tab's file section carry the progress.
+	await page.screenshot({
+		path: "test-results/visual-editor-while-processing.png",
+		fullPage: true,
+	});
 	//
 	// The <audio> element itself is 0x0 — the player's UI is its transport — so the
 	// visible half is asserted on the button and the playing half on the element.
