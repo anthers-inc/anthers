@@ -26,7 +26,8 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { basketItems, purchases, users } from "@anthers/db/schema";
+import { badges, basketItems, purchases, userBadges, users } from "@anthers/db/schema";
+import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import { MAX_BASKET_ITEMS } from "@anthers/shared/constants";
 import { eq } from "drizzle-orm";
 import app from "../index";
@@ -530,3 +531,237 @@ function purchasesSafe() {
 		status: "completed" as const,
 	};
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The Badge line — the basket's second item kind (2026-10-15).
+//
+// A Badge bought from a creator page is a purchase, and its basket line is the rung
+// the buyer picked. What pins here is the storage shape and its ONE extra rule: a
+// second rung of the same issuer REPLACES the first (the pick replaces, one line per
+// ladder — a holding's own shape). Everything about MONEY — the ratchet, the delta,
+// the past-due buyer — is the quote's and checkout's refusal at the money door
+// (`resolveBadgePurchase` in routes/payments.ts), NOT the add's business: the add
+// checks existence and nobody's own ladder, and listing a rung that stopped being
+// buyable between add and checkout is exactly as harmless as it is for a Work.
+
+describe("basket storage — the Badge line", () => {
+	let secondBuyerCookie: string;
+	let secondBuyerId = 0;
+	let ladderIssuerId: number;
+	let rungA = 0;
+	let rungB = 0;
+
+	beforeAll(async () => {
+		// A fresh buyer, so the describe owns its basket state (the module's shared
+		// buyer's basket is other describes' history).
+		const second = await createAccount(`bskt_store_badge_${run}`);
+		secondBuyerCookie = second.cookie;
+		secondBuyerId = second.userId;
+		const issuerAccount = await createAccount(`bskt_store_ladder_${run}`, {
+			fields: { isCreator: true },
+		});
+		await db.update(users).set({ emailVerified: true }).where(eq(users.id, issuerAccount.userId));
+		ladderIssuerId = issuerAccount.userId;
+		rungA = (
+			await db
+				.insert(badges)
+				.values({
+					creatorId: ladderIssuerId,
+					threshold: "6.00",
+					label: "Route rung low",
+					description: "A fixture rung the badge basket tests hold.",
+				})
+				.returning({ id: badges.id })
+		)[0].id;
+		rungB = (
+			await db
+				.insert(badges)
+				.values({
+					creatorId: ladderIssuerId,
+					threshold: "9.00",
+					label: "Route rung high",
+					description: "A fixture rung the badge basket tests hold.",
+				})
+				.returning({ id: badges.id })
+		)[0].id;
+	}, DB_SETUP_TIMEOUT);
+
+	it("adds a Badge and lists it with the resolved first-transaction and monthly prices", async () => {
+		const added = await req(
+			"/api/payments/basket/items",
+			authed(secondBuyerCookie, {
+				method: "POST",
+				body: JSON.stringify({ badgeId: rungA }),
+			}),
+		);
+		expect(added.status).toBe(200);
+		const { items } = (await added.json()) as {
+			items: {
+				kind: string;
+				badgeId?: number;
+				title: string | null;
+				price: string;
+				recurring: string | null;
+				creatorHandle: string;
+			}[];
+		};
+		expect(items).toHaveLength(1);
+		expect(items[0].kind).toBe("badge");
+		expect(items[0].badgeId).toBe(rungA);
+		expect(items[0].title).toBe("Route rung low");
+		expect(items[0].price).toBe("6.00");
+		expect(items[0].recurring).toBe("6.00");
+		// The issuer's handle — the issuer is a user id's worth of identity, the same
+		// vocabulary a Work line names its creator by. (A session account's handle is
+		// its identity on the session's network, not its signup name.)
+		expect(items[0].creatorHandle).not.toBe("");
+
+		// The row in the table, badge-keyed — the exactly-one-kind shape.
+		const rows = await db.select().from(basketItems).where(eq(basketItems.userId, secondBuyerId));
+		expect(rows).toHaveLength(1);
+		expect(rows[0].badgeId).toBe(rungA);
+		expect(rows[0].workId).toBeNull();
+	});
+
+	it("add is idempotent on the same rung, and a SECOND rung of the issuer REPLACES the first", async () => {
+		await req(
+			"/api/payments/basket/items",
+			authed(secondBuyerCookie, { method: "POST", body: JSON.stringify({ badgeId: rungA }) }),
+		);
+		// The same rung again — a no-op, like a Work's repeat add.
+		const repeat = await req(
+			"/api/payments/basket/items",
+			authed(secondBuyerCookie, { method: "POST", body: JSON.stringify({ badgeId: rungA }) }),
+		);
+		expect(repeat.status).toBe(200);
+		let listed = (await (await req("/api/payments/basket", authed(secondBuyerCookie))).json()) as {
+			count: number;
+			items: { badgeId?: number }[];
+		};
+		expect(listed.count).toBe(1);
+		expect(listed.items[0].badgeId).toBe(rungA);
+
+		// 🚨 The pick replaces: a different rung of the SAME ladder leaves exactly one
+		// line — the newest — because the basket is the pick being carried, and one
+		// holding per issuer means one line per ladder everywhere.
+		const upgrade = await req(
+			"/api/payments/basket/items",
+			authed(secondBuyerCookie, { method: "POST", body: JSON.stringify({ badgeId: rungB }) }),
+		);
+		expect(upgrade.status).toBe(200);
+		listed = (await (await req("/api/payments/basket", authed(secondBuyerCookie))).json()) as {
+			count: number;
+			items: { badgeId?: number }[];
+		};
+		expect(listed.count).toBe(1);
+		expect(listed.items[0].badgeId).toBe(rungB);
+	});
+
+	it("removes a Badge line through its own delete route, idempotently", async () => {
+		const res = await req(
+			`/api/payments/basket/badges/${rungB}`,
+			authed(secondBuyerCookie, { method: "DELETE" }),
+		);
+		expect(res.status).toBe(200);
+		let listed = (await (await req("/api/payments/basket", authed(secondBuyerCookie))).json()) as {
+			count: number;
+		};
+		expect(listed.count).toBe(0);
+
+		// Absence is already the goal.
+		const again = await req(
+			`/api/payments/basket/badges/${rungB}`,
+			authed(secondBuyerCookie, { method: "DELETE" }),
+		);
+		expect(again.status).toBe(200);
+		listed = (await (await req("/api/payments/basket", authed(secondBuyerCookie))).json()) as {
+			count: number;
+		};
+		expect(listed.count).toBe(0);
+	});
+
+	it("🚨 refuses the buyer's own ladder at the add — the click's moment, like the cap", async () => {
+		const [ownRung] = await db
+			.insert(badges)
+			.values({ creatorId: secondBuyerId, threshold: "4.00", label: "Own rung" })
+			.returning({ id: badges.id });
+		const res = await req(
+			"/api/payments/basket/items",
+			authed(secondBuyerCookie, { method: "POST", body: JSON.stringify({ badgeId: ownRung.id }) }),
+		);
+		expect(res.status).toBe(400);
+		expect(((await res.json()) as { error?: string }).error).toMatch(/own Badge/i);
+	});
+
+	it("refuses an add naming both or neither — a line names exactly one thing", async () => {
+		const both = await req(
+			"/api/payments/basket/items",
+			authed(secondBuyerCookie, {
+				method: "POST",
+				body: JSON.stringify({ badgeId: rungA, workId: workA }),
+			}),
+		);
+		expect(both.status).toBe(400);
+
+		const neither = await req(
+			"/api/payments/basket/items",
+			authed(secondBuyerCookie, { method: "POST", body: "{}" }),
+		);
+		expect(neither.status).toBe(400);
+	});
+
+	/**
+	 * 🚨 The table itself holds the shape nothing else defends — the CHECK, not the
+	 * service. A hand-rolled write (or a merge bug) must not be able to park a row that
+	 * names two kinds, because resolution drops unresolvable rows silently and a
+	 * doubly-named row dropped silently would mean money the basket never showed.
+	 */
+	it("the database refuses a row naming both kinds — the CHECK, not the service", async () => {
+		let refused = false;
+		try {
+			await db.insert(basketItems).values({ userId: secondBuyerId, workId: workA, badgeId: rungA });
+		} catch {
+			refused = true;
+		}
+		expect(refused).toBe(true);
+	});
+
+	/**
+	 * ⚠️ **The ratchet is deliberately NOT the add's refusal.** A rung the buyer already
+	 * holds can still be carried — listing it is honest, and the money door
+	 * (`resolveBadgePurchase`) stays the one place that decides what is purchasable.
+	 * The refusal's shape, once the buyer reaches it, is the resolution's ABSENCE: the
+	 * basket read returns only what a checkout could charge, so the row is invisible
+	 * rather than an error, and the quote refuses on the empty remainder.
+	 */
+	it("lets the add succeed on a rung the buyer already holds — the money door answers by absence", async () => {
+		await db.insert(userBadges).values({
+			userId: secondBuyerId,
+			badgeId: rungA,
+			billingCycle: cycleKeyFor(new Date()),
+		});
+		const res = await req(
+			"/api/payments/basket/items",
+			authed(secondBuyerCookie, { method: "POST", body: JSON.stringify({ badgeId: rungA }) }),
+		);
+		expect(res.status).toBe(200);
+
+		// The basket read drops the rung the buyer already holds — the same resolution
+		// `/basket` has always answered with, badge lines under it.
+		const read = (await (await req("/api/payments/basket", authed(secondBuyerCookie))).json()) as {
+			count: number;
+		};
+		expect(read.count).toBe(0);
+
+		// And the quote — asked through the same resolution — refuses the empty remainder.
+		const quoted = await req(
+			"/api/payments/basket/quote",
+			authed(secondBuyerCookie, { method: "POST", body: "{}" }),
+		);
+		expect(quoted.status).toBe(400);
+		expect(((await quoted.json()) as { error?: string }).error).toBe("Your basket is empty");
+	});
+
+	// The item cap is one line of shared arithmetic over `listBasket`'s union — the
+	// works-side capacity tests above cover it; no badge-specific cap case exists.
+});

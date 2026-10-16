@@ -285,20 +285,29 @@ function ProjectRow({
 
 	return (
 		<tr className="border-b border-base-300/50 hover:bg-base-200/40 align-top">
-			{/* PROJECT — the header image above the name and the description, the row's left zone. */}
+			{/* PROJECT — the header image above the name and the description, the row's left zone.
+			    The image carries the same link the title does, the Works table's pattern, and sits
+			    out of the accessibility tree because the title already names the same place. */}
 			<td className="py-3 pr-4">
 				<div className="max-w-xs w-64">
-					{project.coverImage ? (
-						<img
-							src={project.coverImage}
-							alt=""
-							className="w-full aspect-[2/1] object-cover rounded"
-						/>
-					) : (
-						<div className="w-full aspect-[2/1] rounded bg-base-300/50 flex items-center justify-center">
-							<TypeIcon type="image" className="w-8 h-8 text-base-content/30" />
-						</div>
-					)}
+					<Link
+						to={projectUrl}
+						tabIndex={-1}
+						aria-hidden="true"
+						className="block w-full aspect-[2/1] rounded"
+					>
+						{project.coverImage ? (
+							<img
+								src={project.coverImage}
+								alt=""
+								className="w-full h-full aspect-[2/1] object-cover rounded"
+							/>
+						) : (
+							<div className="w-full h-full rounded bg-base-300/50 flex items-center justify-center">
+								<TypeIcon type="image" className="w-8 h-8 text-base-content/30" />
+							</div>
+						)}
+					</Link>
 					<p className="font-medium text-sm mt-2" title={project.title ?? undefined}>
 						<Link to={projectUrl} className="link link-hover">
 							{project.title || "Untitled"}

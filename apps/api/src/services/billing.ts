@@ -32,7 +32,12 @@ import {
 	works,
 } from "@anthers/db/schema";
 import { mostTaxablePerkKind } from "@anthers/shared/badge-art";
-import { currentCycleKey, cycleKeyFor } from "@anthers/shared/billing-cycle";
+import {
+	currentCycleKey,
+	cycleKeyFor,
+	cycleStart,
+	nextCycleKey,
+} from "@anthers/shared/billing-cycle";
 import { anthersSupportBreakdown } from "@anthers/shared/fees";
 import { DONATION_TAX_CODE, STREAMED_SUBSCRIPTION_TAX_CODE } from "@anthers/shared/tax-codes";
 import Decimal from "decimal.js";
@@ -41,12 +46,15 @@ import type Stripe from "stripe";
 import {
 	createCustomer,
 	createProduct,
+	createSubscription,
 	listActiveProducts,
 	listCardPaymentMethods,
 	paymentsConfigured,
 	retrieveCustomer,
+	retrieveSubscription,
 	updateCustomer,
 	updateProduct,
+	updateSubscription,
 } from "../lib/processor.js";
 import { anthersUserId } from "./anthers-badges.js";
 
@@ -1089,4 +1097,134 @@ export async function applyDirectedSupport(
 			await ensureFollow(userId, pick.creatorId);
 		}
 	}
+}
+
+/**
+ * The recurrence half of a Badge purchase: add or raise the issuer's line on the buyer's
+ * support subscription **without charging today**.
+ *
+ * A checkout already carried the first transaction — the charge half of the raise this
+ * line replaces. So the line is moved under `proration_behavior: "none"` (Stripe bills it
+ * with the next renewal, which is the 1st for every account), and the caller records the
+ * day-exact reduction (`recordReductions`, the same lines a raise through the
+ * subscription would record) — the mid-month posture of `21.02` arrives through two rails
+ * instead of one, and the arithmetic a normal raise produces is what the buyer gets.
+ *
+ * 🚨 **One update for every pick on the charge, and every line stamped.** A basket can
+ * carry Badges from several creators, and `proration_behavior` — like the raise/drop
+ * split `planItemChange` argues — is one setting for a whole call, so the lines travel
+ * together. Every line carries `metadata.destination` (the stamp `itemsFromSub` reads
+ * back); a badge-created line missing it would credit its money to Anthers.
+ *
+ * ⚠️ **A buyer with no subscription gets one, anchored on the next 1st** — the only shape
+ * a post-checkout creation can take that does not charge today: the checkout already
+ * carried the first Month, an invoice today would double-charge it, and an invoice whose
+ * renewal is the next 1st is what "recurring at the rung" means. The buyer's saved card
+ * (the checkout's `setup_future_usage` save, linked by the completion before this runs)
+ * rides as `default_payment_method`, so the anchor's first invoice can bill off-session;
+ * without one (the probe's fallback), the renewal fails the honest way — Stripe retries,
+ * the account lapses visibly, Manage Billing fixes it.
+ *
+ * ⚠️ **A subscription whose renewal has failed is left alone** (logged, lines skipped) —
+ * the checkout refuses a Badge ride on exactly that precondition, so reaching here means
+ * the window between checkout and completion closed it; the holding still lands (the
+ * money cleared), and the paid-card remedy is what makes the line join on a later pass.
+ * A buyer who canceled at period end but is still active has the cancellation cleared:
+ * they just paid a Badge, which is the opposite of intending to cancel.
+ *
+ * `pmId` is the confirmed payment method from the charge, when one was saved for the
+ * recurrence — the no-subscription creation is the only consumer.
+ */
+export async function applyBadgeRecurrence(
+	userId: number,
+	picks: { issuerId: number; product: string; threshold: number }[],
+	pmId: string | null,
+): Promise<void> {
+	if (picks.length === 0) return;
+	if (!paymentsConfigured()) return;
+
+	const anthersId = await anthersUserId();
+	const lineOf = (pick: { issuerId: number; product: string; threshold: number }) => ({
+		price_data: {
+			currency: "usd",
+			product: pick.product,
+			unit_amount: Math.round(pick.threshold * 100),
+			recurring: { interval: "month" as const },
+			// Tax-exclusive as everywhere — see `supportItems`.
+			tax_behavior: "exclusive" as const,
+		},
+		quantity: 1,
+		// 🚨 The destination stamp — the only thing that says whose money this line is.
+		metadata: { destination: String(pick.issuerId) },
+	});
+
+	const [acct] = await db
+		.select()
+		.from(billingAccounts)
+		.where(eq(billingAccounts.userId, userId))
+		.limit(1);
+	const sub = acct?.stripeSubscriptionId
+		? await retrieveSubscription(acct.stripeSubscriptionId)
+		: null;
+
+	if (sub && (sub.status === "active" || sub.status === "trialing")) {
+		// One item per pick: an existing line at this destination is updated in place (its
+		// amount becomes the rung's threshold — the raise) and a missing one is added.
+		const existing = new Map(itemsFromSub(sub, anthersId).map((i) => [String(i.creatorId), i]));
+		const changeItems = picks.map((pick) => {
+			const have = existing.get(String(pick.issuerId));
+			return {
+				...(have ? { id: have.itemId } : {}),
+				...lineOf(pick),
+			};
+		});
+		// 🚨 Stripe does not charge a line added or changed under `proration_behavior:
+		// "none"` until the next invoice — the whole shape of this function. The PROBE list
+		// (the build plan) confirms the added-line half of that in test mode before ship.
+		await updateSubscription(sub.id, {
+			items: changeItems,
+			proration_behavior: "none",
+			cancel_at_period_end: false,
+			automatic_tax: { enabled: true },
+			metadata: { ...sub.metadata, userId: String(userId) },
+		});
+		return;
+	}
+
+	if (sub) {
+		// past_due, unpaid, or otherwise uncollectable — logged and left; see above.
+		console.error(
+			`badge recurrence skipped: user ${userId}'s subscription ${sub.id} is ${sub.status} — the buyer owns the remedy`,
+		);
+		return;
+	}
+
+	// No subscription: create one whose first billing lands on the next 1st, charging
+	// nothing today.
+	//
+	// ⚠️ **PROBED 2026-10-15, and the anchor shape did not survive the probe.** A
+	// `billing_cycle_anchor` on the next 1st attempts a PRORATION STUB charge today
+	// (creation → anchor, ~$3.10 on a $6 rung, left `open` by `default_incomplete` —
+	// but the subscription itself sat in `incomplete`, and the stub was a second charge
+	// on top of the first Month the checkout already carried). The shape that gives
+	// "no charge today, the full rung on the next 1st" is a TRIAL ending there: the
+	// creation invoices $0 immediately (a bookkeeping row, never attempted), the
+	// subscription is `trialing` until the 1st, and the first real invoice — drafted at
+	// the trial's end with the FULL rung, reason `subscription_cycle`, covered by the
+	// day-exact reduction the caller recorded — is an ordinary renewal that auto-bills
+	// the saved card and lapses honestly when it fails.
+	const customerId = await ensureStripeCustomer(userId, "");
+	const trialEnd = Math.floor(cycleStart(nextCycleKey(currentCycleKey())).getTime() / 1000);
+	await createSubscription({
+		customer: customerId,
+		items: picks.map(lineOf),
+		automatic_tax: { enabled: true },
+		trial_end: trialEnd,
+		// The saved card rides as the subscription's default payment method, so the
+		// trial's first invoice can bill off-session; without one (the save offered
+		// none), the renewal fails the honest way — Stripe retries, the account lapses
+		// visibly, Manage Billing fixes it.
+		...(pmId ? { default_payment_method: pmId } : {}),
+		metadata: { userId: String(userId) },
+	});
 }
