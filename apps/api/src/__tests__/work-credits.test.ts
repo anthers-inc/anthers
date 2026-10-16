@@ -3,9 +3,11 @@
  * The credits table a Work carries — creator-asserted provenance, `POST`/`PATCH` round-trip.
  *
  * The two rules being proven are the shape of the thing: a `created` credit must name its
- * contributor (a 400, with the refusal pointing at the row), while a pure `licensed`/`ai`
- * credit may stay anonymous. Blank rows survive — credits are asserted, and a Work with
- * none is an ordinary Work, not a demonetized one.
+ * contributor (a 400, with the refusal pointing at the row), while a pure `generated`
+ * credit may stay anonymous. The retired first-edition values (`licensed`, `ai`) are
+ * refused at the boundary — the vocabulary is written, and nothing accepts them again.
+ * Blank tables survive — credits are asserted, and a Work with none is an ordinary Work,
+ * not a demonetized one.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
@@ -44,8 +46,8 @@ describe("Work credits", () => {
 	it("round-trips a credits table on create", async () => {
 		const credits: WorkCredit[] = [
 			{ role: "Written and directed by", contributor: "A. Creator", types: ["created"] },
-			{ role: "Illustrations", contributor: "", types: ["ai"] },
-			{ role: "Icons", contributor: "The Noun Project", types: ["licensed"] },
+			{ role: "Illustrations", contributor: "", types: ["generated"] },
+			{ role: "Icons", contributor: "The Noun Project", types: ["created"] },
 		];
 		const res = await req("/api/content/works", {
 			method: "POST",
@@ -65,7 +67,7 @@ describe("Work credits", () => {
 		createdWorkIds.push(workId);
 		expect(work.credits).toEqual(credits);
 		const [row] = await db.select().from(works).where(eq(works.id, workId));
-		// The AI and licensed rows store the contributor as entered — blank is a real value.
+		// The generated row stores the contributor as entered — blank is a real value.
 		expect(row.credits).toEqual(credits);
 	});
 
@@ -85,7 +87,7 @@ describe("Work credits", () => {
 		expect(body.error).toContain("created");
 	});
 
-	it("refuses a created+ai blend with no contributor too — blending changes nothing", async () => {
+	it("refuses a created+generated blend with no contributor too — blending changes nothing", async () => {
 		const res = await req("/api/content/works", {
 			method: "POST",
 			headers: auth,
@@ -93,7 +95,7 @@ describe("Work credits", () => {
 				type: "image",
 				title: "Anonymous blend",
 				maturityRows: rowsRatedAs("general"),
-				credits: [{ role: "Cover", contributor: "", types: ["created", "ai"] }],
+				credits: [{ role: "Cover", contributor: "", types: ["created", "generated"] }],
 			}),
 		});
 		expect(res.status).toBe(400);
@@ -113,17 +115,14 @@ describe("Work credits", () => {
 		expect(res.status).toBe(400);
 	});
 
-	it("accepts anonymous licensed and AI rows — only created forces a name", async () => {
-		const credits = [
-			{ role: "Sample pack", contributor: "", types: ["licensed"] },
-			{ role: "Voiceover", contributor: "", types: ["ai"] },
-		];
+	it("accepts an anonymous generated row — only a created row forces a name", async () => {
+		const credits: WorkCredit[] = [{ role: "Voiceover", contributor: "", types: ["generated"] }];
 		const res = await req("/api/content/works", {
 			method: "POST",
 			headers: auth,
 			body: JSON.stringify({
 				type: "audio",
-				title: "Anonymous sources",
+				title: "Anonymous machine work",
 				maturityRows: rowsRatedAs("general"),
 				credits,
 			}),
@@ -131,6 +130,22 @@ describe("Work credits", () => {
 		expect(res.status).toBe(201);
 		const { work } = (await res.json()) as { work: { id: number } };
 		createdWorkIds.push(work.id);
+	});
+
+	it("refuses the retired first-edition values — the vocabulary changed, the boundary did not keep them", async () => {
+		for (const legacy of [["licensed"], ["ai"], ["licensed", "ai"]]) {
+			const res = await req("/api/content/works", {
+				method: "POST",
+				headers: auth,
+				body: JSON.stringify({
+					type: "audio",
+					title: "Retired vocabulary",
+					maturityRows: rowsRatedAs("general"),
+					credits: [{ role: "Legacy", contributor: "", types: legacy }],
+				}),
+			});
+			expect(res.status).toBe(400);
+		}
 	});
 
 	it("PATCH replaces the table wholesale, and an absent PATCH leaves it alone", async () => {

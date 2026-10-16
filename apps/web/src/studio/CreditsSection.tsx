@@ -44,8 +44,7 @@ interface IdentitySuggestion {
 /** What a credit type is called in the editor, in the order the checkboxes appear. */
 const CREDIT_TYPES: { value: WorkCreditType; label: string }[] = [
 	{ value: "created", label: "Created" },
-	{ value: "licensed", label: "Licensed" },
-	{ value: "ai", label: "AI" },
+	{ value: "generated", label: "Generated" },
 ];
 
 /**
@@ -54,10 +53,9 @@ const CREDIT_TYPES: { value: WorkCreditType; label: string }[] = [
  */
 const TYPE_TIPS: Partial<Record<WorkCreditType, string>> = {
 	created:
-		"A human made this part — alone, or blended with AI or a licensed source. Created names who made it: their identity on the network, or a plain name when they're not on it.",
-	licensed:
-		"Pre-existing material was used under a right. Name the source or leave it blank — many licenses, Anthers' own Badge art among them, do not require attribution.",
-	ai: "A machine made this part. Name the part, never the model — a model owns nothing and is granted nothing. A model's draft you then made your own is a blend: tick Created beside AI, and split the two credits rather than one.",
+		"A person or copyright-capable entity made this part — you, someone you're crediting, or a source you brought in by name. Work-for-hire, licensed and public-domain material all credit here the same way: the deal behind it is not the reader's business. Names the maker — their identity on the network, or a plain name when they're not on it.",
+	generated:
+		"A machine made this part. Name the part, never the model — a machine makes nothing anyone owns. A machine's draft you then made your own is a blend: tick Created beside Generated, and split the two credits rather than one.",
 };
 
 /**
@@ -132,10 +130,11 @@ export default function CreditsSection({
 		<div className="flex flex-col gap-3">
 			<p className="text-xs text-base-content/50">
 				Who and what made this — users see these as liner notes on the Work. A Created credit names
-				who; Licensed and AI credits may stay anonymous. An AI credit never names the model — a tool
-				owns nothing. A blend (Created and AI together) is a genuine mixed credit, and precision is
-				the rewarded move: say what the machine did beside what the human did. A Work needs at least
-				one credit naming a human creator before it can be released.
+				who made the part, however you got it; a Generated credit may stay anonymous and never names
+				the model, because a machine makes nothing anyone owns. A blend (Created and Generated
+				together) is a genuine mixed credit, and precision is the rewarded move: say what the
+				machine did beside what the human did. A Work needs at least one credit naming a human
+				creator before it can be released.
 			</p>
 			{rows.length === 0 && (
 				<p className="text-xs text-warning">

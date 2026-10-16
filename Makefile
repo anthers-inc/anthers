@@ -5,7 +5,7 @@
         gauntlet-reset gauntlet-clean stripe-webhooks \
         verify verify-inner verify-fast verify-fast-inner verify-docs typecheck test lint lint-fix format \
         e2e-install e2e-preflight screenshots test-e2e test-e2e-inner test-e2e-ui test-e2e-ui-inner test-gauntlet test-gauntlet-inner \
-        spec-diff spec-apply deploy-status promote-version release-notes-audit resource-snapshot resource-alerts webhook-check stripe-walk dev-local \
+        spec-diff spec-apply lex-publish deploy-status promote-version release-notes-audit resource-snapshot resource-alerts webhook-check stripe-walk dev-local \
         worktree worktrees worktree-remove \
 
 # ─── OS detection ───
@@ -369,6 +369,21 @@ spec-diff: ## Compare .do/*.yaml against the LIVE App Platform specs (DOCTL_CONT
 # Dry run by default; APPLY=1 to actually update. See scripts/spec-apply.ts.
 spec-apply: ## Apply .do/app.yaml, preserving live secrets (APPLY=1 sends, FROM_BWS=1 pulls from Bitwarden)
 	bun run scripts/spec-apply.ts $(if $(APPLY),--apply,) $(if $(ALLOW_REMOVE),--allow-remove,) $(if $(FROM_BWS),--from-bws,)
+
+# The Lexicon publish door (scripts/atproto-publish-lexicon.ts), make-shaped. Plain
+# `make lex-publish` prints every schema's status and plan and writes nothing — the moment
+# to read the Lexicon. WRITE=1 publishes to bsky.social as anthers.org: 🛑 irreversible,
+# and a person's act. The gates stay with the script, which holds them under any wrapper —
+# it refuses a run without a terminal or under CI, makes the runner type each changed NSID
+# back, and takes the app password hidden (never a flag; it lives in Bitwarden) — so this
+# recipe carries no gate of its own and relaxes none of the script's. A rehearsal runs
+# against a dev session's own network, by hand or in an agent session: the same command
+# with `--service http://localhost:<that session's PDS port> --identifier <a dev account>`
+# is detected off-network and touches nothing real and nothing committed. After a real
+# publish, commit the refreshed copy the script writes into `lexicons-published/`.
+# Retiring is a hand-run `--retire`, never this target.
+lex-publish: ## Publish org.anthers.* Lexicons (dry run by default; WRITE=1 to publish — irreversible, person-gated by the script)
+	bun run scripts/atproto-publish-lexicon.ts $(if $(WRITE),--write,) --service https://bsky.social --identifier anthers.org
 
 # Compare the commit App Platform is actually serving against what `release` points
 # at. `deploy_on_push` is false on every component, so a push to release that the CI
