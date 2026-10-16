@@ -351,7 +351,9 @@ export default function WorksPage() {
 								<th scope="col" aria-sort={ariaSort(sort, "title")}>
 									<SortButton label="Work" k="title" sort={sort} onSort={onSort} />
 								</th>
-								<th scope="col" className="min-w-[14rem]">Description</th>
+								<th scope="col" className="min-w-[14rem]">
+									Description
+								</th>
 								<th scope="col">Visibility</th>
 								<th scope="col">Status</th>
 								<th scope="col" aria-sort={ariaSort(sort, "date")}>

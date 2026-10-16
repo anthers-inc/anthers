@@ -193,7 +193,9 @@ export default function ProjectsPage() {
 								<th scope="col" aria-sort={ariaSort(sort, "title")}>
 									<SortableHeader label="Project" sortKey="title" sort={sort} onSort={onSort} />
 								</th>
-								<th scope="col" className="min-w-[14rem]">Description</th>
+								<th scope="col" className="min-w-[14rem]">
+									Description
+								</th>
 								<th scope="col">Works</th>
 								<th scope="col">Status</th>
 								<th scope="col" aria-sort={ariaSort(sort, "date")}>
