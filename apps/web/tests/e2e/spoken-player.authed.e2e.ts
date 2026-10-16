@@ -9,18 +9,27 @@
  * where the audio still plays, which is the failure shape video-player.authed.e2e.ts
  * was written against.
  *
- * It also pins the persistent miniplayer's two ownership modes (the account's Use
- * Persistent Miniplayer, defaulting on): with it on, pressing play on the Work page
- * queues the episode into the footer bar and the page player renders no element of its
- * own — one engine, so the double-claim this replaces cannot happen; with it off, the
- * episode plays in the page's own element and no bar rises. The setting rides the shared
- * authed account, so the off-mode walks set it and put it back.
+ * ## Two ownership modes (the account's Use Persistent Miniplayer, defaulting on)
+ *
+ * The bar-driven mode rides the shared `authed` account, which **never has its setting
+ * written in this file**: every other spec reading that account's Work pages reads its
+ * setting as part of the page, so a flip here would race another worker's page build
+ * (found the hard way — the chapter spec rendered local under a flip's window). The
+ * local, element-owned mode instead runs on the media fixture creator's own context,
+ * whose setting nobody else reads: the spec flips it false for its window and puts it
+ * back in `afterAll`.
+ *
+ * What the bar mode pins: pressing play on the Work page queues the episode into the
+ * footer bar, the page player renders no element of its own — one engine, so the
+ * double-claim this replaces cannot happen — and the page transport mirrors the bar.
+ * What the local mode pins: the episode plays in the page's own element, skips write
+ * its `currentTime`, and no bar rises.
  *
  * The fixture is the media fixture's `episode` — a Work of type `audio`, free and
  * streaming, so none of it is behind a gate and the player it exercises is the real one.
  */
 import { mediaFixtureWork } from "@anthers/db/media-fixture";
-import { API_URL, expect, test, WEB_ORIGIN } from "./fixtures";
+import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 const EPISODE = mediaFixtureWork("episode");
 const PLAYER = "[data-testid=spoken-player]";
@@ -34,7 +43,10 @@ async function position(page: import("@playwright/test").Page): Promise<number> 
 	}, PLAYER);
 }
 
-/** Write the account's Use Persistent Miniplayer — the switch this spec walks. */
+/**
+ * Write the Use Persistent Miniplayer on the given signed-in context. The media fixture
+ * creator's account is the only one this flips, and only from the local-mode tests.
+ */
 async function setMiniPlayer(request: import("@playwright/test").APIRequestContext, on: boolean) {
 	const res = await request.patch(`${API_URL}/api/accounts/me`, {
 		headers: { Origin: WEB_ORIGIN },
@@ -42,6 +54,22 @@ async function setMiniPlayer(request: import("@playwright/test").APIRequestConte
 	});
 	expect(res.status()).toBe(200);
 }
+
+/** A fresh context signed in as the media fixture creator, miniplayer off. */
+async function localModeContext(browser: import("@playwright/test").Browser) {
+	const context = await browser.newContext();
+	await signInAsMediaFixture(context);
+	await setMiniPlayer(context.request, false);
+	return context;
+}
+
+// Put the media fixture creator's account back — the local-mode walks leave it false.
+test.afterAll(async ({ browser }) => {
+	const context = await browser.newContext();
+	await signInAsMediaFixture(context);
+	await setMiniPlayer(context.request, true);
+	await context.close();
+});
 
 test.describe.configure({ mode: "serial" });
 
@@ -68,10 +96,12 @@ test("an audio Work page renders the spoken transport — skips and a speed menu
 	// The skip buttons move the position by their fixed step — its own test below.
 });
 
-test("the skip buttons move the position by their fixed step", async ({ page }) => {
+test("the skip buttons move the position by their fixed step", async ({ browser }) => {
 	// The element-owned mode: the miniplayer is off, so the page owns the <audio> the
-	// skips write into. The default (never answered) is on; it is turned back on below.
-	await setMiniPlayer(page.request, false);
+	// skips write into. The shared authed account stays on throughout — this test walks
+	// its own context, whose setting no other spec reads.
+	const context = await localModeContext(browser);
+	const page = await context.newPage();
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}`);
 	await expect(page.locator(PLAYER)).toBeVisible();
 
@@ -111,14 +141,14 @@ test("the skip buttons move the position by their fixed step", async ({ page }) 
 	);
 	expect(writes.length, "skip onClick did not write audio.currentTime").toBeGreaterThan(0);
 
-	// Back to the default reading for the walks below (and the account after them).
-	await setMiniPlayer(page.request, true);
+	await context.close();
 });
 
 test("with the miniplayer off, the episode plays in its own page and no bar rises", async ({
-	page,
+	browser,
 }) => {
-	await setMiniPlayer(page.request, false);
+	const context = await localModeContext(browser);
+	const page = await context.newPage();
 	await page.goto(`/works/${EPISODE.slug}-${EPISODE.publicId}`);
 	await page.locator(PLAYER).getByRole("button", { name: "Play", exact: true }).click();
 
@@ -129,7 +159,7 @@ test("with the miniplayer off, the episode plays in its own page and no bar rise
 	).toBeVisible();
 	await expect(page.locator(BAR)).toHaveCount(0);
 
-	await setMiniPlayer(page.request, true);
+	await context.close();
 });
 
 test("playing an audio Work queues it into the persistent bar — the account default", async ({

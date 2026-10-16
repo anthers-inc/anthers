@@ -239,9 +239,14 @@ test("the Work-page player's transport skips, and the times bracket the waveform
 	 * track only seconds long, where the ended transition would race the assertion.
 	 * (Toggled back — the volume store is app-wide and remembered.)
 	 */
+	// Scoped to the page player: the persistent bar (carrying the track the first
+	// skip queued) has its own mute button, and an unscoped role query would be a
+	// strict-mode violation.
+	const unmute = page.locator("[data-testid=audio-player]").getByRole("button", { name: "Unmute" });
+	const mute = page.locator("[data-testid=audio-player]").getByRole("button", { name: "Mute" });
 	await page.locator("[data-testid=audio-player]").focus();
 	await page.keyboard.press("m");
-	await expect(page.getByRole("button", { name: "Unmute" })).toBeVisible();
+	await expect(unmute).toBeVisible();
 	await page.keyboard.press("m");
-	await expect(page.getByRole("button", { name: "Mute" })).toBeVisible();
+	await expect(mute).toBeVisible();
 });
