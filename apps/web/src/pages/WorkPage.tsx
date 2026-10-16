@@ -15,6 +15,7 @@
  */
 
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
+import { isListened } from "@anthers/shared/content";
 import { useAuth } from "@anthers/web-shared/auth";
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import { LockedCover, lockedByBadge, presentsAsLocked } from "@anthers/web-shared/post/unlock";
@@ -158,13 +159,16 @@ export default function WorkPage() {
 	}, [work, location.pathname, navigate, shareToken]);
 
 	// Poll while the media is still encoding, so the player swaps in without a refresh.
-	// A video plays its original whether or not a ladder encode is running (70.06), so
-	// `encoding` no longer gates what renders for a video — it only drives this poll,
-	// which ends the moment the ladder exists and the player swaps to it.
+	// A video plays its original whether or not a ladder encode is running (70.06), and
+	// since 2026-10-16 a track plays its original the same way while its MP3 and
+	// waveform process — so `encoding` no longer gates what renders for either; it only
+	// drives this poll, which ends the moment the processed deliverable exists and the
+	// player swaps to it.
 	const jobStatus = work?.transcoding?.status;
 	const encoding = jobStatus != null && jobStatus !== "completed" && jobStatus !== "failed";
-	/** A video whose original is not on hand yet, for the encoder-status fallback. */
-	const videoWithoutOriginal = work?.type === "video" && !work?.originalUrl;
+	/** A Work whose original is not on hand yet (or is not a play surface), for the encoder-status fallback. */
+	const playsOriginal =
+		work != null && (work.type === "video" || isListened(work.type)) && !!work.originalUrl;
 
 	/*
 	 * The Public Access meter, for the media that have no player of their own.
@@ -448,7 +452,7 @@ export default function WorkPage() {
 						// The server withheld the deliverable because the allowance is gone, so
 						// there is nothing to render in its place but the reason.
 						<PublicAccessWall budget={meterBudget} />
-					) : encoding && !videoWithoutOriginal ? (
+					) : encoding && !playsOriginal ? (
 						<TranscodingStatus
 							status={work.transcoding?.status ?? "pending"}
 							progress={work.transcoding?.progress ?? 0}

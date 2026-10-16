@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A video Work plays its original file, from the moment it exists, at an access-checked
- * route — the 2026-10-11 ruling's baseline (wiki 70.06), pinned end-to-end.
+ * A Work's original plays from the moment the file exists, at an access-checked route —
+ * the 2026-10-11 ruling for video (wiki 70.06) and, since 2026-10-16, for the listened
+ * kinds — pinned end-to-end.
  *
  *   - `GET /works/:id/original` runs the same gate ladder the audio route runs (access,
  *     the Public Access meter, the household limit) and 302s to a freshly-minted signed
  *     address — never the stored key, which names the private bucket;
  *   - the Work's user-facing payload carries `originalUrl` at that route for anyone who
  *     may reach the Work at all, and the meter bites at the route, not in the payload;
- *   - a video with no file yet, and a non-video kind, find nothing there (404s), and
- *     the creator reaches their own original like any other viewer.
+ *   - a video with no file yet, a track with no file, and a kind whose source is no play
+ *     surface — an image, a book's pages — find nothing there (404s), and the creator
+ *     reaches their own original like any other viewer.
  *
  * ⚠️ **The delivery rewrite only exists under `STORAGE_BACKEND=s3`, and that environment
  * cannot be set inside a suite** — one `bun test` invocation is one process, sharing
@@ -29,7 +31,7 @@ const MODE_ENV = "ANTERS_TEST_S3_DELIVERY";
 if (process.env[MODE_ENV] === "1") {
 	await runDeliveryModeSuite();
 } else {
-	describe("a video's original is playable (driven)", () => {
+	describe("an original is playable (driven)", () => {
 		it("runs the s3-delivery suite in a child process, so its storage environment cannot reach a sibling file", async () => {
 			const proc = Bun.spawn(["bun", "test", import.meta.path], {
 				// The api workspace's own bunfig, whose preload brings the child its session.
@@ -148,6 +150,9 @@ async function runDeliveryModeSuite(): Promise<void> {
 	let gatedVideoId: number;
 	let filelessVideoId: number;
 	let audioWorkId: number;
+	let musicWorkId: number;
+	let filelessAudioId: number;
+	let imageWorkId: number;
 
 	describe("the original is the day-one deliverable", () => {
 		beforeAll(async () => {
@@ -195,9 +200,42 @@ async function runDeliveryModeSuite(): Promise<void> {
 				await insertWork({
 					creatorId,
 					type: "audio",
-					title: "Track (its original is not a play surface)",
+					title: "Episode before its MP3 exists",
 					streamEnabled: true,
-					sourceKey: `creators/${creatorId}/audio/sources/track-${id}.wav`,
+					sourceKey: `creators/${creatorId}/audio/originals/episode-${id}.wav`,
+					access: PUBLIC_ACCESS,
+				})
+			).id;
+
+			musicWorkId = (
+				await insertWork({
+					creatorId,
+					type: "music",
+					title: "Track before its MP3 exists",
+					streamEnabled: true,
+					sourceKey: `creators/${creatorId}/audio/originals/track-${id}.flac`,
+					access: PUBLIC_ACCESS,
+				})
+			).id;
+
+			filelessAudioId = (
+				await insertWork({
+					creatorId,
+					type: "music",
+					title: "Track with no file yet",
+					streamEnabled: true,
+					sourceKey: "",
+					access: PUBLIC_ACCESS,
+				})
+			).id;
+
+			imageWorkId = (
+				await insertWork({
+					creatorId,
+					type: "image",
+					title: "Image (its source is no play surface)",
+					streamEnabled: false,
+					sourceKey: `creators/${creatorId}/images/picture-${id}.png`,
 					access: PUBLIC_ACCESS,
 				})
 			).id;
@@ -250,6 +288,34 @@ async function runDeliveryModeSuite(): Promise<void> {
 			expect(work.originalUrl).toBe(`${ORIGIN}/api/content/works/${videoId}/original`);
 		});
 
+		// The listener cases sit above every spend on purpose: the meter's allowance is
+		// ACCOUNT-wide, so a viewer spent on one Work is 402 for every Public Access
+		// deliverable after that — the two 402 cases at the bottom are the last metered
+		// requests the shared viewer can make.
+		it("a track under processing plays its original: the same route, the same ladder", async () => {
+			for (const workId of [musicWorkId, audioWorkId]) {
+				const work = await fetchWork(workId, viewerCookie);
+				expect(work.originalUrl).toBe(`${ORIGIN}/api/content/works/${workId}/original`);
+				const res = await req(`/api/content/works/${workId}/original`, {
+					headers: { Cookie: viewerCookie },
+				});
+				expect(res.status).toBe(302);
+				expect(res.headers.get("Cache-Control")).toBe("no-store");
+				const location = res.headers.get("Location");
+				expect(location).not.toBeNull();
+				expect(location).toContain("X-Amz-");
+			}
+		});
+
+		it("the owner reaches their own track's original through the Studio's shape", async () => {
+			const work = await fetchWork(musicWorkId, creatorCookie);
+			expect(work.originalUrl).toBe(`${ORIGIN}/api/content/works/${musicWorkId}/original`);
+			const res = await req(`/api/content/works/${musicWorkId}/original`, {
+				headers: { Cookie: creatorCookie },
+			});
+			expect(res.status).toBe(302);
+		});
+
 		it("refuses a viewer whose allowance is spent with a real 402", async () => {
 			await spend(viewerId, videoId, FREE_PUBLIC_ACCESS_SECONDS);
 			const res = await req(`/api/content/works/${videoId}/original`, {
@@ -259,6 +325,15 @@ async function runDeliveryModeSuite(): Promise<void> {
 			// 403 would say "you may not"; the truth is "you may, and here is how".
 			expect((await res.json()).error).toBeDefined();
 			expect(res.headers.get("Location")).toBeNull();
+		});
+
+		it("the spent allowance reaches a track the same way — the widening adds no second meter", async () => {
+			// The viewer's allowance is already spent above; the audio original answers
+			// through the same 402, which is the point — no widening-specific gate.
+			const res = await req(`/api/content/works/${audioWorkId}/original`, {
+				headers: { Cookie: viewerCookie },
+			});
+			expect(res.status).toBe(402);
 		});
 
 		it("refuses a viewer the gate refuses — 403, and the payload carries no address", async () => {
@@ -274,26 +349,19 @@ async function runDeliveryModeSuite(): Promise<void> {
 			expect((await req(`/api/content/works/${videoId}/original`)).status).toBe(401);
 		});
 
-		it("a video with no file, and a non-video kind, find nothing to serve", async () => {
-			expect(
-				(
-					await req(`/api/content/works/${filelessVideoId}/original`, {
-						headers: { Cookie: viewerCookie },
-					})
-				).status,
-			).toBe(404);
-			expect(
-				(
-					await req(`/api/content/works/${audioWorkId}/original`, {
-						headers: { Cookie: viewerCookie },
-					})
-				).status,
-			).toBe(404);
-		});
-
-		it("a fileless video's payload carries no original either", async () => {
-			const work = await fetchWork(filelessVideoId, viewerCookie);
-			expect(work.originalUrl).toBeNull();
+		it("a fileless video, a fileless track, and a kind with no play surface find nothing to serve", async () => {
+			for (const [workId, cookie] of [
+				[filelessVideoId, viewerCookie],
+				[filelessAudioId, viewerCookie],
+				[imageWorkId, viewerCookie],
+			] as const) {
+				expect(
+					(await req(`/api/content/works/${workId}/original`, { headers: { Cookie: cookie } }))
+						.status,
+				).toBe(404);
+				const work = await fetchWork(workId, cookie);
+				expect(work.originalUrl).toBeNull();
+			}
 		});
 	});
 }
