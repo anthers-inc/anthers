@@ -428,7 +428,13 @@ function LoggedInLayoutInner() {
 					    studio mode leaves out, and a working tool has no use for a site map. */}
 					{!studio && (
 						<footer
-							className={`bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}
+							// `mt-auto` pins the footer to the bottom of `<main>`'s scroll area:
+							// this flex column is taller than the viewport whenever a page's
+							// content runs short, and without the push the footer hugs the content
+							// and leaves the height below it empty (Settings, in the extreme).
+							// With content taller than the viewport there is no free space and
+							// the margin is zero, leaving the footer directly under the content.
+							className={`mt-auto bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}
 						>
 							<div className="max-w-7xl mx-auto">
 								<div className="join join-horizontal w-full">

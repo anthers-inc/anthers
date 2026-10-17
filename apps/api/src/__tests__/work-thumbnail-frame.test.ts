@@ -209,4 +209,45 @@ describe("POST /works/:id/thumbnail-frame", () => {
 		const { work } = (await res.json()) as { work: { thumbnail: string } };
 		expect(work.thumbnail).toContain(`/thumbnails/${workId}/`);
 	});
+
+	it("a mid-video moment skips the probe when the Work row carries its duration", async () => {
+		const workId = await videoWorkWithFile(5);
+		await db.update(works).set({ durationSeconds: 5 }).where(eq(works.id, workId));
+		const spy = spyOn(Bun, "spawn");
+		try {
+			const res = await call("POST", `/api/content/works/${workId}/thumbnail-frame`, {
+				atSeconds: 2,
+			});
+			expect(res.status).toBe(200);
+			const { work } = (await res.json()) as { work: { thumbnail: string } };
+			expect(work.thumbnail).toContain(`/thumbnails/${workId}/`);
+			// The stored duration stood for the file: the route spawned no ffprobe — its
+			// only spawn is the extraction's ffmpeg. This is the save-speed take.
+			const spawned = spy.mock.calls.map((c) => (c[0] as string[])[0]);
+			expect(spawned).toEqual(["ffmpeg"]);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it("the probe still runs when the asked moment reaches the stored end's rounding", async () => {
+		const workId = await videoWorkWithFile(5);
+		await db.update(works).set({ durationSeconds: 5 }).where(eq(works.id, workId));
+		const spy = spyOn(Bun, "spawn");
+		try {
+			// 9999 is far past the stored duration — exactly the case the exact probe
+			// exists to clamp into the last decoded frame.
+			const res = await call("POST", `/api/content/works/${workId}/thumbnail-frame`, {
+				atSeconds: 9999,
+			});
+			expect(res.status).toBe(200);
+			const { work } = (await res.json()) as { work: { thumbnail: string } };
+			expect(work.thumbnail).toContain(`/thumbnails/${workId}/`);
+			const spawned = spy.mock.calls.map((c) => (c[0] as string[])[0]);
+			expect(spawned).toContain("ffprobe");
+			expect(spawned).toContain("ffmpeg");
+		} finally {
+			spy.mockRestore();
+		}
+	});
 });
