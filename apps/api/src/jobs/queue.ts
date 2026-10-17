@@ -201,15 +201,18 @@ export async function ensureQueueReady(): Promise<void> {
 // ── Queue name constants ─────────────────────────────────────────────────────
 
 export const QUEUES = {
-	// The single-file media lane: one queue carrying every video transcode and audio
-	// process, worked at `localConcurrency: 1`, because an encode saturates the worker's
-	// plan (six pinned ffmpeg threads outpaced two vCPUs through a whole burst on
-	// 2026-10-17 with every figure on screen drifting outside its measured band) and a
-	// second concurrent encode finished no sooner, it only doubled the peak. The job
-	// carries a `jobId` alone; the handler re-reads the row and dispatches on its
-	// `mediaType`, so adding a media type is a row in the handler's map, not a queue.
-	// The old per-type names are on `RETIRED_QUEUES`, retired on 2026-10-17.
-	MEDIA: "media",
+	// The media lane's two per-type queues. **Video is single-file** (`localConcurrency:
+	// 1`) because an encode saturates the worker's two vCPUs and a second concurrent
+	// encode finished no sooner — it only doubled the peak; that was measured true in the
+	// 2026-10-17 burst and remains true. **Audio runs two at a time** because audio is
+	// not that: the jobs are light (one audio job held the worker at ~24% CPU, measured
+	// 2026-10-18), the lane had run two concurrent for months within budget, and the
+	// single-file experiment idled three quarters of the box waiting for encodes that
+	// were never the constraint. The job carries a `jobId` alone; the handlers re-read
+	// the row, and `QUEUE_BY_MEDIA_TYPE` below is the one map any new media type's queue
+	// resolves through.
+	TRANSCODE_VIDEO: "transcode-video",
+	PROCESS_AUDIO: "process-audio",
 	RENDER_PAGED: "render-paged", // Render a paged Work's source set (PDFs and page images) to private per-page images
 	// Extract a reflow ebook Work's EPUB source set into private chapters and their
 	// referenced assets (`work_sections` + `work_section_assets`), one row per component
@@ -374,17 +377,23 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 	// when ffmpeg's ranged reads outrun the signed address.
 	// The lock in the handler (`withTranscodeLock`) is the floor under sizing mistakes:
 	// a re-delivery waits there instead of encoding beside the first handler.
-	[QUEUES.MEDIA]: {
-		// The merged shape of the transcode-video and process-audio budgets (retired
-		// 2026-10-17 with the queue itself): the video expiry sized to exceed the worst
-		// ladder the ladder allows, shared here because a queue's budget is one row and
-		// audio rides the generous side rather than a second set of figures — 12 hours on
-		// a job whose passes take minutes is inert. pg-boss expires a job on started_on,
-		// so queue wait does not count; the heartbeat fails a worker that died mid-job
-		// in minutes either way. The lock in the handlers is the floor under sizing
-		// mistakes: a re-delivery waits there instead of encoding beside the first.
+	[QUEUES.TRANSCODE_VIDEO]: {
 		retryLimit: 2,
 		retryDelay: 60,
+		expireInMinutes: 12 * 60,
+		heartbeatSeconds: 120,
+	},
+	[QUEUES.PROCESS_AUDIO]: {
+		retryLimit: 2,
+		retryDelay: 60,
+		// The same generous budget the video ladder rides (both queues carrying the shape
+		// the merged `media` budget held, 2026-10-17): a job whose passes take minutes is
+		// unaffected by a 12-hour expiry, pg-boss expires on `started_on` so queue wait
+		// counts nowhere, and the heartbeat fails a worker that died mid-job in minutes
+		// either way. The older, tighter budget (15 minutes, no heartbeat) bit exactly
+		// once: under the 2026-10-17 burst an audio job ran past its window, pg-boss
+		// re-delivered it beside the first handler, and the encode lock made the second
+		// delivery wait — spend, not crash, but the shape to leave retired.
 		expireInMinutes: 12 * 60,
 		heartbeatSeconds: 120,
 	},
@@ -548,13 +557,34 @@ export const RETIRED_QUEUES: readonly string[] = [
 	// the EPUB era's "ebook" ingest is a different job on a different table, so the old
 	// name would have said the opposite of what the handler does.
 	"rasterize-ebook",
-	// The media pipeline's two per-type queues, retired on 2026-10-17 for the single-file
-	// lane: the worker ran one video beside two audios, oversubscribing its plan's two
-	// vCPUs and putting every measured encode outside its benchmark band. One queue at
-	// concurrency 1 replaced both; see QUEUES.MEDIA.
-	"transcode-video",
-	"process-audio",
+	// The single-file media lane, retired on 2026-10-18 after one day of measurement: a
+	// real audio pair put the worker at 24% CPU — single-file was the right call for video
+	// (an encode saturates both vCPUs) and the wrong call for audio (the lane idled three
+	// quarters of the box). The per-type queues it replaced came back (`QUEUES` above);
+	// see `QUEUE_BY_MEDIA_TYPE`. The worker re-sends this queue's pending jobs onto their
+	// row's own type queue before retiring it (`worker.ts`'s reschedule block) — deleting
+	// the queue alone would strand waiting rows on a queue nobody drains.
+	"media",
 ];
+
+/**
+ * Which queue carries a media row's job, by the row's own `mediaType`.
+ *
+ * 🚨 A MAP, not a ternary — the same rule `resume-orphans.ts` records: correct for two
+ * types, silently wrong the moment a third exists, and an enqueue routed to the wrong
+ * handler fails on reasons that name ffmpeg. An unknown type maps to nothing, so a caller
+ * routing by it skips (the sweep's resume) or fails loud (the enqueue), never guesses.
+ */
+export const QUEUE_BY_MEDIA_TYPE: Record<string, string | undefined> = {
+	video: QUEUES.TRANSCODE_VIDEO,
+	audio: QUEUES.PROCESS_AUDIO,
+};
+
+/** The retired queues whose pending jobs get re-sent rather than deleted with the queue.
+ * The reschedule (`worker.ts`'s boot block) routes each job by its row's `mediaType`
+ * through `QUEUE_BY_MEDIA_TYPE`; keep an entry here exactly as long as its queue name
+ * sits in `RETIRED_QUEUES`, then remove both. */
+export const RESCHEDULE_ON_RETIRE: readonly string[] = ["media"];
 
 /**
  * Every cron the worker registers, as data.

@@ -232,9 +232,9 @@ beforeAll(async () => {
 	// payload never resolved (deleted).
 	QUEUED_FAKE.length = 0;
 	QUEUED_FAKE.push(
-		{ queue: QUEUES.MEDIA, id: "q-kept", data: { jobId: video.jobId } },
-		{ queue: QUEUES.MEDIA, id: "q-vanished", data: { jobId: 999_999 } },
-		{ queue: QUEUES.MEDIA, id: "q-malformed", data: {} },
+		{ queue: QUEUES.PROCESS_AUDIO, id: "q-kept", data: { jobId: video.jobId } },
+		{ queue: QUEUES.PROCESS_AUDIO, id: "q-vanished", data: { jobId: 999_999 } },
+		{ queue: QUEUES.PROCESS_AUDIO, id: "q-malformed", data: {} },
 	);
 
 	sent = [];
@@ -265,7 +265,7 @@ describe("resumeOrphanedTranscodes", () => {
 	});
 
 	it("resumes a job whose Work still has its source file", async () => {
-		expect(sentFor(video.jobId)).toEqual([QUEUES.MEDIA]);
+		expect(sentFor(video.jobId)).toEqual([QUEUES.TRANSCODE_VIDEO]);
 		expect((await statusOf(video.jobId)).status).toBe("pending");
 	});
 
@@ -275,7 +275,7 @@ describe("resumeOrphanedTranscodes", () => {
 		// handler — which fails on a PDF for reasons that name ffmpeg, i.e. a wrong answer
 		// wearing a plausible error. A test that only covered video and audio would agree
 		// with the broken version completely.
-		expect(sentFor(audio.jobId)).toEqual([QUEUES.MEDIA]);
+		expect(sentFor(audio.jobId)).toEqual([QUEUES.PROCESS_AUDIO]);
 		expect(sentFor(ebook.jobId)).toEqual([QUEUES.RENDER_PAGED]);
 	});
 
@@ -333,7 +333,7 @@ describe("resumeOrphanedTranscodes", () => {
 		expect(row.status).toBe("pending");
 		expect(row.resumeCount).toBe(0);
 		expect(row.flag).toBe(false);
-		expect(sentFor(benign.jobId)).toEqual([QUEUES.MEDIA]);
+		expect(sentFor(benign.jobId)).toEqual([QUEUES.TRANSCODE_VIDEO]);
 	});
 
 	it("resumes a flagged row even past the bound, still without spending a resume", async () => {
@@ -344,7 +344,7 @@ describe("resumeOrphanedTranscodes", () => {
 		expect(row.status).toBe("pending");
 		expect(row.resumeCount).toBe(MAX_TRANSCODE_RESUMES);
 		expect(row.flag).toBe(false);
-		expect(sentFor(benignPastBound.jobId)).toEqual([QUEUES.MEDIA]);
+		expect(sentFor(benignPastBound.jobId)).toEqual([QUEUES.TRANSCODE_VIDEO]);
 	});
 
 	it("retires queued pg-boss jobs whose row has vanished, and never one whose row exists", async () => {
@@ -365,7 +365,9 @@ describe("resumeOrphanedTranscodes", () => {
 		const quiet: LingeringQueueAccess = {
 			findQueued: (queueName) =>
 				Promise.resolve(
-					[{ id: "q-kept", data: { jobId: video.jobId } }].filter(() => queueName === QUEUES.MEDIA),
+					[{ id: "q-kept", data: { jobId: video.jobId } }].filter(
+						() => queueName === QUEUES.TRANSCODE_VIDEO,
+					),
 				),
 			deleteJob: () => {
 				throw new Error("nothing should be deleted when every queued job resolves");
@@ -407,7 +409,7 @@ describe("resumeOrphanedTranscodes", () => {
 		const row = await statusOf(onceResumed.jobId);
 		expect(row.status).toBe("pending");
 		expect(row.resumeCount).toBe(MAX_TRANSCODE_RESUMES);
-		expect(sentFor(onceResumed.jobId)).toEqual([QUEUES.MEDIA]);
+		expect(sentFor(onceResumed.jobId)).toEqual([QUEUES.TRANSCODE_VIDEO]);
 	});
 
 	it("a fresh job counts its own resume, and the unsent ones do not count", async () => {

@@ -763,6 +763,9 @@ async function runTranscode(
 		const timings = {
 			...variantTimings,
 			...(hasAudio ? { audioPassMs: Math.round(marks.audioEnd - marks.audioStart) } : {}),
+			// The source's own length, beside the costs — the queue's pricing reads RATE
+			// medians (cost per second of source), and the rate needs the denominator.
+			durationSeconds: Math.round(duration),
 			waitMs: Math.round(marks[`v${variants[0]?.height}Start`] - marks.start),
 			totalMs: Math.round(Date.now() - marks.start),
 		};

@@ -9,6 +9,9 @@
 // Must precede any import that reads process.env — see api/src/dev-spec-env.ts.
 import "../dev-spec-env.js";
 
+import { db } from "@anthers/db";
+import { transcodingJobs } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
 import { runAbuseEscalationSweep } from "../services/abuse-reports.js";
 import { runDueDeletions } from "../services/account-deletion.js";
 import {
@@ -45,7 +48,16 @@ import { handlePruneAttention, type PruneAttentionData } from "./prune-attention
 import { handlePruneTraffic, type PruneTrafficData } from "./prune-traffic.js";
 import { publishScheduled } from "./publish-scheduled.js";
 import { runPurchaseTransferRetry } from "./purchase-transfer-retry.js";
-import { CRON_SCHEDULES, ensureQueueReady, QUEUES, queue, RETIRED_QUEUES } from "./queue.js";
+import {
+	CRON_SCHEDULES,
+	ensureQueueReady,
+	JOB_OPTIONS,
+	QUEUE_BY_MEDIA_TYPE,
+	QUEUES,
+	queue,
+	RESCHEDULE_ON_RETIRE,
+	RETIRED_QUEUES,
+} from "./queue.js";
 import { reconcileListings } from "./reconcile-listings.js";
 import { releaseScheduled } from "./release-scheduled.js";
 import { type RemoveAtprotoRecordData, removeAtprotoRecordJob } from "./remove-atproto-record.js";
@@ -70,19 +82,32 @@ async function start() {
 
 	// ── On-demand jobs ────────────────────────────────────────────────
 
-	// The single-file media lane: one encode-class job at a time across video and audio
-	// alike (`QUEUES.MEDIA`'s comment carries the shape, `lib/ffmpeg.ts` the sizing). The
+	// The media lane's two per-type queues — video single-file, audio two at a time
+	// (`QUEUES`' comment carries the measured shape, `lib/ffmpeg.ts` the sizing). The
 	// handler dispatches on the row's own `mediaType` — the row re-read is where a job's
-	// idempotency and cancel guards already live — and the two handlers beneath it are
-	// unchanged. `scan-media` stays its own queue at concurrency 2: it is a call to a
-	// detection vendor, not CPU work; putting it in this lane would queue statutory
-	// scans behind a half-hour encode for no machine headroom.
-	await queue.work<{ jobId: number }>(QUEUES.MEDIA, { localConcurrency: 1 }, async (jobs) => {
-		for (const job of jobs) {
-			console.log(`[media] Processing row ${job.data?.jobId}`);
-			await runMediaJob(job.data.jobId);
-		}
-	});
+	// idempotency and cancel guards already live — so each queue's handler is the same
+	// `runMediaJob`, and a delivery that arrives on the wrong queue for its row still
+	// routes by the row, never by whatever queue happened to carry it.
+	await queue.work<{ jobId: number }>(
+		QUEUES.TRANSCODE_VIDEO,
+		{ localConcurrency: 1 },
+		async (jobs) => {
+			for (const job of jobs) {
+				console.log(`[transcode-video] Processing row ${job.data?.jobId}`);
+				await runMediaJob(job.data.jobId);
+			}
+		},
+	);
+	await queue.work<{ jobId: number }>(
+		QUEUES.PROCESS_AUDIO,
+		{ localConcurrency: 2 },
+		async (jobs) => {
+			for (const job of jobs) {
+				console.log(`[process-audio] Processing row ${job.data?.jobId}`);
+				await runMediaJob(job.data.jobId);
+			}
+		},
+	);
 
 	// Detection runs off the request path — see the job's header for why it has to.
 	await queue.work<ScanMediaData>(QUEUES.SCAN_MEDIA, { localConcurrency: 2 }, async (jobs) => {
@@ -481,6 +506,38 @@ async function start() {
 
 	for (const [queueName, cron] of CRON_SCHEDULES) {
 		await queue.schedule(queueName, cron, {});
+	}
+	// A queue being retired may still hold waiting jobs — `media`'s retirement on
+	// 2026-10-18 had a real pending row in it (a creator's audio waiting on a lane this
+	// deployment no longer drains). A plain retire deletes those jobs with the queue and
+	// the row waits forever on nothing, so each job on a reschedule queue is re-sent to
+	// its replacement — routed by the row's own `mediaType`, the one map any queue move
+	// resolves through (`QUEUE_BY_MEDIA_TYPE`). The running row is not here: an active
+	// job is not `queued`, and the interrupted-graceful path below resumes it.
+	for (const retiredName of RESCHEDULE_ON_RETIRE) {
+		if (!RETIRED_QUEUES.includes(retiredName)) continue;
+		try {
+			const stranded = await queue.findQueuedJobs<{ jobId: number }>(retiredName);
+			for (const job of stranded) {
+				const [row] = await db
+					.select({ mediaType: transcodingJobs.mediaType })
+					.from(transcodingJobs)
+					.where(eq(transcodingJobs.id, job.data.jobId))
+					.limit(1);
+				const target = row ? QUEUE_BY_MEDIA_TYPE[row.mediaType] : undefined;
+				if (!target) {
+					console.warn(
+						`[worker] stranded job ${job.id} on ${retiredName}: no queue for media type "${row?.mediaType}"`,
+					);
+					continue;
+				}
+				await queue.send(target, job.data, JOB_OPTIONS[target]);
+				await queue.deleteQueuedJob(retiredName, job.id);
+				console.log(`[worker] rescheduled ${retiredName} job ${job.id} onto ${target}`);
+			}
+		} catch (err) {
+			console.error(`[worker] reschedule of ${retiredName} failed (non-fatal):`, err);
+		}
 	}
 	for (const retired of RETIRED_QUEUES) await queue.retire(retired);
 

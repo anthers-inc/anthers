@@ -41,8 +41,8 @@ import { JOB_OPTIONS, QUEUES, queue } from "./queue.js";
  * below; this map keeps only the entries a media type settles by itself.
  */
 export const RESUME_QUEUE: Record<string, string | undefined> = {
-	video: QUEUES.MEDIA,
-	audio: QUEUES.MEDIA,
+	video: QUEUES.TRANSCODE_VIDEO,
+	audio: QUEUES.PROCESS_AUDIO,
 	ebook: QUEUES.RENDER_PAGED,
 };
 

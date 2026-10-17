@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The media lane's dispatch: one queue (`QUEUES.MEDIA`, single-file — see its comment)
- * carrying video transcodes and audio processes alike, and this is where a fetched job
- * becomes one of the two.
+ * The media lanes' dispatch: the pipeline's per-type queues (`transcode-video` one at a
+ * time, `process-audio` two — see `QUEUES`' comment for the measured shape), whose
+ * handlers all arrive here.
  *
- * The dispatch reads the row's own `mediaType` rather than a kind field on the job data,
- * so a job's payload stays `{ jobId }` for every type and adding a media type is an entry
- * in `DISPATCH` — the same shape `resume-orphans.ts` argued for when its ternary silently
- * misrouted the third media type. A row whose type maps to nothing is recorded failed with
- * the legible reason rather than thrown: an unprocessable row must not spend the queue's
- * retry budget re-reading itself forever.
+ * The dispatch reads the row's own `mediaType` rather than a kind field on the job data
+ * or the queue the delivery arrived on, so a job's payload stays `{ jobId }` for every
+ * type and adding a media type is an entry in `DISPATCH` — the same shape
+ * `resume-orphans.ts` argued for when its ternary silently misrouted the third media type.
+ * This also makes a delivery that arrives on the wrong queue for its row route by the row
+ * anyway, and it is why both queues' handlers are this one function. A row whose type
+ * maps to nothing is recorded failed with the legible reason rather than thrown: an
+ * unprocessable row must not spend the queue's retry budget re-reading itself forever.
  */
 
 import { db } from "@anthers/db";

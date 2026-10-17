@@ -31,25 +31,33 @@ const WORKER_SOURCE = join(ROOT, "jobs/worker.ts");
 // a registration (the shared beforeAll/afterAll pair), not a teardown call.
 purgeAccountsCreatedHere();
 
-describe("the media lane's configuration", () => {
-	it("registers exactly one media handler at concurrency 1 in worker.ts", async () => {
+describe("the media lanes' configuration", () => {
+	it("registers the two media lanes at their measured concurrencies in worker.ts", async () => {
 		const source = await Bun.file(WORKER_SOURCE).text();
-		expect(source).toContain(`QUEUES.MEDIA, { localConcurrency: 1 }`);
-		// The lane is the ONLY handler for these two — a second registration for one of
-		// them makes two lanes and the second encode finishes no sooner, only peaks.
-		expect(source).not.toContain("QUEUES.TRANSCODE_VIDEO");
-		expect(source).not.toContain("QUEUES.PROCESS_AUDIO");
+		// **Video single-file** — an encode saturates both vCPUs, and a second concurrent
+		// encode finished no sooner, only peaked (the 2026-10-17 burst's measurement).
+		// **Audio two at a time** — the jobs are light; one audio job held the worker at
+		// ~24% CPU (2026-10-18's measurement), and the single-file lane idled three
+		// quarters of the box. Each registration may carry only its own name — this was
+		// the test the single-file experiment inverted and then repassed.
+		expect(source).toContain(`QUEUES.TRANSCODE_VIDEO,\n\t\t{ localConcurrency: 1 }`);
+		expect(source).toContain(`QUEUES.PROCESS_AUDIO,\n\t\t{ localConcurrency: 2 }`);
+		// The retired lane's name must not ride any registration.
+		expect(source).not.toContain(`QUEUES.MEDIA`);
 	});
 
-	it("carries the merged budget in JOB_OPTIONS", () => {
-		const options = JOB_OPTIONS[QUEUES.MEDIA];
-		// The video budget merged in: an expiry sized past real encode runtimes (the
-		// transcode-guard's floor) so the lane does not re-introduce a short audio window
-		// that expires a job queued behind a long encode.
-		expect(options.expireInMinutes).toBeGreaterThan(60);
+	it("carries the same generous budget in JOB_OPTIONS for both lanes", () => {
+		for (const queueName of [QUEUES.TRANSCODE_VIDEO, QUEUES.PROCESS_AUDIO]) {
+			const options = JOB_OPTIONS[queueName];
+			// An expiry sized past real job runtimes (the transcode-guard's floor) so the
+			// queue does not re-introduce a short window that expires a job queued behind
+			// a long one, and the heartbeat that makes the long window safe.
+			expect(options.expireInMinutes).toBeGreaterThan(60);
+			expect(options.heartbeatSeconds).toBeGreaterThanOrEqual(10);
+		}
 	});
 
-	it("has a dispatch entry for every media type the lane processes", () => {
+	it("has a dispatch entry for every media type the lanes process", () => {
 		expect(Object.keys(DISPATCH).sort()).toEqual(["audio", "video"]);
 	});
 });
