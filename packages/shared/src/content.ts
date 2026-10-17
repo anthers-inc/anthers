@@ -290,6 +290,40 @@ export function isEmptyWriting(bodyHtml: string | null | undefined): boolean {
 	);
 }
 
+/**
+ * Whether a Work's **deliverable slot is empty** — the place this kind's medium renders holds
+ * nothing to render yet. The editor's silhouette and a previewed draft's Record both ask it,
+ * so the box a creator has been looking at and the page the preview rebuilds agree about
+ * whether the Work has anything to show (Parker, 2026-10-17, written after a previewed
+ * unreleased video rendered no media area at all while its own editor drew the silhouette).
+ *
+ * 🚨 **This reads the STORED ROW, and an in-flight upload is not stored state.** A Work exists
+ * the moment its file is picked and the file lands a moment later, so an editor ORs its own
+ * `fileUploading` over this; a Record read mid-upload answers "empty" and is right to — the
+ * next read answers differently.
+ *
+ * The store kinds are never empty: their deliverable is the buying panel, which renders
+ * whether or not anything is in stock.
+ */
+export function deliverableIsEmpty(work: {
+	type: string;
+	sourceKey?: string | null;
+	embedUrl?: string | null;
+	webPlayable?: boolean | null;
+	assets?: unknown[];
+	bodyHtml?: string | null;
+}): boolean {
+	if (work.type === "physical" || work.type === "service") return false;
+	// A piece of writing is its body the way a video is its file.
+	if (work.type === "text") return isEmptyWriting(work.bodyHtml);
+	if (workNeedsFile(work.type)) return !work.sourceKey;
+	// A build kind is its embed, its builds, or its hosted build — the editor's own rule,
+	// moved here so the Record cannot drift from it.
+	if (work.type === "game" || work.type === "software")
+		return !work.embedUrl && (work.assets ?? []).length === 0 && !work.webPlayable;
+	return false;
+}
+
 /** The longest embed address a game or software Work may carry. */
 export const EMBED_URL_MAX = 500;
 

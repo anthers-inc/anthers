@@ -40,6 +40,7 @@
  */
 
 import {
+	deliverableIsEmpty,
 	embedUrlProblem,
 	isEmptyWriting,
 	isListened,
@@ -587,19 +588,14 @@ export default function OwnerWorkEditor({
 		running && current.type !== "video" && current.type !== "image" && !isListened(current.type);
 	/**
 	 * Whether the deliverable's place is empty — a draft before its medium exists — so
-	 * the silhouette can hold it. The placeholder keeps the page's proportions whether
-	 * the media has arrived or not: the strip and the columns below sit where they will
-	 * once the Work itself is here (Parker, 2026-10-14).
+	 * the silhouette can hold it. The predicate is shared with the user's Record, which
+	 * asks the same question of the same Work when the owner previews it (the no-file
+	 * preview must show the same box the editor does, Parker, 2026-10-17); only the
+	 * in-flight upload is the editor's own knowledge, and only a writing's live draft
+	 * body is — the creator is typing the body this page saves.
 	 */
-	const deliverableEmpty = isGoods(current.type)
-		? false
-		: writing
-			? isEmptyWriting(bodyHtml)
-			: isFileWorkType(current.type)
-				? !current.sourceKey || fileUploading
-				: isBuildType(current.type)
-					? !current.embedUrl && (current.assets ?? []).length === 0 && !current.webPlayable
-					: false;
+	const deliverableEmpty =
+		fileUploading || deliverableIsEmpty(writing ? { ...current, bodyHtml } : current);
 	/**
 	 * Whether the empty box is itself the file's pick — file kinds but the paged ones
 	 * (comic, ebook — their set editor is the Manage tab's form in every state) and
