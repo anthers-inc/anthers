@@ -21,7 +21,6 @@
 export {
 	STUDIO_ROOT,
 	studioEditPostUrl,
-	studioEditProjectUrl,
 	studioNewPostUrl,
 	studioNewProjectUrl,
 	studioOrigin,

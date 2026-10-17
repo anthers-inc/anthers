@@ -6527,6 +6527,14 @@ const contentRoutes = new Hono()
 
 		if (result.length === 0) return c.json({ error: "Project not found" }, 404);
 		const row = result[0];
+		// A draft Project is its creator's business, exactly as a private Work is: it 404s
+		// for everyone else, because the existence of unreleased work is itself not public
+		// information — and this route's member filtering (the drafts of WORKS and posts
+		// below) was never the project's own gate. Drafts reach their owner through the
+		// same URL; the editor lives there for published and draft rows alike.
+		if (row.project.isPublished !== true && userId !== row.project.creatorId) {
+			return c.json({ error: "Project not found" }, 404);
+		}
 
 		const memberRows = await db
 			.select({

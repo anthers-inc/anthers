@@ -63,7 +63,6 @@ export function studioEditWorkUrl(publicId: number | string): string {
 	return studioUrl(`/works/${publicId}/edit`);
 }
 
-/** Path to the Studio's edit page for a given project slug. */
-export function studioEditProjectUrl(slug: string): string {
-	return studioUrl(`/projects/${slug}/edit`);
-}
+// `studioEditProjectUrl` is gone (the unified-editor pass, 2026-10-17): a Project's
+// only edit page is its own public page (`creatorProjectUrl`), and the studio route
+// `/projects/:slug/edit` is a redirect to it.

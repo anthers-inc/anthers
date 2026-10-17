@@ -50,6 +50,8 @@ const creatorName = `pw_${id}`;
 const strangerName = `pw_s_${id}`;
 const SLUG = `pw-album-${id}`;
 const OTHER_SLUG = `pw-other-${id}`;
+/** A draft the suite never publishes — the detail route's draft gate's own subject. */
+const DRAFT_SLUG = `pw-draft-${id}`;
 
 const FREE = [{ threshold: 0, allow: true, price: "0" }];
 const GATED = [{ threshold: 2, allow: true, price: "0" }];
@@ -119,6 +121,13 @@ describe("a Project's Works", () => {
 			});
 			expect(project.status).toBe(201);
 		}
+		// The draft, created unpublished and left there.
+		const draft = await req("/api/content/projects", {
+			method: "POST",
+			headers: auth,
+			body: JSON.stringify({ title: DRAFT_SLUG, slug: DRAFT_SLUG, isPublished: false }),
+		});
+		expect(draft.status).toBe(201);
 
 		// Added deliberately OUT of the order they should end up in, so a passing reorder
 		// can't be the insertion order wearing a disguise.
@@ -269,6 +278,25 @@ describe("a Project's Works", () => {
 		const work = await req(`/api/content/works/${gatedWorkId}`, { headers: auth });
 		expect(work.status).toBe(200);
 		expect((await work.json()).work.visibility).toBe("released");
+	});
+
+	/**
+	 * The draft gate on the detail route (the unified-editor pass, 2026-10-17). A draft
+	 * Project was readable by anyone holding its URL — the member filtering hid draft
+	 * works and posts, and nothing hid the PROJECT — while a private Work 404s the same
+	 * audience, and the Project page's publish field claims "only you can read" from the
+	 * owner's copy of the page. Same rule for both: the existence of unreleased work is
+	 * itself not public information.
+	 */
+	it("a draft Project 404s for a stranger and signed-out, and reads for its creator", async () => {
+		const signedOut = await req(`/api/content/projects/${DRAFT_SLUG}`);
+		expect(signedOut.status).toBe(404);
+		const stranger = await req(`/api/content/projects/${DRAFT_SLUG}`, {
+			headers: { Cookie: strangerCookie },
+		});
+		expect(stranger.status).toBe(404);
+		const owner = await req(`/api/content/projects/${DRAFT_SLUG}`, { headers: auth });
+		expect(owner.status).toBe(200);
 	});
 
 	it("hides unreleased members from everyone but the creator", async () => {
