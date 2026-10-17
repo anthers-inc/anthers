@@ -91,7 +91,28 @@ export function saveShimScript(runtime: string): string {
 			return new Promise(function (resolve, reject) {
 				var tx = db.transaction("FILE_DATA", "readwrite");
 				var store = tx.objectStore("FILE_DATA");
-				for (var key in records) store.put(records[key], key);
+				for (var key in records) {
+					var rec = records[key];
+					// 🚨 **The engine's own shapes, not the wire's.** The cloud blob carried
+					// `records` through JSON, and JSON demotes the engine's shapes: IDBFS's
+					// Date timestamps arrive as ISO strings (its reconcile calls
+					// `timestamp.getTime()`) and its Uint8Array file bytes arrive as an
+					// index-keyed object map. Rebuild each record the engine's storeEntry
+					// and reconcile expect before it is put — else the record sits in the
+					// store and the engine's pull neither copies it nor errs.
+					if (!(rec.timestamp instanceof Date) && rec.timestamp != null) {
+						rec.timestamp = new Date(rec.timestamp);
+					}
+					var contents = rec.contents;
+					if (typeof contents === "string") {
+						rec.contents = Uint8Array.from(atob(contents), function (c) { return c.charCodeAt(0); });
+					} else if (contents != null && !ArrayBuffer.isView(contents)) {
+						var bytes = new Uint8Array(Object.keys(contents).length);
+						for (var i in contents) { bytes[i] = contents[i]; }
+						rec.contents = bytes;
+					}
+					store.put(rec, key);
+				}
 				tx.oncomplete = function () { resolve(); };
 				tx.onerror = function () { reject(tx.error); };
 			}).then(function () { db.close(); }, function (e) { db.close(); throw e; });
@@ -110,7 +131,17 @@ export function saveShimScript(runtime: string): string {
 					keysReq.onsuccess = function () {
 						for (var i = 0; i < req.result.length; i++) {
 							var v = req.result[i];
-							out[keysReq.result[i]] = v instanceof ArrayBuffer ? btoa(String.fromCharCode.apply(null, new Uint8Array(v))) : v;
+							// File bytes leave as base64, the form the JSON blob can carry and
+							// the restore reads back to a Uint8Array; the engine's own record
+							// shape (a mountpoint-keyed record with timestamp/mode/contents)
+							// is otherwise preserved through the round trip.
+							if (v && v.contents && (v.contents instanceof ArrayBuffer || v.contents instanceof Uint8Array)) {
+								v.contents = btoa(String.fromCharCode.apply(null, new Uint8Array(v.contents)));
+							}
+							if (v && v.timestamp instanceof Date) {
+								v.timestamp = v.timestamp.toISOString();
+							}
+							out[keysReq.result[i]] = v;
 						}
 						resolve(out);
 					};
