@@ -117,7 +117,7 @@ import StickerBar from "../post/StickerBar";
 import ProjectPricing from "../project/ProjectPricing";
 import WorkReviews from "../project/WorkReviews";
 import { InlineField } from "./Editing";
-import LyricsCard from "./LyricsCard";
+import { LyricsBody, LyricsShelf } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
 import ShareLinkButton from "./ShareLinkButton";
 import { WorkViewAsRow } from "./ViewAs";
@@ -720,16 +720,23 @@ export default function OwnerWorkEditor({
 	// A song's words — edited where the user reads them: the deliverable's lyrics slot
 	// takes this field, and the read view is the panel the user already sees.
 	const lyricsField = (
+		// `fill` puts the field in the stage's aside column at full height — the words
+		// the creator composes are the words the user reads beside the waveform.
 		<InlineField<string>
 			label="Lyrics"
 			saved={lyrics}
+			fill
 			renderRead={() =>
 				lyrics ? (
-					<LyricsCard lyrics={lyrics} />
+					<LyricsShelf>
+						<LyricsBody lyrics={lyrics} />
+					</LyricsShelf>
 				) : (
-					<section className={`${WORK_LYRICS_CLASS} text-sm text-base-content/40`}>
-						No lyrics written yet.
-					</section>
+					<LyricsShelf>
+						<p className="flex h-full w-full flex-col justify-center text-sm text-base-content/40">
+							No lyrics written yet.
+						</p>
+					</LyricsShelf>
 				)
 			}
 			renderEdit={(draft, setDraft) => (

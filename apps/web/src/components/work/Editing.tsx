@@ -57,6 +57,7 @@ export function InlineField<V>({
 	disabledReason,
 	className = "",
 	rowAlign = "start",
+	fill = false,
 }: {
 	/** Names the field for the pencil and the screen reader. */
 	label: string;
@@ -76,6 +77,13 @@ export function InlineField<V>({
 	/** Set when the field cannot open — said beside the read view, never as silence. */
 	disabledReason?: string;
 	className?: string;
+	/**
+	 * The stage's fill (the listened Work's aside column — see `ListenStage`): the
+	 * field's root and its read row take the column's whole box, so the words the
+	 * user reads and the creator edits fill the media area beside the waveform.
+	 * Default is the page-row field everywhere else, sized by its content.
+	 */
+	fill?: boolean;
 	/** Whether the read row centers its content-and-pencil pair (a centered title). */
 	rowAlign?: "start" | "center";
 }) {
@@ -101,16 +109,20 @@ export function InlineField<V>({
 	};
 
 	return (
-		<div ref={rootRef} className={`group relative ${className}`}>
+		<div ref={rootRef} className={`group relative ${fill ? "h-full w-full" : ""} ${className}`}>
 			{mode === "read" ? (
-				<div className={`flex items-start gap-1 ${rowAlign === "center" ? "justify-center" : ""}`}>
-					<div className="min-w-0">{renderRead()}</div>
+				<div
+					className={`flex gap-1 ${fill ? "h-full w-full items-stretch" : "items-start"} ${
+						rowAlign === "center" && !fill ? "justify-center" : ""
+					}`}
+				>
+					<div className={`min-w-0 ${fill ? "flex w-full min-h-0" : ""}`}>{renderRead()}</div>
 					{!disabledReason ? (
 						<button
 							type="button"
 							aria-label={`Edit ${label}`}
 							title={`Edit ${label}`}
-							className={`${PENCIL} -mt-1 shrink-0`}
+							className={`${PENCIL} -mt-1 shrink-0 self-start`}
 							onClick={() =>
 								// Opening for edit usually makes the page taller — and whatever it
 								// does to the height, the place stays (scroll-keeper's rule).
@@ -124,7 +136,10 @@ export function InlineField<V>({
 							<PencilSquareIcon className="size-4" />
 						</button>
 					) : (
-						<span className="shrink-0 text-xs text-base-content/40" title={disabledReason}>
+						<span
+							className="shrink-0 self-start text-xs text-base-content/40"
+							title={disabledReason}
+						>
 							{disabledReason}
 						</span>
 					)}
