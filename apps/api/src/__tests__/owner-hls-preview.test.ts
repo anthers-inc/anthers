@@ -26,9 +26,16 @@
  * where `userTranscoding`'s "does the audio rendition exist?" probe arrives, so the
  * report-it-only-when-confirmable rule is exercised both ways. Byte-accurate playlists are
  * share-link-hls.test.ts's subject; this file is about who is handed the route URL.
+ *
+ * The save routes are held to the same rewrite (Parker, 2026-10-16 — the Studio's video
+ * player flipped to the raw URL the moment a thumbnail save adopted the response, and the
+ * console filled with 404s): the work edit (`PATCH /works/:id`) and the frame-thumbnail
+ * (`POST /works/:id/thumbnail-frame`) responses answer a creator with a rewritten row too.
  */
 
 import { describe, expect, it } from "bun:test";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /** The mode flag the driver sets for the child, and only the child sees set. */
@@ -66,8 +73,9 @@ async function runDeliveryModeSuite(): Promise<void> {
 	// never needs the app or the fixtures, and the app's imports read the `STORAGE_*`
 	// environment this body sets first.
 	const { afterAll, beforeAll } = await import("bun:test");
+	const { eq } = await import("drizzle-orm");
 	const { db } = await import("@anthers/db/client");
-	const { transcodingJobs } = await import("@anthers/db/schema");
+	const { transcodingJobs, works } = await import("@anthers/db/schema");
 	const { createAccount } = await import("./account-fixture");
 	const { purgeAccountsCreatedHere } = await import("./cleanup");
 	const { DB_SETUP_TIMEOUT } = await import("./setup-timeouts.js");
@@ -78,12 +86,23 @@ async function runDeliveryModeSuite(): Promise<void> {
 	// answered 200 only for the paths `confirmRendition` marks, 404 otherwise. Nothing is
 	// stored anywhere — every `STORAGE_*` value is fake.
 	const confirmedPaths = new Set<string>();
+	/** Bytes the run's own PUTs wrote, by path — the frame route reads its source this way. */
+	const storedBytes = new Map<string, ArrayBuffer>();
 	const storageStandIn = Bun.serve({
 		port: 0,
-		fetch(request) {
+		async fetch(request): Promise<Response> {
 			const pathname = new URL(request.url).pathname;
+			if (request.method === "PUT") {
+				// A route's `storage.upload` — record the address and the bytes, so a later
+				// HEAD confirms the object and a later GET (a signed input URL) carries it.
+				storedBytes.set(pathname, await request.arrayBuffer());
+				confirmedPaths.add(pathname);
+				return new Response(null, { status: 200 });
+			}
 			if (request.method === "HEAD" && confirmedPaths.has(pathname))
 				return new Response(null, { status: 200 });
+			const bytes = storedBytes.get(pathname);
+			if (request.method === "GET" && bytes) return new Response(bytes);
 			return new Response(null, { status: 404 });
 		},
 	});
@@ -104,6 +123,14 @@ async function runDeliveryModeSuite(): Promise<void> {
 	process.env.STORAGE_FORCE_PATH_STYLE = "true";
 
 	const app = (await import("../index")).default;
+
+	// pg-boss is not running under the test runner, and the routes this suite drives
+	// enqueue on their way out (a save queues its listing sync, a frame queues its scan).
+	// The enqueue is not this suite's subject, so the shared queue singleton records and
+	// succeeds instead — which is also why a save route can answer at all here.
+	const { queue } = await import("../jobs/queue.js");
+	let enqueued = 0;
+	queue.send = async <T>(_name: string, _data: T, _options?: unknown) => `stub-${++enqueued}`;
 
 	const ORIGIN = "http://localhost:3000";
 
@@ -140,6 +167,33 @@ async function runDeliveryModeSuite(): Promise<void> {
 	let withoutRenditionId: number;
 	/** An audio Work, whose processed file rides its own access-checked endpoint. */
 	let audioId: number;
+	/** A video with real source bytes, so the frame-thumbnail route can extract from it. */
+	let frameId: number;
+
+	/** A synthetic two-second video, the input the frame route reads through a signed URL. */
+	async function makeVideo(): Promise<Buffer> {
+		const path = join(tmpdir(), `ohlp_frame_${id}.mp4`);
+		const proc = Bun.spawn(
+			[
+				"ffmpeg",
+				"-v",
+				"error",
+				"-f",
+				"lavfi",
+				"-i",
+				"testsrc=duration=2:size=160x120:rate=10",
+				"-pix_fmt",
+				"yuv420p",
+				path,
+				"-y",
+			],
+			{ stdout: "pipe", stderr: "pipe" },
+		);
+		expect(await proc.exited).toBe(0);
+		const bytes = Buffer.from(await Bun.file(path).arrayBuffer());
+		await rm(path).catch(() => {});
+		return bytes;
+	}
 
 	describe("the owner's own preview plays", () => {
 		beforeAll(async () => {
@@ -195,6 +249,21 @@ async function runDeliveryModeSuite(): Promise<void> {
 				status: "completed",
 				outputFileUrl: `https://cdn.anthers.org/creators/x/audio/processed/${id}.mp3`,
 			});
+
+			// The frame route's work: real bytes at a private source key, and a completed
+			// transcode row carrying the raw stored CDN URL exactly as a real transcode
+			// persists it — the shape the save responses were leaking.
+			frameId = (await insertWork({ creatorId, type: "video", title: `Frame video ${id}` })).id;
+			const frameSourceKey = `creators/${creatorId}/videos/originals/frame-${id}.mp4`;
+			const { storage } = await import("../services/storage/index.js");
+			await storage.upload(frameSourceKey, await makeVideo(), "video/mp4", "private");
+			await db.update(works).set({ sourceKey: frameSourceKey }).where(eq(works.id, frameId));
+			await db.insert(transcodingJobs).values({
+				workId: frameId,
+				mediaType: "video",
+				status: "completed",
+				hlsManifestUrl: storedHlsUrl(frameId),
+			});
 		}, DB_SETUP_TIMEOUT);
 
 		it("serves the owner's video manifest from the access-checked route, never the bare bucket URL", async () => {
@@ -239,6 +308,41 @@ async function runDeliveryModeSuite(): Promise<void> {
 			expect(res.status).toBe(200);
 			const { work } = await res.json();
 			expect(work.transcoding.outputFileUrl).toBe(`${ORIGIN}/api/content/works/${audioId}/audio`);
+			expect(JSON.stringify(work.transcoding)).not.toContain("cdn.");
+		});
+
+		it("a save's response runs the same rewrite, so the player never flips to the raw URL", async () => {
+			// The edit route passes the job row through `serializeWork` whole, and the
+			// Studio adopts the response — this save is where the leak showed.
+			const res = await req(`/api/content/works/${withRenditionId}`, {
+				method: "PATCH",
+				headers: { Cookie: creatorCookie, "Content-Type": "application/json", Origin: ORIGIN },
+				body: JSON.stringify({ description: `Save-rewritten row ${id}` }),
+			});
+			expect(res.status).toBe(200);
+			const { work } = await res.json();
+			expect(work.transcoding.hlsManifestUrl).toBe(
+				`${ORIGIN}/api/content/works/${withRenditionId}/hls/master.m3u8`,
+			);
+			expect(work.transcoding.audioManifestUrl).toBe(
+				`${ORIGIN}/api/content/works/${withRenditionId}/hls/audio.m3u8`,
+			);
+			expect(JSON.stringify(work.transcoding)).not.toContain("cdn.");
+		});
+
+		it("taking a frame answers with the rewritten row too", async () => {
+			const res = await req(`/api/content/works/${frameId}/thumbnail-frame`, {
+				method: "POST",
+				headers: { Cookie: creatorCookie, "Content-Type": "application/json", Origin: ORIGIN },
+				body: JSON.stringify({ atSeconds: 0.5 }),
+			});
+			expect(res.status).toBe(200);
+			const { work } = await res.json();
+			// The frame itself was stored and set, and the row's URLs were rewritten.
+			expect(work.thumbnail).toContain("/thumbnails/");
+			expect(work.transcoding.hlsManifestUrl).toBe(
+				`${ORIGIN}/api/content/works/${frameId}/hls/master.m3u8`,
+			);
 			expect(JSON.stringify(work.transcoding)).not.toContain("cdn.");
 		});
 	});

@@ -320,13 +320,21 @@ export function WorkColumn({
 	 *  gap the section spacing gives, not the page's own (Parker, 2026-10-13). */
 	tight?: boolean;
 }) {
+	// `w-full` is load-bearing: this div sits in the shells' `flex flex-col` <main>, and
+	// there an auto-width item with `mx-auto` is sized to its *content* rather than
+	// stretched (auto cross-axis margins turn stretch off), capped by the max-w. A
+	// video's page then rides the <video>'s intrinsic size — 300×150 until its metadata
+	// resolves — so the whole column starts narrow and jumps wide seconds into the
+	// load. A definite width restores the centered-block behavior this component is.
 	const width = wide ? "max-w-7xl" : type && isWriting(type) ? "max-w-2xl" : "max-w-4xl";
 	return (
 		// The player scope wraps the whole column: the deliverable that mounts a
 		// player and the description and reviews that link into it are the siblings
 		// this binding exists for — see `lib/work-player.tsx`.
 		<WorkPlayerProvider>
-			<div className={`${width} mx-auto px-4 ${tight ? "pt-6 pb-16" : "py-8 pb-16"} space-y-6`}>
+			<div
+				className={`w-full ${width} mx-auto px-4 ${tight ? "pt-6 pb-16" : "py-8 pb-16"} space-y-6`}
+			>
 				{children}
 			</div>
 		</WorkPlayerProvider>
