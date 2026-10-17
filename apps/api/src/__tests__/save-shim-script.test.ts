@@ -43,16 +43,29 @@ describe("save shim script — inert without the parent", () => {
 		expect(script).toContain("FILE_DATA");
 	});
 
+	it("never names a database version and never holds a connection", () => {
+		// The engine opens /userfs at its own fixed DB_VERSION with no onblocked
+		// handler: a shim open that names a version (creating the db lower than the
+		// engine wants) or holds a connection across the engine's open blocks that
+		// versionchange forever, and the engine never boots. Found live, 2026-10-17.
+		expect(script).toMatch(/indexedDB\.open\("\/userfs"\)/);
+		expect(script).not.toMatch(/indexedDB\.open\([^)]+,\s*[^)]+\)/);
+		// Every storeAll/readAll path ends in a close, before the engine can want it.
+		expect(script).toContain("db.close()");
+	});
+
 	it("declares the runtime it was built for", () => {
 		expect(saveShimScript("godot")).toContain('"godot"');
 	});
 
-	it("executes cleanly and registers its interaction listeners", () => {
+	it("executes cleanly, never touches the store at boot, and registers its interaction listeners", () => {
 		// grep-assertions cannot catch a script that THROWS on load. This died once for
 		// real: a stray "()" after the beacon's forEach aborted the IIFE's tail, and the
 		// presence beats never attached. So execute the whole IIFE in a stub sandbox and
-		// ask what actually got registered.
+		// ask what actually got registered — and that the boot path opens no database
+		// (the boot ask carries no data; the store is the engine's until a write lands).
 		const registered: Array<{ types: string[]; callbacks: unknown[] }> = [];
+		const opens: string[] = [];
 		let messagesSent = 0;
 		const sandbox = {
 			window: {
@@ -65,14 +78,15 @@ describe("save shim script — inert without the parent", () => {
 				// GodotOS is deliberately absent — the shim runs before the engine defines it.
 			},
 			indexedDB: {
-				open: () => {
+				open: (name: string) => {
+					opens.push(name);
 					const req: Record<string, unknown> = {};
 					// Resolve synchronously against a stub db: the point is load, not the store.
 					const db = { transaction: () => ({ objectStore: () => ({}) }) };
 					queueMicrotask(() => {
 						req.onsuccess?.({ target: db } as never);
 					});
-					return (req as unknown as { onupgradeneeded?: unknown }) ;
+					return req;
 				},
 			},
 			setInterval: () => 0,
@@ -90,6 +104,7 @@ describe("save shim script — inert without the parent", () => {
 			expect(registered.some((r) => r.types.includes(type))).toBe(true);
 		}
 		expect(messagesSent).toBeGreaterThanOrEqual(1); // the boot "load" ask went out
+		expect(opens).toEqual([]); // the boot ask carries no data; the store stays the engine's
 	});
 });
 

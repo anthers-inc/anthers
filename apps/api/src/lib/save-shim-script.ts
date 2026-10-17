@@ -52,48 +52,75 @@ export function saveShimScript(runtime: string): string {
 	// Emscripten's IDBFS persists one database ("/deep/sky" naming varies by engine
 	// build); Godot mounts at /userfs. We read/write the records the engine's own
 	// syncfs loop uses, so a restored blob is indistinguishable from a local one.
-	function openStore() {
+	// 🚨 **Never hold a connection and never name a version.** The engine opens this
+	// same database at its own fixed DB_VERSION (emscripten IDBFS: 21) and carries no
+	// onblocked handler — a shim connection still open across that open, or a shim
+	// database created at version 1 while the engine's open waits on its versionchange,
+	// blocks forever, and the engine's boot pull never resolves: the build downloads
+	// everything, instantiates, and never prints its banner (found live, 2026-10-17).
+	// So every access is one unversioned open, one transaction, an immediate close;
+	// a write may create the store, and a read against a never-mounted store finds
+	// nothing to read and opens nothing but the db it then closes.
+	function openStore(mayCreate) {
 		return new Promise(function (resolve, reject) {
 			var req = indexedDB.open("/userfs");
 			req.onupgradeneeded = function () {
-				try { req.result.createObjectStore("FILE_DATA"); } catch (e) { /* exists */ }
+				if (mayCreate) {
+					try { req.result.createObjectStore("FILE_DATA"); } catch (e) { /* exists */ }
+				}
 			};
-			req.onsuccess = function () { resolve(req.result); };
+			req.onsuccess = function () {
+				var db = req.result;
+				var empty = db.objectStoreNames.length === 0;
+				if (empty && !mayCreate) {
+					// The engine has never persisted here; nothing to read, and its
+					// database's version is the engine's to set.
+					db.close();
+					resolve(null);
+					return;
+				}
+				resolve(db);
+			};
 			req.onerror = function () { reject(req.error); };
 		});
 	}
 
-	function storeAll(db, records) {
-		return new Promise(function (resolve, reject) {
-			var tx = db.transaction("FILE_DATA", "readwrite");
-			var store = tx.objectStore("FILE_DATA");
-			for (var key in records) store.put(records[key], key);
-			tx.oncomplete = function () { resolve(); };
-			tx.onerror = function () { reject(tx.error); };
+	function storeAll(records) {
+		return openStore(true).then(function (db) {
+			if (db == null) return;
+			return new Promise(function (resolve, reject) {
+				var tx = db.transaction("FILE_DATA", "readwrite");
+				var store = tx.objectStore("FILE_DATA");
+				for (var key in records) store.put(records[key], key);
+				tx.oncomplete = function () { resolve(); };
+				tx.onerror = function () { reject(tx.error); };
+			}).then(function () { db.close(); }, function (e) { db.close(); throw e; });
 		});
 	}
 
-	function readAll(db) {
-		return new Promise(function (resolve, reject) {
-			var tx = db.transaction("FILE_DATA", "readonly");
-			var req = tx.objectStore("FILE_DATA").getAll();
-			var keysReq = tx.objectStore("FILE_DATA").getAllKeys();
-			var out = {};
-			req.onsuccess = function () {
-				keysReq.onsuccess = function () {
-					for (var i = 0; i < req.result.length; i++) {
-						var v = req.result[i];
-						out[keysReq.result[i]] = v instanceof ArrayBuffer ? btoa(String.fromCharCode.apply(null, new Uint8Array(v))) : v;
-					}
-					resolve(out);
+	function readAll() {
+		return openStore(false).then(function (db) {
+			if (db == null) return {};
+			return new Promise(function (resolve, reject) {
+				var tx = db.transaction("FILE_DATA", "readonly");
+				var req = tx.objectStore("FILE_DATA").getAll();
+				var keysReq = tx.objectStore("FILE_DATA").getAllKeys();
+				var out = {};
+				req.onsuccess = function () {
+					keysReq.onsuccess = function () {
+						for (var i = 0; i < req.result.length; i++) {
+							var v = req.result[i];
+							out[keysReq.result[i]] = v instanceof ArrayBuffer ? btoa(String.fromCharCode.apply(null, new Uint8Array(v))) : v;
+						}
+						resolve(out);
+					};
 				};
-			};
-			tx.onerror = function () { reject(tx.error); };
+				tx.onerror = function () { reject(tx.error); };
+			}).then(function (out) { db.close(); return out; }, function (e) { db.close(); throw e; });
 		});
 	}
 
 	// ── Boot: ask for the cloud save; write it in before the engine pulls ────────
-	var dbReady = openStore();
 	send({ type: PREFIX + "load" });
 
 	var loaded = false;
@@ -106,12 +133,10 @@ export function saveShimScript(runtime: string): string {
 		if (d.type === PREFIX + "loaded" && !loaded) {
 			loaded = true;
 			if (d.blob) {
-				dbReady.then(function (db) {
-					try {
-						var records = JSON.parse(d.blob);
-						return storeAll(db, records);
-					} catch (e) { /* a save we cannot parse is ignored; local state stands */ }
-				}).catch(function () {});
+				try {
+					var records = JSON.parse(d.blob);
+					storeAll(records).catch(function () { /* a save we cannot parse is ignored; local state stands */ });
+				} catch (e) { /* a save we cannot parse is ignored; local state stands */ }
 			}
 		}
 	});
@@ -122,7 +147,7 @@ export function saveShimScript(runtime: string): string {
 	// releases, the shim flushes on a quiet cadence AND on teardown — the newest
 	// complete snapshot wins, so cadence is a freshness dial, not a correctness one.
 	function snapshot() {
-		return dbReady.then(readAll).then(function (records) {
+		return readAll().then(function (records) {
 			if (Object.keys(records).length === 0) return;
 			send({ type: PREFIX + "put", blob: JSON.stringify(records) });
 		}).catch(function () {});
