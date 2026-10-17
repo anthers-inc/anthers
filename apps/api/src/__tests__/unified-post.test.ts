@@ -520,3 +520,136 @@ describe("Catalog vertical slice", () => {
 		expect(still.status).toBe(200);
 	});
 });
+
+describe("The feed carries the creator's own content", () => {
+	// A maker who publishes but follows nobody, and a fan who follows the maker —
+	// the two directions the change joins. The maker's own feed is the one that
+	// used to come back empty: with no follows, the route's id list was empty and
+	// the early return answered `{ posts: [] }` before either query ran.
+	const id = crypto.randomUUID().slice(0, 8);
+	const makerName = `maker_${id}`;
+	const fanName = `fan_${id}`;
+
+	let makerCookie: string;
+	let makerHandle: string;
+	let makerId: number;
+	let fanCookie: string;
+
+	beforeAll(async () => {
+		await db.execute(
+			sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${makerName}@example.com`}`, sql`${`${fanName}@example.com`}`], sql`, `)})`,
+		);
+	}, DB_SETUP_TIMEOUT);
+
+	it("signs up a maker who follows nobody, and a fan who follows them", async () => {
+		const maker = await createAccount(makerName);
+		makerCookie = maker.cookie;
+		makerHandle = maker.handle;
+		makerId = maker.userId;
+		await enablePayouts(makerName);
+		await db.execute(
+			sql`UPDATE users SET is_creator = true WHERE email = ${`${makerName}@example.com`}`,
+		);
+		fanCookie = (await createAccount(fanName)).cookie;
+
+		const follow = await req(`/api/accounts/users/${makerHandle}/follow`, {
+			method: "POST",
+			headers: { Origin: ORIGIN, Cookie: fanCookie },
+		});
+		expect(follow.ok).toBe(true);
+
+		// The maker follows NOBODY — the change must not ride on a self-follow.
+		const ownFollows = await req("/api/accounts/me/following", {
+			headers: { Cookie: makerCookie },
+		});
+		expect(ownFollows.ok).toBe(true);
+		expect((await ownFollows.json()).users.length).toBe(0);
+	});
+
+	it("shows the maker their own released work and published post without a single follow", async () => {
+		const gameId = (await insertWork({ creatorId: makerId, type: "game", title: `Own Game ${id}` }))
+			.id;
+		const announce = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: makerCookie },
+			body: JSON.stringify({
+				title: `Own Post ${id}`,
+				bodyHtml: "<p> announcing my own game </p>",
+				workIds: [gameId],
+				isPublished: true,
+			}),
+		});
+		expect(announce.status).toBe(201);
+
+		// An unreleased catalog entry and an unpublished post, for the next
+		// test to refuse — the fixture inserts each row as its status name says.
+		await insertWork({
+			creatorId: makerId,
+			type: "text",
+			title: `Unreleased Draft ${id}`,
+			visibility: "private",
+		});
+		const draftPost = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: makerCookie },
+			body: JSON.stringify({
+				title: `Unpublished Draft ${id}`,
+				bodyHtml: "<p>nobody saw this yet</p>",
+				isPublished: false,
+			}),
+		});
+		expect(draftPost.status).toBe(201);
+
+		const res = await req("/api/accounts/me/feed", { headers: { Cookie: makerCookie } });
+		expect(res.status).toBe(200);
+		const { entries } = await res.json();
+		// The early return used to answer here before either half ran.
+		expect(entries.length).toBeGreaterThan(0);
+		expect(
+			entries.some(
+				(e: { kind: string; title?: string }) =>
+					e.kind === "release" && e.title === `Own Game ${id}`,
+			),
+		).toBe(true);
+		expect(
+			entries.some(
+				(e: { kind: string; title?: string }) => e.kind === "post" && e.title === `Own Post ${id}`,
+			),
+		).toBe(true);
+	});
+
+	it("keeps the maker's drafts and unreleased work out of their own feed", async () => {
+		const res = await req("/api/accounts/me/feed", { headers: { Cookie: makerCookie } });
+		const { entries } = await res.json();
+		// The feed shows what the world can see; the Studio is where the rest lives.
+		expect(
+			entries.some(
+				(e: { kind: string; title?: string }) =>
+					e.title === `Unreleased Draft ${id}` || e.title === `Unpublished Draft ${id}`,
+			),
+		).toBe(false);
+	});
+
+	it("says why each entry is there", async () => {
+		// The feed commits to every item explaining itself (24.00 Your Feed): an
+		// own entry is there because the account made it, a followed entry because
+		// the account follows this creator.
+		const own = await req("/api/accounts/me/feed", { headers: { Cookie: makerCookie } });
+		const ownEntries = (await own.json()).entries as { source: string }[];
+		expect(ownEntries.length).toBeGreaterThan(0);
+		expect(ownEntries.every((e) => e.source === "own")).toBe(true);
+
+		const followed = await req("/api/accounts/me/feed", { headers: { Cookie: fanCookie } });
+		const followedEntries = (await followed.json()).entries as { source: string }[];
+		expect(followedEntries.length).toBeGreaterThan(0);
+		expect(followedEntries.every((e) => e.source === "following")).toBe(true);
+
+		// The kind filters narrow the same stream without stripping the reason.
+		const onlyOwnPosts = (
+			await (
+				await req("/api/accounts/me/feed?kind=posts", { headers: { Cookie: makerCookie } })
+			).json()
+		).entries as { kind: string; source: string }[];
+		expect(onlyOwnPosts.every((e) => e.kind === "post" && e.source === "own")).toBe(true);
+	});
+});
