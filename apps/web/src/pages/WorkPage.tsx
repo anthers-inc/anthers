@@ -363,14 +363,21 @@ export default function WorkPage() {
 										className="aspect-video w-full"
 										lockedBy={null}
 									/>
+								) : work.thumbnail ? (
+									<img
+										src={work.thumbnail}
+										alt=""
+										className="aspect-video w-full object-cover blur-xl scale-110"
+									/>
 								) : (
-									work.thumbnail && (
-										<img
-											src={work.thumbnail}
-											alt=""
-											className="aspect-video w-full object-cover blur-xl scale-110"
-										/>
-									)
+									// ⚠️ The base layer is this box's ONLY height (the overlay rides
+									// `absolute inset-0`), so a thumbnail-free Work renders the gradient
+									// fill `LockedCover` itself falls back to — unblurred and
+									// un-padlocked, because this arm is exactly the not-a-lock state —
+									// or the frame collapses to zero height and `overflow-hidden`
+									// clips the account card invisible, rendering as absence (the
+									// locked-preview task, 2026-10-17).
+									<div className="aspect-video w-full bg-gradient-to-br from-base-300 to-base-200" />
 								)}
 								<div className="absolute inset-0 z-10 flex items-center justify-center p-6">
 									{/*
@@ -425,14 +432,18 @@ export default function WorkPage() {
 											className="aspect-video w-full rounded-lg"
 											lockedBy={access ? lockedByBadge(access, creatorName) : null}
 										/>
+									) : work.thumbnail ? (
+										<img
+											src={work.thumbnail}
+											alt=""
+											className="aspect-video w-full rounded-lg object-cover"
+										/>
 									) : (
-										work.thumbnail && (
-											<img
-												src={work.thumbnail}
-												alt=""
-												className="aspect-video w-full rounded-lg object-cover"
-											/>
-										)
+										// Same fill as the video arm above: the two-up's cover is its own
+										// height and the composition's first column — dropping it for a
+										// thumbnail-free Work leaves the pairing one-sided (the
+										// locked-preview task, 2026-10-17).
+										<div className="aspect-video w-full rounded-lg bg-gradient-to-br from-base-300 to-base-200" />
 									)}
 									{access &&
 										(access.requiresPurchase ? (
