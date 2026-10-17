@@ -25,7 +25,7 @@ import { useLocation, useNavigate, useParams } from "@anthers/web-shared/router"
 import { client } from "@anthers/web-shared/rpc";
 import { type AccessResult, isAccessResult, type TranscodingJob } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { usePreviewQuery } from "../components/creator/PreviewBar";
 import SaveButton from "../components/library/SaveButton";
 import { PublicAccessWall } from "../components/media/PublicAccessNotice";
@@ -41,7 +41,7 @@ import OwnerWorkEditor, {
 } from "../components/work/OwnerWorkEditor";
 import SharedWorkBanner from "../components/work/SharedWorkBanner";
 import ShareLinkButton from "../components/work/ShareLinkButton";
-import { WorkViewAsRow } from "../components/work/ViewAs";
+import { WorkViewAsSection } from "../components/work/ViewAs";
 import WorkInfoTabs from "../components/work/WorkInfoTabs";
 import {
 	formatOriginallyReleased,
@@ -265,7 +265,9 @@ export default function WorkPage() {
 	 * 2026-10-14 — the video surface propagated): its owner edits right here, and the
 	 * View As row's modes are exactly that — when one is active the page is the user's
 	 * rendering, which is what the row itself says (the editing banner is gone,
-	 * 2026-10-16 — editing is inline, the pencil is the only edit affordance).
+	 * 2026-10-16 — editing is inline, the pencil is the only edit affordance). The
+	 * row does not move when a mode takes: the owner's copy of the user's rendering
+	 * carries the same Manage tab the editor's does (Parker, 2026-10-17).
 	 */
 	const ownerEdits = isOwner && !preview.previewAs;
 
@@ -282,17 +284,6 @@ export default function WorkPage() {
 		// the first thing on it is the Work itself. A piece of writing keeps its reading
 		// measure as its deliverable's own, centered inside the width.
 		<WorkColumn type={work.type} wide tight>
-			{/* A creator previewing their own Work reaches the user's Record — the editor is
-			    not rendered at all here — and the View As row is what marks the mode and
-			    leaves it (its Creator button rebuilds the editor; Parker, 2026-10-16, where
-			    the retired banner and its "Edit This Work" button stood). */}
-			{isOwner && (
-				<div className="flex flex-col gap-2">
-					<h3 className={WORK_DETAILS_HEADING_CLASS}>View As</h3>
-					<WorkViewAsRow />
-				</div>
-			)}
-
 			{work.visibility === "private" && isOwner && (
 				<div className="alert alert-warning">
 					<span>
@@ -536,8 +527,17 @@ export default function WorkPage() {
 
 			{/* Every kind gets the SAME tab groups its editor renders — a user's read-only
 			    version of the very same information, in the same two columns (the kinds pass,
-			    2026-10-14); the per-kind linear pages and the goods two-up are gone. */}
-			<VisitorRecord work={work} refetch={refetch} access={access} canAccess={canAccess} />
+			    2026-10-14); the per-kind linear pages and the goods two-up are gone. An owner
+			    previewing gets their Manage tab back in the side column (Parker, 2026-10-17):
+			    the row that switched the mode is where the mode is switched back, on the same
+			    tab it never left in the editor. */}
+			<VisitorRecord
+				work={work}
+				refetch={refetch}
+				access={access}
+				canAccess={canAccess}
+				ownerManage={isOwner ? <WorkViewAsSection /> : undefined}
+			/>
 		</WorkColumn>
 	);
 }
@@ -545,7 +545,9 @@ export default function WorkPage() {
 /**
  * A Work's information for a viewer — the same Info and side tab groups its owner
  * edits in (`WorkInfoTabs`/`WorkSideColumn`), read-only, for every kind (the kinds
- * pass, 2026-10-14). Rough views on purpose: Parker reviews the layout in
+ * pass, 2026-10-14). For the owner previewing their own Work it is the same Record
+ * with the Manage tab handed back in, holding the View As row where the editor
+ * holds it (Parker, 2026-10-17). Rough views on purpose: Parker reviews the layout in
  * screenshots and the reads get tuned against what they look like, not a spec.
  */
 function VisitorRecord({
@@ -553,6 +555,7 @@ function VisitorRecord({
 	refetch,
 	access,
 	canAccess,
+	ownerManage,
 }: {
 	work: WorkDetail;
 	refetch: () => void;
@@ -560,6 +563,11 @@ function VisitorRecord({
 	access: AccessResult | null | undefined;
 	/** Whether this user may open the Work — the buyer files' own gate. */
 	canAccess: boolean;
+	/**
+	 * The Manage tab's content for the owner previewing their own Work — the View As
+	 * row, on the tab it lives on in the editor — or nothing for every visitor's page.
+	 */
+	ownerManage?: ReactNode;
 }) {
 	const publicAccess = access ? access.isFree : (work.publicAccess ?? false);
 	const rating = work.maturity;
@@ -669,6 +677,10 @@ function VisitorRecord({
 				<div className="lg:pl-4">
 					<WorkSideColumn
 						tabs={[
+							// The owner's Manage tab, first and active as the editor's is
+							// (Parker, 2026-10-17): while previewing, the row that switched the
+							// mode stays where it was rather than jumping to the page's top.
+							...(ownerManage ? [{ key: "manage", label: "Manage", content: ownerManage }] : []),
 							{
 								key: "reviews",
 								label: "Reviews",
