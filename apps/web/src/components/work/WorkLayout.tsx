@@ -51,7 +51,12 @@ import {
 } from "../../lib/reading-positions";
 import { trackFromWork } from "../../lib/tracks";
 import { useSeekPlayer, WorkPlayerProvider } from "../../lib/work-player";
-import LyricsCard, { WORK_LYRICS_CLASS, WORK_LYRICS_HEADING_CLASS } from "./LyricsCard";
+import {
+	LyricsBody,
+	LyricsShelf,
+	WORK_LYRICS_CLASS,
+	WORK_LYRICS_HEADING_CLASS,
+} from "./LyricsPanel";
 import WorkMediaFrame from "./WorkMediaFrame";
 
 // ⭐ The lyrics classes live beside the card that owns them; re-exported for the Studio's InlineField.
@@ -695,38 +700,48 @@ export function WorkDeliverable({
 				!work.transcoding?.outputFileUrl &&
 				work.originalUrl &&
 				frame(
-					// As below: a comfortable slice of the frame's width, centered.
-					<div className="w-full max-w-3xl">
-						<AudioPlayer
-							src={work.originalUrl}
-							attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
-							publicAccess={work.publicAccess ?? false}
-							chapters={chapters}
-							startSeconds={startSeconds}
-						/>
-					</div>,
+					// The stage fill (the listened kinds' media area — see the stage task,
+					// 2026-10-17): the waveform is the page's reading surface inside the
+					// frame's one profile. The fallback plays its original with the same
+					// stage the processed track gets, for the same reason the fallback
+					// once shared the strip: what differs is only the address.
+					<AudioPlayer
+						stage={framed}
+						src={work.originalUrl}
+						attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+						publicAccess={work.publicAccess ?? false}
+						chapters={chapters}
+						startSeconds={startSeconds}
+					/>,
 				)}
 			{work.type === "music" &&
 				work.transcoding?.outputFileUrl &&
 				frame(
-					// The player takes a comfortable slice of the frame's width, centered
-					// letterboxed like any other medium — not the card's own hugging width.
-					<div className="w-full max-w-3xl">
-						<AudioPlayer
-							src={work.transcoding.outputFileUrl}
-							waveform={work.transcoding.waveformData ?? undefined}
-							attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
-							publicAccess={work.publicAccess ?? false}
-							chapters={chapters}
-							startSeconds={startSeconds}
-							persistent={track}
-						/>
-						{/* A song's words, under the player — a collapsed-by-default card (see
-						    LyricsCard). Gated with the audio: the API blanks them for a user
-						    without access, so reaching this branch at all means the user may
-						    read them. */}
-						{lyrics ?? (work.lyrics?.trim() ? <LyricsCard lyrics={work.lyrics ?? ""} /> : null)}
-					</div>,
+					<AudioPlayer
+						stage={framed}
+						src={work.transcoding.outputFileUrl}
+						waveform={work.transcoding.waveformData ?? undefined}
+						attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+						publicAccess={work.publicAccess ?? false}
+						chapters={chapters}
+						startSeconds={startSeconds}
+						persistent={track}
+						// The stage's aside column, the song's words: the creator's field
+						// when there is one (it starts open — the composer works where the
+						// listener reads); the words when the gate let them through, closed
+						// until the transport's toggle asks for them. Gated with the audio:
+						// the API blanks them for a user without access, so reaching this
+						// branch at all means the user may read them.
+						aside={
+							lyrics ??
+							(work.lyrics?.trim() ? (
+								<LyricsShelf>
+									<LyricsBody lyrics={work.lyrics ?? ""} />
+								</LyricsShelf>
+							) : null)
+						}
+						asideOpen={lyrics != null}
+					/>,
 				)}
 			{/* Spoken word takes its own player — listening to talk wants fixed-step skips,
 			    a rate control and a remembered position, none of which a song does. Its
@@ -737,33 +752,30 @@ export function WorkDeliverable({
 				!work.transcoding?.outputFileUrl &&
 				work.originalUrl &&
 				frame(
-					// As the song branches: a comfortable slice of the frame's width.
-					<div className="w-full max-w-3xl">
-						<SpokenPlayer
-							src={work.originalUrl}
-							workId={work.id}
-							attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
-							publicAccess={work.publicAccess ?? false}
-							chapters={chapters}
-							startSeconds={startSeconds}
-						/>
-					</div>,
+					<SpokenPlayer
+						stage={framed}
+						src={work.originalUrl}
+						workId={work.id}
+						attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+						publicAccess={work.publicAccess ?? false}
+						chapters={chapters}
+						startSeconds={startSeconds}
+					/>,
 				)}
 			{work.type === "audio" &&
 				work.transcoding?.outputFileUrl &&
 				frame(
-					<div className="w-full max-w-3xl">
-						<SpokenPlayer
-							src={work.transcoding.outputFileUrl}
-							workId={work.id}
-							waveform={work.transcoding.waveformData ?? undefined}
-							attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
-							publicAccess={work.publicAccess ?? false}
-							chapters={chapters}
-							startSeconds={startSeconds}
-							persistent={track}
-						/>
-					</div>,
+					<SpokenPlayer
+						stage={framed}
+						src={work.transcoding.outputFileUrl}
+						workId={work.id}
+						waveform={work.transcoding.waveformData ?? undefined}
+						attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+						publicAccess={work.publicAccess ?? false}
+						chapters={chapters}
+						startSeconds={startSeconds}
+						persistent={track}
+					/>,
 				)}
 			{isPaged(work.type) &&
 				// The ingest's own shape signal: sections exist → the reflow reader on the
