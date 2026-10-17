@@ -81,6 +81,26 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.27",
+		date: "2026-10-17",
+		lede: "A free account's Time Pool comes from the Time Pool Fund now, a video releases the moment its first quality is ready, and the states a Work page used to render as nothing hold their places.",
+		entries: [
+			"A free account's Time Pool is funded by the Time Pool Fund now: Free Access's stated share of the remainder, published monthly, divided across the cycle's active free accounts. The free figures the site quotes read the Fund's published ledger rather than a fixed per-account figure, and a place still waiting on the fetch says the figure varies with the month rather than showing a stand-in.",
+			"A video releases as soon as its first quality is ready now, where publishing waited on the whole ladder, and the processing behind it got faster and truthful: audio jobs run two at a time where a single lane idled most of the machine, the waveform pass draws in seconds with progress that follows the real work, and a queued job's stated wait is measured rather than carried over from a slower era.",
+			"A creator's home feed carries their own published posts and released Works now, entering under the same filters, sort, and access rules as the entries of the people they follow, so a creator who follows nobody reads their own work rather than an empty page; and the creator page's timeline renders the feed's tiles, where its own card family fell back to a bare question mark for a name.",
+			"A shared link previews now: the site's card and description ride the served head, and each page's browser tab carries its own title, where one static title answered for every route. The card names the site, not a Work; the pages ride a static origin, and the head they share cannot describe the Work behind one link.",
+			"The Work page stopped rendering absence in its unfinished states: a free Work with no thumbnail, read signed-out, keeps its media card standing, where a collapsed frame clipped what sat inside it; and a previewed unreleased Work carries the editor's silhouette into the Record (the fileless video, the track before its file, the build before its files), where a slot answered nothing.",
+			"A music or spoken-audio Work's page gives its media a stage that fills the frame now: the waveform, normalized to the track's loudest passage, stands at full height as the page's reading surface, the transport sits pinned at the foot, and a song's lyrics open as a scrolling column beside it.",
+			"The save shim inside a hosted browser build got the fixes its first live proof found: a first visit boots where a held storage connection blocked the build after it downloaded, presence beats attach again so played time accrues while a game runs, and a save restored from the cloud reaches the engine in the shapes it reads.",
+			"The Studio's Works table carries Media Status now, a video row showing the per-variant chips its Manage tab does (the original, the audio rendition, the ladder), and the Release Date column edits in place: publish now, set a schedule, or clear one, without opening the Work.",
+			"The Work editor's Kind select leads the Manage tab now, the kind deciding what the tab's machinery is, and the View As row keeps its place through a preview with room for its labels, where a squeezed control wrapped them.",
+			"A fileless draft receives its first file in the frame the page holds for it now, the drop zone moved from the Manage tab's form into the Work placeholder itself, and the Work page's tab groups hold their tallest panel's height, so switching a tab no longer moves the page.",
+			"The Work page's store panel composes beside the product image now: the mockup owns one column at the composition's full height, the pickers and the price own the other, and the buy door spans both at the foot; the price is on screen the moment the panel is, so picking a variant never moves the layout.",
+			"The creator cards in signup carry the creator's actual Badge ladder now: the rungs render as chips with their marks and monthly amounts, hovering a rung states its perks, and giving follows the creator, where a Back button used to stand; tapping a lit chip steps off while the follow stays.",
+			"The meadow behind the signed-in pages receded: it renders softer and blurred now, so the pages scroll over it as distant texture, and the vines that crossed the content column are gone.",
+		],
+	},
+	{
 		version: "2026.10.26",
 		date: "2026-10-17",
 		lede: "Projects are edited at their own addresses now, posts are edited in place, and the processing queue states where an upload stands and what its wait is.",
