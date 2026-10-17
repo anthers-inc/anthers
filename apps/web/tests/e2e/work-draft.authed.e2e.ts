@@ -30,7 +30,7 @@ test.afterAll(async () => {
 		headers: { Cookie: `session=${session}` },
 	});
 	const { works: owned } = (await res.json()) as { works: { id: number; title: string }[] };
-	for (const w of owned.filter((w) => w.title === TITLE)) {
+	for (const w of owned.filter((w) => w.title === TITLE || w.title.startsWith(`${TITLE} `))) {
 		await fetch(`${API_URL}/api/content/works/${w.id}?force=1`, {
 			method: "DELETE",
 			headers: { Cookie: `session=${session}`, Origin: WEB_ORIGIN },
@@ -54,6 +54,13 @@ test("a Work is drafted from a kind and a name, and its kind changes on its page
 	// refusing to be offered for a Work that cannot be released yet.
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 	await expect(page.getByText(/the pages open here/i)).toBeVisible();
+	// The fileless state's dropper is IN the box for the kinds whose deliverable is
+	// a file (the dropper task, 2026-10-17) — but not for the paged kinds, whose SET
+	// editor (with its own add-pages dropper) stays the Manage tab's form. The comic
+	// is paged, so the placeholder box itself is bare. Scoped to the box: the page
+	// still carries the set editor's dropper, in the Manage panel, by design.
+	const box = page.getByRole("status").filter({ hasText: /the pages open here/i });
+	await expect(box.getByRole("button", { name: /drop .* or click to browse/i })).toHaveCount(0);
 	await page.getByRole("button", { name: "Edit Release" }).click();
 	await expect(
 		page.getByRole("checkbox", { name: /released to my public catalog/i }),
@@ -78,4 +85,52 @@ test("a Work is drafted from a kind and a name, and its kind changes on its page
 	expect(row?.type).toBe("ebook");
 	// An unrated draft stays unrated through a kind change; nothing answered nothing.
 	expect(row?.maturity).toBe("unrated");
+});
+
+test("a fileless audio draft drops its file in the Work placeholder, not in a tab", async ({
+	page,
+	context,
+}) => {
+	session = await signInAsMediaFixture(context);
+
+	const title = `${TITLE} audio`;
+	await page.goto("/studio/works/new");
+	await page.locator("select").first().selectOption("audio");
+	await page.getByPlaceholder("Work title").fill(title);
+	await page.getByRole("button", { name: /skip for now/i }).click();
+	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
+
+	// The dropper rides INSIDE the placeholder (the dropper task, 2026-10-17): the
+	// box is the Work's place, so the act of filling it happens there, with its own
+	// warning line under the silhouette. That both halves matter — the picker the
+	// box gains, AND the Manage tab's fileless section gone — is why both are
+	// asserted: the tab is where the act used to be. Scoped to the panel, because
+	// the box itself stays on the page through every tab.
+	const box = page.getByRole("status").filter({ hasText: /the player starts here/i });
+	await expect(box.getByText(/no file yet/i)).toBeVisible();
+	const dropper = box.getByRole("button", { name: /drop an audio file or click to browse/i });
+	await expect(dropper).toBeVisible();
+	await page.getByRole("tab", { name: /Manage/ }).click();
+	const managePanel = page.locator("#work-side-manage");
+	await expect(managePanel.getByText(/no file yet/i)).toHaveCount(0);
+	await expect(managePanel.getByRole("button", { name: /drop an audio file/i })).toHaveCount(0);
+
+	// And the act itself, done where it now lives: the pick attaches through the
+	// box, and the row holds the file.
+	await box.locator('input[type="file"]').setInputFiles({
+		name: `${title}.mp3`,
+		mimeType: "audio/mpeg",
+		buffer: Buffer.from("ID3 a tiny audio stand-in for the walk"),
+	});
+	await expect
+		.poll(async () => {
+			const listing = await fetch(`${API_URL}/api/content/works`, {
+				headers: { Cookie: `session=${session}` },
+			});
+			const { works: owned } = (await listing.json()) as {
+				works: { title: string; sourceKey: string | null }[];
+			};
+			return owned.find((w) => w.title === title)?.sourceKey ?? null;
+		})
+		.toBeTruthy();
 });
