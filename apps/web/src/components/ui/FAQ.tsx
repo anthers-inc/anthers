@@ -17,8 +17,9 @@ import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Eyebrow, H2 } from "@anthers/web-shared/decor/sections";
 import { Link } from "@anthers/web-shared/router";
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
-import { type FAQItem, type FAQSurface, faqFor, interpolatePrice } from "../../content/faq";
+import { type FAQItem, type FAQSurface, faqFor, interpolateFund, interpolatePrice } from "../../content/faq";
 import { useAnthersLadder } from "../../lib/anthers-ladder";
+import { useTimePoolFund } from "../../lib/time-pool-fund";
 
 /**
  * One question.
@@ -34,9 +35,12 @@ import { useAnthersLadder } from "../../lib/anthers-ladder";
 export function FAQAccordion({ item, open = false }: { item: FAQItem; open?: boolean }) {
 	// The seeded entry price, for the answers that quote it — the `[public-access-price]`
 	// placeholder in the pool resolves here, so the value is the rows' and the copy stays
-	// static (what `faq.test.ts` checks shapes against).
+	// static (what `faq.test.ts` checks shapes against). The Fund's published
+	// free-account pool rides the same pattern (`[free-pool-share]`), resolved from its
+	// fetched ledger with the varies clause standing in until it lands.
 	const { publicAccessPrice } = useAnthersLadder();
-	const answer = interpolatePrice(item.answer, publicAccessPrice);
+	const fund = useTimePoolFund();
+	const answer = interpolateFund(interpolatePrice(item.answer, publicAccessPrice), fund);
 	return (
 		<details
 			open={open}

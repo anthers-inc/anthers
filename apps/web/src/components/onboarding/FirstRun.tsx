@@ -25,11 +25,11 @@
  * *first* ask rather than a second.
  */
 
-import { FREE_TIME_POOL } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
 import { useAnthersLadder } from "../../lib/anthers-ladder";
+import { useTimePoolFund } from "../../lib/time-pool-fund";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -103,6 +103,26 @@ function FirstRunPrice() {
 	);
 }
 
+/**
+ * The free tier's honesty line, as its own component: the Fund's published slice is a
+ * fetch, and a component this deep cannot await — the hook re-renders when it lands,
+ * and the varies clause is the figure's nature (the pool is the Fund's monthly
+ * published value, never a constant).
+ */
+function FundPoolLine() {
+	const fund = useTimePoolFund();
+	return (
+		<p className="mt-3 text-base leading-relaxed text-base-content/70">
+			And your time still pays: the Time Pool Fund (the charitable share of what supporters give
+			Anthers) funds a pool of{" "}
+			<strong>
+				{fund ? `$${fund.slicePerAccount.toFixed(2)} a month (varies — published monthly)` : "a monthly published share"}
+			</strong>{" "}
+			for every free account, split between the creators you actually spend time with.
+		</p>
+	);
+}
+
 function Actions({
 	primary,
 	secondary,
@@ -171,15 +191,14 @@ export default function FirstRun({ arrival, handle }: { arrival: Arrival; handle
 				</p>
 				{/*
 				 * 🚨 The one thing worth saying to somebody who just declined, and it is not
-				 * an ask — it is the fact that makes the free tier honest. Anthers funds a
-				 * Time Pool on their behalf, so their watching pays creators at $0. Leading
-				 * with "upgrade" here would be the second ask in ninety seconds.
+				 * an ask — it is the fact that makes the free tier honest. The Time Pool
+				 * Fund funds a Time Pool on their behalf, so their watching pays creators
+				 * at $0. Leading with "upgrade" here would be the second ask in ninety
+				 * seconds. The figure is the Fund's published slice (fetch; the varies
+				 * clause IS the figure's nature — it rides what was given, published
+				 * monthly), never a typed constant.
 				 */}
-				<p className="mt-3 text-base leading-relaxed text-base-content/70">
-					And your time still pays: Anthers puts{" "}
-					<strong>${FREE_TIME_POOL.toFixed(2)} a month</strong> into the Time Pool for every free
-					account, split between the creators you actually spend time with.
-				</p>
+				<FundPoolLine />
 				<Actions
 					primary={[
 						arrival.follows > 0 ? "Go to your feed" : "Find creators to follow",

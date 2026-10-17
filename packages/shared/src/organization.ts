@@ -48,13 +48,20 @@ export function organizationDir(cwd: string): string {
  * than a proxy for it.** A CI runner and a contributor's clone hold the repository alone, so a
  * missing wiki there is simply absent and skipping is correct. A checkout sitting beside its
  * sibling repositories is on a machine where the wikis are *expected*, so a missing one there is
- * broken and has to say so. The marker is any other `Anthers-*` sibling, because the
- * organization is exactly the directory that has them.
+ * broken and has to say so. The marker is a sibling of the organization shape — `wiki-*` —
+ * because the organization is exactly the directory that has them. 🚨 It catches the
+ * *older* shape (`Anthers-*`) too, or the org-shape rename of 2026-10-15 (which renamed
+ * every wiki to `wiki-{org}`) would have turned this into the same silent skip the path
+ * couplings fired three times before: a check that reports correct absence as a defect is
+ * a guard people learn to route around, and a check that reports real presence as
+ * *nothing* is worse.
  */
 export function insideOrganization(cwd: string): boolean {
 	try {
 		return readdirSync(organizationDir(cwd), { withFileTypes: true }).some(
-			(e) => e.isDirectory() && e.name.startsWith("Anthers-"),
+			(e) =>
+				e.isDirectory() &&
+				(e.name.startsWith("wiki-") || e.name.startsWith("Anthers-")),
 		);
 	} catch {
 		return false;

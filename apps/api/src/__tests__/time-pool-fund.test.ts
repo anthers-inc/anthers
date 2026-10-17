@@ -23,6 +23,7 @@ import { currentCycleKey, cycleEnd, cycleStart, nextCycleKey } from "@anthers/sh
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { timePoolFundPool } from "@anthers/shared/time-pool-fund";
 import { and, eq, inArray } from "drizzle-orm";
+import app from "../index";
 import {
 	activeFreeAccountsForCycle,
 	freeSliceForCycle,
@@ -247,6 +248,23 @@ describe("publication", () => {
 		expect((await rowFor(arrived))?.status).toBe("actual");
 		expect(fund.pool.toFixed(2)).toBe(timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2));
 		expect(fund.slice.toFixed(2)).toBe("1.50");
+	});
+});
+
+describe("the route that serves the ledger", () => {
+	it("serves the published rows, newest first, to an unauthenticated caller", async () => {
+		const cycle = aCycle();
+		await bookCycle(cycle, 20);
+		await publishFundLedger(cycleStart(cycle));
+		const res = await app.fetch(new Request("http://localhost/api/subscriptions/time-pool-fund"));
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			cycles: Array<{ billingCycle: string; slicePerAccount: number; status: string }>;
+		};
+		expect(Array.isArray(body.cycles)).toBe(true);
+		const own = body.cycles.find((r) => r.billingCycle === cycle);
+		expect(own?.status).toBe("actual");
+		expect(typeof own?.slicePerAccount).toBe("number");
 	});
 });
 

@@ -142,8 +142,8 @@ const REPO = join(import.meta.dir, "..");
  */
 const ORG = organizationDir(REPO);
 
-/** The public wiki: the documentation written to be read by anyone. */
-const PUBLIC_WIKI = join(ORG, "Anthers-Wiki");
+/** The public wiki: the documentation written to be read by anyone. 🚨 `wiki-anthers` since the org-shape rename of 2026-10-15 (it was `Anthers-Wiki`); a vault never opened by a session can still resolve by name here, because this is a path, not a CLI lookup. */
+const PUBLIC_WIKI = join(ORG, "wiki-anthers");
 
 /**
  * The internal documents: governance and financial modeling, not written for anybody else.

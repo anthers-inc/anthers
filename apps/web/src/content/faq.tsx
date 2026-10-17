@@ -33,7 +33,6 @@
 import {
 	ATTENTION_RAW_RETENTION_DAYS,
 	FREE_STORAGE_GIB,
-	FREE_TIME_POOL,
 } from "@anthers/shared/constants";
 import { DIRECTED_SUPPORT_WORST_CASE, SALE_TABLE } from "@anthers/shared/figures";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
@@ -42,6 +41,18 @@ import { cloneElement, isValidElement, type ReactNode } from "react";
 
 /** The seeded entry price, interpolated at render — see PRICE_TOKEN below. */
 export const PRICE_TOKEN = "[public-access-price]" as const;
+
+/**
+ * The Fund's published free-account pool, interpolated at render, beside
+ * {@link PRICE_TOKEN}. The free tier's Time Pool is the **Time Pool Fund's** figure —
+ * a stated share of the remainder after the admin budget, published monthly, divided
+ * across the cycle's active free accounts — so its number is runtime data served by
+ * `GET /api/subscriptions/time-pool-fund`; no constant here can be the value. The
+ * resolution is dual: the published slice when the fetch has landed, the "varies —
+ * published monthly" wording when it has not (and the varies clause always, because
+ * that IS the figure's nature — the pool is the Fund's, not a fixed promise).
+ */
+export const FUND_TOKEN = "[free-pool-share]" as const;
 
 /**
  * Money figures come from the generated table, never typed here — see
@@ -86,11 +97,12 @@ export const FAQ_ITEMS = {
 					<strong>{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, free forever</strong>.
 					Public Access is everything a creator has left ungated, and it is free to everyone rather
 					than something an account earns its way into; the limit is on how much of it a free
-					account streams in a month, and ${PRICE_TOKEN} a month to Anthers removes that limit.
+					account streams in a month, and {PRICE_TOKEN} a month to Anthers removes that limit.
 				</p>
 				<p>
-					A free account still pays creators, which is the part people don't expect. Anthers funds a
-					small Time Pool on your behalf: ${FREE_TIME_POOL.toFixed(2)} a month, shared out by the
+					A free account still pays creators, which is the part people don't expect. The Time Pool
+					Fund funds a small Time Pool on your behalf from the charitable share of what supporters
+					give Anthers: {FUND_TOKEN}, shared out by the
 					time you spend with each creator's work, so watching something free is not the same as it
 					earning nothing.
 				</p>
@@ -472,6 +484,39 @@ export function interpolatePrice(answer: string | ReactNode, publicAccessPrice: 
 			answer,
 			undefined,
 			interpolatePrice((answer.props as { children?: ReactNode }).children, publicAccessPrice),
+		);
+	}
+	return answer;
+}
+
+/**
+ * Put the Fund's published free-account pool into an answer's placeholders, at render —
+ * the second interpolator an answer may need, beside {@link interpolatePrice}.
+ *
+ * The resolution is never a bare number: the free tier's pool is the Fund's monthly
+ * figure and varies with what was given, so the fetched slice renders as
+ * `$0.42 a month (varies — published monthly)` and an unfetched fetch renders the
+ * varies clause alone. The FAQAccordion holds the fund store; the interpolation
+ * resolves there.
+ */
+export function interpolateFund(
+	answer: ReactNode,
+	fund: { slicePerAccount: number } | null,
+): ReactNode {
+	const fill = (s: string): string =>
+		s.replaceAll(
+			FUND_TOKEN,
+			fund != null
+				? `$${fund.slicePerAccount.toFixed(2)} a month (varies — published monthly)`
+				: "a published monthly share (it varies)",
+		);
+	if (typeof answer === "string") return fill(answer);
+	if (Array.isArray(answer)) return answer.map((child) => interpolateFund(child, fund));
+	if (isValidElement(answer)) {
+		return cloneElement(
+			answer,
+			undefined,
+			interpolateFund((answer.props as { children?: ReactNode }).children, fund),
 		);
 	}
 	return answer;

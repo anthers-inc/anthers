@@ -19,7 +19,6 @@ import {
 	STORAGE_LADDER_GIB,
 	STORAGE_PER_GIB_MONTH,
 } from "./constants.js";
-import { floorPayingShare } from "./growth.js";
 import {
 	ADMIN_CEILING,
 	affordable,
