@@ -15,7 +15,7 @@
  */
 
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
-import { isListened } from "@anthers/shared/content";
+import { deliverableIsEmpty, isListened } from "@anthers/shared/content";
 import { gridFor, normalizeMaturityRows } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
@@ -487,6 +487,18 @@ export default function WorkPage() {
 								/>
 							}
 						/>
+					</WorkMediaFrame>
+				) : deliverableIsEmpty(work) ? (
+					// A draft the owner is previewing: the record renders the same silhouette
+					// the editor's deliverable draws — the page keeps its proportions and the
+					// box names what will fill it — rather than showing nothing at all
+					// (Parker, 2026-10-17, after a previewed unreleased video's media area
+					// was gone entirely). Silent on purpose: the editor's own silhouette is
+					// the one that points at a Manage tab, and this surface cannot know
+					// whose reading it is.
+					<WorkMediaFrame>
+						{isWriting(work.type) && <WorkDescription work={work} />}
+						<WorkPlaceholder type={work.type} note="" />
 					</WorkMediaFrame>
 				) : (
 					<WorkDeliverable

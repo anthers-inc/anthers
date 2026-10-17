@@ -290,6 +290,64 @@ export function isEmptyWriting(bodyHtml: string | null | undefined): boolean {
 	);
 }
 
+/**
+ * Whether a Work's **deliverable slot is empty** — the place this kind's medium renders holds
+ * nothing to render yet. The editor's silhouette and a previewed draft's Record both ask it,
+ * so the box a creator has been looking at and the page the preview rebuilds agree about
+ * whether the Work has anything to show (Parker, 2026-10-17, written after a previewed
+ * unreleased video rendered no media area at all while its own editor drew the silhouette).
+ *
+ * 🚨 **The played kinds are answered by their ADDRESSES, never by the stored key** — a video,
+ * a song or a spoken Work is empty when nothing plays, and that is the truth both payloads
+ * carry differently. The row's `transcoding` URLs and `originalUrl` exist in the creator's
+ * shape whenever the file does. A USER's shape blanks the key when policy says so — the
+ * serializer writes `sourceKey: deliverable ? work.sourceKey : ""` — but the playable
+ * address rides `canAccess` and survives an exhausted meter, because the bytes are withheld
+ * (and the wall drawn) by the player, not by a missing URL. Asking the key there would
+ * replace a spent viewer's wall with this silhouette.
+ *
+ * 🚨 **This reads the STORED ROW, and an in-flight upload is not stored state.** A Work exists
+ * the moment its file is picked and the file lands a moment later, so an editor ORs its own
+ * `fileUploading` over this; a Record read mid-upload answers "empty" and is right to — the
+ * next read answers differently.
+ *
+ * The store kinds are never empty: their deliverable is the buying panel, which renders
+ * whether or not anything is in stock. The picture and the paged kinds are answered by the
+ * key: their payloads blank it only for a reason that preempts this question anyway
+ * (`pageHoldsTheMeter` holds their meter's wall first; a refused access renders the gate
+ * branch first), so the key read never lies in a state this branch sees.
+ */
+export function deliverableIsEmpty(work: {
+	type: string;
+	sourceKey?: string | null;
+	embedUrl?: string | null;
+	webPlayable?: boolean | null;
+	assets?: unknown[];
+	bodyHtml?: string | null;
+	/** The played kinds' playable address — present in both payloads whenever bytes exist. */
+	originalUrl?: string | null;
+	transcoding?: {
+		hlsManifestUrl?: string | null;
+		outputFileUrl?: string | null;
+	} | null;
+}): boolean {
+	if (work.type === "physical" || work.type === "service") return false;
+	// A piece of writing is its body the way a video is its file.
+	if (work.type === "text") return isEmptyWriting(work.bodyHtml);
+	// The played kinds: the ladder's manifest, the track's processed MP3, or the
+	// original's play address — whichever exists is what the player would mount.
+	if (work.type === "video" || isListened(work.type))
+		return (
+			!work.originalUrl && !work.transcoding?.hlsManifestUrl && !work.transcoding?.outputFileUrl
+		);
+	if (workNeedsFile(work.type)) return !work.sourceKey;
+	// A build kind is its embed, its builds, or its hosted build — the editor's own rule,
+	// moved here so the Record cannot drift from it.
+	if (work.type === "game" || work.type === "software")
+		return !work.embedUrl && (work.assets ?? []).length === 0 && !work.webPlayable;
+	return false;
+}
+
 /** The longest embed address a game or software Work may carry. */
 export const EMBED_URL_MAX = 500;
 
