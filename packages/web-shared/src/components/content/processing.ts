@@ -57,9 +57,26 @@ export function etaLeft(etaSeconds: number | null | undefined): string | null {
  */
 export function processingStatusText(job: Work["transcoding"]): string | null {
 	if (!job) return null;
-	if (job.status === "pending") return "Waiting to process";
+	if (job.status === "pending") return queuePositionText(job);
 	if (job.status !== "processing") return null;
 	return `Processing ${job.progress ?? 0}%`;
+}
+
+/**
+ * The waiting sentence, from the position record (`transcoding_jobs.queue_position`,
+ * written by `queue-position.ts`): `Waiting to process` alone stays the shape when the
+ * lane has not numbered this row (older rows, ebooks), `Waiting to process · next up`
+ * when the creator's file is the one the lane reaches next, and `Waiting to process · 2
+ * ahead` when it is not. This is the count figure; the minutes-until-yours one is the
+ * queue ETA and lands with the recorded step costs (`queue-position.ts`'s docblock).
+ */
+export function queuePositionText(job: Work["transcoding"]): string {
+	if (!job) return "Waiting to process";
+	const pos = job.queuePosition ?? null;
+	if (pos == null) return "Waiting to process";
+	if (pos <= 1) return "Waiting to process · next up";
+	const ahead = pos - 1;
+	return `Waiting to process · ${ahead} ahead`;
 }
 
 /**
@@ -68,7 +85,12 @@ export function processingStatusText(job: Work["transcoding"]): string | null {
  */
 export function processingText(job: Work["transcoding"]): string | null {
 	const status = processingStatusText(job);
-	const eta = job?.status === "processing" ? etaLeft(job.etaSeconds) : null;
+	// The estimate sentence reads `etaSeconds` for a RUNNING job (its encoded work
+	// remaining) and for a WAITING one the total the lane's recompute wrote — front
+	// wait plus the row's own cost — so a creator is told the same kind of thing in
+	// both states: how long until this Work is done.
+	const eta =
+		job?.status === "processing" || job?.status === "pending" ? etaLeft(job.etaSeconds) : null;
 	return status && eta ? `${status} · ${eta}` : status;
 }
 
@@ -151,7 +173,13 @@ export function processingQueue(
 }
 
 function rank(work: Work): number {
-	return work.transcoding?.status === "processing" ? 0 : 1;
+	// The running row first, then the waiting ones **in the lane's own order** — the
+	// position record (`transcoding_jobs.queue_position`) is what the queue's truth
+	// looks like from here, and a panel that listed the waiting rows in any other
+	// order would contradict the badge each row already carries. A row the lane has
+	// not numbered sorts last (stable within itself).
+	const pos = work.transcoding?.queuePosition;
+	return work.transcoding?.status === "processing" ? 0 : 1 + (pos ?? Number.MAX_SAFE_INTEGER);
 }
 
 function finishedAt(work: Work): number {

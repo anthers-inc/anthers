@@ -41,7 +41,15 @@ async function signUp(username: string): Promise<string> {
 
 /** Create an owned library item and return its id. game type → no auto media processing. */
 /** Create a Work through the API. `game` by default so nothing queues a transcode. */
-async function makeItem(cookie: string, title: string, type = "game"): Promise<number> {
+async function makeItem(
+	cookie: string,
+	title: string,
+	type = "game",
+): Promise<{
+	id: number;
+	slug: string;
+	publicId: number;
+}> {
 	const res = await req("/api/content/works", {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
@@ -55,20 +63,24 @@ async function makeItem(cookie: string, title: string, type = "game"): Promise<n
 		}),
 	});
 	expect(res.status).toBe(201);
-	return (await res.json()).work.id;
+	return (await res.json()).work;
 }
 
 /** Create a Work and release it, so it is publicly reachable. */
-async function makeReleasedWork(cookie: string, title: string, type = "game"): Promise<number> {
-	const workId = await makeItem(cookie, title, type);
-	await giveWorkAFile(workId);
-	const res = await req(`/api/content/works/${workId}`, {
+async function makeReleasedWork(
+	cookie: string,
+	title: string,
+	type = "game",
+): Promise<{ id: number; slug: string; publicId: number }> {
+	const work = await makeItem(cookie, title, type);
+	await giveWorkAFile(work.id);
+	const res = await req(`/api/content/works/${work.id}`, {
 		method: "PATCH",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
 		body: JSON.stringify({ visibility: "released", access: FREE }),
 	});
 	expect(res.status).toBe(200);
-	return workId;
+	return work;
 }
 
 const id = crypto.randomUUID().slice(0, 8);
@@ -112,12 +124,17 @@ afterAll(async () => {
 
 describe("Release-readiness gate", () => {
 	// The gate MOVED rather than vanished. Readiness is a property of the media, the media
-	// belongs to a Work, and a post that merely links a Work has nothing to wait for — so
+	// belongs to a Work, and a post that merely embeds a Work has nothing to wait for — so
 	// this blocks RELEASE, and publishing an announcement is never blocked by an encode.
 	let workId: number;
+	let workSlug: string;
+	let workPublicId: number;
 
 	it("blocks releasing a Work whose media is still transcoding", async () => {
-		workId = await makeItem(owner, "Gated build", "video");
+		const work = await makeItem(owner, "Gated build", "video");
+		workId = work.id;
+		workSlug = work.slug;
+		workPublicId = work.publicId;
 		await giveWorkAFile(workId);
 		await db
 			.insert(transcodingJobs)
@@ -132,7 +149,7 @@ describe("Release-readiness gate", () => {
 		expect((await res.json()).code).toBe("media_not_ready");
 	});
 
-	it("publishes a post linking that Work anyway", async () => {
+	it("publishes a post embedding that Work anyway", async () => {
 		// The announcement is not the work. Blocking it on someone's encode was an artifact
 		// of the post owning the media.
 		const res = await req("/api/content/posts", {
@@ -140,7 +157,7 @@ describe("Release-readiness gate", () => {
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
 			body: JSON.stringify({
 				title: `Gate announce ${id}`,
-				workIds: [workId],
+				body: `Come get it: https://anthers.org/works/${workSlug}-${workPublicId}`,
 				isPublished: true,
 			}),
 		});
@@ -188,11 +205,14 @@ describe("Edit history", () => {
 	});
 
 	it("logs a timestamped entry when the title changes", async () => {
-		await req(`/api/content/posts/${slug}`, {
+		// The PATCH response is re-read for the slug, because a title change re-derives
+		// it now (Parker, 2026-10-16) — the plain slug form stops answering at the old name.
+		const patch = await req(`/api/content/posts/${slug}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
 			body: JSON.stringify({ title: `History renamed ${id}` }),
 		});
+		slug = (await patch.json()).post.slug;
 		const get = await req(`/api/content/posts/${slug}`, { headers: { Cookie: owner } });
 		const { post } = await get.json();
 		expect(post.edits.length).toBe(1);
@@ -272,13 +292,18 @@ describe("Post delete never destroys the Work it announced", () => {
 	// The opt-in media purge is GONE, deliberately. Under the old model a post OWNED its
 	// content, so an explicit "also remove now-unused media?" was the careful thing to
 	// offer. A Work stands on its own in the Catalog now and is deleted from there, on
-	// purpose, by its own route.
-	it("leaves the linked Work intact, even when asked to purge", async () => {
-		const workId = await makeReleasedWork(owner, "Survivor build");
+	// purpose, by its own route — and since the embed derives from the body alone, the
+	// route has nothing else to purge.
+	it("leaves the embedded Work intact, even when asked to purge", async () => {
+		const work = await makeReleasedWork(owner, "Survivor build");
 		const create = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({ title: `Purge ${id}`, workIds: [workId], isPublished: false }),
+			body: JSON.stringify({
+				title: `Purge ${id}`,
+				body: `About this build: https://anthers.org/works/${work.slug}-${work.publicId}`,
+				isPublished: false,
+			}),
 		});
 		const slug = (await create.json()).post.slug;
 
@@ -290,24 +315,8 @@ describe("Post delete never destroys the Work it announced", () => {
 		});
 		expect(del.status).toBe(204);
 
-		const [survivor] = await db.select().from(works).where(eq(works.id, workId));
+		const [survivor] = await db.select().from(works).where(eq(works.id, work.id));
 		expect(survivor).toBeDefined();
-	});
-
-	it("still reports which Works would lose their only link", async () => {
-		const workId = await makeReleasedWork(owner, "Only-linked build");
-		const create = await req("/api/content/posts", {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({ title: `Lonely ${id}`, workIds: [workId], isPublished: false }),
-		});
-		const slug = (await create.json()).post.slug;
-
-		const preview = await req(`/api/content/posts/${slug}/orphaned-media`, {
-			headers: { Cookie: owner },
-		});
-		expect(preview.status).toBe(200);
-		expect((await preview.json()).items.map((i: { id: number }) => i.id)).toContain(workId);
 	});
 });
 
@@ -464,56 +473,70 @@ describe("Delivery-method floor lives on the Work", () => {
 	});
 });
 
-describe("Work delete refuses to silently strip posts", () => {
-	async function postUsing(workId: number, title: string) {
+describe("A Work embedded in posts deletes freely, and the posts read on", () => {
+	// The post_work_refs cascade this describe used to guard against is gone with the
+	// table (Parker, 2026-10-16): an embed lives in the post's body, and a deleted Work
+	// leaves the link it had exactly where it was — the same decay an embedded video has
+	// when its source page goes away. Nothing strips, so nothing refuses; the flag stays
+	// accepted (no-op) so an older client doesn't 400.
+	async function postUsing(work: { id: number; slug: string; publicId: number }, title: string) {
 		const res = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({ title, workIds: [workId], isPublished: true }),
+			body: JSON.stringify({
+				title,
+				body: `Announcing: https://anthers.org/works/${work.slug}-${work.publicId}`,
+				isPublished: true,
+			}),
 		});
 		expect(res.status).toBe(201);
 		return (await res.json()).post.slug as string;
 	}
 
-	it("reports which posts link a Work, and when they were posted", async () => {
-		const workId = await makeReleasedWork(owner, "Used build");
-		await postUsing(workId, `Uses ${id}`);
-		const res = await req(`/api/content/works/${workId}/usage`, { headers: { Cookie: owner } });
+	it("reports which posts embed a Work, and when they were posted", async () => {
+		const work = await makeReleasedWork(owner, "Used build");
+		const slug = await postUsing(work, `Uses ${id}`);
+		const res = await req(`/api/content/works/${work.id}/usage`, { headers: { Cookie: owner } });
 		expect(res.status).toBe(200);
 		const { posts } = await res.json();
 		expect(posts.length).toBe(1);
 		// The posting history Parker asked for: not just where, but when.
 		expect(posts[0].postedAt).toBeTruthy();
-	});
-
-	it("409s on an unflagged delete of a linked Work, and leaves it intact", async () => {
-		const workId = await makeReleasedWork(owner, "Linked build");
-		await postUsing(workId, `Linked ${id}`);
-		const res = await req(`/api/content/works/${workId}`, {
+		await req(`/api/content/posts/${slug}`, {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: owner },
 		});
-		expect(res.status).toBe(409);
-		expect((await res.json()).code).toBe("work_in_use");
-		const [still] = await db.select().from(works).where(eq(works.id, workId));
-		expect(still).toBeDefined();
 	});
 
-	it("deletes a linked Work when forced", async () => {
-		const workId = await makeReleasedWork(owner, "Forced build");
-		await postUsing(workId, `Forced ${id}`);
-		const res = await req(`/api/content/works/${workId}?force=true`, {
+	it("deletes the Work unflagged, and the post keeps its link as plain text", async () => {
+		const work = await makeReleasedWork(owner, "Deleted build");
+		const slug = await postUsing(work, `Linked ${id}`);
+		const res = await req(`/api/content/works/${work.id}?force=true`, {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: owner },
 		});
 		expect(res.status).toBe(204);
-		const [gone] = await db.select().from(works).where(eq(works.id, workId));
+		const [gone] = await db.select().from(works).where(eq(works.id, work.id));
 		expect(gone).toBeUndefined();
+
+		// The post still reads; the embed resolves to nothing (the Work is gone), and
+		// the body carries the link exactly as written.
+		const detail = await req(`/api/content/posts/${slug}`);
+		expect(detail.status).toBe(200);
+		const { post } = await detail.json();
+		expect((post.body as string).includes(`anthers.org/works/${work.slug}-${work.publicId}`)).toBe(
+			true,
+		);
+		expect(post.linkedWorks.length).toBe(0);
+		await req(`/api/content/posts/${slug}`, {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: owner },
+		});
 	});
 
-	it("deletes an unlinked Work without a flag", async () => {
-		const workId = await makeReleasedWork(owner, "Unused build");
-		const res = await req(`/api/content/works/${workId}`, {
+	it("deletes an unembedded Work without a flag", async () => {
+		const work = await makeReleasedWork(owner, "Unused build");
+		const res = await req(`/api/content/works/${work.id}`, {
 			method: "DELETE",
 			headers: { Origin: ORIGIN, Cookie: owner },
 		});
@@ -561,11 +584,16 @@ describe("Gaps the suite looked like it covered", () => {
 		// Formerly a 409: a PATCH to a published post whose media went unready was refused.
 		// Publishing is not media-gated any more, so the announcement simply stands while
 		// the Work re-encodes — and the Work's own gate is what stops anyone consuming it.
-		const workId = await makeReleasedWork(owner, "Re-encoding build", "video");
+		const work = await makeReleasedWork(owner, "Re-encoding build", "video");
+		const workId = work.id;
 		const create = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
-			body: JSON.stringify({ title: `Unready ${id}`, workIds: [workId], isPublished: true }),
+			body: JSON.stringify({
+				title: `Unready ${id}`,
+				body: `Trailer: https://anthers.org/works/${work.slug}-${work.publicId}`,
+				isPublished: true,
+			}),
 		});
 		const slug = (await create.json()).post.slug;
 

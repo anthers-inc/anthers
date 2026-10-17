@@ -369,10 +369,12 @@ export const works = pgTable(
  * body** — no attachments, no content elements. Anything that is a *work* belongs in the
  * Catalog.
  *
- * A Post may **reference** Works (`post_work_refs`), which renders as a card and gives the
- * Work its posting history in return. That reference is **inert: it confers no access
- * whatsoever.** A Work linked from a Post is reachable exactly to the extent its own gates
- * allow, and a Post may freely link something the user cannot open. This is what stops
+ * A Post may **embed** Works by carrying their public link in the body, which the page
+ * renders as a card under the text the way a Bluesky post renders an embedded player for
+ * the link it carries (`lib/post-work-links.ts`). The embed is **inert: it confers no
+ * access whatsoever.** A Work embedded from a Post is reachable exactly to the extent
+ * its own gates allow, and a Post may freely embed something the user cannot open — or
+ * something another creator made, the way an embed cites its source. This is what stops
  * the two concepts re-coupling through the back door.
  *
  * Because a Post is not a container, a Post earns no Time Pool minutes — unchanged policy,
@@ -442,37 +444,6 @@ export const posts = pgTable(
 		// The post feed sorts on publication, not on when the draft row appeared.
 		index("idx_posts_published").on(table.isPublished, table.publishedAt),
 		uniqueIndex("uq_posts_public_id").on(table.publicId),
-	],
-);
-
-/**
- * A Post's references to Works — the ONLY link between the two, and deliberately inert.
- *
- * Confers no access, no ownership and no media: it exists so a Post can show a card for
- * something in the Catalog, and so a Work can show where it has been posted (the "clean
- * record of when the content has been posted"). Replaced `post_contents` in `0010`, which
- * carried the opposite semantics — a post OWNED its content elements and gated them.
- */
-// node — a join between two node-owned tables (posts and works). Pure content
-// relationship; the org indexes it but does not own it.
-export const postWorkRefs = pgTable(
-	"post_work_refs",
-	{
-		id: serial("id").primaryKey(),
-		postId: integer("post_id")
-			.notNull()
-			.references(() => posts.id, { onDelete: "cascade" }),
-		workId: integer("work_id")
-			.notNull()
-			.references(() => works.id, { onDelete: "cascade" }),
-		position: integer("position").notNull().default(0),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [
-		uniqueIndex("uq_post_work_refs").on(table.postId, table.workId),
-		index("idx_post_work_refs_post").on(table.postId, table.position),
-		// The Work's posting history, newest first.
-		index("idx_post_work_refs_work").on(table.workId, table.createdAt),
 	],
 );
 
@@ -925,6 +896,25 @@ export const transcodingJobs = pgTable(
 		status: text("status").notNull().default("pending"), // pending | processing | completed | failed | canceled
 		progress: integer("progress").default(0),
 		etaSeconds: integer("eta_seconds"), // estimated seconds remaining (video transcode; null when unknown/done)
+		// The row's spot in the single-file media lane (QUEUES.MEDIA), 1 = next to run, for the
+		// creator-facing "N ahead of you" and the queue ETA built in `queue-position.ts`. Set on
+		// the media jobs at enqueue and refreshed at every lane transition — a processing row is
+		// out of the queue (null); ebooks never join the lane, and the per-type queues that
+		// predated it carried no position, so null also reads as "not in the lane" for them.
+		queuePosition: integer("queue_position"),
+		// The lane's own seconds figures for this row while it waits (`queue-position.ts`):
+		// `queue_eta_seconds` = when it reaches the front (everything running and ahead of
+		// it), and `eta_seconds`, for a pending row, carries the total — front wait plus
+		// this row's own estimated cost. A running job's `eta_seconds` keeps meaning only
+		// its own remaining (the ffmpeg-driven figure); null says "no way to know", the
+		// shape the display already reads.
+		queueEtaSeconds: integer("queue_eta_seconds"),
+		// The job's actual step wall times, recorded where they happen (each handler's own
+		// module), jsonb because the steps differ per type and schema here would be the
+		// second place the steps are described. History for the pending rows' cost
+		// estimates — "about an hour" gets truer as jobs record their real shape. Body
+		// keys are camelCase (`totalMs`), like the jsonb elsewhere.
+		timings: jsonb("timings"),
 		errorMessage: text("error_message").default(""),
 		hlsManifestUrl: text("hls_manifest_url").default(""),
 		outputFileUrl: text("output_file_url").default(""),

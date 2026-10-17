@@ -251,7 +251,10 @@ test("the pre-rename paths redirect to the Works page rather than rendering", as
 	await expect(page.getByRole("heading", { name: "Works", exact: true })).toBeVisible();
 });
 
-test("a creator can create a Project and lands on its shelf", async ({ page, context }) => {
+test("a creator can create a Project and lands on its page, which is the editor", async ({
+	page,
+	context,
+}) => {
 	const token = await signInAsCreator(context);
 	// Unique per run: the gauntlet reset does not touch projects, and `POST /projects` 409s
 	// on a duplicate slug — so a fixed slug would pass once and fail forever after.
@@ -271,11 +274,12 @@ test("a creator can create a Project and lands on its shelf", async ({ page, con
 		await page.getByPlaceholder("my-project", { exact: true }).fill(slug);
 		await page.getByRole("button", { name: "Create Project" }).click();
 
-		// Creating ends on the EDIT page, not the public one — the shelves are edit-only,
-		// and they are the whole reason a creator made a Project.
-		await expect(page).toHaveURL(new RegExp(`/studio/projects/${slug}/edit$`));
+		// Creating ends on the Project's own page — which IS the editor now (the
+		// unified-editor pass, 2026-10-17): View As and both shelves live there, and the
+		// old studio edit route is a redirect to this place.
+		await expect(page).toHaveURL(new RegExp(`/@[^/]+/${slug}$`));
 		await expect(page.getByRole("heading", { name: "Works" })).toBeVisible();
-		await expect(studioNav(page)).toBeVisible();
+		await expect(page.getByRole("heading", { name: "Posts" })).toBeVisible();
 
 		// 🚨 IN VIEWPORT, not merely visible — `toBeVisible` passes on an element scrolled
 		// off the top, and that is exactly what happened here. `LoggedInLayout` scrolls an
@@ -286,27 +290,27 @@ test("a creator can create a Project and lands on its shelf", async ({ page, con
 		// ⚠️ **This asserts where the page ARRIVES, so it has to run before anything scrolls
 		// it.** The shelf walk below reaches the bottom of the form; putting it first made
 		// this fail for a reason that had nothing to do with the scroll behavior it guards.
-		await expect(page.getByRole("heading", { name: "Edit Project" })).toBeInViewport();
+		await expect(page.getByRole("heading", { name: "View As" })).toBeInViewport();
 
-		// 🚨 **Both shelves, because the second one had no surface at all.** A Project holds
-		// Works AND posts in two ordered lists — the database, the API and the public Project
-		// page all said so — and `POST /projects/:slug/posts`, its delete and its reorder were
-		// implemented, owner-checked and called from nowhere. The only way a post ever joined a
-		// Project was a select on the New Post form that was hidden on edit and ignored by
-		// `PATCH /posts/:slug`, so membership was set at birth or never.
+		// The old studio edit route is a redirect now: the same Project's page.
+		await page.goto(`/studio/projects/${slug}/edit`);
+		await expect(page).toHaveURL(new RegExp(`/@[^/]+/${slug}$`));
+		await expect(page.getByRole("heading", { name: "View As" })).toBeInViewport();
+
 		// 🚨 **The absence of the picker's mint is a tested absence.** The Works shelf's
 		// picker minted a Work through a ghost "New Work" button until 2026-10-10, when
 		// pickers became pickers only — a Project is edited by assigning existing Works, and
 		// making one is `/studio/works/new`'s job. A removed button looks like a renamed one
 		// to everything in the repository but this count.
 		await page.getByRole("button", { name: "Add a Work" }).click();
-		await expect(page.getByRole("heading", { name: "Add a Work" })).toBeVisible();
+		await expect(page.getByRole("heading", { name: "Add Works" })).toBeVisible();
 		await expect(page.getByRole("button", { name: "New Work" })).toHaveCount(0);
+		// Nothing ticked, nothing adds: the confirm starts disabled.
+		await expect(page.getByRole("button", { name: "Add Work(s)" })).toBeDisabled();
 		await page.getByRole("button", { name: "Close" }).first().click();
 
-		await expect(page.getByRole("heading", { name: "Posts" })).toBeVisible();
 		await page.getByRole("button", { name: "Add a post" }).click();
-		await expect(page.getByRole("heading", { name: "Add a post" })).toBeVisible();
+		await expect(page.getByRole("heading", { name: "Add posts" })).toBeVisible();
 	} finally {
 		// The dev DB is shared with the unit suites and is not a clean room; don't add to it.
 		await fetch(`${API_URL}/api/content/projects/${slug}`, {

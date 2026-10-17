@@ -52,6 +52,9 @@ describe("Catalog vertical slice", () => {
 	let creatorId: number;
 	let otherCookie: string;
 	let oldGameId: number;
+	/** The Work's public address fields — the embed in the announcement's body links it. */
+	let oldGamePublicId: number;
+	let oldGameSlug: string;
 	let recentEssayId: number;
 	let paidAssetId: number;
 	let announcementSlug: string;
@@ -103,6 +106,8 @@ describe("Catalog vertical slice", () => {
 		expect(res.status).toBe(201);
 		const { work } = await res.json();
 		oldGameId = work.id;
+		oldGameSlug = work.slug;
+		oldGamePublicId = work.publicId;
 		expect(work.visibility).toBe("private");
 		expect(work.originallyReleased).toBe("2015-01-01T00:00:00.000Z");
 	});
@@ -241,8 +246,9 @@ describe("Catalog vertical slice", () => {
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie },
 			body: JSON.stringify({
 				title: `Out now ${id}`,
-				bodyHtml: "<p>my 2015 game is on Anthers</p>",
-				workIds: [oldGameId],
+				// The embed is the body's own link now (Parker, 2026-10-16): the Work card
+				// renders under the text, and nothing about the link is stored.
+				bodyHtml: `<p>my 2015 game is on Anthers: https://anthers.org/works/${oldGameSlug}-${oldGamePublicId}</p>`,
 				isPublished: true,
 			}),
 		});
@@ -495,7 +501,9 @@ describe("Catalog vertical slice", () => {
 
 		// And a post entry reads as text: the card's excerpt is the body's plain form.
 		const post = entries.find((e: { kind: string }) => e.kind === "post");
-		expect(post.excerpt).toBe("my 2015 game is on Anthers");
+		// The body carries the Work's link in the text (the embed's source), so the
+		// excerpt reads it as the words it is.
+		expect(post.excerpt).toContain("my 2015 game is on Anthers");
 		expect(post.title).toBe(`Out now ${id}`);
 	});
 

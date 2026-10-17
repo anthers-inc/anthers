@@ -26,7 +26,7 @@ import { client } from "@anthers/web-shared/rpc";
 import { type AccessResult, isAccessResult, type TranscodingJob } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useCallback, useEffect, useRef, useState } from "react";
-import PreviewBar, { usePreviewQuery } from "../components/creator/PreviewBar";
+import { usePreviewQuery } from "../components/creator/PreviewBar";
 import SaveButton from "../components/library/SaveButton";
 import { PublicAccessWall } from "../components/media/PublicAccessNotice";
 import InlineUnlock from "../components/post/InlineUnlock";
@@ -36,12 +36,15 @@ import ProjectPricing from "../components/project/ProjectPricing";
 import WorkReviews from "../components/project/WorkReviews";
 import OwnerWorkEditor, {
 	CaptionsSummary,
+	DateValueLine,
 	ReleaseSummary,
 } from "../components/work/OwnerWorkEditor";
 import SharedWorkBanner from "../components/work/SharedWorkBanner";
 import ShareLinkButton from "../components/work/ShareLinkButton";
+import { WorkViewAsRow } from "../components/work/ViewAs";
 import WorkInfoTabs from "../components/work/WorkInfoTabs";
 import {
+	formatOriginallyReleased,
 	isGoods,
 	isWriting,
 	pageHoldsTheMeter,
@@ -55,8 +58,8 @@ import {
 	type WorkDetail,
 	WorkPlaceholder,
 	WorkRating,
-	WorkRecordLink,
 } from "../components/work/WorkLayout";
+import WorkMediaFrame from "../components/work/WorkMediaFrame";
 import WorkSideColumn, { ShowingsStub } from "../components/work/WorkSideColumn";
 import { reportExternalActivity, useAttentionClaim } from "../lib/attention";
 import { useMeteredBudget } from "../lib/public-access";
@@ -260,8 +263,9 @@ export default function WorkPage() {
 	/**
 	 * Every kind's editing surface is the Work's own page now (the kinds pass,
 	 * 2026-10-14 — the video surface propagated): its owner edits right here, and the
-	 * persona preview's purpose is exactly that — when one is active the page is the
-	 * user's rendering, which is what the PreviewBar itself says.
+	 * View As row's modes are exactly that — when one is active the page is the user's
+	 * rendering, which is what the row itself says (the editing banner is gone,
+	 * 2026-10-16 — editing is inline, the pencil is the only edit affordance).
 	 */
 	const ownerEdits = isOwner && !preview.previewAs;
 
@@ -278,29 +282,14 @@ export default function WorkPage() {
 		// the first thing on it is the Work itself. A piece of writing keeps its reading
 		// measure as its deliverable's own, centered inside the width.
 		<WorkColumn type={work.type} wide tight>
-			{/* Creator preview — only ever offered to the person who made it, and only ever
-			    able to subtract access (the server guards that per Work). Beside it, the way
-			    back from the preview: the page itself, which the editing surface for every
-			    kind now is. */}
+			{/* A creator previewing their own Work reaches the user's Record — the editor is
+			    not rendered at all here — and the View As row is what marks the mode and
+			    leaves it (its Creator button rebuilds the editor; Parker, 2026-10-16, where
+			    the retired banner and its "Edit This Work" button stood). */}
 			{isOwner && (
-				<div className="flex flex-wrap items-start gap-2">
-					<div className="flex-1">
-						<PreviewBar />
-					</div>
-					<button
-						type="button"
-						className="btn btn-primary btn-sm"
-						onClick={() => {
-							const p = new URLSearchParams(window.location.search);
-							p.delete("previewAs");
-							p.delete("previewOwned");
-							navigate(`${window.location.pathname}${p.toString() ? `?${p.toString()}` : ""}`, {
-								replace: true,
-							});
-						}}
-					>
-						Edit This Work
-					</button>
+				<div className="flex flex-col gap-2">
+					<h3 className={WORK_DETAILS_HEADING_CLASS}>View As</h3>
+					<WorkViewAsRow />
 				</div>
 			)}
 
@@ -315,36 +304,55 @@ export default function WorkPage() {
 
 			{/* ── The deliverable, or the gate in front of it ── */}
 			<section ref={deliverableRef}>
-				<div className={isWriting(work.type) ? "mx-auto max-w-2xl" : undefined}>
-					{/* A piece of writing's description is its standfirst, above the article
-					    where a user expects one — and it also rides in the Details tab below,
-					    kept in both places on purpose (Parker, 2026-10-14). */}
-					{isWriting(work.type) && <WorkDescription work={work} />}
-					{isGoods(work.type) ? (
-						/* 🚨 A goods Work's deliverable is the goods themselves (Parker,
-						    2026-10-09): the store panel stands exactly where a player would,
-						    for owner, revisiting buyer, and signed-out visitor alike — the
-						    resolver's goods rule carries the verdicts this reads
-						    (`requiresPurchase` for every qualifying viewer, the gate
-						    verdicts for a hard-gated one, no `isFree` posture at all). The
-						    unlock card renders only under a badge or age gate, in which case
-						    the store is nobody's to read. */
-						access && !access.canAccess && !access.requiresPurchase ? (
-							<InlineUnlock post={work} access={access} />
-						) : (
-							<ProjectPricing
-								workId={work.id}
-								slug={work.slug ?? ""}
-								access={access ?? undefined}
-								title={work.title ?? "Untitled"}
-								creatorHandle={work.creator?.handle ?? ""}
-								creatorHasStripe={work.creatorHasStripe ?? false}
-								thumbnail={work.thumbnail}
-								workType={work.type}
-							/>
-						)
-					) : !canAccess ? (
-						work.type === "video" ? (
+				{/*
+				 * The page's one media card (`WorkMediaFrame` — the media-frame task,
+				 * 2026-10-16, Parker): the video layout is canonical, and locked, processing,
+				 * purchased-unavailable and open branches all hold it, so the page's shape
+				 * never moves between kinds or between a gate and its opening. A piece of
+				 * writing's standfirst rides inside the card above its branches' content,
+				 * and the article renders inside it through `WorkDeliverable`'s lead slot.
+				 */}
+				{isGoods(work.type) ? (
+					/* 🚨 A goods Work's deliverable is the goods themselves (Parker,
+					    2026-10-09): the store panel stands exactly where a player would,
+					    for owner, revisiting buyer, and signed-out visitor alike — the
+					    resolver's goods rule carries the verdicts this reads
+					    (`requiresPurchase` for every qualifying viewer, the gate
+					    verdicts for a hard-gated one, no `isFree` posture at all). The
+					    unlock card renders only under a badge or age gate, in which case
+					    the store is nobody's to read. */
+					access && !access.canAccess && !access.requiresPurchase ? (
+						<WorkMediaFrame>
+							<div className="w-full">
+								<InlineUnlock post={work} access={access} />
+							</div>
+						</WorkMediaFrame>
+					) : (
+						<WorkMediaFrame>
+							<div className="w-full">
+								<ProjectPricing
+									workId={work.id}
+									slug={work.slug ?? ""}
+									access={access ?? undefined}
+									title={work.title ?? "Untitled"}
+									creatorHandle={work.creator?.handle ?? ""}
+									creatorHasStripe={work.creatorHasStripe ?? false}
+									thumbnail={work.thumbnail}
+									workType={work.type}
+								/>
+							</div>
+						</WorkMediaFrame>
+					)
+				) : !canAccess ? (
+					// A locked Work's card **fills**, for both gate shapes: the video's
+					// blur-and-overlay is the player's own rectangle, and the other kinds'
+					// two-up carries its height the way its column widths want it — the
+					// letterbox would force the grid's min-content into a taller box than
+					// the composition reads well at. The card is still the page's shape;
+					// only what it holds is a gate.
+					<WorkMediaFrame fill>
+						{isWriting(work.type) && <WorkDescription work={work} />}
+						{work.type === "video" ? (
 							/* A locked video is the feed's treatment at page scale (Parker,
 							    2026-10-13): the thumbnail blurred beneath, and the unlock —
 							    whatever it asks for — overlaid on it, rather than a two-up
@@ -413,7 +421,7 @@ export default function WorkPage() {
 						    aspect ratio silently outranks the track. An explicit width breaks
 						    the derive-back and the cover sizes to its column. Found by
 						    measuring, invisible in the DOM string. */}
-								<div className="sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
+								<div className="w-full sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
 									{presentsAsLocked(access) ? (
 										<LockedCover
 											thumbnail={work.thumbnail}
@@ -449,15 +457,27 @@ export default function WorkPage() {
 										))}
 								</div>
 							</div>
-						)
-					) : spentOnThis ? (
-						// The server withheld the deliverable because the allowance is gone, so
-						// there is nothing to render in its place but the reason.
-						<PublicAccessWall budget={meterBudget} />
-					) : encoding && !playsOriginal ? (
-						// The processing block, held inside the kind's silhouette rather than replacing
-						// it (the placeholder task, 2026-10-16): the page's proportions do not move
-						// while the Work's processed deliverable is being made.
+						)}
+					</WorkMediaFrame>
+				) : spentOnThis ? (
+					<WorkMediaFrame>
+						{isWriting(work.type) && (
+							<div className="w-full max-w-2xl">
+								<WorkDescription work={work} />
+							</div>
+						)}
+						{/* The server withheld the deliverable because the allowance is gone, so
+						    there is nothing to render in its place but the reason. `w-full` as
+						    everywhere in the frame: the wall's card has no width of its own. */}
+						<div className="w-full">
+							<PublicAccessWall budget={meterBudget} />
+						</div>
+					</WorkMediaFrame>
+				) : encoding && !playsOriginal ? (
+					// The processing block, held inside the media frame rather than replacing
+					// it (the placeholder task, 2026-10-16): the page's proportions do not move
+					// while the Work's processed deliverable is being made.
+					<WorkMediaFrame>
 						<WorkPlaceholder
 							type={work.type}
 							note=""
@@ -470,19 +490,23 @@ export default function WorkPage() {
 								/>
 							}
 						/>
-					) : (
-						<WorkDeliverable
-							work={work}
-							shareToken={shareToken}
-							onFrameActivity={reportExternalActivity}
-							startSeconds={startSeconds}
-							// The account's Use Persistent Miniplayer — an account-level
-							// setting, so null (never answered) reads as on. Signed-out, there
-							// is no bar preference at all and the page plays inline.
-							persistentMiniPlayer={isAuthenticated ? (user?.persistentMiniplayer ?? true) : false}
-						/>
-					)}
-				</div>
+					</WorkMediaFrame>
+				) : (
+					<WorkDeliverable
+						work={work}
+						shareToken={shareToken}
+						onFrameActivity={reportExternalActivity}
+						startSeconds={startSeconds}
+						// The account's Use Persistent Miniplayer — an account-level
+						// setting, so null (never answered) reads as on. Signed-out, there
+						// is no bar preference at all and the page plays inline.
+						persistentMiniPlayer={isAuthenticated ? (user?.persistentMiniplayer ?? true) : false}
+						// A piece of writing's description is its standfirst, above the
+						// article where a user expects one — and it also rides in the Details
+						// tab below, kept in both places on purpose (Parker, 2026-10-14).
+						lead={isWriting(work.type) ? <WorkDescription work={work} /> : undefined}
+					/>
+				)}
 			</section>
 
 			{/* Who sent them, and the way to an account of their own. Rendered under the
@@ -540,126 +564,136 @@ function VisitorRecord({
 	const ratingGrid = gridFor(work.type);
 	const ratingRows = normalizeMaturityRows(work.maturityRows, ratingGrid);
 	return (
-		// The rule between the halves is its own grid column — the same two-pixel, full-
-		// height divider the creator's editor draws (Parker's third pass, 2026-10-13).
-		<div className="grid lg:grid-cols-[minmax(0,1fr)_2px_minmax(0,1fr)]">
-			<div className="lg:pr-4">
-				<WorkInfoTabs
-					tabs={[
-						{
-							key: "details",
-							label: "Details",
-							content: (
-								// Named parts, as the creator's Details tab is (Parker, 2026-10-13):
-								// what it says, when it came out — with the listing's address — and
-								// who may open it. The buyer's files ride at its end when the kind
-								// carries any: they are part of what owning this opens, and a
-								// record column had them wedged under a store panel before.
-								<div className="flex flex-col gap-6">
-									<section className="flex flex-col gap-2">
-										<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
-										{/* Same prose-margin trim as the editor's read (Parker, 2026-10-13). */}
-										<div className="[&_p]:my-0">
+		<>
+			{/* The columns' hairline above (Parker, 2026-10-16) — the same two-pixel rule the
+			    halves' own divider draws, laid flat, so the tab columns read separately from
+			    the title's lines above them; the column's `space-y-6` sets its air. */}
+			<div aria-hidden className="h-0.5 bg-base-content/20" />
+			<div className="grid lg:grid-cols-[minmax(0,1fr)_2px_minmax(0,1fr)]">
+				<div className="lg:pr-4">
+					<WorkInfoTabs
+						tabs={[
+							{
+								key: "details",
+								label: "Details",
+								content: (
+									// Named parts, as the creator's Details tab is (Parker, 2026-10-13):
+									// what it says, when it came out — with the listing's address — and
+									// who may open it. The buyer's files ride at its end when the kind
+									// carries any: they are part of what owning this opens, and a
+									// record column had them wedged under a store panel before.
+									// The dates lead the tab (Parker, 2026-10-16): when it came out is
+									// the first thing asked of it.
+									<div className="flex flex-col gap-6">
+										<section className="flex flex-col gap-2">
+											<h3 className={WORK_DETAILS_HEADING_CLASS}>Release</h3>
+											<div className="flex flex-col gap-2">
+												<ReleaseSummary work={work} scheduled={work.scheduledReleaseAt ?? null} />
+												{work.originallyReleased && (
+													<DateValueLine
+														label="Original Release"
+														value={formatOriginallyReleased(work.originallyReleased) ?? "—"}
+													/>
+												)}
+											</div>
+										</section>
+										<section className="flex flex-col gap-2">
+											<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
 											<WorkDescription work={work} />
-										</div>
-									</section>
-									<section className="flex flex-col gap-2">
-										<h3 className={WORK_DETAILS_HEADING_CLASS}>Release</h3>
-										<ReleaseSummary work={work} scheduled={work.scheduledReleaseAt ?? null} />
-										<WorkRecordLink work={work} />
-									</section>
-									<section className="flex flex-col gap-2">
-										<h3 className={WORK_DETAILS_HEADING_CLASS}>Access</h3>
-										{/* The chip names this in the byline strip; the line says the terms. */}
-										<p className="text-sm">
-											{publicAccess ? (
-												"Free to everyone."
-											) : (
-												<span className="text-base-content/60">
-													Not free to everyone — the unlock above says what opens it.
-												</span>
-											)}
-										</p>
-									</section>
-									{/* The buyer's files, when the kind carries any: they are part of what
+										</section>
+										<section className="flex flex-col gap-2">
+											<h3 className={WORK_DETAILS_HEADING_CLASS}>Access</h3>
+											{/* The chip names this in the byline strip; the line says the terms. */}
+											<p className="text-sm">
+												{publicAccess ? (
+													"Free to everyone."
+												) : (
+													<span className="text-base-content/60">
+														Not free to everyone — the unlock above says what opens it.
+													</span>
+												)}
+											</p>
+										</section>
+										{/* The buyer's files, when the kind carries any: they are part of what
 								    owning this opens, and a record column had them wedged under a
 								    store panel before. No section heading of its own —
 								    `ProjectDownloads` names itself. */}
-									{work.assets.length > 0 && (
-										<ProjectDownloads
-											assets={work.assets}
-											contentType={work.type}
-											workId={work.id}
-											canAccess={canAccess}
-										/>
-									)}
-								</div>
-							),
-						},
-						{
-							key: "credits",
-							label: "Credits",
-							content: <WorkCredits work={work} onCreditDecided={refetch} />,
-						},
-						{
-							key: "rating",
-							label: "Rating",
-							// The full table, read-only, whatever the Work is rated (Parker,
-							// 2026-10-16): the tab exists for the table, and a General Work's
-							// all-General table says the rating in the same shape the other rungs
-							// say theirs in. The badge above still carries the user-facing words.
-							content: (
-								<div className="flex flex-col gap-3">
-									{(rating === "mature" || rating === "adult") && <WorkRating work={work} />}
-									{rating === "general" && (
-										<p className="text-sm text-base-content/60">
-											General — users see no rating on a General Work.
-										</p>
-									)}
-									<RatingMatrixReadOnly grid={ratingGrid} rows={ratingRows} />
-								</div>
-							),
-						},
-						{
-							key: "accessibility",
-							label: "Accessibility",
-							content: <CaptionsSummary captions={work.captions ?? []} />,
-						},
-					]}
-				/>
+										{work.assets.length > 0 && (
+											<ProjectDownloads
+												assets={work.assets}
+												contentType={work.type}
+												workId={work.id}
+												canAccess={canAccess}
+											/>
+										)}
+									</div>
+								),
+							},
+							{
+								key: "credits",
+								label: "Credits",
+								content: <WorkCredits work={work} onCreditDecided={refetch} />,
+							},
+							{
+								key: "rating",
+								label: "Rating",
+								// The full table, read-only, whatever the Work is rated (Parker,
+								// 2026-10-16): the tab exists for the table, and a General Work's
+								// all-General table says the rating in the same shape the other rungs
+								// say theirs in. The badge above still carries the user-facing words.
+								content: (
+									<div className="flex flex-col gap-3">
+										{(rating === "mature" || rating === "adult") && <WorkRating work={work} />}
+										{rating === "general" && (
+											<p className="text-sm text-base-content/60">
+												General — users see no rating on a General Work.
+											</p>
+										)}
+										<RatingMatrixReadOnly grid={ratingGrid} rows={ratingRows} />
+									</div>
+								),
+							},
+							{
+								key: "accessibility",
+								label: "Accessibility",
+								content: <CaptionsSummary captions={work.captions ?? []} />,
+							},
+						]}
+					/>
+				</div>
+				<div aria-hidden className="w-0.5 self-stretch bg-base-content/20 max-lg:hidden" />
+				<div className="lg:pl-4">
+					<WorkSideColumn
+						tabs={[
+							{
+								key: "reviews",
+								label: "Reviews",
+								// 🚨 A Work takes no votes and no comments: a review is the only feedback
+								// it accepts (Parker, 2026-09-13).
+								content: (
+									<WorkReviews
+										workId={work.id}
+										aside={
+											<StickerBar
+												subjectType="work"
+												subjectId={work.id}
+												label={work.title ?? "this Work"}
+												align="end"
+											/>
+										}
+									/>
+								),
+							},
+							{
+								key: "showings",
+								label: "Showings",
+								content: <ShowingsStub work={work} />,
+							},
+						]}
+						work={work}
+					/>
+				</div>
 			</div>
-			<div aria-hidden className="w-0.5 self-stretch bg-base-content/20 max-lg:hidden" />
-			<div className="lg:pl-4">
-				<WorkSideColumn
-					tabs={[
-						{
-							key: "reviews",
-							label: "Reviews",
-							// 🚨 A Work takes no votes and no comments: a review is the only feedback
-							// it accepts (Parker, 2026-09-13).
-							content: (
-								<WorkReviews
-									workId={work.id}
-									aside={
-										<StickerBar
-											subjectType="work"
-											subjectId={work.id}
-											label={work.title ?? "this Work"}
-											align="end"
-										/>
-									}
-								/>
-							),
-						},
-						{
-							key: "showings",
-							label: "Showings",
-							content: <ShowingsStub work={work} />,
-						},
-					]}
-					work={work}
-				/>
-			</div>
-		</div>
+		</>
 	);
 }

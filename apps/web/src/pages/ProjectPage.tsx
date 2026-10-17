@@ -1,31 +1,37 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useAuth } from "@anthers/web-shared/auth";
-import RecordLinkLine from "@anthers/web-shared/content/RecordLink";
+import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { Project } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { PencilSquareIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useReportVisit } from "@/lib/attention";
 import WorkCard from "../components/cards/WorkCard";
+import { usePreviewQuery } from "../components/creator/PreviewBar";
 import SaveButton from "../components/library/SaveButton";
 import AlbumView from "../components/media/AlbumView";
-import { studioUrl } from "../lib/studio";
+import OwnerProjectEditor from "../components/project/OwnerProjectEditor";
+import { WorkViewAsRow } from "../components/work/ViewAs";
 import { isAlbum, tracksFrom } from "../lib/tracks";
 
 export default function ProjectPage() {
 	const { slug } = useParams<{ slug: string }>();
 	const { user } = useAuth();
+	const preview = usePreviewQuery();
 	const [project, setProject] = useState<Project | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
+	/** Stable string, so the effect re-runs on a change of the preview's value not identity. */
+	const previewKey = JSON.stringify(preview);
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: previewKey is the trigger, never a read — a preview is an ANSWER the server computes, so the row re-reads when it changes
 	useEffect(() => {
 		if (!slug) return;
 		setLoading(true);
@@ -41,7 +47,7 @@ export default function ProjectPage() {
 			})
 			.catch(() => setError("Project not found."))
 			.finally(() => setLoading(false));
-	}, [slug]);
+	}, [slug, previewKey]);
 
 	// Attention tracking — a Project view is a page_view for the creator.
 	// A Project is a shelf holding no work of its own, so browsing one records the visit
@@ -70,16 +76,52 @@ export default function ProjectPage() {
 	const posts = project.posts ?? [];
 	const works = project.works ?? [];
 	const isOwner = !!user && user.id === project.creatorId;
+	/**
+	 * The Project's editing surface is its own page (the unified-editor pass, 2026-10-17
+	 * — the Work page's ruling extended): the owner of the page edits it right here, and
+	 * the View As row's modes are exactly the ways to look at it — while one is active
+	 * the page is the user's rendering, which the row itself says.
+	 */
+	const ownerEdits = isOwner && !preview.previewAs;
+
+	if (ownerEdits) {
+		return (
+			<OwnerProjectEditor
+				project={project}
+				onAdopt={(row) => setProject((prev) => (prev ? { ...prev, ...row } : prev))}
+			/>
+		);
+	}
+
+	const asAlbum = isAlbum(works);
+
 	/*
 	 * A Project of nothing but audio is a record, and `AlbumView` becomes its hero: cover,
 	 * title, creator, Play. So the page's own title block stands down rather than printing
 	 * the same three lines directly above it — two identical headings stacked is what the
 	 * first cut looked like, and it read as a bug.
 	 */
-	const asAlbum = isAlbum(works);
 
 	return (
 		<div className="container mx-auto px-4 py-8 max-w-5xl">
+			{/* A creator previewing their own Project reaches the user's rendering of it —
+			    the editor is not rendered at all here — and the View As row is what marks
+			    the mode and leaves it, the Work page's pair. */}
+			{isOwner && (
+				<div className="mb-4 flex flex-col gap-2">
+					<h3 className="text-xs font-medium uppercase tracking-wide text-base-content/40">
+						View As
+					</h3>
+					<WorkViewAsRow subject="Project" />
+				</div>
+			)}
+
+			{project.isPublished === false && isOwner && (
+				<div className="alert alert-warning mb-4">
+					<span>This Project is still a draft.</span>
+				</div>
+			)}
+
 			{/* Hero — stood down for an album, which brings its own. */}
 			<div className={asAlbum ? "mb-4 flex justify-end" : "mb-8"}>
 				{!asAlbum && project.coverImage && (
@@ -91,29 +133,10 @@ export default function ProjectPage() {
 						/>
 					</div>
 				)}
-				{asAlbum ? (
-					isOwner && (
-						<a
-							href={studioUrl(`/projects/${project.slug}/edit`)}
-							className="btn btn-outline btn-sm shrink-0"
-						>
-							<PencilSquareIcon className="w-4 h-4" />
-							Edit
-						</a>
-					)
-				) : (
+				{!asAlbum && (
 					<>
 						<div className="flex items-start justify-between gap-4 mb-2">
 							<h1 className="text-3xl font-bold">{project.title}</h1>
-							{isOwner && (
-								<a
-									href={studioUrl(`/projects/${project.slug}/edit`)}
-									className="btn btn-outline btn-sm shrink-0"
-								>
-									<PencilSquareIcon className="w-4 h-4" />
-									Edit
-								</a>
-							)}
 						</div>
 						{project.creator && (
 							<p className="text-sm text-base-content/70 mb-3">
@@ -142,7 +165,7 @@ export default function ProjectPage() {
 			    block keeps standing down. Nothing renders for a project with no record,
 			    which is ordinary. */}
 			<div className="mb-6">
-				<RecordLinkLine recordUrl={project.recordUrl} />
+				<RecordLinkButton recordUrl={project.recordUrl} />
 			</div>
 
 			{/*

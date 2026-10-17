@@ -17,7 +17,6 @@ import { workChapters } from "@anthers/shared/chapters";
 import { isListened, isPaged } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import HostedEmbed from "@anthers/web-shared/content/HostedEmbed";
-import RecordLinkLine from "@anthers/web-shared/content/RecordLink";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
@@ -53,6 +52,7 @@ import {
 import { trackFromWork } from "../../lib/tracks";
 import { useSeekPlayer, WorkPlayerProvider } from "../../lib/work-player";
 import LyricsCard, { WORK_LYRICS_CLASS, WORK_LYRICS_HEADING_CLASS } from "./LyricsCard";
+import WorkMediaFrame from "./WorkMediaFrame";
 
 // ⭐ The lyrics classes live beside the card that owns them; re-exported for the Studio's InlineField.
 export { WORK_LYRICS_CLASS, WORK_LYRICS_HEADING_CLASS };
@@ -97,10 +97,17 @@ export type WorkDetail = Work & {
 /** The title's typography, so a control standing in for the title reads as the title. */
 export const WORK_TITLE_CLASS = "text-3xl font-bold";
 
-/** The public blurb's typography, likewise. */
-export const WORK_DESCRIPTION_CLASS = "prose max-w-none text-base-content/80";
+/**
+ * The public blurb's typography, likewise — **not the `prose` class** (Parker,
+ * 2026-10-16): the description is one plain paragraph the page renders directly
+ * (`TimestampedText`), and `prose`'s paragraph margins sat between the tab's heading
+ * and the text — unlayered CSS, which no `[&_p]:my-0` utility could beat.
+ */
+export const WORK_DESCRIPTION_CLASS = "max-w-none text-base-content/80";
 
-/** The Details tab's section labels — small, named, uppercased (Parker, 2026-10-13). */
+/** The section labels of the Work's tab panels — Details, Credits, Reviews, Manage, all
+ *  of them: small, named, uppercased (Parker, 2026-10-13; conformed across every tab as
+ *  the page's one heading style, 2026-10-16). */
 export const WORK_DETAILS_HEADING_CLASS =
 	"text-xs font-semibold uppercase tracking-wider text-base-content/50";
 
@@ -166,58 +173,25 @@ export function isGoods(type: string): boolean {
  */
 type PlaceholderShape = {
 	icon: typeof PhotoIcon;
-	className: string;
-	/** How wide the silhouette draws: a portrait page caps at reading width, or the
-	 *  aspect makes it taller than the viewport on the wide column. */
-	width: string;
 	label: string;
 };
 
+/**
+ * The silhouette's tenant and its line, per kind — and only those two. The shapes
+ * themselves are not per kind anymore (the media-frame task, 2026-10-16): the
+ * silhouette mounts inside the page's `WorkMediaFrame`, whose one profile is every
+ * kind's shape, so the aspect a draft's box draws no longer moves between kinds.
+ */
 const PLACEHOLDER_SHAPES: Record<string, PlaceholderShape> = {
-	video: {
-		icon: VideoCameraIcon,
-		className: "aspect-video",
-		width: "",
-		label: "The player starts here",
-	},
-	music: {
-		icon: SpeakerWaveIcon,
-		className: "h-24",
-		width: "",
-		label: "The player starts here — the lyrics sit under it",
-	},
-	audio: { icon: SpeakerWaveIcon, className: "h-24", width: "", label: "The player starts here" },
-	image: {
-		icon: PhotoIcon,
-		className: "aspect-[4/3]",
-		width: "max-w-2xl mx-auto",
-		label: "The picture hangs here",
-	},
-	comic: {
-		icon: BookOpenIcon,
-		className: "aspect-[3/4]",
-		width: "max-w-md mx-auto",
-		label: "The pages open here",
-	},
-	ebook: {
-		icon: BookOpenIcon,
-		className: "aspect-[3/4]",
-		width: "max-w-md mx-auto",
-		label: "The book opens here",
-	},
-	text: { icon: DocumentTextIcon, className: "h-48", width: "", label: "The article reads here" },
-	game: {
-		icon: PuzzlePieceIcon,
-		className: "aspect-video",
-		width: "",
-		label: "The game plays here",
-	},
-	software: {
-		icon: PuzzlePieceIcon,
-		className: "aspect-video",
-		width: "",
-		label: "The program runs here",
-	},
+	video: { icon: VideoCameraIcon, label: "The player starts here" },
+	music: { icon: SpeakerWaveIcon, label: "The player starts here — the lyrics sit under it" },
+	audio: { icon: SpeakerWaveIcon, label: "The player starts here" },
+	image: { icon: PhotoIcon, label: "The picture hangs here" },
+	comic: { icon: BookOpenIcon, label: "The pages open here" },
+	ebook: { icon: BookOpenIcon, label: "The book opens here" },
+	text: { icon: DocumentTextIcon, label: "The article reads here" },
+	game: { icon: PuzzlePieceIcon, label: "The game plays here" },
+	software: { icon: PuzzlePieceIcon, label: "The program runs here" },
 };
 
 export function WorkPlaceholder({
@@ -232,22 +206,21 @@ export function WorkPlaceholder({
 }) {
 	const shape = PLACEHOLDER_SHAPES[type] ?? {
 		icon: DocumentTextIcon,
-		className: "aspect-video",
-		width: "",
 		label: "The Work goes here",
 	};
 	const Icon = shape.icon;
 	return (
-		<div className={shape.width}>
-			<div
-				role="status"
-				className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-base-300 bg-base-200/40 p-6 text-center ${shape.className}`}
-			>
-				<Icon className="size-10 text-base-content/30" aria-hidden />
-				<p className="text-sm text-base-content/60">{shape.label}.</p>
-				{note && <p className="max-w-prose text-xs text-base-content/40">{note}</p>}
-				{status}
-			</div>
+		// Fills the media frame it mounts in rather than carrying a shape of its own —
+		// the frame is the page's shape-holder now — so the dashed box is the frame's
+		// one profile for every kind, and the kind and its note live inside it.
+		<div
+			role="status"
+			className="flex h-full w-full flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-base-300 bg-base-100/50 p-6 text-center"
+		>
+			<Icon className="size-10 text-base-content/30" aria-hidden />
+			<p className="text-sm text-base-content/60">{shape.label}.</p>
+			{note && <p className="max-w-prose text-xs text-base-content/40">{note}</p>}
+			{status}
 		</div>
 	);
 }
@@ -427,17 +400,6 @@ export function WorkDates({ work }: { work: WorkDetail }) {
 }
 
 /**
- * The released Work's listing on the network, as its record link — the same line a
- * creator's Edit page shows, and since the widening (2026-10-10) it is public copy too:
- * the record is public no matter who reads, so every reader who can see the Work sees
- * this. The wording and the link live in {@link RecordLinkLine}, the one wording every
- * page that carries a record link uses.
- */
-export function WorkRecordLink({ work }: { work: WorkDetail }) {
-	return <RecordLinkLine recordUrl={work.recordUrl} />;
-}
-
-/**
  * The rating and its content notes, for a Mature or Adult Work. Nothing for a General Work,
  * which is nearly all of them. An Adult Work reaches only users who opted in and verified, and
  * it is labeled for them all the same, because its notes are as much a warning there as anywhere.
@@ -513,9 +475,20 @@ export interface WorkBylineProps {
  * position a player owns: what a Work is and who made it now stands *between* the thing
  * itself and its record, and Share and Save go with it, to the right, above the side
  * tabs. The rating is deliberately absent — it is the Rating tab's fact.
+ *
+ * Under the strip, the Anthers release date rides again (Parker, 2026-10-16): a second
+ * copy of the line the Details tab carries, so the facts around the title answer where
+ * a viewer looks first. A draft, with no release date, renders nothing.
  */
 export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
+	const releasedDate = work.releasedAt
+		? new Date(work.releasedAt).toLocaleDateString("en-US", {
+				month: "long",
+				day: "numeric",
+				year: "numeric",
+			})
+		: null;
 	const creatorEl = work.creator && (
 		<Link to={profileUrl(work.creator.handle)} className="flex items-center gap-2 hover:underline">
 			{work.creator.avatar ? (
@@ -559,25 +532,47 @@ export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 					{actions}
 				</div>
 			</div>
+			{releasedDate && (
+				<p className="text-center text-sm text-base-content/60">Released {releasedDate}</p>
+			)}
 		</header>
 	);
 }
 /**
  * The Work itself, for somebody who may open it: the player, the user, the image, the
  * embedded build or the gated prose, whichever the kind has.
+ *
+ * ⭐ The deliverable mounts inside `WorkMediaFrame` (the media-frame task, 2026-10-16,
+ * Parker): the video work page's layout is canonical, every kind derives from it, and
+ * one media card — the profile the video player draws — is what makes the page hold
+ * still while kinds flip. The card goes around whoever is here, with the frame's fill
+ * mode decided per branch: **video and a hosted build fill the card** (their medium
+ * draws the video profile itself); every other branch letterboxes inside a 16:9 area
+ * that a taller medium — a portrait picture, a long piece of writing, a reader's own
+ * scrolling — grows downward rather than breaking. The embed page is the one caller
+ * that opts out (`framed` false): a bare window on one medium has no page to hold
+ * still, and the meter footer it needs still renders beside it there.
  */
 export function WorkDeliverable({
 	work,
 	shareToken = null,
 	lyrics,
+	lead,
 	onFrameActivity,
 	startSeconds = null,
 	persistentMiniPlayer = false,
+	framed = true,
 }: {
 	work: WorkDetail;
 	shareToken?: string | null;
 	/** In place of a music Work's lyrics, for a control standing in for them. */
 	lyrics?: ReactNode;
+	/**
+	 * A standfirst above the deliverable, for a piece of writing: the page passes the
+	 * Work's description here so it rides inside the media frame, above the article,
+	 * rather than above the frame as its own block outside the page's shape.
+	 */
+	lead?: ReactNode;
 	/**
 	 * Fed the hosted frame's presence heartbeats, for the page's idle detector — the
 	 * in-frame input signal that otherwise never leaves the frame. See
@@ -597,11 +592,37 @@ export function WorkDeliverable({
 	 * bar as they type.
 	 */
 	persistentMiniPlayer?: boolean;
+	/**
+	 * The media card the page's shape is held by (see the docblock above): true on
+	 * every page surface; the embed route passes false, being a bare window on one
+	 * medium with no page shape to hold.
+	 */
+	framed?: boolean;
 }) {
 	/** The chapters the description carries — one parse, shared by every player branch. */
 	const chapters = useMemo(() => workChapters(work.description ?? ""), [work.description]);
 	/** The Work's own track, for the bar-driven modes of the audio players — see them. */
 	const track = persistentMiniPlayer ? trackFromWork(work) : undefined;
+	/**
+	 * The meter the page holds, for the kinds that are neither video nor listened
+	 * (their players render their own) — it rides inside the branch's frame so a
+	 * medium's allowance never renders outside the media area it belongs to.
+	 */
+	const holdsMeter = pageHoldsTheMeter(work.type);
+	/**
+	 * The branch's mount, through the page's one media card when the caller wants it:
+	 * a fill branch (video, a hosted build) hands `fill` because its medium draws the
+	 * video profile itself; everything else letterboxes in the frame's 16:9 area.
+	 */
+	const frame = (node: ReactNode, fill = false) => {
+		const withMeter = (
+			<>
+				{node}
+				{holdsMeter && <PublicAccessFooter />}
+			</>
+		);
+		return framed ? <WorkMediaFrame fill={fill}>{withMeter}</WorkMediaFrame> : withMeter;
+	};
 	return (
 		<>
 			{/*
@@ -612,43 +633,50 @@ export function WorkDeliverable({
 			 * The same access rules, meter and attention wiring apply in both;
 			 * `VideoPlayer` switches on the shape of the address.
 			 */}
-			{work.type === "video" && work.transcoding?.hlsManifestUrl && (
-				<VideoPlayer
-					src={work.transcoding.hlsManifestUrl}
-					// Original Media, in the quality menu as the opted-into alternative to the
-					// ladder's rungs (the Jellyfin-shaped offer): the route is the same
-					// access-checked one the pre-ladder baseline plays from, so the gate, the
-					// meter and the household limit already hold.
-					originalUrl={work.originalUrl}
-					poster={work.thumbnail ?? undefined}
-					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
-					publicAccess={work.publicAccess ?? false}
-					captions={work.captions}
-					chapters={chapters}
-					startSeconds={startSeconds}
-					// The Podcast-This row: only a video whose audio rendition really shipped
-					// gets one — serialization nulls the URL when `audio.m3u8` is absent.
-					podcast={
-						work.transcoding.audioManifestUrl
-							? {
-									audioManifestUrl: work.transcoding.audioManifestUrl,
-									track: trackFromWork(work),
-								}
-							: undefined
-					}
-				/>
-			)}
-			{work.type === "video" && !work.transcoding?.hlsManifestUrl && work.originalUrl && (
-				<VideoPlayer
-					src={work.originalUrl}
-					poster={work.thumbnail ?? undefined}
-					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
-					publicAccess={work.publicAccess ?? false}
-					captions={work.captions}
-					chapters={chapters}
-					startSeconds={startSeconds}
-				/>
-			)}
+			{work.type === "video" &&
+				work.transcoding?.hlsManifestUrl &&
+				frame(
+					<VideoPlayer
+						src={work.transcoding.hlsManifestUrl}
+						// Original Media, in the quality menu as the opted-into alternative to the
+						// ladder's rungs (the Jellyfin-shaped offer): the route is the same
+						// access-checked one the pre-ladder baseline plays from, so the gate, the
+						// meter and the household limit already hold.
+						originalUrl={work.originalUrl}
+						poster={work.thumbnail ?? undefined}
+						attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+						publicAccess={work.publicAccess ?? false}
+						captions={work.captions}
+						chapters={chapters}
+						startSeconds={startSeconds}
+						// The Podcast-This row: only a video whose audio rendition really shipped
+						// gets one — serialization nulls the URL when `audio.m3u8` is absent.
+						podcast={
+							work.transcoding.audioManifestUrl
+								? {
+										audioManifestUrl: work.transcoding.audioManifestUrl,
+										track: trackFromWork(work),
+									}
+								: undefined
+						}
+					/>,
+					true,
+				)}
+			{work.type === "video" &&
+				!work.transcoding?.hlsManifestUrl &&
+				work.originalUrl &&
+				frame(
+					<VideoPlayer
+						src={work.originalUrl}
+						poster={work.thumbnail ?? undefined}
+						attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+						publicAccess={work.publicAccess ?? false}
+						captions={work.captions}
+						chapters={chapters}
+						startSeconds={startSeconds}
+					/>,
+					true,
+				)}
 			{/*
 			 * A track's processed MP3 is the offered experience, and the original is the
 			 * baseline underneath it — the same shape the video's two branches take above:
@@ -663,90 +691,126 @@ export function WorkDeliverable({
 			 * `src` is the processed endpoint and is null until processing completes, so
 			 * the bar would be handed a track that cannot play.
 			 */}
-			{work.type === "music" && !work.transcoding?.outputFileUrl && work.originalUrl && (
-				<AudioPlayer
-					src={work.originalUrl}
-					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
-					publicAccess={work.publicAccess ?? false}
-					chapters={chapters}
-					startSeconds={startSeconds}
-				/>
-			)}
-			{work.type === "music" && work.transcoding?.outputFileUrl && (
-				<>
-					<AudioPlayer
-						src={work.transcoding.outputFileUrl}
-						waveform={work.transcoding.waveformData ?? undefined}
-						attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
-						publicAccess={work.publicAccess ?? false}
-						chapters={chapters}
-						startSeconds={startSeconds}
-						persistent={track}
-					/>
-					{/* A song's words, under the player — a collapsed-by-default card (see
-					    LyricsCard). Gated with the audio: the API blanks them for a user
-					    without access, so reaching this branch at all means the user may
-					    read them. */}
-					{lyrics ?? (work.lyrics?.trim() ? <LyricsCard lyrics={work.lyrics ?? ""} /> : null)}
-				</>
-			)}
+			{work.type === "music" &&
+				!work.transcoding?.outputFileUrl &&
+				work.originalUrl &&
+				frame(
+					// As below: a comfortable slice of the frame's width, centered.
+					<div className="w-full max-w-3xl">
+						<AudioPlayer
+							src={work.originalUrl}
+							attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+							publicAccess={work.publicAccess ?? false}
+							chapters={chapters}
+							startSeconds={startSeconds}
+						/>
+					</div>,
+				)}
+			{work.type === "music" &&
+				work.transcoding?.outputFileUrl &&
+				frame(
+					// The player takes a comfortable slice of the frame's width, centered
+					// letterboxed like any other medium — not the card's own hugging width.
+					<div className="w-full max-w-3xl">
+						<AudioPlayer
+							src={work.transcoding.outputFileUrl}
+							waveform={work.transcoding.waveformData ?? undefined}
+							attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+							publicAccess={work.publicAccess ?? false}
+							chapters={chapters}
+							startSeconds={startSeconds}
+							persistent={track}
+						/>
+						{/* A song's words, under the player — a collapsed-by-default card (see
+						    LyricsCard). Gated with the audio: the API blanks them for a user
+						    without access, so reaching this branch at all means the user may
+						    read them. */}
+						{lyrics ?? (work.lyrics?.trim() ? <LyricsCard lyrics={work.lyrics ?? ""} /> : null)}
+					</div>,
+				)}
 			{/* Spoken word takes its own player — listening to talk wants fixed-step skips,
 			    a rate control and a remembered position, none of which a song does. Its
 			    original plays the same fallback the song branch does above, for the same
 			    reasons: no waveform, and not bar-driven while the processed deliverable
 			    does not exist. */}
-			{work.type === "audio" && !work.transcoding?.outputFileUrl && work.originalUrl && (
-				<SpokenPlayer
-					src={work.originalUrl}
-					workId={work.id}
-					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
-					publicAccess={work.publicAccess ?? false}
-					chapters={chapters}
-					startSeconds={startSeconds}
-				/>
-			)}
-			{work.type === "audio" && work.transcoding?.outputFileUrl && (
-				<SpokenPlayer
-					src={work.transcoding.outputFileUrl}
-					workId={work.id}
-					waveform={work.transcoding.waveformData ?? undefined}
-					attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
-					publicAccess={work.publicAccess ?? false}
-					chapters={chapters}
-					startSeconds={startSeconds}
-					persistent={track}
-				/>
-			)}
+			{work.type === "audio" &&
+				!work.transcoding?.outputFileUrl &&
+				work.originalUrl &&
+				frame(
+					// As the song branches: a comfortable slice of the frame's width.
+					<div className="w-full max-w-3xl">
+						<SpokenPlayer
+							src={work.originalUrl}
+							workId={work.id}
+							attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+							publicAccess={work.publicAccess ?? false}
+							chapters={chapters}
+							startSeconds={startSeconds}
+						/>
+					</div>,
+				)}
+			{work.type === "audio" &&
+				work.transcoding?.outputFileUrl &&
+				frame(
+					<div className="w-full max-w-3xl">
+						<SpokenPlayer
+							src={work.transcoding.outputFileUrl}
+							workId={work.id}
+							waveform={work.transcoding.waveformData ?? undefined}
+							attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
+							publicAccess={work.publicAccess ?? false}
+							chapters={chapters}
+							startSeconds={startSeconds}
+							persistent={track}
+						/>
+					</div>,
+				)}
 			{isPaged(work.type) &&
 				// The ingest's own shape signal: sections exist → the reflow reader on the
 				// vendored foliate-js engine, reading only through the section/asset
 				// ladder; none → the page reader, comic and PDF-shaped ebook alike.
-				(work.type === "ebook" && (work.sectionCount ?? 0) > 0 ? (
-					<EbookReader
-						workId={work.id}
-						apiBase={apiBaseUrl()}
-						title={work.title ?? "Untitled"}
-						shareToken={shareToken}
-					/>
-				) : (
-					<ComicReader
-						workId={work.id}
-						pageCount={work.pageCount ?? 0}
-						apiBase={apiBaseUrl()}
-						title={work.title ?? "Untitled"}
-						shareToken={shareToken}
-					/>
-				))}
-			{work.type === "image" && work.sourceKey && (
-				// The creator's alt text when there is one; the Work's title is the fallback
-				// this render always fell back to, and `""` keeps it (empty alt on a content
-				// image would read as deliberately decorative, which the picture never is).
-				<img
-					src={work.sourceKey}
-					alt={work.imageAlt || work.title || ""}
-					className="w-full rounded-lg"
-				/>
-			)}
+				(work.type === "ebook" && (work.sectionCount ?? 0) > 0
+					? frame(
+							// `w-full` is load-bearing on these readers (the CI ebook failure's
+							// whole finding): the frame's letterbox centers its content, and a
+							// reader with no width of its own shrink-to-fits there — its
+							// transport row then crushes the seek bar to a zero-width input,
+							// the one control a reader without a pointer must reach. The
+							// readers were block-level wide before the frame; they stay wide.
+							<div className="w-full">
+								<EbookReader
+									workId={work.id}
+									apiBase={apiBaseUrl()}
+									title={work.title ?? "Untitled"}
+									shareToken={shareToken}
+								/>
+							</div>,
+						)
+					: frame(
+							<div className="w-full">
+								<ComicReader
+									workId={work.id}
+									pageCount={work.pageCount ?? 0}
+									apiBase={apiBaseUrl()}
+									title={work.title ?? "Untitled"}
+									shareToken={shareToken}
+								/>
+							</div>,
+						))}
+			{work.type === "image" &&
+				work.sourceKey &&
+				frame(
+					// The creator's alt text when there is one; the Work's title is the fallback
+					// this render always fell back to, and `""` keeps it (empty alt on a content
+					// image would read as deliberately decorative, which the picture never is).
+					// The picture keeps its own full-bleed width — a portrait grows the frame
+					// downward rather than shrinking into a letterbox it is taller than.
+					<img
+						src={work.sourceKey}
+						alt={work.imageAlt || work.title || ""}
+						className="w-full rounded-lg"
+					/>,
+				)}
 			{/* A hosted build outranks an external embed address: the build Anthers serves is
 			    the thing the creator uploaded here, and the embed address is creator-hosted
 			    off-platform. A Work carrying both plays hosted; removing the build falls back
@@ -756,38 +820,62 @@ export function WorkDeliverable({
 			    this SPA carries no per-Work response headers — so it plays on the
 			    server-rendered /play page, which mints the token itself and carries
 			    COOP/COEP. An ordinary build frames inline as before. */}
-			{work.type === "game" || work.type === "software" ? (
-				work.webPlayable && work.webPlayPath === "inline" ? (
-					<HostedEmbed workId={work.id} title={work.title ?? "Play"} onActivity={onFrameActivity} />
-				) : work.webPlayable && work.webPlayPath === "page" ? (
-					<a href={`/api/play/${work.id}`} className="btn btn-primary btn-lg gap-2 self-start">
-						<PlayIcon className="w-6 h-6" />
-						Play in Browser
-					</a>
-				) : (
-					work.embedUrl && <ProjectEmbed embedUrl={work.embedUrl} title={work.title ?? "Play"} />
-				)
-			) : null}
+			{work.type === "game" || work.type === "software"
+				? work.webPlayable && work.webPlayPath === "inline"
+					? // A hosted build fills the card the way a video does: its play area is
+						// the video profile (the iframes draw `aspect-video` now), so the card
+						// hugs it rather than letterboxing it.
+						frame(
+							<HostedEmbed
+								workId={work.id}
+								title={work.title ?? "Play"}
+								onActivity={onFrameActivity}
+							/>,
+							true,
+						)
+					: work.webPlayable && work.webPlayPath === "page"
+						? frame(
+								<a href={`/api/play/${work.id}`} className="btn btn-primary btn-lg gap-2">
+									<PlayIcon className="w-6 h-6" />
+									Play in Browser
+								</a>,
+							)
+						: work.embedUrl &&
+							frame(<ProjectEmbed embedUrl={work.embedUrl} title={work.title ?? "Play"} />, true)
+				: null}
 			{work.bodyHtml &&
-				(isWriting(work.type) ? (
-					<WorkArticle html={work.bodyHtml} workId={work.id} />
-				) : (
-					<article className="prose max-w-none">
-						<SanitizedHtml html={work.bodyHtml} />
-					</article>
-				))}
+				(isWriting(work.type)
+					? // A piece of writing reads at its measure inside the card, the
+						// standfirst above it when the page passed one — the reading column is
+						// the article's own, centered in the frame, and a long piece grows the
+						// card downward rather than breaking its shape.
+						frame(
+							<div className="w-full max-w-2xl">
+								{lead}
+								<WorkArticle html={work.bodyHtml} workId={work.id} />
+							</div>,
+						)
+					: frame(
+							// Same `w-full` as the readers: a prose block has no width of its
+							// own and would shrink-to-fit in the letterbox's centered column.
+							<div className="w-full">
+								<article className="prose max-w-none">
+									<SanitizedHtml html={work.bodyHtml} />
+								</article>
+							</div>,
+						))}
 			{/*
 			 * Reading, playing and looking draw the allowance exactly as watching does,
 			 * and until now said nothing about it — the countdown and the wall were
 			 * wired into the two players and nowhere else, so a user nine hours in
 			 * got no signal at all and then met a wall at a video.
 			 *
-			 * 🚨 Rendered here rather than inside each medium's block because there is
-			 * no component to hang it on: text is an <article>, a game is an <iframe>,
-			 * an image is an <img>. The players own their own footer; everything else
-			 * has this one.
+			 * 🚨 Held inside the branch's media frame by the `frame` helper above, for
+			 * the same reason it was rendered here rather than inside each medium's
+			 * block: there is no component to hang it on — text is an <article>, a game
+			 * is an <iframe>, an image is an <img>. The players own their own footer;
+			 * everything else has this one.
 			 */}
-			{pageHoldsTheMeter(work.type) && <PublicAccessFooter />}
 		</>
 	);
 }
@@ -796,26 +884,114 @@ export function WorkDeliverable({
  * The public blurb — visible whether or not the user can open the Work, because a locked
  * Work still has to say what it is. The gated prose renders inside the deliverable. For a piece
  * of writing it is the standfirst, which the page sets under the headline rather than here.
+ *
+ * A description past a reasonable length truncates behind a Read More toggle
+ * (Parker, 2026-10-16): the cut sits on a word boundary inside {@link DESCRIPTION_THRESHOLD},
+ * the collapsed tail carries an ellipsis, and the same toggle collapses again. Short
+ * descriptions — nearly all of them — render exactly as before.
  */
+export const DESCRIPTION_THRESHOLD = 480;
+
+/** Cut a description at its last word boundary inside the threshold, ellipsis on. */
+function clampedDescription(text: string, threshold: number): string {
+	return `${text.slice(0, text.lastIndexOf(" ", threshold)).trimEnd()}…`;
+}
+
+/**
+ * The description body's read-more toggle, shared by both renderers of a description —
+ * the user's (`WorkDescription`, in its own typography) and the creator's inline read
+ * (which renders the plain paragraph the editor typed into). The collapsed state is the
+ * only state the toggle changes; the button carries its own margin, inside the prose
+ * flow and out of it.
+ */
+export function DescriptionToggle({
+	truncated,
+	expanded,
+	onToggle,
+}: {
+	truncated: boolean;
+	expanded: boolean;
+	onToggle: () => void;
+}) {
+	if (!truncated) return null;
+	return (
+		<button
+			type="button"
+			aria-expanded={expanded}
+			className="mt-2 text-sm text-base-content/50 hover:text-base-content/80 underline decoration-base-content/20 underline-offset-2"
+			onClick={onToggle}
+		>
+			{expanded ? "Read Less" : "Read More…"}
+		</button>
+	);
+}
+
 export function WorkDescription({ work }: { work: WorkDetail }) {
 	const seek = useSeekPlayer();
+	const truncated = (work.description?.length ?? 0) > DESCRIPTION_THRESHOLD;
+	const [expanded, setExpanded] = useState(false);
 	if (!work.description) return null;
+	const shown =
+		truncated && !expanded
+			? clampedDescription(work.description, DESCRIPTION_THRESHOLD)
+			: work.description;
+	const toggle = (
+		<DescriptionToggle
+			truncated={truncated}
+			expanded={expanded}
+			onToggle={() => setExpanded((e) => !e)}
+		/>
+	);
 	if (isWriting(work.type)) {
 		return (
-			<p className={WRITING_STANDFIRST_CLASS} style={WRITING_BODY_STYLE}>
-				{work.description}
-			</p>
+			<div>
+				<p className={WRITING_STANDFIRST_CLASS} style={WRITING_BODY_STYLE}>
+					{shown}
+				</p>
+				{toggle}
+			</div>
 		);
 	}
 	return (
 		<section className={WORK_DESCRIPTION_CLASS}>
 			<TimestampedText
-				text={work.description}
+				text={shown}
 				// Only a Work a player navigates makes its timestamps links — and only
 				// when a player is actually mounted; a locked video's description has
 				// no player to seek, so its timestamps stay text until it is opened.
 				onSeek={work.type === "video" || isListened(work.type) ? seek : null}
 				className="whitespace-pre-line"
+			/>
+			{toggle}
+		</section>
+	);
+}
+
+/**
+ * The description's body for the editor's inline read — the same truncation
+ * `WorkDescription` carries, in the plain paragraph the edit textarea wrote: the
+ * creator's copy is the user's Details tab rendering, and no read of the page should
+ * promise a length the user's page does not keep.
+ */
+export function DescriptionBody({ description }: { description: string | null }) {
+	const truncated = (description?.length ?? 0) > DESCRIPTION_THRESHOLD;
+	const [expanded, setExpanded] = useState(false);
+	if (!description) {
+		return (
+			<section className={WORK_DESCRIPTION_CLASS}>
+				<p className="text-sm text-base-content/40">Nothing written yet.</p>
+			</section>
+		);
+	}
+	const shown =
+		truncated && !expanded ? clampedDescription(description, DESCRIPTION_THRESHOLD) : description;
+	return (
+		<section className={WORK_DESCRIPTION_CLASS}>
+			<p className="whitespace-pre-line">{shown}</p>
+			<DescriptionToggle
+				truncated={truncated}
+				expanded={expanded}
+				onToggle={() => setExpanded((e) => !e)}
 			/>
 		</section>
 	);
@@ -1021,7 +1197,7 @@ export function WorkCredits({
 	if (credits.length === 0) return null;
 	return (
 		<section className="flex flex-col gap-2">
-			<h2 className="text-sm font-semibold">Credits</h2>
+			<h3 className={WORK_DETAILS_HEADING_CLASS}>Credits</h3>
 			<ul className="flex flex-col gap-1.5 text-sm">
 				{credits.map((credit, i) => {
 					const badges = creditBadges(credit.types);

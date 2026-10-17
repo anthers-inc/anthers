@@ -37,7 +37,7 @@
  * than encoding beside the first handler — and `ensureStillOurs` re-reads the row before
  * every upload and the completion write, so a run that has outlived its own delivery
  * abandons quietly instead of planting a second ladder over the finisher's. The expiry
- * sizing this design assumes is `JOB_OPTIONS[TRANSCODE_VIDEO]` in `queue.ts`.
+ * sizing this design assumes is `JOB_OPTIONS[QUEUES.MEDIA]` in `queue.ts`.
  */
 
 import { randomUUID } from "node:crypto";
@@ -69,7 +69,7 @@ export interface TranscodeVideoData {
 // pg-boss v12 fails a job whose handler runs past `expireInSeconds` and re-delivers it,
 // and nothing kills the abandoned handler or its ffmpeg child — so absent a lock a
 // re-delivery encodes the same source a second time, beside the first. That happened:
-// `JOB_OPTIONS[TRANSCODE_VIDEO]` in `queue.ts` carries the 2026-10-11 measurement of one
+// `JOB_OPTIONS[QUEUES.MEDIA]` in `queue.ts` carries the 2026-10-11 measurement of one
 // long source encoded twice in full. `localConcurrency: 1` cannot be the guard, because
 // the expiry path frees the worker's local slot while the orphaned handler is still
 // running — the semaphore counts fetch batches, and a re-delivery is a new fetch.
@@ -372,13 +372,25 @@ export async function isTranscodeSettled(jobId: number): Promise<boolean> {
 }
 
 export async function transcodeVideo(data: TranscodeVideoData) {
+	// The ladder's own wall times, recorded at the completion write (`timings`) — the
+	// history the queue's cost estimates read (`queue-position.ts`). `start` is taken
+	// before the encode lock, so a re-delivery's wait under another handler's lock is
+	// part of the record (`waitMs` includes it); the marks name the stage, and the
+	// deltas are what one actual pass cost.
+	const marks: Record<string, number> = { start: Date.now() };
+	const mark = (name: string) => {
+		marks[name] = Date.now();
+	};
 	// The lock is the whole reason `runTranscode` can trust what it re-reads: while it
 	// holds `pg_try_advisory_lock` no other handler can be past this point, so a row
 	// read `completed` really means another handler finished the work.
-	return withTranscodeLock(data.jobId, () => runTranscode(data));
+	return withTranscodeLock(data.jobId, () => runTranscode(data, { marks, mark }));
 }
 
-async function runTranscode(data: TranscodeVideoData) {
+async function runTranscode(
+	data: TranscodeVideoData,
+	timing: { marks: Record<string, number>; mark: (name: string) => void },
+) {
 	const { jobId } = data;
 
 	const [job] = await db
@@ -484,6 +496,7 @@ async function runTranscode(data: TranscodeVideoData) {
 		const probe = await ffprobe(
 			await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
 		);
+		timing.mark("probeEnd");
 		const videoStream = probe.streams?.find(
 			(s: { codec_type: string }) => s.codec_type === "video",
 		);
@@ -671,6 +684,7 @@ async function runTranscode(data: TranscodeVideoData) {
 			// a stale tick draining during the AUDIO pass would still read the encode
 			// flag as true, which is exactly the window the old shape leaked through.
 			let variantReporting = true;
+			timing.mark(`v${v.height}Start`);
 			await ffmpegHls(
 				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
 				outputDir,
@@ -697,6 +711,7 @@ async function runTranscode(data: TranscodeVideoData) {
 				},
 			);
 			variantReporting = false;
+			timing.mark(`v${v.height}End`);
 			await updateJobProgress(jobId, Math.round(spanStart + (i + 1) * perVariant));
 			// This variant's segments are off the disk before the next variant's encode
 			// grows the directory again — the whole point of uploading per variant.
@@ -713,10 +728,12 @@ async function runTranscode(data: TranscodeVideoData) {
 		// source has nothing to demux, so it ships no rendition and the master says so.
 		const hasAudio = probe.streams?.some((s: { codec_type: string }) => s.codec_type === "audio");
 		if (hasAudio) {
+			timing.mark("audioStart");
 			await ffmpegAudioHls(
 				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
 				outputDir,
 			);
+			timing.mark("audioEnd");
 			await uploadAndFree(outputDir);
 		}
 
@@ -732,9 +749,26 @@ async function runTranscode(data: TranscodeVideoData) {
 		// over the clear. Every tick whose variant has ended was already stopped at the
 		// queueing step, so nothing enqueued after this line exists.
 		await lastWrite;
+		// The ladder's own measured shape, one number per pass plus the whole — the
+		// record the queue's cost estimates read from, so history replaces the
+		// constants as jobs complete (`queue-position.ts`).
+		const { marks } = timing;
+		const variantTimings: Record<string, number> = {};
+		for (const v of variants) {
+			const startKey = `v${v.height}Start`;
+			const endKey = `v${v.height}End`;
+			if (marks[startKey] != null && marks[endKey] != null)
+				variantTimings[`h${v.height}Ms`] = Math.round(marks[endKey] - marks[startKey]);
+		}
+		const timings = {
+			...variantTimings,
+			...(hasAudio ? { audioPassMs: Math.round(marks.audioEnd - marks.audioStart) } : {}),
+			waitMs: Math.round(marks[`v${variants[0]?.height}Start`] - marks.start),
+			totalMs: Math.round(Date.now() - marks.start),
+		};
 		await db
 			.update(transcodingJobs)
-			.set({ progress: 80, etaSeconds: null })
+			.set({ progress: 80, etaSeconds: null, timings })
 			.where(eq(transcodingJobs.id, jobId));
 
 		// 5. The master, uploaded last — after every variant and rendition file it names

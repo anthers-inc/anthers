@@ -38,7 +38,7 @@ import { creatorProjectUrl } from "../lib/profile";
 import { Link, useSearchParams } from "../lib/router";
 import { client } from "../lib/rpc";
 import { useSidebar } from "../lib/sidebar";
-import { studioEditProjectUrl, studioEditWorkUrl, studioNewProjectUrl } from "../lib/studio";
+import { studioEditWorkUrl, studioNewProjectUrl } from "../lib/studio";
 import type { Project, ProjectWorkSummary } from "../lib/types";
 
 export default function ProjectsPage() {
@@ -281,11 +281,10 @@ function ProjectRow({
 }) {
 	const works = project.worksSummary ?? [];
 	const publicIfPublished = project.isPublished !== false;
-	// Draft projects have no public page yet, so the name opens the editor instead —
-	// the same choice the public project's link would make the creator wish for.
-	const projectUrl = publicIfPublished
-		? creatorProjectUrl(handle, project.slug)
-		: studioEditProjectUrl(project.slug);
+	// The Project's page IS its editor now (the unified-editor pass, 2026-10-17), for
+	// published and draft rows alike — the owner's page; the server answers a draft's
+	// URL 404 for anyone but its creator, as a private Work's does.
+	const projectUrl = creatorProjectUrl(handle, project.slug);
 
 	return (
 		<tr className="border-b border-base-300/50 hover:bg-base-200/40 align-top">
@@ -348,11 +347,7 @@ function ProjectRow({
 			{/* Row actions: the editor, and the delete dialog the page owns. */}
 			<td className="py-3 pr-4 text-right whitespace-nowrap">
 				<div className="flex justify-end gap-1">
-					<Link
-						to={studioEditProjectUrl(project.slug)}
-						className="btn btn-ghost btn-xs"
-						title="Edit"
-					>
+					<Link to={projectUrl} className="btn btn-ghost btn-xs" title="Edit">
 						<PencilSquareIcon className="w-4 h-4" />
 					</Link>
 					<button

@@ -136,9 +136,13 @@ test("a picked file becomes an image in the editor and a gap a return drew survi
 	await descriptionField.fill(`${DESCRIPTION}, edited`);
 
 	// Save as a draft, then read what was stored through the API the editor writes to.
+	// The draft's landing is the POST's own page now — the same page with the Draft
+	// badge in it — so the address the walk reads is `/posts/{slug}-{publicId}`.
+	// Anchored on the trailing publicId: the pre-save address `/studio/posts/new`
+	// contains `/posts/` too, and an unanchored match would settle before the click lands.
 	page.getByRole("button", { name: "Save as Draft" }).click();
-	await page.waitForURL(/\/studio\/posts\/.*\/edit/);
-	const slug = page.url().split("/").at(-2);
+	await page.waitForURL(/\/posts\/.+-\d{6,}$/);
+	const slug = page.url().match(/\/posts\/(.+)-(\d{6,})$/)?.[1] ?? "";
 	createdSlugs.push(slug);
 
 	const read = await fetch(`${API_URL}/api/content/posts/${slug}`, {

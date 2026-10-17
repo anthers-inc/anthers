@@ -1,0 +1,1 @@
+ALTER TABLE "transcoding_jobs" ADD COLUMN "queue_position" integer;

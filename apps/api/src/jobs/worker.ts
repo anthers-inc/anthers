@@ -40,7 +40,7 @@ import { runDeadlineReminderSweep } from "./deadline-reminders.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
 import { runHlsOrphanSweep } from "./hls-orphan-sweep.js";
 import { type IngestEbookData, ingestEbook } from "./ingest-ebook.js";
-import { type ProcessAudioData, processAudio } from "./process-audio.js";
+import { runMediaJob } from "./media-lane.js";
 import { handlePruneAttention, type PruneAttentionData } from "./prune-attention.js";
 import { handlePruneTraffic, type PruneTrafficData } from "./prune-traffic.js";
 import { publishScheduled } from "./publish-scheduled.js";
@@ -58,7 +58,6 @@ import { statusSample } from "./status-sample.js";
 import { runStorageUsageSweep } from "./storage-usage.js";
 import { type SyncAtprotoRecordData, syncAtprotoRecordJob } from "./sync-atproto-record.js";
 import { type SyncWorkListingData, syncWorkListingJob } from "./sync-work-listing.js";
-import { type TranscodeVideoData, transcodeVideo } from "./transcode-video.js";
 import { type TransferHeldCreditsData, transferHeldCredits } from "./transfer-held-credits.js";
 import { runUploadSessionSweep } from "./upload-session-sweep.js";
 import { watchHostedIdentities } from "./watch-identities.js";
@@ -71,20 +70,19 @@ async function start() {
 
 	// ── On-demand jobs ────────────────────────────────────────────────
 
-	// One encode at a time. An encode is the largest thing the worker does — about 400 MB for a
-	// 4K source even with its threads pinned (`lib/ffmpeg.ts`) — and on a worker with one vCPU
-	// a second concurrent encode finishes no sooner, it only doubles the peak. Raise this with
-	// the vCPU count.
-	await queue.work<TranscodeVideoData>(
-		QUEUES.TRANSCODE_VIDEO,
-		{ localConcurrency: 1 },
-		async (jobs) => {
-			for (const job of jobs) {
-				console.log(`[transcode-video] Processing job ${job.id}`);
-				await transcodeVideo(job.data);
-			}
-		},
-	);
+	// The single-file media lane: one encode-class job at a time across video and audio
+	// alike (`QUEUES.MEDIA`'s comment carries the shape, `lib/ffmpeg.ts` the sizing). The
+	// handler dispatches on the row's own `mediaType` — the row re-read is where a job's
+	// idempotency and cancel guards already live — and the two handlers beneath it are
+	// unchanged. `scan-media` stays its own queue at concurrency 2: it is a call to a
+	// detection vendor, not CPU work; putting it in this lane would queue statutory
+	// scans behind a half-hour encode for no machine headroom.
+	await queue.work<{ jobId: number }>(QUEUES.MEDIA, { localConcurrency: 1 }, async (jobs) => {
+		for (const job of jobs) {
+			console.log(`[media] Processing row ${job.data?.jobId}`);
+			await runMediaJob(job.data.jobId);
+		}
+	});
 
 	// Detection runs off the request path — see the job's header for why it has to.
 	await queue.work<ScanMediaData>(QUEUES.SCAN_MEDIA, { localConcurrency: 2 }, async (jobs) => {
@@ -92,17 +90,6 @@ async function start() {
 			await scanMedia(job.data);
 		}
 	});
-
-	await queue.work<ProcessAudioData>(
-		QUEUES.PROCESS_AUDIO,
-		{ localConcurrency: 2 },
-		async (jobs) => {
-			for (const job of jobs) {
-				console.log(`[process-audio] Processing job ${job.id}`);
-				await processAudio(job.data);
-			}
-		},
-	);
 
 	await queue.work<RenderPagedData>(QUEUES.RENDER_PAGED, { localConcurrency: 2 }, async (jobs) => {
 		for (const job of jobs) {
