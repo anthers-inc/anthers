@@ -139,7 +139,8 @@ export default function AuthenticatedHomePage() {
 						    followed interests — while only the first has ever run. The other two are the
 						    Layered Feed lane and are named here as not built, which is what the FAQ says. */}
 						<p className="text-base-content/70 mb-2 text-xs">
-							Your feed shows posts and releases from the creators you follow, newest first.
+							Your feed shows your own posts and releases alongside the posts and releases of the
+							creators you follow, newest first.
 						</p>
 						<p className="text-base-content/60 text-xs">
 							Things the people you follow recommend, and work matching tags you follow, are planned

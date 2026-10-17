@@ -6,7 +6,7 @@
  *   GET    /me                      — current user profile (full)
  *   PATCH  /me                      — update current user profile
  *   GET    /me/following            — list creators the current user follows
- *   GET    /me/feed                 — posts AND releases from followed creators
+ *   GET    /me/feed                 — posts AND releases from followed creators, plus your own
  *   GET    /me/blocks               — who the current user has blocked
  *   GET    /me/adult-access         — the opt-in and adulthood verification, and whether
  *                                     the two together open the Adult rung
@@ -583,9 +583,16 @@ const accountRoutes = new Hono()
 	.get("/me/feed", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
 
-		// Get followed creator IDs. Blocked either way is excluded here rather than at each
-		// of the two queries below — the feed's whole input is this id list, so one filter
-		// at the source is also the one that can't be forgotten by a third feed query later.
+		// Get the feed's creator ids: the creators this account follows, plus the
+		// account's own id — a creator reads their own published announcements and
+		// released work in the same stream their followers do. Blocked either way is
+		// excluded here rather than at each of the two queries below — the feed's
+		// whole input is this id list, so one filter at the source is also the one
+		// that can't be forgotten by a third feed query later. (The self-follow the
+		// follows table refuses is why own content never arrived here before; the
+		// own id joins at the source instead, which also retired the empty-list
+		// early return — the list is never empty now, and a follow-less creator's
+		// feed is their own.)
 		const followedIds = await db
 			.select({ creatorId: follows.creatorId })
 			.from(follows)
@@ -602,11 +609,7 @@ const accountRoutes = new Hono()
 				),
 			);
 
-		const creatorIds = followedIds.map((f) => f.creatorId);
-
-		if (creatorIds.length === 0) {
-			return c.json({ posts: [] });
-		}
+		const creatorIds = [...followedIds.map((f) => f.creatorId), sessionUser.id];
 
 		// The feed shows BOTH what a creator said and what they released.
 		//
@@ -791,6 +794,9 @@ const accountRoutes = new Hono()
 					publicId: p.publicId,
 					slug: p.slug,
 					creatorId: p.creatorId,
+					// Why the entry is here: the account made this one, or follows whoever
+					// did (the commitment the feed page carries — every item says why).
+					source: p.creatorId === sessionUser.id ? ("own" as const) : ("following" as const),
 					title: p.title,
 					showOnTimeline: p.showOnTimeline,
 					isPinned: p.isPinned,
@@ -827,6 +833,9 @@ const accountRoutes = new Hono()
 					publicId: w.publicId,
 					slug: w.slug,
 					creatorId: w.creatorId,
+					// Same reason-saying as the posts half: own released work rides the
+					// account's own id in the feed's source list.
+					source: w.creatorId === sessionUser.id ? ("own" as const) : ("following" as const),
 					title: w.title,
 					type: w.type,
 					// Thumbnails are public by design — they are the preview a locked Work is
