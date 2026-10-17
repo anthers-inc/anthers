@@ -326,7 +326,9 @@ export function WorkColumn({
 		// player and the description and reviews that link into it are the siblings
 		// this binding exists for — see `lib/work-player.tsx`.
 		<WorkPlayerProvider>
-			<div className={`w-full ${width} mx-auto px-4 ${tight ? "pt-6 pb-16" : "py-8 pb-16"} space-y-6`}>
+			<div
+				className={`w-full ${width} mx-auto px-4 ${tight ? "pt-6 pb-16" : "py-8 pb-16"} space-y-6`}
+			>
 				{children}
 			</div>
 		</WorkPlayerProvider>
