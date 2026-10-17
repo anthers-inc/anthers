@@ -56,7 +56,7 @@
 					},
 					"credits": {
 						"type": "array",
-						"description": "Who made this work and what of it they made — the creator's own liner notes. Optional and additive: a work with no credits simply lists none, which says nothing against it (credits are asserted, never assumed). A credit naming an on-network identity by DID is withheld until that identity accepts it (see `org.anthers.creditAcceptance`), because a public claim about a third party should not be made in their name without their consent. The `types` flags are published exactly as the creator entered them — including `ai` — so a stranger can build a real filter on machine-made work.",
+						"description": "Who made this work and what of it they made — the creator's own liner notes. Optional and additive: a work with no credits simply lists none, which says nothing against it (credits are asserted, never assumed). A credit naming an on-network identity by DID is withheld until that identity accepts it (see `org.anthers.creditAcceptance`), because a public claim about a third party should not be made in their name without their consent. The `types` flags are published exactly as the creator entered them — including `generated` — so a stranger can build a real filter on machine-made work.",
 						"items": {
 							"type": "ref",
 							"ref": "#credit"
@@ -68,7 +68,7 @@
 		},
 		"access": {
 			"type": "object",
-			"description": "Whether reaching this work costs anything. ⚠️ A display hint and NEVER an authorization: it describes what a stranger would find, not what any particular viewer is entitled to, and a consumer that treats it as permission is wrong. An object rather than a bare string so that further context — such as where access is granted — can be added later without a breaking change.",
+			"description": "Whether reaching this work costs anything. ⚠️ A display hint and NEVER an authorization: it describes what a stranger would find, not what any particular user is entitled to, and a consumer that treats it as permission is wrong. An object rather than a bare string so that further context — such as where access is granted — can be added later without a breaking change.",
 			"required": ["state"],
 			"properties": {
 				"state": {
@@ -117,21 +117,21 @@
 			"properties": {
 				"role": {
 					"type": "string",
-					"description": "The contribution this credit names, as a freeform title in the industry's own words — 'Written by', 'Cut by', 'Sound recording'. Freeform rather than a fixed list, because the useful roles differ by medium and a closed set would force every work into categories that fit none of them. Optional: a credit that is only a type assertion (a bare `ai` row, or an anonymous license) may leave the role unnamed.",
+					"description": "The contribution this credit names, as a freeform title in the industry's own words — 'Written by', 'Cut by', 'Sound recording'. Freeform rather than a fixed list, because the useful roles differ by medium and a closed set would force every work into categories that fit none of them. Optional: a credit that is only a type assertion (a bare `generated` row) may leave the role unnamed.",
 					"maxGraphemes": 120,
 					"maxLength": 1200
 				},
 				"contributor": {
 					"type": "union",
 					"refs": ["#didContributor", "#namedContributor"],
-					"description": "Who is credited. A DID names an on-network identity and is withheld until that identity accepts (see `org.anthers.creditAcceptance`); a name names an off-network contributor and is published as entered. A union rather than a bare string or a single object, so a third contributor kind can join later as a permitted addition. Optional: a credit with no `created` among its types may name nobody — a license or a machine makes nothing a person owns. Required whenever `created` is among the types, alone or in a blend — anything a human made must name who."
+					"description": "Who is credited. A DID names an on-network identity and is withheld until that identity accepts (see `org.anthers.creditAcceptance`); a name names an off-network contributor and is published as entered. A union rather than a bare string or a single object, so a third contributor kind can join later as a permitted addition. Optional: a credit with no `created` among its types may name nobody — a machine makes nothing a person owns, and material brought in unnamed is not credited rather than credited anonymously. Required whenever `created` is among the types, alone or in a blend — anything a human made must name who."
 				},
 				"types": {
 					"type": "array",
-					"description": "The kind(s) of contribution, published as entered. `created` — a person made this part. `licensed` — this part is pre-existing material used under a right (the source may be named or not, at the creator's choice; many licenses do not require attribution). `ai` — this part was machine-made: it records THAT it was, never which model, because a model owns nothing and can be granted nothing. An open set on purpose: a `created+ai` blend and the other non-empty subsets each mean what they say, and Anthers blesses no canonical 'counts as AI' reading of a blend — whether one clears a filter is the reader's own call, and two filters reading a blend opposite ways is a feature, not a defect.",
+					"description": "The kind(s) of contribution, published as entered. `created` — a person, or another entity capable of authorship in the copyright sense, made this part, and the part names them. Work-for-hire, licensed-in and public-domain source material all assert this one way, because the deal behind a credit is not the reader's question — who is responsible for the part is. `generated` — a machine not capable of authorship made this part: it records THAT it was, never which model, because a model owns nothing and can be granted nothing. ⚠️ First-edition values, which records published before October 2026 still carry: `ai` is what `generated` was called, with exactly its meaning, and `licensed` marked pre-existing material used under a right, its source named or not at the creator's choice — a named one reads as `created`, and an unnamed one has no successor, since material brought in unnamed is not credited rather than credited anonymously. An open set on purpose: a `created+generated` blend and the other non-empty subsets each mean what they say, and Anthers blesses no canonical 'counts as machine-made' reading of a blend — whether one clears a filter is the user's own call, and two filters reading a blend opposite ways is a feature, not a defect.",
 					"items": {
 						"type": "string",
-						"knownValues": ["created", "licensed", "ai"],
+						"knownValues": ["created", "licensed", "ai", "generated"],
 						"maxLength": 16
 					},
 					"minLength": 1

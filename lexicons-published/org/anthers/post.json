@@ -5,7 +5,7 @@
 		"main": {
 			"type": "record",
 			"key": "tid",
-			"description": "A post by a creator — an announcement, a devlog, a note to an audience. Posts are written by creators; a reader's contributions are comments, reviews and votes rather than posts of their own. A post is long-form: it may carry headings, lists, code, quotes and images, which is why its content is markdown rather than the plain text and facets a microblog post uses.",
+			"description": "A post by a creator — an announcement, a devlog, a note to an audience. Posts are written by creators; a user's contributions are comments, reviews and votes rather than posts of their own. A post is long-form: it may carry headings, lists, code, quotes and images, which is why its content is markdown rather than the plain text and facets a microblog post uses.",
 			"record": {
 				"type": "object",
 				"required": ["url", "publishedAt"],
@@ -36,7 +36,7 @@
 			"properties": {
 				"format": {
 					"type": "string",
-					"description": "How to read `value`. `markdown` is what Anthers writes. Carried explicitly because a consumer that renders the wrong format shows syntax to a reader and nothing detects it — and because the alternative, changing what a bare string means later, is a break the evolution rules do not catch. An open set, so a plain-text-and-facets rendering or anything else may join without a new schema.",
+					"description": "How to read `value`. `markdown` is what Anthers writes. Carried explicitly because a consumer that renders the wrong format shows syntax to a user and nothing detects it — and because the alternative, changing what a bare string means later, is a break the evolution rules do not catch. An open set, so a plain-text-and-facets rendering or anything else may join without a new schema.",
 					"knownValues": ["markdown"],
 					"maxLength": 64
 				},
