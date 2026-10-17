@@ -17,129 +17,23 @@
  * actions are buttons — Replace File… opens a dialog that takes the file, Remove File
  * removes it, both riding the unpublished gate.
  *
+ * ⭐ **The chips are `@anthers/web-shared/content/media-status`'s** (2026-10-17): the
+ * Works table's Media Status column shows the same per-variant chips, extracted so the
+ * two surfaces cannot drift — this card remains the one place that carries their
+ * actions, because acting on a file belongs to the Work's own page.
+ *
  * ⚠️ **This card is the owner's own surface** — it renders only in the editor container
  * (video pass, 2026-10-13); a user's page keeps the single TranscodingStatus line it
  * has always shown while a ladder is missing.
  */
 
+import { VideoMediaStatusChips } from "@anthers/web-shared/content/media-status";
 import { FormatsHint, fileRules, isFileWorkType } from "@anthers/web-shared/content/work-media";
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import FileUpload from "@anthers/web-shared/ui/FileUpload";
 import type { WorkUpload } from "@anthers/web-shared/work-uploads";
-import {
-	ArrowPathIcon,
-	ArrowUpTrayIcon,
-	CheckIcon,
-	PencilSquareIcon,
-	XMarkIcon,
-} from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import type { WorkDetail } from "./WorkLayout";
-
-/**
- * One chip in the variant row — the three states, as icons beside the name.
- *
- * The **Original** chip is the card's one interactive member (Parker's second pass,
- * 2026-10-13): blue, a touch longer than the others, with a pencil opening a dropdown
- * that carries the destructive actions — Replace File and Remove File. The actions live
- * where the file's identity is named, rather than as a button row of their own.
- */
-function VariantChip({
-	name,
-	ready,
-	running,
-	actions,
-	removeBusy,
-}: {
-	name: string;
-	ready: string | "";
-	running?: boolean;
-	/** The dropdown member: never produced → it still carries the pencil, because there is
-	 *  exactly nothing to replace until it exists; a chip with no actions is passive. */
-	actions?: { onReplace: () => void; onRemove: () => void };
-	/** The removal in flight, while the dropdown's Remove button waits it out. */
-	removeBusy?: boolean;
-}) {
-	const chip = ready ? (
-		<CheckIcon className="size-3.5" />
-	) : running ? (
-		<ArrowPathIcon className="size-3.5" />
-	) : (
-		<XMarkIcon className="size-3.5" />
-	);
-	if (!actions) {
-		return (
-			<span
-				className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs ${
-					ready
-						? "border-success/40 bg-success/10 text-success"
-						: running
-							? "border-warning/40 bg-warning/10 text-warning"
-							: "border-base-300 text-base-content/40"
-				}`}
-			>
-				{chip}
-				{name}
-			</span>
-		);
-	}
-	// A native `<details>` disclosure (the FAQ's pattern, and Parker's rule that a
-	// keyboard user be able to open what a pointer user can): no daisyUI tabindex dance,
-	// no :focus-within magic — the chip is the summary, the menu is the content.
-	return (
-		<details className="dropdown dropdown-end">
-			<summary className="list-none inline-flex cursor-pointer items-center gap-1 rounded-full border border-info/40 bg-info/10 px-3.5 py-0.5 text-xs text-info hover:border-info marker:hidden [&::-webkit-details-marker]:hidden">
-				{chip}
-				{name}
-				<PencilSquareIcon className="size-3 text-info/70" />
-			</summary>
-			<ul className="dropdown-content menu z-20 rounded-box w-44 border border-base-300 bg-base-100 p-1 shadow-lg">
-				<li>
-					<button type="button" onClick={actions.onReplace}>
-						<ArrowUpTrayIcon className="size-4" />
-						Replace File…
-					</button>
-				</li>
-				<li>
-					<button
-						type="button"
-						className="text-error"
-						onClick={actions.onRemove}
-						disabled={removeBusy}
-					>
-						<XMarkIcon className="size-4" />
-						{removeBusy ? "Removing…" : "Remove File"}
-					</button>
-				</li>
-			</ul>
-		</details>
-	);
-}
-
-/** The rendition chips a ladder's own master manifest names — read live once it exists. */
-function useLadderDepths(manifestUrl: string | null | undefined): number[] {
-	const [heights, setHeights] = useState<number[]>([]);
-	useEffect(() => {
-		if (!manifestUrl) {
-			setHeights([]);
-			return;
-		}
-		let live = true;
-		fetch(manifestUrl)
-			.then((res) => (res.ok ? res.text() : ""))
-			.then((text) => {
-				if (!live) return;
-				const found = new Set<number>();
-				for (const m of text.matchAll(/RESOLUTION=\d+x(\d+)/g)) found.add(Number(m[1]));
-				setHeights([...found].sort((a, b) => a - b));
-			})
-			.catch(() => {});
-		return () => {
-			live = false;
-		};
-	}, [manifestUrl]);
-	return heights;
-}
 
 export default function MediaStatusCard({
 	work,
@@ -170,9 +64,7 @@ export default function MediaStatusCard({
 	const canReplace = isFileWorkType(type);
 	const job = work.transcoding;
 	const running = job != null && (job.status === "pending" || job.status === "processing");
-	const failed = job?.status === "failed";
 	const uploading = sourceUpload?.status === "uploading" || sourceUpload?.status === "attaching";
-	const depths = useLadderDepths(job?.hlsManifestUrl ?? null);
 	const [replaceOpen, setReplaceOpen] = useState(false);
 	const onOpenReplace = () => setReplaceOpen(true);
 
@@ -183,36 +75,14 @@ export default function MediaStatusCard({
 			className="flex flex-col gap-3"
 		>
 			{type === "video" && (
-				<div className="flex flex-wrap items-center gap-1.5">
-					{/* The original: the one variant that exists the moment the file does, and
-					    the one chip that acts — replace or remove, from its pencil. */}
-					<VariantChip
-						name="Original"
-						ready={work.sourceKey ? "ready" : ""}
-						running={uploading}
-						removeBusy={removeBusy}
-						actions={
-							unpublished ? { onReplace: () => onOpenReplace(), onRemove: onRemove } : undefined
-						}
-					/>
-					<VariantChip name="Audio" ready={job?.audioManifestUrl ?? ""} running={running} />
-					{depths.length > 0 ? (
-						// Largest first (Parker, 2026-10-13): the ladder reads as what it offers,
-						// best at the left.
-						depths
-							.slice()
-							.sort((a, b) => b - a)
-							.map((h) => <VariantChip key={h} name={`${h}p`} ready="ready" />)
-					) : (
-						<VariantChip name="Ladder" ready={job?.hlsManifestUrl ?? ""} running={running} />
-					)}
-					{/* The failures stand at the row's end: the in-flight and ready states are
-					    the chips' own answer (Parker's third pass, 2026-10-13). */}
-					{sourceUpload?.status === "failed" && (
-						<span className="badge badge-error badge-sm">Upload failed</span>
-					)}
-					{failed && <span className="badge badge-error badge-sm">Processing failed</span>}
-				</div>
+				<VideoMediaStatusChips
+					work={work}
+					sourceUpload={sourceUpload}
+					// The original is the one chip that acts — replace or remove, from its
+					// pencil — and only this page owns those flows.
+					originalActions={unpublished ? { onReplace: () => onOpenReplace(), onRemove } : undefined}
+					removeBusy={removeBusy}
+				/>
 			)}
 
 			{/* The file as it goes up: the progress line and the one warning a closed tab

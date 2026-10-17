@@ -107,7 +107,8 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 	await expect(page.getByText(/scheduled for/i)).toBeVisible({ timeout: 15_000 });
 	await page.goto("/studio/works");
 	const row = page.locator("tbody tr").filter({ hasText: TITLE });
-	await expect(row).toContainText("Releases");
+	// The Release Date cell names the schedule itself, the words the Work's page uses.
+	await expect(row).toContainText(/scheduled for/i);
 	await expect(row).toContainText("Private");
 
 	// The instant stored is the typed local time, not the same digits read as UTC.

@@ -10,8 +10,9 @@
  *
  * The listing is a **table** (Parker, 2026-10-11), in the shape of YouTube Studio's Content
  * tab and modeled on it: rows tall enough to carry a small thumbnail, the title and
- * description beside it, then visibility, status, the upload date and the counts as
- * columns, sortable by header and filterable. The filters live in the left sidebar below
+ * description beside it, then the media status, the release date (editable — the same
+ * acts the Work's own page offers), the access state and the counts as columns, sortable
+ * by header and filterable. The filters live in the left sidebar below
  * the Studio nav — the Feed page's pattern — rather than in tabs above the table; they ride
  * the URL as query parameters, and the table (client-side over the loaded list) re-derives
  * from them. The filtering and sorting themselves are `works-list.ts`'s, extracted so a
@@ -27,6 +28,7 @@
  */
 import { PlusIcon, RectangleStackIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { WorkReleaseFields } from "../components/content/release-date";
 import WorkRow from "../components/content/WorkRow";
 import { processingState } from "../components/content/works";
 import WorksFilterSections from "../components/content/works-filters";
@@ -63,9 +65,9 @@ export default function WorksPage() {
 	>(null);
 	/** Completed purchases of this Work; null until the preflight answers. */
 	const [sold, setSold] = useState<number | null>(null);
-	/** Work id whose visibility flip is in flight, so only its own button disables. */
+	/** Work id whose release act is in flight, so only its own cell disables. */
 	const [releasing, setReleasing] = useState<number | null>(null);
-	/** A refused release, kept beside the table — the server's reason, not a generic one. */
+	/** A refused release act, kept beside the table — the server's reason, not a generic one. */
 	const [releaseError, setReleaseError] = useState<string | null>(null);
 
 	// The filters and the sort ride the URL, the Feed page's pattern — shareable, and
@@ -163,30 +165,35 @@ export default function WorksPage() {
 		);
 
 	/**
-	 * Flip a Work between private and released, from the row.
+	 * One release act from a row — publish now, schedule, clear a schedule, unrelease —
+	 * the same PATCH the Release field on the Work's own page sends.
 	 *
 	 * The server owns the preconditions — media finished encoding, at least one delivery
-	 * switch on — and refuses with a specific message when they aren't met. Show that
-	 * message: "can't release yet, the media is still processing" is something the creator
-	 * can wait out, and a generic failure is not.
+	 * switch on, a complete rating — and refuses with a specific message when they aren't
+	 * met. Show that message: "can't release yet, the media is still processing" is
+	 * something the creator can wait out, and a generic failure is not.
+	 *
+	 * @returns whether the act saved; a refused act keeps the row's cell open.
 	 */
-	const setVisibility = async (work: Work, visibility: "private" | "released") => {
+	const saveRelease = async (work: Work, fields: WorkReleaseFields): Promise<boolean> => {
 		setReleasing(work.id);
 		setReleaseError(null);
 		try {
 			const res = await client.api.content.works[":id"].$patch({
 				param: { id: String(work.id) },
-				json: { visibility },
+				json: fields,
 			});
 			if (!res.ok) {
 				const body = (await res.json().catch(() => null)) as { error?: string } | null;
-				setReleaseError(body?.error || "Couldn't change this Work's visibility.");
-				return;
+				setReleaseError(body?.error || "Couldn't change this Work's release.");
+				return false;
 			}
 			const { work: updated } = (await res.json()) as unknown as { work: Work };
 			upsert(updated);
+			return true;
 		} catch {
-			setReleaseError("Couldn't change this Work's visibility.");
+			setReleaseError("Couldn't change this Work's release.");
+			return false;
 		} finally {
 			setReleasing(null);
 		}
@@ -354,11 +361,11 @@ export default function WorksPage() {
 								<th scope="col" className="min-w-[14rem]">
 									Description
 								</th>
-								<th scope="col">Visibility</th>
-								<th scope="col">Status</th>
+								<th scope="col">Media Status</th>
 								<th scope="col" aria-sort={ariaSort(sort, "date")}>
-									<SortButton label="Date" k="date" sort={sort} onSort={onSort} />
+									<SortButton label="Release Date" k="date" sort={sort} onSort={onSort} />
 								</th>
+								<th scope="col">Access</th>
 								<th scope="col" aria-sort={ariaSort(sort, "views")}>
 									<SortButton label="Views" k="views" sort={sort} onSort={onSort} />
 								</th>
@@ -373,7 +380,7 @@ export default function WorksPage() {
 									key={item.id}
 									item={item}
 									onDelete={(it) => openDelete(it)}
-									onSetVisibility={setVisibility}
+									onRelease={saveRelease}
 									busy={releasing === item.id}
 								/>
 							))}
