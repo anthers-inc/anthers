@@ -259,38 +259,6 @@ export const CHARGEABLE_AMOUNT_MESSAGE = `An amount has to be $0 or at least $${
  * amounts between and beyond those rungs, which the coefficient had no way to express.
  */
 export const TIME_POOL_RATE = 0.5;
-/**
- * The Time Pool Anthers funds on a **free account's** behalf each month, so that a free
- * user's watching still pays the creators they watch. The user pays $0.
- *
- * **$0.25 is the number, and the review it was waiting for is closed** (Parker, 2026-08-31).
- * It was flagged PROVISIONAL from 2026-08-12 pending "real modeling and real conversion
- * data" — the modeling arrived and moved nothing, and the data cannot arrive before there
- * are accounts. So it stands on its own reasoning rather than on a pending analysis: move it
- * if it feels wrong once people are using the platform, not because a spreadsheet asked.
- *
- * ⚠️ **The stakes fell with the bandwidth bill.** While delivery was metered, free access
- * cost bandwidth *plus* this pot; it is now this pot alone, on a per-account cost far below
- * what the dial used to govern. Sensitivity — what each setting costs, as the floor paying
- * share below which growth never closes the gap — is generated into the growth ladder's
- * `free-pot` block; read it there before moving this.
- *
- * **Why it is deliberately low rather than deliberately right.** The Public Access revamp
- * proposed **$0.50**, and the docs were written against that figure before the code moved.
- * Parker's call was to split the difference and start at $0.25, on an asymmetry rather than
- * a forecast: **raising this later is easy and climbing down from it is not.** It is a
- * standing obligation to every free account, so an over-generous opening number becomes a
- * public commitment the charitable budget has to keep funding while the paying share
- * catches up — and the growth ladder is violently non-linear near its floor. Under-shooting
- * costs creators some free-user earnings and can be corrected upward at any time.
- *
- * It is also the single dial that sets **free-access cost per account**, since delivery
- * became free: cost is now `free accounts × this number`, headcount times a policy figure,
- * with no behavioral guess underneath it. That is what decoupled the free tier's
- * *generosity* from the platform's *solvency* — the watch-hour limit can move without
- * moving this, and vice versa.
- */
-export const FREE_TIME_POOL = 0.25;
 
 /**
  * How long raw, per-person attention rows are kept before being rolled up into
@@ -486,11 +454,20 @@ export function amountLabel(amount: string | number | null | undefined): string 
 
 // ── Derived amounts ──────────────────────────────────────────────────────────
 /**
- * Time Pool $ funded by giving Anthers `dollars` a month (giving nothing = the
- * subsidized `FREE_TIME_POOL`, which the user does not pay for).
+ * Time Pool $ funded by giving Anthers `dollars` a month.
+ *
+ * 🚨 **Giving nothing answers 0 here — the free account's pool is not this file's
+ * figure.** The Time Pool Fund is a stated share of the charitable remainder after
+ * the admin budget, published monthly by its ledger and divided across the cycle's
+ * active free accounts: the arithmetic is `packages/shared/src/time-pool-fund.ts`,
+ * the runtime service is `services/time-pool-fund.ts` in apps/api, and the browser
+ * fetches the published value from `GET /api/subscriptions/time-pool-fund`,
+ * rendering "varies — published monthly" until it lands — exactly as the Badge
+ * ladder's seeded values are fetched rather than quoted from code. A caller reaching
+ * for a free-pool number here is a caller that should be reading the ledger.
  */
 export function timePoolFor(anthersDollars: number): number {
-	return anthersDollars <= 0 ? FREE_TIME_POOL : supportAmount(anthersDollars) * TIME_POOL_RATE;
+	return anthersDollars <= 0 ? 0 : supportAmount(anthersDollars) * TIME_POOL_RATE;
 }
 
 /**
@@ -601,42 +578,6 @@ export const STORAGE_LADDER_GIB: Record<BadgeKey, number> = {
 	petal: 150,
 	blossom: 200,
 };
-
-/**
- * How much more a creator earns from an hour of your attention once you give Anthers
- * `dollars` a month, against giving nothing.
- *
- * 🚨 **This is the free-limit prompt's headline number and it must never be typed into
- * copy.** the public wiki's *Badges* reads *"every creator you spend time with is also paid six times
- * more for your attention"* — and that six is not a fact about the world, it is
- * `1.50 / 0.25`, a ratio between two dials. **`FREE_TIME_POOL` is explicitly provisional
- * and expected to move** (see its own note), so a typed "six" becomes a lie on the day
- * someone tunes it, silently, in the one piece of copy the platform's entire conversion
- * argument rests on. Same reasoning as the generated econ figures: a published number
- * with a formula behind it is generated, never transcribed.
- *
- * ⚠️ **A FUNCTION rather than a constant, and the reason matters for copy.** The multiple
- * depends on what *this* user gives, so a page that says "six times" is asserting something
- * about a specific amount and has to say which. At the $3 Public Access price it is 6.
- *
- * Not in `figures.generated.ts` because that file is money *tables* built by a script;
- * this is a one-line derivation and belongs beside the dials it divides.
- */
-export function timePoolMultipleFor(anthersDollars: number = PUBLIC_ACCESS_PRICE): number {
-	return timePoolFor(anthersDollars) / FREE_TIME_POOL;
-}
-
-/**
- * Render a multiple for copy — `6×`, or `3.8×` when the dials stop dividing evenly.
- *
- * The current dials give a whole 6, which makes it tempting to assume one. They are not
- * required to: moving `FREE_TIME_POOL` to $0.40 gives 3.75. Rounding that to "4×" would
- * overstate what supporting buys, and printing `3.75×` reads like a spreadsheet, so it goes
- * to one decimal and keeps the trailing digit only when there is one.
- */
-export function formatMultiple(n: number): string {
-	return `${Number.isInteger(n) ? n : n.toFixed(1)}×`;
-}
 
 // ── Storage charge rate ───────────────────────────────────────────────────────
 /**

@@ -13,6 +13,7 @@
  * cannot tell which group is which, that is the page working.
  */
 
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { useEffect, useState } from "react";
@@ -23,6 +24,7 @@ interface Supporter {
 }
 
 export default function SupportersPage() {
+	usePageTitle("Supporters");
 	const [groups, setGroups] = useState<Supporter[][] | null>(null);
 	const [failed, setFailed] = useState(false);
 

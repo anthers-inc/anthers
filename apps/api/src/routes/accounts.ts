@@ -40,6 +40,8 @@
 
 import { db } from "@anthers/db/client";
 import {
+	badgePerks,
+	badges,
 	follows,
 	posts,
 	rightsRequests,
@@ -125,6 +127,24 @@ import { storageReadingFor } from "../services/storage-reading.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * One rung of a creator's Badge ladder, as the creator listing ships it — the subset the
+ * signup finder's chips and their hover need. Never the art path or its storage key: art
+ * travels as ids into the browser's own library plus the access-checked-route boolean,
+ * the same boundary `publicBadge` (routes/subscriptions.ts) holds.
+ */
+export type LadderBadgeOption = {
+	id: number;
+	label: string;
+	threshold: string;
+	hasArt: boolean;
+	artShape: string | null;
+	artColor: string | null;
+	/** The rungs' perks, as the labels a creator wrote them as — what a chip's hover states. */
+	perks: string[];
+	description: string | null;
+};
+
 /** Public user profile shape (for lists and public profiles) */
 function serializePublicUser(
 	user: typeof users.$inferSelect,
@@ -134,10 +154,13 @@ function serializePublicUser(
 		isFollowing: boolean;
 		/** Work types this creator has actually released — absent where not queried. */
 		mediums?: string[];
+		/** This creator's Badge ladder, ascending — absent where not queried. */
+		badges?: LadderBadgeOption[];
 	},
 ) {
 	return {
 		...(extra.mediums ? { mediums: extra.mediums } : {}),
+		...(extra.badges ? { badges: extra.badges } : {}),
 		id: user.id,
 		handle: user.atprotoHandle,
 		displayName: user.displayName,
@@ -943,6 +966,64 @@ const accountRoutes = new Hono()
 				),
 			);
 
+		// ⭐ The ladders ride the listing (2026-10-17), because the signup finder's chips are
+		// the rungs a creator actually set: a card that said "Back" billed a fixed entry
+		// price the creator never chose, while their Badges — the amounts they did choose —
+		// sat a click away. Two grouped queries here rather than per-creator reads inside a
+		// loop; perks group beside their rungs in one pass. A creator who has configured
+		// no ladder ships an empty one, and the finder draws no chips for them.
+		const creatorIds = creatorList.map((row) => row.user.id);
+		const ladderRows =
+			creatorIds.length === 0
+				? []
+				: await db
+						.select({
+							creatorId: badges.creatorId,
+							id: badges.id,
+							threshold: badges.threshold,
+							label: badges.label,
+							description: badges.description,
+							hasArt: sql<boolean>`${badges.artKey} IS NOT NULL`.as("has_art"),
+							artShape: badges.artShape,
+							artColor: badges.artColor,
+						})
+						.from(badges)
+						.where(inArray(badges.creatorId, creatorIds))
+						.orderBy(badges.sortOrder, badges.threshold);
+		const perksByBadge = new Map<number, string[]>();
+		const ladderIds = ladderRows.map((r) => r.id);
+		if (ladderIds.length > 0) {
+			const perkRows = await db
+				.select({
+					badgeId: badgePerks.badgeId,
+					label: badgePerks.label,
+					sortOrder: badgePerks.sortOrder,
+				})
+				.from(badgePerks)
+				.where(inArray(badgePerks.badgeId, ladderIds))
+				.orderBy(badgePerks.sortOrder);
+			for (const perk of perkRows) {
+				const labels = perksByBadge.get(perk.badgeId) ?? [];
+				labels.push(perk.label);
+				perksByBadge.set(perk.badgeId, labels);
+			}
+		}
+		const laddersByCreator = new Map<number, LadderBadgeOption[]>();
+		for (const row of ladderRows) {
+			const rungs = laddersByCreator.get(row.creatorId) ?? [];
+			rungs.push({
+				id: row.id,
+				label: row.label,
+				threshold: row.threshold,
+				hasArt: Boolean(row.hasArt),
+				artShape: row.artShape,
+				artColor: row.artColor,
+				perks: perksByBadge.get(row.id) ?? [],
+				description: row.description,
+			});
+			laddersByCreator.set(row.creatorId, rungs);
+		}
+
 		return c.json({
 			creators: creatorList.map((row) =>
 				serializePublicUser(row.user, {
@@ -950,6 +1031,7 @@ const accountRoutes = new Hono()
 					projectCount: Number(row.projectCount),
 					isFollowing: "isFollowing" in row && Boolean(row.isFollowing),
 					mediums: row.mediums ?? [],
+					badges: laddersByCreator.get(row.user.id) ?? [],
 				}),
 			),
 		});

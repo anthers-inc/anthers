@@ -104,13 +104,13 @@ const isAnthersBadgeName = (name: string): boolean =>
  *
  * ⭐ **The picks are Badge-shaped.** `badge` names a rung of Anthers' own ladder (or null
  * for Free, which is a real Badge at $0 rather than the absence of one); `badges` holds
- * **creator handles**, like `follow` — the finishing page resolves each handle to a pick
- * of that creator's Badge. **Convention, live as of the issuer pass:** a handle in
- * `badges` resolves
- * to that creator's LOWEST-threshold badge** — signup carries no per-creator rung choice,
- * and the lowest rung is the one every ladder has that a supporter cannot be over-charged
- * for. `follow` and `badges` stay parallel arrays of handles on purpose: the page that
- * collects them treats a creator the same either way.
+ * **one pick per backed creator** — a handle with the rung id the page rendered it as.
+ * ⚠️ **The id is a pointer, and no amount travels with it**: the charge is built from the
+ * ladder as the finishing page fetches it, so a stored pick never becomes a price. The
+ * bare-handle entry is the older shape (every pick resolved to the ladder's lowest rung
+ * before per-rung picking existed) and still travels; `normalizePicks` coerces it at
+ * storage, and a `badgeId` naming a rung the ladder no longer reports resolves by the
+ * same convention — nothing here needs the ladder to accept a pick.
  */
 const signupPicksSchema = z.object({
 	badge: z
@@ -120,7 +120,17 @@ const signupPicksSchema = z.object({
 		.refine(isAnthersBadgeName, { message: "Not a Badge in Anthers' set" })
 		.nullable(),
 	follow: z.array(z.string().min(1).max(150)).max(MAX_PICKED_CREATORS),
-	badges: z.array(z.string().min(1).max(150)).max(MAX_PICKED_CREATORS),
+	badges: z
+		.array(
+			z.union([
+				z.string().min(1).max(150),
+				z.object({
+					handle: z.string().min(1).max(150),
+					badgeId: z.number().int().positive().nullable(),
+				}),
+			]),
+		)
+		.max(MAX_PICKED_CREATORS),
 });
 
 /**

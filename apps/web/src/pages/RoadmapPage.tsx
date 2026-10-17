@@ -28,6 +28,7 @@ import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { Link } from "@anthers/web-shared/router";
 import { BookOpenIcon } from "@heroicons/react/24/outline";
 import { RELEASE_NOTES } from "../content/release-notes";
@@ -61,6 +62,7 @@ const ACCENT: Record<Bucket, { pill: string; rule: string }> = {
 const tintedBand = (band: number) => band % 2 === 0;
 
 export default function RoadmapPage() {
+	usePageTitle("Roadmap");
 	return (
 		<div>
 			<Hero />

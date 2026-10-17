@@ -18,6 +18,7 @@ import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Card, Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { Link } from "@anthers/web-shared/router";
 import {
 	ArrowPathIcon,
@@ -54,6 +55,7 @@ const ITCH_RECEIVES = (
 ).toFixed(2);
 
 export default function CompareItchPage() {
+	usePageTitle("Compared to itch.io");
 	const { isAuthenticated } = useAuth();
 
 	return (

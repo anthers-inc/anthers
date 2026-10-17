@@ -143,9 +143,17 @@ export function createPlayPageRoutes(): Hono {
 		const token = mintPlayToken(work.id, PLAY_TOKEN_TTL_SECONDS);
 
 		// The per-Work host is https in every environment that names one; an own-host
-		// dev delivery takes the request's scheme, as the play route does.
+		// dev delivery takes the request's scheme, as the play route does. Behind the
+		// dev proxy the loopback request is plain http while the origin the browser
+		// reached is https — the proxy's X-Forwarded-Proto is the scheme the browser
+		// actually sees, and it is what the frame's messages carry as their origin:
+		// a minted src in the other scheme upgrades in Chrome (mixed content) to a
+		// frame whose `event.origin` then fails every sender check, silently killing
+		// the save relay (found live, 2026-10-17).
 		const suffixSet = Boolean(process.env.BUILD_ORIGIN_SUFFIX?.trim());
-		const scheme = suffixSet ? "https" : new URL(c.req.url).protocol.replace(":", "");
+		const scheme = suffixSet
+			? "https"
+			: (c.req.header("x-forwarded-proto") ?? new URL(c.req.url).protocol.replace(":", ""));
 		const src = `${scheme}://${host}/build/${token}/${build.entryPath}`;
 
 		const escapedTitle =
@@ -165,7 +173,15 @@ export function createPlayPageRoutes(): Hono {
 			var API_SAVE = "/api/content/works/${work.id}/save";
 			var frame = document.querySelector("iframe");
 
-			function post(msg) { if (frame && frame.contentWindow) frame.contentWindow.postMessage(msg, "*"); }
+			// Replies carry save bytes, so they go to the one origin the minted frame
+			// answers on — never "*" and never the default: without a targetOrigin a
+			// cross-origin frame is checked against the caller's own origin and
+			// silently never delivers.
+			function post(msg) {
+				if (frame && frame.contentWindow) {
+					try { frame.contentWindow.postMessage(msg, new URL(frame.src).origin); } catch (e) { /* no minted target */ }
+				}
+			}
 
 			window.addEventListener("message", function (event) {
 				if (!frame || event.source !== frame.contentWindow) return;

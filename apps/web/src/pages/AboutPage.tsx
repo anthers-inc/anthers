@@ -116,6 +116,7 @@ import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Card, Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { Link } from "@anthers/web-shared/router";
 import { KeyIcon, LockOpenIcon } from "@heroicons/react/24/outline";
 
@@ -172,6 +173,7 @@ function FactCard({ title, note, items }: { title: string; note: string; items: 
 }
 
 export default function AboutPage() {
+	usePageTitle("About");
 	return (
 		<div>
 			{/* ───────────── Hero ───────────── */}

@@ -12,7 +12,6 @@ import Decimal from "decimal.js";
 import {
 	BADGE_ORDER,
 	cardFeeDisplay,
-	FREE_TIME_POOL,
 	ILLUSTRATIVE_SALES_TAX_RATE,
 	PUBLIC_ACCESS_PRICE,
 	SELF_HOST_FEE,
@@ -91,12 +90,15 @@ describe("anthersSupportBreakdown", () => {
 		expect(b.foundation.toFixed(2)).toBe("2.53");
 	});
 
-	test("the free tier ($0) pays $0 and funds no charitable remainder, but has a subsidized Time Pool", () => {
+	test("the free tier ($0) pays $0 and funds no charitable remainder, and carries no pool here", () => {
 		const b = anthersSupportBreakdown(0);
 		expect(b.given.toNumber()).toBe(0);
 		expect(b.foundation.toNumber()).toBe(0);
 		expect(b.subsidized).toBe(true);
-		expect(b.timePool.toNumber()).toBeGreaterThan(0);
+		// The constant is retired: a free account's pool is the Fund's published slice,
+		// which no breakdown of what the user PAYS can carry — the caller hands it in
+		// where a surface needs the figure, and the ledger is its only home.
+		expect(b.timePool.toNumber()).toBe(0);
 	});
 
 	/**
@@ -207,12 +209,14 @@ describe("supportBreakdownDisplay — the spend calculator's copy of the whole c
 				expect(toCent(s.directedNet)).toBe(money.creatorNet.toNumber());
 				expect(s.toCreators).toBeCloseTo(money.toCreators.toNumber(), 8);
 				// And a PAID charge must reconstruct from its own pieces. The subsidized
-				// zero cannot: there `timePool` is the platform's own free-account pool,
-				// not part of what was given, and `foundation` is 0 by construction.
+				// zero cannot: there `timePool` is what the caller handed in as the free
+				// account's pool (0 in a display that has not been handed the Fund's
+				// published slice), not part of what was given, and `foundation` is 0 by
+				// construction.
 				if (s.anthers > 0) {
 					expect(s.timePool + s.remainder + s.cardOnAnthers).toBeCloseTo(s.anthers, 8);
 				} else {
-					expect(s.timePool).toBe(FREE_TIME_POOL);
+					expect(s.timePool).toBe(0);
 					expect(s.remainder).toBe(0);
 				}
 				// Sales tax, at the illustration rate, matches the way the wiki's

@@ -126,7 +126,7 @@ import { InlineField } from "./Editing";
 import { LyricsBody, LyricsShelf } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
 import ShareLinkButton from "./ShareLinkButton";
-import { WorkViewAsRow } from "./ViewAs";
+import { WorkViewAsSection } from "./ViewAs";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
 import {
 	DescriptionBody,
@@ -1259,31 +1259,10 @@ export default function OwnerWorkEditor({
 	const detailsSection = (
 		// Named parts (Parker's third pass, 2026-10-13): the Details tab is the Work's
 		// composition — what it says, when it came out, who may open it — each under its
-		// own heading rather than a flat run of controls.
+		// own heading rather than a flat run of controls. The Kind row moved to the
+		// Manage tab (Parker, 2026-10-17): the kind is the machinery's first fact, and
+		// the machinery is the Manage tab's, not the composition's.
 		<div className="flex flex-col gap-6">
-			{kindChangeable && (
-				<div className="flex items-center gap-2">
-					<span className="text-sm font-medium">Kind</span>
-					{/* The select reads the ROW (current), not the page-load prop: its save
-					    adopts the response, and a refused change stands where it was — the
-					    value is the page's truth here, as every other field's read is. */}
-					<select
-						aria-label="Work kind"
-						className="select select-sm select-bordered"
-						value={current.type}
-						onChange={(e) => void saveKind(e.target.value as UploadableWorkType)}
-					>
-						{LIBRARY_TYPE_OPTIONS.map((opt) => (
-							<option key={opt.value} value={opt.value}>
-								{opt.label}
-							</option>
-						))}
-					</select>
-					<span className="text-xs text-base-content/60">
-						Changing the kind unrates the draft — answer the matrix again before release.
-					</span>
-				</div>
-			)}
 			{/* The dates lead the tab (Parker, 2026-10-16): when it came out is the first
 			    thing asked of it. */}
 			<section className="flex flex-col gap-2">
@@ -1334,13 +1313,39 @@ export default function OwnerWorkEditor({
 			label: "Manage",
 			content: (
 				<div className="flex flex-col gap-6">
-					{/* The View As row, first on the tab (Parker, 2026-10-16): the creator's
-					    four ways to look at the page — and since Manage opens by default, at
-					    the top of the page itself, standing where the editing banner stood. */}
-					<section className="flex flex-col gap-2">
-						<h3 className={WORK_DETAILS_HEADING_CLASS}>View As</h3>
-						<WorkViewAsRow />
-					</section>
+					{kindChangeable && (
+						// The kind leads the Manage tab (Parker, 2026-10-17): the kind decides
+						// what this tab's machinery even is — every section below is the
+						// chosen kind's — so it is the tab's first fact, and it moved here
+						// from the Details tab for exactly that reason.
+						<div className="flex items-center gap-2">
+							<span className="text-sm font-medium">Kind</span>
+							{/* The select reads the ROW (current), not the page-load prop: its save
+							    adopts the response, and a refused change stands where it was — the
+							    value is the page's truth here, as every other field's read is. */}
+							<select
+								aria-label="Work kind"
+								className="select select-sm select-bordered"
+								value={current.type}
+								onChange={(e) => void saveKind(e.target.value as UploadableWorkType)}
+							>
+								{LIBRARY_TYPE_OPTIONS.map((opt) => (
+									<option key={opt.value} value={opt.value}>
+										{opt.label}
+									</option>
+								))}
+							</select>
+							<span className="text-xs text-base-content/60">
+								Changing the kind unrates the draft — answer the matrix again before release.
+							</span>
+						</div>
+					)}
+					{/* The View As row, under the Kind row when a draft can still change its
+					    kind (Parker, 2026-10-16 for the row's place on this tab): the
+					    creator's four ways to look at the page — and since Manage opens by
+					    default, at the top of the page itself, standing where the editing
+					    banner stood. */}
+					<WorkViewAsSection />
 					{current.type === "video" && (
 						<section className="flex flex-col gap-2">
 							<h3 className={WORK_DETAILS_HEADING_CLASS}>Media Status</h3>

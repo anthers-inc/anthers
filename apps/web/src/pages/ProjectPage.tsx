@@ -2,6 +2,7 @@
 
 import { useAuth } from "@anthers/web-shared/auth";
 import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useParams } from "@anthers/web-shared/router";
@@ -26,6 +27,7 @@ export default function ProjectPage() {
 	const preview = usePreviewQuery();
 	const [project, setProject] = useState<Project | null>(null);
 	const [loading, setLoading] = useState(true);
+	usePageTitle(project?.title ?? null);
 	const [error, setError] = useState<string | null>(null);
 
 	/** Stable string, so the effect re-runs on a change of the preview's value not identity. */

@@ -57,6 +57,7 @@ import { supportAmount } from "@anthers/shared/constants";
 import { cardFee, creatorFeeShare, paymentsSplit } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, eq, inArray, isNotNull, isNull, like, lt, notInArray, or, sql } from "drizzle-orm";
+import { freeSliceForCycle } from "../services/time-pool-fund.js";
 import { computeMonth, type MonthCharge } from "./distribute-pool.js";
 
 export interface SettleCycleData {
@@ -294,7 +295,12 @@ const keyOf = (creatorId: number, kind: CreditKind) => `${creatorId}:${kind}`;
  * rows and the invoices' settled stamps describe one decision, and a run that died between them
  * would leave a month credited and its invoices unsettled — which the next run would credit again.
  */
-async function settleSupporterMonth(userId: number, month: string, now: Date): Promise<boolean> {
+async function settleSupporterMonth(
+	userId: number,
+	month: string,
+	now: Date,
+	freeTimePool: number,
+): Promise<boolean> {
 	const charges = await paidChargesFor(userId, month);
 	const paid = charges.length > 0;
 	const anthersDollars = supportAmount(
@@ -312,10 +318,11 @@ async function settleSupporterMonth(userId: number, month: string, now: Date): P
 		anthersDollars,
 		charges,
 		includeStickers: paid,
+		freeTimePool,
 	});
 
-	// A supporter who paid nothing to Anthers — free, or giving only to creators — draws the free
-	// Time Pool, which Anthers funds.
+	// A supporter who paid nothing to Anthers — free, or giving only to creators — draws
+	// the free Time Pool, which the Fund funds from its published cycle value.
 	const poolFunding: CreditFunding = anthersDollars > 0 ? "supporter" : "anthers";
 
 	const entitled: Entitlement = new Map();
@@ -543,9 +550,13 @@ export async function settleCycle(
 	let supporters = 0;
 	for (const month of months) {
 		let failed = false;
+		// The Fund's slice for this month, read once per month at the run's own moment —
+		// the ledger row's restated actual, which a re-settlement (a late invoice, a
+		// suspension lifting) re-reads and converges against.
+		const { slice } = await freeSliceForCycle(month, now);
 		for (const userId of await supportersIn(month, data.userId)) {
 			try {
-				if (await settleSupporterMonth(userId, month, now)) supporters++;
+				if (await settleSupporterMonth(userId, month, now, slice)) supporters++;
 			} catch (error) {
 				failed = true;
 				console.error(`settle: month ${month} failed for user ${userId}:`, error);

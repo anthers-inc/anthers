@@ -37,12 +37,15 @@ export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: 
 	if (!current) return null;
 
 	// The gap under the tab bar is the Info tabs' `gap-6` (Parker, 2026-10-16): the
-	// panel's first heading kept sitting too close to the bar.
+	// panel's first heading kept sitting too close to the bar. The labels name the
+	// column rather than any tab set, because the shell hands different tabs to
+	// different readers — Manage rides in for the creator and the previewing owner,
+	// never for a visitor.
 	return (
-		<aside aria-label="Reviews and showings" className="flex flex-col gap-6">
+		<aside aria-label="The Work's side tabs" className="flex flex-col gap-6">
 			<div
 				role="tablist"
-				aria-label="Reviews and showings"
+				aria-label="The Work's side tabs"
 				className="join rounded-box shadow-[0_2px_6px_0_rgba(0,0,0,0.25)]"
 			>
 				{tabs.map((tab) => (

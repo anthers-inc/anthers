@@ -41,6 +41,34 @@ export interface PublicUser extends User {
 	 * Only the creator listing populates it.
 	 */
 	mediums?: string[];
+	/**
+	 * The Badge ladder this creator set, ascending by threshold as the creator ordered it —
+	 * only the creator listing populates it, and a creator who has configured no ladder
+	 * ships an empty one (the signup finder draws no chips for them). The subset the
+	 * signup card renders: every rung field a chip and its hover need, and never the
+	 * private art path (see {@link CreatorBadge} for the full row those rules live on).
+	 */
+	badges?: SignupBadgeOption[];
+}
+
+/**
+ * One rung of a creator's Badge ladder, as `GET /api/accounts/creators` ships it for the
+ * signup finder's chips — see {@link CreatorBadge} for the full public-ladder row.
+ */
+export interface SignupBadgeOption {
+	id: number;
+	label: string;
+	/** Monthly dollars; the numeric column reads back as text. */
+	threshold: string;
+	/** Whether the rung wears the creator's own art; false draws the fallback emblem. */
+	hasArt: boolean;
+	/** Ids into `@anthers/shared/badge-art`; null means the default. */
+	artShape: string | null;
+	artColor: string | null;
+	/** The rung's perks, as the labels the creator wrote them as — what a chip's hover states. */
+	perks: string[];
+	/** The rung's own words, when the ladder carries them. */
+	description: string | null;
 }
 
 export interface Creator {
@@ -655,6 +683,12 @@ export interface PostListItem {
 	/** First linked Work's thumbnail, if any — thumbnails are public by design. */
 	thumbnail: string | null;
 	linkedWorkCount: number;
+	/**
+	 * The body as plain text, where a tile's band renders the content and the card
+	 * renders nothing more — the field the feed entries and the posts listing carry
+	 * (a post's body is public, a post carries no gate of its own).
+	 */
+	excerpt?: string | null;
 }
 
 /** A post as it appears inside a Project (GET /projects/:slug). */
