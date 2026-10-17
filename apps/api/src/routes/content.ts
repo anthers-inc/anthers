@@ -678,13 +678,26 @@ async function makeUniqueSlug(
 	return `${clean}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-async function postSlugExists(slug: string): Promise<boolean> {
-	const [row] = await db.select({ id: posts.id }).from(posts).where(eq(posts.slug, slug)).limit(1);
+/** The row's own id excludes itself, so a retitle that re-derives the same slug does not collide with itself. */
+async function postSlugExists(slug: string, exceptId?: number): Promise<boolean> {
+	const [row] = await db
+		.select({ id: posts.id })
+		.from(posts)
+		.where(
+			exceptId != null ? and(eq(posts.slug, slug), ne(posts.id, exceptId)) : eq(posts.slug, slug),
+		)
+		.limit(1);
 	return !!row;
 }
 
-async function workSlugExists(slug: string): Promise<boolean> {
-	const [row] = await db.select({ id: works.id }).from(works).where(eq(works.slug, slug)).limit(1);
+async function workSlugExists(slug: string, exceptId?: number): Promise<boolean> {
+	const [row] = await db
+		.select({ id: works.id })
+		.from(works)
+		.where(
+			exceptId != null ? and(eq(works.slug, slug), ne(works.id, exceptId)) : eq(works.slug, slug),
+		)
+		.limit(1);
 	return !!row;
 }
 
@@ -1412,10 +1425,14 @@ function changedPostFields(
 	existing: typeof posts.$inferSelect,
 	data: z.infer<typeof updatePostSchema>,
 	refsChanged: boolean,
+	derivedSlug?: string | null,
 ): string[] {
 	const changed: string[] = [];
+	// `derivedSlug` is the derived slug this PATCH stored for the retitled post — a retitle
+	// moves the URL by design (the publicId keeps it resolving), and the history says so.
 	if (data.title !== undefined && data.title !== (existing.title ?? "")) changed.push("title");
 	if (data.slug !== undefined && data.slug !== existing.slug) changed.push("slug");
+	else if (derivedSlug && derivedSlug !== existing.slug) changed.push("slug");
 	const bodyChanged =
 		(data.body !== undefined && data.body !== (existing.body ?? "")) ||
 		(data.bodyHtml !== undefined && postHtmlToMarkdown(data.bodyHtml) !== (existing.body ?? ""));
@@ -3054,12 +3071,25 @@ const contentRoutes = new Hono()
 			if (await postSlugExists(data.slug)) return c.json({ error: "Slug already taken" }, 409);
 		}
 
+		// 🚨 **A retitle re-derives the slug** (Parker, 2026-10-16, "Hello, there" still sitting
+		// at `/posts/post-…`): part of why the URL is durable is the ability to name the thing
+		// it is, and the trailing `publicId` is the half that never has to change — old links
+		// (every earlier slug, a bare publicId, any word before it) keep resolving through
+		// `findPostRow` and the page settles the address bar to canonical. An explicit slug
+		// still wins as before.
+		let derivedSlug: string | null = null;
+		if (data.slug === undefined && data.title !== undefined && data.title.trim() !== "") {
+			const next = await makeUniqueSlug(data.title, (slug) => postSlugExists(slug, existing.id));
+			if (next !== existing.slug) derivedSlug = next;
+		}
+
 		// Replacing the reference set reports whether it actually changed, for the history.
 		const refsChanged =
 			data.workIds !== undefined ? await setPostWorkRefs(existing.id, data.workIds) : false;
 
 		const updates: Record<string, unknown> = { updatedAt: new Date() };
 		if (data.slug !== undefined) updates.slug = data.slug;
+		else if (derivedSlug) updates.slug = derivedSlug;
 		if (data.title !== undefined) updates.title = data.title;
 		Object.assign(updates, postBodyUpdatesFromPatch(data, existing));
 		if (data.showOnTimeline !== undefined) updates.showOnTimeline = data.showOnTimeline;
@@ -3082,7 +3112,7 @@ const contentRoutes = new Hono()
 
 		// Record a timestamped edit-history entry when the post's content actually changed
 		// (publish/unpublish/schedule toggles don't count — see changedPostFields).
-		const editedFields = changedPostFields(existing, data, refsChanged);
+		const editedFields = changedPostFields(existing, data, refsChanged, derivedSlug);
 		if (editedFields.length > 0) {
 			await db.insert(postEdits).values({
 				postId: existing.id,
@@ -5172,6 +5202,15 @@ const contentRoutes = new Hono()
 			if (await workSlugExists(data.slug)) return c.json({ error: "Slug already taken" }, 409);
 		}
 
+		// 🚨 **A retitle re-derives the slug**, the same rule the post route carries
+		// (Parker, 2026-10-16): the trailing `publicId` keeps every old link resolving, and
+		// the slug half of the address reads the Work's current name. An explicit slug wins.
+		let derivedSlug: string | null = null;
+		if (data.slug === undefined && data.title !== undefined && data.title.trim() !== "") {
+			const next = await makeUniqueSlug(data.title, (slug) => workSlugExists(slug, work.id));
+			if (next !== work.slug) derivedSlug = next;
+		}
+
 		// Delivery floor, evaluated on the state this edit RESULTS IN. `updateWorkSchema` is
 		// `.partial()`, which silently drops any create-time refine, so a PATCH sending only
 		// `streamEnabled: false` is valid or not depending on the STORED `downloadEnabled` —
@@ -5405,6 +5444,7 @@ const contentRoutes = new Hono()
 		const updates: Record<string, unknown> = { updatedAt: new Date() };
 		if (data.type !== undefined) updates.type = data.type;
 		if (data.slug !== undefined) updates.slug = data.slug;
+		else if (derivedSlug) updates.slug = derivedSlug;
 		if (data.title !== undefined) updates.title = data.title;
 		if (data.description !== undefined) updates.description = data.description;
 		if (data.thumbnail !== undefined) updates.thumbnail = data.thumbnail;

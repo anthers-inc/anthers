@@ -188,11 +188,14 @@ describe("Edit history", () => {
 	});
 
 	it("logs a timestamped entry when the title changes", async () => {
-		await req(`/api/content/posts/${slug}`, {
+		// The PATCH response is re-read for the slug, because a title change re-derives
+		// it now (Parker, 2026-10-16) — the plain slug form stops answering at the old name.
+		const patch = await req(`/api/content/posts/${slug}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
 			body: JSON.stringify({ title: `History renamed ${id}` }),
 		});
+		slug = (await patch.json()).post.slug;
 		const get = await req(`/api/content/posts/${slug}`, { headers: { Cookie: owner } });
 		const { post } = await get.json();
 		expect(post.edits.length).toBe(1);
