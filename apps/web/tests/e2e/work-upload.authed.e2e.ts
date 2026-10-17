@@ -128,12 +128,16 @@ test("a video Work is made from its file and edited while the file uploads", asy
 	// The upload's landing is the Work's page now (2026-10-13): the editing surface a
 	// creator meets while the file is still on the wire is the page itself, in editor mode.
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/, { timeout: 15_000 });
-	await expect(page.getByText("Editing your Work")).toBeVisible();
+	// The editing banner is gone (the View As task, 2026-10-16): the editor mode is
+	// what the page is, and the View As row on the Manage tab is its one marker.
+	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
 	// No title was typed, so the file's name became one — read as the title it is,
 	// not as a form field holding a file name.
 	await expect(page.locator("h1").filter({ hasText: STEM })).toBeVisible();
 	// The in-flight upload says where it is, and that the tab's life is the upload's.
-	await expect(page.getByText(/Keep this tab open/)).toBeVisible();
+	// The top banner is scoped (`role=status`): the Manage tab, open by default now, rides
+	// the same warning inside its file section (the View As task, 2026-10-16).
+	await expect(page.getByRole("status").getByText(/Keep this tab open/)).toBeVisible();
 	// A Work whose file has not arrived cannot be released (`media_missing`), and the
 	// control says so rather than earning the refusal.
 	await page.getByRole("button", { name: "Edit Release" }).click();
