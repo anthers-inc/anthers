@@ -74,17 +74,21 @@ export function WorkViewAsRow({ subject = "Work" }: { subject?: string }) {
 	};
 	return (
 		// A `fieldset` over a `role="group"` (the same screen-reader name without the role
-		// redundancy); the legend hides — outside the join, whose first-child selectors
-		// must count buttons only — and the fieldset's default border is reset here.
-		<fieldset className="m-0 flex flex-wrap border-0 p-0">
+		// redundancy); the legend hides. The trough — an inset-bordered box rather than the
+		// button-join the page's tab bars carry — keeps this a segmented single-choice
+		// control that does not read as a second tab strip, and takes the row's full width.
+		<fieldset className="m-0 border-0 p-0">
 			<legend className="sr-only">View this {subject} as</legend>
-			<div className="join rounded-box flex flex-wrap">
+			{/* Basis auto, not flex-1: the buttons are as wide as their labels first and grow
+			    to fill the row, so a label never wraps; the row itself wraps when the width
+			    cannot take all four (only the narrowest phones' viewport). */}
+			<div className="rounded-box flex flex-wrap gap-1 border border-base-300 bg-base-200/40 p-1">
 				{MODES.map(({ mode, label }) => (
 					<button
 						key={mode}
 						type="button"
 						aria-pressed={mode === active}
-						className={`btn btn-xs sm:btn-sm join-item flex-1 ${mode === active ? "btn-active" : ""}`}
+						className={`btn btn-xs sm:btn-sm flex-auto whitespace-nowrap ${mode === active ? "btn-active" : "btn-ghost"}`}
 						onClick={() => set(mode)}
 					>
 						{label}
