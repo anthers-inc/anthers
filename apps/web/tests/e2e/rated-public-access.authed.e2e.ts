@@ -91,16 +91,17 @@ test("a creator releasing rated work into Public Access is told who will see it"
 	// The tab IS the table, always open (Parker, 2026-10-16) — no edit state to enter.
 	await page.getByRole("radio", { name: "Violence: None" }).check();
 	await page.getByRole("button", { name: "Save Rating" }).click();
-	await page.getByRole("tab", { name: "Details" }).click();
-	await page.getByRole("button", { name: "Edit Release" }).click();
+	// ⭐ The tab flip leaves the open edit open (TabPanels keeps every panel mounted;
+	//    what mounts stays mounted). The open edit answers from the saved rows as they
+	//    land — the note is gone before anything is clicked again.
 	await expect(note).toHaveCount(0);
 	// General is met by every user; Adult is noted too — the Work goes back to Adult
 	// from its Sexual Content row, and the release edit notes it again.
 	await page.getByRole("tab", { name: "Rating" }).click();
 	await page.getByRole("radio", { name: "Sexual Content: Adult" }).check();
 	await page.getByRole("button", { name: "Save Rating" }).click();
+	// Back on the Details tab, the same still-open edit now shows the Adult note.
 	await page.getByRole("tab", { name: "Details" }).click();
-	await page.getByRole("button", { name: "Edit Release" }).click();
 	await expect(note).toBeVisible();
 
 	// Out of Public Access, there is nothing to qualify. The access is the byline chip's

@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * A toggle that changes how tall the page is — opening a field for edit, closing it
- * again, switching a tab group — must never cost the reader their place in the page.
+ * again — must never cost the reader their place in the page.
+ *
+ * ⚠️ **Tab switches are not this module's ground any more** (Parker, 2026-10-17):
+ * the Work page's tab groups hold a stable height (`TabPanels` stacks every panel
+ * in one grid cell, as tall as the tallest), so a switch changes nothing that could
+ * move the page and passes through no keeper at all. What still changes the height
+ * is a panel's own content — a field opening for edit is the case this module
+ * covers, from `Editing.tsx`.
  *
  * The shell's pages scroll on a container, not on the document (`LoggedInLayout`'s
  * `<main>` is the app's scroll surface), so the offset lives on a container element
