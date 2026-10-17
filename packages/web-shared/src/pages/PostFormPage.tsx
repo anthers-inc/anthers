@@ -1,48 +1,38 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * New Post builder. Three sections: Basics (title + body + timeline + project), Publish
- * (pin + schedule + draft/publish)…
+ * The **New Post** builder — create, and only create.
  *
- * A post carries NO linked-Works field any more (Parker, 2026-10-16): you put a Work's
- * link in the body and the page renders the card for it under the text, the way a
- * Bluesky post renders an embedded player for the link it carries. There is nothing to
- * configure, and that absence is the point.
+ * 🚨 **There is no edit form any more** (Parker, 2026-10-16): editing a post happens on
+ * the post's own page, the same place every user reads it — the unified surface every
+ * kind's Work page ran on first (`OwnerWorkEditor.tsx` carries that pattern's ruling).
+ * The `/studio/posts/:slug/edit` address a bookmark may hold redirects to the page this
+ * once edited (`apps/web/src/studio/PostEditPage.tsx`).
  *
- * There is no Access section either, and that absence is the point. A post is an
- * announcement: it carries a body and some links and nothing gateable, so there is
- * nothing here to price or gate. Delivery and access are edited on the **Work**, in the
- * Catalog, where the thing being gated actually lives. Tags are parsed from `#hashtag`
- * tokens in the body on save.
+ * That also answers the three complaints the change came from: the edit page had no way
+ * to the published post, the edit page and the view page were two totally separate
+ * surfaces, and a landing on it made a posted item look not-posted. The page everything
+ * sources from is the viewable one, and the creator's view is that page with pencils in
+ * it.
+ *
+ * Sections: Basics (title + body + timeline + project attach), Publish (pin + schedule +
+ * draft/publish). A post carries NO linked-Works field (Parker, 2026-10-16): you put a
+ * Work's link in the body and the page renders the card for it under the text, the way a
+ * Bluesky post renders an embedded player for the link it carries. There is no Access
+ * section: a post is an announcement — it carries a body, some links and nothing
+ * gateable. Delivery and access are edited on the **Work**, in the Catalog.
  */
-import { marked } from "marked";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import RichTextEditor from "../components/editor/RichTextEditor";
 import FormField from "../components/ui/FormField";
-import LoadingSpinner from "../components/ui/LoadingSpinner";
-import { isoToLocalInput } from "../lib/local-datetime";
 import { usePayoutsReady } from "../lib/payouts";
+import { tagsFromBodyHtml } from "../lib/post-tags";
 import { postUrl } from "../lib/postUrl";
 import { usePublishingPermissionMissing } from "../lib/publishing";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
-import { studioEditPostUrl, studioUrl } from "../lib/studio";
+import { studioUrl } from "../lib/studio";
 import type { Post, Project } from "../lib/types";
-
-/** The body HTML's own text — what tag tokens are parsed from, as before. */
-function htmlTextOf(html: string): string {
-	if (!html) return "";
-	const tmp = document.createElement("div");
-	tmp.innerHTML = html;
-	return tmp.textContent || "";
-}
-
-/** Parse `#hashtag` tokens out of the body text into a deduped tag list. */
-function parseTags(text: string): string[] {
-	const set = new Set<string>();
-	for (const m of text.matchAll(/#([\p{L}0-9_-]+)/gu)) set.add(m[1]);
-	return [...set];
-}
 
 /** Best-effort extraction of an { error } message from a non-ok JSON response. */
 function errorMessage(data: unknown, fallback: string): string {
@@ -54,9 +44,7 @@ function errorMessage(data: unknown, fallback: string): string {
 }
 
 export default function PostFormPage() {
-	const { slug } = useParams<{ slug: string }>();
 	const navigate = useNavigate();
-	const isEdit = Boolean(slug);
 
 	// ── Basics ──
 	const [title, setTitle] = useState("");
@@ -72,16 +60,12 @@ export default function PostFormPage() {
 	// Optional auto-publish time (datetime-local string). Non-empty = scheduled draft.
 	const [scheduledFor, setScheduledFor] = useState<string>("");
 
-	// Whether the post is already live, because only going live needs payout setup — a live
-	// post stays editable after payouts lapse.
-	const [wasPublished, setWasPublished] = useState(false);
 	const payoutsReady = usePayoutsReady();
 	const permissionMissing = usePublishingPermissionMissing();
-	/** Going live is refused for either, so neither is offered — but a live post stays editable. */
-	const goLiveBlocked = !wasPublished && (payoutsReady === false || permissionMissing === true);
+	/** Going live is refused for either, so neither is offered. */
+	const goLiveBlocked = payoutsReady === false || permissionMissing === true;
 
 	// ── UI ──
-	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -89,40 +73,6 @@ export default function PostFormPage() {
 	// the media, the media belongs to the Work, and an announcement has nothing to wait for
 	// — the gate moved to releasing the Work.
 	const isScheduling = scheduledFor.trim() !== "";
-
-	// Initial load: the post being edited.
-	useEffect(() => {
-		let canceled = false;
-		(async () => {
-			if (isEdit && slug) {
-				try {
-					const res = await client.api.content.posts[":slug"].$get({ param: { slug } });
-					if (!res.ok) {
-						if (!canceled) setError("Failed to load post.");
-						return;
-					}
-					const { post } = (await res.json()) as { post: Post };
-					if (canceled) return;
-					setTitle(post.title ?? "");
-					// The stored body is markdown; the editor reads HTML, so the load converts
-					// back. The round trip is the write boundary's own pair (marked ↔ turndown,
-					// through the same sanitizer), and the vocabulary the editor can produce is
-					// exactly the one that survives it.
-					setBodyHtml(marked.parse(post.body ?? "", { async: false }));
-					setShowOnTimeline(post.showOnTimeline);
-					setIsPinned(post.isPinned);
-					setWasPublished(post.isPublished === true);
-					setScheduledFor(isoToLocalInput(post.scheduledFor));
-				} catch {
-					if (!canceled) setError("Failed to load post.");
-				}
-			}
-			if (!canceled) setLoading(false);
-		})();
-		return () => {
-			canceled = true;
-		};
-	}, [slug, isEdit]);
 
 	/**
 	 * The creator's Projects, for the attach-on-create select.
@@ -133,7 +83,6 @@ export default function PostFormPage() {
 	 * nothing else, with no request in flight to explain it.
 	 */
 	useEffect(() => {
-		if (isEdit) return;
 		let live = true;
 		client.api.content.projects
 			.$get({ query: { mine: "true" } })
@@ -145,7 +94,7 @@ export default function PostFormPage() {
 		return () => {
 			live = false;
 		};
-	}, [isEdit]);
+	}, []);
 
 	const handleBodyChange = (html: string) => {
 		setBodyHtml(html);
@@ -160,55 +109,34 @@ export default function PostFormPage() {
 			bodyHtml,
 			showOnTimeline,
 			isPinned,
-			tags: parseTags(htmlTextOf(bodyHtml)),
+			tags: tagsFromBodyHtml(bodyHtml),
 			isPublished: publish,
 			// Publishing now clears any schedule; otherwise persist the chosen auto-publish time.
 			scheduledFor: publish || !scheduledFor ? null : new Date(scheduledFor).toISOString(),
 		};
 
-		// After save: publish → the live post view; draft → stay in the Studio editor so they
-		// can keep filling media. Both are ordinary in-app paths — the Studio stopped being a
-		// separate origin on 2026-08-11, so there is no ConsumerRedirect hop any more.
+		// After save: the post's page — for either kind of save. A draft's owner view is
+		// the same page with the Draft badge and the Publish button on it; the viewable
+		// version is the source of everything now.
 		try {
-			if (isEdit && slug) {
-				const res = await client.api.content.posts[":slug"].$patch({
-					param: { slug },
-					json: base,
-				});
-				if (!res.ok) {
-					setError(errorMessage(await res.json(), "Failed to save post."));
-					return;
-				}
-				const { post } = (await res.json()) as { post: Post };
-				navigate(publish ? postUrl(post) : studioEditPostUrl(post.slug));
-			} else {
-				const json = projectId ? { ...base, projectId: Number(projectId) } : base;
-				const res = await client.api.content.posts.$post({ json });
-				if (!res.ok) {
-					setError(errorMessage(await res.json(), "Failed to create post."));
-					return;
-				}
-				const { post } = (await res.json()) as { post: Post };
-				navigate(publish ? postUrl(post) : studioEditPostUrl(post.slug));
+			const json = projectId ? { ...base, projectId: Number(projectId) } : base;
+			const res = await client.api.content.posts.$post({ json });
+			if (!res.ok) {
+				setError(errorMessage(await res.json(), "Failed to create post."));
+				return;
 			}
+			const { post } = (await res.json()) as { post: Post };
+			navigate(postUrl(post));
 		} catch {
-			setError("Failed to save post.");
+			setError("Failed to create post.");
 		} finally {
 			setSaving(false);
 		}
 	};
 
-	if (loading) {
-		return (
-			<div className="flex justify-center py-16">
-				<LoadingSpinner size="lg" />
-			</div>
-		);
-	}
-
 	return (
 		<div className="max-w-3xl mx-auto px-4 py-8">
-			<h1 className="text-2xl font-bold mb-6">{isEdit ? "Edit Post" : "New Post"}</h1>
+			<h1 className="text-2xl font-bold mb-6">New Post</h1>
 
 			{error && (
 				<div className="alert alert-error mb-4">
@@ -235,7 +163,7 @@ export default function PostFormPage() {
 							placeholder="Post title"
 						/>
 						<p className="text-xs text-base-content/50 mt-1">
-							The URL slug is generated from the title automatically.
+							The URL slug is generated from the title, and follows it when the title changes.
 						</p>
 					</FormField>
 
@@ -245,11 +173,9 @@ export default function PostFormPage() {
 							onChange={handleBodyChange}
 							placeholder="Write your post... (use #tags to categorize)"
 						/>
-						{/* Named the "Content section" until 2026-09-11, and there has not been one
-						    since the post stopped owning its media. What a post is *about* lives in
-						    the Catalog as a Work and is referenced below. */}
 						<p className="text-xs text-base-content/50 mt-1">
-							Shown to anyone who can see the post. What it is about goes in Linked Works below.
+							Shown to anyone who can see the post. To feature a Work here, put its link in the text
+							— the card rides under it.
 						</p>
 					</FormField>
 
@@ -263,41 +189,23 @@ export default function PostFormPage() {
 						<span className="label-text">Show on Timeline</span>
 					</label>
 
-					{/*
-					 * 🚨 **Create only, and now it says so instead of just vanishing.** `POST /posts`
-					 * honors `projectId`; `PATCH /posts/:slug` accepts the field in its schema and
-					 * never reads it. So this control could only ever work once, and on edit it
-					 * simply disappeared — which read as "this post is in no Project" rather than
-					 * as "ask somewhere else". Membership is a Project's fact and the Project's
-					 * shelf is where it is managed, so that is what the edit form points at.
-					 */}
-					{!isEdit ? (
-						<FormField
-							label="Project (optional)"
-							hint="Attach this post to one of your Projects. You can move it later from the Project itself."
+					<FormField
+						label="Project (optional)"
+						hint="Attach this post to one of your Projects. You can move it later from the Project itself."
+					>
+						<select
+							className="select select-bordered w-full"
+							value={projectId}
+							onChange={(e) => setProjectId(e.target.value)}
 						>
-							<select
-								className="select select-bordered w-full"
-								value={projectId}
-								onChange={(e) => setProjectId(e.target.value)}
-							>
-								<option value="">No project</option>
-								{projects.map((p) => (
-									<option key={p.id} value={p.id}>
-										{p.title}
-									</option>
-								))}
-							</select>
-						</FormField>
-					) : (
-						<p className="text-xs text-base-content/50">
-							Which Projects this post belongs to is managed on the Project — open it from your{" "}
-							<Link to={studioUrl("/projects")} className="link">
-								Projects page
-							</Link>{" "}
-							and use its Posts shelf.
-						</p>
-					)}
+							<option value="">No project</option>
+							{projects.map((p) => (
+								<option key={p.id} value={p.id}>
+									{p.title}
+								</option>
+							))}
+						</select>
+					</FormField>
 				</section>
 
 				{/* ── 2. Publish ── */}
@@ -340,7 +248,7 @@ export default function PostFormPage() {
 						</p>
 					</FormField>
 
-					{permissionMissing === true && !wasPublished && (
+					{permissionMissing === true && (
 						<div className="alert alert-warning text-sm">
 							<span>
 								<strong>Give Anthers permission to publish first.</strong> A post is written into
@@ -354,7 +262,7 @@ export default function PostFormPage() {
 						</div>
 					)}
 
-					{payoutsReady === false && !wasPublished && (
+					{payoutsReady === false && (
 						<div className="alert alert-warning text-sm">
 							<span>
 								<strong>Set up payouts before publishing.</strong> A post can be paid for with
@@ -390,7 +298,7 @@ export default function PostFormPage() {
 								type="button"
 								className="btn btn-primary"
 								onClick={() => handleSubmit(false)}
-								disabled={saving || payoutsReady === false || permissionMissing === true}
+								disabled={saving || goLiveBlocked}
 							>
 								{saving ? "Saving..." : "Schedule"}
 							</button>

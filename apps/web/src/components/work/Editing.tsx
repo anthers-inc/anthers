@@ -171,20 +171,48 @@ export function InlineField<V>({
 }
 
 /**
- * The banner a creator's own Work page wears while they can edit it — the explicit mode
- * marker the move onto the Work's page was made conditional on: a creator never wonders
- * which mode they are in. It carries the way back to the Studio's Works list and the way
- * into a user's preview, and says in one line what the page is.
+ * The banner a creator's own page wears while they can edit it — the explicit mode
+ * marker the move onto the page itself was made conditional on: a creator never wonders
+ * which mode they are in. It carries the way back to the Studio's list and the way into
+ * a user's preview, and says in one line what the page is.
  */
-export function EditingBanner({ title }: { title: string | null }) {
+export function EditingBanner({
+	title,
+	noun = "Work",
+	studioHref = studioUrl("/works"),
+	studioLabel = "Studio Works",
+	payoutNote,
+}: {
+	title: string | null;
+	/** The sentence is "Editing your {noun} — {title}"; a Work here, a post there. */
+	noun?: string;
+	/** The Studio list this thing lives in — the way back. */
+	studioHref?: string;
+	/** The link's own label, matching the list ("Studio Works", "Studio Posts"). */
+	studioLabel?: string;
+	/**
+	 * The payout-set-up line under the banner, when this page's publish-or-release gate
+	 * has anything to say. Left unset (the Work page's shape), the banner computes it:
+	 * pending setup means releasing waits. A caller that passes a string gets exactly
+	 * that line; null says "nothing to say here" — a live post editing on, whose gate
+	 * was already cleared.
+	 */
+	payoutNote?: string | null;
+}) {
 	const payouts = usePayoutsReady();
 	const navigate = useNavigate();
+	const note =
+		payoutNote !== undefined
+			? payoutNote
+			: payouts === false
+				? "Payout setup is pending — releasing waits on it, in Details."
+				: null;
 	return (
 		// `status`, not `alert`: a persistent mode indicator rather than an interruption.
 		<aside role="status" className="rounded-box border border-warning/40 bg-warning/10 px-4 py-2.5">
 			<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
 				<span className="text-sm font-semibold">
-					Editing your Work — <span className="font-normal">{title ?? "this Work"}</span>
+					Editing your {noun} — <span className="font-normal">{title ?? `this ${noun}`}</span>
 				</span>
 				<span className="text-xs text-base-content/60">
 					Everything you see is what a user sees; the pencil opens the change.
@@ -202,16 +230,12 @@ export function EditingBanner({ title }: { title: string | null }) {
 						<EyeIcon className="size-3.5" />
 						Preview as a user
 					</button>
-					<Link to={studioUrl("/works")} className="btn btn-ghost btn-xs">
-						Studio Works
+					<Link to={studioHref} className="btn btn-ghost btn-xs">
+						{studioLabel}
 					</Link>
 				</div>
 			</div>
-			{payouts === false && (
-				<p className="mt-1 text-xs text-base-content/60">
-					Payout setup is pending — releasing waits on it, in Details.
-				</p>
-			)}
+			{note && <p className="mt-1 text-xs text-base-content/60">{note}</p>}
 		</aside>
 	);
 }
