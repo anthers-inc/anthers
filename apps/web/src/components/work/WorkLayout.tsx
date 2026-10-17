@@ -762,21 +762,31 @@ export function WorkDeliverable({
 				// ladder; none → the page reader, comic and PDF-shaped ebook alike.
 				(work.type === "ebook" && (work.sectionCount ?? 0) > 0
 					? frame(
-							<EbookReader
-								workId={work.id}
-								apiBase={apiBaseUrl()}
-								title={work.title ?? "Untitled"}
-								shareToken={shareToken}
-							/>,
+							// `w-full` is load-bearing on these readers (the CI ebook failure's
+							// whole finding): the frame's letterbox centers its content, and a
+							// reader with no width of its own shrink-to-fits there — its
+							// transport row then crushes the seek bar to a zero-width input,
+							// the one control a reader without a pointer must reach. The
+							// readers were block-level wide before the frame; they stay wide.
+							<div className="w-full">
+								<EbookReader
+									workId={work.id}
+									apiBase={apiBaseUrl()}
+									title={work.title ?? "Untitled"}
+									shareToken={shareToken}
+								/>
+							</div>,
 						)
 					: frame(
-							<ComicReader
-								workId={work.id}
-								pageCount={work.pageCount ?? 0}
-								apiBase={apiBaseUrl()}
-								title={work.title ?? "Untitled"}
-								shareToken={shareToken}
-							/>,
+							<div className="w-full">
+								<ComicReader
+									workId={work.id}
+									pageCount={work.pageCount ?? 0}
+									apiBase={apiBaseUrl()}
+									title={work.title ?? "Untitled"}
+									shareToken={shareToken}
+								/>
+							</div>,
 						))}
 			{work.type === "image" &&
 				work.sourceKey &&
@@ -837,9 +847,13 @@ export function WorkDeliverable({
 							</div>,
 						)
 					: frame(
-							<article className="prose max-w-none">
-								<SanitizedHtml html={work.bodyHtml} />
-							</article>,
+							// Same `w-full` as the readers: a prose block has no width of its
+							// own and would shrink-to-fit in the letterbox's centered column.
+							<div className="w-full">
+								<article className="prose max-w-none">
+									<SanitizedHtml html={work.bodyHtml} />
+								</article>
+							</div>,
 						))}
 			{/*
 			 * Reading, playing and looking draw the allowance exactly as watching does,

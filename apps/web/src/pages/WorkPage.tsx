@@ -335,24 +335,34 @@ export default function WorkPage() {
 					    the store is nobody's to read. */
 					access && !access.canAccess && !access.requiresPurchase ? (
 						<WorkMediaFrame>
-							<InlineUnlock post={work} access={access} />
+							<div className="w-full">
+								<InlineUnlock post={work} access={access} />
+							</div>
 						</WorkMediaFrame>
 					) : (
 						<WorkMediaFrame>
-							<ProjectPricing
-								workId={work.id}
-								slug={work.slug ?? ""}
-								access={access ?? undefined}
-								title={work.title ?? "Untitled"}
-								creatorHandle={work.creator?.handle ?? ""}
-								creatorHasStripe={work.creatorHasStripe ?? false}
-								thumbnail={work.thumbnail}
-								workType={work.type}
-							/>
+							<div className="w-full">
+								<ProjectPricing
+									workId={work.id}
+									slug={work.slug ?? ""}
+									access={access ?? undefined}
+									title={work.title ?? "Untitled"}
+									creatorHandle={work.creator?.handle ?? ""}
+									creatorHasStripe={work.creatorHasStripe ?? false}
+									thumbnail={work.thumbnail}
+									workType={work.type}
+								/>
+							</div>
 						</WorkMediaFrame>
 					)
 				) : !canAccess ? (
-					<WorkMediaFrame fill={work.type === "video"}>
+					// A locked Work's card **fills**, for both gate shapes: the video's
+					// blur-and-overlay is the player's own rectangle, and the other kinds'
+					// two-up carries its height the way its column widths want it — the
+					// letterbox would force the grid's min-content into a taller box than
+					// the composition reads well at. The card is still the page's shape;
+					// only what it holds is a gate.
+					<WorkMediaFrame fill>
 						{isWriting(work.type) && <WorkDescription work={work} />}
 						{work.type === "video" ? (
 							/* A locked video is the feed's treatment at page scale (Parker,
@@ -469,8 +479,11 @@ export default function WorkPage() {
 							</div>
 						)}
 						{/* The server withheld the deliverable because the allowance is gone, so
-						    there is nothing to render in its place but the reason. */}
-						<PublicAccessWall budget={meterBudget} />
+						    there is nothing to render in its place but the reason. `w-full` as
+						    everywhere in the frame: the wall's card has no width of its own. */}
+						<div className="w-full">
+							<PublicAccessWall budget={meterBudget} />
+						</div>
 					</WorkMediaFrame>
 				) : encoding && !playsOriginal ? (
 					// The processing block, held inside the media frame rather than replacing

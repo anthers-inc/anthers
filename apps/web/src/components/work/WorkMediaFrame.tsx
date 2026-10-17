@@ -17,8 +17,13 @@
  *   a short player letterboxes into the same rectangle a video fills, and a medium
  *   with more of its own height — a long piece of writing, a portrait picture, a
  *   reader's own scrolling height — grows the card downward rather than leaving the
- *   shape. (`aspect-ratio` is the *minimum* height of the box while height stays
- *   auto, so growth is what the browser does, not a case coded here.)
+ *   shape. The growth is genuine browser behavior, not a case coded here: the card
+ *   is a flex column, so the 16:9 box inside it is a flex item whose automatic
+ *   minimum size is its content's — with content short, the ratio-derived height
+ *   stands; with content taller, the item cannot shrink below what it holds. (The
+ *   flex-item membership is load-bearing — a plain block child with the same
+ *   aspect-ratio *overflows* on tall content instead of growing, which is exactly
+ *   what CI's ebook failure measured, 2026-10-16.)
  *
  * The embed page deliberately never mounts this card: that route is a bare window on
  * one medium, sized to fill whatever surface opens it.
@@ -39,7 +44,7 @@ export default function WorkMediaFrame({
 		return <div className={`border border-base-300 bg-base-200 p-3 ${className}`}>{children}</div>;
 	}
 	return (
-		<div className={`border border-base-300 bg-base-200 ${className}`}>
+		<div className={`flex flex-col border border-base-300 bg-base-200 ${className}`}>
 			<div className="flex aspect-video flex-col items-center justify-center gap-4 px-6 py-5">
 				{children}
 			</div>

@@ -1473,14 +1473,18 @@ export default function OwnerWorkEditor({
 				{isGoods(current.type) ? (
 					// The creator's copy of the user's store panel: it mounts without a
 					// verdict, the same absence a creator's own visit has always read.
+					// `w-full` as on the user page: the panel has no width of its own and
+					// would shrink-to-fit in the frame's centered column.
 					<WorkMediaFrame>
-						<ProjectPricing
-							workId={current.id}
-							slug={current.slug ?? ""}
-							title={current.title ?? "Untitled"}
-							creatorHandle={asRead.creator?.handle ?? ""}
-							workType={current.type}
-						/>
+						<div className="w-full">
+							<ProjectPricing
+								workId={current.id}
+								slug={current.slug ?? ""}
+								title={current.title ?? "Untitled"}
+								creatorHandle={asRead.creator?.handle ?? ""}
+								workType={current.type}
+							/>
+						</div>
 					</WorkMediaFrame>
 				) : deliverableEmpty ? (
 					// The silhouette: where the Work will be, at the media frame's one
