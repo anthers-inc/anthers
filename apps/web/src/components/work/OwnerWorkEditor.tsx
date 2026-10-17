@@ -12,9 +12,11 @@
  *
  * Below the deliverable the page is two columns: the left is the **Info tab group**
  * (Details · Credits · Rating · Accessibility) shared with the user's rendering
- * of the same page (`WorkInfoTabs`), the right is **Reviews · Showings · Manage**
- * (`WorkSideColumn`). Each editable thing the user can see is an `InlineField` — pencil
- * opens it, X cancels, checkmark saves the field alone; there is no page-wide Save.
+ * of the same page (`WorkInfoTabs`), the right is **Manage · Reviews · Showings**
+ * (`WorkSideColumn`) — Manage first and active by default on the creator's own page
+ * (Parker, 2026-10-16), and a visitor's column never renders it. Each editable thing the
+ * user can see is an `InlineField` — pencil opens it, X cancels, checkmark saves the
+ * field alone; there is no page-wide Save.
  *
  * ⭐ **The pencils are always visible, and the Rating tab is no pencil's** (Parker,
  * 2026-10-16). Hover-reveal was retired because an unfilled field left nothing to hover
@@ -59,6 +61,7 @@ import {
 } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
 import RatingAppeal from "@anthers/web-shared/content/RatingAppeal";
+import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
 import WebBuildSection from "@anthers/web-shared/content/WorkWebBuildSection";
 import { isFileWorkType, WorkFileSection } from "@anthers/web-shared/content/work-media";
 import { isBuildType, LIBRARY_TYPE_OPTIONS, typeLabel } from "@anthers/web-shared/content/works";
@@ -113,12 +116,14 @@ import SaveButton from "../library/SaveButton";
 import StickerBar from "../post/StickerBar";
 import ProjectPricing from "../project/ProjectPricing";
 import WorkReviews from "../project/WorkReviews";
-import { EditingBanner, InlineField } from "./Editing";
+import { InlineField } from "./Editing";
 import LyricsCard from "./LyricsCard";
 import MediaStatusCard from "./MediaStatusCard";
 import ShareLinkButton from "./ShareLinkButton";
+import { WorkViewAsRow } from "./ViewAs";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
 import {
+	DescriptionBody,
 	formatOriginallyReleased,
 	isGoods,
 	isWriting,
@@ -132,7 +137,6 @@ import {
 	WorkDescription,
 	type WorkDetail,
 	WorkPlaceholder,
-	WorkRecordLink,
 	workTitleTypography,
 } from "./WorkLayout";
 import WorkSideColumn, { ShowingsStub } from "./WorkSideColumn";
@@ -599,8 +603,8 @@ export default function OwnerWorkEditor({
 		: isFileWorkType(current.type)
 			? fileUploading
 				? "It's uploading now — keep this tab open until it lands."
-				: "Manage, at its right, takes one."
-			: "Manage, at its right, takes an embed or a build.";
+				: "Manage — the right column's first tab — takes one."
+			: "Manage — the right column's first tab — takes an embed or a build.";
 	/** The kind, while a private draft could still be another kind. */
 	const kindChangeable =
 		current.visibility !== "released" &&
@@ -685,18 +689,10 @@ export default function OwnerWorkEditor({
 			label="Description"
 			saved={description}
 			renderRead={() => (
-				// `[&_p]:my-0`: prose adds a paragraph's own margins, which opened a gap
-				// between the section's heading and its text no other section has (Parker,
-				// 2026-10-13) — the heading's gap is the section's, and it is the section's
-				// everywhere. `whitespace-pre-line` keeps the line breaks the edit textarea
-				// wrote, as the user's own renderer (`WorkDescription`) already does.
-				<section className={`${WORK_DESCRIPTION_CLASS} [&_p]:my-0`}>
-					{description ? (
-						<p className="whitespace-pre-line">{description}</p>
-					) : (
-						<p className="text-sm text-base-content/40">Nothing written yet.</p>
-					)}
-				</section>
+				// The same rendering the user's Details tab carries — including the read-more
+				// truncation (Parker, 2026-10-16; `whitespace-pre-line` keeps the line breaks
+				// the edit textarea wrote) — and, below it, an empty field's note.
+				<DescriptionBody description={description} />
 			)}
 			renderEdit={(draft, setDraft) => (
 				<div>
@@ -875,15 +871,12 @@ export default function OwnerWorkEditor({
 			saved={visibility}
 			renderRead={() => (
 				<div className="flex flex-col gap-2">
+					{/* The listing's globe rides the release line itself (ReleaseSummary,
+					    Parker, 2026-10-16); this line only says when there is none to ride. */}
 					<ReleaseSummary work={current} scheduled={scheduledIso} />
-					{/* The released Work's listing on the network — the shared reader-side line,
-					    read here the moment the page is, because it is public either way. */}
-					{current.visibility === "released" &&
-						(current.recordUrl ? (
-							<WorkRecordLink work={current} />
-						) : (
-							<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
-						))}
+					{current.visibility === "released" && !current.recordUrl && (
+						<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
+					)}
 				</div>
 			)}
 			renderEdit={(_draft, setDraft) => (
@@ -907,12 +900,9 @@ export default function OwnerWorkEditor({
 						/>
 						<span className="label-text text-sm">Released to my public Catalog</span>
 					</label>
-					{current.visibility === "released" &&
-						(current.recordUrl ? (
-							<WorkRecordLink work={current} />
-						) : (
-							<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
-						))}
+					{current.visibility === "released" && !current.recordUrl && (
+						<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
+					)}
 					{visibility !== "released" && (
 						<div className="flex flex-col gap-1">
 							<span className="text-sm">Or release it later</span>
@@ -1287,14 +1277,16 @@ export default function OwnerWorkEditor({
 					</span>
 				</div>
 			)}
-			<section className="flex flex-col gap-2">
-				<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
-				{descriptionField}
-			</section>
+			{/* The dates lead the tab (Parker, 2026-10-16): when it came out is the first
+			    thing asked of it. */}
 			<section className="flex flex-col gap-2">
 				<h3 className={WORK_DETAILS_HEADING_CLASS}>Release</h3>
 				{releaseField}
 				{originalDateField}
+			</section>
+			<section className="flex flex-col gap-2">
+				<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
+				{descriptionField}
 			</section>
 			{/* The Access section is gone (Parker, 2026-10-13): the chip in the byline strip
 			    below the video names who may open this, and for the creator that chip is the
@@ -1327,38 +1319,21 @@ export default function OwnerWorkEditor({
 
 	const sideTabs = [
 		{
-			key: "reviews",
-			label: "Reviews",
-			// The give rides with the verdict row (the design placement, 2026-09-13) — the
-			// bar itself leaves this page when Stickers attach from the editor itself,
-			// which is its own task.
-			content: (
-				<WorkReviews
-					workId={current.id}
-					aside={
-						<StickerBar
-							subjectType="work"
-							subjectId={current.id}
-							label={current.title ?? "this Work"}
-							align="end"
-						/>
-					}
-				/>
-			),
-		},
-		{
-			key: "showings",
-			label: "Showings",
-			content: <ShowingsStub work={current} />,
-		},
-		{
-			// The creator's tab — where the record's machinery lives (Parker's third pass,
-			// 2026-10-13), now per kind (the kinds pass, 2026-10-14). A user's page never
-			// renders this tab; the surface is the creator's alone and says so.
+			// The creator's tab, FIRST on the right column and active by default on it
+			// (Parker, 2026-10-16) — the tab a creator lands on opens the page's machinery,
+			// and the visitor's column never renders it. A user's page keeps the visitor's
+			// order (the surface is the creator's alone and says so).
 			key: "manage",
 			label: "Manage",
 			content: (
 				<div className="flex flex-col gap-6">
+					{/* The View As row, first on the tab (Parker, 2026-10-16): the creator's
+					    four ways to look at the page — and since Manage opens by default, at
+					    the top of the page itself, standing where the editing banner stood. */}
+					<section className="flex flex-col gap-2">
+						<h3 className={WORK_DETAILS_HEADING_CLASS}>View As</h3>
+						<WorkViewAsRow />
+					</section>
 					{current.type === "video" && (
 						<section className="flex flex-col gap-2">
 							<h3 className={WORK_DETAILS_HEADING_CLASS}>Media Status</h3>
@@ -1434,11 +1409,38 @@ export default function OwnerWorkEditor({
 				</div>
 			),
 		},
+		{
+			key: "reviews",
+			label: "Reviews",
+			// The give rides with the verdict row (the design placement, 2026-09-13) — the
+			// bar itself leaves this page when Stickers attach from the editor itself,
+			// which is its own task.
+			content: (
+				<WorkReviews
+					workId={current.id}
+					aside={
+						<StickerBar
+							subjectType="work"
+							subjectId={current.id}
+							label={current.title ?? "this Work"}
+							align="end"
+						/>
+					}
+				/>
+			),
+		},
+		{
+			key: "showings",
+			label: "Showings",
+			content: <ShowingsStub work={current} />,
+		},
 	];
 
 	return (
 		<WorkColumn type={current.type} wide tight>
-			<EditingBanner title={current.title} />
+			{/* The editing banner is gone (Parker, 2026-10-16): editing is inline, the
+			    pencil is the only edit affordance, and the mode a creator is in is what the
+			    page itself is — the View As row on the Manage tab carries the previewing. */}
 
 			{/* The file while it is this tab's life: the upload's progress rides the page's
 			    top, in front of a creator, while the Manage tab keeps the machinery's long
@@ -1534,6 +1536,7 @@ export default function OwnerWorkEditor({
 						label="Title"
 						saved={title}
 						className="w-full min-w-0"
+						rowAlign="center"
 						renderRead={() => (
 							<h1
 								className={`${workTitleTypography(current.type).className} truncate`}
@@ -1569,7 +1572,9 @@ export default function OwnerWorkEditor({
 			{/* ── The record's halves. The rule between them is its own grid column, a
 			    two-pixel span the row's full height: it stands at the player's midline and
 			    reaches the content area's bottom, which a border on one half only ever
-			    reached that half (Parker's third pass, 2026-10-13). ── */}
+			    reached that half (Parker's third pass, 2026-10-13). Above the whole pair,
+			    the same hair laid flat (Parker, 2026-10-16), as the visitor's page draws. ── */}
+			<div aria-hidden className="h-0.5 bg-base-content/20" />
 			<div className="grid lg:grid-cols-[minmax(0,1fr)_2px_minmax(0,1fr)]">
 				<div className="lg:pr-4">
 					<WorkInfoTabs
@@ -1766,24 +1771,30 @@ function ThumbUploadModal({
  * One labeled date line, shared by both of the Release section's lines (Parker's fourth
  * pass, 2026-10-13): the label in its fixed column, the value starting at the same x on
  * every line — the tab stop a text editor would give — with the same type per line and
- * the dash where the Work carries no value.
+ * the dash where the Work carries no value. `recordUrl`, when the row carries one,
+ * appends the record link's globe (Parker, 2026-10-16) — the release line is where the
+ * listing's address has always named itself, and this is the one icon everywhere.
  */
 export function DateValueLine({
 	label,
 	value,
 	hint,
+	recordUrl,
 }: {
 	label: string;
 	value: ReactNode;
 	/** A qualifier after the value, for a scheduled release. */
 	hint?: string;
+	/** The ATProto record's address, as the record link's globe. */
+	recordUrl?: string | null;
 }) {
 	return (
 		<div className="grid grid-cols-[8rem_1fr] items-baseline text-sm">
 			<span className="text-base-content/50">{label}</span>
-			<span>
+			<span className="flex flex-wrap items-center gap-x-2">
 				{value}
 				{hint && <span className="text-base-content/60"> — {hint}</span>}
+				{recordUrl && <RecordLinkButton recordUrl={recordUrl} />}
 			</span>
 		</div>
 	);
@@ -1817,6 +1828,7 @@ export function ReleaseSummary({
 			label="Anthers Release"
 			value={released ?? "—"}
 			hint={scheduledAt ? `scheduled for ${scheduledAt}` : undefined}
+			recordUrl={work.recordUrl}
 		/>
 	);
 }

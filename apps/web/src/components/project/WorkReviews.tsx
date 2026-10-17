@@ -50,6 +50,7 @@ import { useSeekPlayer } from "../../lib/work-player";
 import TimestampedText from "../media/TimestampedText";
 import VoteControl from "../post/VoteControl";
 import ReportDialog from "../ui/ReportDialog";
+import { WORK_DETAILS_HEADING_CLASS } from "../work/WorkLayout";
 
 /** The two orders the section knows. Helpful is the default; Newest is the alternative. */
 type ReviewSort = "helpful" | "newest";
@@ -188,7 +189,7 @@ export default function WorkReviews({
 	return (
 		<div>
 			<div className="flex items-center gap-4 mb-3 flex-wrap">
-				<h2 className="text-xl font-bold">Reviews</h2>
+				<h3 className={WORK_DETAILS_HEADING_CLASS}>Reviews</h3>
 				{agg.recommendedPercent !== null && (
 					<span className="text-sm text-base-content/70">
 						<span className="font-semibold">{agg.recommendedPercent}% Recommended</span>{" "}
