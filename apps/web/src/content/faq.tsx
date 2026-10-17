@@ -508,9 +508,13 @@ export function interpolateFund(
 		);
 	if (typeof answer === "string") return fill(answer);
 	// Keyed fragments, because a rebuilt array's children have no keys of their own and
-	// React warns on exactly this (the interpolated <div> is re-created per render).
+	// React warns on exactly this (the interpolated <div> is re-created per render); the
+	// index key is the stable one here, FAQ content being static and never reordered.
 	if (Array.isArray(answer))
-		return answer.map((child, i) => <Fragment key={i}>{interpolateFund(child, fund)}</Fragment>);
+		return answer.map((child, i) => (
+			// biome-ignore lint/suspicious/noArrayIndexKey: static, never-reordered FAQ content
+			<Fragment key={i}>{interpolateFund(child, fund)}</Fragment>
+		));
 	if (isValidElement(answer)) {
 		return cloneElement(
 			answer,
