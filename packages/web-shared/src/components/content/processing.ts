@@ -172,7 +172,13 @@ export function processingQueue(
 }
 
 function rank(work: Work): number {
-	return work.transcoding?.status === "processing" ? 0 : 1;
+	// The running row first, then the waiting ones **in the lane's own order** — the
+	// position record (`transcoding_jobs.queue_position`) is what the queue's truth
+	// looks like from here, and a panel that listed the waiting rows in any other
+	// order would contradict the badge each row already carries. A row the lane has
+	// not numbered sorts last (stable within itself).
+	const pos = work.transcoding?.queuePosition;
+	return work.transcoding?.status === "processing" ? 0 : 1 + (pos ?? Number.MAX_SAFE_INTEGER);
 }
 
 function finishedAt(work: Work): number {

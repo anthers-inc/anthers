@@ -11,9 +11,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
 import { transcodingJobs, works } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, gt, isNotNull, sql } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { storage } from "../services/storage/index.js";
+import { createEtaClamp } from "./transcode-eta.js";
 import { MAX_TRANSCODE_RESUMES } from "./resume-orphans.js";
 
 /**
@@ -186,7 +187,7 @@ export async function processAudio(data: ProcessAudioData) {
 	// itself.
 	await db
 		.update(transcodingJobs)
-		.set({ status: "processing", progress: 0, interruptedGracefully: false, updatedAt: new Date() })
+		.set({ status: "processing", progress: 0, etaSeconds: null, interruptedGracefully: false, updatedAt: new Date() })
 		.where(eq(transcodingJobs.id, jobId));
 
 	const [item] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
@@ -221,6 +222,34 @@ export async function processAudio(data: ProcessAudioData) {
 		// 2. Normalize and convert to MP3
 		mark("probeEnd");
 		mark("encodeStart");
+		const clampEta = createEtaClamp();
+
+		/**
+		 * The waveform pass's cost, projected, is folded into the running estimate rather
+		 * than left as a multi-minute tail after "0 seconds": the whole file is decoded a
+		 * second time to compute the peaks. Priced from the lane's own recorded history —
+		 * the median waveform wall time of recent completed audio jobs (`timings`,
+		 * camelCase keys like the jsonb elsewhere) — else a duration-scaled shape
+		 * clamped to real bounds. No history and no duration means no estimate to make,
+		 * which the clamp renders as the figure it already held.
+		 */
+		const [historyMedian] = await db
+			.select({
+				medianWaveformMs: sql<number | null>`percentile_cont(0.5) within group (order by ((timings->>'waveformMs')::numeric))`,
+			})
+			.from(transcodingJobs)
+			.where(
+				and(
+					eq(transcodingJobs.status, "completed"),
+					isNotNull(transcodingJobs.timings),
+					eq(transcodingJobs.mediaType, "audio"),
+					gt(transcodingJobs.createdAt, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+				),
+			);
+		const medianWaveform = Number(historyMedian?.medianWaveformMs ?? 0) / 1000;
+		const waveformAllowance =
+			medianWaveform > 0 ? medianWaveform : Math.min(900, Math.max(30, duration / 8));
+
 		outputPath = join(tmpdir(), `audio_${randomUUID()}.mp3`);
 		const proc = Bun.spawn(
 			ffmpegCommand(source, [
@@ -231,16 +260,80 @@ export async function processAudio(data: ProcessAudioData) {
 				"-b:a",
 				"192k",
 				outputPath,
+				// The estimate the creator reads comes from ffmpeg's own progress stream,
+				// tick-driven the way the video ladder reports — position and speed, so the
+				// running audio job carries its own real figure instead of encoding blind.
+				"-progress",
+				"pipe:1",
+				"-nostats",
 				"-y",
 			]),
 			{ stdout: "pipe", stderr: "pipe" },
 		);
+		if (proc.stdout) {
+			// Same parser shape the video ladder's tick loop runs; the write is
+			// fire-and-forget so the stream never blocks on the DB.
+			void (async () => {
+				const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
+				const decoder = new TextDecoder();
+				let buf = "";
+				let speed = 0;
+				let lastWriteMs = 0;
+				let tickWrite: Promise<unknown> = Promise.resolve();
+				try {
+					while (true) {
+						const { done, value } = await reader.read();
+						if (done) break;
+						buf += decoder.decode(value, { stream: true });
+						const lines = buf.split("\n");
+						buf = lines.pop() ?? "";
+						for (const line of lines) {
+							const eqPos = line.indexOf("=");
+							if (eqPos < 0) continue;
+							const key = line.slice(0, eqPos).trim();
+							const val = line.slice(eqPos + 1).trim();
+							if (key === "speed") {
+								const s = Number.parseFloat(val);
+								if (Number.isFinite(s) && s > 0) speed = s;
+							} else if (key === "out_time") {
+								const m = val.match(/^(\d+):(\d+):(\d+(?:\.\d+)?)$/);
+								if (!m) continue;
+								const outSec = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+								if (!Number.isFinite(outSec) || !(speed > 0) || !(duration > 0)) continue;
+								// Throttled like the video ladder's ticks — the estimate narrows the
+								// tail into the running figure as ffmpeg itself reports it.
+								const now = Date.now();
+								if (now - lastWriteMs < 1000) continue;
+								const encodeLeft = Math.max(0, (duration - outSec) / speed);
+								const estimate = clampEta(Math.round(encodeLeft + waveformAllowance));
+								if (estimate == null) continue;
+								lastWriteMs = now;
+								// Fire-and-forget so the progress stream isn't blocked on the DB write.
+								tickWrite = db
+									.update(transcodingJobs)
+									.set({ etaSeconds: estimate })
+									.where(eq(transcodingJobs.id, jobId))
+									.execute()
+									.catch(() => {});
+							}
+						}
+					}
+				} catch {
+					// stream closed on process exit
+				}
+			})();
+		}
 		const exitCode = await proc.exited;
 		if (exitCode !== 0) {
 			const stderr = await new Response(proc.stderr).text();
 			throw new Error(`Audio normalization failed: ${stderr.slice(0, 500)}`);
 		}
 		mark("encodeEnd");
+		// The encode is done — the estimate narrows to the tail the clamp has not already
+		// reached: upload, then the waveform pass the allowance projected.
+		const tailEta = clampEta(Math.round(waveformAllowance));
+		if (tailEta != null)
+			await db.update(transcodingJobs).set({ etaSeconds: tailEta }).where(eq(transcodingJobs.id, jobId));
 		await updateJobProgress(jobId, 60);
 
 		/**
@@ -302,9 +395,12 @@ export async function processAudio(data: ProcessAudioData) {
 			.update(transcodingJobs)
 			.set({
 				status: "completed",
-				// When it finished, which is what "recently finished" on the Dashboard reads.
+				// When it finished, which is what "recently finished" on the Dashboard reads —
+				// and the estimate is cleared, the same rule the video job keeps: a completed
+				// row owes nothing, so no held figure survives to claim it does.
 				updatedAt: new Date(),
 				progress: 100,
+				etaSeconds: null,
 				outputFileUrl: outputUrl,
 				waveformData: waveform,
 				timings,
