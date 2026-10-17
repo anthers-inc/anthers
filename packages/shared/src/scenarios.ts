@@ -23,12 +23,10 @@ import {
 	BADGE_ORDER,
 	CARD_FLAT,
 	CARD_RATE,
-	FREE_TIME_POOL,
 	ILLUSTRATIVE_SALES_TAX_RATE,
 	MERCH_BADGE_DISCOUNT,
 	PUBLIC_ACCESS_PRICE,
 	thresholdForBadge,
-	timePoolFor,
 } from "./constants.js";
 import {
 	anthersSupportBreakdown,
@@ -37,11 +35,13 @@ import {
 	paymentsSplit,
 	supportBreakdown,
 } from "./fees.js";
+import { DEFAULT_PLAN_PHASES, PLAN_DEFAULTS, planLedgerFor } from "./financial-plan.js";
 import {
 	affordable,
 	averageSupport,
 	crossover,
 	decayForAverage,
+	FREE_ACCESS_SHARE_DEFAULT,
 	floorPayingShare,
 	modelAt,
 	NO_STAFFING,
@@ -369,10 +369,15 @@ export const PAYING_SHARES = [0.1, 0.15, 0.2, 0.3];
  * What a free user costs each month.
  *
  * It used to be their streaming bandwidth at cost plus the subsidized Time Pool.
- * With delivery free the bandwidth half is gone, so **a free account's whole cost to
- * Anthers is the Time Pool it funds on their behalf** — the money that reaches the
- * creators they watched. Watching more costs Anthers nothing extra, which is exactly
- * what makes Public Access describable as free without qualification.
+ * With delivery free the bandwidth half is gone, and it was the subsidized pool
+ * alone until the pool mechanism retired that constant: **what a free account costs
+ * is the Fund's slice** — Free Access's published share of the programs after admin,
+ * divided across the plan's active free accounts. So the figure is the plan's
+ * launch-phase slice, derived (`financial-plan.ts`'s arithmetic), not a constant,
+ * and it moves when a share dial moves — the `free-pot` sensitivity block prices
+ * that trade on the share axis. Watching more costs Anthers
+ * nothing extra, which is exactly what makes Public Access describable as free
+ * without qualification.
  *
  * Not literally zero beyond that: presigned HLS segments can't be edge-cached, so
  * streaming carries ~600 Class B reads per watch-hour — about $0.0002/hr, against
@@ -380,7 +385,10 @@ export const PAYING_SHARES = [0.1, 0.15, 0.2, 0.3];
  * describes, and it is a platform line rather than a per-account one, so it is
  * deliberately not charged to a user here. the `STORAGE_PER_GIB_MONTH` docblock carries the figures.
  */
-export const freeUserCost = () => new Decimal(FREE_TIME_POOL);
+export function freeUserCost(): Decimal {
+	const launch = planLedgerFor(DEFAULT_PLAN_PHASES[0], PLAN_DEFAULTS);
+	return new Decimal(launch.freeSlice);
+}
 
 /**
  * What one more account does to the charitable budget, at a given paying share.
@@ -870,23 +878,31 @@ export function seedMixSensitivity() {
 }
 
 /**
- * Candidate settings for the free-account Time Pool pot, priced by what each costs.
+ * Candidate settings for the Fund's share — priced by what each costs.
  *
- * The pot is explicitly **provisional** (Parker, 2026-08-12) and under its own review, so
- * the thing 11.03 actually needs is not today's number but the *shape of the trade*: what
- * each setting costs, expressed as the floor paying share below which growth never closes
- * the gap. Generated because this document has now had three different values for it.
+ * The dial **is the share now** (the pool mechanism retired the per-head constant):
+ * Free Access's share of the programs after admin, so the thing the sensitivity
+ * prices is not today's number but the *shape of the trade*: what each share costs,
+ * expressed as the floor paying share below which growth never closes the gap, and
+ * the per-account slice it funds at the plan's launch scale. Generated because this
+ * document has had three different values for the trade's two halves.
  */
-export const FREE_POT_CANDIDATES = [0.05, FREE_TIME_POOL, 0.4, 0.5];
+export const FREE_POT_CANDIDATES = [0.05, FREE_ACCESS_SHARE_DEFAULT, 0.15, 0.2];
 
 export function freePotSensitivity() {
-	return FREE_POT_CANDIDATES.map((pot) => ({
-		pot: money(new Decimal(pot)),
-		shipped: pot === FREE_TIME_POOL,
-		floorPct: `${(floorPayingShare({ staffing: NO_STAFFING, freeTimePool: pot }) * 100).toFixed(1)}%`,
-		/** How much more a creator earns per unit of attention from a user paying the Public Access price. */
-		multiple: timePoolFor(PUBLIC_ACCESS_PRICE) / pot,
-	}));
+	return FREE_POT_CANDIDATES.map((share) => {
+		/** The slice the share funds a free account at the plan's launch phase. */
+		const slice = planLedgerFor(DEFAULT_PLAN_PHASES[0], {
+			...PLAN_DEFAULTS,
+			freeAccessShare: share,
+		}).freeSlice;
+		return {
+			sharePct: `${(share * 100).toFixed(0)}%`,
+			shipped: share === FREE_ACCESS_SHARE_DEFAULT,
+			slice: money(new Decimal(slice)),
+			floorPct: `${(floorPayingShare({ staffing: NO_STAFFING, freeAccessShare: share }) * 100).toFixed(1)}%`,
+		};
+	});
 }
 
 /** Organizational Structure's ED compensation band, as monthly all-in staff cost. */
@@ -1044,24 +1060,30 @@ export function purchaseCase(prices = [30, 60], rivalCut = 0.3) {
  * What a thousand accounts put into the Time Pool in a month, and who funds it.
  *
  * The one ASSUMPTION is the paying share; everything else derives from `TIME_POOL_RATE`
- * and `FREE_TIME_POOL`. Published on the creator case-study page to answer the question
+ * and the Fund's shares (the free side's money is the Fund — Free Access's published
+ * share of the remainder after admin, never a per-head constant). Published on the
+ * creator case-study page to answer the question
  * that decides whether the model is worth moving to: **more viewing does not create more
  * money.** The pot is set by headcount, and attention divides it.
  */
 export function timePoolPerThousand(accounts = 1000, payingShare = 0.1) {
 	const paying = Math.round(accounts * payingShare);
 	const free = accounts - paying;
-	const fromPaying = new Decimal(timePoolFor(PUBLIC_ACCESS_PRICE)).times(paying);
-	const fromFree = new Decimal(FREE_TIME_POOL).times(free);
-	const total = fromPaying.plus(fromFree);
+	const ledger = modelAt({ accounts, payingShare, staffing: NO_STAFFING });
+	// The ledger splits its own pot: the Fund's share (`freePool`) and the supporters'
+	// pools — the rungs' half — as the difference to `timePoolToCreators`. Derived at
+	// this scale, so the case study and the model cannot disagree.
+	const fromFund = new Decimal(ledger.freePool);
+	const fromPaying = new Decimal(ledger.timePoolToCreators).minus(fromFund);
+	const total = new Decimal(ledger.timePoolToCreators);
 	return {
 		accounts,
 		paying,
 		free,
 		payingSharePct: `${(payingShare * 100).toFixed(0)}%`,
 		fromPaying: money(fromPaying),
-		fromFree: money(fromFree),
+		fromFund: money(fromFund),
 		total: money(total),
-		freeSharePct: `${fromFree.dividedBy(total).times(100).toFixed(0)}%`,
+		fundSharePct: `${fromFund.dividedBy(total).times(100).toFixed(0)}%`,
 	};
 }

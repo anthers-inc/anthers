@@ -683,6 +683,12 @@ export interface PostListItem {
 	/** First linked Work's thumbnail, if any — thumbnails are public by design. */
 	thumbnail: string | null;
 	linkedWorkCount: number;
+	/**
+	 * The body as plain text, where a tile's band renders the content and the card
+	 * renders nothing more — the field the feed entries and the posts listing carry
+	 * (a post's body is public, a post carries no gate of its own).
+	 */
+	excerpt?: string | null;
 }
 
 /** A post as it appears inside a Project (GET /projects/:slug). */

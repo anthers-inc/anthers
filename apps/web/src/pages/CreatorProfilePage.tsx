@@ -19,6 +19,7 @@ import {
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import type {
 	Badge,
+	Creator,
 	CreatorBadge,
 	CreatorStatus,
 	PostListItem,
@@ -41,9 +42,8 @@ import {
 	PencilIcon,
 } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
-import PostCard from "../components/cards/PostCard";
+import FeedTile from "../components/cards/FeedTile";
 import ProjectCard from "../components/cards/ProjectCard";
-import WorkCard from "../components/cards/WorkCard";
 import PreviewBar, { PreviewToggle, usePreviewQuery } from "../components/creator/PreviewBar";
 import ReportDialog from "../components/ui/ReportDialog";
 import { useReportVisit } from "../lib/attention";
@@ -53,6 +53,21 @@ import { useBasket } from "../lib/basket";
 type CatalogWork = Work & {
 	creator?: { handle: string; displayName?: string | null; avatar?: string | null };
 };
+
+/**
+ * The FeedTile entry a catalog Work renders — the `kind` tag naming which tile
+ * shape the rest of the Work rides. The catalog's user serialization carries
+ * everything the tile reads (thumbnail, the access verdict, merch, the rating),
+ * so the spread is the whole entry.
+ */
+function workEntry(work: CatalogWork): { kind: "release"; id: number } & Record<string, unknown> {
+	return { kind: "release", ...work };
+}
+
+/** The FeedTile entry a listed post renders — same shape rule as a work's. */
+function postEntry(post: PostListItem): { kind: "post"; id: number } & Record<string, unknown> {
+	return { kind: "post", ...post };
+}
 
 type Tab = "all" | "posts" | "games" | "videos" | "audio" | "writing" | "badges" | "about";
 
@@ -598,8 +613,23 @@ export default function CreatorProfilePage() {
 				setIsFollowing(userData.isFollowing);
 				setFollowerCount(userData.followerCount);
 				setProjects(projectData.projects);
-				setPosts(postData.posts);
-				setWorks(((catalogData as { works?: CatalogWork[] }).works ?? []) as CatalogWork[]);
+				// The creator is this page's join: the catalog route attaches no per-work
+				// `creator` and the tiles read one, so the splice PostPage and ProjectPage
+				// make on their cards happens here once, over everything the page renders
+				// — the avatar and the name in every tile's meta row come from the profile
+				// itself.
+				const creatorOfPage: Creator = {
+					handle: userData.handle,
+					displayName: userData.displayName,
+					avatar: userData.avatar,
+				};
+				setPosts(postData.posts.map((p) => ({ ...p, creator: creatorOfPage })));
+				setWorks(
+					(((catalogData as { works?: CatalogWork[] }).works ?? []) as CatalogWork[]).map((w) => ({
+						...w,
+						creator: creatorOfPage,
+					})),
+				);
 				if (statusData) setCreatorStatus(statusData as CreatorStatus);
 			})
 			.catch(console.error)
@@ -1051,7 +1081,11 @@ export default function CreatorProfilePage() {
 				<div className="pb-8">
 					{tab === "all" &&
 						(allItems.length > 0 ? (
-							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+							// The same uniform tile grid the feed renders — every listing
+							// surface shares one widget, so a creator's page reads like the
+							// feed the creator's releases also ride. Projects keep ProjectCard:
+							// a project has no tile shape.
+							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
 								{allItems.map((entry) => {
 									if (entry.type === "project") {
 										return (
@@ -1060,11 +1094,18 @@ export default function CreatorProfilePage() {
 									}
 									if (entry.type === "post") {
 										return (
-											<PostCard key={`post-${entry.item.id}`} post={entry.item as PostListItem} />
+											<FeedTile
+												key={`post-${entry.item.id}`}
+												entry={postEntry(entry.item as PostListItem)}
+											/>
 										);
 									}
-									const work = entry.item as CatalogWork;
-									return <WorkCard key={`work-${work.id}`} work={work} />;
+									return (
+										<FeedTile
+											key={`work-${(entry.item as CatalogWork).id}`}
+											entry={workEntry(entry.item as CatalogWork)}
+										/>
+									);
 								})}
 							</div>
 						) : (
@@ -1076,9 +1117,9 @@ export default function CreatorProfilePage() {
 
 					{tab === "posts" &&
 						(posts.length > 0 ? (
-							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
 								{posts.map((p) => (
-									<PostCard key={`post-${p.id}`} post={p} />
+									<FeedTile key={`post-${p.id}`} entry={postEntry(p)} />
 								))}
 							</div>
 						) : (
@@ -1089,10 +1130,10 @@ export default function CreatorProfilePage() {
 						))}
 
 					{tab === "games" &&
-						(projects.length > 0 ? (
-							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+						(gameWorks.length > 0 ? (
+							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
 								{gameWorks.map((w) => (
-									<WorkCard key={w.id} work={w} />
+									<FeedTile key={w.id} entry={workEntry(w)} />
 								))}
 							</div>
 						) : (
@@ -1104,9 +1145,9 @@ export default function CreatorProfilePage() {
 
 					{tab === "videos" &&
 						(videoWorks.length > 0 ? (
-							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
 								{videoWorks.map((w) => (
-									<WorkCard key={w.id} work={w} />
+									<FeedTile key={w.id} entry={workEntry(w)} />
 								))}
 							</div>
 						) : (
@@ -1118,9 +1159,9 @@ export default function CreatorProfilePage() {
 
 					{tab === "audio" &&
 						(audioWorks.length > 0 ? (
-							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
 								{audioWorks.map((w) => (
-									<WorkCard key={w.id} work={w} />
+									<FeedTile key={w.id} entry={workEntry(w)} />
 								))}
 							</div>
 						) : (
@@ -1132,9 +1173,9 @@ export default function CreatorProfilePage() {
 
 					{tab === "writing" &&
 						(textWorks.length > 0 ? (
-							<div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-7xl">
+							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
 								{textWorks.map((w) => (
-									<WorkCard key={w.id} work={w} />
+									<FeedTile key={w.id} entry={workEntry(w)} />
 								))}
 							</div>
 						) : (

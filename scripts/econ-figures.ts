@@ -69,8 +69,6 @@ import {
 	CARD_FLAT,
 	CARD_RATE,
 	FREE_STORAGE_GIB,
-	FREE_TIME_POOL,
-	formatMultiple,
 	ILLUSTRATIVE_SALES_TAX_RATE,
 	PUBLIC_ACCESS_PRICE,
 	stickerBudgetFor,
@@ -144,8 +142,8 @@ const REPO = join(import.meta.dir, "..");
  */
 const ORG = organizationDir(REPO);
 
-/** The public wiki: the documentation written to be read by anyone. */
-const PUBLIC_WIKI = join(ORG, "Anthers-Wiki");
+/** The public wiki: the documentation written to be read by anyone. 🚨 `wiki-anthers` since the org-shape rename of 2026-10-15 (it was `Anthers-Wiki`); a vault never opened by a session can still resolve by name here, because this is a path, not a CLI lookup. */
+const PUBLIC_WIKI = join(ORG, "wiki-anthers");
 
 /**
  * The internal documents: governance and financial modeling, not written for anybody else.
@@ -595,7 +593,7 @@ function renderPerkLadderMarkdown(): string {
 					"*(no Badge)*",
 					"$0",
 					`${FREE_PUBLIC_ACCESS_HOURS} hrs/mo`,
-					`$${FREE_TIME_POOL.toFixed(2)}`,
+					"the Fund's published share",
 					"—",
 					`${FREE_STORAGE_GIB} GiB`,
 				],
@@ -612,7 +610,7 @@ function renderPerkLadderMarkdown(): string {
 		"",
 		"Free viewing, the Time Pool and Stickers are live today — and so is storage now (2026-10-09): the floor is metered, kept purchases and cloud saves draw it, and the renewal carries an at-cost line past it from Root onward.",
 		"",
-		`A free account's Time Pool is paid by Anthers on its behalf. Its ${FREE_STORAGE_GIB} GiB of storage is combined — a creator's catalog and the account's own kept files together, on every account, no Badge needed for either purpose. Each rung bundles more, and past a held rung's allowance more bytes are available at cost from Root onward — the provider's rate, with no mark-up. Keeping a withdrawn purchase past the window and syncing a game's save are both live; each draws the same allowance, a kept Work's cost shared 1/N among its keepers.`,
+		`A free account's Time Pool is the Time Pool Fund's money — the charitable share of what supporters pay in, published monthly, divided across the accounts that use it. Its ${FREE_STORAGE_GIB} GiB of storage is combined — a creator's catalog and the account's own kept files together, on every account, no Badge needed for either purpose. Each rung bundles more, and past a held rung's allowance more bytes are available at cost from Root onward — the provider's rate, with no mark-up. Keeping a withdrawn purchase past the window and syncing a game's save are both live; each draws the same allowance, a kept Work's cost shared 1/N among its keepers.`,
 		"",
 		"**The Sticker column is part of the Time Pool column rather than an addition to it.** A Sticker is money already on its way to creators, handed by you to a particular one instead of being shared out by the time you spend. Whatever you do not hand out is shared by time as usual, so the two columns overlap on purpose and giving no Stickers costs creators nothing.",
 	].join("\n");
@@ -808,7 +806,7 @@ function renderSelfSufficiencyMarkdown(): string {
 		.join(", ")
 		.concat(", trailing off beyond that");
 	return [
-		`Charitable revenue is **$${s.revenuePerPayingUser} per paying user per month**, and each paying user also carries the free-access cost of the free users beside them — **$${s.freeUserCost}/month each**, which is the subsidized Time Pool a free account funds for the creators it watches. So everything turns on the **paying share**:`,
+		`Charitable revenue is **$${s.revenuePerPayingUser} per paying user per month**, and the free accounts beside them are paid for from the same remainder — **about $${s.freeUserCost} a month each**, the Time Pool the Fund's published share divides across them. So everything turns on the **paying share**:`,
 		"",
 		table(
 			["Paying share", "Net per paying user", "Self-funding at", "Full-time at"],
@@ -823,7 +821,7 @@ function renderSelfSufficiencyMarkdown(): string {
 		"",
 		`**Below roughly ${s.breakEvenPct} paying, growth never closes the gap** — each new cohort costs more in free access than it brings in, so scale makes the problem worse rather than better. Above it the model self-funds, and the scale required falls away quickly.`,
 		"",
-		`**That floor no longer moves with how much free users watch**, and until 2026-08-12 it did. A free account's cost was its streaming bandwidth plus its Time Pool, so the generosity of the free floor and the platform's self-sufficiency were the same dial and raising one priced the other. Delivery is free on R2, the floor is gone, and what remains — the $${s.freeUserCost} Time Pool — is a flat cost per free account however much it watches. **Free access stopped having a usage-dependent price.**`,
+		`**That floor no longer moves with how much free users watch**, and until 2026-08-12 it did — free access cost bandwidth plus its Time Pool, and generosity and solvency were the same dial. Delivery is free on R2, the floor is gone, and the free account's Time Pool is **the Fund's slice** — a stated share of the remainder after the admin budget, divided across the accounts that use it, published monthly. It rides what the platform takes in rather than promising per head, so a thin month funds a thin pool. **Free access stopped having a usage-dependent price, and it stopped having a fixed one.**`,
 		"",
 		`**Self-funding** is where the budget covers its obligations with no salary drawn; **full-time** is where it also affords an ED inside the Admin ceiling — 61.01's inflection 1. Both come from the same growth model the ladder does, so the two documents cannot disagree.`,
 		"",
@@ -949,9 +947,8 @@ const usd = (s: string) =>
 	`$${Number(s).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 function renderLandmarksMarkdown(): string {
-	const s = selfSufficiency();
 	return [
-		`Every figure below is derived from \`fees.ts\` through \`packages/shared/src/growth.ts\`, at the model's **${(MODELLED_PAYING_SHARE * 100).toFixed(0)}% paying share** and the shipped free-account Time Pool of **$${s.freeUserCost}**. They move when a dial moves, and \`bun run econ:figures --check\` fails CI if this block and the model disagree.`,
+		`Every figure below is derived from \`fees.ts\` through \`packages/shared/src/growth.ts\`, at the model's **${(MODELLED_PAYING_SHARE * 100).toFixed(0)}% paying share**, the free tier funded at the plan's launch scale by the Fund's share. They move when a dial moves, and \`bun run econ:figures --check\` fails CI if this block and the model disagree.`,
 		"",
 		table(
 			["Landmark", "Accounts", "What it means"],
@@ -1039,30 +1036,30 @@ function renderCreatorSegmentsMarkdown(): string {
 }
 
 /**
- * What each candidate free-account Time Pool pot costs, as the floor paying share.
+ * What each candidate Fund share costs, as the floor paying share — and the
+ * per-account slice it funds at the plan's launch scale.
  *
- * 11.03 carried these three by hand and they had been wrong twice — a table whose entire
- * purpose is to price a decision that has not been taken is exactly the table that must
- * not be typed. ⚠️ Note the reversal this generation produced: the revamp's own ~15.7%
- * for a $0.50 pot, which 11.03 recorded as "does not reproduce, do not carry forward",
- * **reproduces exactly** under the unified model. What did not reproduce was the four-rung
- * Badge mix `selfSufficiency()` used to assume, not the figure.
+ * The dial **is the share now** — the pool mechanism retired the per-head pot the
+ * old table priced — so the axis moved from dollars to the share of programs, and
+ * 11.03's successor page reads: what each share funds a free account, and what each
+ * share needs of growth. Generated because a typed table priced a decision that had
+ * not been taken, and drifted.
  */
 function renderFreePotMarkdown(): string {
 	const rows = freePotSensitivity();
 	const shipped = rows.find((r) => r.shipped);
 	return [
 		table(
-			["Free pot / account", "Creator earns, with support", "Floor paying share"],
+			["Fund share of programs", "A free account's slice", "Floor paying share"],
 			["--:", "--:", "--:"],
 			rows.map((r) => [
-				r.shipped ? `**$${r.pot}** *(shipped)*` : `$${r.pot}`,
-				`${formatMultiple(r.multiple)} more`,
+				r.shipped ? `**${r.sharePct}** *(shipped)*` : r.sharePct,
+				`$${r.slice}`,
 				r.shipped ? `**${r.floorPct}**` : r.floorPct,
 			]),
 		),
 		"",
-		`The pot is the single dial that sets **free-access cost per account**: cost is \`free accounts × this number\`, headcount times a policy figure, with no behavioral guess underneath it. Raising it sends more money to the creators a free user spends time with, and raises the share of payers needed to fund that — which is the whole of the trade. The shipped $${shipped?.pot} was chosen on an **asymmetry rather than a forecast**: it is a standing obligation to every free account, so raising it later is easy and climbing down from it in public is not.`,
+		`The share is the single dial that sets **free-access cost per account** under the pool: the Fund takes its stated share of the remainder after the admin budget and divides it across the cycle's active free accounts, so cost is no longer a headcount times a fixed figure — it rides what the platform takes in, and a thin month funds a thin pool, which is the doctrine working. A larger share sends more money to the creators free users spend time with and raises the paying share needed to cover the rest — which is the whole of the trade. The shipped ${shipped?.sharePct} is the ruled plan default, held as data in the plan tool, and the ledger publishes the actual value monthly.`,
 	].join("\n");
 }
 
@@ -1156,12 +1153,12 @@ function renderTimePoolPerThousandMarkdown(): string {
 					`**${p.paying}** supporting Anthers at $${PUBLIC_ACCESS_PRICE} a month`,
 					`$${p.fromPaying}`,
 				],
-				[`**${p.free}** free accounts, paid by Anthers on their behalf`, `$${p.fromFree}`],
+				[`**${p.free}** free accounts, through the Time Pool Fund`, `$${p.fromFund}`],
 				["**The whole pot**", `**$${p.total}**`],
 			],
 		),
 		"",
-		`That is the entire pot, **however much anybody watches** — it is set by how many accounts exist and what they give, and attention only decides how it is divided. At this paying share **free accounts fund ${p.freeSharePct} of it**, which makes a free user a paying user that Anthers pays for.`,
+		`That is the entire pot, **however much anybody watches** — it is set by how many accounts exist and what they give, and attention only decides how it is divided. At this paying share **the Fund carries ${p.fundSharePct} of it**: the Fund is the charitable share of what supporters pay in, published monthly, and it is what pays a free account's way.`,
 	].join("\n");
 }
 
