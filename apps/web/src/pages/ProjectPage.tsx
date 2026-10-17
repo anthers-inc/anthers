@@ -31,6 +31,7 @@ export default function ProjectPage() {
 	/** Stable string, so the effect re-runs on a change of the preview's value not identity. */
 	const previewKey = JSON.stringify(preview);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: previewKey is the trigger, never a read — a preview is an ANSWER the server computes, so the row re-reads when it changes
 	useEffect(() => {
 		if (!slug) return;
 		setLoading(true);

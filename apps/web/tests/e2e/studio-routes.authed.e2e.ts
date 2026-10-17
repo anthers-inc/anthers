@@ -251,7 +251,10 @@ test("the pre-rename paths redirect to the Works page rather than rendering", as
 	await expect(page.getByRole("heading", { name: "Works", exact: true })).toBeVisible();
 });
 
-test("a creator can create a Project and lands on its page, which is the editor", async ({ page, context }) => {
+test("a creator can create a Project and lands on its page, which is the editor", async ({
+	page,
+	context,
+}) => {
 	const token = await signInAsCreator(context);
 	// Unique per run: the gauntlet reset does not touch projects, and `POST /projects` 409s
 	// on a duplicate slug — so a fixed slug would pass once and fail forever after.

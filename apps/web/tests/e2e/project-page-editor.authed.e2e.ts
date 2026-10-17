@@ -15,8 +15,9 @@
  * the works it made; those titles are prefixed so the gauntlet's own rows are never
  * mistaken for them.
  */
-import { MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
+
 import { gauntletHandle } from "@anthers/db/gauntlet";
+import { MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
@@ -62,9 +63,7 @@ async function makeWork(title: string, released: boolean, originallyReleased?: s
 				visibility: "released",
 				access: [{ threshold: 0, allow: true, price: "0" }],
 				maturityRows: rowsRatedAs("general"),
-				credits: [
-					{ role: "Made by", contributor: handle || "Media Fixture", types: ["created"] },
-				],
+				credits: [{ role: "Made by", contributor: handle || "Media Fixture", types: ["created"] }],
 				...(originallyReleased ? { originallyReleased } : {}),
 			}),
 		});
