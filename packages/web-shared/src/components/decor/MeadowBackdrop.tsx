@@ -47,8 +47,8 @@ export function MeadowBackdrop({
 	// the layer's root rather than a wrapping element, because the shell's e2e test
 	// pins the parent of this root as the stacking context <main> shares: an
 	// intermediate wrapper between them breaks that walk (meadow-signed-in.authed.e2e.ts).
-	const QUIET_OPACITY = 0.3;
-	const QUIET_BLUR_PX = 3;
+	const QUIET_OPACITY = 0.15;
+	const QUIET_BLUR_PX = 6;
 
 	return (
 		// `pointer-events-none` plus `aria-hidden`: the layer is pure decoration, and its
