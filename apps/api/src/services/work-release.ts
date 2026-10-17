@@ -66,16 +66,26 @@ export async function unreadyWorks(
 		.select({
 			workId: transcodingJobs.workId,
 			status: transcodingJobs.status,
+			// The moment a video's tree first played, per `transcoding_jobs.playable_at`.
+			// A video whose ladder is still filling in is no longer the release gate's
+			// problem — publish-early (2026-10-18): the tree plays, the tall rungs
+			// render behind it, and the job's completing write settles the row after.
+			playableAt: transcodingJobs.playableAt,
 			createdAt: transcodingJobs.createdAt,
 		})
 		.from(transcodingJobs)
 		.where(inArray(transcodingJobs.workId, workIds))
 		.orderBy(desc(transcodingJobs.createdAt));
-	const latest = new Map<number, string>();
-	for (const j of jobs) if (!latest.has(j.workId)) latest.set(j.workId, j.status);
+	const latest = new Map<number, { status: string; playableAt: Date | null; workId: number }>();
+	for (const j of jobs) if (!latest.has(j.workId)) latest.set(j.workId, j);
 	const unready: Array<{ workId: number; status: string }> = [];
-	for (const [workId, status] of latest)
-		if (status !== "completed") unready.push({ workId, status });
+	for (const [workId, job] of latest)
+		// Still unready: anything not completed, EXCEPT a video whose playable tree is
+		// up and the ladder is merely filling in (`playableAt` written at the first
+		// rung's upload, `transcode-video.ts`'s loop). A failed or canceled row is not
+		// playable and not something to wait for; its own branch below says so.
+		if (job.status !== "completed" && !(job.status === "processing" && job.playableAt != null))
+			unready.push({ workId: job.workId, status: job.status });
 	return unready;
 }
 

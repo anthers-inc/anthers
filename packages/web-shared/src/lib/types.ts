@@ -268,9 +268,9 @@ export interface TranscodingJob {
 	progress: number | null;
 	etaSeconds: number | null;
 	/**
-	 * The row's spot in the single-file media lane — 1 means next to run — when it is
-	 * waiting, null otherwise (running, settled, canceled, or a book outside the lane).
-	 * The queue figure's "N ahead of you" reads this, not a recomputed order.
+	 * The row's spot in its own type's media lane — 1 means next to run there — when
+	 * it is waiting, null otherwise (running, settled, canceled, or a book outside the
+	 * lanes). The queue figure's "N ahead of you" reads this, not a recomputed order.
 	 */
 	queuePosition: number | null;
 	/**
@@ -281,6 +281,13 @@ export interface TranscodingJob {
 	 */
 	queueEtaSeconds: number | null;
 	errorMessage: string | null;
+	/**
+	 * The moment this tree first played — the smallest rung's upload (publish-early):
+	 * the release gate opens while the tall rungs still encode, and this is what the
+	 * display reads to say "Playable" where a progress figure would claim the wrong
+	 * state. Null on every row that has not produced a playable tree yet.
+	 */
+	playableAt: string | null;
 	hlsManifestUrl: string | null;
 	/**
 	 * The audio-only rendition of a video (`audio.m3u8`), serialized on the user
