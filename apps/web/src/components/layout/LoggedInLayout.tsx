@@ -2,6 +2,7 @@
 
 import { APP_VERSION } from "@anthers/shared/version";
 import { useAuth } from "@anthers/web-shared/auth";
+import { MeadowBackdrop } from "@anthers/web-shared/decor/MeadowBackdrop";
 import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -412,112 +413,116 @@ function LoggedInLayoutInner() {
 					/>
 				)}
 
-				{/* Main content area — reserve the scrollbar gutter so short and tall pages
-					keep the same width (no content shift when the scrollbar appears).
-					`min-w-0` also lets flex-column children shrink below their min-content
-					size, so wide inner grids/tables can't blow the page wider than the
-					viewport on mobile — the same guard LoggedOutLayout's <main> carries. */}
-				<main
-					className={`flex flex-1 min-w-0 flex-col overflow-y-auto [scrollbar-gutter:stable] ${currentTrack ? "pb-16" : ""}`}
-				>
-					<RouteSuspense>
-						<Outlet />
-					</RouteSuspense>
+				{/* Meadow backdrop behind the whole page area. `relative isolate` scopes the
+				    layer's own stacking: the backdrop carries the negative z-index itself, so
+				    everything on the page paints above it by construction and no decoration
+				    ever rides across a creator's work or a post. The vines are hidden below
+				    `xl`, where the shell is too dense for them. The wrapper stays mounted in
+				    every shell state (onboarding included) — one tree, rebuilt on nothing. */}
+				<div className="relative isolate flex flex-1 min-w-0 flex-col">
+					<MeadowBackdrop />
+					<main
+						className={`flex flex-1 min-h-0 flex-col overflow-y-auto [scrollbar-gutter:stable] ${currentTrack ? "pb-16" : ""}`}
+					>
+						<RouteSuspense>
+							<Outlet />
+						</RouteSuspense>
 
-					{/* Footer, in user mode only: most of it is Feed, Library and Subscription, which
-					    studio mode leaves out, and a working tool has no use for a site map. */}
-					{!studio && (
-						<footer
-							className={`bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}
-						>
-							<div className="max-w-7xl mx-auto">
-								<div className="join join-horizontal w-full">
-									<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-										<h6 className="footer-title text-xs">Discover</h6>
-										<Link to="/discover" className="link link-hover">
-											Browse Projects
-										</Link>
-									</nav>
-									<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-										<h6 className="footer-title text-xs">Your Stuff</h6>
-										<Link to="/feed" className="link link-hover">
-											Feed
-										</Link>
-										<Link to="/library" className="link link-hover">
-											Library
-										</Link>
-										<Link to="/badges" className="link link-hover">
-											Badges
-										</Link>
-									</nav>
-									{/* Roadmap and Release Notes in their own column, matching the logged-out
+						{/* Footer, in user mode only: most of it is Feed, Library and Subscription, which
+							    studio mode leaves out, and a working tool has no use for a site map. */}
+						{!studio && (
+							<footer
+								className={`bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}
+							>
+								<div className="max-w-7xl mx-auto">
+									<div className="join join-horizontal w-full">
+										<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+											<h6 className="footer-title text-xs">Discover</h6>
+											<Link to="/discover" className="link link-hover">
+												Browse Projects
+											</Link>
+										</nav>
+										<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+											<h6 className="footer-title text-xs">Your Stuff</h6>
+											<Link to="/feed" className="link link-hover">
+												Feed
+											</Link>
+											<Link to="/library" className="link link-hover">
+												Library
+											</Link>
+											<Link to="/badges" className="link link-hover">
+												Badges
+											</Link>
+										</nav>
+										{/* Roadmap and Release Notes in their own column, matching the logged-out
 									    footer's Development column (Parker, 2026-10-03). */}
-									<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-										<h6 className="footer-title text-xs">Development</h6>
-										<Link to="/roadmap" className="link link-hover">
-											Roadmap
-										</Link>
-										<Link to="/release-notes" className="link link-hover">
-											Release Notes
-										</Link>
-										<Link to="/status" className="link link-hover">
-											Status
-										</Link>
-										<Link to="/issues" className="link link-hover">
-											Report an Issue
-										</Link>
-									</nav>
-									<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-										<h6 className="footer-title text-xs">About</h6>
-										<Link to="/about" className="link link-hover">
-											About Us
-										</Link>
-										<Link to="/faq" className="link link-hover">
-											FAQ
-										</Link>
-										<Link to="/supporters" className="link link-hover">
-											Supporters
-										</Link>
-										<Link to="/resources" className="link link-hover">
-											Resources
-										</Link>
-										{/* Under Support rather than Legal — see the note in LoggedOutLayout. */}
-										<Link to="/parents" className="link link-hover">
-											For Parents
-										</Link>
-									</nav>
-									<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-										<h6 className="footer-title text-xs">Legal</h6>
-										<Link to="/privacy" className="link link-hover">
-											Privacy
-										</Link>
-										<Link to="/terms" className="link link-hover">
-											Terms
-										</Link>
-										<Link to="/copyright" className="link link-hover">
-											Copyright
-										</Link>
-										{/* Matches the URL and the mailbox — see the note in
+										<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+											<h6 className="footer-title text-xs">Development</h6>
+											<Link to="/roadmap" className="link link-hover">
+												Roadmap
+											</Link>
+											<Link to="/release-notes" className="link link-hover">
+												Release Notes
+											</Link>
+											<Link to="/status" className="link link-hover">
+												Status
+											</Link>
+											<Link to="/issues" className="link link-hover">
+												Report an Issue
+											</Link>
+										</nav>
+										<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+											<h6 className="footer-title text-xs">About</h6>
+											<Link to="/about" className="link link-hover">
+												About Us
+											</Link>
+											<Link to="/faq" className="link link-hover">
+												FAQ
+											</Link>
+											<Link to="/supporters" className="link link-hover">
+												Supporters
+											</Link>
+											<Link to="/resources" className="link link-hover">
+												Resources
+											</Link>
+											{/* Under Support rather than Legal — see the note in LoggedOutLayout. */}
+											<Link to="/parents" className="link link-hover">
+												For Parents
+											</Link>
+										</nav>
+										<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+											<h6 className="footer-title text-xs">Legal</h6>
+											<Link to="/privacy" className="link link-hover">
+												Privacy
+											</Link>
+											<Link to="/terms" className="link link-hover">
+												Terms
+											</Link>
+											<Link to="/copyright" className="link link-hover">
+												Copyright
+											</Link>
+											{/* Matches the URL and the mailbox — see the note in
 										    LoggedOutLayout. */}
-										<Link to="/abuse" className="link link-hover">
-											Abuse
-										</Link>
-									</nav>
-								</div>
+											<Link to="/abuse" className="link link-hover">
+												Abuse
+											</Link>
+										</nav>
+									</div>
 
-								{/* The running version, quiet at the bottom of the page. A support
+									{/* The running version, quiet at the bottom of the page. A support
 								    question or a bug report names the build it saw, and the footer is
 								    where a person looks for it. Logged-in view only (Parker, 2026-10-01):
 								    a logged-out visitor is being pitched to, not debugging. The value
 								    is a committed calver constant — `@anthers/shared/version`'s docblock
 								    carries why it is not computed from git at build time. */}
-								<p className="mt-8 text-center text-[10px] opacity-40 select-none">
-									Anthers {APP_VERSION}
-								</p>
-							</div>
-						</footer>
-					)}
-				</main>
+									<p className="mt-8 text-center text-[10px] opacity-40 select-none">
+										Anthers {APP_VERSION}
+									</p>
+								</div>
+							</footer>
+						)}
+					</main>
+				</div>
 			</div>
 
 			<PlayerBar />

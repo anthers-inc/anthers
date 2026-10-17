@@ -26,6 +26,7 @@
 		"./sidebar": "./src/lib/sidebar.tsx",
 		"./decor/BrandGlyph": "./src/components/decor/BrandGlyph.tsx",
 		"./decor/LineArt": "./src/components/decor/LineArt.tsx",
+		"./decor/MeadowBackdrop": "./src/components/decor/MeadowBackdrop.tsx",
 		"./decor/MeadowDecor": "./src/components/decor/MeadowDecor.tsx",
 		"./decor/MeadowFloor": "./src/components/decor/MeadowFloor.tsx",
 		"./decor/MeadowVines": "./src/components/decor/MeadowVines.tsx",
