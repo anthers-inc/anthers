@@ -32,6 +32,7 @@ const CATALOG: Work[] = [
 		visibility: "released",
 		viewCount: 9,
 		createdAt: "2026-03-01T00:00:00Z",
+		releasedAt: "2026-03-10T00:00:00Z",
 	}),
 	work({
 		id: 2,
@@ -39,8 +40,14 @@ const CATALOG: Work[] = [
 		type: "music",
 		viewCount: 100,
 		createdAt: "2026-02-01T00:00:00Z",
+		scheduledReleaseAt: "2026-03-20T00:00:00Z",
 	}),
-	work({ id: 3, title: null, visibility: "withdrawn", createdAt: "2026-01-15T00:00:00Z" }),
+	work({
+		id: 3,
+		title: null,
+		visibility: "withdrawn",
+		createdAt: "2026-01-15T00:00:00Z",
+	}),
 	// No dates at all — the case a comparator turns into NaN if it is unwired.
 	work({ id: 4, title: "Undated", createdAt: undefined }),
 ];
@@ -98,10 +105,18 @@ describe("sortWorks", () => {
 		expect(titled[titled.length - 1].id).toBe(3); // the word "Untitled"
 	});
 
-	it("sorts a Work the payload never dated oldest, never NaN", () => {
+	it("sorts by the release date the column shows — released, then scheduled, never NaN", () => {
+		// The Release Date column reads `releasedAt`, or the scheduled instant for a
+		// Work waiting on one — so the sort orders by what the column reads, not by
+		// the upload date: Undertow was uploaded before Tide came out but is SCHEDULED
+		// after it, so it sorts first — the exact order the old upload-date comparator
+		// would have reversed. And the Works with no release date at all sort last, as
+		// the oldest things present rather than a NaN that would wedge the comparator
+		// and strand the sort's contract mid-table.
 		const byDate = sortWorks(CATALOG, "date", "desc");
-		expect(byDate[byDate.length - 1].id).toBe(4);
-		expect(byDate[0].id).toBe(1);
+		expect(byDate.map((w) => w.id)).toEqual([2, 1, 3, 4]);
+		const byDateAsc = sortWorks(CATALOG, "date", "asc");
+		expect(byDateAsc.map((w) => w.id)).toEqual([3, 4, 1, 2]);
 	});
 
 	it("treats an absent view count as zero", () => {

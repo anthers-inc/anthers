@@ -272,13 +272,14 @@ test("a Work's page and the Dashboard follow its processing", async ({ page, con
 	await expect(page.getByText("43%", { exact: true })).toBeVisible();
 	await expect(page.getByText("About 3 minutes left")).toBeVisible();
 
-	// The row gives the estimate a line of its own, because its badge has no room for it:
-	// the longest estimate wrapped inside the badge's one fixed-height line and spilled out of it.
+	// The row shows the same chips the Manage tab does (Parker, 2026-10-17): the original,
+	// the audio rendition and the ladder — each yellow while the run has not produced it —
+	// and the estimate a line of its own, because a chip has no room for it.
 	await page.goto("/studio/works");
 	const row = page.locator("tbody tr").filter({ hasText: `${STEM} processing` });
-	await expect(row.locator(".badge").filter({ hasText: "Processing" })).toHaveText(
-		"Processing 43%",
-	);
+	await expect(row.getByText("Original", { exact: true })).toBeVisible();
+	await expect(row.getByText("Audio", { exact: true })).toBeVisible();
+	await expect(row.getByText("Ladder", { exact: true })).toBeVisible();
 	await expect(row.getByText("About 3 minutes left")).toBeVisible();
 	await page.goto(`/studio/works/${work.publicId}/edit`);
 	// The fresh page's tabs open on Details; the processing lives on Manage.

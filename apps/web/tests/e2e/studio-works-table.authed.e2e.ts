@@ -142,9 +142,9 @@ test("the column headers sort, and repeat clicks flip the direction", async ({ p
 	session = await signInAsMediaFixture(context);
 	await page.goto("/studio/works");
 
-	// The default is Date, newest first — asserted as the header's own state rather than
-	// a specific row on top, because which Work is newest is the fixture's business.
-	const dateHeader = page.getByRole("button", { name: "Date" });
+	// The default is Release Date, newest first — asserted as the header's own state rather
+	// than a specific row on top, because which Work is newest is the fixture's business.
+	const dateHeader = page.getByRole("button", { name: "Release Date" });
 	await expect(dateHeader.locator("span")).toHaveText("↓");
 
 	// A second column takes the same direction a user expects its data to read — views

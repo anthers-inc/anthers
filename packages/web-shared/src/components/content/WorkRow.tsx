@@ -1,26 +1,40 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * One Work in the creator's Works table as a row: thumbnail and title, the description as
- * its own column beside it, the release and access state, the processing state, the upload
- * date and the counts.
+ * One Work in the creator's Works table as a row: thumbnail and title, the description
+ * as its own column beside it, the media status, the release date (editable — the same
+ * acts the Work's own page offers), the access state and the counts.
  *
  * This carries forward the card's reasoning, which it replaced (the Works listing stopped
- * being a grid): Release is in the table because the common case is uploading a back
- * catalog — a creator releasing thirty Works should not open thirty pages; the page still
- * owns the *shape* of a release. ⭐ And the two blocked-release reasons a creator can act
- * on are links, not tooltips: a Work is born unrated and the server refuses to release it
- * while it is, so "open Edit and say whether this is General or Mature" has to be
+ * being a grid): the release acts live in the table because the common case is uploading
+ * a back catalog — a creator releasing thirty Works should not open thirty pages; the
+ * page still owns the *shape* of a release. ⭐ And the reasons a blocked release gives
+ * are links, not tooltips: a Work is born unrated and the server refuses to release it
+ * while it is, so "open the Work and say whether this is General or Mature" has to be
  * followable by clicking it.
+ *
+ * 🚨 **The row has no Edit button** (Parker, 2026-10-17): the title and the thumbnail are
+ * the Work's page, which is the editing surface for its creator — a second link to the
+ * same place read as a different destination. Delete stays, as a labeled button rather
+ * than a bare icon: it is the one destructive act on the row, and the icon alone asked
+ * the creator to know what it meant.
+ *
+ * **Media Status is per-variant** (Parker, 2026-10-17): a video row shows the same
+ * chips its Manage tab shows — the original, the audio rendition, the ladder — rather
+ * than a badge that only says "Ready", so a back catalog's encoding state reads in place.
+ * The other kinds keep the single processing badge, which for a one-file Work is the
+ * whole truth.
  */
 
 import { isEmptyWriting, needsChosenThumbnail, workNeedsFile } from "@anthers/shared/content";
 import { gridFor, isRatingComplete } from "@anthers/shared/content-rating";
-import { EyeIcon, EyeSlashIcon, PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { TrashIcon } from "@heroicons/react/24/outline";
 import { Link } from "../../lib/router";
 import { studioEditWorkUrl } from "../../lib/studio";
 import type { Work } from "../../lib/types";
 import { isUploading, useSourceUpload } from "../../lib/work-uploads";
+import { VideoMediaStatusChips } from "./media-status";
 import { etaLeft } from "./processing";
+import { WorkReleaseCell, type WorkReleaseFields } from "./release-date";
 import {
 	AccessBadge,
 	accessState,
@@ -34,14 +48,14 @@ import {
 export default function WorkRow({
 	item,
 	onDelete,
-	onSetVisibility,
+	onRelease,
 	busy,
 }: {
 	item: Work;
 	onDelete: (item: Work) => void;
-	/** Flip visibility. Absent → the control is not rendered. */
-	onSetVisibility?: (item: Work, visibility: "private" | "released") => void;
-	/** True while this row's own visibility change is in flight. */
+	/** One release act — publish now, schedule, clear, unrelease — from the row. */
+	onRelease: (item: Work, fields: WorkReleaseFields) => Promise<boolean>;
+	/** True while this row's own release act is in flight. */
 	busy?: boolean;
 }) {
 	const preview = itemPreviewUrl(item);
@@ -96,7 +110,8 @@ export default function WorkRow({
 		<tr className="border-b border-base-300/50 hover:bg-base-200/40 align-middle">
 			{/* WORK — the thumbnail and the title, as one link target like the
 			    video column the table is modeled on. The thumbnail is out of the accessibility
-			    tree because the title already names the same place. */}
+			    tree because the title already names the same place. The rating rides the type
+			    badge: both describe the Work rather than any one column's business. */}
 			<td className="py-2.5 pr-4">
 				<div className="flex items-center gap-3">
 					<Link
@@ -119,8 +134,9 @@ export default function WorkRow({
 								{item.title || "Untitled"}
 							</Link>
 						</p>
-						<div className="mt-0.5">
+						<div className="mt-0.5 flex flex-wrap items-center gap-1">
 							<TypeBadge type={item.type} />
+							<MaturityBadge work={item} />
 						</div>
 					</div>
 				</div>
@@ -135,51 +151,17 @@ export default function WorkRow({
 				</p>
 			</td>
 
-			{/* VISIBILITY — the release state first, the access ladder beneath it, and the
-			    switch below both so a back catalog still releases thirty rows at a time. */}
+			{/* MEDIA STATUS — what is moving, what is missing, and what is owed before a
+			    release. A video shows the same chips its Manage tab shows; the other kinds
+			    keep the one badge that is their whole media state. */}
 			<td className="py-2.5 pr-4">
-				<div className="flex flex-col items-start gap-1">
-					<AccessBadge item={item} />
-					{onSetVisibility && (
-						<button
-							type="button"
-							className="btn btn-ghost btn-xs"
-							onClick={() => onSetVisibility(item, released ? "private" : "released")}
-							disabled={busy || blocked}
-							title={blocked ? blockedWhy : released ? "Make private" : "Release"}
-						>
-							{released ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
-							{released ? "Unrelease" : "Release"}
-						</button>
-					)}
-				</div>
-			</td>
-
-			{/* STATUS — what is moving, what is missing, and what is owed before a release. */}
-			<td className="py-2.5 pr-4">
-				<div className="flex flex-wrap items-center gap-1">
+				{item.type === "video" ? (
+					<div className="flex flex-col gap-1">
+						<VideoMediaStatusChips work={item} sourceUpload={upload} />
+						{processing && eta && <p className="text-xs text-base-content/60">{eta}</p>}
+					</div>
+				) : (
 					<ProcessingBadge item={item} />
-					<MaturityBadge work={item} />
-				</div>
-				{state === "locked" && (
-					<p className="text-xs text-error mt-1">
-						Released, but no one can open it —{" "}
-						<Link to={editUrl} className="link">
-							set access on this Work
-						</Link>
-						.
-					</p>
-				)}
-				{processing && eta && <p className="text-xs text-base-content/60 mt-1">{eta}</p>}
-				{item.scheduledReleaseAt && !released && (
-					<p className="text-xs text-info mt-1">
-						{Date.parse(item.scheduledReleaseAt) <= Date.now()
-							? "Releases as soon as it's ready."
-							: `Releases ${new Date(item.scheduledReleaseAt).toLocaleString(undefined, {
-									dateStyle: "medium",
-									timeStyle: "short",
-								})}.`}
-					</p>
 				)}
 				{noFile && !uploading && !released && (
 					<p className="text-xs text-warning mt-1">
@@ -197,6 +179,20 @@ export default function WorkRow({
 						before it can be released.
 					</p>
 				)}
+			</td>
+
+			{/* RELEASE DATE — the Work's place in the public Catalog, as the editable field
+			    the Work's own page carries: publish now, schedule, clear, unrelease. The
+			    rating link rides here rather than in Media Status because the rating is
+			    what the release waits on, not media. */}
+			<td className="py-2.5 pr-4 align-top">
+				<WorkReleaseCell
+					item={item}
+					blocked={blocked}
+					blockedWhy={blockedWhy}
+					onRelease={onRelease}
+					busy={busy}
+				/>
 				{unrated && !released && (
 					<p className="text-xs text-warning mt-1">
 						<Link to={editUrl} className="link">
@@ -207,12 +203,22 @@ export default function WorkRow({
 				)}
 			</td>
 
-			{/* DATE — the upload date, the creator-facing one (the wiki's *Publishing* carries
-			    the two dates' split). Absent sorts, and reads, as nothing at all. */}
-			<td className="py-2.5 pr-4 whitespace-nowrap text-sm text-base-content/70">
-				{item.createdAt
-					? new Date(item.createdAt).toLocaleString(undefined, { dateStyle: "medium" })
-					: "—"}
+			{/* ACCESS — who may open it, derived from the release and the access table
+			    together. The release acts no longer live here (Parker, 2026-10-17); they
+			    belong to the Release Date column. */}
+			<td className="py-2.5 pr-4">
+				<div className="flex flex-col items-start gap-1">
+					<AccessBadge item={item} />
+					{state === "locked" && (
+						<p className="text-xs text-error mt-1">
+							Released, but no one can open it —{" "}
+							<Link to={editUrl} className="link">
+								set access on this Work
+							</Link>
+							.
+						</p>
+					)}
+				</div>
 			</td>
 
 			{/* Counts — what the Work has done. A zero reads as an em dash, which is quieter. */}
@@ -225,21 +231,17 @@ export default function WorkRow({
 				) : null}
 			</td>
 
-			{/* Row actions: the editor, and the delete dialog the page owns. */}
+			{/* Row actions: the delete dialog the page owns. The Work's page — the title,
+			    the thumbnail, the same place — is the editing surface, so no Edit button. */}
 			<td className="py-2.5 pr-4 text-right whitespace-nowrap">
-				<div className="flex justify-end gap-1">
-					<Link to={editUrl} className="btn btn-ghost btn-xs" title="Edit">
-						<PencilSquareIcon className="w-4 h-4" />
-					</Link>
-					<button
-						type="button"
-						className="btn btn-ghost btn-xs text-error"
-						onClick={() => onDelete(item)}
-						title="Delete"
-					>
-						<TrashIcon className="w-4 h-4" />
-					</button>
-				</div>
+				<button
+					type="button"
+					className="btn btn-ghost btn-xs text-error"
+					onClick={() => onDelete(item)}
+				>
+					Delete
+					<TrashIcon className="w-4 h-4" />
+				</button>
 			</td>
 		</tr>
 	);
