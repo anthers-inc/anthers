@@ -79,13 +79,13 @@ export async function unreadyWorks(
 	const latest = new Map<number, { status: string; playableAt: Date | null; workId: number }>();
 	for (const j of jobs) if (!latest.has(j.workId)) latest.set(j.workId, j);
 	const unready: Array<{ workId: number; status: string }> = [];
+	// Still unready: anything not completed, EXCEPT a video whose playable tree is
+	// up and the ladder is merely filling in (`playableAt` written at the first
+	// rung's upload, `transcode-video.ts`'s loop). A failed or canceled row is not
+	// playable and not something to wait for; its own branch below says so.
 	for (const [workId, job] of latest)
-		// Still unready: anything not completed, EXCEPT a video whose playable tree is
-		// up and the ladder is merely filling in (`playableAt` written at the first
-		// rung's upload, `transcode-video.ts`'s loop). A failed or canceled row is not
-		// playable and not something to wait for; its own branch below says so.
 		if (job.status !== "completed" && !(job.status === "processing" && job.playableAt != null))
-			unready.push({ workId: job.workId, status: job.status });
+			unready.push({ workId, status: job.status });
 	return unready;
 }
 

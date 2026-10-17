@@ -424,7 +424,10 @@ async function generateMasterPlaylist(
 	hasAudio: boolean,
 	withAudioGroup: boolean,
 ) {
-	await Bun.write(join(outputDir, "master.m3u8"), `${masterPlaylistLines(variants, hasAudio, withAudioGroup).join("\n")}\n`);
+	await Bun.write(
+		join(outputDir, "master.m3u8"),
+		`${masterPlaylistLines(variants, hasAudio, withAudioGroup).join("\n")}\n`,
+	);
 }
 async function updateJobProgress(jobId: number, progress: number) {
 	await db.update(transcodingJobs).set({ progress }).where(eq(transcodingJobs.id, jobId));
@@ -775,7 +778,12 @@ async function runTranscode(
 			await generateMasterPlaylist(outputDir, variants.slice(0, i + 1), hasAudio, false);
 			if (!(await ensureStillOurs())) return;
 			const masterKey = `${storagePrefix}/master.m3u8`;
-			await storage.upload(masterKey, await readFile(join(outputDir, "master.m3u8")), "application/vnd.apple.mpegurl", "private");
+			await storage.upload(
+				masterKey,
+				await readFile(join(outputDir, "master.m3u8")),
+				"application/vnd.apple.mpegurl",
+				"private",
+			);
 			await rm(join(outputDir, "master.m3u8")).catch(() => {});
 			if (i === 0) {
 				// The moment this Work first played — the record the release gate reads.

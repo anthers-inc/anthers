@@ -89,9 +89,9 @@ describe("processingText", () => {
 		expect(processingStatusText(job)).toBe("Playable");
 		expect(processingText(job)).toBe("Playable · Full quality in about 40 minutes");
 		// No figure to project from: the state alone, with nothing invented.
-		expect(
-			processingText(work(2, { progress: 34, playableAt: minutesAgo(5) }).transcoding),
-		).toBe("Playable");
+		expect(processingText(work(2, { progress: 34, playableAt: minutesAgo(5) }).transcoding)).toBe(
+			"Playable",
+		);
 	});
 
 	it("says nothing about a job that is not running", () => {

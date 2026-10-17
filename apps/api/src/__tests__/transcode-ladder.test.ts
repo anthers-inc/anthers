@@ -42,17 +42,17 @@ describe("masterPlaylistLines", () => {
 		const lines = masterPlaylistLines(ladder.slice(0, 1), true, false);
 		expect(lines).toEqual([
 			"#EXTM3U",
-			'#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480',
-			'480p.m3u8',
+			"#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480",
+			"480p.m3u8",
 		]);
 	});
 
 	it("carries the audio group only when a rendition exists to resolve it", () => {
 		const withRendition = masterPlaylistLines(ladder, true, true);
-		expect(withRendition[1]).toContain('EXT-X-MEDIA:TYPE=AUDIO');
+		expect(withRendition[1]).toContain("EXT-X-MEDIA:TYPE=AUDIO");
 		expect(withRendition[2]).toContain('AUDIO="aud"');
 		// The progressive rewrites (rungs alone) name no unreached group.
 		const progressive = masterPlaylistLines(ladder.slice(0, 2), true, false);
-		expect(progressive).not.toContain('EXT-X-MEDIA');
+		expect(progressive).not.toContain("EXT-X-MEDIA");
 	});
 });
