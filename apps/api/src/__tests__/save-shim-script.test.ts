@@ -46,6 +46,51 @@ describe("save shim script — inert without the parent", () => {
 	it("declares the runtime it was built for", () => {
 		expect(saveShimScript("godot")).toContain('"godot"');
 	});
+
+	it("executes cleanly and registers its interaction listeners", () => {
+		// grep-assertions cannot catch a script that THROWS on load. This died once for
+		// real: a stray "()" after the beacon's forEach aborted the IIFE's tail, and the
+		// presence beats never attached. So execute the whole IIFE in a stub sandbox and
+		// ask what actually got registered.
+		const registered: Array<{ types: string[]; callbacks: unknown[] }> = [];
+		let messagesSent = 0;
+		const sandbox = {
+			window: {
+				addEventListener: (type: string, cb: unknown) => {
+					let entry = registered.find((r) => r.types[0] === type);
+					if (!entry) registered.push((entry = { types: [type], callbacks: [] }));
+					entry.callbacks.push(cb);
+				},
+				parent: { postMessage: () => messagesSent++ },
+				// GodotOS is deliberately absent — the shim runs before the engine defines it.
+			},
+			indexedDB: {
+				open: () => {
+					const req: Record<string, unknown> = {};
+					// Resolve synchronously against a stub db: the point is load, not the store.
+					const db = { transaction: () => ({ objectStore: () => ({}) }) };
+					queueMicrotask(() => {
+						req.onsuccess?.({ target: db } as never);
+					});
+					return (req as unknown as { onupgradeneeded?: unknown }) ;
+				},
+			},
+			setInterval: () => 0,
+			Date,
+		};
+		const run = new Function(
+			"window",
+			"indexedDB",
+			"setInterval",
+			"Date",
+			`${script}`,
+		);
+		expect(() => run(sandbox.window, sandbox.indexedDB, sandbox.setInterval, sandbox.Date)).not.toThrow();
+		for (const type of ["pointerdown", "keydown", "wheel", "touchstart"]) {
+			expect(registered.some((r) => r.types.includes(type))).toBe(true);
+		}
+		expect(messagesSent).toBeGreaterThanOrEqual(1); // the boot "load" ask went out
+	});
 });
 
 describe("save shim injection", () => {

@@ -156,6 +156,6 @@ export function saveShimScript(runtime: string): string {
 	}
 	["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (type) {
 		window.addEventListener(type, beat, { passive: true, capture: true });
-	})();
+	});
 })();`;
 }
