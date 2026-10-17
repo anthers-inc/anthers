@@ -136,6 +136,62 @@ interface Variant {
 	width: number;
 }
 
+/**
+ * The ladder a source gets encoded to, in **encoding order — smallest first**.
+ *
+ * ⭐ The order is the delivery story now (`publish-early`, 2026-10-18): the ladder is
+ * encoded rung-cheapest-first and the release gate opens at the first rung, so a
+ * creator's video goes playable while the tall rungs still fill in behind it. The
+ * master playlist is rewritten as each rung lands, so the player's ABR grows rather
+ * than appearing at the end.
+ *
+ * A source's ladder is capped at its own resolution (a 720p source never gets an
+ * invented 1080p rung — upscaling is a lie the player would pay for in bandwidth), and
+ * 480p always exists: the floor every player falls to. Widths derive from the source's
+ * own aspect ratio, rounded to even.
+ */
+export function planLadderFor(sourceHeight: number, sourceWidth: number): Variant[] {
+	const variants: Variant[] = [];
+	if (sourceHeight >= 1080) {
+		variants.push({
+			name: "1080p",
+			height: 1080,
+			bitrate: "5000k",
+			bandwidth: 5000000,
+			width: 1920,
+		});
+	}
+	if (sourceHeight >= 720) {
+		variants.push({
+			name: "720p",
+			height: 720,
+			bitrate: "2500k",
+			bandwidth: 2500000,
+			width: 1280,
+		});
+	}
+	variants.push({
+		name: "480p",
+		height: 480,
+		bitrate: "1000k",
+		bandwidth: 1000000,
+		width: 854,
+	});
+
+	// Correct widths using source aspect ratio
+	if (sourceHeight > 0) {
+		const aspect = sourceWidth / sourceHeight;
+		for (const v of variants) {
+			v.width = Math.round((v.height * aspect) / 2) * 2;
+		}
+	}
+	// The rungs were declared tall-first and are encoded small-first now: reverse in
+	// place, smallest first, so the first thing a creator's video delivers is the first
+	// thing a viewer needs.
+	variants.reverse();
+	return variants;
+}
+
 /** Run ffprobe on a local path or a network address and return parsed JSON metadata */
 async function ffprobe(source: string) {
 	const proc = Bun.spawn(
@@ -332,11 +388,21 @@ async function ffmpegAudioHls(inputPath: string, outputDir: string) {
  * than its own muxed stream when a player honors it (every one hls.js drives does),
  * which is what makes the rendition one copy of the audio rather than a second encode.
  */
-async function generateMasterPlaylist(outputDir: string, variants: Variant[], hasAudio: boolean) {
+/**
+ * The master playlist's lines; pure, so a test can read the tree a run would deliver.
+ * The audio group rides it only when a rendition EXISTS to resolve (`withAudioGroup`) —
+ * a group naming a file that isn't there yet is a dangling reference the player
+ * refuses — which is why the ladder's progressive rewrites name rungs alone.
+ */
+export function masterPlaylistLines(
+	variants: Variant[],
+	hasAudio: boolean,
+	withAudioGroup: boolean,
+): string[] {
 	const lines = ["#EXTM3U"];
 	// Only when a rendition actually ships: a source with no audio track is a video
 	// nobody can listen to, and an unresolvable media group is a dangling reference.
-	if (hasAudio) {
+	if (hasAudio && withAudioGroup) {
 		lines.push(
 			'#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Spoken",DEFAULT=YES,AUTOSELECT=YES,URI="audio.m3u8"',
 		);
@@ -344,14 +410,25 @@ async function generateMasterPlaylist(outputDir: string, variants: Variant[], ha
 	for (const v of variants) {
 		lines.push(
 			`#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidth},RESOLUTION=${v.width}x${v.height}${
-				hasAudio ? ',AUDIO="aud"' : ""
+				hasAudio && withAudioGroup ? ',AUDIO="aud"' : ""
 			}`,
 		);
 		lines.push(`${v.name}.m3u8`);
 	}
-	await Bun.write(join(outputDir, "master.m3u8"), `${lines.join("\n")}\n`);
+	return lines;
 }
 
+async function generateMasterPlaylist(
+	outputDir: string,
+	variants: Variant[],
+	hasAudio: boolean,
+	withAudioGroup: boolean,
+) {
+	await Bun.write(
+		join(outputDir, "master.m3u8"),
+		`${masterPlaylistLines(variants, hasAudio, withAudioGroup).join("\n")}\n`,
+	);
+}
 async function updateJobProgress(jobId: number, progress: number) {
 	await db.update(transcodingJobs).set({ progress }).where(eq(transcodingJobs.id, jobId));
 }
@@ -583,41 +660,14 @@ async function runTranscode(
 			await updateJobProgress(jobId, 15);
 		}
 
-		// 2. Determine variants based on source resolution
-		const variants: Variant[] = [];
-		if (sourceHeight >= 1080) {
-			variants.push({
-				name: "1080p",
-				height: 1080,
-				bitrate: "5000k",
-				bandwidth: 5000000,
-				width: 1920,
-			});
-		}
-		if (sourceHeight >= 720) {
-			variants.push({
-				name: "720p",
-				height: 720,
-				bitrate: "2500k",
-				bandwidth: 2500000,
-				width: 1280,
-			});
-		}
-		variants.push({
-			name: "480p",
-			height: 480,
-			bitrate: "1000k",
-			bandwidth: 1000000,
-			width: 854,
-		});
+		// 2. Determine variants based on source resolution — smallest first (the release
+		// gate opens at the first rung; see the loop below and `planLadderFor`).
+		const variants = planLadderFor(sourceHeight, sourceWidth);
 
-		// Correct widths using source aspect ratio
-		if (sourceHeight > 0) {
-			const aspect = sourceWidth / sourceHeight;
-			for (const v of variants) {
-				v.width = Math.round((v.height * aspect) / 2) * 2;
-			}
-		}
+		// Whether the source carries an audio track, from the same probe the variants
+		// came from: the rendition (below) and the master's audio group are written
+		// only when a stream exists to demux.
+		const hasAudio = probe.streams?.some((s: { codec_type: string }) => s.codec_type === "audio");
 
 		// 3. Transcode each variant
 
@@ -716,6 +766,35 @@ async function runTranscode(
 			// This variant's segments are off the disk before the next variant's encode
 			// grows the directory again — the whole point of uploading per variant.
 			await uploadAndFree(outputDir);
+
+			/**
+			 * ⭐ The master is written as the ladder grows, not once at the end: after
+			 * this rung's upload, a playlist naming the rungs done so far is uploaded at
+			 * the tree's master key — the tree PLAYS from the first rung. The audio
+			 * group (and the rendition it names) joins on the master's final rewrite
+			 * below, once the rendition actually exists; a group naming a file that
+			 * isn't there yet is a dangling reference the player refuses.
+			 */
+			await generateMasterPlaylist(outputDir, variants.slice(0, i + 1), hasAudio, false);
+			if (!(await ensureStillOurs())) return;
+			const masterKey = `${storagePrefix}/master.m3u8`;
+			await storage.upload(
+				masterKey,
+				await readFile(join(outputDir, "master.m3u8")),
+				"application/vnd.apple.mpegurl",
+				"private",
+			);
+			await rm(join(outputDir, "master.m3u8")).catch(() => {});
+			if (i === 0) {
+				// The moment this Work first played — the record the release gate reads.
+				// Every upload's supersession check has passed by here, so this write is
+				// the finisher's as much as any other.
+				const manifestUrl = await storage.getUrl(masterKey);
+				await db
+					.update(transcodingJobs)
+					.set({ playableAt: new Date(), hlsManifestUrl: manifestUrl })
+					.where(eq(transcodingJobs.id, jobId));
+			}
 		}
 
 		// A run that learned it was superseded leaves here; the `finally` below still
@@ -726,7 +805,6 @@ async function runTranscode(
 		// source, so a video can be listened to as a podcast without its picture. Its
 		// presence is what `userTranscoding` serializes as `audioManifestUrl`. A silent
 		// source has nothing to demux, so it ships no rendition and the master says so.
-		const hasAudio = probe.streams?.some((s: { codec_type: string }) => s.codec_type === "audio");
 		if (hasAudio) {
 			timing.mark("audioStart");
 			await ffmpegAudioHls(
@@ -737,8 +815,9 @@ async function runTranscode(
 			await uploadAndFree(outputDir);
 		}
 
-		// 4. Generate master playlist
-		await generateMasterPlaylist(outputDir, variants, !!hasAudio);
+		// 4. The master's final rewrite, WITH the audio group — the rendition exists
+		// under it now; every earlier rewrite (in the loop, above) named rungs alone.
+		await generateMasterPlaylist(outputDir, variants, hasAudio, hasAudio);
 		// Re-check before the estimate-clear and the 80 write: this run has now seen
 		// every upload's check, but the row is what the whole tail below is written on.
 		if (!(await ensureStillOurs())) return;

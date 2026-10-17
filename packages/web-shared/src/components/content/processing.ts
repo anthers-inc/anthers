@@ -59,6 +59,10 @@ export function processingStatusText(job: Work["transcoding"]): string | null {
 	if (!job) return null;
 	if (job.status === "pending") return queuePositionText(job);
 	if (job.status !== "processing") return null;
+	// A playable row stops being a progress figure the moment it plays (publish-early,
+	// 2026-10-18): "Processing 40%" names a state the reader has already outrun, and the
+	// number has nowhere further to go that matters to them. "Playable" is the state.
+	if (job.playableAt != null) return "Playable";
 	return `Processing ${job.progress ?? 0}%`;
 }
 
@@ -85,13 +89,24 @@ export function queuePositionText(job: Work["transcoding"]): string {
  */
 export function processingText(job: Work["transcoding"]): string | null {
 	const status = processingStatusText(job);
-	// The estimate sentence reads `etaSeconds` for a RUNNING job (its encoded work
-	// remaining) and for a WAITING one the total the lane's recompute wrote — front
-	// wait plus the row's own cost — so a creator is told the same kind of thing in
-	// both states: how long until this Work is done.
-	const eta =
-		job?.status === "processing" || job?.status === "pending" ? etaLeft(job.etaSeconds) : null;
-	return status && eta ? `${status} · ${eta}` : status;
+	if (job?.status === "pending") {
+		const eta = etaLeft(job.etaSeconds);
+		return status && eta ? `${status} · ${eta}` : status;
+	}
+	if (job?.status === "processing" && job.playableAt != null) {
+		// The tree plays, so "left" would mean the wrong thing: what the estimate still
+		// measures is the ladder the player is not yet served, and the sentence names it.
+		const eta =
+			job.etaSeconds != null && job.etaSeconds > 0
+				? `Full quality in ${etaText(job.etaSeconds)}`
+				: null;
+		return status && eta ? `${status} · ${eta}` : status;
+	}
+	if (job?.status === "processing") {
+		const eta = etaLeft(job.etaSeconds);
+		return status && eta ? `${status} · ${eta}` : status;
+	}
+	return status;
 }
 
 export interface ProcessingRow {

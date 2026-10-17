@@ -77,6 +77,23 @@ describe("processingText", () => {
 		).toBe("Waiting to process · 2 ahead · About 20 minutes left");
 	});
 
+	it("a playable row says Playable, and what the estimate still measures is the rungs", () => {
+		// Publish-early: the tree plays while the ladder fills in. The same figure means
+		// something different now, and the sentence says which thing ("left" would read
+		// as "left until playable", which is already past).
+		const job = work(1, {
+			progress: 34,
+			playableAt: minutesAgo(5),
+			etaSeconds: 2460,
+		}).transcoding;
+		expect(processingStatusText(job)).toBe("Playable");
+		expect(processingText(job)).toBe("Playable · Full quality in about 40 minutes");
+		// No figure to project from: the state alone, with nothing invented.
+		expect(processingText(work(2, { progress: 34, playableAt: minutesAgo(5) }).transcoding)).toBe(
+			"Playable",
+		);
+	});
+
 	it("says nothing about a job that is not running", () => {
 		expect(processingText(null)).toBeNull();
 		expect(processingText(work(1, { status: "completed" }).transcoding)).toBeNull();

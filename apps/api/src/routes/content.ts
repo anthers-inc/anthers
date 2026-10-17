@@ -1647,13 +1647,25 @@ function userTranscoding(
 		if (!job) return null;
 		if (!canAccess)
 			return { ...job, hlsManifestUrl: null, audioManifestUrl: null, outputFileUrl: null };
-		if (!delivery || job.status !== "completed") {
+		// ⭐ Whether the tree plays: a completed row always has (its completion write
+		// named the master), and — publish-early, 2026-10-18 — so does a row whose
+		// ladder's first rung is up (`playableAt` written at that rung's upload) even
+		// though the tall rungs still encode. Every branch below keys on this pair;
+		// a still-encoding ladder has one rung in the master, and HLS degrades.
+		const playable = job.status === "completed" || job.playableAt != null;
+		if (!playable) {
+			// The tree is not up a rung yet (still early, failed, canceled): the row's
+			// URLs are whatever the run wrote, which for a non-playable video is
+			// nothing, and the player state reads that.
+			return job;
+		}
+		if (!delivery) {
 			// No delivery context means local storage, where every object is served
 			// unsigned — the row's URLs are already the playable ones. The audio
 			// rendition still has to be reported, or the Podcast-This row never renders
 			// in a dev browser at all; its URL is the manifest's sibling, same shape as
 			// the raw storage URL the row already carries.
-			if (job.mediaType === "video" && job.hlsManifestUrl && job.status === "completed") {
+			if (job.mediaType === "video" && job.hlsManifestUrl) {
 				const prefixKey = urlToKey(job.hlsManifestUrl).replace(/\/[^/]+$/, "");
 				const hasAudioRendition = await storage.exists(`${prefixKey}/audio.m3u8`);
 				if (hasAudioRendition) {
@@ -1670,7 +1682,8 @@ function userTranscoding(
 			// The audio-only rendition rides the same access-checked route. Its URL is
 			// serialized only when the rendition genuinely exists — a video transcoded
 			// before the job produced one has an `audio.m3u8` that 404s, and reporting it
-			// anyway would draw a Podcast-This affordance that plays nothing.
+			// anyway would draw a Podcast-This affordance that plays nothing. (A ladder
+			// still filling in has no rendition yet, and the same null is right.)
 			const prefixKey = urlToKey(job.hlsManifestUrl).replace(/\/[^/]+$/, "");
 			const hasAudioRendition = await storage.exists(`${prefixKey}/audio.m3u8`);
 			return {

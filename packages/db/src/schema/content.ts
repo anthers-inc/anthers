@@ -916,6 +916,12 @@ export const transcodingJobs = pgTable(
 		// keys are camelCase (`totalMs`), like the jsonb elsewhere.
 		timings: jsonb("timings"),
 		errorMessage: text("error_message").default(""),
+		// The moment this job's tree first played: written at the smallest rung's master
+		// upload, and the reason the release gate can open while the tall rungs are still
+		// encoding (`work-release.ts` reads processing-with-playable as releasable). Null
+		// on every row that has not produced a playable tree yet — a row that never plays
+		// (failed, canceled, still early) reads exactly as the pre-publish-early gate.
+		playableAt: timestamp("playable_at", { withTimezone: true }),
 		hlsManifestUrl: text("hls_manifest_url").default(""),
 		outputFileUrl: text("output_file_url").default(""),
 		waveformData: jsonb("waveform_data"),
