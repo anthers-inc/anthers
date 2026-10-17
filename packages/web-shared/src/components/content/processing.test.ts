@@ -14,6 +14,7 @@ import {
 	processingQueue,
 	processingStatusText,
 	processingText,
+	queuePositionText,
 	RECENTLY_FINISHED_MS,
 } from "./processing";
 
@@ -26,7 +27,14 @@ function work(id: number, transcoding: Partial<NonNullable<Work["transcoding"]>>
 		type: "video",
 		title: `Work ${id}`,
 		transcoding: transcoding
-			? { status: "processing", progress: 0, etaSeconds: null, updatedAt: "", ...transcoding }
+			? {
+					status: "processing",
+					progress: 0,
+					etaSeconds: null,
+					queuePosition: null,
+					updatedAt: "",
+					...transcoding,
+				}
 			: null,
 	} as unknown as Work;
 }
@@ -59,6 +67,16 @@ describe("processingText", () => {
 		expect(processingText(work(1, { status: "pending" }).transcoding)).toBe("Waiting to process");
 	});
 
+	it("gives a waiting row its total — front wait plus its own cost — as a sentence", () => {
+		// The recompute wrote the lane's own total figure (`eta_seconds` on a pending row):
+		// the creator waiting is told when the WORK is done, not when it merely starts.
+		expect(
+			processingText(
+				work(1, { status: "pending", queuePosition: 3, etaSeconds: 1200 }).transcoding,
+			),
+		).toBe("Waiting to process · 2 ahead · About 20 minutes left");
+	});
+
 	it("says nothing about a job that is not running", () => {
 		expect(processingText(null)).toBeNull();
 		expect(processingText(work(1, { status: "completed" }).transcoding)).toBeNull();
@@ -75,6 +93,37 @@ describe("processingStatusText", () => {
 			"Waiting to process",
 		);
 		expect(processingStatusText(work(1, { status: "completed" }).transcoding)).toBeNull();
+	});
+
+	it("says the queue's order in the badge's short form, from the position record", () => {
+		// A row the lane has not numbered reads as it always did; null position is
+		// also every row outside the lane's numbers (ebooks, the per-type queue era).
+		expect(processingStatusText(work(1, { status: "pending" }).transcoding)).toBe(
+			"Waiting to process",
+		);
+		expect(processingStatusText(work(1, { status: "pending", queuePosition: 1 }).transcoding)).toBe(
+			"Waiting to process · next up",
+		);
+		expect(processingStatusText(work(1, { status: "pending", queuePosition: 3 }).transcoding)).toBe(
+			"Waiting to process · 2 ahead",
+		);
+	});
+});
+
+describe("queuePositionText", () => {
+	it("numbers the line from the position record", () => {
+		expect(queuePositionText(work(1, { status: "pending" }).transcoding)).toBe(
+			"Waiting to process",
+		);
+		expect(queuePositionText(work(1, { status: "pending", queuePosition: 1 }).transcoding)).toBe(
+			"Waiting to process · next up",
+		);
+		expect(queuePositionText(work(1, { status: "pending", queuePosition: 2 }).transcoding)).toBe(
+			"Waiting to process · 1 ahead",
+		);
+		expect(queuePositionText(work(1, { status: "pending", queuePosition: 4 }).transcoding)).toBe(
+			"Waiting to process · 3 ahead",
+		);
 	});
 });
 

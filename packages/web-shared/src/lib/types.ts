@@ -267,6 +267,19 @@ export interface TranscodingJob {
 	status: string;
 	progress: number | null;
 	etaSeconds: number | null;
+	/**
+	 * The row's spot in the single-file media lane — 1 means next to run — when it is
+	 * waiting, null otherwise (running, settled, canceled, or a book outside the lane).
+	 * The queue figure's "N ahead of you" reads this, not a recomputed order.
+	 */
+	queuePosition: number | null;
+	/**
+	 * A waiting row's seconds until it reaches the front of the lane, kept by the same
+	 * recompute that writes the position; null while nothing can be said. The total
+	 * until done is `etaSeconds` on a pending row (front wait plus the row's own cost)
+	 * and the running job's own remaining otherwise.
+	 */
+	queueEtaSeconds: number | null;
 	errorMessage: string | null;
 	hlsManifestUrl: string | null;
 	/**

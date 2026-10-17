@@ -201,8 +201,15 @@ export async function ensureQueueReady(): Promise<void> {
 // ── Queue name constants ─────────────────────────────────────────────────────
 
 export const QUEUES = {
-	TRANSCODE_VIDEO: "transcode-video",
-	PROCESS_AUDIO: "process-audio",
+	// The single-file media lane: one queue carrying every video transcode and audio
+	// process, worked at `localConcurrency: 1`, because an encode saturates the worker's
+	// plan (six pinned ffmpeg threads outpaced two vCPUs through a whole burst on
+	// 2026-10-17 with every figure on screen drifting outside its measured band) and a
+	// second concurrent encode finished no sooner, it only doubled the peak. The job
+	// carries a `jobId` alone; the handler re-reads the row and dispatches on its
+	// `mediaType`, so adding a media type is a row in the handler's map, not a queue.
+	// The old per-type names are on `RETIRED_QUEUES`, retired on 2026-10-17.
+	MEDIA: "media",
 	RENDER_PAGED: "render-paged", // Render a paged Work's source set (PDFs and page images) to private per-page images
 	// Extract a reflow ebook Work's EPUB source set into private chapters and their
 	// referenced assets (`work_sections` + `work_section_assets`), one row per component
@@ -367,16 +374,19 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 	// when ffmpeg's ranged reads outrun the signed address.
 	// The lock in the handler (`withTranscodeLock`) is the floor under sizing mistakes:
 	// a re-delivery waits there instead of encoding beside the first handler.
-	[QUEUES.TRANSCODE_VIDEO]: {
+	[QUEUES.MEDIA]: {
+		// The merged shape of the transcode-video and process-audio budgets (retired
+		// 2026-10-17 with the queue itself): the video expiry sized to exceed the worst
+		// ladder the ladder allows, shared here because a queue's budget is one row and
+		// audio rides the generous side rather than a second set of figures — 12 hours on
+		// a job whose passes take minutes is inert. pg-boss expires a job on started_on,
+		// so queue wait does not count; the heartbeat fails a worker that died mid-job
+		// in minutes either way. The lock in the handlers is the floor under sizing
+		// mistakes: a re-delivery waits there instead of encoding beside the first.
 		retryLimit: 2,
 		retryDelay: 60,
 		expireInMinutes: 12 * 60,
 		heartbeatSeconds: 120,
-	},
-	[QUEUES.PROCESS_AUDIO]: {
-		retryLimit: 2,
-		retryDelay: 60,
-		expireInMinutes: 15,
 	},
 	[QUEUES.RENDER_PAGED]: {
 		retryLimit: 2,
@@ -538,6 +548,12 @@ export const RETIRED_QUEUES: readonly string[] = [
 	// the EPUB era's "ebook" ingest is a different job on a different table, so the old
 	// name would have said the opposite of what the handler does.
 	"rasterize-ebook",
+	// The media pipeline's two per-type queues, retired on 2026-10-17 for the single-file
+	// lane: the worker ran one video beside two audios, oversubscribing its plan's two
+	// vCPUs and putting every measured encode outside its benchmark band. One queue at
+	// concurrency 1 replaced both; see QUEUES.MEDIA.
+	"transcode-video",
+	"process-audio",
 ];
 
 /**

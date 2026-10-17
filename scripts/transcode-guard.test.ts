@@ -8,10 +8,10 @@
  * and wasting a ladder. The defense is three parts and this refuses a source that loses
  * any of them:
  *
- * 1. `JOB_OPTIONS[TRANSCODE_VIDEO]` carries an expiry sized for real encode runtimes
- *    (expiry *is* the handler's runtime cap under pg-boss v12 — see the constant's
- *    comment) and a heartbeat, which is the fast "worker died mid-encode" detection a
- *    long expiry does not provide;
+ * 1. `JOB_OPTIONS[MEDIA]` (the single-file lane's shared budget) carries an expiry sized
+ *    for real encode runtimes (expiry *is* the handler's runtime cap under pg-boss v12 —
+ *    see the constant's comment) and a heartbeat, which is the fast "worker died
+ *    mid-encode" detection a long expiry does not provide;
  * 2. `toBossSendOptions` forwards the heartbeat, or no job would ever have one;
  * 3. the handler wraps its body in `withTranscodeLock` — the database advisory lock a
  *    re-delivery waits on — and owes the row `ensureStillOurs` re-reads before the
@@ -49,8 +49,8 @@ async function sourceFiles(): Promise<string[]> {
 const NAMES_ADVISORY = /pg_(try_advisory|advisory)/;
 
 describe("transcode expiry and heartbeat", () => {
-	it("sends the transcode queue an expiry sized past real encode runtimes", () => {
-		const options = JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO];
+	it("sends the media queue an expiry sized past real encode runtimes", () => {
+		const options = JOB_OPTIONS[QUEUES.MEDIA];
 		// The measured long encode (2026-10-11) took 54 minutes; the guard's floor is one
 		// hour, so a revert to the old 45-minute window or any "back to short" tuning
 		// fails here before production does.
@@ -58,7 +58,7 @@ describe("transcode expiry and heartbeat", () => {
 	});
 
 	it("carries a heartbeat, so a worker that died mid-encode is caught in minutes", () => {
-		const options = JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO];
+		const options = JOB_OPTIONS[QUEUES.MEDIA];
 		// pg-boss's own floor is 10s; below it the send is refused and the job would
 		// never land, which is a worse failure mode than expiring blind.
 		expect(options.heartbeatSeconds).toBeGreaterThanOrEqual(10);
