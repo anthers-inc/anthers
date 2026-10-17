@@ -152,13 +152,11 @@ export function saveShimScript(runtime: string): string {
 	}
 
 	// ── Boot: ask for the cloud save; write it in before the engine pulls ────────
-	if (typeof console !== "undefined") console.log("SHIMDBG boot: sending load ask");
 	send({ type: PREFIX + "load" });
 
 	var loaded = false;
 	window.addEventListener("message", function (event) {
 		var d = event.data;
-		if (typeof console !== "undefined") console.log("SHIMDBG msg: " + JSON.stringify(d));
 		if (!d || typeof d !== "object" || typeof d.type !== "string") return;
 		if (!d.type.lastIndexOf) return;
 		if (d.type.indexOf(PREFIX) !== 0) return;
@@ -168,13 +166,8 @@ export function saveShimScript(runtime: string): string {
 			if (d.blob) {
 				try {
 					var records = JSON.parse(d.blob);
-					if (typeof console !== "undefined") console.log("SHIMDBG writing " + Object.keys(records).length + " records");
-					storeAll(records).catch(function (e) { if (typeof console !== "undefined") console.log("SHIMDBG write err " + e); });
-				} catch (e) {
-					if (typeof console !== "undefined") console.log("SHIMDBG parse err " + e);
-				}
-			} else if (typeof console !== "undefined") {
-				console.log("SHIMDBG loaded with null blob");
+					storeAll(records).catch(function () { /* a save we cannot parse is ignored; local state stands */ });
+				} catch (e) { /* a save we cannot parse is ignored; local state stands */ }
 			}
 		}
 	});
