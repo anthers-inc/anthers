@@ -37,7 +37,7 @@
  * than encoding beside the first handler — and `ensureStillOurs` re-reads the row before
  * every upload and the completion write, so a run that has outlived its own delivery
  * abandons quietly instead of planting a second ladder over the finisher's. The expiry
- * sizing this design assumes is `JOB_OPTIONS[TRANSCODE_VIDEO]` in `queue.ts`.
+ * sizing this design assumes is `JOB_OPTIONS[QUEUES.MEDIA]` in `queue.ts`.
  */
 
 import { randomUUID } from "node:crypto";
@@ -69,7 +69,7 @@ export interface TranscodeVideoData {
 // pg-boss v12 fails a job whose handler runs past `expireInSeconds` and re-delivers it,
 // and nothing kills the abandoned handler or its ffmpeg child — so absent a lock a
 // re-delivery encodes the same source a second time, beside the first. That happened:
-// `JOB_OPTIONS[TRANSCODE_VIDEO]` in `queue.ts` carries the 2026-10-11 measurement of one
+// `JOB_OPTIONS[QUEUES.MEDIA]` in `queue.ts` carries the 2026-10-11 measurement of one
 // long source encoded twice in full. `localConcurrency: 1` cannot be the guard, because
 // the expiry path frees the worker's local slot while the orphaned handler is still
 // running — the semaphore counts fetch batches, and a re-delivery is a new fetch.

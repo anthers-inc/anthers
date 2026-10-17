@@ -10,6 +10,7 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
+import { QUEUES } from "../jobs/queue";
 import { sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -106,9 +107,9 @@ describe("Admin / ops console API", () => {
 			transcodes: { counts: Record<string, number>; problems: unknown[] };
 		};
 		// Known queues are seeded from the QUEUES constant, so they appear even
-		// when idle (completed jobs get pruned). transcode-video is one of them.
+		// when idle (completed jobs get pruned). media is one of them.
 		const names = body.pgboss.queues.map((q) => q.name);
-		expect(names).toContain("transcode-video");
+		expect(names).toContain(QUEUES.MEDIA);
 		expect(Array.isArray(body.pgboss.failures)).toBe(true);
 		expect(Array.isArray(body.transcodes.problems)).toBe(true);
 	});

@@ -1185,11 +1185,7 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 			.insert(transcodingJobs)
 			.values({ workId: item.id, mediaType: "video", status: "pending" })
 			.returning();
-		await queue.send(
-			QUEUES.TRANSCODE_VIDEO,
-			{ jobId: job.id },
-			JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO],
-		);
+		await queue.send(QUEUES.MEDIA, { jobId: job.id }, JOB_OPTIONS[QUEUES.MEDIA]);
 		return job;
 	}
 	if (processing === "ebook" && item.sourceKey) {
@@ -1220,7 +1216,7 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 			.insert(transcodingJobs)
 			.values({ workId: item.id, mediaType: "audio", status: "pending" })
 			.returning();
-		await queue.send(QUEUES.PROCESS_AUDIO, { jobId: job.id }, JOB_OPTIONS[QUEUES.PROCESS_AUDIO]);
+		await queue.send(QUEUES.MEDIA, { jobId: job.id }, JOB_OPTIONS[QUEUES.MEDIA]);
 		return job;
 	}
 	return null;

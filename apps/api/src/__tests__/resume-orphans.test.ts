@@ -232,9 +232,9 @@ beforeAll(async () => {
 	// payload never resolved (deleted).
 	QUEUED_FAKE.length = 0;
 	QUEUED_FAKE.push(
-		{ queue: QUEUES.TRANSCODE_VIDEO, id: "q-kept", data: { jobId: video.jobId } },
-		{ queue: QUEUES.TRANSCODE_VIDEO, id: "q-vanished", data: { jobId: 999_999 } },
-		{ queue: QUEUES.PROCESS_AUDIO, id: "q-malformed", data: {} },
+		{ queue: QUEUES.MEDIA, id: "q-kept", data: { jobId: video.jobId } },
+		{ queue: QUEUES.MEDIA, id: "q-vanished", data: { jobId: 999_999 } },
+		{ queue: QUEUES.MEDIA, id: "q-malformed", data: {} },
 	);
 
 	sent = [];
@@ -265,7 +265,7 @@ describe("resumeOrphanedTranscodes", () => {
 	});
 
 	it("resumes a job whose Work still has its source file", async () => {
-		expect(sentFor(video.jobId)).toEqual([QUEUES.TRANSCODE_VIDEO]);
+		expect(sentFor(video.jobId)).toEqual([QUEUES.MEDIA]);
 		expect((await statusOf(video.jobId)).status).toBe("pending");
 	});
 
@@ -275,7 +275,7 @@ describe("resumeOrphanedTranscodes", () => {
 		// handler — which fails on a PDF for reasons that name ffmpeg, i.e. a wrong answer
 		// wearing a plausible error. A test that only covered video and audio would agree
 		// with the broken version completely.
-		expect(sentFor(audio.jobId)).toEqual([QUEUES.PROCESS_AUDIO]);
+		expect(sentFor(audio.jobId)).toEqual([QUEUES.MEDIA]);
 		expect(sentFor(ebook.jobId)).toEqual([QUEUES.RENDER_PAGED]);
 	});
 
@@ -333,7 +333,7 @@ describe("resumeOrphanedTranscodes", () => {
 		expect(row.status).toBe("pending");
 		expect(row.resumeCount).toBe(0);
 		expect(row.flag).toBe(false);
-		expect(sentFor(benign.jobId)).toEqual([QUEUES.TRANSCODE_VIDEO]);
+		expect(sentFor(benign.jobId)).toEqual([QUEUES.MEDIA]);
 	});
 
 	it("resumes a flagged row even past the bound, still without spending a resume", async () => {
@@ -344,21 +344,15 @@ describe("resumeOrphanedTranscodes", () => {
 		expect(row.status).toBe("pending");
 		expect(row.resumeCount).toBe(MAX_TRANSCODE_RESUMES);
 		expect(row.flag).toBe(false);
-		expect(sentFor(benignPastBound.jobId)).toEqual([QUEUES.TRANSCODE_VIDEO]);
+		expect(sentFor(benignPastBound.jobId)).toEqual([QUEUES.MEDIA]);
 	});
 
 	it("retires queued pg-boss jobs whose row has vanished, and never one whose row exists", async () => {
-		const retiredIds = retiredDeletions
-			.filter((d) => d.queue === QUEUES.TRANSCODE_VIDEO)
-			.map((d) => d.id);
-		// The vanished row's job is deleted; the live row's is not touched.
-		expect(retiredIds).toEqual(["q-vanished"]);
-		// A job whose payload never resolved cannot be handled at any time, so there is
-		// nothing it could ever do but fail — retired on the same pass.
-		const audioRetired = retiredDeletions
-			.filter((d) => d.queue === QUEUES.PROCESS_AUDIO)
-			.map((d) => d.id);
-		expect(audioRetired).toEqual(["q-malformed"]);
+		// Both retired ids land on the one media queue now: the vanished row's job is
+		// deleted, and a job whose payload never resolved cannot be handled at any time —
+		// nothing it could ever do but fail, so it is retired on the same pass.
+		const retiredIds = retiredDeletions.map((d) => d.id).sort();
+		expect(retiredIds).toEqual(["q-malformed", "q-vanished"]);
 	});
 
 	it("retires nothing when every queued job still resolves", async () => {
@@ -372,7 +366,7 @@ describe("resumeOrphanedTranscodes", () => {
 			findQueued: (queueName) =>
 				Promise.resolve(
 					[{ id: "q-kept", data: { jobId: video.jobId } }].filter(
-						() => queueName === QUEUES.TRANSCODE_VIDEO,
+						() => queueName === QUEUES.MEDIA,
 					),
 				),
 			deleteJob: () => {
@@ -415,7 +409,7 @@ describe("resumeOrphanedTranscodes", () => {
 		const row = await statusOf(onceResumed.jobId);
 		expect(row.status).toBe("pending");
 		expect(row.resumeCount).toBe(MAX_TRANSCODE_RESUMES);
-		expect(sentFor(onceResumed.jobId)).toEqual([QUEUES.TRANSCODE_VIDEO]);
+		expect(sentFor(onceResumed.jobId)).toEqual([QUEUES.MEDIA]);
 	});
 
 	it("a fresh job counts its own resume, and the unsent ones do not count", async () => {
