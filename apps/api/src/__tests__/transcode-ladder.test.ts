@@ -42,7 +42,7 @@ describe("masterPlaylistLines", () => {
 		const lines = masterPlaylistLines(ladder.slice(0, 1), true, false);
 		expect(lines).toEqual([
 			"#EXTM3U",
-			'#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=2560x480',
+			'#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=854x480',
 			'480p.m3u8',
 		]);
 	});
