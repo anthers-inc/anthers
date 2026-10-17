@@ -26,6 +26,7 @@ import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Lede } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { Link } from "@anthers/web-shared/router";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import { useEffect, useState } from "react";
@@ -338,6 +339,7 @@ function IncidentEntry({ incident }: { incident: IncidentFeedEntry }) {
 }
 
 export default function StatusPage() {
+	usePageTitle("Status");
 	const [report, setReport] = useState<StatusReport | null>(null);
 	const [history, setHistory] = useState<HistoryAnswer | null>(null);
 	const [failed, setFailed] = useState(false);

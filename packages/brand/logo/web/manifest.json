@@ -66,6 +66,24 @@
 			"source": "packages/brand/logo/preps/anthersthumb_1x1_light.png",
 			"sourceSha256": "85a36e5c07d9e801012403bf00cd3c852e7cad7fdda0b2cbd0bd2024ceae1b1b",
 			"sha256": "c316eb99bafeb05fc499538a7cbc4d9ee57d1758eed76cd944689caf36040380"
+		},
+		{
+			"file": "apps/web/public/brand/og-card.png",
+			"source": "packages/brand/logo/preps/anthersthumb_1x1_light.png",
+			"sourceSha256": "85a36e5c07d9e801012403bf00cd3c852e7cad7fdda0b2cbd0bd2024ceae1b1b",
+			"sha256": "4942034ea83b8d055fb35cf949f41ffacffff93e733d8c3a240389c87391c690"
+		},
+		{
+			"file": "apps/web/public/brand/icon-192.png",
+			"source": "packages/brand/logo/preps/anthersthumb_1x1_light.png",
+			"sourceSha256": "85a36e5c07d9e801012403bf00cd3c852e7cad7fdda0b2cbd0bd2024ceae1b1b",
+			"sha256": "903bb323f0a95f3a81223d5bef6a22c29950fd82d9cc76589e729b1da1ac82bf"
+		},
+		{
+			"file": "apps/web/public/brand/icon-512.png",
+			"source": "packages/brand/logo/preps/anthersthumb_1x1_light.png",
+			"sourceSha256": "85a36e5c07d9e801012403bf00cd3c852e7cad7fdda0b2cbd0bd2024ceae1b1b",
+			"sha256": "eb60967f31dc27e7cf1584491779615e880546739b5cf4daf76463efcfd1e89a"
 		}
 	]
 }

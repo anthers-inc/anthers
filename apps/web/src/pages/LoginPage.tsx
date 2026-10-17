@@ -3,6 +3,7 @@
 import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { client } from "@anthers/web-shared/rpc";
 import FormField from "@anthers/web-shared/ui/FormField";
 import Logo from "@anthers/web-shared/ui/Logo";
@@ -96,6 +97,7 @@ const LOOKS_LIKE_HANDLE = /^@?[a-z0-9.-]+\.[a-z0-9-]+$/i;
  * centered.
  */
 export default function LoginPage() {
+	usePageTitle("Log In");
 	const { signInWithBluesky, refreshUser } = useAuth();
 	const navigate = useNavigate();
 	const location = useLocation();
