@@ -78,11 +78,14 @@ test("a Work rated before the matrix is released only once every row is answered
 		.where(eq(works.id, work.id));
 
 	// The Works table is how a back catalog is released thirty rows at a time, so it has to
-	// say which ones still need answering.
+	// say which ones still need answering. The rating link rides the Release Date cell,
+	// where the release act it blocks lives.
 	await page.goto("/studio/works");
 	const row = page.locator("tbody tr").filter({ hasText: TITLE });
 	await expect(row).toContainText("Rate this");
-	await expect(row.getByRole("button", { name: "Release" })).toBeDisabled();
+	await row.getByRole("button", { name: "Edit Release Date" }).click();
+	await expect(row.getByRole("button", { name: "Release now", exact: true })).toBeDisabled();
+	await row.getByRole("button", { name: "Cancel editing the release date" }).click();
 
 	await row.getByRole("link", { name: "Rate this" }).click();
 	// The Studio route redirects to the Work's page (every kind's editing surface now);

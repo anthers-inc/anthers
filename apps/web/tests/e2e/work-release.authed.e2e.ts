@@ -186,9 +186,14 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await expect(rowsFor(page)).toContainText("Private");
 
 	// The row says the same thing, because this listing is how a back catalog gets released
-	// thirty at a time and thirty identical 409s is the failure this prevents.
+	// thirty at a time and thirty identical 409s is the failure this prevents. The acts
+	// live behind the Release Date cell's pencil, the page's own affordance.
 	await expect(rowsFor(page)).toContainText("Rate this");
-	await expect(rowsFor(page).getByRole("button", { name: "Release" })).toBeDisabled();
+	await rowsFor(page).getByRole("button", { name: "Edit Release Date" }).click();
+	await expect(
+		rowsFor(page).getByRole("button", { name: "Release now", exact: true }),
+	).toBeDisabled();
+	await rowsFor(page).getByRole("button", { name: "Cancel editing the release date" }).click();
 
 	// The thumbnail opens the Work as the title does, since it is the biggest thing on the row
 	// and the first thing a creator clicks. It is kept out of the accessibility tree because the
@@ -233,7 +238,8 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await page.goto("/studio/works");
 
 	// ── Release ─────────────────────────────────────────────────────────────
-	await rowsFor(page).getByRole("button", { name: "Release" }).click();
+	await rowsFor(page).getByRole("button", { name: "Edit Release Date" }).click();
+	await rowsFor(page).getByRole("button", { name: "Release now", exact: true }).click();
 
 	// The editor proposes an allowed baseline at $0, so releasing lands in the commons.
 	await expect(rowsFor(page)).toContainText("Public Access");
@@ -277,7 +283,9 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	expect(published?.originallyReleased).toBe("2015-01-15T00:00:00.000Z");
 
 	// ── The locked state ────────────────────────────────────────────────────
-	await rowsFor(page).getByRole("link", { name: "Edit" }).click();
+	// The row's title is the Work's page, which is the editing surface for its creator —
+	// the row has no Edit button of its own any more (Parker, 2026-10-17).
+	await rowsFor(page).getByRole("link", { name: TITLE }).click();
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 
 	// The access is edited from the chip in the byline strip (the creator's door, the

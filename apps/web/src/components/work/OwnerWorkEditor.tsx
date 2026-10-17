@@ -62,6 +62,7 @@ import {
 import { useAuth } from "@anthers/web-shared/auth";
 import RatingAppeal from "@anthers/web-shared/content/RatingAppeal";
 import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
+import { ReleaseScheduleInput } from "@anthers/web-shared/content/release-date";
 import WebBuildSection from "@anthers/web-shared/content/WorkWebBuildSection";
 import { isFileWorkType, WorkFileSection } from "@anthers/web-shared/content/work-media";
 import { isBuildType, LIBRARY_TYPE_OPTIONS, typeLabel } from "@anthers/web-shared/content/works";
@@ -307,11 +308,8 @@ export default function OwnerWorkEditor({
 	const loadedSchedule = isoToLocalInput(current.scheduledReleaseAt);
 	const [scheduledRelease, setScheduledRelease] = useState(loadedSchedule);
 	const scheduledIso = localInputToIso(scheduledRelease);
-	const scheduleHint = !scheduledIso
-		? "Pick a time and save, and it releases then on its own."
-		: scheduledRelease === loadedSchedule && Date.parse(scheduledIso) <= Date.now()
-			? "Its release time has passed. It goes out as soon as its file has finished uploading, processing and being checked."
-			: "It releases at this time once it's ready, and if its file is still uploading or processing then, as soon as that finishes. If something only you can fix stops it, the schedule is cleared and we'll email you.";
+	// The hint under the input is the shared one — the Works table's Release Date cell
+	// says the same sentences (`@anthers/web-shared/content/release-date`).
 
 	/** Whether payouts are set up, so the release control can say so before it is clicked. */
 	const payoutsReady = usePayoutsReady();
@@ -912,28 +910,13 @@ export default function OwnerWorkEditor({
 						<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
 					)}
 					{visibility !== "released" && (
-						<div className="flex flex-col gap-1">
-							<span className="text-sm">Or release it later</span>
-							<div className="flex flex-wrap items-center gap-2">
-								<input
-									type="datetime-local"
-									className="input input-bordered input-sm"
-									aria-label="Release time"
-									value={scheduledRelease}
-									onChange={(e) => setScheduledRelease(e.target.value)}
-								/>
-								{scheduledRelease && (
-									<button
-										type="button"
-										className="btn btn-ghost btn-xs"
-										onClick={() => setScheduledRelease("")}
-									>
-										Clear
-									</button>
-								)}
-							</div>
-							<p className="text-xs text-base-content/50">{scheduleHint}</p>
-						</div>
+						// The schedule row is the shared one — the Works table's Release Date
+						// cell renders the same input and the same hint.
+						<ReleaseScheduleInput
+							value={scheduledRelease}
+							savedIso={current.scheduledReleaseAt}
+							onChange={setScheduledRelease}
+						/>
 					)}
 					{visibility === "released" && !anyoneAllowed && (
 						<div className="alert alert-warning text-sm">
