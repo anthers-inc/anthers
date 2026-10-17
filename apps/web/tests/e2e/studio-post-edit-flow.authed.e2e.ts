@@ -7,12 +7,13 @@
  * to the published post, a second surface that shared nothing with the view, and a read
  * that made a posted item look not-posted. Now the row's address redirects to the post's
  * own page, and the creator's view is that page with pencils on it — the same model every
- * kind's Work page runs (`OwnerWorkEditor.tsx`'s ruling). The walk, one browser stretch —
- * every test here gets its own context, so the steps ride one test: draft save landing
+ * kind's Work page runs (`OwnerWorkEditor.tsx`'s ruling), with #569's refinement: no
+ * editing banner and no preview toggle — editing is inline, the pencil is the only edit
+ * affordance. The walk is one browser stretch
+ * (each test here gets its own context, so the steps ride one test): draft save landing
  * on the POST's page with its badge and Publish button on it; the title pencil whose
  * save settles the URL to the re-derived slug; the body pencil whose save reaches the
- * stored markdown; the studio row click landing on that same page; and the persona
- * preview subtracting every trace of the editing chrome.
+ * stored markdown; and the studio row click landing on that same page.
  */
 import {
 	API_URL,
@@ -59,7 +60,6 @@ test("the studio's post is its own page, with pencils on it", async ({ page, con
 	await expect(page.getByText("Draft", { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Publish" })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
-	await expect(page.locator("aside", { hasText: "Editing your post" })).toBeVisible();
 
 	// The creator's read is the page itself: the words render where a user reads them.
 	await expect(page.locator("article .post-body")).toContainText("Draft words, written");
@@ -96,16 +96,14 @@ test("the studio's post is its own page, with pencils on it", async ({ page, con
 	expect(page.url(), "the walk stayed on the same post").toContain(`-${publicId}`);
 	await expect(page.locator("article .post-body")).toContainText(words);
 
-	// ── The persona preview: the chrome subtracts; the page stays. ──
-	await page.getByRole("button", { name: "Preview as a user" }).click();
-	await expect(page.locator("aside", { hasText: "Editing your post" })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: "Edit Title" })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: "Edit Body" })).toHaveCount(0);
-	await expect(page.getByRole("button", { name: "Publish" })).toHaveCount(0);
-	await expect(page.locator("article .post-body")).toContainText(words);
-	await expect(page.getByText("Draft", { exact: true })).toHaveCount(0);
+	// The publish machinery is the page's owner-only chrome, in the places it acts from:
+	// the Draft badge, the Publish button, the schedule pencil, and the feed-shape
+	// toggles for the creator alone.
+	await expect(page.getByText("Draft", { exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Publish" })).toBeVisible();
+	await expect(page.getByText("Not scheduled")).toBeVisible();
 
-	// A previewer (the creator, seeing the user's page) reads the comments where they sit.
+	// A creator reading their own post reads the comments where they sit.
 	await expect(page.getByRole("heading", { name: "Comments" })).toBeVisible();
 
 	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);

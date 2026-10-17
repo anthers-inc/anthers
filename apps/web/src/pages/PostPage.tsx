@@ -25,13 +25,7 @@ import { tagsFromBodyHtml } from "@anthers/web-shared/post-tags";
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { usePublishingPermissionMissing } from "@anthers/web-shared/publishing";
-import {
-	Link,
-	useLocation,
-	useNavigate,
-	useParams,
-	useSearchParams,
-} from "@anthers/web-shared/router";
+import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { studioUrl } from "@anthers/web-shared/studio";
 import type { Post } from "@anthers/web-shared/types";
@@ -43,7 +37,7 @@ import WorkCard from "../components/cards/WorkCard";
 import CommentThread from "../components/post/CommentThread";
 import StickerBar from "../components/post/StickerBar";
 import VoteControl from "../components/post/VoteControl";
-import { EditingBanner, InlineField } from "../components/work/Editing";
+import { InlineField } from "../components/work/Editing";
 
 const SCHEDULE_FALLBACK = "Couldn't save this just now.";
 
@@ -55,7 +49,6 @@ export default function PostPage() {
 	const location = useLocation();
 	const navigate = useNavigate();
 	const { isAuthenticated, user } = useAuth();
-	const [searchParams] = useSearchParams();
 	const [post, setPost] = useState<Post | null>(null);
 	const [loading, setLoading] = useState(true);
 
@@ -144,10 +137,9 @@ export default function PostPage() {
 
 	const isOwner = isAuthenticated && user?.id === post.creatorId;
 	const edits = post.edits ?? [];
-	// The persona preview is the editing pattern's flip: with it on, the page is the
-	// user's rendering (the Work page's rule) — the chrome that says "you are editing"
-	// is what a preview subtracts.
-	const ownerEdits = isOwner && searchParams.get("previewAs") !== "out";
+	// Editing is inline, and the pencil is the only edit affordance (Parker's #569
+	// ruling, 2026-10-16 — "the mode a creator is in is what the page itself is"): no
+	// banner and no preview toggle. Every owner-only block below reads `isOwner`.
 	const isLive = post.isPublished === true;
 	// Going live takes payout setup and the publish permission — a live post stays
 	// editable (and unpublishable) when either lapses.
@@ -309,22 +301,6 @@ export default function PostPage() {
 
 	return (
 		<div className="container mx-auto px-4 py-8 max-w-3xl">
-			{/* The mode banner — only the creator editing, never a previewer's. */}
-			{ownerEdits && (
-				<div className="mb-6">
-					<EditingBanner
-						title={post.title}
-						noun="post"
-						studioHref={studioUrl("/posts")}
-						studioLabel="Studio Posts"
-						// A live post's gate was already cleared; a ready draft has nothing to
-						// say. The blocked publish machinery carries its own fuller wording
-						// below — the banner keeps to one quiet line.
-						payoutNote={goLiveBlocked ? "Publishing waits on payout setup." : null}
-					/>
-				</div>
-			)}
-
 			{/* The card outlines only the post body (Parker, 2026-10-16): the header —
 			    creator, title, stamp — and the reaction row live OUTSIDE the outline, so
 			    the border says "the thing itself" the way the body it wraps is; the comments
@@ -351,7 +327,7 @@ export default function PostPage() {
 				</div>
 			)}
 
-			{ownerEdits ? (
+			{isOwner ? (
 				titleField
 			) : (
 				<h1 className="text-3xl font-bold mb-2">
@@ -386,7 +362,7 @@ export default function PostPage() {
 
 			{/* Owner publishing machinery. Not shown to a previewer — subtracting it is
 			    the point of the preview. */}
-			{ownerEdits && (
+			{isOwner && (
 				<div className="flex flex-wrap items-center gap-2 mb-6">
 					{!isLive && (
 						<span className="badge badge-warning gap-1">
@@ -433,8 +409,8 @@ export default function PostPage() {
 
 			{/* The creator's feed-shape settings: when a draft goes out on its own, and how
 			    the feed carries it. Owner-only chrome, in one quiet row. */}
-			{ownerEdits && !isLive && <div className="mb-6 text-sm">{scheduleField}</div>}
-			{ownerEdits && (
+			{isOwner && !isLive && <div className="mb-6 text-sm">{scheduleField}</div>}
+			{isOwner && (
 				<div className="flex flex-wrap items-center gap-4 mb-6 text-sm">
 					<label className="flex cursor-pointer items-center gap-2">
 						<input
@@ -461,7 +437,7 @@ export default function PostPage() {
 
 			{/* The gates the publish machinery answers to, said before the click lands —
 			    the builder's wording, carried over (Parker's alerts). */}
-			{ownerEdits && !isLive && goLiveBlocked && (
+			{isOwner && !isLive && goLiveBlocked && (
 				<div className="alert alert-warning mb-6 text-sm">
 					<span>
 						{permissionMissing === true ? (
@@ -519,7 +495,7 @@ export default function PostPage() {
 			    under it refresh with each save (they derive from the body; the save re-reads
 			    them). */}
 			<article className="rounded-xl border border-base-300 bg-base-100 p-6 sm:p-8 mb-8">
-				{ownerEdits ? (
+				{isOwner ? (
 					bodyField
 				) : post.body ? (
 					<div className="prose prose-sm max-w-none flush post-body">
