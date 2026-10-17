@@ -42,6 +42,7 @@
 		"./compliance-calendar": "./src/compliance-calendar.ts",
 		"./resource-thresholds": "./src/resource-thresholds.ts",
 		"./growth": "./src/growth.ts",
+		"./time-pool-fund": "./src/time-pool-fund.ts",
 		"./financial-plan": "./src/financial-plan.ts"
 	},
 	"scripts": {

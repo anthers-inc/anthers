@@ -249,20 +249,25 @@ test.describe("/signup leads with the free door", () => {
 		await page.goto("/signup");
 		const section = page.locator("#anthers-badges");
 		await expect(section).toBeVisible();
-		await expect(section.locator("table")).toHaveCount(0);
+		// The matrix's own table, scoped to its fieldset: the walk-down's per-rung
+		// table (the Fund's publication) also lives in this section, at every width,
+		// and is not the control this test watches.
+		await expect(section.locator("fieldset").locator("table")).toHaveCount(0);
 		// The cards are a real list of every rung, not a truncation of one.
 		await expect(section.getByRole("radio")).toHaveCount(5);
 		expect(await scrollsSideways(page)).toBe(false);
 
 		await page.setViewportSize(desk);
 		await page.goto("/signup");
-		await expect(section.locator("table")).toHaveCount(1);
+		await expect(section.locator("fieldset").locator("table")).toHaveCount(1);
 		await expect(section.getByRole("radio")).toHaveCount(5);
 		expect(await scrollsSideways(page)).toBe(false);
 
 		// And the matrix is not quietly scrolling inside its own box either, which is the
 		// state the breakpoint exists to prevent rather than to tidy up after.
-		const scroller = section.locator(".overflow-x-auto");
+		// The matrix's own scroller, inside its fieldset: the walk-down's wrapper is a
+		// second `.overflow-x-auto` in this section now.
+		const scroller = section.locator("fieldset").locator(".overflow-x-auto");
 		const [scrollWidth, clientWidth] = await scroller.evaluate((el) => [
 			el.scrollWidth,
 			el.clientWidth,
@@ -286,7 +291,7 @@ test.describe("/signup leads with the free door", () => {
 		await page.setViewportSize({ width: 1280, height: 900 });
 		await page.goto("/signup");
 
-		const cell = page.locator("#anthers-badges tbody td").first();
+		const cell = page.locator("#anthers-badges fieldset tbody td").first();
 		await expect(cell).toBeVisible();
 
 		const paint = await cell.evaluate((el) => {
@@ -311,7 +316,7 @@ test.describe("/signup leads with the free door", () => {
 		// together by its edge alone (Parker, 2026-08-25). Both halves are asserted because
 		// either one alone leaves the table reading as loose text on the background.
 		const edge = await page
-			.locator("#anthers-badges tbody tr:last-child td:last-child")
+			.locator("#anthers-badges fieldset tbody tr:last-child td:last-child")
 			.evaluate((el) => ({
 				right: Number.parseFloat(getComputedStyle(el).borderRightWidth),
 				bottom: Number.parseFloat(getComputedStyle(el).borderBottomWidth),
@@ -330,7 +335,7 @@ test.describe("/signup leads with the free door", () => {
 		// A `drop-shadow` filter, not a `box-shadow`: the tabs stand proud of the body with
 		// gaps between them, so a rectangle would not trace this control.
 		const filter = await page
-			.locator("#anthers-badges table")
+			.locator("#anthers-badges fieldset table")
 			.evaluate((el) => getComputedStyle(el).filter);
 		expect(filter, `the matrix casts no shadow: ${filter}`).toContain("drop-shadow");
 	});
