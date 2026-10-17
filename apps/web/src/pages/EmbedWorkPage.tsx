@@ -36,6 +36,7 @@ import {
 	type WorkDetail,
 	WorkPlaceholder,
 } from "../components/work/WorkLayout";
+import WorkMediaFrame from "../components/work/WorkMediaFrame";
 import { useAttentionClaim } from "../lib/attention";
 import { useMeteredBudget } from "../lib/public-access";
 import { withShareToken } from "../lib/share-link";
@@ -149,23 +150,28 @@ export default function EmbedWorkPage() {
 						// deliverable — the reason is all there is to render.
 						<PublicAccessWall budget={meterBudget} />
 					) : encoding && !playsOriginal ? (
-						// The processing note, held inside the kind's silhouette rather than replacing
+						// The processing note, held inside a media frame rather than replacing
 						// it (the placeholder task, 2026-10-16): an embed's own box does not collapse to
 						// a sentence while the deliverable is being made.
-						<WorkPlaceholder
-							type={work.type}
-							note=""
-							status={
-								<TranscodingStatus
-									status={work.transcoding?.status ?? "pending"}
-									progress={work.transcoding?.progress ?? 0}
-									etaSeconds={work.transcoding?.etaSeconds ?? undefined}
-									errorMessage={work.transcoding?.errorMessage ?? undefined}
-								/>
-							}
-						/>
+						<WorkMediaFrame>
+							<WorkPlaceholder
+								type={work.type}
+								note=""
+								status={
+									<TranscodingStatus
+										status={work.transcoding?.status ?? "pending"}
+										progress={work.transcoding?.progress ?? 0}
+										etaSeconds={work.transcoding?.etaSeconds ?? undefined}
+										errorMessage={work.transcoding?.errorMessage ?? undefined}
+									/>
+								}
+							/>
+						</WorkMediaFrame>
 					) : (
-						<WorkDeliverable work={work} shareToken={token ?? null} />
+						// No media card on the embed route: it is a bare window on one
+						// medium (`WorkDeliverable`'s `framed` opt-out), sized to fill
+						// whatever surface opened it.
+						<WorkDeliverable work={work} shareToken={token ?? null} framed={false} />
 					)}
 				</section>
 			) : (

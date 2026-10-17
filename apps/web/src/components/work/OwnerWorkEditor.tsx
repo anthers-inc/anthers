@@ -139,6 +139,7 @@ import {
 	WorkPlaceholder,
 	workTitleTypography,
 } from "./WorkLayout";
+import WorkMediaFrame from "./WorkMediaFrame";
 import WorkSideColumn, { ShowingsStub } from "./WorkSideColumn";
 
 const IN_PLACE =
@@ -1462,38 +1463,46 @@ export default function OwnerWorkEditor({
 				</aside>
 			)}
 
-			{/* ── The Work itself, full width. Everything above the work is the banner and
-			    nothing else (Parker's third pass, 2026-10-13): a player wants no header
+			{/* ── The Work itself, full width, inside the page's one media card
+			    (WorkMediaFrame — the media-frame task, 2026-10-16: the video layout is
+			    canonical and every kind holds it). Everything above the work is the banner
+			    and nothing else (Parker's third pass, 2026-10-13): a player wants no header
 			    block above it, and what a Work is and who made it reads under it, between
-			    the thing and its record. A piece of writing keeps its reading measure
-			    centered inside the width; a good's deliverable is the store panel, exactly
-			    where every user meets it. ── */}
+			    the thing and its record. A piece of writing reads at its measure centered
+			    inside the card; a good's deliverable is the store panel, exactly where
+			    every user meets it. ── */}
 			<section>
-				<div className={writing ? "mx-auto max-w-2xl" : undefined}>
-					{/* The writer's standfirst above their body, in the reading measure — the
-					    description still rides in the Details tab; kept in both places on
-					    purpose (Parker, 2026-10-14). */}
-					{writing && <WorkDescription work={asRead} />}
-					{isGoods(current.type) ? (
-						// The creator's copy of the user's store panel: it mounts without a
-						// verdict, the same absence a creator's own visit has always read.
-						<ProjectPricing
-							workId={current.id}
-							slug={current.slug ?? ""}
-							title={current.title ?? "Untitled"}
-							creatorHandle={asRead.creator?.handle ?? ""}
-							workType={current.type}
-						/>
-					) : deliverableEmpty ? (
-						// The silhouette: where the Work will be, drawn at the aspect it will
-						// occupy, so the page below it doesn't jump when the file lands.
+				{isGoods(current.type) ? (
+					// The creator's copy of the user's store panel: it mounts without a
+					// verdict, the same absence a creator's own visit has always read.
+					// `w-full` as on the user page: the panel has no width of its own and
+					// would shrink-to-fit in the frame's centered column.
+					<WorkMediaFrame>
+						<div className="w-full">
+							<ProjectPricing
+								workId={current.id}
+								slug={current.slug ?? ""}
+								title={current.title ?? "Untitled"}
+								creatorHandle={asRead.creator?.handle ?? ""}
+								workType={current.type}
+							/>
+						</div>
+					</WorkMediaFrame>
+				) : deliverableEmpty ? (
+					// The silhouette: where the Work will be, at the media frame's one
+					// profile, so the page below it doesn't move when the file lands.
+					<WorkMediaFrame>
+						{writing && <WorkDescription work={asRead} />}
 						<WorkPlaceholder type={current.type} note={deliverableNote} />
-					) : kindWaiting ? (
-						// The processing the landed file started, held INSIDE the silhouette the
-						// empty states draw (the placeholder task, 2026-10-16): the box keeps the
-						// kind's proportions and the progress rides in it, rather than the box
-						// being replaced by a status card. The visitor's page shows the same
-						// shape through its own call site.
+					</WorkMediaFrame>
+				) : kindWaiting ? (
+					// The processing the landed file started, held INSIDE the media frame
+					// (the placeholder task, 2026-10-16): the card keeps the one profile and
+					// the progress rides in it, rather than the box being replaced by a
+					// status card. The visitor's page shows the same shape through its own
+					// call site.
+					<WorkMediaFrame>
+						{writing && <WorkDescription work={asRead} />}
 						<WorkPlaceholder
 							type={current.type}
 							note=""
@@ -1506,13 +1515,14 @@ export default function OwnerWorkEditor({
 								/>
 							}
 						/>
-					) : (
-						<WorkDeliverable
-							work={asRead}
-							lyrics={current.type === "music" ? lyricsField : undefined}
-						/>
-					)}
-				</div>
+					</WorkMediaFrame>
+				) : (
+					<WorkDeliverable
+						work={asRead}
+						lead={writing ? <WorkDescription work={asRead} /> : undefined}
+						lyrics={current.type === "music" ? lyricsField : undefined}
+					/>
+				)}
 			</section>
 
 			{/* ── The byline strip: the title (editable in place as everywhere) on the first

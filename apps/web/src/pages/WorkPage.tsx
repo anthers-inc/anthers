@@ -59,6 +59,7 @@ import {
 	WorkPlaceholder,
 	WorkRating,
 } from "../components/work/WorkLayout";
+import WorkMediaFrame from "../components/work/WorkMediaFrame";
 import WorkSideColumn, { ShowingsStub } from "../components/work/WorkSideColumn";
 import { reportExternalActivity, useAttentionClaim } from "../lib/attention";
 import { useMeteredBudget } from "../lib/public-access";
@@ -303,36 +304,55 @@ export default function WorkPage() {
 
 			{/* ── The deliverable, or the gate in front of it ── */}
 			<section ref={deliverableRef}>
-				<div className={isWriting(work.type) ? "mx-auto max-w-2xl" : undefined}>
-					{/* A piece of writing's description is its standfirst, above the article
-					    where a user expects one — and it also rides in the Details tab below,
-					    kept in both places on purpose (Parker, 2026-10-14). */}
-					{isWriting(work.type) && <WorkDescription work={work} />}
-					{isGoods(work.type) ? (
-						/* 🚨 A goods Work's deliverable is the goods themselves (Parker,
-						    2026-10-09): the store panel stands exactly where a player would,
-						    for owner, revisiting buyer, and signed-out visitor alike — the
-						    resolver's goods rule carries the verdicts this reads
-						    (`requiresPurchase` for every qualifying viewer, the gate
-						    verdicts for a hard-gated one, no `isFree` posture at all). The
-						    unlock card renders only under a badge or age gate, in which case
-						    the store is nobody's to read. */
-						access && !access.canAccess && !access.requiresPurchase ? (
-							<InlineUnlock post={work} access={access} />
-						) : (
-							<ProjectPricing
-								workId={work.id}
-								slug={work.slug ?? ""}
-								access={access ?? undefined}
-								title={work.title ?? "Untitled"}
-								creatorHandle={work.creator?.handle ?? ""}
-								creatorHasStripe={work.creatorHasStripe ?? false}
-								thumbnail={work.thumbnail}
-								workType={work.type}
-							/>
-						)
-					) : !canAccess ? (
-						work.type === "video" ? (
+				{/*
+				 * The page's one media card (`WorkMediaFrame` — the media-frame task,
+				 * 2026-10-16, Parker): the video layout is canonical, and locked, processing,
+				 * purchased-unavailable and open branches all hold it, so the page's shape
+				 * never moves between kinds or between a gate and its opening. A piece of
+				 * writing's standfirst rides inside the card above its branches' content,
+				 * and the article renders inside it through `WorkDeliverable`'s lead slot.
+				 */}
+				{isGoods(work.type) ? (
+					/* 🚨 A goods Work's deliverable is the goods themselves (Parker,
+					    2026-10-09): the store panel stands exactly where a player would,
+					    for owner, revisiting buyer, and signed-out visitor alike — the
+					    resolver's goods rule carries the verdicts this reads
+					    (`requiresPurchase` for every qualifying viewer, the gate
+					    verdicts for a hard-gated one, no `isFree` posture at all). The
+					    unlock card renders only under a badge or age gate, in which case
+					    the store is nobody's to read. */
+					access && !access.canAccess && !access.requiresPurchase ? (
+						<WorkMediaFrame>
+							<div className="w-full">
+								<InlineUnlock post={work} access={access} />
+							</div>
+						</WorkMediaFrame>
+					) : (
+						<WorkMediaFrame>
+							<div className="w-full">
+								<ProjectPricing
+									workId={work.id}
+									slug={work.slug ?? ""}
+									access={access ?? undefined}
+									title={work.title ?? "Untitled"}
+									creatorHandle={work.creator?.handle ?? ""}
+									creatorHasStripe={work.creatorHasStripe ?? false}
+									thumbnail={work.thumbnail}
+									workType={work.type}
+								/>
+							</div>
+						</WorkMediaFrame>
+					)
+				) : !canAccess ? (
+					// A locked Work's card **fills**, for both gate shapes: the video's
+					// blur-and-overlay is the player's own rectangle, and the other kinds'
+					// two-up carries its height the way its column widths want it — the
+					// letterbox would force the grid's min-content into a taller box than
+					// the composition reads well at. The card is still the page's shape;
+					// only what it holds is a gate.
+					<WorkMediaFrame fill>
+						{isWriting(work.type) && <WorkDescription work={work} />}
+						{work.type === "video" ? (
 							/* A locked video is the feed's treatment at page scale (Parker,
 							    2026-10-13): the thumbnail blurred beneath, and the unlock —
 							    whatever it asks for — overlaid on it, rather than a two-up
@@ -401,7 +421,7 @@ export default function WorkPage() {
 						    aspect ratio silently outranks the track. An explicit width breaks
 						    the derive-back and the cover sizes to its column. Found by
 						    measuring, invisible in the DOM string. */}
-								<div className="sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
+								<div className="w-full sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
 									{presentsAsLocked(access) ? (
 										<LockedCover
 											thumbnail={work.thumbnail}
@@ -437,15 +457,27 @@ export default function WorkPage() {
 										))}
 								</div>
 							</div>
-						)
-					) : spentOnThis ? (
-						// The server withheld the deliverable because the allowance is gone, so
-						// there is nothing to render in its place but the reason.
-						<PublicAccessWall budget={meterBudget} />
-					) : encoding && !playsOriginal ? (
-						// The processing block, held inside the kind's silhouette rather than replacing
-						// it (the placeholder task, 2026-10-16): the page's proportions do not move
-						// while the Work's processed deliverable is being made.
+						)}
+					</WorkMediaFrame>
+				) : spentOnThis ? (
+					<WorkMediaFrame>
+						{isWriting(work.type) && (
+							<div className="w-full max-w-2xl">
+								<WorkDescription work={work} />
+							</div>
+						)}
+						{/* The server withheld the deliverable because the allowance is gone, so
+						    there is nothing to render in its place but the reason. `w-full` as
+						    everywhere in the frame: the wall's card has no width of its own. */}
+						<div className="w-full">
+							<PublicAccessWall budget={meterBudget} />
+						</div>
+					</WorkMediaFrame>
+				) : encoding && !playsOriginal ? (
+					// The processing block, held inside the media frame rather than replacing
+					// it (the placeholder task, 2026-10-16): the page's proportions do not move
+					// while the Work's processed deliverable is being made.
+					<WorkMediaFrame>
 						<WorkPlaceholder
 							type={work.type}
 							note=""
@@ -458,19 +490,23 @@ export default function WorkPage() {
 								/>
 							}
 						/>
-					) : (
-						<WorkDeliverable
-							work={work}
-							shareToken={shareToken}
-							onFrameActivity={reportExternalActivity}
-							startSeconds={startSeconds}
-							// The account's Use Persistent Miniplayer — an account-level
-							// setting, so null (never answered) reads as on. Signed-out, there
-							// is no bar preference at all and the page plays inline.
-							persistentMiniPlayer={isAuthenticated ? (user?.persistentMiniplayer ?? true) : false}
-						/>
-					)}
-				</div>
+					</WorkMediaFrame>
+				) : (
+					<WorkDeliverable
+						work={work}
+						shareToken={shareToken}
+						onFrameActivity={reportExternalActivity}
+						startSeconds={startSeconds}
+						// The account's Use Persistent Miniplayer — an account-level
+						// setting, so null (never answered) reads as on. Signed-out, there
+						// is no bar preference at all and the page plays inline.
+						persistentMiniPlayer={isAuthenticated ? (user?.persistentMiniplayer ?? true) : false}
+						// A piece of writing's description is its standfirst, above the
+						// article where a user expects one — and it also rides in the Details
+						// tab below, kept in both places on purpose (Parker, 2026-10-14).
+						lead={isWriting(work.type) ? <WorkDescription work={work} /> : undefined}
+					/>
+				)}
 			</section>
 
 			{/* Who sent them, and the way to an account of their own. Rendered under the
