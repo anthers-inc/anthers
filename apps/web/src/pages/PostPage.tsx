@@ -157,134 +157,131 @@ export default function PostPage() {
 
 	return (
 		<div className="container mx-auto px-4 py-8 max-w-3xl">
-			{/* The post as one bordered card (Parker, 2026-10-16): the post content — header,
-			    body, works and the row that reacts to it — reads as one thing, with the
-			    comments below it outside. */}
-			<article className="rounded-xl border border-base-300 bg-base-100 p-6 sm:p-8 mb-8">
-				{/* The creator carries the header (Parker, 2026-10-16): avatar and name above
-				    the title, the byline strip's shape the Work page draws. */}
-				{post.creator && (
-					<div className="mb-4">
-						<Link
-							to={profileUrl(post.creator.handle ?? "")}
-							className="inline-flex items-center gap-3 hover:underline"
-						>
-							{post.creator.avatar ? (
-								<img
-									src={post.creator.avatar}
-									alt={post.creator?.handle}
-									className="w-10 h-10 rounded-full object-cover"
-								/>
-							) : (
-								<div className="w-10 h-10 rounded-full bg-base-300 flex items-center justify-center font-bold">
-									{(post.creator?.handle ?? "?").charAt(0).toUpperCase()}
-								</div>
-							)}
-							<span className="font-medium">
-								{post.creator?.displayName || post.creator?.handle}
-							</span>
-						</Link>
-					</div>
-				)}
-
-				{post.title && <h1 className="text-3xl font-bold mb-2">{post.title}</h1>}
-
-				{/* The stamp carries the record button beside it — the standard icon form
-				    ({@link RecordLinkButton}); nothing renders when the post has no record,
-				    which is ordinary. */}
-				<div className="flex flex-wrap items-center gap-2 mb-6 text-sm text-base-content/60">
-					<span>{stamp}</span>
-					{edits.length > 0 && (
-						<>
-							<span aria-hidden="true">·</span>
-							<button
-								type="button"
-								className="link link-hover"
-								onClick={() => setShowHistory((v) => !v)}
-							>
-								Edited{" "}
-								{new Date(edits[0].editedAt).toLocaleDateString("en-US", {
-									month: "short",
-									day: "numeric",
-									year: "numeric",
-								})}
-							</button>
-						</>
-					)}
-					<RecordLinkButton recordUrl={post.recordUrl} />
+			{/* The card outlines only the post body (Parker, 2026-10-16): the header —
+			    creator, title, stamp — and the reaction row live OUTSIDE the outline, so
+			    the border says "the thing itself" the way the body it wraps is; the comments
+			    sit below the whole arrangement. */}
+			{post.creator && (
+				<div className="mb-4">
+					<Link
+						to={profileUrl(post.creator.handle ?? "")}
+						className="inline-flex items-center gap-3 hover:underline"
+					>
+						{post.creator.avatar ? (
+							<img
+								src={post.creator.avatar}
+								alt={post.creator?.handle}
+								className="w-10 h-10 rounded-full object-cover"
+							/>
+						) : (
+							<div className="w-10 h-10 rounded-full bg-base-300 flex items-center justify-center font-bold">
+								{(post.creator?.handle ?? "?").charAt(0).toUpperCase()}
+							</div>
+						)}
+						<span className="font-medium">{post.creator?.displayName || post.creator?.handle}</span>
+					</Link>
 				</div>
+			)}
 
-				{/* Owner status + controls (only the creator reaches an unpublished post). */}
-				{isOwner && (
-					<div className="flex flex-wrap items-center gap-2 mb-6">
-						{post.isPublished === false && (
-							<span className="badge badge-warning gap-1">
-								{post.scheduledFor
-									? `Scheduled for ${new Date(post.scheduledFor).toLocaleString("en-US", {
-											month: "short",
-											day: "numeric",
-											hour: "numeric",
-											minute: "2-digit",
-										})}`
-									: "Draft"}
-							</span>
-						)}
-						<a href={studioEditPostUrl(post.slug)} className="btn btn-sm btn-outline">
-							Edit
-						</a>
-						{post.isPublished && (
-							<button
-								type="button"
-								className="btn btn-sm btn-ghost"
-								onClick={handleUnpublish}
-								disabled={actioning}
-							>
-								Unpublish
-							</button>
-						)}
+			{post.title && <h1 className="text-3xl font-bold mb-2">{post.title}</h1>}
+
+			{/* The stamp carries the record button beside it — the standard icon form
+			    ({@link RecordLinkButton}); nothing renders when the post has no record,
+			    which is ordinary. */}
+			<div className="flex flex-wrap items-center gap-2 mb-6 text-sm text-base-content/60">
+				<span>{stamp}</span>
+				{edits.length > 0 && (
+					<>
+						<span aria-hidden="true">·</span>
 						<button
 							type="button"
-							className="btn btn-sm btn-ghost text-error"
-							onClick={openDelete}
+							className="link link-hover"
+							onClick={() => setShowHistory((v) => !v)}
+						>
+							Edited{" "}
+							{new Date(edits[0].editedAt).toLocaleDateString("en-US", {
+								month: "short",
+								day: "numeric",
+								year: "numeric",
+							})}
+						</button>
+					</>
+				)}
+				<RecordLinkButton recordUrl={post.recordUrl} />
+			</div>
+
+			{/* Owner status + controls (only the creator reaches an unpublished post). */}
+			{isOwner && (
+				<div className="flex flex-wrap items-center gap-2 mb-6">
+					{post.isPublished === false && (
+						<span className="badge badge-warning gap-1">
+							{post.scheduledFor
+								? `Scheduled for ${new Date(post.scheduledFor).toLocaleString("en-US", {
+										month: "short",
+										day: "numeric",
+										hour: "numeric",
+										minute: "2-digit",
+									})}`
+								: "Draft"}
+						</span>
+					)}
+					<a href={studioEditPostUrl(post.slug)} className="btn btn-sm btn-outline">
+						Edit
+					</a>
+					{post.isPublished && (
+						<button
+							type="button"
+							className="btn btn-sm btn-ghost"
+							onClick={handleUnpublish}
 							disabled={actioning}
 						>
-							Delete
+							Unpublish
 						</button>
-					</div>
-				)}
+					)}
+					<button
+						type="button"
+						className="btn btn-sm btn-ghost text-error"
+						onClick={openDelete}
+						disabled={actioning}
+					>
+						Delete
+					</button>
+				</div>
+			)}
 
-				{/* Edit History (public — the "Edited …" link toggles it). */}
-				{showHistory && edits.length > 0 && (
-					<div className="rounded-lg border border-base-300 bg-base-200/50 p-4 mb-6 text-sm">
-						<h3 className="font-semibold mb-2">Edit History</h3>
-						<ul className="flex flex-col gap-1">
-							{edits.map((e) => (
-								<li
-									key={e.editedAt}
-									className="flex flex-wrap justify-between gap-x-4 text-base-content/70"
-								>
-									<span>
-										{new Date(e.editedAt).toLocaleString("en-US", {
-											month: "short",
-											day: "numeric",
-											year: "numeric",
-											hour: "numeric",
-											minute: "2-digit",
-										})}
-									</span>
-									{e.summary && <span className="text-base-content/50">Changed {e.summary}</span>}
-								</li>
-							))}
-						</ul>
-					</div>
-				)}
+			{/* Edit History (public — the "Edited …" link toggles it). */}
+			{showHistory && edits.length > 0 && (
+				<div className="rounded-lg border border-base-300 bg-base-200/50 p-4 mb-6 text-sm">
+					<h3 className="font-semibold mb-2">Edit History</h3>
+					<ul className="flex flex-col gap-1">
+						{edits.map((e) => (
+							<li
+								key={e.editedAt}
+								className="flex flex-wrap justify-between gap-x-4 text-base-content/70"
+							>
+								<span>
+									{new Date(e.editedAt).toLocaleString("en-US", {
+										month: "short",
+										day: "numeric",
+										year: "numeric",
+										hour: "numeric",
+										minute: "2-digit",
+									})}
+								</span>
+								{e.summary && <span className="text-base-content/50">Changed {e.summary}</span>}
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
 
-				{/* The post body. Always visible — a post is an announcement, and an
-				    announcement nobody can read is not one. It is rendered as the markdown
-				    it is stored as; react-markdown without rehype-raw skips any raw HTML a
-				    stored body somehow carries, so the words show and nothing executes. */}
+			{/* The card: the body only. Always visible — a post is an announcement, and an
+			    announcement nobody can read is not one. It is rendered as the markdown it is
+			    stored as; react-markdown without rehype-raw skips any raw HTML a stored body
+			    somehow carries, so the words show and nothing executes. */}
+			<article className="rounded-xl border border-base-300 bg-base-100 p-6 sm:p-8 mb-8">
 				{post.body && (
-					<div className="prose prose-sm max-w-none flush post-body mb-8">
+					<div className="prose prose-sm max-w-none flush post-body">
 						<Markdown remarkPlugins={[remarkGfm]}>{post.body}</Markdown>
 					</div>
 				)}
@@ -293,10 +290,7 @@ export default function PostPage() {
 				    the user can read may well link something they cannot open — which is
 				    the separation working, not a bug. */}
 				{linkedWorks.length > 0 && (
-					<section className="mb-8">
-						<h2 className="text-lg font-semibold mb-3">
-							{linkedWorks.length === 1 ? "The work" : "The works"}
-						</h2>
+					<section className={post.body ? "mt-6" : ""}>
 						<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 							{linkedWorks.map((ref) => (
 								<WorkCard key={ref.work.id} work={{ ...ref.work, creator: post.creator }} />
@@ -304,20 +298,20 @@ export default function PostPage() {
 						</div>
 					</section>
 				)}
-
-				{/* The reaction row: the votes and the Sticker button on one line — the work
-				    page's review row's shape (Parker, 2026-10-16), with the votes carrying
-				    their counts on the buttons. */}
-				<footer className="flex flex-wrap items-center gap-3">
-					<VoteControl
-						variant="boxed"
-						subjectType="post"
-						subjectId={post.id}
-						label={post.title ?? "this post"}
-					/>
-					<StickerBar subjectType="post" subjectId={post.id} label={post.title ?? "this post"} />
-				</footer>
 			</article>
+
+			{/* The reaction row: the votes and the Sticker button on one line — the work
+			    page's review row's shape (Parker, 2026-10-16), with the votes carrying
+			    their counts on the buttons. */}
+			<footer className="flex flex-wrap items-center gap-3">
+				<VoteControl
+					variant="boxed"
+					subjectType="post"
+					subjectId={post.id}
+					label={post.title ?? "this post"}
+				/>
+				<StickerBar subjectType="post" subjectId={post.id} label={post.title ?? "this post"} />
+			</footer>
 
 			{/* Delete confirmation (with an offer to purge now-orphaned library media). */}
 			{showDelete && (
