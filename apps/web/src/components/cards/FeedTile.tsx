@@ -21,9 +21,12 @@
 // The rule is the resolver's (`services/access.ts`'s goods branch); this tile
 // is its feed-shaped consequence.
 //
-// This is a feed widget, not a general card: WorkCard stays the column card
-// the profile, project and post pages render. If another surface wants this
-// shape, move it to @anthers/web-shared then, not now.
+// This is the widget every listing surface renders: the feed, and — since
+// 2026-10-17 — the creator page's timeline and type tabs, which replaced their
+// own card family with it. WorkCard and PostCard stay the column cards the
+// project and post pages render. The tile stays where it is while every
+// consumer is in this app; if a different package wants this shape, move it to
+// @anthers/web-shared then, not now.
 
 import { isListened } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
