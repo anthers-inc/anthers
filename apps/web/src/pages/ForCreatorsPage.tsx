@@ -63,6 +63,7 @@ import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Card, Eyebrow, H2, Lede, Section, SignpostCard } from "@anthers/web-shared/decor/sections";
 import { AnthersBadgeMark } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { Link } from "@anthers/web-shared/router";
 import {
 	ArrowDownTrayIcon,
@@ -94,6 +95,7 @@ const serif = { fontFamily: FONTS.fraunces };
 const fmtMoney = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
 
 export default function ForCreatorsPage() {
+	usePageTitle("For Creators");
 	const { isAuthenticated } = useAuth();
 	// The seeded ladder, for the claims this page quotes a creator: what a fan's support
 	// for Anthers sets (the entry price, the Time Pool share of it) and the modeled
