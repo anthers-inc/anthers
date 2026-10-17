@@ -16,16 +16,20 @@ import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
 import { db } from "@anthers/db";
 import { transcodingJobs, works } from "@anthers/db/schema";
-import { insertWork } from "./work-fixtures.js";
 import { eq } from "drizzle-orm";
-import { createAccount } from "./account-fixture.js";
 import { DISPATCH, runMediaJob } from "../jobs/media-lane.js";
 import { JOB_OPTIONS, QUEUES } from "../jobs/queue.js";
+import { createAccount } from "./account-fixture.js";
+import { purgeAccountsCreatedHere } from "./cleanup.js";
+import { insertWork } from "./work-fixtures.js";
 
 const ROOT = "apps/api/src";
 
 /** The api's worker source, for asserting the registration's shape. */
 const WORKER_SOURCE = join(ROOT, "jobs/worker.ts");
+// Registered at the suite's top level, as fixture-hygiene's guard requires —
+// a registration (the shared beforeAll/afterAll pair), not a teardown call.
+purgeAccountsCreatedHere();
 
 describe("the media lane's configuration", () => {
 	it("registers exactly one media handler at concurrency 1 in worker.ts", async () => {
@@ -52,7 +56,9 @@ describe("the media lane's configuration", () => {
 
 describe("runMediaJob's dispatch", () => {
 	it("records a row of an unknown media type failed, legibly, without throwing", async () => {
-		const { userId: creatorId } = await createAccount(`media_lane_${crypto.randomUUID().slice(0, 8)}`);
+		const { userId: creatorId } = await createAccount(
+			`media_lane_${crypto.randomUUID().slice(0, 8)}`,
+		);
 		const work = await insertWork({
 			creatorId,
 			type: "audio",

@@ -365,9 +365,7 @@ describe("resumeOrphanedTranscodes", () => {
 		const quiet: LingeringQueueAccess = {
 			findQueued: (queueName) =>
 				Promise.resolve(
-					[{ id: "q-kept", data: { jobId: video.jobId } }].filter(
-						() => queueName === QUEUES.MEDIA,
-					),
+					[{ id: "q-kept", data: { jobId: video.jobId } }].filter(() => queueName === QUEUES.MEDIA),
 				),
 			deleteJob: () => {
 				throw new Error("nothing should be deleted when every queued job resolves");

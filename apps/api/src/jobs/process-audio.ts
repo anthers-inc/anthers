@@ -11,11 +11,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
 import { transcodingJobs, works } from "@anthers/db/schema";
-import { eq, and, gt, isNotNull, sql } from "drizzle-orm";
+import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { storage } from "../services/storage/index.js";
-import { createEtaClamp } from "./transcode-eta.js";
 import { MAX_TRANSCODE_RESUMES } from "./resume-orphans.js";
+import { createEtaClamp } from "./transcode-eta.js";
 
 /**
  * How long the job's signed source address stays valid, exactly as the video legs'
@@ -187,7 +187,13 @@ export async function processAudio(data: ProcessAudioData) {
 	// itself.
 	await db
 		.update(transcodingJobs)
-		.set({ status: "processing", progress: 0, etaSeconds: null, interruptedGracefully: false, updatedAt: new Date() })
+		.set({
+			status: "processing",
+			progress: 0,
+			etaSeconds: null,
+			interruptedGracefully: false,
+			updatedAt: new Date(),
+		})
 		.where(eq(transcodingJobs.id, jobId));
 
 	const [item] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
@@ -198,6 +204,13 @@ export async function processAudio(data: ProcessAudioData) {
 
 	let source: string;
 	let outputPath: string | null = null;
+	// The encode's progress ticks are fire-and-forget; this flips to false the moment
+	// the encoder exits (after it is awaited), so the dead encoder's drained stdout can
+	// never queue a write — the same guard the video ladder runs per variant.
+	let encodeReporting = true;
+	// The last tick the encoder queued, so the tail's narrowing and the completion write
+	// can wait for it rather than race it — the same guard the video ladder runs per variant.
+	let tickWrite: Promise<unknown> = Promise.resolve();
 
 	try {
 		// The source is read in place — `readableInput`: its own path in local mode, a
@@ -235,7 +248,9 @@ export async function processAudio(data: ProcessAudioData) {
 		 */
 		const [historyMedian] = await db
 			.select({
-				medianWaveformMs: sql<number | null>`percentile_cont(0.5) within group (order by ((timings->>'waveformMs')::numeric))`,
+				medianWaveformMs: sql<
+					number | null
+				>`percentile_cont(0.5) within group (order by ((timings->>'waveformMs')::numeric))`,
 			})
 			.from(transcodingJobs)
 			.where(
@@ -279,7 +294,6 @@ export async function processAudio(data: ProcessAudioData) {
 				let buf = "";
 				let speed = 0;
 				let lastWriteMs = 0;
-				let tickWrite: Promise<unknown> = Promise.resolve();
 				try {
 					while (true) {
 						const { done, value } = await reader.read();
@@ -296,6 +310,7 @@ export async function processAudio(data: ProcessAudioData) {
 								const s = Number.parseFloat(val);
 								if (Number.isFinite(s) && s > 0) speed = s;
 							} else if (key === "out_time") {
+								if (!encodeReporting) break;
 								const m = val.match(/^(\d+):(\d+):(\d+(?:\.\d+)?)$/);
 								if (!m) continue;
 								const outSec = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
@@ -324,6 +339,11 @@ export async function processAudio(data: ProcessAudioData) {
 			})();
 		}
 		const exitCode = await proc.exited;
+		// A tick whose encoder has exited is stale by definition: flip first, let the
+		// last queued tick land, then narrow — the exact order the video ladder runs
+		// between its own variants, whose stale-tick incident is its docblock's record.
+		encodeReporting = false;
+		await tickWrite;
 		if (exitCode !== 0) {
 			const stderr = await new Response(proc.stderr).text();
 			throw new Error(`Audio normalization failed: ${stderr.slice(0, 500)}`);
@@ -333,7 +353,10 @@ export async function processAudio(data: ProcessAudioData) {
 		// reached: upload, then the waveform pass the allowance projected.
 		const tailEta = clampEta(Math.round(waveformAllowance));
 		if (tailEta != null)
-			await db.update(transcodingJobs).set({ etaSeconds: tailEta }).where(eq(transcodingJobs.id, jobId));
+			await db
+				.update(transcodingJobs)
+				.set({ etaSeconds: tailEta })
+				.where(eq(transcodingJobs.id, jobId));
 		await updateJobProgress(jobId, 60);
 
 		/**

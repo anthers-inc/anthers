@@ -12,9 +12,9 @@ import {
 	etaLeft,
 	etaText,
 	processingQueue,
-	queuePositionText,
 	processingStatusText,
 	processingText,
+	queuePositionText,
 	RECENTLY_FINISHED_MS,
 } from "./processing";
 
@@ -71,7 +71,9 @@ describe("processingText", () => {
 		// The recompute wrote the lane's own total figure (`eta_seconds` on a pending row):
 		// the creator waiting is told when the WORK is done, not when it merely starts.
 		expect(
-			processingText(work(1, { status: "pending", queuePosition: 3, etaSeconds: 1200 }).transcoding),
+			processingText(
+				work(1, { status: "pending", queuePosition: 3, etaSeconds: 1200 }).transcoding,
+			),
 		).toBe("Waiting to process · 2 ahead · About 20 minutes left");
 	});
 
@@ -99,12 +101,12 @@ describe("processingStatusText", () => {
 		expect(processingStatusText(work(1, { status: "pending" }).transcoding)).toBe(
 			"Waiting to process",
 		);
-		expect(
-			processingStatusText(work(1, { status: "pending", queuePosition: 1 }).transcoding),
-		).toBe("Waiting to process · next up");
-		expect(
-			processingStatusText(work(1, { status: "pending", queuePosition: 3 }).transcoding),
-		).toBe("Waiting to process · 2 ahead");
+		expect(processingStatusText(work(1, { status: "pending", queuePosition: 1 }).transcoding)).toBe(
+			"Waiting to process · next up",
+		);
+		expect(processingStatusText(work(1, { status: "pending", queuePosition: 3 }).transcoding)).toBe(
+			"Waiting to process · 2 ahead",
+		);
 	});
 });
 

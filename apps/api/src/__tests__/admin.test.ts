@@ -10,9 +10,9 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { QUEUES } from "../jobs/queue";
 import { sql } from "drizzle-orm";
 import app from "../index";
+import { QUEUES } from "../jobs/queue";
 import { createAccount } from "./account-fixture";
 import { createAdminFixture } from "./admin-fixture";
 import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";

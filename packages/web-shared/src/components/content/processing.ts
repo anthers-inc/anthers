@@ -89,7 +89,8 @@ export function processingText(job: Work["transcoding"]): string | null {
 	// remaining) and for a WAITING one the total the lane's recompute wrote — front
 	// wait plus the row's own cost — so a creator is told the same kind of thing in
 	// both states: how long until this Work is done.
-	const eta = job?.status === "processing" || job?.status === "pending" ? etaLeft(job.etaSeconds) : null;
+	const eta =
+		job?.status === "processing" || job?.status === "pending" ? etaLeft(job.etaSeconds) : null;
 	return status && eta ? `${status} · ${eta}` : status;
 }
 

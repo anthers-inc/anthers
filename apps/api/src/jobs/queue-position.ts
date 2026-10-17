@@ -71,7 +71,9 @@ export async function refreshQueuePositions(): Promise<void> {
 	const history = await db
 		.select({
 			mediaType: transcodingJobs.mediaType,
-			medianMs: sql<number | null>`percentile_cont(0.5) within group (order by ((timings->>'totalMs')::numeric))`,
+			medianMs: sql<
+				number | null
+			>`percentile_cont(0.5) within group (order by ((timings->>'totalMs')::numeric))`,
 		})
 		.from(transcodingJobs)
 		.where(
@@ -84,7 +86,9 @@ export async function refreshQueuePositions(): Promise<void> {
 		.groupBy(transcodingJobs.mediaType);
 	const costOf = (mediaType: string): number | null => {
 		const median = history.find((h) => h.mediaType === mediaType)?.medianMs;
-		return median != null && Number(median) > 0 ? Number(median) / 1000 : FALLBACK[mediaType] ?? null;
+		return median != null && Number(median) > 0
+			? Number(median) / 1000
+			: (FALLBACK[mediaType] ?? null);
 	};
 
 	const [running] = await db
@@ -101,7 +105,7 @@ export async function refreshQueuePositions(): Promise<void> {
 		running == null
 			? 0
 			: (running.etaSeconds ??
-			  ((100 - (running.progress ?? 0)) / 100) * (costOf(running.mediaType) ?? 0));
+				((100 - (running.progress ?? 0)) / 100) * (costOf(running.mediaType) ?? 0));
 
 	const pending = await db
 		.select({

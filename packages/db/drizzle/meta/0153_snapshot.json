@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
-  "id": "fc35cd63-d766-4f60-ba62-b6828714f6e6",
-=======
   "id": "bf21eea9-884f-4a9e-ab22-27a768918309",
->>>>>>> origin/main
   "prevId": "8eedccd6-8594-4bfc-a84b-d8b8d1b7b665",
   "version": "7",
   "dialect": "postgresql",
@@ -10143,145 +10139,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-<<<<<<< HEAD
-    "public.post_work_refs": {
-      "name": "post_work_refs",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "post_id": {
-          "name": "post_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "work_id": {
-          "name": "work_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "uq_post_work_refs": {
-          "name": "uq_post_work_refs",
-          "columns": [
-            {
-              "expression": "post_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "work_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_post_work_refs_post": {
-          "name": "idx_post_work_refs_post",
-          "columns": [
-            {
-              "expression": "post_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "position",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_post_work_refs_work": {
-          "name": "idx_post_work_refs_work",
-          "columns": [
-            {
-              "expression": "work_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "post_work_refs_post_id_posts_id_fk": {
-          "name": "post_work_refs_post_id_posts_id_fk",
-          "tableFrom": "post_work_refs",
-          "tableTo": "posts",
-          "columnsFrom": [
-            "post_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "post_work_refs_work_id_works_id_fk": {
-          "name": "post_work_refs_work_id_works_id_fk",
-          "tableFrom": "post_work_refs",
-          "tableTo": "works",
-          "columnsFrom": [
-            "work_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-=======
->>>>>>> origin/main
     "public.posts": {
       "name": "posts",
       "schema": "",
@@ -11856,15 +11713,6 @@
           "primaryKey": false,
           "notNull": false
         },
-<<<<<<< HEAD
-        "queue_position": {
-          "name": "queue_position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-=======
->>>>>>> origin/main
         "error_message": {
           "name": "error_message",
           "type": "text",

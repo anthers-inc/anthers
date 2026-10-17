@@ -13,10 +13,10 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
 import { transcodingJobs } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
+import { refreshQueuePositions } from "../jobs/queue-position.js";
 import { createAccount } from "./account-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup.js";
 import { insertWork } from "./work-fixtures.js";
-import { refreshQueuePositions } from "../jobs/queue-position.js";
 
 let creatorId: number;
 const workIds: number[] = [];
@@ -48,7 +48,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
 	// The rows cascade with their works; delete the works, then the account sweep above.
-	if (workIds.length > 0) await db.delete(transcodingJobs).where(inArray(transcodingJobs.workId, workIds));
+	if (workIds.length > 0)
+		await db.delete(transcodingJobs).where(inArray(transcodingJobs.workId, workIds));
 });
 
 const positionOf = async (rowId: number): Promise<number | null> => {
@@ -128,14 +129,20 @@ describe("refreshQueuePositions", () => {
 			// The lane's front is seconds away when nothing runs: the first pending row's
 			// front figure is 0 and its total is exactly the history's cost.
 			expect(await positionOf(rowIds[0])).toBe(1);
-			const [rowA] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, rowIds[0]));
+			const [rowA] = await db
+				.select()
+				.from(transcodingJobs)
+				.where(eq(transcodingJobs.id, rowIds[0]));
 			expect(rowA.queueEtaSeconds).toBe(0);
 			expect(rowA.etaSeconds).toBe(600);
 			// The second row waits behind the first's cost (history-priced, 600) and adds
 			// its own — its type's fallback until audio jobs record their own history,
 			// which the assertion states rather than hard-codes: the total is the front
 			// wait plus the row's cost, whatever the cost model said.
-			const [rowB] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, rowIds[1]));
+			const [rowB] = await db
+				.select()
+				.from(transcodingJobs)
+				.where(eq(transcodingJobs.id, rowIds[1]));
 			expect(rowB.queueEtaSeconds).toBe(600);
 			expect(rowB.etaSeconds!).toBeGreaterThan(rowB.queueEtaSeconds!);
 		} finally {

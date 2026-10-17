@@ -38,7 +38,7 @@ export default function ProjectDownloads({
 	if (!canAccess) {
 		return (
 			<div>
-				<h2 className={WORK_DETAILS_HEADING_CLASS + " mb-4"}>Downloads</h2>
+				<h2 className={`${WORK_DETAILS_HEADING_CLASS} mb-4`}>Downloads</h2>
 				<div className="card bg-base-200">
 					<div className="card-body items-center text-center py-8">
 						<LockClosedIcon className="w-8 h-8 text-base-content/40" />
@@ -62,7 +62,7 @@ export default function ProjectDownloads({
 
 	return (
 		<div>
-			<h2 className={WORK_DETAILS_HEADING_CLASS + " mb-4"}>Downloads</h2>
+			<h2 className={`${WORK_DETAILS_HEADING_CLASS} mb-4`}>Downloads</h2>
 			<div className="overflow-x-auto">
 				<table className="table table-sm">
 					<thead>
