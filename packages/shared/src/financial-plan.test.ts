@@ -69,9 +69,12 @@ describe("the plan's hierarchy", () => {
 		}
 	});
 
-	test("the Fund's slice × free accounts is Free Access — the Fund is the mechanism", () => {
+	test("the Fund's slice divides Free Access — floored to the cent, the dust stays in the remainder", () => {
 		const L = ledgerAt(0.3);
-		expect(L.freeSlice * Math.max(1, L.freeAccounts)).toBeCloseTo(L.freeAccess);
+		const paid = L.freeSlice * Math.max(1, L.freeAccounts);
+		expect(paid).toBeLessThanOrEqual(L.freeAccess + 1e-9);
+		// Flooring a per-account slice can strand only the sub-cent dust × accounts.
+		expect(L.freeAccess - paid).toBeLessThan(Math.max(1, L.freeAccounts) * 0.01);
 	});
 
 	test("solvency is other programs' residual, and flips when the obligations overrun programs", () => {

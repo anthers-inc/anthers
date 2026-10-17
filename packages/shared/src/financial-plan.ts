@@ -55,7 +55,15 @@
  * obligation lines — which is exact, not an approximation. The iterative
  * convergence this replaces converged in one step for the same reason.)
  */
-import { ADMIN_CEILING, modelAt, NO_STAFFING, type Staffing } from "./growth.js";
+import {
+	ADMIN_CEILING,
+	FREE_ACCESS_SHARE_DEFAULT,
+	modelAt,
+	NO_STAFFING,
+	type Staffing,
+} from "./growth.js";
+
+export { FREE_ACCESS_SHARE_DEFAULT };
 
 /** One editable phase of the plan — the tool's input row. */
 export interface PlanPhaseInput {
@@ -149,41 +157,43 @@ export interface PlanSpending {
 /** Compute one phase of the plan. Pure; the tool and every generator call this. */
 export function planLedger(input: PlanPhaseInput): PlanLedger {
 	const adminBudgetShare = input.adminBudgetShare ?? ADMIN_CEILING;
-	const freeAccessShare = input.freeAccessShare ?? 0.1;
+	const freeAccessShare = input.freeAccessShare ?? FREE_ACCESS_SHARE_DEFAULT;
 
-	const base = modelAt({
+	// ONE pass: the free pool derives inside `modelAt` from the same shares, through
+	// the same `timePoolFundPool` arithmetic the runtime service uses — the two-pass
+	// convergence this replaced needed a free slice fed back in because the model
+	// carried no notion of the shares; it does now.
+	const m = modelAt({
 		accounts: input.accounts,
 		payingShare: input.payingShare,
 		staffing: input.staffing ?? NO_STAFFING,
+		adminBudgetShare,
+		freeAccessShare,
 	});
-	const charitableRevenue = base.charitableRevenue;
+	const charitableRevenue = m.charitableRevenue;
 	const adminBudget = adminBudgetShare * charitableRevenue;
 	// Programs is the parent: everything after admin. Free Access's share is
 	// taken OF programs, so the two shares never collide — admin 30% leaves
 	// programs ≥ 70% by construction, whatever the per-phase overrides say.
 	const programs = charitableRevenue - adminBudget;
-	const freeAccess = freeAccessShare * programs;
-	const freeAccounts = Math.max(1, base.freeAccounts);
-	const freeSlice = freeAccess / freeAccounts;
+	// Free Access is the Fund's pot — the model's own pool figure (capped by the
+	// parity ceiling it may never need), so this ledger and the runtime's published
+	// rows are the same arithmetic at different scales.
+	const freeAccess = m.freePool;
+	const freeSlice = m.freeSlice;
 
-	const m = modelAt({
-		accounts: input.accounts,
-		payingShare: input.payingShare,
-		staffing: input.staffing ?? NO_STAFFING,
-		freeTimePool: freeSlice,
-	});
-	// The storage obligation is the storage subsidy minus the Fund — read from
-	// the model, never re-derived. (The model's `freeAccess` is the whole free
-	// slice × free accounts plus storage; the plan splits those two lines.)
+	// The storage obligation is the free program's remainder — read from the model,
+	// never re-derived. (The model's `freeAccess` is the whole free pot plus storage;
+	// the plan splits those two lines.)
 	const freeStorage = m.freeAccess - freeAccess;
 	const otherPrograms = programs - freeAccess - freeStorage;
 
 	return {
-		accounts: base.accounts,
-		creators: base.creators,
-		payingAccounts: base.payingAccounts,
-		freeAccounts: base.freeAccounts,
-		payersByRung: base.bySupportRung,
+		accounts: m.accounts,
+		creators: m.creators,
+		payingAccounts: m.payingAccounts,
+		freeAccounts: m.freeAccounts,
+		payersByRung: m.bySupportRung,
 		charitableRevenue,
 		adminBudget,
 		adminActual: m.overhead,
@@ -222,7 +232,10 @@ export function planLedger(input: PlanPhaseInput): PlanLedger {
  * exists rule from the machine rules — accepted cost of public-source
  * generation). The phase labels are public copy.
  */
-export const PLAN_DEFAULTS = { adminBudgetShare: ADMIN_CEILING, freeAccessShare: 0.1 } as const;
+export const PLAN_DEFAULTS = {
+	adminBudgetShare: ADMIN_CEILING,
+	freeAccessShare: FREE_ACCESS_SHARE_DEFAULT,
+} as const;
 
 /** One authored row of the plan's path, matching the plan tables' columns. */
 export interface AuthoredPlanPhase {

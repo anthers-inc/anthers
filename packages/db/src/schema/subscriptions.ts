@@ -20,6 +20,7 @@ import {
 	jsonb,
 	numeric,
 	pgTable,
+	real,
 	serial,
 	text,
 	timestamp,
@@ -910,6 +911,80 @@ export const poolDistributions = pgTable(
 		),
 		index("idx_pool_distributions_creator").on(table.creatorId),
 	],
+);
+
+// ── The Time Pool Fund ───────────────────────────────────────────────────────
+// org — the Time Pool Fund is Anthers' own charitable fund (the subsidy of free
+// accounts' Time Pools), so the ledger is org money, per published cycle.
+//
+// ⭐ **One row per billing cycle is the published record** (the pool mechanism
+// task, 2026-10-10): free accounts' Time Pools are not a per-head constant; they are
+// the Fund — a stated share of the charitable remainder after the admin budget,
+// published monthly, divided across the cycle's active free accounts, each slice
+// flowing through `computeMonth` unchanged. This table is what makes the pool a
+// fact somebody can read back years later, and `services/time-pool-fund.ts` is its
+// only writer.
+//
+// 🚨 **The row freezes at first actualization; restatements never rewrite the active
+// count.** The count is taken from raw `attention_events`, which prune after
+// `ATTENTION_RAW_RETENTION_DAYS` (the daily rollup is identity-free), so the first
+// actualization is the only moment a cycle's real count exists and the row is where
+// it survives — the same point-in-time discipline as `attention_events.publicAccess`.
+// Revenue, pool and slice restate (upward while the future is concerned; to actuals
+// at cycle start); the count never does.
+export const timePoolFundLedger = pgTable(
+	"time_pool_fund_ledger",
+	{
+		id: serial("id").primaryKey(),
+		// ISO `YYYY-MM-01`, the same cycle shape `pool_distributions` writes.
+		billingCycle: text("billing_cycle").notNull(),
+		/**
+		 * Where the cycle sits in the publication timeline:
+		 *
+		 * - `actual` — the cycle ended or is in flight, computed from its own booked
+		 *   holdings (an ended cycle's holdings may still grow through Stripe's payment
+		 *   retries, so the row restates upward with them, and the parity ceiling is
+		 *   recomputed against the frozen count each time).
+		 * - `committed` — the next month, published in advance from the recurring base
+		 *   (the current holdings, which renew) and frozen: restated only by revenue
+		 *   overshooting.
+		 * - `estimate` — one cycle past the commitment, from the same recurring base.
+		 */
+		status: text("status").notNull().default("actual"),
+		/**
+		 * The booked charitable revenue the pool derives from — the settled holdings
+		 * basis: the sum over Anthers-ladder holdings for the cycle of the breakdown's
+		 * remainder line (`anthersSupportBreakdown`, at the model's fee split). A
+		 * committed or estimate row records the recurring base it projects from, which
+		 * is the current cycle's holdings, not the future cycle's.
+		 */
+		charitableRevenue: numeric("charitable_revenue").notNull().default("0.00"),
+		/** The shares that produced this row, as the plan tool's settings held them. Stored beside the money because a published figure is auditable against the policy that produced it, and a later settings move must not silently restate it. */
+		adminBudgetShare: real("admin_budget_share").notNull(),
+		freeAccessShare: real("free_access_share").notNull(),
+		/** The Fund's pot for the cycle, after the parity ceiling. */
+		poolAmount: numeric("pool_amount").notNull().default("0.00"),
+		/**
+		 * Accounts with at least one credited Public Access second in the cycle and no
+		 * Anthers holding — the pool's denominator. **Frozen at first actualization**
+		 * (see the table note); while a cycle is in flight it restates live, and a
+		 * committed or estimate row carries the last known actual count as its
+		 * projection.
+		 */
+		activeFreeAccounts: integer("active_free_accounts").notNull().default(0),
+		/**
+		 * The per-account slice — `floor(pool ÷ active)` to the whole cent. The dust
+		 * (the pot less slice × active) stays in the remainder by construction: credits
+		 * are per-slice, and nothing distributes it. Zero when the cycle is committed
+		 * to a $0 pool or no free account was active; the pot then stays unspent.
+		 */
+		slicePerAccount: numeric("slice_per_account").notNull().default("0.00"),
+		/** The moment the row's active count was frozen from raw attention data (null while the cycle is in flight or the row is a projection). */
+		actualizedAt: timestamp("actualized_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [uniqueIndex("uq_time_pool_fund_cycle").on(table.billingCycle)],
 );
 
 /**

@@ -36,12 +36,13 @@
  */
 import {
 	FREE_STORAGE_GIB,
-	FREE_TIME_POOL,
 	PUBLIC_ACCESS_PRICE,
 	STORAGE_LADDER_GIB,
 	STORAGE_PER_GIB_MONTH,
+	timePoolFor,
 } from "./constants.js";
 import { anthersSupportBreakdown, paymentsSplit } from "./fees.js";
+import { timePoolFundPool } from "./time-pool-fund.js";
 
 export interface Staffing {
 	/** Salaries and stipends. */
@@ -49,6 +50,14 @@ export interface Staffing {
 	tooling: number;
 	services: number;
 }
+
+/**
+ * Free Access's default share of the programs — the Fund's dial at the ruled plan
+ * default (`PLAN_DEFAULTS` in `financial-plan.ts` re-exports it beside the admin
+ * ceiling; the two defaults live here because the plan module imports this one and a
+ * default shared the other way would be a cycle).
+ */
+export const FREE_ACCESS_SHARE_DEFAULT = 0.1;
 
 /**
  * What each rung PLANS to spend, which is deliberately **not** what it can afford.
@@ -241,8 +250,17 @@ export interface GrowthInputs {
 	/** Share of accounts giving Anthers anything at all, 0..1. */
 	payingShare: number;
 	staffing: Staffing;
-	/** Defaults to the shipped `FREE_TIME_POOL`; a parameter so 11.03's review can sweep it. */
-	freeTimePool?: number;
+	/**
+	 * Free Access's share of the programs — the **Fund's dial** (the plan settings'
+	 * shape, defaulted to the ruled plan default of 0.10). The free pool derives
+	 * inside `modelAt` from it and the admin share through
+	 * `timePoolFundPool`, so the model, the plan tool and the runtime service
+	 * compose from one arithmetic; the per-head `freeTimePool` dollar input this
+	 * parameter replaced retired with the constant it defaulted to.
+	 */
+	freeAccessShare?: number;
+	/** The admin budget's share of charitable revenue; defaults to the locked ceiling. */
+	adminBudgetShare?: number;
 	mix?: Record<number, number>;
 }
 
@@ -274,6 +292,14 @@ export interface GrowthLedger {
 	overhead: number;
 	/** Free access as a program obligation: the free pot and free creators' storage. */
 	freeAccess: number;
+	/**
+	 * The Fund's pot at this scale — the free pools together, from the shares
+	 * through `timePoolFundPool`, capped by the parity ceiling — and the per-account
+	 * slice floored to the cent. Exposed so the plan tool and any public drawing
+	 * read the pool from the model's own arithmetic rather than re-deriving it.
+	 */
+	freePool: number;
+	freeSlice: number;
 	/** What the Public Access incentives cost, and what they are allowed to cost. */
 	paIncentiveCost: number;
 	paCeiling: number;
@@ -332,7 +358,8 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		accounts,
 		payingShare,
 		staffing,
-		freeTimePool = FREE_TIME_POOL,
+		freeAccessShare = FREE_ACCESS_SHARE_DEFAULT,
+		adminBudgetShare = ADMIN_CEILING,
 		mix = payingBadgeMix(),
 	} = input;
 
@@ -349,14 +376,29 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		rungs.map((n) => mix[n]),
 	);
 	let charitableFromUsers = 0;
-	let timePoolToCreators = freeTimePool * freeAccounts;
+	let payingTimePool = 0;
 	rungs.forEach((n, i) => {
 		const count = byLevel[i];
 		const bd = anthersSupportBreakdown(n, { payments: paymentsSplit(n, 0).anthers });
 		charitableFromUsers += bd.foundation.toNumber() * count;
-		timePoolToCreators += bd.timePool.toNumber() * count;
+		payingTimePool += bd.timePool.toNumber() * count;
 	});
-	const freeAccessTimePool = freeTimePool * freeAccounts;
+
+	// The free pools are the **Fund's** now, not a per-head constant: the pot derives
+	// from the shares through the one arithmetic the runtime and the plan share
+	// (`timePoolFundPool`), at the model's own revenue. The count here is every free
+	// account rather than just the Public-Access-active ones — the model does not
+	// model watch behavior, and the ceiling (a Root supporter's pool × the count)
+	// is never the binding term at any modeled scale, so the difference is nil.
+	const fund = timePoolFundPool({
+		charitableRevenue: charitableFromUsers,
+		adminBudgetShare,
+		freeAccessShare,
+		activeFreeAccounts: freeAccounts,
+		rootPool: timePoolFor(PUBLIC_ACCESS_PRICE),
+	});
+	const freeAccessTimePool = fund.pool.toNumber();
+	const timePoolToCreators = freeAccessTimePool + payingTimePool;
 
 	// ---- Creators ----
 	// Bookkeeping care with the Public Access exemption: a FREE creator's whole catalog
@@ -465,6 +507,8 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		charitableRevenue,
 		overhead,
 		freeAccess,
+		freePool: freeAccessTimePool,
+		freeSlice: fund.slice.toNumber(),
 		paIncentiveCost,
 		paCeiling,
 		paWithinCeiling: paIncentiveCost <= paCeiling + 1e-9,

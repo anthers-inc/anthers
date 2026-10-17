@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The Compliance Calendar's dated obligations — the transcription of `13 - Compliance Calendar`
- * (Anthers-Wiki, `Internal Wiki/10-19 Governance & Records/13 - Compliance Calendar`, § Dated and
+ * (wiki-anthers, `Internal Wiki/10-19 Governance & Records/13 - Compliance Calendar`, § Dated and
  * § Then annually), and the place a date is added.
  *
  * Pure (no clock reads, no I/O — `now` is always a parameter), like `sales-tax-thresholds.ts` and
