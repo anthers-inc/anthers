@@ -44,8 +44,10 @@ export default function ProjectEmbed({ embedUrl, title }: ProjectEmbedProps) {
 			<iframe
 				src={embedUrl}
 				title={title}
-				className="w-full"
-				style={{ height: "480px" }}
+				// The video profile, not a fixed pixel height (the media-frame task,
+				// 2026-10-16): a play area the same shape the video player draws is the
+				// frame's exact fill, so every kind's deliverable takes one rectangle.
+				className="aspect-video w-full"
 				sandbox="allow-scripts allow-same-origin allow-popups"
 				allowFullScreen
 			/>
