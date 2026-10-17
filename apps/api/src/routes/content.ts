@@ -5561,11 +5561,17 @@ const contentRoutes = new Hono()
 		}
 
 		await resolveWorkThumbnail(updated);
+		// The Studio adopts this response, and its player drives `transcoding.hlsManifestUrl`,
+		// whose raw stored value points at the private bucket — a browser 404 with no CORS
+		// headers, and the console noise Parker reported (2026-10-16). The save answers
+		// through the same delivery rewrite the owner read branch carries below: the row is
+		// playable the way entitled playback is, and a creator may always see their own media.
+		const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx());
 		return c.json({
 			work: await serializeWork(
 				updated,
 				workAssets,
-				jobRows[0] ?? null,
+				playableJob,
 				buildRows.map((b) => ({ ...b, files: filesByBuild.get(b.id) ?? [] })),
 				deliveryCtx(),
 			),
@@ -5730,11 +5736,14 @@ const contentRoutes = new Hono()
 					list.push(file);
 					filesByBuild.set(file.buildId, list);
 				}
+				// Same delivery rewrite the edit route answers with — the Studio's editor
+				// adopts this response while its player is showing `transcoding.hlsManifestUrl`.
+				const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx());
 				return c.json({
 					work: await serializeWork(
 						updated,
 						workAssets,
-						jobRows[0] ?? null,
+						playableJob,
 						buildRows.map((b) => ({ ...b, files: filesByBuild.get(b.id) ?? [] })),
 						deliveryCtx(),
 					),
