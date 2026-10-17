@@ -8,7 +8,9 @@
  * `lib/work-uploads` when it arrives, while the creator is editing the same Work on its page. So
  * `WorkFileSection` reads the upload store and the stored row, and never contributes a
  * `sourceKey` to the page's save — a whole-form save carrying the key the page loaded, empty,
- * would erase a file that arrived a moment earlier.
+ * would erase a file that arrived a moment earlier. `WorkFileDropzone`, which holds the
+ * never-arrived states inside the Work placeholder itself (the dropper task, 2026-10-17), keeps
+ * the same boundary.
  *
  * 🚨 **Every upload is processed server-side, and there is no choice to offer.** This
  * carried an *Encode on device / Upload & we process* toggle plus a desktop-only native
@@ -243,28 +245,81 @@ export function UploadProgress({ upload }: { upload: WorkUpload }) {
 }
 
 /**
- * The file section of a Work's own page, for the kinds that are their file.
+ * The dropper for a draft that has never arrived at a file, mounted in the Work
+ * placeholder itself (the dropper task, 2026-10-17): the act of filling the Work
+ * happens where the Work will be, rather than down in the Manage tab's form. The
+ * two states it carries are the ones a fileless page can be in — nothing yet, or
+ * the upload a closed tab left failed — and an upload in flight quiets it, because
+ * the page's own aside carries the progress while it runs.
  *
- * Four states, in the order a creator meets them: still uploading from this tab, failed, arrived,
- * and never arrived. The last is a real state rather than an error — the tab that was uploading
- * may have been closed — and it offers the upload again rather than explaining why it happened.
+ * Reads the upload store and the stored row, and never contributes a `sourceKey`
+ * to a save — the same boundary its sibling `WorkFileSection` holds (see the
+ * module head). The caller decides which kinds mount it: the paged kinds keep
+ * their set editor on the Manage tab, and a video's source is the Media Status
+ * card's, so neither reaches this.
  */
-export function WorkFileSection({
-	work,
-	landing = false,
-}: {
-	work: Work;
-	/**
-	 * True between an upload from this tab reporting done and the page re-reading the row. The
-	 * row decides after that, so a file attached and then lost again shows as missing rather than
-	 * as uploaded on the strength of an upload that finished earlier.
-	 */
-	landing?: boolean;
-}) {
+export function WorkFileDropzone({ work }: { work: Work }) {
 	const type = work.type as FileWorkType;
 	const upload = useSourceUpload(work.id);
 	const rules = fileRules(type);
 	const start = (file: File) => workUploads.start(work.id, file, { kind: "source", type });
+
+	if (upload && isUploading(upload)) {
+		// The page's aside carries the progress and the Manage tab's file section the
+		// cancel — this renders nothing while the same upload is climbing, rather than
+		// repeating it a third time inside the placeholder.
+		return null;
+	}
+
+	if (upload?.status === "failed") {
+		return (
+			<div className="flex flex-col gap-2">
+				<div className="alert alert-error text-sm">
+					<span className="flex-1">{upload.error}</span>
+					<button type="button" className="btn btn-sm" onClick={() => workUploads.retry(upload.id)}>
+						Try again
+					</button>
+				</div>
+				<FileUpload
+					accept={rules.accept}
+					maxSize={rules.maxSize}
+					compact
+					label="Or choose a different file"
+					onFileSelect={start}
+				/>
+				<FormatsHint type={type} />
+			</div>
+		);
+	}
+
+	return (
+		<div className="flex flex-col items-center gap-1.5">
+			{/* The one invisible fact the empty state carries; the picker's own label
+			    below says the act, so the line says nothing about picking or dropping
+			    (UI copy says what the screen cannot, the 2026-10-17 rule). */}
+			<p className="text-sm text-warning">No file yet, so this Work can't be released.</p>
+			<FileUpload
+				accept={rules.accept}
+				maxSize={rules.maxSize}
+				label={`Drop ${rules.noun} or click to browse`}
+				onFileSelect={start}
+			/>
+			<FormatsHint type={type} />
+		</div>
+	);
+}
+
+/**
+ * The file section of a Work's own page, for the arrived states — the Manage tab's
+ * form for a Work whose file exists or is climbing from this tab. The caller mounts
+ * it only in those states: the never-arrived and failed upload live in the Work
+ * placeholder itself now, carried by {@link WorkFileDropzone} (the dropper task,
+ * 2026-10-17), so neither is a state this can be reached in — unless the Work is
+ * paged, whose file section is the SET editor in every state.
+ */
+export function WorkFileSection({ work }: { work: Work }) {
+	const type = work.type as FileWorkType;
+	const upload = useSourceUpload(work.id);
 	// A paged Work's file section is the SET editor — the list with add, reorder, remove —
 	// whether the set is one file or several; the in-flight states it shares with every
 	// kind are handled inside (they read the same upload store). Called after the hooks,
@@ -272,6 +327,8 @@ export function WorkFileSection({
 	if (isPaged(type)) return <PagedSourceFiles work={work} />;
 
 	const label = type === "image" ? "Image" : "File";
+	const rules = fileRules(type);
+	const start = (file: File) => workUploads.start(work.id, file, { kind: "source", type });
 
 	if (upload && isUploading(upload)) {
 		return (
@@ -292,88 +349,46 @@ export function WorkFileSection({
 		);
 	}
 
-	if (upload?.status === "failed") {
-		return (
-			<FormField label={label}>
-				<div className="alert alert-error text-sm">
-					<span className="flex-1">{upload.error}</span>
-					<button type="button" className="btn btn-sm" onClick={() => workUploads.retry(upload.id)}>
-						Try again
-					</button>
-				</div>
-				<div className="mt-2">
-					<FileUpload
-						accept={rules.accept}
-						maxSize={rules.maxSize}
-						compact
-						label="Or choose a different file"
-						onFileSelect={start}
-					/>
-					<FormatsHint type={type} />
-				</div>
-			</FormField>
-		);
-	}
-
-	// Arrived: stored on the row, or attached from this tab a moment before the row is re-read.
-	if (work.sourceKey || (landing && upload?.status === "done")) {
-		return (
-			<FormField label={label}>
-				{type === "image" && work.sourceKey ? (
-					<div className="flex flex-col gap-2">
-						<img
-							src={keyToPreview(work.sourceKey)}
-							alt=""
-							className="max-h-64 w-fit rounded-lg border border-base-300"
-						/>
-						{/* An image is replaced in place, as it could be before it had an upload step.
-						    Other kinds are not offered this: a new video re-encodes, and a released
-						    one would be unplayable while it did. */}
-						<div className="max-w-xs">
-							<FileUpload
-								accept={rules.accept}
-								maxSize={rules.maxSize}
-								compact
-								label="Replace the image"
-								onFileSelect={start}
-							/>
-						</div>
-					</div>
-				) : (
-					<div className="flex items-center gap-3 rounded-lg bg-base-200 p-3">
-						<span className="flex-1 truncate text-sm">{upload?.fileName ?? "Uploaded file"}</span>
-						<span className="badge badge-success badge-sm">Uploaded</span>
-					</div>
-				)}
-				{/* The processing a landed file starts, with its estimate where there is one. The
-				    page re-reads the row while it runs; the block goes once processing completes. */}
-				{work.transcoding && work.transcoding.status !== "completed" && (
-					<div className="mt-2">
-						<TranscodingStatus
-							status={work.transcoding.status}
-							progress={work.transcoding.progress ?? 0}
-							etaSeconds={work.transcoding.etaSeconds}
-							errorMessage={work.transcoding.errorMessage ?? undefined}
-						/>
-					</div>
-				)}
-			</FormField>
-		);
-	}
-
 	return (
 		<FormField label={label}>
-			<p className="mb-2 text-sm text-warning">
-				This Work has no file yet, so it can't be released. If it was uploading in a tab that has
-				since closed, upload it again here.
-			</p>
-			<FileUpload
-				accept={rules.accept}
-				maxSize={rules.maxSize}
-				label={`Drop ${rules.noun} or click to browse`}
-				onFileSelect={start}
-			/>
-			<FormatsHint type={type} />
+			{type === "image" && work.sourceKey ? (
+				<div className="flex flex-col gap-2">
+					<img
+						src={keyToPreview(work.sourceKey)}
+						alt=""
+						className="max-h-64 w-fit rounded-lg border border-base-300"
+					/>
+					{/* An image is replaced in place, as it could be before it had an upload step.
+					    Other kinds are not offered this: a new video re-encodes, and a released
+					    one would be unplayable while it did. */}
+					<div className="max-w-xs">
+						<FileUpload
+							accept={rules.accept}
+							maxSize={rules.maxSize}
+							compact
+							label="Replace the image"
+							onFileSelect={start}
+						/>
+					</div>
+				</div>
+			) : (
+				<div className="flex items-center gap-3 rounded-lg bg-base-200 p-3">
+					<span className="flex-1 truncate text-sm">{upload?.fileName ?? "Uploaded file"}</span>
+					<span className="badge badge-success badge-sm">Uploaded</span>
+				</div>
+			)}
+			{/* The processing a landed file starts, with its estimate where there is one. The
+			    page re-reads the row while it runs; the block goes once processing completes. */}
+			{work.transcoding && work.transcoding.status !== "completed" && (
+				<div className="mt-2">
+					<TranscodingStatus
+						status={work.transcoding.status}
+						progress={work.transcoding.progress ?? 0}
+						etaSeconds={work.transcoding.etaSeconds}
+						errorMessage={work.transcoding.errorMessage ?? undefined}
+					/>
+				</div>
+			)}
 		</FormField>
 	);
 }

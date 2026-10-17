@@ -64,7 +64,11 @@ import RatingAppeal from "@anthers/web-shared/content/RatingAppeal";
 import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
 import { ReleaseScheduleInput } from "@anthers/web-shared/content/release-date";
 import WebBuildSection from "@anthers/web-shared/content/WorkWebBuildSection";
-import { isFileWorkType, WorkFileSection } from "@anthers/web-shared/content/work-media";
+import {
+	isFileWorkType,
+	WorkFileDropzone,
+	WorkFileSection,
+} from "@anthers/web-shared/content/work-media";
 import { isBuildType, LIBRARY_TYPE_OPTIONS, typeLabel } from "@anthers/web-shared/content/works";
 import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
 import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
@@ -596,13 +600,29 @@ export default function OwnerWorkEditor({
 				: isBuildType(current.type)
 					? !current.embedUrl && (current.assets ?? []).length === 0 && !current.webPlayable
 					: false;
-	/** The silhouette's note, said per kind — what fills the box, and where. */
+	/**
+	 * Whether the empty box is itself the file's pick — file kinds but the paged ones
+	 * (comic, ebook — their set editor is the Manage tab's form in every state) and
+	 * but a video, whose source is the Media Status card's. The dropzone mounts in
+	 * the placeholder and the Manage tab keeps only the arrived-state section.
+	 */
+	const deliverableDropsInBox =
+		isFileWorkType(current.type) && !isPaged(current.type) && current.type !== "video";
+	/**
+	 * The silhouette's note, said per kind — what fills the box, and where. For the
+	 * file kinds whose dropper lives IN the box (the dropper task, 2026-10-17), the
+	 * note is silent — the dropzone's own line says a file is missing and the picker
+	 * right under it is how one lands. The paged kinds, whose set editor stays on the
+	 * Manage tab, and the build kinds, whose embed and builds stay there, keep pointing.
+	 */
 	const deliverableNote = writing
 		? "Its Manage tab is where the pen is."
 		: isFileWorkType(current.type)
 			? fileUploading
 				? "It's uploading now — keep this tab open until it lands."
-				: "Manage — the right column's first tab — takes one."
+				: deliverableDropsInBox
+					? ""
+					: "Manage — the right column's first tab — takes one."
 			: "Manage — the right column's first tab — takes an embed or a build.";
 	/** The kind, while a private draft could still be another kind. */
 	const kindChangeable =
@@ -1345,13 +1365,18 @@ export default function OwnerWorkEditor({
 							/>
 						</section>
 					)}
-					{isFileWorkType(current.type) && current.type !== "video" && (
-						// No section heading of its own: the file section's own label names it,
-						// and the doubled "File / File" was the rhythm reading twice.
-						<section className="flex flex-col gap-2">
-							<WorkFileSection work={current} />
-						</section>
-					)}
+					{isFileWorkType(current.type) &&
+						current.type !== "video" &&
+						(isPaged(current.type) || !!current.sourceKey || fileUploading) && (
+							// No section heading of its own: the file section's own label names it,
+							// and the doubled "File / File" was the rhythm reading twice. The
+							// never-arrived and failed states no longer reach this — their dropper
+							// moved into the Work's own placeholder (the dropper task, 2026-10-17);
+							// this is the arrived form now, plus the paged kinds' set editor.
+							<section className="flex flex-col gap-2">
+								<WorkFileSection work={current} />
+							</section>
+						)}
 					{isPaged(current.type) && fileReady && (
 						<section className="flex flex-col gap-2">
 							<h3 className={WORK_DETAILS_HEADING_CLASS}>Pages</h3>
@@ -1467,8 +1492,10 @@ export default function OwnerWorkEditor({
 					// verdict, the same absence a creator's own visit has always read.
 					// `w-full` as on the user page: the panel has no width of its own and
 					// would shrink-to-fit in the frame's centered column.
+					// `h-full` as on the user page: the store's columns fill the media
+					// frame's whole profile (the store-panel task, 2026-10-17).
 					<WorkMediaFrame>
-						<div className="w-full">
+						<div className="h-full w-full">
 							<ProjectPricing
 								workId={current.id}
 								slug={current.slug ?? ""}
@@ -1481,9 +1508,17 @@ export default function OwnerWorkEditor({
 				) : deliverableEmpty ? (
 					// The silhouette: where the Work will be, at the media frame's one
 					// profile, so the page below it doesn't move when the file lands.
+					// And, for the kinds whose deliverable is a picked-up file, the
+					// dropper rides IN the box (the dropper task, 2026-10-17) — the act
+					// of filling the Work happens where the Work will be. It goes quiet
+					// itself while an upload climbs; the note and the aside say so.
 					<WorkMediaFrame>
 						{writing && <WorkDescription work={asRead} />}
-						<WorkPlaceholder type={current.type} note={deliverableNote} />
+						<WorkPlaceholder
+							type={current.type}
+							note={deliverableNote}
+							action={deliverableDropsInBox ? <WorkFileDropzone work={current} /> : undefined}
+						/>
 					</WorkMediaFrame>
 				) : kindWaiting ? (
 					// The processing the landed file started, held INSIDE the media frame
