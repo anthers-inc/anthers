@@ -97,7 +97,7 @@ function DesktopHomeSection() {
 				</p>
 
 				<div className="form-control mt-2 gap-2">
-					<label className="label cursor-pointer justify-start gap-3 py-1">
+					<label className="label whitespace-normal cursor-pointer justify-start gap-3 py-1">
 						<input
 							type="radio"
 							name="desktop-home"
@@ -112,7 +112,7 @@ function DesktopHomeSection() {
 							</span>
 						</span>
 					</label>
-					<label className="label cursor-pointer justify-start gap-3 py-1">
+					<label className="label whitespace-normal cursor-pointer justify-start gap-3 py-1">
 						<input
 							type="radio"
 							name="desktop-home"
@@ -157,7 +157,7 @@ function MediaPlaySection() {
 					{/* The stop *Your Feed* commits every feed signal to: previews are the
 					    cursor's doing, and they stay that way by being stoppable. Turning this
 					    off mid-hover stops the playing preview on the same render. */}
-					<label className="label cursor-pointer justify-start gap-3">
+					<label className="label whitespace-normal cursor-pointer justify-start gap-3">
 						<input
 							type="checkbox"
 							className="toggle toggle-primary"
@@ -179,7 +179,7 @@ function MediaPlaySection() {
 					{/* The same remembered answer the preview's speaker button flips: sound is
 					    the viewer's gesture, never the hover's, so it defaults off and follows
 					    the media volume the rest of the players share. */}
-					<label className="label cursor-pointer justify-start gap-3">
+					<label className="label whitespace-normal cursor-pointer justify-start gap-3">
 						<input
 							type="checkbox"
 							className="toggle toggle-primary"
@@ -246,7 +246,7 @@ function MiniPlayerSection() {
 				</p>
 
 				<div className="form-control mt-2">
-					<label className="label cursor-pointer justify-start gap-3">
+					<label className="label whitespace-normal cursor-pointer justify-start gap-3">
 						<input
 							type="checkbox"
 							className="toggle toggle-primary"
@@ -1105,7 +1105,7 @@ function RecoveryKeyCard({
 							</p>
 						</div>
 
-						<label className="label cursor-pointer justify-start gap-3 py-0">
+						<label className="label whitespace-normal cursor-pointer justify-start gap-3 py-0">
 							<input
 								type="checkbox"
 								className="checkbox checkbox-sm"
@@ -2247,6 +2247,19 @@ export default function SettingsPage() {
 	/** The browser is on its way to Bluesky, so say why rather than appearing to hang. */
 	const [redirecting, setRedirecting] = useState(false);
 
+	/**
+	 * A visited tab stays mounted, hidden with CSS, rather than being unmounted.
+	 *
+	 * ⚠️ Unmounting threw a tab's loaded state away at every switch, so each visit
+	 * re-ran the loads and the page collapsed and grew again as they resolved.
+	 * Keeping visited panes mounted makes a switch instant — after the first look
+	 * at a tab, nothing refetches and nothing reflows.
+	 */
+	const [visitedTabs, setVisitedTabs] = useState<Set<SettingsTab>>(() => new Set([activeTab]));
+	useEffect(() => {
+		setVisitedTabs((prev) => (prev.has(activeTab) ? prev : new Set([...prev, activeTab])));
+	}, [activeTab]);
+
 	const handleCreatorToggle = async (checked: boolean) => {
 		setIsCreator(checked);
 		setSaving(true);
@@ -2314,8 +2327,11 @@ export default function SettingsPage() {
 		}
 	};
 
+	// ⚠️ DaisyUI 5's `.label` ships `white-space: nowrap`, meant for labels beside input
+	// fields — the labels below carry sentences, so every toggle row adds
+	// `whitespace-normal` to let them wrap.
 	return (
-		<div className="max-w-2xl mx-auto px-4 py-8">
+		<div className="max-w-3xl mx-auto px-4 py-8">
 			<h1 className="text-2xl font-bold mb-6">Settings</h1>
 
 			{error && (
@@ -2372,15 +2388,15 @@ export default function SettingsPage() {
 				))}
 			</div>
 
-			{activeTab === "account" && (
-				<>
+			{visitedTabs.has("account") && (
+				<div hidden={activeTab !== "account"}>
 					{/* Creator mode toggle */}
 					<div
 						className={`card mb-6 ${sentFromStudio ? "bg-base-200 ring-2 ring-info" : "bg-base-200"}`}
 					>
 						<div className="card-body">
 							<div className="form-control">
-								<label className="label cursor-pointer justify-start gap-3">
+								<label className="label whitespace-normal cursor-pointer justify-start gap-3">
 									<input
 										type="checkbox"
 										className="toggle toggle-primary"
@@ -2430,11 +2446,11 @@ export default function SettingsPage() {
 							</div>
 						</div>
 					)}
-				</>
+				</div>
 			)}
 
-			{activeTab === "identity" && (
-				<>
+			{visitedTabs.has("identity") && (
+				<div hidden={activeTab !== "identity"}>
 					{/* The account's identity on the network — issued here, or brought from elsewhere. */}
 					<IdentitySection />
 
@@ -2442,11 +2458,11 @@ export default function SettingsPage() {
 					<DesktopHomeSection />
 
 					<DevicesSection />
-				</>
+				</div>
 			)}
 
-			{activeTab === "content" && (
-				<>
+			{visitedTabs.has("content") && (
+				<div hidden={activeTab !== "content"}>
 					{/* What the user meets at each rung, and the door to the Adult rung. */}
 					<MatureContentSection />
 
@@ -2458,11 +2474,11 @@ export default function SettingsPage() {
 					{/* Blocked Accounts — the only place a block can be lifted, since a blocked
 					    profile no longer resolves. */}
 					<BlockedSection />
-				</>
+				</div>
 			)}
 
-			{activeTab === "activity" && (
-				<>
+			{visitedTabs.has("activity") && (
+				<div hidden={activeTab !== "activity"}>
 					{/* How each kind of notification reaches you — app, email, or both. First on
 					    the tab, because it is the settings the most surfaces point at (the email
 					    footers and the unsubscribe landing both name this page). */}
@@ -2473,7 +2489,7 @@ export default function SettingsPage() {
 
 					{/* Export and deletion — the controls Privacy Policy and /parents describe. */}
 					<DataSection />
-				</>
+				</div>
 			)}
 		</div>
 	);
@@ -2531,7 +2547,7 @@ function SupporterListingSection() {
 		<div className="card bg-base-200 mb-6">
 			<div className="card-body">
 				<div className="form-control">
-					<label className="label cursor-pointer justify-start gap-3">
+					<label className="label whitespace-normal cursor-pointer justify-start gap-3">
 						<input
 							type="checkbox"
 							className="toggle toggle-primary"
