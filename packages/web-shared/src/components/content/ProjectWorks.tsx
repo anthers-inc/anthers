@@ -2,11 +2,11 @@
 /**
  * The Works on a Project's shelf, as an ordered, reorderable list.
  *
- * Deliberately NOT modeled on `PostWorkLinks`, which looks like the same component and
- * isn't. That one holds form state and saves with the post; membership here has its own
- * endpoints and **persists immediately**, the way the builds section of `WorkEditPage` does.
- * The reason is the Project form: a creator adding twelve tracks should not lose them to a
- * failed save on an unrelated field, and a list that persists per-action can't.
+ * A Project's shelf is NOT a form-held list. That design was considered (it is what the
+ * post builder used to do) and rejected: membership here has its own endpoints and
+ * **persists immediately**, the way the builds section of `WorkEditPage` does. The reason
+ * is the Project form: a creator adding twelve tracks should not lose them to a failed
+ * save on an unrelated field, and a list that persists per-action can't.
  *
  * 🚨 **Edit-only, because every endpoint is keyed on the Project's slug.** There is no
  * Project to attach anything to until it has been created, which is the same shape as

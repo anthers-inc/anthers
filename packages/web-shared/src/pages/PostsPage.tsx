@@ -46,10 +46,6 @@ export default function PostsPage() {
 	const [loading, setLoading] = useState(true);
 
 	const [deleteTarget, setDeleteTarget] = useState<PostListItem | null>(null);
-	const [orphanMedia, setOrphanMedia] = useState<
-		{ id: number; title: string | null; type: string; thumbnail: string | null }[]
-	>([]);
-	const [purgeMedia, setPurgeMedia] = useState(false);
 	const [actioning, setActioning] = useState(false);
 
 	// The filters and the sort ride the URL, the Works page's pattern — shareable, and
@@ -105,23 +101,8 @@ export default function PostsPage() {
 		};
 	}, []);
 
-	const openDelete = async (post: PostListItem) => {
+	const openDelete = (post: PostListItem) => {
 		setDeleteTarget(post);
-		setPurgeMedia(false);
-		setOrphanMedia([]);
-		try {
-			const res = await client.api.content.posts[":slug"]["orphaned-media"].$get({
-				param: { slug: post.slug },
-			});
-			if (res.ok) {
-				const data = (await res.json()) as {
-					items: { id: number; title: string | null; type: string; thumbnail: string | null }[];
-				};
-				setOrphanMedia(data.items ?? []);
-			}
-		} catch {
-			// Preview is best-effort — delete still works without it.
-		}
 	};
 
 	const confirmDelete = async () => {
@@ -130,7 +111,7 @@ export default function PostsPage() {
 		try {
 			const res = await client.api.content.posts[":slug"].$delete({
 				param: { slug: deleteTarget.slug },
-				query: purgeMedia ? { purgeMedia: "true" } : {},
+				query: {},
 			});
 			if (res.status === 204 || res.ok) {
 				setPosts((prev) => prev.filter((p) => p.id !== deleteTarget.id));
@@ -251,36 +232,14 @@ export default function PostsPage() {
 				</div>
 			)}
 
-			{/* Delete confirmation (with an offer to purge now-orphaned library media). */}
+			{/* Delete confirmation. */}
 			{deleteTarget && (
 				<div className="modal modal-open" role="dialog">
 					<div className="modal-box">
 						<h3 className="text-lg font-bold">Delete "{deleteTarget.title || "Untitled"}"?</h3>
 						<p className="py-3 text-sm text-base-content/70">
-							This permanently removes the post along with its comments and reviews. It can't be
-							undone.
+							This permanently removes the post along with its comments. It can't be undone.
 						</p>
-						{orphanMedia.length > 0 && (
-							<label className="label cursor-pointer items-start justify-start gap-3 rounded-lg border border-base-300 p-3">
-								<input
-									type="checkbox"
-									className="checkbox checkbox-sm mt-0.5"
-									checked={purgeMedia}
-									onChange={(e) => setPurgeMedia(e.target.checked)}
-								/>
-								<span className="label-text">
-									Also delete {orphanMedia.length} unused media item
-									{orphanMedia.length === 1 ? "" : "s"} from your library
-									<span className="block text-xs text-base-content/50">
-										{orphanMedia.map((m) => m.title || `Untitled ${m.type}`).join(", ")}
-									</span>
-									<span className="block text-xs text-base-content/50">
-										No other post uses {orphanMedia.length === 1 ? "it" : "them"}. Leave unchecked
-										to keep {orphanMedia.length === 1 ? "it" : "them"} in your library.
-									</span>
-								</span>
-							</label>
-						)}
 						<div className="modal-action">
 							<button
 								type="button"

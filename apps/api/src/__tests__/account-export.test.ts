@@ -104,7 +104,8 @@ beforeAll(async () => {
 		maturityRows: rowsRatedAs("general"),
 	});
 	expect(workRes.status).toBe(201);
-	workId = (await workRes.json()).work.id;
+	const createdWork = (await workRes.json()).work;
+	workId = createdWork.id;
 
 	const release = await req(`/api/content/works/${workId}`, {
 		method: "PATCH",
@@ -119,7 +120,7 @@ beforeAll(async () => {
 
 	const postRes = await post("/api/content/posts", subject, {
 		title: `Export post ${id}`,
-		workIds: [workId],
+		body: `The release: https://anthers.org/works/${createdWork.slug}-${createdWork.publicId}`,
 		isPublished: true,
 	});
 	expect(postRes.status).toBe(201);

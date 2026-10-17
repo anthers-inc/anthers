@@ -28,10 +28,6 @@ export default function PostPage() {
 	// ── Owner actions (edit / unpublish / delete) ──
 	const [showHistory, setShowHistory] = useState(false);
 	const [showDelete, setShowDelete] = useState(false);
-	const [orphanMedia, setOrphanMedia] = useState<
-		{ id: number; title: string | null; type: string; thumbnail: string | null }[]
-	>([]);
-	const [purgeMedia, setPurgeMedia] = useState(false);
 	const [actioning, setActioning] = useState(false);
 
 	/** Path whose post is already in state — see the skip below. */
@@ -108,31 +104,16 @@ export default function PostPage() {
 	const edits = post.edits ?? [];
 
 	// Load which library items would be orphaned, then open the delete confirmation.
-	const openDelete = async () => {
-		setPurgeMedia(false);
-		setOrphanMedia([]);
-		setShowDelete(true);
-		try {
-			const res = await client.api.content.posts[":slug"]["orphaned-media"].$get({
-				param: { slug: post.slug },
-			});
-			if (res.ok) {
-				const data = (await res.json()) as {
-					items: { id: number; title: string | null; type: string; thumbnail: string | null }[];
-				};
-				setOrphanMedia(data.items ?? []);
-			}
-		} catch {
-			// Preview is best-effort — delete still works without it.
-		}
-	};
+	const openDelete = () => setShowDelete(true);
 
 	const confirmDelete = async () => {
 		setActioning(true);
 		try {
+			// `purgeMedia` is accepted-and-ignored by the route (deleting an announcement
+			// must never destroy the work it announced), so the delete is bare.
 			const res = await client.api.content.posts[":slug"].$delete({
 				param: { slug: post.slug },
-				query: purgeMedia ? { purgeMedia: "true" } : {},
+				query: {},
 			});
 			if (res.status === 204 || res.ok) {
 				navigate(post.creator?.handle ? profileUrl(post.creator.handle) : "/");
@@ -313,36 +294,14 @@ export default function PostPage() {
 				<StickerBar subjectType="post" subjectId={post.id} label={post.title ?? "this post"} />
 			</footer>
 
-			{/* Delete confirmation (with an offer to purge now-orphaned library media). */}
+			{/* Delete confirmation. */}
 			{showDelete && (
 				<div className="modal modal-open">
 					<div className="modal-box">
 						<h3 className="text-lg font-bold">Delete this post?</h3>
 						<p className="py-3 text-sm text-base-content/70">
-							This permanently removes the post along with its comments and reviews. It can't be
-							undone.
+							This permanently removes the post along with its comments. It can't be undone.
 						</p>
-						{orphanMedia.length > 0 && (
-							<label className="label cursor-pointer items-start justify-start gap-3 rounded-lg border border-base-300 p-3">
-								<input
-									type="checkbox"
-									className="checkbox checkbox-sm mt-0.5"
-									checked={purgeMedia}
-									onChange={(e) => setPurgeMedia(e.target.checked)}
-								/>
-								<span className="label-text">
-									Also delete {orphanMedia.length} unused media item
-									{orphanMedia.length === 1 ? "" : "s"} from your library
-									<span className="block text-xs text-base-content/50">
-										{orphanMedia.map((m) => m.title || `Untitled ${m.type}`).join(", ")}
-									</span>
-									<span className="block text-xs text-base-content/50">
-										No other post uses {orphanMedia.length === 1 ? "it" : "them"}. Leave unchecked
-										to keep {orphanMedia.length === 1 ? "it" : "them"} in your library.
-									</span>
-								</span>
-							</label>
-						)}
 						<div className="modal-action">
 							<button
 								type="button"

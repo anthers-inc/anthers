@@ -1,19 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * New / Edit Post builder. Three sections: Basics (title + body + timeline + project),
- * Linked Works, and Publish (pin + schedule + draft/publish).
+ * New Post builder. Three sections: Basics (title + body + timeline + project), Publish
+ * (pin + schedule + draft/publish)…
  *
- * There is no Access section any more, and that absence is the point. A post is an
- * announcement: it carries a body, some links and nothing gateable, so there is nothing
- * here to price or gate. Delivery and access are edited on the **Work**, in the Catalog,
- * where the thing being gated actually lives. Tags are parsed from `#hashtag` tokens in
- * the body on save.
+ * A post carries NO linked-Works field any more (Parker, 2026-10-16): you put a Work's
+ * link in the body and the page renders the card for it under the text, the way a
+ * Bluesky post renders an embedded player for the link it carries. There is nothing to
+ * configure, and that absence is the point.
+ *
+ * There is no Access section either, and that absence is the point. A post is an
+ * announcement: it carries a body and some links and nothing gateable, so there is
+ * nothing here to price or gate. Delivery and access are edited on the **Work**, in the
+ * Catalog, where the thing being gated actually lives. Tags are parsed from `#hashtag`
+ * tokens in the body on save.
  */
 import { marked } from "marked";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import RichTextEditor from "../components/editor/RichTextEditor";
-import PostWorkLinks from "../components/post/PostWorkLinks";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { isoToLocalInput } from "../lib/local-datetime";
@@ -23,7 +27,7 @@ import { usePublishingPermissionMissing } from "../lib/publishing";
 import { Link } from "../lib/router";
 import { client } from "../lib/rpc";
 import { studioEditPostUrl, studioUrl } from "../lib/studio";
-import type { Post, Project, Work } from "../lib/types";
+import type { Post, Project } from "../lib/types";
 
 /** The body HTML's own text — what tag tokens are parsed from, as before. */
 function htmlTextOf(html: string): string {
@@ -62,9 +66,6 @@ export default function PostFormPage() {
 	const [showOnTimeline, setShowOnTimeline] = useState(true);
 	const [projectId, setProjectId] = useState<string>("");
 	const [projects, setProjects] = useState<Project[]>([]);
-
-	// ── Linked Works (inert references — they confer no access) ──
-	const [linkedWorks, setLinkedWorks] = useState<Work[]>([]);
 
 	// ── Publish ──
 	const [isPinned, setIsPinned] = useState(false);
@@ -112,7 +113,6 @@ export default function PostFormPage() {
 					setIsPinned(post.isPinned);
 					setWasPublished(post.isPublished === true);
 					setScheduledFor(isoToLocalInput(post.scheduledFor));
-					setLinkedWorks((post.linkedWorks ?? []).map((r) => r.work));
 				} catch {
 					if (!canceled) setError("Failed to load post.");
 				}
@@ -164,7 +164,6 @@ export default function PostFormPage() {
 			isPublished: publish,
 			// Publishing now clears any schedule; otherwise persist the chosen auto-publish time.
 			scheduledFor: publish || !scheduledFor ? null : new Date(scheduledFor).toISOString(),
-			workIds: linkedWorks.map((w) => w.id),
 		};
 
 		// After save: publish → the live post view; draft → stay in the Studio editor so they
@@ -301,19 +300,7 @@ export default function PostFormPage() {
 					)}
 				</section>
 
-				{/* ── 2. Linked Works ── */}
-				<section className="flex flex-col gap-4 border-t border-base-300 pt-6">
-					<div>
-						<h2 className="text-lg font-semibold">Linked Works</h2>
-						<p className="text-xs text-base-content/50">
-							Anything from your Catalog this post is about. Optional — a post can be just words.
-							Access and delivery are set on the Work itself, not here.
-						</p>
-					</div>
-					<PostWorkLinks works={linkedWorks} onChange={setLinkedWorks} />
-				</section>
-
-				{/* ── 3. Publish ── */}
+				{/* ── 2. Publish ── */}
 				<section className="flex flex-col gap-4 border-t border-base-300 pt-6">
 					<h2 className="text-lg font-semibold">Publish</h2>
 
@@ -377,15 +364,6 @@ export default function PostFormPage() {
 									Set it up in the Studio's Payments tab
 								</Link>
 								.
-							</span>
-						</div>
-					)}
-
-					{linkedWorks.some((w) => w.visibility === "private") && (
-						<div className="alert alert-info">
-							<span>
-								This post links a Work you haven't released yet. Publishing is fine — the link
-								simply won't open for anyone until you release it from your Catalog.
 							</span>
 						</div>
 					)}

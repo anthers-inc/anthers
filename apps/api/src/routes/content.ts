@@ -10,10 +10,11 @@
  * released, gated, purchased and consumed with **no Post ever existing**.
  *
  * A **Post** is an announcement — rich text, links and body-embedded images, and nothing
- * else. It may *reference* Works (`post_work_refs`), which renders as a card and gives the
- * Work its posting history in return, but **that reference is inert: it confers no access
- * whatsoever.** A Post may freely link a Work its user cannot open. Projects are
- * Projects that group Works and Posts via many-to-many joins.
+ * else. It **embeds** Works by carrying their public link in the body (nothing is stored;
+ * the card derives from the body at read time — `lib/post-work-links.ts`), and the embed
+ * is **inert: it confers no access whatsoever.** A Post may freely embed a Work its user
+ * cannot open, and one another creator made. Projects are Projects that group Works and
+ * Posts via many-to-many joins.
  *
  * Both are addressed by a durable numeric `publicId`; the canonical URLs are
  * `/posts/{slug}-{publicId}` and `/works/{slug}-{publicId}`, and a route param of either
@@ -31,7 +32,6 @@ import {
 	libraryItems,
 	postEdits,
 	posts,
-	postWorkRefs,
 	projectItems,
 	projectPosts,
 	projects,
@@ -121,6 +121,7 @@ import { queueScansForWork } from "../jobs/scan-media.js";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
 import { routePagedIngest } from "../lib/paged-ingest.js";
+import { pgWorkEmbedPattern, workPublicIdsFromBody } from "../lib/post-work-links.js";
 import { probeVideo } from "../lib/video-frames.js";
 import { buildDeliveryHost, mintPlayToken, PLAY_TOKEN_TTL_SECONDS } from "../lib/web-build.js";
 import { getOptionalUserId, requireAuth, requireCreator } from "../middleware/auth.js";
@@ -891,13 +892,6 @@ const workCreditsSchema = z
 	})
 	.optional();
 
-/**
- * The Works a post points at. A bare id list — there is nothing to configure, because
- * the reference carries no access, no caption-as-content and no ordering semantics beyond
- * display order. Anything richer would be the post owning the Work again.
- */
-const postWorkRefsSchema = z.array(z.number().int()).max(50);
-
 // ── Works (the Catalog) ──
 
 /** When the work first came out ANYWHERE, creator-asserted, optional. */
@@ -1040,9 +1034,6 @@ const postBaseSchema = z.object({
 	// wire because TipTap lives in the client; a client that has moved to markdown simply
 	// stops sending it.
 	bodyHtml: z.string().optional().default(""),
-
-	// Works this post points at. Inert references — they confer no access.
-	workIds: postWorkRefsSchema.optional().default([]),
 
 	// Presentation
 	showOnTimeline: z.boolean().optional().default(true),
@@ -1424,7 +1415,6 @@ export { urlToKey };
 function changedPostFields(
 	existing: typeof posts.$inferSelect,
 	data: z.infer<typeof updatePostSchema>,
-	refsChanged: boolean,
 	derivedSlug?: string | null,
 ): string[] {
 	const changed: string[] = [];
@@ -1437,35 +1427,12 @@ function changedPostFields(
 		(data.body !== undefined && data.body !== (existing.body ?? "")) ||
 		(data.bodyHtml !== undefined && postHtmlToMarkdown(data.bodyHtml) !== (existing.body ?? ""));
 	if (bodyChanged) changed.push("body");
-	if (refsChanged) changed.push("linked works");
 	if (data.showOnTimeline !== undefined && data.showOnTimeline !== existing.showOnTimeline)
 		changed.push("timeline visibility");
 	if (data.isPinned !== undefined && data.isPinned !== existing.isPinned) changed.push("pin");
 	if (data.tags !== undefined && JSON.stringify(data.tags) !== JSON.stringify(existing.tags ?? []))
 		changed.push("tags");
 	return changed;
-}
-
-/**
- * Works referenced by this post and by no other — i.e. those left with no posting history
- * if the post is deleted. NOT orphaned in any meaningful sense any more: a Work stands on
- * its own in the Catalog whether or not a post ever pointed at it, so deleting a post
- * never proposes deleting a Work. Retained only to tell the creator what will lose its
- * link, which is why the delete route no longer purges anything.
- */
-async function worksOnlyLinkedFrom(postId: number): Promise<number[]> {
-	const mine = await db
-		.select({ workId: postWorkRefs.workId })
-		.from(postWorkRefs)
-		.where(eq(postWorkRefs.postId, postId));
-	const ids = [...new Set(mine.map((r) => r.workId))];
-	if (ids.length === 0) return [];
-	const others = await db
-		.select({ workId: postWorkRefs.workId })
-		.from(postWorkRefs)
-		.where(and(inArray(postWorkRefs.workId, ids), ne(postWorkRefs.postId, postId)));
-	const stillLinked = new Set(others.map((r) => r.workId));
-	return ids.filter((id) => !stillLinked.has(id));
 }
 
 /**
@@ -1531,7 +1498,9 @@ async function tellBuyersItWasWithdrawn(
 /**
  * A Work's posting history — where it has been announced, and when. This is the record
  * Parker asked for: "a clean record of when the content has been posted". Carries the
- * post date, since a Work may be posted many times over its life.
+ * post date, since a Work may be posted many times over its life. Derived from the post
+ * bodies' own work links (`pgWorkEmbedPattern`) — a post is not asked to store anything,
+ * so "has it been posted" reads what the post actually says.
  */
 async function postsUsingWork(workId: number): Promise<
 	Array<{
@@ -1541,6 +1510,12 @@ async function postsUsingWork(workId: number): Promise<
 		postedAt: Date | null;
 	}>
 > {
+	const [work] = await db
+		.select({ publicId: works.publicId })
+		.from(works)
+		.where(eq(works.id, workId))
+		.limit(1);
+	if (!work) return [];
 	return await db
 		.selectDistinct({
 			slug: posts.slug,
@@ -1548,9 +1523,8 @@ async function postsUsingWork(workId: number): Promise<
 			isPublished: posts.isPublished,
 			postedAt: posts.publishedAt,
 		})
-		.from(postWorkRefs)
-		.innerJoin(posts, eq(postWorkRefs.postId, posts.id))
-		.where(eq(postWorkRefs.workId, workId));
+		.from(posts)
+		.where(sql`${posts.body} ~ ${pgWorkEmbedPattern(work.publicId)}`);
 }
 
 /**
@@ -1569,45 +1543,6 @@ async function projectsShowingWork(
 		.innerJoin(projects, eq(projects.id, projectItems.projectId))
 		.where(and(eq(projectItems.workId, workId), eq(projects.isPublished, true)))
 		.orderBy(asc(projectItems.sortOrder));
-}
-
-// ─── Post → Work references ─────────────────────────────────────────────────────
-
-/**
- * Verify the caller owns every Work they're linking. A post may only reference the
- * creator's own Works for now — cross-creator references are a real future feature
- * (collabs, bundles) but they need their own consent story first.
- */
-async function ownedWorkIds(workIds: number[], creatorId: number): Promise<Set<number>> {
-	if (workIds.length === 0) return new Set();
-	const rows = await db
-		.select({ id: works.id })
-		.from(works)
-		.where(and(inArray(works.id, workIds), eq(works.creatorId, creatorId)));
-	return new Set(rows.map((r) => r.id));
-}
-
-/**
- * Replace a post's Work references wholesale. There is nothing to reconcile field-by-field
- * — a reference has no state of its own beyond its position, which is exactly the point of
- * keeping it inert. Returns true when the set actually changed, for the edit history.
- */
-async function setPostWorkRefs(postId: number, workIds: number[]): Promise<boolean> {
-	const existing = await db
-		.select({ workId: postWorkRefs.workId, position: postWorkRefs.position })
-		.from(postWorkRefs)
-		.where(eq(postWorkRefs.postId, postId))
-		.orderBy(asc(postWorkRefs.position));
-
-	const wanted = [...new Set(workIds)];
-	const before = existing.map((e) => e.workId).join(",");
-	if (before === wanted.join(",")) return false;
-
-	await db.delete(postWorkRefs).where(eq(postWorkRefs.postId, postId));
-	for (let i = 0; i < wanted.length; i++) {
-		await db.insert(postWorkRefs).values({ postId, workId: wanted[i], position: i });
-	}
-	return true;
 }
 
 /**
@@ -2434,37 +2369,51 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 }
 
 /**
- * The Works a post references, each resolved against the user's own standing.
+ * The Works a post embeds, each resolved against the user's own standing.
  *
- * Note what is NOT happening here: the post contributes nothing to access. Each Work is
- * resolved on its own gates, so one post can carry a free Work and a locked one side by
- * side, and a post the user can read may link a Work they cannot open.
+ * The embeds are the Work links the body carries (`workPublicIdsFromBody`) — nothing is
+ * stored, so a body edit changes the embeds with it, and a link whose Work is gone
+ * renders as the plain link it already is. Note what is NOT happening here: the post
+ * contributes nothing to access. Each Work is resolved on its own gates, so one post can
+ * carry a free Work and a locked one side by side, and a post the user can read may
+ * embed a Work they cannot open.
  */
-async function loadPostWorks(
-	postId: number,
+async function loadPostWorksFromBody(
+	body: string | null,
 	userId: number | null,
 	delivery: DeliveryCtx | null = null,
 ) {
-	const refs = await db
-		.select({ workId: postWorkRefs.workId, position: postWorkRefs.position })
-		.from(postWorkRefs)
-		.where(eq(postWorkRefs.postId, postId))
-		.orderBy(asc(postWorkRefs.position));
-	if (refs.length === 0) return [];
+	const publicIds = workPublicIdsFromBody(body);
+	if (publicIds.length === 0) return [];
 
-	const workIds = refs.map((r) => r.workId);
+	// Resolved by publicId — the part of the address that identifies the Work — and
+	// ordered by first appearance in the body, which is the display order the refs
+	// table's `position` used to carry.
+	const rows = await db
+		.select({
+			id: works.id,
+			publicId: works.publicId,
+			maturity: works.maturity,
+			creatorId: works.creatorId,
+		})
+		.from(works)
+		.where(inArray(works.publicId, publicIds));
+	if (rows.length === 0) return [];
+	const byPublicId = new Map(rows.map((r) => [r.publicId, r]));
+
 	const { worksById, assetsByWork, jobByWork, pagesByWork, sectionsByWork, buildsByWork } =
-		await loadWorkBundles(workIds);
+		await loadWorkBundles(rows.map((r) => r.id));
 	const [ctx, spent] = await Promise.all([
-		buildAccessContext(userId, { workIds }),
+		buildAccessContext(userId, { workIds: rows.map((r) => r.id) }),
 		allowanceSpent(userId),
 	]);
 
 	const serialized = await Promise.all(
-		refs.map(async (ref) => {
-			const work = worksById.get(ref.workId);
+		publicIds.map(async (publicId, position) => {
+			const found = byPublicId.get(publicId);
+			const work = found ? worksById.get(found.id) : undefined;
 			if (!work) return null;
-			// 🚨 A post announcing an Adult Work does not announce it to somebody who has
+			// 🚨 A post embedding an Adult Work does not embed it to somebody who has
 			// not opted in. The reference is dropped rather than serialized as locked,
 			// because the invisibility rule covers the title and cover art and a locked
 			// card is made of both. `ctx` already carries the user's adult access, so
@@ -2478,7 +2427,7 @@ async function loadPostWorks(
 				return null;
 			}
 			return {
-				position: ref.position,
+				position,
 				work: await serializeWorkForUser(
 					work,
 					assetsByWork.get(work.id) ?? [],
@@ -2780,36 +2729,24 @@ const contentRoutes = new Hono()
 			).toString("base64url");
 		}
 
-		const postIds = result.map((r) => r.post.id);
-
-		// The Works each post links, for a card thumbnail and a count. Deliberately NOT
-		// resolved for access here: the feed lists announcements, and a post's readability
-		// has nothing to do with whether the Works it mentions are open.
-		const refsByPost = new Map<number, Array<{ id: number; type: string; thumbnail: string }>>();
-		if (postIds.length > 0) {
-			const refRows = await db
-				.select({
-					postId: postWorkRefs.postId,
-					workId: works.id,
-					type: works.type,
-					thumbnail: works.thumbnail,
-					position: postWorkRefs.position,
-				})
-				.from(postWorkRefs)
-				.innerJoin(works, eq(postWorkRefs.workId, works.id))
-				.where(inArray(postWorkRefs.postId, postIds))
-				.orderBy(asc(postWorkRefs.position));
-			for (const r of refRows) {
-				const list = refsByPost.get(r.postId) ?? [];
-				list.push({ id: r.workId, type: r.type, thumbnail: r.thumbnail ?? "" });
-				refsByPost.set(r.postId, list);
-			}
+		// The Works each post embeds, for a card thumbnail and a count — extracted from
+		// the bodies the rows already carry (nothing is stored; see `lib/post-work-links.ts`).
+		// Deliberately NOT resolved for access here: the feed lists announcements, and a
+		// post's readability has nothing to do with whether the Works it embeds are open.
+		const thumbByPublicId = new Map<number, string | null>();
+		const allPublicIds = [...new Set(result.flatMap((r) => workPublicIdsFromBody(r.post.body)))];
+		if (allPublicIds.length > 0) {
+			const thumbRows = await db
+				.select({ publicId: works.publicId, thumbnail: works.thumbnail })
+				.from(works)
+				.where(inArray(works.publicId, allPublicIds));
+			for (const t of thumbRows) thumbByPublicId.set(t.publicId, t.thumbnail);
 		}
 
 		return c.json({
 			posts: result.map((r) => {
 				const p = r.post;
-				const linked = refsByPost.get(p.id) ?? [];
+				const embedded = workPublicIdsFromBody(p.body);
 				return {
 					id: p.id,
 					publicId: p.publicId,
@@ -2830,10 +2767,10 @@ const contentRoutes = new Hono()
 						displayName: r.creatorDisplayName,
 						avatar: r.creatorAvatar,
 					}),
-					// A card image, if the post links anything. Thumbnails are public — they are
+					// A card image, if the post embeds anything. Thumbnails are public — they are
 					// the preview a locked Work is *supposed* to show.
-					thumbnail: linked[0]?.thumbnail ?? "",
-					linkedWorkCount: linked.length,
+					thumbnail: thumbByPublicId.get(embedded[0]) ?? null,
+					linkedWorkCount: embedded.length,
 				};
 			}),
 			nextCursor,
@@ -2851,15 +2788,8 @@ const contentRoutes = new Hono()
 			if (refusal) return c.json(refusal.body, refusal.status);
 		}
 
-		// A post may only link the caller's own Works. Cross-creator references are a real
-		// future feature (collabs, bundles) but they need a consent story first.
-		const owned = await ownedWorkIds(data.workIds, user.id);
-		if (data.workIds.some((id) => !owned.has(id))) {
-			return c.json({ error: "A linked Work was not found in your Catalog." }, 400);
-		}
-
 		// NOTE: publishing is deliberately NOT gated on media readiness any more. Readiness is
-		// a property of the media, the media belongs to the Work, and a post that merely links
+		// a property of the media, the media belongs to the Work, and a post that merely embeds
 		// a Work has nothing to wait for — blocking an announcement on someone's encode was an
 		// artifact of the post owning the media. The gate moved to RELEASE, on the Work.
 
@@ -2904,8 +2834,6 @@ const contentRoutes = new Hono()
 		// reading. See `authorUpvote`.
 		await authorUpvote("post", post.id, user.id);
 
-		await setPostWorkRefs(post.id, data.workIds);
-
 		// Optionally attach to a Project the creator owns.
 		if (data.projectId != null) {
 			const [project] = await db
@@ -2930,7 +2858,7 @@ const contentRoutes = new Hono()
 		// would put the publishability rule in two places, and they would drift.
 		void queueRecordSync("post", post.id);
 
-		const linkedWorks = await loadPostWorks(post.id, user.id, deliveryCtx());
+		const linkedWorks = await loadPostWorksFromBody(body, user.id, deliveryCtx());
 		// The row no longer carries `body_html`; the stored body is markdown in `body`,
 		// which the spread ships as it is.
 		return c.json({ post: { ...post, linkedWorks } }, 201);
@@ -2988,10 +2916,10 @@ const contentRoutes = new Hono()
 			.execute();
 
 		// A post has no gates of its own: it is an announcement, and announcements are for
-		// the audience. Each Work it links resolves on its OWN gates, so this page can show
-		// a readable post alongside a Work the user cannot open — which is exactly the
+		// the audience. Each Work its body embeds resolves on its OWN gates, so this page can
+		// show a readable post alongside a Work the user cannot open — which is exactly the
 		// separation the model is for, and why there is no post-level `access` any more.
-		const linkedWorks = await loadPostWorks(post.id, userId, deliveryCtx());
+		const linkedWorks = await loadPostWorksFromBody(post.body, userId, deliveryCtx());
 
 		// Transparent edit history — every content edit is logged with a timestamp, and it
 		// carries no user predicate **on purpose** (settled 2026-08-09).
@@ -3058,15 +2986,6 @@ const contentRoutes = new Hono()
 			if (refusal) return c.json(refusal.body, refusal.status);
 		}
 
-		// Linked Works must belong to the caller — validated before any writes so a bad
-		// reference never partially applies.
-		if (data.workIds !== undefined) {
-			const owned = await ownedWorkIds(data.workIds, user.id);
-			if (data.workIds.some((id) => !owned.has(id))) {
-				return c.json({ error: "A linked Work was not found in your Catalog." }, 400);
-			}
-		}
-
 		if (data.slug && data.slug !== existing.slug) {
 			if (await postSlugExists(data.slug)) return c.json({ error: "Slug already taken" }, 409);
 		}
@@ -3082,10 +3001,6 @@ const contentRoutes = new Hono()
 			const next = await makeUniqueSlug(data.title, (slug) => postSlugExists(slug, existing.id));
 			if (next !== existing.slug) derivedSlug = next;
 		}
-
-		// Replacing the reference set reports whether it actually changed, for the history.
-		const refsChanged =
-			data.workIds !== undefined ? await setPostWorkRefs(existing.id, data.workIds) : false;
 
 		const updates: Record<string, unknown> = { updatedAt: new Date() };
 		if (data.slug !== undefined) updates.slug = data.slug;
@@ -3112,7 +3027,7 @@ const contentRoutes = new Hono()
 
 		// Record a timestamped edit-history entry when the post's content actually changed
 		// (publish/unpublish/schedule toggles don't count — see changedPostFields).
-		const editedFields = changedPostFields(existing, data, refsChanged, derivedSlug);
+		const editedFields = changedPostFields(existing, data, derivedSlug);
 		if (editedFields.length > 0) {
 			await db.insert(postEdits).values({
 				postId: existing.id,
@@ -3126,32 +3041,8 @@ const contentRoutes = new Hono()
 		// it is what takes the record back down.
 		void queueRecordSync("post", updated.id);
 
-		const linkedWorks = await loadPostWorks(updated.id, user.id, deliveryCtx());
+		const linkedWorks = await loadPostWorksFromBody(updated.body, user.id, deliveryCtx());
 		return c.json({ post: { ...updated, linkedWorks } });
-	})
-
-	/**
-	 * Which Works would be left with no posting history if this post went away. Nothing is
-	 * deleted with the post any more — a Work stands on its own in the Catalog whether or
-	 * not a post ever pointed at it — so this is informational only, and the delete route
-	 * purges nothing. Owner-only.
-	 */
-	.get("/posts/:slug/orphaned-media", requireAuth, async (c) => {
-		const user = c.get("user");
-		const existing = await findPostRow(c.req.param("slug"));
-		if (!existing || existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
-		const ids = await worksOnlyLinkedFrom(existing.id);
-		if (ids.length === 0) return c.json({ items: [] });
-		const items = await db
-			.select({
-				id: works.id,
-				title: works.title,
-				type: works.type,
-				thumbnail: works.thumbnail,
-			})
-			.from(works)
-			.where(inArray(works.id, ids));
-		return c.json({ items });
 	})
 
 	.delete("/posts/:slug", requireAuth, zValidator("query", deletePostQuerySchema), async (c) => {
@@ -5914,25 +5805,12 @@ const contentRoutes = new Hono()
 			.from(purchases)
 			.where(and(eq(purchases.workId, id), eq(purchases.status, "completed")));
 
-		// `post_work_refs.workId` cascades, so deleting a linked Work silently strips it
-		// from every post referencing it — including published ones. Refuse unless the
-		// caller has seen the damage and opted in, and hand back the list so a client can
-		// show it. Failing closed is deliberate: the destructive reading of an ambiguous
-		// request is the unrecoverable one.
+		// There is no `post_work_refs` cascade to warn about any more: an embed lives in the
+		// post's body, and a deleted Work leaves the link it had exactly where it was — a
+		// plain link, no card — the way any embedded page decays. Nothing here strips, so
+		// nothing here refuses.
 		const force = c.req.valid("query").force;
 		if (!force) {
-			const inUse = await postsUsingWork(id);
-			if (inUse.length > 0) {
-				return c.json(
-					{
-						error: `This Work is linked from ${inUse.length} post${inUse.length === 1 ? "" : "s"}. Deleting it removes it from ${inUse.length === 1 ? "that post" : "those posts"}.`,
-						code: "work_in_use",
-						posts: inUse,
-					},
-					409,
-				);
-			}
-
 			// Someone paid for this. Say so before doing anything — removing it from
 			// public circulation is still a decision worth confirming, even though
 			// forcing it no longer strands the buyer (see the withdrawal below).
