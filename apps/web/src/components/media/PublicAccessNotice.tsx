@@ -22,7 +22,6 @@
  * nag, so nothing here appears until the last hour and nothing here blocks a page.
  */
 
-import { formatMultiple, timePoolMultipleFor } from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { useAuth } from "@anthers/web-shared/auth";
 import { Link } from "@anthers/web-shared/router";
@@ -35,36 +34,26 @@ import {
 } from "../../lib/public-access";
 
 /**
- * The multiplier, derived rather than typed.
+ * The shared close, without a comparison number.
  *
- * the public wiki's *Badges* words this as "six times more", and six is `timePoolFor(price) /
- * FREE_TIME_POOL` at the Public Access price — a ratio between two dials, one of which
- * (`FREE_TIME_POOL`) is explicitly provisional. Typing it would put a silent lie in the
- * single piece of copy the conversion argument rests on, the day anyone tunes it.
+ * The wiki's *Badges* once said "six times more for your attention" — a ratio with the
+ * free tier's pool in it, which stopped being a dial (a constant) the day the pool
+ * mechanism retired it: the free account's Time Pool is **the Time Pool Fund's**
+ * published monthly slice, which varies with what supporters gave. A claim that
+ * divides by it can be neither typed nor safely rendered; the comparison leaves the
+ * conversion copy entirely (Parker, 2026-10-17), and the free tier's own figure
+ * publishes on the signup walk-down and the Fund's ledger, stated as itself.
  *
- * Computed from the SEEDED price through the store, not from the constant at module
- * load: the multiplier is copy the meter notice and the wall both render, and the module-
- * scope constant would have frozen the fallback value for the page's whole life. Same
- * store as `SeedPitch` below.
- */
-function useMultiple(): string {
-	const { publicAccessPrice } = useAnthersLadder();
-	return formatMultiple(timePoolMultipleFor(publicAccessPrice));
-}
-
-/** Shared close: what supporting Anthers does, in the two sentences that are actually true.
- *
- * The price reads the seeded ladder (the rows are the source of truth) through the store,
- * with the constant as the fallback for the first paint. A component this deep cannot
- * await, so the hook re-renders when the fetch lands.
+ * The price reads the seeded ladder (the rows are the source of truth) through the
+ * store, with the constant as the fallback for the first paint. A component this deep
+ * cannot await, so the hook re-renders when the fetch lands.
  */
 function SeedPitch({ compact = false }: { compact?: boolean }) {
 	const { publicAccessPrice } = useAnthersLadder();
-	const multiple = useMultiple();
 	return (
 		<p className={compact ? "text-xs text-base-content/60" : "text-sm text-base-content/70"}>
-			Supporting Anthers is ${publicAccessPrice} a month and removes the limit entirely — and every
-			creator you spend time with is paid <strong>{multiple} more</strong> for your attention.
+			Supporting Anthers is ${publicAccessPrice} a month and removes the limit entirely, and every
+			creator you spend time with is paid more for your attention.
 		</p>
 	);
 }

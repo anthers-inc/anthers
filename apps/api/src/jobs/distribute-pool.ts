@@ -61,6 +61,7 @@ import Decimal from "decimal.js";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { anthersUserId } from "../services/anthers-badges.js";
 import { creditedSecondsByCreator } from "../services/attention-ranges.js";
+import { freeSliceForCycle } from "../services/time-pool-fund.js";
 
 export interface DistributePoolData {
 	/** If set, distribute for a single account. Otherwise all active accounts. */
@@ -70,9 +71,14 @@ export interface DistributePoolData {
 /** Round to cents the same way `fees.ts` does, so the two never disagree by a penny. */
 const CENTS = (d: Decimal) => d.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 
-/** The Time Pool a user funds this cycle = `TIME_POOL_RATE` of what they give Anthers (subsidized at $0). */
-function computeTimePoolAmount(anthersSupport: number): Decimal {
-	return new Decimal(timePoolFor(anthersSupport));
+/**
+ * The Time Pool a user funds this cycle = `TIME_POOL_RATE` of what they give Anthers —
+ * and a zero amount draws the **Fund's slice** for the cycle, not a constant: the free
+ * pool is Anthers' charitable money, published monthly by the Time Pool Fund's ledger
+ * (`services/time-pool-fund.ts`), and the caller passes that cycle's published slice.
+ */
+function computeTimePoolAmount(anthersSupport: number, freeTimePool: number): Decimal {
+	return anthersSupport > 0 ? new Decimal(timePoolFor(anthersSupport)) : new Decimal(freeTimePool);
 }
 
 function getBillingCycle(acct: { currentPeriodStart: Date | null; currentPeriodEnd: Date | null }) {
@@ -152,6 +158,12 @@ export async function computeMonth(input: {
 	end: Date;
 	/** What the month gave Anthers. Zero funds the free Time Pool. */
 	anthersDollars: number;
+	/**
+	 * The Fund's published slice for the cycle — what a zero amount draws. The caller
+	 * fetches it once per run from the ledger (`freeSliceForCycle`); there is no
+	 * default, so a caller cannot silently fall back to the retired per-head constant.
+	 */
+	freeTimePool: number;
 	charges: MonthCharge[];
 	/**
 	 * Whether the supporter's Stickers are paid. A month with no paid invoice funds only the free
@@ -287,7 +299,7 @@ export async function computeMonth(input: {
 	// built 2026-08-29). `settle-cycle.ts` books it, by measuring what this computation
 	// distributed against the budget — so leaving money undistributed here is a decision about
 	// *creators* and never a decision to lose it.
-	const timePool = computeTimePoolAmount(input.anthersDollars);
+	const timePool = computeTimePoolAmount(input.anthersDollars, input.freeTimePool);
 
 	// 3a. Stickers — the part of this user's Time Pool they directed themselves.
 	//
@@ -393,12 +405,15 @@ function newDist(): Dist {
 	};
 }
 
-async function distributeForAccount(acct: {
-	id: number;
-	userId: number;
-	currentPeriodStart: Date | null;
-	currentPeriodEnd: Date | null;
-}) {
+async function distributeForAccount(
+	acct: {
+		id: number;
+		userId: number;
+		currentPeriodStart: Date | null;
+		currentPeriodEnd: Date | null;
+	},
+	freeTimePool: number,
+) {
 	const { start, end } = getBillingCycle(acct);
 	const cycleDate = billingCycleDate(start);
 
@@ -458,6 +473,7 @@ async function distributeForAccount(acct: {
 			},
 		],
 		includeStickers: true,
+		freeTimePool,
 	});
 
 	// 4. Write the estimate.
@@ -523,10 +539,19 @@ export async function distributePool(data: DistributePoolData) {
 				.where(and(eq(billingAccounts.id, data.accountId), eq(billingAccounts.isActive, true)))
 		: await db.select().from(billingAccounts).where(eq(billingAccounts.isActive, true));
 
+	// The Fund's slice for the cycle, read once per run — what every zero-Anthers
+	// account's `computeMonth` draws. The same read that restates the current cycle's
+	// published row from its booked holdings, so the estimate and the ledger cannot
+	// come apart.
+	const { start: firstStart } = accts[0]
+		? getBillingCycle(accts[0])
+		: { start: cycleStart(currentCycleKey()) };
+	const slice = await freeSliceForCycle(cycleKeyFor(firstStart));
+
 	let processed = 0;
 	for (const acct of accts) {
 		try {
-			await distributeForAccount(acct);
+			await distributeForAccount(acct, slice.slice);
 			processed++;
 		} catch (error) {
 			console.error(`Pool distribution failed for user ${acct.userId}:`, error);

@@ -267,7 +267,9 @@ const PLATFORMS: Platform[] = [
 				rival: {
 					keep: `$${rivalSaleNet(SALE_25_PHYSICAL, 0.1)}`,
 					keepSub: "90% less the same card processing",
-					cut: "10% (≈ $2.50)",
+					// Computed from the rival's own share, never typed: the guard read a cut
+					// that happened to equal a generated figure and correctly said so.
+					cut: `10% (≈ $${rivalSaleNet(SALE_25_PHYSICAL, 0.1)})`,
 				},
 				note: `Both all-in. Nothing ships through us and there is no fee on a sale, so the only deduction from your $${SALE_25_PHYSICAL.price} is card processing. Excludes production and shipping, a real cost on any platform.`,
 			},

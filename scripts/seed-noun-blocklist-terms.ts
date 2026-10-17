@@ -8,7 +8,7 @@
  *   blocklist (the same terms on their side).
  *
  * The terms and their reasons are the seed document's
- * (`Anthers-Wiki/Internal Wiki/Transient/Noun Project Blocklist Seed.md`); this file is
+ * (`wiki-anthers/Internal Wiki/Transient/Noun Project Blocklist Seed.md`); this file is
  * the machine-readable half, and a term added here is added to BOTH by the two readers.
  * Removals never happen here in bulk — remove an entry in production through the admin
  * door and re-run the sync, which reconciles by pushing the missing and never
