@@ -94,9 +94,9 @@ export function saveShimScript(runtime: string): string {
 				for (var key in records) {
 					var rec = records[key];
 					// 🚨 **The engine's own shapes, not the wire's.** The cloud blob carried
-					// `records` through JSON, and JSON demotes the engine's shapes: IDBFS's
+					// records through JSON, and JSON demotes the engine's shapes: IDBFS's
 					// Date timestamps arrive as ISO strings (its reconcile calls
-					// `timestamp.getTime()`) and its Uint8Array file bytes arrive as an
+					// timestamp.getTime()) and its Uint8Array file bytes arrive as an
 					// index-keyed object map. Rebuild each record the engine's storeEntry
 					// and reconcile expect before it is put — else the record sits in the
 					// store and the engine's pull neither copies it nor errs.
