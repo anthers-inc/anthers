@@ -16,17 +16,12 @@ import {
 	STORAGE_LADDER_GIB,
 } from "./constants.js";
 import { calculateFees, supportBreakdown } from "./fees.js";
-import {
-	DEFAULT_PLAN_PHASES,
-	PLAN_DEFAULTS,
-	planLedgerFor,
-} from "./financial-plan.js";
+import { DEFAULT_PLAN_PHASES, PLAN_DEFAULTS, planLedgerFor } from "./financial-plan.js";
 import {
 	affordable,
 	averageSupport,
 	crossover,
 	floorPayingShare,
-	modelAt,
 	NO_STAFFING,
 	payingBadgeMix,
 	remainderPerPayingAccount,

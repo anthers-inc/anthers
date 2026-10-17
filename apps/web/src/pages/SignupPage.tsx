@@ -99,9 +99,9 @@ import {
 	FREE_STORAGE_GIB,
 	heldBadgeLabel,
 	PUBLIC_ACCESS_PRICE,
+	STORAGE_PER_GIB_MONTH,
 	stickerBudgetFor,
 	storageGibFor,
-	STORAGE_PER_GIB_MONTH,
 	thresholdForBadge,
 	timePoolFor,
 	WITHDRAWN_RESCUE_DAYS,
@@ -147,8 +147,8 @@ import SubscriptionPaymentModal, {
 } from "../components/subscribe/SubscriptionPaymentModal";
 import { FAQBlock } from "../components/ui/FAQ";
 import { useAnthersLadder } from "../lib/anthers-ladder";
-import { useTimePoolFund } from "../lib/time-pool-fund";
 import { type HandleStatus, useHandleAvailability } from "../lib/hosted-handle";
+import { useTimePoolFund } from "../lib/time-pool-fund";
 
 /* ── Free-tier figures ────────────────────────────────────────────────────────
  * The Public Access hours are read from the module that owns them; the meter that
@@ -878,19 +878,33 @@ function LadderWalkDown({ fundSlice }: { fundSlice: number | null }) {
 				charitable programs.
 			</p>
 			<div className="relative overflow-x-auto">
-				<table className={`w-full min-w-[46rem] table-fixed border-separate border-spacing-0 text-left text-sm ${RAISED}`}>
+				<table
+					className={`w-full min-w-[46rem] table-fixed border-separate border-spacing-0 text-left text-sm ${RAISED}`}
+				>
 					<caption className="sr-only">
-						Where a monthly amount to Anthers goes at each rung, including the free tier's
-						Time Pool share from the Time Pool Fund.
+						Where a monthly amount to Anthers goes at each rung, including the free tier's Time Pool
+						share from the Time Pool Fund.
 					</caption>
 					<thead>
 						<tr>
-							<th scope="col" className="px-4 py-3">A month to Anthers</th>
-							<th scope="col" className="px-4 py-3 text-right">Time Pool, to creators</th>
-							<th scope="col" className="px-4 py-3 text-right">Stickers</th>
-							<th scope="col" className="px-4 py-3 text-right">Payments</th>
-							<th scope="col" className="px-4 py-3 text-right">Charitable programs</th>
-							<th scope="col" className="px-4 py-3 text-right">Storage</th>
+							<th scope="col" className="px-4 py-3">
+								A month to Anthers
+							</th>
+							<th scope="col" className="px-4 py-3 text-right">
+								Time Pool, to creators
+							</th>
+							<th scope="col" className="px-4 py-3 text-right">
+								Stickers
+							</th>
+							<th scope="col" className="px-4 py-3 text-right">
+								Payments
+							</th>
+							<th scope="col" className="px-4 py-3 text-right">
+								Charitable programs
+							</th>
+							<th scope="col" className="px-4 py-3 text-right">
+								Storage
+							</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -928,8 +942,8 @@ function LadderWalkDown({ fundSlice }: { fundSlice: number | null }) {
 				</table>
 			</div>
 			<p className="mx-auto mt-4 max-w-2xl text-center text-xs leading-relaxed text-base-content/45">
-				The Time Pool and Stickers are one column's worth of money, not two: a Sticker is handed
-				out of the same pool the time splits, so giving none costs creators nothing.
+				The Time Pool and Stickers are one column's worth of money, not two: a Sticker is handed out
+				of the same pool the time splits, so giving none costs creators nothing.
 			</p>
 		</div>
 	);
@@ -2577,7 +2591,11 @@ export default function SignupPage() {
 	 * published slice (null until the fetch lands), so the breakdown and the walk-down
 	 * name the same published figure.
 	 */
-	const anthersBreakdown = anthersReading(anthersAmount, ladder.publicAccessPrice, fund?.slicePerAccount ?? null);
+	const anthersBreakdown = anthersReading(
+		anthersAmount,
+		ladder.publicAccessPrice,
+		fund?.slicePerAccount ?? null,
+	);
 
 	/** Step 3's answer, in the shape the echo and the summary both render. Step 3 is the
 	 *  Anthers ask — it was step 2 until 2026-08-17; see the resequencing note up top. */
@@ -2972,7 +2990,9 @@ export default function SignupPage() {
 								<GoFurtherCard icon={SparklesIcon} title="Back Anthers" target="anthers-badges">
 									Just {money(ladder.publicAccessPrice)}/month takes the monthly limit off Public
 									Access usage, and it lifts your automatic support for creators from{" "}
-									{fund ? `${money(fund.slicePerAccount)}/month` : "the free pool's published share"}{" "}
+									{fund
+										? `${money(fund.slicePerAccount)}/month`
+										: "the free pool's published share"}{" "}
 									to {money(timePoolFor(ladder.publicAccessPrice))}
 									/month.
 									<br></br>

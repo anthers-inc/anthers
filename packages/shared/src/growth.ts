@@ -35,9 +35,9 @@
  * that funds free access — the charitable program inside the remainder — stays thin.
  */
 import {
-	STORAGE_LADDER_GIB,
 	FREE_STORAGE_GIB,
 	PUBLIC_ACCESS_PRICE,
+	STORAGE_LADDER_GIB,
 	STORAGE_PER_GIB_MONTH,
 	timePoolFor,
 } from "./constants.js";

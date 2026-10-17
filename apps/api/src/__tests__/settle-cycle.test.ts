@@ -503,9 +503,7 @@ describe("the remainder", () => {
 
 		await settle(userId);
 
-		expect((await creditsFrom(userId)).total(creator, "time_pool")).toBe(
-			fundSlice(5).toFixed(2),
-		);
+		expect((await creditsFrom(userId)).total(creator, "time_pool")).toBe(fundSlice(5).toFixed(2));
 		expect(await inflowFrom(userId)).toBe("0.00");
 	});
 });

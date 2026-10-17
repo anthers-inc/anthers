@@ -59,9 +59,7 @@ export function organizationDir(cwd: string): string {
 export function insideOrganization(cwd: string): boolean {
 	try {
 		return readdirSync(organizationDir(cwd), { withFileTypes: true }).some(
-			(e) =>
-				e.isDirectory() &&
-				(e.name.startsWith("wiki-") || e.name.startsWith("Anthers-")),
+			(e) => e.isDirectory() && (e.name.startsWith("wiki-") || e.name.startsWith("Anthers-")),
 		);
 	} catch {
 		return false;

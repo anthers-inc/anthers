@@ -55,7 +55,13 @@
  * obligation lines — which is exact, not an approximation. The iterative
  * convergence this replaces converged in one step for the same reason.)
  */
-import { ADMIN_CEILING, FREE_ACCESS_SHARE_DEFAULT, modelAt, NO_STAFFING, type Staffing } from "./growth.js";
+import {
+	ADMIN_CEILING,
+	FREE_ACCESS_SHARE_DEFAULT,
+	modelAt,
+	NO_STAFFING,
+	type Staffing,
+} from "./growth.js";
 
 export { FREE_ACCESS_SHARE_DEFAULT };
 
@@ -226,7 +232,10 @@ export function planLedger(input: PlanPhaseInput): PlanLedger {
  * exists rule from the machine rules — accepted cost of public-source
  * generation). The phase labels are public copy.
  */
-export const PLAN_DEFAULTS = { adminBudgetShare: ADMIN_CEILING, freeAccessShare: FREE_ACCESS_SHARE_DEFAULT } as const;
+export const PLAN_DEFAULTS = {
+	adminBudgetShare: ADMIN_CEILING,
+	freeAccessShare: FREE_ACCESS_SHARE_DEFAULT,
+} as const;
 
 /** One authored row of the plan's path, matching the plan tables' columns. */
 export interface AuthoredPlanPhase {

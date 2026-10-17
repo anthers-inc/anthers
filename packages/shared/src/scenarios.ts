@@ -27,7 +27,6 @@ import {
 	MERCH_BADGE_DISCOUNT,
 	PUBLIC_ACCESS_PRICE,
 	thresholdForBadge,
-	timePoolFor,
 } from "./constants.js";
 import {
 	anthersSupportBreakdown,
@@ -42,8 +41,8 @@ import {
 	averageSupport,
 	crossover,
 	decayForAverage,
-	floorPayingShare,
 	FREE_ACCESS_SHARE_DEFAULT,
+	floorPayingShare,
 	modelAt,
 	NO_STAFFING,
 	PAY_DECAY,
@@ -893,8 +892,10 @@ export const FREE_POT_CANDIDATES = [0.05, FREE_ACCESS_SHARE_DEFAULT, 0.15, 0.2];
 export function freePotSensitivity() {
 	return FREE_POT_CANDIDATES.map((share) => {
 		/** The slice the share funds a free account at the plan's launch phase. */
-		const slice = planLedgerFor(DEFAULT_PLAN_PHASES[0], { ...PLAN_DEFAULTS, freeAccessShare: share })
-			.freeSlice;
+		const slice = planLedgerFor(DEFAULT_PLAN_PHASES[0], {
+			...PLAN_DEFAULTS,
+			freeAccessShare: share,
+		}).freeSlice;
 		return {
 			sharePct: `${(share * 100).toFixed(0)}%`,
 			shipped: share === FREE_ACCESS_SHARE_DEFAULT,

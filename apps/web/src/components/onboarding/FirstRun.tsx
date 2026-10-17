@@ -116,7 +116,9 @@ function FundPoolLine() {
 			And your time still pays: the Time Pool Fund (the charitable share of what supporters give
 			Anthers) funds a pool of{" "}
 			<strong>
-				{fund ? `$${fund.slicePerAccount.toFixed(2)} a month (varies — published monthly)` : "a monthly published share"}
+				{fund
+					? `$${fund.slicePerAccount.toFixed(2)} a month (varies — published monthly)`
+					: "a monthly published share"}
 			</strong>{" "}
 			for every free account, split between the creators you actually spend time with.
 		</p>

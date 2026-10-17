@@ -15,24 +15,24 @@
  * ⭐ The expected slices are computed from the shared core (`timePoolFundPool`), the
  * same call the service makes — never a copied formula.
  */
-import { afterEach, afterAll, describe, expect, it } from "bun:test";
+import { afterAll, afterEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { accountCycles, badges, timePoolFundLedger, userBadges } from "@anthers/db/schema";
 import type { CycleKey } from "@anthers/shared/billing-cycle";
 import { currentCycleKey, cycleEnd, cycleStart, nextCycleKey } from "@anthers/shared/billing-cycle";
 import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { timePoolFundPool } from "@anthers/shared/time-pool-fund";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { createAccount } from "../__tests__/account-fixture.js";
+import { ensureAnthersLadder } from "../__tests__/anthers-ladder-fixture.js";
+import { insertAttentionRange } from "../__tests__/attention-fixture.js";
+import { purgeAccountIds, purgeAccountsCreatedHere } from "../__tests__/cleanup.js";
 import app from "../index";
 import {
 	activeFreeAccountsForCycle,
 	freeSliceForCycle,
 	publishFundLedger,
 } from "../services/time-pool-fund";
-import { createAccount } from "../__tests__/account-fixture.js";
-import { ensureAnthersLadder } from "../__tests__/anthers-ladder-fixture.js";
-import { insertAttentionRange } from "../__tests__/attention-fixture.js";
-import { purgeAccountIds, purgeAccountsCreatedHere } from "../__tests__/cleanup.js";
 
 await ensureAnthersLadder();
 purgeAccountsCreatedHere();
@@ -172,9 +172,7 @@ describe("the slice the funding path reads", () => {
 		await makeWatcher(cycle);
 		// The uncapped share is $7.00; the ceiling is a Root supporter's pool × 1.
 		const fund = await freeSliceForCycle(cycle);
-		expect(fund.pool.toFixed(2)).toBe(
-			timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2),
-		);
+		expect(fund.pool.toFixed(2)).toBe(timePoolFor(PUBLIC_ACCESS_PRICE).toFixed(2));
 		expect(fund.slice.toFixed(2)).toBe("1.50");
 	});
 
@@ -198,9 +196,7 @@ describe("the slice the funding path reads", () => {
 		await makeWatcher(cycle);
 		const restated = await freeSliceForCycle(cycle, after);
 		expect(restated.activeFreeAccounts).toBe(1);
-		expect(restated.pool.toFixed(2)).toBe(
-			expected(40, 1).pool.toFixed(2),
-		);
+		expect(restated.pool.toFixed(2)).toBe(expected(40, 1).pool.toFixed(2));
 		const still = await rowFor(cycle);
 		expect(still?.actualizedAt?.getTime()).toBe(row?.actualizedAt?.getTime());
 	});

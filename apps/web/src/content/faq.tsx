@@ -30,10 +30,7 @@
 // to everyone and what changes is the **cap**. `faq.test.ts` holds the ones a regex can
 // check.
 
-import {
-	ATTENTION_RAW_RETENTION_DAYS,
-	FREE_STORAGE_GIB,
-} from "@anthers/shared/constants";
+import { ATTENTION_RAW_RETENTION_DAYS, FREE_STORAGE_GIB } from "@anthers/shared/constants";
 import { DIRECTED_SUPPORT_WORST_CASE, SALE_TABLE } from "@anthers/shared/figures";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { Link } from "@anthers/web-shared/router";
@@ -102,9 +99,8 @@ export const FAQ_ITEMS = {
 				<p>
 					A free account still pays creators, which is the part people don't expect. The Time Pool
 					Fund funds a small Time Pool on your behalf from the charitable share of what supporters
-					give Anthers: {FUND_TOKEN}, shared out by the
-					time you spend with each creator's work, so watching something free is not the same as it
-					earning nothing.
+					give Anthers: {FUND_TOKEN}, shared out by the time you spend with each creator's work, so
+					watching something free is not the same as it earning nothing.
 				</p>
 			</div>
 		),

@@ -39,15 +39,10 @@ import {
 	userBadges,
 } from "@anthers/db/schema";
 import type { CycleKey } from "@anthers/shared/billing-cycle";
-import {
-	currentCycleKey,
-	cycleEnd,
-	cycleStart,
-	nextCycleKey,
-} from "@anthers/shared/billing-cycle";
+import { currentCycleKey, cycleEnd, cycleStart, nextCycleKey } from "@anthers/shared/billing-cycle";
 import { PUBLIC_ACCESS_PRICE, supportAmount, timePoolFor } from "@anthers/shared/constants";
 import { anthersSupportBreakdown, paymentsSplit } from "@anthers/shared/fees";
-import { timePoolFundPool, type FundStatus } from "@anthers/shared/time-pool-fund";
+import { type FundStatus, timePoolFundPool } from "@anthers/shared/time-pool-fund";
 import Decimal from "decimal.js";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { anthersUserId, loadAnthersLadder } from "./anthers-badges.js";
@@ -99,7 +94,8 @@ export async function charitableRevenueForCycle(cycle: CycleKey): Promise<Decima
 		.from(accountCycles)
 		.where(eq(accountCycles.billingCycle, cycle));
 	const booked = new Decimal(settled[0]?.total ?? "0.00");
-	if (settled.length > 0 && booked.greaterThan(0)) return booked.toDecimalPlaces(2, Decimal.ROUND_DOWN);
+	if (settled.length > 0 && booked.greaterThan(0))
+		return booked.toDecimalPlaces(2, Decimal.ROUND_DOWN);
 
 	const anthersId = await anthersUserId();
 	const rows = await db

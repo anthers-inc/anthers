@@ -13,12 +13,7 @@
 // from here. After that these constants are the record of the port, and the thing they
 // guard is that a later refactor does not quietly move a landmark.
 import { describe, expect, test } from "bun:test";
-import {
-	FREE_STORAGE_GIB,
-	PUBLIC_ACCESS_PRICE,
-	STORAGE_LADDER_GIB,
-	STORAGE_PER_GIB_MONTH,
-} from "./constants.js";
+import { STORAGE_LADDER_GIB, STORAGE_PER_GIB_MONTH } from "./constants.js";
 import {
 	ADMIN_CEILING,
 	affordable,
@@ -189,7 +184,12 @@ describe("the floor paying share", () => {
 	 */
 	test("the Fund's pot is the share of the remainder after admin, divided by the count", () => {
 		for (const share of [0.05, 0.1, 0.2]) {
-			const m = modelAt({ accounts: 1_000_000, payingShare: 0.3, staffing: NO_STAFFING, freeAccessShare: share });
+			const m = modelAt({
+				accounts: 1_000_000,
+				payingShare: 0.3,
+				staffing: NO_STAFFING,
+				freeAccessShare: share,
+			});
 			expect(m.freePool).toBeCloseTo((1 - 0.3) * share * m.charitableRevenue, 2);
 			// The slice divides the pot floored to the cent — never above it.
 			const unrounded = m.freePool / m.freeAccounts;

@@ -17,7 +17,13 @@ import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Eyebrow, H2 } from "@anthers/web-shared/decor/sections";
 import { Link } from "@anthers/web-shared/router";
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
-import { type FAQItem, type FAQSurface, faqFor, interpolateFund, interpolatePrice } from "../../content/faq";
+import {
+	type FAQItem,
+	type FAQSurface,
+	faqFor,
+	interpolateFund,
+	interpolatePrice,
+} from "../../content/faq";
 import { useAnthersLadder } from "../../lib/anthers-ladder";
 import { useTimePoolFund } from "../../lib/time-pool-fund";
 

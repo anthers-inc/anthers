@@ -101,7 +101,6 @@ import {
 	resolveAccessSync,
 } from "../services/access.js";
 import { anthersUserId, loadAnthersLadder } from "../services/anthers-badges.js";
-import { publishedFundLedger } from "../services/time-pool-fund.js";
 import { creditedSeconds, creditedSecondsByDayAndCreator } from "../services/attention-ranges.js";
 import { composeBadgeArt } from "../services/badge-art-compose.js";
 import {
@@ -122,6 +121,7 @@ import { scanInlineUpload } from "../services/safety-scan.js";
 import { resolveShareToken } from "../services/share-links.js";
 import { storage } from "../services/storage/index.js";
 import { recordReductions } from "../services/support-reductions.js";
+import { publishedFundLedger } from "../services/time-pool-fund.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 

@@ -947,7 +947,6 @@ const usd = (s: string) =>
 	`$${Number(s).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 function renderLandmarksMarkdown(): string {
-	const s = selfSufficiency();
 	return [
 		`Every figure below is derived from \`fees.ts\` through \`packages/shared/src/growth.ts\`, at the model's **${(MODELLED_PAYING_SHARE * 100).toFixed(0)}% paying share**, the free tier funded at the plan's launch scale by the Fund's share. They move when a dial moves, and \`bun run econ:figures --check\` fails CI if this block and the model disagree.`,
 		"",

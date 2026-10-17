@@ -66,15 +66,15 @@ export function timePoolFundPool(input: {
 	const base = new Decimal(input.charitableRevenue)
 		.times(input.freeAccessShare)
 		.times(Decimal.max(0, new Decimal(1).minus(input.adminBudgetShare)));
-	const ceiling = input.activeFreeAccounts > 0
-		? new Decimal(input.rootPool).times(input.activeFreeAccounts)
-		: new Decimal(0);
+	const ceiling =
+		input.activeFreeAccounts > 0
+			? new Decimal(input.rootPool).times(input.activeFreeAccounts)
+			: new Decimal(0);
 	// ⚠️ With no active free account the pot has nobody to divide across — the ceiling
 	// reads zero and the pot is unspent, which is the doctrine working (a cycle in which
 	// nobody streamed the commons funds no slice), never a division by zero.
 	const pool = Decimal.min(base, ceiling);
-	const slice = input.activeFreeAccounts > 0
-		? CENTS_DOWN(pool.div(input.activeFreeAccounts))
-		: new Decimal(0);
+	const slice =
+		input.activeFreeAccounts > 0 ? CENTS_DOWN(pool.div(input.activeFreeAccounts)) : new Decimal(0);
 	return { pool, slice, uncapped: base };
 }
