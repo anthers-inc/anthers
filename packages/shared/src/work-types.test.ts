@@ -52,10 +52,31 @@ describe("deliverableIsEmpty", () => {
 	 * preview task, 2026-10-17 — the Record had no answer at all and rendered nothing).
 	 * The store kinds are never empty: their buying panel renders whatever is in stock.
 	 */
-	test("a file kind is empty without its sourceKey, and full with it", () => {
-		for (const type of FILE_WORK_TYPES) {
+	test("the played kinds are answered by what plays, never by the stored key", () => {
+		// The meter-spent payload's own shape (the gauntlet's red caught this as a wall
+		// replaced by the silhouette): the key blanked by policy while the playable
+		// address survives, so the player can mount and draw its own wall.
+		expect(
+			deliverableIsEmpty({
+				type: "video",
+				sourceKey: "",
+				originalUrl: "/api/content/works/1/original",
+			}),
+		).toBe(false);
+		expect(deliverableIsEmpty({ type: "video" })).toBe(true);
+		expect(
+			deliverableIsEmpty({ type: "music", originalUrl: "/api/content/works/1/original" }),
+		).toBe(false);
+		expect(deliverableIsEmpty({ type: "audio", transcoding: { outputFileUrl: "/x.mp3" } })).toBe(
+			false,
+		);
+		expect(deliverableIsEmpty({ type: "audio" })).toBe(true);
+	});
+
+	test("the picture and the book kinds are answered by their key", () => {
+		for (const type of ["image", "comic", "ebook"]) {
 			expect(deliverableIsEmpty({ type })).toBe(true);
-			expect(deliverableIsEmpty({ type, sourceKey: "creators/4/file.mp3" })).toBe(false);
+			expect(deliverableIsEmpty({ type, sourceKey: "creators/4/file.pdf" })).toBe(false);
 		}
 	});
 
