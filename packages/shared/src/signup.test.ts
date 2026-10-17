@@ -85,7 +85,11 @@ describe("directedAmountFor", () => {
 describe("the picks' emptiness", () => {
 	test("an empty answer is empty, and a backed rung is not nothing", () => {
 		const empty = normalizePicks({ badge: null, follow: [], badges: [] });
-		const backed = normalizePicks({ badge: null, follow: [], badges: [{ handle: "m", badgeId: 1 }] });
+		const backed = normalizePicks({
+			badge: null,
+			follow: [],
+			badges: [{ handle: "m", badgeId: 1 }],
+		});
 		expect(picksAreEmpty(empty)).toBe(true);
 		expect(picksAreEmpty(backed)).toBe(false);
 	});
