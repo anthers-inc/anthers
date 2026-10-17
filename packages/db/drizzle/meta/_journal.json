@@ -1072,6 +1072,13 @@
       "when": 1792191379178,
       "tag": "20261016-225619_smooth_big_bertha",
       "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1792214011309,
+      "tag": "20261017-051331_low_major_mapleleaf",
+      "breakpoints": true
     }
   ]
 }

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Catalog CRUD and a post's references to Works.
+ * Catalog CRUD and a post's embeds.
  *
  * The pivot this covers: a Work is a creator-owned, first-class thing that carries its own
- * visibility, dates, delivery and gates, and a post merely LINKS it. The link is inert —
- * confers no access, no ownership — so most of what this file asserts is what linking
- * *doesn't* do.
+ * visibility, dates, delivery and gates, and a post merely EMBEDS it — a link in the body
+ * whose card resolves the Work on its own gates. The embed is inert — confers no access,
+ * no ownership — so most of what this file asserts is what embedding *doesn't* do.
  *
  * Works are game/text so nothing hits real media processing (no pg-boss).
  *
@@ -54,6 +54,9 @@ describe("Catalog CRUD and post links", () => {
 	let ownerCookie: string;
 	let strangerCookie: string;
 	let workId: number;
+	/** The Work's public address — the body link that embeds it. */
+	let workSlug: string;
+	let workPublicId: number;
 	let postSlug: string;
 
 	beforeAll(async () => {
@@ -95,6 +98,8 @@ describe("Catalog CRUD and post links", () => {
 		expect(create.status).toBe(201);
 		const { work } = await create.json();
 		workId = work.id;
+		workSlug = work.slug;
+		workPublicId = work.publicId;
 		expect(workId).toBeGreaterThan(0);
 		// Nothing is visible on upload. Release is a separate, deliberate act — the whole
 		// point of separating the Catalog from posting.
@@ -172,14 +177,13 @@ describe("Catalog CRUD and post links", () => {
 		expect(res.status).toBe(400);
 	});
 
-	it("creates a post linking the Work", async () => {
+	it("creates a post embedding the Work in its body", async () => {
 		const res = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
 			body: JSON.stringify({
 				title: `Announcing ${id}`,
-				bodyHtml: "<p>it's out</p>",
-				workIds: [workId],
+				bodyHtml: `<p>it's out: https://anthers.org/works/${workSlug}-${workPublicId}</p>`,
 				isPublished: true,
 			}),
 		});
@@ -192,20 +196,31 @@ describe("Catalog CRUD and post links", () => {
 		expect(post.access).toBeUndefined();
 	});
 
-	it("refuses to link another creator's Work (400)", async () => {
+	it("embeds another creator's Work — an embed is a citation, not a claim", async () => {
+		// The workIds field used to refuse this (a reference belonged to its creator); the
+		// body link has no such rule to break, the way a Bluesky post embeds a video nobody
+		// on Bluesky made. It still confers nothing: the Work resolves on its own gates.
 		const res = await req("/api/content/posts", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: strangerCookie },
-			body: JSON.stringify({ title: `Thief ${id}`, workIds: [workId] }),
+			body: JSON.stringify({
+				title: `Mentioning ${id}`,
+				body: `Look at this: https://anthers.org/works/${workSlug}-${workPublicId}`,
+				isPublished: true,
+			}),
 		});
-		expect(res.status).toBe(400);
+		expect(res.status).toBe(201);
+		const { post } = await res.json();
+		expect(post.linkedWorks.length).toBe(1);
+		expect(post.linkedWorks[0].work.id).toBe(workId);
 	});
 
-	it("replaces the link set wholesale on patch", async () => {
+	it("the embed set follows the body, and nothing else", async () => {
+		// Editing away the link removes the card; there is no link list to reconcile.
 		const res = await req(`/api/content/posts/${postSlug}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
-			body: JSON.stringify({ workIds: [] }),
+			body: JSON.stringify({ body: "gone the link" }),
 		});
 		expect(res.status).toBe(200);
 		expect((await res.json()).post.linkedWorks.length).toBe(0);
@@ -227,24 +242,6 @@ describe("Catalog CRUD and post links", () => {
 		const { post } = await res.json();
 		expect(post.isPublished).toBe(true);
 		expect(post.publishedAt).toBeTruthy();
-	});
-
-	it("refuses to delete a linked Work without force, and reports where it is linked", async () => {
-		const relink = await req(`/api/content/posts/${postSlug}`, {
-			method: "PATCH",
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: ownerCookie },
-			body: JSON.stringify({ workIds: [workId] }),
-		});
-		expect(relink.status).toBe(200);
-
-		const res = await req(`/api/content/works/${workId}`, {
-			method: "DELETE",
-			headers: { Origin: ORIGIN, Cookie: ownerCookie },
-		});
-		expect(res.status).toBe(409);
-		const body = await res.json();
-		expect(body.code).toBe("work_in_use");
-		expect(body.posts.length).toBe(1);
 	});
 
 	it("deletes a post without touching the Work it announced", async () => {
