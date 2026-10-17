@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The creator's **editing primitives** — the one set of parts that put a pencil beside
- * what a user reads, and the banner that says the page is being edited.
+ * what a user reads.
  *
  * ⭐ **The model is per-field save** (Parker, 2026-10-13): if you are the creator, every
  * editable field shows a little pencil; clicking it opens that field for edit, at which
@@ -22,10 +22,7 @@
  * the exit, not a background act.
  */
 
-import { usePayoutsReady } from "@anthers/web-shared/payouts";
-import { Link, useNavigate } from "@anthers/web-shared/router";
-import { studioUrl } from "@anthers/web-shared/studio";
-import { CheckIcon, EyeIcon, PencilSquareIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, PencilSquareIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { type ReactNode, useRef, useState } from "react";
 import { keepScroll } from "./scrollKeeper";
 
@@ -42,6 +39,14 @@ const PENCIL =
  * The field is generic over its value; the call site narrows the draft to its own shape
  * when it passes `renderEdit` and `save` — the primitive only owns the opening, the
  * closing and the waiting.
+ *
+ * ⭐ **The pencil rides the content, not the field's edge** (Parker, 2026-10-16): the
+ * read view and the pencil sit in one top-aligned flex row whose content hugs what it
+ * renders, so the pencil lands beside the thing it edits — a centered title's pencil
+ * beside the title, a description's beside its last full line — rather than at the far
+ * edge of a full-width edit area. `rowAlign="center"` centers the pair as a group, which
+ * a centered title's slot passes; everything else keeps the page's left column. The
+ * `-mt-1` lifts the pencil toward the first text line's ascent, the corner it used to sit on.
  */
 export function InlineField<V>({
 	label,
@@ -51,6 +56,7 @@ export function InlineField<V>({
 	save,
 	disabledReason,
 	className = "",
+	rowAlign = "start",
 }: {
 	/** Names the field for the pencil and the screen reader. */
 	label: string;
@@ -70,6 +76,8 @@ export function InlineField<V>({
 	/** Set when the field cannot open — said beside the read view, never as silence. */
 	disabledReason?: string;
 	className?: string;
+	/** Whether the read row centers its content-and-pencil pair (a centered title). */
+	rowAlign?: "start" | "center";
 }) {
 	const [mode, setMode] = useState<"read" | "edit" | "busy">("read");
 	const [draft, setDraft] = useState<V>(saved);
@@ -95,14 +103,14 @@ export function InlineField<V>({
 	return (
 		<div ref={rootRef} className={`group relative ${className}`}>
 			{mode === "read" ? (
-				<>
-					{renderRead()}
+				<div className={`flex items-start gap-1 ${rowAlign === "center" ? "justify-center" : ""}`}>
+					<div className="min-w-0">{renderRead()}</div>
 					{!disabledReason ? (
 						<button
 							type="button"
 							aria-label={`Edit ${label}`}
 							title={`Edit ${label}`}
-							className={mode === "read" ? `${PENCIL} absolute -top-1 right-0` : PENCIL}
+							className={`${PENCIL} -mt-1 shrink-0`}
 							onClick={() =>
 								// Opening for edit usually makes the page taller — and whatever it
 								// does to the height, the place stays (scroll-keeper's rule).
@@ -116,11 +124,11 @@ export function InlineField<V>({
 							<PencilSquareIcon className="size-4" />
 						</button>
 					) : (
-						<span className="text-xs text-base-content/40" title={disabledReason}>
+						<span className="shrink-0 text-xs text-base-content/40" title={disabledReason}>
 							{disabledReason}
 						</span>
 					)}
-				</>
+				</div>
 			) : (
 				<div className="space-y-2">
 					{renderEdit(draft, setDraft, () => {
@@ -167,51 +175,5 @@ export function InlineField<V>({
 				</div>
 			)}
 		</div>
-	);
-}
-
-/**
- * The banner a creator's own Work page wears while they can edit it — the explicit mode
- * marker the move onto the Work's page was made conditional on: a creator never wonders
- * which mode they are in. It carries the way back to the Studio's Works list and the way
- * into a user's preview, and says in one line what the page is.
- */
-export function EditingBanner({ title }: { title: string | null }) {
-	const payouts = usePayoutsReady();
-	const navigate = useNavigate();
-	return (
-		// `status`, not `alert`: a persistent mode indicator rather than an interruption.
-		<aside role="status" className="rounded-box border border-warning/40 bg-warning/10 px-4 py-2.5">
-			<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-				<span className="text-sm font-semibold">
-					Editing your Work — <span className="font-normal">{title ?? "this Work"}</span>
-				</span>
-				<span className="text-xs text-base-content/60">
-					Everything you see is what a user sees; the pencil opens the change.
-				</span>
-				<div className="ml-auto flex items-center gap-2">
-					<button
-						type="button"
-						className="btn btn-outline btn-xs gap-1.5"
-						onClick={() => {
-							const p = new URLSearchParams(window.location.search);
-							p.set("previewAs", "out");
-							navigate(`${window.location.pathname}?${p.toString()}`, { replace: true });
-						}}
-					>
-						<EyeIcon className="size-3.5" />
-						Preview as a user
-					</button>
-					<Link to={studioUrl("/works")} className="btn btn-ghost btn-xs">
-						Studio Works
-					</Link>
-				</div>
-			</div>
-			{payouts === false && (
-				<p className="mt-1 text-xs text-base-content/60">
-					Payout setup is pending — releasing waits on it, in Details.
-				</p>
-			)}
-		</aside>
 	);
 }

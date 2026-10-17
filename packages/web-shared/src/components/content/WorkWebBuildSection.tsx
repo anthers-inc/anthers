@@ -241,8 +241,10 @@ export default function WebBuildSection({
 	};
 
 	return (
+		// No heading of its own: the Manage tab's section names it ("Hosted Build")
+		// already, and a second heading over one section read twice (Parker's conformance
+		// pass, 2026-10-16).
 		<section className="flex flex-col gap-3">
-			<h2 className="font-semibold">Browser Build</h2>
 			<p className="text-sm text-base-content/60">
 				Upload a build that runs in the browser (an HTML entry, its scripts, assets) and Anthers
 				hosts it. Delivery to players arrives with the hosted-build launch; today this puts the

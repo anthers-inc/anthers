@@ -224,6 +224,28 @@ describe("creator preview", () => {
 		expect(work.sourceKey).toBeFalsy();
 	});
 
+	// ── The View As row's two user shapes (Parker, 2026-10-16) ──────────────────
+	// The row names no amounts — Locked and Unlocked are the two consequences a creator
+	// wants to see — so the tokens, and not the retired dial's numbers, are what the
+	// control sends. Each resolves through the same context builder the amounts do.
+
+	it("the View As tokens resolve as a locked or an unlocked user would", async () => {
+		// Locked: given nothing, bought nothing — the gate and the price both stand.
+		const locked = await view(gatedId, creatorCookie, "?previewAs=locked");
+		expect(locked.access?.canAccess).toBe(false);
+		const notBought = await view(saleId, creatorCookie, "?previewAs=locked");
+		expect(notBought.access?.canAccess).toBe(false);
+		expect(notBought.access?.requiresPurchase).toBe(true);
+
+		// Unlocked: above any real gate AND bought — even the sale Work is open.
+		const unlockedGated = await view(gatedId, creatorCookie, "?previewAs=unlocked");
+		expect(unlockedGated.access?.canAccess).toBe(true);
+		const unlockedSale = await view(saleId, creatorCookie, "?previewAs=unlocked");
+		expect(unlockedSale.access?.canAccess).toBe(true);
+		// And the payload rides an unlocked preview, as it rides a bought one.
+		expect(unlockedGated.sourceKey).toBeTruthy();
+	});
+
 	// ── The catalog, which is where a creator actually looks ───────────────────
 
 	it("applies to the creator's whole Catalog at once", async () => {

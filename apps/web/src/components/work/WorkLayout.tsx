@@ -17,7 +17,6 @@ import { workChapters } from "@anthers/shared/chapters";
 import { isListened, isPaged } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import HostedEmbed from "@anthers/web-shared/content/HostedEmbed";
-import RecordLinkLine from "@anthers/web-shared/content/RecordLink";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
@@ -98,10 +97,17 @@ export type WorkDetail = Work & {
 /** The title's typography, so a control standing in for the title reads as the title. */
 export const WORK_TITLE_CLASS = "text-3xl font-bold";
 
-/** The public blurb's typography, likewise. */
-export const WORK_DESCRIPTION_CLASS = "prose max-w-none text-base-content/80";
+/**
+ * The public blurb's typography, likewise — **not the `prose` class** (Parker,
+ * 2026-10-16): the description is one plain paragraph the page renders directly
+ * (`TimestampedText`), and `prose`'s paragraph margins sat between the tab's heading
+ * and the text — unlayered CSS, which no `[&_p]:my-0` utility could beat.
+ */
+export const WORK_DESCRIPTION_CLASS = "max-w-none text-base-content/80";
 
-/** The Details tab's section labels — small, named, uppercased (Parker, 2026-10-13). */
+/** The section labels of the Work's tab panels — Details, Credits, Reviews, Manage, all
+ *  of them: small, named, uppercased (Parker, 2026-10-13; conformed across every tab as
+ *  the page's one heading style, 2026-10-16). */
 export const WORK_DETAILS_HEADING_CLASS =
 	"text-xs font-semibold uppercase tracking-wider text-base-content/50";
 
@@ -394,17 +400,6 @@ export function WorkDates({ work }: { work: WorkDetail }) {
 }
 
 /**
- * The released Work's listing on the network, as its record link — the same line a
- * creator's Edit page shows, and since the widening (2026-10-10) it is public copy too:
- * the record is public no matter who reads, so every reader who can see the Work sees
- * this. The wording and the link live in {@link RecordLinkLine}, the one wording every
- * page that carries a record link uses.
- */
-export function WorkRecordLink({ work }: { work: WorkDetail }) {
-	return <RecordLinkLine recordUrl={work.recordUrl} />;
-}
-
-/**
  * The rating and its content notes, for a Mature or Adult Work. Nothing for a General Work,
  * which is nearly all of them. An Adult Work reaches only users who opted in and verified, and
  * it is labeled for them all the same, because its notes are as much a warning there as anywhere.
@@ -480,9 +475,20 @@ export interface WorkBylineProps {
  * position a player owns: what a Work is and who made it now stands *between* the thing
  * itself and its record, and Share and Save go with it, to the right, above the side
  * tabs. The rating is deliberately absent — it is the Rating tab's fact.
+ *
+ * Under the strip, the Anthers release date rides again (Parker, 2026-10-16): a second
+ * copy of the line the Details tab carries, so the facts around the title answer where
+ * a viewer looks first. A draft, with no release date, renders nothing.
  */
 export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
+	const releasedDate = work.releasedAt
+		? new Date(work.releasedAt).toLocaleDateString("en-US", {
+				month: "long",
+				day: "numeric",
+				year: "numeric",
+			})
+		: null;
 	const creatorEl = work.creator && (
 		<Link to={profileUrl(work.creator.handle)} className="flex items-center gap-2 hover:underline">
 			{work.creator.avatar ? (
@@ -526,6 +532,9 @@ export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 					{actions}
 				</div>
 			</div>
+			{releasedDate && (
+				<p className="text-center text-sm text-base-content/60">Released {releasedDate}</p>
+			)}
 		</header>
 	);
 }
@@ -875,26 +884,114 @@ export function WorkDeliverable({
  * The public blurb — visible whether or not the user can open the Work, because a locked
  * Work still has to say what it is. The gated prose renders inside the deliverable. For a piece
  * of writing it is the standfirst, which the page sets under the headline rather than here.
+ *
+ * A description past a reasonable length truncates behind a Read More toggle
+ * (Parker, 2026-10-16): the cut sits on a word boundary inside {@link DESCRIPTION_THRESHOLD},
+ * the collapsed tail carries an ellipsis, and the same toggle collapses again. Short
+ * descriptions — nearly all of them — render exactly as before.
  */
+export const DESCRIPTION_THRESHOLD = 480;
+
+/** Cut a description at its last word boundary inside the threshold, ellipsis on. */
+function clampedDescription(text: string, threshold: number): string {
+	return `${text.slice(0, text.lastIndexOf(" ", threshold)).trimEnd()}…`;
+}
+
+/**
+ * The description body's read-more toggle, shared by both renderers of a description —
+ * the user's (`WorkDescription`, in its own typography) and the creator's inline read
+ * (which renders the plain paragraph the editor typed into). The collapsed state is the
+ * only state the toggle changes; the button carries its own margin, inside the prose
+ * flow and out of it.
+ */
+export function DescriptionToggle({
+	truncated,
+	expanded,
+	onToggle,
+}: {
+	truncated: boolean;
+	expanded: boolean;
+	onToggle: () => void;
+}) {
+	if (!truncated) return null;
+	return (
+		<button
+			type="button"
+			aria-expanded={expanded}
+			className="mt-2 text-sm text-base-content/50 hover:text-base-content/80 underline decoration-base-content/20 underline-offset-2"
+			onClick={onToggle}
+		>
+			{expanded ? "Read Less" : "Read More…"}
+		</button>
+	);
+}
+
 export function WorkDescription({ work }: { work: WorkDetail }) {
 	const seek = useSeekPlayer();
+	const truncated = (work.description?.length ?? 0) > DESCRIPTION_THRESHOLD;
+	const [expanded, setExpanded] = useState(false);
 	if (!work.description) return null;
+	const shown =
+		truncated && !expanded
+			? clampedDescription(work.description, DESCRIPTION_THRESHOLD)
+			: work.description;
+	const toggle = (
+		<DescriptionToggle
+			truncated={truncated}
+			expanded={expanded}
+			onToggle={() => setExpanded((e) => !e)}
+		/>
+	);
 	if (isWriting(work.type)) {
 		return (
-			<p className={WRITING_STANDFIRST_CLASS} style={WRITING_BODY_STYLE}>
-				{work.description}
-			</p>
+			<div>
+				<p className={WRITING_STANDFIRST_CLASS} style={WRITING_BODY_STYLE}>
+					{shown}
+				</p>
+				{toggle}
+			</div>
 		);
 	}
 	return (
 		<section className={WORK_DESCRIPTION_CLASS}>
 			<TimestampedText
-				text={work.description}
+				text={shown}
 				// Only a Work a player navigates makes its timestamps links — and only
 				// when a player is actually mounted; a locked video's description has
 				// no player to seek, so its timestamps stay text until it is opened.
 				onSeek={work.type === "video" || isListened(work.type) ? seek : null}
 				className="whitespace-pre-line"
+			/>
+			{toggle}
+		</section>
+	);
+}
+
+/**
+ * The description's body for the editor's inline read — the same truncation
+ * `WorkDescription` carries, in the plain paragraph the edit textarea wrote: the
+ * creator's copy is the user's Details tab rendering, and no read of the page should
+ * promise a length the user's page does not keep.
+ */
+export function DescriptionBody({ description }: { description: string | null }) {
+	const truncated = (description?.length ?? 0) > DESCRIPTION_THRESHOLD;
+	const [expanded, setExpanded] = useState(false);
+	if (!description) {
+		return (
+			<section className={WORK_DESCRIPTION_CLASS}>
+				<p className="text-sm text-base-content/40">Nothing written yet.</p>
+			</section>
+		);
+	}
+	const shown =
+		truncated && !expanded ? clampedDescription(description, DESCRIPTION_THRESHOLD) : description;
+	return (
+		<section className={WORK_DESCRIPTION_CLASS}>
+			<p className="whitespace-pre-line">{shown}</p>
+			<DescriptionToggle
+				truncated={truncated}
+				expanded={expanded}
+				onToggle={() => setExpanded((e) => !e)}
 			/>
 		</section>
 	);
@@ -1100,7 +1197,7 @@ export function WorkCredits({
 	if (credits.length === 0) return null;
 	return (
 		<section className="flex flex-col gap-2">
-			<h2 className="text-sm font-semibold">Credits</h2>
+			<h3 className={WORK_DETAILS_HEADING_CLASS}>Credits</h3>
 			<ul className="flex flex-col gap-1.5 text-sm">
 				{credits.map((credit, i) => {
 					const badges = creditBadges(credit.types);
