@@ -48,7 +48,6 @@ import {
 	follows,
 	poolDistributions,
 	posts,
-	postWorkRefs,
 	purchases,
 	stripeAccounts,
 	userBadges,
@@ -440,7 +439,7 @@ async function createPost(creatorId: number, spec: GauntletPost): Promise<number
 			maturitySource: "creator",
 			releasedAt: new Date(),
 		})
-		.returning({ id: works.id });
+		.returning({ id: works.id, publicId: works.publicId, slug: works.slug });
 
 	const [inserted] = await db
 		.insert(posts)
@@ -449,13 +448,13 @@ async function createPost(creatorId: number, spec: GauntletPost): Promise<number
 			publicId: spec.publicId + 1_000,
 			slug: `${spec.slug}-post`,
 			title: spec.title,
-			// The stored form is markdown; the announcement's body is its text as written.
-			body: spec.body,
+			// The stored form is markdown; the announcement's body is its text as written,
+			// ending with the Work's link, which is what the page renders the embed from.
+			body: `${spec.body}\n\nhttps://anthers.org/works/${work.slug}-${work.publicId}`,
 			isPublished: true,
 			publishedAt: new Date(),
 		})
 		.returning({ id: posts.id });
-	await db.insert(postWorkRefs).values({ postId: inserted.id, workId: work.id, position: 0 });
 
 	if (spec.downloadEnabled) {
 		// The checkout sums the Work's asset bytes for the delivery fee, and the download

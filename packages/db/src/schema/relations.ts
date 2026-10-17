@@ -9,7 +9,6 @@ import {
 	creditRejections,
 	inlineImages,
 	posts,
-	postWorkRefs,
 	projectItems,
 	projectPosts,
 	projects,
@@ -117,11 +116,10 @@ export const userBlocksRelations = relations(userBlocks, ({ one }) => ({
 
 // ─── Content ─────────────────────────────────────────────────────────────────
 
-// Posts — announcements. They reference Works; they never contain them.
+// Posts — announcements. They embed Works by carrying their links in the body.
 export const postsRelations = relations(posts, ({ one, many }) => ({
 	creator: one(users, { fields: [posts.creatorId], references: [users.id] }),
 	projectPosts: many(projectPosts), // Projects this post belongs to
-	workRefs: many(postWorkRefs),
 	attentionEvents: many(attentionEvents),
 }));
 
@@ -152,18 +150,12 @@ export const worksRelations = relations(works, ({ one, many }) => ({
 	webBuilds: many(webBuilds),
 	saves: many(workSaves),
 	transcodingJobs: many(transcodingJobs),
-	postRefs: many(postWorkRefs), // where this Work has been posted
 	projectItems: many(projectItems), // Projects this Work belongs to
 	purchases: many(purchases),
 	bookmarks: many(bookmarks),
 	reviews: many(reviews),
 	creditAcceptances: many(creditAcceptances),
 	creditRejections: many(creditRejections),
-}));
-
-export const postWorkRefsRelations = relations(postWorkRefs, ({ one }) => ({
-	post: one(posts, { fields: [postWorkRefs.postId], references: [posts.id] }),
-	work: one(works, { fields: [postWorkRefs.workId], references: [works.id] }),
 }));
 
 export const assetsRelations = relations(assets, ({ one }) => ({

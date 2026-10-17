@@ -37,6 +37,7 @@ const WorksPage = lazy(() => import("@anthers/web-shared/WorksPage"));
 const AnalyticsDashboardPage = lazy(() => import("@anthers/web-shared/AnalyticsDashboardPage"));
 const PostFormPage = lazy(() => import("@anthers/web-shared/PostFormPage"));
 const PostsPage = lazy(() => import("@anthers/web-shared/PostsPage"));
+const PostEditPage = lazy(() => import("./studio/PostEditPage"));
 const ProjectFormPage = lazy(() => import("@anthers/web-shared/ProjectFormPage"));
 const WorkUploadPage = lazy(() => import("@anthers/web-shared/WorkUploadPage"));
 const WorkEditPage = lazy(() => import("./studio/WorkEditPage"));
@@ -437,7 +438,9 @@ export default function App() {
 						<Route path="analytics" element={<AnalyticsDashboardPage />} />
 						<Route path="posts" element={<PostsPage />} />
 						<Route path="posts/new" element={<PostFormPage />} />
-						<Route path="posts/:slug/edit" element={<PostFormPage />} />
+						{/* A redirect: the post's own page is its editing surface now (see
+						studio/PostEditPage.tsx); the address stays for bookmarks and rows. */}
+						<Route path="posts/:slug/edit" element={<PostEditPage />} />
 						<Route path="projects/new" element={<ProjectFormPage />} />
 						<Route path="projects/:slug/edit" element={<ProjectFormPage />} />
 						{/* Keyed on the Work's durable `publicId`, matching how a Work is addressed

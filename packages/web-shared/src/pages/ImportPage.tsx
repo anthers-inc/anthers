@@ -9,9 +9,11 @@ import {
 import { useState } from "react";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import { useAuth } from "../lib/auth";
+import { creatorProjectUrl } from "../lib/profile";
 import { Link } from "../lib/router";
 import { apiFetch, client } from "../lib/rpc";
-import { studioEditProjectUrl, studioUrl } from "../lib/studio";
+import { studioUrl } from "../lib/studio";
 
 interface ItchioGame {
 	url: string;
@@ -30,6 +32,7 @@ interface ImportResult {
 }
 
 export default function ImportPage() {
+	const { user } = useAuth();
 	const [username, setUsername] = useState("");
 	const [games, setGames] = useState<ItchioGame[]>([]);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -180,7 +183,12 @@ export default function ImportPage() {
 									{r.error && <p className="text-xs text-error">{r.error}</p>}
 								</div>
 								{r.status === "imported" && r.projectSlug && (
-									<Link to={studioEditProjectUrl(r.projectSlug)} className="btn btn-sm btn-outline">
+									// The draft's page IS its editor now; the owner's handle is the
+									// path's first half, and the import acts for the signed-in creator.
+									<Link
+										to={creatorProjectUrl(user?.handle ?? "me", r.projectSlug)}
+										className="btn btn-sm btn-outline"
+									>
 										Edit Draft
 									</Link>
 								)}
