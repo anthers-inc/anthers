@@ -12,6 +12,15 @@
  * kinds, settled by the View As row itself before each preview read (a snapshot taken
  * earlier read a mid-transition render and called the states wrong).
  *
+ * The locked-preview walk (same day, its own task) pins the gate states over the same
+ * fileless drafts: the verdicts route them, so a locked user's preview of a gated
+ * draft renders the unlock card on its cover, a signed-out preview renders the same
+ * treatment — and the one state that could render as absence is refused: a signed-out
+ * read of a FREE draft has no thumbnail and answers `presentsAsLocked` false, so the
+ * video's overlay card rode `absolute` inside a box nobody sized and was clipped
+ * invisible by `overflow-hidden`. The gradient fill `LockedCover` itself falls back to
+ * is the cover, unblurred and un-padlocked, exactly as a free work's design says.
+ *
  * Runs in the `authed` project on `media_fixture`, which nothing else resets — see
  * `signInAsMediaFixture` in `fixtures.ts`.
  */
@@ -28,8 +37,12 @@ interface OwnedWork {
 
 let session = "";
 
-/** Create an unreleased Work with no file, the way `/studio/works/new` "skip for now" does. */
-async function filelessWork(type: string, title: string): Promise<string> {
+/** Create an unreleased Work with no file, returning both ids — the public one the page
+ *  addresses, and the row's own (the access-table PATCH below is keyed on that one). */
+async function filelessWorkIds(
+	type: string,
+	title: string,
+): Promise<{ id: number; publicId: string }> {
 	const res = await fetch(`${API_URL}/api/content/works`, {
 		method: "POST",
 		headers: {
@@ -39,8 +52,13 @@ async function filelessWork(type: string, title: string): Promise<string> {
 		},
 		body: JSON.stringify({ type, title }),
 	});
-	const { work } = (await res.json()) as { work: { publicId: string } };
-	return String(work.publicId);
+	const { work } = (await res.json()) as { work: { id: number; publicId: string } };
+	return { id: work.id, publicId: String(work.publicId) };
+}
+
+/** Create an unreleased Work with no file, the way `/studio/works/new` "skip for now" does. */
+async function filelessWork(type: string, title: string): Promise<string> {
+	return (await filelessWorkIds(type, title)).publicId;
 }
 
 test.describe.configure({ mode: "serial" });
@@ -120,6 +138,78 @@ test("a fileless draft's preview draws the same silhouette instead of nothing", 
 				path: `../../test-artifacts/${kind}-preview-unlocked.png`,
 				fullPage: true,
 			});
+		}
+	}
+});
+
+test("a fileless draft's locked and signed-out previews end with a gate or a silhouette, never an absence", async ({
+	page,
+	context,
+}) => {
+	session = await signInAsMediaFixture(context);
+	const emptyBox = page.getByRole("status").filter({ hasText: /starts here|hangs here/i });
+
+	/** Wait out a mode change by the row's own pressed state, then the content's arrival. */
+	const press = async (mode: string) => {
+		await page.getByRole("button", { name: mode }).click();
+		await expect(page.getByRole("button", { name: mode })).toHaveAttribute("aria-pressed", "true", {
+			timeout: 15_000,
+		});
+	};
+
+	for (const kind of ["video", "audio"] as const) {
+		const { id, publicId } = await filelessWorkIds(kind, `${STEM} ${kind} gates`);
+		await page.goto(`/works/${publicId}`);
+		await expect(page.locator("h1")).toBeVisible({ timeout: 15_000 });
+
+		// The draft's default table is "free but fully locked" (the schema's default
+		// row, `allow: false`), so a locked user's verdict is `gated`: the unlock card
+		// renders on its cover — the gate treatment, fileless or not.
+		await press("User (Locked)");
+		await expect(page.getByRole("heading", { name: "Unlock this post" })).toBeVisible();
+		await press("Signed-Out");
+		await expect(page.getByRole("heading", { name: "Unlock this post" })).toBeVisible();
+
+		// Un-gate the draft (Public Access: the baseline row, allowed, $0). A locked
+		// user of a FREE work HAS access — a preview must not present free work as
+		// gated (`presentsAsLocked`'s rule) — so this mode ends in the silhouette.
+		await fetch(`${API_URL}/api/content/works/${id}`, {
+			method: "PATCH",
+			headers: {
+				"Content-Type": "application/json",
+				Cookie: `session=${session}`,
+				Origin: WEB_ORIGIN,
+			},
+			body: JSON.stringify({ access: [{ threshold: 0, allow: true, price: "0" }] }),
+		});
+		await press("User (Locked)");
+		await expect(emptyBox).toBeVisible();
+
+		// Signed-out, the deliverable is refused on the account alone, and the
+		// account card rides a cover box that must exist: with no thumbnail and no
+		// fill, the video's overlay stood `absolute` inside a zero-height frame and
+		// `overflow-hidden` clipped it invisible — the one absence this task found.
+		// ⚠️ Asserted on the section's real height rather than the card's visibility,
+		// which Playwright does not catch: an `overflow-hidden` clipped element still
+		// carries a non-empty bounding box, so a green `toBeVisible` proves nothing
+		// about a box that renders a 26px sliver (measured, pre-fix).
+		await press("Signed-Out");
+		await expect(page.getByRole("heading", { name: "Free to everyone on Anthers" })).toBeVisible();
+		await expect
+			.poll(async () => (await page.locator("main section").first().boundingBox())?.height ?? 0, {
+				timeout: 15_000,
+			})
+			.toBeGreaterThan(100);
+		// The cover column is filled even where there is no art to show — the gradient
+		// is the same fill `LockedCover` falls back to (absent in this state's pre-fix
+		// rendering for BOTH kinds: the video's slot was the collapsed sliver above,
+		// and the two-up's cover column simply dropped out).
+		await expect(page.locator("main section [class*='from-base-300']").first()).toBeAttached();
+
+		if (ARIA_DEBUG) {
+			const snap = await page.locator("main").ariaSnapshot();
+			await writeFile(`../../test-artifacts/${kind}-gates.aria.txt`, snap);
+			await page.screenshot({ path: `../../test-artifacts/${kind}-gates.png`, fullPage: true });
 		}
 	}
 });
