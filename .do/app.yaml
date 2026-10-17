@@ -407,7 +407,11 @@ services:
       deploy_on_push: false
     run_command: bun run apps/api/src/server.ts
     http_port: 8000
-    instance_size_slug: basic-xxs
+    # 1 dedicated vCPU / 1GB — the $34 tier. The frame-thumbnail extraction decodes on
+    # this component, and a shared instance throttles it (16s measured on a heavy source,
+    # 2026-10-16); a dedicated core is the steady, 2-4x step. The migrate PRE_DEPLOY job
+    # stays on basic-xxs — it runs a migration and exits.
+    instance_size_slug: apps-d-1vcpu-1gb
     instance_count: 1
     health_check:
       http_path: /health
