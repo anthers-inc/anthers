@@ -28,6 +28,9 @@ export default function ProjectPage() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
+	/** Stable string, so the effect re-runs on a change of the preview's value not identity. */
+	const previewKey = JSON.stringify(preview);
+
 	useEffect(() => {
 		if (!slug) return;
 		setLoading(true);
@@ -43,7 +46,7 @@ export default function ProjectPage() {
 			})
 			.catch(() => setError("Project not found."))
 			.finally(() => setLoading(false));
-	}, [slug]);
+	}, [slug, previewKey]);
 
 	// Attention tracking — a Project view is a page_view for the creator.
 	// A Project is a shelf holding no work of its own, so browsing one records the visit
