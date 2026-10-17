@@ -116,8 +116,10 @@ test("a Work rated before the matrix is released only once every row is answered
 	const matrix = page.getByRole("tabpanel", { name: "Rating" }).locator("table");
 	await matrix.getByRole("button", { name: "None", exact: true }).click();
 	await page.getByRole("button", { name: "Save Rating" }).click();
+	// ⭐ The flip back finds the release edit still open (TabPanels keeps every panel
+	//    mounted), answering the saved rows: the checkbox the first opening showed
+	//    disabled is enabled again by the answer the save carried.
 	await page.getByRole("tab", { name: "Details" }).click();
-	await page.getByRole("button", { name: "Edit Release" }).click();
 	await expect(released).toBeEnabled({ timeout: 15_000 });
 	await released.check();
 	await page.getByRole("button", { name: "Save Release" }).click();

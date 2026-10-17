@@ -11,14 +11,18 @@
  *
  * 🚨 Same tabs for owner and user, like the Info tabs: the shell does not know who is
  * looking; the contents do.
+ *
+ * ⭐ **A switch changes nothing about the page's height** (Parker, 2026-10-17): the
+ * panels ride `TabPanels`, which holds the group at its tallest panel's height, so
+ * the scroll keeper has no part in a switch here.
  */
 
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { creatorProjectUrl, profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { MegaphoneIcon } from "@heroicons/react/24/outline";
-import { type ReactNode, useRef, useState } from "react";
-import { keepScroll } from "./scrollKeeper";
+import { type ReactNode, useState } from "react";
+import TabPanels from "./TabPanels";
 import { WORK_DETAILS_HEADING_CLASS, type WorkDetail } from "./WorkLayout";
 
 export interface SideTab {
@@ -30,14 +34,12 @@ export interface SideTab {
 export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: WorkDetail }) {
 	const [active, setActive] = useState(tabs[0]?.key ?? "");
 	const current = tabs.find((t) => t.key === active) ?? tabs[0];
-	/** The group's root, the anchor `keepScroll` measures the page's scroller from. */
-	const rootRef = useRef<HTMLElement | null>(null);
 	if (!current) return null;
 
 	// The gap under the tab bar is the Info tabs' `gap-6` (Parker, 2026-10-16): the
 	// panel's first heading kept sitting too close to the bar.
 	return (
-		<aside ref={rootRef} aria-label="Reviews and showings" className="flex flex-col gap-6">
+		<aside aria-label="Reviews and showings" className="flex flex-col gap-6">
 			<div
 				role="tablist"
 				aria-label="Reviews and showings"
@@ -52,19 +54,13 @@ export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: 
 						aria-controls={`work-side-${tab.key}`}
 						id={`work-side-button-${tab.key}`}
 						className={`btn btn-xs sm:btn-sm join-item flex-1 ${tab.key === current.key ? "btn-active" : ""}`}
-						onClick={() => keepScroll(rootRef.current, () => setActive(tab.key))}
+						onClick={() => setActive(tab.key)}
 					>
 						{tab.label}
 					</button>
 				))}
 			</div>
-			<div
-				role="tabpanel"
-				id={`work-side-${current.key}`}
-				aria-labelledby={`work-side-button-${current.key}`}
-			>
-				{current.content}
-			</div>
+			<TabPanels tabs={tabs} activeKey={current.key} idPrefix="work-side" />
 			{work.postedIn && work.postedIn.length > 0 && <PostedAbout work={work} />}
 		</aside>
 	);
