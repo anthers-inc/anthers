@@ -143,9 +143,17 @@ export function createPlayPageRoutes(): Hono {
 		const token = mintPlayToken(work.id, PLAY_TOKEN_TTL_SECONDS);
 
 		// The per-Work host is https in every environment that names one; an own-host
-		// dev delivery takes the request's scheme, as the play route does.
+		// dev delivery takes the request's scheme, as the play route does. Behind the
+		// dev proxy the loopback request is plain http while the origin the browser
+		// reached is https — the proxy's X-Forwarded-Proto is the scheme the browser
+		// actually sees, and it is what the frame's messages carry as their origin:
+		// a minted src in the other scheme upgrades in Chrome (mixed content) to a
+		// frame whose `event.origin` then fails every sender check, silently killing
+		// the save relay (found live, 2026-10-17).
 		const suffixSet = Boolean(process.env.BUILD_ORIGIN_SUFFIX?.trim());
-		const scheme = suffixSet ? "https" : new URL(c.req.url).protocol.replace(":", "");
+		const scheme = suffixSet
+			? "https"
+			: (c.req.header("x-forwarded-proto") ?? new URL(c.req.url).protocol.replace(":", ""));
 		const src = `${scheme}://${host}/build/${token}/${build.entryPath}`;
 
 		const escapedTitle =

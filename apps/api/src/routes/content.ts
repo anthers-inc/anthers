@@ -4055,12 +4055,19 @@ const contentRoutes = new Hono()
 		// The token is the path PREFIX, so the build's own relative references — the wasm,
 		// the pck, the worklets — resolve underneath it with no HTML rewriting.
 		//
-		// Scheme: a per-Work host (suffix set) is a real or portless-CA'd https origin in
-		// every environment that names one — https always. A checkout serving on its own
-		// host takes the request's own scheme, because dev's http localhost would otherwise
-		// mint a mixed-content iframe that never loads.
+		// Scheme: a per-Work host (suffix set) is a real or portless-CA'd https origin
+		// in every environment that names one — https always. A checkout serving on its
+		// own host takes the request's own scheme, because dev's http localhost would
+		// otherwise mint a mixed-content iframe that never loads — but behind the dev
+		// proxy the loopback request is plain http while the origin the browser reached
+		// is https, and the proxy's X-Forwarded-Proto says so (a minted src in the other
+		// scheme upgrades in Chrome to a frame whose `event.origin` then fails the
+		// parent's every sender check, silently killing the save relay; found live,
+		// 2026-10-17).
 		const suffixSet = Boolean(process.env.BUILD_ORIGIN_SUFFIX?.trim());
-		const scheme = suffixSet ? "https" : new URL(c.req.url).protocol.replace(":", "");
+		const scheme = suffixSet
+			? "https"
+			: (c.req.header("x-forwarded-proto") ?? new URL(c.req.url).protocol.replace(":", ""));
 		const src = `${scheme}://${host}/build/${token}/${build.entryPath}`;
 		// no-store: the answer carries an entitlement and is access-dependent — the same
 		// reasoning the audio route's 302 carries.
