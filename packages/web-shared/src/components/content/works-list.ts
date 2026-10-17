@@ -8,7 +8,7 @@
  */
 import type { Work } from "../../lib/types";
 
-/** The columns the table can sort by. `date` is the upload date the creator-facing page shows. */
+/** The columns the table can sort by. `date` is the release date the column shows. */
 export type WorksSortKey = "title" | "date" | "views";
 
 /** `date` starts descending, because a creator's own listing reads newest first. */
@@ -57,13 +57,16 @@ function compareWorks(a: Work, b: Work, key: WorksSortKey): number {
 				sensitivity: "base",
 			});
 		case "date": {
-			// A Work the payload never dated is the oldest thing present, not an NaN that
-			// would wedge the comparator and strand the sort's contract mid-table.
-			const at = (s: string | undefined) => {
-				const t = Date.parse(s ?? "");
+			// The column shows the release date — when it went out, or the scheduled
+			// instant it goes out at — so the sort orders by what the column reads. A
+			// Work never released and never scheduled has no release date at all: it
+			// sorts as the oldest thing present, not an NaN that would wedge the
+			// comparator and strand the sort's contract mid-table.
+			const at = (work: Work) => {
+				const t = Date.parse(work.releasedAt ?? work.scheduledReleaseAt ?? "");
 				return Number.isNaN(t) ? 0 : t;
 			};
-			return at(a.createdAt) - at(b.createdAt);
+			return at(a) - at(b);
 		}
 		case "views":
 			return (a.viewCount ?? 0) - (b.viewCount ?? 0);
