@@ -250,143 +250,168 @@ export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 	}
 
 	return (
+		/*
+		 * The store panel, composed (Parker, 2026-10-17): the product's picture on the
+		 * left, the pickers and the price box on the right, and the buy door at the bottom
+		 * spanning both — the frame gave this card the page's whole media area, and a
+		 * left-aligned stack inside it wasted half. The quote box is visible the whole
+		 * time, so picking a variant never moves the layout: until a size is picked its
+		 * figures read as dashes, and the box's shape does not change on a selection.
+		 */
 		<div className="card bg-base-200 border border-base-300 h-full">
-			<div className="card-body p-5 gap-4 flex flex-col items-start text-start">
-				{/*
-				    The color's mockup — Printful's own product image for the picked color,
-				    from the store's binding (the setup script stamps it; the dashboard is
-				    its source). One image, not a gallery: the shirt the buyer is pointing
-				    at, and it changes when they change color. Shown before the price so
-				    the card opens on the thing, as a shop does; a color bound without a
-				    mockup shows none rather than some other color's shirt.
-				*/}
-				{mockupUrl && (
-					<img
-						src={mockupUrl}
-						alt={color ? `${title} in ${color}` : title}
-						// Capped, not full-bleed (Parker, 2026-10-10): the picture is the
-						// card's opening line, not its whole body.
-						className="w-full max-w-sm rounded-xl border border-base-300 bg-base-100"
-						loading="lazy"
-					/>
-				)}
-				<div>
-					<h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-2">
-						Variants
-					</h2>
-					{/* The pickers ARE the price display on a merch Work — each variant's
-					    price is Printful's own retail price for it (stamped at setup),
-					    discounted when this buyer holds a Badge, so the picker and the
-					    price are one control. Color first, then size. */}
-					{colors ? (
-						colors.length > 0 ? (
-							/* Rows are labeled and spaced (Parker, 2026-10-10): "Colors:" and
-							    "Sizes:" open each row at a fixed width so the left-most
-							    buttons align, and every size the Work carries shows from the
-							    start — one the picked color doesn't make greys out rather
-							    than vanishing. */
-							<div className="space-y-3 w-full">
-								<div className="flex items-center gap-3">
-									<span className="w-16 shrink-0 text-sm text-base-content/70">Colors:</span>
-									<fieldset className="flex flex-wrap gap-2 border-0 p-0 m-0" aria-label="Color">
-										<legend className="sr-only">Color</legend>
-										{colors.map((g) => (
-											<button
-												key={g.color}
-												type="button"
-												aria-pressed={color === g.color}
-												className={`btn btn-sm ${color === g.color ? "btn-primary" : "btn-outline"}`}
-												onClick={() => {
-													// A picked size survives a color change when the new
-													// color makes it — the shirt the user means doesn't
-													// reset because they adjusted the shade first.
-													setColor(g.color);
-													setSize((s) =>
-														s != null && g.sizes.some((v) => v.size === s) ? s : null,
-													);
-													setSession(null);
-												}}
+			<div className="card-body flex flex-col gap-4 p-5 text-start">
+				<div className="grid flex-1 items-stretch gap-4 rounded-lg sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+					{/*
+					    The color's mockup — Printful's own product image for the picked color,
+					    from the store's binding (the setup script stamps it; the dashboard is
+					    its source). One image, not a gallery: the shirt the buyer is pointing
+					    at, and it changes when they change color. It owns the left column and
+					    fills it, the column the panel's height gives it. A color bound without
+					    a mockup binds the column as a mount anyway, rather than vanishing and
+					    moving the columns beneath the picker's feet.
+					*/}
+					<div className="flex min-h-0 items-center justify-center overflow-hidden rounded-xl border border-base-300 bg-base-100">
+						{mockupUrl ? (
+							<img
+								src={mockupUrl}
+								alt={color ? `${title} in ${color}` : title}
+								className="max-h-full max-w-full object-contain"
+								loading="lazy"
+							/>
+						) : null}
+					</div>
+
+					{/*
+					    The right column: the pickers ARE the price display on a merch Work —
+					    each variant's price is Printful's own retail price for it (stamped at
+					    setup), discounted when this buyer holds a Badge, so the picker and the
+					    price are one control. Color first, then size.
+					*/}
+					<div className="flex min-w-0 flex-col gap-4">
+						<div>
+							<h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-base-content/50">
+								Variants
+							</h2>
+							{colors ? (
+								colors.length > 0 ? (
+									/* Rows are labeled and spaced (Parker, 2026-10-10): "Colors:" and
+									    "Sizes:" open each row at a fixed width so the left-most
+									    buttons align, and every size the Work carries shows from the
+									    start — one the picked color doesn't make greys out rather
+									    than vanishing. */
+									<div className="w-full space-y-3">
+										<div className="flex items-center gap-3">
+											<span className="w-16 shrink-0 text-sm text-base-content/70">Colors:</span>
+											<fieldset
+												className="m-0 flex flex-wrap gap-2 border-0 p-0"
+												aria-label="Color"
 											>
-												<span>{g.color}</span>
-											</button>
-										))}
-									</fieldset>
+												<legend className="sr-only">Color</legend>
+												{colors.map((g) => (
+													<button
+														key={g.color}
+														type="button"
+														aria-pressed={color === g.color}
+														className={`btn btn-sm ${color === g.color ? "btn-primary" : "btn-outline"}`}
+														onClick={() => {
+															// A picked size survives a color change when the new
+															// color makes it — the shirt the user means doesn't
+															// reset because they adjusted the shade first.
+															setColor(g.color);
+															setSize((s) =>
+																s != null && g.sizes.some((v) => v.size === s) ? s : null,
+															);
+															setSession(null);
+														}}
+													>
+														<span>{g.color}</span>
+													</button>
+												))}
+											</fieldset>
+										</div>
+										<div className="flex items-start gap-3">
+											<span className="w-16 shrink-0 pt-1.5 text-sm text-base-content/70">
+												Sizes:
+											</span>
+											<fieldset className="m-0 flex flex-wrap gap-2 border-0 p-0" aria-label="Size">
+												<legend className="sr-only">Size</legend>
+												{allSizes.map((s) => {
+													const variantInColor = pickedGroup?.sizes.find((v) => v.size === s);
+													return variantInColor ? (
+														<button
+															key={s}
+															type="button"
+															aria-pressed={size === variantInColor.size}
+															className={`btn btn-sm justify-between ${size === variantInColor.size ? "btn-primary" : "btn-outline"}`}
+															onClick={() => {
+																setSize(variantInColor.size);
+																setSession(null);
+															}}
+														>
+															<span>{variantInColor.size}</span>
+															<span className="ml-2 tabular-nums">${variantInColor.amount}</span>
+														</button>
+													) : (
+														<button
+															key={s}
+															type="button"
+															disabled
+															aria-label={`${s} — not offered in this color`}
+															title={`Not offered in ${color ?? "this color"}`}
+															className="btn btn-outline btn-sm cursor-not-allowed opacity-40"
+														>
+															<span>{s}</span>
+														</button>
+													);
+												})}
+											</fieldset>
+										</div>
+									</div>
+								) : (
+									<p className="text-sm text-base-content/60">This item isn't in the store yet.</p>
+								)
+							) : variantsError ? (
+								<div className="alert alert-warning text-sm">
+									<span>{variantsError}</span>
 								</div>
-								<div className="flex items-start gap-3">
-									<span className="w-16 shrink-0 pt-1.5 text-sm text-base-content/70">Sizes:</span>
-									<fieldset className="flex flex-wrap gap-2 border-0 p-0 m-0" aria-label="Size">
-										<legend className="sr-only">Size</legend>
-										{allSizes.map((s) => {
-											const variantInColor = pickedGroup?.sizes.find((v) => v.size === s);
-											return variantInColor ? (
-												<button
-													key={s}
-													type="button"
-													aria-pressed={size === variantInColor.size}
-													className={`btn btn-sm justify-between ${size === variantInColor.size ? "btn-primary" : "btn-outline"}`}
-													onClick={() => {
-														setSize(variantInColor.size);
-														setSession(null);
-													}}
-												>
-													<span>{variantInColor.size}</span>
-													<span className="tabular-nums ml-2">${variantInColor.amount}</span>
-												</button>
-											) : (
-												<button
-													key={s}
-													type="button"
-													disabled
-													aria-label={`${s} — not offered in this color`}
-													title={`Not offered in ${color ?? "this color"}`}
-													className="btn btn-sm btn-outline opacity-40 cursor-not-allowed"
-												>
-													<span>{s}</span>
-												</button>
-											);
-										})}
-									</fieldset>
-								</div>
-							</div>
-						) : (
-							<p className="text-sm text-base-content/60">This item isn't in the store yet.</p>
-						)
-					) : variantsError ? (
-						<div className="alert alert-warning text-sm">
-							<span>{variantsError}</span>
+							) : (
+								<div className="skeleton h-10 w-40" aria-hidden="true" />
+							)}
 						</div>
-					) : (
-						<div className="skeleton h-10 w-40" aria-hidden="true" />
-					)}
+
+						{/* The quote box — visible from the moment the panel is, not a box that
+						    appears on selection (Parker, 2026-10-17). Dashes until a pick names
+						    a priced variant; the account facts it quotes from (the Badge, the
+						    saved billing zip) settle into it once a pick gives them a variant.
+						    The box fills the column below the pickers, its lower edge meeting
+						    the picture's — the negative space belongs inside the box's own
+						    ground rather than as a void beside the column. */}
+						<div className="flex min-h-0 flex-1">
+							<MerchQuoteBox
+								color={color}
+								size={size}
+								estimate={estimate}
+								loading={estimateLoading}
+							/>
+						</div>
+
+						{sessionError && (
+							<div className="alert alert-error w-full text-sm">
+								<span>{sessionError}</span>
+							</div>
+						)}
+					</div>
 				</div>
 
-				{/* The quote box's better form (the 2026-10-10 stopgap retired): once a
-				    pick is made, the panel quotes the checkout's real figures live — the
-				    discounted goods, Printful's own shipping rate, and, from the buyer's
-				    saved billing address (the 2026-10-11 opt-in), Stripe Tax itself. The
-				    checkout remains the authority: its session resolves tax from the
-				    address the buyer delivers to, which this estimate stands in with
-				    billing. Signed out, the discount and the saved zip it quotes from
-				    are account facts, so the box waits for the account. */}
-				{isAuthenticated && (
-					<MerchQuoteBox color={color} size={size} estimate={estimate} loading={estimateLoading} />
-				)}
-
-				{sessionError && (
-					<div className="alert alert-error text-sm w-full">
-						<span>{sessionError}</span>
-					</div>
-				)}
-
-				<div className="grid gap-2 w-full mt-auto">
-					{/*
-					    🚨 The door is the account's, not the button's: buying requires an
-					    account (the same ruling that put the signed-out wall in front of
-					    streaming), and the honest way to say so is a door that leads TO the
-					    account, carrying the Work they were looking at with it — not a 401
-					    discovered after the press. The picker above stays fully readable
-					    signed out; only the purchase asks.
-					*/}
+				{/*
+				    🚨 The door is the account's, not the button's: buying requires an
+				    account (the same ruling that put the signed-out wall in front of
+				    streaming), and the honest way to say so is a door that leads TO the
+				    account, carrying the Work they were looking at with it — not a 401
+				    discovered after the press. The picker above stays fully readable
+				    signed out; only the purchase asks.
+				*/}
+				<div className="w-full">
 					{isAuthenticated ? (
 						<button
 							type="button"
@@ -411,11 +436,15 @@ export default function MerchBuyPanel({ slug, title }: MerchBuyPanelProps) {
 }
 
 /**
- * The store panel's estimate for the currently picked (color, size) — the quote route's
- * answer rendered as the shop's price box. Renders nothing while there is no pick to
- * price, nothing signed out, and nothing on a failed estimate: the buy door and the
- * checkout POST carry the honest errors. With no saved billing address the tax line
- * says where it resolves instead of showing a figure.
+ * The store panel's price box — visible from the moment the panel is, so picking a
+ * variant never moves the layout (Parker, 2026-10-17): until a pick names a priced
+ * variant, the figures read as dashes, and a selection only fills them in. Once a pick
+ * is made and the quote route answers, it quotes the checkout's real figures live —
+ * the discounted goods, Printful's own shipping rate, and, from the buyer's saved
+ * billing address (the 2026-10-11 opt-in), Stripe Tax itself. The checkout remains the
+ * authority: its session resolves tax from the address the buyer delivers to, which
+ * this estimate stands in with billing. The Badge discount and the saved zip it quotes
+ * from are account facts, so a signed-out visitor's box simply stays dashed.
  */
 function MerchQuoteBox({
 	color,
@@ -428,34 +457,52 @@ function MerchQuoteBox({
 	estimate: MerchEstimate | null;
 	loading: boolean;
 }) {
-	// No pick (or signed out) — the box prices nothing yet, by design.
-	if (!color || !size) return null;
-	if (loading && !estimate) {
+	const { isAuthenticated } = useAuth();
+	const picked = color != null && size != null;
+	if (picked && loading && !estimate) {
 		return (
-			<div className="w-full rounded-lg bg-base-100 p-3 space-y-1.5" aria-hidden="true">
+			<div
+				className="w-full space-y-1.5 rounded-lg border border-base-300 bg-base-100 p-3"
+				aria-hidden="true"
+				data-testid="merch-quote-box"
+			>
 				<div className="skeleton h-4 w-full" />
 				<div className="skeleton h-4 w-4/5" />
 				<div className="skeleton h-4 w-3/5" />
 			</div>
 		);
 	}
-	if (!estimate) return null;
-	const taxed = estimate.tax != null;
+	const taxed = estimate?.tax != null;
+	/** The dash a figure that does not exist yet carries. */
+	const dash = <span className="tabular-nums text-base-content/40">–</span>;
 	return (
 		<div
-			className="w-full rounded-lg bg-base-100 border border-base-300 p-3 text-sm space-y-1.5"
+			className="flex h-full w-full flex-col justify-between space-y-1.5 self-start rounded-lg border border-base-300 bg-base-100 p-3 text-sm sm:self-stretch"
 			data-testid="merch-quote-box"
 		>
 			<dl className="space-y-1.5">
 				<div className="flex justify-between text-base-content/60">
 					<dt>
-						The shirt{estimate.color ? `, ${estimate.color}` : ""}, size {estimate.size}
+						{/* The line names the pick it prices: a picked color rides the line
+						    even before a size does — the shade is chosen, the variant is not
+						    priced until both. */}
+						{estimate
+							? `The shirt${estimate.color ? `, ${estimate.color}` : ""}, size ${estimate.size}`
+							: color != null
+								? `The shirt, ${color}`
+								: "The shirt"}
 					</dt>
 					<dd className="tabular-nums">
-						{estimate.discount ? <s>${estimate.listPrice}</s> : null} ${estimate.goodsPrice}
+						{estimate ? (
+							<>
+								{estimate.discount ? <s>${estimate.listPrice}</s> : null} ${estimate.goodsPrice}
+							</>
+						) : (
+							dash
+						)}
 					</dd>
 				</div>
-				{estimate.discount && (
+				{estimate?.discount && (
 					<div className="flex justify-between text-success">
 						<dt>
 							Badge discount <span className="text-xs">({estimate.discount.percent}% off)</span>
@@ -465,42 +512,41 @@ function MerchQuoteBox({
 				)}
 				<div className="flex justify-between text-base-content/60">
 					<dt>Shipping (Printful's)</dt>
-					<dd className="tabular-nums">${estimate.shipping}</dd>
+					<dd className="tabular-nums">{estimate ? `$${estimate.shipping}` : dash}</dd>
 				</div>
-				{taxed ? (
-					<div className="flex justify-between">
-						<dt>Sales tax</dt>
-						<dd className="tabular-nums">${estimate.tax}</dd>
-					</div>
-				) : (
-					<div className="flex justify-between text-base-content/60">
-						<dt>Sales tax</dt>
+				<div className="flex justify-between text-base-content/60">
+					<dt>Sales tax</dt>
+					{taxed ? (
+						<dd className="tabular-nums">${estimate?.tax}</dd>
+					) : (
 						<dd className="text-xs">calculated at checkout</dd>
-					</div>
-				)}
-			</dl>
-			{estimate.buyerTotal != null && (
+					)}
+				</div>
 				<div className="flex justify-between border-t border-base-300 pt-1.5 font-semibold">
 					<span>Estimated total</span>
-					<span className="tabular-nums">${estimate.buyerTotal}</span>
+					<span className="tabular-nums">
+						{estimate?.buyerTotal != null ? `$${estimate.buyerTotal}` : dash}
+					</span>
 				</div>
-			)}
-			{estimate.quotedTo ? (
+			</dl>
+			{estimate?.quotedTo ? (
 				<p className="text-base-content/60 text-xs" data-testid="merch-quote-source">
 					Quoted live to your saved address in {estimate.quotedTo.city}, {estimate.quotedTo.state} —
 					checkout recalculates from the address you deliver to.
 				</p>
 			) : (
-				<p className="text-base-content/60 text-xs">
-					{/* No saved address (or a rate that couldn't resolve just now): the
-					    checkout's own session is where tax resolves, and the settings card
-					    is where the address that quotes here comes from. */}
-					Checkout calculates tax from your delivery address.{" "}
-					<Link to="/settings" className="link text-xs pointer-events-auto">
-						Save a billing address
-					</Link>{" "}
-					to quote your total here.
-				</p>
+				isAuthenticated && (
+					<p className="text-base-content/60 text-xs">
+						{/* No saved address (or a rate that couldn't resolve just now): the
+						    checkout's own session is where tax resolves, and the settings card
+						    is where the address that quotes here comes from. */}
+						Checkout calculates tax from your delivery address.{" "}
+						<Link to="/settings" className="link pointer-events-auto text-xs">
+							Save a billing address
+						</Link>{" "}
+						to quote your total here.
+					</p>
+				)
 			)}
 		</div>
 	);
