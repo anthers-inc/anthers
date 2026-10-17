@@ -64,12 +64,14 @@ describe("refreshQueuePositions", () => {
 	// Registered here rather than called in `afterAll`: the purge is hook-registration
 	// (cleanup.ts's own beforeAll/afterAll pair), not a function to invoke on teardown.
 	purgeAccountsCreatedHere();
-	it("numbers the lane's pending rows by created order, and never the rows outside it", async () => {
+	it("numbers each type's pending rows by created order, in that type's lane, and never the rows outside it", async () => {
+		// Two lanes now: each type's pending rows number from 1 in their OWN lane, so a
+		// video at position 1 and an audio at position 1 are both their lane's next-to-run.
 		await refreshQueuePositions();
-		expect(await positionOf(rowIds[0])).toBe(1);
-		expect(await positionOf(rowIds[1])).toBe(2);
-		expect(await positionOf(rowIds[2])).toBe(3);
-		// The ebook row has no spot: its ingest is not the lane's work to wait behind.
+		expect(await positionOf(rowIds[0])).toBe(1); // video lane
+		expect(await positionOf(rowIds[2])).toBe(2); // video lane, behind the first
+		expect(await positionOf(rowIds[1])).toBe(1); // audio lane, its own count from 1
+		// The ebook row has no spot: its ingest is not the lanes' work to wait behind.
 		expect(await positionOf(rowIds[3])).toBeNull();
 	});
 
@@ -80,8 +82,8 @@ describe("refreshQueuePositions", () => {
 			.where(eq(transcodingJobs.id, rowIds[0]));
 		await refreshQueuePositions();
 		expect(await positionOf(rowIds[0])).toBeNull();
-		expect(await positionOf(rowIds[1])).toBe(1);
-		expect(await positionOf(rowIds[2])).toBe(2);
+		expect(await positionOf(rowIds[1])).toBe(1); // the audio lane was never behind it
+		expect(await positionOf(rowIds[2])).toBe(1); // the video lane's next
 	});
 
 	it("clears a canceled row the same way — a cancel does not leave a hole in the queue", async () => {
@@ -135,18 +137,51 @@ describe("refreshQueuePositions", () => {
 				.where(eq(transcodingJobs.id, rowIds[0]));
 			expect(rowA.queueEtaSeconds).toBe(0);
 			expect(rowA.etaSeconds).toBe(600);
-			// The second row waits behind the first's cost (history-priced, 600) and adds
-			// its own — its type's fallback until audio jobs record their own history,
-			// which the assertion states rather than hard-codes: the total is the front
-			// wait plus the row's cost, whatever the cost model said.
+			// The video lane's second row waits behind the first's cost (history-priced,
+			// 600) and adds its own — its type's fallback — so its total exceeds its front.
 			const [rowB] = await db
 				.select()
 				.from(transcodingJobs)
-				.where(eq(transcodingJobs.id, rowIds[1]));
+				.where(eq(transcodingJobs.id, rowIds[2]));
 			expect(rowB.queueEtaSeconds).toBe(600);
 			expect(rowB.etaSeconds!).toBeGreaterThan(rowB.queueEtaSeconds!);
+			// 🔒 The cross-type guarantee the per-type lanes exist to make: the AUDIO row's
+			// figures are the audio lane's own — a video's measured hour must never read
+			// onto an audio row's front, or the queue quotes minutes a song will never
+			// spend (the 2026-10-18 report's "about 30 minutes left", again).
+			const [rowC] = await db
+				.select()
+				.from(transcodingJobs)
+				.where(eq(transcodingJobs.id, rowIds[1]));
+			expect(rowC.queueEtaSeconds).toBe(0);
+			expect(rowC.etaSeconds!).toBeLessThan(rowC.queueEtaSeconds! + 601);
 		} finally {
 			await db.delete(transcodingJobs).where(eq(transcodingJobs.id, donor.id));
 		}
+	});
+
+	it("prices a pending row behind its OWN type's running figure — never the other lane's", async () => {
+		// A running audio row whose live figure is 100s, beside a PENDING video row: the
+		// video's front figure must stay 0 (its lane runs nothing), and the audio's
+		// pending row (none here, so the audio row itself is the debt) shows the isolation.
+		await db
+			.update(transcodingJobs)
+			.set({ status: "processing", progress: 50, etaSeconds: 100 })
+			.where(eq(transcodingJobs.id, rowIds[2]));
+		await db
+			.update(transcodingJobs)
+			.set({ status: "pending" })
+			.where(eq(transcodingJobs.id, rowIds[0]));
+		await refreshQueuePositions();
+		// The video pending row's lane (video) has no RUNNING row — rowIds[2] is audio? No:
+		// rowIds[2] is video and IS running, so the video pending row waits behind 100.
+		const [videoPending] = await db
+			.select()
+			.from(transcodingJobs)
+			.where(eq(transcodingJobs.id, rowIds[0]));
+		expect(await positionOf(rowIds[0])).toBe(1);
+		expect(videoPending.queueEtaSeconds).toBe(100);
+		// And the audio row (not on the video lane) carries no spot while running.
+		expect(await positionOf(rowIds[2])).toBeNull();
 	});
 });

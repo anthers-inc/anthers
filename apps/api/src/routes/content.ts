@@ -116,7 +116,7 @@ import {
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import { z } from "zod";
-import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
+import { JOB_OPTIONS, QUEUE_BY_MEDIA_TYPE, QUEUES, queue } from "../jobs/queue.js";
 import { refreshQueuePositions } from "../jobs/queue-position.js";
 import { queueScansForWork } from "../jobs/scan-media.js";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
@@ -1190,9 +1190,12 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 			.insert(transcodingJobs)
 			.values({ workId: item.id, mediaType: "video", status: "pending" })
 			.returning();
-		await queue.send(QUEUES.MEDIA, { jobId: job.id }, JOB_OPTIONS[QUEUES.MEDIA]);
-		// The lane's order is a record (queue-position.ts), written at every transition —
+		// The lane's own queue resolves by the row's media type (`QUEUE_BY_MEDIA_TYPE`), and
+		// the lane's order is a record (queue-position.ts), written at every transition —
 		// enqueue here, claim/settle in the handler, cancel in its route.
+		const mediaQueue = QUEUE_BY_MEDIA_TYPE.video;
+		if (!mediaQueue) throw new Error("video has no queue to ride");
+		await queue.send(mediaQueue, { jobId: job.id }, JOB_OPTIONS[mediaQueue]);
 		await refreshQueuePositions();
 		return job;
 	}
@@ -1224,7 +1227,9 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 			.insert(transcodingJobs)
 			.values({ workId: item.id, mediaType: "audio", status: "pending" })
 			.returning();
-		await queue.send(QUEUES.MEDIA, { jobId: job.id }, JOB_OPTIONS[QUEUES.MEDIA]);
+		const mediaQueue = QUEUE_BY_MEDIA_TYPE.audio;
+		if (!mediaQueue) throw new Error("audio has no queue to ride");
+		await queue.send(mediaQueue, { jobId: job.id }, JOB_OPTIONS[mediaQueue]);
 		await refreshQueuePositions();
 		return job;
 	}

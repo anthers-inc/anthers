@@ -30,12 +30,14 @@
  * silence is what makes the alarm mean something. Knob status: trim, pooler and resize are on
  * stand-down (Parker, 2026-10-15) pending this alarm's first real firing.
  *
- * The media lane (2026-10-17) changed the shape that stresses this budget most: the video and
- * audio jobs left their per-type queues for one single-file media queue (`QUEUES.MEDIA`),
- * worked one at a time, so a processing lane now holds the encode lock's one reserved session
- * connection for the job's duration, where before it overlapped two audio handlers' load
- * beside it. The steady-state budget did not move; the burst peak did, dropping below what
- * the 2026-10-17 burst read measured (pg-boss connection timeouts through a burst of eight).
+ * The media lanes (2026-10-18, after one day of the single-file experiment) run the shape
+ * this budget was measured under: `transcode-video` single-file — an encode saturates both
+ * vCPUs, so a second concurrent encode finished no sooner — and `process-audio` two at a
+ * time, where audio's handlers are light (one audio job held the worker at ~24% CPU). Each
+ * running handler holds the encode lock's one reserved session connection for its job's
+ * duration; the shape overlaps at most three, as it did through everything the census's
+ * 2026-10 readings measured, and the 2026-10-17 burst's pg-boss pool timeouts are recorded
+ * at `QUEUES` for the shape that produced them.
  */
 
 import { client } from "@anthers/db/client";

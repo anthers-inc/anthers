@@ -42,45 +42,80 @@ async function ffprobe(filePath: string) {
 	return JSON.parse(await new Response(proc.stdout).text());
 }
 
-/** Generate waveform peaks (128 data points) using ffprobe frame analysis */
-async function generateWaveform(filePath: string, numPoints = 128): Promise<number[]> {
-	// Try peak level analysis first
+/**
+ * Generate waveform peaks (128 data points) from one ffmpeg pass over the file.
+ *
+ * The first cut asked ffprobe's `amovie …,astats` for a peak per frame and paid for every
+ * frame's metadata print: it decoded at roughly realtime, four to five minutes for a
+ * six-minute track on the worker (measured 2026-10-18) — exactly the stretch that made a
+ * running job sit at 80% reading "less than a minute left". One pass decoding to 8 kHz
+ * mono and bucketing the samples in-process yields the same 128 peaks in seconds, and
+ * the byte stream doubles as the pass's own progress: `onTick` reports samples
+ * processed out of the expected total, which the caller turns into the row's real
+ * percentage and figure while the pass runs.
+ */
+export async function generateWaveform(
+	filePath: string,
+	numPoints = 128,
+	durationSeconds = 0,
+	onTick?: (processed: number, total: number) => void,
+): Promise<number[]> {
 	const proc = Bun.spawn(
-		[
-			"ffprobe",
-			"-v",
-			"quiet",
+		ffmpegCommand(filePath, [
+			"-map",
+			"0:a:0",
+			"-ac",
+			"1",
+			"-ar",
+			"8000",
 			"-f",
-			"lavfi",
-			"-i",
-			`amovie=${filePath},astats=metadata=1:reset=1`,
-			"-show_entries",
-			"frame_tags=lavfi.astats.Overall.Peak_level",
-			"-of",
-			"csv=p=0",
-		],
+			"s16le",
+			"-acodec",
+			"pcm_s16le",
+			"pipe:1",
+			"-y",
+		]),
 		{ stdout: "pipe", stderr: "pipe" },
 	);
 
-	const exitCode = await proc.exited;
-	const stdout = await new Response(proc.stdout).text();
-
-	if (exitCode !== 0 || !stdout.trim()) {
-		// Fallback: simple volume detection per segment
+	// One bucket per peak point, assigned by sample index — whatever the duration's
+	// rounding, every sample lands in a bucket and the buckets are the exactly-128 bins
+	// the player's shape expects. A bucket no sample reached (a stream that ended early)
+	// stays 0. The tick cadence is a second of audio, floored at a 5% step so a short
+	// file still ticks; the caller throttles what it writes.
+	const totalSamples = Math.max(1, Math.round(8000 * durationSeconds));
+	const tickEvery = Math.max(1, Math.min(8000, Math.floor(totalSamples / 20)));
+	const peaks = new Array<number>(numPoints).fill(0);
+	let samples = 0;
+	let bucketPeak = 0;
+	const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		const view = new DataView(value.buffer, value.byteOffset, value.byteLength);
+		for (let off = 0; off + 1 < view.byteLength; off += 2) {
+			const sample = Math.abs(view.getInt16(off, true));
+			if (sample > bucketPeak) bucketPeak = sample;
+			samples++;
+			const bucket = Math.min(numPoints - 1, Math.floor((samples * numPoints) / totalSamples));
+			const nextBucket = Math.min(
+				numPoints,
+				Math.floor(((samples + 1) * numPoints) / totalSamples),
+			);
+			if (nextBucket > bucket) {
+				peaks[bucket] = bucketPeak / 32768;
+				bucketPeak = 0;
+			}
+			if (onTick && samples % tickEvery === 0) onTick(samples, totalSamples);
+		}
+	}
+	if (samples === 0) {
+		// The stream died before any sample: the old astats path is the recorded fallback,
+		// and volumedetect per segment under it — slower still, but the peak shape it
+		// yields is real and this shape of failure is rare.
 		return generateWaveformFallback(filePath, numPoints);
 	}
-
-	const rawPeaks: number[] = [];
-	for (const line of stdout.trim().split("\n")) {
-		const val = Number.parseFloat(line.trim());
-		if (!Number.isFinite(val)) continue;
-		// Convert from dB to linear (0-1 range)
-		const linear = Math.min(1.0, Math.max(0.0, 10 ** (val / 20)));
-		rawPeaks.push(linear);
-	}
-
-	if (rawPeaks.length === 0) return Array(numPoints).fill(0.5);
-	return downsamplePeaks(rawPeaks, numPoints);
+	return peaks.map((p) => Math.round(p * 1000) / 1000);
 }
 
 /** Fallback waveform generation using volumedetect per segment */
@@ -121,23 +156,6 @@ async function generateWaveformFallback(filePath: string, numPoints: number): Pr
 		peaks.push(Math.round(linear * 1000) / 1000);
 	}
 	return peaks;
-}
-
-/** Downsample a list of peaks to target count via max-in-chunk */
-function downsamplePeaks(peaks: number[], targetCount: number): number[] {
-	if (peaks.length <= targetCount) {
-		return peaks.map((p) => Math.round(p * 1000) / 1000);
-	}
-	const chunkSize = peaks.length / targetCount;
-	const result: number[] = [];
-	for (let i = 0; i < targetCount; i++) {
-		const start = Math.floor(i * chunkSize);
-		const end = Math.floor((i + 1) * chunkSize);
-		const chunk = peaks.slice(start, end);
-		const peak = chunk.length > 0 ? Math.max(...chunk) : 0;
-		result.push(Math.round(peak * 1000) / 1000);
-	}
-	return result;
 }
 
 async function updateJobProgress(jobId: number, progress: number) {
@@ -239,18 +257,22 @@ export async function processAudio(data: ProcessAudioData) {
 
 		/**
 		 * The waveform pass's cost, projected, is folded into the running estimate rather
-		 * than left as a multi-minute tail after "0 seconds": the whole file is decoded a
-		 * second time to compute the peaks. Priced from the lane's own recorded history —
-		 * the median waveform wall time of recent completed audio jobs (`timings`,
-		 * camelCase keys like the jsonb elsewhere) — else a duration-scaled shape
-		 * clamped to real bounds. No history and no duration means no estimate to make,
-		 * which the clamp renders as the figure it already held.
+		 * than left as a tail with no figure: the pass decodes the whole file a second
+		 * time to compute the peaks. Priced as a RATE — the median of recent completed
+		 * jobs' waveform wall time per second of audio (from `timings`, camelCase keys
+		 * like the jsonb elsewhere), scaled by this file's duration — because a rate is
+		 * what carries across files of different lengths, and a total does not. A pass
+		 * measured before the durations were recorded has no rate to offer, and that
+		 * exclusion is load-bearing as well as incidental: the astats era's multiminute
+		 * measurements (2026-10-18's prod recordings, ~0.8x realtime) would otherwise
+		 * price the pass that replaced them. No history means a duration-scaled shape;
+		 * both branches clamp to bounds a pass can honestly hit.
 		 */
-		const [historyMedian] = await db
+		const [historyRate] = await db
 			.select({
-				medianWaveformMs: sql<
+				rate: sql<
 					number | null
-				>`percentile_cont(0.5) within group (order by ((timings->>'waveformMs')::numeric))`,
+				>`percentile_cont(0.5) within group (order by ((timings->>'waveformMs')::numeric / NULLIF((timings->>'durationSeconds')::numeric, 0)))`,
 			})
 			.from(transcodingJobs)
 			.where(
@@ -261,9 +283,11 @@ export async function processAudio(data: ProcessAudioData) {
 					gt(transcodingJobs.createdAt, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
 				),
 			);
-		const medianWaveform = Number(historyMedian?.medianWaveformMs ?? 0) / 1000;
+		const medianWaveformRate = Number(historyRate?.rate ?? 0);
 		const waveformAllowance =
-			medianWaveform > 0 ? medianWaveform : Math.min(900, Math.max(30, duration / 8));
+			medianWaveformRate > 0
+				? Math.min(300, Math.max(20, (medianWaveformRate * duration) / 1000))
+				: Math.min(300, Math.max(20, duration / 16));
 
 		outputPath = join(tmpdir(), `audio_${randomUUID()}.mp3`);
 		const proc = Bun.spawn(
@@ -399,13 +423,46 @@ export async function processAudio(data: ProcessAudioData) {
 		await updateJobProgress(jobId, 80);
 
 		// 4. Generate waveform
-		const waveform = await generateWaveform(source, 128);
+		mark("waveformStart");
+		/**
+		 * The tail's own ticks: the pass knows its progress exactly (samples decoded out
+		 * of the expected total), so the row's percentage walks 80→99 and its figure is
+		 * the measured remaining — elapsed wall per processed fraction — rather than a
+		 * held allowance. Deliberately NOT through the monotonic clamp: a measured
+		 * remaining is allowed to rise above the projection (a slow stretch is real),
+		 * and the figure must follow the truth, not only shrink. Fire-and-forget and
+		 * throttled like the encode's ticks, so the stream never waits on the DB.
+		 */
+		const waveStartMs = Date.now();
+		let waveLastWriteMs = 0;
+		const waveform = await generateWaveform(source, 128, duration, (processed, total) => {
+			const now = Date.now();
+			if (now - waveLastWriteMs < 1000) return;
+			waveLastWriteMs = now;
+			const progress = Math.min(99, 80 + Math.round((19 * processed) / Math.max(1, total)));
+			const frac = processed / Math.max(1, total);
+			// Under 2% the rate is too little measured to extrapolate from; the held
+			// figure (the projection) is better than a rate built on two samples.
+			const remaining =
+				frac >= 0.02 ? Math.round(((now - waveStartMs) * (1 - frac)) / (frac * 1000)) : null;
+			void db
+				.update(transcodingJobs)
+				.set(remaining == null ? { progress } : { progress, etaSeconds: remaining })
+				.where(eq(transcodingJobs.id, jobId))
+				.execute()
+				.catch(() => {});
+		});
 		mark("waveformEnd");
 
 		// The deltas, as the row keeps them: the measured answer to "what did an audio
 		// job actually cost", which the queue's estimates read instead of constants as
 		// soon as any exists.
 		const timings = {
+			// The file's own length, beside the costs: the wave allowance and the queue's
+			// pricing read RATE medians (cost per second of audio), which is what carries
+			// across files of different lengths — without it a measurement prices only a
+			// file of its own size.
+			durationSeconds: Math.round(duration),
 			probeMs: marks.probeEnd - marks.probeStart,
 			encodeMs: marks.encodeEnd - marks.encodeStart,
 			uploadMs: marks.uploadEnd - marks.encodeEnd,

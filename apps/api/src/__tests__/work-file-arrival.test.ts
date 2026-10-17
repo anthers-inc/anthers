@@ -122,7 +122,7 @@ describe("a video Work whose file has not arrived", () => {
 		const { work } = await res.json();
 		expect(work.sourceKey).toBe(sourceKey());
 		expect(work.transcoding?.status).toBe("pending");
-		expect(sent.map((s) => s.name)).toContain(QUEUES.MEDIA);
+		expect(sent.map((s) => s.name)).toContain(QUEUES.TRANSCODE_VIDEO);
 		expect(sent.filter((s) => s.name === QUEUES.SCAN_MEDIA).map((s) => s.data)).toEqual([
 			{ storageKey: sourceKey(), workId, kind: "video" },
 		]);
@@ -166,12 +166,12 @@ describe("a video Work whose file has not arrived", () => {
  * waiting for it.
  */
 describe("each kind with a file is processed by its medium's pipeline", () => {
-	// Video and audio join on the single-file media lane, so both name QUEUES.MEDIA; the
-	// assert that matters is that the SEND happened into the lane (whose handler routes
-	// the row by mediaType) rather than into a queue nothing works.
+	// Each medium's pipeline names its own lane; the assert that matters is that the
+	// SEND happened into a queue whose handler routes the row by mediaType, rather than
+	// into a queue nothing works.
 	for (const [type, mediaType, queueName] of [
-		["music", "audio", QUEUES.MEDIA],
-		["audio", "audio", QUEUES.MEDIA],
+		["music", "audio", QUEUES.PROCESS_AUDIO],
+		["audio", "audio", QUEUES.PROCESS_AUDIO],
 		["comic", "ebook", QUEUES.RENDER_PAGED],
 		["ebook", "ebook", QUEUES.RENDER_PAGED],
 	] as const) {

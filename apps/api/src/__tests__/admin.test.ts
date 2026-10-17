@@ -107,9 +107,10 @@ describe("Admin / ops console API", () => {
 			transcodes: { counts: Record<string, number>; problems: unknown[] };
 		};
 		// Known queues are seeded from the QUEUES constant, so they appear even
-		// when idle (completed jobs get pruned). media is one of them.
+		// when idle (completed jobs get pruned). The media lanes are two of them.
 		const names = body.pgboss.queues.map((q) => q.name);
-		expect(names).toContain(QUEUES.MEDIA);
+		expect(names).toContain(QUEUES.TRANSCODE_VIDEO);
+		expect(names).toContain(QUEUES.PROCESS_AUDIO);
 		expect(Array.isArray(body.pgboss.failures)).toBe(true);
 		expect(Array.isArray(body.transcodes.problems)).toBe(true);
 	});
