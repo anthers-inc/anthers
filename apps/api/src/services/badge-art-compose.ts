@@ -93,10 +93,16 @@ export async function composeBadgeArt(input: {
 		// quarantine must precede visibility exactly as it does for uploads.
 		const key = `creators/${creatorId}/badges/${badgeId}/${crypto.randomUUID().replace(/-/g, "")}.png`;
 		await storage.upload(key, png, "image/png", "private");
-		const outcome = await scanInlineUpload(key, {
-			uploaderId: creatorId,
-			objectKind: "badge",
-		});
+		// The composed bytes are in hand — scanned from them rather than read back out of
+		// storage, the same shape the upload routes carry.
+		const outcome = await scanInlineUpload(
+			key,
+			{
+				uploaderId: creatorId,
+				objectKind: "badge",
+			},
+			png,
+		);
 		if (outcome.quarantine) {
 			// The object is held and the Badge's art is left unchanged — the same answer
 			// the upload route gives, because a scan finding is not this module's to
