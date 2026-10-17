@@ -1739,10 +1739,11 @@ function parseNumericId(raw: string): number | null {
 /**
  * A creator's **preview** request, if they made one.
  *
- * `?previewAs=out` for signed-out, `?previewAs=<amount>` for a user giving that much a
- * month, plus
- * `?previewOwned=1` for one who bought it outright. Absent or malformed → null, and the
- * user sees the truth, which is the only safe way for this to fail.
+ * The View As row's shapes (Parker, 2026-10-16): `?previewAs=unlocked` for a user who has
+ * cleared every gate and bought it, `?previewAs=locked` for one who has given nothing and
+ * bought nothing, `?previewAs=out` for signed-out, and the retired slider's
+ * `?previewAs=<amount>` still resolving for old links. Absent or malformed → null, and
+ * the user sees the truth, which is the only safe way for this to fail.
  */
 /**
  * The preview parameters, declared for the RPC client.
@@ -1769,6 +1770,8 @@ const catalogQuerySchema = previewQuerySchema.extend({
 	type: z.string().optional(),
 });
 
+const PREVIEW_UNLOCKED_GIVEN = 1_000_000;
+
 function previewRequest(c: {
 	req: { query: (k: string) => string | undefined };
 }): { given: number | null; owned: boolean } | null {
@@ -1780,6 +1783,13 @@ function previewRequest(c: {
 	// Treat empty as absent, always.
 	const raw = c.req.query("previewAs")?.trim();
 	if (!raw) return null;
+	// ⭐ The View As row's shapes (Parker, 2026-10-16): the imagined user is one of two,
+	// Unlocked or Locked — the retired slider's dial was read by nobody, and what a
+	// creator wants to see is the consequence. Unlocked has cleared every gate a
+	// creator's own ladder could name (a monthly amount no real threshold exceeds, and
+	// bought) and Locked has given nothing and bought nothing.
+	if (raw === "unlocked") return { given: PREVIEW_UNLOCKED_GIVEN, owned: true };
+	if (raw === "locked") return { given: 0, owned: false };
 	if (raw === "out") return { given: null, owned: false };
 	// ⚠️ **NOT `Number.isInteger`.** Amounts carry cents, so an integer check refuses a
 	// unit, so an integer check would silently refuse to preview any creator whose own
