@@ -13,6 +13,7 @@ import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Card, Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { Link } from "@anthers/web-shared/router";
 import {
 	ArrowPathIcon,
@@ -34,6 +35,7 @@ import {
 const serif = { fontFamily: FONTS.fraunces };
 
 export default function CompareGhostPage() {
+	usePageTitle("Compared to Ghost");
 	const { isAuthenticated } = useAuth();
 	// /signup is the one signup door since 2026-10-02; /subscribe only redirects there
 	// (the old URL is in circulation in marketing surfaces), so a hop through a redirect is

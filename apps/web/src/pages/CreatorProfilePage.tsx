@@ -4,6 +4,7 @@ import { ANTHERS_BADGES, amountLabel, supportAmount } from "@anthers/shared/cons
 import { isListened } from "@anthers/shared/content";
 import { withNextPath } from "@anthers/shared/next-path";
 import { useAuth } from "@anthers/web-shared/auth";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { displayHandle, handleFromParam } from "@anthers/web-shared/profile";
 import {
 	INTERACTION_PERMISSION_HINT,
@@ -427,6 +428,7 @@ export default function CreatorProfilePage() {
 	const [projects, setProjects] = useState<Project[]>([]);
 	const [posts, setPosts] = useState<PostListItem[]>([]);
 	const [works, setWorks] = useState<CatalogWork[]>([]);
+	usePageTitle(creator?.displayName ?? null);
 	// ?tab=badges is a real entry point, not a nicety: a locked post's unlock panel sends the
 	// user here to act, and dropping them on the default tab loses the intent they arrived with.
 	// ?badge= beside it is the pick carried back across a sign-in detour from the same tab.

@@ -46,6 +46,7 @@ import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Card, Eyebrow, H2, Lede, Section, SignpostCard } from "@anthers/web-shared/decor/sections";
 import { BADGE_LADDER, BadgeMark, PurchaseExample } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { Link } from "@anthers/web-shared/router";
 import { FAQBlock } from "../components/ui/FAQ";
 import { useAnthersLadder } from "../lib/anthers-ladder";
@@ -56,6 +57,7 @@ const serif = { fontFamily: FONTS.fraunces };
 const ctaMotion = "transition duration-200 motion-safe:hover:-translate-y-0.5";
 
 export default function ForUsersPage() {
+	usePageTitle("For Users");
 	// The seeded ladder, for the prices this page quotes the reader: the entry price and
 	// the pool a fan's support sets. Constants stand in until the fetch lands; what is
 	// quoted is a claim about the ladder, so the rows own it.

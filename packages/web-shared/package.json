@@ -13,6 +13,7 @@
 		"./content-preferences": "./src/lib/content-preferences.tsx",
 		"./language-filter": "./src/lib/language-filter.tsx",
 		"./theme": "./src/lib/theme.ts",
+		"./page-title": "./src/lib/page-title.ts",
 		"./postUrl": "./src/lib/postUrl.ts",
 		"./post-body": "./src/lib/post-body.ts",
 		"./post-tags": "./src/lib/post-tags.ts",

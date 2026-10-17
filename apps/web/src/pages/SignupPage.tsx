@@ -119,6 +119,7 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { AnthersBadgeMark } from "@anthers/web-shared/economics";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -2374,6 +2375,7 @@ function Summary({
 /* ── Page ───────────────────────────────────────────────────────────────────── */
 
 export default function SignupPage() {
+	usePageTitle("Join Anthers");
 	const { user, refreshUser, signUpWithBluesky } = useAuth();
 	const navigate = useNavigate();
 	const location = useLocation();

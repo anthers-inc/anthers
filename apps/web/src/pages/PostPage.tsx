@@ -19,6 +19,7 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
 import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
 import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { usePayoutsReady } from "@anthers/web-shared/payouts";
 import { markdownToEditorHtml } from "@anthers/web-shared/post-body";
 import { tagsFromBodyHtml } from "@anthers/web-shared/post-tags";
@@ -51,6 +52,7 @@ export default function PostPage() {
 	const { isAuthenticated, user } = useAuth();
 	const [post, setPost] = useState<Post | null>(null);
 	const [loading, setLoading] = useState(true);
+	usePageTitle(post?.title ?? null);
 
 	// ── Owner actions (unpublish / delete / publish) ──
 	const [showHistory, setShowHistory] = useState(false);
