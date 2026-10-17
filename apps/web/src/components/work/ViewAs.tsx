@@ -3,17 +3,18 @@
  * The **View As row** — the creator's four ways to look at their own Work:
  * `Creator | User (Unlocked) | User (Locked) | Signed-Out` (Parker, 2026-10-16).
  *
- * It sits at the top of the Manage tab, which is the right column's first tab and the
- * one a creator's page opens on, so the modes are at the top of the page the creator
- * meets. It replaces the top editing banner: editing is inline — the pencil is the only
- * edit affordance and nothing changes without a click on it — so a mode banner earned
+ * It lives on the Manage tab — the right column's first tab and the one a creator's
+ * page opens on — under the Kind row that leads the tab (Parker, 2026-10-17). It
+ * replaced the top editing banner: editing is inline — the pencil is the only edit
+ * affordance and nothing changes without a click on it — so a mode banner earned
  * nothing by standing.
  *
- * 🚨 **The mode lives in the URL, not in this component** (the preview's standing rule):
- * a preview survives a refresh, can be linked to, and is visible. While a preview is
- * active the page renders the *user's* Record, where the editor — and this tab — are
- * not rendered at all, so the row also renders at the top of the previewed page itself:
- * the way to switch view and the way back to Creator are always the same four buttons.
+ * 🚨 **The mode lives in the URL, not in this component** (the preview's standing
+ * rule): a preview survives a refresh, can be linked to, and is visible. While a
+ * preview is active the page renders the *user's* Record, and the owner's copy of
+ * that Record carries the same Manage tab with this row in it (Parker, 2026-10-17)
+ * — the row does not move to the page's top, so the way to switch view and the way
+ * back to Creator are always the same four buttons, in the same place.
  *
  * The imagined user comes in exactly two shapes now. Unlocked has cleared every gate —
  * given the creator a very large monthly amount and bought the Work outright
@@ -24,6 +25,8 @@
  */
 
 import { useSearchParams } from "@anthers/web-shared/router";
+
+import { WORK_DETAILS_HEADING_CLASS } from "./WorkLayout";
 
 export type WorkViewMode = "creator" | "unlocked" | "locked" | "out";
 
@@ -96,5 +99,19 @@ export function WorkViewAsRow({ subject = "Work" }: { subject?: string }) {
 				))}
 			</div>
 		</fieldset>
+	);
+}
+
+/**
+ * The row in its Manage-tab section — the heading and the trough are one placement,
+ * drawn by the editor's tab and the previewed page's alike so the row stands in the
+ * same place on the page whichever mode the creator is in (Parker, 2026-10-17).
+ */
+export function WorkViewAsSection({ subject = "Work" }: { subject?: string }) {
+	return (
+		<section className="flex flex-col gap-2">
+			<h3 className={WORK_DETAILS_HEADING_CLASS}>View As</h3>
+			<WorkViewAsRow subject={subject} />
+		</section>
 	);
 }

@@ -120,6 +120,13 @@ test("a video's editing surface is its own page, and the two lead to each other"
 	await expect(
 		page.getByRole("link", { name: "View the raw ATProto record on Taproot" }),
 	).toBeVisible();
+	// The row stays on the Manage tab in the preview too (Parker, 2026-10-17): the
+	// modes do not jump to the page's top when one takes — the owner's copy of the
+	// user's Record carries the same first tab the editor's does, so the buttons
+	// that switched the mode are where they were, and that is where the way back is.
+	await expect(
+		page.locator("#work-side-manage").getByRole("group", { name: "View this Work as" }),
+	).toBeVisible();
 	await page.getByRole("button", { name: "Creator", exact: true }).click();
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
 	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
