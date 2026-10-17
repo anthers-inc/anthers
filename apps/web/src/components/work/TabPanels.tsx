@@ -51,7 +51,11 @@ export default function TabPanels({
 	idPrefix: string;
 }) {
 	return (
-		<div className="grid">
+		// One cell for every panel — and the track pinned to the container's width with
+		// `minmax(0,1fr)`, because an implicit `auto` track sizes to the widest panel's
+		// max-content and a wide table there (the rating matrix) would widen the whole
+		// stack past the column and over whatever sits beside it.
+		<div className="grid grid-cols-[minmax(0,1fr)]">
 			{tabs.map((tab) => {
 				const active = tab.key === activeKey;
 				return (
