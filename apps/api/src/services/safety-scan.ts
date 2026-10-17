@@ -202,12 +202,21 @@ export async function scanStoredImage(
 		credentials?: ShieldCredentials | null;
 		baseUrl?: string;
 		now?: () => Date;
+		/**
+		 * The bytes the caller already holds, standing in for the `storage.read` below.
+		 * A direct upload's own request is the shape this exists for: the route buffered
+		 * the whole file to put it into storage, and scanning would otherwise read those
+		 * exact bytes back from R2 — a full second pass of the object across the network
+		 * the creator waits behind. When provided, the object in storage is untouched;
+		 * an R2 PUT is durable before its response returns, so the bytes are the object.
+		 */
+		bytes?: Buffer;
 	} = {},
 ): Promise<ScanOutcome> {
-	const bytes = await storage.read(storageKey);
+	const buffer = options.bytes ?? (await storage.read(storageKey));
 	// A key the database names and storage does not have. Recorded as unscannable rather
 	// than thrown, because retrying forever will not make a deleted object reappear.
-	const pdq = bytes ? await pdqHashImage(bytes) : null;
+	const pdq = buffer ? await pdqHashImage(buffer) : null;
 
 	let outcome: ScanOutcome;
 	if (pdq) {
@@ -341,9 +350,10 @@ export function scanSubjectFromRow(row: {
 export async function scanInlineUpload(
 	storageKey: string,
 	subject: ScanSubject,
+	bytes?: Buffer,
 ): Promise<ScanOutcome> {
 	try {
-		return await scanStoredImage(storageKey, subject);
+		return await scanStoredImage(storageKey, { ...subject, bytes });
 	} catch (err) {
 		const pdq = err instanceof ScanUnansweredError ? err.pdq : null;
 		await recordScan(storageKey, scanSubjectOf(subject), pdq, UNSCANNABLE);

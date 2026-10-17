@@ -5642,28 +5642,42 @@ const contentRoutes = new Hono()
 			const { atSeconds } = c.req.valid("json");
 			frameExtractionsBusy.add(id);
 			try {
-				let at = atSeconds;
-				// Read the duration straight from the stored original, so a paused moment
-				// past the end (or a client claiming one) still lands inside the file —
-				// and past the last DECODED frame, not merely inside the container: an
-				// input seek asks for frames from the moment onward, so a moment past the
-				// last frame's own timestamp (an ended video's pause is exactly its
-				// duration) yields nothing. One frame earlier is the last displayable
-				// picture the file holds.
+				// The extraction reads the stored original in place — a fresh signed address;
+				// `SOURCE_URL_TTL_SECONDS` above carries the reasoning.
 				const input = await storage.readableInput(work.sourceKey);
-				const probe = await probeVideo(input);
-				if (!probe) {
-					return c.json(
-						{
-							error: "This file has no readable video to take a frame from.",
-							code: "thumbnail_frame_unreadable",
-						},
-						409,
-					);
+				let at = atSeconds;
+				// The stored duration the transcode wrote stands for the file's length, at
+				// whole-second precision. **Inside that duration, no probe runs**: the
+				// creator's player bounds `at` to its own playback, so a mid-video moment is
+				// inside the file by construction, and asking ffprobe over the stored
+				// original (two-plus ranged reads this request waits behind) buys nothing.
+				// The probe still runs — with the exact duration and fps the last-frame clamp
+				// needs — when the row carries no duration yet, and when the asked moment
+				// reaches the stored rounding's last half second, where the difference
+				// between the stored and exact bounds is what the clamp exists to hold.
+				const storedDuration = work.durationSeconds ?? 0;
+				if (!(storedDuration > 1) || atSeconds > storedDuration - 0.5) {
+					// Read the duration straight from the stored original, so a paused moment
+					// past the end (or a client claiming one) still lands inside the file —
+					// and past the last DECODED frame, not merely inside the container: an
+					// input seek asks for frames from the moment onward, so a moment past the
+					// last frame's own timestamp (an ended video's pause is exactly its
+					// duration) yields nothing. One frame earlier is the last displayable
+					// picture the file holds.
+					const probe = await probeVideo(input);
+					if (!probe) {
+						return c.json(
+							{
+								error: "This file has no readable video to take a frame from.",
+								code: "thumbnail_frame_unreadable",
+							},
+							409,
+						);
+					}
+					const lastFrame =
+						probe.durationSeconds - (probe.framesPerSecond > 0 ? 1 / probe.framesPerSecond : 0.5);
+					at = Math.max(0, Math.min(at, Math.max(lastFrame, 0)));
 				}
-				const lastFrame =
-					probe.durationSeconds - (probe.framesPerSecond > 0 ? 1 / probe.framesPerSecond : 0.5);
-				at = Math.max(0, Math.min(at, Math.max(lastFrame, 0)));
 
 				// One frame into the pipe: input seeking (`-ss` before `-i`) stops ffmpeg
 				// reading past the moment, and `image2pipe` keeps the JPEG on stdout rather
@@ -7039,7 +7053,6 @@ const contentRoutes = new Hono()
 
 		const buffer = Buffer.from(await file.arrayBuffer());
 		await storage.upload(key, buffer, file.type, acl);
-
 		// 🚨 **Scanned inline, and this is the door the child-safety coverage map describes as
 		// the inline path.** The bytes are fully buffered here, so there is nothing to defer to a
 		// job — and unlike a Work there is no release gate behind which a queued scan could
@@ -7052,7 +7065,10 @@ const contentRoutes = new Hono()
 		// perceptual image hash has nothing to say about any of them and the file may be
 		// 500 MB. Those go through `QUEUES.SCAN_MEDIA` once they are attached to a Work.
 		if (objectKind) {
-			const outcome = await scanInlineUpload(key, { uploaderId: user.id, objectKind });
+			// The bytes are the ones this request just buffered and PUT — the scan reads
+			// them in hand rather than pulling the object back out of storage, sparing the
+			// save a second full pass of the image across the network.
+			const outcome = await scanInlineUpload(key, { uploaderId: user.id, objectKind }, buffer);
 			if (outcome.quarantine) {
 				return c.json({ error: "That image cannot be used.", code: "refused" }, 422);
 			}
