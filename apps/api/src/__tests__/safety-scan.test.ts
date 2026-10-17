@@ -7,9 +7,16 @@
  * federal clearinghouse, and it should be made in the policy first.
  */
 
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { db } from "@anthers/db/client";
+import { mediaScans } from "@anthers/db/schema";
+import { eq } from "drizzle-orm";
 import { pdqHexToBase64, ShieldError, scanPdqHashes } from "../lib/arachnid-shield";
-import { determinationFor, scanPdqHash, VENDOR } from "../services/safety-scan";
+import { determinationFor, scanPdqHash, scanStoredImage, VENDOR } from "../services/safety-scan";
+import { storage } from "../services/storage";
 import { purgeAccountsCreatedHere } from "./cleanup";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -232,6 +239,83 @@ describe("scanPdqHashes — the vendor client", () => {
 			expect(stub.calls).toHaveLength(0);
 		} finally {
 			stub.restore();
+		}
+	});
+});
+
+describe("scanStoredImage — the bytes a caller holds in hand", () => {
+	/** A real 64x64 JPEG, so the fingerprint is an honest one. */
+	async function makeJpeg(): Promise<Buffer> {
+		const path = join(tmpdir(), `scan_bytes_${crypto.randomUUID().slice(0, 8)}.jpg`);
+		const proc = Bun.spawn(
+			[
+				"ffmpeg",
+				"-v",
+				"error",
+				"-f",
+				"lavfi",
+				"-i",
+				"testsrc=duration=1:size=64x64:rate=1",
+				"-frames:v",
+				"1",
+				path,
+				"-y",
+			],
+			{ stdout: "pipe", stderr: "pipe" },
+		);
+		expect(await proc.exited).toBe(0);
+		const bytes = Buffer.from(await Bun.file(path).arrayBuffer());
+		await rm(path).catch(() => {});
+		return bytes;
+	}
+
+	/** A Shield stand-in that answers for whichever hash it is asked, so a real fingerprint scans. */
+	function echoShield(): { url: string; restore: () => void } {
+		const original = globalThis.fetch;
+		globalThis.fetch = (async (_input: RequestInfo | URL, req?: RequestInit) => {
+			const body = (JSON.parse(String(req?.body)) as { hashes: string[] }).hashes;
+			const scanned: Record<string, { classification: string; match_type: string | null }> = {};
+			for (const asked of body) {
+				scanned[asked] = { classification: "no-known-match", match_type: "none" };
+			}
+			return new Response(JSON.stringify({ scanned_hashes: scanned }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		}) as typeof fetch;
+		return {
+			url: "https://shield.test",
+			restore: () => {
+				globalThis.fetch = original;
+			},
+		};
+	}
+
+	it("scans provided bytes and never reads the object back out of storage", async () => {
+		const bytes = await makeJpeg();
+		const key = `creators/0/scan-bytes-${crypto.randomUUID().slice(0, 8)}.jpg`;
+		// The direct-upload route is the caller this exists for: it buffered the file to
+		// put it into storage seconds ago, and reading the same object back is a second
+		// full pass of the image across the network the creator's save waits behind.
+		const readSpy = spyOn(storage, "read");
+		try {
+			const shield = echoShield();
+			try {
+				const outcome = await scanStoredImage(key, {
+					bytes,
+					credentials: CREDS,
+					baseUrl: shield.url,
+				});
+				expect(outcome.determination).toBe("clean");
+				// The bytes were used from hand — storage was never touched for the scan.
+				expect(readSpy).not.toHaveBeenCalled();
+			} finally {
+				shield.restore();
+			}
+		} finally {
+			readSpy.mockRestore();
+			// The recordScan this scan wrote — the suite cleans up what it creates.
+			await db.delete(mediaScans).where(eq(mediaScans.storageKey, key));
 		}
 	});
 });

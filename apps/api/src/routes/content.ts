@@ -1691,10 +1691,11 @@ function parseNumericId(raw: string): number | null {
 /**
  * A creator's **preview** request, if they made one.
  *
- * `?previewAs=out` for signed-out, `?previewAs=<amount>` for a user giving that much a
- * month, plus
- * `?previewOwned=1` for one who bought it outright. Absent or malformed → null, and the
- * user sees the truth, which is the only safe way for this to fail.
+ * The View As row's shapes (Parker, 2026-10-16): `?previewAs=unlocked` for a user who has
+ * cleared every gate and bought it, `?previewAs=locked` for one who has given nothing and
+ * bought nothing, `?previewAs=out` for signed-out, and the retired slider's
+ * `?previewAs=<amount>` still resolving for old links. Absent or malformed → null, and
+ * the user sees the truth, which is the only safe way for this to fail.
  */
 /**
  * The preview parameters, declared for the RPC client.
@@ -1721,6 +1722,8 @@ const catalogQuerySchema = previewQuerySchema.extend({
 	type: z.string().optional(),
 });
 
+const PREVIEW_UNLOCKED_GIVEN = 1_000_000;
+
 function previewRequest(c: {
 	req: { query: (k: string) => string | undefined };
 }): { given: number | null; owned: boolean } | null {
@@ -1732,6 +1735,13 @@ function previewRequest(c: {
 	// Treat empty as absent, always.
 	const raw = c.req.query("previewAs")?.trim();
 	if (!raw) return null;
+	// ⭐ The View As row's shapes (Parker, 2026-10-16): the imagined user is one of two,
+	// Unlocked or Locked — the retired slider's dial was read by nobody, and what a
+	// creator wants to see is the consequence. Unlocked has cleared every gate a
+	// creator's own ladder could name (a monthly amount no real threshold exceeds, and
+	// bought) and Locked has given nothing and bought nothing.
+	if (raw === "unlocked") return { given: PREVIEW_UNLOCKED_GIVEN, owned: true };
+	if (raw === "locked") return { given: 0, owned: false };
 	if (raw === "out") return { given: null, owned: false };
 	// ⚠️ **NOT `Number.isInteger`.** Amounts carry cents, so an integer check refuses a
 	// unit, so an integer check would silently refuse to preview any creator whose own
@@ -5492,11 +5502,17 @@ const contentRoutes = new Hono()
 		}
 
 		await resolveWorkThumbnail(updated);
+		// The Studio adopts this response, and its player drives `transcoding.hlsManifestUrl`,
+		// whose raw stored value points at the private bucket — a browser 404 with no CORS
+		// headers, and the console noise Parker reported (2026-10-16). The save answers
+		// through the same delivery rewrite the owner read branch carries below: the row is
+		// playable the way entitled playback is, and a creator may always see their own media.
+		const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx());
 		return c.json({
 			work: await serializeWork(
 				updated,
 				workAssets,
-				jobRows[0] ?? null,
+				playableJob,
 				buildRows.map((b) => ({ ...b, files: filesByBuild.get(b.id) ?? [] })),
 				deliveryCtx(),
 			),
@@ -5567,28 +5583,42 @@ const contentRoutes = new Hono()
 			const { atSeconds } = c.req.valid("json");
 			frameExtractionsBusy.add(id);
 			try {
-				let at = atSeconds;
-				// Read the duration straight from the stored original, so a paused moment
-				// past the end (or a client claiming one) still lands inside the file —
-				// and past the last DECODED frame, not merely inside the container: an
-				// input seek asks for frames from the moment onward, so a moment past the
-				// last frame's own timestamp (an ended video's pause is exactly its
-				// duration) yields nothing. One frame earlier is the last displayable
-				// picture the file holds.
+				// The extraction reads the stored original in place — a fresh signed address;
+				// `SOURCE_URL_TTL_SECONDS` above carries the reasoning.
 				const input = await storage.readableInput(work.sourceKey);
-				const probe = await probeVideo(input);
-				if (!probe) {
-					return c.json(
-						{
-							error: "This file has no readable video to take a frame from.",
-							code: "thumbnail_frame_unreadable",
-						},
-						409,
-					);
+				let at = atSeconds;
+				// The stored duration the transcode wrote stands for the file's length, at
+				// whole-second precision. **Inside that duration, no probe runs**: the
+				// creator's player bounds `at` to its own playback, so a mid-video moment is
+				// inside the file by construction, and asking ffprobe over the stored
+				// original (two-plus ranged reads this request waits behind) buys nothing.
+				// The probe still runs — with the exact duration and fps the last-frame clamp
+				// needs — when the row carries no duration yet, and when the asked moment
+				// reaches the stored rounding's last half second, where the difference
+				// between the stored and exact bounds is what the clamp exists to hold.
+				const storedDuration = work.durationSeconds ?? 0;
+				if (!(storedDuration > 1) || atSeconds > storedDuration - 0.5) {
+					// Read the duration straight from the stored original, so a paused moment
+					// past the end (or a client claiming one) still lands inside the file —
+					// and past the last DECODED frame, not merely inside the container: an
+					// input seek asks for frames from the moment onward, so a moment past the
+					// last frame's own timestamp (an ended video's pause is exactly its
+					// duration) yields nothing. One frame earlier is the last displayable
+					// picture the file holds.
+					const probe = await probeVideo(input);
+					if (!probe) {
+						return c.json(
+							{
+								error: "This file has no readable video to take a frame from.",
+								code: "thumbnail_frame_unreadable",
+							},
+							409,
+						);
+					}
+					const lastFrame =
+						probe.durationSeconds - (probe.framesPerSecond > 0 ? 1 / probe.framesPerSecond : 0.5);
+					at = Math.max(0, Math.min(at, Math.max(lastFrame, 0)));
 				}
-				const lastFrame =
-					probe.durationSeconds - (probe.framesPerSecond > 0 ? 1 / probe.framesPerSecond : 0.5);
-				at = Math.max(0, Math.min(at, Math.max(lastFrame, 0)));
 
 				// One frame into the pipe: input seeking (`-ss` before `-i`) stops ffmpeg
 				// reading past the moment, and `image2pipe` keeps the JPEG on stdout rather
@@ -5661,11 +5691,14 @@ const contentRoutes = new Hono()
 					list.push(file);
 					filesByBuild.set(file.buildId, list);
 				}
+				// Same delivery rewrite the edit route answers with — the Studio's editor
+				// adopts this response while its player is showing `transcoding.hlsManifestUrl`.
+				const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx());
 				return c.json({
 					work: await serializeWork(
 						updated,
 						workAssets,
-						jobRows[0] ?? null,
+						playableJob,
 						buildRows.map((b) => ({ ...b, files: filesByBuild.get(b.id) ?? [] })),
 						deliveryCtx(),
 					),
@@ -6948,7 +6981,6 @@ const contentRoutes = new Hono()
 
 		const buffer = Buffer.from(await file.arrayBuffer());
 		await storage.upload(key, buffer, file.type, acl);
-
 		// 🚨 **Scanned inline, and this is the door the child-safety coverage map describes as
 		// the inline path.** The bytes are fully buffered here, so there is nothing to defer to a
 		// job — and unlike a Work there is no release gate behind which a queued scan could
@@ -6961,7 +6993,10 @@ const contentRoutes = new Hono()
 		// perceptual image hash has nothing to say about any of them and the file may be
 		// 500 MB. Those go through `QUEUES.SCAN_MEDIA` once they are attached to a Work.
 		if (objectKind) {
-			const outcome = await scanInlineUpload(key, { uploaderId: user.id, objectKind });
+			// The bytes are the ones this request just buffered and PUT — the scan reads
+			// them in hand rather than pulling the object back out of storage, sparing the
+			// save a second full pass of the image across the network.
+			const outcome = await scanInlineUpload(key, { uploaderId: user.id, objectKind }, buffer);
 			if (outcome.quarantine) {
 				return c.json({ error: "That image cannot be used.", code: "refused" }, 422);
 			}

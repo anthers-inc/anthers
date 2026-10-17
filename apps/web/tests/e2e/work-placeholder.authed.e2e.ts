@@ -86,8 +86,7 @@ test("a Work mid-processing holds its shape on both surfaces", async ({ page, co
 	// (Signed-out shape shows the locked cover — an unauthenticated request cannot
 	// stream, the meter needing the account — so the entitled view is the shape a
 	// viewer of a free Work holds.)
-	await page.getByRole("button", { name: "Preview as a user" }).click();
-	await page.getByRole("button", { name: "Signed in" }).click();
+	await page.getByRole("button", { name: "User (Locked)" }).click();
 	await page.waitForTimeout(1_500);
 	await expect(page.getByText("The pages open here.")).toBeVisible();
 	await expect(page.getByText("Processing…")).toBeVisible();
