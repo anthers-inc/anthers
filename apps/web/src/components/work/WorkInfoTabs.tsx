@@ -42,7 +42,9 @@ export default function WorkInfoTabs({
 	if (!current) return null;
 
 	return (
-		<section ref={rootRef} aria-label="About this Work" className="flex flex-col gap-4">
+		// The `gap-6` under the tab bar (Parker, 2026-10-16): the panel's first heading
+		// kept sitting too close to the bar, and the extra air reads the bar as its object.
+		<section ref={rootRef} aria-label="About this Work" className="flex flex-col gap-6">
 			{/* The shadow marks the bar as its own object — heavier at the bottom edge where
 			    the panels hang from it (Parker's fourth pass, 2026-10-13). */}
 			<div

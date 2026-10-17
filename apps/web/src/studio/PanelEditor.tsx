@@ -241,7 +241,9 @@ export default function PanelEditor({ workId, pageCount }: PanelEditorProps) {
 			aria-label="Panel editor"
 		>
 			<div className="flex items-center justify-between">
-				<h2 className="font-semibold">Panel Reading Order</h2>
+				<h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+					Panel Reading Order
+				</h3>
 				<span className="text-xs text-base-content/60">
 					{pageCount} page{pageCount === 1 ? "" : "s"};{" "}
 					{pages.reduce((n, p) => n + p.panels.length, 0)} panel

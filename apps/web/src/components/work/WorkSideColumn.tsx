@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Work page's **side column** — Reviews and Showings, one tab group
- * (Parker, 2026-10-13). Reviews is the default tab: a verdict on the work is what the
- * column has always been about, and Showings starts here as its stub — the places this
- * Work can be found, beginning with the creator's profile and any Project carrying it,
- * with the wider machinery (channels, collections, collaborations) stated as to-come
- * rather than promised.
+ * The Work page's **side column** — Reviews, Showings, and (on the creator's own page,
+ * handed in first) Manage, one tab group (Parker, 2026-10-13). The default tab is the
+ * first one handed in: a visitor's Review tab, a creator's Manage (Parker, 2026-10-16).
+ * Reviews is the visitor's default: a verdict on the work is what the column has always
+ * been about, and Showings starts here as its stub — the places this Work can be found,
+ * beginning with the creator's profile and any Project carrying it, with the wider
+ * machinery (channels, collections, collaborations) stated as to-come rather than
+ * promised.
  *
  * 🚨 Same tabs for owner and user, like the Info tabs: the shell does not know who is
  * looking; the contents do.
@@ -17,7 +19,7 @@ import { Link } from "@anthers/web-shared/router";
 import { MegaphoneIcon } from "@heroicons/react/24/outline";
 import { type ReactNode, useRef, useState } from "react";
 import { keepScroll } from "./scrollKeeper";
-import type { WorkDetail } from "./WorkLayout";
+import { WORK_DETAILS_HEADING_CLASS, type WorkDetail } from "./WorkLayout";
 
 export interface SideTab {
 	key: string;
@@ -32,8 +34,10 @@ export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: 
 	const rootRef = useRef<HTMLElement | null>(null);
 	if (!current) return null;
 
+	// The gap under the tab bar is the Info tabs' `gap-6` (Parker, 2026-10-16): the
+	// panel's first heading kept sitting too close to the bar.
 	return (
-		<aside ref={rootRef} aria-label="Reviews and showings" className="flex flex-col gap-4">
+		<aside ref={rootRef} aria-label="Reviews and showings" className="flex flex-col gap-6">
 			<div
 				role="tablist"
 				aria-label="Reviews and showings"
@@ -73,10 +77,10 @@ export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: 
 function PostedAbout({ work }: { work: WorkDetail }) {
 	return (
 		<section className="border-t border-base-300 pt-4">
-			<h2 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+			<h3 className={`${WORK_DETAILS_HEADING_CLASS} mb-2 flex items-center gap-2`}>
 				<MegaphoneIcon className="size-4" />
 				Posted about
-			</h2>
+			</h3>
 			<ul className="space-y-1.5">
 				{work.postedIn
 					?.filter((p) => p.isPublished)

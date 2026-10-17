@@ -95,7 +95,9 @@ test("a music Work plays its original while processing runs", async ({ page, con
 
 	// The landing is the Work's own page in editor mode, as every upload walk reads it.
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/, { timeout: 15_000 });
-	await expect(page.getByText("Editing your Work")).toBeVisible();
+	// The editing banner is gone (the View As task, 2026-10-16): the editor mode is
+	// what the page is, and the View As row on the Manage tab is its one marker.
+	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
 
 	// The file lands, and landing is what starts processing — a job row exists with no
 	// worker to drain it, which is precisely the state the ruling's widening governs.
@@ -132,12 +134,16 @@ test("a music Work plays its original while processing runs", async ({ page, con
 
 	// And nothing anywhere on the page claims the Work is waiting, while the job's row
 	// still says pending — the status block no longer stands in the player's place.
-	await expect(page.getByText(/Waiting to process…/)).toHaveCount(0);
+	// Scoped to the player's own section: the Manage tab (open by default since the
+	// View As task, 2026-10-16) carries the machinery's own waiting words in its card.
+	await expect(
+		page.locator("section", { has: page.locator("audio") }).getByText(/Waiting to process…/),
+	).toHaveCount(0);
 
 	// The user's view holds the player too: the deliverable is one component with one
 	// layout for both surfaces, so the preview a creator checks is the page a listener
 	// opens while the track is still processing. A read view carries no edit pencils.
-	await page.getByRole("button", { name: "Preview as a user" }).click();
+	await page.getByRole("button", { name: "User (Locked)" }).click();
 	await expect(page.locator("audio")).toBeAttached();
 	const userSrc = await page.locator("audio").getAttribute("src");
 	expect(userSrc ?? "").toMatch(new RegExp(`works/${landedWork.id}/original|creators/`));

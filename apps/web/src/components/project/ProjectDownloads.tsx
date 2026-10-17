@@ -3,6 +3,7 @@
 import { client } from "@anthers/web-shared/rpc";
 import type { Asset } from "@anthers/web-shared/types";
 import { ArrowDownTrayIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import { WORK_DETAILS_HEADING_CLASS } from "../work/WorkLayout";
 
 function formatSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -37,7 +38,7 @@ export default function ProjectDownloads({
 	if (!canAccess) {
 		return (
 			<div>
-				<h2 className="text-xl font-bold mb-4">Downloads</h2>
+				<h2 className={WORK_DETAILS_HEADING_CLASS + " mb-4"}>Downloads</h2>
 				<div className="card bg-base-200">
 					<div className="card-body items-center text-center py-8">
 						<LockClosedIcon className="w-8 h-8 text-base-content/40" />
@@ -61,7 +62,7 @@ export default function ProjectDownloads({
 
 	return (
 		<div>
-			<h2 className="text-xl font-bold mb-4">Downloads</h2>
+			<h2 className={WORK_DETAILS_HEADING_CLASS + " mb-4"}>Downloads</h2>
 			<div className="overflow-x-auto">
 				<table className="table table-sm">
 					<thead>
