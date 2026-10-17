@@ -265,7 +265,9 @@ test.describe("/signup leads with the free door", () => {
 
 		// And the matrix is not quietly scrolling inside its own box either, which is the
 		// state the breakpoint exists to prevent rather than to tidy up after.
-		const scroller = section.locator(".overflow-x-auto");
+		// The matrix's own scroller, inside its fieldset: the walk-down's wrapper is a
+		// second `.overflow-x-auto` in this section now.
+		const scroller = section.locator("fieldset").locator(".overflow-x-auto");
 		const [scrollWidth, clientWidth] = await scroller.evaluate((el) => [
 			el.scrollWidth,
 			el.clientWidth,
@@ -289,7 +291,7 @@ test.describe("/signup leads with the free door", () => {
 		await page.setViewportSize({ width: 1280, height: 900 });
 		await page.goto("/signup");
 
-		const cell = page.locator("#anthers-badges tbody td").first();
+		const cell = page.locator("#anthers-badges fieldset tbody td").first();
 		await expect(cell).toBeVisible();
 
 		const paint = await cell.evaluate((el) => {
@@ -314,7 +316,7 @@ test.describe("/signup leads with the free door", () => {
 		// together by its edge alone (Parker, 2026-08-25). Both halves are asserted because
 		// either one alone leaves the table reading as loose text on the background.
 		const edge = await page
-			.locator("#anthers-badges tbody tr:last-child td:last-child")
+			.locator("#anthers-badges fieldset tbody tr:last-child td:last-child")
 			.evaluate((el) => ({
 				right: Number.parseFloat(getComputedStyle(el).borderRightWidth),
 				bottom: Number.parseFloat(getComputedStyle(el).borderBottomWidth),
