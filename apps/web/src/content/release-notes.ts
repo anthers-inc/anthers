@@ -81,6 +81,30 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.26",
+		date: "2026-10-17",
+		lede: "Projects are edited at their own addresses now, posts are edited in place, and the processing queue states where an upload stands and what its wait is.",
+		entries: [
+			"A Project is edited at its own address now, the model the Work page runs: the public URL is the editor, with pencilled title, tagline, description and publish field, the cover uploading in place, and the member shelves living on the page where the Studio's edit form used to hold them.",
+			"Filling a Project's shelf became a multi-select table, whose rows click to toggle and whose one confirm adds everything ticked, and sorting offers Manual, Release Date, Original Release Date, and Alphabetical; Manual is the only real order, and the grip is the only way to change it.",
+			"A draft Project's page stopped rendering for every visitor who held its URL, where the server had never checked publication: it answers 404 now, as a private Work's does.",
+			"A post's page carries its body in the card now: the byline, title and record strip sit above it, the votes and stickers below, so the border wraps the writing rather than the whole page.",
+			"A creator who opens one of their own posts from the Studio lands on the post itself, editable in place with the pencils and the publishing machinery beside it, where a separate editing form used to answer.",
+			"Retitling re-derives the address, for posts and Works both, with the trailing publicId unchanged, so every link naming the old slug keeps resolving.",
+			"A Work named in a post's body renders its card beneath the text; linked Works are done away with as a first-class field, the links are read back from the body, and each Work arrives through its own gates, so an embed is a citation and a gate stays a gate.",
+			"Processing media became one queue that describes itself honestly: video and audio line up in a single lane rather than two queues racing for the same worker, and the position a waiting job reports is rewritten at every change in the lane.",
+			"A waiting job now says what stands ahead of it beside what it is expected to take, and audio reports its progress as it runs, the way a video's ladder always did, where a burst of uploads had left an estimate holding a figure reality never met.",
+			"The Work page's layout was reworked: the Details tab leads with the release dates above the description, a second release date rides under the byline, a hairline divider sits above the two-column record, every pencil sits beside the field it edits, and a description past a readable length folds behind a Read more.",
+			"The editing banner is gone from the Work page; the Manage tab leads, and its View As row previews the page as an unlocked user, a locked user, or signed out, where a slider used to imagine an amount.",
+			"Every kind of media on a Work's page sits in one card derived from the video layout, and the card holds a definite width, so the page stops jumping as a video loads.",
+			"The meadow came to the signed-in site: the pollen, the woven side vines with their bees, and the grassy floor now paint behind the signed-in pages, the Studio included, always beneath a Work's or a Post's own surface and never riding across one.",
+			"The Settings pages gained width, their toggle descriptions wrap instead of clipping, and a tab visited this session holds its place while another is read.",
+			"A thumbnail frame saved from a video answers in a fraction of the sixteen seconds a save took: the image's safety scan reads the bytes already in hand rather than pulling the stored file back out, and a moment picked mid-video extracts directly instead of probing the whole original.",
+			"The signed-in footer sits at the bottom of the viewport now, even where a page runs short.",
+			"The Studio player asks for the work's rewritten HLS address now and never the raw storage one, where a saved Work's player could request a file it had no way to open.",
+		],
+	},
+	{
 		version: "2026.10.25",
 		date: "2026-10-16",
 		lede: "Badges are purchasable from every creator's page now, the Badges page took the subscription page's place, and audio keeps playing across the site in a footer bar.",
