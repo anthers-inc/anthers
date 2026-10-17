@@ -39,6 +39,17 @@ export function MeadowBackdrop({
 	// "Pollen in the air" over the base surface, exactly as <MeadowDecor> paints it.
 	const pollen = `url("${pollenDataUri(c.pollen, c.pollenScale)}") repeat, var(--color-base-100)`;
 
+	// Signed-in quieting: on the working app the decor sits close to dense UI, so the
+	// layer renders at strongly reduced opacity and a real blur — distant texture the
+	// page scrolls over, rather than a foreground (Parker, 2026-10-17, tuned live in
+	// the browser: padding the content away from the floor wasted vertical space the
+	// Work pages want, while this keeps the last row readable through it). Applied on
+	// the layer's root rather than a wrapping element, because the shell's e2e test
+	// pins the parent of this root as the stacking context <main> shares: an
+	// intermediate wrapper between them breaks that walk (meadow-signed-in.authed.e2e.ts).
+	const QUIET_OPACITY = 0.15;
+	const QUIET_BLUR_PX = 6;
+
 	return (
 		// `pointer-events-none` plus `aria-hidden`: the layer is pure decoration, and its
 		// negative z-index (below) keeps it from competing with content in paint order.
@@ -46,7 +57,11 @@ export function MeadowBackdrop({
 			aria-hidden="true"
 			data-meadow-backdrop=""
 			className={`pointer-events-none absolute inset-0 -z-10 ${className}`}
-			style={{ background: pollen }}
+			style={{
+				background: pollen,
+				opacity: QUIET_OPACITY,
+				filter: `blur(${QUIET_BLUR_PX}px)`,
+			}}
 		>
 			<MeadowVines mode={resolvedMode} />
 			<div className="absolute inset-x-0 bottom-0">
