@@ -51,11 +51,17 @@ let sendSpy: ReturnType<typeof spyOn>;
 /** A delivery-host env: the suffix makes the host guard name a per-Work origin. */
 const _DELIVERY_ENV = { BUILD_ORIGIN_SUFFIX: "delivery.test" };
 
-function call(method: string, path: string, cookie: string, body?: unknown) {
+function call(
+	method: string,
+	path: string,
+	cookie: string,
+	body?: unknown,
+	headers: Record<string, string> = {},
+) {
 	return app.fetch(
 		new Request(`http://localhost${path}`, {
 			method,
-			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie },
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie, ...headers },
 			body: body === undefined ? undefined : JSON.stringify(body),
 		}),
 	);
@@ -161,6 +167,32 @@ describe("browser-build delivery", () => {
 		const pckRes = await app.fetch(new Request(`http://localhost/build/${token}/game.pck`));
 		expect(pckRes.status).toBe(200);
 		expect(await pckRes.text()).toContain("bytes-for-game.pck");
+	});
+
+	it("mints the src in the scheme the browser actually sees, not the loopback's", async () => {
+		// Behind the dev proxy every upstream request is plain http while the origin the
+		// browser reached is https; the proxy's X-Forwarded-Proto is the scheme the
+		// minted src must carry. An src in the other scheme upgrades the frame in Chrome
+		// (mixed content) to an origin that then fails the parent's senders checks,
+		// silently killing the save relay. Found live, 2026-10-17.
+		const w = await insertWork({
+			creatorId: creator.id,
+			type: "game",
+			title: `mint scheme ${run}`,
+		});
+		workIds.push(w.id);
+		await createBuildWithFiles(w.id, creator.cookie, ["index.html"], "index.html");
+		const mint = await call(
+			"GET",
+			`/api/content/works/${w.id}/play`,
+			creator.cookie,
+			undefined as never,
+			{
+				"X-Forwarded-Proto": "https",
+			},
+		);
+		const { src } = (await mint.json()) as { src: string };
+		expect(src).toMatch(/^https:\/\/localhost\/build\//);
 	});
 
 	it("serves nothing for a path the build never registered", async () => {
