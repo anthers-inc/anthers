@@ -931,6 +931,19 @@ export const transcodingJobs = pgTable(
 		// out of the queue (null); ebooks never join the lane, and the per-type queues that
 		// predated it carried no position, so null also reads as "not in the lane" for them.
 		queuePosition: integer("queue_position"),
+		// The lane's own seconds figures for this row while it waits (`queue-position.ts`):
+		// `queue_eta_seconds` = when it reaches the front (everything running and ahead of
+		// it), and `eta_seconds`, for a pending row, carries the total — front wait plus
+		// this row's own estimated cost. A running job's `eta_seconds` keeps meaning only
+		// its own remaining (the ffmpeg-driven figure); null says "no way to know", the
+		// shape the display already reads.
+		queueEtaSeconds: integer("queue_eta_seconds"),
+		// The job's actual step wall times, recorded where they happen (each handler's own
+		// module), jsonb because the steps differ per type and schema here would be the
+		// second place the steps are described. History for the pending rows' cost
+		// estimates — "about an hour" gets truer as jobs record their real shape. Body
+		// keys are camelCase (`totalMs`), like the jsonb elsewhere.
+		timings: jsonb("timings"),
 		errorMessage: text("error_message").default(""),
 		hlsManifestUrl: text("hls_manifest_url").default(""),
 		outputFileUrl: text("output_file_url").default(""),

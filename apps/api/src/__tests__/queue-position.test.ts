@@ -104,4 +104,42 @@ describe("refreshQueuePositions", () => {
 		expect(await positionOf(rowIds[0])).toBeNull();
 		expect(await positionOf(rowIds[2])).toBe(1);
 	});
+
+	it("prices the row ahead from recorded history, and totals the front wait with the row's own cost", async () => {
+		// A completed donor row whose `timings` carry one real measured total — the shape
+		// `transcode-video`/`process-audio` write — so history, not the fallback constants,
+		// prices the pending rows.
+		const [donor] = await db
+			.insert(transcodingJobs)
+			.values({
+				workId: workIds[3],
+				mediaType: "video",
+				status: "completed",
+				progress: 100,
+				timings: { totalMs: 600_000 },
+			})
+			.returning({ id: transcodingJobs.id });
+		try {
+			await db
+				.update(transcodingJobs)
+				.set({ status: "pending" })
+				.where(inArray(transcodingJobs.id, rowIds.slice(0, 3)));
+			await refreshQueuePositions();
+			// The lane's front is seconds away when nothing runs: the first pending row's
+			// front figure is 0 and its total is exactly the history's cost.
+			expect(await positionOf(rowIds[0])).toBe(1);
+			const [rowA] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, rowIds[0]));
+			expect(rowA.queueEtaSeconds).toBe(0);
+			expect(rowA.etaSeconds).toBe(600);
+			// The second row waits behind the first's cost (history-priced, 600) and adds
+			// its own — its type's fallback until audio jobs record their own history,
+			// which the assertion states rather than hard-codes: the total is the front
+			// wait plus the row's cost, whatever the cost model said.
+			const [rowB] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, rowIds[1]));
+			expect(rowB.queueEtaSeconds).toBe(600);
+			expect(rowB.etaSeconds!).toBeGreaterThan(rowB.queueEtaSeconds!);
+		} finally {
+			await db.delete(transcodingJobs).where(eq(transcodingJobs.id, donor.id));
+		}
+	});
 });

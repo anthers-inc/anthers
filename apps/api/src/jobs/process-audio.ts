@@ -145,6 +145,13 @@ async function updateJobProgress(jobId: number, progress: number) {
 
 export async function processAudio(data: ProcessAudioData) {
 	const { jobId } = data;
+	// The job's own wall times, recorded at the completion write (`timings`) — the
+	// history the queue's cost estimates read (`queue-position.ts`). Marks taken at
+	// each step boundary; the deltas are the actual costs of the actual passes.
+	const marks: Record<string, number> = { start: Date.now() };
+	const mark = (name: string) => {
+		marks[name] = Date.now();
+	};
 
 	const [job] = await db
 		.select()
@@ -200,6 +207,7 @@ export async function processAudio(data: ProcessAudioData) {
 		source = await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS });
 
 		// 1. Probe for duration
+		mark("probeStart");
 		const probe = await ffprobe(source);
 		const duration = Number.parseFloat(probe.format?.duration ?? "0");
 		if (duration > 0) {
@@ -211,6 +219,8 @@ export async function processAudio(data: ProcessAudioData) {
 		await updateJobProgress(jobId, 20);
 
 		// 2. Normalize and convert to MP3
+		mark("probeEnd");
+		mark("encodeStart");
 		outputPath = join(tmpdir(), `audio_${randomUUID()}.mp3`);
 		const proc = Bun.spawn(
 			ffmpegCommand(source, [
@@ -230,6 +240,7 @@ export async function processAudio(data: ProcessAudioData) {
 			const stderr = await new Response(proc.stderr).text();
 			throw new Error(`Audio normalization failed: ${stderr.slice(0, 500)}`);
 		}
+		mark("encodeEnd");
 		await updateJobProgress(jobId, 60);
 
 		/**
@@ -265,6 +276,7 @@ export async function processAudio(data: ProcessAudioData) {
 		await storage.upload(outputKey, outputBuffer, "audio/mpeg", "private");
 		// The deliverable produced and delivered: its temp file is dead the moment the
 		// upload lands, so the finally sweep below is crash cleanup, not the plan.
+		mark("uploadEnd");
 		await rm(outputPath).catch(() => {});
 		outputPath = null;
 		const outputUrl = await storage.getUrl(outputKey);
@@ -272,6 +284,18 @@ export async function processAudio(data: ProcessAudioData) {
 
 		// 4. Generate waveform
 		const waveform = await generateWaveform(source, 128);
+		mark("waveformEnd");
+
+		// The deltas, as the row keeps them: the measured answer to "what did an audio
+		// job actually cost", which the queue's estimates read instead of constants as
+		// soon as any exists.
+		const timings = {
+			probeMs: marks.probeEnd - marks.probeStart,
+			encodeMs: marks.encodeEnd - marks.encodeStart,
+			uploadMs: marks.uploadEnd - marks.encodeEnd,
+			waveformMs: marks.waveformEnd - marks.uploadEnd,
+			totalMs: marks.waveformEnd - marks.start,
+		};
 
 		// 5. Complete
 		await db
@@ -283,6 +307,7 @@ export async function processAudio(data: ProcessAudioData) {
 				progress: 100,
 				outputFileUrl: outputUrl,
 				waveformData: waveform,
+				timings,
 			})
 			.where(eq(transcodingJobs.id, jobId));
 	} catch (error) {

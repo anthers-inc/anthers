@@ -67,6 +67,14 @@ describe("processingText", () => {
 		expect(processingText(work(1, { status: "pending" }).transcoding)).toBe("Waiting to process");
 	});
 
+	it("gives a waiting row its total — front wait plus its own cost — as a sentence", () => {
+		// The recompute wrote the lane's own total figure (`eta_seconds` on a pending row):
+		// the creator waiting is told when the WORK is done, not when it merely starts.
+		expect(
+			processingText(work(1, { status: "pending", queuePosition: 3, etaSeconds: 1200 }).transcoding),
+		).toBe("Waiting to process · 2 ahead · About 20 minutes left");
+	});
+
 	it("says nothing about a job that is not running", () => {
 		expect(processingText(null)).toBeNull();
 		expect(processingText(work(1, { status: "completed" }).transcoding)).toBeNull();

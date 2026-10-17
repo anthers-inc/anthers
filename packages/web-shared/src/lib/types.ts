@@ -273,6 +273,13 @@ export interface TranscodingJob {
 	 * The queue figure's "N ahead of you" reads this, not a recomputed order.
 	 */
 	queuePosition: number | null;
+	/**
+	 * A waiting row's seconds until it reaches the front of the lane, kept by the same
+	 * recompute that writes the position; null while nothing can be said. The total
+	 * until done is `etaSeconds` on a pending row (front wait plus the row's own cost)
+	 * and the running job's own remaining otherwise.
+	 */
+	queueEtaSeconds: number | null;
 	errorMessage: string | null;
 	hlsManifestUrl: string | null;
 	/**
