@@ -589,7 +589,11 @@ interface PerkCell {
 interface PerkRow {
 	title: string;
 	desc: string;
-	cell: (amount: number) => PerkCell;
+	/**
+	 * The cell's figures, as a function of the rung's amount — and, where the free tier's
+	 * pool is the subject, of the Fund's published slice (null until the fetch lands).
+	 */
+	cell: (amount: number, fundSlice?: number | null) => PerkCell;
 	/**
 	 * A perk Anthers has committed to and not built. The row still shows what each rung will
 	 * carry, and says beside its title that it is not there yet, because a matrix read without
@@ -628,12 +632,20 @@ const PERK_ROWS: PerkRow[] = [
 	{
 		title: "Monthly Time Pool",
 		// ⚠️ The second sentence is not decoration. A free account's pot is real money that
-		// creators are really paid, and it is Anthers that pays it — a column reading "$0.25"
-		// with no more said implies the free account is being charged a quarter.
-		desc: "Paid out to the creators you spend time with, split by the share of your time each one earned. Anthers funds a free account's pot rather than the account paying for it.",
-		cell: (amount) => ({
-			value: columnMoney(timePoolFor(amount)),
-			note: amount > 0 ? undefined : "from Anthers",
+		// creators are really paid, and it is the Time Pool Fund that pays it — a column
+		// reading a figure with no more said implies the free account is being charged it.
+		// The free column's value is the Fund's published slice for the current cycle, and
+		// "published monthly" is the note rather than the number, because the pool rides
+		// what arrived; before the fetch lands the note IS the value.
+		desc: "Paid out to the creators you spend time with, split by the share of your time each one earned. The Time Pool Fund funds a free account's pot rather than the account paying for it.",
+		cell: (amount, fundSlice) => ({
+			value:
+				amount > 0
+					? columnMoney(timePoolFor(amount))
+					: fundSlice != null
+						? columnMoney(fundSlice)
+						: "varies",
+			note: amount > 0 ? undefined : "from the Time Pool Fund, published monthly",
 		}),
 	},
 	{
@@ -708,11 +720,15 @@ const same = (a: PerkCell, b: PerkCell) => a.value === b.value && a.note === b.n
  * the drift would be invisible: a card that has quietly stopped mentioning the storage
  * upgrade still renders and still reads fine.
  */
-export function marginalRows(amount: number, previous: number | null): PerkRow[] {
+export function marginalRows(
+	amount: number,
+	previous: number | null,
+	fundSlice: number | null = null,
+): PerkRow[] {
 	return PERK_ROWS.filter((row) => {
-		const here = row.cell(amount);
+		const here = row.cell(amount, fundSlice);
 		if (here.value === NOT_CARRIED) return false;
-		return previous === null || !same(here, row.cell(previous));
+		return previous === null || !same(here, row.cell(previous, fundSlice));
 	});
 }
 
@@ -726,8 +742,13 @@ export function marginalRows(amount: number, previous: number | null): PerkRow[]
  * `marginalRows` still compares the full cell, qualifier included, which is what keeps the
  * storage upgrade from vanishing out of Root's card on the grounds that 50 equals 50.
  */
-function changedNote(row: PerkRow, amount: number, previous: number | null): string | null {
-	const { note } = row.cell(amount);
+function changedNote(
+	row: PerkRow,
+	amount: number,
+	previous: number | null,
+	fundSlice: number | null = null,
+): string | null {
+	const { note } = row.cell(amount, fundSlice);
 	if (!note) return null;
 	if (previous === null) return note;
 	return note === row.cell(previous).note ? null : note;
@@ -949,7 +970,7 @@ function LadderWalkDown({ fundSlice }: { fundSlice: number | null }) {
 	);
 }
 
-function BadgeLadder(props: LadderProps) {
+function BadgeLadder(props: LadderProps & { fundSlice?: number | null }) {
 	const fits = useMatrixFits();
 	return (
 		// 🚨 `min-w-0` is load-bearing, and it is a `<fieldset>` quirk rather than a flex one.
@@ -1014,7 +1035,12 @@ const SURFACE_CELL = "bg-base-100/70";
 const RAISED = "drop-shadow-[0_5px_16px_rgba(0,0,0,0.15)]";
 
 /** The wide layout: seven perks by five rungs, chosen by the column headers. */
-function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
+function BadgeMatrix({
+	value,
+	onChange,
+	idPrefix,
+	fundSlice = null,
+}: LadderProps & { fundSlice?: number | null }) {
 	// ⚠️ The chosen rung as a COLUMN INDEX rather than a name, because the grid rules are
 	// drawn by neighbor: a cell needs to know it sits immediately left of the lit column.
 	// The name's index in `BADGE_ORDER` is the column, so a name off the ladder gives `-1`,
@@ -1119,12 +1145,13 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 									// it draws that rule in primary when EITHER of the two is the chosen one.
 									const rightEdgeLit = lit || column === litColumn - 1;
 									const lastColumn = column === RUNG_AMOUNTS.length - 1;
-									const cell = row.cell(amount);
+									const cell = row.cell(amount, fundSlice);
 									const carried = cell.value !== NOT_CARRIED;
 									const shownNote = changedNote(
 										row,
 										amount,
 										column === 0 ? null : RUNG_AMOUNTS[column - 1],
+										fundSlice,
 									);
 									return (
 										<td
@@ -1164,7 +1191,12 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
  * legally contain a `<ul>`, so wrapping the whole card would mean giving up list semantics
  * for the perks. The pressable part is the rung, which is also what it is in the matrix.
  */
-function BadgeCards({ value, onChange, idPrefix }: LadderProps) {
+function BadgeCards({
+	value,
+	onChange,
+	idPrefix,
+	fundSlice = null,
+}: LadderProps & { fundSlice?: number | null }) {
 	return (
 		<div className="space-y-3">
 			{BADGE_ORDER.map((key, index) => {
@@ -1172,7 +1204,7 @@ function BadgeCards({ value, onChange, idPrefix }: LadderProps) {
 				const previousKey = index === 0 ? null : BADGE_ORDER[index - 1];
 				const previous = index === 0 ? null : RUNG_AMOUNTS[index - 1];
 				const lit = value === key;
-				const rows = marginalRows(amount, previous);
+				const rows = marginalRows(amount, previous, fundSlice);
 				return (
 					<div
 						key={key}
@@ -3081,6 +3113,7 @@ export default function SignupPage() {
 							idPrefix="anthers-ladder"
 							value={pickedRung(picks.badge)}
 							onChange={(v) => setPicks((prev) => ({ ...prev, badge: v }))}
+							fundSlice={fund?.slicePerAccount ?? null}
 						/>
 						{/* 🚨 **Always rendered, including for Free** (Parker, 2026-08-24). It used to
 						    be hidden at $0, which made choosing Free shrink the page — and the

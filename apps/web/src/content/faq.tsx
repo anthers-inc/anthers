@@ -34,7 +34,7 @@ import { ATTENTION_RAW_RETENTION_DAYS, FREE_STORAGE_GIB } from "@anthers/shared/
 import { DIRECTED_SUPPORT_WORST_CASE, SALE_TABLE } from "@anthers/shared/figures";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { Link } from "@anthers/web-shared/router";
-import { cloneElement, isValidElement, type ReactNode } from "react";
+import { cloneElement, Fragment, isValidElement, type ReactNode } from "react";
 
 /** The seeded entry price, interpolated at render — see PRICE_TOKEN below. */
 export const PRICE_TOKEN = "[public-access-price]" as const;
@@ -507,7 +507,10 @@ export function interpolateFund(
 				: "a published monthly share (it varies)",
 		);
 	if (typeof answer === "string") return fill(answer);
-	if (Array.isArray(answer)) return answer.map((child) => interpolateFund(child, fund));
+	// Keyed fragments, because a rebuilt array's children have no keys of their own and
+	// React warns on exactly this (the interpolated <div> is re-created per render).
+	if (Array.isArray(answer))
+		return answer.map((child, i) => <Fragment key={i}>{interpolateFund(child, fund)}</Fragment>);
 	if (isValidElement(answer)) {
 		return cloneElement(
 			answer,
