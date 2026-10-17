@@ -422,7 +422,13 @@ function LoggedInLayoutInner() {
 				<div className="relative isolate flex flex-1 min-w-0 flex-col">
 					<MeadowBackdrop />
 					<main
-						className={`flex flex-1 min-h-0 flex-col overflow-y-auto [scrollbar-gutter:stable] ${currentTrack ? "pb-16" : ""}`}
+						// Clearance for the Meadow backdrop: at `xl`, where the side vines ride
+						// the shell's edges, a wide horizontal padding keeps every page's content
+						// column clear of them, whichever width that page itself uses (the decor
+						// is gone below `xl`, so pages keep their own edges there). The floor gets
+						// no clearance on purpose: the backdrop is quieted to distant texture, and
+						// bottom padding for it would tax the vertical space a Work page wants.
+						className={`flex flex-1 min-h-0 flex-col overflow-y-auto [scrollbar-gutter:stable] xl:px-36 ${currentTrack ? "pb-16" : ""}`}
 					>
 						<RouteSuspense>
 							<Outlet />
