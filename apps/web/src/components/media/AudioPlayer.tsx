@@ -15,6 +15,13 @@
  *   hand-off comment this design retires: the bar is the single engine, so it cannot
  *   come back.
  *
+ * And two layouts: the **strip** (below) is where the medium stands alone — the embed
+ * route's bare window, the fallback branches — and the **stage** (`stage`, set by
+ * `WorkDeliverable` when the media frame holds this page) is the frame's fill, where
+ * the waveform is the page's reading surface (`ListenStage`), the transport sits at
+ * its foot, and a song's words open as the stage's aside column. Both layouts read
+ * their state identically, by the two-mode rule above.
+ *
  * The element's state and the bar's mirror are both named `isPlaying` / `progress` /
  * `duration` below so the transport JSX never branches on mode.
  */
@@ -26,13 +33,14 @@ import {
 	PauseIcon,
 	PlayIcon,
 } from "@heroicons/react/24/solid";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
 import { useMediaPlayer } from "../../lib/media-player";
 import type { QueueTrack } from "../../lib/music-queue";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { useBindPlayerSeek } from "../../lib/work-player";
 import ChapterList from "./ChapterList";
+import { AsideColumn, AsideToggle } from "./ListenStage";
 import { PublicAccessFooter, PublicAccessWall } from "./PublicAccessNotice";
 import { formatRemaining, formatTime } from "./transport/format";
 import SeekBar from "./transport/SeekBar";
@@ -55,6 +63,22 @@ interface AudioPlayerProps {
 	 */
 	persistent?: QueueTrack;
 	/**
+	 * The stage layout — the media frame's fill — where this page's media area is
+	 * held by `WorkMediaFrame` and the waveform is the page's reading surface rather
+	 * than a strip inside the row. Absent (the embed's bare window, and the
+	 * fallback branches that have no frame to fill): yesterday's strip.
+	 */
+	stage?: boolean;
+	/**
+	 * What the stage's aside column holds when it is open — a song's words on the
+	 * read; the creator's lyrics field there (the editing surface, mounted open where
+	 * a listener's starts closed). Null means the Work carries nothing to open, and
+	 * no toggle renders.
+	 */
+	aside?: ReactNode;
+	/** Whether the aside column starts open. The creator's field does; a listener's does not. */
+	asideOpen?: boolean;
+	/**
 	 * Whose Time Pool minutes this playback earns. Omit on surfaces where playback
 	 * shouldn't be credited (previews, the Studio); the player then just plays.
 	 * Bar-driven playback claims through the bar instead, so this never double-claims.
@@ -76,6 +100,9 @@ export default function AudioPlayer({
 	src,
 	waveform,
 	persistent,
+	stage = false,
+	aside = null,
+	asideOpen = false,
 	attention,
 	publicAccess = false,
 	chapters,
@@ -293,7 +320,147 @@ export default function AudioPlayer({
 		if (spent) audioRef.current?.pause();
 	}, [spent]);
 
+	/** The aside column's state — the creator's field starts open, a listener's starts closed. */
+	const [asideShown, setAsideShown] = useState(asideOpen);
+
 	if (spent && budget) return <PublicAccessWall budget={budget} />;
+
+	const skipCluster = (
+		<div className="flex items-center gap-1">
+			<TransportButton
+				label={`Skip back ${SKIP_SECONDS} seconds`}
+				icon={ArrowUturnLeftIcon}
+				onClick={() => skipBy(-SKIP_SECONDS)}
+				size="lg"
+				badge={
+					<span className="absolute right-0 top-0 text-[8px] font-bold leading-none">
+						{SKIP_SECONDS}
+					</span>
+				}
+			/>
+			<TransportButton
+				label={isPlaying ? "Pause" : "Play"}
+				icon={isPlaying ? PauseIcon : PlayIcon}
+				onClick={togglePlay}
+				tone="primary"
+				size="lg"
+			/>
+			<TransportButton
+				label={`Skip forward ${SKIP_SECONDS} seconds`}
+				icon={ArrowUturnRightIcon}
+				onClick={() => skipBy(SKIP_SECONDS)}
+				size="lg"
+				badge={
+					<span className="absolute right-0 top-0 text-[8px] font-bold leading-none">
+						{SKIP_SECONDS}
+					</span>
+				}
+			/>
+		</div>
+	);
+
+	if (stage) {
+		return (
+			// biome-ignore lint/a11y/noStaticElementInteractions: the keymap is scoped to the player by design — see useMediaShortcuts.ts for why there is no global listener.
+			<div
+				tabIndex={-1}
+				onKeyDown={onKeyDown}
+				data-testid="audio-player"
+				className="flex h-full min-h-0 w-full flex-col gap-3 focus-visible:outline-primary/50 sm:gap-4"
+			>
+				{/* Bar-driven mode renders no element — the bar owns the one <audio>. */}
+				{!persistent && (
+					// biome-ignore lint/a11y/useMediaCaption: Anthers has no caption tracks to offer yet — the `captions` roadmap entry. The element has no native controls; everything a person uses is the transport below.
+					<audio ref={audioRef} src={src} preload="metadata" />
+				)}
+
+				{/*
+				 * The stage's hero: the waveform IS the page's reading surface here, the
+				 * playhead and the hover time it carries are the shared SeekBar's, and
+				 * filling the media frame's profile is the composition's own flex. On a
+				 * phone the hero does not stand — a box two hundred pixels tall holds no
+				 * reading surface — and the transport's strip carries the shape instead.
+				 * The aside (the words, when opened) rides the same area: beside the
+				 * hero on a wide screen, beneath it on a phone.
+				 */}
+				<div className="flex min-h-0 w-full flex-col gap-4 sm:flex-1 sm:flex-row sm:items-stretch xl:gap-5">
+					<div className="relative hidden min-h-0 min-w-0 flex-1 sm:block">
+						<SeekBar
+							position={progress}
+							duration={duration}
+							onSeek={seekTo}
+							label="Seek audio"
+							stretch
+							track={
+								<WaveformDisplay peaks={peaks} progress={duration > 0 ? progress / duration : 0} />
+							}
+						/>
+					</div>
+					{aside != null && asideShown && <AsideColumn>{aside}</AsideColumn>}
+				</div>
+
+				{/*
+				 * The transport, at the stage's foot. The times live here — one pair,
+				 * whatever the width, so the phone and the stage read the same surface —
+				 * and the strip only on the phone, where the hero does not stand.
+				 */}
+				<div className="flex w-full flex-wrap items-center gap-x-4 gap-y-3">
+					{skipCluster}
+					<span
+						data-testid="audio-elapsed"
+						className="min-w-[3rem] text-xs tabular-nums text-base-content/60"
+					>
+						{formatTime(progress)}
+					</span>
+					<div className="min-w-[10rem] flex-1 sm:hidden">
+						<SeekBar
+							position={progress}
+							duration={duration}
+							onSeek={seekTo}
+							label="Seek audio"
+							track={
+								<WaveformDisplay
+									peaks={peaks}
+									progress={duration > 0 ? progress / duration : 0}
+									height={48}
+								/>
+							}
+						/>
+					</div>
+					<div className="hidden flex-1 sm:block" />
+					<span
+						data-testid="audio-remaining"
+						className="min-w-[3rem] text-right text-xs tabular-nums text-base-content/60"
+					>
+						{formatRemaining(progress, duration)}
+					</span>
+					<div className="flex items-center gap-1">
+						<VolumeControl collapsible size="xs" />
+						{aside != null && (
+							<AsideToggle
+								label="Lyrics"
+								open={asideShown}
+								onToggle={() => setAsideShown((o) => !o)}
+							/>
+						)}
+					</div>
+				</div>
+
+				{/* The creator's chapters from the description, inside the transport — a song
+				    whose creator cues verse and chorus by the clock keeps its listeners there. */}
+				{chapters && chapters.length > 0 && (
+					<ChapterList
+						chapters={chapters}
+						position={progress}
+						duration={duration}
+						onSeek={seekTo}
+					/>
+				)}
+
+				{publicAccess && <PublicAccessFooter />}
+			</div>
+		);
+	}
 
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: the keymap is scoped to the player by design — see useMediaShortcuts.ts for why there is no global listener.
@@ -310,38 +477,7 @@ export default function AudioPlayer({
 			)}
 
 			<div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-				{/* ── Transport: skip, play (the card's own centerpiece), skip ── */}
-				<div className="flex items-center gap-1">
-					<TransportButton
-						label={`Skip back ${SKIP_SECONDS} seconds`}
-						icon={ArrowUturnLeftIcon}
-						onClick={() => skipBy(-SKIP_SECONDS)}
-						size="lg"
-						badge={
-							<span className="absolute right-0 top-0 text-[8px] font-bold leading-none">
-								{SKIP_SECONDS}
-							</span>
-						}
-					/>
-					<TransportButton
-						label={isPlaying ? "Pause" : "Play"}
-						icon={isPlaying ? PauseIcon : PlayIcon}
-						onClick={togglePlay}
-						tone="primary"
-						size="lg"
-					/>
-					<TransportButton
-						label={`Skip forward ${SKIP_SECONDS} seconds`}
-						icon={ArrowUturnRightIcon}
-						onClick={() => skipBy(SKIP_SECONDS)}
-						size="lg"
-						badge={
-							<span className="absolute right-0 top-0 text-[8px] font-bold leading-none">
-								{SKIP_SECONDS}
-							</span>
-						}
-					/>
-				</div>
+				{skipCluster}
 
 				{/*
 				 * The waveform IS the scrub surface, so it goes inside the shared SeekBar

@@ -44,7 +44,7 @@ import { SPOKEN_RATE_EVENT, stepSpokenRate, useSpokenRate } from "../../lib/spok
 import { useBindPlayerSeek } from "../../lib/work-player";
 import ChapterList from "./ChapterList";
 import { PublicAccessFooter, PublicAccessWall } from "./PublicAccessNotice";
-import { formatTime } from "./transport/format";
+import { formatRemaining, formatTime } from "./transport/format";
 import SeekBar from "./transport/SeekBar";
 import SpeedMenu from "./transport/SpeedMenu";
 import TransportButton from "./transport/TransportButton";
@@ -67,6 +67,13 @@ interface SpokenPlayerProps {
 	 * owns this page's playback — the account's Use Persistent Miniplayer setting.
 	 */
 	persistent?: QueueTrack;
+	/**
+	 * The stage layout — the media frame's fill, the waveform as the page's reading
+	 * surface (`ListenStage`) — set by `WorkDeliverable` where the frame holds the
+	 * page. Absent: the strip, which the embed's bare window and the fallback
+	 * branches keep.
+	 */
+	stage?: boolean;
 	/**
 	 * Restore from a remembered position and persist as it moves. Off only where resume
 	 * would be a lie — the Studio's own preview, which is not the listening the Work is for.
@@ -94,6 +101,7 @@ export default function SpokenPlayer({
 	workId,
 	waveform,
 	persistent,
+	stage = false,
 	remember = true,
 	attention,
 	publicAccess = false,
@@ -367,6 +375,129 @@ export default function SpokenPlayer({
 	const peaks = waveform && waveform.length > 0 ? waveform : defaultWaveform;
 
 	if (spent && budget) return <PublicAccessWall budget={budget} />;
+
+	const skipCluster = (
+		<>
+			<TransportButton
+				label={`Skip back ${SPOKEN_SKIP_BACK_SECONDS} seconds`}
+				icon={ArrowUturnLeftIcon}
+				onClick={() => skipBy(-SPOKEN_SKIP_BACK_SECONDS)}
+				badge={
+					<span className="absolute right-0 top-0 text-[8px] font-bold leading-none">
+						{SPOKEN_SKIP_BACK_SECONDS}
+					</span>
+				}
+			/>
+			<TransportButton
+				label={isPlaying ? "Pause" : "Play"}
+				icon={isPlaying ? PauseIcon : PlayIcon}
+				onClick={togglePlay}
+				tone="primary"
+			/>
+			<TransportButton
+				label={`Skip forward ${SPOKEN_SKIP_FORWARD_SECONDS} seconds`}
+				icon={ArrowUturnRightIcon}
+				onClick={() => skipBy(SPOKEN_SKIP_FORWARD_SECONDS)}
+				badge={
+					<span className="absolute right-0 top-0 text-[8px] font-bold leading-none">
+						{SPOKEN_SKIP_FORWARD_SECONDS}
+					</span>
+				}
+			/>
+		</>
+	);
+
+	if (stage) {
+		return (
+			// biome-ignore lint/a11y/noStaticElementInteractions: the keymap is scoped to the player by design — see useMediaShortcuts.ts for why there is no global listener.
+			<div
+				ref={containerRef}
+				onKeyDown={onKeyDown}
+				data-testid="spoken-player"
+				className="flex h-full min-h-0 w-full flex-col gap-3 focus-visible:outline-primary/50 sm:gap-4"
+				tabIndex={-1}
+			>
+				{/* Bar-driven mode renders no element — the bar owns the one <audio>. */}
+				{!persistent && (
+					// biome-ignore lint/a11y/useMediaCaption: Anthers has no caption tracks to offer yet — the `captions` roadmap entry. The element has no native controls; everything a person uses is the transport below.
+					<audio ref={audioRef} src={src} preload="metadata" />
+				)}
+
+				{/* The hero: the waveform is the page's reading surface, filling the media
+				    frame's profile; the phone keeps the strip in the transport below. */}
+				<div className="hidden min-h-0 w-full flex-1 sm:block">
+					<SeekBar
+						position={progress}
+						duration={duration}
+						onSeek={seekTo}
+						label="Seek audio"
+						stretch
+						track={
+							<WaveformDisplay peaks={peaks} progress={duration > 0 ? progress / duration : 0} />
+						}
+					/>
+				</div>
+
+				{/*
+				 * The transport, at the stage's foot: the skips, the rate the listener sets
+				 * once (the reason spoken does not share music's player), the times, and
+				 * the strip only on the phone.
+				 */}
+				<div className="flex w-full flex-wrap items-center gap-x-4 gap-y-3">
+					{skipCluster}
+					<span
+						className="min-w-[4rem] text-xs tabular-nums text-base-content/60"
+						data-testid="spoken-elapsed"
+					>
+						{formatTime(progress)}
+					</span>
+					<div className="min-w-[10rem] flex-1 sm:hidden">
+						<SeekBar
+							position={progress}
+							duration={duration}
+							onSeek={seekTo}
+							label="Seek audio"
+							track={
+								<WaveformDisplay
+									peaks={peaks}
+									progress={duration > 0 ? progress / duration : 0}
+									height={48}
+								/>
+							}
+						/>
+					</div>
+					<div className="hidden flex-1 sm:block" />
+					<span
+						className="min-w-[4rem] text-right text-xs tabular-nums text-base-content/60"
+						data-testid="spoken-remaining"
+					>
+						{formatRemaining(progress, duration)}
+					</span>
+					<div className="flex items-center gap-1">
+						{/* The speed menu is shared with the persistent bar, so both read the same. */}
+						<SpeedMenu rate={rate} onRate={setRate} />
+						<div className="hidden sm:block">
+							<VolumeControl collapsible size="xs" />
+						</div>
+					</div>
+				</div>
+
+				{/* The creator's chapters, inside the transport — the list that answers "what
+				    am I listening to", and the reason a titled lecture or interview episode
+				    doesn't read as one unbroken bar of waveform. */}
+				{chapters && chapters.length > 0 && (
+					<ChapterList
+						chapters={chapters}
+						position={progress}
+						duration={duration}
+						onSeek={seekTo}
+					/>
+				)}
+
+				{publicAccess && <PublicAccessFooter />}
+			</div>
+		);
+	}
 
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: the keymap is scoped to the player by design — see useMediaShortcuts.ts for why there is no global listener.
