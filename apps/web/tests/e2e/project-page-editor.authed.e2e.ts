@@ -93,9 +93,9 @@ test.afterAll(async () => {
 	}
 });
 
-/** The Works shelf's list — the first ordered list the owner's page renders. */
+/** The Works shelf's list, by its own role and name. */
 function shelfRows(page: import("@playwright/test").Page) {
-	return page.locator("ul").first();
+	return page.getByRole("list", { name: "Works on this Project" });
 }
 
 test("the editor is the page: the creator finds the shelves, the sort and the pencil there", async ({
@@ -109,7 +109,8 @@ test("the editor is the page: the creator finds the shelves, the sort and the pe
 	// [Zulu…, Bravo…]; alphabetical ascending reads [Bravo…, Zulu…]. A view that wrote
 	// would not survive returning to Manual, which the third test reads back.
 	const zulu = await makeWork(`${TITLE_PREFIX} Zulu`, true);
-	await makeWork(`${TITLE_PREFIX} Bravo`, true, "1999-01-01");
+	// The API takes a full datetime; the editor sends midnight UTC for a date-only claim.
+	await makeWork(`${TITLE_PREFIX} Bravo`, true, "1999-01-01T00:00:00.000Z");
 	await makeWork(`${TITLE_PREFIX} Delta draft`, false);
 
 	const made = await fetch(`${API_URL}/api/content/projects`, {
@@ -134,7 +135,7 @@ test("the editor is the page: the creator finds the shelves, the sort and the pe
 	// The sort's controls: Manual is the default and the direction pair is greyed out —
 	// visible, disabled — so the shape holds across modes.
 	const sortSelect = page.getByLabel("Sort the works");
-	const direction = page.getByLabel("Sort direction");
+	const direction = page.getByLabel("Works sort direction");
 	await expect(sortSelect).toHaveValue("manual");
 	await expect(direction).toBeDisabled();
 	await expect(direction).toBeVisible();
@@ -156,10 +157,12 @@ test("the multi-select picker adds everything ticked, in one act", async ({ page
 		await page.getByLabel(`Select ${title}`).click();
 	}
 	await expect(confirm).toBeEnabled();
-	// Untick and retick — the toggle has to toggle, and the count follows.
-	await page.getByLabel(`Select ${zulu}`).click();
+	// Untick the SECOND row and retick it — the toggle has to toggle, and the count
+	// follows. (Reticking Bravo keeps Zulu first in the picked order, so the adds — and
+	// thus the shelf's Manual order — read [Zulu, Bravo], the reverse of Alphabetical.)
+	await page.getByLabel(`Select ${bravo}`).click();
 	await expect(page.getByText("1 selected")).toBeVisible();
-	await page.getByLabel(`Select ${zulu}`).click();
+	await page.getByLabel(`Select ${bravo}`).click();
 	await expect(page.getByText("2 selected")).toBeVisible();
 
 	await confirm.click();
@@ -183,7 +186,7 @@ test("a non-manual sort is a view: no write, no drag, and Manual gives the store
 	const zulu = `${TITLE_PREFIX} Zulu`;
 	const bravo = `${TITLE_PREFIX} Bravo`;
 	const sortSelect = page.getByLabel("Sort the works");
-	const direction = page.getByLabel("Sort direction");
+	const direction = page.getByLabel("Works sort direction");
 	const rows = shelfRows(page).locator("li .truncate");
 
 	// Manual first: two rows, in the order the adds went in — the stored order.

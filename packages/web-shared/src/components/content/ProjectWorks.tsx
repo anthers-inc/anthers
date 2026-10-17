@@ -202,7 +202,7 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 						))}
 					</select>
 					<select
-						aria-label="Sort direction"
+						aria-label="Works sort direction"
 						className="select select-bordered select-sm disabled:opacity-50"
 						value={sortDirection}
 						disabled={manual}
@@ -229,7 +229,9 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 				</p>
 			)}
 
-			<ul className="space-y-2">
+			{/* The list names itself for the tests' role-targeting and for a screen reader
+			    over a page whose other lists (menus) are not shelves. */}
+			<ul aria-label="Works on this Project" className="space-y-2">
 				{displayed.map((work, i) => {
 					const preview = itemPreviewUrl(work);
 					// Manual renders the stored array in stored order, so the displayed index is

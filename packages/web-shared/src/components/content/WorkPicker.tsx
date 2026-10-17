@@ -162,9 +162,11 @@ export default function WorkPicker({ onSelect, onClose, excludeIds = [] }: WorkP
 													aria-label={`Select ${item.title || "Untitled"}`}
 													className="checkbox checkbox-sm"
 													checked={pickedSet.has(item.id)}
-													onChange={() => {}}
+													// The checkbox is a real toggle — the row's click and this
+													// box's change are one act on two surfaces, and the
+													// stopPropagation keeps the two from stacking into a double.
+													onChange={() => toggle(item.id)}
 													onClick={(e) => e.stopPropagation()}
-													onKeyDown={(e) => e.key === "Enter" && toggle(item.id)}
 												/>
 											</td>
 											<td>

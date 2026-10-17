@@ -158,9 +158,11 @@ export default function PostPicker({ excludeIds, onSelect, onClose }: PostPicker
 												aria-label={`Select ${post.title || "Untitled"}`}
 												className="checkbox checkbox-sm"
 												checked={pickedSet.has(post.id)}
-												onChange={() => {}}
+												// The checkbox is a real toggle — the row's click and this
+												// box's change are one act on two surfaces, and the
+												// stopPropagation keeps the two from stacking into a double.
+												onChange={() => toggle(post.id)}
 												onClick={(e) => e.stopPropagation()}
-												onKeyDown={(e) => e.key === "Enter" && toggle(post.id)}
 											/>
 										</td>
 										<td

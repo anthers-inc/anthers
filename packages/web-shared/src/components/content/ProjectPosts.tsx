@@ -190,7 +190,7 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 						))}
 					</select>
 					<select
-						aria-label="Sort direction"
+						aria-label="Posts sort direction"
 						className="select select-bordered select-sm disabled:opacity-50"
 						value={sortDirection}
 						disabled={manual}
@@ -217,7 +217,7 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 				</p>
 			)}
 
-			<ul className="space-y-2">
+			<ul aria-label="Posts on this Project" className="space-y-2">
 				{displayed.map((post, i) => {
 					const storedIndex = manual ? i : posts.findIndex((p) => p.id === post.id);
 					return (
