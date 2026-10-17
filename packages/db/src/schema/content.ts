@@ -925,6 +925,12 @@ export const transcodingJobs = pgTable(
 		status: text("status").notNull().default("pending"), // pending | processing | completed | failed | canceled
 		progress: integer("progress").default(0),
 		etaSeconds: integer("eta_seconds"), // estimated seconds remaining (video transcode; null when unknown/done)
+		// The row's spot in the single-file media lane (QUEUES.MEDIA), 1 = next to run, for the
+		// creator-facing "N ahead of you" and the queue ETA built in `queue-position.ts`. Set on
+		// the media jobs at enqueue and refreshed at every lane transition — a processing row is
+		// out of the queue (null); ebooks never join the lane, and the per-type queues that
+		// predated it carried no position, so null also reads as "not in the lane" for them.
+		queuePosition: integer("queue_position"),
 		errorMessage: text("error_message").default(""),
 		hlsManifestUrl: text("hls_manifest_url").default(""),
 		outputFileUrl: text("output_file_url").default(""),

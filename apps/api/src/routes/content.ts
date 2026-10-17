@@ -117,6 +117,7 @@ import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import { z } from "zod";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
+import { refreshQueuePositions } from "../jobs/queue-position.js";
 import { queueScansForWork } from "../jobs/scan-media.js";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
@@ -1186,6 +1187,9 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 			.values({ workId: item.id, mediaType: "video", status: "pending" })
 			.returning();
 		await queue.send(QUEUES.MEDIA, { jobId: job.id }, JOB_OPTIONS[QUEUES.MEDIA]);
+		// The lane's order is a record (queue-position.ts), written at every transition —
+		// enqueue here, claim/settle in the handler, cancel in its route.
+		await refreshQueuePositions();
 		return job;
 	}
 	if (processing === "ebook" && item.sourceKey) {
@@ -1217,6 +1221,7 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 			.values({ workId: item.id, mediaType: "audio", status: "pending" })
 			.returning();
 		await queue.send(QUEUES.MEDIA, { jobId: job.id }, JOB_OPTIONS[QUEUES.MEDIA]);
+		await refreshQueuePositions();
 		return job;
 	}
 	return null;
@@ -3750,6 +3755,8 @@ const contentRoutes = new Hono()
 			.update(transcodingJobs)
 			.set({ status: "canceled", etaSeconds: null, updatedAt: new Date() })
 			.where(eq(transcodingJobs.id, jobId));
+		// The canceled row leaves the queue; the ones behind it move up.
+		await refreshQueuePositions();
 
 		const [jobRow] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, jobId));
 		return c.json(

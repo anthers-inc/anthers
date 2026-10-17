@@ -16,6 +16,7 @@ import { db } from "@anthers/db";
 import { transcodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { processAudio } from "./process-audio.js";
+import { refreshQueuePositions } from "./queue-position.js";
 import { transcodeVideo } from "./transcode-video.js";
 
 /** The lane's routing, exported so a test can assert the map's shape directly. */
@@ -32,6 +33,16 @@ export async function runMediaJob(jobId: number): Promise<void> {
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 
+	// The claimed row leaves the queue (its position nulls) and the rest renumber —
+	// before, not after, so the screen already reads the shift while the work runs.
+	// Best-effort: a failed renumber must not cost a job its run; the write happens
+	// again at the run's own settle below.
+	try {
+		await refreshQueuePositions();
+	} catch (err) {
+		console.error("[media] queue refresh failed (non-fatal):", err);
+	}
+
 	const run = DISPATCH[job.mediaType];
 	if (!run) {
 		const message = `TranscodingJob ${jobId} carries media type "${job.mediaType}", which the media lane does not process`;
@@ -40,7 +51,18 @@ export async function runMediaJob(jobId: number): Promise<void> {
 			.update(transcodingJobs)
 			.set({ status: "failed", errorMessage: message, updatedAt: new Date() })
 			.where(eq(transcodingJobs.id, jobId));
+		await refreshQueuePositions();
 		return;
 	}
-	await run(jobId);
+	try {
+		await run(jobId);
+	} finally {
+		// Settled — completed, failed or thrown — the row is out of the queue either way,
+		// and the rows behind it renumber to say so.
+		try {
+			await refreshQueuePositions();
+		} catch (err) {
+			console.error("[media] queue refresh failed (non-fatal):", err);
+		}
+	}
 }
