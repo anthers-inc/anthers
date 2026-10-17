@@ -9,7 +9,7 @@
  * diff, beside the reasoning that put each there** — an opaque list "in the vault
  * somewhere" is exactly the unownable mechanism the sourcing document warned about. The
  * categories and their reasons are the seed document's
- * (`Anthers-Wiki/Internal Wiki/Transient/Noun Project Blocklist Seed.md`); the script is
+ * (`wiki-anthers/Internal Wiki/Transient/Noun Project Blocklist Seed.md`); the script is
  * the mechanical half that makes the rows exist.
  *
  * Idempotent on (kind, value): re-running adds nothing and removes nothing. Removals are

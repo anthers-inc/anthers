@@ -580,8 +580,11 @@ test("the meter — a free user is warned before the limit, not after", async ({
 	// Half an hour left, so the countdown speaks — and says the remainder, because "you
 	// are near the end" without a number is not information.
 	await expect(page.getByText(/30 minutes.*Public Access left this month/i)).toBeVisible();
-	// The pitch, with the multiplier that must never be typed into copy.
-	await expect(page.getByText(/6× more/)).toBeVisible();
+	// The pitch's own rule: the price and the more-creators-are-paid claim, and no
+	// multiple — the comparison left the conversion copy when the free tier's pool
+	// became the Fund's published monthly figure (2026-10-17), which no typed "six"
+	// can follow.
+	await expect(page.getByText(/paid more for your attention/)).toBeVisible();
 
 	// And the player is still there — a warning is not a wall.
 	await expect(page.locator("video")).toBeVisible();

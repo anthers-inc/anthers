@@ -45,7 +45,7 @@
 //    the model generates, the scenario lives in `packages/shared/src/scenarios.ts` and
 //    the entry interpolates the constant.
 // 6. **The voice is the vault's public voice** — `82.01 How Anthers Talks About Itself`
-//    in `Anthers-Wiki/80-89 Development/82 Brand/` governs claims and vocabulary
+//    in `wiki-anthers/80-89 Development/82 Brand/` governs claims and vocabulary
 //    (Work, Post, Library, Badge, gate, Public Access, Review, time). The pass is
 //    captured as the `anthers-release-notes` skill, which walks the whole procedure.
 //

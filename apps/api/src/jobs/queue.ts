@@ -222,6 +222,9 @@ export const QUEUES = {
 	INGEST_EBOOK: "ingest-ebook",
 	DISTRIBUTE_POOL: "distribute-pool",
 	SETTLE_CYCLE: "settle-cycle", // Credit each ended month from its paid invoices; see settle-cycle.ts
+	// Publish the Time Pool Fund's ledger: restate actuals, commit the next month from
+	// the recurring base, estimate one further. See services/time-pool-fund.ts.
+	PUBLISH_POOL_FUND: "publish-pool-fund",
 	// Move settled, held credits into each creator's connected-account balance, 14 days
 	// after each credit's own settlement. See transfer-held-credits.ts.
 	TRANSFER_HELD_CREDITS: "transfer-held-credits",
@@ -601,6 +604,11 @@ export const CRON_SCHEDULES: ReadonlyArray<
 > = [
 	[QUEUES.DISTRIBUTE_POOL, "0 0 * * *"], // midnight daily
 	[QUEUES.SETTLE_CYCLE, "0 2 2 * *"], // 2 AM on the 2nd, clear of the renewals on the 1st
+	// 3 AM on the 2nd, AFTER settle-cycle's 2 AM: the ledger's actual rows are published
+	// behind the settled books they restate from, and the commitment for next month
+	// reads the current holdings, not the books — so the hour's ordering is about the
+	// actuals arriving settled rather than about any reader of theirs.
+	[QUEUES.PUBLISH_POOL_FUND, "0 3 2 * *"],
 	// 4 AM daily, deliberately AFTER settle-cycle's 2 AM on the 2nd — the money this job
 	// moves is the money settlement credited, so a settlement that lands at 2 AM is
 	// hold-eligible fourteen days from its own settledAt rather than waiting a night.

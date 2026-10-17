@@ -97,9 +97,9 @@ import {
 	badgeLabel,
 	cardFeeDisplay,
 	FREE_STORAGE_GIB,
-	FREE_TIME_POOL,
 	heldBadgeLabel,
 	PUBLIC_ACCESS_PRICE,
+	STORAGE_PER_GIB_MONTH,
 	stickerBudgetFor,
 	storageGibFor,
 	thresholdForBadge,
@@ -149,15 +149,15 @@ import SubscriptionPaymentModal, {
 import { FAQBlock } from "../components/ui/FAQ";
 import { useAnthersLadder } from "../lib/anthers-ladder";
 import { type HandleStatus, useHandleAvailability } from "../lib/hosted-handle";
+import { useTimePoolFund } from "../lib/time-pool-fund";
 
 /* ── Free-tier figures ────────────────────────────────────────────────────────
- * Both of these were quarantined in a named `SPIKE` block until 2026-08-12, because
- * Public Access was a proposal and neither number had code behind it. Both are real
- * now and are read from the modules that own them, so this page cannot drift from the
- * meter that enforces the hours or the ledger that funds the pool.
- *
- * 🚨 `FREE_TIME_POOL` in particular is **explicitly provisional** and expected to move —
- * which is exactly why it must not be transcribed here. See its note in `constants.ts`.
+ * The Public Access hours are read from the module that owns them; the meter that
+ * enforces them and this page cannot drift. The free tier's Time Pool is the **Time
+ * Pool Fund's** published monthly slice (the pool mechanism retired the constant):
+ * runtime data, fetched from its ledger through `lib/time-pool-fund`, and the copy
+ * renders the published figure or the varies clause until it lands. See
+ * `anthersReading` and the walk-down below the ladder.
  */
 
 /**
@@ -448,11 +448,14 @@ function SupportBreakdown({
  * inline, the sizer would have been a third copy of copy that already existed twice, and
  * the sizer is the copy nobody proofreads.
  *
- * ⚠️ Free's segments describe money that is real but is not the user's: Anthers funds a
- * Time Pool pot on a free account's behalf, so creators are genuinely paid for that
+ * ⚠️ Free's segments describe money that is real but is not the user's: the Time Pool
+ * Fund funds a pool on a free account's behalf, so creators are genuinely paid for that
  * account's time. They are the SAME three lines a paid rung draws, so the two readings are
  * directly comparable — and the zeroes are true, since a free account contributes nothing
- * to the remainder and has no card to process.
+ * to the remainder and has no card to process. The Fund's slice rides in as `fundSlice`:
+ * the published ledger's figure for the current cycle, or null before the fetch lands,
+ * where the copy names the share as published rather than showing a number it does not
+ * have.
  *
  * ⚠️ **The entry price travels in as `entryPrice`** rather than being read from a constant
  * here: the note's "$3 a month lifts your monthly limit" is a claim about the seeded ladder
@@ -463,7 +466,11 @@ function SupportBreakdown({
  * the cards, the choice resolution — is the charge picker's own display and stays
  * constant-derived with it, by the same "one list, one total" rule.
  */
-function anthersReading(amount: number, entryPrice: number): { segments: Segment[]; note: string } {
+function anthersReading(
+	amount: number,
+	entryPrice: number,
+	fundSlice: number | null,
+): { segments: Segment[]; note: string } {
 	if (amount > 0) {
 		return {
 			segments: [
@@ -493,9 +500,9 @@ function anthersReading(amount: number, entryPrice: number): { segments: Segment
 		segments: [
 			{
 				tone: "pool",
-				amount: FREE_TIME_POOL,
+				amount: fundSlice ?? 0,
 				label: "To Creators, by Time",
-				desc: "split by the share of your time each one earned, funded by Anthers, not by you",
+				desc: "split by the share of your time each one earned, funded by the Time Pool Fund, not by you",
 			},
 			{
 				tone: "mission",
@@ -510,7 +517,13 @@ function anthersReading(amount: number, entryPrice: number): { segments: Segment
 				desc: "no card, so nothing to process",
 			},
 		],
-		note: `A free account is charged nothing, and the creators you spend time with are still paid: Anthers puts ${money(FREE_TIME_POOL)} a month into the Time Pool on your behalf, out of what the rungs above pay in.`,
+		// ⭐ The Fund figure renders when the fetch has landed and names itself as what
+		// it is (varies monthly); until then, no number is claimed, which is the
+		// placeholder the walk-down's Free rung shows too.
+		note:
+			fundSlice != null
+				? `A free account is charged nothing, and the creators you spend time with are still paid: the Time Pool Fund puts ${money(fundSlice)} a month into the Time Pool on your behalf, out of what the rungs above pay in (varies — published monthly).`
+				: "A free account is charged nothing, and the creators you spend time with are still paid: the Time Pool Fund funds the Time Pool on your behalf out of what the rungs above pay in, and its monthly share is published.",
 	};
 }
 
@@ -577,7 +590,11 @@ interface PerkCell {
 interface PerkRow {
 	title: string;
 	desc: string;
-	cell: (amount: number) => PerkCell;
+	/**
+	 * The cell's figures, as a function of the rung's amount — and, where the free tier's
+	 * pool is the subject, of the Fund's published slice (null until the fetch lands).
+	 */
+	cell: (amount: number, fundSlice?: number | null) => PerkCell;
 	/**
 	 * A perk Anthers has committed to and not built. The row still shows what each rung will
 	 * carry, and says beside its title that it is not there yet, because a matrix read without
@@ -616,12 +633,20 @@ const PERK_ROWS: PerkRow[] = [
 	{
 		title: "Monthly Time Pool",
 		// ⚠️ The second sentence is not decoration. A free account's pot is real money that
-		// creators are really paid, and it is Anthers that pays it — a column reading "$0.25"
-		// with no more said implies the free account is being charged a quarter.
-		desc: "Paid out to the creators you spend time with, split by the share of your time each one earned. Anthers funds a free account's pot rather than the account paying for it.",
-		cell: (amount) => ({
-			value: columnMoney(timePoolFor(amount)),
-			note: amount > 0 ? undefined : "from Anthers",
+		// creators are really paid, and it is the Time Pool Fund that pays it — a column
+		// reading a figure with no more said implies the free account is being charged it.
+		// The free column's value is the Fund's published slice for the current cycle, and
+		// "published monthly" is the note rather than the number, because the pool rides
+		// what arrived; before the fetch lands the note IS the value.
+		desc: "Paid out to the creators you spend time with, split by the share of your time each one earned. The Time Pool Fund funds a free account's pot rather than the account paying for it.",
+		cell: (amount, fundSlice) => ({
+			value:
+				amount > 0
+					? columnMoney(timePoolFor(amount))
+					: fundSlice != null
+						? columnMoney(fundSlice)
+						: "varies",
+			note: amount > 0 ? undefined : "from the Time Pool Fund, published monthly",
 		}),
 	},
 	{
@@ -696,11 +721,15 @@ const same = (a: PerkCell, b: PerkCell) => a.value === b.value && a.note === b.n
  * the drift would be invisible: a card that has quietly stopped mentioning the storage
  * upgrade still renders and still reads fine.
  */
-export function marginalRows(amount: number, previous: number | null): PerkRow[] {
+export function marginalRows(
+	amount: number,
+	previous: number | null,
+	fundSlice: number | null = null,
+): PerkRow[] {
 	return PERK_ROWS.filter((row) => {
-		const here = row.cell(amount);
+		const here = row.cell(amount, fundSlice);
 		if (here.value === NOT_CARRIED) return false;
-		return previous === null || !same(here, row.cell(previous));
+		return previous === null || !same(here, row.cell(previous, fundSlice));
 	});
 }
 
@@ -714,8 +743,13 @@ export function marginalRows(amount: number, previous: number | null): PerkRow[]
  * `marginalRows` still compares the full cell, qualifier included, which is what keeps the
  * storage upgrade from vanishing out of Root's card on the grounds that 50 equals 50.
  */
-function changedNote(row: PerkRow, amount: number, previous: number | null): string | null {
-	const { note } = row.cell(amount);
+function changedNote(
+	row: PerkRow,
+	amount: number,
+	previous: number | null,
+	fundSlice: number | null = null,
+): string | null {
+	const { note } = row.cell(amount, fundSlice);
 	if (!note) return null;
 	if (previous === null) return note;
 	return note === row.cell(previous).note ? null : note;
@@ -837,7 +871,107 @@ function pickedRung(badge: string | null): BadgeKey | null {
 		: "free";
 }
 
-function BadgeLadder(props: LadderProps) {
+/**
+ * The walk-down beneath the ladder: where a month to Anthers goes, rung by rung.
+ *
+ * The pool mechanism's publication deliverable, settled at signup (the signup-table
+ * design Parker approved on 2026-10-07, labels his): a rung's support splits into the
+ * Time Pool paid to creators by the time spent, the part handed out directly as
+ * Stickers, the card fee at cost, and the remainder funding the charitable programs —
+ * with the real storage cost a reader would otherwise never see, in a dollar
+ * parenthetical beside the allowance. The free rung's pool is the **Time Pool Fund's**
+ * published slice of the remainder after the admin budget, shown as the varies clause
+ * the walk-down's Free row carries until the fetch lands.
+ *
+ * Figures come from the same helpers the generated wiki tables compose from
+ * (`timePoolFor`, `stickerBudgetFor`, `cardFeeDisplay`, `storageGibFor` and the
+ * provider rate), so this table cannot drift from the model; nothing here is typed.
+ * The rung list is the ladder display's own constant-derived rule (see
+ * `anthersReading`'s note on the one-list-one-total rule).
+ */
+function LadderWalkDown({ fundSlice }: { fundSlice: number | null }) {
+	const amounts = BADGE_ORDER.map((key) => thresholdForBadge(key));
+	const provider = (gib: number) => `$${(gib * STORAGE_PER_GIB_MONTH).toFixed(2)}`;
+	return (
+		<div className="mx-auto mt-10 max-w-5xl">
+			<p className="mx-auto mb-4 max-w-2xl text-center text-sm leading-relaxed text-base-content/65">
+				Where a month to Anthers goes, at any rung: the Time Pool half to creators by the time
+				spent, Stickers as the part handed out directly, the card at cost, and the rest to the
+				charitable programs.
+			</p>
+			<div className="relative overflow-x-auto">
+				<table
+					className={`w-full min-w-[46rem] table-fixed border-separate border-spacing-0 text-left text-sm ${RAISED}`}
+				>
+					<caption className="sr-only">
+						Where a monthly amount to Anthers goes at each rung, including the free tier's Time Pool
+						share from the Time Pool Fund.
+					</caption>
+					<thead>
+						<tr>
+							<th scope="col" className="px-4 py-3">
+								A month to Anthers
+							</th>
+							<th scope="col" className="px-4 py-3 text-right">
+								Time Pool, to creators
+							</th>
+							<th scope="col" className="px-4 py-3 text-right">
+								Stickers
+							</th>
+							<th scope="col" className="px-4 py-3 text-right">
+								Payments
+							</th>
+							<th scope="col" className="px-4 py-3 text-right">
+								Charitable programs
+							</th>
+							<th scope="col" className="px-4 py-3 text-right">
+								Storage
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						{amounts.map((amount) => {
+							const free = amount === 0;
+							const pool = free ? null : timePoolFor(amount);
+							const stickers = free ? null : stickerBudgetFor(amount);
+							const payments = free ? 0 : cardFeeDisplay(amount);
+							const programs = free ? 0 : Math.max(0, amount - (pool ?? 0) - payments);
+							const gib: number = free ? FREE_STORAGE_GIB : storageGibFor(amount);
+							return (
+								<tr key={free ? "free" : amount}>
+									<td className="px-4 py-3 font-medium">{free ? "Free" : money(amount)}</td>
+									<td className="px-4 py-3 text-right tabular-nums">
+										{free
+											? fundSlice != null
+												? `${money(fundSlice)} (varies — published monthly)`
+												: "Pool share (varies — published monthly)"
+											: money(pool ?? 0)}
+									</td>
+									<td className="px-4 py-3 text-right tabular-nums">
+										{free || stickers == null ? "—" : money(stickers)}
+									</td>
+									<td className="px-4 py-3 text-right tabular-nums">
+										{free ? "no card, so nothing" : money(payments)}
+									</td>
+									<td className="px-4 py-3 text-right tabular-nums">{money(programs)}</td>
+									<td className="px-4 py-3 text-right tabular-nums">
+										{gib} GiB ({provider(gib)} to our provider)
+									</td>
+								</tr>
+							);
+						})}
+					</tbody>
+				</table>
+			</div>
+			<p className="mx-auto mt-4 max-w-2xl text-center text-xs leading-relaxed text-base-content/45">
+				The Time Pool and Stickers are one column's worth of money, not two: a Sticker is handed out
+				of the same pool the time splits, so giving none costs creators nothing.
+			</p>
+		</div>
+	);
+}
+
+function BadgeLadder(props: LadderProps & { fundSlice?: number | null }) {
 	const fits = useMatrixFits();
 	return (
 		// 🚨 `min-w-0` is load-bearing, and it is a `<fieldset>` quirk rather than a flex one.
@@ -902,7 +1036,12 @@ const SURFACE_CELL = "bg-base-100/70";
 const RAISED = "drop-shadow-[0_5px_16px_rgba(0,0,0,0.15)]";
 
 /** The wide layout: seven perks by five rungs, chosen by the column headers. */
-function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
+function BadgeMatrix({
+	value,
+	onChange,
+	idPrefix,
+	fundSlice = null,
+}: LadderProps & { fundSlice?: number | null }) {
 	// ⚠️ The chosen rung as a COLUMN INDEX rather than a name, because the grid rules are
 	// drawn by neighbor: a cell needs to know it sits immediately left of the lit column.
 	// The name's index in `BADGE_ORDER` is the column, so a name off the ladder gives `-1`,
@@ -1007,12 +1146,13 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
 									// it draws that rule in primary when EITHER of the two is the chosen one.
 									const rightEdgeLit = lit || column === litColumn - 1;
 									const lastColumn = column === RUNG_AMOUNTS.length - 1;
-									const cell = row.cell(amount);
+									const cell = row.cell(amount, fundSlice);
 									const carried = cell.value !== NOT_CARRIED;
 									const shownNote = changedNote(
 										row,
 										amount,
 										column === 0 ? null : RUNG_AMOUNTS[column - 1],
+										fundSlice,
 									);
 									return (
 										<td
@@ -1052,7 +1192,12 @@ function BadgeMatrix({ value, onChange, idPrefix }: LadderProps) {
  * legally contain a `<ul>`, so wrapping the whole card would mean giving up list semantics
  * for the perks. The pressable part is the rung, which is also what it is in the matrix.
  */
-function BadgeCards({ value, onChange, idPrefix }: LadderProps) {
+function BadgeCards({
+	value,
+	onChange,
+	idPrefix,
+	fundSlice = null,
+}: LadderProps & { fundSlice?: number | null }) {
 	return (
 		<div className="space-y-3">
 			{BADGE_ORDER.map((key, index) => {
@@ -1060,7 +1205,7 @@ function BadgeCards({ value, onChange, idPrefix }: LadderProps) {
 				const previousKey = index === 0 ? null : BADGE_ORDER[index - 1];
 				const previous = index === 0 ? null : RUNG_AMOUNTS[index - 1];
 				const lit = value === key;
-				const rows = marginalRows(amount, previous);
+				const rows = marginalRows(amount, previous, fundSlice);
 				return (
 					<div
 						key={key}
@@ -2246,6 +2391,8 @@ export default function SignupPage() {
 	 * that paid for it.
 	 */
 	const ladder = useAnthersLadder();
+	// The Fund's published values — the free tier's pool is its slice, never a constant.
+	const fund = useTimePoolFund();
 
 	/**
 	 * Where to hand the visitor back to once this is over, if they came from somewhere.
@@ -2474,9 +2621,15 @@ export default function SignupPage() {
 	/**
 	 * The breakdown the chosen rung reads as — see `anthersReading` for the other one.
 	 * The entry price is the seeded ladder's: the note claims the price that lifts the
-	 * limit, which is the bottom rung the rows state.
+	 * limit, which is the bottom rung the rows state. The free reading draws the Fund's
+	 * published slice (null until the fetch lands), so the breakdown and the walk-down
+	 * name the same published figure.
 	 */
-	const anthersBreakdown = anthersReading(anthersAmount, ladder.publicAccessPrice);
+	const anthersBreakdown = anthersReading(
+		anthersAmount,
+		ladder.publicAccessPrice,
+		fund?.slicePerAccount ?? null,
+	);
 
 	/** Step 3's answer, in the shape the echo and the summary both render. Step 3 is the
 	 *  Anthers ask — it was step 2 until 2026-08-17; see the resequencing note up top. */
@@ -2871,7 +3024,10 @@ export default function SignupPage() {
 								<GoFurtherCard icon={SparklesIcon} title="Back Anthers" target="anthers-badges">
 									Just {money(ladder.publicAccessPrice)}/month takes the monthly limit off Public
 									Access usage, and it lifts your automatic support for creators from{" "}
-									{money(FREE_TIME_POOL)}/month to {money(timePoolFor(ladder.publicAccessPrice))}
+									{fund
+										? `${money(fund.slicePerAccount)}/month`
+										: "the free pool's published share"}{" "}
+									to {money(timePoolFor(ladder.publicAccessPrice))}
 									/month.
 									<br></br>
 									<br></br>
@@ -2959,6 +3115,7 @@ export default function SignupPage() {
 							idPrefix="anthers-ladder"
 							value={pickedRung(picks.badge)}
 							onChange={(v) => setPicks((prev) => ({ ...prev, badge: v }))}
+							fundSlice={fund?.slicePerAccount ?? null}
 						/>
 						{/* 🚨 **Always rendered, including for Free** (Parker, 2026-08-24). It used to
 						    be hidden at $0, which made choosing Free shrink the page — and the
@@ -2976,6 +3133,7 @@ export default function SignupPage() {
 								anthersReading(
 									anthersAmount > 0 ? 0 : ladder.publicAccessPrice,
 									ladder.publicAccessPrice,
+									fund?.slicePerAccount ?? null,
 								),
 							]}
 						/>
@@ -2988,6 +3146,11 @@ export default function SignupPage() {
 							sizers={ANTHERS_ECHO_SIZERS}
 							empty={`Staying free at ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month.`}
 						/>
+						{/* The walk-down the pool mechanism's publication settles at signup: where a
+						    rung's month goes, rung by rung, from the same figures the generated tables
+						    and the plan compose from. The free rung's pool is the Fund's published
+						    slice, shown as the varies clause until the fetch lands. */}
+						<LadderWalkDown fundSlice={fund?.slicePerAccount ?? null} />
 					</Reveal>
 				</div>
 			</section>

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * State marketplace-facilitator thresholds — the transcription of the Sales Tax Playbook's
- * threshold table (Anthers-Wiki, `Internal Wiki/10-19 Governance & Records/22 - Sales Tax
+ * threshold table (wiki-anthers, `Internal Wiki/10-19 Governance & Records/22 - Sales Tax
  * Playbook`, § The Threshold Table), and the place a value is added.
  *
  * Pure (no clock reads, no DOM, no I/O — `now` is always a parameter), like `content-rating.ts`
