@@ -71,7 +71,10 @@ describe("save shim script — inert without the parent", () => {
 			window: {
 				addEventListener: (type: string, cb: unknown) => {
 					let entry = registered.find((r) => r.types[0] === type);
-					if (!entry) registered.push((entry = { types: [type], callbacks: [] }));
+					if (!entry) {
+						entry = { types: [type], callbacks: [] };
+						registered.push(entry);
+					}
 					entry.callbacks.push(cb);
 				},
 				parent: { postMessage: () => messagesSent++ },
@@ -92,14 +95,10 @@ describe("save shim script — inert without the parent", () => {
 			setInterval: () => 0,
 			Date,
 		};
-		const run = new Function(
-			"window",
-			"indexedDB",
-			"setInterval",
-			"Date",
-			`${script}`,
-		);
-		expect(() => run(sandbox.window, sandbox.indexedDB, sandbox.setInterval, sandbox.Date)).not.toThrow();
+		const run = new Function("window", "indexedDB", "setInterval", "Date", `${script}`);
+		expect(() =>
+			run(sandbox.window, sandbox.indexedDB, sandbox.setInterval, sandbox.Date),
+		).not.toThrow();
 		for (const type of ["pointerdown", "keydown", "wheel", "touchstart"]) {
 			expect(registered.some((r) => r.types.includes(type))).toBe(true);
 		}

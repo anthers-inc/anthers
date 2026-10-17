@@ -51,7 +51,13 @@ let sendSpy: ReturnType<typeof spyOn>;
 /** A delivery-host env: the suffix makes the host guard name a per-Work origin. */
 const _DELIVERY_ENV = { BUILD_ORIGIN_SUFFIX: "delivery.test" };
 
-function call(method: string, path: string, cookie: string, body?: unknown, headers: Record<string, string> = {}) {
+function call(
+	method: string,
+	path: string,
+	cookie: string,
+	body?: unknown,
+	headers: Record<string, string> = {},
+) {
 	return app.fetch(
 		new Request(`http://localhost${path}`, {
 			method,
@@ -169,12 +175,22 @@ describe("browser-build delivery", () => {
 		// minted src must carry. An src in the other scheme upgrades the frame in Chrome
 		// (mixed content) to an origin that then fails the parent's senders checks,
 		// silently killing the save relay. Found live, 2026-10-17.
-		const w = await insertWork({ creatorId: creator.id, type: "game", title: `mint scheme ${run}` });
+		const w = await insertWork({
+			creatorId: creator.id,
+			type: "game",
+			title: `mint scheme ${run}`,
+		});
 		workIds.push(w.id);
 		await createBuildWithFiles(w.id, creator.cookie, ["index.html"], "index.html");
-		const mint = await call("GET", `/api/content/works/${w.id}/play`, creator.cookie, undefined as never, {
-			"X-Forwarded-Proto": "https",
-		});
+		const mint = await call(
+			"GET",
+			`/api/content/works/${w.id}/play`,
+			creator.cookie,
+			undefined as never,
+			{
+				"X-Forwarded-Proto": "https",
+			},
+		);
 		const { src } = (await mint.json()) as { src: string };
 		expect(src).toMatch(/^https:\/\/localhost\/build\//);
 	});
