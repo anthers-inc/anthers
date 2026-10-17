@@ -5,7 +5,7 @@
 //
 // ⏳ **This file is a way station.** The settled direction (Parker, 2026-09-03) is that
 // the documentation, the roadmap and the task board all become public together, authored
-// in `Anthers-Wiki` in Obsidian and pushed to the site by an exporter — because publishing
+// in `wiki-anthers` in Obsidian and pushed to the site by an exporter — because publishing
 // three surfaces separately means maintaining the links between them by hand. The plan is
 // *Publishing the Wiki, Roadmap and Tasks 20260903* in the vault's Transient folder. **The
 // content below is written to survive that move; the TypeScript around it is not.** Do not
@@ -72,7 +72,7 @@ export function interpolatePriceFor(text: string, publicAccessPrice: number): st
 export type Bucket = "launched" | "active" | "planned";
 
 /**
- * A page in `Anthers-Wiki`, named by identity rather than by address.
+ * A page in `wiki-anthers`, named by identity rather than by address.
  *
  * 🚨 **Deliberately not a URL.** The wiki is not served from this site, and *how* it will
  * be served is one of the open decisions — so a path written here today would be a guess

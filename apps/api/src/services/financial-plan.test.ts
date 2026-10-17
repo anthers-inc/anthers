@@ -62,8 +62,11 @@ describe("the financial plan service", () => {
 			expect(L.adminBudget + L.programs).toBeCloseTo(L.charitableRevenue, 6);
 			expect(L.freeAccess + L.freeStorage + L.otherPrograms).toBeCloseTo(L.programs, 6);
 			expect(L.solvent).toBe(true);
-			// The Fund's slice is the pot divided across free accounts.
-			expect(L.freeAccess).toBeCloseTo(L.freeSlice * L.freeAccounts, 6);
+			// The slice divides the pot floored to the cent, so the accounts' slices sum
+			// to the pot less the dust they strand (sub-cent each, per the slice's rule).
+			const paidBySlices = L.freeSlice * L.freeAccounts;
+			expect(L.freeAccess - paidBySlices).toBeGreaterThanOrEqual(0);
+			expect(L.freeAccess - paidBySlices).toBeLessThan(L.freeAccounts * 0.01);
 		}
 	});
 
