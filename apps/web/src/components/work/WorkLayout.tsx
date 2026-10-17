@@ -198,11 +198,19 @@ export function WorkPlaceholder({
 	type,
 	note,
 	status,
+	action,
 }: {
 	type: string;
 	note: string;
 	/** The processing block that replaced the box, now riding inside it — see the docblock. */
 	status?: ReactNode;
+	/**
+	 * The act that fills the box, riding inside it — the creator's file dropper (the
+	 * dropper task, 2026-10-17): a draft with no file picks its file in the place the
+	 * file will occupy, rather than being sent down a tab's form. The caller decides
+	 * when the box is the creator's to fill; the visitor's silhouette passes nothing.
+	 */
+	action?: ReactNode;
 }) {
 	const shape = PLACEHOLDER_SHAPES[type] ?? {
 		icon: DocumentTextIcon,
@@ -221,6 +229,7 @@ export function WorkPlaceholder({
 			<p className="text-sm text-base-content/60">{shape.label}.</p>
 			{note && <p className="max-w-prose text-xs text-base-content/40">{note}</p>}
 			{status}
+			{action && <div className="w-full max-w-lg">{action}</div>}
 		</div>
 	);
 }

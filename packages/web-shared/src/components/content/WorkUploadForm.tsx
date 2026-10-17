@@ -27,9 +27,10 @@
  *
  * ⭐ **A file is optional** (Parker, 2026-10-10). A Work can be drafted before its file exists,
  * and an upload that failed must not cost the title and type typed beside it — so the page
- * offers a fileless create that lands on the Work's own page, where `WorkFileSection` already
- * holds the no-file state and release refuses until the file arrives. A fileless create needs
- * a title, because a Work with neither file nor name is a row, not a draft.
+ * offers a fileless create that lands on the Work's own page, where the Work placeholder's
+ * own dropper (`WorkFileDropzone`) holds the no-file state and release refuses until the file
+ * arrives. A fileless create needs a title, because a Work with neither file nor name is a
+ * row, not a draft.
  */
 
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
