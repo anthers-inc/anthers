@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A layout change a toggle makes must not move the reader's scroll offset.
+ * The Work page's two height rules, walked on one page.
  *
- * Opening a field for edit makes the page taller; saving or canceling shrinks it back;
- * switching an Info or side tab swaps panels of different heights. The shell pages scroll
- * on a container (`LoggedInLayout`'s `<main>`), so the browser clamps an offset whose
- * page became too short and the reader lands elsewhere. `keepScroll`
- * (`components/work/scrollKeeper.ts`) captures and restores the offset at both moments;
- * this walk proves the place survives.
+ * **The keeper's rule** — a toggle that changes the page's height must not cost the
+ * reader their place: opening a field for edit makes the page taller, saving or
+ * canceling shrinks it back, and `keepScroll` (`components/work/scrollKeeper.ts`)
+ * captures and restores the offset at every one of those moments.
+ *
+ * **The stack's rule** (Parker, 2026-10-17) — a tab switch changes nothing at all:
+ * the tab groups hold a stable height (`components/work/TabPanels.tsx` stacks every
+ * panel in one grid cell, as tall as the tallest), so both the page's height and the
+ * reader's place in it are pinned across a switch, with no keeper involved. The
+ * assertion is the stronger one — the height does not move, which is what makes the
+ * place trivially safe.
  *
  * 🚨 The clicks here are **raw `page.mouse` clicks on measured positions** — never
  * `locator.click()`. Playwright's actionability scrolls a below-the-fold target into
@@ -28,6 +33,10 @@ test.describe.configure({ mode: "serial" });
 const scrollTop = (page: import("@playwright/test").Page) =>
 	page.evaluate(() => Math.round(document.querySelector("main")?.scrollTop ?? -1));
 
+/** The page's whole height — the thing a tab switch must not move. */
+const scrollHeight = (page: import("@playwright/test").Page) =>
+	page.evaluate(() => Math.round(document.querySelector("main")?.scrollHeight ?? -1));
+
 /** Center a target in its scroll container, by this walk's own JS scroll. */
 async function centerIntoView(
 	page: import("@playwright/test").Page,
@@ -39,9 +48,23 @@ async function centerIntoView(
 	await page.waitForTimeout(150);
 }
 
+/** Wait until the page's height stops moving. The stack mounts every panel whether
+ *  or not its tab is chosen, so a hidden panel's late-arriving data (the reviews
+ *  list) can still change the height once — content, not a switch — and this walk
+ *  measures a page that has already said what it is. */
+async function settleHeight(page: import("@playwright/test").Page): Promise<void> {
+	let last = -1;
+	for (let i = 0; i < 20; i++) {
+		const now = await scrollHeight(page);
+		if (now === last) return;
+		last = now;
+		await page.waitForTimeout(200);
+	}
+}
+
 /** A raw mouse click at a target's center, refusing targets not currently on screen.
- *  On-screen is measured against the page's own scroll container's visible box, with a
- *  small inset for the sticky header that sits over its top. */
+ *  On-screen is measured against the page's own scroll container's visible box, with
+ *  a small inset for the sticky header that sits over its top. */
 async function mouseClickAt(
 	page: import("@playwright/test").Page,
 	locator: import("@playwright/test").Locator,
@@ -72,6 +95,21 @@ async function clickHoldingPlace(
 	await mouseClickAt(page, locator);
 	await page.waitForTimeout(900);
 	expect(await scrollTop(page), "the place survives the toggle").toBe(before);
+}
+
+/** A tab switch's whole rhythm: center the bar, hold the page's offset and height
+ *  measured there, click, and expect the switch to have changed neither. */
+async function clickExpectingStillness(
+	page: import("@playwright/test").Page,
+	locator: import("@playwright/test").Locator,
+) {
+	await centerIntoView(page, locator);
+	const beforeTop = await scrollTop(page);
+	const beforeHeight = await scrollHeight(page);
+	await mouseClickAt(page, locator);
+	await page.waitForTimeout(400);
+	expect(await scrollTop(page), "the place survives the switch").toBe(beforeTop);
+	expect(await scrollHeight(page), "the page's height survives the switch").toBe(beforeHeight);
 }
 
 test("the creator's place survives every toggle that changes the page's height", async ({
@@ -108,11 +146,31 @@ test("the creator's place survives every toggle that changes the page's height",
 	// A save is a close too (the field's own save path, then the read).
 	await clickHoldingPlace(page, page.getByLabel("Edit Description"));
 	await clickHoldingPlace(page, page.getByRole("button", { name: "Save Description" }));
+});
 
-	// Tab switches of both groups.
-	await clickHoldingPlace(page, page.getByRole("tab", { name: "Rating" }));
-	await clickHoldingPlace(page, page.getByRole("tab", { name: "Details" }));
-	await clickHoldingPlace(page, page.getByRole("tab", { name: "Manage" }));
+test("switching tabs changes nothing about the page's height", async ({ page, context }) => {
+	await signInAsMediaFixture(context);
+	await page.goto("/works/media-fixture-video-910000001");
+	await page.getByLabel("Edit Description").waitFor({ state: "visible", timeout: 15_000 });
+
+	// Every panel of both groups is mounted from the start — let the page say its
+	// whole height before pinning it, so a late-arriving panel's data is never read
+	// as a switch having moved the page.
+	await settleHeight(page);
+
+	// Both groups, every tab: each switch holds the page's height and the reader's
+	// place in it exactly.
+	for (const tab of [
+		"Rating",
+		"Accessibility",
+		"Credits",
+		"Details",
+		"Reviews",
+		"Showings",
+		"Manage",
+	]) {
+		await clickExpectingStillness(page, page.getByRole("tab", { name: tab, exact: true }));
+	}
 });
 
 test("the read view shows the line breaks the edit textarea holds", async ({ page, context }) => {
