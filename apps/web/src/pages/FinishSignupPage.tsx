@@ -41,11 +41,15 @@ import {
 	amountLabel,
 	BADGE_ORDER,
 	type BadgeKey,
-	PUBLIC_ACCESS_PRICE,
 	thresholdForBadge,
 } from "@anthers/shared/constants";
 import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
-import { EMPTY_PICKS, type SignupPicks, supportTotal } from "@anthers/shared/signup";
+import {
+	directedAmountFor,
+	EMPTY_PICKS,
+	type SignupPicks,
+	supportTotal,
+} from "@anthers/shared/signup";
 import { useAuth } from "@anthers/web-shared/auth";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { useNavigate } from "@anthers/web-shared/router";
@@ -279,11 +283,24 @@ export default function FinishSignupPage() {
 	 * derived what it displayed and what it billed by two routes until 2026-08-16 and quoted
 	 * $9 while charging $1. This page shows a total too, so it inherits the rule rather than
 	 * the defect.
+	 *
+	 * ⚠️ **Each pick's amount is its rung's threshold, resolved by `directedAmountFor`**
+	 * against the ladders this page's creator fetch shipped — the same function `/signup`
+	 * resolves its chips and its echo by. A stored pick carries a rung id, never a price.
 	 */
 	const directed = picks.badges
-		.map((handle) => byHandle.get(handle))
-		.filter((creator): creator is PublicUser => !!creator)
-		.map((creator) => ({ creatorId: creator.id, amount: PUBLIC_ACCESS_PRICE }));
+		.map((pick) => {
+			const creator = byHandle.get(pick.handle);
+			return creator === undefined ? null : { pick, creator };
+		})
+		.filter(
+			(entry): entry is { pick: (typeof picks.badges)[number]; creator: PublicUser } =>
+				entry !== null,
+		)
+		.map(({ pick, creator }) => ({
+			creatorId: creator.id,
+			amount: directedAmountFor(pick, creator.badges),
+		}));
 	// The picked Anthers Badge resolves to its threshold here, so the total contains no
 	// number this page could invent: every dollar in it was chosen on /signup.
 	const anthersAmount = anthersDollarsOf(picks.badge);
@@ -330,9 +347,18 @@ export default function FinishSignupPage() {
 			destination.current = landing;
 
 			const chosenDirected = chosen.badges
-				.map((handle) => byHandle.get(handle))
-				.filter((creator): creator is PublicUser => !!creator)
-				.map((creator) => ({ creatorId: creator.id, amount: PUBLIC_ACCESS_PRICE }));
+				.map((pick) => {
+					const creator = byHandle.get(pick.handle);
+					return creator === undefined ? null : { pick, creator };
+				})
+				.filter(
+					(entry): entry is { pick: (typeof chosen.badges)[number]; creator: PublicUser } =>
+						entry !== null,
+				)
+				.map(({ pick, creator }) => ({
+					creatorId: creator.id,
+					amount: directedAmountFor(pick, creator.badges),
+				}));
 			const chosenAnthers = anthersDollarsOf(chosen.badge);
 			const chosenTotal = supportTotal(chosenAnthers, chosenDirected);
 
@@ -836,7 +862,7 @@ function ChosenSummary({
 				</li>
 				{picks.follow.map((handle) => {
 					const creator = byHandle.get(handle);
-					const backing = picks.badges.includes(handle);
+					const backing = picks.badges.find((pick) => pick.handle === handle);
 					return (
 						<li key={handle} className="flex items-baseline gap-3">
 							<span className="min-w-0">
@@ -846,7 +872,7 @@ function ChosenSummary({
 								</span>
 							</span>
 							<strong className="ml-auto shrink-0 tabular-nums">
-								{backing ? amountLabel(PUBLIC_ACCESS_PRICE) : "Free"}
+								{backing ? amountLabel(directedAmountFor(backing, creator?.badges)) : "Free"}
 							</strong>
 						</li>
 					);

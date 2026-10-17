@@ -122,7 +122,12 @@ describe("asking for an account writes it down", () => {
 	it("keeps the picks, so the page that finishes the job knows what it is finishing", async () => {
 		const { res, token } = await begin({
 			email: addr("picks"),
-			picks: { badge: "petal", follow: ["alice", "bob"], badges: ["alice"] },
+			picks: {
+				badge: "petal",
+				follow: ["alice", "bob"],
+				// Per-rung now: the rung id the page rendered, beside the handle.
+				badges: [{ handle: "alice", badgeId: 42 }],
+			},
 		});
 		expect(res.status).toBe(200);
 
@@ -132,12 +137,31 @@ describe("asking for an account writes it down", () => {
 		const body = (await read.json()) as {
 			pending: {
 				email: string;
-				picks: { badge: string | null; follow: string[]; badges: string[] };
+				picks: { badge: string | null; follow: string[]; badges: unknown[] };
 			};
 		};
 		expect(body.pending.email).toBe(addr("picks"));
 		expect(body.pending.picks.badge).toBe("petal");
 		expect(body.pending.picks.follow).toEqual(["alice", "bob"]);
+		expect(body.pending.picks.badges).toEqual([{ handle: "alice", badgeId: 42 }]);
+	});
+
+	it("reads a stored handle-only pick as the lowest rung, the convention it was written by", async () => {
+		// A pending row written before per-rung picks existed carries bare handles in
+		// `badges` — and normalization never drops a choice a reader can still honor.
+		const { res, token } = await begin({
+			email: addr("legacy-picks"),
+			picks: { badge: "root", follow: ["carol"], badges: ["carol"] },
+		});
+		expect(res.status).toBe(200);
+
+		const read = await app.request("/api/auth/signup/pending", {
+			headers: { Cookie: `signup_pending=${token}` },
+		});
+		const body = (await read.json()) as {
+			pending: { picks: { badges: { handle: string; badgeId: number | null }[] } };
+		};
+		expect(body.pending.picks.badges).toEqual([{ handle: "carol", badgeId: null }]);
 	});
 
 	it("tells a browser holding no token nothing at all", async () => {
