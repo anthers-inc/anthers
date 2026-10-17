@@ -1,10 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
+/**
+ * The **creation** form for a Project — one route, `/studio/projects/new`, and the only
+ * screen left at which a Project is built rather than seen (the unified-editor pass,
+ * 2026-10-17). Editing happens on the Project's own page, where the shelves and the
+ * pencilled fields live; this route's edit form folded away to the redirect below.
+ *
+ * Why creation stays a form at all: every membership endpoint is keyed on the Project's
+ * slug, so there is nothing to attach a Work to until the Project exists — the same
+ * shape as "create the Work first, then add builds". Creating lands on the new public
+ * page, which is the editor.
+ */
 
 import { THUMBNAIL_RULE } from "@anthers/shared/content";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import ProjectPosts from "../components/content/ProjectPosts";
-import ProjectWorks from "../components/content/ProjectWorks";
 import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
@@ -14,7 +23,7 @@ import { creatorProjectUrl } from "../lib/profile";
 import { usePublishingPermissionMissing } from "../lib/publishing";
 import { Link } from "../lib/router";
 import { apiFetch, client } from "../lib/rpc";
-import { studioEditProjectUrl, studioUrl } from "../lib/studio";
+import { studioUrl } from "../lib/studio";
 import type { Project } from "../lib/types";
 
 function slugify(text: string): string {
@@ -47,6 +56,54 @@ function errorMessage(data: unknown, fallback: string): string {
 	return fallback;
 }
 
+/**
+ * The edit route's redirect. The old editor lives on the Project's page now, so arriving
+ * here means arriving a step late: the page is fetched enough to resolve the public URL
+ * and the creator is sent on — the Work edit route's shape, applied.
+ */
+function ProjectEditRedirect({ slug }: { slug: string }) {
+	const navigate = useNavigate();
+	const { user } = useAuth();
+	const [redirecting, setRedirecting] = useState(true);
+
+	useEffect(() => {
+		let live = true;
+		client.api.content.projects[":slug"]
+			.$get({ param: { slug } })
+			.then(async (res) => {
+				if (!res.ok) throw new Error("not found");
+				const { project } = (await res.json()) as { project: Project };
+				if (live)
+					navigate(
+						creatorProjectUrl(project.creator?.handle ?? user?.handle ?? "me", project.slug),
+						{
+							replace: true,
+						},
+					);
+			})
+			.catch(() => {})
+			.finally(() => live && setRedirecting(false));
+		return () => {
+			live = false;
+		};
+	}, [slug, navigate, user?.handle]);
+
+	if (!redirecting) {
+		return (
+			<div className="max-w-3xl mx-auto px-4 py-8">
+				<p className="text-sm text-base-content/60">
+					Couldn't find that Project, or it isn't yours. Projects are edited on their own page.
+				</p>
+			</div>
+		);
+	}
+	return (
+		<div className="flex justify-center py-16">
+			<LoadingSpinner size="lg" />
+		</div>
+	);
+}
+
 export default function ProjectFormPage() {
 	const { slug } = useParams<{ slug: string }>();
 	const navigate = useNavigate();
@@ -62,44 +119,18 @@ export default function ProjectFormPage() {
 	const [coverImage, setCoverImage] = useState("");
 	const [coverPreview, setCoverPreview] = useState<string | null>(null);
 	const [isPublished, setIsPublished] = useState(false);
-	// Only going live needs payout setup, so a project already published stays editable.
-	const [wasPublished, setWasPublished] = useState(false);
 	const payoutsReady = usePayoutsReady();
 	const permissionMissing = usePublishingPermissionMissing();
 
 	// UI state.
-	const [loading, setLoading] = useState(isEdit);
 	const [saving, setSaving] = useState(false);
 	const [uploading, setUploading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	useEffect(() => {
-		if (!isEdit || !slug) return;
-		client.api.content.projects[":slug"]
-			.$get({ param: { slug } })
-			.then(async (res) => {
-				if (!res.ok) {
-					setError("Failed to load project.");
-					return;
-				}
-				const { project } = (await res.json()) as { project: Project };
-				setTitle(project.title);
-				setProjectSlug(project.slug);
-				setDescription(project.description || "");
-				setShortDescription(project.shortDescription || "");
-				setCoverImage(project.coverImage || "");
-				setCoverPreview(project.coverImage);
-				setIsPublished(project.isPublished ?? false);
-				setWasPublished(project.isPublished ?? false);
-			})
-			.catch(() => setError("Failed to load project."))
-			.finally(() => setLoading(false));
-	}, [slug, isEdit]);
-
 	// Auto-generate slug from the title on create until the user edits it.
 	useEffect(() => {
-		if (!slugManual && !isEdit) setProjectSlug(slugify(title));
-	}, [title, slugManual, isEdit]);
+		if (!slugManual) setProjectSlug(slugify(title));
+	}, [title, slugManual]);
 
 	const handleCoverSelect = async (file: File) => {
 		setCoverPreview(URL.createObjectURL(file));
@@ -120,47 +151,26 @@ export default function ProjectFormPage() {
 		e.preventDefault();
 		setSaving(true);
 		setError(null);
-
 		try {
-			if (isEdit && slug) {
-				const res = await client.api.content.projects[":slug"].$patch({
-					param: { slug },
-					json: { title, description, shortDescription, coverImage, isPublished },
-				});
-				if (!res.ok) {
-					const data: unknown = await res.json();
-					setError(errorMessage(data, "Failed to save project."));
-					return;
-				}
-				const { project } = (await res.json()) as { project: Project };
-				navigate(creatorProjectUrl(user?.handle ?? "me", project.slug));
-				// ^ Editing ends at the public page: the creator already had the shelf in front
-				// of them, so what they want to see is the result.
-			} else {
-				const res = await client.api.content.projects.$post({
-					json: {
-						title,
-						slug: projectSlug,
-						description,
-						shortDescription,
-						coverImage,
-						isPublished,
-					},
-				});
-				if (!res.ok) {
-					const data: unknown = await res.json();
-					setError(errorMessage(data, "Failed to create project."));
-					return;
-				}
-				const { project } = (await res.json()) as { project: Project };
-				// CREATING ends on the edit page, not the public one. The Works shelf below is
-				// edit-only — every membership endpoint is keyed on the Project's slug, so
-				// there is nothing to attach a Work to until the Project exists — and this
-				// page's own lede promises "add and reorder them after creating it". Landing a
-				// creator on a public page with an empty shelf makes them go and find the way
-				// back to the one screen that can fill it.
-				navigate(studioEditProjectUrl(project.slug));
+			const res = await client.api.content.projects.$post({
+				json: {
+					title,
+					slug: projectSlug,
+					description,
+					shortDescription,
+					coverImage,
+					isPublished,
+				},
+			});
+			if (!res.ok) {
+				const data: unknown = await res.json();
+				setError(errorMessage(data, "Failed to create project."));
+				return;
 			}
+			const { project } = (await res.json()) as { project: Project };
+			// Creating ends on the Project's own page — which is the editor now, shelves and
+			// all. The old landing (the studio form) is the route that redirects away.
+			navigate(creatorProjectUrl(user?.handle ?? "me", project.slug));
 		} catch {
 			setError("Failed to save project.");
 		} finally {
@@ -168,20 +178,17 @@ export default function ProjectFormPage() {
 		}
 	};
 
-	if (loading) {
-		return (
-			<div className="flex justify-center py-16">
-				<LoadingSpinner size="lg" />
-			</div>
-		);
+	// An edit URL is a redirect, not a form — the form below is creation's only.
+	if (isEdit && slug) {
+		return <ProjectEditRedirect slug={slug} />;
 	}
 
 	return (
 		<div className="max-w-3xl mx-auto px-4 py-8">
-			<h1 className="text-2xl font-bold mb-2">{isEdit ? "Edit Project" : "New Project"}</h1>
+			<h1 className="text-2xl font-bold mb-2">New Project</h1>
 			<p className="text-sm text-base-content/60 mb-6">
 				A Project groups related Works and Posts — an album and its tracks, a game and its devlogs,
-				a book and its chapters. Add and reorder both after creating it.
+				a book and its chapters. Create it here, then add and reorder both on its page.
 			</p>
 
 			{error && (
@@ -201,23 +208,21 @@ export default function ProjectFormPage() {
 					/>
 				</FormField>
 
-				{!isEdit && (
-					<FormField label="Slug" required>
-						<input
-							type="text"
-							className="input input-bordered w-full"
-							value={projectSlug}
-							onChange={(e) => {
-								setProjectSlug(e.target.value);
-								setSlugManual(true);
-							}}
-							placeholder="my-project"
-						/>
-						<p className="text-xs text-base-content/50 mt-1">
-							URL: /@{user?.handle ?? "you"}/{projectSlug || "..."}
-						</p>
-					</FormField>
-				)}
+				<FormField label="Slug" required>
+					<input
+						type="text"
+						className="input input-bordered w-full"
+						value={projectSlug}
+						onChange={(e) => {
+							setProjectSlug(e.target.value);
+							setSlugManual(true);
+						}}
+						placeholder="my-project"
+					/>
+					<p className="text-xs text-base-content/50 mt-1">
+						URL: /@{user?.handle ?? "you"}/{projectSlug || "..."}
+					</p>
+				</FormField>
 
 				<FormField label="Short Description">
 					<input
@@ -262,7 +267,7 @@ export default function ProjectFormPage() {
 							className="toggle toggle-primary"
 							checked={isPublished}
 							onChange={(e) => setIsPublished(e.target.checked)}
-							disabled={!wasPublished && (payoutsReady === false || permissionMissing === true)}
+							disabled={payoutsReady === false || permissionMissing === true}
 						/>
 						<div>
 							<span className="label-text font-medium">Publish</span>
@@ -271,7 +276,7 @@ export default function ProjectFormPage() {
 							</p>
 						</div>
 					</label>
-					{permissionMissing === true && !wasPublished && (
+					{permissionMissing === true && (
 						<p className="text-xs text-warning mt-1">
 							Give Anthers permission to publish in{" "}
 							<Link to={studioUrl("/settings")} className="link">
@@ -281,7 +286,7 @@ export default function ProjectFormPage() {
 							building the project as a draft until then.
 						</p>
 					)}
-					{payoutsReady === false && !wasPublished && (
+					{payoutsReady === false && (
 						<p className="text-xs text-warning mt-1">
 							Set up payouts in{" "}
 							<Link to={studioUrl("/payments")} className="link">
@@ -292,47 +297,13 @@ export default function ProjectFormPage() {
 					)}
 				</div>
 
-				{/*
-				 * The shelf itself. Edit-only: every membership endpoint is keyed on the
-				 * Project's slug, so there is nothing to attach a Work to until the Project
-				 * exists — the same shape as "create the Work first, then add builds".
-				 *
-				 * Outside the form's save cycle by design; `ProjectWorks` persists each change
-				 * on its own endpoint the moment it is made.
-				 */}
-				{isEdit && projectSlug && (
-					<div className="border-t border-base-300 pt-4">
-						<h2 className="font-semibold text-sm mb-1">Works</h2>
-						<p className="text-xs text-base-content/50 mb-3">
-							The Works on this Project's shelf, in order. Putting one here changes nothing about
-							who can open it.
-						</p>
-						<ProjectWorks projectSlug={projectSlug} />
-					</div>
-				)}
-
-				{/*
-				 * The second shelf. A Project holds Works AND posts in two separate ordered
-				 * lists — the database, the API and the public Project page have all said so
-				 * from the start, and this is the surface that was missing.
-				 */}
-				{isEdit && projectSlug && (
-					<div className="border-t border-base-300 pt-4">
-						<h2 className="font-semibold text-sm mb-1">Posts</h2>
-						<p className="text-xs text-base-content/50 mb-3">
-							The posts about this Project, in order — its devlogs, patch notes and announcements.
-						</p>
-						<ProjectPosts projectSlug={projectSlug} />
-					</div>
-				)}
-
 				<div className="flex gap-2 mt-2">
 					<button
 						type="submit"
 						className={`btn btn-primary ${saving || uploading ? "btn-disabled" : ""}`}
 						disabled={saving || uploading}
 					>
-						{saving ? "Saving..." : isEdit ? "Update Project" : "Create Project"}
+						{saving ? "Saving..." : "Create Project"}
 					</button>
 					<button type="button" className="btn btn-ghost" onClick={() => navigate(studioUrl("/"))}>
 						Cancel

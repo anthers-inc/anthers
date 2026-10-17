@@ -60,7 +60,7 @@ const MODES: Array<{ mode: WorkViewMode; label: string }> = [
  * of no other state: previewing from the editor tears it down for the user's Record,
  * and "Creator" from there rebuilds it — the same pair of pages leading to each other.
  */
-export function WorkViewAsRow() {
+export function WorkViewAsRow({ subject = "Work" }: { subject?: string }) {
 	const [params, setParams] = useSearchParams();
 	const active = viewModeOfParams({
 		previewAs: params.get("previewAs") ?? undefined,
@@ -77,7 +77,7 @@ export function WorkViewAsRow() {
 		// redundancy); the legend hides — outside the join, whose first-child selectors
 		// must count buttons only — and the fieldset's default border is reset here.
 		<fieldset className="m-0 flex flex-wrap border-0 p-0">
-			<legend className="sr-only">View this Work as</legend>
+			<legend className="sr-only">View this {subject} as</legend>
 			<div className="join rounded-box flex flex-wrap">
 				{MODES.map(({ mode, label }) => (
 					<button

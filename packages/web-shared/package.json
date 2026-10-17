@@ -46,6 +46,8 @@
 		"./content/work-state": "./src/components/content/work-state.ts",
 		"./content/RatingAppeal": "./src/components/content/RatingAppeal.tsx",
 		"./content/RecordLink": "./src/components/content/RecordLink.tsx",
+		"./content/ProjectWorks": "./src/components/content/ProjectWorks.tsx",
+		"./content/ProjectPosts": "./src/components/content/ProjectPosts.tsx",
 		"./ui/Logo": "./src/components/ui/Logo.tsx",
 		"./ui/ThemeSelect": "./src/components/ui/ThemeSelect.tsx",
 		"./ui/FormField": "./src/components/ui/FormField.tsx",
