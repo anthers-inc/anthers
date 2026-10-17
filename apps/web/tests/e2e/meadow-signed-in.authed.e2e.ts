@@ -56,15 +56,17 @@ test("the backdrop and the page content share their stacking context", async ({ 
 
 	// A stacking context is created by a positioned element with a non-auto
 	// z-index; by isolation, opacity, transforms and filters; and by several
-	// containment modes. Walk each element's ancestors to the first one that
-	// creates one: for the layer and <main>, that must be the SAME element —
-	// LoggedInLayout's `relative isolate` wrapper — or the two are no longer
-	// ordered by the layer's negative z-index at all.
+	// containment modes. The wrapper LoggedInLayout puts around the layer and
+	// <main> must be one (`relative isolate`), or the layer's negative z-index
+	// escapes into an outer context and paints beneath an OPAQUE ancestor — the
+	// decor vanishing behind the page rather than sitting behind it, signed-in
+	// flat again. So two facts, both required: the layer's parent is a stacking
+	// context, and <main>'s own nearest stacking context is that same element.
 	//
 	// The shell's <main> is the right second walker because it is the page's
 	// containing surface, present in every shell state, exactly what the decor
 	// must stay beneath.
-	const shared = await page.evaluate(() => {
+	const verdict = await page.evaluate(() => {
 		const makesContext = (el: Element) => {
 			const s = getComputedStyle(el);
 			return (
@@ -77,21 +79,30 @@ test("the backdrop and the page content share their stacking context", async ({ 
 			);
 		};
 		const nearest = (el: Element): Element => {
-			let node: Element | null = el;
+			// Walk from the PARENT: the backdrop itself creates a stacking context by
+			// design (its negative z-index), and the walk is for the context it shares
+			// with the page, which only an ancestor of both can answer.
+			let node: Element | null = el.parentElement;
 			while (node && node !== document.documentElement) {
-				if (node !== document.documentElement && makesContext(node)) return node;
+				if (makesContext(node)) return node;
 				node = node.parentElement;
 			}
 			return document.documentElement;
 		};
 		const layer = document.querySelector("[data-meadow-backdrop]");
 		const main = document.querySelector("main");
-		if (!layer || !main) return "missing (no decor layer or no main)";
-		return nearest(layer) === nearest(main) ? "shared" : "separate";
+		if (!layer || !main || !layer.parentElement) {
+			return "missing (no decor layer, no wrapper, or no main)";
+		}
+		const wrapper = layer.parentElement;
+		if (!makesContext(wrapper)) {
+			return "wrapper-not-a-context (the layer's negative z escapes to the page root)";
+		}
+		return nearest(main) === wrapper ? "shared" : "separate";
 	});
 
 	expect(
-		shared,
+		verdict,
 		"the decor layer and the page content live in different stacking contexts — the " +
 			"layer's negative z-index no longer orders it beneath the page",
 	).toBe("shared");
