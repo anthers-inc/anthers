@@ -50,7 +50,7 @@ const NAMES_ADVISORY = /pg_(try_advisory|advisory)/;
 
 describe("transcode expiry and heartbeat", () => {
 	it("sends the media queue an expiry sized past real encode runtimes", () => {
-		const options = JOB_OPTIONS[QUEUES.MEDIA];
+		const options = JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO];
 		// The measured long encode (2026-10-11) took 54 minutes; the guard's floor is one
 		// hour, so a revert to the old 45-minute window or any "back to short" tuning
 		// fails here before production does.
@@ -58,7 +58,7 @@ describe("transcode expiry and heartbeat", () => {
 	});
 
 	it("carries a heartbeat, so a worker that died mid-encode is caught in minutes", () => {
-		const options = JOB_OPTIONS[QUEUES.MEDIA];
+		const options = JOB_OPTIONS[QUEUES.TRANSCODE_VIDEO];
 		// pg-boss's own floor is 10s; below it the send is refused and the job would
 		// never land, which is a worse failure mode than expiring blind.
 		expect(options.heartbeatSeconds).toBeGreaterThanOrEqual(10);
