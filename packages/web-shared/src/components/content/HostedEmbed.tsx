@@ -95,7 +95,8 @@ export default function HostedEmbed({
 		/** A helper the handler uses to answer a frame through its own event.source. */
 		function postTo(source: MessageEventSource | null | undefined, message: SaveShimInbound): void {
 			if (source == null || replyOrigin == null) return;
-			source.postMessage(message, replyOrigin);
+			// The union's postMessage takes the options form, not the window-overload string.
+			source.postMessage(message, { targetOrigin: replyOrigin });
 		}
 
 		const onMessage = async (event: MessageEvent) => {
