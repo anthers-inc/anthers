@@ -294,9 +294,10 @@ export function WorkFileDropzone({ work }: { work: Work }) {
 
 	return (
 		<div className="flex flex-col items-center gap-1.5">
-			<p className="text-sm text-warning">
-				No file yet, so this Work can't be released — pick one now and it lands here.
-			</p>
+			{/* The one invisible fact the empty state carries; the picker's own label
+			    below says the act, so the line says nothing about picking or dropping
+			    (UI copy says what the screen cannot, the 2026-10-17 rule). */}
+			<p className="text-sm text-warning">No file yet, so this Work can't be released.</p>
 			<FileUpload
 				accept={rules.accept}
 				maxSize={rules.maxSize}
