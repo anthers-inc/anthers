@@ -173,7 +173,15 @@ export function createPlayPageRoutes(): Hono {
 			var API_SAVE = "/api/content/works/${work.id}/save";
 			var frame = document.querySelector("iframe");
 
-			function post(msg) { if (frame && frame.contentWindow) frame.contentWindow.postMessage(msg, "*"); }
+			// Replies carry save bytes, so they go to the one origin the minted frame
+			// answers on — never "*" and never the default: without a targetOrigin a
+			// cross-origin frame is checked against the caller's own origin and
+			// silently never delivers.
+			function post(msg) {
+				if (frame && frame.contentWindow) {
+					try { frame.contentWindow.postMessage(msg, new URL(frame.src).origin); } catch (e) { /* no minted target */ }
+				}
+			}
 
 			window.addEventListener("message", function (event) {
 				if (!frame || event.source !== frame.contentWindow) return;

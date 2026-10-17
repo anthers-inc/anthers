@@ -27,11 +27,6 @@ import { PlayIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { useEffect, useRef, useState } from "react";
 import { client } from "../../lib/rpc";
 
-/** A helper the handler uses to answer a frame through its own event.source. */
-function postTo(source: MessageEventSource | null | undefined, message: SaveShimInbound): void {
-	source?.postMessage(message);
-}
-
 interface HostedEmbedProps {
 	workId: number;
 	/** The viewer-resolved verdict to show the play button under. */
@@ -85,6 +80,23 @@ export default function HostedEmbed({
 				return null;
 			}
 		})();
+
+		/**
+		 * The frame's answer address: the minted src's origin, exactly. Replies carry
+		 * save bytes and sync verdicts, so they go to the one origin the minted frame
+		 * runs on — never "*" and never the default: `postMessage` without a
+		 * targetOrigin, or with "/", means "same origin as the caller", which is the
+		 * PARENT here, and a cross-origin frame is checked against it and silently
+		 * never delivers (found live, 2026-10-17: the restore and every ack died in
+		 * transit while the API calls themselves succeeded).
+		 */
+		const replyOrigin = expectedOrigin ?? null;
+
+		/** A helper the handler uses to answer a frame through its own event.source. */
+		function postTo(source: MessageEventSource | null | undefined, message: SaveShimInbound): void {
+			if (source == null || replyOrigin == null) return;
+			source.postMessage(message, replyOrigin);
+		}
 
 		const onMessage = async (event: MessageEvent) => {
 			if (closed) return;

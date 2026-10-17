@@ -80,7 +80,7 @@ describe("save shim script — inert without the parent", () => {
 			indexedDB: {
 				open: (name: string) => {
 					opens.push(name);
-					const req: Record<string, unknown> = {};
+					const req = {} as { onsuccess?: (ev: never) => void };
 					// Resolve synchronously against a stub db: the point is load, not the store.
 					const db = { transaction: () => ({ objectStore: () => ({}) }) };
 					queueMicrotask(() => {
