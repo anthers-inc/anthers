@@ -1,45 +1,44 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Work picker: a modal grid of the creator's Catalog, filterable by type.
+ * Work picker: a modal TABLE of the creator's Catalog, filterable by type, selected a
+ * row at a time and added in one act.
  *
- * Used when a post wants to LINK a Work and when a Project wants to SHELVE one. Neither
- * confers anything — no access, no ownership — so picking here never changes what the Work
- * costs or who can open it. The verb differs between the two, which is why the heading
- * takes one rather than always saying "Link".
+ * Used when a Project wants to SHELVE works. It confers nothing — no access, no
+ * ownership — so picking here never changes what the Work costs or who can open it.
+ * (The post that wanted to LINK a Work carried this modal once; that flow is being
+ * removed — a post links no Work of its own.)
  *
- * 🚨 **A picker picks, and nothing else** (Parker, 2026-10-10, retiring the opposite ruling of
- * 2026-09-11). This dialog minted a minimal Work through a ghost "New Work" button and
- * `QuickWorkCreate`, and that path is gone: realizing a Work does not exist yet is the moment
- * to go to `/studio/works/new` and come back, not a reason to make a half-finished one inside
- * another screen. `PostPicker` carries the same shape — list, filter, pick, and no create path.
+ * The grid it replaced could pick strictly one Work per pass, with no order and no
+ * dates — a creator shelving an album's twelve tracks walked the modal twelve times
+ * (Parker, 2026-10-17). Now: rows click to toggle, the footer's button adds everything
+ * ticked, and an already-shelved Work is excluded by the caller. Like its caller, a
+ * picker picks and nothing else — no create path; making a Work is `/studio/works/new`'s
+ * job, and realizing mid-shelf that one does not exist is a reason to go and come back.
+ *
+ * Columns follow the Studio's Works table, narrowed to what a shelf act needs:
+ * thumbnail · title · work type · status · the two dates in one column (the release
+ * date, with the original release date above it when the Work names one).
  */
 import { useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
 import type { UploadableWorkType, Work } from "../../lib/types";
 import LoadingSpinner from "../ui/LoadingSpinner";
-import {
-	itemPreviewUrl,
-	LIBRARY_TYPE_OPTIONS,
-	ProcessingBadge,
-	TypeBadge,
-	TypeIcon,
-} from "./works";
+import { itemPreviewUrl, LIBRARY_TYPE_OPTIONS, ProcessingBadge, TypeIcon } from "./works";
 
 interface WorkPickerProps {
-	onSelect: (item: Work) => void;
+	/** Everything selected, in the order it was ticked — the order the adds are sent in. */
+	onSelect: (works: Work[]) => void;
 	onClose: () => void;
-	/**
-	 * What picking does here, in the caller's own word. A post **links** a Work and a
-	 * Project **adds** one to its shelf, and a dialog headed "Link a Work" opened by a
-	 * button reading "Add a Work" is the two halves of one action disagreeing.
-	 */
-	verb?: "link" | "add";
+	/** Works already on the shelf, shown nowhere: picking one again is an error today. */
+	excludeIds?: number[];
 }
 
-export default function WorkPicker({ onSelect, onClose, verb = "link" }: WorkPickerProps) {
+export default function WorkPicker({ onSelect, onClose, excludeIds = [] }: WorkPickerProps) {
 	const [items, setItems] = useState<Work[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [typeFilter, setTypeFilter] = useState<"all" | UploadableWorkType>("all");
+	/** The selection, as a set for O(1) row toggles and a list for the confirm's order. */
+	const [picked, setPicked] = useState<number[]>([]);
 
 	useEffect(() => {
 		client.api.content.works
@@ -53,13 +52,25 @@ export default function WorkPicker({ onSelect, onClose, verb = "link" }: WorkPic
 			.finally(() => setLoading(false));
 	}, []);
 
-	const filtered = typeFilter === "all" ? items : items.filter((i) => i.type === typeFilter);
+	const catalog = items.filter((i) => !excludeIds.includes(i.id));
+	const filtered = typeFilter === "all" ? catalog : catalog.filter((i) => i.type === typeFilter);
+
+	const toggle = (id: number) => {
+		setPicked((prev) => (prev.includes(id) ? prev.filter((n) => n !== id) : [...prev, id]));
+	};
+
+	// Resolve the confirm's payload through the unfiltered catalog: an id ticked under one
+	// type filter stays selected when the filter moves, and stays addable when it moves back.
+	const selectedWorks = picked
+		.map((id) => items.find((i) => i.id === id))
+		.filter((w) => w !== undefined && w !== null);
+	const pickedSet = new Set(picked);
 
 	return (
 		<div className="modal modal-open" role="dialog">
-			<div className="modal-box max-w-3xl max-h-[90vh] flex flex-col gap-4">
+			<div className="modal-box max-w-4xl max-h-[90vh] flex flex-col gap-4">
 				<div className="flex items-center justify-between">
-					<h2 className="text-lg font-bold">{verb === "add" ? "Add a Work" : "Link a Work"}</h2>
+					<h2 className="text-lg font-bold">Add Works</h2>
 					<button
 						type="button"
 						className="btn btn-sm btn-circle btn-ghost"
@@ -73,6 +84,7 @@ export default function WorkPicker({ onSelect, onClose, verb = "link" }: WorkPic
 				<div className="flex flex-wrap items-center gap-2">
 					<select
 						className="select select-bordered select-sm"
+						aria-label="Filter by work type"
 						value={typeFilter}
 						onChange={(e) => setTypeFilter(e.target.value as "all" | UploadableWorkType)}
 					>
@@ -83,6 +95,9 @@ export default function WorkPicker({ onSelect, onClose, verb = "link" }: WorkPic
 							</option>
 						))}
 					</select>
+					<span className="text-xs text-base-content/50">
+						Click a work to select or unselect it.
+					</span>
 				</div>
 
 				<div className="overflow-y-auto pr-1">
@@ -94,41 +109,140 @@ export default function WorkPicker({ onSelect, onClose, verb = "link" }: WorkPic
 						<p className="text-sm text-base-content/50 text-center py-12">
 							{items.length === 0
 								? "Your Catalog is empty. Make a Work and it shows up here."
-								: "No Works of this type. Try another filter."}
+								: catalog.length === 0
+									? "Every Work you have is already on this shelf."
+									: "No Works of this type. Try another filter."}
 						</p>
 					) : (
-						<div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-							{filtered.map((item) => (
-								<button
-									type="button"
-									key={item.id}
-									onClick={() => onSelect(item)}
-									className="text-left card bg-base-100 border border-base-300 hover:border-primary overflow-hidden"
-								>
-									<div className="aspect-video bg-base-200 flex items-center justify-center overflow-hidden">
-										{itemPreviewUrl(item) ? (
-											<img
-												src={itemPreviewUrl(item) ?? ""}
-												alt={item.title ?? ""}
-												className="w-full h-full object-cover"
-											/>
-										) : (
-											<TypeIcon type={item.type} className="w-10 h-10 text-base-content/30" />
-										)}
-									</div>
-									<div className="p-2 gap-1 flex flex-col">
-										<span className="text-sm font-medium truncate" title={item.title ?? undefined}>
-											{item.title || "Untitled"}
-										</span>
-										<div className="flex flex-wrap items-center gap-1">
-											<TypeBadge type={item.type} />
-											<ProcessingBadge item={item} />
-										</div>
-									</div>
-								</button>
-							))}
-						</div>
+						<table className="table table-sm w-full">
+							<thead>
+								<tr className="border-base-300/50 text-xs text-base-content/50">
+									<th scope="col">
+										<span className="sr-only">Selected</span>
+									</th>
+									<th scope="col" className="w-20">
+										Thumbnail
+									</th>
+									<th scope="col">Title</th>
+									<th scope="col">Work type</th>
+									<th scope="col">Status</th>
+									<th scope="col" className="min-w-[10rem]">
+										Release date
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								{filtered.map((item) => {
+									const original = item.originallyReleased
+										? new Date(item.originallyReleased).toLocaleDateString("en-US", {
+												timeZone: "UTC",
+											})
+										: null;
+									return (
+										// The row is the toggle: a click on any part of it selects or
+										// unselects, with the checkbox in the first column as the row's
+										// own readable state (and the way a screen reader meets it).
+										<tr
+											key={item.id}
+											tabIndex={0}
+											onClick={() => toggle(item.id)}
+											onKeyDown={(e) => {
+												if (e.key === "Enter" || e.key === " ") {
+													e.preventDefault();
+													toggle(item.id);
+												}
+											}}
+											className={`cursor-pointer hover:bg-base-200/50 ${
+												pickedSet.has(item.id) ? "bg-primary/10 border-l-2 border-l-primary" : ""
+											}`}
+										>
+											<td>
+												<input
+													type="checkbox"
+													aria-label={`Select ${item.title || "Untitled"}`}
+													className="checkbox checkbox-sm"
+													checked={pickedSet.has(item.id)}
+													onChange={() => {}}
+													onClick={(e) => e.stopPropagation()}
+													onKeyDown={(e) => e.key === "Enter" && toggle(item.id)}
+												/>
+											</td>
+											<td>
+												{itemPreviewUrl(item) ? (
+													<img
+														src={itemPreviewUrl(item) ?? ""}
+														alt=""
+														className="h-10 w-14 rounded object-cover"
+													/>
+												) : (
+													<TypeIcon type={item.type} className="h-6 w-6 text-base-content/25" />
+												)}
+											</td>
+											<td
+												className="max-w-[16rem] truncate font-medium"
+												title={item.title ?? undefined}
+											>
+												{item.title || "Untitled"}
+											</td>
+											<td className="text-sm">{item.type}</td>
+											<td>
+												{item.visibility === "released" ? (
+													<span className="badge badge-sm badge-ghost">Released</span>
+												) : (
+													<span
+														className="badge badge-sm badge-neutral"
+														title="Private — nobody but you sees this on the shelf"
+													>
+														Private
+													</span>
+												)}
+												{(item.transcoding?.status === "pending" ||
+													item.transcoding?.status === "processing") && (
+													<ProcessingBadge item={item} />
+												)}
+											</td>
+											<td className="text-sm">
+												<div className="flex flex-col">
+													{original && (
+														<span title="Original release date" className="text-xs">
+															Original: {original}
+														</span>
+													)}
+													<span>
+														{item.releasedAt
+															? new Date(item.releasedAt).toLocaleDateString("en-US", {
+																	timeZone: "UTC",
+																})
+															: "—"}
+													</span>
+												</div>
+											</td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
 					)}
+				</div>
+
+				<div className="flex items-center justify-between border-t border-base-300 pt-3">
+					<span className="text-sm text-base-content/60">{selectedWorks.length} selected</span>
+					<div className="flex items-center gap-2">
+						<button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
+							Cancel
+						</button>
+						<button
+							type="button"
+							className="btn btn-primary btn-sm"
+							disabled={selectedWorks.length === 0}
+							onClick={() => {
+								onSelect(selectedWorks);
+								onClose();
+							}}
+						>
+							Add Work(s)
+						</button>
+					</div>
 				</div>
 			</div>
 			<button type="button" className="modal-backdrop" onClick={onClose} aria-label="Close">

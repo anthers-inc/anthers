@@ -19,6 +19,7 @@ import { hiddenStudioPanels, STUDIO_PANELS, type StudioPanel } from "@anthers/sh
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import type { ReactNode } from "react";
 import { postUrl } from "../../lib/postUrl";
+import { creatorProjectUrl } from "../../lib/profile";
 import { Link } from "../../lib/router";
 import { studioEditPostUrl, studioEditWorkUrl, studioUrl } from "../../lib/studio";
 import type { CreatorEarnings, PostListItem, Project, StorageReading, Work } from "../../lib/types";
@@ -253,8 +254,10 @@ export function StudioPanelBody({ panel, data }: { panel: StudioPanel; data: Pan
 						<ul className="flex flex-col gap-1 text-sm">
 							{data.projects.slice(0, 5).map((p) => (
 								<li key={p.id} className="flex items-center justify-between gap-2">
+									{/* The Project's page is its editor; the panel lands there directly,
+									    not through the studio route's redirect. */}
 									<Link
-										to={studioUrl(`/projects/${p.slug}/edit`)}
+										to={creatorProjectUrl(p.creator?.handle ?? "", p.slug)}
 										className="link link-hover truncate"
 									>
 										{p.title}

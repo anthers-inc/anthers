@@ -119,7 +119,18 @@ export default function PostWorkLinks({ works, onChange }: PostWorkLinksProps) {
 				something its users can't open yet.
 			</p>
 
-			{picking && <WorkPicker onSelect={add} onClose={() => setPicking(false)} />}
+			{picking && (
+				// The picker went multi-select (the Project shelves' revamp, 2026-10-17); this
+				// one-work-at-a-time flow is being removed wholesale, so the adapter keeps it
+				// working with the first ticked Work and nothing more is built here.
+				<WorkPicker
+					onSelect={(works) => {
+						const first = works[0];
+						if (first) add(first);
+					}}
+					onClose={() => setPicking(false)}
+				/>
+			)}
 		</div>
 	);
 }
