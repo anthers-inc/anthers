@@ -47,9 +47,11 @@ import { PUBLIC_ACCESS_PRICE } from "./constants.js";
  * Hours of Public Access a free account may watch per calendar month.
  *
  * ⚠️ A **product** number, not a budget one, and that is a genuinely new property. Free
- * access costs `free accounts × FREE_TIME_POOL` — headcount times a policy figure — so
+ * access is the Time Pool Fund's money — Free Access's published share of the remainder
+ * after admin, divided across the accounts that use it (`packages/shared/src/
+ * time-pool-fund.ts`) — so
  * raising this changes what a free account *feels like* without changing what it costs.
- * It was untrue while a bandwidth floor existed, where generosity and solvency were
+ * That was untrue while a bandwidth floor existed, where generosity and solvency were
  * literally the same dial. What this figure trades against is **conversion**: it is the
  * reason to give Anthers anything at all.
  */

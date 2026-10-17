@@ -174,7 +174,7 @@ function insideOrganization(): boolean {
  * identical from the outside, and the broken one is the state you least want to be in.
  */
 function wikiPages(): Map<string, string> | { error: string } {
-	const root = process.env.ANTHERS_WIKI ?? join(ORG, "Anthers-Wiki");
+	const root = process.env.ANTHERS_WIKI ?? join(ORG, "wiki-anthers");
 	if (!existsSync(root)) {
 		return insideOrganization()
 			? {

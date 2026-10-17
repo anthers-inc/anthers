@@ -209,6 +209,7 @@ import { canBePaid } from "../services/payouts.js";
 import {
 	normalizeStoredMarkdown,
 	POST_BODY_LIMIT,
+	postContentExcerpt,
 	postHtmlToMarkdown,
 } from "../services/post-markdown.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
@@ -2800,6 +2801,12 @@ const contentRoutes = new Hono()
 					// the preview a locked Work is *supposed* to show.
 					thumbnail: thumbByPublicId.get(embedded[0]) ?? null,
 					linkedWorkCount: embedded.length,
+					// The body as plain text, where the tile's band renders the content —
+					// the same field the feed entries carry (`routes/accounts.ts`), for the
+					// same tile. The body is public (a post carries no gate of its own, and
+					// its page reads signed out); the plain-text form is lighter than the
+					// markdown it is derived from.
+					excerpt: postContentExcerpt(p.body),
 				};
 			}),
 			nextCursor,

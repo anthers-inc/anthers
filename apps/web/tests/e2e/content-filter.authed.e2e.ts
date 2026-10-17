@@ -117,7 +117,11 @@ test("a user who blurs or hides violence meets it covered, then not at all", asy
 			"true",
 		);
 	};
-	const card = (title: string) => page.locator(".card").filter({ hasText: title });
+	// The profile renders the feed's tiles since the widget swap, not the column
+	// cards this spec named before it — the tile carries `data-testid` for exactly
+	// the kind of grip this walk needs.
+	const card = (title: string) =>
+		page.locator("[data-testid='feed-tile']").filter({ hasText: title });
 
 	await violence("Blur");
 	await page.goto(creatorProfile);
