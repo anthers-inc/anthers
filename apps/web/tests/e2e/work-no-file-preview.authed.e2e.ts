@@ -39,7 +39,10 @@ let session = "";
 
 /** Create an unreleased Work with no file, returning both ids — the public one the page
  *  addresses, and the row's own (the access-table PATCH below is keyed on that one). */
-async function filelessWorkIds(type: string, title: string): Promise<{ id: number; publicId: string }> {
+async function filelessWorkIds(
+	type: string,
+	title: string,
+): Promise<{ id: number; publicId: string }> {
 	const res = await fetch(`${API_URL}/api/content/works`, {
 		method: "POST",
 		headers: {
@@ -149,11 +152,9 @@ test("a fileless draft's locked and signed-out previews end with a gate or a sil
 	/** Wait out a mode change by the row's own pressed state, then the content's arrival. */
 	const press = async (mode: string) => {
 		await page.getByRole("button", { name: mode }).click();
-		await expect(page.getByRole("button", { name: mode })).toHaveAttribute(
-			"aria-pressed",
-			"true",
-			{ timeout: 15_000 },
-		);
+		await expect(page.getByRole("button", { name: mode })).toHaveAttribute("aria-pressed", "true", {
+			timeout: 15_000,
+		});
 	};
 
 	for (const kind of ["video", "audio"] as const) {
