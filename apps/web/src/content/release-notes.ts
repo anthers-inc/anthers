@@ -81,6 +81,28 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.25",
+		date: "2026-10-16",
+		lede: "Badges are purchasable from every creator's page now, the Badges page took the subscription page's place, and audio keeps playing across the site in a footer bar.",
+		entries: [
+			"A creator's Badge ladder became a purchase surface on every page that carries one, Anthers' own page included: a visitor picks a rung, adds it to the basket or buys it right there, signed in or out, and the give card priced by the retired budget model is gone. An upgrade is charged as the difference it is, and Badge money settles through the monthly distribution.",
+			"The Badges page took the subscription page's place at /badges: the ladder Anthers issues leads the page with a breakdown of where its money goes beside it, the Badges the account holds from other creators sit under it, and the month's accounting reads as a table now, where a pie chart used to carry it. The old /subscription address redirects.",
+			"Listening follows the account around the site now: pressing play on music or spoken audio hands it to the footer bar, which stays put through navigation, and the Work page's player mirrors it. That behavior is an account-level setting, on by default, and a signed-out visit, an embed, or a Studio preview still plays inline.",
+			"The music on a Work's page got the transport it was missing: skip back and forward around a large play button, keyboard shortcuts, a waveform drawn to match its space rather than stretched fat, and a lyrics card that folds away when it is not wanted.",
+			"A track can be heard while it still processes now, served as its original behind the same access check and metering every stream runs; and where no player can fill the Work's place yet, the place itself holds a shaped placeholder, so the page stops jumping when the file lands and processing starts.",
+			"The desktop app signs people in without leaving the window now: the address is typed, the emailed code is spent in the app, and the session it opens is revocable per device from Settings. The handoff to a browser remains for signing in with Bluesky.",
+			"A credit's kind states the copyright boundary it draws now: a creator's editor offers Created and Generated, the retired Licensed type is rewritten where it named somebody and dropped where it named nobody, and the badges a reader sees on a Work keep AI as the word for machine-made contribution.",
+			"The sticker picker opens over the page now rather than pushing it down: a pill beside the votes opens it, the rows run smallest to largest, and each row names what the Sticker directs and how many of that denomination the account's allowance still affords, so the giver no longer divides a remaining balance in their head.",
+			"Every field on a Work's page shows its full structure at every value now, an unfilled one wearing a fitting placeholder, so the layout is the same from Work to Work and nothing hides a place worth editing; and the Rating tab is the rating table itself in both views, answered in one act, with its two grid answers named None and General.",
+			"The topbar's light and dark switch became a theme picker: an icon dropdown in the corner utilities, grouped into Light and Dark, with the catalog's one theme named and the active choice marked. The logged-out navigation's two doors changed order, Log In leading and Sign Up Free closing the corner.",
+			"The Resources landing was rebuilt around its audiences: one band each for users and for creators, one for what Anthers does with its own money, opening on the media-month calculator and the money-flow drawing, and the page returned to the navigation it had left while the rebuild was under way.",
+			"The post page took the bordered-card treatment: a post reads inside a card now, the creator's name sits above the title, the vote buttons carry their counts, and the record's Taproot link rides the header.",
+			"The Studio's tables caught up with one another in the same pass: the Posts page joined the Works and Projects pages as a table, a row's description sits in its own column beside the title, and a Project row's cover image opens the Project, as a Works row's thumbnail already did.",
+			"The Work editor's thumbnail section was rebuilt without losing the creator's place when the page's height changes, and the sidebar's mode toggle moved onto the sidebar's own edge, its two modes reading User and Creator.",
+			"The public roadmap's cards were corrected against what shipped: traffic analytics reads as launched, and the copy on three cards claims only what a skeptic can check.",
+		],
+	},
+	{
 		version: "2026.10.24",
 		date: "2026-10-15",
 		lede: "Traffic became a first-party measurement described exactly, a calculator joined the resources, and a Work's page is the one editing surface.",
@@ -107,6 +129,7 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 			"Turning a page while the book is still opening no longer freezes the ebook reader.",
 			"Every promoted release carries the signed web bundle the desktop pins, retiring the separate web-v release channel.",
 		],
+		roadmapIds: ["traffic"],
 	},
 	{
 		version: "2026.10.23",
