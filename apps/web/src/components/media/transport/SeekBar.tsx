@@ -29,6 +29,7 @@ export default function SeekBar({
 	onScrubEnd,
 	label = "Seek",
 	track,
+	stretch = false,
 	className = "",
 	disabled = false,
 }: {
@@ -49,6 +50,13 @@ export default function SeekBar({
 	label?: string;
 	/** What to paint under the control. Omit for the default rail. */
 	track?: ReactNode;
+	/**
+	 * Fill the definite box the control is given (the stage's hero — see
+	 * `ListenStage`): full height with no rail padding, so the painted track can
+	 * measure the surface it stretches across. The bare rail ignores a stretch it
+	 * has nothing to fill.
+	 */
+	stretch?: boolean;
 	className?: string;
 	disabled?: boolean;
 }) {
@@ -70,12 +78,14 @@ export default function SeekBar({
 	return (
 		<div
 			ref={wrapRef}
-			className={`group/seek relative flex items-center rounded-full py-2 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/60 ${className}`}
+			className={`group/seek relative flex items-center rounded-full has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/60 ${
+				stretch ? "h-full w-full" : "py-2"
+			} ${className}`}
 			onPointerMove={(e) => trackHover(e.clientX)}
 			onPointerLeave={() => setHover(null)}
 		>
 			{/* The painted surface. Never interactive — the input above owns every event. */}
-			<div className="pointer-events-none w-full">
+			<div className="pointer-events-none relative h-full w-full">
 				{track ?? (
 					<div className="relative h-1.5 w-full overflow-hidden rounded-full bg-base-content/15">
 						<div
