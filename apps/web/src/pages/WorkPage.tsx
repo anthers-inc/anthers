@@ -328,8 +328,12 @@ export default function WorkPage() {
 							</div>
 						</WorkMediaFrame>
 					) : (
+						// `h-full` as the panel's own: the store's columns fill the media
+						// frame's whole profile — the picture column takes the height the
+						// composition gives it (the store-panel task, 2026-10-17), rather
+						// than a strip beside empty space.
 						<WorkMediaFrame>
-							<div className="w-full">
+							<div className="h-full w-full">
 								<ProjectPricing
 									workId={work.id}
 									slug={work.slug ?? ""}

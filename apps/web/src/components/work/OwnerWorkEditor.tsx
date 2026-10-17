@@ -1492,8 +1492,10 @@ export default function OwnerWorkEditor({
 					// verdict, the same absence a creator's own visit has always read.
 					// `w-full` as on the user page: the panel has no width of its own and
 					// would shrink-to-fit in the frame's centered column.
+					// `h-full` as on the user page: the store's columns fill the media
+					// frame's whole profile (the store-panel task, 2026-10-17).
 					<WorkMediaFrame>
-						<div className="w-full">
+						<div className="h-full w-full">
 							<ProjectPricing
 								workId={current.id}
 								slug={current.slug ?? ""}
