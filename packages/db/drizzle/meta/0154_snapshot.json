@@ -1,10 +1,6 @@
 {
-<<<<<<< HEAD
   "id": "fc35cd63-d766-4f60-ba62-b6828714f6e6",
-=======
-  "id": "bf21eea9-884f-4a9e-ab22-27a768918309",
->>>>>>> origin/main
-  "prevId": "8eedccd6-8594-4bfc-a84b-d8b8d1b7b665",
+  "prevId": "bf21eea9-884f-4a9e-ab22-27a768918309",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -10143,7 +10139,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-<<<<<<< HEAD
     "public.post_work_refs": {
       "name": "post_work_refs",
       "schema": "",
@@ -10280,8 +10275,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-=======
->>>>>>> origin/main
     "public.posts": {
       "name": "posts",
       "schema": "",
@@ -11856,15 +11849,12 @@
           "primaryKey": false,
           "notNull": false
         },
-<<<<<<< HEAD
         "queue_position": {
           "name": "queue_position",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
-=======
->>>>>>> origin/main
         "error_message": {
           "name": "error_message",
           "type": "text",
