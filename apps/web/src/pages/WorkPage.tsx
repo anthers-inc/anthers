@@ -19,6 +19,7 @@ import { isListened } from "@anthers/shared/content";
 import { gridFor, normalizeMaturityRows } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { LockedCover, lockedByBadge, presentsAsLocked } from "@anthers/web-shared/post/unlock";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
@@ -98,6 +99,7 @@ export default function WorkPage() {
 
 	const [work, setWork] = useState<WorkDetail | null>(null);
 	const [loading, setLoading] = useState(true);
+	usePageTitle(work?.title ?? null);
 
 	/**
 	 * What is already in state — the canonical path AND the preview it was fetched under.

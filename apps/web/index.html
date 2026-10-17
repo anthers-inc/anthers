@@ -5,6 +5,37 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Anthers</title>
+    <!-- Link-preview metadata, site-level by structural necessity: the web app is a static
+         SPA whose served head is identical on every route (see .do/app.yaml's
+         catchall_document), so anything here must be true of the whole site and can name no
+         Work, creator or rating — a head shared by every route cannot know them. The
+         description quotes the standing introduction from How Anthers Talks About Itself;
+         its per-route descendants are the Marketing Rendering, Metadata & SEO lane, whose
+         rendering decision also covers where dynamic routes' metadata is injected. Absolute
+         URLs only: crawlers do not resolve relative og values. og:image is the stable-address
+         card in public/brand/ — its address is written down here, so read
+         apps/web/public/brand/README.md before moving it. -->
+    <meta name="description" content="Anthers is a nonprofit creative garden for everyone: a place for videos, games, music, writing, crafts, services, and more, all on an open-source, ad-free platform." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Anthers" />
+    <meta property="og:title" content="Anthers" />
+    <meta property="og:description" content="Anthers is a nonprofit creative garden for everyone: a place for videos, games, music, writing, crafts, services, and more, all on an open-source, ad-free platform. A harmonious ecosystem where we can all nurture a creative internet worth loving again." />
+    <meta property="og:url" content="https://anthers.org/" />
+    <meta property="og:image" content="https://anthers.org/brand/og-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The Anthers mark, a striped bee on a cream round with orchids beneath." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Anthers" />
+    <meta name="twitter:description" content="Anthers is a nonprofit creative garden for everyone: a place for videos, games, music, writing, crafts, services, and more, all on an open-source, ad-free platform." />
+    <meta name="twitter:image" content="https://anthers.org/brand/og-card.png" />
+    <!-- Home-screen icons for surfaces that read a manifest (Android, install prompts).
+         The bundle-imported icon links above are right where a page loads them, and this is
+         the other shape: a manifest whose own internal src strings carry root-absolute
+         addresses, so they run on both the dev server and production without rewriting.
+         The bundler resolves this href like the icons and emits it content-hashed at the
+         dist root — nothing outside the app references the manifest's own address by name. -->
+    <link rel="manifest" href="./site.webmanifest" />
     <!-- Apply the saved light/dark choice before first paint. Default light (set on <html>);
          override to dark if stored. Key + default mirror packages/web-shared/src/lib/theme.ts. -->
     <script>

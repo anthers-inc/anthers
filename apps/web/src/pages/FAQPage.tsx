@@ -19,6 +19,7 @@ import { MeadowDecor } from "@anthers/web-shared/decor/MeadowDecor";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Eyebrow, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { Link, useLocation } from "@anthers/web-shared/router";
 import { useEffect } from "react";
 import { FAQAccordion } from "../components/ui/FAQ";
@@ -27,6 +28,7 @@ import { ALL_FAQ_ITEMS, FAQ_CATEGORIES } from "../content/faq";
 const serif = { fontFamily: FONTS.fraunces };
 
 export default function FAQPage() {
+	usePageTitle("FAQ");
 	// `/faq#<id>` opens that answer and scrolls to it, which is how another page links to one
 	// question rather than to the top of all of them. Scrolled by hand because the router does
 	// not follow a fragment on navigation, and a browser's own jump happens before this renders.

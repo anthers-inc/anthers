@@ -12,9 +12,12 @@
  * ⚠️ **So do not remove it, and do not let a route pattern grow broad enough to swallow it.**
  * `apps/web/tests/e2e/profile-urls.e2e.ts` asserts it still answers.
  */
+
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { Link } from "@anthers/web-shared/router";
 
 export default function NotFoundPage() {
+	usePageTitle("Page Not Found");
 	return (
 		<div className="mx-auto max-w-md px-4 py-24 text-center">
 			<h1 className="text-2xl font-bold">There's Nothing at This Address</h1>

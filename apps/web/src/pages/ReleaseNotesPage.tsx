@@ -30,6 +30,7 @@ import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
+import { usePageTitle } from "@anthers/web-shared/page-title";
 import { Link, useLocation } from "@anthers/web-shared/router";
 import { useEffect } from "react";
 import { RELEASE_NOTES, type ReleaseNotesEntry } from "../content/release-notes";
@@ -97,6 +98,7 @@ export function groupedByMonth(
 }
 
 export default function ReleaseNotesPage() {
+	usePageTitle("Release Notes");
 	// `/release-notes#<version>` scrolls to that release, which is how the roadmap's card
 	// for a launched item links to the version that shipped it. Scrolled by hand
 	// because the router does not follow a fragment on navigation, and a browser's

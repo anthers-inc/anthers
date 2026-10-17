@@ -19,7 +19,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { follows, posts, projects, users, works } from "@anthers/db/schema";
+import { badgePerks, badges, follows, posts, projects, users, works } from "@anthers/db/schema";
 import { and, eq, like } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -39,6 +39,16 @@ interface ListedCreator {
 	projectCount: number;
 	isFollowing: boolean;
 	mediums?: string[];
+	badges?: {
+		id: number;
+		threshold: string;
+		label: string;
+		hasArt: boolean;
+		artShape: string | null;
+		artColor: string | null;
+		perks: string[];
+		description: string | null;
+	}[];
 }
 
 function req(path: string, options?: RequestInit) {
@@ -126,6 +136,21 @@ beforeAll(async () => {
 		method: "POST",
 		headers: { Origin: ORIGIN, Cookie: fanCookie },
 	});
+
+	// Two rungs on the maker's ladder, with perks on one — what the listing ships for
+	// /signup's chips. Inserted here rather than via the editor route so the fixture stays
+	// a plain row shape; the ladder route's own suite covers the CRUD.
+	const ladder = await db
+		.insert(badges)
+		.values([
+			{ creatorId: makerId, threshold: "3.00", label: `cl-low-${id}`, sortOrder: 0 },
+			{ creatorId: makerId, threshold: "9.50", label: `cl-high-${id}`, sortOrder: 1 },
+		])
+		.returning({ id: badges.id });
+	await db.insert(badgePerks).values([
+		{ badgeId: ladder[0].id, kind: "recognition", label: "The maker's thanks", sortOrder: 0 },
+		{ badgeId: ladder[0].id, kind: "recognition", label: "Early drafts", sortOrder: 1 },
+	]);
 }, DB_SETUP_TIMEOUT);
 
 // Projects and Works go with the account; posts do not, because a departed creator's posts are
@@ -169,5 +194,25 @@ describe("creator listing — derived columns", () => {
 
 		const asStranger = (await listCreators()).find((c) => c.id === makerId);
 		expect(asStranger?.isFollowing).toBe(false);
+	});
+
+	it("ships the Badge ladder the signup chips render — ascending, with perks, and no private art", async () => {
+		// ⭐ The chips on /signup are this creator's actual Badges: a `badges` entry absent
+		// from the listing would put "Back" back on the cards, and a private key here would
+		// put the art's path into a marketing payload. Asserted on the shape, field by field.
+		const listed = (await listCreators()).find((c) => c.id === makerId);
+		expect(listed?.badges).toHaveLength(2);
+
+		const [low, high] = listed?.badges ?? [];
+		expect(low.threshold).toBe("3.00");
+		expect(high.threshold).toBe("9.50"); // ascending, the order a ladder reads by
+		expect(low.perks).toEqual(["The maker's thanks", "Early drafts"]);
+		expect(high.perks).toEqual([]);
+		expect(typeof low.hasArt).toBe("boolean");
+		// The art path and its key are private — `artKey`/`art_key` never travel, and the
+		// composed-art fingerprint is a detail view's business, not a chip's.
+		const shape = JSON.stringify(low);
+		expect(shape).not.toContain("artKey");
+		expect(shape).not.toContain("art_key");
 	});
 });
