@@ -363,11 +363,14 @@ function MetaRow({
 	handle,
 	name,
 	date,
+	own,
 }: {
 	avatar: string | null | undefined;
 	handle: string | null | undefined;
 	name: string;
 	date: string;
+	/** The viewer made this tile's entry — the feed's own-content source. */
+	own?: boolean;
 }) {
 	return (
 		<div className="flex items-center gap-2 min-w-0">
@@ -379,10 +382,12 @@ function MetaRow({
 				</div>
 			)}
 			{/* The name is the creator's way out of the tile: it rises past the tile's
-			    stretched overlay (CreatorLink), so the date stays the tile's. */}
+			    stretched overlay (CreatorLink), so the date stays the tile's. An own
+			    entry reads "You": the tile says why it is there (the viewer made it)
+			    while the link still leads to the viewer's own page. */}
 			<CreatorLink
 				handle={handle}
-				name={name}
+				name={own ? "You" : name}
 				className="text-xs text-base-content/70 truncate hover:underline"
 			/>
 			{date && <span className="text-[11px] text-base-content/40 ml-auto shrink-0">{date}</span>}
@@ -404,6 +409,15 @@ function TileBody({ children }: { children: ReactNode }) {
  */
 function creatorLabel(creator: { handle: string; displayName?: string | null }): string {
 	return creator.displayName || creator.handle || "?";
+}
+
+/**
+ * Why the entry is here, from the `source` the API states per entry (24.00 Your
+ * Feed's every-item-explains-itself): "own" is the viewer's own content, anything
+ * else is the follow its creator carries.
+ */
+function entryIsOwn(entry: FeedEntry): boolean {
+	return entry.source === "own";
 }
 
 /**
@@ -501,6 +515,7 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 					avatar={work.creator?.avatar}
 					handle={work.creator?.handle}
 					name={creatorLabel(work.creator ?? { handle: "?" })}
+					own={entryIsOwn(entry)}
 					date={compactDate(work.originallyReleased ?? work.releasedAt)}
 				/>
 				{!bandIsTypographic && work.title && (
@@ -564,6 +579,7 @@ function PostTile({ entry }: { entry: FeedEntry }) {
 					avatar={post.creator?.avatar}
 					handle={post.creator?.handle}
 					name={creatorLabel(post.creator ?? { handle: "?" })}
+					own={entryIsOwn(entry)}
 					date={compactDate(post.publishedAt ?? post.createdAt)}
 				/>
 				{!bandIsTitle && post.title && (

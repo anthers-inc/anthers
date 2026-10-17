@@ -111,9 +111,9 @@ export const FAQ_ITEMS = {
 		answer: (
 			<div className="space-y-2">
 				<p>
-					No. Your feed is posts and releases from the creators you follow, newest first, and that
-					is the whole of it today: nothing scores it, nothing predicts what will hold your
-					attention, and nothing you did not ask for appears in it.
+					No. Your feed is your own posts and releases alongside those of the creators you follow,
+					newest first, and that is the whole of it today: nothing scores it, nothing predicts what
+					will hold your attention, and nothing you did not ask for appears in it.
 				</p>
 				<p>Three things that stay true as it grows:</p>
 				<ul className="list-disc list-inside space-y-1 text-base-content/70">
