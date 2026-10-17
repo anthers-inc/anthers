@@ -66,6 +66,7 @@ import { rescanOwed } from "./rescan-owed.js";
 import { markBenignInterrupted, resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
+import { publishFundLedger } from "../services/time-pool-fund.js";
 import { statusSample } from "./status-sample.js";
 import { runStorageUsageSweep } from "./storage-usage.js";
 import { type SyncAtprotoRecordData, syncAtprotoRecordJob } from "./sync-atproto-record.js";
@@ -177,6 +178,18 @@ async function start() {
 		for (const job of jobs) {
 			console.log(`[settle-cycle] Processing job ${job.id}`);
 			await settleCycle(job.data);
+		}
+	});
+
+	// The Time Pool Fund's monthly publication — the ledger's actuals restated, next
+	// month committed, one further estimated. Idempotent by row; quiet unless the
+	// window grew.
+	await queue.work(QUEUES.PUBLISH_POOL_FUND, async (jobs) => {
+		for (const job of jobs) {
+			console.log(`[publish-pool-fund] Processing job ${job.id}`);
+			const published = await publishFundLedger();
+			if (published > 0)
+				console.log(`[publish-pool-fund] job ${job.id}: ${published} cycle row(s) published`);
 		}
 	});
 

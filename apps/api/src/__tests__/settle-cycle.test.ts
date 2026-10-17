@@ -11,13 +11,14 @@
  * ⚠️ **Each run is scoped to one supporter**, because a settlement run finds every unsettled
  * month in the database and this suite shares its database with every other suite in the run.
  *
- * ⭐ Figures are asserted against `timePoolFor`, `paymentsSplit` and `FREE_TIME_POOL` wherever the
- * model defines the answer — a copied number drifts exactly the way the code it was copied from
- * does.
+ * ⭐ Figures are asserted against `timePoolFor` and `paymentsSplit` wherever the model
+ * defines the answer, and the free tier's pool against the Fund's ledger — a copied number
+ * drifts exactly the way the code it was copied from does.
  */
-import { afterAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
+	accountCycles,
 	badgeCharges,
 	badges,
 	billingAccounts,
@@ -28,11 +29,13 @@ import {
 	monthSettlements,
 	poolDistributions,
 	stickers,
+	timePoolFundLedger,
 	userBadges,
 } from "@anthers/db/schema";
-import { FREE_TIME_POOL, timePoolFor } from "@anthers/shared/constants";
+import { PUBLIC_ACCESS_PRICE, timePoolFor } from "@anthers/shared/constants";
 import { paymentsSplit } from "@anthers/shared/fees";
 import { SHARE_LINK_POOL_FRACTION } from "@anthers/shared/public-access";
+import { timePoolFundPool } from "@anthers/shared/time-pool-fund";
 import Decimal from "decimal.js";
 import { and, eq, inArray, like, sql } from "drizzle-orm";
 import app from "../index";
@@ -41,7 +44,7 @@ import { settleCycle } from "../jobs/settle-cycle";
 import { createAccount } from "./account-fixture";
 import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { insertAttentionRange } from "./attention-fixture.js";
-import { purgeAccountsCreatedHere } from "./cleanup";
+import { purgeAccountIds, purgeAccountsCreatedHere } from "./cleanup";
 
 await ensureAnthersLadder();
 purgeAccountsCreatedHere();
@@ -61,6 +64,24 @@ const madeUserIds: number[] = [];
 const markedMonths: string[] = [];
 let n = 0;
 
+/**
+ * 🚨 The Fund's slice for a cycle is read across EVERY supporter of that cycle
+ * (`services/time-pool-fund.ts`), so one test's fixtures leak into the next test's
+ * denominators. Each test starts from the accounts and books nothing else wrote:
+ * the previous test's users are purged (which cascades their `account_cycles` rows),
+ * their ledger markers go, and the Fund's rows for the suite's months are cleared —
+ * a test publishes the Fund state its own fixtures mean.
+ */
+beforeEach(async () => {
+	const ids = [...madeUserIds];
+	madeUserIds.length = 0;
+	for (const userId of ids) {
+		await db.delete(crfLedger).where(like(crfLedger.description, `[settle u${userId} %`));
+	}
+	await purgeAccountIds(ids);
+	await db.delete(timePoolFundLedger).where(inArray(timePoolFundLedger.billingCycle, [MONTH]));
+});
+
 afterAll(async () => {
 	// The ledger rows reference no user, so they are found by the marker they carry; the month
 	// markers reference nothing at all. Both go before the accounts do.
@@ -70,6 +91,7 @@ afterAll(async () => {
 	if (markedMonths.length > 0) {
 		await db.delete(monthSettlements).where(inArray(monthSettlements.billingCycle, markedMonths));
 	}
+	await db.delete(timePoolFundLedger).where(inArray(timePoolFundLedger.billingCycle, [MONTH]));
 });
 
 async function makeUser(kind: string): Promise<number> {
@@ -142,6 +164,44 @@ async function holdOrgRung(userId: number, threshold: string, cycle: string): Pr
 	if (Number(threshold) > 0) {
 		await db.insert(userBadges).values({ userId, badgeId: badge.id, billingCycle: cycle });
 	}
+}
+
+/**
+ * Publish a Fund row for the test month as the mechanism would have: a settled book
+ * of `foundation` dollars (the books the ledger's settled basis reads), a frozen
+ * active count of `active`, and the pool and slice the shared arithmetic derives
+ * from them. Settlement reads the cycle's slice through the ledger; this is the
+ * fixture for it — the same one write `services/time-pool-fund.ts` makes.
+ */
+async function publishFundRow(activeFreeAccounts: number, foundation = 100): Promise<void> {
+	const { userId } = await makeSupporter(0);
+	await db.insert(accountCycles).values({
+		userId,
+		billingCycle: MONTH,
+		foundation: foundation.toFixed(2),
+	});
+	await db.insert(timePoolFundLedger).values({
+		billingCycle: MONTH,
+		status: "actual",
+		charitableRevenue: foundation.toFixed(2),
+		adminBudgetShare: 0.3,
+		freeAccessShare: 0.1,
+		poolAmount: "0.00",
+		activeFreeAccounts,
+		slicePerAccount: "0.00",
+		actualizedAt: new Date("2031-06-02T02:00:00Z"),
+	});
+}
+
+/** The Fund's slice the ledger's arithmetic derives for MONTH — the tests' expected free pool. */
+function fundSlice(activeFreeAccounts: number, foundation = 100): Decimal {
+	return timePoolFundPool({
+		charitableRevenue: foundation,
+		adminBudgetShare: 0.3,
+		freeAccessShare: 0.1,
+		activeFreeAccounts,
+		rootPool: timePoolFor(PUBLIC_ACCESS_PRICE),
+	}).slice;
 }
 
 /** A paid invoice for the month, with its lines, as the webhook would have recorded it. */
@@ -263,8 +323,11 @@ describe("settling a month from what was paid for it", () => {
 	it("🚨 credits only the free Time Pool for a month nothing was paid for, and pays no Stickers", async () => {
 		// The renewal failed and never cleared. The estimate credited this supporter's whole $6
 		// pool and their Sticker from the first night; none of it was ever collected.
+		// The Fund's published slice for the month ($1.40 from a $100 book, 5 active)
+		// is the free pool the cycle carries; the supporter draws it, Stickers draw none.
 		const creator = await makeUser("creator");
 		const { userId, accountId } = await makeSupporter(6);
+		await publishFundRow(5);
 		await watch(userId, creator, 1800);
 		await db.insert(stickers).values({
 			giverId: userId,
@@ -279,7 +342,7 @@ describe("settling a month from what was paid for it", () => {
 		await settle(userId);
 
 		const { rows, total } = await creditsFrom(userId);
-		expect(total(creator, "time_pool")).toBe(new Decimal(FREE_TIME_POOL).toFixed(2));
+		expect(total(creator, "time_pool")).toBe(fundSlice(5).toFixed(2));
 		expect(total(creator, "sticker")).toBe("0.00");
 		expect(rows.every((r) => r.fundedBy === "anthers")).toBe(true);
 		// Nobody paid, so nothing is income.
@@ -300,11 +363,11 @@ describe("settling a month from what was paid for it", () => {
 		const { rows, total } = await creditsFrom(userId);
 		expect(total(creator, "time_pool")).toBe(new Decimal(timePoolFor(6)).toFixed(2));
 		// The late money is its own row with its own settlement time, so its hold starts then —
-		// and the free pool credited first stays where it was.
+		// and the free pool credited first stays where it was. Under the Fund that first pool
+		// is $0: the cycle had no paid Anthers revenue in it, so the Fund's slice was $0 —
+		// the doctrine working, not a failure of credit.
 		const late = rows.filter((r) => r.settledAt.getTime() === LATER.getTime());
-		expect(late.map((r) => r.amount)).toEqual([
-			new Decimal(timePoolFor(6)).minus(FREE_TIME_POOL).toFixed(2),
-		]);
+		expect(late.map((r) => r.amount)).toEqual([new Decimal(timePoolFor(6)).toFixed(2)]);
 		expect(await inflowFrom(userId)).toBe(ownRemainder(6).toFixed(2));
 	});
 
@@ -341,9 +404,9 @@ describe("settling a month from what was paid for it", () => {
 
 		await settle(userId);
 
-		expect((await creditsFrom(userId)).total(creator, "time_pool")).toBe(
-			new Decimal(FREE_TIME_POOL).toFixed(2),
-		);
+		// Nothing was paid, so the Fund's slice for the cycle is $0 — nothing from the
+		// refunded invoice, and nothing from a Fund no revenue funded.
+		expect((await creditsFrom(userId)).total(creator, "time_pool")).toBe("0.00");
 	});
 });
 
@@ -429,15 +492,19 @@ describe("the remainder", () => {
 	});
 
 	it("books no income from a free account's pool, spent or not", async () => {
+		// The Fund's slice is live here ($1.40 from a $100 book, 5 active), so this
+		// exercises a free account drawing real Fund money — and books none of it as
+		// income, spent or not: it is the charitable remainder's money both ways.
 		const creator = await makeUser("creator");
 		const { userId, accountId } = await makeSupporter(0);
+		await publishFundRow(5);
 		await watch(userId, creator, 1800);
 		await distributePool({ accountId });
 
 		await settle(userId);
 
 		expect((await creditsFrom(userId)).total(creator, "time_pool")).toBe(
-			new Decimal(FREE_TIME_POOL).toFixed(2),
+			fundSlice(5).toFixed(2),
 		);
 		expect(await inflowFrom(userId)).toBe("0.00");
 	});

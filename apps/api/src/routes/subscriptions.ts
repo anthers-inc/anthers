@@ -101,6 +101,7 @@ import {
 	resolveAccessSync,
 } from "../services/access.js";
 import { anthersUserId, loadAnthersLadder } from "../services/anthers-badges.js";
+import { publishedFundLedger } from "../services/time-pool-fund.js";
 import { creditedSeconds, creditedSecondsByDayAndCreator } from "../services/attention-ranges.js";
 import { composeBadgeArt } from "../services/badge-art-compose.js";
 import {
@@ -591,6 +592,21 @@ const subscriptionRoutes = new Hono()
 			return c.json({ error: "The Anthers Badge ladder has not been seeded." }, 503);
 		}
 		return c.json({ rungs, publicAccessPrice });
+	})
+
+	// ── The Time Pool Fund's published ledger ──────────────────────────────
+	// The free account's Time Pool is not a constant (its own task retired
+	// `FREE_TIME_POOL`): it is the Fund — a stated share of the charitable remainder
+	// after the admin budget, published monthly, divided across the cycle's active
+	// free accounts. This route serves the published ledger newest-first — actuals,
+	// the next month's commitment and its estimate each named as what they are — so
+	// every surface quoting the free tier's pool draws it from the record rather
+	// than from code.
+	.get("/time-pool-fund", async (c) => {
+		// Nothing published yet — a fresh deploy before the first publish run — answers
+		// an empty ledger, and the browser treats absence as "figures unknown" exactly
+		// as it does the ladder's 503.
+		return c.json({ cycles: await publishedFundLedger() });
 	})
 
 	// ── Current Account ──────────────────────────────────────────────────────

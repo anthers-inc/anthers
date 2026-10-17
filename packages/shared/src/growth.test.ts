@@ -13,7 +13,13 @@
 // from here. After that these constants are the record of the port, and the thing they
 // guard is that a later refactor does not quietly move a landmark.
 import { describe, expect, test } from "bun:test";
-import { FREE_TIME_POOL, STORAGE_LADDER_GIB, STORAGE_PER_GIB_MONTH } from "./constants.js";
+import {
+	FREE_STORAGE_GIB,
+	PUBLIC_ACCESS_PRICE,
+	STORAGE_LADDER_GIB,
+	STORAGE_PER_GIB_MONTH,
+} from "./constants.js";
+import { floorPayingShare } from "./growth.js";
 import {
 	ADMIN_CEILING,
 	affordable,
@@ -43,10 +49,16 @@ function near(actual: number | null, expected: number, pct = 1.5) {
 }
 
 describe("the landmarks 61.01 publishes", () => {
-	test("the platform stops costing Parker money at ~225 accounts", () => {
+	// 🚨 The landmark values moved when the free tier stopped being a per-head
+	// constant and became the Fund (2026-10-17): the ruled prediction — "the landmarks
+	// move up dramatically, because the platform stops paying per head before revenue
+	// supports it" — held everywhere, most at the 10% paying row, where the old pot's
+	// headcount term was nearly the whole obligation. The values below are the new
+	// recorded ones, deliberately updated rather than loosened.
+	test("the platform stops costing Parker money at ~185 accounts", () => {
 		near(
 			crossover((m) => m.solvent, { payingShare: SHARE, staffing: NO_STAFFING }),
-			225,
+			185,
 		);
 	});
 
@@ -54,10 +66,10 @@ describe("the landmarks 61.01 publishes", () => {
 		near(crossover(affordable, { payingShare: SHARE, staffing: NO_STAFFING }), 555);
 	});
 
-	test("a full-time salary is SOLVENT at ~12,300 — far below where it is responsible", () => {
+	test("a full-time salary is SOLVENT at ~10,400 — far below where it is responsible", () => {
 		near(
 			crossover((m) => m.solvent, { payingShare: SHARE, staffing: full }),
-			12_300,
+			10_430,
 		);
 	});
 
@@ -80,8 +92,8 @@ describe("the landmarks 61.01 publishes", () => {
 	 * table turns violent there. Pinning this row means a landmark *value*, not just a
 	 * verdict, protects the free-access pot's contribution to the model.
 	 */
-	test("at 10% paying — where solvency binds instead of Admin — inflection 1 is ~201,500", () => {
-		near(crossover(affordable, { payingShare: 0.1, staffing: full }, { maxLog: 12 }), 201_500, 2);
+	test("at 10% paying — where the old pot bound solvency — inflection 1 is ~109,400", () => {
+		near(crossover(affordable, { payingShare: 0.1, staffing: full }, { maxLog: 12 }), 109_400, 2);
 	});
 
 	/**
@@ -112,20 +124,22 @@ describe("the landmarks 61.01 publishes", () => {
 
 describe("affordability takes BOTH tests", () => {
 	/**
-	 * 🚨 The test that would have caught the wrong predicate, and did.
-	 *
-	 * The Admin ratio is overhead against charitable **revenue**, so it cannot see the
-	 * free-access pot at all — a free account contributes nothing to either side of that
-	 * fraction. Reaching for `adminHealthy` alone therefore reports a model that is
-	 * "healthy" while it is losing money on every free account, and the published floor
-	 * comes out at 1.3% instead of 8.8%, with a smooth curve where the real one has a
-	 * cliff. This pins a scale where the two verdicts genuinely disagree.
+	 * 🚨 The test that would have caught the wrong predicate, and did — until the Fund
+	 * retired the cliff it tested. The per-head constant made free access an obligation
+	 * independent of revenue, so a model could pass the Admin ratio while losing money
+	 * per free account, and the two verdicts split. Under the Fund the free pool IS a
+	 * share of revenue (`timePoolFundPool`), and the parity ceiling keeps it beside the
+	 * smallest paid pool, so **Admin-healthy implies solvent** — asserted as the sweep
+	 * it now is, because the invariant is a property of the arithmetic rather than of
+	 * one scale.
 	 */
-	test("at a low paying share the Admin ratio passes while the books do not balance", () => {
-		const m = modelAt({ accounts: 500_000, payingShare: 0.05, staffing: full });
-		expect(m.adminHealthy).toBe(true);
-		expect(m.solvent).toBe(false);
-		expect(affordable(m)).toBe(false);
+	test("under the Fund, Admin-healthy implies solvent — the two-floor cliff is retired", () => {
+		for (const share of [0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.3]) {
+			for (const accounts of [10_000, 100_000, 1_000_000, 10_000_000]) {
+				const m = modelAt({ accounts, payingShare: share, staffing: full });
+				if (m.adminHealthy) expect(m.solvent).toBe(true);
+			}
+		}
 	});
 
 	test("at a high paying share the reverse binds — solvent well before Admin is healthy", () => {
@@ -137,43 +151,52 @@ describe("affordability takes BOTH tests", () => {
 });
 
 describe("the floor paying share", () => {
-	test("is ~8.7% at the shipped free pot", () => {
-		expect(floorPayingShare({ staffing: NO_STAFFING }) * 100).toBeCloseTo(8.7, 1);
+	// 🚨 The floor's value moved with the Fund (2026-10-17): the pot stopped being a
+	// per-head obligation and became a share of revenue, so the paying cohort no longer
+	// carries free access headcount against headcount — 8.7% becomes 1.3%.
+	test("is ~1.3% with the Fund at the ruled share", () => {
+		expect(floorPayingShare({ staffing: NO_STAFFING }) * 100).toBeCloseTo(1.3, 1);
 	});
 
 	/**
-	 * Cross-checked against the model's own SLOPE rather than against its closed form —
-	 * there isn't one here, which is the point. Below the floor one more account makes the
-	 * budget worse; above it, better. Asserting that is asserting what the floor *means*,
-	 * not how it is computed.
+	 * The floor's meaning, restated for the Fund: at the floor share some scale is
+	 * affordable, below it none is — within the crossover's own bounds. The old model's
+	 * single sign flip of the programs *slope* was a property of the per-head pot
+	 * (an obligation that grew with free headcount whatever revenue did), and the
+	 * Fund retires that shape with the constant: the pool rides revenue, the deficit
+	 * curve is no longer monotone in scale, and the floor's claim is about
+	 * affordability, not slope.
 	 */
-	test("is exactly where one more account stops making the budget worse", () => {
+	test("is exactly where affordability becomes reachable at all", () => {
 		const floor = floorPayingShare({ staffing: NO_STAFFING });
-		const slope = (share: number) => {
-			const at = (n: number) =>
-				modelAt({ accounts: n, payingShare: share, staffing: NO_STAFFING }).programs;
-			return (at(2e6) - at(1e6)) / 1e6;
-		};
-		expect(slope(floor - 0.01)).toBeLessThan(0);
-		expect(slope(floor + 0.01)).toBeGreaterThan(0);
-		expect(Math.abs(slope(floor))).toBeLessThan(0.002);
+		const stride = Math.max(0.005, floor * 0.5);
+		expect(
+			crossover(affordable, { staffing: NO_STAFFING, payingShare: floor - stride }, { maxLog: 12 }),
+		).toBeNull();
+		expect(
+			crossover(
+				affordable,
+				{ staffing: NO_STAFFING, payingShare: Math.min(0.5, floor + stride) },
+				{ maxLog: 12 },
+			),
+		).not.toBeNull();
 	});
 
 	/**
-	 * The dial this pivots on is explicitly provisional (Parker, 2026-08-12) and expected
-	 * to move, so the assertion is the RELATIONSHIP, not a number tuned to today's value.
-	 * A more generous pot is a standing obligation to every free account, and it raises the
-	 * share of payers needed to fund it — which is the asymmetry the $0.25 opening was
-	 * chosen on: raising it later is easy, climbing down is not.
+	 * The Fund's dial is the SHARE, and the pot rides revenue — the old per-head
+	 * promise's steep trade between generosity and the floor is retired with it. What
+	 * holds instead is the mechanism's own shape, asserted as the formula's identity:
+	 * the pool is the share of the remainder after admin, and the slice divides it.
 	 */
-	test("a more generous free pot raises the share of payers needed to fund it", () => {
-		const a = floorPayingShare({ staffing: NO_STAFFING, freeTimePool: FREE_TIME_POOL });
-		const b = floorPayingShare({ staffing: NO_STAFFING, freeTimePool: FREE_TIME_POOL * 2 });
-		expect(b).toBeGreaterThan(a);
-		// 61.01 recorded the $0.50 pot's floor as 15.66% under the old storage shape; the
-		// ruled ladder makes carrying allowances cheaper than the half-again world was,
-		// so the same pot lands at 15.61% — recorded as the relationship, re-derived here.
-		expect(b * 100).toBeCloseTo(15.61, 1);
+	test("the Fund's pot is the share of the remainder after admin, divided by the count", () => {
+		for (const share of [0.05, 0.1, 0.2]) {
+			const m = modelAt({ accounts: 1_000_000, payingShare: 0.3, staffing: NO_STAFFING, freeAccessShare: share });
+			expect(m.freePool).toBeCloseTo((1 - 0.3) * share * m.charitableRevenue, 2);
+			// The slice divides the pot floored to the cent — never above it.
+			const unrounded = m.freePool / m.freeAccounts;
+			expect(m.freeSlice).toBeLessThanOrEqual(unrounded);
+			expect(m.freeSlice).toBeGreaterThan(unrounded - 0.0101);
+		}
 	});
 
 	test("staffing does not move it — a floor is asymptotic, and fixed cost washes out", () => {

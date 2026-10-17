@@ -11,12 +11,16 @@ import Decimal from "decimal.js";
 import {
 	AFF_INFRA_RATE,
 	FREE_STORAGE_GIB,
-	FREE_TIME_POOL,
 	ILLUSTRATIVE_SALES_TAX_RATE,
 	PUBLIC_ACCESS_PRICE,
 	STORAGE_LADDER_GIB,
 } from "./constants.js";
 import { calculateFees, supportBreakdown } from "./fees.js";
+import {
+	DEFAULT_PLAN_PHASES,
+	PLAN_DEFAULTS,
+	planLedgerFor,
+} from "./financial-plan.js";
 import {
 	affordable,
 	averageSupport,
@@ -224,8 +228,11 @@ describe("creatorReceipt", () => {
 describe("selfSufficiency", () => {
 	const s = selfSufficiency();
 
-	test("a free user costs the Time Pool funded for them, and nothing else", () => {
-		expect(s.freeUserCost).toBe(new Decimal(FREE_TIME_POOL).toFixed(2));
+	test("what a free user costs is the Fund's plan-scale slice, and nothing else", () => {
+		// Derived, not the retired per-head constant: the same arithmetic the figure
+		// exists to publish, pinned from the plan's launch phase like the figure does.
+		const funded = planLedgerFor(DEFAULT_PLAN_PHASES[0], PLAN_DEFAULTS).freeSlice;
+		expect(s.freeUserCost).toBe(new Decimal(funded).toFixed(2));
 	});
 
 	/**
@@ -283,50 +290,42 @@ describe("selfSufficiency", () => {
 	});
 
 	/**
-	 * `net` is the model's **slope** — what one more account does to the budget, divided
-	 * across the paying cohort carrying it. So the break-even share is where it reaches
-	 * zero, and asserting that is asserting what the figure means rather than how it is
-	 * computed. The old version of this test recomputed `revenue − freePerPaying × cost`,
-	 * which was the implementation copied into the test file and could only ever agree.
+	 * The break-even share's meaning, restated for the Fund: at the floor some scale
+	 * is affordable, below it none is. The per-share `net` line's own monotone zero was
+	 * a property of the per-head pot, and the Fund retires that shape with the
+	 * constant — the assertable meaning is affordability's reachability.
 	 */
 	test("net per paying user reaches zero exactly at the break-even share", () => {
 		const floor = Number(s.breakEvenPct.replace("%", "")) / 100;
-		const netAt = (share: number) => {
-			const at = (n: number) =>
-				modelAt({ accounts: n, payingShare: share, staffing: NO_STAFFING }).programs;
-			return (at(2e6) - at(1e6)) / 1e6 / share;
-		};
-		// `breakEvenPct` is published to one decimal, so `floor` can sit up to half a
-		// tenth of a percent off the true crossing — and `net` is per PAYING account, so
-		// that half-step is divided by the share and comes back magnified. The tolerance
-		// is derived from the publishing precision rather than tuned until it passed:
-		// a bare 0.01 looks tighter and is only an assertion about today's rounding.
-		const halfStep = 0.0005;
-		const slopePerShare = Number(s.revenuePerPayingUser) + Number(s.freeUserCost);
-		expect(Math.abs(netAt(floor))).toBeLessThan((halfStep * slopePerShare) / floor);
-		expect(netAt(floor - 0.02)).toBeLessThan(0);
-		expect(netAt(floor + 0.02)).toBeGreaterThan(0);
+		const stride = Math.max(0.005, floor * 0.5);
+		expect(
+			crossover(affordable, { staffing: NO_STAFFING, payingShare: floor - stride }, { maxLog: 12 }),
+		).toBeNull();
+		expect(
+			crossover(
+				affordable,
+				{ staffing: NO_STAFFING, payingShare: Math.min(0.5, floor + stride) },
+				{ maxLog: 12 },
+			),
+		).not.toBeNull();
 	});
 
 	/**
-	 * The sensitivity that used to sit here — *"a more generous free floor raises the
-	 * share needed to sustain it"* — was retired with the floor on 2026-08-12. It
-	 * compared the free-user cost at 8 streaming hours against the same user drawing
-	 * their whole 15 GiB, and there is no longer a version of a free account that
-	 * costs more by watching more.
-	 *
-	 * What replaces it is the stronger claim: **free access has no usage-dependent
-	 * price at all.** Asserted here as a property of the published figure, because it
-	 * is the sentence the wiki now leads with.
+	 * What replaced the sensitivity the floor's retirement removed: free access has no
+	 * usage-dependent price, **and under the Fund no fixed one** — a free account's
+	 * cost is the Fund's published share of what arrived, derived here and published
+	 * monthly by the ledger. Asserted as the figure's own derivation.
 	 */
-	test("free access has no usage-dependent price — a free user costs a flat Time Pool", () => {
-		expect(Number(s.freeUserCost)).toBe(FREE_TIME_POOL);
+	test("free access has no usage-dependent price — a free user costs the Fund's slice", () => {
+		expect(Number(s.freeUserCost)).toBe(
+			planLedgerFor(DEFAULT_PLAN_PHASES[0], PLAN_DEFAULTS).freeSlice,
+		);
 	});
 
 	test("the model is viable at a plausible paying share", () => {
-		// The claim the figure is actually for. Not a tautology: at a high enough
-		// FREE_TIME_POOL this fails, which is precisely the bind a generous opening number
-		// would have put the charitable budget in.
+		// The claim the figure is actually for — the Fund's share dial can be raised
+		// until free access outruns what the paying cohort brings in; the ruled default
+		// has to sit comfortably inside the floor.
 		expect(Number(s.breakEvenPct.replace("%", ""))).toBeLessThan(25);
 	});
 });
