@@ -138,7 +138,8 @@ beforeAll(async () => {
 		maturityRows: rowsRatedAs("general"),
 	});
 	expect(workRes.status).toBe(201);
-	workId = (await workRes.json()).work.id;
+	const createdWork = (await workRes.json()).work;
+	workId = createdWork.id;
 
 	// Released and open, so both parties can comment on and review it.
 	const release = await req(`/api/content/works/${workId}`, {
@@ -154,7 +155,7 @@ beforeAll(async () => {
 
 	const postRes = await post("/api/content/posts", host, {
 		title: `Blk post ${id}`,
-		workIds: [workId],
+		body: `About the build: https://anthers.org/works/${createdWork.slug}-${createdWork.publicId}`,
 		isPublished: true,
 	});
 	expect(postRes.status).toBe(201);

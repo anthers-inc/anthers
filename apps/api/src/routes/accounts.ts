@@ -42,7 +42,6 @@ import { db } from "@anthers/db/client";
 import {
 	follows,
 	posts,
-	postWorkRefs,
 	rightsRequests,
 	studioPreferences,
 	userPreferences,
@@ -60,11 +59,12 @@ import {
 import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panels";
 import { isUsState } from "@anthers/shared/us-states";
 import { zValidator } from "@hono/zod-validator";
-import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
+import { PG_WORK_URL_PATTERN, workPublicIdsFromBody } from "../lib/post-work-links.js";
 import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
 import { type AccessibleWork, buildAccessContext, resolveAccessSync } from "../services/access.js";
@@ -674,11 +674,18 @@ const accountRoutes = new Hono()
 									? [sql`${posts.tags} @> ${JSON.stringify(tagFilter)}::jsonb`]
 									: []),
 								// A type filter reads a post through what it announces: some Work
-								// it links matches. (Posts never ship a payload here; the EXISTS
-								// only reads ids and a type, which are public on any listing.)
+								// its body embeds matches. (Posts never ship a payload here; the
+								// EXISTS only reads an id out of the body and a type, which are
+								// public on any listing — the shared pattern in
+								// `lib/post-work-links.ts`.)
 								...(mediaTypeFilter
 									? [
-											sql`EXISTS (SELECT 1 FROM post_work_refs feed_ref INNER JOIN works feed_work ON feed_work.id = feed_ref.work_id WHERE feed_ref.post_id = ${posts.id} AND feed_work.type = ${mediaTypeFilter})`,
+											sql`EXISTS (
+												SELECT 1
+												FROM regexp_matches(${posts.body}, ${PG_WORK_URL_PATTERN}, 'g') AS feed_m(pid)
+												JOIN works feed_work ON feed_work.public_id = feed_m.pid[1]::int
+												WHERE feed_work.type = ${mediaTypeFilter}
+											)`,
 										]
 									: []),
 							),
@@ -729,32 +736,27 @@ const accountRoutes = new Hono()
 				? await buildAccessContext(sessionUser.id, { workIds: feedWorks.map((r) => r.work.id) })
 				: null;
 
-		// The Works each post links, for a card thumbnail and a count — a post
+		// The Works each post embeds, for a card thumbnail and a count — a post
 		// in the grid has no artwork of its own, and announcing something while
-		// showing nothing would waste the tile. Same pattern the timeline route
-		// uses; thumbnails are public by design.
-		const postRefs: Record<string, { thumbnail: string | null; linkedWorkCount: number }> = {};
-		if (feedPosts.length > 0) {
-			const postIds = feedPosts.map((r) => r.post.id);
-			const refRows = await db
-				.select({
-					postId: postWorkRefs.postId,
-					thumbnail: works.thumbnail,
-				})
-				.from(postWorkRefs)
-				.innerJoin(works, eq(postWorkRefs.workId, works.id))
-				.where(inArray(postWorkRefs.postId, postIds))
-				.orderBy(asc(postWorkRefs.position));
-			for (const r of refRows) {
-				let entry = postRefs[r.postId];
-				if (!entry) {
-					entry = { thumbnail: null, linkedWorkCount: 0 };
-					postRefs[r.postId] = entry;
-				}
-				entry.linkedWorkCount += 1;
-				if (!entry.thumbnail && r.thumbnail) entry.thumbnail = r.thumbnail;
-			}
+		// showing nothing would waste the tile. Extracted from the bodies the
+		// rows already carry (`lib/post-work-links.ts` — nothing is stored);
+		// thumbnails are public by design.
+		const thumbByPublicId = new Map<number, string | null>();
+		const embeddedIds = [...new Set(feedPosts.flatMap((r) => workPublicIdsFromBody(r.post.body)))];
+		if (embeddedIds.length > 0) {
+			const thumbRows = await db
+				.select({ publicId: works.publicId, thumbnail: works.thumbnail })
+				.from(works)
+				.where(inArray(works.publicId, embeddedIds));
+			for (const t of thumbRows) thumbByPublicId.set(t.publicId, t.thumbnail);
 		}
+		const embedsOf = (post: { id: number; body: string | null }) => {
+			const ids = workPublicIdsFromBody(post.body);
+			return {
+				thumbnail: thumbByPublicId.get(ids[0]) ?? null,
+				linkedWorkCount: ids.length,
+			};
+		};
 
 		// The goods releases' store facts — what the tile shows in place of a lock
 		// chip, since the purchase gates RECEIVING the thing, never seeing it (the
@@ -800,10 +802,9 @@ const accountRoutes = new Hono()
 					createdAt: p.createdAt,
 					updatedAt: p.updatedAt,
 					// What the grid tile shows of what the post announces: the first
-					// linked Work's thumbnail and how many Works it points at.
+					// embedded Work's thumbnail and how many Works the body embeds.
 					// Thumbnails are public by design.
-					thumbnail: postRefs[p.id]?.thumbnail ?? null,
-					linkedWorkCount: postRefs[p.id]?.linkedWorkCount ?? 0,
+					...embedsOf(p),
 					// The body as plain text, where the tile's band renders the content
 					// and the card renders the shorter excerpt — both read this string.
 					excerpt: postContentExcerpt(p.body),

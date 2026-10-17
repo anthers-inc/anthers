@@ -5,8 +5,8 @@
  *
  * Lives on the Project's own page now (the unified-editor pass, 2026-10-17): a creator
  * visiting their project sees this as the working surface where users see the grid or
- * the album record. Deliberately NOT modeled on `PostWorkLinks`, which looks like the
- * same component and isn't. That one holds form state and saves with the post;
+ * the album record. A Project's shelf is NOT a form-held list — the post builder used
+ * to hold one, and it is what this design was considered against and rejected:
  * membership here has its own endpoints and **persists immediately**, the way the builds
  * section of the Work editor does. The reason is the Project form: a creator adding
  * twelve tracks should not lose them to a failed save on an unrelated field, and a list

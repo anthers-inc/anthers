@@ -36,7 +36,8 @@ export function studioNewPostUrl(): string {
 	return studioUrl("/posts/new");
 }
 
-/** Path to the Studio's edit page for a given post slug. */
+/** The Studio's edit address for a given post — a redirect to the post's own page,
+ *  which is its editing surface (PostEditPage.tsx); the address stays for rows and bookmarks. */
 export function studioEditPostUrl(slug: string): string {
 	return studioUrl(`/posts/${slug}/edit`);
 }

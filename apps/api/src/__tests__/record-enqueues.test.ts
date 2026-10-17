@@ -103,7 +103,7 @@ describe("what each route asks for", () => {
 		sent = [];
 		const res = await call("POST", "/api/content/posts", host.cookie, {
 			title: `Rq post ${id}`,
-			workIds: [],
+			body: "Words only — the record asks for the post either way.",
 			isPublished: true,
 		});
 		expect(res.status).toBe(201);
