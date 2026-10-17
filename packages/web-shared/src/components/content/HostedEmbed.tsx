@@ -94,14 +94,26 @@ export default function HostedEmbed({
 
 		/** A helper the handler uses to answer a frame through its own event.source. */
 		function postTo(source: MessageEventSource | null | undefined, message: SaveShimInbound): void {
-			if (source == null || replyOrigin == null) return;
+			console.log("HOSTEDDBG postTo", message.type, "to", replyOrigin);
+			if (source == null || replyOrigin == null) {
+				console.log("HOSTEDDBG postTo SKIPPED");
+				return;
+			}
 			source.postMessage(message, replyOrigin);
 		}
 
 		const onMessage = async (event: MessageEvent) => {
+			// SHIMDBG
+			console.log("HOSTEDDBG msg from", event.origin, (event.data?.type ?? event.data?.slice?.(0, 20) ?? event.data));
 			if (closed) return;
-			if (event.source !== frameRef.current?.contentWindow) return;
-			if (expectedOrigin && event.origin !== expectedOrigin) return;
+			if (event.source !== frameRef.current?.contentWindow) {
+				console.log("HOSTEDDBG source mismatch", !!frameRef.current, event.source, frameRef.current?.contentWindow);
+				return;
+			}
+			if (expectedOrigin && event.origin !== expectedOrigin) {
+				console.log("HOSTEDDBG origin mismatch", event.origin, expectedOrigin);
+				return;
+			}
 			if (!isSaveShimMessage(event.data)) return;
 
 			switch (event.data.type) {
@@ -120,6 +132,8 @@ export default function HostedEmbed({
 							};
 							blob = body.save?.blob ?? null;
 							updatedAt = body.save?.updatedAt;
+							// SHIMDBG
+							console.log("HOSTEDDBG save GET ok, blob:", blob ? `${blob.length} chars` : "null");
 						} else if (res.status === 402) {
 							// No Badge: local saves keep working; say so passively.
 							postTo(event.source, {
