@@ -64,9 +64,15 @@
 // band) — see the note beside `SURFACE_BAND` below for why it composes them itself rather
 // than sharing the marketing `<Section>`.
 //
-// The question the page asks is *whether*, never *how much*: a creator pick is
-// follow-or-back rather than a stepper, because the amount is a conversation for after
-// the account exists and asking it here costs conversion for no information.
+// The question the page asks is *who* and *which*, never *type a number*: a creator pick
+// is follow-or-back, and a back is one of the Badges on the ladder the creator actually
+// set — the chips on a card are that ladder, each billing the amount printed beside it.
+// The amount is therefore a resolved rung's threshold, never a free-form figure, and
+// asking it costs no information: the creator fixed their own prices.
+//
+// ⚠️ The chips replaced a single "Back" button on 2026-10-17, whose charge was the Public
+// Access entry price whatever ladder the creator had set. Backing still follows first
+// (a back adds the follow), and unbacking keeps the follow, as Back behaved.
 //
 // ⚠️ PROPOSAL vs. SHIPPED. Public Access is a proposal — the working plan is the vault's
 // `90-99 Agents/Transient/Public Access Model Revamp 20260811`, and where this disagrees
@@ -109,8 +115,10 @@ import {
 import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import {
+	directedAmountFor,
 	EMPTY_PICKS,
 	normalizePicks,
+	type SignupBadgePick,
 	type SignupPicks,
 	supportTotal,
 } from "@anthers/shared/signup";
@@ -118,6 +126,7 @@ import { solve } from "@anthers/shared/signup-pow";
 import { useAuth } from "@anthers/web-shared/auth";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { AnthersBadgeMark } from "@anthers/web-shared/economics";
+import { CreatorBadgeMark } from "@anthers/web-shared/economics/CreatorBadgeMark";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
@@ -1154,7 +1163,7 @@ function CreatorFinder({
 	creators: PublicUser[];
 	loading: boolean;
 	picks: Picks;
-	onToggle: (handle: string, kind: "follow" | "badge") => void;
+	onToggle: (handle: string, kind: "follow" | "badge", badgeId?: number) => void;
 }) {
 	const [query, setQuery] = useState("");
 	const [medium, setMedium] = useState<string | null>(null);
@@ -1247,12 +1256,18 @@ function CreatorFinder({
 				) : (
 					shown.map((creator) => {
 						const followed = picks.follow.includes(creator.handle);
-						const backed = picks.badges.includes(creator.handle);
+						const backingPick: SignupBadgePick | undefined = picks.badges.find(
+							(pick) => pick.handle === creator.handle,
+						);
+						// The ladder as the listing shipped it, ascending by threshold; a creator
+						// who has configured none offers no chips — there is nothing to back yet,
+						// and the follow stands on its own.
+						const ladder = creator.badges ?? [];
 						return (
 							<div
 								key={creator.id}
 								className={`rounded-xl border p-3.5 transition-colors ${
-									followed || backed
+									followed || backingPick
 										? "border-primary/40 bg-primary/5"
 										: "border-base-content/10 bg-base-100"
 								}`}
@@ -1293,14 +1308,67 @@ function CreatorFinder({
 									>
 										{followed ? "✓ Following" : "Follow"}
 									</button>
-									<button
-										type="button"
-										className={`btn btn-xs rounded-full ${backed ? "btn-primary" : "btn-outline"}`}
-										aria-pressed={backed}
-										onClick={() => onToggle(creator.handle, "badge")}
-									>
-										{backed ? "✓ Backing" : "Back"}
-									</button>
+									{/* ⭐ The backing chips are the creator's own ladder, each rung as
+									    the image and the amount the creator set — descriptions stay on
+									    the profile, and the hover states what the rung carries. A lit
+									    chip behind a rung-id-less pick is a restored handle-only pick
+									    reading as the ladder's bottom rung, which is also how the
+									    charge resolves it. */}
+									{ladder.map((rung, i) => {
+										const active = backingPick
+											? backingPick.badgeId === null
+												? i === 0
+												: backingPick.badgeId === rung.id
+											: false;
+										// What the hover states: the perks the rung was set up with,
+										// else the rung's own words, else nothing — an empty overlay
+										// is not a better one.
+										const perkLines =
+											rung.perks.length > 0
+												? rung.perks
+												: rung.description
+													? [rung.description]
+													: [];
+										return (
+											<div key={rung.id} className="relative group/badge-chip">
+												<button
+													type="button"
+													className={`btn btn-xs rounded-full gap-1.5 ${active ? "btn-primary" : "btn-outline"}`}
+													aria-pressed={active}
+													aria-label={`${rung.label} at ${amountLabel(Number(rung.threshold))} a month`}
+													onClick={() => onToggle(creator.handle, "badge", rung.id)}
+												>
+													<CreatorBadgeMark
+														badgeId={rung.id}
+														index={i}
+														label={rung.label}
+														art={{
+															hasArt: rung.hasArt,
+															artShape: rung.artShape,
+															artColor: rung.artColor,
+														}}
+														size="h-5 w-5"
+													/>
+													{amountLabel(Number(rung.threshold))}
+												</button>
+												{perkLines.length > 0 && (
+													<div
+														role="tooltip"
+														className="pointer-events-none invisible absolute bottom-full left-1/2 z-30 mb-2 w-60 -translate-x-1/2 rounded-xl border border-base-content/10 bg-base-100 p-3 text-left text-xs text-base-content/70 opacity-0 shadow-lg transition-opacity group-hover/badge-chip:visible group-hover/badge-chip:opacity-100 group-has-[:focus-visible]/badge-chip:visible group-has-[:focus-visible]/badge-chip:opacity-100"
+													>
+														<strong className="text-base-content">
+															{rung.label} · {amountLabel(Number(rung.threshold))}/mo
+														</strong>
+														<ul className="mt-1.5 space-y-0.5">
+															{perkLines.map((perk) => (
+																<li key={perk}>{perk}</li>
+															))}
+														</ul>
+													</div>
+												)}
+											</div>
+										);
+									})}
 								</div>
 							</div>
 						);
@@ -1309,14 +1377,16 @@ function CreatorFinder({
 			</div>
 			{/* ⚠️ This said "how much each creator gets is a question for once your account
 			    exists — right now it's just who", which the echo below it contradicts: a
-			    pick adds a real priced line. The page still asks *whether* rather than *how
-			    much*, so name the starting amount and say where it is changed. 🚨 The starting
-			    amount is the DIRECTED DEFAULT — a charge the commit site builds, so it stays
-			    constant-derived (see `CREATOR_WORST_CASE_*` above) rather than reading the
-			    ladder. */}
+			    pick adds a real priced line. It then said "starts at $3 a month each", which
+			    the chips above it contradict the same way: the amounts on the chips are the
+			    rungs the creator set, not one shared entry price. The sentence's remaining
+			    jobs are the two the cards don't say — picking starts a backing, and the
+			    amount is not final. 🚨 Every dollar this page ever charges stays
+				constant-derived (see `CREATOR_WORST_CASE_*` above) or resolved from a ladder
+				the listing itself shipped — never typed here. */}
 			<p className="mt-4 text-center text-xs text-base-content/45">
-				Backing someone starts at {money(PUBLIC_ACCESS_PRICE)} a month each, which you can raise
-				whenever you like once your account exists.
+				Picking a Badge starts backing that creator at the amount on it; you can raise it or lower
+				it whenever you like once your account exists.
 			</p>
 		</div>
 	);
@@ -2391,27 +2461,52 @@ export default function SignupPage() {
 		};
 	}, []);
 
-	const toggleCreator = useCallback((handle: string, kind: "follow" | "badge") => {
-		setPicks((prev) => {
-			const follow = new Set(prev.follow);
-			const badges = new Set(prev.badges);
-			if (kind === "badge") {
-				if (badges.has(handle)) {
-					badges.delete(handle);
-				} else {
-					badges.add(handle);
-					// Backing someone follows them too; the reverse isn't implied.
+	/**
+	 * Pick and unpick.
+	 *
+	 * 🚨 **A back has named its rung since 2026-10-17**: chips carry the rung id, and the
+	 * pick is one per creator — a different chip *switches* the pick rather than stacking
+	 * it, and re-tapping the lit chip drops the backing but keeps the follow, which is what
+	 * the old Back toggle did. Backing follows the creator (adding the follow with it);
+	 * the reverse is not implied. Unfollowing — the follow tap on a followed card — drops
+	 * the backing with it, the one follow/badge coupling this page holds.
+	 */
+	const toggleCreator = useCallback(
+		(handle: string, kind: "follow" | "badge", badgeId?: number) => {
+			setPicks((prev) => {
+				const follow = new Set(prev.follow);
+				if (kind === "follow") {
+					if (follow.has(handle)) {
+						follow.delete(handle);
+						// Unfollowing unmakes the backing too; backing kept its own follow, so
+						// this is the pick's only path back to absent.
+						return {
+							...prev,
+							follow: [...follow],
+							badges: prev.badges.filter((pick) => pick.handle !== handle),
+						};
+					}
 					follow.add(handle);
+					return { ...prev, follow: [...follow] };
 				}
-			} else if (follow.has(handle)) {
-				follow.delete(handle);
-				badges.delete(handle);
-			} else {
+				if (badgeId === undefined) return prev;
+				const badgeIdPicked = badgeId ?? null;
+				const existing = prev.badges.find((pick) => pick.handle === handle);
+				const badges =
+					existing && existing.badgeId === badgeIdPicked
+						? prev.badges.filter((pick) => pick.handle !== handle)
+						: existing
+							? prev.badges.map((pick) =>
+									pick.handle === handle ? { handle, badgeId: badgeIdPicked } : pick,
+								)
+							: [...prev.badges, { handle, badgeId: badgeIdPicked }];
+				// Backing someone follows them too; the reverse isn't implied.
 				follow.add(handle);
-			}
-			return { ...prev, follow: [...follow], badges: [...badges] };
-		});
-	}, []);
+				return { ...prev, follow: [...follow], badges };
+			});
+		},
+		[],
+	);
 
 	const dropPick = useCallback((key: string) => {
 		setPicks((prev) =>
@@ -2422,7 +2517,7 @@ export default function SignupPage() {
 				: {
 						...prev,
 						follow: prev.follow.filter((u) => u !== key),
-						badges: prev.badges.filter((u) => u !== key),
+						badges: prev.badges.filter((pick) => pick.handle !== key),
 					},
 		);
 	}, []);
@@ -2450,13 +2545,23 @@ export default function SignupPage() {
 	 * charge needs, which closes a second, quieter divergence: the display used to count
 	 * `picks.badges` while the charge dropped any handle missing from `byHandle`, so a
 	 * pick made before the creator list loaded was quotable and unbillable.
+	 *
+	 * ⚠️ **The amounts are the picked rungs' thresholds since 2026-10-17**, resolved by
+	 * `directedAmountFor` against the ladders the listing itself shipped — the same
+	 * function the summary and the finish page resolve theirs by. No line here can invent
+	 * a price: a chip names a rung, and the rung names its threshold.
 	 */
 	const directed = useMemo(
 		() =>
 			picks.badges
-				.map((handle) => byHandle.get(handle))
-				.filter((creator): creator is PublicUser => !!creator)
-				.map((creator) => ({ creatorId: creator.id, amount: PUBLIC_ACCESS_PRICE })),
+				.map((pick) => ({ pick, creator: byHandle.get(pick.handle) }))
+				.filter((entry): entry is { pick: SignupBadgePick; creator: PublicUser } =>
+					Boolean(entry.creator),
+				)
+				.map(({ pick, creator }) => ({
+					creatorId: creator.id,
+					amount: directedAmountFor(pick, creator.badges),
+				})),
 		[picks.badges, byHandle],
 	);
 
@@ -2488,11 +2593,12 @@ export default function SignupPage() {
 		() =>
 			picks.follow.map((handle) => {
 				const creator = byHandle.get(handle);
+				const backing = picks.badges.find((pick) => pick.handle === handle);
 				return {
 					key: handle,
 					label: creator ? nameOf(creator) : handle,
-					sub: picks.badges.includes(handle) ? "following · backing" : "following",
-					amount: picks.badges.includes(handle) ? PUBLIC_ACCESS_PRICE : 0,
+					sub: backing ? "following · backing" : "following",
+					amount: backing ? directedAmountFor(backing, creator?.badges) : 0,
 				};
 			}),
 		[picks.follow, picks.badges, byHandle],
@@ -2567,9 +2673,8 @@ export default function SignupPage() {
 			// both, which is what let the displayed and charged amounts drift apart while both
 			// still went through `supportTotal`.
 			//
-			// The Public Access price each, to the creators picked, on the SAME charge as
-			// the Anthers one — the lowest rung is what the server applies to a signup pick,
-			// and this is the amount it bills.
+			// Each picked creator's rung threshold, on the SAME charge as the Anthers one —
+			// `directedAmountFor` resolved it, and that is the amount the charge bills.
 
 			if (total === 0) {
 				// A signed-in account owes no handle, so there is no onboarding to pass

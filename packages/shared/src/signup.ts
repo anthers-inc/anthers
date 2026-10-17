@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+import { PUBLIC_ACCESS_PRICE } from "./constants";
+
 /**
  * The choices a signup carries from `/signup` to the page that finishes it.
  *
@@ -9,6 +11,27 @@
  * thing to keep in step, and the one that drifted would do so silently — a pick the page
  * shows and the charge does not is exactly the class of defect `supportTotal` exists for.
  */
+
+/**
+ * One backed creator, with the rung of their ladder the visit picked.
+ *
+ * ⭐ **The choice is per rung, the charge is per creator** (2026-10-17): a backed creator
+ * carries exactly one pick, and a card's Badge chips offer the rungs of the ladder that
+ * creator actually set — the image and the amount on a chip are that rung's own data.
+ * `badgeId` names the rung exactly as the ladder rendered it, so what a chip shows is what
+ * the charge bills, and no page substitutes a price of its own for one the creator set.
+ */
+export interface SignupBadgePick {
+	/** The creator's handle — the same address `follow` carries. */
+	handle: string;
+	/**
+	 * The chosen rung's id, as `GET /api/accounts/creators` reported the ladder. Null reads
+	 * as **the ladder's lowest rung**, and a rung id the ladder no longer reports resolves
+	 * the same way: the page that charges resolves against the ladder it just fetched, so a
+	 * pick never carries a price, only a pointer the ladder can still answer.
+	 */
+	badgeId: number | null;
+}
 
 /** What a visitor chose on `/signup`, before any of it was committed. */
 export interface SignupPicks {
@@ -23,8 +46,8 @@ export interface SignupPicks {
 	badge: string | null;
 	/** Creator handles to follow. Following costs nothing and is applied first. */
 	follow: string[];
-	/** Creator handles to support directly, at the Badge each creator's ladder names. */
-	badges: string[];
+	/** Creators to support directly, one pick each, at the rung that creator's ladder names. */
+	badges: SignupBadgePick[];
 }
 
 export const EMPTY_PICKS: SignupPicks = { badge: null, follow: [], badges: [] };
@@ -50,6 +73,11 @@ export const MAX_SIGNUP_AMOUNT = 10_000;
  * spreading it through would leave the ceremony charging for a rung the page cannot
  * display. Anything that is not a non-empty string reads as Free (null), which is what
  * a badge-less signup actually is.
+ *
+ * ⚠️ **The same tolerance is how this shape itself crossed `badges`.** Until 2026-10-17
+ * a `badges` entry was a bare handle, and the convention those picks resolved by — the
+ * ladder's lowest rung — is what a bare entry still reads as (`badgeId: null`), so stored
+ * signups older than the per-rung picker keep working without a ladder in storage.
  */
 export function normalizePicks(value: unknown): SignupPicks {
 	const raw = (value ?? {}) as Partial<Record<keyof SignupPicks, unknown>>;
@@ -60,13 +88,62 @@ export function normalizePicks(value: unknown): SignupPicks {
 	return {
 		badge: typeof raw.badge === "string" && raw.badge.length > 0 ? raw.badge : null,
 		follow: names(raw.follow),
-		badges: names(raw.badges),
+		badges: badgePicks(raw.badges),
 	};
+}
+
+/** Coerce a `badges` list of mixed age into one pick per creator, handles intact. */
+function badgePicks(list: unknown): SignupBadgePick[] {
+	if (!Array.isArray(list)) return [];
+	const picks = new Map<string, SignupBadgePick>();
+	for (const entry of list) {
+		if (typeof entry === "string" && entry.length > 0) {
+			picks.set(entry, { handle: entry, badgeId: null });
+			continue;
+		}
+		const asObject = entry as Partial<Record<keyof SignupBadgePick, unknown>> | null;
+		if (asObject && typeof asObject.handle === "string" && asObject.handle.length > 0) {
+			const badgeId = asObject.badgeId;
+			picks.set(asObject.handle, {
+				handle: asObject.handle,
+				badgeId:
+					typeof badgeId === "number" && Number.isInteger(badgeId) && badgeId > 0 ? badgeId : null,
+			});
+		}
+	}
+	return [...picks.values()];
 }
 
 /** Whether anything at all was chosen. An empty answer is a complete answer, not an error. */
 export function picksAreEmpty(picks: SignupPicks): boolean {
 	return picks.badge === null && picks.follow.length === 0 && picks.badges.length === 0;
+}
+
+/**
+ * The monthly amount **one backed creator's pick bills**.
+ *
+ * 🚨 **The page that shows the pick and the page that charges it call this same function**
+ * — the display/charged rule `supportTotal` carries, held at the resolution too. A pick
+ * carries a rung id, never a price: the amount comes from the ladder as it was just
+ * fetched, so a ladder an edit changed between pick and commit charges what it now names.
+ *
+ * The fallbacks, in order: a rung whose id no longer resolves reads as **the ladder's
+ * lowest rung** (the one every real ladder has, and what the handle-only shape of
+ * 2026-10-16 and before resolved every pick by); a creator with no ladder at all reads as
+ * the entry price, which is what that creator's "Back" meant while backing was a fixed
+ * figure. The ladder arrives ascending by threshold, the way the listing ships it.
+ */
+export function directedAmountFor(
+	pick: { badgeId: number | null },
+	ladder: readonly { id: number; threshold: string }[] | undefined,
+): number {
+	const rungs = ladder ?? [];
+	if (rungs.length === 0) return PUBLIC_ACCESS_PRICE;
+	if (pick.badgeId !== null) {
+		const chosen = rungs.find((r) => r.id === pick.badgeId);
+		if (chosen) return Number(chosen.threshold);
+	}
+	return Number(rungs[0].threshold);
 }
 
 /**
