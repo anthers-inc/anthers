@@ -104,6 +104,8 @@ import {
 	cardFeeDisplay,
 	FREE_STORAGE_GIB,
 	heldBadgeLabel,
+	heldBadgeName,
+	MERCH_BADGE_DISCOUNT,
 	PUBLIC_ACCESS_PRICE,
 	stickerBudgetFor,
 	storageGibFor,
@@ -132,6 +134,7 @@ import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import type { PublicUser } from "@anthers/web-shared/types";
+import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import {
 	ArrowDownTrayIcon,
 	BanknotesIcon,
@@ -164,8 +167,8 @@ import { useTimePoolFund } from "../lib/time-pool-fund";
  * enforces them and this page cannot drift. The free tier's Time Pool is the **Time
  * Pool Fund's** published monthly slice (the pool mechanism retired the constant):
  * runtime data, fetched from its ledger through `lib/time-pool-fund`, and the copy
- * renders the published figure or the varies clause until it lands. See
- * `anthersReading`; the matrix's Time Pool row carries the same clause.
+ * renders the published figure or Varies with its (i) tip until it lands. See
+ * `anthersReading`; the matrix's Time Pool row and the free card carry the same.
  */
 
 /**
@@ -593,6 +596,11 @@ const columnMoney = (amount: number) => `$${amount.toFixed(2)}`;
 interface PerkCell {
 	value: string;
 	note?: string;
+	/**
+	 * A hoverable (i)'s text, rendered beside the value — for a fact the cell cannot fit,
+	 * on the one state where the figure a reader could otherwise wonder about is absent.
+	 */
+	info?: string;
 }
 
 interface PerkRow {
@@ -645,16 +653,22 @@ const PERK_ROWS: PerkRow[] = [
 		// reading a figure with no more said implies the free account is being charged it.
 		// The free column's value is the Fund's published slice for the current cycle, and
 		// "published monthly" is the note rather than the number, because the pool rides
-		// what arrived; before the fetch lands the note IS the value.
-		desc: "Paid out to the creators you spend time with, split by the share of your time each one earned. The Time Pool Fund funds a free account's pot rather than the account paying for it.",
+		// what arrived; before the fetch lands the value says Varies and the `info` tip
+		// (Parker, 2026-10-18) carries the explanation the old note printed flat.
+		// 🚨 Parker's wording of this row's description is the copy that ships (2026-10-18);
+		// keep the vocabulary's capitalization when touching it.
+		desc: "Paid to the creators whose works you enjoy, split by the share of your time spent. For free users, Anthers funds their Time Pool from the Time Pool Fund, so creators are paid even for streaming from free accounts, without serving ads.",
 		cell: (amount, fundSlice) => ({
 			value:
 				amount > 0
 					? columnMoney(timePoolFor(amount))
 					: fundSlice != null
 						? columnMoney(fundSlice)
-						: "varies",
-			note: amount > 0 ? undefined : "from the Time Pool Fund, published monthly",
+						: "Varies",
+			info:
+				amount > 0
+					? undefined
+					: "A free account's Time Pool is paid by the Time Pool Fund, out of the charitable share of what supporters give. Its slice is published monthly and moves with each cycle. This page carries the Fund's published figure when it has one, and says Varies before it does.",
 		}),
 	},
 	{
@@ -716,11 +730,16 @@ const PERK_ROWS: PerkRow[] = [
 	},
 	{
 		title: "Merch Discount",
-		notBuilt: true,
-		// The size of the discount is undecided and the shop does not exist yet, so the cell
-		// says that it is carried and no more. A percentage invented here would be a figure with no source.
+		// 🚨 **Built — the ladder was decided 2026-10-08** (root 10 / sprout 15 / petal 20 /
+		// blossom 25, goods line only; shipping and tax are never discounted) and applies
+		// at checkout, with `purchases.merch_discount_badge` recording the rung that priced
+		// a purchase. No `notBuilt` flag, and the cell reads the same constant the wiki's
+		// generated merch-discount table renders, so the matrix cannot drift from it.
 		desc: "A discount on merch anyone can buy from the Anthers shop, where the net revenue funds Anthers' charitable programs.",
-		cell: (amount) => ({ value: amount > 0 ? "Yes" : NOT_CARRIED }),
+		cell: (amount) => {
+			const key = heldBadgeName(amount);
+			return key === "free" ? { value: NOT_CARRIED } : { value: `${MERCH_BADGE_DISCOUNT[key]}%` };
+		},
 	},
 	{
 		title: "Our Appreciation",
@@ -1089,8 +1108,13 @@ function BadgeMatrix({
 											key={amount}
 											className={`border-r border-t px-2 py-3 text-center text-sm tabular-nums transition-colors ${GRID} ${SURFACE_CELL} ${first ? "border-t-2 border-t-base-content/30" : ""} ${last ? "border-b-2 border-b-base-content/30" : ""} ${lastColumn ? "border-r-2 border-r-base-content/30" : ""} ${lastColumn && first ? "rounded-tr-2xl" : ""} ${lastColumn && last ? "rounded-br-2xl" : ""} ${lit ? "bg-primary/10 font-semibold" : ""} ${rightEdgeLit ? "border-r-primary/50" : ""} ${lit && last ? "border-b-primary/50" : ""} ${carried ? "text-base-content/80" : "text-base-content/30"}`}
 										>
+											{/* No `unclipped` here: the table carries a drop-shadow filter, which makes
+											it the containing block for any fixed descendant and lands the tip at
+											viewport coords inside table space. The plain absolute mode anchors to
+											the button itself, which is `relative`. */}
 											{cell.value}
 											{!carried && <span className="sr-only">not carried</span>}
+											{cell.info && <InfoTip text={cell.info} />}
 											{shownNote && (
 												<span className="mt-0.5 block text-xs font-normal text-base-content/45">
 													{shownNote}
@@ -1185,6 +1209,7 @@ function BadgeCards({
 													</span>
 													<strong className="shrink-0 text-right tabular-nums">
 														{cell.value}
+														{cell.info && <InfoTip text={cell.info} align="right" />}
 														{shownNote && (
 															<span className="block text-xs font-normal text-base-content/45">
 																{shownNote}
