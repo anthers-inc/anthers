@@ -640,6 +640,7 @@ export default function OwnerWorkEditor({
 			current.type === "image" && current.sourceKey
 				? keyToPreview(current.sourceKey)
 				: current.sourceKey,
+		gallery: current.type === "image" ? (current.gallery ?? []).map(keyToPreview) : undefined,
 		thumbnail: thumbnailPreview ?? current.thumbnail,
 		creator: user?.handle
 			? {

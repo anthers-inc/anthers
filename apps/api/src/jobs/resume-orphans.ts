@@ -166,6 +166,9 @@ export async function resumeOrphanedTranscodes(
 			mediaType: transcodingJobs.mediaType,
 			resumeCount: transcodingJobs.resumeCount,
 			sourceKey: works.sourceKey,
+			// The Work's kind, which `listSourceFiles`' fallback reads to say what mime its
+			// one-file set carries (the image kind stores display URLs, not PDF keys).
+			type: works.type,
 			errorMessage: transcodingJobs.errorMessage,
 			interruptedGracefully: transcodingJobs.interruptedGracefully,
 		})
@@ -288,7 +291,7 @@ export async function resumeOrphanedTranscodes(
 		if (job.mediaType === "ebook") {
 			try {
 				const route = routePagedIngest(
-					await listSourceFiles({ id: job.workId, sourceKey: job.sourceKey }),
+					await listSourceFiles({ id: job.workId, type: job.type, sourceKey: job.sourceKey }),
 				);
 				target = route === "ingest-ebook" ? QUEUES.INGEST_EBOOK : QUEUES.RENDER_PAGED;
 			} catch (error) {

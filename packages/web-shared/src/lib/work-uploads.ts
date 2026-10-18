@@ -27,7 +27,12 @@
  * moment earlier.
  */
 
-import { type FILE_WORK_TYPES, isPaged, processingFor } from "@anthers/shared/content";
+import {
+	type FILE_WORK_TYPES,
+	hasSourceSet,
+	isPaged,
+	processingFor,
+} from "@anthers/shared/content";
 import { useMemo, useSyncExternalStore } from "react";
 import { uploadImageFile } from "../components/post/mediaUpload";
 import { client } from "./rpc";
@@ -97,19 +102,21 @@ const defaultTransport: WorkUploadTransport = {
 	// breath after the bytes did.
 	async attach(workId, target, key, file, _signal) {
 		const param = { id: String(workId) };
-		// 🚨 A paged Work's file attaches as a ROW of its source set (Parker, 2026-10-10) —
-		// the route carries the filename and size a `source_key` PATCH cannot, and the set is
-		// the row-level truth for these kinds; the service keeps the legacy column following
-		// the set. The other kinds' attach stays the legacy column patch.
+		// 🚨 A set-kind Work's file attaches as a ROW of its source set (Parker, 2026-10-10;
+		// the image kind joins it, 2026-10-18) — the route carries the filename, size and
+		// mime a `source_key` PATCH cannot, and the set is the row-level truth for these
+		// kinds; the service keeps the legacy column following the set — a paged set at its
+		// newest file, an image set at its first. The other kinds' attach stays the legacy
+		// column patch.
 		const res =
-			target.kind === "source" && isPaged(target.type)
+			target.kind === "source" && hasSourceSet(target.type)
 				? await client.api.content.works[":id"]["source-files"].$post({
 						param,
 						json: {
 							file: key,
 							filename: file.name,
 							fileSize: file.size,
-							mimeType: file.type || "application/pdf",
+							mimeType: file.type || (isPaged(target.type) ? "application/pdf" : "image"),
 						},
 					})
 				: target.kind === "source"

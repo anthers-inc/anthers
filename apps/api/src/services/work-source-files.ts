@@ -16,14 +16,24 @@
  * enqueue two jobs, and the later one wins on rendering (they serialize on the queue) — never
  * re-order around this, and never skip it for what looks like a no-op change.
  *
+ * **The image kind's set is the gallery the Work displays** (2026-10-18): an image Work that
+ * carries more than one source renders them all, in position order, and the set admits only
+ * images. Its mutations render nothing and enqueue nothing — the files ARE the deliverable —
+ * so `askRerender`'s no-op for them is the whole pipeline. What follows the legacy column
+ * differs by family instead: a paged set leaves its Work's `source_key` on the newest file
+ * (the old readers read it only as presence), while an image set updates it to the **first**
+ * file on every mutation, because for an image Work the column is the cover — the thumbnail,
+ * the listing image, the release gate's media presence — and "the Work's image" means the set's
+ * first picture.
+ *
  * ⚠️ **The legacy `works.source_key` column stays the truth for every other kind** and is
- * synced INTO this table for paged kinds by {@link syncFromSourceKey}, so an old client or a
+ * synced INTO this table for the set kinds by {@link syncFromSourceKey}, so an old client or a
  * raw PATCH that attaches a source the old way still produces the row the pipeline reads.
  */
 
 import { db } from "@anthers/db/client";
 import { transcodingJobs, workSourceFiles, works } from "@anthers/db/schema";
-import { isPaged } from "@anthers/shared/content";
+import { hasSourceSet, isPaged } from "@anthers/shared/content";
 import { and, asc, eq, max, sql } from "drizzle-orm";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { routePagedIngest } from "../lib/paged-ingest.js";
@@ -34,7 +44,39 @@ export type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
 export type WorkRow = typeof works.$inferSelect;
 
 /** The fields of a Work `listSourceFiles` reads — what a caller holding only ids and keys passes. */
-type WorkSourceRef = Pick<WorkRow, "id" | "sourceKey">;
+type WorkSourceRef = Pick<WorkRow, "id" | "type" | "sourceKey">;
+
+/** The image extensions the display half reads, mapped to the mimes a set row stores. */
+const IMAGE_MIMES: Record<string, string> = {
+	jpg: "image/jpeg",
+	jpeg: "image/jpeg",
+	png: "image/png",
+	webp: "image/webp",
+	gif: "image/gif",
+	avif: "image/avif",
+	bmp: "image/bmp",
+	tif: "image/tiff",
+	tiff: "image/tiff",
+};
+
+/** The image mime an uploaded file or legacy column value carries, read off its extension. */
+function imageMimeFromUrl(urlOrKey: string): string {
+	const name = urlOrKey.split(/[?#]/)[0].split("/").pop() ?? "";
+	const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
+	return IMAGE_MIMES[ext] ?? "image";
+}
+
+/**
+ * Whether a source may stand in an image Work's set: an image mime, the `image` marker a
+ * legacy row stores when its extension says nothing, or a file whose extension is one the
+ * display half reads. A PDF or an EPUB is the ordinary refusal — the guard exists so a
+ * mixed upload cannot hand a gallery a file no browser renders.
+ */
+function looksLikeImage(source: { mimeType: string; file: string }): boolean {
+	const mime = source.mimeType ?? "";
+	if (mime.startsWith("image/") || mime === "image") return true;
+	return IMAGE_MIMES[(source.file.split(/[?#]/)[0].split(".").pop() ?? "").toLowerCase()] != null;
+}
 
 /** The Work's sources, from the table when it has rows and from the legacy column when not. */
 export async function listSourceFiles(work: WorkSourceRef): Promise<WorkSourceFileRow[]> {
@@ -46,7 +88,8 @@ export async function listSourceFiles(work: WorkSourceRef): Promise<WorkSourceFi
 	if (stored.length > 0) return stored;
 	if (!work.sourceKey) return [];
 	// A Work with a legacy column value and no rows yet: not yet backfilled or not yet
-	// synced — read as the one-file set it represents.
+	// synced — read as the one-file set it represents. The mime is the PDF default a paged
+	// file carries, or the image mime the URL's extension names for the image kind.
 	return [
 		{
 			id: 0,
@@ -55,7 +98,7 @@ export async function listSourceFiles(work: WorkSourceRef): Promise<WorkSourceFi
 			file: work.sourceKey,
 			filename: "",
 			fileSize: null,
-			mimeType: "application/pdf",
+			mimeType: isPaged(work.type) ? "application/pdf" : imageMimeFromUrl(work.sourceKey),
 			createdAt: new Date(),
 		},
 	];
@@ -64,8 +107,8 @@ export async function listSourceFiles(work: WorkSourceRef): Promise<WorkSourceFi
 /**
  * Sync a legacy attach (the `source_key` column, still the shape the Upload form's first
  * upload uses) into the table as the set's single row, and ask a re-render unless the table
- * already stands at exactly that file. The set REPLACEs on this sync: a paged Work attaching
- * by the old way says "this is the book", not "add it to the pages".
+ * already stands at exactly that file. The set REPLACEs on this sync: a set-kind Work
+ * attaching by the old way says "this is the work", not "add it to the pages".
  */
 export async function syncFromSourceKey(work: WorkRow): Promise<void> {
 	if (!work.sourceKey) return;
@@ -78,19 +121,31 @@ export async function syncFromSourceKey(work: WorkRow): Promise<void> {
 		if (row.id !== 0) await removeSourceFileStorage(row, work.creatorId);
 	}
 	await db.delete(workSourceFiles).where(eq(workSourceFiles.workId, work.id));
+	// An image row's stored value is the display URL the kind has always stored, and its
+	// mime is what that URL's extension names; a paged row keeps the column's PDF default.
 	await db.insert(workSourceFiles).values({
 		workId: work.id,
 		position: 0,
 		file: work.sourceKey,
+		...(isPaged(work.type) ? {} : { mimeType: imageMimeFromUrl(work.sourceKey) }),
 	});
 	await askRerender(work);
 }
 
-/** Append an owned file at the end of the set, renumber nothing, and re-render. */
+/** Append an owned file at the end of the set, renumber nothing, re-render a paged set. */
 export async function appendSourceFile(
 	work: WorkRow,
 	input: { file: string; filename?: string; fileSize?: number | null; mimeType?: string },
-): Promise<{ rows: WorkSourceFileRow[]; job: TranscodingJobRow | null; error?: string }> {
+): Promise<{
+	rows: WorkSourceFileRow[];
+	job: TranscodingJobRow | null;
+	code?: string;
+	error?: string;
+}> {
+	if (!hasSourceSet(work.type)) {
+		return { rows: [], job: null, error: "This kind of Work carries no file set." };
+	}
+
 	const existing = await db
 		.select()
 		.from(workSourceFiles)
@@ -108,15 +163,43 @@ export async function appendSourceFile(
 		},
 	];
 	// A legacy column file with no row joins the considered set the append would seed it
-	// as — the list fallback's row, whose mime reads as the PDF default it has always read as.
+	// as — the list fallback's row, whose mime reads as the PDF default it has always read as
+	// for the paged kinds, and as the image mime the URL's extension names for the image kind.
 	const fallback =
 		existing.length === 0 && work.sourceKey
-			? [{ mimeType: "application/pdf", filename: "", file: work.sourceKey }]
+			? [
+					{
+						mimeType: isPaged(work.type) ? "application/pdf" : imageMimeFromUrl(work.sourceKey),
+						filename: "",
+						file: work.sourceKey,
+					},
+				]
 			: [];
-	try {
-		routePagedIngest([...fallback, ...wouldBe]);
-	} catch (error) {
-		return { rows: existing, job: null, error: error instanceof Error ? error.message : "mixed" };
+
+	// 🚨 **An image Work's set admits only images.** Nothing renders a PDF inside a gallery,
+	// and no ingest would process it — the guard is the whole pipeline's image check. It reads
+	// the set the append would stand at, including the legacy seed, so a set that arrived
+	// honest is never corrupted by one non-image row.
+	if (work.type === "image" && ![...fallback, ...wouldBe].every(looksLikeImage)) {
+		const offender = [...fallback, ...wouldBe].find((s) => !looksLikeImage(s));
+		return {
+			rows: existing,
+			job: null,
+			code: "sources_not_images",
+			error: `An image gallery holds only images, and ${
+				offender?.filename || offender?.file
+			} isn't one. Pick an image file, or make a comic or a book of it instead.`,
+		};
+	}
+
+	// The paged ingest routes by composition and refuses mixed shapes legibly; an image set
+	// renders nothing, so it never reaches the router at all.
+	if (isPaged(work.type)) {
+		try {
+			routePagedIngest([...fallback, ...wouldBe]);
+		} catch (error) {
+			return { rows: existing, job: null, error: error instanceof Error ? error.message : "mixed" };
+		}
 	}
 	// 🚨 **A set that has grown past its legacy column carries the column's file with it.**
 	// A Work with a legacy `source_key` and no rows (a fixture, or any source attached
@@ -128,6 +211,9 @@ export async function appendSourceFile(
 			workId: work.id,
 			position: 0,
 			file: work.sourceKey,
+			// The seed's mime: what the file's extension names for the image kind; the PDF
+			// default for the paged kinds, whose legacy rows the 0138 backfill wrote the same way.
+			...(isPaged(work.type) ? {} : { mimeType: imageMimeFromUrl(work.sourceKey) }),
 		});
 	}
 	const [{ highest }] = await db
@@ -140,13 +226,21 @@ export async function appendSourceFile(
 		file: input.file,
 		filename: input.filename ?? "",
 		fileSize: input.fileSize ?? null,
-		mimeType: input.mimeType ?? "application/pdf",
+		mimeType:
+			input.mimeType ?? (isPaged(work.type) ? "application/pdf" : imageMimeFromUrl(input.file)),
 	});
-	// The legacy column keeps pointing at the set's most recent file. It is what the old
-	// readers (the serializer's resolution paths, storage-usage) read, and an empty column
-	// under a paged Work whose set is non-empty is a lie those readers would tell.
-	await db.update(works).set({ sourceKey: input.file }).where(eq(works.id, work.id));
 	const rows = await listSourceFiles(work);
+	// The legacy column follows the set — it is what the old readers (the serializer's
+	// resolution paths, storage-usage) read, and an empty column under a Work whose set is
+	// non-empty is a lie those readers would tell. The two families follow differently, and
+	// the difference is load-bearing: a paged column points at the set's NEWEST file (it is
+	// read only as presence), while an image column points at the set's FIRST — for an image
+	// Work the column IS the cover ("the Work's image" for listings, thumbnails and the
+	// release gate), so it moves when the first row moves.
+	await db
+		.update(works)
+		.set({ sourceKey: isPaged(work.type) ? input.file : rows[0].file })
+		.where(eq(works.id, work.id));
 	const job = await askRerender(work);
 	return { rows, job };
 }
@@ -172,13 +266,26 @@ export async function removeSourceFile(
 	for (const [position, row] of remaining.entries()) {
 		await db.update(workSourceFiles).set({ position }).where(eq(workSourceFiles.id, row.id));
 	}
+	// The set emptied: the Work has no media again. The legacy column follows it (an
+	// empty set with a non-empty column would read as "file present, never processed",
+	// one lie instead of none), and nothing is asked to render: an empty set renders
+	// no pages, and the job the mutation would enqueue would only fail on the read.
 	if (remaining.length === 0) {
-		// The set emptied: the Work has no media again. The legacy column follows it (an
-		// empty set with a non-empty column would read as "file present, never processed",
-		// one lie instead of none), and nothing is asked to render: an empty set renders
-		// no pages, and the job the mutation would enqueue would only fail on the read.
 		await db.update(works).set({ sourceKey: "" }).where(eq(works.id, work.id));
 		return null;
+	}
+	// An image Work's column is its cover, so a removal that takes the first file moves
+	// the cover to the set's new first image (and out of the column entirely when the
+	// set emptied above). The paged kinds touch nothing here: their column points at
+	// the newest file, which a removal of an earlier file does not change.
+	if (work.type === "image") {
+		const [first] = await db
+			.select({ file: workSourceFiles.file })
+			.from(workSourceFiles)
+			.where(eq(workSourceFiles.workId, work.id))
+			.orderBy(asc(workSourceFiles.position))
+			.limit(1);
+		if (first) await db.update(works).set({ sourceKey: first.file }).where(eq(works.id, work.id));
 	}
 	return askRerender(work);
 }
@@ -219,8 +326,14 @@ export async function reorderSourceFiles(
 			.set({ position })
 			.where(and(eq(workSourceFiles.id, id), eq(workSourceFiles.workId, work.id)));
 	}
+	// An image Work's column is its cover, and a reorder moves it when (and only when) the
+	// arrangement puts a different image first — paged sets keep their newest-file column.
+	const rows = await listSourceFiles(work);
+	if (work.type === "image" && rows[0]) {
+		await db.update(works).set({ sourceKey: rows[0].file }).where(eq(works.id, work.id));
+	}
 	await askRerender(work);
-	return { rows: await listSourceFiles(work) };
+	return { rows };
 }
 
 /**
