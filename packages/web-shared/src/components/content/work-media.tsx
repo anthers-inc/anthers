@@ -32,9 +32,9 @@ import {
 	workUploads,
 } from "../../lib/work-uploads";
 import TranscodingStatus from "../media/TranscodingStatus";
-import { keyToPreview } from "../post/mediaUpload";
 import FileUpload from "../ui/FileUpload";
 import FormField from "../ui/FormField";
+import { ImageSourceFiles } from "./ImageSourceFiles";
 import { PagedSourceFiles } from "./PagedSourceFiles";
 
 /** The Work kinds whose file is uploaded into them, as the upload store names them. */
@@ -255,8 +255,10 @@ export function UploadProgress({ upload }: { upload: WorkUpload }) {
  * Reads the upload store and the stored row, and never contributes a `sourceKey`
  * to a save — the same boundary its sibling `WorkFileSection` holds (see the
  * module head). The caller decides which kinds mount it: the paged kinds keep
- * their set editor on the Manage tab, and a video's source is the Media Status
- * card's, so neither reaches this.
+ * their set editor on the Manage tab in every state, and a video's source is the
+ * Media Status card's, so neither reaches this; the image kind's set editor does
+ * (it is the Manage tab's form once pictures exist), but a draft's dropper lives
+ * in the box like every other non-paged file kind's.
  */
 export function WorkFileDropzone({ work }: { work: Work }) {
 	const type = work.type as FileWorkType;
@@ -314,21 +316,20 @@ export function WorkFileDropzone({ work }: { work: Work }) {
  * form for a Work whose file exists or is climbing from this tab. The caller mounts
  * it only in those states: the never-arrived and failed upload live in the Work
  * placeholder itself now, carried by {@link WorkFileDropzone} (the dropper task,
- * 2026-10-17), so neither is a state this can be reached in — unless the Work is
- * paged, whose file section is the SET editor in every state.
+ * 2026-10-17), so neither is a state this can be reached in — every set kind's file
+ * section is the SET editor in every state.
  */
 export function WorkFileSection({ work }: { work: Work }) {
 	const type = work.type as FileWorkType;
 	const upload = useSourceUpload(work.id);
-	// A paged Work's file section is the SET editor — the list with add, reorder, remove —
+	// A set-kind Work's file section is the SET editor — the list with add, reorder, remove —
 	// whether the set is one file or several; the in-flight states it shares with every
 	// kind are handled inside (they read the same upload store). Called after the hooks,
 	// which its sibling states are what keep ordered.
 	if (isPaged(type)) return <PagedSourceFiles work={work} />;
+	if (type === "image") return <ImageSourceFiles work={work} />;
 
-	const label = type === "image" ? "Image" : "File";
-	const rules = fileRules(type);
-	const start = (file: File) => workUploads.start(work.id, file, { kind: "source", type });
+	const label = "File";
 
 	if (upload && isUploading(upload)) {
 		return (
@@ -351,32 +352,10 @@ export function WorkFileSection({ work }: { work: Work }) {
 
 	return (
 		<FormField label={label}>
-			{type === "image" && work.sourceKey ? (
-				<div className="flex flex-col gap-2">
-					<img
-						src={keyToPreview(work.sourceKey)}
-						alt=""
-						className="max-h-64 w-fit rounded-lg border border-base-300"
-					/>
-					{/* An image is replaced in place, as it could be before it had an upload step.
-					    Other kinds are not offered this: a new video re-encodes, and a released
-					    one would be unplayable while it did. */}
-					<div className="max-w-xs">
-						<FileUpload
-							accept={rules.accept}
-							maxSize={rules.maxSize}
-							compact
-							label="Replace the image"
-							onFileSelect={start}
-						/>
-					</div>
-				</div>
-			) : (
-				<div className="flex items-center gap-3 rounded-lg bg-base-200 p-3">
-					<span className="flex-1 truncate text-sm">{upload?.fileName ?? "Uploaded file"}</span>
-					<span className="badge badge-success badge-sm">Uploaded</span>
-				</div>
-			)}
+			<div className="flex items-center gap-3 rounded-lg bg-base-200 p-3">
+				<span className="flex-1 truncate text-sm">{upload?.fileName ?? "Uploaded file"}</span>
+				<span className="badge badge-success badge-sm">Uploaded</span>
+			</div>
 			{/* The processing a landed file starts, with its estimate where there is one. The
 			    page re-reads the row while it runs; the block goes once processing completes. */}
 			{work.transcoding && work.transcoding.status !== "completed" && (
