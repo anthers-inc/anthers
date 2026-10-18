@@ -425,8 +425,8 @@ export default function CreatorPayComparisonPage() {
 				</p>
 				<p>
 					Want to model your own audience?{" "}
-					<Link to="/resources/creator-monetization" className="link link-primary">
-						Creator Monetization Calculator
+					<Link to="/resources/creator-financials" className="link link-primary">
+						Your Financials on Anthers
 					</Link>{" "}
 					·{" "}
 					<Link to="/for-creators" className="link link-primary">

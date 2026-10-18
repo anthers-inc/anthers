@@ -95,9 +95,7 @@ const ReleaseNotesPage = lazy(() => import("./pages/ReleaseNotesPage"));
 const StatusPage = lazy(() => import("./pages/StatusPage"));
 const CompareGhostPage = lazy(() => import("./pages/CompareGhostPage"));
 const CompareItchPage = lazy(() => import("./pages/CompareItchPage"));
-const CreatorMonetizationCalculatorPage = lazy(
-	() => import("./pages/CreatorMonetizationCalculatorPage"),
-);
+const CreatorFinancialsPage = lazy(() => import("./pages/CreatorFinancialsPage"));
 const CreatorPayComparisonPage = lazy(() => import("./pages/CreatorPayComparisonPage"));
 const HowMoneyMovesPage = lazy(() => import("./pages/HowMoneyMovesPage"));
 const MediaMonthCalculatorPage = lazy(() => import("./pages/MediaMonthCalculatorPage"));
@@ -127,7 +125,6 @@ const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
 const SignupPage = lazy(() => import("./pages/SignupPage"));
 const BadgesPage = lazy(() => import("./pages/BadgesPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
-const VideoStorageCalculatorPage = lazy(() => import("./pages/VideoStorageCalculatorPage"));
 const WorkPage = lazy(() => import("./pages/WorkPage"));
 const SharedWorkPage = lazy(() => import("./pages/SharedWorkPage"));
 const EmbedWorkPage = lazy(() => import("./pages/EmbedWorkPage"));
@@ -410,11 +407,20 @@ export default function App() {
 					    larger revamp". */}
 					<Route path="/resources/how-money-moves" element={<HowMoneyMovesPage />} />
 					<Route path="/resources/media-month" element={<MediaMonthCalculatorPage />} />
-					<Route path="/resources/video-storage" element={<VideoStorageCalculatorPage />} />
+					{/* /resources/media-month and /resources/how-money-moves sit above here
+					in their own blocks; the absorbed calculators follow, with their old
+					URLs kept alive as redirects — the pages are live in production and
+					linked from elsewhere, so a retired URL resolves to its successor
+					rather than a 404. */}
 					<Route
 						path="/resources/creator-monetization"
-						element={<CreatorMonetizationCalculatorPage />}
+						element={<Navigate to="/resources/creator-financials" replace />}
 					/>
+					<Route
+						path="/resources/video-storage"
+						element={<Navigate to="/resources/creator-financials" replace />}
+					/>
+					<Route path="/resources/creator-financials" element={<CreatorFinancialsPage />} />
 
 					{/* The Studio. Registration order is a readability choice rather than a
 					correctness one — React Router ranks matches by specificity rather than by
