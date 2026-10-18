@@ -47,6 +47,7 @@ import {
 } from "../components/calculators/ui";
 import { fixed, money as moneyAdaptive } from "../components/calculators/video-model";
 import {
+	allowanceOf,
 	type CatalogVideo,
 	type FreeViewerGroup,
 	freeViewerRow,
@@ -146,7 +147,7 @@ function Explanation() {
 						</span>{" "}
 						Half of what they give funds their <b className="text-base-content">Time Pool</b>, which
 						they split across everything they spend time with,{" "}
-						<b className="text-base-content">proportionally by time</b> — a minute is a minute,
+						<b className="text-base-content">proportionally by time</b>; a minute is a minute,
 						whether they spent it watching, listening, reading or playing. Your share of their time
 						is your slice of their pool.
 					</li>
@@ -155,7 +156,7 @@ function Explanation() {
 							Their support they can point at you by name.
 						</span>{" "}
 						A supporter may direct any amount at you monthly. It rides their one monthly charge, and
-						its only cost is that charge's pro-rata slice of the card fee — after that it is yours,
+						its only cost is that charge's pro-rata slice of the card fee. After that, it is yours,
 						in full.
 					</li>
 					<li>
@@ -173,12 +174,12 @@ function Explanation() {
 				<div className="rounded-xl bg-success/[0.07] border border-success/20 p-4 text-sm text-base-content/75 leading-relaxed space-y-2">
 					<p>
 						<b className="text-base-content">And the people who pay nothing?</b> A free account
-						streams Public Access work — {FREE_PUBLIC_ACCESS_HOURS} hours a month, free forever —
-						and the time those accounts spend with you still pays. It is paid from the{" "}
+						streams Public Access work ({FREE_PUBLIC_ACCESS_HOURS} hours a month, free forever), and
+						the time those accounts spend with you still pays. It is paid from the{" "}
 						<b className="text-base-content">Time Pool Fund</b>: a stated share of what is left of
 						support given to Anthers after the admin budget, published monthly and divided across
 						the month's active free accounts. Anthers funds it; the viewer does not, and no ads, no
-						tracking and no paywall stand behind it.
+						tracking, and no paywall stand behind it.
 					</p>
 					<p className="text-base-content/80">
 						{fund ? (
@@ -187,7 +188,7 @@ function Explanation() {
 								<b className="font-mono text-success">{moneyAdaptive(fund.poolAmount)}</b> for the
 								pool in {fund.billingCycle}, which is{" "}
 								<b className="font-mono text-success">{moneyAdaptive(fund.slicePerAccount)}</b> for
-								each active free account. The figure moves monthly with what is given — it is
+								each active free account. The figure moves monthly with what is given; it is
 								published every month, and so is its history.
 							</>
 						) : (
@@ -198,16 +199,16 @@ function Explanation() {
 						What an hour of attention is worth comes only from the pools above: a supporter's pool
 						divided by their whole month's time is the per-hour rate their watching pays you,
 						computed per row in the calculator below. Where a comparison between free and paying is
-						ever stated, a paying Badge — Root, the smallest — carries its base, and the Fund's own
+						ever stated, a paying Badge (Root, the smallest) carries its base, and the Fund's own
 						figure is quoted as itself, never as somebody else's denominator.
 					</p>
 				</div>
 
 				<p className="text-sm text-base-content/60 leading-relaxed max-w-3xl">
 					What you would host is the one place you spend money: every Badged account carries a
-					bundled storage allowance, and every stored byte above rung arithmetic — an at-cost charge
-					from Root onward, at the vendor's rate, with no markup. Delivery has no bill anywhere on
-					it: there is no bandwidth fee, and downloads are unlimited and free.
+					bundled storage allowance, and every stored byte past it bills at cost from Root onward,
+					at the vendor's rate, with no markup. Delivery has no bill anywhere on it: there is no
+					bandwidth fee, and downloads are unlimited and free.
 				</p>
 			</div>
 		</div>
@@ -306,8 +307,8 @@ function Calculator() {
 						suffix="/mo"
 					/>
 					<p className="text-base-content/40 text-xs leading-relaxed">
-						Each rides one monthly charge — the Badge amount they hold plus what they direct at you
-						— so the card fee is paid once and split pro-rata; your side nets its exact slice.
+						Each rides one monthly charge (the Badge amount they hold plus what they direct at you),
+						so the card fee is paid once and split pro-rata; your side nets its exact slice.
 					</p>
 				</div>
 
@@ -355,8 +356,8 @@ function Calculator() {
 					<p className="text-base-content/40 text-xs leading-relaxed">
 						{fund ? (
 							<>
-								Their streams pay from the Time Pool Fund — {moneyAdaptive(fund.slicePerAccount)}{" "}
-								per active free account this month's publication, split by time.
+								Their streams pay from the Time Pool Fund, {moneyAdaptive(fund.slicePerAccount)} per
+								active free account in this month's figures, split by time.
 							</>
 						) : (
 							<>
@@ -392,10 +393,10 @@ function Calculator() {
 						</p>
 						{m.sales.storefrontWins && (
 							<p className="mt-1.5 text-warning">
-								Conceded: at this price the storefront wins outright — below{" "}
-								{moneyAdaptive(crossover())} a percentage cut that absorbs processing beats the flat
-								card fee. The crossover is computed from the card rate, and this row loses to it
-								rather than hiding it.
+								Conceded: at this price the storefront wins outright; below{" "}
+								{moneyAdaptive(crossover())}, a percentage cut that absorbs processing beats the
+								flat card fee. The crossover is computed from the card rate, and this row loses to
+								it rather than hiding it.
 							</p>
 						)}
 					</div>
@@ -423,17 +424,17 @@ function Calculator() {
 				<StatCard
 					label="Given to you by name"
 					value={money2(cent(m.directShare + m.salesRev))}
-					sub={`Direct support and sales — no platform cut, named fees.`}
+					sub="Directed support and purchases; the at-cost card fee is the only deduction."
 				/>
 			</div>
 
 			{/* The stated gap, when the Fund's values are not in hand. */}
 			{m.free.count > 0 && m.byTime === null && (
 				<p className="mt-3 text-sm text-base-content/70 leading-relaxed border-l-4 border-warning/50 px-3 py-2 bg-warning/[0.06]">
-					Of your {cnt(m.free.count)} free viewers' time, the money rides the Time Pool Fund — the
+					Of your {cnt(m.free.count)} free viewers' time, the money rides the Time Pool Fund. The
 					published slice was not in hand when this page loaded, so their total stands below the
-					headline figure rather than inside it. The slice varies — published monthly. Conceded to
-					the gap, not estimated.
+					headline figure rather than inside it. The slice varies — published monthly. The gap is a
+					finding, not an estimate.
 				</p>
 			)}
 
@@ -441,14 +442,14 @@ function Calculator() {
 			<div className="mt-5 border-l-4 border-primary/40 bg-base-200/60 px-4 py-3 text-sm text-base-content/80 leading-relaxed space-y-2">
 				<p>
 					{cnt(m.sup.count)} supporters holding {m.sup.label} give{" "}
-					{money2(cent(thresholdForBadge(m.sup.badge) * m.sup.count))}
-					/mo to Anthers in all — half of which funds their Time Pools they split by time, the rest
-					funds the charitable programs; what they direct at you arrives net of the fee share their
-					charge already paid. Anthers keeps <b>$0</b> of anything that reaches you.
+					{money2(cent(thresholdForBadge(m.sup.badge) * m.sup.count))}/mo to Anthers in all. Half of
+					that funds their Time Pools, which they split across their month by time spent; the rest
+					funds the charitable programs. What they direct at you arrives net of the fee share their
+					charge already paid, and Anthers keeps <b>$0</b> of anything that reaches you.
 				</p>
 				<p className="text-base-content/70">
-					Your monthly revenue in this scenario: <b>{money2(m.known)}</b> — {money2(m.poolShare)} by
-					time, {money2(m.directShare)} directed, {money2(m.salesRev)} by sale
+					Your monthly revenue in this scenario is <b>{money2(m.known)}</b>: {money2(m.poolShare)}{" "}
+					by time, {money2(m.directShare)} directed, {money2(m.salesRev)} by sale
 					{m.byTime === null && m.free.count > 0
 						? "; the free viewers' share stands as the gap above"
 						: ""}
@@ -458,7 +459,7 @@ function Calculator() {
 				<p className="text-base-content/60 text-xs">
 					The pools are real and modest: the whole time side of a Badge is half its amount, and the
 					Fund's slice is small today. Sizes are what they are; the rates beneath them are the
-					model's, and they hold at any scale — the page refuses to model a projection of the
+					model's, and they hold at any scale. The page refuses to model a projection of the
 					platform, and so does the calculator.
 				</p>
 			</div>
@@ -494,9 +495,8 @@ function StoragePanel() {
 			</h2>
 			<p className="text-sm text-base-content/60 max-w-2xl mt-2 mb-5 leading-relaxed">
 				Storage is the only infrastructure charge anyone is billed for, and it is billed{" "}
-				<em>above the bundled allowance</em> — every stored byte past your Badge's share bills at
-				cost, from Root onward. There is no gated-vs-free catalog: the rule is about your allowance,
-				not about who may watch.
+				<em>above the bundled allowance</em>: every stored byte past your Badge's share bills at
+				cost, from Root onward. The rule is about your allowance, not about who may watch.
 			</p>
 
 			<div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -585,8 +585,8 @@ function StoragePanel() {
 						</p>
 						<p className="mt-2 text-xs text-base-content/55">
 							{fixed(videoCat.masterGiB, 1)} GiB of it is the original masters,{" "}
-							{fixed(videoCat.ladderGiB, 1)} GiB the delivery ladders — the master is kept as-is,
-							and a full AV1 ladder down to 240p30 is stored alongside it,{" "}
+							{fixed(videoCat.ladderGiB, 1)} GiB the delivery ladders; the master is kept as-is, and
+							a full AV1 ladder down to 240p30 is stored alongside it,{" "}
 							{(videoCat.masterShare * 100).toFixed(0)}% master.
 						</p>
 					</div>
@@ -611,19 +611,19 @@ function StoragePanel() {
 								{fixed(carrying.topUp.gib, 1)} GiB sits past the ladder's top allowance and bills at
 								cost:{" "}
 								<b className="font-mono text-warning">{moneyAdaptive(carrying.topUp.monthly)}</b>
-								/mo, the provider's rate ({STORAGE_PER_GIB_MONTH_LABEL} per GiB-month) — the at-cost
+								/mo, the provider's rate ({STORAGE_PER_GIB_MONTH_LABEL} per GiB-month), the at-cost
 								line, from Root onward.
 							</p>
 						) : (
 							<p className="mt-2 text-base-content/70 leading-relaxed">
 								{carrying.badge === "free" ? (
 									<>
-										The combined free floor carries it — nothing to pay, no Badge needed. The
+										The combined free floor carries it: nothing to pay, no Badge needed. The
 										allowance is also your own files' room.
 									</>
 								) : (
 									<>
-										Its allowance holds the whole catalog — nothing beyond the Badge itself to pay
+										Its allowance holds the whole catalog; nothing beyond the Badge itself to pay
 										for hosting. Past an allowance, the bytes bill at cost (
 										{STORAGE_PER_GIB_MONTH_LABEL} per GiB-month) and never become a reason to climb.
 									</>
@@ -634,7 +634,7 @@ function StoragePanel() {
 					<p className="text-base-content/40 text-xs leading-relaxed">
 						Sizes assume the delivery ladder's reference bitrates at good quality, master audio
 						carried at its rate, and that the original is never re-encoded. A ProRes master will
-						swamp the ladder — that is the point of showing it as-is.
+						swamp the ladder; that is the point of showing it as-is.
 					</p>
 				</div>
 			</div>
@@ -648,33 +648,34 @@ function Notes() {
 	return (
 		<CalcNotes>
 			<p>
-				Every Anthers figure on this page is computed from the checkout's own math — the float
-				copies of the decimal originals, pinned by test to the money version, the same arrangement
-				every calculator here runs. The free tier's pool is not a constant to quote: it is the
-				published Time Pool Fund, fetched from its ledger when the page requests it, and it is left
-				standing as a stated gap when the fetch comes back empty. Planning model; approximate, not
-				for invoicing.
+				Every Anthers figure on this page is computed from the checkout's own math: the float copies
+				of the decimal originals, pinned by test to the money version, the same arrangement every
+				calculator here runs. The free tier's pool is not a constant to quote: it is the published
+				Time Pool Fund, fetched from its ledger when the page requests it, and it is left standing
+				as a stated gap when the fetch comes back empty. Planning model; approximate, not for
+				invoicing.
 			</p>
 			<p>
-				Storage's geometry — the master as-is plus the AV1 delivery ladder down to 240p30 — is the
+				Storage's geometry (the master as-is plus the AV1 delivery ladder down to 240p30) is the
 				same ladder model the signup matrix reads, reference bitrates beside the model, and the
 				at-cost rate is the vendor's own ({STORAGE_PER_GIB_MONTH_LABEL} per GiB-month, Cloudflare
-				R2), passed through with no markup, from Root onward. What a free account carries is 25 GiB
-				combined, catalog and kept files together. Past the top rung's 200 GiB, the excess bills at
-				the same at-cost rate.
+				R2), passed through with no markup, from Root onward. What a free account carries is{" "}
+				{allowanceOf("free")} GiB combined, catalog and kept files together, and the top rung's
+				allowance is {allowanceOf("blossom")} GiB; every byte past it bills at the same at-cost
+				rate.
 			</p>
 			<p>
 				What an hour of attention pays in this model depends on who is paying it: a pool is a
 				person's, and its per-hour worth is that person's whole month divided by their time.
 				Per-hour figures here are computed from the pools, and comparisons between free and paying
-				accounts are not published as ratios — a paying Badge's pool carries the base, and the free
+				accounts are not published as ratios; a paying Badge's pool carries the base, and the free
 				tier's published slice speaks for itself.
 			</p>
 			<p>
 				The head-to-head per-price table against incumbent platforms is the{" "}
 				<em>How Our Pay Compares</em> resource, and the wiki's <em>What a Creator Takes Home</em>{" "}
 				pages carry the fixed cases in prose. The support model behind every line on this page is
-				the model the checkout charges against — hold any figure you doubt against{" "}
+				the model the checkout charges against. Hold any figure you doubt against{" "}
 				<code>@anthers/shared</code>.
 			</p>
 		</CalcNotes>
