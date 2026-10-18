@@ -2111,9 +2111,7 @@ async function serializeWorkForUser(
 	// the four with no delivery endpoint of their own, so this payload is where the meter
 	// bites for looking, and a locked Work's pictures leave with its words.
 	const gallery =
-		work.type === "image" && deliverable
-			? (await listSourceFiles(work)).map((f) => f.file)
-			: [];
+		work.type === "image" && deliverable ? (await listSourceFiles(work)).map((f) => f.file) : [];
 	return {
 		id: work.id,
 		publicId: work.publicId,

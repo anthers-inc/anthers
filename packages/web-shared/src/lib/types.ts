@@ -429,6 +429,14 @@ export interface Work {
 	 * user gets `""`, but a denied user gets no image either, so nothing renders against it.
 	 */
 	imageAlt?: string | null;
+	/**
+	 * The images an image Work displays, in position order — the Work's source-set read
+	 * back (`WorkSourceFile.file` values, which for the image kind are the display URLs
+	 * the kind has always stored in `sourceKey`). A one-image Work carries the same
+	 * single-picture list, so the Work page reads one field for both shapes; a denied
+	 * user gets `[]`, gated exactly beside `imageAlt`. Absent on other kinds.
+	 */
+	gallery?: string[];
 	estimatedReadMinutes?: number | null;
 	/**
 	 * How many pages an ebook has, or 0.

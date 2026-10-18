@@ -51,6 +51,7 @@ import {
 } from "../../lib/reading-positions";
 import { trackFromWork } from "../../lib/tracks";
 import { useSeekPlayer, WorkPlayerProvider } from "../../lib/work-player";
+import GalleryView from "../media/GalleryView";
 import {
 	LyricsBody,
 	LyricsShelf,
@@ -820,17 +821,24 @@ export function WorkDeliverable({
 						))}
 			{work.type === "image" &&
 				work.sourceKey &&
+				// A set of more than one picture renders as the gallery, in the order the
+				// creator arranged it (`work.gallery`, gated exactly beside this Work's
+				// `sourceKey`); a one-picture Work renders the plain image it always has.
+				// The creator's alt text when there is one; the Work's title is the fallback
+				// this render always fell back to, and `""` keeps it (empty alt on a content
+				// image would read as deliberately decorative, which the picture never is).
+				// The picture keeps its own full-bleed width — a portrait grows the frame
+				// downward rather than shrinking into a letterbox it is taller than.
 				frame(
-					// The creator's alt text when there is one; the Work's title is the fallback
-					// this render always fell back to, and `""` keeps it (empty alt on a content
-					// image would read as deliberately decorative, which the picture never is).
-					// The picture keeps its own full-bleed width — a portrait grows the frame
-					// downward rather than shrinking into a letterbox it is taller than.
-					<img
-						src={work.sourceKey}
-						alt={work.imageAlt || work.title || ""}
-						className="w-full rounded-lg"
-					/>,
+					(work.gallery?.length ?? 0) > 1 ? (
+						<GalleryView images={work.gallery ?? []} alt={work.imageAlt || work.title || ""} />
+					) : (
+						<img
+							src={work.sourceKey}
+							alt={work.imageAlt || work.title || ""}
+							className="w-full rounded-lg"
+						/>
+					),
 				)}
 			{/* A hosted build outranks an external embed address: the build Anthers serves is
 			    the thing the creator uploaded here, and the embed address is creator-hosted
