@@ -81,6 +81,18 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.28",
+		date: "2026-10-18",
+		lede: "An Image Work carries a set of pictures now, a creator's financials are explained and calculated on one page, and the signup Badge matrix shows each rung's split and discounts as they actually run.",
+		entries: [
+			"An Image Work holds a set of images now: one Work, one upload rail, several pictures the creator orders, and the Studio's image section edits the set with add, remove, and reorder. The first picture leads as the cover a listing and a shared link show, and the Work page displays it with a lightbox that steps through; a one-picture Work reads as it always did.",
+			"A creator's financials are explained and calculated on one page now, at /resources/creator-financials: how support, sales, and storage pay, worked through with a calculator over what somebody would host, how many supporters, and what they would sell, with figures read from the same fee constants the site's other published figures use.",
+			"The free account's pool on that page renders the Time Pool Fund's published monthly figures, stating the figure varies where the month's numbers are not in hand, and the two staging calculators the page replaced answer their old addresses with redirects.",
+			"The signup Badge matrix shows the merch discount each rung actually carries now, read from the same constant the store applies, where every cell used to answer Yes under a Not Built Yet mark; and the free column's monthly figure says its amount varies, explained behind the information icon, where a flat note used to sit under the value.",
+			"The Badge matrix gained an Anthers Support row, naming for each rung the portion of the monthly amount kept for Anthers' own costs and the charitable programs, derived beside the other money lines rather than typed, so the whole split reads in the matrix before a rung is picked. The free rung has nothing to split, and the walk-down table that sat below it left the page.",
+		],
+	},
+	{
 		version: "2026.10.27",
 		date: "2026-10-17",
 		lede: "A free account's Time Pool comes from the Time Pool Fund now, a video releases the moment its first quality is ready, and the states a Work page used to render as nothing hold their places.",
