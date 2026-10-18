@@ -192,6 +192,21 @@ export function isPaged(type: string): boolean {
 }
 
 /**
+ * The Work kinds that carry an ordered set of source files in `work_source_files`: the
+ * paged kinds, whose set renders into the pages a reader turns, and the image kind,
+ * whose set IS the gallery the Work displays. The set routes and the Studio's set
+ * editor are shared by both families; what differs is what the set becomes.
+ */
+export const SOURCE_SET_WORK_TYPES = [
+	...PAGED_WORK_TYPES,
+	"image",
+] as const satisfies readonly WorkType[];
+
+export function hasSourceSet(type: string): boolean {
+	return (SOURCE_SET_WORK_TYPES as readonly string[]).includes(type);
+}
+
+/**
  * The Work types the Bookshelf lens holds — the book-like shelf, the single bookshelf
  * every written Work stands on (Parker, 2026-09-20): the *reading* experience is
  * different enough for `comic` to be its own Work type, but the shelf metaphor for

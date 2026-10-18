@@ -64,6 +64,7 @@ import {
 	COMMENT_MAX,
 	type CommentSubjectType,
 	embedUrlProblem,
+	hasSourceSet,
 	isListened,
 	isOwnThumbnail,
 	isPaged,
@@ -1292,6 +1293,10 @@ async function serializeWork(
 	/** The Work's caption tracks, for the Studio's editor; empty when the caller did not load them. */
 	captions: CaptionTrackRow[] = [],
 ) {
+	// The image set, in order — an image Work's gallery is its source-set table read
+	// back (`listSourceFiles` falls back to the legacy column as the one-file set), and
+	// the owner shape carries it ungated like the row it edits.
+	const gallery = item.type === "image" ? (await listSourceFiles(item)).map((f) => f.file) : [];
 	return {
 		id: item.id,
 		publicId: item.publicId,
@@ -1324,6 +1329,8 @@ async function serializeWork(
 		// Owner-facing, so ungated — this is the shape the Studio editor loads to edit.
 		lyrics: item.lyrics,
 		imageAlt: item.imageAlt,
+		// The image Work's set, ordered; other kinds carry nothing here.
+		gallery,
 		estimatedReadMinutes: item.estimatedReadMinutes,
 		metadata: stripInternalMetadata(item.metadata),
 		visibility: item.visibility,
@@ -2098,6 +2105,15 @@ async function serializeWorkForUser(
 	 */
 	const deliverable = canAccess && !(publicAccess && allowanceSpent) && !timeLimited;
 
+	// The image set, in order — an image Work's gallery is its source-set table read back
+	// (`listSourceFiles` falls back to the legacy column as the one-file set). It rides the
+	// same `deliverable` verdict as `sourceKey`, `imageAlt` and the gated prose: these are
+	// the four with no delivery endpoint of their own, so this payload is where the meter
+	// bites for looking, and a locked Work's pictures leave with its words.
+	const gallery =
+		work.type === "image" && deliverable
+			? (await listSourceFiles(work)).map((f) => f.file)
+			: [];
 	return {
 		id: work.id,
 		publicId: work.publicId,
@@ -2182,6 +2198,8 @@ async function serializeWorkForUser(
 		// The image's alt rides the same branch as the image itself — it describes pixels
 		// the gate withholds (the schema column's docblock carries the reasoning).
 		imageAlt: deliverable ? work.imageAlt : "",
+		// The set of images the Work displays, gated exactly beside its siblings here.
+		gallery,
 		pageCount,
 		sectionCount,
 		// ⚠️ Downloads stay on `canAccess` alone, deliberately. **The meter measures
@@ -5510,7 +5528,7 @@ const contentRoutes = new Hono()
 					await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, id));
 				}
 			}
-			if (isPaged(updated.type)) await syncFromSourceKey(updated);
+			if (hasSourceSet(updated.type)) await syncFromSourceKey(updated);
 			else await queueTranscodeForWork(updated);
 		}
 		if (sourceChanged || thumbnailChanged) await queueScansForWork(updated);
@@ -5977,10 +5995,13 @@ const contentRoutes = new Hono()
 		return c.body(null, 204);
 	})
 
-	// ── A paged Work's source set ────────────────────────────────────────────────
+	// ── A set-kind Work's source set ─────────────────────────────────────────────
 	// The multi-PDF ruling (Parker, 2026-10-10): a comic or book is made from one PDF or
 	// several, each file's rendered pages a contiguous run in the creator's arrangement.
-	// These routes are thin over `services/work-source-files.ts`, which owns the invariants.
+	// The image kind rides the same rail (2026-10-18): its set IS the gallery the Work
+	// displays, and the service follows its column to the set's first file instead of its
+	// newest. These routes are thin over `services/work-source-files.ts`, which owns the
+	// invariants.
 
 	.get("/works/:id/source-files", requireAuth, async (c) => {
 		const user = c.get("user");
@@ -6000,9 +6021,12 @@ const contentRoutes = new Hono()
 		// A 404 rather than a 403, the way the works routes answer a non-owner — the
 		// existence of another creator's Work is not information to hand out.
 		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
-		if (!isPaged(item.type)) {
+		if (!hasSourceSet(item.type)) {
 			return c.json(
-				{ error: "Only a comic or a book carries a set of files.", code: "sources_not_paged" },
+				{
+					error: "Only a comic, a book or an image carries a set of files.",
+					code: "sources_not_set",
+				},
 				400,
 			);
 		}
@@ -6019,9 +6043,9 @@ const contentRoutes = new Hono()
 		// The set route signs this key for the Work's owner, so a file naming another
 		// creator's private original would hand it over. See `storage/keys.ts`.
 		if (!(await isOwnStorageRef(data.file, user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
-		const { rows, job, error } = await appendSourceFile(item, data);
+		const { rows, job, error, code } = await appendSourceFile(item, data);
 		if (error) {
-			return c.json({ error, code: "sources_mixed_shapes" }, 400);
+			return c.json({ error, code: code ?? "sources_mixed_shapes" }, 400);
 		}
 		await queueScansForWork({ ...item, sourceKey: data.file });
 		return c.json({ files: rows, transcoding: job }, 201);

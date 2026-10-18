@@ -24,7 +24,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, purchases, transcodingJobs, users } from "@anthers/db/schema";
+import { assets, purchases, transcodingJobs, users, workSourceFiles } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -50,6 +50,24 @@ async function signUp(username: string) {
 /** The raw stored URLs the fixtures below stand in for. Neither may reach a denied user. */
 const AUDIO_URL = "https://cdn.example.com/creators/x/audio/processed/secret.mp3";
 const HLS_URL = "https://cdn.example.com/creators/x/videos/hls/secret/master.m3u8";
+
+/** The image set the gallery specs stand in for, in the display order its positions name. */
+const GALLERY_URLS = [
+	"https://cdn.example.com/creators/x/gallery/first.png",
+	"https://cdn.example.com/creators/x/gallery/second.png",
+];
+const SINGLE_URL = "https://cdn.example.com/creators/x/gallery/single.png";
+
+/** Insert the gallery's rows, second position first, so a position-order read cannot
+ * pass by arriving at raw rowid order. */
+async function insertGallery(workId: number): Promise<void> {
+	await db
+		.insert(workSourceFiles)
+		.values({ workId, position: 1, file: GALLERY_URLS[1], mimeType: "image/png" });
+	await db
+		.insert(workSourceFiles)
+		.values({ workId, position: 0, file: GALLERY_URLS[0], mimeType: "image/png" });
+}
 
 const id = crypto.randomUUID().slice(0, 8);
 const creatorName = `deliv_${id}`;
@@ -288,6 +306,61 @@ describe("Delivery-layer access", () => {
 		const { work } = await res.json();
 		expect(work.access.canAccess).toBe(true);
 		expect(work.imageAlt).toBe("the open description");
+	});
+
+	/*
+	 * The image set, the picture gate at its gallery shape (2026-10-18): a denied user is
+	 * not handed a pointer at any picture the Work carries, and the reachable side again
+	 * proves the payload is real — the ordered set arrives, in the order a reader sees it.
+	 * The first-picture Work whose set has no rows reads the legacy column as its gallery
+	 * (`listSourceFiles`' fallback), so the one-image Work's payload is the same field.
+	 */
+	it("withholds a locked image Work's gallery with its pictures", async () => {
+		const work = await insertWork({
+			creatorId,
+			type: "image",
+			title: "Locked Gallery",
+			...LOCKED,
+		});
+		await insertGallery(work.id);
+
+		const res = await req(`/api/content/works/${work.id}`, { headers: { Cookie: userCookie } });
+		expect(res.status).toBe(200);
+		const { work: body } = await res.json();
+		expect(body.access.canAccess).toBe(false);
+		expect(body.gallery).toEqual([]);
+	});
+
+	it("hands the ordered gallery over once the user can reach the Work", async () => {
+		const work = await insertWork({
+			creatorId,
+			type: "image",
+			title: "Open Gallery",
+			access: [{ threshold: 0, allow: true, price: "0" }],
+		});
+		await insertGallery(work.id);
+
+		const res = await req(`/api/content/works/${work.id}`, { headers: { Cookie: userCookie } });
+		expect(res.status).toBe(200);
+		const { work: body } = await res.json();
+		expect(body.access.canAccess).toBe(true);
+		// In position order — the rows were written second-position-first, so arriving at
+		// this by rowid would fail here.
+		expect(body.gallery).toEqual(GALLERY_URLS);
+	});
+
+	it("reads a one-picture Work's legacy column as its gallery", async () => {
+		const work = await insertWork({
+			creatorId,
+			type: "image",
+			title: "Single Picture",
+			sourceKey: SINGLE_URL,
+			access: [{ threshold: 0, allow: true, price: "0" }],
+		});
+		const res = await req(`/api/content/works/${work.id}`, { headers: { Cookie: userCookie } });
+		expect(res.status).toBe(200);
+		const { work: body } = await res.json();
+		expect(body.gallery).toEqual([SINGLE_URL]);
 	});
 
 	it("still hands the owner their own media URLs", async () => {
