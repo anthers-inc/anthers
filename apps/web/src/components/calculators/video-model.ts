@@ -106,6 +106,30 @@ export const MASTER_EXPORT: Record<
 export const MASTER_AUDIO_MBPS = 0.256;
 
 /**
+ * The store, split: what the master occupies and what its delivery ladder occupies,
+ * in GiB — the structured half of `storedGibPerSourceHour`, for calculators that
+ * report the two separately. Named formats read their reference table; pass a
+ * custom master bitrate's GIB via `customMasterMbps` and the master is sized from
+ * it instead, the ladder unchanged.
+ */
+export function videoStore(
+	res: Resolution,
+	fps: number,
+	master: MasterFormat,
+	customMasterMbps?: number,
+): { masterGiB: number; ladderGiB: number } {
+	const m = MASTER_EXPORT[master];
+	const video = customMasterMbps ?? (m.ref[res] ?? 0) * m.fps[fps];
+	const masterGib = (video + MASTER_AUDIO_MBPS) * GIB_PER_MBPS_HR;
+	const ladderGib = RES_LADDER_HIGH_TO_LOW.filter((r) => RES_HEIGHT[r] <= RES_HEIGHT[res]).reduce(
+		(sum, r) =>
+			sum + (AV1_REF30[r] * FPS_MULT[rungFps(r, fps)] + RUNG_AUDIO_MBPS) * GIB_PER_MBPS_HR,
+		0,
+	);
+	return { masterGiB: masterGib, ladderGiB: ladderGib };
+}
+
+/**
  * Everything Anthers stores for one hour of uploaded video, in GiB: the master kept
  * as-is, plus the whole AV1 ladder from the master's resolution down to 240p.
  *
@@ -116,14 +140,8 @@ export const MASTER_AUDIO_MBPS = 0.256;
  * cannot drift; a `6` in a sentence can.
  */
 export function storedGibPerSourceHour(res: Resolution, fps: number, master: MasterFormat): number {
-	const m = MASTER_EXPORT[master];
-	const masterGib = ((m.ref[res] ?? 0) * m.fps[fps] + MASTER_AUDIO_MBPS) * GIB_PER_MBPS_HR;
-	const ladderGib = RES_LADDER_HIGH_TO_LOW.filter((r) => RES_HEIGHT[r] <= RES_HEIGHT[res]).reduce(
-		(sum, r) =>
-			sum + (AV1_REF30[r] * FPS_MULT[rungFps(r, fps)] + RUNG_AUDIO_MBPS) * GIB_PER_MBPS_HR,
-		0,
-	);
-	return masterGib + ladderGib;
+	const { masterGiB, ladderGiB } = videoStore(res, fps, master);
+	return masterGiB + ladderGiB;
 }
 
 // ---------------------------------------------------------------------------

@@ -15,12 +15,11 @@
 // but they were the financial plan's *projections*, and projections this early and
 // this in flux make a public page muddier rather than more transparent.
 //
-// 🚨 **Nothing unbuilt is described in the present tense here.** The creator
-// category's flagship — one financials calculator joining the explanation to the
-// numbers — is its own build (the board task "Build the creator financials
-// calculator, absorbing the monetization and storage pages"), so this page stages
-// the two incumbent calculators it will absorb until it lands, and says nothing on
-// the public page about the one that is coming.
+// 🚨 **Nothing unbuilt is described in the present tense here.** The three
+// categories' flagships all exist — the creator category's financials calculator
+// absorbed its two staging calculators on 2026-10-18 — and what this page still
+// stages is only the landings-and-nav call that is its own build (the revamp's
+// step 4): hub-first or distribute, with `/resources` back in the nav, is Parker's.
 //
 // The page is wrapped in the shared <MeadowDecor> (pollen + woven side vines) at
 // the route level, so this file styles content only.
@@ -33,7 +32,6 @@ import { Link } from "@anthers/web-shared/router";
 import {
 	ArrowRightIcon,
 	BanknotesIcon,
-	CircleStackIcon,
 	NewspaperIcon,
 	PuzzlePieceIcon,
 	ScaleIcon,
@@ -47,7 +45,7 @@ interface ResourceCard {
 	blurb: string;
 	/** The card's *subject*, never its audience — the section heading carries that. */
 	tag: string;
-	icon: typeof CircleStackIcon;
+	icon: typeof BanknotesIcon;
 }
 
 /** The user category's flagship: the reader's own spending, compared, which the
@@ -92,26 +90,16 @@ const COMPARISONS: ResourceCard[] = [
 	},
 ];
 
-/** The two creator calculators, staged as this category's cards until their flagship —
- * one financials calculator absorbing both — replaces them (see the file header). */
-const CREATOR_RESOURCES: ResourceCard[] = [
-	{
-		to: "/resources/creator-monetization",
-		title: "Creator Monetization Calculator",
-		blurb:
-			"How time with a creator becomes revenue under the Time Pool + support model — from one user up to a creator's monthly earnings.",
-		tag: "Economics",
-		icon: BanknotesIcon,
-	},
-	{
-		to: "/resources/video-storage",
-		title: "Video Storage Calculator",
-		blurb:
-			"What it costs to store a source video plus its full AV1 transcode ladder, per source-hour and across a whole library.",
-		tag: "Infrastructure",
-		icon: CircleStackIcon,
-	},
-];
+/** The creator category's flagship: the explanation and the scenario calculator in
+ * one page — the two calculators it absorbed are redirects now (see the file header). */
+const CREATOR_FLAGSHIP: ResourceCard = {
+	to: "/resources/creator-financials",
+	title: "Your Financials on Anthers",
+	blurb:
+		"How money reaches a creator — support by time, directed support, purchases — explained and computed on your own numbers: your audience, your catalog, your sales, and what hosting would cost you at cost.",
+	tag: "Money",
+	icon: BanknotesIcon,
+};
 
 /** The Anthers category's flagship: the mechanism, drawn — the one page whose
  * subject is the organization's own money, no projections. */
@@ -165,8 +153,8 @@ export default function ResourcesPage() {
 				<FlagshipCard r={USER_FLAGSHIP} />
 			</Section>
 
-			{/* For Creators — the numbers to run before bringing work here. The two
-			    incumbent calculators stage this category until their flagship absorbs them. */}
+			{/* For Creators — the numbers to run before bringing work here. One flagship:
+			    the financials calculator that absorbed its two staging calculators. */}
 			<Section tint>
 				<Reveal>
 					<Eyebrow>For Creators</Eyebrow>
@@ -176,7 +164,7 @@ export default function ResourcesPage() {
 						your catalog costs. Run the numbers against your own situation.
 					</Lede>
 				</Reveal>
-				<ResourceGrid cards={CREATOR_RESOURCES} />
+				<FlagshipCard r={CREATOR_FLAGSHIP} />
 			</Section>
 
 			{/* Inside Anthers — the mechanism, drawn; the organization's own money. */}

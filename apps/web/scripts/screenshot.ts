@@ -7,7 +7,7 @@
 //
 //   make screenshots                         # default route list
 //   make screenshots ROUTES="/ /resources"   # custom routes
-//   bun run scripts/screenshot.ts /resources/video-storage
+//   bun run scripts/screenshot.ts /resources/creator-financials
 //
 // Output PNGs land in apps/web/.screenshots/ (gitignored). Exit code is
 // non-zero if any route had a real page/console error.
@@ -21,11 +21,7 @@ const OUT_DIR = `${WEB_ROOT}/.screenshots`;
 const PORT = Number(process.env.SHOT_PORT ?? 4177);
 const BASE = `http://localhost:${PORT}`;
 
-const DEFAULT_ROUTES = [
-	"/resources",
-	"/resources/video-storage",
-	"/resources/creator-monetization",
-];
+const DEFAULT_ROUTES = ["/resources"];
 
 const args = process.argv.slice(2);
 const routes = args.length ? args : DEFAULT_ROUTES;

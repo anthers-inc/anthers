@@ -189,10 +189,10 @@ const CREATOR_WORST_CASE_NET = PUBLIC_ACCESS_PRICE - CREATOR_WORST_CASE_FEE;
  * What the free creator allowance holds, in hours of video — **derived, never typed.**
  *
  * A creator's storage carries the master they uploaded plus the whole AV1 ladder Anthers
- * transcodes from it, so "50 GiB" means nothing to somebody deciding whether to publish
- * here and "6+ hours of video" means everything. The number is computed from the same
- * bitrate model `/calculators/video-storage` runs on, so the page and the calculator
- * cannot disagree, and doubling the allowance would move this sentence on its own.
+ * transcodes from it, so a GiB count means nothing to somebody deciding whether to
+ * publish here and "hours of video" means everything. The number is computed from the
+ * same bitrate model `/resources/creator-financials` runs on, so the page and the
+ * calculator cannot disagree, and an allowance move updates this sentence on its own.
  *
  * 🚨 **The framerate is the assumption to know about, and the copy does not state it.**
  * An hour at 1080p60 stores nearly twice what an hour at 1080p30 does, so this reads the

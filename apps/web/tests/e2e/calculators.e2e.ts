@@ -45,95 +45,101 @@ test.describe("Resources calculators", () => {
 		const demoLinks = await page.locator('a[href*="/demo-"]').count();
 		expect(demoLinks, "the resources index links to a retired demo page").toBe(0);
 
-		// Each audience category opens on its flagship card, full-width; the creator
-		// category's two staging calculators follow as grid cards.
+		// Each audience category opens on its flagship card. The creator category's two
+		// staging calculators were absorbed by their flagship (2026-10-18) — so a staging
+		// link returning is this suite's way of noticing.
 		await expect(page.getByRole("link", { name: "Your Media Month" }).first()).toBeVisible();
 		await expect(page.getByRole("link", { name: "How the Money Moves" }).first()).toBeVisible();
-		await expect(page.getByRole("heading", { name: "Video Storage Calculator" })).toBeVisible();
-		await expect(
-			page.getByRole("heading", { name: "Creator Monetization Calculator" }),
-		).toBeVisible();
+		await expect(page.getByRole("link", { name: "Your Financials on Anthers" })).toBeVisible();
+		const absorbed = await page
+			.locator('a[href*="/resources/creator-monetization"], a[href*="/resources/video-storage"]')
+			.count();
+		expect(absorbed, "the resources index links to a retired staging calculator").toBe(0);
 
-		await page.getByRole("heading", { name: "Video Storage Calculator" }).click();
-		await expect(page).toHaveURL(/\/resources\/video-storage$/);
+		await page.getByRole("link", { name: "Your Financials on Anthers" }).click();
+		await expect(page).toHaveURL(/\/resources\/creator-financials$/);
 		expect(errors).toEqual([]);
 	});
 
-	/**
-	 * ⚠️ **The money here is DERIVED, and it used to be frozen.** It asserted `$0.212` and
-	 * `$21.25`, both computed at `$0.02/GiB` — DigitalOcean Spaces' rate, which the page
-	 * defaulted to for eight days after storage moved to Cloudflare R2. The test agreed
-	 * with the page because both had the same wrong number in them, which is the failure
-	 * mode the sibling test below was written to end. The **sizes** stay frozen: they are
-	 * geometry off the bitrate ladder and owe nothing to a dial.
-	 */
-	test("video storage: default readout and library scale-out", async ({ page }) => {
-		const errors = trackErrors(page);
-		await page.goto("/resources/video-storage");
-		// 1080p60, H.264 master + AV1 ladder — a fixed 10.62 GiB/hr.
-		const gibPerHour = 10.62;
-		const hourly = gibPerHour * STORAGE_PER_GIB_MONTH;
-		await expect(page.locator("p.text-5xl")).toContainText(`$${hourly.toFixed(3)}`);
-		await expect(page.getByText("10.62 GiB", { exact: false }).first()).toBeVisible();
-		// 100-hour library scale-out, at the same rate the page reads.
-		const library = gibPerHour * 100 * STORAGE_PER_GIB_MONTH;
-		await expect(
-			page
-				.getByText(
-					`$${library.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-					{ exact: false },
-				)
-				.first(),
-		).toBeVisible();
-		expect(errors).toEqual([]);
-	});
+	// 🚨 **A retired URL is a redirect, not a removal** — both staging calculators were
+	// live pages in production with links in circulation. Each must land on the page
+	// that absorbed it, else the absorbed URLs render 404s that only a link-walker sees.
+	for (const old of ["creator-monetization", "video-storage"]) {
+		test(`the retired /resources/${old} lands on the financials flagship`, async ({ page }) => {
+			await page.goto(`/resources/${old}`);
+			await expect(page).toHaveURL(/\/resources\/creator-financials$/);
+			await expect(page.getByRole("heading", { name: "Your Financials on Anthers" })).toBeVisible();
+		});
+	}
 
 	/**
-	 * 🚨 **This asserted only that the phrase was VISIBLE, and that is how the page came to
-	 * overstate creator revenue threefold for a fortnight.** When the indivisible unit
-	 * retired, `thresholdForBadge` began returning dollars while the page still multiplied
-	 * by $3, so a Sprout user was modeled as directing $18 rather than $6 — and a test
-	 * asking "does the string `reaches creators` appear" passed every run.
-	 *
-	 * Every figure on this page is computed, so the typed-figure scan has nothing to look
-	 * at either. That leaves this test as the only thing standing between the model and the
-	 * page, which is why it now reads the numbers instead of the words.
-	 *
-	 * The expected values are derived from the same constants the page reads, so this pins
-	 * the *relationship* and moves with the dials rather than freezing a figure.
+	 * 🚨 **Every figure on this page is computed — so the test reads the numbers, not
+	 * the words.** The predecessor's test once passed through a threefold overstated
+	 * page by asking whether the phrase "reaches creators" was visible; the same rule
+	 * applies here with more inputs: derive expectations from the constants and the
+	 * generated figures the page itself reads, never freeze a rendered dollar.
 	 */
-	test("creator monetization: the split is the model's, not a multiple of it", async ({ page }) => {
+	test("creator financials: the supporter math is the model's", async ({ page }) => {
 		const errors = trackErrors(page);
-		await page.goto("/resources/creator-monetization");
-		await expect(page.getByText("User's Badge").first()).toBeVisible();
+		await page.goto("/resources/creator-financials");
+		await expect(page.getByText("Your supporters").first()).toBeVisible();
 
-		const summary = page.getByText(/reaches creators/).first();
-		await expect(summary).toBeVisible();
-		const text = (await summary.innerText()).replace(/\s+/g, " ");
+		// The page opens on the default scenario: 250 supporters holding Root, 30-hour
+		// months, 4 hours with you, $1 directed each — the readout states the total.
+		const count = 250;
+		const badge = "root";
+		const directed = 1;
+		const pool = timePoolFor(thresholdForBadge(badge));
+		const share = 4 / 30;
+		const tpPer = Math.round(share * pool * 100) / 100;
+		// The directed net: whole charge = 3 + 1, fee split pro-rata, directed side nets.
+		const charge = thresholdForBadge(badge) + directed;
+		const fee = cardFeeDisplay(charge);
+		const feeOnDirected = Math.round(((fee * directed) / charge) * 100) / 100;
+		const perSupporter = Math.round((tpPer + (directed - feeOnDirected)) * 100) / 100;
+		// Plus the sales line the same headline totals: each sale its own charge.
+		const sale = Math.round((10 - cardFeeDisplay(10)) * 100) / 100;
+		const expectedRevenue = Math.round((perSupporter * count + sale * 40) * 100) / 100;
 
-		// The page opens on Sprout. Both figures come from the constants, not from here.
-		const sprout = thresholdForBadge("sprout");
-		const usd = (n: number) => `$${n.toFixed(2)}`;
-
-		expect(text, "the amount given to Anthers").toContain(usd(sprout));
-		expect(text, "the Time Pool it funds").toContain(usd(timePoolFor(sprout)));
-		// The directed figure is the Badge's own amount. Under the retirement bug it was
-		// that amount × the Public Access price, which is the assertion that would have
-		// caught it — and nothing else on the page would have.
-		expect(text, "what the user directs, NOT a multiple of it").toContain(usd(sprout));
-		// Directed support rides the whole monthly charge's single at-cost card fee, and the
-		// directed half bears its pro-rata share of it (the fee share rounds per side before
-		// subtracting — SAMPLE_RECEIPT: $6 directed atop a Sprout nets $5.67, so $3.00 + $5.67
-		// = $8.67 reaches creators). The earlier expectation here added the directed amount
-		// whole, which quietly modeled the card fee away.
-		const directedShare = Math.round(
-			cardFeeDisplay(sprout + sprout) * (sprout / (sprout + sprout)) * 100,
+		// The headline stat is the one the verdict restates — read the number out of the
+		// page's own mono rendering and compare it to the model, not the words.
+		const headline = page.getByText("Reaches you, monthly").locator("..").locator("p").nth(1);
+		const headlineText = (await headline.innerText()).replace(/\s+/g, " ");
+		expect(headlineText, "the computed revenue is the model's").toContain(
+			`$${expectedRevenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
 		);
-		expect(
-			text,
-			"reaches creators = Time Pool + directed net of the card fee's pro-rata share",
-		).toContain(usd(timePoolFor(sprout) + (sprout - directedShare / 100)));
 
+		expect(errors).toEqual([]);
+	});
+
+	/**
+	 * ⚠️ **The storage readout is DERIVED, and its predecessor once froze the rate.**
+	 * It asserted `$0.212` and `$21.25`, both computed at `$0.02/GiB` — DigitalOcean
+	 * Spaces' rate, eight days stale after storage moved to Cloudflare R2. The lesson
+	 * stands here: the test READS the catalog's GiB off the page, derives the expected
+	 * top-up from that catalog and the dial the copy quotes, and freezes nothing.
+	 */
+	test("creator financials: the catalog lands in a rung, bytes past it bill at cost", async ({
+		page,
+	}) => {
+		const errors = trackErrors(page);
+		await page.goto("/resources/creator-financials");
+
+		// Read the catalog the page computed (20 source-hours at 1080p60 H.264 + the
+		// AV1 ladder, plus 8 GiB of everything else). The value is the card's second
+		// paragraph — its `GiB` unit is a span, so `getByText(/GiB/)` would match that
+		// alone and parse nothing.
+		const catalogCard = page.getByText("Your catalog", { exact: true }).locator("..");
+		const catalogText = (await catalogCard.locator("p").nth(1).innerText()).trim();
+		const gib = Number(/([\d.]+)\s*GiB/.exec(catalogText)?.[1]);
+		expect(gib, "the page renders a catalog size").toBeGreaterThan(200);
+
+		// Past Blossom's 200 GiB, every byte above bills at the at-cost rate the page
+		// quotes — the rung card says so, with the derived dollar beside it.
+		const topUp = Math.round((gib - 200) * STORAGE_PER_GIB_MONTH * 100) / 100;
+		await expect(page.getByText("The Badge that carries it")).toBeVisible();
+		await expect(page.getByText("$0.0161", { exact: false }).first()).toBeVisible();
+		await expect(page.getByText(`$${topUp.toFixed(2)}`, { exact: false })).toBeVisible();
 		expect(errors).toEqual([]);
 	});
 });
