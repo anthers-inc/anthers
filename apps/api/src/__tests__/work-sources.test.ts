@@ -2,7 +2,8 @@
 /**
  * A paged Work's source set — the multi-PDF ruling's routes and their invariants
  * (Parker, 2026-10-10: one PDF or several, each file's pages a contiguous run in the
- * creator's arrangement).
+ * creator's arrangement) — and, in its second describe, the image kind's set (2026-10-18),
+ * whose rows are the gallery the Work displays.
  *
  * The properties under test, one spec each:
  * - **The legacy attach syncs**: a `source_key` PATCH on a comic — the shape the Upload
@@ -274,7 +275,7 @@ describe("a paged Work's source set", () => {
 		expect(body.error).toContain("one of your uploads");
 	});
 
-	it("refuses the set on a released Work and on a Work of a kind that is not paged", async () => {
+	it("refuses the set on a released Work and on a Work of a kind that is not set-bearing", async () => {
 		const released = await insertWork({
 			creatorId: creator.id,
 			type: "comic",
@@ -307,7 +308,7 @@ describe("a paged Work's source set", () => {
 			},
 		);
 		expect(videoRes.status).toBe(400);
-		expect(((await videoRes.json()) as { code?: string }).code).toBe("sources_not_paged");
+		expect(((await videoRes.json()) as { error?: string }).error).toContain("set of files");
 	});
 
 	it("refuses the set for a work that is not yours, with a 404", async () => {
@@ -322,5 +323,168 @@ describe("a paged Work's source set", () => {
 			file: foreignKey(other.id, other.id),
 		});
 		expect(res.status).toBe(404);
+	});
+});
+
+/**
+ * The image kind's set (2026-10-18): the gallery the Work displays. The mutation invariants
+ * are the routes' own; what this describe pins is what makes the image family DIFFERENT —
+ * the legacy column follows the set's FIRST file rather than its newest, because for an
+ * image Work the column IS the cover (the thumbnail, the listing image, the release gate's
+ * media presence), and the set admits only images.
+ */
+describe("an image Work's set", () => {
+	/** A display URL the local storage can actually sign, matching what a direct upload returns. */
+	async function putImage(creatorId: number, name: string): Promise<string> {
+		const key = `creators/${creatorId}/gallery/${name}.png`;
+		await storage.upload(key, Buffer.from("fake image bytes"), "image/png", "public");
+		return storage.getUrl(key);
+	}
+
+	/** A PDF under the owner's own prefix — the image-only guard's bait. */
+	async function putPdf(creatorId: number, name: string): Promise<string> {
+		const key = `creators/${creatorId}/assets/${name}.pdf`;
+		await storage.upload(
+			key,
+			Buffer.from("%PDF-1.4\ntrailer << /Root 1 0 R >>\n%%EOF\n"),
+			"application/pdf",
+			"private",
+		);
+		return key;
+	}
+
+	async function sourceKeyOf(id: number): Promise<string> {
+		const [row] = await db.select({ v: works.sourceKey }).from(works).where(eq(works.id, id));
+		return row.v ?? "";
+	}
+
+	it("syncs a legacy source_key attach into the set's one row, column first", async () => {
+		const work = await insertWork({ creatorId: creator.id, type: "image", visibility: "private" });
+		workIds.push(work.id);
+		const cover = await putImage(creator.id, "sync-cover");
+
+		const res = await call("PATCH", `/api/content/works/${work.id}`, creator.cookie, {
+			sourceKey: cover,
+		});
+		expect(res.status).toBe(200);
+
+		const files = await readSet(work.id);
+		expect(files).toHaveLength(1);
+		expect(files[0].position).toBe(0);
+		// The row stores the display URL the image kind has always stored, not a bare key.
+		expect(files[0].file).toBe(cover);
+		expect(await sourceKeyOf(work.id)).toBe(cover);
+	});
+
+	it("appends at the end and leaves the column on the FIRST image", async () => {
+		const cover = await putImage(creator.id, "append-cover");
+		const second = await putImage(creator.id, "append-second");
+		const work = await insertWork({ creatorId: creator.id, type: "image", visibility: "private" });
+		workIds.push(work.id);
+		await call("PATCH", `/api/content/works/${work.id}`, creator.cookie, { sourceKey: cover });
+
+		const res = await call("POST", `/api/content/works/${work.id}/source-files`, creator.cookie, {
+			file: second,
+			filename: "second.png",
+			fileSize: 123,
+			mimeType: "image/png",
+		});
+		expect(res.status).toBe(201);
+
+		const files = await readSet(work.id);
+		expect(files.map((f) => f.position)).toEqual([0, 1]);
+		expect(files.map((f) => f.file)).toEqual([cover, second]);
+		// 🚨 The load-bearing difference from the paged kinds: the column IS the cover.
+		expect(await sourceKeyOf(work.id)).toBe(cover);
+	});
+
+	it("refuses a file that is not an image, and writes nothing", async () => {
+		const cover = await putImage(creator.id, "guard-cover");
+		const pdf = await putPdf(creator.id, "guard-not-image");
+		const work = await insertWork({ creatorId: creator.id, type: "image", visibility: "private" });
+		workIds.push(work.id);
+		await call("PATCH", `/api/content/works/${work.id}`, creator.cookie, { sourceKey: cover });
+
+		const res = await call("POST", `/api/content/works/${work.id}/source-files`, creator.cookie, {
+			file: pdf,
+			filename: "not-a-picture.pdf",
+			mimeType: "application/pdf",
+		});
+		expect(res.status).toBe(400);
+		const body = (await res.json()) as { code?: string };
+		expect(body.code).toBe("sources_not_images");
+		// The refusal leaves the set exactly as it was: one row, cover in the column.
+		const files = await readSet(work.id);
+		expect(files.map((f) => f.file)).toEqual([cover]);
+		expect(await sourceKeyOf(work.id)).toBe(cover);
+	});
+
+	it("reorders, and the cover follows the image that arrives first", async () => {
+		const one = await putImage(creator.id, "order-one");
+		const two = await putImage(creator.id, "order-two");
+		const work = await insertWork({ creatorId: creator.id, type: "image", visibility: "private" });
+		workIds.push(work.id);
+		await call("PATCH", `/api/content/works/${work.id}`, creator.cookie, { sourceKey: one });
+		await call("POST", `/api/content/works/${work.id}/source-files`, creator.cookie, {
+			file: two,
+			mimeType: "image/png",
+		});
+		const rows = await readSet(work.id);
+		// The second image moves to the front, and the column moves with it.
+		const res = await call("PATCH", `/api/content/works/${work.id}/source-files`, creator.cookie, {
+			order: [rows[1].id, rows[0].id],
+		});
+		expect(res.status).toBe(200);
+		const files = await readSet(work.id);
+		expect(files.map((f) => f.file)).toEqual([two, one]);
+		expect(await sourceKeyOf(work.id)).toBe(two);
+	});
+
+	it("removes the first image and the cover follows; removing the last empties it", async () => {
+		const one = await putImage(creator.id, "rm-cover");
+		const two = await putImage(creator.id, "rm-second");
+		const work = await insertWork({ creatorId: creator.id, type: "image", visibility: "private" });
+		workIds.push(work.id);
+		await call("PATCH", `/api/content/works/${work.id}`, creator.cookie, { sourceKey: one });
+		const added = await call("POST", `/api/content/works/${work.id}/source-files`, creator.cookie, {
+			file: two,
+			mimeType: "image/png",
+		});
+		const { files: rows } = (await added.json()) as { files: Array<{ id: number; file: string }> };
+
+		// Removing the FIRST image moves the cover to the set's new first — not to the
+		// newest, and not to nothing.
+		await call(
+			"DELETE",
+			`/api/content/works/${work.id}/source-files/${rows.find((r) => r.file === one)!.id}`,
+			creator.cookie,
+		);
+		expect(await sourceKeyOf(work.id)).toBe(two);
+		expect(await storage.exists(one)).toBe(false);
+
+		// Removing the last image leaves the Work with no media again, column included.
+		const files = await readSet(work.id);
+		await call(
+			"DELETE",
+			`/api/content/works/${work.id}/source-files/${files[0].id}`,
+			creator.cookie,
+		);
+		expect(await sourceKeyOf(work.id)).toBe("");
+	});
+
+	it("refuses the set on a released image Work", async () => {
+		const work = await insertWork({
+			creatorId: creator.id,
+			type: "image",
+			visibility: "released",
+			sourceKey: await putImage(creator.id, "released-gal"),
+		});
+		workIds.push(work.id);
+		const res = await call("POST", `/api/content/works/${work.id}/source-files`, creator.cookie, {
+			file: await putImage(creator.id, "released-gal-add"),
+			mimeType: "image/png",
+		});
+		expect(res.status).toBe(409);
+		expect(((await res.json()) as { code?: string }).code).toBe("sources_not_private");
 	});
 });
