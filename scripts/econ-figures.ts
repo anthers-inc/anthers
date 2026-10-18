@@ -698,7 +698,7 @@ function renderSalePublicMarkdown(): string {
 /**
  * The merch discount, as a Badge holder reads it on *Badges* — the fourth public renderer.
  *
- * ⚠️ **Committed, in build** — the shop it applies to is arriving before launch, so everything here is written in the bringing-it tense: committed, arriving, not yet purchasable. When the shop ships, the paragraph and the tense update in the same change that builds it.
+ * ⚠️ **Built and live** (2026-10-18) — the shop it applies to is in production (deployed 2026-10-09 from `release`), the discount applies at checkout, and `purchases.merch_discount_badge` records the rung that priced a purchase, so the table's figures carry the live ladder and the prose around this block reads in the present tense.
  *
  * 🚨 **The print cost is never a figure here.** The table's arithmetic reads the card fee and the discounted price, both ours to compute; the print cost is Printful's and reprices, so the prose says "about $20 to print" and no generated row asserts an exact Printful figure. The transparency framing is "after printing and card costs, the rest funds Anthers' programs" — check any new sentence against that shape before it lands in copy.
  */
