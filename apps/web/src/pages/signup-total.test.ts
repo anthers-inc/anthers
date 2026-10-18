@@ -165,23 +165,31 @@ describe("what a rung adds over the one below it", () => {
 	});
 
 	test("marks the perks that are committed and not built, and only those", () => {
-		// Root carries every perk, so its card lists them all. A perk that ships drops out of
-		// this list in the same change that builds it — Cloud Storage and Purchase
-		// Preservation shipped 2026-10-09 (#409/#412/#414), and Merch Discount is what
-		// remains unbuilt, because the shop does not exist yet.
+		// Root carries every perk, so its card lists them all. A perk that ships drops out
+		// of this list in the same change that builds it — Cloud Storage and Purchase
+		// Preservation shipped 2026-10-09 (#409/#412/#414), and Merch Discount joined them
+		// with its 2026-10-08 decision. Nothing is committed-unbuilt right now; the marker
+		// and this test stay for the next perk that earns them, because a matrix read
+		// without the marker is a list of things a supporter can use today.
 		const unbuilt = marginalRows(root, free)
 			.concat(marginalRows(root, null))
 			.filter((row) => row.notBuilt)
 			.map((row) => row.title);
-		expect([...new Set(unbuilt)].sort()).toEqual(["Merch Discount"].sort());
+		expect([...new Set(unbuilt)]).toEqual([]);
 	});
 
 	test("a middle rung adds only what actually moves", () => {
-		// A perk identical at Root and Sprout — Public Access, preservation, merch,
-		// recognition — would be padding a comparison. What remains all moves with the
-		// rung: the money lines and the storage allowance.
+		// A perk identical at Root and Sprout — Public Access, preservation, recognition —
+		// would be padding a comparison. What remains all moves with the rung: the money
+		// lines, the storage allowance, and the merch discount's percent.
 		expect(titles(sprout, root).sort()).toEqual(
-			["Anthers Support", "Cloud Storage", "Monthly Sticker Budget", "Monthly Time Pool"].sort(),
+			[
+				"Anthers Support",
+				"Cloud Storage",
+				"Merch Discount",
+				"Monthly Sticker Budget",
+				"Monthly Time Pool",
+			].sort(),
 		);
 	});
 
