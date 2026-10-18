@@ -105,7 +105,6 @@ import {
 	FREE_STORAGE_GIB,
 	heldBadgeLabel,
 	PUBLIC_ACCESS_PRICE,
-	STORAGE_PER_GIB_MONTH,
 	stickerBudgetFor,
 	storageGibFor,
 	thresholdForBadge,
@@ -166,7 +165,7 @@ import { useTimePoolFund } from "../lib/time-pool-fund";
  * Pool Fund's** published monthly slice (the pool mechanism retired the constant):
  * runtime data, fetched from its ledger through `lib/time-pool-fund`, and the copy
  * renders the published figure or the varies clause until it lands. See
- * `anthersReading` and the walk-down below the ladder.
+ * `anthersReading`; the matrix's Time Pool row carries the same clause.
  */
 
 /**
@@ -528,7 +527,7 @@ function anthersReading(
 		],
 		// ⭐ The Fund figure renders when the fetch has landed and names itself as what
 		// it is (varies monthly); until then, no number is claimed, which is the
-		// placeholder the walk-down's Free rung shows too.
+		// placeholder the matrix's Time Pool row shows too.
 		note:
 			fundSlice != null
 				? `A free account is charged nothing, and the creators you spend time with are still paid: the Time Pool Fund puts ${money(fundSlice)} a month into the Time Pool on your behalf, out of what the rungs above pay in (varies — published monthly).`
@@ -670,6 +669,28 @@ const PERK_ROWS: PerkRow[] = [
 		desc: "Part of the Time Pool above, which you can hand out yourself by sending a Sticker on a Work, a Post, or a Comment, instead of leaving it to be paid out by time.",
 		cell: (amount) => ({
 			value: stickerBudgetFor(amount) > 0 ? columnMoney(stickerBudgetFor(amount)) : NOT_CARRIED,
+		}),
+	},
+	{
+		title: "Anthers Support",
+		// ⭐ **The third money line completes the story the first two start** (Parker,
+		// 2026-10-18). Time Pool pays creators, Stickers route part of the pool by hand,
+		// and this is what stays with Anthers: the remainder, funding the charitable
+		// programs and Anthers' own costs, with no profit-taking on top. It sits beside
+		// the other two so the matrix reads as one split rather than two stories, which
+		// is the row Parker asked for instead of the second table its first attempt
+		// built below the matrix.
+		//
+		// ⚠️ Free's cell is `NOT_CARRIED` because there is no monthly amount to split at
+		// all — the figure in the Time Pool row beside it is money the user did not give.
+		// Figures derive from the same helpers `anthersReading` and the generated tables
+		// compose from, so this cannot drift from the model; nothing here is typed.
+		desc: "The part of your monthly amount that stays with Anthers, funding the charitable programs (free access included) and Anthers' own costs. A nonprofit takes no profit, so this is where every kept dollar goes.",
+		cell: (amount) => ({
+			value:
+				amount > 0
+					? columnMoney(Math.max(0, amount - timePoolFor(amount) - cardFeeDisplay(amount)))
+					: NOT_CARRIED,
 		}),
 	},
 	{
@@ -878,106 +899,6 @@ function pickedRung(badge: string | null): BadgeKey | null {
 	return badge !== null && (BADGE_ORDER as readonly string[]).includes(badge)
 		? (badge as BadgeKey)
 		: "free";
-}
-
-/**
- * The walk-down beneath the ladder: where a month to Anthers goes, rung by rung.
- *
- * The pool mechanism's publication deliverable, settled at signup (the signup-table
- * design Parker approved on 2026-10-07, labels his): a rung's support splits into the
- * Time Pool paid to creators by the time spent, the part handed out directly as
- * Stickers, the card fee at cost, and the remainder funding the charitable programs —
- * with the real storage cost a reader would otherwise never see, in a dollar
- * parenthetical beside the allowance. The free rung's pool is the **Time Pool Fund's**
- * published slice of the remainder after the admin budget, shown as the varies clause
- * the walk-down's Free row carries until the fetch lands.
- *
- * Figures come from the same helpers the generated wiki tables compose from
- * (`timePoolFor`, `stickerBudgetFor`, `cardFeeDisplay`, `storageGibFor` and the
- * provider rate), so this table cannot drift from the model; nothing here is typed.
- * The rung list is the ladder display's own constant-derived rule (see
- * `anthersReading`'s note on the one-list-one-total rule).
- */
-function LadderWalkDown({ fundSlice }: { fundSlice: number | null }) {
-	const amounts = BADGE_ORDER.map((key) => thresholdForBadge(key));
-	const provider = (gib: number) => `$${(gib * STORAGE_PER_GIB_MONTH).toFixed(2)}`;
-	return (
-		<div className="mx-auto mt-10 max-w-5xl">
-			<p className="mx-auto mb-4 max-w-2xl text-center text-sm leading-relaxed text-base-content/65">
-				Where a month to Anthers goes, at any rung: the Time Pool half to creators by the time
-				spent, Stickers as the part handed out directly, the card at cost, and the rest to the
-				charitable programs.
-			</p>
-			<div className="relative overflow-x-auto">
-				<table
-					className={`w-full min-w-[46rem] table-fixed border-separate border-spacing-0 text-left text-sm ${RAISED}`}
-				>
-					<caption className="sr-only">
-						Where a monthly amount to Anthers goes at each rung, including the free tier's Time Pool
-						share from the Time Pool Fund.
-					</caption>
-					<thead>
-						<tr>
-							<th scope="col" className="px-4 py-3">
-								A month to Anthers
-							</th>
-							<th scope="col" className="px-4 py-3 text-right">
-								Time Pool, to creators
-							</th>
-							<th scope="col" className="px-4 py-3 text-right">
-								Stickers
-							</th>
-							<th scope="col" className="px-4 py-3 text-right">
-								Payments
-							</th>
-							<th scope="col" className="px-4 py-3 text-right">
-								Charitable programs
-							</th>
-							<th scope="col" className="px-4 py-3 text-right">
-								Storage
-							</th>
-						</tr>
-					</thead>
-					<tbody>
-						{amounts.map((amount) => {
-							const free = amount === 0;
-							const pool = free ? null : timePoolFor(amount);
-							const stickers = free ? null : stickerBudgetFor(amount);
-							const payments = free ? 0 : cardFeeDisplay(amount);
-							const programs = free ? 0 : Math.max(0, amount - (pool ?? 0) - payments);
-							const gib: number = free ? FREE_STORAGE_GIB : storageGibFor(amount);
-							return (
-								<tr key={free ? "free" : amount}>
-									<td className="px-4 py-3 font-medium">{free ? "Free" : money(amount)}</td>
-									<td className="px-4 py-3 text-right tabular-nums">
-										{free
-											? fundSlice != null
-												? `${money(fundSlice)} (varies — published monthly)`
-												: "Pool share (varies — published monthly)"
-											: money(pool ?? 0)}
-									</td>
-									<td className="px-4 py-3 text-right tabular-nums">
-										{free || stickers == null ? "—" : money(stickers)}
-									</td>
-									<td className="px-4 py-3 text-right tabular-nums">
-										{free ? "no card, so nothing" : money(payments)}
-									</td>
-									<td className="px-4 py-3 text-right tabular-nums">{money(programs)}</td>
-									<td className="px-4 py-3 text-right tabular-nums">
-										{gib} GiB ({provider(gib)} to our provider)
-									</td>
-								</tr>
-							);
-						})}
-					</tbody>
-				</table>
-			</div>
-			<p className="mx-auto mt-4 max-w-2xl text-center text-xs leading-relaxed text-base-content/45">
-				The Time Pool and Stickers are one column's worth of money, not two: a Sticker is handed out
-				of the same pool the time splits, so giving none costs creators nothing.
-			</p>
-		</div>
-	);
 }
 
 function BadgeLadder(props: LadderProps & { fundSlice?: number | null }) {
@@ -2727,8 +2648,8 @@ export default function SignupPage() {
 	 * The breakdown the chosen rung reads as — see `anthersReading` for the other one.
 	 * The entry price is the seeded ladder's: the note claims the price that lifts the
 	 * limit, which is the bottom rung the rows state. The free reading draws the Fund's
-	 * published slice (null until the fetch lands), so the breakdown and the walk-down
-	 * name the same published figure.
+	 * published slice (null until the fetch lands), so the breakdown and the matrix's
+	 * Time Pool row name the same published figure.
 	 */
 	const anthersBreakdown = anthersReading(
 		anthersAmount,
@@ -3251,11 +3172,6 @@ export default function SignupPage() {
 							sizers={ANTHERS_ECHO_SIZERS}
 							empty={`Staying free at ${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month.`}
 						/>
-						{/* The walk-down the pool mechanism's publication settles at signup: where a
-						    rung's month goes, rung by rung, from the same figures the generated tables
-						    and the plan compose from. The free rung's pool is the Fund's published
-						    slice, shown as the varies clause until the fetch lands. */}
-						<LadderWalkDown fundSlice={fund?.slicePerAccount ?? null} />
 					</Reveal>
 				</div>
 			</section>
