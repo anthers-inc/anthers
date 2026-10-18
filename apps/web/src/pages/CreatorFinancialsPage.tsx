@@ -236,7 +236,10 @@ function Calculator() {
 	}, [supporters, freeViewers, price, buyers, fund]);
 
 	const totalHours = m.sup.hoursYou + m.free.hoursYou;
-	const effRate = totalHours > 0 ? m.sup.revenue / totalHours : 0;
+	// The per-hour rate is support-only, on the hours that back it — a supporter's
+	// revenue divided by their own hours with you. Folding the free viewers' hours
+	// in would pair a full denominator with a revenue the gap above excludes.
+	const effRate = m.sup.hoursYou > 0 ? m.sup.revenue / m.sup.hoursYou : 0;
 
 	const set = <K extends keyof SupporterGroup>(k: K, v: SupporterGroup[K]) =>
 		setSupporters((p) => ({ ...p, [k]: v }));
@@ -411,7 +414,11 @@ function Calculator() {
 					label="Paid by time spent"
 					value={money2(cent(m.poolShare + (m.byTime ?? 0)))}
 					tone="time"
-					sub={`${cnt(totalHours)} hours with you a month`}
+					sub={
+						m.byTime === null && m.free.count > 0
+							? `${cnt(m.sup.hoursYou)} supporter hours with you; the free viewers' share is the gap below`
+							: `${cnt(totalHours)} hours with you a month`
+					}
 				/>
 				<StatCard
 					label="Given to you by name"
@@ -445,8 +452,8 @@ function Calculator() {
 					{m.byTime === null && m.free.count > 0
 						? "; the free viewers' share stands as the gap above"
 						: ""}
-					. That is <b>{moneyAdaptive(Math.round(effRate * 1000) / 1000)}</b> per hour of attention
-					you hold, computed against the people supporting you by Badge.
+					. That is <b>{moneyAdaptive(Math.round(effRate * 1000) / 1000)}</b> per hour of your
+					supporters' attention, their revenue against their own hours with you.
 				</p>
 				<p className="text-base-content/60 text-xs">
 					The pools are real and modest: the whole time side of a Badge is half its amount, and the

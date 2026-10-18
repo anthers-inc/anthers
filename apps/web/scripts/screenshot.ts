@@ -21,9 +21,7 @@ const OUT_DIR = `${WEB_ROOT}/.screenshots`;
 const PORT = Number(process.env.SHOT_PORT ?? 4177);
 const BASE = `http://localhost:${PORT}`;
 
-const DEFAULT_ROUTES = [
-	"/resources",
-];
+const DEFAULT_ROUTES = ["/resources"];
 
 const args = process.argv.slice(2);
 const routes = args.length ? args : DEFAULT_ROUTES;
