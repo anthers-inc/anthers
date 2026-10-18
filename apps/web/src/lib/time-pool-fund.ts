@@ -14,8 +14,9 @@
  * constant (the seed's input); the Fund's value is RUNTIME data with no seed-time
  * predecessor — a stale number typed into the bundle would sit beside a published
  * record that moved. Until the fetch lands, the hook answers `null` and the surface
- * renders the settled placeholder — "varies — published monthly" — exactly as the
- * signup walk-down's Free rung does. A 503 or an empty ledger answers the same null.
+ * renders the varies clause rather than quoting a stale number — the matrix's Time
+ * Pool row and the FAQ's free-pool line both hold that shape. A 503 or an empty
+ * ledger answers the same null.
  */
 
 import { client } from "@anthers/web-shared/rpc";
