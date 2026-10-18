@@ -42,7 +42,7 @@ import {
  * published monthly slice, which varies with what supporters gave. A claim that
  * divides by it can be neither typed nor safely rendered; the comparison leaves the
  * conversion copy entirely (Parker, 2026-10-17), and the free tier's own figure
- * publishes on the signup walk-down and the Fund's ledger, stated as itself.
+ * publishes on the Fund's ledger, quoted where it is shown, stated as itself.
  *
  * The price reads the seeded ladder (the rows are the source of truth) through the
  * store, with the constant as the fallback for the first paint. A component this deep

@@ -249,9 +249,8 @@ test.describe("/signup leads with the free door", () => {
 		await page.goto("/signup");
 		const section = page.locator("#anthers-badges");
 		await expect(section).toBeVisible();
-		// The matrix's own table, scoped to its fieldset: the walk-down's per-rung
-		// table (the Fund's publication) also lives in this section, at every width,
-		// and is not the control this test watches.
+		// The matrix's own table, scoped to its fieldset, so any other table this section
+		// may ever grow cannot masquerade as the control this test watches.
 		await expect(section.locator("fieldset").locator("table")).toHaveCount(0);
 		// The cards are a real list of every rung, not a truncation of one.
 		await expect(section.getByRole("radio")).toHaveCount(5);
@@ -265,8 +264,7 @@ test.describe("/signup leads with the free door", () => {
 
 		// And the matrix is not quietly scrolling inside its own box either, which is the
 		// state the breakpoint exists to prevent rather than to tidy up after.
-		// The matrix's own scroller, inside its fieldset: the walk-down's wrapper is a
-		// second `.overflow-x-auto` in this section now.
+		// The matrix's own scroller, inside its fieldset.
 		const scroller = section.locator("fieldset").locator(".overflow-x-auto");
 		const [scrollWidth, clientWidth] = await scroller.evaluate((el) => [
 			el.scrollWidth,

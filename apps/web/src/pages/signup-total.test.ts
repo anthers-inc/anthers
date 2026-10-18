@@ -27,8 +27,10 @@ import { describe, expect, test } from "bun:test";
 import {
 	ANTHERS_BADGES,
 	BADGE_ORDER,
+	cardFeeDisplay,
 	PUBLIC_ACCESS_PRICE,
 	thresholdForBadge,
+	timePoolFor,
 } from "@anthers/shared/constants";
 import { supportTotal } from "@anthers/shared/signup";
 import { anthersDollarsOf, marginalRows, RUNG_AMOUNTS } from "./SignupPage";
@@ -147,6 +149,9 @@ describe("what a rung adds over the one below it", () => {
 		expect(shown).toContain("Monthly Time Pool");
 		// A row of "—" on the free card is noise: the perk is introduced where it starts.
 		expect(shown).not.toContain("Monthly Sticker Budget");
+		expect(shown).not.toContain("Anthers Support");
+		// Anthers Support is what stays of the monthly amount, and Free gives none — the
+		// Fund's figure in the Time Pool row is somebody else's money, not a $0 line.
 		expect(shown).not.toContain("Merch Discount");
 	});
 
@@ -172,10 +177,11 @@ describe("what a rung adds over the one below it", () => {
 	});
 
 	test("a middle rung adds only what actually moves", () => {
-		// Public Access, preservation, merch and recognition are all identical at Root and
-		// Sprout, so a Sprout card that listed them would be padding a comparison.
+		// A perk identical at Root and Sprout — Public Access, preservation, merch,
+		// recognition — would be padding a comparison. What remains all moves with the
+		// rung: the money lines and the storage allowance.
 		expect(titles(sprout, root).sort()).toEqual(
-			["Cloud Storage", "Monthly Sticker Budget", "Monthly Time Pool"].sort(),
+			["Anthers Support", "Cloud Storage", "Monthly Sticker Budget", "Monthly Time Pool"].sort(),
 		);
 	});
 
@@ -186,6 +192,22 @@ describe("what a rung adds over the one below it", () => {
 				added.length,
 				`rung ${RUNG_AMOUNTS[i]} adds nothing over ${RUNG_AMOUNTS[i - 1]}`,
 			).toBeGreaterThan(0);
+		}
+	});
+
+	test("Anthers Support is the remainder after creators and the card fee, derived and never the whole amount", () => {
+		// The row Parker asked for in the matrix instead of the second table its first
+		// attempt built below it: the kept dollar, the same figure the breakdown panel's
+		// Charitable Programs segment carries. It derives
+		// from the same helpers those compose from, so this pins the derivation rather
+		// than a typed figure, and the Free cell carries nothing because Free gives none.
+		const row = marginalRows(root, free).find((candidate) => candidate.title === "Anthers Support");
+		expect(row).toBeDefined();
+		for (const amount of RUNG_AMOUNTS.filter((a) => a > 0)) {
+			const cell = row?.cell(amount);
+			const kept = Math.max(0, amount - timePoolFor(amount) - cardFeeDisplay(amount));
+			expect(cell?.value).toBe(`$${kept.toFixed(2)}`);
+			expect(kept).toBeLessThan(amount);
 		}
 	});
 });
