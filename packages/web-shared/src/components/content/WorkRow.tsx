@@ -2,7 +2,11 @@
 /**
  * One Work in the creator's Works table as a row: thumbnail and title, the description
  * as its own column beside it, the media status, the release date (editable — the same
- * acts the Work's own page offers), the access state and the counts.
+ * acts the Work's own page offers), the counts, the review figures and the row's action.
+ *
+ * **The access chip rides under the type chip** (Parker, 2026-10-19): the two describe the
+ * Work together, the way they sit beside the title on its own page, so the table keeps them
+ * together rather than giving access a column of its own.
  *
  * This carries forward the card's reasoning, which it replaced (the Works listing stopped
  * being a grid): the release acts live in the table because the common case is uploading
@@ -111,8 +115,10 @@ export default function WorkRow({
 			{/* WORK — the thumbnail and the title, as one link target like the
 			    video column the table is modeled on. The thumbnail is out of the accessibility
 			    tree because the title already names the same place. The rating rides the type
-			    badge: both describe the Work rather than any one column's business. */}
-			<td className="py-2.5 pr-4">
+			    badge: both describe the Work rather than any one column's business. The access
+			    chip sits on its own line beneath them (Parker, 2026-10-19) — the two describe
+			    the Work together on its own page, so the table keeps them together too. */}
+			<td className="py-2.5 pr-4 align-middle border-r border-base-300">
 				<div className="flex items-center gap-3">
 					<Link
 						to={editUrl}
@@ -138,14 +144,28 @@ export default function WorkRow({
 							<TypeBadge type={item.type} />
 							<MaturityBadge work={item} />
 						</div>
+						<div className="mt-1 flex flex-wrap items-center gap-1">
+							<AccessBadge item={item} />
+						</div>
 					</div>
 				</div>
+				{state === "locked" && (
+					<p className="text-xs text-error mt-1">
+						Released, but no one can open it —{" "}
+						<Link to={editUrl} className="link">
+							set access on this Work
+						</Link>
+						.
+					</p>
+				)}
 			</td>
 
 			{/* DESCRIPTION — its own column beside the title (Parker, 2026-10-16): the row had
 			    the room, and a back catalog's descriptions read in place rather than on the edit
-			    page. The empty case keeps the row's quiet register instead of rendering nothing. */}
-			<td className="py-2.5 pr-4">
+			    page. The empty case keeps the row's quiet register instead of rendering nothing.
+			    It is also the table's one flexible column, so its clamp is what makes a narrow
+			    window cost nothing but excerpt (Parker, 2026-10-19). */}
+			<td className="py-2.5 pr-4 align-middle border-r border-base-300/50">
 				<p className="text-xs text-base-content/60 line-clamp-2 break-words max-w-lg">
 					{item.description || "No description"}
 				</p>
@@ -154,7 +174,7 @@ export default function WorkRow({
 			{/* MEDIA STATUS — what is moving, what is missing, and what is owed before a
 			    release. A video shows the same chips its Manage tab shows; the other kinds
 			    keep the one badge that is their whole media state. */}
-			<td className="py-2.5 pr-4">
+			<td className="py-2.5 pr-4 align-middle border-r border-base-300/50">
 				{item.type === "video" ? (
 					<div className="flex flex-col gap-1">
 						<VideoMediaStatusChips work={item} sourceUpload={upload} />
@@ -185,7 +205,7 @@ export default function WorkRow({
 			    the Work's own page carries: publish now, schedule, clear, unrelease. The
 			    rating link rides here rather than in Media Status because the rating is
 			    what the release waits on, not media. */}
-			<td className="py-2.5 pr-4 align-top">
+			<td className="py-2.5 pr-4 align-middle border-r border-base-300/50">
 				<WorkReleaseCell
 					item={item}
 					blocked={blocked}
@@ -203,26 +223,8 @@ export default function WorkRow({
 				)}
 			</td>
 
-			{/* ACCESS — who may open it, derived from the release and the access table
-			    together. The release acts no longer live here (Parker, 2026-10-17); they
-			    belong to the Release Date column. */}
-			<td className="py-2.5 pr-4">
-				<div className="flex flex-col items-start gap-1">
-					<AccessBadge item={item} />
-					{state === "locked" && (
-						<p className="text-xs text-error mt-1">
-							Released, but no one can open it —{" "}
-							<Link to={editUrl} className="link">
-								set access on this Work
-							</Link>
-							.
-						</p>
-					)}
-				</div>
-			</td>
-
 			{/* Counts — what the Work has done. A zero reads as an em dash, which is quieter. */}
-			<td className="py-2.5 pr-4 text-sm text-base-content/70 tabular-nums">
+			<td className="py-2.5 pr-4 align-middle border-r border-base-300/50 text-sm text-base-content/70 tabular-nums">
 				{item.viewCount ? item.viewCount.toLocaleString() : "—"}
 				{item.downloadCount ? (
 					<p className="text-xs text-base-content/40">
@@ -231,9 +233,16 @@ export default function WorkRow({
 				) : null}
 			</td>
 
+			{/* REVIEWS — the net verdict and the counts behind it, the same figures the Work
+			    page's review section leads with: `+10 (+30/-20)` reads as ten more people
+			    recommended it than did not, from thirty for and twenty against. */}
+			<td className="py-2.5 pr-4 align-middle border-r border-base-300/50 text-sm text-base-content/70 tabular-nums whitespace-nowrap">
+				<ReviewCounts item={item} />
+			</td>
+
 			{/* Row actions: the delete dialog the page owns. The Work's page — the title,
 			    the thumbnail, the same place — is the editing surface, so no Edit button. */}
-			<td className="py-2.5 pr-4 text-right whitespace-nowrap">
+			<td className="py-2.5 pr-4 align-middle text-right whitespace-nowrap">
 				<button
 					type="button"
 					className="btn btn-ghost btn-xs text-error"
@@ -244,5 +253,25 @@ export default function WorkRow({
 				</button>
 			</td>
 		</tr>
+	);
+}
+
+/**
+ * The Reviews column's content: the net and the pair behind it, or the quiet em dash a
+ * Work nobody has reviewed shares with a zero Views cell.
+ */
+function ReviewCounts({ item }: { item: Work }) {
+	const recommended = item.reviewCounts?.recommended ?? 0;
+	const notRecommended = item.reviewCounts?.notRecommended ?? 0;
+	if (recommended + notRecommended === 0) return <>—</>;
+	const net = recommended - notRecommended;
+	const netText = net > 0 ? `+${net.toLocaleString()}` : net.toLocaleString();
+	return (
+		<>
+			{netText}{" "}
+			<span className="text-xs text-base-content/40">
+				({recommended.toLocaleString()}/{notRecommended.toLocaleString()})
+			</span>
+		</>
 	);
 }
