@@ -31,7 +31,7 @@ import {
 	creatorTransferCredits,
 	creatorTransfers,
 	receiptSends,
-	stripeAccounts,
+	userPreferences,
 } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -82,9 +82,12 @@ async function makeCreator(opts: { receiptsOff?: boolean } = {}): Promise<number
 	await enablePayoutsFor(account.userId);
 	if (opts.receiptsOff) {
 		await db
-			.update(stripeAccounts)
-			.set({ creatorReceiptEmails: false })
-			.where(eq(stripeAccounts.userId, account.userId));
+			.insert(userPreferences)
+			.values({ userId: account.userId, creatorEmailDelivery: { payout: "none" } })
+			.onConflictDoUpdate({
+				target: userPreferences.userId,
+				set: { creatorEmailDelivery: { payout: "none" } },
+			});
 	}
 	return account.userId;
 }

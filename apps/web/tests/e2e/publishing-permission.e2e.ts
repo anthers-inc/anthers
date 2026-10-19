@@ -92,7 +92,9 @@ test("a creator who denies the publishing permission is warned until they give i
 	await expect(page).toHaveURL(/\/studio\/settings\?publishing=declined/, { timeout: 15_000 });
 	await expect(page.getByText("No permission was given.")).toBeVisible();
 	await expect(
-		page.getByText(/You can't release Works or publish posts and projects/),
+		page.getByText(
+			/Anthers can't publish or interact for you until it can write to your repository/,
+		),
 	).toBeVisible();
 	// Settled first, so the banner's own request has answered before its absence is believed.
 	await page.waitForLoadState("networkidle");
