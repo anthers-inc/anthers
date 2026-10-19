@@ -52,7 +52,7 @@ import {
 } from "@anthers/db/schema";
 import { type ProcessingKind, processingFor } from "@anthers/shared/content";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { strToU8, type Zippable, zipSync } from "fflate";
 import { ingestEbook } from "../jobs/ingest-ebook.js";
 import { processAudio } from "../jobs/process-audio.js";
@@ -696,8 +696,25 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 		else if (processing === "video") {
 			await transcodeVideo({ jobId: job.id });
 			await seedVideoThumbnail(workId, creator, clipPath as string);
-		} else if (processing === "ebook") await renderPaged({ jobId: job.id });
-		else await processAudio({ jobId: job.id });
+		} else if (processing === "ebook") {
+			await renderPaged({ jobId: job.id });
+			if (spec.media === "comic") {
+				// The fixture is a comic whose creator has confirmed the detected layout:
+				// a reader is sent only confirmed panels, and the panel-mode specs walk
+				// these regions. Leaving them `auto` would make the fixture read as a Work
+				// nobody has looked at, which is a different (and deliberately untested
+				// here) state.
+				await db
+					.update(workPanels)
+					.set({ auto: false, updatedAt: new Date() })
+					.where(
+						inArray(
+							workPanels.pageId,
+							db.select({ id: workPages.id }).from(workPages).where(eq(workPages.workId, workId)),
+						),
+					);
+			}
+		} else await processAudio({ jobId: job.id });
 
 		const [done] = await db
 			.select()

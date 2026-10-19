@@ -2,8 +2,10 @@
 /**
  * Tests for the `/works/:id/panels` GET/PATCH routes.
  *
- * GET returns panel geometry for the whole Work, grouped by page. PATCH replaces one
- * page's panels atomically, clears `auto`, and validates normalized bounds.
+ * GET returns panel geometry for the whole Work, grouped by page: the owner sees the
+ * detector's proposals, and everybody else sees only the pages the creator confirmed.
+ * PATCH replaces one page's panels atomically, clears `auto`, and validates normalized
+ * bounds.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
@@ -187,6 +189,22 @@ describe("/works/:id/panels", () => {
 		expect(pageOne[0].work_panels.auto).toBe(false);
 	});
 
+	it("gives a reader only the confirmed pages, and a whole page where none are confirmed", async () => {
+		// Page 1 was confirmed by the PATCH above; page 2 is still only a proposal, so a
+		// reader gets no geometry for it and the page reads whole.
+		const user = await createAccount(`panels_reader_${RUN}`);
+		const res = await call("GET", `/api/content/works/${workId}/panels`, undefined, user.cookie);
+		expect(res.status).toBe(200);
+		const { pages } = (await res.json()) as {
+			pages: Array<{ pageNumber: number; panels: Array<{ auto: boolean }> }>;
+		};
+		expect(pages.length).toBe(2);
+		expect(pages[0]?.panels.length).toBe(2);
+		expect(pages[0]?.panels.every((p) => p.auto === false)).toBe(true);
+		expect(pages[1]?.panels).toEqual([]);
+		await db.delete(users).where(eq(users.id, user.userId as number));
+	});
+
 	it("PATCH refuses a panel with zero size", async () => {
 		const res = await call(
 			"PATCH",
@@ -207,10 +225,15 @@ describe("/works/:id/panels", () => {
 		expect(res.status).toBe(400);
 	});
 
-	it("GET for a non-creator still reads panel geometry", async () => {
+	it("gives a non-creator only confirmed geometry even when the Work is otherwise open", async () => {
+		// The same work the reader test above walked: page 1 confirmed, page 2 still a
+		// proposal. A signed-out caller cannot read it at all, so a signed-in reader is the
+		// boundary case — and their answer is the pages' confirmed panels, never the guess.
 		const user = await createAccount(`panels_view_${RUN}`);
 		const res = await call("GET", `/api/content/works/${workId}/panels`, undefined, user.cookie);
 		expect(res.status).toBe(200);
+		const { pages } = (await res.json()) as { pages: Array<{ panels: unknown[] }> };
+		expect(pages.flatMap((p) => p.panels).length).toBe(2);
 		await db.delete(users).where(eq(users.id, user.userId as number));
 	});
 });

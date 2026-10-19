@@ -6,6 +6,12 @@
  * top-left-first within a page, then the next page. This hook turns that tree into a
  * single index so next/previous can advance within a page and across page boundaries
  * without the caller tracking both dimensions.
+ *
+ * ⭐ **Panel guidance is additive, page by page, and never a precondition.** The endpoint
+ * gives a reader only the panels a creator confirmed; a page carrying none of them is a
+ * whole page. {@link guidedPages} fills those pages in as one whole-page panel so turning
+ * through them still works, and {@link hasGuidedView} is what the reader asks before it
+ * offers panel mode at all — a Work whose creator has touched nothing reads as plain pages.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -29,6 +35,29 @@ export interface Panel {
 export interface PanelPosition {
 	pageNumber: number;
 	panelNumber: number;
+}
+
+/**
+ * Every page as a walkable list: the confirmed panels where a page has them, and one
+ * whole-page panel where it does not.
+ *
+ * The synthesised panel is marked `auto: false` because it is not a guess — it is the
+ * page itself, and it is what a page with no guidance has always looked like.
+ */
+export function guidedPages(pages: PanelPage[]): PanelPage[] {
+	return pages.map((page) =>
+		page.panels.length > 0
+			? page
+			: {
+					...page,
+					panels: [{ panelNumber: 1, x: 0, y: 0, width: 1, height: 1, auto: false }],
+				},
+	);
+}
+
+/** Whether the Work has any confirmed panel, and so anything to offer as guided view. */
+export function hasGuidedView(pages: PanelPage[]): boolean {
+	return pages.some((page) => page.panels.length > 0);
 }
 
 function totalPanels(pages: PanelPage[]): number {

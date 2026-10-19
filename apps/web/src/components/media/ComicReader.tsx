@@ -2,12 +2,16 @@
 /**
  * The comic/ebook reader — page turns by default, with an opt-in panel mode for comics.
  *
- * Panel mode fetches `/works/:id/panels` once, then crops each panel from the page image
- * so the panel fills the reader's media area. A full-page zoom view is available with `z`
- * without leaving panel mode. Touch swipes advance panels on mobile.
+ * ⭐ **Guided view is an addition, page by page.** The reader fetches `/works/:id/panels`
+ * once, which for a reader carries only the panels a creator confirmed. No confirmed panel
+ * anywhere means no panel mode offered at all: the comic is plain pages, which is a
+ * complete way to publish it. A page with nothing confirmed walks as one whole page, so
+ * guidance can arrive one page at a time without leaving a gap in panel mode.
  *
- * Page URLs are still minted per request for page-flip mode, and panel mode uses the same
- * page endpoint for the underlying image.
+ * Panel mode crops each panel from the page image so it fills the reader's media area, and a full-page
+ * zoom view is available with `z` without leaving panel mode. Touch swipes advance panels
+ * on mobile. Page URLs are minted per request for page-flip mode, and panel mode uses the
+ * same page endpoint for the underlying image.
  */
 import {
 	ArrowsPointingInIcon,
@@ -18,8 +22,14 @@ import {
 	Squares2X2Icon,
 	ViewfinderCircleIcon,
 } from "@heroicons/react/24/solid";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { type PanelPage, type PanelPosition, usePanelNavigation } from "@/lib/panel-navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	guidedPages,
+	hasGuidedView,
+	type PanelPage,
+	type PanelPosition,
+	usePanelNavigation,
+} from "@/lib/panel-navigation";
 import {
 	onReadingPositionsChange,
 	readPage,
@@ -105,9 +115,11 @@ export default function ComicReader({
 		return shareToken ? `${url}?share=${encodeURIComponent(shareToken)}` : url;
 	}, [apiBase, workId, shareToken]);
 
-	// Lazy-load panel geometry the first time panel mode is entered.
+	// Panel geometry loads on mount, not on the first panel-mode click: the reader has to
+	// know whether anything has been confirmed before it can offer panel mode at all, and
+	// a request per opened comic is cheaper than a Work field that only this surface reads.
 	useEffect(() => {
-		if (mode !== "panel" || panelPages != null || error) return;
+		if (panelPages != null || error) return;
 		let live = true;
 		fetch(panelsUrl(), { credentials: "include" })
 			.then(async (res) => {
@@ -118,12 +130,13 @@ export default function ComicReader({
 				if (live) setPanelPages(data.pages);
 			})
 			.catch((e) => {
+				// A failed geometry fetch only costs guided view; the pages still turn.
 				if (live) setError(e instanceof Error ? e.message : String(e));
 			});
 		return () => {
 			live = false;
 		};
-	}, [mode, panelPages, panelsUrl, error]);
+	}, [panelPages, panelsUrl, error]);
 
 	// Two-up shows n and n+1, so the last spread of an even-length book is a single page.
 	const spread = layout === "spread";
@@ -157,8 +170,12 @@ export default function ComicReader({
 	}, []);
 
 	const [initialPanel] = useState(() => readStoredPanel(workId) ?? { page: 1, panel: 1 });
+	// A page with no confirmed panels is a whole page, so guided view still turns through
+	// it; and a Work with nothing confirmed anywhere offers no guided view at all.
+	const walkable = useMemo(() => guidedPages(panelPages ?? []), [panelPages]);
+	const guidedAvailable = panelPages != null && hasGuidedView(panelPages);
 	const panelNav = usePanelNavigation(
-		panelPages ?? [],
+		walkable,
 		useCallback(
 			(pos: PanelPosition) => {
 				writePanel(workId, { page: pos.pageNumber, panel: pos.panelNumber }, pageCount);
@@ -183,6 +200,13 @@ export default function ComicReader({
 		const pos = readStoredPanel(workId) ?? { page: 1, panel: 1 };
 		panelNav.goTo({ pageNumber: pos.page, panelNumber: pos.panel });
 	}, [panelPages, panelNav.goTo, workId]);
+
+	// A reader is sent only the panels a creator confirmed, so geometry can arrive with
+	// nothing to guide with. Panel mode entered before it lands falls back to plain pages
+	// rather than sitting on an empty panel.
+	useEffect(() => {
+		if (panelPages != null && !guidedAvailable && mode === "panel") setMode("page");
+	}, [panelPages, guidedAvailable, mode]);
 
 	const panelNext = useCallback(() => {
 		panelNav.next();
@@ -379,13 +403,15 @@ export default function ComicReader({
 					onClick={mode === "panel" ? panelNext : next}
 					disabled={mode === "panel" ? !panelNav.hasNext : page + step > pageCount}
 				/>
-				<TransportButton
-					label={mode === "panel" ? "Page mode" : "Panel mode"}
-					icon={ViewfinderCircleIcon}
-					onClick={togglePanelMode}
-					active={mode === "panel"}
-					className="hidden sm:inline-flex"
-				/>
+				{guidedAvailable && (
+					<TransportButton
+						label={mode === "panel" ? "Page mode" : "Panel mode"}
+						icon={ViewfinderCircleIcon}
+						onClick={togglePanelMode}
+						active={mode === "panel"}
+						className="hidden sm:inline-flex"
+					/>
+				)}
 				{mode === "panel" && (
 					<TransportButton
 						label={panelZoom ? "Zoom out" : "Zoom to page"}
