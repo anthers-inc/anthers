@@ -4205,17 +4205,26 @@ const contentRoutes = new Hono()
 	// The panel geometry for a Work, for the user's panel mode and the Studio's
 	// correction surface. Same access gates as `/pages/:n`: a share link recipient can read
 	// it, but a signed-out caller cannot, and the same public-access / parental gates apply.
+	//
+	// ⭐ **Detection proposes to the creator and to nobody else.** A row still carrying
+	// `auto` is a guess the creator has not looked at, so the Work's owner reads it (the
+	// Studio is where guesses are corrected) and every other caller gets only the pages a
+	// creator confirmed. A page with nothing confirmed comes back with no panels, and the
+	// reader treats it as a whole page — which is how a comic publishes before panel
+	// guidance has been added to any page at all.
 	.get("/works/:id/panels", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
+		const viewerId = await getOptionalUserId(c);
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
 		const metered = await publicAccessGate(c, work, access);
 		if (metered) return c.json(metered, 402);
-		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		const limited = await parentalTimeGate(viewerId, work);
 		if (limited) return c.json(limited, 403);
 
+		const correcting = viewerId != null && viewerId === work.creatorId;
 		const pages = await db
 			.select({
 				pageNumber: workPages.pageNumber,
@@ -4229,7 +4238,16 @@ const contentRoutes = new Hono()
 				auto: workPanels.auto,
 			})
 			.from(workPages)
-			.leftJoin(workPanels, eq(workPanels.pageId, workPages.id))
+			// The filter belongs in the JOIN, not the WHERE: a page whose every row is an
+			// unconfirmed proposal still has to come back, as a page with no panels. In the
+			// WHERE it would drop the page instead, and the reader would lose it entirely.
+			.leftJoin(
+				workPanels,
+				and(
+					eq(workPanels.pageId, workPages.id),
+					correcting ? undefined : eq(workPanels.auto, false),
+				),
+			)
 			.where(eq(workPages.workId, work.id))
 			.orderBy(workPages.pageNumber, workPanels.panelNumber);
 

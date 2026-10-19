@@ -1258,6 +1258,21 @@ export default function OwnerWorkEditor({
 			</p>
 		);
 
+	// The thumbnail block is one object, placed by kind: the paged kinds carry it high in
+	// the Manage tab, under View As and above Pages (Parker, 2026-10-19), because the cover
+	// and the pages are the two things a comic is. Every other kind keeps it at the tab's end.
+	const thumbnailSection = !isOwnThumbnail(current.type) ? (
+		<section className="flex flex-col gap-2">
+			{/* The terms ride the (i) now (Parker, 2026-10-16) — a hoverable beside
+			    the heading instead of a paragraph the section always carried. */}
+			<h3 className={`${WORK_DETAILS_HEADING_CLASS} flex items-center`}>
+				Thumbnail
+				<InfoTip text="All works need thumbnails. You can choose one from the work (e.g., a frame of video) or upload a custom thumbnail." />
+			</h3>
+			{thumbnailField}
+		</section>
+	) : null;
+
 	const detailsSection = (
 		// Named parts (Parker's third pass, 2026-10-13): the Details tab is the Work's
 		// composition — what it says, when it came out, who may open it — each under its
@@ -1348,6 +1363,7 @@ export default function OwnerWorkEditor({
 					    default, at the top of the page itself, standing where the editing
 					    banner stood. */}
 					<WorkViewAsSection />
+					{isPaged(current.type) && thumbnailSection}
 					{(current.type === "video" || isListened(current.type)) && (
 						<section className="flex flex-col gap-2">
 							<h3 className={WORK_DETAILS_HEADING_CLASS}>Media Status</h3>
@@ -1418,17 +1434,7 @@ export default function OwnerWorkEditor({
 							{bodyField}
 						</section>
 					)}
-					{!isOwnThumbnail(current.type) && (
-						<section className="flex flex-col gap-2">
-							{/* The terms ride the (i) now (Parker, 2026-10-16) — a hoverable beside
-							    the heading instead of a paragraph the section always carried. */}
-							<h3 className={`${WORK_DETAILS_HEADING_CLASS} flex items-center`}>
-								Thumbnail
-								<InfoTip text="All works need thumbnails. You can choose one from the work (e.g., a frame of video) or upload a custom thumbnail." />
-							</h3>
-							{thumbnailField}
-						</section>
-					)}
+					{!isPaged(current.type) && thumbnailSection}
 				</div>
 			),
 		},

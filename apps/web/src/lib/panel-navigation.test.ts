@@ -7,7 +7,7 @@
  * cross-page wrapping, position persistence, and the edge cases of empty or missing pages.
  */
 import { describe, expect, it } from "bun:test";
-import type { PanelPage, PanelPosition } from "./panel-navigation";
+import { guidedPages, hasGuidedView, type PanelPage, type PanelPosition } from "./panel-navigation";
 
 const PAGES: PanelPage[] = [
 	{
@@ -108,5 +108,40 @@ describe("panel navigation helpers", () => {
 			});
 			expect(back).toBe(i);
 		}
+	});
+});
+
+/**
+ * Guidance is added page by page: a page nobody confirmed is a whole page, and a Work with
+ * no confirmed page anywhere offers no panel mode at all. That is what lets a comic publish
+ * before the creator has touched its Pages section.
+ */
+describe("guided view is optional per page", () => {
+	// Page 1 carries confirmed panels; page 2 has none, which is what the endpoint returns
+	// for a page the creator never confirmed.
+	const CONFIRMED: PanelPage[] = [
+		{
+			pageNumber: 1,
+			width: 800,
+			height: 1200,
+			panels: [
+				{ panelNumber: 1, x: 0, y: 0, width: 1, height: 0.5, auto: false },
+				{ panelNumber: 2, x: 0, y: 0.5, width: 1, height: 0.5, auto: false },
+			],
+		},
+		{ pageNumber: 2, width: 800, height: 1200, panels: [] },
+	];
+
+	it("fills an unconfirmed page in as one whole page, so it still turns", () => {
+		const walkable = guidedPages(CONFIRMED);
+		expect(walkable[0]?.panels.length).toBe(2);
+		expect(walkable[1]?.panels).toEqual([
+			{ panelNumber: 1, x: 0, y: 0, width: 1, height: 1, auto: false },
+		]);
+	});
+
+	it("leaves a Work with nothing confirmed without guided view", () => {
+		expect(hasGuidedView([{ pageNumber: 1, width: 800, height: 1200, panels: [] }])).toBe(false);
+		expect(hasGuidedView(CONFIRMED)).toBe(true);
 	});
 });

@@ -4,9 +4,13 @@
  *
  * Lists each page with its panel rectangles overlaid as SVG rects. Creators can drag
  * a rectangle to move it, drag a corner handle to resize it, delete the selected panel
- * with the Delete key, add a new panel, reset a page to the auto-detected proposals, and
- * confirm a page to clear the `auto` flag on its rows. All writes go through the PATCH
- * endpoint atomically per page.
+ * with the Delete key, add a new panel, set a page back to a whole page, and confirm a
+ * page to clear the `auto` flag on its rows. All writes go through the PATCH endpoint
+ * atomically per page.
+ *
+ * ⭐ **Confirming is optional, page by page.** Detection proposes; a page nobody confirms
+ * is a whole page to a reader, so a comic publishes without this surface ever being used
+ * and gains guided view as pages are confirmed.
  */
 
 import { client } from "@anthers/web-shared/rpc";
@@ -205,7 +209,7 @@ export default function PanelEditor({ workId, pageCount }: PanelEditorProps) {
 		setSelectedPanel(page.panels.length);
 	};
 
-	const resetPage = async (page: PageState) => {
+	const clearPagePanels = async (page: PageState) => {
 		try {
 			const res = await client.api.content.works[":id"].panels.$patch({
 				param: { id: String(workId) },
@@ -250,6 +254,11 @@ export default function PanelEditor({ workId, pageCount }: PanelEditorProps) {
 					{pages.reduce((n, p) => n + p.panels.length, 0) === 1 ? "" : "s"}
 				</span>
 			</div>
+
+			<p className="text-xs text-base-content/60">
+				Pages read whole until you confirm their panels, so a comic publishes without this step and
+				gains guided view one page at a time.
+			</p>
 
 			<div className="flex gap-2 overflow-x-auto pb-2">
 				{pages.map((page) => {
@@ -307,10 +316,10 @@ export default function PanelEditor({ workId, pageCount }: PanelEditorProps) {
 				<button
 					type="button"
 					className="btn btn-outline btn-sm"
-					onClick={() => resetPage(activePage)}
+					onClick={() => clearPagePanels(activePage)}
 					disabled={savingPage === activePage.pageNumber}
 				>
-					Reset to detected
+					Use whole page
 				</button>
 				<span className="text-xs text-base-content/60">
 					Click a panel to select it; drag to move; drag a corner to resize; Delete removes it.
