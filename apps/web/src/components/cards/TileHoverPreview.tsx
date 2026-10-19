@@ -23,16 +23,16 @@
  *    is no wall here, the poster is simply what a stopped preview looks like.
  *
  * Sound is the viewer's gesture, never a hover's side effect (Parker,
- * 2026-10-15): a preview begins muted, and a video only turns audible when the
+ * 2026-10-15): a preview begins muted, and only turns audible when the
  * hover-audio setting says so — flipped from the speaker button this component
  * renders top-right, or from Settings — playing at the shared media volume and
- * under its mute. The listened family stays muted; its preview is invisible and
- * a poster band has no surface that would explain a sound.
+ * under its mute. Both families carry it, because the setting names the sound a
+ * hover makes rather than one media type's rendition of it (Parker, 2026-10-19).
  */
 
 import { SpeakerWaveIcon, SpeakerXMarkIcon } from "@heroicons/react/24/solid";
 import type HlsInstance from "hls.js";
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { useAttentionClaim } from "../../lib/attention";
 import { previewOriginalSourceFor, previewSourceFor } from "../../lib/tile-preview";
 import { setPreviewAudio, usePreviewAudio } from "../../lib/tile-preview-settings";
@@ -57,6 +57,90 @@ interface TileHoverPreviewProps {
 	onDone: () => void;
 }
 
+/**
+ * The hover-audio rule, applied to whichever element is playing the preview.
+ *
+ * A preview always begins muted: the browser refuses audible autoplay before a
+ * viewer gesture, and sound is that gesture rather than the hover's side effect.
+ * It turns audible only while the hover-audio setting is on and the site's shared
+ * media volume is not muted, at that shared level, and recovers muted rather than
+ * freezing the picture when the browser's autoplay policy interrupts an unmute.
+ *
+ * Returns the setting, so the preview's speaker button reflects it.
+ */
+function useHoverPreviewSound(mediaRef: RefObject<HTMLMediaElement | null>): boolean {
+	const audioOn = usePreviewAudio();
+	const { volume } = useVolume();
+
+	useEffect(() => {
+		const media = mediaRef.current;
+		if (!media) return;
+		const level = effectiveVolume(volume);
+		const audible = audioOn && !volume.muted;
+		media.volume = level;
+		if (!audible) {
+			media.muted = true;
+			return;
+		}
+		// ⭐ Detect the thing itself: a page that has had no click yet cannot win an
+		// audible-playoff argument with the browser, so no listener fights it frame
+		// by frame — the preview stays muted until something was clicked, which the
+		// speaker button itself is. `hasBeenActive` is undefined-supporting: without
+		// the API we act as though activation exists and let the recovery below speak.
+		if (navigator.userActivation && !navigator.userActivation.hasBeenActive) {
+			media.muted = true;
+			return;
+		}
+		// The preview begins muted, so an unmute lands while playback is under way —
+		// which the browser blocks only before the page has had a click. When its
+		// pause arrives under us, resume muted so the preview stays a moving picture,
+		// and re-arm the unmute on the next playing event so sound returns as soon
+		// as the browser allows it (a button click is itself the gesture that does).
+		const recover = () => {
+			media.muted = true;
+			void media.play().catch(() => {});
+		};
+		const rearm = () => {
+			media.muted = false;
+			if (media.paused) recover();
+		};
+		media.addEventListener("pause", recover);
+		media.addEventListener("playing", rearm);
+		media.muted = false;
+		if (media.paused) recover();
+		return () => {
+			media.removeEventListener("pause", recover);
+			media.removeEventListener("playing", rearm);
+		};
+	}, [audioOn, volume, mediaRef]);
+
+	return audioOn;
+}
+
+/**
+ * The one control inside a preview's band: the hover-audio setting, flipped from
+ * where the sound would come from. It sits above the tile's stretched overlay (the
+ * own-controls rule at the release tile), so it is a control of its own rather than
+ * a click through to the Work.
+ */
+function PreviewAudioButton({ audioOn }: { audioOn: boolean }) {
+	return (
+		<button
+			type="button"
+			className="absolute top-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/85"
+			aria-label={audioOn ? "Mute hover previews" : "Play hover previews with sound"}
+			aria-pressed={audioOn}
+			onClick={(e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				setPreviewAudio(!audioOn);
+			}}
+		>
+			{audioOn ? <SpeakerWaveIcon className="h-4 w-4" /> : <SpeakerXMarkIcon className="h-4 w-4" />}
+		</button>
+	);
+}
+
 /** Video: HLS over the same ladder the Work page plays, with the original-file fallback beneath it. */
 function TileVideoPreview({ work, onDone }: TileHoverPreviewProps) {
 	const videoRef = useRef<HTMLVideoElement>(null);
@@ -64,9 +148,8 @@ function TileVideoPreview({ work, onDone }: TileHoverPreviewProps) {
 	const [playing, setPlaying] = useState(false);
 	// The hover-audio preference and the shared media volume: the preview starts
 	// muted regardless, and only turns audible while both the viewer's setting and
-	// the site's mute allow it. See the audibility effect below for the exact rule.
-	const audioOn = usePreviewAudio();
-	const { volume } = useVolume();
+	// the site's mute allow it.
+	const audioOn = useHoverPreviewSound(videoRef);
 
 	// Video counts while it is playing, on the feed as on any page — muting never
 	// changes the claim, exactly as it does not on the Work page.
@@ -81,10 +164,9 @@ function TileVideoPreview({ work, onDone }: TileHoverPreviewProps) {
 	useEffect(() => {
 		const video = videoRef.current;
 		if (!video) return;
-		// Silence is the preview's initial state, set before any source is attached —
-		// the delivery below plays from this, and audible autoplay would be refused
-		// by the browser before a viewer gesture gave it leave.
-		video.muted = true;
+		// Silence is the element's initial state, set by its `muted` attribute before
+		// any source is attached — the delivery below plays from this, and audible
+		// autoplay would be refused by the browser before a viewer gesture gave it leave.
 
 		// The ladder-less fallback: the original, streamed by the element itself
 		// through its access-checked route's 302 — the same deliverable the Work
@@ -185,92 +267,35 @@ function TileVideoPreview({ work, onDone }: TileHoverPreviewProps) {
 		};
 	}, []);
 
-	useEffect(() => {
-		const video = videoRef.current;
-		if (!video) return;
-		const level = effectiveVolume(volume);
-		const audible = audioOn && !volume.muted;
-		video.volume = level;
-		if (!audible) {
-			video.muted = true;
-			return;
-		}
-		// ⭐ Detect the thing itself: a page that has had no click yet cannot win an
-		// audible-playoff argument with the browser, so no listener fights it frame
-		// by frame — the preview stays muted until something was clicked, which the
-		// speaker button itself is. `hasBeenActive` is undefined-supporting: without
-		// the API we act as though activation exists and let the recovery below speak.
-		if (navigator.userActivation && !navigator.userActivation.hasBeenActive) {
-			video.muted = true;
-			return;
-		}
-		// The preview begins muted, so an unmute lands while playback is under way —
-		// which the browser blocks only before the page has had a click. When its
-		// pause arrives under us, resume muted so the preview stays a moving picture,
-		// and re-arm the unmute on the next playing event so sound returns as soon
-		// as the browser allows it (a button click is itself the gesture that does).
-		const recover = () => {
-			video.muted = true;
-			void video.play().catch(() => {});
-		};
-		const rearm = () => {
-			video.muted = false;
-			if (video.paused) recover();
-		};
-		video.addEventListener("pause", recover);
-		video.addEventListener("playing", rearm);
-		video.muted = false;
-		if (video.paused) recover();
-		return () => {
-			video.removeEventListener("pause", recover);
-			video.removeEventListener("playing", rearm);
-		};
-	}, [audioOn, volume]);
-
 	return (
 		<>
-			{/* biome-ignore lint/a11y/useMediaCaption: the preview is a glance at the opened
-			    Work, which carries the caption tracks; a feed entry serializes none, and a
-			    hover that can be audible is not a reading surface. */}
+			{/* The preview is a glance at the opened Work, which carries the caption tracks;
+			    a feed entry serializes none, and a hover that can be audible is not a
+			    reading surface. */}
 			<video
 				ref={videoRef}
 				playsInline
 				autoPlay
+				muted
 				className="absolute inset-0 h-full w-full object-cover"
 				onEnded={onDone}
 			/>
-			<button
-				type="button"
-				// Above the tile's stretched overlay (the own-controls rule at the release
-				// tile): this is a control of its own, never a click through to the Work.
-				className="absolute top-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition-colors hover:bg-black/85"
-				aria-label={audioOn ? "Mute hover previews" : "Play hover previews with sound"}
-				aria-pressed={audioOn}
-				onClick={(e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					setPreviewAudio(!audioOn);
-				}}
-			>
-				{audioOn ? (
-					<SpeakerWaveIcon className="h-4 w-4" />
-				) : (
-					<SpeakerXMarkIcon className="h-4 w-4" />
-				)}
-			</button>
+			<PreviewAudioButton audioOn={audioOn} />
 		</>
 	);
 }
 
 /**
  * Listened family: the audio endpoint's stream, invisible, with no bar takeover.
- * It stays muted on purpose — the hover-audio setting names videos, and an
- * audible element under a poster band has no surface that would explain the
- * sound a viewer is hearing (Parker, 2026-10-15).
+ * It follows the same hover-audio rule as a video — beginning muted, turning
+ * audible only while the viewer's setting and the shared volume allow it — because
+ * for a listened Work the preview *is* the listening, and the speaker button on
+ * the band is the surface that explains the sound (Parker, 2026-10-19).
  */
 function TileAudioPreview({ work, onDone }: TileHoverPreviewProps) {
 	const audioRef = useRef<HTMLAudioElement>(null);
 	const [playing, setPlaying] = useState(false);
+	const audioOn = useHoverPreviewSound(audioRef);
 
 	// The listened family counts while playing, keyed on the Work's own type.
 	useAttentionClaim({
@@ -311,7 +336,12 @@ function TileAudioPreview({ work, onDone }: TileHoverPreviewProps) {
 	// A track that ends under the hover returns the tile to its poster, exactly
 	// as a short preview video does — an ended element frozen forever is not a
 	// state the tile has.
-	return <audio ref={audioRef} src={previewSourceFor(work)} muted autoPlay onEnded={onDone} />;
+	return (
+		<>
+			<audio ref={audioRef} src={previewSourceFor(work)} muted autoPlay onEnded={onDone} />
+			<PreviewAudioButton audioOn={audioOn} />
+		</>
+	);
 }
 
 export default function TileHoverPreview({ work, onDone }: TileHoverPreviewProps) {
