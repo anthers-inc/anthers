@@ -31,6 +31,7 @@ import {
 	purchases,
 	receiptSends,
 	stripeAccounts,
+	userPreferences,
 	works,
 } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -205,16 +206,19 @@ describe("Receipts: purchases", () => {
 		expect(await receiptRows(`purchase:${intentId}:creator:${buyerId}`)).toHaveLength(0);
 	});
 
-	it("the creator's preference off silences the creator copy and only that", async () => {
+	it("the creator's sale preference off silences the creator copy and only that", async () => {
 		const intentId = `pi_rcp_${run}_pref`;
 		await db
 			.insert(stripeAccounts)
 			.values({ userId: creatorId, stripeAccountId: `acct_rcp_${run}` })
 			.onConflictDoNothing();
 		await db
-			.update(stripeAccounts)
-			.set({ creatorReceiptEmails: false })
-			.where(eq(stripeAccounts.userId, creatorId));
+			.insert(userPreferences)
+			.values({ userId: creatorId, creatorEmailDelivery: { sale: "none" } })
+			.onConflictDoUpdate({
+				target: userPreferences.userId,
+				set: { creatorEmailDelivery: { sale: "none" } },
+			});
 
 		await completedPurchase({ buyerId, creatorId, workId, intentId });
 		await sendPurchaseReceipts(await rowsFor(intentId));
@@ -226,14 +230,17 @@ describe("Receipts: purchases", () => {
 		expect(await receiptRows(`purchase:${intentId}:creator:${creatorId}`)).toHaveLength(0);
 	});
 
-	it("a null preference reads as on (the stored default is on)", async () => {
-		// A row written without the column — or by a pass that predates it — carries
-		// null, and "never answered" must not read as a no.
+	it("no creator-email preference reads as on (the registry's default)", async () => {
+		// A missing map, a missing key or an absent preferences row is not a no. The
+		// column carries only the kinds somebody has answered.
 		const intentId = `pi_rcp_${run}_nullpref`;
 		await db
-			.update(stripeAccounts)
-			.set({ creatorReceiptEmails: null })
-			.where(eq(stripeAccounts.userId, creatorId));
+			.insert(userPreferences)
+			.values({ userId: creatorId, creatorEmailDelivery: null })
+			.onConflictDoUpdate({
+				target: userPreferences.userId,
+				set: { creatorEmailDelivery: null },
+			});
 
 		await completedPurchase({ buyerId, creatorId, workId, intentId });
 		await sendPurchaseReceipts(await rowsFor(intentId));
@@ -254,6 +261,24 @@ describe("Receipts: refunds", () => {
 		const buyerRows = await receiptRows(`refund:${refundId}:buyer:${buyerId}`);
 		expect(buyerRows).toHaveLength(1);
 		expect(buyerRows[0].kind).toBe("refund");
+		expect(await receiptRows(`refund:${refundId}:creator:${creatorId}`)).toHaveLength(1);
+	});
+
+	it("turning sale mail off leaves the refund mail on — the switches are per kind", async () => {
+		const intentId = `pi_rcp_${run}_refundpref`;
+		const refundId = `re_rcp_${run}_refundpref`;
+		await db
+			.insert(userPreferences)
+			.values({ userId: creatorId, creatorEmailDelivery: { sale: "none" } })
+			.onConflictDoUpdate({
+				target: userPreferences.userId,
+				set: { creatorEmailDelivery: { sale: "none" } },
+			});
+		await completedPurchase({ buyerId, creatorId, workId, intentId });
+		await markRefunded(intentId, refundId);
+
+		await sendRefundReceipts(await refundedRowsFor(intentId));
+
 		expect(await receiptRows(`refund:${refundId}:creator:${creatorId}`)).toHaveLength(1);
 	});
 });
