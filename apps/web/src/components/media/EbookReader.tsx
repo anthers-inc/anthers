@@ -314,16 +314,16 @@ export default function EbookReader({
 			tabIndex={0}
 			onKeyDown={onKeyDown}
 			aria-label={`Ebook reader: ${title}`}
-			className="relative overflow-hidden rounded-lg bg-neutral focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+			className="relative flex h-full w-full flex-col overflow-hidden rounded-lg bg-neutral focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
 		>
 			<div
-				className="relative min-h-[60vh] bg-neutral"
+				className="relative min-h-0 flex-1 bg-neutral"
 				onTouchStart={onTouchStart}
 				onTouchEnd={onTouchEnd}
 			>
 				{/* The vendored view is appended imperatively into this holder; it sizes
 				    itself against this box, so the box is what carries the reading height. */}
-				<div ref={viewHostRef} className="h-[70vh] min-h-[60vh]" />
+				<div ref={viewHostRef} className="h-full" />
 				{phase !== "ready" && (
 					<div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-neutral/90 px-6 text-center">
 						{phase === "loading" && (
@@ -344,7 +344,7 @@ export default function EbookReader({
 				{tocOpen && (
 					<nav
 						aria-label="Table of contents"
-						className="absolute inset-y-0 left-0 z-20 max-h-[80vh] w-72 overflow-y-auto rounded-r-lg border border-base-300 bg-base-100/95 p-2 shadow-xl"
+						className="absolute inset-y-0 left-0 z-20 max-h-full w-72 overflow-y-auto rounded-r-lg border border-base-300 bg-base-100/95 p-2 shadow-xl"
 					>
 						<div className="flex items-center justify-between px-2 py-1">
 							<span className="text-sm font-semibold">Contents</span>
