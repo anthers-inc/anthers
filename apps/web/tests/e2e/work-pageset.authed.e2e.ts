@@ -4,12 +4,12 @@
  * several in the picked order, a reorder is whole-list, and a removal renumbers — and the
  * set the server then holds equals what the page showed.
  *
- * 🚨 **The walk is the honest answer to "could a creator load their book this way?"** The
- * per-page export shape (one file per page — PDFs, and the image leaves the lead path
- * accepts) is joined as many picks or one multi-pick; what this proves is the multi-pick,
- * which is the one path whose ordering claim ("attached in the order the picker handed
- * them") is only visible in a browser: the input's FileList order, the sequential uploads,
- * the appended positions and a re-render per file are all real there.
+ * 🚨 **The walk is the honest answer to "could a creator load their comic this way?"** A
+ * comic's pages are JPG or PNG images (Parker, 2026-10-19), joined as many picks or one
+ * multi-pick; what this proves is the multi-pick, which is the one path whose ordering
+ * claim ("attached in the order the picker handed them") is only visible in a browser: the
+ * input's FileList order, the sequential uploads, the appended positions and a re-render
+ * per file are all real there.
  *
  * Runs in the `authed` project on `media_fixture`, serial with the other walks it shares
  * the sweep shape with.
@@ -21,17 +21,6 @@ import { eq } from "drizzle-orm";
 import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 const TITLE = `Page set walk ${Date.now()}`;
-
-/** A minimal, readable PDF — pages are never rendered here (no worker), only rows stored. */
-function stubPdf(name: string): { name: string; mimeType: string; buffer: Buffer } {
-	return {
-		name,
-		mimeType: "application/pdf",
-		buffer: Buffer.from(
-			"%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n",
-		),
-	};
-}
 
 /** A real 1×1 PNG — small but honest: the row's mime is what the pipeline would branch on. */
 function stubImage(name: string): { name: string; mimeType: string; buffer: Buffer } {
@@ -65,7 +54,7 @@ test("a comic's set grows by a multi-pick, reorders and removes", async ({ page,
 	await page.goto("/studio/works/new");
 	await page.locator("select").first().selectOption("comic");
 	await page.getByPlaceholder("Work title").fill(TITLE);
-	await page.locator('input[type="file"]').setInputFiles(stubPdf("lead page.pdf"));
+	await page.locator('input[type="file"]').setInputFiles(stubImage("lead page.png"));
 	// The Work's own page is the landing for every kind now (the kinds pass,
 	// 2026-10-14); the set editor lives in its Manage tab.
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
@@ -75,7 +64,7 @@ test("a comic's set grows by a multi-pick, reorders and removes", async ({ page,
 	// The set gains two files in one browse — attached in the picked order.
 	await page
 		.locator('input[type="file"][multiple]')
-		.setInputFiles([stubPdf("chapter two page.pdf"), stubPdf("chapter three page.pdf")]);
+		.setInputFiles([stubImage("chapter two page.png"), stubImage("chapter three page.png")]);
 	await expect(page.getByText(/chapter two page,?$/)).toBeVisible({ timeout: 30_000 });
 	await expect(page.getByText(/chapter three page,?$/)).toBeVisible({ timeout: 30_000 });
 
@@ -112,8 +101,8 @@ test("a comic's set grows by a multi-pick, reorders and removes", async ({ page,
 	);
 	// Ordering is the column's whole job; this is the assertion the list alone cannot make.
 	expect(set.map((f) => f.filename)).toEqual([
-		"chapter three page.pdf",
-		"lead page.pdf",
+		"chapter three page.png",
+		"lead page.png",
 		"leaf page.png",
 	]);
 	// The leaf's mime lands as the leaf itself declared it, not a defaulted PDF.

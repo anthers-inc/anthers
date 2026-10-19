@@ -235,6 +235,7 @@ import { queueWorkListingSync } from "../services/work-listing.js";
 import { releaseRefusal } from "../services/work-release.js";
 import {
 	appendSourceFile,
+	comicSourceProblem,
 	listSourceFiles,
 	removeSourceFile,
 	reorderSourceFiles,
@@ -5604,6 +5605,15 @@ const contentRoutes = new Hono()
 		// A replaced thumbnail is new bytes from the same uploader, so it owes its own scan.
 		const thumbnailChanged = data.thumbnail !== undefined && data.thumbnail !== work.thumbnail;
 		if (data.sourceKey !== undefined) {
+			// A legacy attach is still a new source, so a comic takes the same page-image
+			// rule the source-set route runs — the two paths cannot disagree about what a
+			// comic may add (Parker, 2026-10-19). An existing PDF is never re-read here.
+			const pdfProblem = data.sourceKey
+				? comicSourceProblem(work.type, { file: data.sourceKey })
+				: null;
+			if (pdfProblem) {
+				return c.json({ error: pdfProblem, code: "comic_sources_are_images" }, 400);
+			}
 			updates.sourceKey = data.sourceKey;
 			// The version that a change moves away from carries its original pointer with
 			// it; the code below sweeps what it named. A new source has no original of its

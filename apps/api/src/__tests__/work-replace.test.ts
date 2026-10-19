@@ -187,17 +187,17 @@ describe("replace-in-place retires the old version", () => {
 		"a comic's legacy-column replacement retires the set's old file and re-renders",
 		async () => {
 			const work = await makeWork({ type: "comic", title: "comic", visibility: "private" });
-			const oldPdf = `creators/${creatorId}/assets/old-${work.id}.pdf`;
-			const newPdf = `creators/${creatorId}/assets/new-${work.id}.pdf`;
-			await db.update(works).set({ sourceKey: oldPdf }).where(eq(works.id, work.id));
-			await db.insert(workSourceFiles).values({ workId: work.id, position: 0, file: oldPdf });
+			const oldImage = `creators/${creatorId}/assets/old-${work.id}.png`;
+			const newImage = `creators/${creatorId}/assets/new-${work.id}.png`;
+			await db.update(works).set({ sourceKey: oldImage }).where(eq(works.id, work.id));
+			await db.insert(workSourceFiles).values({ workId: work.id, position: 0, file: oldImage });
 
 			captureStorage();
 			try {
 				const res = await req(`/api/content/works/${work.id}`, {
 					method: "PATCH",
 					headers: { cookie, Origin: ORIGIN, "content-type": "application/json" },
-					body: JSON.stringify({ sourceKey: newPdf }),
+					body: JSON.stringify({ sourceKey: newImage }),
 				});
 				expect(res.status).toBe(200);
 
@@ -207,8 +207,8 @@ describe("replace-in-place retires the old version", () => {
 					.from(workSourceFiles)
 					.where(eq(workSourceFiles.workId, work.id));
 				expect(rows).toHaveLength(1);
-				expect(rows[0].file).toBe(newPdf);
-				expect(deleted).toContain(oldPdf);
+				expect(rows[0].file).toBe(newImage);
+				expect(deleted).toContain(oldImage);
 
 				// Exactly one re-render was asked, through the queue the route names.
 				const sends = sendSpy!.mock.calls.map((call: unknown[]) => call[0]);

@@ -12,7 +12,9 @@
  */
 import { describe, expect, it } from "bun:test";
 import { acceptedVideoFormatsSentence } from "@anthers/shared/accepted-formats";
-import { fileRules } from "./work-media";
+import { WORK_TYPES } from "@anthers/shared/content";
+import { fileSizeSentence } from "../ui/FileUpload";
+import { type FileWorkType, fileRules, workTypeFacts } from "./work-media";
 
 const GB = 1024 * 1024 * 1024;
 const MB = 1024 * 1024;
@@ -34,13 +36,13 @@ describe("fileRules", () => {
 		expect(fileRules("comic").maxSize).toBeGreaterThanOrEqual(1.5 * GB);
 	});
 
-	it("takes page images and PDFs for the paged kinds, and only the medium's own type for the rest", () => {
-		// The lead path: a JPG or PNG page image; the PDF beside it, because a
-		// whole-book master is what a creator holds and the set is one set either way.
-		expect(fileRules("comic").accept).toBe("image/jpeg,image/png,application/pdf");
-		// The ebook kind additionally takes an EPUB — the reflow path's native source
-		// (the 2026-10-11 design). The comic does not: its container formats (CBZ,
-		// EPUB 3 FXL) sit in the format ladder's tail and ride their own tasks.
+	it("takes page images for a comic, and images, a PDF or an EPUB for a book", () => {
+		// A comic's pages are images now (2026-10-19): the PDF is not offered, because the
+		// rasterization it costs is the wait the page-image path removes.
+		expect(fileRules("comic").accept).toBe("image/jpeg,image/png");
+		// The ebook kind keeps the PDF and additionally takes an EPUB — the reflow path's
+		// native source. The comic does not: its container formats (CBZ, EPUB 3 FXL) sit in
+		// the format ladder's tail and ride their own tasks.
 		expect(fileRules("ebook").accept).toBe(
 			"image/jpeg,image/png,application/pdf,application/epub+zip,.epub",
 		);
@@ -62,5 +64,82 @@ describe("fileRules", () => {
 
 	it("says audio is converted rather than refused", () => {
 		expect(fileRules("audio").formats).toContain("MP3");
+	});
+
+	it("says a comic's PDF is not taken, and names the way out", () => {
+		const points = workTypeFacts("comic").points.join(" ");
+		expect(points).toContain("JPG or PNG page images");
+		expect(points).toContain("PDF or a CBZ isn't taken");
+	});
+});
+
+/**
+ * The Upload page's card, which follows the kind rather than listing every kind at once.
+ *
+ * 🚨 **The caps are read from `fileRules` and the video set from the shared module**, so a
+ * card's claim cannot drift from the pipeline it describes: a cap that moves in one place and
+ * not the other fails here rather than surprising a creator at the picker.
+ */
+describe("workTypeFacts", () => {
+	it("has a card for every Work kind, with a heading and at least one fact", () => {
+		for (const type of WORK_TYPES) {
+			const facts = workTypeFacts(type);
+			expect(facts.heading, type).toBeTruthy();
+			expect(facts.points.length, type).toBeGreaterThan(0);
+			for (const point of facts.points) expect(point.trim(), type).not.toBe("");
+		}
+	});
+
+	it("states each file kind's cap from the rules the picker enforces", () => {
+		const fileKinds: FileWorkType[] = ["video", "music", "audio", "image", "comic", "ebook"];
+		for (const type of fileKinds) {
+			const points = workTypeFacts(type).points.join(" ");
+			expect(points, type).toContain(fileSizeSentence(fileRules(type).maxSize));
+		}
+	});
+
+	it("states the video set and the remux promise, never a widening of its own", () => {
+		const video = workTypeFacts("video");
+		const points = video.points.join(" ");
+		expect(points).toContain(acceptedVideoFormatsSentence());
+		expect(points).toContain("remuxed");
+		expect(points).toContain("no audio track");
+		expect(video.note).toContain("short on purpose");
+	});
+
+	it("follows the platform a build is labeled for", () => {
+		const windows = workTypeFacts("game", "windows").points.join(" ");
+		expect(windows).toContain(".exe");
+		expect(windows).toContain(".zip");
+		expect(workTypeFacts("game", "mac").points.join(" ")).toContain(".dmg");
+		expect(workTypeFacts("game", "linux").points.join(" ")).toContain("AppImage");
+		expect(workTypeFacts("game", "android").points.join(" ")).toContain(".apk");
+		expect(workTypeFacts("game", "ios").points.join(" ")).toContain("iPhone");
+		// A platform this build does not name still says something a creator can act on.
+		expect(workTypeFacts("software", "unknown-platform").points.join(" ")).toContain(
+			"any file people can run",
+		);
+	});
+
+	it("talks about Web as the hosted build it is, not a downloadable asset", () => {
+		const web = workTypeFacts("game", "web");
+		const points = web.points.join(" ");
+		expect(web.heading).toBe("What a browser build needs");
+		expect(points).toContain("export folder");
+		expect(points).toContain("index.html");
+		expect(points).toContain("SharedArrayBuffer");
+		expect(points).toContain(fileSizeSentence(500 * MB));
+		expect(points).not.toContain("primary download");
+	});
+
+	it("names the Work's page as where a set grows", () => {
+		expect(workTypeFacts("image").points.join(" ")).toContain("Work's page");
+		expect(workTypeFacts("comic").points.join(" ")).toContain("set");
+	});
+
+	it("says plainly that writing, physical goods and services upload nothing", () => {
+		for (const type of ["text", "physical", "service"] as const) {
+			expect(workTypeFacts(type).points.join(" ")).toContain("Nothing is uploaded");
+		}
 	});
 });

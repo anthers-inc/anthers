@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The source set of a comic or book — the files its pages render from, as the creator
- * arranges them (Parker, 2026-10-10 as PDFs; 2026-10-11 the adopted design: page images
- * lead, PDFs stay as the whole-book alternate, and each file's pages are a contiguous run
- * in the set's order).
+ * arranges them. A comic's pages are JPG or PNG images (Parker, 2026-10-19); a book's are
+ * page images, a PDF (2026-10-11's whole-book alternate) or an EPUB, each file's pages a
+ * contiguous run in the set's order.
  *
  * 🚨 **The first file rides the same rail as every other Work's source upload** — created on
  * the Upload page's pick, uploaded through `work-uploads`, attached by the legacy
@@ -144,9 +144,9 @@ export function PagedSourceFiles({ work }: { work: Work }) {
 	return (
 		<FormField label="Pages">
 			<p className="mb-2 text-xs text-base-content/50">
-				One PDF or several. Each file's pages become a run of this Work's pages, in the order listed
-				here; a file with many pages keeps them all. Adding, removing or reordering re-renders the
-				book.
+				{work.type === "comic"
+					? "One page image per page (JPG or PNG). Each file becomes a run of this Work's pages, in the order listed here. Adding, removing or reordering re-renders the book."
+					: "JPG or PNG page images, a PDF, or an EPUB. Each page set becomes a run of this Work's pages, in the order listed here; an EPUB reflows on its own and can't mix with page files. Adding, removing or reordering re-renders the book."}
 			</p>
 			{error && <div className="alert alert-error text-sm mb-2">{error}</div>}
 			{upload && (upload.status === "uploading" || upload.status === "attaching") && (
@@ -209,7 +209,20 @@ export function PagedSourceFiles({ work }: { work: Work }) {
 					since closed, upload it again here.
 				</p>
 			)}
-			<MultipleFileInput onFiles={addFiles} disabled={busy} />
+			<MultipleFileInput
+				accept={
+					work.type === "comic"
+						? "image/jpeg,image/png"
+						: "image/jpeg,image/png,application/pdf,application/epub+zip,.epub"
+				}
+				label={
+					work.type === "comic"
+						? "Drop page images (JPG or PNG), or click to browse"
+						: "Drop page images, a PDF or an EPUB, or click to browse"
+				}
+				onFiles={addFiles}
+				disabled={busy}
+			/>
 		</FormField>
 	);
 }
@@ -221,9 +234,13 @@ export function PagedSourceFiles({ work }: { work: Work }) {
  */
 function MultipleFileInput({
 	onFiles,
+	accept,
+	label,
 	disabled,
 }: {
 	onFiles: (files: File[]) => void;
+	accept: string;
+	label: string;
 	disabled?: boolean;
 }) {
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -234,7 +251,7 @@ function MultipleFileInput({
 				style={{ display: "none" }}
 				ref={inputRef}
 				type="file"
-				accept="image/jpeg,image/png,application/pdf"
+				accept={accept}
 				multiple
 				onChange={(e) => {
 					const files = Array.from(e.target.files ?? []);
@@ -260,9 +277,7 @@ function MultipleFileInput({
 					if (files.length > 0 && !disabled) onFiles(files);
 				}}
 			>
-				<span>
-					{disabled ? "Working…" : "Drop page images (JPG or PNG) or PDFs, or click to browse"}
-				</span>
+				<span>{disabled ? "Working…" : label}</span>
 			</button>
 		</div>
 	);
