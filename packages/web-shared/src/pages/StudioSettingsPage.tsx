@@ -2,13 +2,13 @@
 /**
  * Studio Settings — the creator-operational settings that live on the Studio side of
  * the boundary: payout setup's summary card (the surface itself is the Payments tab),
- * publishing to the creator's own repository on the AT Protocol network, and the Badge
- * ladder. Account settings (profile, password, email, identity, the become-a-creator
- * toggle) stay on anthers.org/settings.
+ * publishing to the creator's own repository on the AT Protocol network, and the
+ * receipt-email switch. Account settings (profile, password, email, identity, the
+ * become-a-creator toggle) stay on anthers.org/settings, and the Badge Maker is on the
+ * creator's own profile, in the Badges tab beside the ladder it edits.
  */
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import BadgeMaker from "../components/post/BadgeMaker";
 import { useAuth } from "../lib/auth";
 import type { PublishingState } from "../lib/publishing";
 import { Link } from "../lib/router";
@@ -347,18 +347,14 @@ export default function StudioSettingsPage() {
 		<div className="max-w-2xl mx-auto px-4 py-8">
 			<h1 className="text-2xl font-bold mb-2">Creator Settings</h1>
 			<p className="text-sm text-base-content/50 mb-6">
-				Payouts, publishing and Badges. Account settings (profile, email, identity) live on your
-				Anthers account.
+				Payouts and publishing. Account settings (profile, email, identity) live on your Anthers
+				account, and your Badges live on your profile.
 			</p>
 
 			<div className="flex flex-col gap-6">
 				<StripeOnboardingSection />
 				<CreatorReceiptEmailsSection />
 				<AtmospherePublishingSection />
-				<div>
-					<h2 className="text-lg font-semibold mb-2">Badges</h2>
-					<BadgeMaker />
-				</div>
 			</div>
 		</div>
 	);

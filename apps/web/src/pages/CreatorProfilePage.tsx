@@ -5,6 +5,7 @@ import { isListened } from "@anthers/shared/content";
 import { withNextPath } from "@anthers/shared/next-path";
 import { useAuth } from "@anthers/web-shared/auth";
 import { usePageTitle } from "@anthers/web-shared/page-title";
+import BadgeMaker from "@anthers/web-shared/post/BadgeMaker";
 import { displayHandle, handleFromParam } from "@anthers/web-shared/profile";
 import {
 	INTERACTION_PERMISSION_HINT,
@@ -41,7 +42,7 @@ import {
 	NoSymbolIcon,
 	PencilSquareIcon,
 } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import FeedTile from "../components/cards/FeedTile";
 import ProjectCard from "../components/cards/ProjectCard";
 import ReportDialog from "../components/ui/ReportDialog";
@@ -121,6 +122,7 @@ function BadgesTab({
 	canBuy,
 	authenticated,
 	preselectedBadgeId,
+	isOwner,
 }: {
 	rungs: CreatorBadge[];
 	unlockedBadges: number[];
@@ -133,6 +135,8 @@ function BadgesTab({
 	authenticated: boolean;
 	/** A pick carried back across the sign-in detour, as `?badge=`. */
 	preselectedBadgeId: number | null;
+	/** The creator's own page, where the Badge Maker sits above this ladder. */
+	isOwner: boolean;
 }) {
 	const { hasBadge, add } = useBasket();
 	const navigate = useNavigate();
@@ -198,6 +202,10 @@ function BadgesTab({
 	const back = `${pathname}?tab=badges&badge=${pick?.id ?? ""}`;
 
 	if (rungs.length === 0) {
+		// The owner has the maker above this ladder; its own empty line and add form are
+		// the invitation, so a second "hasn't set up any Badges yet" would talk about them
+		// in the third person on their own page.
+		if (isOwner) return null;
 		return (
 			<EmptyState
 				title="No Badges configured"
@@ -528,6 +536,27 @@ export default function CreatorProfilePage() {
 		}
 	};
 
+	/**
+	 * The supporter-facing ladder and the account's own status. The Badge Maker edits the
+	 * same rows the tab renders below it, so it calls back here after a save — one edit,
+	 * one screen — rather than leaving the creator to reload to see what they changed.
+	 */
+	const loadCreatorStatus = useCallback(async () => {
+		if (!handle) return null;
+		try {
+			const res = await apiFetch(`/api/subscriptions/creator-status/${handle}`, {});
+			return res.ok ? ((await res.json()) as CreatorStatus) : null;
+		} catch {
+			return null;
+		}
+	}, [handle]);
+
+	const reloadCreatorStatus = () => {
+		void loadCreatorStatus().then((status) => {
+			if (status) setCreatorStatus(status);
+		});
+	};
+
 	useEffect(() => {
 		if (!handle) return;
 		setLoading(true);
@@ -547,9 +576,7 @@ export default function CreatorProfilePage() {
 			client.api.content.catalog[":handle"]
 				.$get({ param: { handle }, query: {} })
 				.then(async (res) => (res.ok ? await res.json() : { works: [] })),
-			apiFetch(`/api/subscriptions/creator-status/${handle}`, {})
-				.then((res) => (res.ok ? res.json() : null))
-				.catch(() => null),
+			loadCreatorStatus(),
 		])
 			.then(([creatorData, projectData, postData, catalogData, statusData]) => {
 				const userData = creatorData.user;
@@ -578,7 +605,7 @@ export default function CreatorProfilePage() {
 			})
 			.catch(console.error)
 			.finally(() => setLoading(false));
-	}, [handle]);
+	}, [handle, loadCreatorStatus]);
 
 	/**
 	 * Block this person. Confirmed first, because it is the one control here that
@@ -1122,17 +1149,23 @@ export default function CreatorProfilePage() {
 						))}
 
 					{tab === "badges" && (
-						<BadgesTab
-							rungs={creatorStatus?.badges ?? []}
-							unlockedBadges={creatorStatus?.unlockedBadges ?? []}
-							heldBadge={creatorStatus?.badge ?? "free"}
-							heldAmount={creatorStatus?.badgeAmount ?? "0.00"}
-							creatorName={creator.displayName || creator.handle}
-							creatorHandle={creator.handle}
-							canBuy={!isOwnProfile}
-							authenticated={isAuthenticated === true}
-							preselectedBadgeId={badgeParam != null ? Number(badgeParam) : null}
-						/>
+						<div className="max-w-2xl space-y-8">
+							{/* The maker and the ladder are one surface: edit a rung here and the
+							    supporter-facing row below moves with it. */}
+							{isOwnProfile && <BadgeMaker onChanged={reloadCreatorStatus} />}
+							<BadgesTab
+								rungs={creatorStatus?.badges ?? []}
+								unlockedBadges={creatorStatus?.unlockedBadges ?? []}
+								heldBadge={creatorStatus?.badge ?? "free"}
+								heldAmount={creatorStatus?.badgeAmount ?? "0.00"}
+								creatorName={creator.displayName || creator.handle}
+								creatorHandle={creator.handle}
+								canBuy={!isOwnProfile}
+								authenticated={isAuthenticated === true}
+								preselectedBadgeId={badgeParam != null ? Number(badgeParam) : null}
+								isOwner={isOwnProfile}
+							/>
+						</div>
 					)}
 
 					{blocked && (
