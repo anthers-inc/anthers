@@ -26,6 +26,7 @@
 		"./rights": "./src/rights.ts",
 		"./content": "./src/content.ts",
 		"./web-build": "./src/web-build.ts",
+		"./work-preview": "./src/work-preview.ts",
 		"./accepted-formats": "./src/accepted-formats.ts",
 		"./next-path": "./src/next-path.ts",
 		"./redirect-paths": "./src/redirect-paths.ts",

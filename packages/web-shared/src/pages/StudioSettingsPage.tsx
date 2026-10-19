@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Studio Settings — the creator-operational settings that live on the Studio side of
- * the boundary: the Communications table for creator emails, the account's AT Protocol
- * connection, and the Badge ladder. Account settings (profile, password, email,
- * identity, the become-a-creator toggle) stay on anthers.org/settings.
+ * the boundary: the Communications table for creator emails and the account's AT
+ * Protocol connection. Account settings (profile, password, email, identity, the
+ * become-a-creator toggle) stay on anthers.org/settings, and the Badge Maker is on the
+ * creator's own profile, in the Badges tab beside the ladder it edits.
  *
  * ⚠️ **Payout setup is not here.** Its surface is the Studio's Payments tab
  * (`/studio/payments`), which is also where Connect's return legs land and where Stripe's
@@ -18,7 +19,6 @@ import {
 } from "@anthers/shared/creator-emails";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import BadgeMaker from "../components/post/BadgeMaker";
 import { useAuth } from "../lib/auth";
 import type { PublishingState } from "../lib/publishing";
 import { apiFetch } from "../lib/rpc";
@@ -365,17 +365,13 @@ export default function StudioSettingsPage() {
 		<div className="max-w-2xl mx-auto px-4 py-8">
 			<h1 className="text-2xl font-bold mb-2">Creator Settings</h1>
 			<p className="text-sm text-base-content/50 mb-6">
-				Communications, your ATProto connection and Badges. Account settings (profile, email,
-				identity) live on your Anthers account.
+				Communications and your ATProto connection. Account settings (profile, email, identity) live
+				on your Anthers account, and your Badges live on your profile.
 			</p>
 
 			<div className="flex flex-col gap-6">
 				<CommunicationsSection />
 				<AtmospherePublishingSection />
-				<div>
-					<h2 className="text-lg font-semibold mb-2">Badges</h2>
-					<BadgeMaker />
-				</div>
 			</div>
 		</div>
 	);

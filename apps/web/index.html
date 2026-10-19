@@ -4,17 +4,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Link-preview metadata: the site-level card, and the region the web server replaces
+         for a route that knows what it serves (a Work, today). The SPA's document is one
+         shell for every path, so this block has to be true of the whole site on its own;
+         `serve.ts` swaps everything between the markers for a Work's own tags and leaves it
+         alone for every other route, including any Work rated above General. Absolute URLs
+         only: crawlers do not resolve relative og values. og:image is the stable-address
+         card in public/brand/ — its address is written down here and in `share-head.ts`, so
+         read apps/web/public/brand/README.md before moving it. -->
+    <!-- share:begin -->
     <title>Anthers</title>
-    <!-- Link-preview metadata, site-level by structural necessity: the web app is a static
-         SPA whose served head is identical on every route (see .do/app.yaml's
-         catchall_document), so anything here must be true of the whole site and can name no
-         Work, creator or rating — a head shared by every route cannot know them. The
-         description quotes the standing introduction from How Anthers Talks About Itself;
-         its per-route descendants are the Marketing Rendering, Metadata & SEO lane, whose
-         rendering decision also covers where dynamic routes' metadata is injected. Absolute
-         URLs only: crawlers do not resolve relative og values. og:image is the stable-address
-         card in public/brand/ — its address is written down here, so read
-         apps/web/public/brand/README.md before moving it. -->
     <meta name="description" content="Anthers is a nonprofit creative garden for everyone: a place for videos, games, music, writing, crafts, services, and more, all on an open-source, ad-free platform." />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Anthers" />
@@ -29,6 +28,7 @@
     <meta name="twitter:title" content="Anthers" />
     <meta name="twitter:description" content="Anthers is a nonprofit creative garden for everyone: a place for videos, games, music, writing, crafts, services, and more, all on an open-source, ad-free platform." />
     <meta name="twitter:image" content="https://anthers.org/brand/og-card.png" />
+    <!-- share:end -->
     <!-- Home-screen icons for surfaces that read a manifest (Android, install prompts).
          The bundle-imported icon links above are right where a page loads them, and this is
          the other shape: a manifest whose own internal src strings carry root-absolute

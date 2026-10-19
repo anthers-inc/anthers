@@ -81,6 +81,7 @@ import AccessTables, {
 	serializeAccessRows,
 } from "@anthers/web-shared/post/AccessTables";
 import { keyToPreview, uploadImageFile } from "@anthers/web-shared/post/mediaUpload";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { publishingPermissionMissing, usePublishingState } from "@anthers/web-shared/publishing";
 import {
 	RATED_PUBLIC_ACCESS_HELP,
@@ -1272,6 +1273,21 @@ export default function OwnerWorkEditor({
 			</p>
 		);
 
+	// The thumbnail block is one object, placed by kind: the paged kinds carry it high in
+	// the Manage tab, under View As and above Pages (Parker, 2026-10-19), because the cover
+	// and the pages are the two things a comic is. Every other kind keeps it at the tab's end.
+	const thumbnailSection = !isOwnThumbnail(current.type) ? (
+		<section className="flex flex-col gap-2">
+			{/* The terms ride the (i) now (Parker, 2026-10-16) — a hoverable beside
+			    the heading instead of a paragraph the section always carried. */}
+			<h3 className={`${WORK_DETAILS_HEADING_CLASS} flex items-center`}>
+				Thumbnail
+				<InfoTip text="All works need thumbnails. You can choose one from the work (e.g., a frame of video) or upload a custom thumbnail." />
+			</h3>
+			{thumbnailField}
+		</section>
+	) : null;
+
 	const detailsSection = (
 		// Named parts (Parker's third pass, 2026-10-13): the Details tab is the Work's
 		// composition — what it says, when it came out, who may open it — each under its
@@ -1362,6 +1378,7 @@ export default function OwnerWorkEditor({
 					    default, at the top of the page itself, standing where the editing
 					    banner stood. */}
 					<WorkViewAsSection />
+					{isPaged(current.type) && thumbnailSection}
 					{(current.type === "video" || isListened(current.type)) && (
 						<section className="flex flex-col gap-2">
 							<h3 className={WORK_DETAILS_HEADING_CLASS}>Media Status</h3>
@@ -1432,17 +1449,7 @@ export default function OwnerWorkEditor({
 							{bodyField}
 						</section>
 					)}
-					{!isOwnThumbnail(current.type) && (
-						<section className="flex flex-col gap-2">
-							{/* The terms ride the (i) now (Parker, 2026-10-16) — a hoverable beside
-							    the heading instead of a paragraph the section always carried. */}
-							<h3 className={`${WORK_DETAILS_HEADING_CLASS} flex items-center`}>
-								Thumbnail
-								<InfoTip text="All works need thumbnails. You can choose one from the work (e.g., a frame of video) or upload a custom thumbnail." />
-							</h3>
-							{thumbnailField}
-						</section>
-					)}
+					{!isPaged(current.type) && thumbnailSection}
 				</div>
 			),
 		},
@@ -1981,6 +1988,8 @@ function OwnerAccessChipEditor({
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const dialog = useRef<HTMLDialogElement>(null);
+	// The advice links to this creator's own profile, where the ladder is edited.
+	const { user } = useAuth();
 
 	useEffect(() => {
 		if (open) dialog.current?.showModal();
@@ -2044,11 +2053,11 @@ function OwnerAccessChipEditor({
 								onStream={onStream}
 								onDownload={onDownload}
 							/>
-							{draft.length === 1 && (
+							{draft.length === 1 && user?.handle && (
 								<p className="text-xs text-base-content/50">
 									Want to gate this by monthly support?{" "}
-									<Link to={studioUrl("/settings")} className="link">
-										Add Badge rungs in Settings
+									<Link to={`${profileUrl(user.handle)}?tab=badges`} className="link">
+										Add Badge rungs on your profile
 									</Link>
 									.
 								</p>

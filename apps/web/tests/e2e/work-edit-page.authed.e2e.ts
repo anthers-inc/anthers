@@ -20,6 +20,7 @@ import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtu
 const TITLE_PREFIX = "Edit walk ";
 const STEM = `${TITLE_PREFIX}${Date.now()}`;
 const FIXTURE_VIDEO = "A short film that really plays";
+const FIXTURE_COMIC = "A comic that really turns";
 
 interface OwnedWork {
 	id: number;
@@ -294,4 +295,29 @@ test("a piece of writing is written on its page and reads as an article", async 
 	const standfirst = page.getByText("A standfirst for the walk.").first();
 	const [above, below] = await Promise.all([standfirst.boundingBox(), article.boundingBox()]);
 	expect(above && below && above.y < below.y).toBe(true);
+});
+
+test("a comic's Manage tab puts the thumbnail under View As, above Pages", async ({
+	page,
+	context,
+}) => {
+	session = await signInAsMediaFixture(context);
+	const [comic] = (await ownWorks()).filter((w) => w.title === FIXTURE_COMIC);
+	expect(comic, "the media fixture's comic is missing").toBeTruthy();
+	if (!comic) return;
+
+	await page.goto(`/studio/works/${comic.publicId}/edit`);
+	// Manage is the tab the creator lands on; the three sections are compared in document
+	// order rather than by pixel, because a section's height moves with its content.
+	await expect(page.getByRole("heading", { name: "View As" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Thumbnail" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Pages" })).toBeVisible();
+	const order = await page.evaluate(() => {
+		const headings = [...document.querySelectorAll("h3")].map((h) => h.textContent?.trim() ?? "");
+		const at = (text: string) => headings.findIndex((h) => h.startsWith(text));
+		return { view: at("View As"), thumbnail: at("Thumbnail"), pages: at("Pages") };
+	});
+	expect(order.view).toBeGreaterThanOrEqual(0);
+	expect(order.thumbnail).toBeGreaterThan(order.view);
+	expect(order.pages).toBeGreaterThan(order.thumbnail);
 });
