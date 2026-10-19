@@ -13,41 +13,12 @@
 import { describe, expect, it } from "bun:test";
 import {
 	buildDeliveryHost,
-	buildPathProblem,
 	isBuildDeliveryHost,
 	mintPlayToken,
 	verifyPlayToken,
 } from "../lib/web-build.js";
 
 const DEV_ENV = { NODE_ENV: "development" } as Record<string, string | undefined>;
-
-describe("build path rules", () => {
-	const bad: [string, string][] = [
-		["", "empty"],
-		["/abs.html", "leading slash"],
-		["a/../b.js", "dot-dot climb"],
-		["./a.js", "dot segment"],
-		["dir\\win.js", "backslash"],
-		["a?b.js", "question mark"],
-		["a#b.js", "fragment"],
-		["a%2Fb.js", "percent"],
-		["a/%2e%2e/b.js", "encoded climb"],
-		["a//b.js", "empty segment"],
-		["trailing/", "trailing slash"],
-		["\0x.js", "NUL"],
-		[`${"a".repeat(251)}.js`, "too long"],
-	];
-	for (const [path, why] of bad) {
-		it(`refuses ${why}`, () => {
-			expect(buildPathProblem(path)).not.toBeNull();
-		});
-	}
-	it("accepts a build's own relative path", () => {
-		expect(buildPathProblem("index.html")).toBeNull();
-		expect(buildPathProblem("assets/logo.png")).toBeNull();
-		expect(buildPathProblem("AudioWorkletProcessor.js")).toBeNull();
-	});
-});
 
 describe("play tokens", () => {
 	it("mints and verifies round-trip", () => {

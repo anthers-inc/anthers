@@ -235,6 +235,7 @@ import { queueWorkListingSync } from "../services/work-listing.js";
 import { releaseRefusal } from "../services/work-release.js";
 import {
 	appendSourceFile,
+	comicSourceProblem,
 	listSourceFiles,
 	removeSourceFile,
 	reorderSourceFiles,
@@ -4253,17 +4254,26 @@ const contentRoutes = new Hono()
 	// The panel geometry for a Work, for the user's panel mode and the Studio's
 	// correction surface. Same access gates as `/pages/:n`: a share link recipient can read
 	// it, but a signed-out caller cannot, and the same public-access / parental gates apply.
+	//
+	// ⭐ **Detection proposes to the creator and to nobody else.** A row still carrying
+	// `auto` is a guess the creator has not looked at, so the Work's owner reads it (the
+	// Studio is where guesses are corrected) and every other caller gets only the pages a
+	// creator confirmed. A page with nothing confirmed comes back with no panels, and the
+	// reader treats it as a whole page — which is how a comic publishes before panel
+	// guidance has been added to any page at all.
 	.get("/works/:id/panels", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
+		const viewerId = await getOptionalUserId(c);
 		const access = await workAccessFor(c, work);
 		if (!access.canAccess) return c.json({ error: "Access required", access }, 403);
 		const metered = await publicAccessGate(c, work, access);
 		if (metered) return c.json(metered, 402);
-		const limited = await parentalTimeGate(await getOptionalUserId(c), work);
+		const limited = await parentalTimeGate(viewerId, work);
 		if (limited) return c.json(limited, 403);
 
+		const correcting = viewerId != null && viewerId === work.creatorId;
 		const pages = await db
 			.select({
 				pageNumber: workPages.pageNumber,
@@ -4277,7 +4287,16 @@ const contentRoutes = new Hono()
 				auto: workPanels.auto,
 			})
 			.from(workPages)
-			.leftJoin(workPanels, eq(workPanels.pageId, workPages.id))
+			// The filter belongs in the JOIN, not the WHERE: a page whose every row is an
+			// unconfirmed proposal still has to come back, as a page with no panels. In the
+			// WHERE it would drop the page instead, and the reader would lose it entirely.
+			.leftJoin(
+				workPanels,
+				and(
+					eq(workPanels.pageId, workPages.id),
+					correcting ? undefined : eq(workPanels.auto, false),
+				),
+			)
 			.where(eq(workPages.workId, work.id))
 			.orderBy(workPages.pageNumber, workPanels.panelNumber);
 
@@ -5586,6 +5605,15 @@ const contentRoutes = new Hono()
 		// A replaced thumbnail is new bytes from the same uploader, so it owes its own scan.
 		const thumbnailChanged = data.thumbnail !== undefined && data.thumbnail !== work.thumbnail;
 		if (data.sourceKey !== undefined) {
+			// A legacy attach is still a new source, so a comic takes the same page-image
+			// rule the source-set route runs — the two paths cannot disagree about what a
+			// comic may add (Parker, 2026-10-19). An existing PDF is never re-read here.
+			const pdfProblem = data.sourceKey
+				? comicSourceProblem(work.type, { file: data.sourceKey })
+				: null;
+			if (pdfProblem) {
+				return c.json({ error: pdfProblem, code: "comic_sources_are_images" }, 400);
+			}
 			updates.sourceKey = data.sourceKey;
 			// The version that a change moves away from carries its original pointer with
 			// it; the code below sweeps what it named. A new source has no original of its

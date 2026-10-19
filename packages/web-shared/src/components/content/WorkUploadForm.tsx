@@ -31,17 +31,36 @@
  * own dropper (`WorkFileDropzone`) holds the no-file state and release refuses until the file
  * arrives. A fileless create needs a title, because a Work with neither file nor name is a
  * row, not a draft.
+ *
+ * ⭐ **The card under the picker follows the kind** (Parker, 2026-10-19): a video's set, a
+ * book's set and a build's platform are three different facts, and `WorkTypeFacts` states the
+ * one for the kind currently chosen rather than every kind at once. It sits below the upload
+ * area the fact belongs to, before the skip or continue action.
+ *
+ * ⭐ **A Web build is the hosted lane, on this page** (Parker, 2026-10-19): a browser build is
+ * a folder of files, not one downloadable asset, so choosing Web swaps the single-file picker
+ * for the export-folder or `.zip` picker whose files the page-one upload starts. The entry and
+ * threaded posture are answered here because the build row fixes both at create time;
+ * `lib/web-build-uploads` carries the files to their registered list while the creator moves
+ * on to the Work's page. Every other platform keeps the downloadable build.
  */
 
 import { ArrowRightIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { client } from "../../lib/rpc";
 import type { ContentType, Work, WorkInput } from "../../lib/types";
+import {
+	formatBuildFileSize,
+	pickBuildFolder,
+	pickBuildZip,
+	type WebBuildPick,
+} from "../../lib/web-build-files";
+import { webBuildUploads } from "../../lib/web-build-uploads";
 import { workUploads } from "../../lib/work-uploads";
 import { serializeAccessRows } from "../post/AccessTables";
 import FileUpload from "../ui/FileUpload";
 import FormField from "../ui/FormField";
-import { FormatsHint, fileRules, isFileWorkType } from "./work-media";
+import { fileRules, isFileWorkType, WorkTypeFacts } from "./work-media";
 import { isBuildType, LIBRARY_TYPE_OPTIONS } from "./works";
 
 const BUILD_PLATFORMS = [
@@ -71,6 +90,13 @@ export default function WorkUploadForm({ onCreated }: WorkUploadFormProps) {
 	const [platform, setPlatform] = useState("windows");
 	const [creating, setCreating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	// The Web lane: a whole export rather than one downloadable file. Held here until the
+	// creator says to create, because the entry and threaded posture are questions the
+	// build row fixes at create time — and the upload starts on that click.
+	const [webPick, setWebPick] = useState<WebBuildPick | null>(null);
+	const [webEntry, setWebEntry] = useState("");
+	const [webIsolation, setWebIsolation] = useState(false);
+	const [webReading, setWebReading] = useState(false);
 	const requireTitleForDraft = (): boolean => {
 		if (!title.trim()) {
 			setError("Give the draft a name — you can change it on its page.");
@@ -79,13 +105,61 @@ export default function WorkUploadForm({ onCreated }: WorkUploadFormProps) {
 		return true;
 	};
 
-	const create = async (file: File | null) => {
-		if (!file && !requireTitleForDraft()) return;
+	const chooseType = (next: ContentType) => {
+		setType(next);
+		setWebPick(null);
+		setWebEntry("");
+		setError(null);
+	};
+
+	const choosePlatform = (next: string) => {
+		setPlatform(next);
+		setWebPick(null);
+		setWebEntry("");
+		setError(null);
+	};
+
+	const chooseFolder = (files: File[]) => {
+		setError(null);
+		try {
+			const pick = pickBuildFolder(files);
+			setWebPick(pick);
+			setWebEntry(pick.entryPath);
+		} catch (err) {
+			setWebPick(null);
+			setWebEntry("");
+			setError(err instanceof Error ? err.message : "That folder can't be used as a build.");
+		}
+	};
+
+	const chooseZip = async (file: File) => {
+		setError(null);
+		setWebReading(true);
+		try {
+			const pick = await pickBuildZip(file);
+			setWebPick(pick);
+			setWebEntry(pick.entryPath);
+		} catch (err) {
+			setWebPick(null);
+			setWebEntry("");
+			setError(err instanceof Error ? err.message : "That zip can't be used as a build.");
+		} finally {
+			setWebReading(false);
+		}
+	};
+
+	const create = async (file: File | null, hosted: WebBuildPick | null = null) => {
+		if (!file && !hosted && !requireTitleForDraft()) return;
+		const entry = webEntry.trim();
+		if (hosted && !hosted.files.some((f) => f.path === entry)) {
+			setError("The entry file has to be one of the build's files.");
+			return;
+		}
 		setCreating(true);
 		setError(null);
 		const input: WorkInput & { type: ContentType } = {
 			type,
-			title: title.trim() || (file ? titleFromFileName(file.name) : ""),
+			title: title.trim() || (hosted ? hosted.name : file ? titleFromFileName(file.name) : ""),
 			access: serializeAccessRows([{ threshold: 0, label: "Everyone", allow: true, price: "0" }]),
 		};
 		try {
@@ -97,7 +171,14 @@ export default function WorkUploadForm({ onCreated }: WorkUploadFormProps) {
 				return;
 			}
 			const { work } = (await res.json()) as unknown as { work: Work };
-			if (file && isFileWorkType(type)) {
+			if (hosted) {
+				// The build's files keep going from the store while the creator lands on the
+				// Work's page — the same shape a single file's upload takes.
+				webBuildUploads.start(work.id, hosted, {
+					entryPath: entry,
+					requiresIsolation: webIsolation,
+				});
+			} else if (file && isFileWorkType(type)) {
 				workUploads.start(work.id, file, { kind: "source", type });
 			} else if (file && isBuildType(type)) {
 				workUploads.start(work.id, file, { kind: "build", platform });
@@ -119,21 +200,12 @@ export default function WorkUploadForm({ onCreated }: WorkUploadFormProps) {
 				</div>
 			)}
 
-			<FormField
-				label="Type"
-				hint={
-					// The one moment a creator chooses between a piece of writing and a post, and the
-					// only place the difference can still be acted on without writing it twice.
-					type === "text"
-						? "Writing is written on its own page and reads as an article. Like any Work it can be gated, sold or given away; for an announcement, write a post instead."
-						: undefined
-				}
-			>
+			<FormField label="Type">
 				<select
 					className="select select-bordered w-full"
 					value={type}
 					disabled={creating}
-					onChange={(e) => setType(e.target.value as ContentType)}
+					onChange={(e) => chooseType(e.target.value as ContentType)}
 				>
 					{LIBRARY_TYPE_OPTIONS.map((opt) => (
 						<option key={opt.value} value={opt.value}>
@@ -146,9 +218,11 @@ export default function WorkUploadForm({ onCreated }: WorkUploadFormProps) {
 			<FormField
 				label="Title"
 				hint={
-					isFileWorkType(type) || isBuildType(type)
-						? "Leave it blank to use the file's name. You can change it on the next page."
-						: undefined
+					isBuildType(type) && platform === "web"
+						? "Leave it blank to use the folder's or zip's name. You can change it on the next page."
+						: isFileWorkType(type) || isBuildType(type)
+							? "Leave it blank to use the file's name. You can change it on the next page."
+							: undefined
 				}
 			>
 				<input
@@ -162,59 +236,61 @@ export default function WorkUploadForm({ onCreated }: WorkUploadFormProps) {
 			</FormField>
 
 			{isFileWorkType(type) && (
-				<FormField
-					label="File"
-					hint="Choosing the file adds this Work to your Catalog, privately, and takes you to its page to fill in the rest while it uploads."
-				>
-					{creating ? (
-						<div className="flex items-center gap-3 rounded-lg bg-base-200 p-4 text-sm">
-							<span className="loading loading-spinner loading-sm" />
-							Creating the Work…
-						</div>
-					) : (
-						<FileUpload
-							accept={fileRules(type).accept}
-							maxSize={fileRules(type).maxSize}
-							label={`Drop ${fileRules(type).noun} or click to browse`}
-							onFileSelect={(file) => create(file)}
-						/>
-					)}
-					<FormatsHint type={type} />
-				</FormField>
-			)}
-
-			{isFileWorkType(type) && (
-				<div>
-					<button
-						type="button"
-						className="btn btn-ghost btn-sm"
-						disabled={creating}
-						onClick={() => create(null)}
+				<>
+					<FormField
+						label="File"
+						hint="Choosing the file adds this Work to your Catalog, privately, and takes you to its page to fill in the rest while it uploads."
 					>
-						Skip for now — draft it without a file <ArrowRightIcon className="h-4 w-4" />
-					</button>
-				</div>
+						{creating ? (
+							<div className="flex items-center gap-3 rounded-lg bg-base-200 p-4 text-sm">
+								<span className="loading loading-spinner loading-sm" />
+								Creating the Work…
+							</div>
+						) : (
+							<FileUpload
+								accept={fileRules(type).accept}
+								maxSize={fileRules(type).maxSize}
+								label={`Drop ${fileRules(type).noun} or click to browse`}
+								onFileSelect={(file) => create(file)}
+							/>
+						)}
+					</FormField>
+					<WorkTypeFacts type={type} />
+					<div>
+						<button
+							type="button"
+							className="btn btn-ghost btn-sm"
+							disabled={creating}
+							onClick={() => create(null)}
+						>
+							Skip for now — draft it without a file <ArrowRightIcon className="h-4 w-4" />
+						</button>
+					</div>
+				</>
 			)}
 
 			{isBuildType(type) && (
+				<FormField label="Platform">
+					<select
+						className="select select-bordered w-full"
+						value={platform}
+						disabled={creating}
+						onChange={(e) => choosePlatform(e.target.value)}
+					>
+						{BUILD_PLATFORMS.map((p) => (
+							<option key={p.value} value={p.value}>
+								{p.label}
+							</option>
+						))}
+					</select>
+				</FormField>
+			)}
+
+			{isBuildType(type) && platform !== "web" && (
 				<>
-					<FormField label="Platform">
-						<select
-							className="select select-bordered w-full"
-							value={platform}
-							disabled={creating}
-							onChange={(e) => setPlatform(e.target.value)}
-						>
-							{BUILD_PLATFORMS.map((p) => (
-								<option key={p.value} value={p.value}>
-									{p.label}
-								</option>
-							))}
-						</select>
-					</FormField>
 					<FormField
 						label="Build (optional)"
-						hint="A build you add here becomes this Work's primary download. More builds, and a browser build hosted on another site, are added on the next page."
+						hint="A build you add here becomes this Work's primary download. More builds are added on the Work's page."
 					>
 						{creating ? (
 							<div className="flex items-center gap-3 rounded-lg bg-base-200 p-4 text-sm">
@@ -228,6 +304,7 @@ export default function WorkUploadForm({ onCreated }: WorkUploadFormProps) {
 							/>
 						)}
 					</FormField>
+					<WorkTypeFacts type={type} platform={platform} />
 					<div>
 						<button
 							type="button"
@@ -241,17 +318,125 @@ export default function WorkUploadForm({ onCreated }: WorkUploadFormProps) {
 				</>
 			)}
 
-			{!isFileWorkType(type) && !isBuildType(type) && (
-				<div>
-					<button
-						type="button"
-						className="btn btn-primary"
-						disabled={creating}
-						onClick={() => create(null)}
+			{isBuildType(type) && platform === "web" && (
+				<>
+					<FormField
+						label="Hosted build (optional)"
+						hint="Anthers hosts a browser build and plays it on the Work's page. Choose the folder the engine's export wrote, or a .zip of it."
+						spaced
 					>
-						{creating ? "Creating…" : "Create Work"}
-					</button>
-				</div>
+						{creating ? (
+							<div className="flex items-center gap-3 rounded-lg bg-base-200 p-4 text-sm">
+								<span className="loading loading-spinner loading-sm" />
+								Creating the Work…
+							</div>
+						) : (
+							<div className="flex flex-col gap-3">
+								<label className="flex flex-col gap-1 text-sm">
+									<span className="font-medium">The export folder</span>
+									<input
+										type="file"
+										className="file-input file-input-bordered w-full"
+										multiple
+										disabled={creating || webReading}
+										ref={(el) => {
+											// A directory pick carries each file's path, which is what the build
+											// is registered by; the attribute cannot be set through JSX types.
+											if (el) el.setAttribute("webkitdirectory", "");
+										}}
+										onChange={(e) => chooseFolder(Array.from(e.target.files ?? []))}
+									/>
+								</label>
+								<label className="flex flex-col gap-1 text-sm">
+									<span className="font-medium">or a .zip of it</span>
+									<input
+										type="file"
+										accept=".zip,application/zip"
+										className="file-input file-input-bordered w-full"
+										disabled={creating || webReading}
+										onChange={(e) => {
+											const file = e.target.files?.[0];
+											if (file) void chooseZip(file);
+										}}
+									/>
+								</label>
+								{webReading && (
+									<span className="flex items-center gap-2 text-xs text-base-content/60">
+										<span className="loading loading-spinner loading-xs" />
+										Reading the zip…
+									</span>
+								)}
+								{webPick && (
+									<p className="text-xs text-base-content/60">
+										{webPick.files.length} file{webPick.files.length === 1 ? "" : "s"},{" "}
+										{formatBuildFileSize(webPick.files.reduce((sum, f) => sum + f.file.size, 0))} —
+										entry {webPick.entryPath}.
+									</p>
+								)}
+							</div>
+						)}
+					</FormField>
+					<WorkTypeFacts type={type} platform="web" />
+					<FormField label="Entry file" hint="The file the build loads first — usually index.html.">
+						<input
+							className="input input-bordered w-full font-mono"
+							value={webEntry}
+							placeholder="index.html"
+							disabled={creating || webReading}
+							onChange={(e) => setWebEntry(e.target.value)}
+						/>
+					</FormField>
+					<label className="label cursor-pointer justify-start gap-2 w-fit">
+						<input
+							type="checkbox"
+							className="checkbox checkbox-sm"
+							checked={webIsolation}
+							onChange={(e) => setWebIsolation(e.target.checked)}
+							disabled={creating || webReading}
+						/>
+						<span className="label-text text-sm">
+							Threaded build (SharedArrayBuffer)
+							<span className="block text-xs text-base-content/60">
+								On when your export preset had Thread Support enabled. Plays on a dedicated page
+								with the isolation headers, rather than inline.
+							</span>
+						</span>
+					</label>
+					<div className="flex items-center gap-2">
+						<button
+							type="button"
+							className="btn btn-primary"
+							disabled={creating || webReading || !webPick || !webEntry.trim()}
+							onClick={() => void create(null, webPick)}
+						>
+							{creating ? "Creating…" : "Create Work and upload build"}
+						</button>
+						<button
+							type="button"
+							className="btn btn-ghost btn-sm"
+							disabled={creating}
+							onClick={() => void create(null)}
+						>
+							Continue without a build <ArrowRightIcon className="h-4 w-4" />
+						</button>
+					</div>
+				</>
+			)}
+
+			{!isFileWorkType(type) && !isBuildType(type) && (
+				<>
+					<WorkTypeFacts type={type} />
+					<div>
+						<button
+							type="button"
+							className="btn btn-primary"
+							disabled={creating}
+							onClick={() => create(null)}
+						>
+							{creating ? "Creating…" : "Create Work"}
+						</button>
+					</div>
+				</>
 			)}
 		</div>
 	);

@@ -30,7 +30,7 @@ export default function FileUpload({
 		(file: File) => {
 			setError(null);
 			if (maxSize && file.size > maxSize) {
-				setError(`File too large. Maximum size is ${sizeSentence(maxSize)}.`);
+				setError(`File too large. Maximum size is ${fileSizeSentence(maxSize)}.`);
 				return;
 			}
 			setFileName(file.name);
@@ -124,7 +124,7 @@ export default function FileUpload({
 }
 
 /** A byte cap as a creator reads it — GB once the number is one, MB below that. */
-function sizeSentence(bytes: number): string {
+export function fileSizeSentence(bytes: number): string {
 	const MB = 1024 * 1024;
 	const GB = 1024 * MB;
 	return bytes >= GB ? `${(bytes / GB).toFixed(0)} GB` : `${(bytes / MB).toFixed(0)} MB`;

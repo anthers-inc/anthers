@@ -2,13 +2,17 @@
 /**
  * The source set of a paged Work — the one writer of `work_source_files` rows.
  *
- * The multi-PDF ruling (Parker, 2026-10-10): a comic or book is made from one PDF or several,
- * a single multi-page PDF meaning each of its rendered pages, several files meaning each
- * file's rendered pages as a contiguous run in the creator's arrangement. The design is the
- * wiki-internal *Multi-PDF Upload Design 20261010*. This service owns every write to the
- * table — append, remove, reorder and the legacy attach sync — the way `services/quarantine.ts`
- * owns its domain: routes stay thin, and the invariants (dense positions, one re-render
- * enqueued per mutation) live here where they can be seen.
+ * 🚨 **A comic's pages are JPG or PNG images, and a book's are images, a PDF or an EPUB**
+ * (Parker, 2026-10-19 for the comic half; the multi-PDF ruling of 2026-10-10 for the rest).
+ * A comic no longer takes a PDF: its pages are already pages, so each keeps its own
+ * resolution and one `sharp` normalize replaces a `pdftoppm` rasterization. A book still
+ * takes a PDF beside its EPUB because a prose document without one is a harder ask, and a
+ * page image set is its third shape. The PDF branch in `render-paged` stays for books and
+ * for every comic whose pages already arrived that way — this refusal is on new sources,
+ * never a re-read of an existing set. This service owns every write to the table — append,
+ * remove, reorder and the legacy attach sync — the way `services/quarantine.ts` owns its
+ * domain: routes stay thin, and the invariants (dense positions, one re-render enqueued per
+ * mutation) live here where they can be seen.
  *
  * 🚨 **One mutation, one re-render.** The rasterizer renders the whole current set each time
  * and replaces the Work's pages wholesale, so the re-render the last mutation enqueued is
@@ -76,6 +80,38 @@ function looksLikeImage(source: { mimeType: string; file: string }): boolean {
 	const mime = source.mimeType ?? "";
 	if (mime.startsWith("image/") || mime === "image") return true;
 	return IMAGE_MIMES[(source.file.split(/[?#]/)[0].split(".").pop() ?? "").toLowerCase()] != null;
+}
+
+/**
+ * Whether a source is a PDF, by the mime the client reported or the name the file carries.
+ * The key's extension is what a legacy attach has to go on; a paged row's own mime is the
+ * client's answer.
+ */
+function isPdfSource(source: { mimeType?: string; filename?: string; file: string }): boolean {
+	if (source.mimeType === "application/pdf") return true;
+	if (/\.pdf$/i.test(source.filename ?? "")) return true;
+	return /\.pdf$/i.test(source.file.split(/[?#]/)[0]);
+}
+
+/**
+ * Why a comic cannot take this file, or null when it may.
+ *
+ * 🚨 **A comic's pages are images now** (Parker, 2026-10-19): a 1.31 GB, 119-page PDF took
+ * 25m53s on production, 20 minutes of it in one `pdftoppm` pass, while an image leaf is
+ * already a page and needs one `sharp` normalize. The refusal is on a NEW source only —
+ * a comic already carrying PDF pages keeps them, and `render-paged` keeps its PDF branch —
+ * so this is a rule about what a creator can add, never a retroactive re-read.
+ *
+ * ⚠️ Books are deliberately left out: a prose book is still practical as a PDF, and the
+ * same route serves both kinds, so the check is by Work type rather than by format alone.
+ */
+export function comicSourceProblem(
+	workType: string,
+	source: { mimeType?: string; filename?: string; file: string },
+): string | null {
+	if (workType !== "comic" || !isPdfSource(source)) return null;
+	const name = source.filename || "That file";
+	return `${name} is a PDF, and a comic's pages are JPG or PNG images now. Export its pages as images and add them in order.`;
 }
 
 /** The Work's sources, from the table when it has rows and from the legacy column when not. */
@@ -151,6 +187,16 @@ export async function appendSourceFile(
 		.from(workSourceFiles)
 		.where(eq(workSourceFiles.workId, work.id))
 		.orderBy(asc(workSourceFiles.position));
+	// 🚨 A comic's pages are images now, and the refusal is the service's so every writer
+	// takes it (Parker, 2026-10-19). Existing PDF pages are untouched; this is a new source.
+	const pdfProblem = comicSourceProblem(work.type, {
+		mimeType: input.mimeType,
+		filename: input.filename,
+		file: input.file,
+	});
+	if (pdfProblem) {
+		return { rows: existing, job: null, code: "comic_sources_are_images", error: pdfProblem };
+	}
 	// 🚨 **The set is one shape** (the two-shape ingest of 2026-10-11): one EPUB makes the
 	// set reflow, one PDF or page image makes it fixed, and mixing them lands nowhere.
 	// Checked before anything is written, so a refused add leaves the set exactly as it was.

@@ -15,30 +15,10 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { isPublicDeployment } from "./deployment.js";
 
-/** The characters a build-relative path may not carry, checked segment by segment. */
-export function buildPathProblem(value: string): string | null {
-	if (value === "") return "Every file needs a name saying where it sits in the build.";
-	if (value.startsWith("/") || value.endsWith("/")) {
-		return "Paths are relative to the build's root, without leading or trailing slashes.";
-	}
-	if (value.includes("\\")) return "Paths use forward slashes.";
-	if (value.includes("\0")) return "That path contains a character file names cannot carry.";
-	// 🚨 A literal `%` is refused because `isOwnStorageRef` and the serve path both meet
-	// percent-encoding between this string and a URL: a stored `a%2Fb.js` decodes to two
-	// segments at request time and the two ends of the pipeline disagree about which
-	// string the file lives under. Refusing keeps the stored path and the requested path
-	// the same string, always.
-	if (value.includes("%")) return "Paths cannot carry a % sign.";
-	const parts = value.split("/");
-	if (parts.some((p) => p === "" || p === "." || p === "..")) {
-		return "A path in a build cannot climb out of the build with .. or name an empty segment.";
-	}
-	if (parts.some((p) => p.includes("?") || p.includes("#"))) {
-		return "A path in a build cannot carry ? or # — the browser cuts the URL at them.";
-	}
-	if (value.length > 250) return "That path is too long.";
-	return null;
-}
+// The path rule lives in `@anthers/shared/web-build` because the Studio's pickers run it
+// before an upload and this module's two routes run it at both ends. Re-exported here so
+// every existing importer keeps one entry point for the build helpers.
+export { buildPathProblem, WEB_BUILD_FILE_MAX } from "@anthers/shared/web-build";
 
 /** The content-type of the files a build actually contains. Everything else is octet-stream. */
 export function buildFileContentType(filePath: string): string {

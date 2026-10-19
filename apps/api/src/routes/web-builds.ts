@@ -31,37 +31,16 @@ import { zValidator } from "@hono/zod-validator";
 import { and, count, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
+import { buildPathProblem, WEB_BUILD_FILE_MAX } from "../lib/web-build.js";
 import { requireAuth, requireCreator } from "../middleware/auth.js";
 import { webBuildPrefix } from "../services/media-purge.js";
 import { aclForMediaType } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../services/storage/keys.js";
 
-/** How large a single build file may be. A real export's `.pck` runs to tens of MB. */
-const BUILD_FILE_MAX = 500 * 1024 * 1024;
-
 /** The endpoint the local-dev direct upload POSTs to. */
 function buildDirectPath(workId: number, buildId: number): string {
 	return `/api/web-builds/works/${workId}/web-build/${buildId}/upload`;
-}
-
-/** One file path within the build. Refusals here are what keep every file inside the prefix. */
-function buildPathProblem(value: string): string | null {
-	if (value === "") return "Every file needs a name saying where it sits in the build.";
-	if (value.startsWith("/") || value.endsWith("/")) {
-		return "Paths are relative to the build's root, without leading or trailing slashes.";
-	}
-	if (value.includes("\\")) return "Paths use forward slashes.";
-	if (value.includes("\0")) return "That path contains a character file names cannot carry.";
-	const parts = value.split("/");
-	if (parts.some((p) => p === "" || p === "." || p === "..")) {
-		return "A path in a build cannot climb out of the build with .. or name an empty segment.";
-	}
-	if (parts.some((p) => p.includes("?") || p.includes("#"))) {
-		return "A path in a build cannot carry ? or # — the browser cuts the URL at them.";
-	}
-	if (value.length > 250) return "That path is too long.";
-	return null;
 }
 
 const createSchema = z.object({
@@ -332,7 +311,7 @@ const webBuildRoutes = new Hono()
 		}
 		const problem = buildPathProblem(path);
 		if (problem) return c.json({ error: problem }, 400);
-		if (file.size > BUILD_FILE_MAX) {
+		if (file.size > WEB_BUILD_FILE_MAX) {
 			return c.json({ error: "That file is too large for a build file." }, 413);
 		}
 
