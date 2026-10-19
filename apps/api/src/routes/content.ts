@@ -1292,6 +1292,12 @@ async function serializeWork(
 	delivery: DeliveryCtx | null = null,
 	/** The Work's caption tracks, for the Studio's editor; empty when the caller did not load them. */
 	captions: CaptionTrackRow[] = [],
+	/**
+	 * The counts behind the Studio's Reviews column. Only the owner's own Works listing
+	 * computes them — it is the one surface that shows the column — so every other caller
+	 * omits the argument and the serialization carries no `reviewCounts` key at all.
+	 */
+	reviewCounts?: { recommended: number; notRecommended: number },
 ) {
 	// The image set, in order — an image Work's gallery is its source-set table read
 	// back (`listSourceFiles` falls back to the legacy column as the one-file set), and
@@ -1354,6 +1360,9 @@ async function serializeWork(
 		sourceUrl: item.sourceUrl,
 		viewCount: item.viewCount,
 		downloadCount: item.downloadCount,
+		// Owner-facing and listing-only: the Reviews column's numbers, where the caller
+		// asked for them. Omitted entirely elsewhere, so no other shape has to explain them.
+		...(reviewCounts ? { reviewCounts } : {}),
 		/** The UPLOAD date. Creator-facing only — the public sees originallyReleased and releasedAt. */
 		createdAt: item.createdAt,
 		updatedAt: item.updatedAt,
@@ -4533,7 +4542,7 @@ const contentRoutes = new Hono()
 		if (items.length === 0) return c.json({ works: [] });
 
 		const ids = items.map((i) => i.id);
-		const [assetRows, jobRows, buildRows, buildFileRows] = await Promise.all([
+		const [assetRows, jobRows, buildRows, buildFileRows, reviewRows] = await Promise.all([
 			db.select().from(assets).where(inArray(assets.workId, ids)),
 			db
 				.select()
@@ -4546,7 +4555,38 @@ const contentRoutes = new Hono()
 				.from(webBuildFiles)
 				.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
 				.where(inArray(webBuilds.workId, ids)),
+			// The Reviews column's counts, in one grouped read rather than per row. The
+			// filters are the public aggregate's own — a hidden review, a suspended
+			// reviewer's and the automated-test account's all stop counting there, so a
+			// creator reading their table sees the figure their Work page shows.
+			db
+				.select({
+					workId: reviews.workId,
+					recommended:
+						sql<number>`count(*) filter (where ${reviews.verdict} = 'recommended')`.mapWith(Number),
+					notRecommended:
+						sql<number>`count(*) filter (where ${reviews.verdict} <> 'recommended')`.mapWith(
+							Number,
+						),
+				})
+				.from(reviews)
+				.where(
+					and(
+						inArray(reviews.workId, ids),
+						visibleReview,
+						notTestAccount(reviews.userId),
+						notSuspendedAccount(reviews.userId),
+					),
+				)
+				.groupBy(reviews.workId),
 		]);
+		const reviewCountsByWork = new Map<number, { recommended: number; notRecommended: number }>();
+		for (const row of reviewRows) {
+			reviewCountsByWork.set(row.workId, {
+				recommended: row.recommended,
+				notRecommended: row.notRecommended,
+			});
+		}
 		const filesByBuild = new Map<number, WebBuildFileRow[]>();
 		for (const { file } of buildFileRows) {
 			const list = filesByBuild.get(file.buildId) ?? [];
@@ -4581,6 +4621,8 @@ const contentRoutes = new Hono()
 						jobByWork.get(i.id) ?? null,
 						buildsByWork.get(i.id) ?? [],
 						deliveryCtx(),
+						[],
+						reviewCountsByWork.get(i.id),
 					),
 				),
 			),

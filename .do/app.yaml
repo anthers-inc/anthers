@@ -42,7 +42,8 @@
 #     per-object ACLs, so the bucket is the access boundary). STORAGE_KEY /
 #     STORAGE_SECRET are dashboard-set secrets; everything else is non-secret here.
 #     Objects use a creator-first key layout (creators/<creatorId>/…).
-#   - STRIPE_* is declared below: prod runs Stripe in test mode.
+#   - STRIPE_* is declared below: prod runs Stripe in LIVE mode, on the corporation's
+#     own account, since the 2026-10-03 cutover.
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: anthers
@@ -232,8 +233,16 @@ envs:
   # ran `.anthers.org` on the component, which is the drift `make spec-diff` exists to
   # catch and very nearly didn't: the two entries sat at different paths, so a key-set
   # comparison reported "one here, one there" without ever comparing the values.
-  # Stripe — TEST MODE in production, deliberately. Every Stripe object here is
-  # test-mode (livemode:false), so no real money can move.
+  # Stripe — LIVE mode in production since the 2026-10-03 cutover, on the Anthers, Inc.
+  # account. Every Stripe object in the live app is `livemode: true` and real money moves:
+  # the publishable key below is a `pk_live_…`, and the two signing secrets the platform
+  # holds are the *live* event destinations' — so a test-mode key set here would not be a
+  # harmless posture but a silent switch of which account the site bills.
+  # 🚨 The separate `Anthers, Inc. - Sandbox` account is for dev and test, and its webhook
+  # endpoints must never point at the production URL: the app verifies signatures against
+  # the live secrets, so a test-mode destination here answers 400 until Stripe disables it
+  # (two such endpoints, created 2026-08-15, were disabled 2026-10-19 after one tripped
+  # Stripe's nine-day failure rule and emailed a warning).
   # This block was missing from this file
   # entirely while prod carried the values, which is how the drift went unnoticed:
   # `lib/stripe.ts` builds its client from STRIPE_SECRET_KEY alone, so having that
