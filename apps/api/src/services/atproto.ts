@@ -10,7 +10,18 @@
  * PAR, handle resolution and DID resolution. All of that is now the SDK's.
  */
 import { db } from "@anthers/db";
-import { handleHistory, users, works } from "@anthers/db/schema";
+import {
+	comments,
+	creditAcceptances,
+	follows,
+	handleHistory,
+	posts,
+	projects,
+	reviews,
+	users,
+	votes,
+	works,
+} from "@anthers/db/schema";
 import { extractPdsUrl } from "@atproto/oauth-client";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import {
@@ -20,6 +31,16 @@ import {
 	grantedScopeFor,
 	USER_COLLECTIONS,
 } from "./atproto-client.js";
+import {
+	COMMENT_COLLECTION,
+	CREDIT_ACCEPTANCE_COLLECTION,
+	FOLLOW_COLLECTION,
+	POST_COLLECTION,
+	PROJECT_COLLECTION,
+	REVIEW_COLLECTION,
+	VOTE_COLLECTION,
+} from "./atproto-record-plan.js";
+import { WORK_COLLECTION } from "./atproto-repo.js";
 import { scopeAllowsWriting, scopeCoversCollection } from "./atproto-scope.js";
 import { type PdsHealth, pdsHealth } from "./pds-health.js";
 
@@ -160,10 +181,23 @@ export interface PublishingState {
 	/** How many of this creator's Works currently carry a listing on the network. */
 	listed: number;
 	/**
+	 * Every `org.anthers.*` record type Anthers publishes, with how many of them this
+	 * identity currently holds. Counts come from the `atproto_uri` index columns — a row
+	 * with one is a record that reached the network — and never from a network read.
+	 */
+	records: PublishedRecordCount[];
+	/**
 	 * Whether the server holding an identity Anthers does not host is answering, or null when it
 	 * was not asked — a hosted identity, or a read that did not ask. Informs and never refuses.
 	 */
 	server: PdsHealth | null;
+}
+
+/** One record type's public footprint, in the order the Settings card lists them. */
+export interface PublishedRecordCount {
+	kind: "work" | "post" | "project" | "comment" | "review" | "vote" | "follow" | "creditAcceptance";
+	collection: string;
+	count: number;
 }
 
 /** Which route each tier of an account's records takes, and the identity they take it into. */
@@ -246,6 +280,7 @@ export async function publishingStateFor(
 		...rest,
 		offered: atprotoPublishEnabled(),
 		listed: await countListedWorks(userId),
+		records: await publishedRecordCounts(userId, found.did),
 		server,
 	};
 }
@@ -388,6 +423,99 @@ async function countListedWorks(creatorId: number): Promise<number> {
 		.from(works)
 		.where(and(eq(works.creatorId, creatorId), isNotNull(works.atprotoUri)));
 	return row?.count ?? 0;
+}
+
+/**
+ * Every record type Anthers publishes, counted where the row says one reached the network.
+ *
+ * ⚠️ **The count is of `atproto_uri` columns, not of a network read.** Those columns are
+ * written when the record lands and cleared when it comes down, so the number is what
+ * Anthers believes it has published — the same claim the row makes everywhere else. A
+ * record somebody deleted at their PDS by hand stays counted until the next sync notices,
+ * which is the right direction for a page that reports what Anthers did.
+ *
+ * Credit acceptances are keyed by DID rather than by a user id — the contributor may hold
+ * an identity Anthers has no account for — so the count uses the identity's own DID.
+ */
+async function publishedRecordCounts(
+	userId: number,
+	did: string | null,
+): Promise<PublishedRecordCount[]> {
+	const count = async (rows: Promise<{ count: number }[]>) => (await rows)[0]?.count ?? 0;
+	const published = sql<number>`count(*)::int`;
+
+	const [work, post, project, comment, review, vote, follow, creditAcceptance] = await Promise.all([
+		count(
+			db
+				.select({ count: published })
+				.from(works)
+				.where(and(eq(works.creatorId, userId), isNotNull(works.atprotoUri))),
+		),
+		count(
+			db
+				.select({ count: published })
+				.from(posts)
+				.where(and(eq(posts.creatorId, userId), isNotNull(posts.atprotoUri))),
+		),
+		count(
+			db
+				.select({ count: published })
+				.from(projects)
+				.where(and(eq(projects.creatorId, userId), isNotNull(projects.atprotoUri))),
+		),
+		count(
+			db
+				.select({ count: published })
+				.from(comments)
+				.where(and(eq(comments.userId, userId), isNotNull(comments.atprotoUri))),
+		),
+		count(
+			db
+				.select({ count: published })
+				.from(reviews)
+				.where(and(eq(reviews.userId, userId), isNotNull(reviews.atprotoUri))),
+		),
+		count(
+			db
+				.select({ count: published })
+				.from(votes)
+				.where(and(eq(votes.userId, userId), isNotNull(votes.atprotoUri))),
+		),
+		count(
+			db
+				.select({ count: published })
+				.from(follows)
+				.where(and(eq(follows.followerId, userId), isNotNull(follows.atprotoUri))),
+		),
+		did
+			? count(
+					db
+						.select({ count: published })
+						.from(creditAcceptances)
+						.where(
+							and(
+								eq(creditAcceptances.contributorDid, did),
+								isNotNull(creditAcceptances.atprotoUri),
+							),
+						),
+				)
+			: 0,
+	]);
+
+	return [
+		{ kind: "work", collection: WORK_COLLECTION, count: work },
+		{ kind: "post", collection: POST_COLLECTION, count: post },
+		{ kind: "project", collection: PROJECT_COLLECTION, count: project },
+		{ kind: "comment", collection: COMMENT_COLLECTION, count: comment },
+		{ kind: "review", collection: REVIEW_COLLECTION, count: review },
+		{ kind: "vote", collection: VOTE_COLLECTION, count: vote },
+		{ kind: "follow", collection: FOLLOW_COLLECTION, count: follow },
+		{
+			kind: "creditAcceptance",
+			collection: CREDIT_ACCEPTANCE_COLLECTION,
+			count: creditAcceptance,
+		},
+	];
 }
 
 /*
