@@ -80,7 +80,7 @@ function RowCells({
 					return (
 						<td key={level}>
 							<div className="rounded-md border border-dashed border-base-300 p-2 text-[11px] text-base-content/30">
-								Never on this row
+								N/A
 							</div>
 						</td>
 					);

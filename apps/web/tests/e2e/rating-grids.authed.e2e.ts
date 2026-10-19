@@ -129,6 +129,6 @@ test("a game is rated on the visual grid, where language never rates", async ({
 		),
 	).toHaveCount(1);
 	// Language never rates here, so its Mature and Adult cells are dashed; with Self-Harm's
-	// and Horror's Adult cells, four cells on this grid say it.
-	await expect(matrix.getByText("Never on this row")).toHaveCount(4);
+	// and Horror's Adult cells, four cells on this grid say N/A.
+	await expect(matrix.getByText("N/A")).toHaveCount(4);
 });
