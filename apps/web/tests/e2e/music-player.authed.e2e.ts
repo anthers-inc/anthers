@@ -159,9 +159,13 @@ test("listening survives navigating away", async ({ page }) => {
 	await expect.poll(() => playing(page)).toBe(MEDIA_FIXTURE_TRACKS[0].title);
 
 	// A client-side navigation, which is the case that matters: the provider sits above
-	// the router, so the element is never torn down.
-	await page.getByRole("link", { name: "Resources" }).first().click();
-	await expect(page).toHaveURL(/\/resources/);
+	// the router, so the element is never torn down. The sidebar is the signed-in shell's
+	// own navigation; a Work's page has no site footer to borrow a link from.
+	await page
+		.getByRole("navigation", { name: "Anthers" })
+		.getByRole("link", { name: "Feed" })
+		.click();
+	await expect(page).toHaveURL(/\/feed$/);
 	await expect(page.locator(BAR)).toBeVisible();
 	expect(await playing(page)).toBe(MEDIA_FIXTURE_TRACKS[0].title);
 });
