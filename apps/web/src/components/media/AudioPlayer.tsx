@@ -19,8 +19,8 @@
  * route's bare window, the fallback branches — and the **stage** (`stage`, set by
  * `WorkDeliverable` when the media frame holds this page) is the frame's fill, where
  * the waveform is the page's reading surface (`ListenStage`), the transport sits at
- * its foot, and a song's words open as a drawer over the waveform's right side. Both layouts read
- * their state identically, by the two-mode rule above.
+ * its foot, and a song's words open as a drawer over the waveform's right side. Both
+ * layouts read their state identically, by the two-mode rule above.
  *
  * The element's state and the bar's mirror are both named `isPlaying` / `progress` /
  * `duration` below so the transport JSX never branches on mode.
