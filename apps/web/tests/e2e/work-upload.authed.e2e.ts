@@ -26,6 +26,7 @@ import { join } from "node:path";
 import { db } from "@anthers/db/client";
 import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
+import { zipSync } from "fflate";
 import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 const TITLE_PREFIX = "Upload walk ";
@@ -92,18 +93,18 @@ async function ownBuilds(workId: number): Promise<OwnedBuild[] | null> {
 	return body.work?.webBuilds ?? null;
 }
 
-/** A tiny engine export — the entry and the files a browser build loads beside it. */
+/** The files a tiny engine export carries — the entry and what a browser loads beside it. */
+const EXPORT_FILES = [
+	["index.html", "<!doctype html><html><body>a game</body></html>"],
+	["index.js", "globalThis.boot = true;"],
+	["index.pck", "pack"],
+	["index.wasm", "wasm"],
+	["index.audio.worklet.js", "// worklet"],
+] as const;
+
 function writeExport(folder: string): void {
 	mkdirSync(folder, { recursive: true });
-	for (const [name, body] of [
-		["index.html", "<!doctype html><html><body>a game</body></html>"],
-		["index.js", "globalThis.boot = true;"],
-		["index.pck", "pack"],
-		["index.wasm", "wasm"],
-		["index.audio.worklet.js", "// worklet"],
-	] as const) {
-		writeFileSync(join(folder, name), body);
-	}
+	for (const [name, body] of EXPORT_FILES) writeFileSync(join(folder, name), body);
 }
 
 /** Delete this spec's Works — a crashed earlier run's, and this run's. */
@@ -206,8 +207,14 @@ for (const source of [
 			writeExport(folder);
 			let picked = folder;
 			if (source.kind === "zip") {
+				// No system archiver is assumed on CI: the archive is built with the same
+				// library the browser unpacks it with.
 				picked = join(dir, "export.zip");
-				execFileSync("zip", ["-q", "-r", picked, "."], { cwd: folder, stdio: "pipe" });
+				const entries: Record<string, Uint8Array> = {};
+				for (const [name] of EXPORT_FILES) {
+					entries[name] = new Uint8Array(readFileSync(join(folder, name)));
+				}
+				writeFileSync(picked, zipSync(entries));
 			}
 
 			await page.goto("/studio/works/new");
