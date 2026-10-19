@@ -5,32 +5,49 @@ import { useState } from "react";
 interface ProjectEmbedProps {
 	embedUrl: string;
 	title: string;
+	/**
+	 * Mounted inside the Work page's fixed 16:9 media stage (the standard-profile
+	 * task, 2026-10-19): the frame takes the stage's remaining height rather than
+	 * deriving its own `aspect-video` height beside the close bar. The embed page's
+	 * bare window leaves this off and keeps the picture-derived height.
+	 */
+	fillsFrame?: boolean;
 }
 
-export default function ProjectEmbed({ embedUrl, title }: ProjectEmbedProps) {
+export default function ProjectEmbed({ embedUrl, title, fillsFrame = false }: ProjectEmbedProps) {
 	const [active, setActive] = useState(false);
 
+	const idle = (
+		<>
+			<button
+				type="button"
+				className="btn btn-primary btn-lg gap-2"
+				onClick={() => setActive(true)}
+			>
+				<PlayIcon className="w-6 h-6" />
+				Play in Browser
+			</button>
+			<p className="text-sm text-base-content/50">Runs in a sandboxed iframe</p>
+		</>
+	);
+
 	if (!active) {
-		return (
-			<div className="relative bg-base-300 rounded-lg overflow-hidden">
-				<div className="flex flex-col items-center justify-center py-16 gap-4">
-					<button
-						type="button"
-						className="btn btn-primary btn-lg gap-2"
-						onClick={() => setActive(true)}
-					>
-						<PlayIcon className="w-6 h-6" />
-						Play in Browser
-					</button>
-					<p className="text-sm text-base-content/50">Runs in a sandboxed iframe</p>
-				</div>
+		return fillsFrame ? (
+			<div className="flex h-full w-full flex-col items-center justify-center gap-4 overflow-hidden rounded-lg bg-base-300">
+				{idle}
+			</div>
+		) : (
+			<div className="relative overflow-hidden rounded-lg bg-base-300">
+				<div className="flex flex-col items-center justify-center gap-4 py-16">{idle}</div>
 			</div>
 		);
 	}
 
 	return (
-		<div className="relative bg-black rounded-lg overflow-hidden">
-			<div className="flex justify-end p-1 bg-base-300">
+		<div
+			className={`flex flex-col overflow-hidden rounded-lg bg-black ${fillsFrame ? "h-full w-full" : ""}`}
+		>
+			<div className="flex shrink-0 justify-end bg-base-300 p-1">
 				<button type="button" className="btn btn-ghost btn-xs" onClick={() => setActive(false)}>
 					<XMarkIcon className="w-4 h-4" />
 					Close
@@ -44,10 +61,9 @@ export default function ProjectEmbed({ embedUrl, title }: ProjectEmbedProps) {
 			<iframe
 				src={embedUrl}
 				title={title}
-				// The video profile, not a fixed pixel height (the media-frame task,
-				// 2026-10-16): a play area the same shape the video player draws is the
-				// frame's exact fill, so every kind's deliverable takes one rectangle.
-				className="aspect-video w-full"
+				// Inside the stage the play area takes the height left by the close bar; on
+				// the bare embed route it keeps drawing the video profile itself.
+				className={fillsFrame ? "min-h-0 w-full flex-1" : "aspect-video w-full"}
 				sandbox="allow-scripts allow-same-origin allow-popups"
 				allowFullScreen
 			/>

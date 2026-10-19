@@ -17,6 +17,7 @@ import { workChapters } from "@anthers/shared/chapters";
 import { isListened, isPaged } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import HostedEmbed from "@anthers/web-shared/content/HostedEmbed";
+import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
@@ -52,12 +53,7 @@ import {
 import { trackFromWork } from "../../lib/tracks";
 import { useSeekPlayer, WorkPlayerProvider } from "../../lib/work-player";
 import GalleryView from "../media/GalleryView";
-import {
-	LyricsBody,
-	LyricsShelf,
-	WORK_LYRICS_CLASS,
-	WORK_LYRICS_HEADING_CLASS,
-} from "./LyricsPanel";
+import { LyricsBody, WORK_LYRICS_CLASS, WORK_LYRICS_HEADING_CLASS } from "./LyricsPanel";
 import WorkMediaFrame from "./WorkMediaFrame";
 
 // ⭐ The lyrics classes live beside the card that owns them; re-exported for the Studio's InlineField.
@@ -76,7 +72,20 @@ import SanitizedHtml from "../ui/SanitizedHtml";
 
 /** A Work as the detail endpoint returns it — with its creator and posting history. */
 export type WorkDetail = Work & {
-	creator?: { handle: string; displayName: string | null; avatar: string | null };
+	/**
+	 * The creator, as much as a card needs — the name, thumbnail and bio the Showings
+	 * panel's creator card shows, plus whether this reader already follows them. The
+	 * page's endpoint sends all of it; the owner's editor fills the same shape from the
+	 * signed-in account.
+	 */
+	creator?: {
+		handle: string;
+		displayName: string | null;
+		avatar: string | null;
+		bio?: string | null;
+		isFollowing?: boolean;
+		followerCount?: number;
+	};
 	/** Whether the creator can actually take a direct payment (Connect onboarded). */
 	creatorHasStripe?: boolean;
 	/**
@@ -493,7 +502,9 @@ export interface WorkBylineProps {
  *
  * Under the strip, the Anthers release date rides again (Parker, 2026-10-16): a second
  * copy of the line the Details tab carries, so the facts around the title answer where
- * a viewer looks first. A draft, with no release date, renders nothing.
+ * a viewer looks first. The listing's record link — the globe — rides that line
+ * (Parker, 2026-10-19), so a reader finds the raw ATProto record where the release is
+ * stated. A draft, with no release date, renders nothing.
  */
 export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
@@ -548,7 +559,13 @@ export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 				</div>
 			</div>
 			{releasedDate && (
-				<p className="text-center text-sm text-base-content/60">Released {releasedDate}</p>
+				// The listing's globe rides the Released line (Parker, 2026-10-19): it is
+				// the page's own statement that the Work exists on the network, and it sits
+				// where a reader looks for the date rather than inside the Details tab.
+				<p className="flex items-center justify-center gap-1 text-sm text-base-content/60">
+					Released {releasedDate}
+					<RecordLinkButton recordUrl={work.recordUrl} />
+				</p>
 			)}
 		</header>
 	);
@@ -558,15 +575,15 @@ export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
  * embedded build or the gated prose, whichever the kind has.
  *
  * ⭐ The deliverable mounts inside `WorkMediaFrame` (the media-frame task, 2026-10-16,
- * Parker): the video work page's layout is canonical, every kind derives from it, and
- * one media card — the profile the video player draws — is what makes the page hold
- * still while kinds flip. The card goes around whoever is here, with the frame's fill
- * mode decided per branch: **video and a hosted build fill the card** (their medium
- * draws the video profile itself); every other branch letterboxes inside a 16:9 area
- * that a taller medium — a portrait picture, a long piece of writing, a reader's own
- * scrolling — grows downward rather than breaking. The embed page is the one caller
- * that opts out (`framed` false): a bare window on one medium has no page to hold
- * still, and the meter footer it needs still renders beside it there.
+ * Parker; the standard 16:9 profile, 2026-10-19): the video work page's layout is
+ * canonical, every kind derives from it, and one media card — a single 16:9 stage — is
+ * what makes the page hold still while kinds flip. The frame's fill mode is decided per
+ * branch: **video, a hosted build and a picture contain themselves in the stage**; every
+ * other branch is a composition inside it (the listened kinds' stage, the readers, the
+ * writing column, the store panel, a placeholder, a gate), whose taller content scrolls
+ * inside the stage rather than growing the card. The embed page is the one caller that
+ * opts out (`framed` false): a bare window on one medium has no page to hold still, and
+ * the meter footer it needs still renders beside it there.
  */
 export function WorkDeliverable({
 	work,
@@ -626,17 +643,23 @@ export function WorkDeliverable({
 	const holdsMeter = pageHoldsTheMeter(work.type);
 	/**
 	 * The branch's mount, through the page's one media card when the caller wants it:
-	 * a fill branch (video, a hosted build) hands `fill` because its medium draws the
-	 * video profile itself; everything else letterboxes in the frame's 16:9 area.
+	 * a fill branch (video, a hosted build, a picture) hands `fill` because its medium
+	 * draws its own box; everything else is a composition inside the stage. The page's
+	 * meter, where this kind owns one, rides the frame's footer slot so a fill medium
+	 * never clips it and a composition reads it after the content.
 	 */
 	const frame = (node: ReactNode, fill = false) => {
-		const withMeter = (
+		const meter = holdsMeter ? <PublicAccessFooter /> : undefined;
+		return framed ? (
+			<WorkMediaFrame fill={fill} footer={meter}>
+				{node}
+			</WorkMediaFrame>
+		) : (
 			<>
 				{node}
-				{holdsMeter && <PublicAccessFooter />}
+				{meter}
 			</>
 		);
-		return framed ? <WorkMediaFrame fill={fill}>{withMeter}</WorkMediaFrame> : withMeter;
 	};
 	return (
 		<>
@@ -652,6 +675,7 @@ export function WorkDeliverable({
 				work.transcoding?.hlsManifestUrl &&
 				frame(
 					<VideoPlayer
+						fillsFrame={framed}
 						src={work.transcoding.hlsManifestUrl}
 						// Original Media, in the quality menu as the opted-into alternative to the
 						// ladder's rungs (the Jellyfin-shaped offer): the route is the same
@@ -682,6 +706,7 @@ export function WorkDeliverable({
 				work.originalUrl &&
 				frame(
 					<VideoPlayer
+						fillsFrame={framed}
 						src={work.originalUrl}
 						poster={work.thumbnail ?? undefined}
 						attention={{ creatorId: work.creatorId ?? null, workId: work.id }}
@@ -736,21 +761,15 @@ export function WorkDeliverable({
 						chapters={chapters}
 						startSeconds={startSeconds}
 						persistent={track}
-						// The stage's aside column, the song's words: the creator's field
-						// when there is one (it starts open — the composer works where the
-						// listener reads); the words when the gate let them through, closed
-						// until the transport's toggle asks for them. Gated with the audio:
-						// the API blanks them for a user without access, so reaching this
-						// branch at all means the user may read them.
+						// The stage's aside drawer, the song's words: the creator's field
+						// when there is one; the words when the gate let them through. It
+						// starts closed for everyone — the drawer is the toggle's to open,
+						// whichever face is inside it (Parker, 2026-10-19). Gated with the
+						// audio: the API blanks them for a user without access, so reaching
+						// this branch at all means the user may read them.
 						aside={
-							lyrics ??
-							(work.lyrics?.trim() ? (
-								<LyricsShelf>
-									<LyricsBody lyrics={work.lyrics ?? ""} />
-								</LyricsShelf>
-							) : null)
+							lyrics ?? (work.lyrics?.trim() ? <LyricsBody lyrics={work.lyrics ?? ""} /> : null)
 						}
-						asideOpen={lyrics != null}
 					/>,
 				)}
 			{/* Spoken word takes its own player — listening to talk wants fixed-step skips,
@@ -793,13 +812,13 @@ export function WorkDeliverable({
 				// ladder; none → the page reader, comic and PDF-shaped ebook alike.
 				(work.type === "ebook" && (work.sectionCount ?? 0) > 0
 					? frame(
-							// `w-full` is load-bearing on these readers (the CI ebook failure's
-							// whole finding): the frame's letterbox centers its content, and a
-							// reader with no width of its own shrink-to-fits there — its
-							// transport row then crushes the seek bar to a zero-width input,
-							// the one control a reader without a pointer must reach. The
-							// readers were block-level wide before the frame; they stay wide.
-							<div className="w-full">
+							// `h-full w-full` is load-bearing on these readers: they take the
+							// stage's whole height, and their own transport rows sit at its foot
+							// rather than under a viewport-sized reading box. A reader with no
+							// width of its own would also shrink-to-fit here and crush its seek
+							// bar to a zero-width input (the CI ebook failure's finding). The
+							// embed route has no stage to fill, so it keeps a viewport height.
+							<div className={framed ? "h-full w-full" : "h-[70vh] w-full"}>
 								<EbookReader
 									workId={work.id}
 									apiBase={apiBaseUrl()}
@@ -809,7 +828,7 @@ export function WorkDeliverable({
 							</div>,
 						)
 					: frame(
-							<div className="w-full">
+							<div className={framed ? "h-full w-full" : "h-[70vh] w-full"}>
 								<ComicReader
 									workId={work.id}
 									pageCount={work.pageCount ?? 0}
@@ -827,18 +846,23 @@ export function WorkDeliverable({
 				// The creator's alt text when there is one; the Work's title is the fallback
 				// this render always fell back to, and `""` keeps it (empty alt on a content
 				// image would read as deliberately decorative, which the picture never is).
-				// The picture keeps its own full-bleed width — a portrait grows the frame
-				// downward rather than shrinking into a letterbox it is taller than.
+				// The picture is contained by the 16:9 stage: a portrait or 4:3 picture
+				// pillarboxes inside it, a 21:9 one letterboxes, and a 16:9 one fills it
+				// edge to edge. A set stays a scrolling stack inside the same stage rather
+				// than growing the card.
 				frame(
 					(work.gallery?.length ?? 0) > 1 ? (
-						<GalleryView images={work.gallery ?? []} alt={work.imageAlt || work.title || ""} />
+						<div className={framed ? "h-full w-full overflow-y-auto" : "w-full"}>
+							<GalleryView images={work.gallery ?? []} alt={work.imageAlt || work.title || ""} />
+						</div>
 					) : (
 						<img
 							src={work.sourceKey}
 							alt={work.imageAlt || work.title || ""}
-							className="w-full rounded-lg"
+							className={`${framed ? "h-full w-full object-contain" : "w-full"} rounded-lg`}
 						/>
 					),
+					true,
 				)}
 			{/* A hosted build outranks an external embed address: the build Anthers serves is
 			    the thing the creator uploaded here, and the embed address is creator-hosted
@@ -859,34 +883,44 @@ export function WorkDeliverable({
 								workId={work.id}
 								title={work.title ?? "Play"}
 								onActivity={onFrameActivity}
+								fillsFrame={framed}
 							/>,
 							true,
 						)
 					: work.webPlayable && work.webPlayPath === "page"
 						? frame(
-								<a href={`/api/play/${work.id}`} className="btn btn-primary btn-lg gap-2">
-									<PlayIcon className="w-6 h-6" />
-									Play in Browser
-								</a>,
+								<div className="flex h-full w-full items-center justify-center">
+									<a href={`/api/play/${work.id}`} className="btn btn-primary btn-lg gap-2">
+										<PlayIcon className="w-6 h-6" />
+										Play in Browser
+									</a>
+								</div>,
 							)
 						: work.embedUrl &&
-							frame(<ProjectEmbed embedUrl={work.embedUrl} title={work.title ?? "Play"} />, true)
+							frame(
+								<ProjectEmbed
+									embedUrl={work.embedUrl}
+									title={work.title ?? "Play"}
+									fillsFrame={framed}
+								/>,
+								true,
+							)
 				: null}
 			{work.bodyHtml &&
 				(isWriting(work.type)
 					? // A piece of writing reads at its measure inside the card, the
 						// standfirst above it when the page passed one — the reading column is
-						// the article's own, centered in the frame, and a long piece grows the
-						// card downward rather than breaking its shape.
+						// the article's own, centered in the stage, and a long piece scrolls
+						// inside the fixed 16:9 area rather than growing the card.
 						frame(
-							<div className="w-full max-w-2xl">
+							<div className="mx-auto w-full max-w-2xl">
 								{lead}
 								<WorkArticle html={work.bodyHtml} workId={work.id} />
 							</div>,
 						)
 					: frame(
-							// Same `w-full` as the readers: a prose block has no width of its
-							// own and would shrink-to-fit in the letterbox's centered column.
+							// Same `w-full` as the readers: the prose column takes the stage's
+							// width rather than sitting in a shrink-to-fit box.
 							<div className="w-full">
 								<article className="prose max-w-none">
 									<SanitizedHtml html={work.bodyHtml} />
@@ -1033,10 +1067,11 @@ export function DescriptionBody({ description }: { description: string | null })
  * **Depth-scrolled is the whole position** — a scroll has no pages to have stopped on, so
  * the fraction is defined once here and everything else (the rail's membership, the
  * spine's ribbon, the resume) reads it the same way it reads a page fraction. The
- * measure is the article element against the window: when the viewport's bottom edge has
- * passed that depth of the piece, the reader has seen that much of it. (An article that
- * fits on one screen is read as soon as it has been seen at all, which the clamp to 1
- * states honestly.)
+ * measure is the article element against the surface that scrolls it — the media area's
+ * own scroll box when the piece is framed (the standard-profile task, 2026-10-19), the
+ * window on the bare embed route: when that surface's bottom edge has passed that depth
+ * of the piece, the reader has seen that much of it. (An article that fits on one screen
+ * is read as soon as it has been seen at all, which the clamp to 1 states honestly.)
  *
  * **Never written on mount.** The same contract the paged readers keep: opening a piece
  * records nothing; scrolling it does. A resume lands at the recorded depth with the
@@ -1054,9 +1089,25 @@ function useArticleScrollProgress(
 		if (!workId || !ref.current) return;
 		void refreshReadingPositions();
 		const el = ref.current;
+		/**
+		 * The surface that scrolls this piece: the media frame's own scroll box when it
+		 * holds the article, the window when the page is a bare embed. The frame marks
+		 * its scrolling stage rather than this function guessing from overflow styles.
+		 */
+		const scroller = el.closest<HTMLElement>("[data-media-scroll]");
+		const scrollSurface: HTMLElement | Window = scroller ?? window;
 
 		let restored = false;
 		const resumeAt = (fraction: number) => {
+			if (scroller) {
+				const top =
+					el.getBoundingClientRect().top -
+					scroller.getBoundingClientRect().top +
+					scroller.scrollTop;
+				const target = top + fraction * el.offsetHeight - scroller.clientHeight * 0.8;
+				scroller.scrollTo({ top: Math.max(0, target) });
+				return;
+			}
 			const target = el.offsetTop + fraction * el.offsetHeight - window.innerHeight * 0.8;
 			window.scrollTo(0, Math.max(0, target));
 		};
@@ -1085,11 +1136,13 @@ function useArticleScrollProgress(
 			lastWrite = now;
 			const height = el.offsetHeight;
 			if (height <= 0) return;
-			const depth = (window.scrollY + window.innerHeight - el.offsetTop) / height;
+			const depth = scroller
+				? (scroller.getBoundingClientRect().bottom - el.getBoundingClientRect().top) / height
+				: (window.scrollY + window.innerHeight - el.offsetTop) / height;
 			writeScroll(workId, Math.min(1, Math.max(0, depth)));
 		};
-		window.addEventListener("scroll", onScroll, { passive: true });
-		return () => window.removeEventListener("scroll", onScroll);
+		scrollSurface.addEventListener("scroll", onScroll, { passive: true });
+		return () => scrollSurface.removeEventListener("scroll", onScroll);
 	}, [workId, ref]);
 }
 

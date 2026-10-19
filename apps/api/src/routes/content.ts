@@ -4802,12 +4802,23 @@ const contentRoutes = new Hono()
 		const { sharedBy } = await requesterFor(c, work.id);
 		const ctx = await buildAccessContext(userId, { workIds: [work.id], sharedBy });
 		// A withdrawn Work can outlive its creator's account — see `works.creator_id`.
+		// The card's own facts (bio, follower count, whether this reader follows them)
+		// ride the creator so the Showings panel shows a person rather than a name
+		// (Parker, 2026-10-19); the follow lookup is the same EXISTS the profile route uses.
 		const [creator] = work.creatorId
 			? await db
 					.select({
 						handle: users.atprotoHandle,
 						displayName: users.displayName,
 						avatar: users.avatar,
+						bio: users.bio,
+						followerCount:
+							sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${users.id})`.as(
+								"follower_count",
+							),
+						isFollowing: userId
+							? sql<boolean>`EXISTS(SELECT 1 FROM follows WHERE follower_id = ${userId} AND creator_id = ${users.id})`
+							: sql<boolean>`false`,
 					})
 					.from(users)
 					.where(eq(users.id, work.creatorId))
