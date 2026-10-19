@@ -53,8 +53,8 @@ const RULE_SIGNAL: Record<AppAlertRule, "cpu" | "memory" | "restarts"> = {
 
 /**
  * The alerts this build wants: CPU, memory and restart-count policies on every component that
- * carries those signals in the shared threshold table (api and worker; the migrate job is a
- * batch job whose duration signal has no App Platform rule, and the static sites have no
+ * carries those signals in the shared threshold table (api, web and worker; the migrate job is
+ * a batch job whose duration signal has no App Platform rule, and the admin static site has no
  * compute at all). Each policy's value is the component's "now" band for its signal, read
  * from the shared table rather than retyped — the one thing an alert must never do is fire
  * at a different number than the console renders.
