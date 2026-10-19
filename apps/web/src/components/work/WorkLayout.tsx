@@ -805,8 +805,9 @@ export function WorkDeliverable({
 							// stage's whole height, and their own transport rows sit at its foot
 							// rather than under a viewport-sized reading box. A reader with no
 							// width of its own would also shrink-to-fit here and crush its seek
-							// bar to a zero-width input (the CI ebook failure's finding).
-							<div className="h-full w-full">
+							// bar to a zero-width input (the CI ebook failure's finding). The
+							// embed route has no stage to fill, so it keeps a viewport height.
+							<div className={framed ? "h-full w-full" : "h-[70vh] w-full"}>
 								<EbookReader
 									workId={work.id}
 									apiBase={apiBaseUrl()}
@@ -816,7 +817,7 @@ export function WorkDeliverable({
 							</div>,
 						)
 					: frame(
-							<div className="h-full w-full">
+							<div className={framed ? "h-full w-full" : "h-[70vh] w-full"}>
 								<ComicReader
 									workId={work.id}
 									pageCount={work.pageCount ?? 0}
@@ -840,14 +841,14 @@ export function WorkDeliverable({
 				// than growing the card.
 				frame(
 					(work.gallery?.length ?? 0) > 1 ? (
-						<div className="h-full w-full overflow-y-auto">
+						<div className={framed ? "h-full w-full overflow-y-auto" : "w-full"}>
 							<GalleryView images={work.gallery ?? []} alt={work.imageAlt || work.title || ""} />
 						</div>
 					) : (
 						<img
 							src={work.sourceKey}
 							alt={work.imageAlt || work.title || ""}
-							className="h-full w-full rounded-lg object-contain"
+							className={`${framed ? "h-full w-full object-contain" : "w-full"} rounded-lg`}
 						/>
 					),
 					true,
@@ -871,6 +872,7 @@ export function WorkDeliverable({
 								workId={work.id}
 								title={work.title ?? "Play"}
 								onActivity={onFrameActivity}
+								fillsFrame={framed}
 							/>,
 							true,
 						)
@@ -884,7 +886,14 @@ export function WorkDeliverable({
 								</div>,
 							)
 						: work.embedUrl &&
-							frame(<ProjectEmbed embedUrl={work.embedUrl} title={work.title ?? "Play"} />, true)
+							frame(
+								<ProjectEmbed
+									embedUrl={work.embedUrl}
+									title={work.title ?? "Play"}
+									fillsFrame={framed}
+								/>,
+								true,
+							)
 				: null}
 			{work.bodyHtml &&
 				(isWriting(work.type)
