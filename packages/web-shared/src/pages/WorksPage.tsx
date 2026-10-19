@@ -11,7 +11,7 @@
  * The listing is a **table** (Parker, 2026-10-11), in the shape of YouTube Studio's Content
  * tab and modeled on it: rows tall enough to carry a small thumbnail, the title and
  * description beside it, then the media status, the release date (editable — the same
- * acts the Work's own page offers), the access state and the counts as columns, sortable
+ * acts the Work's own page offers), the counts and the review figures as columns, sortable
  * by header and filterable. The filters live in the left sidebar below
  * the Studio nav — the Feed page's pattern — rather than in tabs above the table; they ride
  * the URL as query parameters, and the table (client-side over the loaded list) re-derives
@@ -160,7 +160,10 @@ export default function WorksPage() {
 	const upsert = (item: Work) =>
 		setItems((prev) =>
 			prev.some((i) => i.id === item.id)
-				? prev.map((i) => (i.id === item.id ? item : i))
+				? // A single-Work response does not carry the listing-only fields the table
+					// computes in bulk — the Reviews column's counts among them — so merge
+					// rather than replace, or a release act would blank the column.
+					prev.map((i) => (i.id === item.id ? { ...i, ...item } : i))
 				: [item, ...prev],
 		);
 
@@ -351,25 +354,49 @@ export default function WorksPage() {
 					</button>
 				</div>
 			) : (
+				/* ⭐ **The Description is the table's only flexible column** (Parker, 2026-10-19):
+				   every other column carries a fixed width, so a narrowing window spends the
+				   Description first and the table starts scrolling once it reaches its floor
+				   rather than wrapping or compressing anything else. `table-fixed` is what makes
+				   that true — an auto-layout table lets any column give ground. */
 				<div className="overflow-x-auto">
-					<table className="table w-full">
+					<table className="table w-full table-fixed min-w-[71rem]">
 						<thead>
-							<tr className="border-base-300/50 text-xs text-base-content/50">
-								<th scope="col" aria-sort={ariaSort(sort, "title")}>
+							{/* The header rule is a touch bolder than the row rules, and so is the
+							    column line to the right of Work — they divide the table rather than
+							    merely separating two entries. */}
+							<tr className="border-b border-base-300 text-xs text-base-content/50">
+								<th
+									scope="col"
+									className="w-[18rem] border-r border-base-300"
+									aria-sort={ariaSort(sort, "title")}
+								>
 									<SortButton label="Work" k="title" sort={sort} onSort={onSort} />
 								</th>
-								<th scope="col" className="min-w-[14rem]">
+								<th scope="col" className="border-r border-base-300/50">
 									Description
 								</th>
-								<th scope="col">Media Status</th>
-								<th scope="col" aria-sort={ariaSort(sort, "date")}>
+								<th scope="col" className="w-[10rem] border-r border-base-300/50">
+									Media Status
+								</th>
+								<th
+									scope="col"
+									className="w-[12rem] border-r border-base-300/50"
+									aria-sort={ariaSort(sort, "date")}
+								>
 									<SortButton label="Release Date" k="date" sort={sort} onSort={onSort} />
 								</th>
-								<th scope="col">Access</th>
-								<th scope="col" aria-sort={ariaSort(sort, "views")}>
+								<th
+									scope="col"
+									className="w-[6rem] border-r border-base-300/50"
+									aria-sort={ariaSort(sort, "views")}
+								>
 									<SortButton label="Views" k="views" sort={sort} onSort={onSort} />
 								</th>
-								<th scope="col">
+								<th scope="col" className="w-[7rem] border-r border-base-300/50">
+									Reviews
+								</th>
+								<th scope="col" className="w-[6.5rem]">
 									<span className="sr-only">Actions</span>
 								</th>
 							</tr>

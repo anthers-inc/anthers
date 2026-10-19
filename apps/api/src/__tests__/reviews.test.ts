@@ -471,3 +471,29 @@ describe("the record link beside a review", () => {
 		}
 	});
 });
+
+describe("the owner's Works listing", () => {
+	it("carries the Reviews column's counts, matching the public aggregate", async () => {
+		// The Studio's table shows the net and the pair behind it in one cell, so the
+		// owner's listing carries the same two numbers the Work page's aggregate counts.
+		// Derived from the public list rather than hardcoded: earlier blocks leave this
+		// suite's fixture with a mix of verdicts and one hidden row, and the point is that
+		// the two reads agree about which rows count.
+		const publicList = await readReviews();
+		const recommended = publicList.reviews.filter((r) => r.verdict === "recommended").length;
+		const notRecommended = publicList.count - recommended;
+		expect(publicList.count).toBeGreaterThan(0);
+
+		const res = await req("/api/content/works", {
+			headers: { Cookie: creator, Origin: ORIGIN },
+		});
+		expect(res.status).toBe(200);
+		const { works: rows } = (await res.json()) as {
+			works: { id: number; reviewCounts?: { recommended: number; notRecommended: number } }[];
+		};
+		expect(rows.find((w) => w.id === workId)?.reviewCounts).toEqual({
+			recommended,
+			notRecommended,
+		});
+	});
+});
