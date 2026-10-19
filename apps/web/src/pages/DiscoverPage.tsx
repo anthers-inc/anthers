@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import CreatorCard from "@anthers/web-shared/creator/CreatorCard";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import { useSidebar } from "@anthers/web-shared/sidebar";
 import type { Project, PublicUser } from "@anthers/web-shared/types";
@@ -14,7 +15,6 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import CardImpressionBoundary from "../components/cards/CardImpressionBoundary";
-import CreatorCard from "../components/cards/CreatorCard";
 import ProjectCard from "../components/cards/ProjectCard";
 import ContentFilterSections from "../components/layout/ContentFilterSections";
 import { sidebarRowClass } from "../components/layout/sidebar-row-class";
