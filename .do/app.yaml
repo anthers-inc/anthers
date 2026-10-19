@@ -485,6 +485,62 @@ services:
         scope: RUN_TIME
         type: SECRET
 
+  # The web origin, which replaced the static site named `web` on 2026-10-19 so a Work's
+  # link preview can name the Work. The app is still a folder of built files; this process
+  # serves them exactly as the static site did and swaps the shell's neutral share block
+  # for a Work's own on `/works/*` (`apps/web/serve.ts`). Everything else, every asset
+  # included, is byte-for-byte what the build emitted.
+  #
+  # 🚨 The shell and the assets ship from THIS component together, on purpose. Splitting
+  # them (a service for documents, the static site for chunk files) makes every deploy a
+  # window in which the new shell names chunks the old static origin does not have yet.
+  #
+  # `API_ORIGIN` is the app's private network, not the public host: the card read must not
+  # leave the app or queue behind Cloudflare. `SITE_ORIGIN` is the canonical the previews
+  # and `<link rel=canonical>` name, so it is the apex rather than the app's default
+  # ondigitalocean.app address.
+  - name: web
+    # The same rendered alert set as the api — the values are this component's "now" bands
+    # from packages/shared/src/resource-thresholds.ts, per scripts/resource-alerts-lib.ts, so
+    # the alert can never fire at a number the console does not render.
+    alerts:
+      - rule: CPU_UTILIZATION
+        operator: GREATER_THAN
+        value: 90
+        window: FIVE_MINUTES
+      - rule: MEM_UTILIZATION
+        operator: GREATER_THAN
+        value: 90
+        window: FIVE_MINUTES
+      - rule: RESTART_COUNT
+        operator: GREATER_THAN
+        value: 3
+        window: ONE_HOUR
+    source_dir: /
+    github:
+      repo: anthers-inc/anthers
+      branch: release
+      deploy_on_push: false
+    # `bun run typecheck` (whole monorepo) gates the deploy, exactly as it did on the
+    # static site: a type error in api or web fails the build before anything ships.
+    build_command: bun install && bun run typecheck && bun run --cwd apps/web build
+    run_command: bun run apps/web/serve.ts
+    http_port: 3000
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    health_check:
+      http_path: /_health
+    envs:
+      - key: PORT
+        scope: RUN_TIME
+        value: "3000"
+      - key: API_ORIGIN
+        scope: RUN_TIME
+        value: http://api
+      - key: SITE_ORIGIN
+        scope: RUN_TIME
+        value: https://anthers.org
+
 workers:
   - name: worker
     # The same rendered alert set on the worker — rendered and explained at services:
@@ -582,18 +638,6 @@ jobs:
     instance_count: 1
 
 static_sites:
-  - name: web
-    source_dir: /
-    github:
-      repo: anthers-inc/anthers
-      branch: release
-      deploy_on_push: false
-    # `bun run typecheck` (whole monorepo) gates the deploy: a type error in api
-    # or web fails the build before anything ships. The static-site build checks
-    # out the full repo, so it can typecheck both workspaces.
-    build_command: bun install && bun run typecheck && bun run --cwd apps/web build
-    output_dir: apps/web/dist
-    catchall_document: index.html
   # The admin app, served at admin.anthers.org by the ingress rule above. Not typechecked here:
   # the site's build above typechecks the whole monorepo at the same commit, and doing it twice
   # would only double the deploy.

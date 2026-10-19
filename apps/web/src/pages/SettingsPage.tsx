@@ -20,6 +20,7 @@ import {
 	isDesktop,
 	setDesktopHome,
 } from "@anthers/web-shared/desktop";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import type { NotificationDeliveryMode } from "@anthers/web-shared/types";
@@ -2432,17 +2433,29 @@ export default function SettingsPage() {
 					    persistent footer bar or the page's own player. */}
 					<MiniPlayerSection />
 
-					{/* Creator Tools live in the Studio (payouts, connections, Badges). */}
+					{/* Creator Tools live in the Studio (payouts, connections); Badges are edited
+					    on the creator's own profile, beside the ladder supporters meet. */}
 					{isCreator && (
 						<div className="card bg-base-200 mt-6">
 							<div className="card-body">
 								<h3 className="card-title text-lg">Creator Tools</h3>
 								<p className="text-sm text-base-content/60">
-									Manage payouts, platform connections, and your Badges in your Studio.
+									Manage payouts and platform connections in your Studio. Your Badges are on your
+									profile, beside the ladder supporters see.
 								</p>
-								<a href={studioUrl("/settings")} className="btn btn-primary btn-sm w-fit">
-									Open Studio settings
-								</a>
+								<div className="flex flex-wrap gap-2">
+									<a href={studioUrl("/settings")} className="btn btn-primary btn-sm w-fit">
+										Open Studio settings
+									</a>
+									{user?.handle && (
+										<Link
+											to={`${profileUrl(user.handle)}?tab=badges`}
+											className="btn btn-ghost btn-sm w-fit"
+										>
+											Edit your Badges
+										</Link>
+									)}
+								</div>
 							</div>
 						</div>
 					)}

@@ -23,15 +23,18 @@ describe("The wanted policies", () => {
 			"api/CPU_UTILIZATION",
 			"api/MEM_UTILIZATION",
 			"api/RESTART_COUNT",
+			"web/CPU_UTILIZATION",
+			"web/MEM_UTILIZATION",
+			"web/RESTART_COUNT",
 			"worker/CPU_UTILIZATION",
 			"worker/MEM_UTILIZATION",
 			"worker/RESTART_COUNT",
 		]);
 	});
 
-	it("carries no policy for the migrate job or the static sites", () => {
+	it("carries no policy for the migrate job or the static site", () => {
 		for (const w of wantedAlerts(EMAIL)) {
-			expect(["api", "worker"]).toContain(w.component);
+			expect(["api", "worker", "web"]).toContain(w.component);
 		}
 	});
 
@@ -60,6 +63,7 @@ describe("The rendered YAML fragments", () => {
 	it("renders one block per component, under the component rather than the app level", () => {
 		const yaml = renderAlertsYaml(EMAIL);
 		expect(yaml).toContain('under the "api" component');
+		expect(yaml).toContain('under the "web" component');
 		expect(yaml).toContain('under the "worker" component');
 		expect(yaml).not.toMatch(/^alerts:$/m); // component-level rules only
 	});
@@ -102,7 +106,7 @@ describe("The idempotency decision", () => {
 
 	it("reports a wanted alert absent when the live list does not carry it", () => {
 		const { absent } = missingAlerts(wanted, [live("api", "CPU_UTILIZATION")]);
-		expect(absent.length).toBe(5);
+		expect(absent.length).toBe(8);
 		expect(absent.map((a) => alertKey(a.component, a.rule))).toContain("worker:MEM_UTILIZATION");
 	});
 
