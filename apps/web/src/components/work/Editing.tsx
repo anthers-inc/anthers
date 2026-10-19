@@ -40,13 +40,19 @@ const PENCIL =
  * when it passes `renderEdit` and `save` — the primitive only owns the opening, the
  * closing and the waiting.
  *
- * ⭐ **The pencil rides the content, not the field's edge** (Parker, 2026-10-16): the
- * read view and the pencil sit in one top-aligned flex row whose content hugs what it
- * renders, so the pencil lands beside the thing it edits — a centered title's pencil
- * beside the title, a description's beside its last full line — rather than at the far
- * edge of a full-width edit area. `rowAlign="center"` centers the pair as a group, which
- * a centered title's slot passes; everything else keeps the page's left column. The
- * `-mt-1` lifts the pencil toward the first text line's ascent, the corner it used to sit on.
+ * ⭐ **The pencil rides the content, not the field's edge**: the read view and the pencil
+ * sit in one top-aligned flex row whose content hugs what it renders, so the pencil lands
+ * beside the thing it edits — a description's beside its last full line — rather than at
+ * the far edge of a full-width edit area. The `-mt-1` lifts the pencil toward the first
+ * text line's ascent.
+ *
+ * ⭐ **A centered title is the exception: the text alone is centered, and the pencil
+ * hangs off its top-right corner** (Parker, 2026-10-19). Centering the read view and the
+ * pencil as one group pulls the title off the page's center, so `pencilPlacement="corner"`
+ * makes the read view a content-sized block centered by its own margins, with an equal
+ * gutter on both sides that keeps the text centered while the pencil hangs in the right
+ * one. Capping the block at the column's width means a long title truncates rather than
+ * pushing the pencil past the page's edge.
  */
 export function InlineField<V>({
 	label,
@@ -56,7 +62,7 @@ export function InlineField<V>({
 	save,
 	disabledReason,
 	className = "",
-	rowAlign = "start",
+	pencilPlacement = "beside",
 	fill = false,
 }: {
 	/** Names the field for the pencil and the screen reader. */
@@ -84,8 +90,11 @@ export function InlineField<V>({
 	 * Default is the page-row field everywhere else, sized by its content.
 	 */
 	fill?: boolean;
-	/** Whether the read row centers its content-and-pencil pair (a centered title). */
-	rowAlign?: "start" | "center";
+	/**
+	 * Whether the pencil hangs off the read view's top-right corner rather than sitting
+	 * beside it — for a centered title, where the text alone is the centered thing.
+	 */
+	pencilPlacement?: "beside" | "corner";
 }) {
 	const [mode, setMode] = useState<"read" | "edit" | "busy">("read");
 	const [draft, setDraft] = useState<V>(saved);
@@ -108,42 +117,51 @@ export function InlineField<V>({
 		}
 	};
 
+	const pencil = !disabledReason ? (
+		<button
+			type="button"
+			aria-label={`Edit ${label}`}
+			title={`Edit ${label}`}
+			className={`${PENCIL} shrink-0 ${
+				pencilPlacement === "corner" ? "absolute -top-1 right-0" : "-mt-1 self-start"
+			}`}
+			onClick={() =>
+				// Opening for edit usually makes the page taller — and whatever it
+				// does to the height, the place stays (scroll-keeper's rule).
+				keepScroll(rootRef.current, () => {
+					setDraft(saved);
+					setError(null);
+					setMode("edit");
+				})
+			}
+		>
+			<PencilSquareIcon className="size-4" />
+		</button>
+	) : (
+		<span className="shrink-0 self-start text-xs text-base-content/40" title={disabledReason}>
+			{disabledReason}
+		</span>
+	);
+
 	return (
 		<div ref={rootRef} className={`group relative ${fill ? "h-full w-full" : ""} ${className}`}>
 			{mode === "read" ? (
-				<div
-					className={`flex gap-1 ${fill ? "h-full w-full items-stretch" : "items-start"} ${
-						rowAlign === "center" && !fill ? "justify-center" : ""
-					}`}
-				>
-					<div className={`min-w-0 ${fill ? "flex w-full min-h-0" : ""}`}>{renderRead()}</div>
-					{!disabledReason ? (
-						<button
-							type="button"
-							aria-label={`Edit ${label}`}
-							title={`Edit ${label}`}
-							className={`${PENCIL} -mt-1 shrink-0 self-start`}
-							onClick={() =>
-								// Opening for edit usually makes the page taller — and whatever it
-								// does to the height, the place stays (scroll-keeper's rule).
-								keepScroll(rootRef.current, () => {
-									setDraft(saved);
-									setError(null);
-									setMode("edit");
-								})
-							}
-						>
-							<PencilSquareIcon className="size-4" />
-						</button>
-					) : (
-						<span
-							className="shrink-0 self-start text-xs text-base-content/40"
-							title={disabledReason}
-						>
-							{disabledReason}
-						</span>
-					)}
-				</div>
+				pencilPlacement === "corner" && !fill && !disabledReason ? (
+					// The gutter on both sides is what keeps the text centered while the
+					// pencil hangs in the right one; it is sized for the pencil itself (a
+					// btn-xs with padding is 34px) plus a gap. Capping the box at the
+					// column's width means a long title truncates instead of pushing the
+					// pencil outward.
+					<div className="relative mx-auto w-fit max-w-full px-10">
+						<div className="min-w-0">{renderRead()}</div>
+						{pencil}
+					</div>
+				) : (
+					<div className={`flex gap-1 ${fill ? "h-full w-full items-stretch" : "items-start"}`}>
+						<div className={`min-w-0 ${fill ? "flex w-full min-h-0" : ""}`}>{renderRead()}</div>
+						{pencil}
+					</div>
+				)
 			) : (
 				<div className="space-y-2">
 					{renderEdit(draft, setDraft, () => {
