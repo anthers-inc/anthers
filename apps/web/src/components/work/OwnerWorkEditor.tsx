@@ -1573,7 +1573,7 @@ export default function OwnerWorkEditor({
 						label="Title"
 						saved={title}
 						className="w-full min-w-0"
-						rowAlign="center"
+						pencilPlacement="corner"
 						renderRead={() => (
 							<h1
 								className={`${workTitleTypography(current.type).className} truncate`}
