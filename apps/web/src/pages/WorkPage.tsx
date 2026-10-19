@@ -27,7 +27,7 @@ import { client } from "@anthers/web-shared/rpc";
 import { type AccessResult, isAccessResult, type TranscodingJob } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { usePreviewQuery } from "../components/creator/PreviewBar";
+import { usePreviewQuery } from "../components/creator/preview";
 import SaveButton from "../components/library/SaveButton";
 import { PublicAccessWall } from "../components/media/PublicAccessNotice";
 import InlineUnlock from "../components/post/InlineUnlock";

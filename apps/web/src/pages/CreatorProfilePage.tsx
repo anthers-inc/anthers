@@ -29,24 +29,23 @@ import type {
 	Work,
 } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
-import FormField from "@anthers/web-shared/ui/FormField";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
 	BoltIcon,
-	CameraIcon,
+	CalendarDaysIcon,
 	CheckCircleIcon,
 	EllipsisHorizontalIcon,
 	LinkIcon,
 	LockClosedIcon,
 	MapPinIcon,
 	NoSymbolIcon,
-	PencilIcon,
+	PencilSquareIcon,
 } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 import FeedTile from "../components/cards/FeedTile";
 import ProjectCard from "../components/cards/ProjectCard";
-import PreviewBar, { PreviewToggle, usePreviewQuery } from "../components/creator/PreviewBar";
 import ReportDialog from "../components/ui/ReportDialog";
+import { InlineField } from "../components/work/Editing";
 import { useReportVisit } from "../lib/attention";
 import { useBasket } from "../lib/basket";
 
@@ -70,11 +69,20 @@ function postEntry(post: PostListItem): { kind: "post"; id: number } & Record<st
 	return { kind: "post", ...post };
 }
 
-type Tab = "all" | "posts" | "games" | "videos" | "audio" | "writing" | "badges" | "about";
+type Tab = "all" | "posts" | "games" | "videos" | "audio" | "writing" | "badges";
 
 function badgeNameFor(id: string): string {
 	if (id === "none" || id === "free" || !id) return "Free";
 	return id.charAt(0).toUpperCase() + id.slice(1);
+}
+
+/** The host a saved website link shows, or the stored value when it will not parse. */
+function hostLabel(url: string): string {
+	try {
+		return new URL(url).hostname;
+	} catch {
+		return url;
+	}
 }
 
 /* ------------------------------------------------------------------ */
@@ -407,7 +415,7 @@ function _anthersBadgeForRank(rank: number): Badge | null {
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
-const TABS: Tab[] = ["all", "posts", "games", "videos", "audio", "writing", "badges", "about"];
+const TABS: Tab[] = ["all", "posts", "games", "videos", "audio", "writing", "badges"];
 
 /** The separator between the tab row's groups — the timeline, the Work types, and the profile's metadata views. */
 function TabDivider() {
@@ -454,11 +462,6 @@ export default function CreatorProfilePage() {
 	const [blocked, setBlocked] = useState(false);
 
 	const isOwnProfile = currentUser?.handle === handle;
-	const preview = usePreviewQuery();
-	/** Stable string for the preview, so the load effect re-runs on value not identity. */
-	const _previewKey = JSON.stringify(preview);
-	/** Whether the preview mode is on — the toggle beside Edit only shows when it is off. */
-	const previewActive = Object.keys(preview).length > 0;
 
 	// A profile is a single-creator shelf — the Catalog and posts render as cards that
 	// link out to WorkPage, where consumption actually happens and the Time Pool claim
@@ -466,123 +469,62 @@ export default function CreatorProfilePage() {
 	// browsed this creator's catalog) and earns nothing, mirroring ProjectPage's pattern.
 	useReportVisit({ creatorId: creator?.id ?? null });
 
-	// Edit mode state
-	const [editing, setEditing] = useState(false);
-	const [editDisplayName, setEditDisplayName] = useState("");
-	const [editBio, setEditBio] = useState("");
-	const [editWebsiteUrl, setEditWebsiteUrl] = useState("");
-	const [editLocation, setEditLocation] = useState("");
-	const [avatarFile, setAvatarFile] = useState<File | null>(null);
-	const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-	const [headerFile, setHeaderFile] = useState<File | null>(null);
-	const [headerPreview, setHeaderPreview] = useState<string | null>(null);
-	const [saving, setSaving] = useState(false);
-	const [editError, setEditError] = useState<string | null>(null);
-	const [editErrors, setEditErrors] = useState<Record<string, string>>({});
-
-	const startEditing = () => {
-		if (!creator) return;
-		setEditDisplayName(creator.displayName || "");
-		setEditBio(creator.bio || "");
-		setEditWebsiteUrl(creator.websiteUrl || "");
-		setEditLocation(creator.location || "");
-		setAvatarFile(null);
-		setAvatarPreview(creator.avatar || null);
-		setHeaderFile(null);
-		setHeaderPreview(creator.headerImage || null);
-		setEditError(null);
-		setEditErrors({});
-		setEditing(true);
+	/**
+	 * The one writer behind every pencil: a field saves itself, so there is no page-wide
+	 * save and no draft outliving the field that opened it. A refusal keeps the field
+	 * open with the server's own words in it.
+	 */
+	const saveProfileField = async (
+		patch: Partial<
+			Pick<PublicUser, "displayName" | "bio" | "websiteUrl" | "location" | "avatar" | "headerImage">
+		>,
+	) => {
+		const res = await apiFetch("/api/accounts/me", {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(patch),
+		});
+		if (!res.ok) {
+			const body = (await res.json().catch(() => null)) as {
+				error?: string;
+				issues?: Array<{ message?: string }>;
+			} | null;
+			throw new Error(body?.error ?? body?.issues?.[0]?.message ?? "Couldn't save this just now.");
+		}
+		const { user } = (await res.json()) as { user: PublicUser };
+		setCreator((current) => (current ? { ...current, ...user } : current));
+		// The account's name and avatar also ride the nav, so the app's copy moves too.
+		await refreshUser();
 	};
 
-	const cancelEditing = () => {
-		setEditing(false);
-		setEditError(null);
-		setEditErrors({});
-	};
+	/**
+	 * An image is the one field with no draft: choosing a file uploads it and saves the
+	 * URL in the same act, the way a Work's thumbnail and a Project's cover behave.
+	 */
+	const [imageBusy, setImageBusy] = useState<"avatar" | "header" | null>(null);
+	const [imageError, setImageError] = useState<string | null>(null);
 
-	const handleSaveProfile = async (e: React.FormEvent) => {
-		e.preventDefault();
-		setSaving(true);
-		setEditError(null);
-		setEditErrors({});
-
+	const changeImage = async (kind: "avatar" | "header", file: File) => {
+		setImageBusy(kind);
+		setImageError(null);
 		try {
-			// Upload files first if changed, then patch profile with URLs
-			let avatarUrl: string | undefined;
-			let headerUrl: string | undefined;
-
-			if (avatarFile) {
-				const uploadData = new FormData();
-				uploadData.append("file", avatarFile);
-				uploadData.append("mediaType", "avatar");
-				const uploadRes = await apiFetch("/api/content/media-upload/direct", {
-					method: "POST",
-					body: uploadData,
-				});
-				if (!uploadRes.ok) throw new Error("Failed to upload avatar.");
-				const uploadJson = (await uploadRes.json()) as { url: string };
-				avatarUrl = uploadJson.url;
-			}
-
-			if (headerFile) {
-				const uploadData = new FormData();
-				uploadData.append("file", headerFile);
-				uploadData.append("mediaType", "header");
-				const uploadRes = await apiFetch("/api/content/media-upload/direct", {
-					method: "POST",
-					body: uploadData,
-				});
-				if (!uploadRes.ok) throw new Error("Failed to upload header image.");
-				const uploadJson = (await uploadRes.json()) as { url: string };
-				headerUrl = uploadJson.url;
-			}
-
-			const payload: Record<string, string> = {
-				displayName: editDisplayName,
-				bio: editBio,
-				websiteUrl: editWebsiteUrl,
-				location: editLocation,
-			};
-			if (avatarUrl) payload.avatar = avatarUrl;
-			if (headerUrl) payload.headerImage = headerUrl;
-
-			const res = await apiFetch("/api/accounts/me", {
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(payload),
+			const form = new FormData();
+			form.append("file", file);
+			form.append("mediaType", kind);
+			const upload = await apiFetch("/api/content/media-upload/direct", {
+				method: "POST",
+				body: form,
 			});
-
-			if (!res.ok) {
-				const data = await res.json();
-				if (data && typeof data === "object") {
-					const fieldErrors: Record<string, string> = {};
-					for (const [key, val] of Object.entries(data as Record<string, string[]>)) {
-						fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
-					}
-					setEditErrors(fieldErrors);
-					return;
-				}
-				throw new Error("Failed to save profile.");
+			if (!upload.ok) {
+				const body = (await upload.json().catch(() => null)) as { error?: string } | null;
+				throw new Error(body?.error ?? "That image didn't upload. Try it again.");
 			}
-
-			await refreshUser();
-
-			// Re-fetch the profile data to reflect changes
-			const creatorRes = await client.api.accounts.users[":handle"].$get({
-				param: { handle: handle! },
-			});
-			if (creatorRes.ok) {
-				const { user } = await creatorRes.json();
-				setCreator(user);
-			}
-			setEditing(false);
+			const { url } = (await upload.json()) as { url: string };
+			await saveProfileField(kind === "avatar" ? { avatar: url } : { headerImage: url });
 		} catch (err) {
-			if (Object.keys(editErrors).length === 0) {
-				setEditError(err instanceof Error ? err.message : "Failed to save profile.");
-			}
+			setImageError(err instanceof Error ? err.message : "That image didn't upload. Try it again.");
 		} finally {
-			setSaving(false);
+			setImageBusy(null);
 		}
 	};
 
@@ -600,10 +542,10 @@ export default function CreatorProfilePage() {
 				const res = await client.api.content.posts.$get({ query: { creator: handle } });
 				return res.ok ? ((await res.json()) as { posts: PostListItem[] }) : { posts: [] };
 			})(),
+			// A profile has no preview mode, so the catalog resolves in the viewer's real
+			// context — the server re-resolves each Work, and the frontend never decides a gate.
 			client.api.content.catalog[":handle"]
-				// The preview reaches the server, which re-resolves each Work with a
-				// substituted context — the frontend never decides a gate itself.
-				.$get({ param: { handle }, query: preview })
+				.$get({ param: { handle }, query: {} })
 				.then(async (res) => (res.ok ? await res.json() : { works: [] })),
 			apiFetch(`/api/subscriptions/creator-status/${handle}`, {})
 				.then((res) => (res.ok ? res.json() : null))
@@ -636,7 +578,7 @@ export default function CreatorProfilePage() {
 			})
 			.catch(console.error)
 			.finally(() => setLoading(false));
-	}, [handle, preview]);
+	}, [handle]);
 
 	/**
 	 * Block this person. Confirmed first, because it is the one control here that
@@ -750,169 +692,47 @@ export default function CreatorProfilePage() {
 		// the bees read as a background, hidden behind the header image and the cards
 		// rather than painted across them. The logged-in layout has no decorative layer.
 		<div className="relative z-30">
-			{/* Creator preview — above everything, because it changes what everything below
-			    says. Only ever offered to the person whose profile it is; the server guards
-			    it per Work regardless. */}
-			{isAuthenticated && isOwnProfile && (
-				<div className="container mx-auto px-4 pt-4">
-					<PreviewBar />
-				</div>
-			)}
 			{/* Header banner. 🚨 Inside the container's width, at a 3:1 ratio — that is
 			    the banner-size convention (Bluesky: 3:1, recommended 1500×500; YouTube
 			    similar), and full-bleed read as a second, wider site than the one the
-			    rest of this page belongs to. */}
-			{editing ? (
-				<div className="container mx-auto px-4">
-					<div className="relative w-full aspect-[3/1] bg-base-300 group">
-						{headerPreview ? (
-							<img src={headerPreview} alt="Header" className="w-full h-full object-cover" />
-						) : (
-							<div className="w-full h-full bg-base-300" />
-						)}
-						<label className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-							<div className="flex items-center gap-2 text-white text-sm font-medium">
-								<CameraIcon className="w-5 h-5" />
-								Change header
-							</div>
+			    rest of this page belongs to. The pencil is the only edit affordance:
+			    a creator and a visitor meet the same banner. */}
+			<div className="container mx-auto px-4">
+				<div className="relative w-full aspect-[3/1] bg-base-300">
+					{creator.headerImage && (
+						<img src={creator.headerImage} alt="Header" className="w-full h-full object-cover" />
+					)}
+					{isAuthenticated && isOwnProfile && (
+						<label
+							className={`btn btn-sm absolute right-2 top-2 bg-base-100/80 backdrop-blur ${
+								imageBusy === "header" ? "btn-disabled" : ""
+							}`}
+							title="Change header image"
+						>
+							<PencilSquareIcon className="w-4 h-4" />
+							<span className="sr-only">Change header image</span>
 							<input
 								type="file"
 								accept="image/*"
 								className="hidden"
+								disabled={imageBusy !== null}
 								onChange={(e) => {
 									const file = e.target.files?.[0];
-									if (file) {
-										setHeaderFile(file);
-										setHeaderPreview(URL.createObjectURL(file));
-									}
+									e.target.value = "";
+									if (file) void changeImage("header", file);
 								}}
 							/>
 						</label>
-					</div>
+					)}
 				</div>
-			) : (
-				<div className="container mx-auto px-4">
-					<div
-						className="w-full aspect-[3/1] bg-base-300"
-						style={
-							creator.headerImage
-								? {
-										backgroundImage: `url(${creator.headerImage})`,
-										backgroundSize: "cover",
-										backgroundPosition: "center",
-									}
-								: undefined
-						}
-					/>
-				</div>
-			)}
+			</div>
 
 			<div className="container mx-auto px-4">
-				{/* Profile info */}
-				{editing ? (
-					<form onSubmit={handleSaveProfile} className="mb-6">
-						{/* Avatar with overlay */}
-						<div className="flex flex-col sm:flex-row items-start gap-4 -mt-12 mb-4">
-							<div className="relative group">
-								{avatarPreview ? (
-									<img
-										src={avatarPreview}
-										alt="Avatar"
-										className="w-24 h-24 rounded-full object-cover border-4 border-base-100"
-									/>
-								) : (
-									<div className="w-24 h-24 rounded-full bg-base-300 border-4 border-base-100 flex items-center justify-center text-3xl font-bold text-base-content/40">
-										{(editDisplayName || creator.handle).charAt(0).toUpperCase()}
-									</div>
-								)}
-								<label className="absolute inset-0 flex items-center justify-center rounded-full bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-									<CameraIcon className="w-6 h-6 text-white" />
-									<input
-										type="file"
-										accept="image/*"
-										className="hidden"
-										onChange={(e) => {
-											const file = e.target.files?.[0];
-											if (file) {
-												setAvatarFile(file);
-												setAvatarPreview(URL.createObjectURL(file));
-											}
-										}}
-									/>
-								</label>
-							</div>
-							<div className="flex-1 pt-4 sm:pt-14 w-full">
-								<p className="text-base-content/60 mb-3">@{creator.handle}</p>
-							</div>
-						</div>
-
-						{editError && (
-							<div className="alert alert-error mb-4">
-								<span>{editError}</span>
-							</div>
-						)}
-
-						<div className="flex flex-col gap-4 max-w-lg">
-							<FormField label="Display Name" error={editErrors.displayName}>
-								<input
-									type="text"
-									className="input input-bordered w-full"
-									value={editDisplayName}
-									onChange={(e) => setEditDisplayName(e.target.value)}
-									maxLength={150}
-								/>
-							</FormField>
-
-							<FormField label="Bio" error={editErrors.bio}>
-								<textarea
-									className="textarea textarea-bordered w-full"
-									rows={3}
-									value={editBio}
-									onChange={(e) => setEditBio(e.target.value)}
-								/>
-							</FormField>
-
-							<FormField label="Website URL" error={editErrors.websiteUrl}>
-								<input
-									type="url"
-									className="input input-bordered w-full"
-									value={editWebsiteUrl}
-									onChange={(e) => setEditWebsiteUrl(e.target.value)}
-									placeholder="https://example.com"
-								/>
-							</FormField>
-
-							<FormField label="Location" error={editErrors.location}>
-								<input
-									type="text"
-									className="input input-bordered w-full"
-									value={editLocation}
-									onChange={(e) => setEditLocation(e.target.value)}
-									maxLength={100}
-								/>
-							</FormField>
-
-							<div className="flex gap-2 mt-2">
-								<button
-									type="submit"
-									className={`btn btn-primary btn-sm ${saving ? "btn-disabled" : ""}`}
-									disabled={saving}
-								>
-									{saving ? "Saving..." : "Save Profile"}
-								</button>
-								<button
-									type="button"
-									className="btn btn-ghost btn-sm"
-									onClick={cancelEditing}
-									disabled={saving}
-								>
-									Cancel
-								</button>
-							</div>
-						</div>
-					</form>
-				) : (
-					<div className="flex flex-col sm:flex-row items-start gap-4 -mt-12 mb-6">
+				{/* Profile info. Every editable field is the page's own read rendering with
+				    a pencil beside it; there is no separate edit view and no page-wide save. */}
+				{imageError && <p className="mt-2 text-xs text-error">{imageError}</p>}
+				<div className="flex flex-col sm:flex-row items-start gap-4 -mt-12 mb-6">
+					<div className="relative">
 						{creator.avatar ? (
 							<img
 								src={creator.avatar}
@@ -924,114 +744,211 @@ export default function CreatorProfilePage() {
 								{(creator.displayName || creator.handle).charAt(0).toUpperCase()}
 							</div>
 						)}
-						<div className="flex-1 pt-4 sm:pt-14">
-							{/* The name and its two controls sit together, Bluesky-style — the row
-							    of text the name belongs to is where a person looks to act on a
-							    profile, not the far corner of it. */}
-							<div className="flex flex-wrap items-center gap-3">
+						{isAuthenticated && isOwnProfile && (
+							<label
+								className={`btn btn-xs btn-circle absolute bottom-0 right-0 ${
+									imageBusy === "avatar" ? "btn-disabled" : ""
+								}`}
+								title="Change profile picture"
+							>
+								<PencilSquareIcon className="w-3.5 h-3.5" />
+								<span className="sr-only">Change profile picture</span>
+								<input
+									type="file"
+									accept="image/*"
+									className="hidden"
+									disabled={imageBusy !== null}
+									onChange={(e) => {
+										const file = e.target.files?.[0];
+										e.target.value = "";
+										if (file) void changeImage("avatar", file);
+									}}
+								/>
+							</label>
+						)}
+					</div>
+					<div className="flex-1 pt-4 sm:pt-14">
+						<InlineField<string>
+							label="display name"
+							saved={creator.displayName ?? ""}
+							renderRead={() => (
 								<h1 className="text-2xl font-bold">{creator.displayName || creator.handle}</h1>
-								{isAuthenticated && isOwnProfile && (
-									<button type="button" className="btn btn-ghost btn-sm" onClick={startEditing}>
-										<PencilIcon className="w-4 h-4" />
-										Edit
-									</button>
+							)}
+							renderEdit={(draft, setDraft) => (
+								<input
+									type="text"
+									aria-label="Display name"
+									className="input input-bordered w-full max-w-md"
+									value={draft}
+									onChange={(e) => setDraft(e.target.value)}
+									maxLength={150}
+								/>
+							)}
+							save={(draft) => saveProfileField({ displayName: draft.trim() })}
+						/>
+						<p className="text-base-content/60">
+							@{creator.handle} · {followerCount} followers
+						</p>
+						<InlineField<string>
+							label="bio"
+							saved={creator.bio ?? ""}
+							className="mt-2"
+							renderRead={() =>
+								creator.bio ? (
+									<p className="text-sm max-w-2xl whitespace-pre-line">{creator.bio}</p>
+								) : (
+									<p className="text-sm italic text-base-content/40">Add a bio</p>
+								)
+							}
+							renderEdit={(draft, setDraft) => (
+								<textarea
+									aria-label="Bio"
+									className="textarea textarea-bordered w-full max-w-2xl"
+									rows={4}
+									value={draft}
+									onChange={(e) => setDraft(e.target.value)}
+									maxLength={5000}
+								/>
+							)}
+							save={(draft) => saveProfileField({ bio: draft.trim() })}
+						/>
+						<div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-base-content/60">
+							<InlineField<string>
+								label="website"
+								saved={creator.websiteUrl ?? ""}
+								renderRead={() =>
+									creator.websiteUrl ? (
+										<a
+											href={creator.websiteUrl}
+											target="_blank"
+											rel="noopener noreferrer"
+											className="flex items-center gap-1 link link-hover"
+										>
+											<LinkIcon className="w-4 h-4" />
+											{hostLabel(creator.websiteUrl)}
+										</a>
+									) : (
+										<span className="italic text-base-content/40">Add a website</span>
+									)
+								}
+								renderEdit={(draft, setDraft) => (
+									<input
+										type="url"
+										aria-label="Website URL"
+										className="input input-bordered input-sm w-72"
+										value={draft}
+										onChange={(e) => setDraft(e.target.value)}
+										placeholder="https://example.com"
+										maxLength={500}
+									/>
 								)}
-								{isAuthenticated && isOwnProfile && !previewActive && <PreviewToggle />}
-							</div>
-							<p className="text-base-content/60">
-								@{creator.handle} · {followerCount} followers
-							</p>
-							{creator.bio && <p className="mt-2 text-sm max-w-2xl">{creator.bio}</p>}
-							<div className="flex items-center gap-4 mt-2 text-sm text-base-content/60">
-								{creator.websiteUrl && (
-									<a
-										href={creator.websiteUrl}
-										target="_blank"
-										rel="noopener noreferrer"
-										className="flex items-center gap-1 link link-hover"
-									>
-										<LinkIcon className="w-4 h-4" />
-										{new URL(creator.websiteUrl).hostname}
-									</a>
+								save={(draft) => saveProfileField({ websiteUrl: draft.trim() })}
+							/>
+							<InlineField<string>
+								label="location"
+								saved={creator.location ?? ""}
+								renderRead={() =>
+									creator.location ? (
+										<span className="flex items-center gap-1">
+											<MapPinIcon className="w-4 h-4" />
+											{creator.location}
+										</span>
+									) : (
+										<span className="italic text-base-content/40">Add a location</span>
+									)
+								}
+								renderEdit={(draft, setDraft) => (
+									<input
+										type="text"
+										aria-label="Location"
+										className="input input-bordered input-sm w-56"
+										value={draft}
+										onChange={(e) => setDraft(e.target.value)}
+										placeholder="City, country"
+										maxLength={100}
+									/>
 								)}
-								{creator.location && (
-									<span className="flex items-center gap-1">
-										<MapPinIcon className="w-4 h-4" />
-										{creator.location}
-									</span>
-								)}
-							</div>
+								save={(draft) => saveProfileField({ location: draft.trim() })}
+							/>
+							<span className="flex items-center gap-1">
+								<CalendarDaysIcon className="w-4 h-4" />
+								Member since{" "}
+								{new Date(creator.createdAt).toLocaleDateString("en-US", {
+									month: "long",
+									year: "numeric",
+								})}
+							</span>
 						</div>
-						{isAuthenticated && !isOwnProfile && (
-							<div className="flex flex-col items-end gap-2 mt-4 sm:mt-12">
-								<div className="flex items-center gap-2">
-									<button
-										type="button"
-										className={`btn ${isFollowing ? "btn-outline" : "btn-primary"}`}
-										onClick={handleFollow}
-										// Unfollowing is never blocked; following writes a record.
-										disabled={!isFollowing && followPermissionMissing}
-										title={
-											!isFollowing && followPermissionMissing
-												? INTERACTION_PERMISSION_HINT
-												: undefined
-										}
-									>
-										{isFollowing ? "Following" : "Follow"}
-									</button>
+					</div>
+					{isAuthenticated && !isOwnProfile && (
+						<div className="flex flex-col items-end gap-2 mt-4 sm:mt-12">
+							<div className="flex items-center gap-2">
+								<button
+									type="button"
+									className={`btn ${isFollowing ? "btn-outline" : "btn-primary"}`}
+									onClick={handleFollow}
+									// Unfollowing is never blocked; following writes a record.
+									disabled={!isFollowing && followPermissionMissing}
+									title={
+										!isFollowing && followPermissionMissing
+											? INTERACTION_PERMISSION_HINT
+											: undefined
+									}
+								>
+									{isFollowing ? "Following" : "Follow"}
+								</button>
 
-									{/* Block and Report sit together and read differently on purpose.
+								{/* Block and Report sit together and read differently on purpose.
 									    Blocking is yours and takes effect immediately; reporting asks an
 									    operator to look. Someone who wants to be left alone should not have
 									    to file a report to get it, and someone reporting abuse should not
 									    have to keep seeing it while they wait. */}
-									<div className="dropdown dropdown-end">
-										<button
-											type="button"
-											tabIndex={0}
-											className="btn btn-ghost btn-square"
-											aria-label={`More options for ${creator.handle}`}
-										>
-											<EllipsisHorizontalIcon className="w-5 h-5" />
-										</button>
-										<ul className="dropdown-content menu z-10 w-56 rounded-box bg-base-200 p-2 shadow">
-											<li>
-												<button type="button" onClick={() => setConfirmingBlock(true)}>
-													<NoSymbolIcon className="w-4 h-4" />
-													Block @{creator.handle}
-												</button>
-											</li>
-											<li>
-												<button type="button" onClick={() => setReporting(true)}>
-													Report @{creator.handle}
-												</button>
-											</li>
-										</ul>
-									</div>
+								<div className="dropdown dropdown-end">
+									<button
+										type="button"
+										tabIndex={0}
+										className="btn btn-ghost btn-square"
+										aria-label={`More options for ${creator.handle}`}
+									>
+										<EllipsisHorizontalIcon className="w-5 h-5" />
+									</button>
+									<ul className="dropdown-content menu z-10 w-56 rounded-box bg-base-200 p-2 shadow">
+										<li>
+											<button type="button" onClick={() => setConfirmingBlock(true)}>
+												<NoSymbolIcon className="w-4 h-4" />
+												Block @{creator.handle}
+											</button>
+										</li>
+										<li>
+											<button type="button" onClick={() => setReporting(true)}>
+												Report @{creator.handle}
+											</button>
+										</li>
+									</ul>
 								</div>
-								{/* The user's Anthers Badge, and the rung held here */}
-								{creatorStatus && creatorStatus.badge !== "free" && (
-									<div className="flex items-center gap-2 text-xs">
-										<span className="badge badge-sm badge-outline">
-											{badgeNameFor(creatorStatus.badge)}
-										</span>
-										{parseFloat(creatorStatus.badgeAmount) > 0 && (
-											<span className="badge badge-sm badge-primary badge-outline">
-												{amountLabel(creatorStatus.badgeAmount)}/mo
-											</span>
-										)}
-									</div>
-								)}
 							</div>
-						)}
-					</div>
-				)}
+							{/* The user's Anthers Badge, and the rung held here */}
+							{creatorStatus && creatorStatus.badge !== "free" && (
+								<div className="flex items-center gap-2 text-xs">
+									<span className="badge badge-sm badge-outline">
+										{badgeNameFor(creatorStatus.badge)}
+									</span>
+									{parseFloat(creatorStatus.badgeAmount) > 0 && (
+										<span className="badge badge-sm badge-primary badge-outline">
+											{amountLabel(creatorStatus.badgeAmount)}/mo
+										</span>
+									)}
+								</div>
+							)}
+						</div>
+					)}
+				</div>
 
 				{/* Tabs. One flat row, but grouped: the timeline views (All, Posts), then the
 				    Work-type views — only the types the creator has actually released, so a
 				    profile with no audio shows no Audio tab rather than "Audio (0)" — then
-				    Badges and About. The dividers sit between the groups, and collapse to a
-				    single divider when the middle group is empty. */}
+				    Badges. The dividers sit between the groups, and collapse to a single
+				    divider when the middle group is empty. */}
 				<div className="tabs tabs-bordered mb-6 overflow-x-auto">
 					<button
 						type="button"
@@ -1069,13 +986,6 @@ export default function CreatorProfilePage() {
 						onClick={() => setTab("badges")}
 					>
 						Badges
-					</button>
-					<button
-						type="button"
-						className={`tab whitespace-nowrap ${tab === "about" ? "tab-active" : ""}`}
-						onClick={() => setTab("about")}
-					>
-						About
 					</button>
 				</div>
 
@@ -1207,32 +1117,6 @@ export default function CreatorProfilePage() {
 								You've blocked @{creator.handle}. Neither of you will see the other around Anthers,
 								and you're no longer following each other. You can undo this in Settings.
 							</span>
-						</div>
-					)}
-
-					{tab === "about" && (
-						<div className="max-w-2xl">
-							{creator.bio ? (
-								<div className="prose prose-sm">
-									{creator.bio.split("\n").map((line, i) => (
-										<p
-											// biome-ignore lint/suspicious/noArrayIndexKey: lines of one string, re-split whole on every render; two blank lines are identical, so position is the only identity.
-											key={i}
-										>
-											{line}
-										</p>
-									))}
-								</div>
-							) : (
-								<EmptyState title="No bio yet" />
-							)}
-							<div className="mt-6 text-sm text-base-content/50">
-								Member since{" "}
-								{new Date(creator.createdAt).toLocaleDateString("en-US", {
-									month: "long",
-									year: "numeric",
-								})}
-							</div>
 						</div>
 					)}
 				</div>
