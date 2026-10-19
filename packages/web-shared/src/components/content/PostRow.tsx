@@ -108,9 +108,6 @@ export default function PostRow({
 							Scheduled for {scheduled}
 						</p>
 					)}
-					{status === "published" && !post.showOnTimeline && (
-						<p className="text-xs text-base-content/60">Off the timeline</p>
-					)}
 					{status === "published" && onUnpublish && (
 						<button
 							type="button"

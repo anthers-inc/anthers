@@ -59,7 +59,9 @@ test("the studio's post is its own page, with pencils on it", async ({ page, con
 	expect(publicId, "the post's public address resolved").toBeTruthy();
 	await expect(page.getByText("Draft", { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Publish" })).toBeVisible();
-	await expect(page.getByRole("button", { name: "Delete" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Pin" })).toBeVisible();
+	// Delete is the Studio Posts table's, not the page's (Parker, 2026-10-19).
+	await expect(page.getByRole("button", { name: "Delete" })).toHaveCount(0);
 
 	// The creator's read is the page itself: the words render where a user reads them.
 	await expect(page.locator("article .post-body")).toContainText("Draft words, written");
@@ -76,6 +78,15 @@ test("the studio's post is its own page, with pencils on it", async ({ page, con
 	await page.waitForURL(/\/posts\/retitled-.+-\d{6,}$/);
 	await expect(page.locator("h1")).toContainText(`Retitled ${RUN}`);
 	await expect(page.locator("article .post-body")).toContainText("Draft words, written");
+
+	// The retitle logged itself, and the history opens OVER the page rather than into it
+	// (Parker, 2026-10-19): the layout does not shift to make room for it.
+	await page.getByRole("button", { name: /^Edited/ }).click();
+	const history = page.getByRole("dialog", { name: "Edit history" });
+	await expect(history).toBeVisible();
+	await expect(history).toContainText("Changed title");
+	await page.keyboard.press("Escape");
+	await expect(history).toBeHidden();
 
 	// ── The body pencil: the save reaches the stored markdown the page renders. ──
 	await page.getByRole("button", { name: "Edit Body" }).click();
@@ -96,9 +107,8 @@ test("the studio's post is its own page, with pencils on it", async ({ page, con
 	expect(page.url(), "the walk stayed on the same post").toContain(`-${publicId}`);
 	await expect(page.locator("article .post-body")).toContainText(words);
 
-	// The publish machinery is the page's owner-only chrome, in the places it acts from:
-	// the Draft badge, the Publish button, the schedule pencil, and the feed-shape
-	// toggles for the creator alone.
+	// The owner's chrome is the action pack at the title's right, the Draft badge, and
+	// the schedule pencil — the creator's alone.
 	await expect(page.getByText("Draft", { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Publish" })).toBeVisible();
 	await expect(page.getByText("Not scheduled")).toBeVisible();

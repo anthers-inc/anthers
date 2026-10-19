@@ -366,7 +366,7 @@ describe("what 'deleted' means, table by table", () => {
 		for (const [table, column] of [
 			["sessions", "user_id"],
 			["follows", "follower_id"],
-			["bookmarks", "user_id"],
+			["library_items", "user_id"],
 			["attention_events", "user_id"],
 			["billing_accounts", "user_id"],
 			["user_preferences", "user_id"],
