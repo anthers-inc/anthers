@@ -14,8 +14,9 @@
  * sources from is the viewable one, and the creator's view is that page with pencils in
  * it.
  *
- * Sections: Basics (title + body + timeline + project attach), Publish (pin + schedule +
- * draft/publish). A post carries NO linked-Works field (Parker, 2026-10-16): you put a
+ * Sections: Basics (title + body + project attach), Publish (schedule + draft/publish).
+ * Pinning is not a create-time control any more: a creator pins the post they want featured
+ * from the post's own page, where the one-pin rule can name the post it would replace. A post carries NO linked-Works field (Parker, 2026-10-16): you put a
  * Work's link in the body and the page renders the card for it under the text, the way a
  * Bluesky post renders an embedded player for the link it carries. There is no Access
  * section: a post is an announcement — it carries a body, some links and nothing
@@ -51,12 +52,10 @@ export default function PostFormPage() {
 	// One body, held as the editor's HTML and converted to markdown at the API's write
 	// boundary — the stored, canonical form. Nothing else about the body is sent.
 	const [bodyHtml, setBodyHtml] = useState("");
-	const [showOnTimeline, setShowOnTimeline] = useState(true);
 	const [projectId, setProjectId] = useState<string>("");
 	const [projects, setProjects] = useState<Project[]>([]);
 
 	// ── Publish ──
-	const [isPinned, setIsPinned] = useState(false);
 	// Optional auto-publish time (datetime-local string). Non-empty = scheduled draft.
 	const [scheduledFor, setScheduledFor] = useState<string>("");
 
@@ -107,8 +106,6 @@ export default function PostFormPage() {
 		const base = {
 			title,
 			bodyHtml,
-			showOnTimeline,
-			isPinned,
 			tags: tagsFromBodyHtml(bodyHtml),
 			isPublished: publish,
 			// Publishing now clears any schedule; otherwise persist the chosen auto-publish time.
@@ -179,16 +176,6 @@ export default function PostFormPage() {
 						</p>
 					</FormField>
 
-					<label className="label cursor-pointer justify-start gap-3">
-						<input
-							type="checkbox"
-							className="toggle toggle-primary"
-							checked={showOnTimeline}
-							onChange={(e) => setShowOnTimeline(e.target.checked)}
-						/>
-						<span className="label-text">Show on Timeline</span>
-					</label>
-
 					<FormField
 						label="Project (optional)"
 						hint="Attach this post to one of your Projects. You can move it later from the Project itself."
@@ -211,16 +198,6 @@ export default function PostFormPage() {
 				{/* ── 2. Publish ── */}
 				<section className="flex flex-col gap-4 border-t border-base-300 pt-6">
 					<h2 className="text-lg font-semibold">Publish</h2>
-
-					<label className="label cursor-pointer justify-start gap-3">
-						<input
-							type="checkbox"
-							className="toggle toggle-secondary"
-							checked={isPinned}
-							onChange={(e) => setIsPinned(e.target.checked)}
-						/>
-						<span className="label-text">Pin Post</span>
-					</label>
 
 					<FormField label="Schedule publish (optional)">
 						<div className="flex flex-wrap items-center gap-2">
