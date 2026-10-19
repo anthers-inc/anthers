@@ -170,6 +170,12 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// Release appears on the far side of create, in the Details tab, at a URL that can
 	// be linked to — the Work's own page is the editing surface (the kinds pass).
 	await expect(page.getByRole("heading", { name: "Release", exact: true })).toBeVisible();
+	// The tab leads with what the Work is, and puts when it came out under it
+	// (Parker, 2026-10-19) — the creator's Details tab carries those two sections.
+	await expect(page.getByRole("tabpanel", { name: "Details" }).locator("h3")).toHaveText([
+		"Description",
+		"Release",
+	]);
 
 	// ── Unrated, and therefore unreleasable ─────────────────────────────────
 	// A Work is born `unrated` and the server refuses to release one (`maturity_undeclared`),
@@ -216,6 +222,10 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 		.getByRole("button", { name: "None", exact: true })
 		.click();
 	await page.getByRole("button", { name: "Save Rating" }).click();
+	// The Rating tab is the badge and the table, with no line explaining what a
+	// General rating means (Parker, 2026-10-19) — neither the visitor's wording nor
+	// the creator's shorter copy.
+	await expect(page.getByText(/users see no rating on a General Work/i)).toHaveCount(0);
 	// The credits, in the Credits tab's own field. Release refuses a Work whose credits
 	// name no human (`credits_creator_required`), and the walk is through the UI rather
 	// than around it: add a credit, tick its Created box, and name the person — the
