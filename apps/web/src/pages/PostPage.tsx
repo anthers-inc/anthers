@@ -29,13 +29,16 @@ import { usePublishingPermissionMissing } from "@anthers/web-shared/publishing";
 import { Link, useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { studioUrl } from "@anthers/web-shared/studio";
-import type { Post } from "@anthers/web-shared/types";
+import type { Post, PostListItem } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
+import { XMarkIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import WorkCard from "../components/cards/WorkCard";
+import SaveButton from "../components/library/SaveButton";
 import CommentThread from "../components/post/CommentThread";
+import SharePostButton from "../components/post/SharePostButton";
 import StickerBar from "../components/post/StickerBar";
 import VoteControl from "../components/post/VoteControl";
 import { InlineField } from "../components/work/Editing";
@@ -54,9 +57,11 @@ export default function PostPage() {
 	const [loading, setLoading] = useState(true);
 	usePageTitle(post?.title ?? null);
 
-	// ── Owner actions (unpublish / delete / publish) ──
+	// ── Owner actions (publish / pin) ──
 	const [showHistory, setShowHistory] = useState(false);
-	const [showDelete, setShowDelete] = useState(false);
+	const [showUnpublish, setShowUnpublish] = useState(false);
+	/** The post a new pin would replace, when there is one — the confirmation's cue. */
+	const [pinTarget, setPinTarget] = useState<PostListItem | null>(null);
 	const [actioning, setActioning] = useState(false);
 
 	const payoutsReady = usePayoutsReady();
@@ -106,6 +111,20 @@ export default function PostPage() {
 			navigate(canonical, { replace: true });
 		}
 	}, [post, location.pathname, navigate]);
+
+	// Escape closes whichever modal is open, the keyboard half of the door; the pointer
+	// half is each modal's own ✕ / Cancel.
+	useEffect(() => {
+		if (!showHistory && !showUnpublish && !pinTarget) return;
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== "Escape") return;
+			setShowHistory(false);
+			setShowUnpublish(false);
+			setPinTarget(null);
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [showHistory, showUnpublish, pinTarget]);
 
 	// No transcode poller and no Time Pool claim here, deliberately. A post owns no media
 	// and earns nothing — both belong to the Work, and both live on WorkPage now.
@@ -175,10 +194,12 @@ export default function PostPage() {
 		}
 	};
 
-	const handleUnpublish = async () => {
+	/** Unpublish, once the confirmation has been answered. Returns the post to draft. */
+	const confirmUnpublish = async () => {
 		setActioning(true);
 		try {
 			await saveField({ isPublished: false });
+			setShowUnpublish(false);
 		} catch (err) {
 			console.error(err);
 		} finally {
@@ -197,16 +218,43 @@ export default function PostPage() {
 		}
 	};
 
-	const confirmDelete = async () => {
+	/** Apply a pin or unpin. Pinning takes the creator's one pin slot server-side. */
+	const applyPin = async (pinned: boolean) => {
 		setActioning(true);
 		try {
-			const res = await client.api.content.posts[":slug"].$delete({
-				param: { slug: post.slug },
-				query: {},
-			});
-			if (res.status === 204 || res.ok) {
-				navigate(post.creator?.handle ? profileUrl(post.creator.handle) : "/");
+			await saveField({ isPinned: pinned });
+			setPinTarget(null);
+		} catch (err) {
+			console.error(err);
+		} finally {
+			setActioning(false);
+		}
+	};
+
+	/**
+	 * Pin asks first **only** when another post already holds the pin. Unpin never asks,
+	 * because taking a pin off your own post is the direction that loses nothing.
+	 */
+	const requestPin = async () => {
+		if (post.isPinned) {
+			await applyPin(false);
+			return;
+		}
+		setActioning(true);
+		try {
+			const res = await client.api.content.posts.$get({ query: { mine: "true" } });
+			if (res.ok) {
+				const { posts } = (await res.json()) as { posts: PostListItem[] };
+				// Pinned rows sort first, so the one holding the slot is on this page.
+				const other = posts.find((p) => p.isPinned && p.id !== post.id);
+				if (other) {
+					setPinTarget(other);
+					return;
+				}
 			}
+			await applyPin(true);
+		} catch (err) {
+			console.error(err);
 		} finally {
 			setActioning(false);
 		}
@@ -329,13 +377,41 @@ export default function PostPage() {
 				</div>
 			)}
 
-			{isOwner ? (
-				titleField
-			) : (
-				<h1 className="text-3xl font-bold mb-2">
-					{post.title || <span className="text-base-content/40">Untitled</span>}
-				</h1>
-			)}
+			{/* The creator's action pack sits at the title's right (Parker, 2026-10-19):
+			    one pair for the post's state — Publish/Unpublish and Pin/Unpin — where the
+			    page used to scatter a publish button, an unpublish link, a delete link and
+			    two toggles across three rows. Delete lives in the Studio's Posts table. */}
+			<div className="flex items-start justify-between gap-4">
+				<div className="min-w-0">
+					{isOwner ? (
+						titleField
+					) : (
+						<h1 className="text-3xl font-bold mb-2">
+							{post.title || <span className="text-base-content/40">Untitled</span>}
+						</h1>
+					)}
+				</div>
+				{isOwner && (
+					<div className="flex shrink-0 items-center gap-1">
+						<button
+							type="button"
+							className="btn btn-sm btn-outline"
+							onClick={() => (isLive ? setShowUnpublish(true) : void handlePublish())}
+							disabled={actioning || (!isLive && goLiveBlocked)}
+						>
+							{isLive ? "Unpublish" : "Publish"}
+						</button>
+						<button
+							type="button"
+							className="btn btn-sm btn-outline"
+							onClick={() => void requestPin()}
+							disabled={actioning}
+						>
+							{post.isPinned ? "Unpin" : "Pin"}
+						</button>
+					</div>
+				)}
+			</div>
 
 			{/* The stamp carries the record button beside it — the standard icon form
 			    ({@link RecordLinkButton}); nothing renders when the post has no record,
@@ -345,11 +421,7 @@ export default function PostPage() {
 				{edits.length > 0 && (
 					<>
 						<span aria-hidden="true">·</span>
-						<button
-							type="button"
-							className="link link-hover"
-							onClick={() => setShowHistory((v) => !v)}
-						>
+						<button type="button" className="link link-hover" onClick={() => setShowHistory(true)}>
 							Edited{" "}
 							{new Date(edits[0].editedAt).toLocaleDateString("en-US", {
 								month: "short",
@@ -362,80 +434,25 @@ export default function PostPage() {
 				<RecordLinkButton recordUrl={post.recordUrl} />
 			</div>
 
-			{/* Owner publishing machinery. Not shown to a previewer — subtracting it is
-			    the point of the preview. */}
-			{isOwner && (
-				<div className="flex flex-wrap items-center gap-2 mb-6">
-					{!isLive && (
-						<span className="badge badge-warning gap-1">
-							{post.scheduledFor
-								? `Scheduled for ${new Date(post.scheduledFor).toLocaleString("en-US", {
-										month: "short",
-										day: "numeric",
-										hour: "numeric",
-										minute: "2-digit",
-									})}`
-								: "Draft"}
-						</span>
-					)}
-					{!isLive && (
-						<button
-							type="button"
-							className="btn btn-sm btn-primary"
-							onClick={() => void handlePublish()}
-							disabled={actioning || goLiveBlocked}
-						>
-							{post.scheduledFor ? "Publish now" : "Publish"}
-						</button>
-					)}
-					{isLive && (
-						<button
-							type="button"
-							className="btn btn-sm btn-ghost"
-							onClick={() => void handleUnpublish()}
-							disabled={actioning}
-						>
-							Unpublish
-						</button>
-					)}
-					<button
-						type="button"
-						className="btn btn-sm btn-ghost text-error"
-						onClick={() => setShowDelete(true)}
-						disabled={actioning}
-					>
-						Delete
-					</button>
+			{/* The draft's own state, on its own line — the action that changes it lives
+			    in the pack above. */}
+			{isOwner && !isLive && (
+				<div className="mb-6">
+					<span className="badge badge-warning gap-1">
+						{post.scheduledFor
+							? `Scheduled for ${new Date(post.scheduledFor).toLocaleString("en-US", {
+									month: "short",
+									day: "numeric",
+									hour: "numeric",
+									minute: "2-digit",
+								})}`
+							: "Draft"}
+					</span>
 				</div>
 			)}
 
-			{/* The creator's feed-shape settings: when a draft goes out on its own, and how
-			    the feed carries it. Owner-only chrome, in one quiet row. */}
+			{/* When a draft goes out on its own. Owner-only chrome, in one quiet row. */}
 			{isOwner && !isLive && <div className="mb-6 text-sm">{scheduleField}</div>}
-			{isOwner && (
-				<div className="flex flex-wrap items-center gap-4 mb-6 text-sm">
-					<label className="flex cursor-pointer items-center gap-2">
-						<input
-							type="checkbox"
-							className="toggle toggle-sm toggle-primary"
-							checked={post.showOnTimeline}
-							onChange={(e) =>
-								void saveField({ showOnTimeline: e.target.checked }).catch(console.error)
-							}
-						/>
-						Show on the timeline
-					</label>
-					<label className="flex cursor-pointer items-center gap-2">
-						<input
-							type="checkbox"
-							className="toggle toggle-sm toggle-primary"
-							checked={post.isPinned}
-							onChange={(e) => void saveField({ isPinned: e.target.checked }).catch(console.error)}
-						/>
-						Pinned
-					</label>
-				</div>
-			)}
 
 			{/* The gates the publish machinery answers to, said before the click lands —
 			    the builder's wording, carried over (Parker's alerts). */}
@@ -462,32 +479,6 @@ export default function PostPage() {
 							</>
 						)}
 					</span>
-				</div>
-			)}
-
-			{/* Edit History (public — the "Edited …" link toggles it). */}
-			{showHistory && edits.length > 0 && (
-				<div className="rounded-lg border border-base-300 bg-base-200/50 p-4 mb-6 text-sm">
-					<h3 className="font-semibold mb-2">Edit History</h3>
-					<ul className="flex flex-col gap-1">
-						{edits.map((e) => (
-							<li
-								key={e.editedAt}
-								className="flex flex-wrap justify-between gap-x-4 text-base-content/70"
-							>
-								<span>
-									{new Date(e.editedAt).toLocaleString("en-US", {
-										month: "short",
-										day: "numeric",
-										year: "numeric",
-										hour: "numeric",
-										minute: "2-digit",
-									})}
-								</span>
-								{e.summary && <span className="text-base-content/50">Changed {e.summary}</span>}
-							</li>
-						))}
-					</ul>
 				</div>
 			)}
 
@@ -521,9 +512,10 @@ export default function PostPage() {
 				)}
 			</article>
 
-			{/* The reaction row: the votes and the Sticker button on one line — the work
+			{/* The reaction row: the votes and the Sticker button on the left — the work
 			    page's review row's shape (Parker, 2026-10-16), with the votes carrying
-			    their counts on the buttons. */}
+			    their counts on the buttons — and Share and Save at its right end
+			    (Parker, 2026-10-19), the same pair the Work page's byline carries. */}
 			<footer className="flex flex-wrap items-center gap-3">
 				<VoteControl
 					variant="boxed"
@@ -532,39 +524,142 @@ export default function PostPage() {
 					label={post.title ?? "this post"}
 				/>
 				<StickerBar subjectType="post" subjectId={post.id} label={post.title ?? "this post"} />
+				<div className="ml-auto flex items-center gap-1">
+					<SharePostButton
+						url={new URL(postUrl(post), window.location.origin).toString()}
+						label={post.title ?? "this post"}
+					/>
+					<SaveButton postId={post.id} className="shrink-0" />
+				</div>
 			</footer>
 
-			{/* Delete confirmation. */}
-			{showDelete && (
-				<div className="modal modal-open">
+			{/* ── The modals ────────────────────────────────────────────────────────
+			    Each one is a state the page owns, not a route: closing it leaves the page
+			    exactly where it was, which is the point of moving these off the layout. */}
+
+			{/* Edit history — public, opened by the "Edited …" line above. */}
+			{showHistory && edits.length > 0 && (
+				<div className="modal modal-open" role="dialog" aria-label="Edit history">
 					<div className="modal-box">
-						<h3 className="text-lg font-bold">Delete this post?</h3>
+						<button
+							type="button"
+							className="btn btn-ghost btn-sm btn-circle absolute right-2 top-2"
+							aria-label="Close"
+							onClick={() => setShowHistory(false)}
+						>
+							<XMarkIcon className="h-4 w-4" />
+						</button>
+						<h3 className="text-lg font-semibold mb-3">Edit History</h3>
+						<ul className="flex flex-col gap-2 text-sm">
+							{edits.map((e) => (
+								<li
+									key={e.editedAt}
+									className="flex flex-wrap justify-between gap-x-4 text-base-content/70"
+								>
+									<span>
+										{new Date(e.editedAt).toLocaleString("en-US", {
+											month: "short",
+											day: "numeric",
+											year: "numeric",
+											hour: "numeric",
+											minute: "2-digit",
+										})}
+									</span>
+									{e.summary && <span className="text-base-content/50">Changed {e.summary}</span>}
+								</li>
+							))}
+						</ul>
+						<p className="mt-4 text-xs text-base-content/50">
+							The history names what changed. Showing the change itself needs the before and after
+							kept, which the edit log does not store yet.
+						</p>
+					</div>
+					<button
+						type="button"
+						className="modal-backdrop"
+						onClick={() => setShowHistory(false)}
+						aria-label="Close"
+					/>
+				</div>
+			)}
+
+			{/* Unpublish confirmation — the post goes back to being a draft. */}
+			{showUnpublish && (
+				<div className="modal modal-open" role="dialog" aria-label="Unpublish this post">
+					<div className="modal-box">
+						<h3 className="text-lg font-bold">Unpublish this post?</h3>
 						<p className="py-3 text-sm text-base-content/70">
-							This permanently removes the post along with its comments. It can't be undone.
+							It returns to being a draft: it leaves the feed, and its address stops resolving for
+							anyone but you. You can publish it again at any time.
 						</p>
 						<div className="modal-action">
 							<button
 								type="button"
 								className="btn btn-ghost"
-								onClick={() => setShowDelete(false)}
+								onClick={() => setShowUnpublish(false)}
 								disabled={actioning}
 							>
 								Cancel
 							</button>
 							<button
 								type="button"
-								className="btn btn-error"
-								onClick={() => void confirmDelete()}
+								className="btn btn-primary"
+								onClick={() => void confirmUnpublish()}
 								disabled={actioning}
 							>
-								{actioning ? "Deleting..." : "Delete post"}
+								{actioning ? "Unpublishing..." : "Unpublish"}
 							</button>
 						</div>
 					</div>
 					<button
 						type="button"
 						className="modal-backdrop"
-						onClick={() => setShowDelete(false)}
+						onClick={() => setShowUnpublish(false)}
+						aria-label="Close"
+					/>
+				</div>
+			)}
+
+			{/* Pin replacement — only when another post holds the creator's one pin slot. */}
+			{pinTarget && (
+				<div className="modal modal-open" role="dialog" aria-label="Replace the pinned post">
+					<div className="modal-box">
+						<h3 className="text-lg font-bold">Replace your pinned post?</h3>
+						<p className="pt-3 text-sm text-base-content/70">
+							Pinning this post would replace the post you have pinned now:
+						</p>
+						<div className="my-3 rounded-lg border border-base-300 bg-base-200/50 p-4">
+							<p className="font-medium">{pinTarget.title || "Untitled"}</p>
+							{pinTarget.excerpt && (
+								<p className="mt-1 line-clamp-3 text-sm text-base-content/70">
+									{pinTarget.excerpt}
+								</p>
+							)}
+						</div>
+						<p className="text-sm text-base-content/70">Do you want to proceed?</p>
+						<div className="modal-action">
+							<button
+								type="button"
+								className="btn btn-ghost"
+								onClick={() => setPinTarget(null)}
+								disabled={actioning}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								className="btn btn-primary"
+								onClick={() => void applyPin(true)}
+								disabled={actioning}
+							>
+								{actioning ? "Pinning..." : "Replace it"}
+							</button>
+						</div>
+					</div>
+					<button
+						type="button"
+						className="modal-backdrop"
+						onClick={() => setPinTarget(null)}
 						aria-label="Close"
 					/>
 				</div>

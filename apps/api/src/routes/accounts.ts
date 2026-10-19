@@ -821,7 +821,6 @@ const accountRoutes = new Hono()
 					// did (the commitment the feed page carries — every item says why).
 					source: p.creatorId === sessionUser.id ? ("own" as const) : ("following" as const),
 					title: p.title,
-					showOnTimeline: p.showOnTimeline,
 					isPinned: p.isPinned,
 					tags: p.tags,
 					isPublished: p.isPublished,

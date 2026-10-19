@@ -25,9 +25,11 @@ export interface ShelfIndex {
 	works: Map<number, number>;
 	/** Project id → library item id. */
 	projects: Map<number, number>;
+	/** Post id → library item id. A post is saved like anything else (2026-10-11). */
+	posts: Map<number, number>;
 }
 
-const EMPTY: ShelfIndex = { works: new Map(), projects: new Map() };
+const EMPTY: ShelfIndex = { works: new Map(), projects: new Map(), posts: new Map() };
 
 let current: ShelfIndex | null = null;
 const listeners = new Set<(s: ShelfIndex) => void>();
@@ -40,9 +42,10 @@ function publish(next: ShelfIndex) {
 
 interface ShelfRow {
 	id: number;
-	kind: "work" | "project";
+	kind: "work" | "project" | "post";
 	work?: { id: number } | null;
 	project?: { id: number } | null;
+	post?: { id: number } | null;
 }
 
 async function load(): Promise<void> {
@@ -53,10 +56,11 @@ async function load(): Promise<void> {
 		const res = await client.api.content.library.$get({ query: { hidden: "1" } });
 		if (!res.ok) return publish(EMPTY);
 		const { items } = (await res.json()) as unknown as { items: ShelfRow[] };
-		const next: ShelfIndex = { works: new Map(), projects: new Map() };
+		const next: ShelfIndex = { works: new Map(), projects: new Map(), posts: new Map() };
 		for (const item of items) {
 			if (item.work) next.works.set(item.work.id, item.id);
 			else if (item.project) next.projects.set(item.project.id, item.id);
+			else if (item.post) next.posts.set(item.post.id, item.id);
 		}
 		publish(next);
 	} catch {
@@ -95,6 +99,13 @@ export function useShelf(): ShelfIndex {
 /** Save a Work. Idempotent, and brings back one that was hidden. */
 export async function saveWork(workId: number): Promise<boolean> {
 	const res = await client.api.content.library.$post({ json: { workId } });
+	if (res.ok) refreshShelf();
+	return res.ok;
+}
+
+/** Save a Post — a keep like any other, since Save is the one keep action (2026-10-11). */
+export async function savePost(postId: number): Promise<boolean> {
+	const res = await client.api.content.library.$post({ json: { postId } });
 	if (res.ok) refreshShelf();
 	return res.ok;
 }

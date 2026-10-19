@@ -8,7 +8,7 @@
  * complete way to publish it. A page with nothing confirmed walks as one whole page, so
  * guidance can arrive one page at a time without leaving a gap in panel mode.
  *
- * Panel mode crops each panel from the page image so it fills the viewport, and a full-page
+ * Panel mode crops each panel from the page image so it fills the reader's media area, and a full-page
  * zoom view is available with `z` without leaving panel mode. Touch swipes advance panels
  * on mobile. Page URLs are minted per request for page-flip mode, and panel mode uses the
  * same page endpoint for the underlying image.
@@ -314,10 +314,10 @@ export default function ComicReader({
 			tabIndex={0}
 			onKeyDown={onKeyDown}
 			aria-label={`Comic reader: ${title}`}
-			className="overflow-hidden rounded-lg bg-neutral focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+			className="flex h-full w-full flex-col overflow-hidden rounded-lg bg-neutral focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
 		>
 			<div
-				className="relative flex min-h-[60vh] items-center justify-center gap-1 bg-neutral p-2 sm:gap-2 sm:p-4"
+				className="relative flex min-h-0 flex-1 items-center justify-center gap-1 overflow-hidden bg-neutral p-2 sm:gap-2 sm:p-4"
 				onTouchStart={onTouchStart}
 				onTouchEnd={onTouchEnd}
 			>
@@ -327,12 +327,12 @@ export default function ComicReader({
 							key={n}
 							src={pageUrl(n)}
 							alt={`${title}, page ${n}`}
-							className="max-h-[80vh] w-auto max-w-full rounded object-contain shadow-lg"
+							className="max-h-full w-auto max-w-full rounded object-contain shadow-lg"
 							loading="eager"
 						/>
 					))
 				) : currentPanelPage && currentPanel ? (
-					<div className="relative flex h-[80vh] w-full items-center justify-center">
+					<div className="relative flex h-full w-full items-center justify-center">
 						{/* Full page ghosted behind the panel so the user keeps context. */}
 						<img
 							src={pageUrl(currentPanelPage.pageNumber)}
@@ -344,7 +344,7 @@ export default function ComicReader({
 							<img
 								src={pageUrl(currentPanelPage.pageNumber)}
 								alt={`${title}, page ${currentPanelPage.pageNumber}`}
-								className="relative z-10 max-h-[80vh] w-auto max-w-full rounded object-contain shadow-lg"
+								className="relative z-10 max-h-full w-auto max-w-full rounded object-contain shadow-lg"
 								loading="eager"
 							/>
 						) : (
@@ -454,7 +454,7 @@ function PanelView({
 
 	return (
 		<div
-			className="relative z-10 h-[80vh] overflow-hidden rounded shadow-lg"
+			className="relative z-10 h-full max-h-full max-w-full overflow-hidden rounded shadow-lg"
 			style={{
 				aspectRatio: `${panel.width * page.width} / ${panel.height * page.height}`,
 			}}
