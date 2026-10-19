@@ -15,7 +15,7 @@
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { mediaScans, transcodingJobs, works } from "@anthers/db/schema";
+import { mediaScans, transcodingJobs, workPages, workPanels, works } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
@@ -201,6 +201,45 @@ describe("the kinds with no file to wait for", () => {
 		const workId = await createWithoutFile("game");
 		const res = await release(workId);
 		expect(res.status).toBe(200);
+	});
+});
+
+/**
+ * Panel guidance is additive, never a precondition: a comic's pages are a complete Work
+ * the moment they render. Detection can fail on every page without failing the render
+ * (`render-paged` catches it per page), and a creator who has not opened the panel editor
+ * has confirmed nothing, so this is an ordinary state rather than a broken one.
+ */
+describe("a comic's pages do not wait on panel work", () => {
+	it("releases a processed comic with no panels at all", async () => {
+		const workId = await createWithoutFile("comic");
+		sent = [];
+		expect(
+			(await call("PATCH", `/api/content/works/${workId}`, { sourceKey: KEY("no-panels.pdf") }))
+				.status,
+		).toBe(200);
+		await db
+			.update(transcodingJobs)
+			.set({ status: "completed", progress: 100 })
+			.where(eq(transcodingJobs.workId, workId));
+		await db.insert(workPages).values({
+			workId,
+			pageNumber: 1,
+			file: KEY("no-panels-page-0001.jpg"),
+			width: 100,
+			height: 150,
+		});
+
+		const res = await release(workId);
+		expect(res.status).toBe(200);
+		expect((await res.json()).work.visibility).toBe("released");
+
+		const panels = await db
+			.select({ id: workPanels.id })
+			.from(workPanels)
+			.innerJoin(workPages, eq(workPanels.pageId, workPages.id))
+			.where(eq(workPages.workId, workId));
+		expect(panels).toEqual([]);
 	});
 });
 

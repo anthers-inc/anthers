@@ -7,7 +7,11 @@
  * across page boundaries, the page-zoom shortcut, and restoring position from localStorage
  * after a reload.
  */
+
+import { db } from "@anthers/db/client";
 import { mediaFixtureWork } from "@anthers/db/media-fixture";
+import { workPages, workPanels, works } from "@anthers/db/schema";
+import { eq, inArray } from "drizzle-orm";
 import { expect, resetReadingPosition, test } from "./fixtures";
 
 const COMIC = mediaFixtureWork("comic");
@@ -22,6 +26,29 @@ async function openComic(page: import("@playwright/test").Page) {
 
 async function panelIndicator(page: import("@playwright/test").Page) {
 	return page.locator("span", { hasText: /Panel \d+ of \d+ · Page \d+/ }).first();
+}
+
+/**
+ * Put the fixture's panels back into the state a freshly rendered comic is in: `auto`
+ * rows are the detector's proposals, which only the Studio sees. The seeded fixture is
+ * confirmed so the panel-mode specs above can walk it, so this flips the whole Work.
+ */
+async function setPanelsConfirmed(confirmed: boolean) {
+	const [work] = await db
+		.select({ id: works.id })
+		.from(works)
+		.where(eq(works.slug, COMIC.slug))
+		.limit(1);
+	if (!work) throw new Error(`No fixture Work with slug ${COMIC.slug}`);
+	await db
+		.update(workPanels)
+		.set({ auto: !confirmed })
+		.where(
+			inArray(
+				workPanels.pageId,
+				db.select({ id: workPages.id }).from(workPages).where(eq(workPages.workId, work.id)),
+			),
+		);
 }
 
 test("panel mode enters and shows the first panel", async ({ page }) => {
@@ -77,4 +104,23 @@ test("a reload restores the saved panel position", async ({ page }) => {
 	// choice. Flip back in, and the saved panel is where it returns to.
 	await page.getByRole("button", { name: "Panel mode" }).click();
 	await expect(await panelIndicator(page)).toContainText("Panel 2 of 4 · Page 1");
+});
+
+test("a comic with nothing confirmed offers no panel mode and still reads as pages", async ({
+	page,
+}) => {
+	await setPanelsConfirmed(false);
+	try {
+		await resetReadingPosition(page, COMIC);
+		await page.goto(`/works/${COMIC.slug}-${COMIC.publicId}`);
+		await expect(page.locator(READER)).toBeVisible();
+		// The detector's rows exist in the database, but a reader is sent none of them, so
+		// there is nothing to guide with and the reader stays a page reader.
+		await expect(page.getByRole("button", { name: "Panel mode" })).toHaveCount(0);
+		await expect(
+			page.getByRole("img", { name: /A comic that really turns, page 1/ }),
+		).toBeVisible();
+	} finally {
+		await setPanelsConfirmed(true);
+	}
 });
