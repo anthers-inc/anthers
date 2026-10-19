@@ -14,7 +14,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useReportVisit } from "@/lib/attention";
 import WorkCard from "../components/cards/WorkCard";
-import { usePreviewQuery } from "../components/creator/PreviewBar";
+import { usePreviewQuery } from "../components/creator/preview";
 import SaveButton from "../components/library/SaveButton";
 import AlbumView from "../components/media/AlbumView";
 import OwnerProjectEditor from "../components/project/OwnerProjectEditor";
