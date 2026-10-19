@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Reviews — a verdict cannot be left without words.
+ * Reviews — a verdict can stand alone.
  *
- * The rule is enforced at the write boundary, so the assertions that matter are
- * that a verdict-only submission is REJECTED and that the text survives the round
- * trip into the public list. Everything else here guards the edges that were
- * easy to get wrong when `body` was bolted onto an existing upsert:
+ * The write boundary accepts a verdict with no text (Parker, 2026-10-19). A textless
+ * review counts in the Work's shares and never appears in the list, where only reviews
+ * with words belong, so the assertions here cover both halves of that rule. Everything
+ * else guards the edges that were easy to get wrong when `body` was bolted onto an
+ * existing upsert:
  *
  *   - The conflict branch has to set BOTH columns. Setting only `verdict` on an
  *     edit would silently keep the old text against a new verdict, which is
@@ -13,14 +14,14 @@
  *   - It must still NOT set `moderationStatus`, or re-reviewing becomes a way to
  *     un-hide your own hidden review. That rule predates this change and is
  *     exactly the sort of thing a hurried edit to the same statement breaks.
- *   - Rows written before text was required have `body IS NULL`, must keep
- *     rendering, and must keep counting toward the average.
+ *   - A row with no body must count in the aggregate and stay out of the list —
+ *     the same read-side rule whether the row was written by the API or predates it.
  */
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { reviews, users, votes } from "@anthers/db/schema";
-import { REVIEW_MAX, REVIEW_MIN } from "@anthers/shared/content";
+import { REVIEW_MAX } from "@anthers/shared/content";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
@@ -131,28 +132,33 @@ beforeAll(async () => {
 	expect(release.status).toBe(200);
 }, DB_SETUP_TIMEOUT);
 
-describe("A verdict cannot be left without words", () => {
-	it("rejects a verdict with no body at all", async () => {
+describe("A review can stand on its verdict alone", () => {
+	it("accepts a verdict with no body at all, counting it without listing it", async () => {
 		const res = await post(`/api/content/works/${workId}/reviews`, userA, {
 			verdict: "recommended",
 		});
-		expect(res.status).toBe(400);
+		expect(res.status).toBe(201);
+
+		const list = await readReviews();
+		expect(list.count).toBe(1);
+		expect(list.recommended).toBe(1);
+		expect(list.recommendedPercent).toBe(100);
+		// The verdict counts; it has nothing to read, so it is not in the list.
+		expect(list.reviews).toHaveLength(0);
 	});
 
-	it("rejects a body that is only whitespace", async () => {
+	it("treats text that is only whitespace as no text", async () => {
 		const res = await post(`/api/content/works/${workId}/reviews`, userA, {
 			verdict: "recommended",
 			body: "        ",
 		});
-		expect(res.status).toBe(400);
-	});
+		expect(res.status).toBe(201);
 
-	it("rejects a body under the minimum", async () => {
-		const res = await post(`/api/content/works/${workId}/reviews`, userA, {
-			verdict: "recommended",
-			body: "x".repeat(REVIEW_MIN - 1),
-		});
-		expect(res.status).toBe(400);
+		const list = await readReviews(userA);
+		expect(list.count).toBe(1);
+		expect(list.reviews).toHaveLength(0);
+		// Stored as absence rather than an empty string, the same shape a record carries.
+		expect(list.userReview).toBeNull();
 	});
 
 	it("rejects a body over the maximum", async () => {
@@ -243,9 +249,10 @@ describe("Editing a review", () => {
 	});
 });
 
-describe("Reviews written before text was required", () => {
-	it("still render and still count, with an empty body", async () => {
-		// Insert the legacy shape directly — the API can no longer produce it.
+describe("A verdict written without text", () => {
+	it("counts in the aggregate and stays out of the list", async () => {
+		// Insert the textless shape directly — the API writes NULL the same way now, and
+		// this proves the READ side does not depend on how the row got there.
 		const [user] = (await db.execute(
 			sql`SELECT id FROM users WHERE email = ${`${userBName}@example.com`}`,
 		)) as unknown as { id: number }[];
@@ -254,24 +261,30 @@ describe("Reviews written before text was required", () => {
 		const list = await readReviews();
 		expect(list.count).toBe(1);
 		expect(list.recommendedPercent).toBe(100);
-		expect(list.reviews).toHaveLength(1);
-		// Null in the column, "" over the wire — the client renders the verdict alone
-		// rather than an empty quote.
-		expect(list.reviews[0].body).toBe("");
-		expect(list.reviews[0].verdict).toBe("recommended");
+		// Nothing to read, so nothing in the list — the rule this suite exists for.
+		expect(list.reviews).toHaveLength(0);
 	});
 });
 
 describe("Helpfulness — reviews sort by it and are never weighted by it", () => {
 	it("carries a floored net and the user's own vote on every review", async () => {
-		// The userB review from the block above is the subject. Three fresh users
-		// vote on it: two up and one down lands it at 1, which the REVIEWER sees
-		// decomposed and everybody else sees as one number.
-		const reviewId = (await readReviews()).reviews[0].id;
-		expect(reviewId, "the legacy review id").toBeGreaterThan(0);
+		// A textless review is not listed, so it is not what a reader can vote on. Give
+		// this block a written review of its own: three fresh users vote on it — two up
+		// and one down lands it at 1 — and the author's own upvote is absent because the
+		// row is inserted directly rather than posted through the route.
 		const voterNames = ["h_a", "h_b", "h_c"].map((n) => `rv_${n}_${id}`);
 		const cookies: string[] = [];
 		for (const name of voterNames) cookies.push(await signUp(name));
+
+		const [reviewer] = (await db.execute(
+			sql`SELECT id FROM users WHERE email = ${`rv_h_a_${id}@example.com`}`,
+		)) as unknown as { id: number }[];
+		const [subject] = await db
+			.insert(reviews)
+			.values({ userId: reviewer.id, workId, verdict: "recommended", body: "worth the hour" })
+			.returning({ id: reviews.id });
+		const reviewId = subject.id;
+		expect(reviewId, "the written review id").toBeGreaterThan(0);
 
 		const vote = async (cookie: string, direction: "up" | "down") =>
 			req("/api/content/votes", {
@@ -292,12 +305,13 @@ describe("Helpfulness — reviews sort by it and are never weighted by it", () =
 		expect(entry).not.toHaveProperty("up");
 		expect(entry).not.toHaveProperty("down");
 
-		// A voter sees their own; the aggregate is untouched — 100% recommended from one
-		// review however many votes the review draws.
+		// A voter sees their own; the aggregate is untouched — 100% recommended from two
+		// visible verdicts (this written one and userB's textless one) however many votes
+		// the written review draws.
 		const asVoter = await readReviews(cookies[2]);
 		expect(asVoter.reviews[0].userVote).toBe("down");
 		expect(asVoter.recommendedPercent).toBe(100);
-		expect(asVoter.count).toBe(1);
+		expect(asVoter.count).toBe(2);
 
 		// The reviewer sees the figures behind it — and so does every reader now: the
 		// single-subject read serves the counts to whoever can see the thing (Parker,
@@ -407,22 +421,24 @@ describe("The Recent share", () => {
 			};
 		};
 
-		// All Time unchanged — the move is a window matter, not a count matter: the
-		// visible set is userB (recommended) plus this block's two (1 of 2 recommended).
+		// All Time unchanged — the move is a window matter, not a count matter. The
+		// visible set is userB's textless verdict (recommended), this suite's written
+		// review (recommended), and the two from the block above (1 of 2 recommended):
+		// 3 of 4 = 75%, and the textless row counts here like any other.
 		const all = await readReviews();
-		expect(all.count).toBe(3);
-		expect(all.recommendedPercent).toBe(67);
+		expect(all.count).toBe(4);
+		expect(all.recommendedPercent).toBe(75);
 
-		// Over the month, only the two fresh rows count: 1 of 2 = 50%.
+		// Over the month, only the three fresh rows count: 2 of 3 = 67%.
 		const month = await readWindow("month");
 		expect(month.window).toBe("month");
-		expect(month.count).toBe(2);
-		expect(month.recommendedPercent).toBe(50);
+		expect(month.count).toBe(3);
+		expect(month.recommendedPercent).toBe(67);
 
-		// Over the year the moved row is back inside: 2 of 3 = 67%.
+		// Over the year the moved row is back inside: 3 of 4 = 75%.
 		const year = await readWindow("year");
-		expect(year.count).toBe(3);
-		expect(year.recommendedPercent).toBe(67);
+		expect(year.count).toBe(4);
+		expect(year.recommendedPercent).toBe(75);
 
 		// The default when no window is asked for is the month.
 		const defaultRes = await req(`/api/content/works/${workId}/reviews`);
@@ -475,14 +491,23 @@ describe("the record link beside a review", () => {
 describe("the owner's Works listing", () => {
 	it("carries the Reviews column's counts, matching the public aggregate", async () => {
 		// The Studio's table shows the net and the pair behind it in one cell, so the
-		// owner's listing carries the same two numbers the Work page's aggregate counts.
-		// Derived from the public list rather than hardcoded: earlier blocks leave this
-		// suite's fixture with a mix of verdicts and one hidden row, and the point is that
-		// the two reads agree about which rows count.
+		// owner's listing carries the same two numbers the Work page's aggregate counts —
+		// textless verdicts included. The expected figures come from the rows rather than
+		// from the public list, which deliberately omits the textless one; that difference
+		// is the point, and it is asserted alongside.
+		const [expected] = (await db.execute(
+			sql`
+				SELECT
+					count(*) FILTER (WHERE verdict = 'recommended') AS recommended,
+					count(*) FILTER (WHERE verdict <> 'recommended') AS not_recommended
+				FROM reviews
+				WHERE work_id = ${workId} AND moderation_status = 'visible'
+			`,
+		)) as unknown as { recommended: string; not_recommended: string }[];
+
 		const publicList = await readReviews();
-		const recommended = publicList.reviews.filter((r) => r.verdict === "recommended").length;
-		const notRecommended = publicList.count - recommended;
-		expect(publicList.count).toBeGreaterThan(0);
+		expect(publicList.count).toBe(4);
+		expect(publicList.reviews).toHaveLength(3);
 
 		const res = await req("/api/content/works", {
 			headers: { Cookie: creator, Origin: ORIGIN },
@@ -492,8 +517,8 @@ describe("the owner's Works listing", () => {
 			works: { id: number; reviewCounts?: { recommended: number; notRecommended: number } }[];
 		};
 		expect(rows.find((w) => w.id === workId)?.reviewCounts).toEqual({
-			recommended,
-			notRecommended,
+			recommended: Number(expected.recommended),
+			notRecommended: Number(expected.not_recommended),
 		});
 	});
 });
