@@ -3,7 +3,7 @@
  * Content schema — see auth.ts for the role-classification legend (node/org/both).
  * Most of this file is node: a creator's own content records, media, and the
  * join tables that organize them. The exceptions are the polymorphic moderation
- * state columns (org-imposed) and the cross-account tables (library, bookmarks)
+ * state columns (org-imposed) and the cross-account tables (library)
  * which are a *user's* records, not the creator's.
  */
 
@@ -410,7 +410,9 @@ export const posts = pgTable(
 		body: text("body").default(""),
 
 		// ── Presentation ──
-		showOnTimeline: boolean("show_on_timeline").notNull().default(true),
+		// 🚨 One pinned post per creator: the route that pins clears the creator's others
+		// in the same request. The flag is presentation, not access — a pin only floats a
+		// post above the feed, and an unpinned post reaches its URL as it always did.
 		isPinned: boolean("is_pinned").notNull().default(false),
 
 		// ── Metadata ──
@@ -1140,7 +1142,7 @@ export const comments = pgTable(
 );
 
 /**
- * The **Library** — the Works and Projects a user has kept.
+ * The **Library** — the Works, Projects and Posts a user has kept.
  *
  * 🚨 **Curation, never entitlement.** `resolveAccess` must not read this table, and a row
  * here grants nothing: saving a free Work is a bookmark for something you could already
@@ -1175,7 +1177,8 @@ export const comments = pgTable(
  * completed purchase for that (user, Work) exists — so a refund, which removes the
  * entitlement, also releases the shelf entry in the same instant and with no sweep.
  *
- * Polymorphic over Work | Project in the same shape `bookmarks` uses, because **people keep
+ * Polymorphic over Work | Project | Post in the same shape the other cross-account
+ * pointers use, because **people keep
  * albums, not four loose tracks**: a Project is how an album exists here, so saving one has
  * to save the record rather than scatter it.
  */
@@ -1191,11 +1194,15 @@ export const libraryItems = pgTable(
 		userId: integer("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		// Exactly one of these is set; enforced at the app layer, as `bookmarks` does.
+		// Exactly one of these is set; enforced at the app layer, as the save route does.
 		// Cascade is right here in a way it is NOT on `purchases.work_id`: a shelf entry
 		// is a preference, not an entitlement, so it may go when its subject does.
 		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
 		projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
+		// A post saves like anything else (Parker, 2026-10-11): Save is the one keep action,
+		// and "bookmarked" is no longer a separate verb or store. A post is not a shelf
+		// *work* — it is an announcement — but a keep is a keep, so it rides the same row.
+		postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
 		// Tidied off the shelf without being given up. Only ever set by the user, and the
 		// only thing a purchased item's "remove" control is allowed to do.
 		hidden: boolean("hidden").notNull().default(false),
@@ -1212,40 +1219,12 @@ export const libraryItems = pgTable(
 		uniqueIndex("uq_library_project")
 			.on(table.userId, table.projectId)
 			.where(sql`${table.projectId} IS NOT NULL`),
+		uniqueIndex("uq_library_post")
+			.on(table.userId, table.postId)
+			.where(sql`${table.postId} IS NOT NULL`),
 		index("idx_library_work").on(table.workId),
 		index("idx_library_project").on(table.projectId),
-	],
-);
-
-/**
- * Bookmarks — **posts only**, since 2026-08-13, and now posts only **in the schema too**.
- *
- * The product line is one verb per object: a Work or a Project is **saved** (to the
- * Library), a creator is **followed**, and a post is **bookmarked**. Two controls that
- * sound like the same thing on one object is what made both feel like half a feature.
- *
- * Migration `0035` moved every Work and Project bookmark into `library_items`, and the
- * accounts split's pass (2026-10-03) dropped the `work_id`/`project_id`/`creator_id`
- * columns it had deferred — the table carries only what a post bookmark names.
- */
-// org — bookmarks are a user's records (same reasoning as `libraryItems`: the
-// user has no node in the current topology). A post is content the bookmarking
-// user does not own, which is what makes this an org-side table about node
-// content rather than a node table.
-export const bookmarks = pgTable(
-	"bookmarks",
-	{
-		id: serial("id").primaryKey(),
-		userId: integer("user_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
-		postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
-		sortOrder: integer("sort_order").notNull().default(0),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [
-		index("idx_bookmarks_user").on(table.userId, table.sortOrder),
-		index("idx_bookmarks_post").on(table.postId),
+		index("idx_library_post").on(table.postId),
 	],
 );
 

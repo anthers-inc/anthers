@@ -437,11 +437,11 @@ describe("what an Adult rating costs", () => {
 	});
 
 	describe("the reads that named it anyway", () => {
-		// 🚨 **Four reads applied no maturity filter**, found by the roadmap state pass on
-		// 2026-09-13: a share link, the Library, bookmarks and the project listing. Each hands
-		// back a Work's title or a description of it, so each disclosed the existence the rung
-		// withholds — most sharply for a Work corrected into Adult after somebody saved it,
-		// bookmarked it or was sent a link to it. Asserted as absences, like the rest of this file.
+		// 🚨 **Three reads applied no maturity filter**, found by the roadmap state pass on
+		// 2026-09-13: a share link, the Library and the project listing. Each hands back a
+		// Work's title or a description of it, so each disclosed the existence the rung
+		// withholds — most sharply for a Work corrected into Adult after somebody saved it
+		// or was sent a link to it. Asserted as absences, like the rest of this file.
 		const token = `adenf-share-${run}`;
 		const controlToken = `adenf-share-mature-${run}`;
 		let userId: number;
@@ -468,10 +468,9 @@ describe("what an Adult rating costs", () => {
 				{ userId: userId, workId: adultWork.id },
 				{ userId: grownId, workId: adultWork.id },
 			]);
-			// Bookmarks name posts only now — the Work/creator columns died with the dead
-			// columns sweep — so the leak this test watches is the POST listing. A post the
-			// fixture makes carrying the Adult Work's title stands in for the surface.
-			// (A bookmark to a Work can no longer exist, so it cannot leak.)
+			// 🚨 **A saved post is the Library's other arm now**, and it names only its own
+			// title: a post carries no gate and no Work title of its own, so the leak this
+			// fixture would watch for lives in the project listing below, not a bookmark.
 			const [project] = await db
 				.insert(projects)
 				.values({
@@ -498,17 +497,6 @@ describe("what an Adult rating costs", () => {
 		it("leaves it off the shelf of a user who has not opted in, and on a verified one's", async () => {
 			expect(await titlesIn("/api/content/library", userCookie)).not.toContain(ADULT_TITLE);
 			expect(await titlesIn("/api/content/library", grownCookie)).toContain(ADULT_TITLE);
-		});
-
-		it("leaves nothing to leak through the bookmarks page", async () => {
-			// The bookmarks listing serves posts only — the Work/creator bookmark columns
-			// died with the dead-columns sweep — so a bookmark can no longer name an Adult
-			// Work at all, and the page can only leak a post's own title.
-			const res = await req("/api/content/bookmarks", {
-				headers: { Origin: ORIGIN, Cookie: userCookie },
-			});
-			const body = (await res.json()) as { bookmarks: unknown[] };
-			expect(JSON.stringify(body)).not.toContain(ADULT_TITLE);
 		});
 
 		it("🚨 leaves a project holding only Adult work out of the listing, except for those who may see it", async () => {

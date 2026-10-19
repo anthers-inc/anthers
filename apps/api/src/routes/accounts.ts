@@ -52,6 +52,7 @@ import {
 } from "@anthers/db/schema";
 import { isWorkType } from "@anthers/shared/content";
 import { type ContentNote, RATING_ROWS } from "@anthers/shared/content-rating";
+import { CREATOR_EMAIL_KINDS, resolvedCreatorEmailDelivery } from "@anthers/shared/creator-emails";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
 	isRightsRequestKind,
@@ -189,6 +190,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 			notificationUnsubscribeToken: userPreferences.notificationUnsubscribeToken,
 			homeNavOrder: userPreferences.homeNavOrder,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
+			creatorEmailDelivery: userPreferences.creatorEmailDelivery,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
@@ -221,6 +223,9 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		// The resolved per-group modes (never the raw map — the wildcard is an authoring
 		// convenience, and the client rendering every group needs every group ANSWERED).
 		notificationDelivery: resolveDeliveryModes(prefs?.notificationDelivery ?? null),
+		// The creator transaction emails, likewise resolved: the Studio's Communications
+		// table renders a control per kind, so every kind arrives answered.
+		creatorEmailDelivery: resolvedCreatorEmailDelivery(prefs?.creatorEmailDelivery ?? null),
 		// Present so the Settings page can show whether the one-click links are live, but
 		// never rendered as copy — it is a credential, and the client's only use is "regenerate".
 		hasUnsubscribeToken: Boolean(prefs?.notificationUnsubscribeToken),
@@ -406,6 +411,17 @@ const updateProfileSchema = z.object({
 		)
 		.optional(),
 	/**
+	 * Per-kind creator transaction email delivery, written whole like the map above.
+	 * The kinds are `@anthers/shared/creator-emails`' registry, so a client cannot
+	 * invent an alert Anthers never sends.
+	 */
+	creatorEmailDelivery: z
+		.record(
+			z.enum(CREATOR_EMAIL_KINDS as unknown as [string, ...string[]]),
+			z.enum(["email", "none"]),
+		)
+		.optional(),
+	/**
 	 * Whether audio playback rides the persistent footer bar. A whole write (the client
 	 * knows the switch's own state), null = never said, client default on.
 	 */
@@ -497,6 +513,14 @@ const accountRoutes = new Hono()
 			);
 			prefUpdates.notificationDelivery = cleaned;
 		}
+		if (data.creatorEmailDelivery !== undefined) {
+			const cleaned = Object.fromEntries(
+				Object.entries(data.creatorEmailDelivery).filter(([key]) =>
+					(CREATOR_EMAIL_KINDS as readonly string[]).includes(key),
+				),
+			);
+			prefUpdates.creatorEmailDelivery = cleaned;
+		}
 		if (data.persistentMiniplayer !== undefined) {
 			prefUpdates.persistentMiniplayer = data.persistentMiniplayer;
 		}
@@ -508,6 +532,9 @@ const accountRoutes = new Hono()
 				...(data.themePreference !== undefined ? { themePreference: data.themePreference } : {}),
 				...(data.notificationDelivery !== undefined
 					? { notificationDelivery: prefUpdates.notificationDelivery as Record<string, string> }
+					: {}),
+				...(data.creatorEmailDelivery !== undefined
+					? { creatorEmailDelivery: prefUpdates.creatorEmailDelivery as Record<string, string> }
 					: {}),
 				...(data.homeNavOrder !== undefined ? { homeNavOrder: data.homeNavOrder } : {}),
 				...(data.persistentMiniplayer !== undefined
@@ -821,7 +848,6 @@ const accountRoutes = new Hono()
 					// did (the commitment the feed page carries — every item says why).
 					source: p.creatorId === sessionUser.id ? ("own" as const) : ("following" as const),
 					title: p.title,
-					showOnTimeline: p.showOnTimeline,
 					isPinned: p.isPinned,
 					tags: p.tags,
 					isPublished: p.isPublished,

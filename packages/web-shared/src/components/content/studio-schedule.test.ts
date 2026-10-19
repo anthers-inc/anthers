@@ -38,7 +38,6 @@ function post(over: Partial<PostListItem> = {}): PostListItem {
 		slug: "tide",
 		creatorId: 1,
 		title: "Tide devlog",
-		showOnTimeline: true,
 		isPinned: false,
 		tags: null,
 		isPublished: false,

@@ -27,7 +27,7 @@ import { client } from "@anthers/web-shared/rpc";
 import { type AccessResult, isAccessResult, type TranscodingJob } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { usePreviewQuery } from "../components/creator/PreviewBar";
+import { usePreviewQuery } from "../components/creator/preview";
 import SaveButton from "../components/library/SaveButton";
 import { PublicAccessWall } from "../components/media/PublicAccessNotice";
 import InlineUnlock from "../components/post/InlineUnlock";
@@ -341,13 +341,11 @@ export default function WorkPage() {
 						</WorkMediaFrame>
 					)
 				) : !canAccess ? (
-					// A locked Work's card **fills**, for both gate shapes: the video's
-					// blur-and-overlay is the player's own rectangle, and the other kinds'
-					// two-up carries its height the way its column widths want it — the
-					// letterbox would force the grid's min-content into a taller box than
-					// the composition reads well at. The card is still the page's shape;
-					// only what it holds is a gate.
-					<WorkMediaFrame fill>
+					// A locked Work keeps the one 16:9 stage like every other state. A
+					// video's gate fills it — the blur-and-overlay is the player's own
+					// rectangle — while the other kinds' two-up is a composition inside the
+					// stage: padded, centered where it fits, and scrolling where it does not.
+					<WorkMediaFrame fill={work.type === "video"}>
 						{isWriting(work.type) && <WorkDescription work={work} />}
 						{work.type === "video" ? (
 							/* A locked video is the feed's treatment at page scale (Parker,
@@ -356,7 +354,7 @@ export default function WorkPage() {
 							    of cover and card. The underlying cover is the same
 							    `LockedCover` blur the tiles draw; the card overlay rides
 							    above it, centered, on `z-10`. */
-							<div className="relative overflow-hidden rounded-lg">
+							<div className="relative w-full overflow-hidden rounded-lg">
 								{presentsAsLocked(access) ? (
 									<LockedCover
 										thumbnail={work.thumbnail}
@@ -407,7 +405,7 @@ export default function WorkPage() {
 								</div>
 							</div>
 						) : (
-							<div className="space-y-4">
+							<div className="flex h-full flex-col justify-start gap-4 sm:justify-center">
 								{/* ⚠️ A signed-out visitor is refused the bytes of free work too, and
 						    that is not a lock — the Work is free to everyone and stays free;
 						    what is missing is an account for the time to be attributed to. So
@@ -470,7 +468,7 @@ export default function WorkPage() {
 				) : spentOnThis ? (
 					<WorkMediaFrame>
 						{isWriting(work.type) && (
-							<div className="w-full max-w-2xl">
+							<div className="mx-auto w-full max-w-2xl">
 								<WorkDescription work={work} />
 							</div>
 						)}

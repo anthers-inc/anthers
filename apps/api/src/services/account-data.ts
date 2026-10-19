@@ -46,10 +46,10 @@ import {
 	attentionEvents,
 	badges,
 	billingAccounts,
-	bookmarks,
 	comments,
 	crfSubsidies,
 	follows,
+	libraryItems,
 	moderationReports,
 	poolDistributions,
 	posts,
@@ -95,7 +95,7 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 		followingRows,
 		followerRows,
 		blockRows,
-		bookmarkRows,
+		libraryRows,
 		commentRows,
 		ratingRows,
 		postRows,
@@ -117,7 +117,7 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 		db.select().from(follows).where(eq(follows.followerId, userId)),
 		db.select().from(follows).where(eq(follows.creatorId, userId)),
 		db.select().from(userBlocks).where(eq(userBlocks.blockerId, userId)),
-		db.select().from(bookmarks).where(eq(bookmarks.userId, userId)),
+		db.select().from(libraryItems).where(eq(libraryItems.userId, userId)),
 		db.select().from(comments).where(eq(comments.userId, userId)),
 		db.select().from(reviews).where(eq(reviews.userId, userId)),
 		db.select().from(posts).where(eq(posts.creatorId, userId)),
@@ -192,7 +192,8 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 			// already visible to you as a count. Ids only — no names, no emails.
 			followers: followerRows.map((f) => ({ followerId: f.followerId, createdAt: f.createdAt })),
 			blocked: blockRows.map((b) => ({ blockedId: b.blockedId, createdAt: b.createdAt })),
-			bookmarks: bookmarkRows,
+			// What the person kept — Works, Projects and posts in one shelf.
+			library: libraryRows,
 		},
 
 		content: {
