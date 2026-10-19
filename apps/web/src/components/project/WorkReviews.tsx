@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Reviews on a Work — the aggregates, the written reviews, and the composer.
- * composer stands open for a signed-in user, and the verdict is what makes it
- * postable: choosing one is a selection, not a reveal, and nothing submits until
- * there are words. A deliberate trade of volume for substance — most Works carry
- * no reviews for a long while, and an honest "no reviews yet" beats a percentage
- * assembled from three drive-by clicks. It also gives moderation something to act
- * on, where a bare thumb is unmoderatable by construction.
+ * The composer stands open for a signed-in user, and the verdict is what makes it
+ * postable: choosing one is a selection, not a reveal, and text is optional. A
+ * verdict alone counts in both shares and stays out of the list below, where only
+ * reviews with words appear — a list of bare verdicts is nothing a reader can read.
  *
  * ⭐ **The aggregate is a proportion and not an average**, because a review recommends a Work
  * or does not. `@anthers/shared/content` carries why, and it is the same reasoning that gives
@@ -32,7 +30,6 @@
 
 import {
 	REVIEW_MAX,
-	REVIEW_MIN,
 	REVIEW_WINDOWS,
 	type ReviewWindow,
 	verdictLabel,
@@ -82,9 +79,12 @@ function ReviewBody({ body }: { body: string }) {
  * The composer stands open for a signed-in user (Parker, 2026-10-13): the text field is
  * always visible, and choosing a verdict selects it rather than revealing the form — the
  * "choose one to write a review" instruction is gone, because the selected state and the
- * disabled post button say the same thing. The verdict buttons split the row evenly, and
- * a non-recommendation wears red when it is the chosen verdict, so the two verdicts read
- * like the two answers they are rather than like two flavors of one choice.
+ * disabled post button say the same thing. **Text is optional** (Parker, 2026-10-19), so the
+ * button enables on the verdict alone; words are what make a review appear in the list
+ * below, and a verdict without them still counts in both shares. The verdict buttons split
+ * the row evenly, and a non-recommendation wears red when it is the chosen verdict, so the
+ * two verdicts read like the two answers they are rather than like two flavors of one
+ * choice.
  */
 export default function WorkReviews({
 	workId,
@@ -127,7 +127,7 @@ export default function WorkReviews({
 
 	// The composer stands open always now; a returning reviewer opens on what they already
 	// said, so editing is a correction rather than a retype (the same intent the verdict
-	// click carried, always on).
+	// click carried, always on). A review left without words opens empty.
 	useEffect(() => {
 		if (!agg || agg.userVerdict == null || draftVerdict !== null) return;
 		setDraftVerdict(agg.userVerdict);
@@ -145,7 +145,7 @@ export default function WorkReviews({
 
 	const submit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (draftVerdict === null || draftBody.trim().length < REVIEW_MIN) return;
+		if (draftVerdict === null) return;
 		setSubmitting(true);
 		setError(null);
 		try {
@@ -183,7 +183,6 @@ export default function WorkReviews({
 
 	if (!agg) return null;
 
-	const tooShort = draftBody.trim().length < REVIEW_MIN;
 	const chosen = draftVerdict ?? agg.userVerdict;
 
 	return (
@@ -260,15 +259,15 @@ export default function WorkReviews({
 						</div>
 						{aside && <div className="shrink-0">{aside}</div>}
 					</div>
-					{/* The field is not gated behind a verdict: it reads with the buttons. A
-					    verdict cannot be left on its own regardless — the post button stays
-					    disabled until both a verdict and enough words are here. */}
+					{/* The field is not gated behind a verdict: it reads with the buttons. Text is
+					    optional, so the post button enables on the verdict alone — the words are
+					    what put the review in the list below. */}
 					<form onSubmit={submit} className="mt-3">
 						<textarea
 							className="textarea textarea-bordered w-full"
 							rows={3}
 							maxLength={REVIEW_MAX}
-							placeholder="What did you think? A verdict on its own doesn't say much."
+							placeholder="Say more if you like. A verdict on its own still counts."
 							value={draftBody}
 							onChange={(e) => {
 								setDraftBody(e.target.value);
@@ -285,7 +284,7 @@ export default function WorkReviews({
 							<button
 								type="submit"
 								className="btn btn-primary btn-sm"
-								disabled={submitting || tooShort || chosen === null || permissionMissing}
+								disabled={submitting || chosen === null || permissionMissing}
 							>
 								{submitting ? (
 									<span className="loading loading-spinner loading-sm" />
@@ -312,8 +311,14 @@ export default function WorkReviews({
 
 			{agg.reviews.length === 0 ? (
 				<p className="text-sm text-base-content/50">
-					No reviews yet.{" "}
-					{isAuthenticated ? "Be the first to say something." : "Log in to write one."}
+					{agg.count > 0 ? (
+						<>No written reviews yet. {isAuthenticated ? "Add yours." : "Log in to add yours."}</>
+					) : (
+						<>
+							No reviews yet.{" "}
+							{isAuthenticated ? "Be the first to say something." : "Log in to write one."}
+						</>
+					)}
 				</p>
 			) : (
 				<>
@@ -362,7 +367,7 @@ export default function WorkReviews({
 
 					{shown.length === 0 ? (
 						<p className="text-sm text-base-content/50">
-							None of the {agg.count} {agg.count === 1 ? "review" : "reviews"} is a{" "}
+							None of the written reviews is a{" "}
 							{filter === "recommended" ? "recommendation" : "non-recommendation"}.
 						</p>
 					) : (
@@ -444,7 +449,8 @@ export default function WorkReviews({
 												</button>
 											)}
 										</div>
-										{/* "" is a verdict-only review written before text was required. */}
+										{/* Every listed review carries words — the list excludes a verdict
+										    left on its own — so the guard is a type narrowing, not a shape. */}
 										{review.body && <ReviewBody body={review.body} />}
 									</div>
 								</div>
