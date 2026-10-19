@@ -1229,7 +1229,7 @@ function BroughtIdentityCard({ handle, did }: { handle: string; did: string }) {
 
 interface DeletionPreview {
 	follows: number;
-	bookmarks: number;
+	savedItems: number;
 	blocks: number;
 	viewingEvents: number;
 	sessions: number;
@@ -2101,8 +2101,8 @@ function DataSection() {
 									<ul className="mt-2 space-y-1 text-sm text-base-content/80">
 										<li>
 											<strong>Deleted:</strong> your profile, {p.follows} follow
-											{p.follows === 1 ? "" : "s"}, {p.bookmarks} bookmark
-											{p.bookmarks === 1 ? "" : "s"}, {p.reviews} review
+											{p.follows === 1 ? "" : "s"}, {p.savedItems} saved item
+											{p.savedItems === 1 ? "" : "s"}, {p.reviews} review
 											{p.reviews === 1 ? "" : "s"}, {p.sessions} session
 											{p.sessions === 1 ? "" : "s"}, and {p.viewingEvents} viewing record
 											{p.viewingEvents === 1 ? "" : "s"}.

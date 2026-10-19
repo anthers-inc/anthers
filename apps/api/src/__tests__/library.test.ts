@@ -100,6 +100,17 @@ async function makeWork(title: string, access: unknown, released = true): Promis
 	return workId;
 }
 
+/** A published post by the creator, for the shelf's post arm. */
+async function makePost(title: string): Promise<number> {
+	const res = await req("/api/content/posts", {
+		method: "POST",
+		headers: creatorAuth,
+		body: JSON.stringify({ title, body: `${title} body`, isPublished: true }),
+	});
+	expect(res.status).toBe(201);
+	return (await res.json()).post.id as number;
+}
+
 /** The user's shelf. `hidden` includes the tidied-away entries. */
 async function shelf(opts: { hidden?: boolean } = {}) {
 	const res = await req(`/api/content/library${opts.hidden ? "?hidden=1" : ""}`, {
@@ -117,6 +128,15 @@ async function shelf(opts: { hidden?: boolean } = {}) {
 			creatorHandle?: string | null;
 			creatorDisplayName?: string | null;
 			creatorAvatar?: string | null;
+		};
+		post?: {
+			id: number;
+			publicId: number;
+			slug: string;
+			title: string | null;
+			excerpt: string | null;
+			isPublished: boolean;
+			creator: { handle: string; displayName: string | null; avatar: string | null } | null;
 		};
 	}[];
 }
@@ -234,6 +254,29 @@ describe("the Library", () => {
 	it("refuses a request naming both a Work and a Project, or neither", async () => {
 		expect((await save({ workId: freeWorkId, projectId: 1 })).status).toBe(400);
 		expect((await save({})).status).toBe(400);
+	});
+
+	it("saves a post into the same shelf as a Work — a keep is a keep", async () => {
+		const postId = await makePost(`Saved post ${id}`);
+		expect((await save({ postId })).status).toBe(201);
+
+		const entry = (await shelf()).find((i) => i.kind === "post" && i.post?.id === postId);
+		expect(entry, "the post should be on the shelf").toBeTruthy();
+		expect(entry?.post?.title).toBe(`Saved post ${id}`);
+		expect(entry?.post?.excerpt).toContain(`Saved post ${id} body`);
+		// The card reads a post like a post: its own opening and the person who wrote it.
+		expect(entry?.post?.creator?.handle).toBe(creatorHandle);
+		expect(entry?.purchased).toBe(false);
+
+		// Idempotent, and removable like any free keep.
+		expect((await save({ postId })).status).toBe(201);
+		expect((await shelf()).filter((i) => i.post?.id === postId)).toHaveLength(1);
+		const remove = await req(`/api/content/library/${entry?.id}`, {
+			method: "DELETE",
+			headers: userAuth,
+		});
+		expect(remove.status).toBe(204);
+		expect((await shelf()).some((i) => i.post?.id === postId)).toBe(false);
 	});
 
 	// ── Purchases are permanent ────────────────────────────────────────────────
