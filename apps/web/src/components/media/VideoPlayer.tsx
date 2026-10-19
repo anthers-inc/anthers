@@ -68,6 +68,14 @@ interface VideoPlayerProps {
 	poster?: string;
 	autoPlay?: boolean;
 	/**
+	 * The player is mounted inside the Work page's fixed 16:9 media stage (the
+	 * standard-profile task, 2026-10-19). It then fills that stage as a column — the
+	 * picture takes what the chapters and the meter footer leave — rather than drawing
+	 * its own `aspect-video` height and overflowing the stage. The embed route and other
+	 * bare windows leave this off and keep the picture-derived height.
+	 */
+	fillsFrame?: boolean;
+	/**
 	 * Whose Time Pool minutes this playback earns. Omit on surfaces where playback
 	 * shouldn't be credited (previews, the Studio); the player then just plays.
 	 */
@@ -136,6 +144,7 @@ export default function VideoPlayer({
 	src,
 	poster,
 	autoPlay = false,
+	fillsFrame = false,
 	attention,
 	publicAccess = false,
 	elementRef,
@@ -681,7 +690,13 @@ export default function VideoPlayer({
 	if (spent && budget) return <PublicAccessWall budget={budget} />;
 
 	return (
-		<>
+		/*
+		 * Inside the Work page's fixed stage the whole player — picture, chapters, meter —
+		 * is one column that fills it, so the chrome takes its room and the picture takes
+		 * the rest. Everywhere else the wrapper is `contents`, which leaves the player in
+		 * the page flow exactly as it was (the picture derives the height).
+		 */
+		<div className={fillsFrame ? "flex h-full min-h-0 flex-col" : "contents"}>
 			{/*
 			 * The container IS the player: focusable, carries the keymap, and the thing
 			 * fullscreen is requested on. A <section> with a label rather than a div with
@@ -701,9 +716,11 @@ export default function VideoPlayer({
 				onPointerMove={wakeControls}
 				onPointerLeave={() => isPlaying && setControlsVisible(false)}
 				aria-label="Video player"
-				className={`group/player relative overflow-hidden rounded-lg bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
+				className={`group/player relative overflow-hidden rounded-lg bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${fillsFrame ? "flex min-h-0 flex-1 flex-col" : ""}`}
 			>
-				<div className={`relative ${isPlaying && !controlsVisible ? "cursor-none" : ""}`}>
+				<div
+					className={`relative ${fillsFrame ? "min-h-0 flex-1" : ""} ${isPlaying && !controlsVisible ? "cursor-none" : ""}`}
+				>
 					{/*
 					 * Caption tracks render as children whose src is a blob URL built from the
 					 * app's own authenticated fetch (above), so the track's modes are ours to
@@ -726,7 +743,7 @@ export default function VideoPlayer({
 							containerRef.current?.focus();
 							togglePlay();
 						}}
-						className="aspect-video w-full cursor-pointer bg-black"
+						className={`${fillsFrame ? "h-full w-full" : "aspect-video w-full"} cursor-pointer bg-black object-contain`}
 					>
 						{(captions ?? [])
 							.filter((t) => trackBlobUrls[t.id])
@@ -791,6 +808,6 @@ export default function VideoPlayer({
 				)}
 			</section>
 			{publicAccess && <PublicAccessFooter />}
-		</>
+		</div>
 	);
 }

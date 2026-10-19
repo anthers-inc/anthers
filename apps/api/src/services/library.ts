@@ -13,7 +13,7 @@
  * on the table itself in `packages/db/src/schema/content.ts`.
  */
 
-import { db, libraryItems, purchases, works } from "@anthers/db";
+import { db, libraryItems, posts, purchases, works } from "@anthers/db";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 
 /** Why a save was refused, when it was. */
@@ -116,6 +116,38 @@ export async function saveProject(
 		.update(libraryItems)
 		.set({ hidden: false })
 		.where(and(eq(libraryItems.userId, userId), eq(libraryItems.projectId, projectId)))
+		.returning({ id: libraryItems.id });
+	return existing ? { ok: true, id: existing.id } : { ok: false, reason: "not_found" };
+}
+
+/**
+ * Save a Post.
+ *
+ * ⭐ **A keep is a keep** (Parker, 2026-10-11): Save is the one action that puts something
+ * in your Library, and "bookmarked" retired as a second verb and a second store. A post is
+ * an announcement rather than a Work, but a person who wants to keep one is doing exactly
+ * what a shelf is for, so it rides `library_items` beside Works and Projects.
+ *
+ * It grants nothing, like every other save — a post has no gate of its own to grant.
+ */
+export async function savePost(
+	userId: number,
+	postId: number,
+): Promise<{ ok: true; id: number } | { ok: false; reason: SaveRefusal }> {
+	const [post] = await db.select({ id: posts.id }).from(posts).where(eq(posts.id, postId)).limit(1);
+	if (!post) return { ok: false, reason: "not_found" };
+
+	const [row] = await db
+		.insert(libraryItems)
+		.values({ userId, postId, sortOrder: await nextSortOrder(userId) })
+		.onConflictDoNothing()
+		.returning({ id: libraryItems.id });
+	if (row) return { ok: true, id: row.id };
+
+	const [existing] = await db
+		.update(libraryItems)
+		.set({ hidden: false })
+		.where(and(eq(libraryItems.userId, userId), eq(libraryItems.postId, postId)))
 		.returning({ id: libraryItems.id });
 	return existing ? { ok: true, id: existing.id } : { ok: false, reason: "not_found" };
 }

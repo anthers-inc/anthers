@@ -35,19 +35,6 @@ export const stripeAccounts = pgTable("stripe_accounts", {
 	chargesEnabled: boolean("charges_enabled").default(false),
 	payoutsEnabled: boolean("payouts_enabled").default(false),
 	onboardingComplete: boolean("onboarding_complete").default(false),
-	/**
-	 * Whether this creator wants an email receipt for every transaction on their work —
-	 * a sale, a refund — sent to their account address, on top of the buyer's own
-	 * receipt. On by default (Parker, 2026-10-07): the platform and every creator on it
-	 * are low-volume today, so the mail is welcome record-keeping rather than noise, and
-	 * a creator who outgrows it flips one switch rather than writing to ask.
-	 *
-	 * Nullable rather than `notNull().default(true)`: null is "never answered", which is
-	 * what lets the default move (or the mail be retired for a class of transactions)
-	 * without rewriting stored rows — the same convention `userPreferences` states for
-	 * its display preferences. Readers treat null as on.
-	 */
-	creatorReceiptEmails: boolean("creator_receipt_emails").default(true),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

@@ -174,23 +174,30 @@ test("lyrics show on a free track and never on a gated one", async ({ page }) =>
 	await page.goto(`/works/${FREE_WITH_LYRICS.slug}-${FREE_WITH_LYRICS.publicId}`);
 
 	/*
-	 * 🚨 The card is collapsed out of the box (Parker, 2026-10-16): the toggle is the
-	 * header, and until it is opened the words are absent from the page entirely —
-	 * asserted here in both directions, because a card that rendered them regardless
-	 * would pass everything below and the collapse would be theater.
+	 * 🚨 The drawer is collapsed out of the box (Parker, 2026-10-19). It stays mounted
+	 * while closed — that is what lets it slide — so the words being in the DOM is not
+	 * the failure; being reachable is. `inert` and `aria-hidden` are what make the
+	 * collapse real, and both are asserted in both directions.
 	 */
-	const toggle = page.getByRole("button", { name: "Lyrics" });
+	const drawer = page.getByTestId("stage-aside");
+	// `exact` matters now the drawer carries a "Close lyrics" button of its own.
+	const toggle = page.getByRole("button", { name: "Lyrics", exact: true });
 	await expect(toggle).toBeVisible();
 	await expect(toggle).toHaveAttribute("aria-expanded", "false");
-	await expect(page.getByText("First verse, second line")).toHaveCount(0);
+	await expect(drawer).toHaveAttribute("aria-hidden", "true");
+	await expect(drawer).toHaveAttribute("inert", "");
 
 	await toggle.click();
+	await expect(toggle).toHaveAttribute("aria-expanded", "true");
+	await expect(drawer).toHaveAttribute("aria-hidden", "false");
 	// The line breaks are the content: `whitespace-pre-wrap`, not a paragraph.
 	await expect(page.getByText("First verse, second line")).toBeVisible();
 
-	// And it toggles back to nothing.
+	// And it toggles back to unreachable.
 	await toggle.click();
-	await expect(page.getByText("First verse, second line")).toHaveCount(0);
+	await expect(toggle).toHaveAttribute("aria-expanded", "false");
+	await expect(drawer).toHaveAttribute("aria-hidden", "true");
+	await expect(drawer).toHaveAttribute("inert", "");
 
 	await page.goto(`/works/${GATED.slug}-${GATED.publicId}`);
 	// 🚨 The negative one. The fixture's gated track has lyrics in the database, so this

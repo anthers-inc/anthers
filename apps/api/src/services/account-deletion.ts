@@ -30,7 +30,7 @@
  *
  * | What | Outcome | Why |
  * |:--|:--|:--|
- * | profile, sessions, ATProto link, follows, bookmarks, blocks, attention rows | **destroyed** (FK cascade) | purely this person's |
+ * | profile, sessions, ATProto link, follows, saved items, blocks, attention rows | **destroyed** (FK cascade) | purely this person's |
  * | comments, posts | **tombstoned** — author nulled, content stays | a thread full of holes is worse for everyone still in it, and deleting a post takes third parties' comments with it |
  * | reviews | **destroyed** — verdict and text | a review is this person's written opinion, and an anonymous one nobody wrote any more is not honest to keep counting (Parker, 2026-09-13) |
  * | Works nobody bought | **destroyed** | nothing depends on them |
@@ -94,7 +94,8 @@ export interface DeletionPreview {
 	/** Destroyed outright — including reviews, which carry the person's written verdict and
 	 * are destroyed with it rather than tombstoned (the table at the top of this file). */
 	follows: number;
-	bookmarks: number;
+	/** Saved Works, Projects and posts — the Library, destroyed with the account. */
+	savedItems: number;
 	blocks: number;
 	viewingEvents: number;
 	sessions: number;
@@ -143,7 +144,7 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 
 	const [
 		follows_,
-		bookmarks_,
+		savedItems_,
 		blocks_,
 		viewing,
 		sessions_,
@@ -154,7 +155,7 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 		handles,
 	] = await Promise.all([
 		countRows("follows", "follower_id"),
-		countRows("bookmarks", "user_id"),
+		countRows("library_items", "user_id"),
 		countRows("user_blocks", "blocker_id"),
 		countRows("attention_events", "user_id"),
 		countRows("sessions", "user_id"),
@@ -167,7 +168,7 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 
 	return {
 		follows: follows_,
-		bookmarks: bookmarks_,
+		savedItems: savedItems_,
 		blocks: blocks_,
 		viewingEvents: viewing,
 		sessions: sessions_,
@@ -471,7 +472,7 @@ export async function eraseAccount(
 			await tx.delete(atprotoSessions).where(eq(atprotoSessions.did, user.atprotoDid));
 		}
 
-		// And the account. Sessions, ATProto tokens, follows, bookmarks, blocks,
+		// And the account. Sessions, ATProto tokens, follows, saved items, blocks,
 		// attention rows, accounts/cycles and seed allocations all cascade from here;
 		// moderation reports and actions do not, by design.
 		await tx.delete(users).where(eq(users.id, userId));
