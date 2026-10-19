@@ -99,7 +99,7 @@ Bun.serve({
 	async fetch(req) {
 		const url = new URL(req.url);
 		if (url.pathname === "/dev/web-build") return devBuildPage(devBuildApiOrigin(req, API_PORT));
-		if (url.pathname === "/healthz") return new Response("ok");
+		if (url.pathname === "/_health") return new Response("ok");
 		if (url.pathname === "/index.html") {
 			return new Response(await indexHtml(), {
 				headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-cache" },

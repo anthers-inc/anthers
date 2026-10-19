@@ -24,10 +24,11 @@
  *    its Postgres connections per instance, and the connection budget binds before CPU does, so
  *    any `more` remedy on the api states that precondition beside it. Preconditions ride with
  *    the signal row so a rendered cue cannot appear without the thing that must be true first.
- * 4. **Static sites have no compute signals at all.** `web` and `admin` are static sites on
- *    App Platform's CDN — no instance, no CPU, no memory, no restarts. They are carried as rows
- *    with empty signal lists rather than omitted, so the console can say why they read
- *    differently instead of silently missing them.
+ * 4. **The admin site has no compute signals at all.** `admin` is a static site on App
+ *    Platform's CDN — no instance, no CPU, no memory, no restarts. It is carried as a row with
+ *    an empty signal list rather than omitted, so the console can say why it reads differently
+ *    instead of silently missing it. `web` stopped being one on 2026-10-19, when the web origin
+ *    became the service that serves the app and its per-Work preview tags.
  *
  * ⚠️ **The migrate job's signal is its run duration, not steady-state CPU.** A PRE_DEPLOY job
  * runs to completion and exits; its CPU is spiky by design and a sustained-CPU band would fire
@@ -189,9 +190,36 @@ export const RESOURCE_THRESHOLDS: readonly ResourceThresholds[] = [
 	},
 	{
 		component: "web",
-		kind: "static",
-		bands: [],
-		note: "A static site on the CDN — no instance, no CPU, no memory, no restarts. There is nothing to size here.",
+		kind: "service",
+		bands: [
+			{
+				signal: "cpu",
+				unit: "% sustained",
+				soonAt: 70,
+				nowAt: 90,
+				// Stateless page serving: another instance takes half the document traffic,
+				// and the health check is how the platform knows a new one is ready.
+				remedy: "more",
+				precondition: null,
+			},
+			{
+				signal: "memory",
+				unit: "% sustained",
+				soonAt: 75,
+				nowAt: 90,
+				remedy: "bigger",
+				precondition: null,
+			},
+			{
+				signal: "restarts",
+				unit: "in a day",
+				soonAt: 2,
+				nowAt: 3,
+				remedy: "bigger",
+				precondition: null,
+			},
+		],
+		note: "The web origin: one small service serving the built app and swapping a Work's preview tags into the shell. It is stateless, so CPU argues for another instance and memory or restarts for a bigger one; an outage here is every page, including the ones that are only a shell.",
 	},
 	{
 		component: "admin",

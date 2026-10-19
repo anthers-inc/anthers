@@ -31,11 +31,11 @@ function deployment(phase: string, commits: string[], id = phase.toLowerCase()):
 		cause: "manual",
 		phase,
 		created_at: "2026-08-25T19:45:17Z",
-		// Spread across kinds the way App Platform really does — api is a service, web a
+		// Spread across kinds the way App Platform really does — api is a service, admin a
 		// static site, worker a worker, migrate a job — so a user of this fixture sees
 		// the shape the collector actually walks.
 		services: commits[0] ? [{ name: "api", source_commit_hash: commits[0] }] : [],
-		static_sites: commits[1] ? [{ name: "web", source_commit_hash: commits[1] }] : [],
+		static_sites: commits[1] ? [{ name: "admin", source_commit_hash: commits[1] }] : [],
 		workers: [],
 		jobs: [],
 	};

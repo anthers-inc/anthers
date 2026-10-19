@@ -500,6 +500,22 @@ services:
   # and `<link rel=canonical>` name, so it is the apex rather than the app's default
   # ondigitalocean.app address.
   - name: web
+    # The same rendered alert set as the api — the values are this component's "now" bands
+    # from packages/shared/src/resource-thresholds.ts, per scripts/resource-alerts-lib.ts, so
+    # the alert can never fire at a number the console does not render.
+    alerts:
+      - rule: CPU_UTILIZATION
+        operator: GREATER_THAN
+        value: 90
+        window: FIVE_MINUTES
+      - rule: MEM_UTILIZATION
+        operator: GREATER_THAN
+        value: 90
+        window: FIVE_MINUTES
+      - rule: RESTART_COUNT
+        operator: GREATER_THAN
+        value: 3
+        window: ONE_HOUR
     source_dir: /
     github:
       repo: anthers-inc/anthers
@@ -513,7 +529,7 @@ services:
     instance_size_slug: basic-xxs
     instance_count: 1
     health_check:
-      http_path: /healthz
+      http_path: /_health
     envs:
       - key: PORT
         scope: RUN_TIME
