@@ -38,6 +38,17 @@ const NAV_LINKS = [
 	{ to: "/discover", id: "discover", label: "Discover", icon: MagnifyingGlassIcon },
 ] as const;
 
+/**
+ * Where the signed-in site-map footer renders: the account pages only. Every other
+ * signed-in page ends at its own content, since the sidebar and the header's account
+ * menu already carry the reader's navigation. Studio mode omits the footer separately.
+ */
+const SITE_FOOTER_PATHS = new Set(["/badges", "/purchases", "/settings"]);
+
+/** Treat `/badges/` and `/badges` as the same destination. */
+const showsSiteFooter = (pathname: string) =>
+	SITE_FOOTER_PATHS.has(pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname);
+
 const navItemClass = (active: boolean) =>
 	`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
 		active
@@ -428,10 +439,13 @@ function LoggedInLayoutInner() {
 							<Outlet />
 						</RouteSuspense>
 
-						{/* Footer, in user mode only: most of it is Feed, Library and Subscription, which
-					    studio mode leaves out, and a working tool has no use for a site map. */}
-						{!studio && (
+						{/* Footer, on the account pages only: Badges, Purchases and Settings are where a
+					    person is managing their own account, and the site map's reference and legal
+					    columns belong there. Every other signed-in page ends at its own content.
+					    Studio mode leaves it out entirely; a working tool has no use for a site map. */}
+						{!studio && showsSiteFooter(pathname) && (
 							<footer
+								data-site-footer
 								// `mt-auto` pins the footer to the bottom of `<main>`'s scroll area:
 								// this flex column is taller than the viewport whenever a page's
 								// content runs short, and without the push the footer hugs the content
