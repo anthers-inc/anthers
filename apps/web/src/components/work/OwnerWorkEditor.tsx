@@ -28,8 +28,8 @@
  * or the store through `ProjectPricing` for the goods kinds, exactly where every user
  * meets the same Work — the creator's copy is that view with pencils in it. The one
  * place the kinds legitimately differ is the **Manage tab**, which carries each kind's
- * own machinery: a video's media status and thumbnail, a track's file and a comic's
- * page set, a game's builds and embed, a good's fulfillment details, a writing's body.
+ * own machinery: a video's or an audio Work's media status and thumbnail, a comic's page
+ * set, a game's builds and embed, a good's fulfillment details, a writing's body.
  *
  * ⚠️ **Saves are narrow, one field per request, and adopt the response.** The server's
  * own rules (release gates, the rating re-declaration refusal, the media floors) are the
@@ -62,10 +62,10 @@ import {
 } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
 import RatingAppeal from "@anthers/web-shared/content/RatingAppeal";
-import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
 import { ReleaseScheduleInput } from "@anthers/web-shared/content/release-date";
 import WebBuildSection from "@anthers/web-shared/content/WorkWebBuildSection";
 import {
+	type FileWorkType,
 	isFileWorkType,
 	WorkFileDropzone,
 	WorkFileSection,
@@ -599,11 +599,16 @@ export default function OwnerWorkEditor({
 	/**
 	 * Whether the empty box is itself the file's pick — file kinds but the paged ones
 	 * (comic, ebook — their set editor is the Manage tab's form in every state) and
-	 * but a video, whose source is the Media Status card's. The dropzone mounts in
-	 * the placeholder and the Manage tab keeps only the arrived-state section.
+	 * but the media kinds, whose source is the Media Status card's: video first, and
+	 * the listened kinds since 2026-10-19, when audio joined video's card rather than
+	 * keeping the older filename row. The dropzone mounts in the placeholder and the
+	 * Manage tab keeps only the arrived-state section.
 	 */
 	const deliverableDropsInBox =
-		isFileWorkType(current.type) && !isPaged(current.type) && current.type !== "video";
+		isFileWorkType(current.type) &&
+		!isPaged(current.type) &&
+		current.type !== "video" &&
+		!isListened(current.type);
 	/**
 	 * The silhouette's note, said per kind — what fills the box, and where. For the
 	 * file kinds whose dropper lives IN the box (the dropper task, 2026-10-17), the
@@ -647,6 +652,7 @@ export default function OwnerWorkEditor({
 					handle: user.handle,
 					displayName: user.displayName ?? null,
 					avatar: user.avatar ?? null,
+					bio: user.bio ?? null,
 				}
 			: current.creator,
 	};
@@ -888,8 +894,9 @@ export default function OwnerWorkEditor({
 			saved={visibility}
 			renderRead={() => (
 				<div className="flex flex-col gap-2">
-					{/* The listing's globe rides the release line itself (ReleaseSummary,
-					    Parker, 2026-10-16); this line only says when there is none to ride. */}
+					{/* The record link's globe moved to the byline's Released line
+					    (Parker, 2026-10-19); this line only says when there is no
+					    listing on the network yet. */}
 					<ReleaseSummary work={current} scheduled={scheduledIso} />
 					{current.visibility === "released" && !current.recordUrl && (
 						<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
@@ -1256,18 +1263,18 @@ export default function OwnerWorkEditor({
 		// composition — what it says, when it came out, who may open it — each under its
 		// own heading rather than a flat run of controls. The Kind row moved to the
 		// Manage tab (Parker, 2026-10-17): the kind is the machinery's first fact, and
-		// the machinery is the Manage tab's, not the composition's.
+		// the machinery is the Manage tab's, not the composition's. The description
+		// leads the tab (Parker, 2026-10-19): what the Work is comes before when it
+		// came out.
 		<div className="flex flex-col gap-6">
-			{/* The dates lead the tab (Parker, 2026-10-16): when it came out is the first
-			    thing asked of it. */}
+			<section className="flex flex-col gap-2">
+				<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
+				{descriptionField}
+			</section>
 			<section className="flex flex-col gap-2">
 				<h3 className={WORK_DETAILS_HEADING_CLASS}>Release</h3>
 				{releaseField}
 				{originalDateField}
-			</section>
-			<section className="flex flex-col gap-2">
-				<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
-				{descriptionField}
 			</section>
 			{/* The Access section is gone (Parker, 2026-10-13): the chip in the byline strip
 			    below the video names who may open this, and for the creator that chip is the
@@ -1341,7 +1348,7 @@ export default function OwnerWorkEditor({
 					    default, at the top of the page itself, standing where the editing
 					    banner stood. */}
 					<WorkViewAsSection />
-					{current.type === "video" && (
+					{(current.type === "video" || isListened(current.type)) && (
 						<section className="flex flex-col gap-2">
 							<h3 className={WORK_DETAILS_HEADING_CLASS}>Media Status</h3>
 							<MediaStatusCard
@@ -1353,7 +1360,10 @@ export default function OwnerWorkEditor({
 								onCancel={() => void cancelProcessing()}
 								onRemove={() => void removeMedia()}
 								onReplaceFile={(file) =>
-									workUploads.start(current.id, file, { kind: "source", type: "video" })
+									workUploads.start(current.id, file, {
+										kind: "source",
+										type: current.type as FileWorkType,
+									})
 								}
 								onRetry={() => {
 									if (sourceUpload) workUploads.retry(sourceUpload.id);
@@ -1363,6 +1373,7 @@ export default function OwnerWorkEditor({
 					)}
 					{isFileWorkType(current.type) &&
 						current.type !== "video" &&
+						!isListened(current.type) &&
 						(isPaged(current.type) || !!current.sourceKey || fileUploading) && (
 							// No section heading of its own: the file section's own label names it,
 							// and the doubled "File / File" was the rhythm reading twice. The
@@ -1802,22 +1813,18 @@ function ThumbUploadModal({
  * One labeled date line, shared by both of the Release section's lines (Parker's fourth
  * pass, 2026-10-13): the label in its fixed column, the value starting at the same x on
  * every line — the tab stop a text editor would give — with the same type per line and
- * the dash where the Work carries no value. `recordUrl`, when the row carries one,
- * appends the record link's globe (Parker, 2026-10-16) — the release line is where the
- * listing's address has always named itself, and this is the one icon everywhere.
+ * the dash where the Work carries no value. The record link's globe lives on the
+ * byline's Released line rather than here (Parker, 2026-10-19).
  */
 export function DateValueLine({
 	label,
 	value,
 	hint,
-	recordUrl,
 }: {
 	label: string;
 	value: ReactNode;
 	/** A qualifier after the value, for a scheduled release. */
 	hint?: string;
-	/** The ATProto record's address, as the record link's globe. */
-	recordUrl?: string | null;
 }) {
 	return (
 		<div className="grid grid-cols-[8rem_1fr] items-baseline text-sm">
@@ -1825,7 +1832,6 @@ export function DateValueLine({
 			<span className="flex flex-wrap items-center gap-x-2">
 				{value}
 				{hint && <span className="text-base-content/60"> — {hint}</span>}
-				{recordUrl && <RecordLinkButton recordUrl={recordUrl} />}
 			</span>
 		</div>
 	);
@@ -1859,7 +1865,6 @@ export function ReleaseSummary({
 			label="Anthers Release"
 			value={released ?? "—"}
 			hint={scheduledAt ? `scheduled for ${scheduledAt}` : undefined}
-			recordUrl={work.recordUrl}
 		/>
 	);
 }
@@ -2115,9 +2120,8 @@ function RatingSummary({
 			{maturity !== "general" && notes.length > 0 && (
 				<span className="text-base-content/60">{notes.map(contentNoteLabel).join(" · ")}</span>
 			)}
-			{maturity === "general" && (
-				<span className="text-xs text-base-content/50">Users see no rating on a General Work.</span>
-			)}
+			{/* The "users see no rating" line is gone (Parker, 2026-10-19): the badge says
+			    General, and the table below answers the rest. */}
 		</div>
 	);
 }

@@ -17,6 +17,7 @@ import { workChapters } from "@anthers/shared/chapters";
 import { isListened, isPaged } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import HostedEmbed from "@anthers/web-shared/content/HostedEmbed";
+import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
@@ -71,7 +72,20 @@ import SanitizedHtml from "../ui/SanitizedHtml";
 
 /** A Work as the detail endpoint returns it — with its creator and posting history. */
 export type WorkDetail = Work & {
-	creator?: { handle: string; displayName: string | null; avatar: string | null };
+	/**
+	 * The creator, as much as a card needs — the name, thumbnail and bio the Showings
+	 * panel's creator card shows, plus whether this reader already follows them. The
+	 * page's endpoint sends all of it; the owner's editor fills the same shape from the
+	 * signed-in account.
+	 */
+	creator?: {
+		handle: string;
+		displayName: string | null;
+		avatar: string | null;
+		bio?: string | null;
+		isFollowing?: boolean;
+		followerCount?: number;
+	};
 	/** Whether the creator can actually take a direct payment (Connect onboarded). */
 	creatorHasStripe?: boolean;
 	/**
@@ -488,7 +502,9 @@ export interface WorkBylineProps {
  *
  * Under the strip, the Anthers release date rides again (Parker, 2026-10-16): a second
  * copy of the line the Details tab carries, so the facts around the title answer where
- * a viewer looks first. A draft, with no release date, renders nothing.
+ * a viewer looks first. The listing's record link — the globe — rides that line
+ * (Parker, 2026-10-19), so a reader finds the raw ATProto record where the release is
+ * stated. A draft, with no release date, renders nothing.
  */
 export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
@@ -543,7 +559,13 @@ export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 				</div>
 			</div>
 			{releasedDate && (
-				<p className="text-center text-sm text-base-content/60">Released {releasedDate}</p>
+				// The listing's globe rides the Released line (Parker, 2026-10-19): it is
+				// the page's own statement that the Work exists on the network, and it sits
+				// where a reader looks for the date rather than inside the Details tab.
+				<p className="flex items-center justify-center gap-1 text-sm text-base-content/60">
+					Released {releasedDate}
+					<RecordLinkButton recordUrl={work.recordUrl} />
+				</p>
 			)}
 		</header>
 	);
