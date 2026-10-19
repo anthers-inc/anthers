@@ -28,6 +28,20 @@ export interface PublishingState {
 	did: string | null;
 	handle: string;
 	listed: number;
+	/** Every `org.anthers.*` record type, with how many this identity currently holds. */
+	records: {
+		kind:
+			| "work"
+			| "post"
+			| "project"
+			| "comment"
+			| "review"
+			| "vote"
+			| "follow"
+			| "creditAcceptance";
+		collection: string;
+		count: number;
+	}[];
 	/**
 	 * Whether the server holding an identity Anthers does not host is answering, or null when that
 	 * was not asked. A server that is down delays records reaching the network and blocks nothing.

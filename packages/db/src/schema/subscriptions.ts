@@ -249,6 +249,21 @@ export const userPreferences = pgTable("user_preferences", {
 	 */
 	persistentMiniplayer: boolean("persistent_miniplayer"),
 
+	/**
+	 * Which creator transaction emails this person wants, per kind of alert.
+	 *
+	 * Shape: `{ [kind]: "email" | "none" }`, with a missing key reading as `email` —
+	 * the registry and the default story live in `@anthers/shared/creator-emails`.
+	 * The Studio's Communications table is the only writer.
+	 *
+	 * ⚠️ **This moved off `stripe_accounts` deliberately** (2026-10-19): the old single
+	 * boolean gated three different mails at once, so a creator who wanted payout mail
+	 * but not sale mail had no way to say it. The migration carries a stored `false`
+	 * into all three kinds, and a `true` or null into an empty map (every kind's default,
+	 * which is on).
+	 */
+	creatorEmailDelivery: jsonb("creator_email_delivery").$type<Record<string, string>>(),
+
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

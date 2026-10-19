@@ -1433,40 +1433,6 @@ const paymentRoutes = new Hono()
 		return c.json({ url });
 	})
 
-	// ── The creator's receipt-email preference ───────────────────────────────
-	// GET answers even with no Stripe account row (on, the default), because the
-	// toggle lives on the Studio Settings page a pre-onboarding creator also reads;
-	// PATCH writes through to the row, creating it with a placeholder account id is
-	// NOT done — an unbuilt row is a real state (the onboarding route owns it), so
-	// PATCH is refused with the same 409 the other Stripe routes give, and the page
-	// hides the toggle until payouts exist (the toggle's own reasoning below).
-	.get("/stripe/receipt-emails", requireAuth, async (c) => {
-		const [account] = await db
-			.select({ wants: stripeAccounts.creatorReceiptEmails })
-			.from(stripeAccounts)
-			.where(eq(stripeAccounts.userId, c.get("user").id))
-			.limit(1);
-		return c.json({ enabled: account?.wants !== false });
-	})
-	.patch("/stripe/receipt-emails", requireAuth, async (c) => {
-		const body = await c.req.json().catch(() => null);
-		const enabled = (body as { enabled?: unknown } | null)?.enabled;
-		if (typeof enabled !== "boolean") return c.json({ error: "enabled must be a boolean" }, 400);
-
-		const [account] = await db
-			.select({ id: stripeAccounts.id })
-			.from(stripeAccounts)
-			.where(eq(stripeAccounts.userId, c.get("user").id))
-			.limit(1);
-		if (!account) return c.json({ error: "Connect a Stripe account first." }, 409);
-
-		await db
-			.update(stripeAccounts)
-			.set({ creatorReceiptEmails: enabled, updatedAt: new Date() })
-			.where(eq(stripeAccounts.id, account.id));
-		return c.json({ enabled });
-	})
-
 	// ── Quote (accurate fee preview, no charge) ──────────────────────────────
 	.get("/quote/:slug", requireAuth, async (c) => {
 		const user = c.get("user");
