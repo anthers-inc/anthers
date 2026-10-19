@@ -19,7 +19,7 @@
  * route's bare window, the fallback branches — and the **stage** (`stage`, set by
  * `WorkDeliverable` when the media frame holds this page) is the frame's fill, where
  * the waveform is the page's reading surface (`ListenStage`), the transport sits at
- * its foot, and a song's words open as the stage's aside column. Both layouts read
+ * its foot, and a song's words open as a drawer over the waveform's right side. Both layouts read
  * their state identically, by the two-mode rule above.
  *
  * The element's state and the bar's mirror are both named `isPlaying` / `progress` /
@@ -40,7 +40,7 @@ import type { QueueTrack } from "../../lib/music-queue";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { useBindPlayerSeek } from "../../lib/work-player";
 import ChapterList from "./ChapterList";
-import { AsideColumn, AsideToggle } from "./ListenStage";
+import { AsideDrawer, AsideToggle } from "./ListenStage";
 import { PublicAccessFooter, PublicAccessWall } from "./PublicAccessNotice";
 import { formatRemaining, formatTime } from "./transport/format";
 import SeekBar from "./transport/SeekBar";
@@ -70,14 +70,12 @@ interface AudioPlayerProps {
 	 */
 	stage?: boolean;
 	/**
-	 * What the stage's aside column holds when it is open — a song's words on the
-	 * read; the creator's lyrics field there (the editing surface, mounted open where
-	 * a listener's starts closed). Null means the Work carries nothing to open, and
-	 * no toggle renders.
+	 * What the stage's aside drawer holds when it is open — a song's words on the read;
+	 * the creator's lyrics field there. Null means the Work carries nothing to open,
+	 * and no toggle renders. It always starts closed: the drawer is the toggle's to
+	 * open, whichever face is inside it (Parker, 2026-10-19).
 	 */
 	aside?: ReactNode;
-	/** Whether the aside column starts open. The creator's field does; a listener's does not. */
-	asideOpen?: boolean;
 	/**
 	 * Whose Time Pool minutes this playback earns. Omit on surfaces where playback
 	 * shouldn't be credited (previews, the Studio); the player then just plays.
@@ -102,7 +100,6 @@ export default function AudioPlayer({
 	persistent,
 	stage = false,
 	aside = null,
-	asideOpen = false,
 	attention,
 	publicAccess = false,
 	chapters,
@@ -320,8 +317,8 @@ export default function AudioPlayer({
 		if (spent) audioRef.current?.pause();
 	}, [spent]);
 
-	/** The aside column's state — the creator's field starts open, a listener's starts closed. */
-	const [asideShown, setAsideShown] = useState(asideOpen);
+	/** The aside drawer's state — closed until the transport's toggle asks for it. */
+	const [asideShown, setAsideShown] = useState(false);
 
 	if (spent && budget) return <PublicAccessWall budget={budget} />;
 
@@ -379,40 +376,47 @@ export default function AudioPlayer({
 				 * playhead and the hover time it carries are the shared SeekBar's, and
 				 * filling the media frame's profile is the composition's own flex. On a
 				 * phone the hero does not stand — a box two hundred pixels tall holds no
-				 * reading surface — and the transport's strip carries the shape instead.
-				 * The aside (the words, when opened) rides the same area: beside the
-				 * hero on a wide screen, beneath it on a phone.
+				 * reading surface — and the transport's strip carries the shape instead;
+				 * it stands only while the aside is open, because the drawer needs an
+				 * area to cover and the words need somewhere to scroll.
+				 *
+				 * ⭐ The aside is an overlay inside this row, not a column beside it
+				 * (Parker, 2026-10-19): its height is the waveform area's rather than the
+				 * lyrics', so the media card is the same size whatever the song's words
+				 * fill. Nothing here may let the aside make this row grow.
 				 */}
-				<div className="flex min-h-0 w-full flex-col gap-4 sm:flex-1 sm:flex-row sm:items-stretch xl:gap-5">
-					<div className="relative hidden min-h-0 min-w-0 flex-1 sm:block">
-						<SeekBar
-							position={progress}
-							duration={duration}
-							onSeek={seekTo}
-							label="Seek audio"
-							stretch
-							track={
-								<WaveformDisplay peaks={peaks} progress={duration > 0 ? progress / duration : 0} />
-							}
-						/>
-					</div>
-					{aside != null && asideShown && <AsideColumn>{aside}</AsideColumn>}
+				<div
+					className={`relative min-h-0 min-w-0 flex-1 overflow-hidden ${
+						aside != null && asideShown ? "block max-sm:min-h-[45vh]" : "hidden"
+					} sm:block`}
+				>
+					<SeekBar
+						position={progress}
+						duration={duration}
+						onSeek={seekTo}
+						label="Seek audio"
+						stretch
+						track={
+							<WaveformDisplay peaks={peaks} progress={duration > 0 ? progress / duration : 0} />
+						}
+					/>
+					{aside != null && (
+						<AsideDrawer label="Lyrics" open={asideShown} onClose={() => setAsideShown(false)}>
+							{aside}
+						</AsideDrawer>
+					)}
 				</div>
 
 				{/*
-				 * The transport, at the stage's foot. The times live here — one pair,
-				 * whatever the width, so the phone and the stage read the same surface —
-				 * and the strip only on the phone, where the hero does not stand.
+				 * The transport, at the stage's foot, with the play cluster centered: the
+				 * times flank it as one group, and only the volume and the lyrics toggle
+				 * sit at the row's edges. A `1fr auto 1fr` grid centers the cluster on the
+				 * page rather than on the space the side controls leave (Parker,
+				 * 2026-10-19). The waveform strip above it is the phone's, where the hero
+				 * does not stand.
 				 */}
-				<div className="flex w-full flex-wrap items-center gap-x-4 gap-y-3">
-					{skipCluster}
-					<span
-						data-testid="audio-elapsed"
-						className="min-w-[3rem] text-xs tabular-nums text-base-content/60"
-					>
-						{formatTime(progress)}
-					</span>
-					<div className="min-w-[10rem] flex-1 sm:hidden">
+				<div className="flex w-full flex-col gap-3">
+					<div className="min-w-0 sm:hidden">
 						<SeekBar
 							position={progress}
 							duration={duration}
@@ -427,22 +431,35 @@ export default function AudioPlayer({
 							}
 						/>
 					</div>
-					<div className="hidden flex-1 sm:block" />
-					<span
-						data-testid="audio-remaining"
-						className="min-w-[3rem] text-right text-xs tabular-nums text-base-content/60"
-					>
-						{formatRemaining(progress, duration)}
-					</span>
-					<div className="flex items-center gap-1">
-						<VolumeControl collapsible size="xs" />
-						{aside != null && (
-							<AsideToggle
-								label="Lyrics"
-								open={asideShown}
-								onToggle={() => setAsideShown((o) => !o)}
-							/>
-						)}
+					<div className="flex w-full flex-col gap-2 sm:grid sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-x-2">
+						<span aria-hidden className="hidden sm:block" />
+						<div className="flex items-center justify-center gap-2 sm:gap-4">
+							<span
+								data-testid="audio-elapsed"
+								className="min-w-[2.5rem] text-right text-xs tabular-nums text-base-content/60"
+							>
+								{formatTime(progress)}
+							</span>
+							{skipCluster}
+							<span
+								data-testid="audio-remaining"
+								className="min-w-[2.5rem] text-xs tabular-nums text-base-content/60"
+							>
+								{formatRemaining(progress, duration)}
+							</span>
+						</div>
+						<div className="flex items-center justify-end gap-1">
+							<div className="hidden sm:block">
+								<VolumeControl collapsible size="xs" />
+							</div>
+							{aside != null && (
+								<AsideToggle
+									label="Lyrics"
+									open={asideShown}
+									onToggle={() => setAsideShown((o) => !o)}
+								/>
+							)}
+						</div>
 					</div>
 				</div>
 
