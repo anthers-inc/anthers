@@ -9,15 +9,30 @@
  * when an export is finished — the creator says so — and a build that is not completed is
  * an ordinary draft state the row records, not an error to clean up.
  *
- * ⚠️ **This uploads; it does not deliver.** The files land in the private bucket under
- * the build's own prefix and the Work page embeds nothing from here yet — hosting
- * delivery is the hosting task's remaining half. What this section does today is put the
- * bytes in the right place with the right records.
+ * ⚠️ **This uploads; the delivery route is what plays.** The files land in the private
+ * bucket under the build's own prefix and `routes/build-delivery.ts` serves them on the
+ * Work's delivery origin, every request resolved against `web_build_files`. The lane is
+ * built and proven on the dev base; its production ingress is not open yet, so nothing
+ * here is described as live. What this section does today is put the bytes in the right
+ * place with the right records.
+ *
+ * ⭐ **The Upload page starts the same build** (Parker, 2026-10-19): choosing Web there swaps
+ * its single-file picker for this lane, and `lib/web-build-uploads` carries the folder or
+ * zip's files here. This section shows that upload's progress so the creator who lands on
+ * the Work's page sees the build they just started rather than an empty section.
  */
 
+import { WEB_BUILD_FILE_MAX } from "@anthers/shared/web-build";
 import { useEffect, useRef, useState } from "react";
-import { apiBaseUrl, apiSendsCookies, client } from "../../lib/rpc";
+import { client } from "../../lib/rpc";
 import type { Work } from "../../lib/types";
+import { formatBuildFileSize } from "../../lib/web-build-files";
+import {
+	directBuildUpload,
+	putToStorage,
+	useWebBuildUploads,
+	webBuildUploads,
+} from "../../lib/web-build-uploads";
 import FormField from "../ui/FormField";
 
 /** One file's progress through its own upload. */
@@ -29,73 +44,7 @@ interface FileProgress {
 }
 
 /** Small enough to be a mistake rather than a build. A real export carries tens of MB. */
-const BUILD_FILE_MAX = 500 * 1024 * 1024;
-
-function formatFileSize(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-	return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-/**
- * PUT one file to its presigned URL, with progress. Mirrors `upload.ts`'s xhrUpload —
- * XHR because fetch has no upload progress — but without the multipart path: a build
- * file's key is minted by the build route and the PUT goes straight to storage.
- */
-function putToStorage(
-	url: string,
-	file: File,
-	headers: Record<string, string>,
-	onPercent: (p: number) => void,
-): Promise<void> {
-	return new Promise((resolve, reject) => {
-		const xhr = new XMLHttpRequest();
-		xhr.open("PUT", url);
-		for (const [k, v] of Object.entries(headers ?? {})) xhr.setRequestHeader(k, v);
-		xhr.upload.addEventListener("progress", (e) => {
-			if (e.lengthComputable) onPercent(Math.round((e.loaded / e.total) * 100));
-		});
-		xhr.addEventListener("load", () => {
-			if (xhr.status >= 200 && xhr.status < 300) resolve();
-			else reject(new Error(`Upload failed with status ${xhr.status}`));
-		});
-		xhr.addEventListener("error", () => reject(new Error("Upload failed")));
-		xhr.send(file);
-	});
-}
-
-/**
- * POST one file to the build route's direct endpoint (local dev), with progress.
- * Mirrors `upload.ts`'s `xhrUploadFormData`: XHR because fetch has no upload progress,
- * which also means it bypasses `apiFetch`, so the base URL and credentials are resolved
- * the same way `apiFetch` would.
- */
-function directUpload(
-	path: string,
-	file: File,
-	buildPath: string,
-	onPercent: (p: number) => void,
-): Promise<{ key: string }> {
-	return new Promise((resolve, reject) => {
-		const form = new FormData();
-		form.append("file", file);
-		form.append("path", buildPath);
-		const xhr = new XMLHttpRequest();
-		const full = path.startsWith("/") ? `${apiBaseUrl()}${path}` : path;
-		xhr.open("POST", full);
-		xhr.withCredentials = apiSendsCookies();
-		xhr.upload.addEventListener("progress", (e) => {
-			if (e.lengthComputable) onPercent(Math.round((e.loaded / e.total) * 100));
-		});
-		xhr.addEventListener("load", () => {
-			if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
-			else reject(new Error(`Upload failed with status ${xhr.status}`));
-		});
-		xhr.addEventListener("error", () => reject(new Error("Upload failed")));
-		xhr.send(form);
-	});
-}
+const BUILD_FILE_MAX = WEB_BUILD_FILE_MAX;
 
 export default function WebBuildSection({
 	work,
@@ -124,6 +73,10 @@ export default function WebBuildSection({
 	);
 
 	const uploading = phase !== "idle";
+	// A hosted build started on the Upload page keeps going while the creator lands here.
+	// These are its files and their progress; a completed one disappears into the build
+	// list on the page's re-read.
+	const incoming = useWebBuildUploads().filter((u) => u.workId === work.id && u.status !== "done");
 
 	const start = async () => {
 		setError(null);
@@ -176,7 +129,7 @@ export default function WebBuildSection({
 					});
 				} else {
 					// Local dev: POST the bytes to the build route's direct endpoint.
-					const body = await directUpload(info.uploadUrl, file, path, (p) => {
+					const body = await directBuildUpload(info.uploadUrl, file, path, (p) => {
 						if (alive.current) {
 							setFileProgress((prev) =>
 								prev.map((f) => (f.name === file.name ? { ...f, percent: p } : f)),
@@ -246,9 +199,10 @@ export default function WebBuildSection({
 		// pass, 2026-10-16).
 		<section className="flex flex-col gap-3">
 			<p className="text-sm text-base-content/60">
-				Upload a build that runs in the browser (an HTML entry, its scripts, assets) and Anthers
-				hosts it. Delivery to players arrives with the hosted-build launch; today this puts the
-				files where they will be served from.
+				Upload a build that runs in the browser — the HTML entry, its loader, the wasm and the
+				assets beside it. A game or piece of software can also start one on the Upload page by
+				choosing Web. Delivery to players opens with the hosted-build launch; today this stores the
+				files a player will load.
 			</p>
 
 			{error && (
@@ -256,6 +210,55 @@ export default function WebBuildSection({
 					<span className="flex-1">{error}</span>
 				</div>
 			)}
+
+			{incoming.map((u) => (
+				<div key={u.id} className="rounded-box border border-base-300 bg-base-200/40 p-4">
+					<div className="flex items-center gap-2">
+						<h3 className="font-medium">Hosted build uploading</h3>
+						<div className="flex-1" />
+						{u.status === "failed" ? (
+							<button
+								type="button"
+								className="btn btn-ghost btn-xs"
+								onClick={() => webBuildUploads.dismiss(u.id)}
+							>
+								Dismiss
+							</button>
+						) : (
+							<button
+								type="button"
+								className="btn btn-ghost btn-xs text-error"
+								onClick={() => webBuildUploads.cancel(u.id)}
+							>
+								Cancel
+							</button>
+						)}
+					</div>
+					<p className="mt-1 text-xs font-mono text-base-content/60">
+						Entry: {u.entryPath} · {u.files.filter((f) => f.done).length} of {u.files.length} files
+						{u.requiresIsolation ? " · threaded" : ""}
+					</p>
+					{u.status === "failed" ? (
+						<div className="alert alert-error mt-2 text-sm">
+							<span>{u.error}</span>
+						</div>
+					) : (
+						<ul className="mt-2 flex flex-col gap-1 text-xs">
+							{u.files.map((f) => (
+								<li key={f.path} className="flex items-center gap-2">
+									<span className="w-48 truncate font-mono">{f.path}</span>
+									<progress
+										className="progress progress-primary flex-1"
+										value={f.percent}
+										max={100}
+									/>
+									<span className="w-10 text-right">{f.percent}%</span>
+								</li>
+							))}
+						</ul>
+					)}
+				</div>
+			))}
 
 			{builds.map((b) => (
 				<div key={b.id} className="rounded-box border border-base-300 bg-base-200/40 p-4">
@@ -273,13 +276,15 @@ export default function WebBuildSection({
 					</div>
 					<p className="mt-1 text-xs font-mono text-base-content/60">
 						Entry: {b.entryPath} · {b.files.length} file{b.files.length === 1 ? "" : "s"} ·{" "}
-						{formatFileSize(b.files.reduce((sum, f) => sum + (f.fileSize ?? 0), 0))}
+						{formatBuildFileSize(b.files.reduce((sum, f) => sum + (f.fileSize ?? 0), 0))}
 					</p>
 					<ul className="mt-2 max-h-40 overflow-y-auto text-xs font-mono text-base-content/70">
 						{b.files.map((f) => (
 							<li key={f.id} className="truncate">
 								{f.path}{" "}
-								<span className="text-base-content/40">({formatFileSize(f.fileSize ?? 0)})</span>
+								<span className="text-base-content/40">
+									({formatBuildFileSize(f.fileSize ?? 0)})
+								</span>
 							</li>
 						))}
 					</ul>

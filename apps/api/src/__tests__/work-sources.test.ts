@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A paged Work's source set — the multi-PDF ruling's routes and their invariants
- * (Parker, 2026-10-10: one PDF or several, each file's pages a contiguous run in the
- * creator's arrangement) — and, in its second describe, the image kind's set (2026-10-18),
- * whose rows are the gallery the Work displays.
+ * A paged Work's source set — the routes and their invariants, and, in its second describe,
+ * the image kind's set (2026-10-18), whose rows are the gallery the Work displays.
+ *
+ * 🚨 **A comic's pages are JPG or PNG images** (Parker, 2026-10-19), so this suite's comic
+ * fixtures are page images; a book may still carry a PDF or an EPUB. The last test pins the
+ * refusal on a new comic PDF and the book's continued acceptance of one.
  *
  * The properties under test, one spec each:
  * - **The legacy attach syncs**: a `source_key` PATCH on a comic — the shape the Upload
- *   form's first upload uses — becomes the set's one row, so the table is the row-level
- *   truth for the paged kinds and no Work can carry both a column and a set in disagreement.
+ *   form's first upload used before the set rail — becomes the set's one row, so the table
+ *   is the row-level truth for the paged kinds and no Work can carry both a column and a set
+ *   in disagreement.
  * - **The set mutates as rows**: append at the end (dense positions, the legacy column
  *   following the newest file), remove with renumber, reorder as a whole list. Every
  *   mutation enqueues exactly one more rasterize.
@@ -47,8 +50,15 @@ let other = { id: 0, cookie: "" };
 const workIds: number[] = [];
 let sendSpy: ReturnType<typeof spyOn>;
 
-/** An owned key the local storage can actually sign: it exists after `putKey` writes it. */
+/** An owned page image the local storage can actually sign: it exists after `putKey` writes it. */
 async function putKey(creatorId: number, name: string): Promise<string> {
+	const key = `creators/${creatorId}/assets/${name}.png`;
+	await storage.upload(key, Buffer.from("fake page image bytes"), "image/png", "private");
+	return key;
+}
+
+/** An owned PDF, for the book that still takes one and the comic that no longer does. */
+async function putPdfKey(creatorId: number, name: string): Promise<string> {
 	const key = `creators/${creatorId}/assets/${name}.pdf`;
 	await storage.upload(
 		key,
@@ -142,19 +152,19 @@ describe("a paged Work's source set", () => {
 
 		const add = await call("POST", `/api/content/works/${work.id}/source-files`, creator.cookie, {
 			file: second,
-			filename: "second.pdf",
+			filename: "second.png",
 			fileSize: 123,
 		});
 		expect(add.status).toBe(201);
 		const added = await call("POST", `/api/content/works/${work.id}/source-files`, creator.cookie, {
 			file: third,
-			filename: "third.pdf",
+			filename: "third.png",
 		});
 		expect(added.status).toBe(201);
 
 		const files = await readSet(work.id);
 		expect(files.map((f) => f.position)).toEqual([0, 1, 2]);
-		expect(files.map((f) => f.filename)).toEqual([expect.any(String), "second.pdf", "third.pdf"]);
+		expect(files.map((f) => f.filename)).toEqual([expect.any(String), "second.png", "third.png"]);
 		// The legacy column follows the set's newest file, so the old readers never read
 		// a paged Work's column as empty while its set stands.
 		const [row] = await db
@@ -323,6 +333,57 @@ describe("a paged Work's source set", () => {
 			file: foreignKey(other.id, other.id),
 		});
 		expect(res.status).toBe(404);
+	});
+
+	it("refuses a new PDF for a comic, while a book still takes one", async () => {
+		const comic = await insertWork({
+			creatorId: creator.id,
+			type: "comic",
+			visibility: "private",
+			sourceKey: await putKey(creator.id, "comic-page"),
+		});
+		workIds.push(comic.id);
+		const pdf = await putPdfKey(creator.id, "comic-pages");
+
+		const res = await call("POST", `/api/content/works/${comic.id}/source-files`, creator.cookie, {
+			file: pdf,
+			filename: "comic-pages.pdf",
+			mimeType: "application/pdf",
+		});
+		expect(res.status).toBe(400);
+		const body = (await res.json()) as { code?: string; error?: string };
+		expect(body.code).toBe("comic_sources_are_images");
+		expect(body.error).toContain("JPG or PNG");
+		// The refusal leaves the set exactly as it stood, including the PDF pages it already
+		// carried from before this rule — a new source is what is refused, never a re-read.
+		expect(await readSet(comic.id)).toHaveLength(1);
+
+		// The legacy column attach is the same act and takes the same rule.
+		const legacy = await call("PATCH", `/api/content/works/${comic.id}`, creator.cookie, {
+			sourceKey: pdf,
+		});
+		expect(legacy.status).toBe(400);
+		expect(((await legacy.json()) as { code?: string }).code).toBe("comic_sources_are_images");
+
+		// A book is deliberately out of scope: a prose book still takes a PDF.
+		const book = await insertWork({
+			creatorId: creator.id,
+			type: "ebook",
+			visibility: "private",
+			sourceKey: await putPdfKey(creator.id, "book-first"),
+		});
+		workIds.push(book.id);
+		const bookAdd = await call(
+			"POST",
+			`/api/content/works/${book.id}/source-files`,
+			creator.cookie,
+			{
+				file: await putPdfKey(creator.id, "book-second"),
+				filename: "book-second.pdf",
+				mimeType: "application/pdf",
+			},
+		);
+		expect(bookAdd.status).toBe(201);
 	});
 });
 

@@ -100,6 +100,7 @@ import {
 import FileUpload from "@anthers/web-shared/ui/FileUpload";
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import { uploadMediaFile } from "@anthers/web-shared/upload";
+import { useWebBuildUploads } from "@anthers/web-shared/web-build-uploads";
 import {
 	isUploading,
 	useSourceUpload,
@@ -365,6 +366,19 @@ export default function OwnerWorkEditor({
 		for (const u of landedNow) landedSeen.current.add(u.id);
 		void refreshMedia();
 	}, [uploads]);
+
+	// A hosted build started on the Upload page lands the same way, one file list at a time.
+	const webBuilds = useWebBuildUploads().filter((u) => u.workId === current.id);
+	const webBuildsLandedSeen = useRef<Set<string>>(new Set());
+	const webBuildsLanded = webBuilds.filter(
+		(u) => u.status === "done" && !webBuildsLandedSeen.current.has(u.id),
+	);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: fires on a landing, and only then
+	useEffect(() => {
+		if (webBuildsLanded.length === 0) return;
+		for (const u of webBuildsLanded) webBuildsLandedSeen.current.add(u.id);
+		void refreshMedia();
+	}, [webBuilds]);
 
 	/**
 	 * Re-read the media half of the row when an upload lands — the file section, the

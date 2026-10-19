@@ -22,8 +22,9 @@
 
 import { acceptedVideoFormatsSentence } from "@anthers/shared/accepted-formats";
 import { embedUrlProblem, isPaged, workNeedsFile } from "@anthers/shared/content";
+import { WEB_BUILD_FILE_MAX } from "@anthers/shared/web-build";
 import { type ReactNode, useState } from "react";
-import type { UploadableWorkType, Work, WorkInput } from "../../lib/types";
+import type { ContentType, UploadableWorkType, Work, WorkInput } from "../../lib/types";
 import {
 	isUploading,
 	useSourceUpload,
@@ -32,7 +33,7 @@ import {
 	workUploads,
 } from "../../lib/work-uploads";
 import TranscodingStatus from "../media/TranscodingStatus";
-import FileUpload from "../ui/FileUpload";
+import FileUpload, { fileSizeSentence } from "../ui/FileUpload";
 import FormField from "../ui/FormField";
 import { ImageSourceFiles } from "./ImageSourceFiles";
 import { PagedSourceFiles } from "./PagedSourceFiles";
@@ -51,27 +52,6 @@ export function FormatsHint({ type }: { type: FileWorkType }) {
 	return <p className="mt-2 text-xs text-base-content/50">{formats}</p>;
 }
 
-/**
- * What a file picker for this kind accepts, and how large a file it takes.
- *
- * 🚨 **These caps are picked to what the pipeline behind them tolerates, not to what
- * storage accepts.** A Work's source goes up through the resumable multipart session
- * (`packages/web-shared/src/lib/upload.ts`) wherever the plan is more than one part, so
- * the transport's own ceiling is the bucket's — ten thousand 64 MiB parts is ~640 GB,
- * and no session cap belongs in this table. What binds each kind is the worker behind
- * it: `apps/api/src/jobs/transcode-video.ts` reads a video's source from App Platform's
- * ephemeral filesystem — 4 GiB total per container — with the encode ladder beside it,
- * so the video cap is the share of that disk a master may claim; the binding constraint
- * for a PDF is the rasterize job: `apps/api/src/jobs/render-paged.ts` writes the source
- * to the same filesystem alongside every page image it renders before uploading them,
- * so the source cap is the share of that disk a book may claim. 2 GB is that share with
- * room for the rendered pages, and parity with the video cap; a 5 GB cap would trade
- * "cannot upload a giant master" for "the job dies out of disk partway through a
- * 2000-page render". A page image is bounded not by that disk but by the job's decode
- * bound (`PAGE_MAX_PIXELS`) and its own re-encode — the 2 GB accept is the same number
- * either way, so one ceiling covers both paths and the creator's page quality lives
- * downstream of it.
- */
 /**
  * What a file picker for this kind accepts, and how large a file it takes.
  *
@@ -129,16 +109,17 @@ export function fileRules(type: FileWorkType): {
 		case "image":
 			return { accept: "image/*", maxSize: 20 * 1024 * 1024, noun: "an image" };
 		case "comic":
-			// Page images lead (Parker, 2026-10-11) — the paged job renders image leaves
-			// directly, one leaf per page — and the PDF stays: it is what a whole-book
-			// master ships as, and the set is built from whatever mix the creator holds.
-			// The comic's own container (CBZ) and the authored-fixed EPUB 3 FXL sit in
-			// the format ladder's tail, parked — an accept for those lands when the
-			// ingest for them does.
+			// 🚨 **A comic's pages are page images** (Parker, 2026-10-19): JPG or PNG only.
+			// A 1.31 GB, 119-page PDF took 25m53s to process, 20 minutes of it in one
+			// `pdftoppm` pass; an image leaf is already a page, so the same count becomes
+			// one `sharp` normalize per page and keeps its own resolution. The PDF branch
+			// in `render-paged` stays for pages already carried that way and for a book,
+			// which still takes a PDF beside an EPUB. CBZ and authored-fixed EPUB 3 FXL
+			// remain in the format ladder's tail, parked.
 			return {
-				accept: "image/jpeg,image/png,application/pdf",
+				accept: "image/jpeg,image/png",
 				maxSize: 2 * 1024 * 1024 * 1024,
-				noun: "a page image (JPG or PNG) or a PDF",
+				noun: "page images (JPG or PNG)",
 			};
 		case "ebook":
 			// The EPUB rides beside the paged set's files (the reflow path's source — the
@@ -152,6 +133,172 @@ export function fileRules(type: FileWorkType): {
 				noun: "a page image (JPG or PNG), a PDF, or an EPUB",
 			};
 	}
+}
+
+/**
+ * What the Upload page's card says about the kind being chosen, and the platform a build is
+ * for.
+ *
+ * ⭐ **The card follows the kind rather than stating every kind at once** (Parker, 2026-10-19):
+ * a creator choosing a video reads the video's set, its cap and what the pipeline does with
+ * it, instead of a list of four media whose irrelevant entries they must skip. It sits under
+ * the picker, where the fact is worth having, and every sentence is one this page can keep:
+ * the caps read from `fileRules`, the video set from `@anthers/shared/accepted-formats`, so
+ * the copy and the pipeline widen together.
+ *
+ * ⚠️ **A build's platform is part of its fact** — a Windows installer and a macOS `.dmg` are
+ * what a person can actually run — so the build kinds' middle point follows the Platform
+ * select above the card. A platform this build does not name falls back to the other-kinds
+ * sentence rather than showing nothing.
+ */
+export interface WorkTypeFactsCopy {
+	/** The card's title, naming the kind. */
+	heading: string;
+	/** The facts, one sentence or two each. */
+	points: string[];
+	/** The standing note under the list, where the kind carries one. */
+	note?: string;
+}
+
+/** What a person can run on each platform a build can be labeled for. */
+const PLATFORM_POINTS: Record<string, string> = {
+	windows:
+		"Windows — a .zip or an installer (.exe or .msi); Windows may warn about an unsigned build's publisher.",
+	mac: "macOS — a .zip or a .dmg; an unsigned app needs the reader to allow it in Gatekeeper the first time.",
+	linux: "Linux — a .zip, .AppImage, .deb or a tarball, whichever suits what you ship.",
+	android:
+		"Android — an .apk, which people install after allowing installs from outside the Play Store.",
+	ios: "iOS — a download can't be installed on an iPhone, so there is no build to upload for iOS; if your app is on the App Store, name it in the description.",
+	other: "Other — any file people can run.",
+};
+
+/** The build kinds' shared points, with the platform's own sentence between them. */
+function buildFacts(kind: "game" | "software", platform: string | undefined): WorkTypeFactsCopy {
+	if (platform === "web") {
+		return {
+			heading: "What a browser build needs",
+			points: [
+				"The export folder, or a .zip of it: the entry file the build loads first — usually index.html — and every file the engine's export wrote beside it, such as the loader script, the .wasm, the .pck, the audio worklets, icons and assets.",
+				`Up to ${fileSizeSentence(WEB_BUILD_FILE_MAX)} per file.`,
+				"Threaded, if the engine's export turned thread support on (SharedArrayBuffer). It decides where the build plays from, so answer it here.",
+			],
+			note: "Anthers hosts the build. Delivery to players opens with the hosted-build launch; today this stores the files a player will load.",
+		};
+	}
+	return {
+		heading: `What Anthers accepts for a ${kind === "game" ? "game" : "piece of software"}`,
+		points: [
+			"A build — the file you add here becomes the Work's primary download.",
+			PLATFORM_POINTS[platform ?? "other"] ?? PLATFORM_POINTS.other,
+		],
+	};
+}
+
+const WORK_TYPE_FACTS: Record<ContentType, (platform: string | undefined) => WorkTypeFactsCopy> = {
+	video: () => ({
+		heading: "What Anthers accepts for a video",
+		points: [
+			`Format — ${acceptedVideoFormatsSentence()}. MP4, MOV, MKV and WebM all work, and a file in another container carrying one of those pairs is remuxed as it arrives, with no re-encode, before processing starts.`,
+			"A video with no audio track is fine too.",
+			`Size — up to ${fileSizeSentence(fileRules("video").maxSize)}.`,
+		],
+		note: "The set is short on purpose, and it widens only by decision: a format joins it when Anthers decides to deliver it, and this page states each addition as it lands. If your file isn't in the set, re-export it with one from above.",
+	}),
+	music: () => ({
+		heading: "What Anthers accepts for music",
+		points: [
+			"Format — any common audio format, whatever a music player opens.",
+			"What happens — it's converted to MP3 for streaming as it's processed, with a waveform drawn for the player.",
+			`Size — up to ${fileSizeSentence(fileRules("music").maxSize)}.`,
+		],
+	}),
+	audio: () => ({
+		heading: "What Anthers accepts for audio",
+		points: [
+			"Format — any common audio format, whatever a music player opens: a podcast, an audiobook, an audio drama, a soundscape. Songs belong under Music.",
+			"What happens — it's converted to MP3 for streaming as it's processed, with a waveform drawn for the player.",
+			`Size — up to ${fileSizeSentence(fileRules("audio").maxSize)}.`,
+		],
+	}),
+	image: () => ({
+		heading: "What Anthers accepts for an image",
+		points: [
+			"Format — any image format a browser displays.",
+			"A set — the image you pick here is the first; the Work's page adds more, in the order a reader sees them. The first is what listings show.",
+			`Size — up to ${fileSizeSentence(fileRules("image").maxSize)} per image.`,
+		],
+	}),
+	comic: () => ({
+		heading: "What Anthers accepts for a comic",
+		points: [
+			"Format — JPG or PNG page images; a set of them is one Work.",
+			"What happens — pages are rendered from the set in its order, and read one at a time.",
+			"A PDF or a CBZ isn't taken — export its pages as JPG or PNG images and add them in order.",
+			`Size — up to ${fileSizeSentence(fileRules("comic").maxSize)} per file.`,
+		],
+	}),
+	ebook: () => ({
+		heading: "What Anthers accepts for a book",
+		points: [
+			"Format — an EPUB, or JPG or PNG page images, or a PDF.",
+			"An EPUB is processed on its own and reflows as text, so it can't share a Work with page images or a PDF.",
+			"What happens — a page set is rendered in its order and read page by page; an EPUB is read as reflowing text.",
+			`Size — up to ${fileSizeSentence(fileRules("ebook").maxSize)} per file.`,
+		],
+	}),
+	game: (platform) => buildFacts("game", platform),
+	software: (platform) => buildFacts("software", platform),
+	text: () => ({
+		heading: "What a written Work is",
+		points: [
+			"Nothing is uploaded: you write it on the Work's page, and it reads as an article.",
+			"Like any Work, it can be gated, sold or given away. For an announcement, write a post instead.",
+		],
+	}),
+	physical: () => ({
+		heading: "What a physical Work carries",
+		points: [
+			"Nothing is uploaded or streamed: the Work describes what ships.",
+			"Dimensions, shipping and what arrives are written on its page. Selling a creator's own shipped good isn't open yet.",
+		],
+	}),
+	service: () => ({
+		heading: "What a service Work carries",
+		points: [
+			"Nothing is uploaded or streamed: the Work describes what you do.",
+			"What it includes, the turnaround and the terms are written on its page, and it's sold rather than played.",
+		],
+	}),
+};
+
+/** The copy for one kind's card: the heading, its facts, and any standing note. */
+export function workTypeFacts(type: ContentType, platform?: string): WorkTypeFactsCopy {
+	return WORK_TYPE_FACTS[type](platform);
+}
+
+/**
+ * The card under the Upload page's picker: what the chosen kind takes, what the platform's
+ * build should be, and what the pipeline does with it. A region with an accessible name so
+ * the heading is how the card is found, by a screen reader and by a browser walk alike.
+ */
+export function WorkTypeFacts({ type, platform }: { type: ContentType; platform?: string }) {
+	const facts = workTypeFacts(type, platform);
+	return (
+		<section
+			aria-labelledby="work-type-facts-heading"
+			className="rounded-lg bg-base-200/50 p-4 text-sm"
+		>
+			<p id="work-type-facts-heading" className="mb-2 font-medium">
+				{facts.heading}
+			</p>
+			<ul className="list-disc space-y-1 pl-5 text-base-content/70">
+				{facts.points.map((point) => (
+					<li key={point}>{point}</li>
+				))}
+			</ul>
+			{facts.note && <p className="mt-2 text-xs text-base-content/50">{facts.note}</p>}
+		</section>
+	);
 }
 
 /** The free-text detail a physical good or a service carries, out of `metadata.note`. */
