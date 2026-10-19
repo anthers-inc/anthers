@@ -5,8 +5,8 @@
  *
  * Every transaction a person is on either side of earns an email: the buyer's receipt
  * for a purchase, a refund, or a paid monthly Badge, and the creator's copy of a sale
- * or a refund on their work (on by default, off by the preference on their Stripe
- * account row). Receipts are sent from the webhook that already knows the money moved,
+ * or a refund on their work (on by default, off per kind by the map on their preferences
+ * row). Receipts are sent from the webhook that already knows the money moved,
  * not from the route that asked for it, so a dashboard refund and an app refund produce
  * the same buyer email through the same door.
  *
@@ -38,9 +38,10 @@ import {
 	type invoices,
 	type purchases,
 	receiptSends,
-	stripeAccounts,
+	userPreferences,
 	users,
 } from "@anthers/db/schema";
+import { type CreatorEmailKind, resolvedCreatorEmailMode } from "@anthers/shared/creator-emails";
 import Decimal from "decimal.js";
 import { eq, inArray } from "drizzle-orm";
 import {
@@ -58,17 +59,22 @@ import {
 const ZERO_SUM_TRANSFER_PREFIX = "tr_local_zerosum_";
 
 /**
- * Whether this creator wants their copy of transaction emails. Null reads as on: the
- * default is on, and "never answered" is not a no — the same reading `userPreferences`
- * gives its nullable display preferences, whose reasoning the column's docblock carries.
+ * Whether this creator wants their copy of one kind of transaction email.
+ *
+ * A missing map, a missing key and a row that has never been written all read as on —
+ * the registry's default, stated once in `@anthers/shared/creator-emails`. The Studio's
+ * Communications table writes only the kinds somebody has turned off.
  */
-export async function creatorWantsReceiptEmails(creatorId: number): Promise<boolean> {
-	const [acct] = await db
-		.select({ wants: stripeAccounts.creatorReceiptEmails })
-		.from(stripeAccounts)
-		.where(eq(stripeAccounts.userId, creatorId))
+export async function creatorWantsEmail(
+	creatorId: number,
+	kind: CreatorEmailKind,
+): Promise<boolean> {
+	const [prefs] = await db
+		.select({ delivery: userPreferences.creatorEmailDelivery })
+		.from(userPreferences)
+		.where(eq(userPreferences.userId, creatorId))
 		.limit(1);
-	return acct?.wants !== false;
+	return resolvedCreatorEmailMode(prefs?.delivery ?? null, kind) === "email";
 }
 
 /**
@@ -200,7 +206,7 @@ export async function sendPurchaseReceipts(rows: PurchaseRow[]): Promise<void> {
 			.where(eq(users.id, creatorId))
 			.limit(1);
 		if (!creator) return;
-		if (!(await creatorWantsReceiptEmails(creatorId))) return;
+		if (!(await creatorWantsEmail(creatorId, "sale"))) return;
 		const earnings = rows
 			.reduce((acc, r) => acc.plus(new Decimal(r.creatorEarnings)), new Decimal(0))
 			.toFixed(2);
@@ -286,7 +292,7 @@ export async function sendRefundReceipts(rows: PurchaseRow[]): Promise<void> {
 			.where(eq(users.id, row.creatorId))
 			.limit(1);
 		if (!creator) return;
-		if (!(await creatorWantsReceiptEmails(row.creatorId))) return;
+		if (!(await creatorWantsEmail(row.creatorId, "refund"))) return;
 		const earnings = negated(
 			rows.reduce((acc, r) => acc.plus(new Decimal(r.creatorEarnings)), new Decimal(0)).toFixed(2),
 		);
@@ -388,9 +394,9 @@ export async function sendSupportReceipt(invoiceRow: InvoiceRow): Promise<void> 
  * The reference is the transfer id, which is also the identifier on the Studio Payments
  * page's transfer record, so the email and the page name the same movement.
  *
- * The creator's receipt preference (`creatorWantsReceiptEmails`) is honored — this is
+ * The creator's payout-email preference (`creatorWantsEmail(…, "payout")`) is honored — this is
  * transactional mail of the same family as the sale receipt, not the essential category,
- * and the off switch on their Stripe account row says so.
+ * and the off switch on their preferences row says so.
  */
 export async function sendPayoutReceipt(transfer: {
 	creatorId: number;
@@ -407,7 +413,7 @@ export async function sendPayoutReceipt(transfer: {
 	}
 	const creatorEmail = await emailOf(transfer.creatorId);
 	if (!creatorEmail) return;
-	if (!(await creatorWantsReceiptEmails(transfer.creatorId))) return;
+	if (!(await creatorWantsEmail(transfer.creatorId, "payout"))) return;
 	await sendOnce(
 		{
 			dedupeKey: `payout:${transfer.stripeTransferId}:creator:${transfer.creatorId}`,

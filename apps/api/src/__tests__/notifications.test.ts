@@ -362,6 +362,40 @@ describe("per-group delivery", () => {
 	});
 });
 
+describe("creator email preferences", () => {
+	it("stores per-kind answers and resolves every kind for the Studio table", async () => {
+		const res = await req("/api/accounts/me", {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: recipient },
+			body: JSON.stringify({ creatorEmailDelivery: { sale: "none" } }),
+		});
+		expect(res.status).toBe(200);
+
+		const read = await req("/api/accounts/me", { headers: { Cookie: recipient } });
+		const body = (await read.json()) as {
+			user: { creatorEmailDelivery: Record<string, string> };
+		};
+		expect(body.user.creatorEmailDelivery.sale).toBe("none");
+		// An unanswered kind arrives at its default, which is on.
+		expect(body.user.creatorEmailDelivery.refund).toBe("email");
+		expect(body.user.creatorEmailDelivery.payout).toBe("email");
+
+		await db
+			.update(userPreferences)
+			.set({ creatorEmailDelivery: {} })
+			.where(eq(userPreferences.userId, recipientId));
+	});
+
+	it("refuses a kind outside the registry", async () => {
+		const res = await req("/api/accounts/me", {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: recipient },
+			body: JSON.stringify({ creatorEmailDelivery: { sale: "none", nonsense: "email" } }),
+		});
+		expect(res.status).toBe(400);
+	});
+});
+
 describe("one-click unsubscribe", () => {
 	it("mints a token on the first social send and the email carries the link", async () => {
 		// The mail is a no-op under the test runner, but minting happens on the decide-to-
