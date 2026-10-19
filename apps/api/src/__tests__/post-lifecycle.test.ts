@@ -624,3 +624,51 @@ describe("Gaps the suite looked like it covered", () => {
 		for (const [q] of CRON_SCHEDULES) expect(known.has(q)).toBe(true);
 	});
 });
+
+describe("The one pin", () => {
+	/** Make a published post and return its slug. */
+	async function publish(title: string): Promise<string> {
+		const res = await req("/api/content/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({ title, body: `${title} body`, isPublished: true }),
+		});
+		expect(res.status).toBe(201);
+		return (await res.json()).post.slug as string;
+	}
+
+	function pin(slug: string, isPinned: boolean) {
+		return req(`/api/content/posts/${slug}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
+			body: JSON.stringify({ isPinned }),
+		});
+	}
+
+	async function pinnedSlugs(): Promise<string[]> {
+		const res = await req("/api/content/posts?mine=true", { headers: { Cookie: owner } });
+		expect(res.status).toBe(200);
+		const { posts } = (await res.json()) as { posts: { slug: string; isPinned: boolean }[] };
+		return posts.filter((p) => p.isPinned).map((p) => p.slug);
+	}
+
+	it("pinning a post takes the creator's only pin slot", async () => {
+		const first = await publish(`First pinned ${id}`);
+		const second = await publish(`Second pinned ${id}`);
+
+		expect((await pin(first, true)).status).toBe(200);
+		expect(await pinnedSlugs()).toEqual([first]);
+
+		// Pinning the second is what the page confirms before doing: the first loses the
+		// slot in the same request.
+		expect((await pin(second, true)).status).toBe(200);
+		expect(await pinnedSlugs()).toEqual([second]);
+	});
+
+	it("unpinning one post leaves the others as they were", async () => {
+		const only = await publish(`Unpin ${id}`);
+		expect((await pin(only, true)).status).toBe(200);
+		expect((await pin(only, false)).status).toBe(200);
+		expect(await pinnedSlugs()).toEqual([]);
+	});
+});

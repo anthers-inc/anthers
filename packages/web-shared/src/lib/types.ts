@@ -634,7 +634,7 @@ export interface Post {
 	body: string | null;
 
 	// Presentation
-	showOnTimeline: boolean;
+	/** One pinned post per creator: pinning one clears the creator's others. */
 	isPinned: boolean;
 
 	// Metadata
@@ -688,7 +688,6 @@ export interface PostListItem {
 	 */
 	creatorId: number | null;
 	title: string | null;
-	showOnTimeline: boolean;
 	isPinned: boolean;
 	tags: string[] | null;
 	isPublished: boolean | null;
@@ -1318,33 +1317,6 @@ export interface NotificationItem {
  * to the noisier display rather than silently hiding mail the person is receiving.
  */
 export type NotificationDeliveryMode = "app" | "email" | "both";
-
-export interface Bookmark {
-	id: number;
-	userId: number;
-	projectId: number | null;
-	postId: number | null;
-	creatorId: number | null;
-	sortOrder: number;
-	createdAt: string;
-	project?: {
-		title: string | null;
-		slug: string;
-		coverImage: string | null;
-	} | null;
-	post?: {
-		title: string | null;
-		slug: string;
-		publicId?: number;
-		contentType: string;
-		thumbnail: string | null;
-	} | null;
-	creator?: {
-		handle: string;
-		displayName: string | null;
-		avatar: string | null;
-	} | null;
-}
 
 // ─── Analytics / Integration Types ───
 

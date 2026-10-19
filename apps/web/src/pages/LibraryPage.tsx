@@ -39,7 +39,7 @@ import {
 	MaturityVeil,
 	useContentPreferences,
 } from "@anthers/web-shared/content-preferences";
-import { workUrl } from "@anthers/web-shared/postUrl";
+import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { useSidebar } from "@anthers/web-shared/sidebar";
@@ -93,15 +93,28 @@ function musicDial(includeSpoken: boolean, onIncludeSpoken: (on: boolean) => voi
 /** The shelf's view of a saved Project — the album card's whole data source. */
 type ShelfProject = LensProject;
 
+/** A saved post as the shelf's card reads it — title, opening and who wrote it. */
+interface ShelfPost {
+	id: number;
+	publicId: number;
+	slug: string;
+	title: string | null;
+	excerpt: string | null;
+	tags: string[];
+	isPublished: boolean;
+	creator: { handle: string; displayName: string | null; avatar: string | null } | null;
+}
+
 interface ShelfItem {
 	id: number;
-	kind: "work" | "project";
+	kind: "work" | "project" | "post";
 	hidden: boolean;
 	savedAt: string;
 	/** Derived from a completed purchase on every read — never stored on the row. */
 	purchased: boolean;
 	work?: Work | null;
 	project?: ShelfProject | null;
+	post?: ShelfPost | null;
 }
 
 /**
@@ -120,15 +133,18 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 	const [busy, setBusy] = useState(false);
 	const work = item.work;
 	const project = item.project;
+	const post = item.post;
 
-	const title = work?.title ?? project?.title ?? "Untitled";
+	const title = work?.title ?? project?.title ?? post?.title ?? "Untitled";
 	const rawCover = work?.thumbnail ?? project?.coverImage ?? null;
 	const to =
 		work?.publicId != null
 			? workUrl({ slug: work.slug, publicId: work.publicId })
 			: project
 				? `/projects/${project.slug}`
-				: null;
+				: post
+					? postUrl(post)
+					: null;
 
 	// A shelf entry the user cannot currently open — saved free and later gated, or
 	// refunded. Stated rather than hidden: it is still theirs to see, just not to open.
@@ -154,7 +170,13 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 
 	const body = (
 		<>
-			{rawCover ? (
+			{post ? (
+				// A post has no picture of its own, so the card's top shows its opening the
+				// way the feed's tile does — a post on the shelf reads like a post.
+				<div className="flex h-40 w-full items-start bg-base-300/60 p-4">
+					<p className="line-clamp-4 text-sm text-base-content/70">{post.excerpt || "No text"}</p>
+				</div>
+			) : rawCover ? (
 				cover ? (
 					<MaturityVeil
 						maturity={work?.maturity}
@@ -176,11 +198,17 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 			)}
 			<div className="card-body gap-1 p-4">
 				<h2 className="card-title text-sm">{title}</h2>
+				{post?.creator && (
+					<p className="text-xs text-base-content/60">
+						{post.creator.displayName || `@${post.creator.handle}`}
+					</p>
+				)}
 				<div className="flex flex-wrap items-center gap-1.5">
 					{/* A word, not only a color: "Purchased" is what makes the permanence
 					    rule legible when the remove control refuses. */}
 					{item.purchased && <span className="badge badge-sm badge-soft">Purchased</span>}
 					{item.kind === "project" && <span className="badge badge-sm badge-ghost">Album</span>}
+					{item.kind === "post" && <span className="badge badge-sm badge-ghost">Post</span>}
 					{locked && (
 						<span className="badge badge-sm badge-ghost gap-1">
 							<LockClosedIcon className="size-3" />
@@ -189,6 +217,9 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 					)}
 					{item.hidden && <span className="badge badge-sm badge-ghost">Hidden</span>}
 				</div>
+				{post && !post.isPublished && (
+					<p className="text-xs text-warning">Back in drafts — the creator has unpublished it.</p>
+				)}
 				{work?.visibility === "withdrawn" && (
 					<p className="text-xs text-warning">
 						Withdrawn by the creator — still yours
@@ -245,7 +276,12 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
  * a post linking nothing drops while any type filter is on. */
 function matchesTags(item: ShelfItem, tags: string[]): boolean {
 	if (tags.length === 0) return true;
-	const own = item.kind === "work" ? (item.work?.tags ?? []) : [];
+	const own =
+		item.kind === "work"
+			? (item.work?.tags ?? [])
+			: item.kind === "post"
+				? (item.post?.tags ?? [])
+				: [];
 	return tags.every((t) => own.includes(t));
 }
 
@@ -256,6 +292,8 @@ function matchesTags(item: ShelfItem, tags: string[]): boolean {
  */
 function matchesAccess(item: ShelfItem, access: string): boolean {
 	if (!access) return true;
+	// A saved post carries no access reading at all, so it drops under either side of the
+	// filter — All is where it lives, the same honesty a Project gets.
 	if (item.kind !== "work" || !item.work || !isAccessResult(item.work.access)) return false;
 	return access === "unlocked"
 		? item.work.access.canAccess === true
@@ -344,20 +382,23 @@ export default function LibraryPage() {
 	);
 	// A Project has no media type of its own, so a type filter necessarily excludes
 	// albums. The All type is where they live, which is honest: an album is not "a video".
-	const filtered = useMemo(
-		() =>
-			activeType
-				? withTags.filter((i) => i.kind === "work" && i.work?.type === activeType)
-				: withTags,
-		[withTags, activeType],
-	);
+	// A lens reorganizes the shelf's Works and Projects; a post is not a Work type, so it
+	// sits out every lens rather than arriving as a row a lens has no shape for.
+	const lensDraw = useMemo(() => withTags.filter((i) => i.kind !== "post"), [withTags]);
+
+	const filtered = useMemo(() => {
+		if (!activeType) return withTags;
+		// "posts" is the shared Type row's id for the post kind; every other id is a Work
+		// type, so a post drops under those and a Work drops under Posts.
+		if (activeType === "posts") return withTags.filter((i) => i.kind === "post");
+		return withTags.filter((i) => i.kind === "work" && i.work?.type === activeType);
+	}, [withTags, activeType]);
 
 	/**
 	 * The Type rows the sidebar grays out (Parker, 2026-10-11): a type grayed when the
 	 * Library holds nothing of it, and — under a lens — when the lens excludes it. Posts
-	 * gray here by absence too: until and unless the shelf holds a saved post
-	 * (the Save unification adds posts as Library rows), the row shows the grayed state
-	 * — the vocabulary, exactly as with any empty type.
+	 * are a Type row like any other now that a post saves into the Library, so the row is
+	 * live exactly when the shelf holds one.
 	 */
 	const unavailableTypes = useMemo(() => {
 		const set = new Set<string>();
@@ -384,7 +425,11 @@ export default function LibraryPage() {
 			}
 		} else {
 			for (const t of SHARED_FILTER_TYPES) {
-				if (t.id && !items.some((i) => i.kind === "work" && i.work?.type === t.id)) set.add(t.id);
+				if (t.id === "posts") {
+					if (!items.some((i) => i.kind === "post")) set.add(t.id);
+				} else if (t.id && !items.some((i) => i.kind === "work" && i.work?.type === t.id)) {
+					set.add(t.id);
+				}
 			}
 		}
 		return set;
@@ -476,17 +521,17 @@ export default function LibraryPage() {
 				   reorganizes what is on the shelf, never fetches a different corpus.
 				   Drawing on `withTags` is what keeps "a lens is a view" true of the whole
 				   family of them. */
-				<MusicLens items={withTags as LensItem[]} includeSpoken={includeSpoken} />
+				<MusicLens items={lensDraw as LensItem[]} includeSpoken={includeSpoken} />
 			) : lens === "bookshelf" ? (
 				/* The reading shelf: book-like types as spines, alpha by title. The same
 				   drawn list as every lens — `withTags`, the shelf's own narrowing. */
-				<BookshelfLens items={withTags as LensItem[]} />
+				<BookshelfLens items={lensDraw as LensItem[]} />
 			) : lens === "channel-guide" ? (
 				/* The TV-guide: a channel per creator with saved video, that channel's
 				   timeline of saved videos, latest first. Channels translate client-side
 				   from the same drawn list; the guide itself owns selection. */
 				<ChannelGuideLens
-					channels={channelGuideChannelsFromShelf(withTags as LensItem[])}
+					channels={channelGuideChannelsFromShelf(lensDraw as LensItem[])}
 					source="library"
 				/>
 			) : filtered.length === 0 ? (

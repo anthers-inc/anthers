@@ -3,7 +3,6 @@ import { relations } from "drizzle-orm";
 import { atprotoSessions, follows, sessions, userBlocks, users } from "./auth.js";
 import {
 	assets,
-	bookmarks,
 	comments,
 	creditAcceptances,
 	creditRejections,
@@ -59,7 +58,6 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	inlineImages: many(inlineImages),
 	comments: many(comments),
 	reviews: many(reviews),
-	bookmarks: many(bookmarks),
 
 	// Payments
 	stripeAccount: one(stripeAccounts),
@@ -130,7 +128,6 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
 	creator: one(users, { fields: [projects.creatorId], references: [users.id] }),
 	projectPosts: many(projectPosts),
 	projectItems: many(projectItems),
-	bookmarks: many(bookmarks),
 }));
 
 export const projectItemsRelations = relations(projectItems, ({ one }) => ({
@@ -152,7 +149,6 @@ export const worksRelations = relations(works, ({ one, many }) => ({
 	transcodingJobs: many(transcodingJobs),
 	projectItems: many(projectItems), // Projects this Work belongs to
 	purchases: many(purchases),
-	bookmarks: many(bookmarks),
 	reviews: many(reviews),
 	creditAcceptances: many(creditAcceptances),
 	creditRejections: many(creditRejections),
@@ -198,16 +194,6 @@ export const commentsRelations = relations(comments, ({ one }) => ({
 export const reviewsRelations = relations(reviews, ({ one }) => ({
 	user: one(users, { fields: [reviews.userId], references: [users.id] }),
 	work: one(works, { fields: [reviews.workId], references: [works.id] }),
-}));
-
-// Posts only — the Work/Project/creator targets moved to `library_items` in `0035`,
-// and the schema carries only what a post bookmark names now.
-export const bookmarksRelations = relations(bookmarks, ({ one }) => ({
-	user: one(users, {
-		fields: [bookmarks.userId],
-		references: [users.id],
-	}),
-	post: one(posts, { fields: [bookmarks.postId], references: [posts.id] }),
 }));
 
 // ─── Payments ────────────────────────────────────────────────────────────────
