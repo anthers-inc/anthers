@@ -190,9 +190,9 @@ function MediaPlaySection() {
 						<div>
 							<span className="label-text font-medium">Play audio on hover previews</span>
 							<p className="text-xs text-base-content/50 mt-0.5">
-								Hovered video previews are silent by default. Turning this on plays them with sound
-								at the volume the site's players share, and the speaker button on a preview flips
-								this same setting.
+								Hovered previews are silent by default. Turning this on plays them with sound at the
+								volume the site's players share, and the speaker button on a preview flips this same
+								setting.
 							</p>
 						</div>
 					</label>
