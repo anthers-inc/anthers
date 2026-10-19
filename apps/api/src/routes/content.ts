@@ -87,6 +87,7 @@ import {
 	requiresAdultVerification,
 } from "@anthers/shared/content-rating";
 import { dailyCapFor, type LimitWindow, spentWindow } from "@anthers/shared/parental-controls";
+import { visiblePostTitle } from "@anthers/shared/post-title";
 import type { PublicAccessBudget } from "@anthers/shared/public-access";
 import {
 	commentScore,
@@ -123,6 +124,13 @@ import { queueScansForWork } from "../jobs/scan-media.js";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
 import { routePagedIngest } from "../lib/paged-ingest.js";
+import {
+	canonicalizePostTitle,
+	displayPostTitle,
+	displayPostTitles,
+	mentionedWorksForTitle,
+	postsMentioningWork,
+} from "../lib/post-title-mentions.js";
 import { pgWorkEmbedPattern, workPublicIdsFromBody } from "../lib/post-work-links.js";
 import { probeVideo } from "../lib/video-frames.js";
 import { buildDeliveryHost, mintPlayToken, PLAY_TOKEN_TTL_SECONDS } from "../lib/web-build.js";
@@ -2664,6 +2672,9 @@ const contentRoutes = new Hono()
 		const search = c.req.query("search");
 		const sort = c.req.query("sort") ?? "newest";
 		const effectiveSort = sort === "popular" ? "popular" : "newest";
+		// The viewer, for the two things the feed resolves per person: their own drafts
+		// under `mine=true`, and the names behind the Works their posts' titles mention.
+		const viewerId = await getOptionalUserId(c);
 
 		// ── Cursor pagination ──
 		// Keyset pagination over the full ordering tuple — the row id breaks every tie —
@@ -2706,9 +2717,8 @@ const contentRoutes = new Hono()
 		const conditions: SQL[] = [];
 
 		if (mine === "true") {
-			const userId = await getOptionalUserId(c);
-			if (!userId) return c.json({ posts: [] });
-			conditions.push(eq(posts.creatorId, userId));
+			if (!viewerId) return c.json({ posts: [] });
+			conditions.push(eq(posts.creatorId, viewerId));
 		} else {
 			conditions.push(eq(posts.isPublished, true));
 		}
@@ -2813,6 +2823,13 @@ const contentRoutes = new Hono()
 		const hasMore = fetched.length > limit;
 		const result = hasMore ? fetched.slice(0, limit) : fetched;
 
+		// The name each title's `@` mention resolves to for this viewer — one lookup for
+		// the page, and the card renders this rather than the raw stored title.
+		const displayTitles = await displayPostTitles(
+			result.map((row) => row.post.title),
+			viewerId,
+		);
+
 		let nextCursor: string | null = null;
 		if (hasMore && result.length > 0) {
 			const last = result[result.length - 1];
@@ -2842,7 +2859,7 @@ const contentRoutes = new Hono()
 		}
 
 		return c.json({
-			posts: result.map((r) => {
+			posts: result.map((r, index) => {
 				const p = r.post;
 				const embedded = workPublicIdsFromBody(p.body);
 				return {
@@ -2851,6 +2868,8 @@ const contentRoutes = new Hono()
 					slug: p.slug,
 					creatorId: p.creatorId,
 					title: p.title,
+					// The title with each mentioned Work's current name — what a card shows.
+					displayTitle: displayTitles[index] ?? p.title,
 					isPinned: p.isPinned,
 					tags: p.tags,
 					isPublished: p.isPublished,
@@ -2896,6 +2915,12 @@ const contentRoutes = new Hono()
 		// a Work has nothing to wait for — blocking an announcement on someone's encode was an
 		// artifact of the post owning the media. The gate moved to RELEASE, on the Work.
 
+		// A title's `@` mentions are canonicalized before anything reads the title: the slug
+		// derives from the visible words, never the link destinations, and a mention to a
+		// Work this author cannot publish about is reduced to its plain text rather than
+		// stored as a link that would never resolve.
+		const title = (await canonicalizePostTitle(data.title, user.id)) ?? "";
+
 		// Explicit slug must be free; otherwise derive a unique one from the title.
 		let slug: string;
 		if (data.slug) {
@@ -2904,7 +2929,7 @@ const contentRoutes = new Hono()
 			}
 			slug = data.slug;
 		} else {
-			slug = await makeUniqueSlug(data.title || "post", postSlugExists);
+			slug = await makeUniqueSlug(visiblePostTitle(title) || "post", postSlugExists);
 		}
 
 		const body = postBodyFromCreate(data);
@@ -2916,7 +2941,7 @@ const contentRoutes = new Hono()
 				creatorId: user.id,
 				publicId,
 				slug,
-				title: data.title,
+				title,
 				body,
 				isPinned: data.isPinned,
 				tags: data.tags,
@@ -2967,7 +2992,7 @@ const contentRoutes = new Hono()
 		const linkedWorks = await loadPostWorksFromBody(body, user.id, deliveryCtx());
 		// The row no longer carries `body_html`; the stored body is markdown in `body`,
 		// which the spread ships as it is.
-		return c.json({ post: { ...post, linkedWorks } }, 201);
+		return c.json({ post: { ...post, linkedWorks, displayTitle: visiblePostTitle(title) } }, 201);
 	})
 
 	.get("/posts/:slug", async (c) => {
@@ -3027,6 +3052,11 @@ const contentRoutes = new Hono()
 		// separation the model is for, and why there is no post-level `access` any more.
 		const linkedWorks = await loadPostWorksFromBody(post.body, userId, deliveryCtx());
 
+		// The title's `@` mentions: one resolved name for the card's text, and the Works
+		// themselves so the heading can link each name to its Work.
+		const displayTitle = await displayPostTitle(post.title, userId);
+		const mentionedWorks = await mentionedWorksForTitle(post.title, userId);
+
 		// Transparent edit history — every content edit is logged with a timestamp, and it
 		// carries no user predicate **on purpose** (settled 2026-08-09).
 		//
@@ -3065,6 +3095,10 @@ const contentRoutes = new Hono()
 				recordUrl: recordUrlFor(post.atprotoUri),
 				creator: { ...creator, hasStripe: creatorHasStripe },
 				linkedWorks,
+				// The title as a reader sees it, and the Works behind its mentions so the
+				// heading links each `@` name to the Work it names.
+				displayTitle,
+				mentionedWorks,
 				edits,
 			},
 		});
@@ -3096,6 +3130,15 @@ const contentRoutes = new Hono()
 			if (await postSlugExists(data.slug)) return c.json({ error: "Slug already taken" }, 409);
 		}
 
+		// The title as it will be stored: a mention's destination stays the durable public
+		// id, its text is refreshed to the Work's current name, and a mention this author
+		// cannot publish about is reduced to plain text. Done once, before the slug derives
+		// from the title and before the edit history compares it.
+		const nextTitle =
+			data.title !== undefined
+				? ((await canonicalizePostTitle(data.title, user.id)) ?? "")
+				: undefined;
+
 		// 🚨 **A retitle re-derives the slug** (Parker, 2026-10-16, "Hello, there" still sitting
 		// at `/posts/post-…`): part of why the URL is durable is the ability to name the thing
 		// it is, and the trailing `publicId` is the half that never has to change — old links
@@ -3103,15 +3146,17 @@ const contentRoutes = new Hono()
 		// `findPostRow` and the page settles the address bar to canonical. An explicit slug
 		// still wins as before.
 		let derivedSlug: string | null = null;
-		if (data.slug === undefined && data.title !== undefined && data.title.trim() !== "") {
-			const next = await makeUniqueSlug(data.title, (slug) => postSlugExists(slug, existing.id));
+		if (data.slug === undefined && nextTitle !== undefined && nextTitle.trim() !== "") {
+			const next = await makeUniqueSlug(visiblePostTitle(nextTitle), (slug) =>
+				postSlugExists(slug, existing.id),
+			);
 			if (next !== existing.slug) derivedSlug = next;
 		}
 
 		const updates: Record<string, unknown> = { updatedAt: new Date() };
 		if (data.slug !== undefined) updates.slug = data.slug;
 		else if (derivedSlug) updates.slug = derivedSlug;
-		if (data.title !== undefined) updates.title = data.title;
+		if (nextTitle !== undefined) updates.title = nextTitle;
 		Object.assign(updates, postBodyUpdatesFromPatch(data, existing));
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
 		if (data.tags !== undefined) updates.tags = data.tags;
@@ -3137,7 +3182,11 @@ const contentRoutes = new Hono()
 
 		// Record a timestamped edit-history entry when the post's content actually changed
 		// (publish/unpublish/schedule toggles don't count — see changedPostFields).
-		const editedFields = changedPostFields(existing, data, derivedSlug);
+		const editedFields = changedPostFields(
+			existing,
+			nextTitle !== undefined ? { ...data, title: nextTitle } : data,
+			derivedSlug,
+		);
 		if (editedFields.length > 0) {
 			await db.insert(postEdits).values({
 				postId: existing.id,
@@ -3152,7 +3201,16 @@ const contentRoutes = new Hono()
 		void queueRecordSync("post", updated.id);
 
 		const linkedWorks = await loadPostWorksFromBody(updated.body, user.id, deliveryCtx());
-		return c.json({ post: { ...updated, linkedWorks } });
+		return c.json({
+			post: {
+				...updated,
+				linkedWorks,
+				// The canonicalization just refreshed every mention's text, so the visible
+				// title needs no further lookup here.
+				displayTitle: visiblePostTitle(updated.title),
+				mentionedWorks: await mentionedWorksForTitle(updated.title, user.id),
+			},
+		});
 	})
 
 	.delete("/posts/:slug", requireAuth, zValidator("query", deletePostQuerySchema), async (c) => {
@@ -4827,11 +4885,16 @@ const contentRoutes = new Hono()
 
 		/*
 		 * The stub foundation of **Showings** — where a Work can be found. The creator's
-		 * profile card and every Project it sits in today; channels, collections and
-		 * collaborations follow when their machinery exists, and the client's side panel
-		 * is the one place that reads this.
+		 * profile card and every Project it sits in today, plus the published posts whose
+		 * TITLES name it: a discussion post lives on the Work's page rather than only at its
+		 * own URL (`@Curtains Discussion (Spoilers)` is the shape). Channels, collections and
+		 * collaborations follow when their machinery exists, and the client's side panel is
+		 * the one place that reads this.
 		 */
-		const shownOn = { projects: await projectsShowingWork(work.id) };
+		const shownOn = {
+			projects: await projectsShowingWork(work.id),
+			posts: await postsMentioningWork(work.publicId, userId),
+		};
 
 		/*
 		 * The owner short-circuit — and the one place creator preview has to interrupt it.
@@ -6708,6 +6771,12 @@ const contentRoutes = new Hono()
 		]);
 		await Promise.all(itemRows.map((r) => resolveWorkThumbnail(r.work)));
 
+		// The names behind the member posts' title mentions, in one lookup for the page.
+		const memberPostTitles = await displayPostTitles(
+			memberRows.map((m) => m.post.title),
+			userId,
+		);
+
 		return c.json({
 			project: {
 				...row.project,
@@ -6746,11 +6815,12 @@ const contentRoutes = new Hono()
 				),
 				// No per-post access verdict: a post has no gates. The Works a member post
 				// links resolve on their own gates, at the post's own endpoint.
-				posts: memberRows.map((m) => ({
+				posts: memberRows.map((m, index) => ({
 					id: m.post.id,
 					publicId: m.post.publicId,
 					slug: m.post.slug,
 					title: m.post.title,
+					displayTitle: memberPostTitles[index] ?? m.post.title,
 					isPublished: m.post.isPublished,
 					publishedAt: m.post.publishedAt,
 					sortOrder: m.sortOrder,
@@ -7458,6 +7528,14 @@ const contentRoutes = new Hono()
 		const workById = new Map(workRows.map((w) => [w.id, w]));
 		const projectById = new Map(projectRows.map((p) => [p.id, p]));
 		const postById = new Map(postRows.map((p) => [p.id, p]));
+		// The names behind the saved posts' title mentions, one lookup for the shelf.
+		const savedPostDisplayTitles = await displayPostTitles(
+			postRows.map((p) => p.title),
+			user.id,
+		);
+		const savedPostTitleById = new Map(
+			postRows.map((p, index) => [p.id, savedPostDisplayTitles[index] ?? p.title]),
+		);
 
 		// The channel-guide fields, for the work arm only: a creator's display name,
 		// handle and avatar, so a lens that organizes the shelf **by its creators** can
@@ -7535,6 +7613,7 @@ const contentRoutes = new Hono()
 									publicId: saved.publicId,
 									slug: saved.slug,
 									title: saved.title,
+									displayTitle: savedPostTitleById.get(saved.id) ?? saved.title,
 									excerpt: postContentExcerpt(saved.body),
 									tags: saved.tags ?? [],
 									isPublished: saved.isPublished === true,
