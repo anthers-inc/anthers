@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Settings card: the **Badge Maker** — the one place a creator makes a Badge.
+ * The **Badge Maker** — the one place a creator makes a Badge, rendered on the creator's
+ * own profile in the Badges tab, above the ladder a supporter meets.
  *
  * 🚨 **This replaces the Badge rung editor rather than adding a picker beside it**
  * (Parker, 2026-09-13): naming a rung, setting its monthly amount, describing it, and
- * designing its art are one tool's four jobs. Studio settings renders this card where
- * the old editor sat.
+ * designing its art are one tool's four jobs. The profile's Badges tab renders this card
+ * where the read-only ladder sits below it, so a creator edits a rung and sees the result
+ * on the same page.
  *
  * 🚨 **There are no standard creator Badges any more.** A creator's Badge art is built
  * from the Noun Project catalog here or uploaded as their own file, and nothing else —
@@ -413,7 +415,7 @@ type PerkDraft = {
 	description?: string;
 };
 
-export default function BadgeMaker() {
+export default function BadgeMaker({ onChanged }: { onChanged?: () => void } = {}) {
 	const [badges, setBadges] = useState<CreatorBadge[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -461,6 +463,16 @@ export default function BadgeMaker() {
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the first load only. A save refetches by calling `fetchBadges` directly, and depending on `badges.length` would refetch every time a rung is added.
 	useEffect(fetchBadges, []);
 
+	/**
+	 * A change lands in two places: the maker's own list, and the page around it. The
+	 * profile renders the supporter-facing ladder from `creator-status`, so it passes a
+	 * callback to refetch that alongside the maker's rows — one edit, one screen.
+	 */
+	const refreshLadder = () => {
+		fetchBadges();
+		onChanged?.();
+	};
+
 	const handleAdd = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!newLabel.trim() || !newThreshold.trim()) return;
@@ -478,7 +490,7 @@ export default function BadgeMaker() {
 			setNewLabel("");
 			setNewThreshold("");
 			setNewDescription("");
-			fetchBadges();
+			refreshLadder();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to add rung.");
 		} finally {
@@ -534,7 +546,7 @@ export default function BadgeMaker() {
 			});
 			if (!perksRes.ok) throw new Error("Failed to save perks.");
 			setEditingId(null);
-			fetchBadges();
+			refreshLadder();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to save rung.");
 		} finally {
@@ -550,7 +562,7 @@ export default function BadgeMaker() {
 				param: { id: String(id) },
 			});
 			if (!res.ok) throw new Error("Failed to delete rung.");
-			fetchBadges();
+			refreshLadder();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Failed to delete rung.");
 		} finally {
@@ -639,7 +651,7 @@ export default function BadgeMaker() {
 									<BadgeArtControl
 										badge={badge}
 										index={badges.indexOf(badge)}
-										onChanged={fetchBadges}
+										onChanged={refreshLadder}
 										onError={setError}
 									/>
 									<div className="flex-1">

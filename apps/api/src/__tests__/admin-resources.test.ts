@@ -15,7 +15,7 @@
  *    component's current shape, and the trend series is newest-first with the metrics
  *    each row carried.
  * 4. **A component the snapshot script has never covered still renders its card**, with
- *    the static sites carrying empty signals and their why-note.
+ *    the static site carrying empty signals and its why-note.
  *
  * The snapshots this suite writes are its own (taken far in the past, under a distinct
  * component set from any real run), and they are deleted in `afterAll` on success or failure.
@@ -155,7 +155,7 @@ describe("The honest empty state", () => {
 		const body = await resources();
 		expect(body.hasSnapshots).toBe(false);
 		expect(body.howToSnapshot).toBe("make resource-snapshot");
-		// Five components: the three compute ones plus the two static sites, all with their
+		// Five components: four compute ones plus the one static site, all with their
 		// cards rather than a shortened list.
 		expect(body.components.map((c) => c.component).sort()).toEqual([
 			"admin",
@@ -170,10 +170,12 @@ describe("The honest empty state", () => {
 			expect(c.snapshottedAt).toBeNull();
 			expect(c.latest).toBeNull();
 		}
-		// The static sites say why they carry no signals.
+		// The static site says why it carries no signals; the web origin is a service now.
+		const admin = body.components.find((c) => c.component === "admin");
+		expect(admin?.bands).toEqual([]);
+		expect(admin?.note).toContain("static site");
 		const web = body.components.find((c) => c.component === "web");
-		expect(web?.bands).toEqual([]);
-		expect(web?.note).toContain("static site");
+		expect(web?.bands.length).toBeGreaterThan(0);
 	});
 
 	it("states the spend boundary rather than a per-component number", async () => {

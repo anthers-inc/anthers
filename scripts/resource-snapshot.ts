@@ -30,7 +30,7 @@
  *   row answers "what has this component been doing" rather than "one sample".
  * - A metric that could not be retrieved is stored as NULL with the reason in `notes` — the
  *   null-with-reason discipline, never zero-as-guess. A component the metrics API does not
- *   cover (the migrate job between deploys, the static sites) gets its honest nulls too.
+ *   cover (the migrate job between deploys, the admin static site) gets its honest nulls too.
  *
  * If `doctl` is absent, the same honest refusal `deploy-status.ts` uses: "not installed —
  * nothing to compare", exit 2.

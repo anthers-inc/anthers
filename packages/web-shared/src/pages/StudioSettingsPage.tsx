@@ -1,112 +1,205 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Studio Settings — the creator-operational settings that live on the Studio side of
- * the boundary: payout setup's summary card (the surface itself is the Payments tab),
- * publishing to the creator's own repository on the AT Protocol network, and the Badge
- * ladder. Account settings (profile, password, email, identity, the become-a-creator
- * toggle) stay on anthers.org/settings.
+ * the boundary: the Communications table for creator emails and the account's AT
+ * Protocol connection. Account settings (profile, password, email, identity, the
+ * become-a-creator toggle) stay on anthers.org/settings, and the Badge Maker is on the
+ * creator's own profile, in the Badges tab beside the ladder it edits.
+ *
+ * ⚠️ **Payout setup is not here.** Its surface is the Studio's Payments tab
+ * (`/studio/payments`), which is also where Connect's return legs land and where Stripe's
+ * requirements, schedule and balance are shown. A Settings card that only linked there
+ * was redundant with the nav (removed 2026-10-19).
  */
-import { useEffect, useState } from "react";
+import {
+	CREATOR_EMAIL_KINDS,
+	type CreatorEmailKind,
+	type CreatorEmailMode,
+	resolvedCreatorEmailDelivery,
+} from "@anthers/shared/creator-emails";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import BadgeMaker from "../components/post/BadgeMaker";
 import { useAuth } from "../lib/auth";
 import type { PublishingState } from "../lib/publishing";
-import { Link } from "../lib/router";
-import { apiFetch, client } from "../lib/rpc";
-import { studioUrl } from "../lib/studio";
-import type { StripeAccountStatus } from "../lib/types";
+import { apiFetch } from "../lib/rpc";
+
+/** The order and copy of the Studio's Communications table. */
+const CREATOR_EMAIL_COPY: Record<CreatorEmailKind, { label: string; hint: string }> = {
+	sale: {
+		label: "Sales",
+		hint: "An email each time somebody buys one of your Works.",
+	},
+	refund: {
+		label: "Refunds",
+		hint: "An email each time a sale on your work is refunded.",
+	},
+	payout: {
+		label: "Payouts",
+		hint: "An email each time money moves to your Stripe balance.",
+	},
+};
 
 /**
- * Payouts — now a doorway rather than the surface.
+ * Communications — every creator email Anthers offers, with one switch each.
  *
- * 🚨 **Payout setup lives on the Studio's Payments tab (`/studio/payments`)**, which is
- * also where Connect's return legs land and where Stripe's requirements, schedule and
- * balance are shown. This card carries the one-line state and the link, so a creator who
- * reaches settings for the publishing or Badges sections still finds their payout state
- * named rather than absent.
+ * ⭐ **One row per kind, because the old single switch bundled three different mails.**
+ * A creator who wants payout mail but not a message per sale had no way to say it. The
+ * kinds are the shared registry's, so a control cannot appear for a mail Anthers never
+ * sends; app notifications are a later column on the same table once they exist for
+ * these alerts, which is why this reads as a table rather than a list of toggles.
  *
- * ⚠️ **Called "Payouts" here and "Payments" in the nav deliberately**: the nav names the
- * *place* (Payments), the card names the *need* (Payouts — getting paid is the thing a
- * creator is looking for when they arrive). `payoutRefusalMessage` says "Open Payments in
- * the Studio" to match the nav.
+ * ⚠️ **The write carries the whole map**, the same rule the Notifications section uses:
+ * the page holds every kind's state, and a per-key patch would need a story for setting
+ * one back to the default.
  */
-function StripeOnboardingSection() {
-	const [stripeStatus, setStripeStatus] = useState<StripeAccountStatus | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [searchParams] = useSearchParams();
+function CommunicationsSection() {
+	const [modes, setModes] = useState<Record<CreatorEmailKind, CreatorEmailMode> | null>(null);
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
-	const stripeResult = searchParams.get("stripe");
-
-	useEffect(() => {
-		client.api.payments.stripe.onboard
-			.$get()
-			.then((res) => res.json() as Promise<unknown>)
-			.then((data) => setStripeStatus(data as StripeAccountStatus))
-			.catch(() => setStripeStatus(null))
-			.finally(() => setLoading(false));
+	const load = useCallback(() => {
+		apiFetch("/api/accounts/me")
+			.then(async (res) => {
+				if (!res.ok) throw new Error("Could not load your email settings.");
+				const body = (await res.json()) as {
+					user: { creatorEmailDelivery?: Record<string, string> };
+				};
+				setModes(resolvedCreatorEmailDelivery(body.user.creatorEmailDelivery));
+			})
+			.catch((e) =>
+				setError(e instanceof Error ? e.message : "Could not load your email settings."),
+			);
 	}, []);
 
-	if (loading) {
-		return (
-			<div className="card bg-base-200">
-				<div className="card-body">
-					<h3 className="card-title text-lg">Payouts</h3>
-					<p className="text-sm text-base-content/60">Loading...</p>
-				</div>
-			</div>
-		);
+	useEffect(() => load(), [load]);
+
+	async function setMode(kind: CreatorEmailKind, mode: CreatorEmailMode) {
+		if (!modes) return;
+		const before = modes;
+		const next = { ...modes, [kind]: mode };
+		setModes(next); // Optimistic; snap back on refusal.
+		setSaving(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/accounts/me", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ creatorEmailDelivery: next }),
+			});
+			if (!res.ok) throw new Error(String(res.status));
+		} catch {
+			setModes(before);
+			setError("Couldn't save that. Try again.");
+		} finally {
+			setSaving(false);
+		}
 	}
 
-	const isConnected = stripeStatus?.chargesEnabled && stripeStatus?.onboardingComplete;
-	const isPending =
-		stripeStatus?.hasAccount &&
-		stripeStatus.chargesEnabled === false &&
-		stripeStatus.onboardingComplete === false &&
-		// Pending means Stripe has the submission; without the flag the incomplete state is
-		// indistinguishable from unstarted, which is why the detail shape carries it.
-		stripeStatus.detailsSubmitted;
-
-	const stateLine = isConnected
-		? "Your Stripe account is connected and ready to receive payments."
-		: isPending
-			? "Stripe onboarding is submitted and being reviewed."
-			: stripeStatus?.hasAccount
-				? "Your Stripe account setup is incomplete."
-				: "Payouts are not set up yet.";
+	if (modes === null && !error) return null;
 
 	return (
 		<div className="card bg-base-200">
 			<div className="card-body">
-				<h3 className="card-title text-lg">Payouts</h3>
-				{stripeResult === "refresh" && (
-					<div className="alert alert-warning text-sm">
-						<span>Stripe onboarding link expired. Continue from the Payments tab.</span>
+				<h3 className="card-title text-lg">Communications</h3>
+				<p className="text-sm text-base-content/60">
+					What Anthers emails you about your work and your money. Each one is on unless you turn it
+					off.
+				</p>
+
+				{error && (
+					<div className="alert alert-error text-sm">
+						<span>{error}</span>
 					</div>
 				)}
-				<p className="text-sm text-base-content/60">{stateLine}</p>
-				<div className="card-actions justify-end">
-					<Link to={studioUrl("/payments")} className="btn btn-primary btn-sm">
-						Open Payments
-					</Link>
-				</div>
+
+				{modes !== null && (
+					<table className="table mt-1">
+						<thead>
+							<tr>
+								<th>Alert</th>
+								<th className="text-right">Delivery</th>
+							</tr>
+						</thead>
+						<tbody>
+							{CREATOR_EMAIL_KINDS.map((kind) => {
+								const copy = CREATOR_EMAIL_COPY[kind];
+								const mode = modes[kind];
+								return (
+									<tr key={kind}>
+										<td>
+											<span className="text-sm font-medium">{copy.label}</span>
+											<p className="text-xs text-base-content/50">{copy.hint}</p>
+										</td>
+										<td className="text-right">
+											<fieldset className="join border-0 p-0 m-0">
+												<legend className="sr-only">
+													How {copy.label.toLowerCase()} reach you
+												</legend>
+												<button
+													type="button"
+													className={`btn btn-xs join-item w-16 ${mode === "none" ? "btn-primary" : "btn-outline"}`}
+													aria-pressed={mode === "none"}
+													disabled={saving}
+													onClick={() => setMode(kind, "none")}
+												>
+													None
+												</button>
+												<button
+													type="button"
+													className={`btn btn-xs join-item w-16 ${mode === "email" ? "btn-primary" : "btn-outline"}`}
+													aria-pressed={mode === "email"}
+													disabled={saving}
+													onClick={() => setMode(kind, "email")}
+												>
+													Email
+												</button>
+											</fieldset>
+										</td>
+									</tr>
+								);
+							})}
+						</tbody>
+					</table>
+				)}
 			</div>
 		</div>
 	);
 }
 
+/** The record types the card lists, in publishing order, and what to call them. */
+const RECORD_LABELS: Record<PublishingState["records"][number]["kind"], string> = {
+	work: "Works",
+	post: "Posts",
+	project: "Projects",
+	comment: "Comments",
+	review: "Reviews",
+	vote: "Votes",
+	follow: "Follows",
+	creditAcceptance: "Credit Acceptances",
+};
+
+/** Taproot's viewer for one collection in one repository. */
+function taprootUrl(did: string, collection: string): string {
+	return `https://atproto.at/uri/at://${did}/${collection}`;
+}
+
 /**
- * Publishing a creator's records into the repository behind their own identity.
+ * The account's connection to the AT Protocol, and what Anthers has published through it.
  *
- * 🚨 **`ungranted` is a warning, and this card is where it is said most fully.** An identity
- * Anthers can write to is mandatory (Parker, 2026-09-12), so a creator whose identity is held
- * elsewhere and who has declined, withdrawn or lost the permission cannot release a Work or
- * publish a post or a project — the API refuses them. The card says so plainly, says what is
- * asked for, and carries the one button that fixes it. The banner on every other page points
- * the same way and stays off this one.
+ * ⭐ **The card leads with the records rather than with the permission.** Publishing is
+ * load-bearing — an identity Anthers can write to is mandatory — so a card built around
+ * granting and revoking described a routine permission as a decision the creator was
+ * making. What they actually want to see is their footprint, with the revoke control
+ * kept but demoted to a sentence, which is the one thing that still has to be possible.
  *
- * ⚠️ **It renders nothing when Anthers is not asking for the permission**, because a warning
- * with no button is a creator told about a problem they cannot fix, and the API refuses nobody
- * in that state either.
+ * ⚠️ **A hosted identity has no grant to revoke.** Anthers holds its keys and publishes
+ * through them; there is no OAuth scope to hand back, and a button implying one would be
+ * a lie. Closing the account is the way to remove that identity, so the card says that
+ * rather than offering a control that does nothing.
+ *
+ * ⚠️ **The counts are Anthers' own record, not a network read.** Each is the number of
+ * rows carrying an `atproto_uri` for this identity — what Anthers believes it published,
+ * which is the claim the rest of the product makes too.
  */
 function AtmospherePublishingSection() {
 	const { grantPublishing } = useAuth();
@@ -134,6 +227,10 @@ function AtmospherePublishingSection() {
 	// Nothing granted and no way to ask — say nothing rather than warn about a closed door.
 	if (state.route === "ungranted" && !state.offered) return null;
 
+	// Either tier missing is a connection that cannot do what the account does.
+	const needsPermission = state.route === "ungranted" || state.interactions === "ungranted";
+	const hosted = state.route === "hosted";
+
 	const handleGrant = async () => {
 		setBusy(true);
 		setError(null);
@@ -152,11 +249,11 @@ function AtmospherePublishingSection() {
 			const res = await apiFetch("/api/atproto/publishing/stop", { method: "POST" });
 			if (!res.ok) {
 				const body = (await res.json().catch(() => null)) as { error?: string } | null;
-				throw new Error(body?.error ?? "Couldn't take your listings down.");
+				throw new Error(body?.error ?? "Couldn't revoke the permission.");
 			}
 			load();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Couldn't take your listings down.");
+			setError(err instanceof Error ? err.message : "Couldn't revoke the permission.");
 		} finally {
 			setBusy(false);
 		}
@@ -165,7 +262,7 @@ function AtmospherePublishingSection() {
 	return (
 		<div className="card bg-base-200">
 			<div className="card-body">
-				<h3 className="card-title text-lg">Your Catalog on the Network</h3>
+				<h3 className="card-title text-lg">Your ATProto Connection</h3>
 
 				{outcome === "on" && (
 					<div className="alert alert-success text-sm">
@@ -178,165 +275,86 @@ function AtmospherePublishingSection() {
 					</div>
 				)}
 
-				{state.route === "hosted" && (
-					<p className="text-sm text-base-content/70">
-						Anthers publishes a record for each released Work, post and project into the repository
-						behind <span className="font-medium">@{state.handle}</span>, the handle it issued you.
-						Nothing to set up.
-					</p>
+				<p className="text-sm text-base-content/70">
+					All of your publicly accessible Anthers content and interactions are recorded in the{" "}
+					<a
+						href="https://atproto.com"
+						className="link link-hover"
+						target="_blank"
+						rel="noreferrer"
+					>
+						Atmosphere
+					</a>
+					, an open format for social data that ensures your data is owned by you, portable for use
+					elsewhere, and legible to any app that wants to interact with it. Here's where you can
+					find all of the records published to your identity from Anthers:
+				</p>
+
+				{state.did && (
+					<table className="table table-sm mt-1">
+						<thead>
+							<tr>
+								<th>Record Type</th>
+								<th className="text-right">Published</th>
+								<th className="text-right">Taproot</th>
+							</tr>
+						</thead>
+						<tbody>
+							{state.records.map((record) => (
+								<tr key={record.kind}>
+									<td className="text-sm">{RECORD_LABELS[record.kind] ?? record.kind}</td>
+									<td className="text-right text-sm tabular-nums">{record.count}</td>
+									<td className="text-right">
+										<a
+											href={taprootUrl(state.did as string, record.collection)}
+											className="link link-hover text-xs"
+											target="_blank"
+											rel="noreferrer"
+										>
+											View
+										</a>
+									</td>
+								</tr>
+							))}
+						</tbody>
+					</table>
 				)}
 
-				{state.route === "granted" && (
-					<>
-						<p className="text-sm text-base-content/70">
-							Anthers keeps a record for each released Work, post and project in your own
-							repository, under <span className="font-medium">@{state.handle}</span>. A Work's
-							listing says what it is and where to reach it — never the work itself, and never who
-							may open it.
+				{needsPermission ? (
+					<div className="rounded-box border border-warning/40 p-3">
+						<p className="text-sm">
+							{outcome === "declined" && <strong>No permission was given.</strong>} Anthers can't
+							publish or interact for you until it can write to your repository.
 						</p>
-						<p className="text-sm text-base-content/50">
-							{state.listed === 0
-								? "Nothing is listed yet."
-								: `${state.listed} ${state.listed === 1 ? "work is" : "works are"} listed.`}
-						</p>
-						<div className="card-actions justify-end">
+						{state.offered && (
 							<button
 								type="button"
-								className="btn btn-ghost btn-sm"
-								onClick={handleStop}
-								disabled={busy}
-							>
-								{busy ? "Taking them down…" : "Stop Publishing"}
-							</button>
-						</div>
-						{/* ⚠️ Said before they press it, not after. Stopping removes the records, and a
-						    deletion cannot be undone by us — it is their repository. */}
-						<p className="text-xs text-base-content/50">
-							Stopping removes the Works, posts and projects already on the network and hands the
-							permission back, and you won't be able to release or publish anything until you give
-							it again.
-						</p>
-					</>
-				)}
-
-				{state.route === "ungranted" && (
-					<>
-						<div className="alert alert-warning text-sm">
-							<span>
-								{/* A decline lands here, so the lead says what just happened rather than
-								    stacking a second warning on this one. */}
-								<strong>
-									{outcome === "declined"
-										? "No permission was given."
-										: "Anthers can't publish for you yet."}
-								</strong>{" "}
-								You can't release Works or publish posts and projects until you give Anthers
-								permission to write them into your repository under{" "}
-								<span className="font-medium">@{state.handle}</span>.
-							</span>
-						</div>
-						<p className="text-sm text-base-content/70">
-							Anthers keeps a record for each of your released Works, posts and projects in your own
-							repository, so your catalog is readable by other software on the network and outlives
-							any one service — including this one.
-						</p>
-						<p className="text-sm text-base-content/50">
-							It asks for permission over Anthers' own kinds of record and nothing else: not your
-							Bluesky posts, not your messages, not anything another app wrote. A Work's listing
-							carries the title, description and a link — never the work itself, and never who may
-							open it.
-						</p>
-						<div className="card-actions justify-end">
-							<button
-								type="button"
-								className="btn btn-primary btn-sm"
+								className="btn btn-primary btn-sm mt-2"
 								onClick={handleGrant}
 								disabled={busy}
 							>
 								{busy ? "Starting…" : "Give Permission"}
 							</button>
-						</div>
-					</>
-				)}
-			</div>
-		</div>
-	);
-}
-
-/**
- * Receipt emails on the creator's side of a transaction: a sale, a refund, mailed to the
- * account address for every one, on by default. Low volume is when every creator starts
- * (and where the platform is today), so the default is on and the switch is the way out
- * at scale — the reasoning lives on the column.
- *
- * The toggle hides entirely until a Stripe account exists: a creator still onboarding
- * has received no money and can receive none, so a switch about sale emails would render
- * as dead UI — the same show-nothing rule `AtmospherePublishingSection` applies to a
- * closed door. PATCH is refused by the API in that state anyway.
- */
-function CreatorReceiptEmailsSection() {
-	const [enabled, setEnabled] = useState<boolean | null>(null);
-	const [exists, setExists] = useState(true);
-	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-
-	useEffect(() => {
-		apiFetch("/api/payments/stripe/receipt-emails")
-			.then(async (res) => {
-				if (!res.ok) {
-					// 409 is the no-Stripe-account answer, which is the hide case, not an error.
-					if (res.status === 409) setExists(false);
-					return null;
-				}
-				return (res.json() as Promise<{ enabled: boolean }>).then((d) => d.enabled);
-			})
-			.then((v) => v !== null && setEnabled(v))
-			.catch(() => setExists(false));
-	}, []);
-
-	const toggle = async () => {
-		if (enabled === null) return;
-		setBusy(true);
-		setError(null);
-		try {
-			const res = await apiFetch("/api/payments/stripe/receipt-emails", {
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ enabled: !enabled }),
-			});
-			if (!res.ok) {
-				const body = (await res.json().catch(() => null)) as { error?: string } | null;
-				throw new Error(body?.error ?? "Couldn't save the setting.");
-			}
-			const data = (await res.json()) as { enabled: boolean };
-			setEnabled(data.enabled);
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Couldn't save the setting.");
-		} finally {
-			setBusy(false);
-		}
-	};
-
-	if (!exists || enabled === null) return null;
-
-	return (
-		<div className="card bg-base-200">
-			<div className="card-body">
-				<h3 className="card-title text-lg">Email me about every transaction</h3>
-				<p className="text-sm text-base-content/60">
-					An email each time somebody buys or is refunded on your work, sent to your account
-					address. It's on while volume is low; turn it off any time.
-				</p>
-				{error && (
-					<div className="alert alert-error text-sm">
-						<span>{error}</span>
+						)}
 					</div>
+				) : hosted ? (
+					<p className="text-xs text-base-content/50">
+						Anthers hosts this identity and holds its keys, so there is no separate permission to
+						revoke. Closing your account is what removes it.
+					</p>
+				) : (
+					<p className="text-xs text-base-content/50">
+						If you're having an issue with the ATProto connection or need to shut it off for any
+						reason,{" "}
+						<button type="button" className="link link-hover" onClick={handleStop} disabled={busy}>
+							{busy ? "Revoking…" : "click here to Revoke Permissions"}
+						</button>
+						. Note that if you revoke ATProto permissions, you won't be able to post or interact
+						from this account until you grant the permissions again. Think of this like unplugging
+						the Ethernet cable from your account. Revoking also takes down the Works, posts and
+						projects Anthers published for you.
+					</p>
 				)}
-				<div>
-					<button type="button" className="btn btn-sm btn-outline" onClick={toggle} disabled={busy}>
-						{enabled ? "Turn off" : "Turn on"}
-					</button>
-				</div>
 			</div>
 		</div>
 	);
@@ -347,18 +365,13 @@ export default function StudioSettingsPage() {
 		<div className="max-w-2xl mx-auto px-4 py-8">
 			<h1 className="text-2xl font-bold mb-2">Creator Settings</h1>
 			<p className="text-sm text-base-content/50 mb-6">
-				Payouts, publishing and Badges. Account settings (profile, email, identity) live on your
-				Anthers account.
+				Communications and your ATProto connection. Account settings (profile, email, identity) live
+				on your Anthers account, and your Badges live on your profile.
 			</p>
 
 			<div className="flex flex-col gap-6">
-				<StripeOnboardingSection />
-				<CreatorReceiptEmailsSection />
+				<CommunicationsSection />
 				<AtmospherePublishingSection />
-				<div>
-					<h2 className="text-lg font-semibold mb-2">Badges</h2>
-					<BadgeMaker />
-				</div>
 			</div>
 		</div>
 	);
