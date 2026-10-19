@@ -323,9 +323,8 @@ function AtmospherePublishingSection() {
 				{needsPermission ? (
 					<div className="rounded-box border border-warning/40 p-3">
 						<p className="text-sm">
-							{outcome === "declined"
-								? "No permission was given."
-								: "Anthers can't publish or interact for you until it can write to your repository."}
+							{outcome === "declined" && <strong>No permission was given.</strong>} Anthers can't
+							publish or interact for you until it can write to your repository.
 						</p>
 						{state.offered && (
 							<button
