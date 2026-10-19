@@ -25,6 +25,8 @@
 		"./upload": "./src/lib/upload.ts",
 		"./local-datetime": "./src/lib/local-datetime.ts",
 		"./work-uploads": "./src/lib/work-uploads.ts",
+		"./web-build-files": "./src/lib/web-build-files.ts",
+		"./web-build-uploads": "./src/lib/web-build-uploads.ts",
 		"./fonts": "./src/styles/fonts.ts",
 		"./sidebar": "./src/lib/sidebar.tsx",
 		"./decor/BrandGlyph": "./src/components/decor/BrandGlyph.tsx",
@@ -95,6 +97,7 @@
 		"@tiptap/extension-placeholder": "^2.6.0",
 		"@tiptap/react": "^2.6.0",
 		"@tiptap/starter-kit": "^2.6.0",
+		"fflate": "0.8.3",
 		"hash-wasm": "4.12.0",
 		"hono": "^4.7.0",
 		"marked": "18.0.14"

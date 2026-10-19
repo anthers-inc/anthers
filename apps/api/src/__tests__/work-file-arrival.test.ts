@@ -215,7 +215,7 @@ describe("a comic's pages do not wait on panel work", () => {
 		const workId = await createWithoutFile("comic");
 		sent = [];
 		expect(
-			(await call("PATCH", `/api/content/works/${workId}`, { sourceKey: KEY("no-panels.pdf") }))
+			(await call("PATCH", `/api/content/works/${workId}`, { sourceKey: KEY("no-panels.png") }))
 				.status,
 		).toBe(200);
 		await db
