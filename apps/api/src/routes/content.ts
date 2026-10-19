@@ -26,7 +26,6 @@
 import { db } from "@anthers/db/client";
 import {
 	assets,
-	bookmarks,
 	comments,
 	inlineImages,
 	libraryItems,
@@ -188,6 +187,7 @@ import {
 	permanentWorkIds,
 	removeItem,
 	SHELF_LIMIT,
+	savePost,
 	saveProject,
 	saveWork,
 	setHidden,
@@ -1039,7 +1039,6 @@ const postBaseSchema = z.object({
 	bodyHtml: z.string().optional().default(""),
 
 	// Presentation
-	showOnTimeline: z.boolean().optional().default(true),
 	isPinned: z.boolean().optional().default(false),
 
 	// Metadata
@@ -1450,12 +1449,25 @@ function changedPostFields(
 		(data.body !== undefined && data.body !== (existing.body ?? "")) ||
 		(data.bodyHtml !== undefined && postHtmlToMarkdown(data.bodyHtml) !== (existing.body ?? ""));
 	if (bodyChanged) changed.push("body");
-	if (data.showOnTimeline !== undefined && data.showOnTimeline !== existing.showOnTimeline)
-		changed.push("timeline visibility");
 	if (data.isPinned !== undefined && data.isPinned !== existing.isPinned) changed.push("pin");
 	if (data.tags !== undefined && JSON.stringify(data.tags) !== JSON.stringify(existing.tags ?? []))
 		changed.push("tags");
 	return changed;
+}
+
+/**
+ * One pinned post per creator.
+ *
+ * A pin is presentation — it floats a post above the feed — and the product speaks of
+ * "your pinned post" in the singular, so two of them is a state with no meaning. Pinning
+ * clears the creator's other pins in the same statement the route runs; the confirmation
+ * a creator sees names what will be replaced.
+ */
+async function unpinOtherPosts(creatorId: number, keepPostId: number): Promise<void> {
+	await db
+		.update(posts)
+		.set({ isPinned: false })
+		.where(and(eq(posts.creatorId, creatorId), ne(posts.id, keepPostId), eq(posts.isPinned, true)));
 }
 
 /**
@@ -2699,11 +2711,10 @@ const contentRoutes = new Hono()
 		void contentType;
 		void delivery;
 
-		// The public feed shows timeline posts only; a creator's own view or a
-		// Project view shows everything (including off-timeline posts).
-		if (mine !== "true" && !projectSlug) {
-			conditions.push(eq(posts.showOnTimeline, true));
-		}
+		// The public feed is every published post now: a post has one home, and retiring
+		// `show_on_timeline` removed the only way to publish something off it. A creator's
+		// own view (`mine=true`) still carries drafts, which the published condition above
+		// deliberately leaves out of the public arm.
 
 		if (tag) conditions.push(sql`${posts.tags} @> ${JSON.stringify([tag])}::jsonb`);
 
@@ -2808,7 +2819,6 @@ const contentRoutes = new Hono()
 					slug: p.slug,
 					creatorId: p.creatorId,
 					title: p.title,
-					showOnTimeline: p.showOnTimeline,
 					isPinned: p.isPinned,
 					tags: p.tags,
 					isPublished: p.isPublished,
@@ -2876,7 +2886,6 @@ const contentRoutes = new Hono()
 				slug,
 				title: data.title,
 				body,
-				showOnTimeline: data.showOnTimeline,
 				isPinned: data.isPinned,
 				tags: data.tags,
 				isPublished: data.isPublished,
@@ -2890,6 +2899,10 @@ const contentRoutes = new Hono()
 						: null,
 			})
 			.returning();
+
+		// One pinned post per creator: a pin floats above the feed, so a second one would
+		// make "the pinned post" meaningless. Creating a pinned post takes the slot.
+		if (post.isPinned) await unpinOtherPosts(user.id, post.id);
 
 		// The creator's own upvote starts the post at 1 — posting it at all says it is worth
 		// reading. See `authorUpvote`.
@@ -3068,7 +3081,6 @@ const contentRoutes = new Hono()
 		else if (derivedSlug) updates.slug = derivedSlug;
 		if (data.title !== undefined) updates.title = data.title;
 		Object.assign(updates, postBodyUpdatesFromPatch(data, existing));
-		if (data.showOnTimeline !== undefined) updates.showOnTimeline = data.showOnTimeline;
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
 		if (data.tags !== undefined) updates.tags = data.tags;
 		if (data.isPublished !== undefined) updates.isPublished = data.isPublished;
@@ -3085,6 +3097,11 @@ const contentRoutes = new Hono()
 			.set(updates)
 			.where(eq(posts.id, existing.id))
 			.returning();
+
+		// Pinning takes the creator's one pin slot. Done after the update so the new pin is
+		// never one of the rows just cleared, and conditioned on the flag rather than on a
+		// difference, so pinning an already-pinned post is harmless.
+		if (updates.isPinned === true) await unpinOtherPosts(user.id, existing.id);
 
 		// Record a timestamped edit-history entry when the post's content actually changed
 		// (publish/unpublish/schedule toggles don't count — see changedPostFields).
@@ -7215,107 +7232,6 @@ const contentRoutes = new Hono()
 		return c.json({ inlineImage }, 201);
 	})
 
-	// ══════════════════════════════════════════════════════════════════════════
-	// BOOKMARKS — a user-ordered list of posts
-	// ══════════════════════════════════════════════════════════════════════════
-
-	// Posts carry no rating and no gate of their own — that is what makes an announcement
-	// an announcement — so the listing is the plain shelf read. The rung conditions bind
-	// Work listings, and bookmarks stopped naming Works when the pre-`0035` targets died
-	// at the column level (the accounts split's dead-column sweep).
-	.get("/bookmarks", requireAuth, async (c) => {
-		const user = c.get("user");
-
-		const result = await db
-			.select({
-				bookmark: bookmarks,
-				postTitle: posts.title,
-				postSlug: posts.slug,
-				postPublicId: posts.publicId,
-			})
-			.from(bookmarks)
-			.leftJoin(posts, eq(bookmarks.postId, posts.id))
-			.where(eq(bookmarks.userId, user.id))
-			.orderBy(asc(bookmarks.sortOrder));
-
-		return c.json({
-			bookmarks: result.map((r) => ({
-				...r.bookmark,
-				post: r.bookmark.postId
-					? { title: r.postTitle, slug: r.postSlug, publicId: r.postPublicId }
-					: null,
-			})),
-		});
-	})
-
-	.post(
-		"/bookmarks",
-		requireAuth,
-		zValidator(
-			"json",
-			z
-				.object({
-					postId: z.number().int().optional(),
-				})
-				.refine(
-					(d) => [d.postId].filter((v) => v !== undefined).length === 1,
-					"Exactly one of postId must be provided",
-				),
-		),
-		async (c) => {
-			const user = c.get("user");
-			const data = c.req.valid("json");
-
-			const [maxSort] = await db
-				.select({ max: sql<number>`COALESCE(MAX(sort_order), -1)` })
-				.from(bookmarks)
-				.where(eq(bookmarks.userId, user.id));
-
-			const [bookmark] = await db
-				.insert(bookmarks)
-				.values({
-					userId: user.id,
-					postId: data.postId ?? null,
-					sortOrder: Number(maxSort.max) + 1,
-				})
-				.returning();
-
-			return c.json({ bookmark }, 201);
-		},
-	)
-
-	.patch(
-		"/bookmarks/reorder",
-		requireAuth,
-		zValidator("json", z.object({ ids: z.array(z.number().int()) })),
-		async (c) => {
-			const user = c.get("user");
-			const { ids } = c.req.valid("json");
-
-			for (let i = 0; i < ids.length; i++) {
-				await db
-					.update(bookmarks)
-					.set({ sortOrder: i })
-					.where(and(eq(bookmarks.id, ids[i]), eq(bookmarks.userId, user.id)));
-			}
-
-			return c.json({ success: true });
-		},
-	)
-
-	.delete("/bookmarks/:id", requireAuth, async (c) => {
-		const user = c.get("user");
-		const { id } = c.req.param();
-
-		const deleted = await db
-			.delete(bookmarks)
-			.where(and(eq(bookmarks.id, Number(id)), eq(bookmarks.userId, user.id)))
-			.returning({ id: bookmarks.id });
-
-		if (deleted.length === 0) return c.json({ error: "Bookmark not found" }, 404);
-		return c.body(null, 204);
-	})
-
 	// ── The Library ──────────────────────────────────────────────────────────────
 	//
 	// What a user has KEPT: everything they bought, plus everything free they chose to
@@ -7356,6 +7272,7 @@ const contentRoutes = new Hono()
 
 		const workIds = rows.map((r) => r.workId).filter((id): id is number => id != null);
 		const projectIds = rows.map((r) => r.projectId).filter((id): id is number => id != null);
+		const postIds = rows.map((r) => r.postId).filter((id): id is number => id != null);
 
 		// 🚨 A shelf is a listing like any other, so a Work the user may not see is absent from
 		// it rather than present and locked — including one they saved or bought before it was
@@ -7385,6 +7302,27 @@ const contentRoutes = new Hono()
 					.from(projects)
 					.leftJoin(users, eq(projects.creatorId, users.id))
 					.where(inArray(projects.id, projectIds))
+			: [];
+		// A saved post is a shelf entry like any other, and its card reads like a post card
+		// (title, excerpt, the creator). Published state rides along so the shelf can say
+		// when a saved post has gone back to draft rather than rendering a dead link.
+		const postRows = postIds.length
+			? await db
+					.select({
+						id: posts.id,
+						publicId: posts.publicId,
+						slug: posts.slug,
+						title: posts.title,
+						body: posts.body,
+						tags: posts.tags,
+						isPublished: posts.isPublished,
+						creatorHandle: users.atprotoHandle,
+						creatorDisplayName: users.displayName,
+						creatorAvatar: users.avatar,
+					})
+					.from(posts)
+					.leftJoin(users, eq(posts.creatorId, users.id))
+					.where(inArray(posts.id, postIds))
 			: [];
 
 		/*
@@ -7435,6 +7373,7 @@ const contentRoutes = new Hono()
 
 		const workById = new Map(workRows.map((w) => [w.id, w]));
 		const projectById = new Map(projectRows.map((p) => [p.id, p]));
+		const postById = new Map(postRows.map((p) => [p.id, p]));
 
 		// The channel-guide fields, for the work arm only: a creator's display name,
 		// handle and avatar, so a lens that organizes the shelf **by its creators** can
@@ -7500,6 +7439,34 @@ const contentRoutes = new Hono()
 								},
 							};
 						}
+						if (row.postId != null) {
+							const saved = postById.get(row.postId);
+							if (!saved) return null;
+							return {
+								...base,
+								kind: "post" as const,
+								purchased: false,
+								post: {
+									id: saved.id,
+									publicId: saved.publicId,
+									slug: saved.slug,
+									title: saved.title,
+									excerpt: postContentExcerpt(saved.body),
+									tags: saved.tags ?? [],
+									isPublished: saved.isPublished === true,
+									// A tombstoned creator leaves no name to show; the entry
+									// still reads at its own URL, so the card says nothing
+									// rather than inventing an author.
+									creator: saved.creatorHandle
+										? embedCreator({
+												handle: saved.creatorHandle,
+												displayName: saved.creatorDisplayName,
+												avatar: saved.creatorAvatar,
+											})
+										: null,
+								},
+							};
+						}
 						const p = row.projectId != null ? projectById.get(row.projectId) : null;
 						if (!p) return null;
 						// A Project is a shelf, not a payload: it has no gates of its own and
@@ -7525,7 +7492,7 @@ const contentRoutes = new Hono()
 		});
 	})
 
-	/** Save a Work or a Project. Idempotent, and un-hides one that was tidied away. */
+	/** Save a Work, a Project or a Post. Idempotent, and un-hides one that was tidied away. */
 	.post(
 		"/library",
 		requireAuth,
@@ -7535,11 +7502,12 @@ const contentRoutes = new Hono()
 				.object({
 					workId: z.number().int().positive().optional(),
 					projectId: z.number().int().positive().optional(),
+					postId: z.number().int().positive().optional(),
 				})
-				// Exactly one — the same shape `bookmarks` uses, checked here rather than by
-				// a database constraint so the error is a sentence instead of a 500.
-				.refine((d) => (d.workId == null) !== (d.projectId == null), {
-					message: "Save either a Work or a Project, not both and not neither",
+				// Exactly one — checked here rather than by a database constraint so the
+				// error is a sentence instead of a 500.
+				.refine((d) => [d.workId, d.projectId, d.postId].filter((v) => v != null).length === 1, {
+					message: "Save one thing: a Work, a Project or a Post",
 				}),
 		),
 		async (c) => {
@@ -7549,7 +7517,9 @@ const contentRoutes = new Hono()
 			const result =
 				data.workId != null
 					? await saveWork(user.id, data.workId)
-					: await saveProject(user.id, data.projectId as number);
+					: data.projectId != null
+						? await saveProject(user.id, data.projectId)
+						: await savePost(user.id, data.postId as number);
 
 			if (!result.ok) {
 				return c.json(
