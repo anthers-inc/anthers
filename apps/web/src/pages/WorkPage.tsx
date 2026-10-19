@@ -615,13 +615,17 @@ function VisitorRecord({
 								label: "Details",
 								content: (
 									// Named parts, as the creator's Details tab is (Parker, 2026-10-13):
-									// what it says, when it came out — with the listing's address — and
-									// who may open it. The buyer's files ride at its end when the kind
-									// carries any: they are part of what owning this opens, and a
-									// record column had them wedged under a store panel before.
-									// The dates lead the tab (Parker, 2026-10-16): when it came out is
-									// the first thing asked of it.
+									// what it says, when it came out and who may open it. The
+									// buyer's files ride at its end when the kind carries any: they
+									// are part of what owning this opens, and a record column had
+									// them wedged under a store panel before. The description leads
+									// the tab (Parker, 2026-10-19): what the Work is comes before
+									// when it came out.
 									<div className="flex flex-col gap-6">
+										<section className="flex flex-col gap-2">
+											<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
+											<WorkDescription work={work} />
+										</section>
 										<section className="flex flex-col gap-2">
 											<h3 className={WORK_DETAILS_HEADING_CLASS}>Release</h3>
 											<div className="flex flex-col gap-2">
@@ -633,10 +637,6 @@ function VisitorRecord({
 													/>
 												)}
 											</div>
-										</section>
-										<section className="flex flex-col gap-2">
-											<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
-											<WorkDescription work={work} />
 										</section>
 										<section className="flex flex-col gap-2">
 											<h3 className={WORK_DETAILS_HEADING_CLASS}>Access</h3>
@@ -681,11 +681,6 @@ function VisitorRecord({
 								content: (
 									<div className="flex flex-col gap-3">
 										{(rating === "mature" || rating === "adult") && <WorkRating work={work} />}
-										{rating === "general" && (
-											<p className="text-sm text-base-content/60">
-												General — users see no rating on a General Work.
-											</p>
-										)}
 										<RatingMatrixReadOnly grid={ratingGrid} rows={ratingRows} />
 									</div>
 								),

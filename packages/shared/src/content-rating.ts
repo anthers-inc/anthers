@@ -412,7 +412,7 @@ export interface RatingRowDef {
 	label: string;
 	/** Where each rung begins on this row, on each grid, or null where the row never reaches it. */
 	rungs: Record<RatingGrid, Record<DeclarableMaturity, string | null>>;
-	/** Said under the row's name, where the row has a line past its last rung. */
+	/** Said beside the row's name in a hoverable (i), where the row has a line past its last rung. */
 	after?: string;
 }
 

@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The **variant chips** of a video Work's media status — the per-variant state the
- * Manage tab's Media Status card and the Works table's Media Status column both show,
- * extracted from `apps/web`'s `MediaStatusCard` (2026-10-17) so the table can carry the
- * same chips the Work's own page does rather than a badge that says only "Ready".
+ * The **variant chips** of a Work's media status — the per-variant state the Manage tab's
+ * Media Status card and the Works table's Media Status column both show, extracted from
+ * `apps/web`'s `MediaStatusCard` (2026-10-17) so the table can carry the same chips the
+ * Work's own page does rather than a badge that says only "Ready".
+ *
+ * ⭐ **A video's ladder and an audio Work's products are the same idea, named for what
+ * each pipeline makes** (Parker, 2026-10-19): the original file first, then each
+ * rendition the processing run produces. The audio row is the MP3 a listener streams
+ * and the waveform the player draws, so audio's Manage tab reads like video's rather
+ * than as an older filename row.
  *
  * ⭐ **The variants are chips** (Parker's first redesign pass, 2026-10-13): greyed with an
  * X when a variant was never a product of this file (a video with no audio track has no
@@ -185,6 +191,57 @@ export function VideoMediaStatusChips({
 			)}
 			{/* The failures stand at the row's end: the in-flight and ready states are
 			    the chips' own answer (Parker's third pass, 2026-10-13). */}
+			{sourceUpload?.status === "failed" && (
+				<span className="badge badge-error badge-sm">Upload failed</span>
+			)}
+			{job?.status === "failed" && (
+				<span className="badge badge-error badge-sm">Processing failed</span>
+			)}
+		</div>
+	);
+}
+
+/**
+ * The chips row for an audio Work — the original file, the MP3 a listener streams and
+ * the waveform the player draws, each present the moment its product exists. The
+ * pipeline is `jobs/process-audio.ts`: normalize, convert to MP3, generate the peaks.
+ *
+ * `originalActions` is the Work page's pencil on the Original chip, as it is on video's;
+ * the Works table passes nothing and gets the passive chips.
+ */
+export function AudioMediaStatusChips({
+	work,
+	sourceUpload,
+	originalActions,
+	removeBusy,
+}: {
+	work: Work;
+	/** The latest in-flight (or last settled) source upload this tab knows about. */
+	sourceUpload: WorkUpload | null;
+	/** Replace/Remove on the Original chip, offered only where the page owns the flows. */
+	originalActions?: { onReplace: () => void; onRemove: () => void };
+	/** The removal in flight, while the Original chip's dropdown waits it out. */
+	removeBusy?: boolean;
+}) {
+	const job = work.transcoding;
+	const running = job != null && (job.status === "pending" || job.status === "processing");
+	const uploading = sourceUpload?.status === "uploading" || sourceUpload?.status === "attaching";
+
+	return (
+		<div className="flex flex-wrap items-center gap-1.5">
+			<VariantChip
+				name="Original"
+				ready={work.sourceKey ? "ready" : ""}
+				running={uploading}
+				removeBusy={removeBusy}
+				actions={originalActions}
+			/>
+			<VariantChip name="MP3" ready={job?.outputFileUrl ?? ""} running={running} />
+			<VariantChip
+				name="Waveform"
+				ready={(job?.waveformData?.length ?? 0) > 0 ? "ready" : ""}
+				running={running}
+			/>
 			{sourceUpload?.status === "failed" && (
 				<span className="badge badge-error badge-sm">Upload failed</span>
 			)}

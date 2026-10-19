@@ -174,6 +174,13 @@ export function createWorkUploadStore(transport: WorkUploadTransport): WorkUploa
 	const update = (id: string, changes: Partial<WorkUpload>) => {
 		const entry = entries.get(id);
 		if (!entry) return;
+		// A change that leaves the state where it already was must not rebuild the
+		// snapshot: the direct-upload path's XHR speaks dozens of times a second, and only
+		// a few of those events move the whole percent.
+		const moved = (Object.keys(changes) as Array<keyof WorkUpload>).some(
+			(key) => entry.state[key] !== changes[key],
+		);
+		if (!moved) return;
 		entry.state = { ...entry.state, ...changes };
 		emit();
 	};

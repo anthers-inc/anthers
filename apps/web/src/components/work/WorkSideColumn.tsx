@@ -17,8 +17,9 @@
  * the scroll keeper has no part in a switch here.
  */
 
+import CreatorCard from "@anthers/web-shared/creator/CreatorCard";
 import { postUrl } from "@anthers/web-shared/postUrl";
-import { creatorProjectUrl, profileUrl } from "@anthers/web-shared/profile";
+import { creatorProjectUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { MegaphoneIcon } from "@heroicons/react/24/outline";
 import { type ReactNode, useState } from "react";
@@ -97,21 +98,16 @@ function PostedAbout({ work }: { work: WorkDetail }) {
 
 /**
  * The Showings stub body, assembled by the pages that have the facts. Kept beside the
- * shell because its copy is the panel's one voice until the real machinery ships.
+ * shell because its copy is the panel's one voice until the real machinery ships. The
+ * creator's entry is the standard `CreatorCard` (Parker, 2026-10-19), so the panel shows
+ * their thumbnail, name and bio rather than a box naming only them.
  */
 export function ShowingsStub({ work }: { work: WorkDetail }) {
 	const creator = work.creator;
 	const projects = work.shownOn?.projects ?? [];
 	return (
 		<div className="flex flex-col gap-3">
-			{creator && (
-				<Link to={profileUrl(creator.handle)} className="link-hover block">
-					<Card
-						title={creator.displayName || creator.handle || "the creator"}
-						subtitle="Creator's profile"
-					/>
-				</Link>
-			)}
+			{creator && <CreatorCard creator={creator} />}
 			{projects.map((p) => (
 				<Link
 					key={p.slug}

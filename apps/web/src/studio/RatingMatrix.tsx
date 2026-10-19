@@ -34,6 +34,7 @@ import {
 	type RatingGrid,
 	type RowLevel,
 } from "@anthers/shared/content-rating";
+import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
 
 const COLUMNS: readonly RowLevel[] = ["none", "general", "mature", "adult"];
@@ -222,11 +223,13 @@ function RatingTable({
 										className={`text-sm font-medium ${pick === undefined ? "border-l-2 border-warning" : ""}`}
 									>
 										{row.label}
-										{row.after && (
-											<span className="mt-1 block text-[11px] font-normal text-base-content/50">
-												{row.after}
-											</span>
-										)}
+										{/* The line past the row's last rung is an (i) beside its heading
+										    (Parker, 2026-10-19): it explains a boundary rather than a
+										    rung, so it belongs in a hover rather than under a row a
+										    creator has already read. `unclipped` because the table
+										    scrolls sideways inside `overflow-x-auto`, whose clip
+										    would otherwise cut the overlay. */}
+										{row.after && <InfoTip text={row.after} unclipped />}
 									</th>
 									<RowCells
 										grid={grid}

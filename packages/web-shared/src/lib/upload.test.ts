@@ -43,26 +43,38 @@ describe("wholeFileSha256Hex", () => {
  * the fake for real and the arithmetic is asserted on.
  */
 describe("uploadSessionPlan", () => {
-	it("advances by completed parts plus the in-flight part's load, with no throw on a progress event", async () => {
+	it("sums every in-flight part, so interleaved siblings never move the bar backwards", async () => {
 		const reported: number[] = [];
-		const file = new File([new Uint8Array(100)], "clip.mp4");
-		// Fires the progress events as the wire does — partway, then the whole part —
-		// and a throw in the runner's callback propagates HERE, so the TDZ version
-		// fails this suite at its first event with a ReferenceError.
-		const put: SessionPartPutter = async (_url, blob, onLoaded) => {
-			const size = blob.size;
-			onLoaded(Math.floor(size / 4));
-			onLoaded(size);
-			return { etag: `etag-${size}`, bytes: size };
+		const file = new File([new Uint8Array(300)], "clip.mp4");
+		let releaseFirst = () => {};
+		const firstHeld = new Promise<void>((resolve) => {
+			releaseFirst = resolve;
+		});
+		// Three workers start together and each reports only its own bytes. The runner's
+		// figure must be all of them at once: 80 + 20 + 10 of 300 is 37%. Adding the
+		// speaking part to the completed total instead reads 27%, then 7%, then 3% — the
+		// backwards stutter this suite exists to fail on.
+		const put: SessionPartPutter = async (url, blob, onLoaded) => {
+			const number = Number(url.slice(-1));
+			if (number === 1) {
+				onLoaded(80);
+				await firstHeld;
+				onLoaded(blob.size);
+			} else {
+				onLoaded(number === 2 ? 20 : 10);
+				if (number === 2) releaseFirst();
+			}
+			return { etag: `etag-${number}`, bytes: blob.size };
 		};
 		const key = await uploadSessionPlan(
 			file,
 			{
 				sessionId: "s1",
-				partSize: 64,
+				partSize: 100,
 				parts: [
 					{ number: 1, url: "https://storage/part1" },
 					{ number: 2, url: "https://storage/part2" },
+					{ number: 3, url: "https://storage/part3" },
 				],
 				held: [],
 				digest: "sha-x",
@@ -77,26 +89,57 @@ describe("uploadSessionPlan", () => {
 					expect(sessionId).toBe("s1");
 					expect(digest).toBe("sha-x");
 					expect(parts).toEqual([
-						{ number: 1, etag: "etag-64" },
-						{ number: 2, etag: "etag-36" },
+						{ number: 1, etag: "etag-1" },
+						{ number: 2, etag: "etag-2" },
+						{ number: 3, etag: "etag-3" },
 					]);
 					return "session-key";
 				},
 			},
 		);
 		expect(key).toBe("session-key");
-		// Part 1's events are deterministic (both fire before its completion is
-		// accounted): a quarter and the whole part. Part 2's are interleaved with
-		// part 1's completion on a concurrent wire, so its quarter reads 9 or 73 and
-		// its whole 36 or 100 — the assertions hold the *bounds*, not the order.
-		expect(reported.length).toBeGreaterThanOrEqual(4);
-		expect(reported).toContain(16);
-		expect(reported).toContain(64);
-		expect(reported.every((p) => p <= 100)).toBe(true);
-		// Every value is an honest sum of completed bytes and one in-flight part:
-		// exactly the set the two parts' quarter/whole events compose.
-		const possible = new Set([9, 16, 36, 64, 73, 100]);
-		expect(reported.every((p) => possible.has(p))).toBe(true);
+		// The three simultaneous openings are the whole-file sum, never one part's share.
+		expect(reported.slice(0, 3)).toEqual([27, 33, 37]);
+		for (let i = 1; i < reported.length; i++) {
+			expect(reported[i]).toBeGreaterThanOrEqual(reported[i - 1]);
+		}
+		expect(reported.at(-1)).toBe(100);
+	});
+
+	it("holds the bar where it was when a failed part restarts", async () => {
+		const reported: number[] = [];
+		let attempts = 0;
+		// The first attempt puts 60 of its 100 bytes on the wire and then loses the
+		// connection. The retry restarts that part's counter at zero, which must not walk
+		// the creator's bar back to where the abandoned attempt had reached.
+		const put: SessionPartPutter = async (_url, blob, onLoaded) => {
+			attempts += 1;
+			if (attempts === 1) {
+				onLoaded(60);
+				throw new Error("network");
+			}
+			onLoaded(20);
+			onLoaded(blob.size);
+			return { etag: null, bytes: blob.size };
+		};
+		const key = await uploadSessionPlan(
+			new File([new Uint8Array(100)], "clip.mp4"),
+			{
+				sessionId: "s3",
+				partSize: 100,
+				parts: [{ number: 1, url: "https://storage/part1" }],
+				held: [],
+				digest: "sha-z",
+			},
+			(p) => {
+				if (p != null) reported.push(p);
+			},
+			undefined,
+			{ put, complete: async () => "key3" },
+		);
+		expect(key).toBe("key3");
+		expect(attempts).toBe(2);
+		expect(reported).toEqual([60, 100]);
 	});
 
 	it("records held parts and starts a resumed attempt at where they already are", async () => {
