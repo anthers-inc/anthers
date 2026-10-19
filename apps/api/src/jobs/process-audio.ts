@@ -53,6 +53,15 @@ async function ffprobe(filePath: string) {
  * the byte stream doubles as the pass's own progress: `onTick` reports samples
  * processed out of the expected total, which the caller turns into the row's real
  * percentage and figure while the pass runs.
+ *
+ * ⭐ **Each bucket is the root mean square of its samples, not their loudest one**
+ * (2026-10-19). Peak-per-bucket was what the first version measured, and against a
+ * mastered track it drew a wall: a loud, well-compressed master touches (or nearly
+ * touches) full scale in almost every bucket, so the bar heights all sat at the ceiling
+ * and the drawing had no shape to show. Density is what a listener reads as loudness —
+ * a dense chorus and a sparse verse at the same peak are not the same loudness — and
+ * RMS is the measure that follows it. The display normalizes by the track's own loudest
+ * bucket, so the stored value only has to be proportional.
  */
 export async function generateWaveform(
 	filePath: string,
@@ -83,29 +92,30 @@ export async function generateWaveform(
 	// the player's shape expects. A bucket no sample reached (a stream that ended early)
 	// stays 0. The tick cadence is a second of audio, floored at a 5% step so a short
 	// file still ticks; the caller throttles what it writes.
+	//
+	// Each bucket carries the sum of squared samples and how many samples landed in it;
+	// the RMS is taken at the bucket boundary rather than the running peak. A bucket
+	// whose window ends mid-stream is still finalized on the last sample, so a short
+	// file cannot silently drop its tail.
 	const totalSamples = Math.max(1, Math.round(8000 * durationSeconds));
 	const tickEvery = Math.max(1, Math.min(8000, Math.floor(totalSamples / 20)));
 	const peaks = new Array<number>(numPoints).fill(0);
+	const sums = new Float64Array(numPoints);
+	const counts = new Uint32Array(numPoints);
 	let samples = 0;
-	let bucketPeak = 0;
 	const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
 	while (true) {
 		const { done, value } = await reader.read();
 		if (done) break;
 		const view = new DataView(value.buffer, value.byteOffset, value.byteLength);
 		for (let off = 0; off + 1 < view.byteLength; off += 2) {
-			const sample = Math.abs(view.getInt16(off, true));
-			if (sample > bucketPeak) bucketPeak = sample;
-			samples++;
+			// Normalize first so the squared sum stays well inside a double's exact range
+			// for any track length: 32768² × millions would otherwise lose precision.
+			const sample = view.getInt16(off, true) / 32768;
 			const bucket = Math.min(numPoints - 1, Math.floor((samples * numPoints) / totalSamples));
-			const nextBucket = Math.min(
-				numPoints,
-				Math.floor(((samples + 1) * numPoints) / totalSamples),
-			);
-			if (nextBucket > bucket) {
-				peaks[bucket] = bucketPeak / 32768;
-				bucketPeak = 0;
-			}
+			sums[bucket] += sample * sample;
+			counts[bucket] += 1;
+			samples++;
 			if (onTick && samples % tickEvery === 0) onTick(samples, totalSamples);
 		}
 	}
@@ -114,6 +124,9 @@ export async function generateWaveform(
 		// and volumedetect per segment under it — slower still, but the peak shape it
 		// yields is real and this shape of failure is rare.
 		return generateWaveformFallback(filePath, numPoints);
+	}
+	for (let i = 0; i < numPoints; i++) {
+		peaks[i] = counts[i] > 0 ? Math.sqrt(sums[i] / counts[i]) : 0;
 	}
 	return peaks.map((p) => Math.round(p * 1000) / 1000);
 }

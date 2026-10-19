@@ -53,12 +53,7 @@ import {
 import { trackFromWork } from "../../lib/tracks";
 import { useSeekPlayer, WorkPlayerProvider } from "../../lib/work-player";
 import GalleryView from "../media/GalleryView";
-import {
-	LyricsBody,
-	LyricsShelf,
-	WORK_LYRICS_CLASS,
-	WORK_LYRICS_HEADING_CLASS,
-} from "./LyricsPanel";
+import { LyricsBody, WORK_LYRICS_CLASS, WORK_LYRICS_HEADING_CLASS } from "./LyricsPanel";
 import WorkMediaFrame from "./WorkMediaFrame";
 
 // ⭐ The lyrics classes live beside the card that owns them; re-exported for the Studio's InlineField.
@@ -766,21 +761,15 @@ export function WorkDeliverable({
 						chapters={chapters}
 						startSeconds={startSeconds}
 						persistent={track}
-						// The stage's aside column, the song's words: the creator's field
-						// when there is one (it starts open — the composer works where the
-						// listener reads); the words when the gate let them through, closed
-						// until the transport's toggle asks for them. Gated with the audio:
-						// the API blanks them for a user without access, so reaching this
-						// branch at all means the user may read them.
+						// The stage's aside drawer, the song's words: the creator's field
+						// when there is one; the words when the gate let them through. It
+						// starts closed for everyone — the drawer is the toggle's to open,
+						// whichever face is inside it (Parker, 2026-10-19). Gated with the
+						// audio: the API blanks them for a user without access, so reaching
+						// this branch at all means the user may read them.
 						aside={
-							lyrics ??
-							(work.lyrics?.trim() ? (
-								<LyricsShelf>
-									<LyricsBody lyrics={work.lyrics ?? ""} />
-								</LyricsShelf>
-							) : null)
+							lyrics ?? (work.lyrics?.trim() ? <LyricsBody lyrics={work.lyrics ?? ""} /> : null)
 						}
-						asideOpen={lyrics != null}
 					/>,
 				)}
 			{/* Spoken word takes its own player — listening to talk wants fixed-step skips,
