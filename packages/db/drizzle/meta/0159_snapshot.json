@@ -1,5 +1,5 @@
 {
-  "id": "1414a699-bd09-4a61-93f0-145b688a3fd8",
+  "id": "a5a1b0a0-7443-4d36-98fc-86d295f9e51d",
   "prevId": "61714168-2f2e-46d0-ae57-74a2bec14754",
   "version": "7",
   "dialect": "postgresql",
@@ -3096,6 +3096,13 @@
           "primaryKey": false,
           "notNull": false,
           "default": false
+        },
+        "creator_receipt_emails": {
+          "name": "creator_receipt_emails",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
         },
         "created_at": {
           "name": "created_at",
@@ -8113,12 +8120,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "creator_email_delivery": {
-          "name": "creator_email_delivery",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -8671,115 +8672,6 @@
           "tableTo": "works",
           "columnsFrom": [
             "work_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.bookmarks": {
-      "name": "bookmarks",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "post_id": {
-          "name": "post_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sort_order": {
-          "name": "sort_order",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_bookmarks_user": {
-          "name": "idx_bookmarks_user",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "sort_order",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_bookmarks_post": {
-          "name": "idx_bookmarks_post",
-          "columns": [
-            {
-              "expression": "post_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bookmarks_user_id_users_id_fk": {
-          "name": "bookmarks_user_id_users_id_fk",
-          "tableFrom": "bookmarks",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "bookmarks_post_id_posts_id_fk": {
-          "name": "bookmarks_post_id_posts_id_fk",
-          "tableFrom": "bookmarks",
-          "tableTo": "posts",
-          "columnsFrom": [
-            "post_id"
           ],
           "columnsTo": [
             "id"
@@ -9859,6 +9751,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "post_id": {
+          "name": "post_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "hidden": {
           "name": "hidden",
           "type": "boolean",
@@ -9947,6 +9845,28 @@
           "method": "btree",
           "with": {}
         },
+        "uq_library_post": {
+          "name": "uq_library_post",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "post_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"library_items\".\"post_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "idx_library_work": {
           "name": "idx_library_work",
           "columns": [
@@ -9967,6 +9887,21 @@
           "columns": [
             {
               "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_library_post": {
+          "name": "idx_library_post",
+          "columns": [
+            {
+              "expression": "post_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -10011,6 +9946,19 @@
           "tableTo": "projects",
           "columnsFrom": [
             "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "library_items_post_id_posts_id_fk": {
+          "name": "library_items_post_id_posts_id_fk",
+          "tableFrom": "library_items",
+          "tableTo": "posts",
+          "columnsFrom": [
+            "post_id"
           ],
           "columnsTo": [
             "id"
@@ -10287,13 +10235,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": "''"
-        },
-        "show_on_timeline": {
-          "name": "show_on_timeline",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
         },
         "is_pinned": {
           "name": "is_pinned",
