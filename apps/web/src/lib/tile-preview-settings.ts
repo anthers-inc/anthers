@@ -17,15 +17,15 @@
  * ## Play audio on hover previews (Parker, 2026-10-15)
  *
  * Defaults **off**, holding the preview rule that nothing audible rides the cursor:
- * sound is the viewer's explicit gesture — the speaker button on a hovered video, or
+ * sound is the viewer's explicit gesture — the speaker button on a hovered preview, or
  * this setting — never a hover's side effect. The setting is one, deliberately: the
  * button and the settings row flip the same remembered answer, so unmuting one hover
  * carries to the next. Sound follows the shared media volume
  * (`components/media/transport/volume.ts`), including its mute — a listener who muted
  * the site does not get sound back from a hover, and unmuting the players brings the
- * hover audio back. The listened family keeps its invisible muted preview: the ask
- * names videos, and an audible element under a poster band has no surface to explain
- * itself from.
+ * hover audio back. It applies to both preview families (Parker, 2026-10-19): a video
+ * preview carries the work's own audio, and a listened Work's preview is the listening,
+ * so the setting names the hover's sound rather than one media type's rendition of it.
  */
 
 import { useSyncExternalStore } from "react";
