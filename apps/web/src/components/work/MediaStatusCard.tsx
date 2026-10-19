@@ -5,6 +5,11 @@
  * (Parker, 2026-10-13: a unified card showing upload, processing and which processed
  * variants exist together — and carrying the actions that act on that state).
  *
+ * ⭐ **Video and audio draw the same card** (Parker, 2026-10-19): the chips name what
+ * each pipeline actually produces — a video's audio rendition and ladder, an audio
+ * Work's MP3 and waveform — so the Manage tab's media section reads one way across
+ * kinds rather than as a filename row here and a status card there.
+ *
  * ⭐ **The variants are chips** (Parker's first redesign pass, 2026-10-13): greyed with an
  * X when a variant was never a product of this file (a video with no audio track has no
  * audio rendition), yellow with a running arrow while a run hasn't produced it, green
@@ -27,7 +32,10 @@
  * has always shown while a ladder is missing.
  */
 
-import { VideoMediaStatusChips } from "@anthers/web-shared/content/media-status";
+import {
+	AudioMediaStatusChips,
+	VideoMediaStatusChips,
+} from "@anthers/web-shared/content/media-status";
 import { FormatsHint, fileRules, isFileWorkType } from "@anthers/web-shared/content/work-media";
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import FileUpload from "@anthers/web-shared/ui/FileUpload";
@@ -80,6 +88,15 @@ export default function MediaStatusCard({
 					sourceUpload={sourceUpload}
 					// The original is the one chip that acts — replace or remove, from its
 					// pencil — and only this page owns those flows.
+					originalActions={unpublished ? { onReplace: () => onOpenReplace(), onRemove } : undefined}
+					removeBusy={removeBusy}
+				/>
+			)}
+
+			{(type === "audio" || type === "music") && (
+				<AudioMediaStatusChips
+					work={work}
+					sourceUpload={sourceUpload}
 					originalActions={unpublished ? { onReplace: () => onOpenReplace(), onRemove } : undefined}
 					removeBusy={removeBusy}
 				/>

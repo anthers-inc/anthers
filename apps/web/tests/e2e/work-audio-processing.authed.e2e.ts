@@ -118,7 +118,8 @@ test("a music Work plays its original while processing runs", async ({ page, con
 
 	// The deliverable's place holds the player, not the status block. The old page put
 	// "Waiting to process…" there; the ruled page mounts the original and lets the
-	// Manage tab's file section carry the progress.
+	// Manage tab's Media Status card carry the progress (Parker, 2026-10-19 — audio
+	// joined video's card rather than keeping the older filename row).
 	//
 	// The <audio> element itself is 0x0 — the player's UI is its transport — so the
 	// visible half is asserted on the button and the playing half on the element.
@@ -131,6 +132,13 @@ test("a music Work plays its original while processing runs", async ({ page, con
 	await expect(
 		audio.locator("xpath=ancestor::*[1]").getByRole("button", { name: "Play" }),
 	).toBeVisible();
+
+	// And the Manage tab's section is video's card adapted to what this pipeline makes:
+	// the original, the MP3 a listener streams and the waveform the player draws.
+	const media = page.getByRole("region", { name: "Media status" });
+	await expect(media.getByText("Original", { exact: true })).toBeVisible();
+	await expect(media.getByText("MP3", { exact: true })).toBeVisible();
+	await expect(media.getByText("Waveform", { exact: true })).toBeVisible();
 
 	// And nothing anywhere on the page claims the Work is waiting, while the job's row
 	// still says pending — the status block no longer stands in the player's place.

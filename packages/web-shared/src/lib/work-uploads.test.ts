@@ -74,6 +74,28 @@ function controlledTransport() {
 const file = () => new File(["bytes"], "clip.mp4", { type: "video/mp4" });
 
 describe("work uploads", () => {
+	it("does not notify subscribers for a progress event that moved nothing", async () => {
+		const t = controlledTransport();
+		const store = createWorkUploadStore(t.transport);
+		store.start(7, file(), VIDEO);
+		let notifications = 0;
+		store.subscribe(() => {
+			notifications += 1;
+		});
+
+		t.progress(40);
+		expect(notifications).toBe(1);
+		// The wire speaks far more often than the whole percent moves; an event that
+		// leaves it where it was must not re-render every subscriber.
+		t.progress(40);
+		expect(notifications).toBe(1);
+		t.progress(41);
+		expect(notifications).toBe(2);
+
+		await t.putArrives("k");
+		await t.attachAnswers();
+	});
+
 	it("uploads, then attaches the key that came back, then reports done", async () => {
 		const t = controlledTransport();
 		const store = createWorkUploadStore(t.transport);

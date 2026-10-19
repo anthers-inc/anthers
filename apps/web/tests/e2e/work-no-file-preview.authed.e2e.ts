@@ -66,7 +66,7 @@ test.describe.configure({ mode: "serial" });
 /** Dump accessibility trees and screenshots for a debugging session; CI runs assertions only. */
 const ARIA_DEBUG = process.env.ARIA_DEBUG === "1";
 
-test("a fileless draft's editor draws its silhouette, and the audio kind's picker rides in it", async ({
+test("a fileless draft's editor draws its silhouette, and neither kind's picker rides in it", async ({
 	page,
 	context,
 }) => {
@@ -85,15 +85,9 @@ test("a fileless draft's editor draws its silhouette, and the audio kind's picke
 
 		// The box, in the deliverable's slot, whatever the kind.
 		await expect(emptyBox).toBeVisible();
-		if (kind === "audio") {
-			// The audio draft fills its box where the file will land; the video's source
-			// is the Media Status card's, so its box is bare of a picker by design.
-			await expect(
-				emptyBox.getByRole("button", { name: /drop an audio file or click to browse/i }),
-			).toBeVisible();
-		} else {
-			await expect(emptyBox.getByRole("button", { name: /drop /i })).toHaveCount(0);
-		}
+		// The box is bare of a picker for both kinds: the source is the Manage tab's
+		// Media Status card (Parker, 2026-10-19, when audio joined video's card).
+		await expect(emptyBox.getByRole("button", { name: /drop /i })).toHaveCount(0);
 
 		if (ARIA_DEBUG) {
 			const snap = await page.locator("main").ariaSnapshot();
