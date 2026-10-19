@@ -10,10 +10,10 @@
  * with a soft background; the creator's name inside a tile links to the creator's
  * page rather than the tile's target; only what plays carries a play affordance (a
  * video keeps
- * one on hover, a shirt never shows one); a preview answers the viewer's stop and a
- * video preview carries its speaker button, whose click is the persistent hover-audio
- * answer; and the grid fills the content area, flexing to fewer, larger tiles as the
- * window narrows.
+ * one on hover, a shirt never shows one); a preview answers the viewer's stop and every
+ * preview — video or audio — carries its speaker button, whose click is the persistent
+ * hover-audio answer; and the grid fills the content area, flexing to fewer, larger
+ * tiles as the window narrows.
  *
  * 🚨 **The scratch spec that "verified" #437's drag pinned none of this, and the
  * regressions shipped.** Pins instead of screenshots: structure, ratios, counts.
@@ -377,6 +377,40 @@ test("the preview's speaker button turns hover audio on, and that answer persist
 		page.getByRole("button", { name: "Mute hover previews" }),
 		"a later visit starts from the remembered on",
 	).toBeVisible();
+});
+
+test("an audio preview carries the same speaker button and the same remembered answer", async ({
+	page,
+}) => {
+	test.setTimeout(60_000);
+	const audioName = /Track 1/;
+
+	await page.setViewportSize({ width: 2000, height: 1100 });
+	await page.goto(`${WEB_ORIGIN}/feed`);
+	const tile = page.getByRole("link", { name: audioName });
+	await expect(tile).toBeVisible();
+	await tile.hover();
+	const audio = tileRoot(tile).locator("audio");
+	await expect(audio, "the listened default preview mounts silently").toBeAttached({
+		timeout: 3_000,
+	});
+	await expect(audio).toHaveJSProperty("muted", true);
+
+	// The one control a listened preview had no reason to carry until the setting
+	// reached it — the same button, the same remembered answer the video preview
+	// writes, because the setting names the hover's sound rather than its medium.
+	const speaker = tileRoot(tile).getByRole("button", {
+		name: "Play hover previews with sound",
+	});
+	await expect(speaker, "an audio preview carries its speaker button").toBeVisible();
+	await speaker.click();
+	await expect(audio, "the click unmutes the playing element").toHaveJSProperty("muted", false, {
+		timeout: 2_000,
+	});
+	expect(
+		await page.evaluate(() => localStorage.getItem("anthers_tile_preview_audio")),
+		"the button writes the persistent answer",
+	).toBe("1");
 });
 
 test("the grid fills the content area and flexes as the window narrows", async ({ page }) => {
