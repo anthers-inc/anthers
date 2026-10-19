@@ -173,8 +173,28 @@ export async function uploadSessionPlan(
 	);
 	let deliveredBytes = heldBytes;
 	let aborted = false;
+	// Every part that is on the wire right now, with the bytes it has reported. Progress
+	// is the whole file, and three parts share the wire at once, each reporting only its
+	// own counter — so the figure is completed bytes PLUS each in-flight part's own, not
+	// completed bytes plus whichever sibling happened to speak last. That per-event
+	// reading was the bar's stutter: a part at 80 of 100 reported 27% while a sibling at
+	// 10 reported 3%, so the bar ran backwards on every event burst.
+	const inFlight = new Map<number, number>();
+	let lastPercent = -1;
+	const report = () => {
+		if (!onProgress) return;
+		let loaded = deliveredBytes;
+		for (const bytes of inFlight.values()) loaded += bytes;
+		const percent = percentOf(loaded, file.size);
+		// Forward only. A failed part restarts its own counter at zero, and a retry must
+		// hold the bar where it was rather than walk it back. An unchanged percentage is
+		// not worth waking every subscriber either.
+		if (percent <= lastPercent) return;
+		lastPercent = percent;
+		onProgress(percent);
+	};
 	// A resumed attempt reports where it already is, not a restarted 0%.
-	if (heldBytes > 0) onProgress?.(percentOf(deliveredBytes, file.size));
+	if (heldBytes > 0) report();
 
 	try {
 		const queue = plan.parts.filter((part) => !held.has(part.number));
@@ -192,30 +212,25 @@ export async function uploadSessionPlan(
 							next.url,
 							blob,
 							(chunkLoaded) => {
-								if (onProgress) {
-									onProgress(
-										// Progress is whole-file honest: delivered = parts done +
-										// the in-flight part's own loaded counter.
-										//
-										// 🚨 `bytes` must NOT join this sum. It is named by this very
-										// destructuring, which is still awaiting — reading it here was
-										// a temporal-dead-zone throw on every progress event (the
-										// production bundle's "Cannot access 'K' before
-										// initialization", browser error event 5359), and it also
-										// double-counted: a part's full size would be added before
-										// that part had finished. The completed parts sit in
-										// `deliveredBytes`, and the in-flight one tells its own
-										// loaded counter.
-										percentOf(deliveredBytes + chunkLoaded, file.size),
-									);
-								}
+								// 🚨 `bytes` is not readable here: the destructuring that names the
+								// part's total is still awaiting this callback, and reading it was
+								// the production TDZ throw (browser error event 5359).
+								inFlight.set(next.number, chunkLoaded);
+								report();
 							},
 							signal,
 						);
 						uploaded[next.number - 1] = { number: next.number, ...(etag ? { etag } : {}) };
+						// The part's own counter becomes part of the completed total in one move,
+						// so the figure keeps the bytes the wire never got to report.
+						inFlight.delete(next.number);
 						deliveredBytes += bytes;
+						report();
 						break;
 					} catch (error) {
+						// The attempt's bytes are gone with it. Keeping its counter would count
+						// them again once the retry reports, so the part leaves the sum here.
+						inFlight.delete(next.number);
 						if (attempt === 3) throw error;
 					}
 				}
@@ -228,7 +243,12 @@ export async function uploadSessionPlan(
 			plan.digest,
 			plan.sessionId,
 		);
-		if (onProgress) onProgress(100);
+		// Completion is the one moment the whole file is known to be on the server, so 100
+		// is certain even where the wire's last progress event never arrived.
+		if (lastPercent < 100) {
+			lastPercent = 100;
+			onProgress?.(100);
+		}
 		return key;
 	} catch (error) {
 		// The session STAYS OPEN: its held parts are exactly what a retry resumes, keyed

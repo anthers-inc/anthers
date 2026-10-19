@@ -23,11 +23,12 @@ const MIN_BAR_HEIGHT = 2;
 const PEAK_SHARE = 0.92;
 
 /**
- * The hero's amplitude mapping, in shares of the box's height. The stage normalizes a
+ * The amplitude mapping, in shares of the box's height. Every surface normalizes a
  * track's peaks to its own loud passage — the loudest point reaches (near) the top and
  * silence keeps a stub — because a quiet recording's waveform drawn by amplitude alone
- * is a thin strip in a big surface: the empty look the stage exists to fix. The shape
- * is the track's own; the scale is the drawing's.
+ * is a thin strip in the surface: the empty look the stage exists to fix. The shape is
+ * the track's own; the scale is the drawing's. The stored peaks are bucket RMS, so the
+ * loudest bucket sets the scale and the arrangement's quieter passages keep their room.
  */
 const WAVEFORM_FLOOR = 0.06;
 
@@ -94,10 +95,10 @@ export default function WaveformDisplay({ peaks, progress, height }: WaveformDis
 	const clamped = Math.min(1, Math.max(0, progress));
 	const totalWidth = bars.length * pxPerBar;
 	const playheadX = Math.min(totalWidth - BAR_GAP, clamped * totalWidth);
-	/** The hero normalize scale: the track's own loud passage. The fixed modes are 1:1. */
-	const loudest = fill ? Math.max(...bars, 0.0001) : 1;
+	/** The normalize scale: the track's own loudest bucket, whichever surface draws it. */
+	const loudest = Math.max(...bars, 0.0001);
 	const heightShare = (peak: number) =>
-		fill ? WAVEFORM_FLOOR + (PEAK_SHARE - WAVEFORM_FLOOR) * (peak / loudest) : PEAK_SHARE;
+		WAVEFORM_FLOOR + (PEAK_SHARE - WAVEFORM_FLOOR) * Math.min(1, peak / loudest);
 
 	return (
 		<svg
