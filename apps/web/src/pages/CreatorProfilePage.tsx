@@ -686,6 +686,45 @@ export default function CreatorProfilePage() {
 	});
 	allItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+	// The read half of each inline field, shared by the owner's pencil and the visitor's
+	// plain rendering: a visitor meets exactly what the creator reads, minus the pencils.
+	// The "Add a …" prompts are the owner's, since a visitor has nothing to add.
+	const displayNameRead = () => (
+		<h1 className="text-2xl font-bold">{creator.displayName || creator.handle}</h1>
+	);
+
+	const bioRead = () =>
+		creator.bio ? (
+			<p className="text-sm max-w-2xl whitespace-pre-line">{creator.bio}</p>
+		) : isOwnProfile ? (
+			<p className="text-sm italic text-base-content/40">Add a bio</p>
+		) : null;
+
+	const websiteRead = () =>
+		creator.websiteUrl ? (
+			<a
+				href={creator.websiteUrl}
+				target="_blank"
+				rel="noopener noreferrer"
+				className="flex items-center gap-1 link link-hover"
+			>
+				<LinkIcon className="w-4 h-4" />
+				{hostLabel(creator.websiteUrl)}
+			</a>
+		) : isOwnProfile ? (
+			<span className="italic text-base-content/40">Add a website</span>
+		) : null;
+
+	const locationRead = () =>
+		creator.location ? (
+			<span className="flex items-center gap-1">
+				<MapPinIcon className="w-4 h-4" />
+				{creator.location}
+			</span>
+		) : isOwnProfile ? (
+			<span className="italic text-base-content/40">Add a location</span>
+		) : null;
+
 	return (
 		// `relative z-30` lifts the whole page above the logged-out shell's decorative
 		// layer (the side vines and their bee swarm sit at z-20 — see LoggedOutLayout) so
@@ -768,108 +807,93 @@ export default function CreatorProfilePage() {
 						)}
 					</div>
 					<div className="flex-1 pt-4 sm:pt-14">
-						<InlineField<string>
-							label="display name"
-							saved={creator.displayName ?? ""}
-							renderRead={() => (
-								<h1 className="text-2xl font-bold">{creator.displayName || creator.handle}</h1>
-							)}
-							renderEdit={(draft, setDraft) => (
-								<input
-									type="text"
-									aria-label="Display name"
-									className="input input-bordered w-full max-w-md"
-									value={draft}
-									onChange={(e) => setDraft(e.target.value)}
-									maxLength={150}
-								/>
-							)}
-							save={(draft) => saveProfileField({ displayName: draft.trim() })}
-						/>
-						<p className="text-base-content/60">
-							@{creator.handle} · {followerCount} followers
-						</p>
-						<InlineField<string>
-							label="bio"
-							saved={creator.bio ?? ""}
-							className="mt-2"
-							renderRead={() =>
-								creator.bio ? (
-									<p className="text-sm max-w-2xl whitespace-pre-line">{creator.bio}</p>
-								) : (
-									<p className="text-sm italic text-base-content/40">Add a bio</p>
-								)
-							}
-							renderEdit={(draft, setDraft) => (
-								<textarea
-									aria-label="Bio"
-									className="textarea textarea-bordered w-full max-w-2xl"
-									rows={4}
-									value={draft}
-									onChange={(e) => setDraft(e.target.value)}
-									maxLength={5000}
-								/>
-							)}
-							save={(draft) => saveProfileField({ bio: draft.trim() })}
-						/>
-						<div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-base-content/60">
+						{isOwnProfile ? (
 							<InlineField<string>
-								label="website"
-								saved={creator.websiteUrl ?? ""}
-								renderRead={() =>
-									creator.websiteUrl ? (
-										<a
-											href={creator.websiteUrl}
-											target="_blank"
-											rel="noopener noreferrer"
-											className="flex items-center gap-1 link link-hover"
-										>
-											<LinkIcon className="w-4 h-4" />
-											{hostLabel(creator.websiteUrl)}
-										</a>
-									) : (
-										<span className="italic text-base-content/40">Add a website</span>
-									)
-								}
-								renderEdit={(draft, setDraft) => (
-									<input
-										type="url"
-										aria-label="Website URL"
-										className="input input-bordered input-sm w-72"
-										value={draft}
-										onChange={(e) => setDraft(e.target.value)}
-										placeholder="https://example.com"
-										maxLength={500}
-									/>
-								)}
-								save={(draft) => saveProfileField({ websiteUrl: draft.trim() })}
-							/>
-							<InlineField<string>
-								label="location"
-								saved={creator.location ?? ""}
-								renderRead={() =>
-									creator.location ? (
-										<span className="flex items-center gap-1">
-											<MapPinIcon className="w-4 h-4" />
-											{creator.location}
-										</span>
-									) : (
-										<span className="italic text-base-content/40">Add a location</span>
-									)
-								}
+								label="display name"
+								saved={creator.displayName ?? ""}
+								renderRead={displayNameRead}
 								renderEdit={(draft, setDraft) => (
 									<input
 										type="text"
-										aria-label="Location"
-										className="input input-bordered input-sm w-56"
+										aria-label="Display name"
+										className="input input-bordered w-full max-w-md"
 										value={draft}
 										onChange={(e) => setDraft(e.target.value)}
-										placeholder="City, country"
-										maxLength={100}
+										maxLength={150}
 									/>
 								)}
-								save={(draft) => saveProfileField({ location: draft.trim() })}
+								save={(draft) => saveProfileField({ displayName: draft.trim() })}
 							/>
+						) : (
+							displayNameRead()
+						)}
+						<p className="text-base-content/60">
+							@{creator.handle} · {followerCount} followers
+						</p>
+						{isOwnProfile ? (
+							<InlineField<string>
+								label="bio"
+								saved={creator.bio ?? ""}
+								className="mt-2"
+								renderRead={bioRead}
+								renderEdit={(draft, setDraft) => (
+									<textarea
+										aria-label="Bio"
+										className="textarea textarea-bordered w-full max-w-2xl"
+										rows={4}
+										value={draft}
+										onChange={(e) => setDraft(e.target.value)}
+										maxLength={5000}
+									/>
+								)}
+								save={(draft) => saveProfileField({ bio: draft.trim() })}
+							/>
+						) : (
+							creator.bio && <div className="mt-2">{bioRead()}</div>
+						)}
+						<div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-base-content/60">
+							{isOwnProfile ? (
+								<InlineField<string>
+									label="website"
+									saved={creator.websiteUrl ?? ""}
+									renderRead={websiteRead}
+									renderEdit={(draft, setDraft) => (
+										<input
+											type="url"
+											aria-label="Website URL"
+											className="input input-bordered input-sm w-72"
+											value={draft}
+											onChange={(e) => setDraft(e.target.value)}
+											placeholder="https://example.com"
+											maxLength={500}
+										/>
+									)}
+									save={(draft) => saveProfileField({ websiteUrl: draft.trim() })}
+								/>
+							) : (
+								websiteRead()
+							)}
+							{isOwnProfile ? (
+								<InlineField<string>
+									label="location"
+									saved={creator.location ?? ""}
+									renderRead={locationRead}
+									renderEdit={(draft, setDraft) => (
+										<input
+											type="text"
+											aria-label="Location"
+											className="input input-bordered input-sm w-56"
+											value={draft}
+											onChange={(e) => setDraft(e.target.value)}
+											placeholder="City, country"
+											maxLength={100}
+										/>
+									)}
+									save={(draft) => saveProfileField({ location: draft.trim() })}
+								/>
+							) : (
+								locationRead()
+							)}
 							<span className="flex items-center gap-1">
 								<CalendarDaysIcon className="w-4 h-4" />
 								Member since{" "}
