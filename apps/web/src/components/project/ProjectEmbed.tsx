@@ -19,7 +19,11 @@ export default function ProjectEmbed({ embedUrl, title, fillsFrame = false }: Pr
 
 	const idle = (
 		<>
-			<button type="button" className="btn btn-primary btn-lg gap-2" onClick={() => setActive(true)}>
+			<button
+				type="button"
+				className="btn btn-primary btn-lg gap-2"
+				onClick={() => setActive(true)}
+			>
 				<PlayIcon className="w-6 h-6" />
 				Play in Browser
 			</button>

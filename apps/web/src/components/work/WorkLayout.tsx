@@ -1090,7 +1090,9 @@ function useArticleScrollProgress(
 		const resumeAt = (fraction: number) => {
 			if (scroller) {
 				const top =
-					el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+					el.getBoundingClientRect().top -
+					scroller.getBoundingClientRect().top +
+					scroller.scrollTop;
 				const target = top + fraction * el.offsetHeight - scroller.clientHeight * 0.8;
 				scroller.scrollTo({ top: Math.max(0, target) });
 				return;
