@@ -9,8 +9,9 @@
  * 2. **Remedies and preconditions**: the api's restart and CPU rows name the bigger instance,
  *    the migrate row names duration rather than steady-state CPU, and — the one live
  *    precondition — any `more` remedy on the api carries the Postgres connection budget.
- * 3. **Static-site honesty**: `web` and `admin` carry empty band lists rather than being
- *    omitted, and `bandFor` answers null for every signal on them.
+ * 3. **Static-site honesty**: `admin` carries an empty band list rather than being omitted,
+ *    `bandFor` answers null for every signal on it, and `web` carries the service bands the
+ *    web origin gained when it stopped being a static site.
  *
  * The numbers themselves are engineering defaults, revisable in `resource-thresholds.ts` alone;
  * what this suite pins is the shape and the honesty, not the exact figures.
@@ -52,21 +53,24 @@ describe("Band resolution", () => {
 });
 
 describe("Static-site honesty", () => {
-	it("carries web and admin with empty band lists rather than omitting them", () => {
-		for (const component of ["web", "admin"] as const) {
-			const row = thresholdsFor(component);
-			expect(row).not.toBeNull();
-			expect(row?.kind).toBe("static");
-			expect(row?.bands).toHaveLength(0);
-			expect(row?.note).toContain("static site");
+	it("carries admin with an empty band list rather than omitting it", () => {
+		const row = thresholdsFor("admin");
+		expect(row).not.toBeNull();
+		expect(row?.kind).toBe("static");
+		expect(row?.bands).toHaveLength(0);
+		expect(row?.note).toContain("static site");
+	});
+
+	it("answers null for every signal on the static site", () => {
+		for (const signal of ["cpu", "memory", "restarts", "duration"] as ResourceSignal[]) {
+			expect(bandFor("admin", signal, 100)).toBeNull();
 		}
 	});
 
-	it("answers null for every signal on a static site", () => {
-		for (const signal of ["cpu", "memory", "restarts", "duration"] as ResourceSignal[]) {
-			expect(bandFor("web", signal, 100)).toBeNull();
-			expect(bandFor("admin", signal, 100)).toBeNull();
-		}
+	it("carries the web origin as a service, because it serves pages now", () => {
+		const row = thresholdsFor("web");
+		expect(row?.kind).toBe("service");
+		expect(row?.bands.map((b) => b.signal).sort()).toEqual(["cpu", "memory", "restarts"]);
 	});
 });
 
@@ -102,7 +106,7 @@ describe("Remedies and preconditions", () => {
 	});
 
 	it("states the restart band as the OOM detector with a bigger-instance remedy", () => {
-		for (const component of ["api", "worker"] as const) {
+		for (const component of ["api", "worker", "web"] as const) {
 			const row = thresholdsFor(component);
 			const restarts = row?.bands.find((b) => b.signal === "restarts");
 			expect(restarts?.remedy).toBe("bigger");

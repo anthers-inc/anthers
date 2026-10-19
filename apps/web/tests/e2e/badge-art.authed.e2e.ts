@@ -13,7 +13,9 @@
  */
 import { deflateSync } from "node:zlib";
 import { db } from "@anthers/db/client";
+import { GAUNTLET_CREATOR_USERNAME, gauntletHandle } from "@anthers/db/gauntlet";
 import { badges } from "@anthers/db/schema";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { eq } from "drizzle-orm";
 import { API_URL, expect, signInAsCreator, test, trackErrorsStrict, WEB_ORIGIN } from "./fixtures";
 
@@ -111,7 +113,10 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	expect(created.status, "could not create the fixture rung").toBe(201);
 	badgeId = ((await created.json()) as { badge: { id: number } }).badge.id;
 
-	await page.goto(`${WEB_ORIGIN}/studio/settings`);
+	// The maker lives on the creator's own profile now, in the Badges tab beside the
+	// supporter-facing ladder it edits — not in Studio settings.
+	const handle = await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME);
+	await page.goto(`${WEB_ORIGIN}${profileUrl(handle)}?tab=badges`);
 
 	// ⚠️ Scoped by the CONTROL rather than by a div containing the label. `locator("div")`
 	// filtered on text and taken `.last()` returns the innermost matching div, which here

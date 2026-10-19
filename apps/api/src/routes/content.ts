@@ -97,6 +97,7 @@ import {
 	type VoteDirection,
 	type VoteTally,
 } from "@anthers/shared/votes";
+import { workPreviewFor } from "@anthers/shared/work-preview";
 import { zValidator } from "@hono/zod-validator";
 import {
 	and,
@@ -1266,6 +1267,36 @@ async function resolveWorkThumbnail(item: WorkRow): Promise<void> {
 	) {
 		item.thumbnail = await storage.getUrl(item.thumbnail);
 	}
+}
+
+/**
+ * The facts a link preview may show about one Work, for an anonymous reader.
+ *
+ * 🚨 **Anonymous is the whole caller set, and that is a property of the surface rather
+ * than a limitation.** A crawler unfolds a URL with no session, so the owner branch, the
+ * withdrawn-purchaser branch and the reader's opt-in have no subject to consult — a Work
+ * that is not `released`, is Adult-rated, or belongs to a suspended creator is absent,
+ * exactly as it is from the page. `null` here becomes the same 404 the page answers,
+ * never a differently-worded one that would leak the state.
+ *
+ * ⚠️ **This read must not count a view.** `GET /works/:id` increments `viewCount`
+ * fire-and-forget for everybody but the owner; an unfurl is not a view, and every chat,
+ * feed and search crawler asking for a card would otherwise inflate it. Nothing here
+ * writes.
+ */
+async function publicWorkCard(param: string) {
+	const work = await findWorkRow(param);
+	if (!work) return null;
+	if (work.visibility !== "released") return null;
+	if (requiresAdultVerification(work.maturity)) return null;
+	if (work.creatorId != null && (await isSuspendedAccount(work.creatorId))) return null;
+	await resolveWorkThumbnail(work);
+	return {
+		title: work.title,
+		description: work.description,
+		thumbnail: work.thumbnail,
+		maturity: work.maturity,
+	};
 }
 
 /**
@@ -4662,6 +4693,20 @@ const contentRoutes = new Hono()
 				),
 			),
 		});
+	})
+
+	/**
+	 * The card a shared link is unfurled with, for a reader who holds no session.
+	 *
+	 * Separate from `GET /works/:id` on purpose: that route counts a view and serializes
+	 * the whole deliverable shape, while a crawler wants four fields and must leave no
+	 * trace. The rating gate lives in `@anthers/shared/work-preview`, beside the renderer
+	 * that reads it, so the API does not get a second opinion about what may travel.
+	 */
+	.get("/works/:id/card", async (c) => {
+		const card = await publicWorkCard(c.req.param("id"));
+		if (!card) return c.json({ error: "Work not found" }, 404);
+		return c.json({ preview: workPreviewFor(card) });
 	})
 
 	/**

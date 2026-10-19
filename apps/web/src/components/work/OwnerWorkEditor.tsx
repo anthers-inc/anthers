@@ -81,6 +81,7 @@ import AccessTables, {
 	serializeAccessRows,
 } from "@anthers/web-shared/post/AccessTables";
 import { keyToPreview, uploadImageFile } from "@anthers/web-shared/post/mediaUpload";
+import { profileUrl } from "@anthers/web-shared/profile";
 import { publishingPermissionMissing, usePublishingState } from "@anthers/web-shared/publishing";
 import {
 	RATED_PUBLIC_ACCESS_HELP,
@@ -1973,6 +1974,8 @@ function OwnerAccessChipEditor({
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const dialog = useRef<HTMLDialogElement>(null);
+	// The advice links to this creator's own profile, where the ladder is edited.
+	const { user } = useAuth();
 
 	useEffect(() => {
 		if (open) dialog.current?.showModal();
@@ -2036,11 +2039,11 @@ function OwnerAccessChipEditor({
 								onStream={onStream}
 								onDownload={onDownload}
 							/>
-							{draft.length === 1 && (
+							{draft.length === 1 && user?.handle && (
 								<p className="text-xs text-base-content/50">
 									Want to gate this by monthly support?{" "}
-									<Link to={studioUrl("/settings")} className="link">
-										Add Badge rungs in Settings
+									<Link to={`${profileUrl(user.handle)}?tab=badges`} className="link">
+										Add Badge rungs on your profile
 									</Link>
 									.
 								</p>
