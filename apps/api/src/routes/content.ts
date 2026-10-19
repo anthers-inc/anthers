@@ -1072,7 +1072,6 @@ const createProjectSchema = z.object({
 		.max(255)
 		.regex(/^[a-z0-9-]+$/, "Slug: lowercase letters, numbers, hyphens"),
 	description: z.string().max(50000).optional().default(""),
-	shortDescription: z.string().max(300).optional().default(""),
 	coverImage: z.string().max(500).optional().default(""),
 	pageConfig: z.record(z.unknown()).optional(),
 	isPublished: z.boolean().optional().default(false),
@@ -6603,7 +6602,6 @@ const contentRoutes = new Hono()
 				title: data.title,
 				slug: data.slug,
 				description: data.description,
-				shortDescription: data.shortDescription,
 				coverImage: data.coverImage,
 				pageConfig: data.pageConfig ?? {},
 				isPublished: data.isPublished,

@@ -488,7 +488,6 @@ export const projects = pgTable(
 		slug: text("slug").notNull().unique(),
 		title: text("title").notNull(),
 		description: text("description").default(""),
-		shortDescription: text("short_description").default(""),
 		coverImage: text("cover_image").default(""),
 		// Custom-page layout/showcase config (built out in a later phase).
 		pageConfig: jsonb("page_config").$type<Record<string, unknown>>().default({}),
