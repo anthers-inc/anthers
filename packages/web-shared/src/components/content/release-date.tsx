@@ -138,13 +138,13 @@ export function WorkReleaseCell({
 
 	if (!editing) {
 		return (
-			<div className="flex items-start gap-1 whitespace-nowrap text-sm text-base-content/70">
+			<div className="flex items-center gap-1 whitespace-nowrap text-sm text-base-content/70">
 				<span className="min-w-0">{releaseDateText(item)}</span>
 				<button
 					type="button"
 					aria-label="Edit Release Date"
 					title="Edit Release Date"
-					className={`${PENCIL} -mt-1 shrink-0`}
+					className={`${PENCIL} shrink-0`}
 					onClick={() => setEditing(true)}
 				>
 					<PencilSquareIcon className="size-4" />

@@ -519,6 +519,16 @@ export interface Work {
 	sourceUrl?: string | null;
 	viewCount?: number;
 	downloadCount?: number;
+	/**
+	 * The counts behind the Studio's Reviews column, on the owner's own Works listing.
+	 *
+	 * ⚠️ **Present only where the listing computes them** — a single Work read and every
+	 * user-facing serialization omit the key, so the column is a listing surface and not a
+	 * claim about the Work's payload. Both counts exclude hidden reviews, suspended
+	 * reviewers and the automated-test account, the same set the Work page's aggregate
+	 * counts.
+	 */
+	reviewCounts?: { recommended: number; notRecommended: number };
 
 	/** Whether an access-resolved viewer may press play on the Work's hosted browser build. Absent on the owner shape (which has the builds themselves). */
 	webPlayable?: boolean;
