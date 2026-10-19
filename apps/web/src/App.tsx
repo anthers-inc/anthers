@@ -289,10 +289,12 @@ export default function App() {
 						}
 					/>
 					{/*
-					 * Deliberately NOT a ProtectedRoute. A basket is a scratchpad in
-					 * localStorage, so a logged-out user can fill one and is asked to log
-					 * in at the point of payment — where the ask is motivated — rather than
-					 * at the point of browsing, where it is a wall.
+					 * Deliberately NOT a ProtectedRoute. The basket is the account's when
+					 * there is one and a browser scratchpad when there is not, so a
+					 * logged-out user can fill one and is asked to log in at the point of
+					 * payment — where the ask is motivated — rather than at the point of
+					 * browsing, where it is a wall. Signing in merges the scratch into the
+					 * account's basket.
 					 */}
 					<Route path="/basket" element={<BasketPage />} />
 					<Route

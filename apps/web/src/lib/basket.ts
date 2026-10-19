@@ -265,6 +265,17 @@ export function useBasket(): BasketApi {
 		};
 	}, [authenticated]);
 
+	// Signing out ends this tab's knowledge of the account's basket. Dropping the module
+	// cache is what stops the NEXT account signing in on this tab from rendering the last
+	// one's basket until its own fetch lands — the cross-account leak the server-side move
+	// exists to prevent, still reachable inside one SPA session without a reload. The
+	// sign-in flows also invalidate on their way in (`mergeIntoServerBasket`), so this is
+	// the half that does not depend on the sign-out path calling into the basket at all.
+	useEffect(() => {
+		if (authenticated) return;
+		if (serverCurrent) publishServer(null);
+	}, [authenticated]);
+
 	if (authenticated) {
 		// Read through the subscription state so a publish re-renders; the verbs below
 		// read the same module store, so the render and the verbs cannot disagree.
