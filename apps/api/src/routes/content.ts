@@ -88,6 +88,7 @@ import {
 } from "@anthers/shared/content-rating";
 import { dailyCapFor, type LimitWindow, spentWindow } from "@anthers/shared/parental-controls";
 import type { PublicAccessBudget } from "@anthers/shared/public-access";
+import { normalizeTag, normalizeWorkTags, workTagsProblem } from "@anthers/shared/tags";
 import {
 	commentScore,
 	isCollapsed,
@@ -219,6 +220,7 @@ import { publishRefusal } from "../services/publish-refusal.js";
 import { findPosition, listPositions, upsertPosition } from "../services/reading-positions.js";
 import { queueRecordSync } from "../services/record-sync.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
+import { rowsOf } from "../services/rows.js";
 import { scanInlineUpload } from "../services/safety-scan.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
 import {
@@ -904,6 +906,21 @@ const originallyReleasedSchema = z.object({
 	originallyReleased: z.string().datetime().nullable().optional(),
 });
 
+/**
+ * A Work's tag list, normalized and refused in the creator's own words.
+ *
+ * 🚨 **The cap is enforced here rather than only in the Details tab**, because the API is
+ * the authority and a second client must meet the same five. Normalization runs before
+ * the check so `["Indie", "indie"]` is one tag rather than two against the cap.
+ */
+const workTagsSchema = z
+	.array(z.string())
+	.transform((tags) => normalizeWorkTags(tags))
+	.superRefine((tags, ctx) => {
+		const problem = workTagsProblem(tags);
+		if (problem) ctx.addIssue({ code: "custom", message: problem });
+	});
+
 const workBaseSchema = z
 	.object({
 		title: z.string().max(255).optional().default(""),
@@ -967,7 +984,7 @@ const workBaseSchema = z
 
 		// Presentation & metadata
 		isPinned: z.boolean().optional(),
-		tags: z.array(z.string()).optional(),
+		tags: workTagsSchema.optional(),
 		websiteUrl: z.string().max(500).optional(),
 		sourceUrl: z.string().max(500).optional(),
 	})
@@ -2648,6 +2665,12 @@ async function rewriteHlsPlaylist(
  * asks for no limit at all. It matches the flat limit this route carried before pagination;
  * a client keeps walking `nextCursor` past it. */
 const FEED_PAGE_MAX = 100;
+
+/** How the tag directory is asked for: a substring and a page size, both bounded. */
+const tagDirectoryQuerySchema = z.object({
+	q: z.string().max(64).optional(),
+	limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
 
 const contentRoutes = new Hono()
 	// ══════════════════════════════════════════════════════════════════════════
@@ -4598,6 +4621,53 @@ const contentRoutes = new Hono()
 	})
 
 	/** The caller's own Catalog — every Work, private and released, with processing state. */
+	/**
+	 * The tag directory — the tags released Works actually carry, most-used first, with
+	 * the count beside each one.
+	 *
+	 * ⭐ **This is the vocabulary the Details tab offers**, and it is deliberately the real
+	 * corpus rather than the filter sidebar's curated `TAGS_BY_TYPE` list: a creator deciding
+	 * between a broad tag and a specific new one needs to see how many Works already use
+	 * each, and a tag nobody has used yet must be visibly new rather than absent.
+	 *
+	 * ⚠️ **The count is public Works only.** Drafts and private Works never qualify (they
+	 * are not part of the catalog a reader can browse), and Adult Works are left out for
+	 * the same reason every listing leaves them out: an aggregate is still a statement
+	 * that Adult work exists, and the rung's invisibility is a query condition. Mature
+	 * Works count normally — Mature is a warning and a blur, never invisibility.
+	 */
+	.get("/tags", zValidator("query", tagDirectoryQuerySchema, invalidBody), async (c) => {
+		const { q, limit } = c.req.valid("query");
+		const search = q ? normalizeTag(q) : "";
+		if (q && !search) return c.json({ tags: [] });
+		const visible = and(
+			sql`w.visibility = 'released'`,
+			sql`w.maturity <> 'adult'`,
+			notSuspendedAccount(sql`w.creator_id`),
+			notTestAccount(sql`w.creator_id`),
+		) as SQL;
+		const result = await db.execute(sql`
+			SELECT entry.tag AS tag, count(*)::int AS works
+			FROM ${works} w
+			CROSS JOIN LATERAL (
+				SELECT DISTINCT value AS tag
+				FROM jsonb_array_elements_text(coalesce(w.tags, '[]'::jsonb))
+			) AS entry
+			WHERE ${visible}
+				AND entry.tag <> ''
+				${search ? sql`AND entry.tag ILIKE ${`%${search}%`}` : sql``}
+			GROUP BY entry.tag
+			ORDER BY count(*) DESC, entry.tag ASC
+			LIMIT ${limit}
+		`);
+		return c.json({
+			tags: rowsOf<{ tag: string; works: number }>(result).map((row) => ({
+				tag: row.tag,
+				works: Number(row.works),
+			})),
+		});
+	})
+
 	.get("/works", requireAuth, async (c) => {
 		const user = c.get("user");
 

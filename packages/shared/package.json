@@ -25,6 +25,7 @@
 		"./content-rating-fixtures": "./src/content-rating-fixtures.ts",
 		"./rights": "./src/rights.ts",
 		"./content": "./src/content.ts",
+		"./tags": "./src/tags.ts",
 		"./web-build": "./src/web-build.ts",
 		"./work-preview": "./src/work-preview.ts",
 		"./accepted-formats": "./src/accepted-formats.ts",
