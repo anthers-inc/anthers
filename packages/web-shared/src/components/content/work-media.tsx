@@ -255,10 +255,10 @@ export function UploadProgress({ upload }: { upload: WorkUpload }) {
  * Reads the upload store and the stored row, and never contributes a `sourceKey`
  * to a save — the same boundary its sibling `WorkFileSection` holds (see the
  * module head). The caller decides which kinds mount it: the paged kinds keep
- * their set editor on the Manage tab in every state, and a video's source is the
- * Media Status card's, so neither reaches this; the image kind's set editor does
- * (it is the Manage tab's form once pictures exist), but a draft's dropper lives
- * in the box like every other non-paged file kind's.
+ * their set editor on the Manage tab in every state, and a video's or a listened
+ * Work's source is the Media Status card's, so neither reaches this; the image
+ * kind's set editor does (it is the Manage tab's form once pictures exist), but a
+ * draft's dropper lives in the box like every other non-paged file kind's.
  */
 export function WorkFileDropzone({ work }: { work: Work }) {
 	const type = work.type as FileWorkType;

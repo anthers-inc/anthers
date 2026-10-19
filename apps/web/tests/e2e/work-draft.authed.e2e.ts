@@ -98,7 +98,7 @@ test("a Work is drafted from a kind and a name, and its kind changes on its page
 	expect(row?.maturity).toBe("unrated");
 });
 
-test("a fileless audio draft drops its file in the Work placeholder, not in a tab", async ({
+test("a fileless audio draft picks its file from the Media Status card, as video does", async ({
 	page,
 	context,
 }) => {
@@ -111,28 +111,35 @@ test("a fileless audio draft drops its file in the Work placeholder, not in a ta
 	await page.getByRole("button", { name: /skip for now/i }).click();
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 
-	// The dropper rides INSIDE the placeholder (the dropper task, 2026-10-17): the
-	// box is the Work's place, so the act of filling it happens there, with its own
-	// warning line under the silhouette. That both halves matter — the picker the
-	// box gains, AND the Manage tab's fileless section gone — is why both are
-	// asserted: the tab is where the act used to be. Scoped to the panel, because
-	// the box itself stays on the page through every tab.
+	// Audio's source lives on the Manage tab's Media Status card, exactly as video's
+	// does (Parker, 2026-10-19): the player's box stays bare, and the Original chip's
+	// pencil is the way a file arrives. Both halves are asserted, because the tab is
+	// where the act used to be — and the box is where it once was for audio.
 	const box = page.getByRole("status").filter({ hasText: /the player starts here/i });
-	await expect(box.getByText(/no file yet/i)).toBeVisible();
-	const dropper = box.getByRole("button", { name: /drop an audio file or click to browse/i });
-	await expect(dropper).toBeVisible();
+	await expect(box).toBeVisible();
+	await expect(box.getByText(/manage/i)).toBeVisible();
+	await expect(
+		box.getByRole("button", { name: /drop an audio file or click to browse/i }),
+	).toHaveCount(0);
 	await page.getByRole("tab", { name: /Manage/ }).click();
 	const managePanel = page.locator("#work-side-manage");
-	await expect(managePanel.getByText(/no file yet/i)).toHaveCount(0);
-	await expect(managePanel.getByRole("button", { name: /drop an audio file/i })).toHaveCount(0);
+	const mediaStatus = managePanel.getByRole("region", { name: "Media status" });
+	await expect(mediaStatus.getByText("Original", { exact: true })).toBeVisible();
+	await expect(mediaStatus.getByText("MP3", { exact: true })).toBeVisible();
+	await expect(mediaStatus.getByText("Waveform", { exact: true })).toBeVisible();
 
-	// And the act itself, done where it now lives: the pick attaches through the
-	// box, and the row holds the file.
-	await box.locator('input[type="file"]').setInputFiles({
+	// And the act itself, done where it now lives: the Original chip's dropdown opens
+	// the Replace dialog, whose file picker attaches through the same upload store.
+	await mediaStatus.locator("summary", { hasText: "Original" }).click();
+	await mediaStatus.getByRole("button", { name: /replace file/i }).click();
+	const dialog = page.getByRole("dialog");
+	await expect(dialog).toBeVisible();
+	await dialog.locator('input[type="file"]').setInputFiles({
 		name: `${title}.mp3`,
 		mimeType: "audio/mpeg",
 		buffer: Buffer.from("ID3 a tiny audio stand-in for the walk"),
 	});
+	await dialog.getByRole("button", { name: "Replace", exact: true }).click();
 	await expect
 		.poll(async () => {
 			const listing = await fetch(`${API_URL}/api/content/works`, {

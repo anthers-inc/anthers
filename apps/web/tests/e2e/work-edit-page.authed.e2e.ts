@@ -155,6 +155,34 @@ test("a field saves itself alone, and Cancel puts back what is saved", async ({
 	// what the page is, and the View As row on the Manage tab is its one marker.
 	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
 
+	// The title alone is centered, with its pencil hanging off the text's top-right corner
+	// (Parker, 2026-10-19): centering the two as a group is what pulled the title off the
+	// page's center, which no save, cancel or reload would ever catch.
+	const titleHeading = page.locator("h1").filter({ hasText: STEM });
+	const titleEdit = page.getByRole("button", { name: "Edit Title" });
+	const byline = titleHeading.locator("xpath=ancestor::header[1]");
+	const [headingBox, pencilBox, bylineBox] = await Promise.all([
+		titleHeading.boundingBox(),
+		titleEdit.boundingBox(),
+		byline.boundingBox(),
+	]);
+	expect(
+		headingBox && pencilBox && bylineBox,
+		"the title, its pencil and the byline are all drawn",
+	).toBeTruthy();
+	expect(
+		Math.abs(headingBox!.x + headingBox!.width / 2 - (bylineBox!.x + bylineBox!.width / 2)),
+		"the title text itself is what the page centers",
+	).toBeLessThanOrEqual(2);
+	expect(
+		pencilBox!.x,
+		"the pencil is off the title's right edge, not inside the centered group",
+	).toBeGreaterThanOrEqual(headingBox!.x + headingBox!.width - 1);
+	expect(
+		Math.abs(pencilBox!.y - headingBox!.y),
+		"the pencil sits at the title's top",
+	).toBeLessThanOrEqual(8);
+
 	// The title field, opened: the pencil opens, the X cancels, the check saves.
 	await page.getByRole("button", { name: "Edit Title" }).click();
 	const title = page.getByRole("textbox", { name: "Title" });
