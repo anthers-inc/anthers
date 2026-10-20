@@ -17,6 +17,7 @@ export function Reveal({
 	as: Tag = "div",
 	style,
 	id,
+	eager = false,
 }: {
 	children: React.ReactNode;
 	className?: string;
@@ -24,6 +25,15 @@ export function Reveal({
 	delay?: number;
 	as?: ElementType;
 	style?: React.CSSProperties;
+	/**
+	 * Reveal on mount instead of waiting for the observer.
+	 *
+	 * For the first section after a full-screen hero: that section is the continuation of
+	 * the first screen rather than a scroll discovery, and on a tall display its heading
+	 * sits just under the fold while its top padding is already visible, so the observer
+	 * leaves a strip of unexplained blank space. Everything below keeps the observer.
+	 */
+	eager?: boolean;
 	/**
 	 * An anchor on the wrapper, for in-page links.
 	 *
@@ -40,10 +50,10 @@ export function Reveal({
 		const el = ref.current;
 		if (!el || revealed) return;
 
-		// No IntersectionObserver (or the visitor prefers reduced motion) → skip the
-		// animation entirely and show the content right away.
+		// Eager, no IntersectionObserver, or the visitor prefers reduced motion → skip the
+		// observer and show the content right away.
 		const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-		if (typeof IntersectionObserver === "undefined" || reduce) {
+		if (eager || typeof IntersectionObserver === "undefined" || reduce) {
 			setRevealed(true);
 			return;
 		}
@@ -64,7 +74,7 @@ export function Reveal({
 		);
 		io.observe(el);
 		return () => io.disconnect();
-	}, [revealed]);
+	}, [revealed, eager]);
 
 	return (
 		<Tag
