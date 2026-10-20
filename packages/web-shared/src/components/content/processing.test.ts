@@ -44,10 +44,12 @@ function upload(workId: number, over: Partial<WorkUpload> = {}): WorkUpload {
 		id: `u${workId}`,
 		workId,
 		fileName: "clip.mp4",
+		fileSize: 1024,
 		target: { kind: "source", type: "video" },
 		status: "uploading",
 		progress: 40,
 		error: null,
+		batch: null,
 		...over,
 	};
 }

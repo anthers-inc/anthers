@@ -11,16 +11,28 @@
  *     a file already in it, and land the remuxed original beside the uploaded one, re-pointing
  *     the Work at it and queueing its scan like any other attach
  * 2. Determine variants based on source height (480p, 720p, 1080p)
- * 3. Transcode each variant to HLS via ffmpeg, uploading and freeing each one's
- *    files before the next variant starts; 3b transcodes the audio-only rendition the same way
+ * 3. Transcode the ladder in two passes, uploading and freeing each pass's files the
+ *    moment it finishes: the smallest rung alone (the publish-early gate opens on it),
+ *    then every taller rung plus the audio-only rendition sharing one decode
+ *    (`ffmpegSharedHls`). A one-rung source keeps the rendition in a pass of its own.
  * 4. Generate master playlist
  * 5. Upload the master playlist (the rest is uploaded per step 3)
  * 6. Update TranscodingJob status throughout
  *
- * The per-variant upload is a disk constraint, not an ordering preference: the worker's
+ * ⭐ **The tall rungs share one decode, and that is what makes the ladder cheaper**
+ * (measured 2026-10-19 on the same real 1080p source as the preset benchmark: 480p 59 s,
+ * 720p 98 s, 1080p 138 s and the audio pass 4 s one after another, 299 s total; the
+ * smallest rung alone then 720p+1080p+audio from one decode, 241 s — a 19% saving with
+ * the first rung still publishing at ~63 s). A single decode feeding every rung including
+ * the smallest would save 30%, but all outputs finish together, which forfeits the
+ * playable-at-the-first-rung gate that landed the day before; the split keeps that gate.
+ *
+ * The per-pass upload is a disk constraint, not an ordering preference: the worker's
  * filesystem is ephemeral and small, and the platform replaces a container whose disk
  * fills — silently, with no line the app can log. Holding the whole output beside a
- * whole source is how a burst of uploads bounced this worker every few minutes.
+ * whole source is how a burst of uploads bounced this worker every few minutes. The
+ * shared pass holds the tall rungs together (~265 MB for a five-minute 1080p source),
+ * which is the one residency this design accepts and the price of the shared decode.
  *
  * 🚨 **The source is read in place, every pass minting its own short-lived address**
  * (`storage.readableInput`): a signed ranged-read URL in remote mode, the object's own
@@ -47,7 +59,7 @@ import { join } from "node:path";
 import { client, db } from "@anthers/db";
 import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { ffmpegCommand } from "../lib/ffmpeg.js";
+import { FFMPEG_THREADS, ffmpegCommand } from "../lib/ffmpeg.js";
 import {
 	classifyVideoStreams,
 	type DeliverableContainer,
@@ -57,7 +69,11 @@ import {
 import { storage } from "../services/storage/index.js";
 import { MAX_TRANSCODE_RESUMES } from "./resume-orphans.js";
 import { queueScansForWork } from "./scan-media.js";
-import { createEtaClamp, remainingEncodeSeconds } from "./transcode-eta.js";
+import {
+	createEtaClamp,
+	remainingEncodeSeconds,
+	remainingSharedPassSeconds,
+} from "./transcode-eta.js";
 
 export interface TranscodeVideoData {
 	jobId: number;
@@ -208,6 +224,53 @@ async function ffprobe(source: string) {
 }
 
 /**
+ * Pipe ffmpeg's `-progress pipe:1` output into `onTick` as (encoded position, speed).
+ *
+ * Detached on purpose: the caller awaits the process, and this reader keeps draining what
+ * ffmpeg buffered even after the exit resolves. The caller's own reporting flag is what
+ * stops those late ticks from writing to the row.
+ */
+function streamFfmpegProgress(
+	stdout: ReadableStream<Uint8Array> | null | undefined,
+	onTick?: (outTimeSec: number, speed: number) => void,
+) {
+	if (!onTick || !stdout) return;
+	void (async () => {
+		const reader = stdout.getReader();
+		const decoder = new TextDecoder();
+		let buf = "";
+		let speed = 0;
+		try {
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				buf += decoder.decode(value, { stream: true });
+				const lines = buf.split("\n");
+				buf = lines.pop() ?? "";
+				for (const line of lines) {
+					const eq = line.indexOf("=");
+					if (eq < 0) continue;
+					const key = line.slice(0, eq).trim();
+					const val = line.slice(eq + 1).trim();
+					if (key === "speed") {
+						const s = Number.parseFloat(val); // "1.5x" → 1.5
+						if (Number.isFinite(s) && s > 0) speed = s;
+					} else if (key === "out_time") {
+						const m = val.match(/^(\d+):(\d+):(\d+(?:\.\d+)?)$/);
+						if (m) {
+							const sec = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+							if (Number.isFinite(sec)) onTick(sec, speed);
+						}
+					}
+				}
+			}
+		} catch {
+			// stream closed on process exit
+		}
+	})();
+}
+
+/**
  * Transcode to a single HLS variant. `onTick(outTimeSec, speed)` fires as ffmpeg
  * reports progress (encoded position in seconds + speed as a ×realtime factor),
  * parsed from `-progress pipe:1`. `-nostats` keeps the stderr buffer small so a
@@ -261,42 +324,7 @@ async function ffmpegHls(
 		{ stdout: "pipe", stderr: "pipe" },
 	);
 
-	// Stream ffmpeg's -progress output (key=value blocks) for live position + speed.
-	if (onTick && proc.stdout) {
-		void (async () => {
-			const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader();
-			const decoder = new TextDecoder();
-			let buf = "";
-			let speed = 0;
-			try {
-				while (true) {
-					const { done, value } = await reader.read();
-					if (done) break;
-					buf += decoder.decode(value, { stream: true });
-					const lines = buf.split("\n");
-					buf = lines.pop() ?? "";
-					for (const line of lines) {
-						const eq = line.indexOf("=");
-						if (eq < 0) continue;
-						const key = line.slice(0, eq).trim();
-						const val = line.slice(eq + 1).trim();
-						if (key === "speed") {
-							const s = Number.parseFloat(val); // "1.5x" → 1.5
-							if (Number.isFinite(s) && s > 0) speed = s;
-						} else if (key === "out_time") {
-							const m = val.match(/^(\d+):(\d+):(\d+(?:\.\d+)?)$/);
-							if (m) {
-								const sec = Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
-								if (Number.isFinite(sec)) onTick(sec, speed);
-							}
-						}
-					}
-				}
-			} catch {
-				// stream closed on process exit
-			}
-		})();
-	}
+	streamFfmpegProgress(proc.stdout as ReadableStream<Uint8Array>, onTick);
 
 	const exitCode = await proc.exited;
 	if (exitCode !== 0) {
@@ -304,6 +332,121 @@ async function ffmpegHls(
 		throw new Error(`ffmpeg HLS failed for ${name}: ${stderr.slice(0, 500)}`);
 	}
 	return playlist;
+}
+
+/**
+ * The shared pass's filtergraph and output arguments: **one decode, every tall rung and
+ * the audio rendition fed from it** (`-filter_complex` split/scale, one HLS muxer each).
+ *
+ * Pure and exported because the command is the contract a test can read — every branch
+ * scales the same decoded frame, so each rung's picture is identical to what its isolated
+ * pass produced (verified pixel-identical on all three rungs of the real benchmark source,
+ * 2026-10-19). The smallest rung is deliberately absent: it is encoded alone, before this
+ * pass, because the release gate opens on it.
+ */
+export function sharedPassOutputs(
+	variants: Variant[],
+	outputDir: string,
+	hasAudio: boolean,
+): string[] {
+	const filter = [
+		`[0:v]split=${variants.length}${variants.map((_, i) => `[vsrc${i}]`).join("")}`,
+		...variants.map((v, i) => `[vsrc${i}]scale=-2:${v.height}[v${i}]`),
+		...(hasAudio
+			? [
+					`[0:a]asplit=${variants.length + 1}${Array.from(
+						{ length: variants.length + 1 },
+						(_, i) => `[a${i}]`,
+					).join("")}`,
+				]
+			: []),
+	].join(";");
+
+	const outputs: string[] = ["-filter_complex", filter];
+	for (const [i, v] of variants.entries()) {
+		outputs.push(
+			"-map",
+			`[v${i}]`,
+			...(hasAudio ? ["-map", `[a${i}]`] : []),
+			// Each output carries its own pin: `-threads` is an output option, so the
+			// helper's post-input one covers the first muxer only.
+			"-threads",
+			String(FFMPEG_THREADS),
+			"-c:v",
+			"libx264",
+			"-preset",
+			"veryfast",
+			"-b:v",
+			v.bitrate,
+			"-c:a",
+			"aac",
+			"-b:a",
+			"128k",
+			"-hls_time",
+			"6",
+			"-hls_list_size",
+			"0",
+			"-hls_segment_filename",
+			join(outputDir, `${v.name}_%03d.ts`),
+			"-f",
+			"hls",
+			join(outputDir, `${v.name}.m3u8`),
+		);
+	}
+	if (hasAudio) {
+		outputs.push(
+			"-map",
+			`[a${variants.length}]`,
+			"-threads",
+			String(FFMPEG_THREADS),
+			"-c:a",
+			"aac",
+			"-b:a",
+			"128k",
+			"-hls_time",
+			"6",
+			"-hls_playlist_type",
+			"vod",
+			"-hls_segment_filename",
+			join(outputDir, "audio-%03d.ts"),
+			"-f",
+			"hls",
+			join(outputDir, AUDIO_RENDITION_PLAYLIST),
+		);
+	}
+	return outputs;
+}
+
+/**
+ * Run the shared pass: one ffmpeg, one decode, every tall rung and the audio rendition.
+ *
+ * `-progress` in a multi-output invocation reports one timeline for the whole graph (the
+ * outputs consume the same frames), which is exactly what the pass's estimate needs.
+ */
+async function ffmpegSharedHls(
+	inputPath: string,
+	outputDir: string,
+	variants: Variant[],
+	hasAudio: boolean,
+	onTick?: (outTimeSec: number, speed: number) => void,
+): Promise<void> {
+	const proc = Bun.spawn(
+		ffmpegCommand(inputPath, [
+			...sharedPassOutputs(variants, outputDir, hasAudio),
+			"-progress",
+			"pipe:1",
+			"-nostats",
+			"-y",
+		]),
+		{ stdout: "pipe", stderr: "pipe" },
+	);
+	streamFfmpegProgress(proc.stdout as ReadableStream<Uint8Array>, onTick);
+
+	const exitCode = await proc.exited;
+	if (exitCode !== 0) {
+		const stderr = await new Response(proc.stderr).text();
+		throw new Error(`ffmpeg shared HLS pass failed: ${stderr.slice(0, 500)}`);
+	}
 }
 
 /** The filename of a Work's audio-only rendition, within the same HLS directory. */
@@ -669,15 +812,15 @@ async function runTranscode(
 		// only when a stream exists to demux.
 		const hasAudio = probe.streams?.some((s: { codec_type: string }) => s.codec_type === "audio");
 
-		// 3. Transcode each variant
+		// 3. Transcode the ladder in its two passes.
 
 		/**
-		 * Upload every file a finished encode left in `dir`, deleting each the moment its
-		 * upload lands, so the directory never holds more than the variant still encoding
-		 * is about to write. The ephemeral disk is small and the platform replaces a
-		 * container whose disk fills, silently; uploading per variant rather than once at
-		 * the end of the job is what keeps the output's residency bounded by one variant
-		 * instead of by all of them.
+		 * Upload every file a finished pass left in `dir`, deleting each the moment its
+		 * upload lands, so the directory never holds more than the pass about to run.
+		 * The ephemeral disk is small and the platform replaces a container whose disk
+		 * fills, silently; uploading per pass rather than once at the end of the job is
+		 * what keeps the output's residency bounded by one pass instead of the whole
+		 * ladder.
 		 */
 		const uploadAndFree = async (dir: string): Promise<void> => {
 			// The supersession check rides the upload, because the upload is exactly what
@@ -706,46 +849,42 @@ async function runTranscode(
 			}
 		};
 
-		// Variants span the 10→80 range; within each, ffmpeg's -progress drives a
-		// smooth sub-percentage and a live estimate of what is left (`transcode-eta.ts`).
+		// The ladder spans the 10→80 range; ffmpeg's -progress drives a smooth
+		// sub-percentage and a live estimate of what is left (`transcode-eta.ts`).
 		const spanStart = 10;
 		const spanEnd = 80;
-		const perVariant = (spanEnd - spanStart) / variants.length;
+		const perRung = (spanEnd - spanStart) / variants.length;
 		const heights = variants.map((v) => v.height);
 		const clampEta = createEtaClamp();
 		let lastWrite: Promise<unknown> = Promise.resolve();
-		for (let i = 0; i < variants.length; i++) {
-			// A run that lost its delivery between variants leaves the encode loop here;
-			// its last check was the previous variant's upload.
-			if (superseded) break;
-			const v = variants[i];
-			const variantBase = spanStart + i * perVariant;
+
+		/**
+		 * One pass's progress writer. `span` is the share of 10→80 this pass owns.
+		 *
+		 * ⚠️ **The reporting flag is flipped before the pass's post-encode writes**, because
+		 * a tick arriving after its ffmpeg has exited is stale by definition and must queue
+		 * NOTHING. The reader in `streamFfmpegProgress` is detached and keeps draining the
+		 * dead process's buffered stdout after the await resolves, so without the flip its
+		 * late ticks re-enqueue writes with no one waiting on them — landing through the
+		 * estimate-clear and completion writes, where a final row reading a mid-ladder
+		 * progress and a stale estimate is the bug the real 2026-10-11 job 15 carried. One
+		 * shared flag across passes cannot do this: a stale tick draining during the next
+		 * pass would still read the flag as true, which is the window this closes.
+		 */
+		const reportTicks = (
+			base: number,
+			span: number,
+			etaFor: (outSec: number, speed: number) => number | null,
+		) => {
 			let lastPct = -1;
 			let lastWriteMs = 0;
-			// Per-variant, and flipped before this variant's post-encode writes: a tick
-			// reported once its variant's ffmpeg has exited is stale by definition (the
-			// variant-end write and everything after supersede it), and it must queue
-			// NOTHING. The reporting loop inside `ffmpegHls` is detached and keeps draining
-			// the dead process's buffered stdout after this await resolves, so without the
-			// per-variant flip its late ticks would re-enqueue writes with no one waiting
-			// on them — landing through the estimate-clear write and the completion write,
-			// where a final row reading a mid-ladder progress and a stale estimate is a
-			// bug the real 2026-10-11 job 15 carried. One shared flag could not do this:
-			// a stale tick draining during the AUDIO pass would still read the encode
-			// flag as true, which is exactly the window the old shape leaked through.
-			let variantReporting = true;
-			timing.mark(`v${v.height}Start`);
-			await ffmpegHls(
-				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
-				outputDir,
-				v.height,
-				v.bitrate,
-				v.name,
-				(outSec, speed) => {
-					if (duration <= 0 || !variantReporting || superseded) return;
+			let reporting = true;
+			return {
+				tick: (outSec: number, speed: number) => {
+					if (duration <= 0 || !reporting || superseded) return;
 					const frac = Math.min(1, outSec / duration);
-					const pct = Math.min(spanEnd - 1, Math.round(variantBase + frac * perVariant));
-					const eta = clampEta(remainingEncodeSeconds(heights, i, outSec, duration, speed));
+					const pct = Math.min(spanEnd - 1, Math.round(base + frac * span));
+					const eta = clampEta(etaFor(outSec, speed));
 					const now = Date.now();
 					if (pct !== lastPct && now - lastWriteMs >= 1000) {
 						lastPct = pct;
@@ -759,53 +898,100 @@ async function runTranscode(
 							.catch(() => {});
 					}
 				},
-			);
-			variantReporting = false;
-			timing.mark(`v${v.height}End`);
-			await updateJobProgress(jobId, Math.round(spanStart + (i + 1) * perVariant));
-			// This variant's segments are off the disk before the next variant's encode
-			// grows the directory again — the whole point of uploading per variant.
-			await uploadAndFree(outputDir);
+				stop: () => {
+					reporting = false;
+				},
+			};
+		};
 
-			/**
-			 * ⭐ The master is written as the ladder grows, not once at the end: after
-			 * this rung's upload, a playlist naming the rungs done so far is uploaded at
-			 * the tree's master key — the tree PLAYS from the first rung. The audio
-			 * group (and the rendition it names) joins on the master's final rewrite
-			 * below, once the rendition actually exists; a group naming a file that
-			 * isn't there yet is a dangling reference the player refuses.
-			 */
-			await generateMasterPlaylist(outputDir, variants.slice(0, i + 1), hasAudio, false);
-			if (!(await ensureStillOurs())) return;
-			const masterKey = `${storagePrefix}/master.m3u8`;
-			await storage.upload(
-				masterKey,
-				await readFile(join(outputDir, "master.m3u8")),
-				"application/vnd.apple.mpegurl",
-				"private",
-			);
-			await rm(join(outputDir, "master.m3u8")).catch(() => {});
-			if (i === 0) {
-				// The moment this Work first played — the record the release gate reads.
-				// Every upload's supersession check has passed by here, so this write is
-				// the finisher's as much as any other.
-				const manifestUrl = await storage.getUrl(masterKey);
-				await db
-					.update(transcodingJobs)
-					.set({ playableAt: new Date(), hlsManifestUrl: manifestUrl })
-					.where(eq(transcodingJobs.id, jobId));
-			}
-		}
-
-		// A run that learned it was superseded leaves here; the `finally` below still
-		// frees its temp directory, and nothing was uploaded or written to the row.
+		// A run that lost its delivery between passes leaves the ladder here; its last
+		// check was the previous pass's upload.
 		if (superseded) return;
 
-		// 3b. The audio-only rendition, beside the variants — one more pass over the same
-		// source, so a video can be listened to as a podcast without its picture. Its
-		// presence is what `userTranscoding` serializes as `audioManifestUrl`. A silent
-		// source has nothing to demux, so it ships no rendition and the master says so.
-		if (hasAudio) {
+		const [first, ...shared] = variants;
+
+		// ── Pass 1: the publish-early rung, alone ────────────────────────────────
+		// The release gate opens on this rung's upload, so it must never wait behind a
+		// taller encode — which is exactly what one decode feeding every rung would make
+		// it do.
+		const firstTicks = reportTicks(spanStart, perRung, (outSec, speed) =>
+			remainingEncodeSeconds(heights, 0, outSec, duration, speed),
+		);
+		timing.mark(`v${first.height}Start`);
+		await ffmpegHls(
+			await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
+			outputDir,
+			first.height,
+			first.bitrate,
+			first.name,
+			firstTicks.tick,
+		);
+		firstTicks.stop();
+		timing.mark(`v${first.height}End`);
+		await updateJobProgress(jobId, Math.round(spanStart + perRung));
+		await uploadAndFree(outputDir);
+
+		/**
+		 * ⭐ The master is written as the ladder grows, not once at the end: after this
+		 * rung's upload, a playlist naming it is uploaded at the tree's master key — the
+		 * tree PLAYS from the first rung. The tall rungs join on a later rewrite, and the
+		 * audio group (with the rendition it names) joins only on the final one, once the
+		 * rendition actually exists; a group naming a file that isn't there yet is a
+		 * dangling reference the player refuses.
+		 */
+		await generateMasterPlaylist(outputDir, [first], hasAudio, false);
+		if (!(await ensureStillOurs())) return;
+		const masterKey = `${storagePrefix}/master.m3u8`;
+		await storage.upload(
+			masterKey,
+			await readFile(join(outputDir, "master.m3u8")),
+			"application/vnd.apple.mpegurl",
+			"private",
+		);
+		await rm(join(outputDir, "master.m3u8")).catch(() => {});
+		// The moment this Work first played — the record the release gate reads.
+		// Every upload's supersession check has passed by here, so this write is the
+		// finisher's as much as any other.
+		const firstManifestUrl = await storage.getUrl(masterKey);
+		await db
+			.update(transcodingJobs)
+			.set({ playableAt: new Date(), hlsManifestUrl: firstManifestUrl })
+			.where(eq(transcodingJobs.id, jobId));
+
+		if (superseded) return;
+
+		// ── Pass 2: one decode for every tall rung and the rendition ─────────────
+		// The audio-only rendition rides this pass when one exists, so a video can be
+		// listened to as a podcast without its picture and without a second decode.
+		let audioShared = false;
+		if (shared.length > 0) {
+			const sharedTicks = reportTicks(
+				spanStart + perRung,
+				spanEnd - spanStart - perRung,
+				(outSec, speed) => remainingSharedPassSeconds(outSec, duration, speed),
+			);
+			timing.mark("sharedStart");
+			for (const v of shared) timing.mark(`v${v.height}Start`);
+			await ffmpegSharedHls(
+				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
+				outputDir,
+				shared,
+				hasAudio,
+				sharedTicks.tick,
+			);
+			sharedTicks.stop();
+			for (const v of shared) timing.mark(`v${v.height}End`);
+			if (hasAudio) {
+				timing.mark("audioStart");
+				timing.mark("audioEnd");
+			}
+			audioShared = hasAudio;
+			timing.mark("sharedEnd");
+			await updateJobProgress(jobId, spanEnd);
+			await uploadAndFree(outputDir);
+		} else if (hasAudio) {
+			// A one-rung source has no tall rung to share the rendition's pass with; its
+			// decode is audio alone (`-vn`), which is a few seconds and not a video decode.
 			timing.mark("audioStart");
 			await ffmpegAudioHls(
 				await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
@@ -816,7 +1002,7 @@ async function runTranscode(
 		}
 
 		// 4. The master's final rewrite, WITH the audio group — the rendition exists
-		// under it now; every earlier rewrite (in the loop, above) named rungs alone.
+		// under it now; pass 1's rewrite named the first rung alone.
 		await generateMasterPlaylist(outputDir, variants, hasAudio, hasAudio);
 		// Re-check before the estimate-clear and the 80 write: this run has now seen
 		// every upload's check, but the row is what the whole tail below is written on.
@@ -824,28 +1010,36 @@ async function runTranscode(
 		// ⚠️ **The estimate covers the encoding alone, so it is cleared here.** Uploading the
 		// segments takes a time nothing measures, and the last estimate the
 		// encode wrote, usually a second or two, would otherwise stand for as long as they take.
-		// A write the last variant queued is let land first, or it could write its figure
-		// over the clear. Every tick whose variant has ended was already stopped at the
+		// A write the last pass queued is let land first, or it could write its figure
+		// over the clear. Every tick whose pass has ended was already stopped at the
 		// queueing step, so nothing enqueued after this line exists.
 		await lastWrite;
 		// The ladder's own measured shape, one number per pass plus the whole — the
 		// record the queue's cost estimates read from, so history replaces the
 		// constants as jobs complete (`queue-position.ts`).
+		//
+		// ⚠️ **There are no per-rung figures for the shared pass, and inventing them would
+		// be the lie to avoid**: its outputs finish together, so each shares one wall time.
+		// The isolated rung keeps its own key; the pass records what it covered.
 		const { marks } = timing;
-		const variantTimings: Record<string, number> = {};
-		for (const v of variants) {
-			const startKey = `v${v.height}Start`;
-			const endKey = `v${v.height}End`;
-			if (marks[startKey] != null && marks[endKey] != null)
-				variantTimings[`h${v.height}Ms`] = Math.round(marks[endKey] - marks[startKey]);
-		}
-		const timings = {
-			...variantTimings,
-			...(hasAudio ? { audioPassMs: Math.round(marks.audioEnd - marks.audioStart) } : {}),
+		const timings: Record<string, number | number[] | boolean> = {
+			[`h${first.height}Ms`]: Math.round(
+				marks[`v${first.height}End`] - marks[`v${first.height}Start`],
+			),
+			...(shared.length > 0
+				? {
+						sharedPassMs: Math.round(marks.sharedEnd - marks.sharedStart),
+						sharedHeights: shared.map((v) => v.height),
+					}
+				: {}),
+			...(hasAudio && audioShared ? { audioSharedPass: true } : {}),
+			...(hasAudio && !audioShared
+				? { audioPassMs: Math.round(marks.audioEnd - marks.audioStart) }
+				: {}),
 			// The source's own length, beside the costs — the queue's pricing reads RATE
 			// medians (cost per second of source), and the rate needs the denominator.
 			durationSeconds: Math.round(duration),
-			waitMs: Math.round(marks[`v${variants[0]?.height}Start`] - marks.start),
+			waitMs: Math.round(marks[`v${first.height}Start`] - marks.start),
 			totalMs: Math.round(Date.now() - marks.start),
 		};
 		await db
