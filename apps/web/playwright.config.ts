@@ -34,6 +34,12 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
+	// 🚨 **`expect` times out at 5s by default, and CI's containers run this suite several
+	// times slower than a dev box.** Left unset, that default is the whole budget: a real
+	// multi-step UI wait can false-red on latency alone, and `retries: 2` absorbs most of
+	// those, which hides which spec is actually slow. CI gets a real budget; local keeps
+	// Playwright's default, and neither weakens an assertion.
+	expect: process.env.CI ? { timeout: 15_000 } : undefined,
 	// 🚨 **Local runs cap at a handful of workers, not half the machine.** Playwright's
 	// default is cores/2, which was written for one person on an idle box. This machine
 	// runs several agent sessions at once — each with its own browsers and, since the
