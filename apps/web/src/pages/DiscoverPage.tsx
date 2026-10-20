@@ -42,6 +42,7 @@ import FeedTile from "../components/cards/FeedTile";
 import SharedFilterSections, {
 	SHARED_FILTER_TYPES,
 } from "../components/layout/SharedFilterSections";
+import SharedLensesSection from "../components/layout/SharedLensesSection";
 import { sidebarRowClass } from "../components/layout/sidebar-row-class";
 import TabHeader from "../components/layout/TabHeader";
 
@@ -187,6 +188,8 @@ export default function DiscoverPage() {
 	const access = searchParams.get("access") ?? "";
 	const tags = searchParams.get("tags") ?? "";
 	const search = searchParams.get("search") ?? "";
+	/** The lens is a second organizing metaphor over the active mode, never a mode. */
+	const lens = searchParams.get("lens") ?? "";
 
 	const graphPresetId = searchParams.get("preset") ?? "taste";
 	const graphPreset =
@@ -350,36 +353,43 @@ export default function DiscoverPage() {
 		});
 	}, [entries, window, search]);
 
-	// Sidebar: Modes is the page's own section; the shared filters sit below the
-	// divider the layout draws, exactly as on the Network and Library tabs.
+	// Sidebar: Modes is the page's own section and the lens sits under it, because the
+	// mode decides the corpus and the lens organizes that corpus. The URL carries both,
+	// so a link to "Ticker under the Music Player" survives. The shared filters sit below
+	// the divider the layout draws, exactly as on the Network and Library tabs.
 	useEffect(() => {
 		setPageContent(
-			<section>
-				<h3 className={sectionTitleClass}>Modes</h3>
-				<div className="flex flex-col gap-0.5">
-					{DISCOVERY_MODES.map((discoveryMode) => (
-						<button
-							key={discoveryMode.id}
-							type="button"
-							className={sidebarRowClass(mode === discoveryMode.id)}
-							onClick={() =>
-								updateParams({
-									mode: discoveryMode.id,
-									// Access belongs to the ticker's stream, not to a person.
-									...(discoveryMode.id === "graph" ? { access: "" } : {}),
-									// Each mode has its own preset vocabulary.
-									preset: "",
-									min_shared: "",
-								})
-							}
-							title={discoveryMode.description}
-						>
-							<discoveryMode.icon className="h-5 w-5 shrink-0" />
-							{discoveryMode.label}
-						</button>
-					))}
-				</div>
-			</section>,
+			<div className="flex flex-col gap-5">
+				<section>
+					<h3 className={sectionTitleClass}>Modes</h3>
+					<div className="flex flex-col gap-0.5">
+						{DISCOVERY_MODES.map((discoveryMode) => (
+							<button
+								key={discoveryMode.id}
+								type="button"
+								className={sidebarRowClass(mode === discoveryMode.id)}
+								onClick={() =>
+									updateParams({
+										mode: discoveryMode.id,
+										// Access belongs to the ticker's stream, not to a person.
+										...(discoveryMode.id === "graph" ? { access: "" } : {}),
+										// Each mode has its own preset vocabulary.
+										preset: "",
+										min_shared: "",
+									})
+								}
+								title={discoveryMode.description}
+							>
+								<discoveryMode.icon className="h-5 w-5 shrink-0" />
+								{discoveryMode.label}
+							</button>
+						))}
+					</div>
+				</section>
+				{/* Every lens row renders here; No Lens is the one live on Discovery today.
+				    A future lens lights up when its meaning over these modes is built. */}
+				<SharedLensesSection lens={lens} onLens={(id) => updateParams({ lens: id })} />
+			</div>,
 		);
 		setSharedContent(
 			<SharedFilterSections
@@ -407,6 +417,7 @@ export default function DiscoverPage() {
 		access,
 		tags,
 		graphUnavailableTypes,
+		lens,
 		updateParams,
 	]);
 
