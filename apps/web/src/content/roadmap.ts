@@ -450,8 +450,9 @@ export const ROADMAP: RoadmapGroup[] = [
 						id: "search",
 						title: "Search That Finds People and Posts",
 						blurb: "One box covering Works, the people who made them, and what they wrote.",
-						bucket: "active",
-						note: "It says it covers creators and posts. It does not.",
+						bucket: "launched",
+						quarter: "Q4 2026",
+						lane: "Browse & Discover",
 					},
 					{
 						id: "layered-feeds",
