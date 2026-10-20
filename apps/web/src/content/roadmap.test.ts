@@ -22,7 +22,7 @@
 // thing standing between that and a page full of dead links at launch.
 
 import { describe, expect, it } from "bun:test";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
 	insideOrganization as insideOrganizationAt,
@@ -249,6 +249,54 @@ describe("every documentation reference points at a page that exists", () => {
 		for (const { item } of located()) {
 			if (!item.doc) continue;
 			expect(docHref(item.doc)).toBeNull();
+		}
+	});
+});
+
+/**
+ * Every lane heading in the vault roadmap, as the text after `##`.
+ *
+ * The lane a goal names is not a guess at a slug — it is the heading itself, so this
+ * compares names exactly as the document spells them. A renamed lane fails here rather
+ * than turning a chip into a link that lands at the top of the page, which looks like
+ * nothing is wrong.
+ */
+function wikiLanes(): Set<string> | { error: string } {
+	const root = process.env.ANTHERS_WIKI ?? join(ORG, "wiki-anthers");
+	const file = join(root, "Anthers Roadmap.md");
+	if (!existsSync(file)) {
+		return insideOrganization()
+			? { error: `no roadmap at ${file}, but this checkout sits inside the Anthers organization` }
+			: { error: "skip" };
+	}
+	const lanes = new Set<string>();
+	for (const line of readFileSync(file, "utf8").split("\n")) {
+		const match = line.match(/^## (.+)$/);
+		if (match) lanes.add(match[1].trim());
+	}
+	return lanes;
+}
+
+describe("every lane a goal names is a lane in the wiki roadmap", () => {
+	const lanes = wikiLanes();
+
+	it("finds the roadmap, or is on a machine that legitimately has none", () => {
+		// Asserted rather than assumed: a wrong path otherwise degrades into "nothing to
+		// check", and every lane below passes by doing nothing.
+		if ("error" in lanes) expect(lanes.error).toBe("skip");
+		else expect(lanes.size).toBeGreaterThan(0);
+	});
+
+	it("resolves each one against the roadmap's lane headings", () => {
+		if ("error" in lanes) {
+			console.log("  (no public wiki on this machine — lane references unchecked)");
+			return;
+		}
+		for (const { where, item } of located()) {
+			if (!item.lane) continue;
+			expect(`${where} → ${item.lane}`).toBe(
+				`${where} → ${lanes.has(item.lane) ? item.lane : "«no such lane»"}`,
+			);
 		}
 	});
 });
