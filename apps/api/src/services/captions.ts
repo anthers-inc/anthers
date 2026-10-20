@@ -27,12 +27,14 @@
  */
 
 import { db } from "@anthers/db/client";
-import { workCaptionTracks, type works } from "@anthers/db/schema";
+import type { works } from "@anthers/db/schema";
+import { workCaptionTracks, workPreviewCaptionTracks, workPreviewMedia } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { storage } from "./storage/index.js";
 import { isKeyUnder, urlToKey } from "./storage/keys.js";
 
 type WorkRow = typeof works.$inferSelect;
+type PreviewMediaRow = typeof workPreviewMedia.$inferSelect;
 
 /** A caption file over this is not a caption file. Two MB of VTT is a feature film with dense SDH. */
 export const MAX_CAPTION_BYTES = 2 * 1024 * 1024;
@@ -165,6 +167,47 @@ export async function attachCaptionTrack(input: AttachCaptionInput): Promise<Cap
 		// for any future caller that forgets, stated as an error rather than a silent write.
 		throw new Error("Only the Work's creator may attach captions.");
 	}
+	const validated = await validateVttUpload(input);
+
+	// Replace by (language, kind), taking the old object's bytes with the old row so no
+	// orphaned caption file lingers in the private bucket past its track.
+	const [previous] = await db
+		.select()
+		.from(workCaptionTracks)
+		.where(
+			and(
+				eq(workCaptionTracks.workId, work.id),
+				eq(workCaptionTracks.language, validated.language),
+				eq(workCaptionTracks.kind, validated.kind),
+			),
+		);
+	if (previous) {
+		await deleteCaptionTrack(previous, work.creatorId);
+	}
+
+	const [row] = await db
+		.insert(workCaptionTracks)
+		.values({
+			workId: work.id,
+			language: validated.language,
+			label: validated.label,
+			kind: validated.kind,
+			storageKey: validated.key,
+			byteSize: validated.byteSize,
+			cueCount: validated.cueCount,
+		})
+		.returning();
+	return row;
+}
+
+/** The shared ingest gate both caption tables pass: language shape, owned key, WebVTT parse. */
+async function validateVttUpload(input: {
+	requesterId: number;
+	key: string;
+	language: string;
+	label?: string | null;
+	kind?: CaptionKind;
+}) {
 	const language = input.language.trim();
 	if (!LANGUAGE_SHAPE.test(language)) {
 		throw new VttRefusal("The language needs to be a tag like `en` or `pt-BR`.");
@@ -176,7 +219,7 @@ export async function attachCaptionTrack(input: AttachCaptionInput): Promise<Cap
 	// 🚨 A caption key names an object the serving route reads bytes from, so a reference
 	// outside the writer's own prefix is the foreign-file door this codebase already
 	// closes everywhere else. See `storage/keys.ts`.
-	if (!isKeyUnder(key, work.creatorId ?? -1)) {
+	if (!isKeyUnder(key, input.requesterId)) {
 		throw new VttRefusal("That file does not belong to this account.");
 	}
 	const bytes = await storage.read(key);
@@ -190,32 +233,63 @@ export async function attachCaptionTrack(input: AttachCaptionInput): Promise<Cap
 	const parsed = parseVtt(new TextDecoder("utf-8", { fatal: false }).decode(bytes));
 	if (!parsed.ok) throw new VttRefusal(parsed.error);
 
-	// Replace by (language, kind), taking the old object's bytes with the old row so no
-	// orphaned caption file lingers in the private bucket past its track.
+	return {
+		key,
+		language: language.toLowerCase(),
+		label,
+		kind,
+		byteSize: bytes.byteLength,
+		cueCount: parsed.cueCount,
+	};
+}
+
+export type PreviewCaptionTrackRow = typeof workPreviewCaptionTracks.$inferSelect;
+
+/**
+ * Attach one caption track to a trailer, replacing any existing track of the same language
+ * and kind. Same gate as the Work's own: a trailer is a video and its captions are authored
+ * WebVTT, not a second mechanism.
+ */
+export async function attachPreviewCaptionTrack(input: {
+	work: WorkRow;
+	preview: PreviewMediaRow;
+	requesterId: number;
+	key: string;
+	language: string;
+	label?: string | null;
+	kind?: CaptionKind;
+}): Promise<PreviewCaptionTrackRow> {
+	const { work, preview, requesterId } = input;
+	if (work.creatorId !== requesterId || preview.workId !== work.id) {
+		throw new Error("Only the Work's creator may attach captions to its trailer.");
+	}
+	if (preview.kind !== "video") {
+		throw new VttRefusal("A screenshot takes alt text, not caption tracks.");
+	}
+	const validated = await validateVttUpload(input);
+
 	const [previous] = await db
 		.select()
-		.from(workCaptionTracks)
+		.from(workPreviewCaptionTracks)
 		.where(
 			and(
-				eq(workCaptionTracks.workId, work.id),
-				eq(workCaptionTracks.language, language.toLowerCase()),
-				eq(workCaptionTracks.kind, kind),
+				eq(workPreviewCaptionTracks.previewId, preview.id),
+				eq(workPreviewCaptionTracks.language, validated.language),
+				eq(workPreviewCaptionTracks.kind, validated.kind),
 			),
 		);
-	if (previous) {
-		await deleteCaptionTrack(previous, work.creatorId);
-	}
+	if (previous) await deletePreviewCaptionTrack(previous, work.creatorId);
 
 	const [row] = await db
-		.insert(workCaptionTracks)
+		.insert(workPreviewCaptionTracks)
 		.values({
-			workId: work.id,
-			language: language.toLowerCase(),
-			label,
-			kind,
-			storageKey: key,
-			byteSize: bytes.byteLength,
-			cueCount: parsed.cueCount,
+			previewId: preview.id,
+			language: validated.language,
+			label: validated.label,
+			kind: validated.kind,
+			storageKey: validated.key,
+			byteSize: validated.byteSize,
+			cueCount: validated.cueCount,
 		})
 		.returning();
 	return row;
@@ -242,4 +316,63 @@ export async function listCaptionTracks(workId: number): Promise<CaptionTrackRow
 		.from(workCaptionTracks)
 		.where(eq(workCaptionTracks.workId, workId))
 		.orderBy(workCaptionTracks.createdAt, workCaptionTracks.id);
+}
+
+/** List one trailer's caption tracks, oldest first — the same editor order. */
+export async function listPreviewCaptionTracks(
+	previewId: number,
+): Promise<PreviewCaptionTrackRow[]> {
+	return db
+		.select()
+		.from(workPreviewCaptionTracks)
+		.where(eq(workPreviewCaptionTracks.previewId, previewId))
+		.orderBy(workPreviewCaptionTracks.createdAt, workPreviewCaptionTracks.id);
+}
+
+/**
+ * Every caption track on a Work's trailers, grouped by preview id — the detail route's one
+ * query, so the serializer does no per-preview lookup.
+ */
+export async function listPreviewCaptionTracksForWork(
+	workId: number,
+): Promise<Map<number, PreviewCaptionTrackRow[]>> {
+	const rows = await db
+		.select({ track: workPreviewCaptionTracks, previewId: workPreviewMedia.id })
+		.from(workPreviewCaptionTracks)
+		.innerJoin(workPreviewMedia, eq(workPreviewCaptionTracks.previewId, workPreviewMedia.id))
+		.where(eq(workPreviewMedia.workId, workId))
+		.orderBy(workPreviewCaptionTracks.createdAt, workPreviewCaptionTracks.id);
+	const byPreview = new Map<number, PreviewCaptionTrackRow[]>();
+	for (const { track, previewId } of rows) {
+		const list = byPreview.get(previewId) ?? [];
+		list.push(track);
+		byPreview.set(previewId, list);
+	}
+	return byPreview;
+}
+
+/** Delete one trailer caption track, removing its object inside the owner's prefix. */
+export async function deletePreviewCaptionTrack(
+	track: PreviewCaptionTrackRow,
+	creatorId: number,
+): Promise<void> {
+	await db.delete(workPreviewCaptionTracks).where(eq(workPreviewCaptionTracks.id, track.id));
+	if (isKeyUnder(track.storageKey, creatorId)) {
+		await storage.delete(track.storageKey);
+	}
+}
+
+/** Delete every caption track on a trailer — the preview-removal half of the same rule. */
+export async function deletePreviewCaptionTracksForPreview(
+	previewId: number,
+	creatorId: number,
+): Promise<void> {
+	const tracks = await listPreviewCaptionTracks(previewId);
+	if (tracks.length === 0) return;
+	await db
+		.delete(workPreviewCaptionTracks)
+		.where(eq(workPreviewCaptionTracks.previewId, previewId));
+	for (const track of tracks) {
+		if (isKeyUnder(track.storageKey, creatorId)) await storage.delete(track.storageKey);
+	}
 }

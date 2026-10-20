@@ -21,7 +21,7 @@
 
 import { db } from "@anthers/db/client";
 import type { VendorMatch } from "@anthers/db/schema";
-import { mediaQuarantine, mediaScans, works } from "@anthers/db/schema";
+import { mediaQuarantine, mediaScans, workPreviewMedia, works } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull, isNull, lt, notExists, or, sql } from "drizzle-orm";
 import {
 	type ShieldClassification,
@@ -568,6 +568,7 @@ async function scanPdqHashBatch(
 // ─── The release gate ────────────────────────────────────────────────────────
 
 type WorkRow = typeof works.$inferSelect;
+type PreviewMediaRow = typeof workPreviewMedia.$inferSelect;
 
 /**
  * How long a creator waits for a queued scan before release gives way and proceeds.
@@ -617,6 +618,15 @@ export interface ScannableObject {
 
 export function scannableKeys(
 	work: Pick<WorkRow, "type" | "sourceKey" | "thumbnail">,
+	/**
+	 * The Work's preview rows, already loaded by the caller.
+	 *
+	 * 🚨 **Preview media is storefront chrome, not a deliverable, and it is scanned all the
+	 * same.** A screenshot is the same picture a gallery image is, and a trailer is a video;
+	 * leaving them out of this set would make the coverage map say a Work's objects are
+	 * covered when the carousel is serving ones nobody looked at.
+	 */
+	previews: ReadonlyArray<Pick<PreviewMediaRow, "id" | "kind" | "file">> = [],
 ): ScannableObject[] {
 	const out = new Map<string, ScannableKind>();
 	if (work.type === "image" && work.sourceKey) out.set(work.sourceKey, "image");
@@ -626,6 +636,11 @@ export function scannableKeys(
 	if (work.thumbnail) {
 		const key = urlToKey(work.thumbnail);
 		if (key && !out.has(key)) out.set(key, "image");
+	}
+	for (const preview of previews) {
+		if (!preview.file) continue;
+		const key = urlToKey(preview.file);
+		if (key && !out.has(key)) out.set(key, preview.kind === "video" ? "video" : "image");
 	}
 	return [...out].map(([key, kind]) => ({ key, kind }));
 }
@@ -666,7 +681,11 @@ export async function beginScans(
 	work: WorkRow,
 	now: Date = new Date(),
 ): Promise<ScannableObject[]> {
-	const objects = await unanswered(scannableKeys(work));
+	const previews = await db
+		.select({ id: workPreviewMedia.id, kind: workPreviewMedia.kind, file: workPreviewMedia.file })
+		.from(workPreviewMedia)
+		.where(eq(workPreviewMedia.workId, work.id));
+	const objects = await unanswered(scannableKeys(work, previews));
 	if (objects.length === 0) return [];
 	await db.update(works).set({ scanQueuedAt: now }).where(eq(works.id, work.id));
 	return objects;
@@ -700,7 +719,11 @@ export async function scanReleaseGate(
 	work: WorkRow,
 	now: Date = new Date(),
 ): Promise<ScanReleaseGate> {
-	const keys = scannableKeys(work).map((o) => o.key);
+	const previews = await db
+		.select({ id: workPreviewMedia.id, kind: workPreviewMedia.kind, file: workPreviewMedia.file })
+		.from(workPreviewMedia)
+		.where(eq(workPreviewMedia.workId, work.id));
+	const keys = scannableKeys(work, previews).map((o) => o.key);
 	if (keys.length === 0) return { pending: [], blocked: false, waitUntil: null };
 
 	const answered = await db
@@ -755,6 +778,13 @@ export async function worksOwedScans(
 						SELECT 1 FROM ${mediaScans} ms WHERE ms.storage_key = ${works.sourceKey})`,
 					sql`${works.thumbnail} <> '' AND NOT EXISTS (
 						SELECT 1 FROM ${mediaScans} ms WHERE ms.storage_key = ${works.thumbnail})`,
+					// Preview objects are found by the same absence test. The coarse filter
+					// stays over-inclusive; `scannableKeys` below decides.
+					sql`EXISTS (
+						SELECT 1 FROM ${workPreviewMedia} pm
+						WHERE pm.work_id = ${works.id}
+							AND NOT EXISTS (
+								SELECT 1 FROM ${mediaScans} ms WHERE ms.storage_key = pm.file))`,
 				),
 			),
 		)
@@ -762,7 +792,11 @@ export async function worksOwedScans(
 
 	const owed: Array<{ id: number; objects: ScannableObject[] }> = [];
 	for (const work of candidates) {
-		const pending = await unanswered(scannableKeys(work));
+		const previews = await db
+			.select({ id: workPreviewMedia.id, kind: workPreviewMedia.kind, file: workPreviewMedia.file })
+			.from(workPreviewMedia)
+			.where(eq(workPreviewMedia.workId, work.id));
+		const pending = await unanswered(scannableKeys(work, previews));
 		if (pending.length > 0) owed.push({ id: work.id, objects: pending });
 	}
 	return owed;

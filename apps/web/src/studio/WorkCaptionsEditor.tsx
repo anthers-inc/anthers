@@ -23,6 +23,13 @@ import { useRef, useState } from "react";
 interface WorkCaptionsEditorProps {
 	workId: number;
 	captions: WorkCaptionTrack[];
+	/**
+	 * The preview item this editor is attached to, when it is a trailer's captions rather
+	 * than the Work's own. The only differences are the upload's `entityId`/media type and
+	 * the two routes; the parse, size cap and replace-by-language rule are the server's,
+	 * unchanged (`services/captions.ts`).
+	 */
+	previewId?: number;
 	/** A track landed or left — the page re-reads the row's media payload, so the preview player (if it is open) gains the menu. */
 	onChanged?: () => void;
 }
@@ -36,6 +43,7 @@ function formatBytes(bytes: number): string {
 export default function WorkCaptionsEditor({
 	workId,
 	captions,
+	previewId,
 	onChanged,
 }: WorkCaptionsEditorProps) {
 	const [tracks, setTracks] = useState<WorkCaptionTrack[]>(captions);
@@ -55,8 +63,8 @@ export default function WorkCaptionsEditor({
 		try {
 			const form = new FormData();
 			form.append("file", file);
-			form.append("mediaType", "caption");
-			form.append("entityId", String(workId));
+			form.append("mediaType", previewId != null ? "preview-caption" : "caption");
+			form.append("entityId", String(previewId ?? workId));
 			const uploadRes = await apiFetch("/api/content/media-upload/direct", {
 				method: "POST",
 				body: form,
@@ -65,10 +73,16 @@ export default function WorkCaptionsEditor({
 				throw new Error("The upload itself failed — try the file again.");
 			}
 			const { key } = (await uploadRes.json()) as { key: string };
-			const res = await client.api.content.works[":id"].captions.$post({
-				param: { id: String(workId) },
-				json: { key, language: lang, label: label.trim() || "", kind },
-			});
+			const res =
+				previewId != null
+					? await client.api.content.works[":id"].previews[":previewId"].captions.$post({
+							param: { id: String(workId), previewId: String(previewId) },
+							json: { key, language: lang, label: label.trim() || "", kind },
+						})
+					: await client.api.content.works[":id"].captions.$post({
+							param: { id: String(workId) },
+							json: { key, language: lang, label: label.trim() || "", kind },
+						});
 			if (!res.ok) {
 				const data = (await res.json().catch(() => null)) as { error?: string } | null;
 				throw new Error(data?.error ?? "The file was refused.");
@@ -97,9 +111,16 @@ export default function WorkCaptionsEditor({
 		setBusy(true);
 		setError(null);
 		try {
-			const res = await client.api.content.works[":id"].captions[":trackId"].$delete({
-				param: { id: String(workId), trackId: String(trackId) },
-			});
+			const res =
+				previewId != null
+					? await client.api.content.works[":id"].previews[":previewId"].captions[
+							":trackId"
+						].$delete({
+							param: { id: String(workId), previewId: String(previewId), trackId: String(trackId) },
+						})
+					: await client.api.content.works[":id"].captions[":trackId"].$delete({
+							param: { id: String(workId), trackId: String(trackId) },
+						});
 			if (!res.ok) throw new Error("The track could not be removed.");
 			const { captions: remaining } = (await res.json()) as { captions: WorkCaptionTrack[] };
 			setTracks(remaining);

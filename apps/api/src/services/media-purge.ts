@@ -19,7 +19,16 @@
  * that refused to delete is a deletion request we did not honor.
  */
 
-import { assets, db, transcodingJobs, webBuilds, workSourceFiles, works } from "@anthers/db";
+import {
+	assets,
+	db,
+	transcodingJobs,
+	webBuilds,
+	workPreviewCaptionTracks,
+	workPreviewMedia,
+	workSourceFiles,
+	works,
+} from "@anthers/db";
 import { isPaged } from "@anthers/shared/content";
 import { and, eq, inArray } from "drizzle-orm";
 import { storage } from "./storage/index.js";
@@ -29,6 +38,8 @@ type WorkRow = typeof works.$inferSelect;
 type AssetRow = typeof assets.$inferSelect;
 type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
 type SourceFileRow = typeof workSourceFiles.$inferSelect;
+type PreviewMediaRow = typeof workPreviewMedia.$inferSelect;
+type PreviewCaptionRow = typeof workPreviewCaptionTracks.$inferSelect;
 
 /** Delete a set of prefixes and keys, logging and swallowing every failure. */
 async function sweep(keys: Set<string>, prefixes: Set<string>, label: string): Promise<void> {
@@ -141,8 +152,17 @@ function keysForWork(
 	workAssets: AssetRow[],
 	jobRows: TranscodingJobRow[],
 	sourceFiles: SourceFileRow[],
+	previews: PreviewMediaRow[] = [],
+	previewCaptions: PreviewCaptionRow[] = [],
 ): { keys: Set<string>; prefixes: Set<string> } {
-	const all = collectRawKeysForWork(item, workAssets, jobRows, sourceFiles);
+	const all = collectRawKeysForWork(
+		item,
+		workAssets,
+		jobRows,
+		sourceFiles,
+		previews,
+		previewCaptions,
+	);
 	const owner = item.creatorId;
 	const mine = (key: string) => owner != null && isKeyUnder(key, owner);
 	return {
@@ -197,6 +217,8 @@ function collectRawKeysForWork(
 	workAssets: AssetRow[],
 	jobRows: TranscodingJobRow[],
 	sourceFiles: SourceFileRow[],
+	previews: PreviewMediaRow[] = [],
+	previewCaptions: PreviewCaptionRow[] = [],
 ): { keys: Set<string>; prefixes: Set<string> } {
 	const keys = new Set<string>();
 	const prefixes = new Set<string>();
@@ -212,6 +234,11 @@ function collectRawKeysForWork(
 	// the sweep cannot see it here by design: the remove path asks the sweep directly
 	// (`removeSourceFileStorage`, below) rather than through this enumeration.
 	for (const sourceFile of sourceFiles) keys.add(urlToKey(sourceFile.file));
+	// The storefront's screenshots and trailers, and every caption file on a trailer. A
+	// preview removed on its own takes its objects with it (`work-preview-media.ts`); this
+	// is the Work-delete half, which must name what the rows still hold.
+	for (const preview of previews) keys.add(urlToKey(preview.file));
+	for (const caption of previewCaptions) keys.add(urlToKey(caption.storageKey));
 	for (const a of workAssets) if (a.file) keys.add(urlToKey(a.file));
 	for (const job of jobRows) {
 		if (job.hlsManifestUrl) {
@@ -249,7 +276,30 @@ export async function purgeWorkMedia(
 		.select()
 		.from(workSourceFiles)
 		.where(eq(workSourceFiles.workId, item.id));
-	const { keys, prefixes } = keysForWork(item, workAssets, jobRows, sourceFileRows);
+	const previewRows = await db
+		.select()
+		.from(workPreviewMedia)
+		.where(eq(workPreviewMedia.workId, item.id));
+	const previewCaptionRows =
+		previewRows.length === 0
+			? []
+			: await db
+					.select()
+					.from(workPreviewCaptionTracks)
+					.where(
+						inArray(
+							workPreviewCaptionTracks.previewId,
+							previewRows.map((p) => p.id),
+						),
+					);
+	const { keys, prefixes } = keysForWork(
+		item,
+		workAssets,
+		jobRows,
+		sourceFileRows,
+		previewRows,
+		previewCaptionRows,
+	);
 	// A browser build is swept by prefix — one whole `web-builds/{buildId}/` prefix per
 	// build — rather than file by file, because the number of files a real engine export
 	// carries makes enumerating keys the wrong shape and a missed file an ungated copy of
@@ -286,7 +336,7 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 	const prefixes = new Set<string>();
 	if (workIds.length === 0) return { keys, prefixes };
 
-	const [workRows, assetRows, jobRows, sourceFileRows] = await Promise.all([
+	const [workRows, assetRows, jobRows, sourceFileRows, previewRows] = await Promise.all([
 		db.select().from(works).where(inArray(works.id, workIds)),
 		db.select().from(assets).where(inArray(assets.workId, workIds)),
 		db
@@ -294,7 +344,21 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 			.from(transcodingJobs)
 			.where(and(inArray(transcodingJobs.workId, workIds))),
 		db.select().from(workSourceFiles).where(inArray(workSourceFiles.workId, workIds)),
+		db.select().from(workPreviewMedia).where(inArray(workPreviewMedia.workId, workIds)),
 	]);
+	const previewCaptionRows =
+		previewRows.length === 0
+			? []
+			: await db
+					.select()
+					.from(workPreviewCaptionTracks)
+					.where(
+						inArray(
+							workPreviewCaptionTracks.previewId,
+							previewRows.map((p) => p.id),
+						),
+					);
+	const previewWorkId = new Map(previewRows.map((p) => [p.id, p.workId]));
 	await addWebBuildPrefixes({ keys, prefixes }, workIds);
 
 	for (const w of workRows) {
@@ -303,6 +367,8 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 			assetRows.filter((a) => a.workId === w.id),
 			jobRows.filter((j) => j.workId === w.id),
 			sourceFileRows.filter((s) => s.workId === w.id),
+			previewRows.filter((p) => p.workId === w.id),
+			previewCaptionRows.filter((c) => previewWorkId.get(c.previewId) === w.id),
 		);
 		for (const k of forThis.keys) keys.add(k);
 		for (const p of forThis.prefixes) prefixes.add(p);

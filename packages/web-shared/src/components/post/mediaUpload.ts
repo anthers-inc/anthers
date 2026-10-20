@@ -9,7 +9,7 @@
 import { apiBaseUrl, apiFetch } from "../../lib/rpc";
 
 /** mediaType values the direct endpoint accepts for display images. */
-export type ImageMediaType = "image" | "thumbnail" | "cover" | "inline-image";
+export type ImageMediaType = "image" | "thumbnail" | "cover" | "inline-image" | "preview-image";
 
 /** Upload a display image via the direct endpoint. Returns the storage key + preview URL. */
 export async function uploadImageFile(

@@ -44,6 +44,7 @@ import {
 	workCaptionTracks,
 	workPages,
 	workPanels,
+	workPreviewCaptionTracks,
 	workSaves,
 	workSectionAssets,
 	workSections,
@@ -73,6 +74,7 @@ import {
 	REVIEW_WINDOWS,
 	recommendedPercent,
 	reviewWindowSince,
+	supportsPreviewMedia,
 	WORK_TYPES,
 	type WorkType,
 } from "@anthers/shared/content";
@@ -169,9 +171,14 @@ import { recordUrlFor } from "../services/atproto-repo.js";
 import { blockedUserIds, isBlocked, notBlockedBy } from "../services/blocks.js";
 import {
 	attachCaptionTrack,
+	attachPreviewCaptionTrack,
 	type CaptionTrackRow,
 	deleteCaptionTrack,
+	deletePreviewCaptionTrack,
 	listCaptionTracks,
+	listPreviewCaptionTracks,
+	listPreviewCaptionTracksForWork,
+	type PreviewCaptionTrackRow,
 	VttRefusal,
 } from "../services/captions.js";
 import {
@@ -248,6 +255,16 @@ import { isLocalStorage, storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
 import { mediaUploadKeyFor } from "../services/upload-sessions.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
+import {
+	attachPreviewMedia,
+	findPreviewMedia,
+	listPreviewMedia,
+	PreviewMediaRefusal,
+	type PreviewMediaRow,
+	removePreviewMedia,
+	reorderPreviewMedia,
+	updatePreviewMedia,
+} from "../services/work-preview-media.js";
 import { releaseRefusal } from "../services/work-release.js";
 import {
 	appendSourceFile,
@@ -1053,6 +1070,19 @@ const captionAttachSchema = z.object({
 	kind: z.enum(["captions", "subtitles"]).default("captions"),
 });
 
+/** One storefront preview item to attach: what it is and the uploaded file's key. */
+const previewAttachSchema = z.object({
+	kind: z.enum(["image", "video"]),
+	key: z.string().min(1).max(500),
+	alt: z.string().max(500).default(""),
+});
+
+/** An image's alt text — the trailer counterpart carries none. */
+const previewUpdateSchema = z.object({ alt: z.string().max(500) });
+
+/** A whole-set arrangement: the ids in the order the creator is showing. No partial orders. */
+const previewOrderSchema = z.object({ previewIds: z.array(z.number().int()) });
+
 const postBaseSchema = z.object({
 	title: z.string().max(255).optional().default(""),
 	slug: z
@@ -1451,6 +1481,10 @@ async function serializeWork(
 	 * omits the argument and the serialization carries no `reviewCounts` key at all.
 	 */
 	reviewCounts?: { recommended: number; notRecommended: number },
+	/** The Work's storefront preview set, owner-facing — empty when the caller did not load it. */
+	previews: PreviewMediaRow[] = [],
+	/** Each trailer's caption tracks, keyed by preview id — loaded with the previews. */
+	previewCaptions: Map<number, PreviewCaptionTrackRow[]> = new Map(),
 ) {
 	// The image set, in order — an image Work's gallery is its source-set table read
 	// back (`listSourceFiles` falls back to the legacy column as the one-file set), and
@@ -1533,6 +1567,19 @@ async function serializeWork(
 						...t,
 						url: buildCaptionUrl(delivery ?? localDelivery, item.id, t.id),
 					})),
+		// The storefront's preview set, ungated for the owner — this is the shape the Manage
+		// tab edits. A kind that does not take previews carries an empty list rather than a
+		// missing field, so the editor's branch is one shape.
+		previewMedia: supportsPreviewMedia(item.type)
+			? previews.map((p) =>
+					serializePreviewMedia(
+						p,
+						item.id,
+						delivery ?? localDelivery,
+						previewCaptions.get(p.id) ?? [],
+					),
+				)
+			: [],
 		/**
 		 * The Work's listing on the network while it has one, and the public record link
 		 * beside it — every reader who can see the Work sees it too (the record is public
@@ -1788,8 +1835,18 @@ function buildCaptionUrl(ctx: DeliveryCtx, workId: number, trackId: number): str
 	return withShare(`${ctx.origin}/api/content/works/${workId}/captions/${trackId}`, ctx);
 }
 
-/** The delivery context the local-mode serialization falls back to for caption URLs. */
-const localDelivery: DeliveryCtx = { origin: publicOrigin() };
+/**
+ * The delivery context the local-mode serialization falls back to for caption and preview
+ * URLs.
+ *
+ * `BASE_URL` is the API's own externally reachable origin in a session (`session.ts` sets
+ * it), while `publicOrigin()` is the SPA's dev default of `:3000`. A browser session runs
+ * the API on its own free port, so falling back to the SPA default would hand `<img>` and
+ * `<track>` the wrong origin — the page would fetch `:3000` and get nothing.
+ */
+const localDelivery: DeliveryCtx = {
+	origin: (process.env.BASE_URL ?? publicOrigin()).replace(/\/+$/, ""),
+};
 
 /**
  * One caption track as its consumer needs it: the play-facing URL beside the row's shape.
@@ -1805,6 +1862,59 @@ function serializeCaptionRow(row: CaptionTrackRow, ctx: DeliveryCtx) {
 		url: buildCaptionUrl(ctx, row.workId, row.id),
 		byteSize: row.byteSize,
 		cueCount: row.cueCount,
+	};
+}
+
+/**
+ * URL of the reachability-checked preview route for one storefront item. Like the caption
+ * route, this endpoint is the address in every mode: preview media is private and no bucket
+ * URL may stand in for it.
+ */
+function buildPreviewUrl(ctx: DeliveryCtx, workId: number, previewId: number): string {
+	return withShare(`${ctx.origin}/api/content/works/${workId}/previews/${previewId}`, ctx);
+}
+
+/** URL of a trailer's caption route, reachability-checked with the preview it belongs to. */
+function buildPreviewCaptionUrl(
+	ctx: DeliveryCtx,
+	workId: number,
+	previewId: number,
+	trackId: number,
+): string {
+	return withShare(
+		`${ctx.origin}/api/content/works/${workId}/previews/${previewId}/captions/${trackId}`,
+		ctx,
+	);
+}
+
+/** One trailer caption track — the same shape the Work's own editor reads. */
+function serializePreviewCaptionRow(row: PreviewCaptionTrackRow, workId: number, ctx: DeliveryCtx) {
+	return {
+		id: row.id,
+		language: row.language,
+		label: row.label || row.language,
+		kind: row.kind,
+		url: buildPreviewCaptionUrl(ctx, workId, row.previewId, row.id),
+		byteSize: row.byteSize,
+		cueCount: row.cueCount,
+	};
+}
+
+/** One preview item as the carousel needs it: its id, kind, alt, delivery URL and captions. */
+function serializePreviewMedia(
+	preview: PreviewMediaRow,
+	workId: number,
+	ctx: DeliveryCtx,
+	captions: PreviewCaptionTrackRow[] = [],
+) {
+	return {
+		id: preview.id,
+		kind: preview.kind === "video" ? ("video" as const) : ("image" as const),
+		alt: preview.alt,
+		url: buildPreviewUrl(ctx, workId, preview.id),
+		...(preview.kind === "video"
+			? { captions: captions.map((t) => serializePreviewCaptionRow(t, workId, ctx)) }
+			: {}),
 	};
 }
 
@@ -2252,6 +2362,16 @@ async function serializeWorkForUser(
 	 * array either way.
 	 */
 	captions: CaptionTrackRow[] = [],
+	/**
+	 * The Work's storefront preview set, loaded only by the Work detail route.
+	 *
+	 * 🚨 **Deliberately NOT gated on `canAccess`.** The locked viewer is this feature's
+	 * audience, so the list travels beside `access` rather than behind it — and the
+	 * reachability ladder the detail route already ran is what stops it reaching somebody
+	 * the Work is invisible to. The delivery route enforces that ladder again per request.
+	 */
+	previews: PreviewMediaRow[] = [],
+	previewCaptions: Map<number, PreviewCaptionTrackRow[]> = new Map(),
 ) {
 	const canAccess = access.canAccess;
 
@@ -2416,6 +2536,19 @@ async function serializeWorkForUser(
 						url: buildCaptionUrl(delivery ?? localDelivery, work.id, t.id),
 					}))
 				: [],
+		// The storefront's preview set — shown to the locked viewer this page is for. A kind
+		// without preview support carries an empty list; an already-open Work still carries
+		// it (the page just does not render the carousel), so the shape does not change.
+		previewMedia: supportsPreviewMedia(work.type)
+			? previews.map((p) =>
+					serializePreviewMedia(
+						p,
+						work.id,
+						delivery ?? localDelivery,
+						previewCaptions.get(p.id) ?? [],
+					),
+				)
+			: [],
 		access,
 		/**
 		 * Whether this Work is **Public Access** — ungated, streaming, free to everyone.
@@ -2674,7 +2807,14 @@ async function loadPostWorksFromBody(
  * handed to the client must be built from FRONTEND_URL, not the request URL.
  */
 function publicOrigin(): string {
-	return (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+	const configured = (process.env.FRONTEND_URL ?? "").trim().replace(/\/+$/, "");
+	if (configured) return configured;
+	// A browser session (and CI's copy of one) runs the API on its own port, not on the
+	// SPA's `:3000`. Absolute media URLs have to name the API, so fall back to the port
+	// this process is actually listening on rather than the dev SPA default. Production
+	// always names FRONTEND_URL, so this branch is local and CI only.
+	const port = process.env.API_PORT ?? process.env.PORT ?? "8000";
+	return `http://localhost:${port}`;
 }
 
 /** The display name of whoever shared a link, for the recipient's banner. */
@@ -2762,6 +2902,88 @@ async function rewriteHlsPlaylist(
 		}
 	}
 	return out.join("\n");
+}
+
+type WorkReachability = { refusal: Response } | { userId: number | null; isOwner: boolean };
+
+/**
+ * The visibility ladder a Work's own bytes pass before anything is served: released or
+ * still-owed-to-a-buyer, Adult verification, and creator suspension, each a 404 rather
+ * than a 403 because the state itself is what the rung withholds.
+ *
+ * 🚨 **This is extracted so the preview route cannot be a side door around it.** A preview
+ * is shown to a locked viewer by design, but only to a viewer the Work itself is reachable
+ * by; a route that signed a preview without this ladder would hand a suspended creator's
+ * storefront, or an Adult Work's screenshots, to somebody who cannot see the Work at all.
+ * The detail route and every preview delivery route call this one function.
+ */
+async function workReachability(
+	c: Parameters<typeof getOptionalUserId>[0],
+	work: typeof works.$inferSelect,
+): Promise<WorkReachability> {
+	const userId = await getOptionalUserId(c);
+	const isOwner = userId != null && userId === work.creatorId;
+
+	const stillOwed = async (buyerId: number | null) =>
+		buyerId != null &&
+		(
+			await db
+				.select({ id: purchases.id })
+				.from(purchases)
+				.where(
+					and(
+						eq(purchases.workId, work.id),
+						eq(purchases.buyerId, buyerId),
+						eq(purchases.status, "completed"),
+					),
+				)
+				.limit(1)
+		).length > 0;
+
+	if (work.visibility !== "released" && !isOwner) {
+		// A withdrawn Work is out of public circulation but still owed to the people
+		// who bought it — that is the whole point of the state, so this is the one
+		// place a non-released Work is served to someone other than its creator.
+		// `private` still 404s for everyone else: it was never anyone's to buy.
+		if (work.visibility !== "withdrawn" || !(await stillOwed(userId))) {
+			return { refusal: c.json({ error: "Work not found" }, 404) };
+		}
+	}
+
+	// 🚨 **404, not 403, and the difference is the whole rule.** Adult work is invisible
+	// to anyone who has not opted in and verified — its existence, title and cover art
+	// included — so a response saying "this exists and you may not have it" would leak
+	// exactly what the rung withholds. This is also the surface a share link arrives at,
+	// and the wiki's *Rating Standard* is explicit that a share link is a locator and never an entitlement: the
+	// person following one has no setting for the opt-in to consult, so they meet the
+	// same absence a search would have given them.
+	//
+	// ⚠️ Placed after the owner and withdrawn-purchaser branches deliberately. A creator
+	// reaches their own Work whatever their setting says, and this must not become the
+	// reason somebody cannot see a thing they made.
+	if (!isOwner && requiresAdultVerification(work.maturity)) {
+		const { access } = await adultVisibility(userId);
+		if (!access.canReach) return { refusal: c.json({ error: "Work not found" }, 404) };
+	}
+
+	// A suspended creator's Work reads as absent — the same 404 a private Work gets,
+	// never a differently-worded one, because naming the state would leak it. Placed
+	// after the withdrawn-purchaser branch deliberately: a suspension removes the
+	// creator from circulation; it does not confiscate what a buyer already owns.
+	if (!isOwner && work.creatorId != null && (await isSuspendedAccount(work.creatorId))) {
+		const stillOwned = work.visibility === "withdrawn" || (await stillOwed(userId));
+		if (!stillOwned) return { refusal: c.json({ error: "Work not found" }, 404) };
+	}
+
+	return { userId, isOwner };
+}
+
+/** The owner's preview set as the Manage tab reads it — every mutation answers the same shape. */
+async function previewMediaPayload(work: typeof works.$inferSelect) {
+	const previews = await listPreviewMedia(work.id);
+	const captions = await listPreviewCaptionTracksForWork(work.id);
+	const ctx = deliveryCtx() ?? localDelivery;
+	return previews.map((p) => serializePreviewMedia(p, work.id, ctx, captions.get(p.id) ?? []));
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -4963,71 +5185,9 @@ const contentRoutes = new Hono()
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
 
-		const userId = await getOptionalUserId(c);
-		const isOwner = userId != null && userId === work.creatorId;
-		if (work.visibility !== "released" && !isOwner) {
-			// A withdrawn Work is out of public circulation but still owed to the people
-			// who bought it — that is the whole point of the state, so this is the one
-			// place a non-released Work is served to someone other than its creator.
-			// `private` still 404s for everyone else: it was never anyone's to buy.
-			const stillOwed =
-				work.visibility === "withdrawn" &&
-				userId != null &&
-				(
-					await db
-						.select({ id: purchases.id })
-						.from(purchases)
-						.where(
-							and(
-								eq(purchases.workId, work.id),
-								eq(purchases.buyerId, userId),
-								eq(purchases.status, "completed"),
-							),
-						)
-						.limit(1)
-				).length > 0;
-			if (!stillOwed) return c.json({ error: "Work not found" }, 404);
-		}
-
-		// 🚨 **404, not 403, and the difference is the whole rule.** Adult work is invisible
-		// to anyone who has not opted in and verified — its existence, title and cover art
-		// included — so a response saying "this exists and you may not have it" would leak
-		// exactly what the rung withholds. This is also the surface a share link arrives at,
-		// and the wiki's *Rating Standard* is explicit that a share link is a locator and never an entitlement: the
-		// person following one has no setting for the opt-in to consult, so they meet the
-		// same absence a search would have given them.
-		//
-		// ⚠️ Placed after the owner and withdrawn-purchaser branches deliberately. A creator
-		// reaches their own Work whatever their setting says, and this must not become the
-		// reason somebody cannot see a thing they made.
-		if (!isOwner && requiresAdultVerification(work.maturity)) {
-			const { access } = await adultVisibility(userId);
-			if (!access.canReach) return c.json({ error: "Work not found" }, 404);
-		}
-
-		// A suspended creator's Work reads as absent — the same 404 a private Work gets,
-		// never a differently-worded one, because naming the state would leak it. Placed
-		// after the withdrawn-purchaser branch deliberately: a suspension removes the
-		// creator from circulation; it does not confiscate what a buyer already owns.
-		if (!isOwner && work.creatorId != null && (await isSuspendedAccount(work.creatorId))) {
-			const stillOwned =
-				work.visibility === "withdrawn" ||
-				(userId != null &&
-					(
-						await db
-							.select({ id: purchases.id })
-							.from(purchases)
-							.where(
-								and(
-									eq(purchases.workId, work.id),
-									eq(purchases.buyerId, userId),
-									eq(purchases.status, "completed"),
-								),
-							)
-							.limit(1)
-					).length > 0);
-			if (!stillOwned) return c.json({ error: "Work not found" }, 404);
-		}
+		const reach = await workReachability(c, work);
+		if ("refusal" in reach) return reach.refusal;
+		const { userId, isOwner } = reach;
 
 		const [workAssets, jobRows, buildRows, buildFileRows] = await Promise.all([
 			db.select().from(assets).where(eq(assets.workId, work.id)),
@@ -5061,6 +5221,10 @@ const contentRoutes = new Hono()
 		// lists them, the viewer's player offers them — and the batch shapes (cards,
 		// listings) carry none, because nothing there renders a player.
 		const captionRows = await listCaptionTracks(work.id);
+		// The storefront's preview set and each trailer's caption tracks. One query each,
+		// loaded only on this route: listing and card shapes never render the carousel.
+		const previewRows = supportsPreviewMedia(work.type) ? await listPreviewMedia(work.id) : [];
+		const previewCaptionRows = await listPreviewCaptionTracksForWork(work.id);
 
 		/*
 		 * The stub foundation of **Showings** — where a Work can be found. The creator's
@@ -5107,6 +5271,9 @@ const contentRoutes = new Hono()
 						webBuildsList,
 						deliveryCtx(),
 						captionRows,
+						undefined,
+						previewRows,
+						previewCaptionRows,
 					)),
 					shownOn,
 				},
@@ -5198,6 +5365,8 @@ const contentRoutes = new Hono()
 					// isolation (which decides whether play opens the /play page).
 					...(await buildFlagsForWork(work.id)),
 					captionRows,
+					previewRows,
+					previewCaptionRows,
 				)),
 				creator,
 				creatorHasStripe,
@@ -7409,7 +7578,7 @@ const contentRoutes = new Hono()
 			z.object({
 				filename: z.string().min(1).max(255),
 				contentType: z.string().min(1).max(100),
-				mediaType: z.enum(["video", "audio", "asset"]),
+				mediaType: z.enum(["video", "audio", "asset", "preview-video"]),
 			}),
 		),
 		async (c) => {
@@ -7456,7 +7625,11 @@ const contentRoutes = new Hono()
 
 		if (!(file instanceof File)) return c.json({ error: "No file provided" }, 400);
 
-		const isMedia = mediaType === "video" || mediaType === "audio" || mediaType === "asset";
+		const isMedia =
+			mediaType === "video" ||
+			mediaType === "audio" ||
+			mediaType === "asset" ||
+			mediaType === "preview-video";
 		const maxSize = isMedia ? 500 * 1024 * 1024 : 10 * 1024 * 1024;
 		if (file.size > maxSize) {
 			return c.json({ error: `File too large (max ${isMedia ? "500MB" : "10MB"})` }, 413);
@@ -7484,6 +7657,21 @@ const contentRoutes = new Hono()
 				// read in a text file, and anything disguised as a caption dies at that
 				// parse — a refusal that leaves a row never created.
 				key = `${prefix}/captions/${entityId ?? "unknown"}/${uuid}.vtt`;
+				break;
+			case "preview-caption":
+				// The trailer's counterpart: `entityId` is the preview row, so one preview's
+				// tracks share a directory and the purge can name them. Same WebVTT parse at
+				// attach, same reason for no perceptual scan.
+				key = `${prefix}/previews/captions/${entityId ?? "unknown"}/${uuid}.vtt`;
+				break;
+			case "preview-image":
+				// Every preview object sits under one `previews/` prefix. The screenshot's
+				// directory is the Work, so a creator's set is legible on disk as well as in
+				// the table.
+				key = `${prefix}/previews/images/${entityId ?? "unknown"}/${uuid}.${ext}`;
+				break;
+			case "preview-video":
+				key = `${prefix}/previews/videos/${uuid}.${ext}`;
 				break;
 			case "avatar":
 				key = `${prefix}/avatars/${uuid}.${ext}`;
@@ -7622,6 +7810,230 @@ const contentRoutes = new Hono()
 			.select()
 			.from(workCaptionTracks)
 			.where(and(eq(workCaptionTracks.workId, work.id), eq(workCaptionTracks.id, trackId)));
+		if (!track) return c.json({ error: "Not found" }, 404);
+		const bytes = await storage.read(track.storageKey);
+		if (!bytes) return c.json({ error: "Not found" }, 404);
+		return c.body(new TextDecoder().decode(bytes), 200, {
+			"Content-Type": "text/vtt; charset=utf-8",
+			"Cache-Control": "no-store",
+		});
+	})
+
+	// ── Preview media — the storefront a locked viewer sees ─────────────────────
+	//
+	// Screenshots and a trailer under the locked composition, in the creator's order
+	// (Parker, 2026-10-19). The owner writes the set here; every viewer reads it through
+	// the two delivery routes below, which run the SAME reachability ladder the Work detail
+	// route runs and NOT the access check — a locked viewer is this feature's audience.
+	//
+	// 🚨 Neither route signs anything before `workReachability` has answered. A preview that
+	// skipped it would serve a suspended creator's storefront or an Adult Work's screenshots
+	// to somebody the Work is invisible to, which is the one failure here with no acceptable
+	// version. Storage is private on purpose: `previews/` is absent from `PUBLIC_KEY_PREFIXES`.
+	//
+	// ⚠️ **No auth middleware on the two delivery routes, and that is the feature rather
+	// than an omission.** A signed-out visitor is the most locked viewer there is, and a
+	// storefront that vanishes until you make an account sells nothing; the reachability
+	// ladder — not a session — decides whether this Work may be seen at all. The share token
+	// is unnecessary here for the same reason: the route is public to exactly the audience
+	// the Work itself is public to.
+
+	.post("/works/:id/previews", requireAuth, zValidator("json", previewAttachSchema), async (c) => {
+		const user = c.get("user");
+		const work = await findWorkRow(c.req.param("id"));
+		// 404 rather than 403, the way every owner route answers a non-owner: the existence
+		// of another creator's Work is not information to hand out.
+		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		const data = c.req.valid("json");
+		try {
+			await attachPreviewMedia({
+				work,
+				requesterId: user.id,
+				kind: data.kind,
+				key: data.key,
+				alt: data.alt,
+			});
+			return c.json({ previewMedia: await previewMediaPayload(work) }, 201);
+		} catch (err) {
+			if (err instanceof PreviewMediaRefusal) {
+				return c.json({ error: err.message, code: "preview_refused" }, 400);
+			}
+			throw err;
+		}
+	})
+
+	.put(
+		"/works/:id/previews/order",
+		requireAuth,
+		zValidator("json", previewOrderSchema),
+		async (c) => {
+			const user = c.get("user");
+			const work = await findWorkRow(c.req.param("id"));
+			if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			try {
+				await reorderPreviewMedia(work, c.req.valid("json").previewIds);
+				return c.json({ previewMedia: await previewMediaPayload(work) });
+			} catch (err) {
+				if (err instanceof PreviewMediaRefusal) {
+					return c.json({ error: err.message, code: "preview_refused" }, 400);
+				}
+				throw err;
+			}
+		},
+	)
+
+	.patch(
+		"/works/:id/previews/:previewId",
+		requireAuth,
+		zValidator("json", previewUpdateSchema),
+		async (c) => {
+			const user = c.get("user");
+			const work = await findWorkRow(c.req.param("id"));
+			if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			const previewId = Number(c.req.param("previewId"));
+			if (!Number.isInteger(previewId) || previewId <= 0) {
+				return c.json({ error: "Not found" }, 404);
+			}
+			const updated = await updatePreviewMedia(work, previewId, c.req.valid("json"));
+			if (!updated) return c.json({ error: "Not found" }, 404);
+			return c.json({ previewMedia: await previewMediaPayload(work) });
+		},
+	)
+
+	.delete("/works/:id/previews/:previewId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		const previewId = Number(c.req.param("previewId"));
+		if (!Number.isInteger(previewId) || previewId <= 0) {
+			return c.json({ error: "Not found" }, 404);
+		}
+		const preview = await findPreviewMedia(work.id, previewId);
+		if (!preview) return c.json({ error: "Not found" }, 404);
+		await removePreviewMedia(work, previewId);
+		return c.json({ previewMedia: await previewMediaPayload(work) });
+	})
+
+	.post(
+		"/works/:id/previews/:previewId/captions",
+		requireAuth,
+		zValidator("json", captionAttachSchema),
+		async (c) => {
+			const user = c.get("user");
+			const work = await findWorkRow(c.req.param("id"));
+			if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			const previewId = Number(c.req.param("previewId"));
+			if (!Number.isInteger(previewId) || previewId <= 0) {
+				return c.json({ error: "Not found" }, 404);
+			}
+			const preview = await findPreviewMedia(work.id, previewId);
+			if (!preview) return c.json({ error: "Not found" }, 404);
+			const data = c.req.valid("json");
+			try {
+				const row = await attachPreviewCaptionTrack({
+					work,
+					preview,
+					requesterId: user.id,
+					key: data.key,
+					language: data.language,
+					label: data.label || null,
+					kind: data.kind,
+				});
+				return c.json(
+					{ caption: serializePreviewCaptionRow(row, work.id, deliveryCtx() ?? localDelivery) },
+					201,
+				);
+			} catch (err) {
+				if (err instanceof VttRefusal) {
+					return c.json({ error: err.message, code: "captions_refused" }, 400);
+				}
+				throw err;
+			}
+		},
+	)
+
+	.delete("/works/:id/previews/:previewId/captions/:trackId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work || work.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		const previewId = Number(c.req.param("previewId"));
+		const trackId = Number(c.req.param("trackId"));
+		if (
+			!Number.isInteger(previewId) ||
+			previewId <= 0 ||
+			!Number.isInteger(trackId) ||
+			trackId <= 0
+		) {
+			return c.json({ error: "Not found" }, 404);
+		}
+		const [track] = await db
+			.select()
+			.from(workPreviewCaptionTracks)
+			.where(
+				and(
+					eq(workPreviewCaptionTracks.previewId, previewId),
+					eq(workPreviewCaptionTracks.id, trackId),
+				),
+			);
+		if (!track) return c.json({ error: "Not found" }, 404);
+		await deletePreviewCaptionTrack(track, work.creatorId ?? -1);
+		const remaining = await listPreviewCaptionTracks(previewId);
+		const ctx = deliveryCtx() ?? localDelivery;
+		return c.json({
+			captions: remaining.map((t) => serializePreviewCaptionRow(t, work.id, ctx)),
+		});
+	})
+
+	/**
+	 * Serve one preview item. A short-lived signed redirect with `no-store`, the shape every
+	 * gated delivery route here uses — and deliberately no access check and no meter: the
+	 * locked viewer is who the storefront is for, and a screenshot is not attention drawn
+	 * from the commons.
+	 */
+	.get("/works/:id/previews/:previewId", async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		const reach = await workReachability(c, work);
+		if ("refusal" in reach) return reach.refusal;
+		const previewId = Number(c.req.param("previewId"));
+		if (!Number.isInteger(previewId) || previewId <= 0) {
+			return c.json({ error: "Not found" }, 404);
+		}
+		const preview = await findPreviewMedia(work.id, previewId);
+		if (!preview) return c.json({ error: "Not found" }, 404);
+		const url = await storage.getUrl(preview.file, {
+			signed: true,
+			expiresIn: SIGNED_MEDIA_TTL_SECONDS,
+		});
+		c.header("Cache-Control", "no-store");
+		return c.redirect(url, 302);
+	})
+
+	/** One trailer caption — reachability-checked with its preview, never access-checked. */
+	.get("/works/:id/previews/:previewId/captions/:trackId", async (c) => {
+		const work = await findWorkRow(c.req.param("id"));
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		const reach = await workReachability(c, work);
+		if ("refusal" in reach) return reach.refusal;
+		const previewId = Number(c.req.param("previewId"));
+		const trackId = Number(c.req.param("trackId"));
+		if (
+			!Number.isInteger(previewId) ||
+			previewId <= 0 ||
+			!Number.isInteger(trackId) ||
+			trackId <= 0
+		) {
+			return c.json({ error: "Not found" }, 404);
+		}
+		const [track] = await db
+			.select()
+			.from(workPreviewCaptionTracks)
+			.where(
+				and(
+					eq(workPreviewCaptionTracks.previewId, previewId),
+					eq(workPreviewCaptionTracks.id, trackId),
+				),
+			);
 		if (!track) return c.json({ error: "Not found" }, 404);
 		const bytes = await storage.read(track.storageKey);
 		if (!bytes) return c.json({ error: "Not found" }, 404);

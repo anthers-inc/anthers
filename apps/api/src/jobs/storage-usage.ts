@@ -54,6 +54,7 @@ import {
 	transcodingJobs,
 	webBuildFiles,
 	webBuilds,
+	workPreviewMedia,
 	workSaves,
 	workSourceFiles,
 	works,
@@ -269,6 +270,22 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 	for (const row of pagedWorks) {
 		if (row.creatorId == null || !isPaged(row.type)) continue;
 		const bytes = await prefixBytes(`creators/${row.creatorId}/ebook/`);
+		if (bytes > 0) add(account(row.creatorId).purposes, "catalog", bytes);
+	}
+
+	// ── Preview media, one prefix read per creator ───────────────────────────────
+	// A Work's storefront screenshots, trailer and trailer captions all live under
+	// `creators/{id}/previews/` by construction, and no row carries their byte sizes —
+	// the inline-images bend again, bounded to creators who actually have previews.
+	// Preview media is creator storage rather than free bytes.
+	const previewCreators = await db
+		.selectDistinct({ creatorId: works.creatorId })
+		.from(workPreviewMedia)
+		.innerJoin(works, eq(workPreviewMedia.workId, works.id))
+		.where(isNotNull(works.creatorId));
+	for (const row of previewCreators) {
+		if (row.creatorId == null) continue;
+		const bytes = await prefixBytes(`creators/${row.creatorId}/previews/`);
 		if (bytes > 0) add(account(row.creatorId).purposes, "catalog", bytes);
 	}
 

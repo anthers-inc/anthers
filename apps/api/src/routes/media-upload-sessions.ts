@@ -39,7 +39,7 @@ export const mediaUploadSessionRoutes = new Hono()
 			z.object({
 				filename: z.string().min(1).max(255),
 				contentType: z.string().min(1).max(100),
-				mediaType: z.enum(["video", "audio", "asset"]),
+				mediaType: z.enum(["video", "audio", "asset", "preview-video"]),
 				/** The file's full size — what the part plan is built from. */
 				size: z.number().int().min(1),
 				/**

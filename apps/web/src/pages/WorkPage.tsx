@@ -15,12 +15,12 @@
  */
 
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
-import { deliverableIsEmpty, isListened } from "@anthers/shared/content";
+import { deliverableIsEmpty, isListened, supportsPreviewMedia } from "@anthers/shared/content";
 import { gridFor, normalizeMaturityRows } from "@anthers/shared/content-rating";
 import { useAuth } from "@anthers/web-shared/auth";
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import { usePageTitle } from "@anthers/web-shared/page-title";
-import { LockedCover, lockedByBadge, presentsAsLocked } from "@anthers/web-shared/post/unlock";
+
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -35,11 +35,13 @@ import StickerBar from "../components/post/StickerBar";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectPricing from "../components/project/ProjectPricing";
 import WorkReviews from "../components/project/WorkReviews";
+import LockedWorkComposition from "../components/work/LockedWorkComposition";
 import OwnerWorkEditor, {
 	CaptionsSummary,
 	DateValueLine,
 	ReleaseSummary,
 } from "../components/work/OwnerWorkEditor";
+import PreviewCarousel from "../components/work/PreviewCarousel";
 import SharedWorkBanner from "../components/work/SharedWorkBanner";
 import ShareLinkButton from "../components/work/ShareLinkButton";
 import { WorkViewAsSection } from "../components/work/ViewAs";
@@ -346,126 +348,23 @@ export default function WorkPage() {
 					// video's gate fills it — the blur-and-overlay is the player's own
 					// rectangle — while the other kinds' two-up is a composition inside the
 					// stage: padded, centered where it fits, and scrolling where it does not.
-					<WorkMediaFrame fill={work.type === "video"}>
-						{isWriting(work.type) && <WorkDescription work={work} />}
-						{work.type === "video" ? (
-							/* A locked video is the feed's treatment at page scale (Parker,
-							    2026-10-13): the thumbnail blurred beneath, and the unlock —
-							    whatever it asks for — overlaid on it, rather than a two-up
-							    of cover and card. The underlying cover is the same
-							    `LockedCover` blur the tiles draw; the card overlay rides
-							    above it, centered, on `z-10`. */
-							<div className="relative w-full overflow-hidden rounded-lg">
-								{presentsAsLocked(access) ? (
-									<LockedCover
-										thumbnail={work.thumbnail}
-										className="aspect-video w-full"
-										lockedBy={null}
-									/>
-								) : work.thumbnail ? (
-									<img
-										src={work.thumbnail}
-										alt=""
-										className="aspect-video w-full object-cover blur-xl scale-110"
-									/>
-								) : (
-									// ⚠️ The base layer is this box's ONLY height (the overlay rides
-									// `absolute inset-0`), so a thumbnail-free Work renders the gradient
-									// fill `LockedCover` itself falls back to — unblurred and
-									// un-padlocked, because this arm is exactly the not-a-lock state —
-									// or the frame collapses to zero height and `overflow-hidden`
-									// clips the account card invisible, rendering as absence (the
-									// locked-preview task, 2026-10-17).
-									<div className="aspect-video w-full bg-gradient-to-br from-base-300 to-base-200" />
-								)}
-								<div className="absolute inset-0 z-10 flex items-center justify-center p-6">
-									{/*
-									 * ⚠️ A user-shape Work always carries an access verdict, which is
-									 * the only shape that reaches this branch — an owner without one
-									 * reads canAccess true above and never gets here. So the card
-									 * here is whichever the verdict asks for.
-									 */}
-									{access && (
-										<div className="w-full max-w-md rounded-lg shadow-lg">
-											{access.requiresPurchase ? (
-												<ProjectPricing
-													workId={work.id}
-													slug={work.slug ?? ""}
-													access={access}
-													title={work.title ?? "Untitled"}
-													creatorHandle={work.creator?.handle ?? ""}
-													thumbnail={work.thumbnail}
-													creatorHasStripe={work.creatorHasStripe ?? false}
-													workType={work.type}
-												/>
-											) : (
-												<InlineUnlock post={work} access={access} />
-											)}
-										</div>
-									)}
-								</div>
-							</div>
-						) : (
-							<div className="flex h-full flex-col justify-start gap-4 sm:justify-center">
-								{/* ⚠️ A signed-out visitor is refused the bytes of free work too, and
-						    that is not a lock — the Work is free to everyone and stays free;
-						    what is missing is an account for the time to be attributed to. So
-						    the cover stays unblurred and un-padlocked here, and the card
-						    underneath asks for the account instead. See `presentsAsLocked`. */}
-								{/* The locked preview and the purchase decision are one composition: a
-						    two-up, equal-height pairing (Parker, 2026-10-04, after Vimeo On
-						    Demand's buy panel) — the blurred cover left, the price card right,
-						    both cards' edges aligned. They stack below `sm` with the cover
-						    first. Everything else on the page stays full-width; only this
-						    pairing is two-up. */}
-								{/* ⚠️ `w-full` is load-bearing on both children: a grid item stretched to
-						    the row's height lets `aspect-video` derive its WIDTH from that
-						    height (254 × 16/9 ≈ 452px), overflowing its 424px track — the
-						    aspect ratio silently outranks the track. An explicit width breaks
-						    the derive-back and the cover sizes to its column. Found by
-						    measuring, invisible in the DOM string. */}
-								<div className="w-full sm:grid sm:grid-cols-2 sm:gap-4 sm:items-stretch">
-									{presentsAsLocked(access) ? (
-										<LockedCover
-											thumbnail={work.thumbnail}
-											className="aspect-video w-full rounded-lg"
-											lockedBy={access ? lockedByBadge(access, creatorName) : null}
-										/>
-									) : work.thumbnail ? (
-										<img
-											src={work.thumbnail}
-											alt=""
-											className="aspect-video w-full rounded-lg object-cover"
-										/>
-									) : (
-										// Same fill as the video arm above: the two-up's cover is its own
-										// height and the composition's first column — dropping it for a
-										// thumbnail-free Work leaves the pairing one-sided (the
-										// locked-preview task, 2026-10-17).
-										<div className="aspect-video w-full rounded-lg bg-gradient-to-br from-base-300 to-base-200" />
-									)}
-									{access &&
-										(access.requiresPurchase ? (
-											/* Every purchase goes through the basket (Parker, 2026-10-03): the
-									   pricing card offers the two doors into it and nothing about a
-									   card lives on this page. */
-											<ProjectPricing
-												workId={work.id}
-												slug={work.slug ?? ""}
-												access={access}
-												title={work.title ?? "Untitled"}
-												creatorHandle={work.creator?.handle ?? ""}
-												thumbnail={work.thumbnail}
-												creatorHasStripe={work.creatorHasStripe ?? false}
-												workType={work.type}
-											/>
-										) : (
-											<InlineUnlock post={work} access={access} />
-										))}
-								</div>
-							</div>
-						)}
-					</WorkMediaFrame>
+					// The carousel mounts only when the kind supports previews and the Work
+					// has any; with none, this is the same composition it has always been.
+					supportsPreviewMedia(work.type) && (work.previewMedia?.length ?? 0) > 0 ? (
+						<PreviewCarousel
+							workTitle={work.title}
+							thumbnail={work.thumbnail}
+							previews={work.previewMedia ?? []}
+							slideZeroFill={work.type === "video"}
+							slideZero={
+								<LockedWorkComposition work={work} access={access} creatorName={creatorName} />
+							}
+						/>
+					) : (
+						<WorkMediaFrame fill={work.type === "video"}>
+							<LockedWorkComposition work={work} access={access} creatorName={creatorName} />
+						</WorkMediaFrame>
+					)
 				) : spentOnThis ? (
 					<WorkMediaFrame>
 						{isWriting(work.type) && (

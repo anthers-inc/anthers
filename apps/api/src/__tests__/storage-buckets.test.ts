@@ -111,6 +111,11 @@ describe("what counts as public, by key", () => {
 			HLS_SEGMENT,
 			HLS_MASTER,
 			PROCESSED_AUDIO,
+			// Storefront chrome shown before purchase, and still private: it follows the
+			// Work's rating and has to disappear with the Work.
+			"creators/7/previews/images/12/shot.png",
+			"creators/7/previews/videos/trailer.mp4",
+			"creators/7/previews/captions/4/en.vtt",
 		]) {
 			expect({ key, public: isPublicKey(key) }).toEqual({ key, public: false });
 		}

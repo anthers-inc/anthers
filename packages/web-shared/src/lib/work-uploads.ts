@@ -57,7 +57,11 @@ export type WorkUploadTarget =
 	 */
 	| { kind: "set-row"; type: (typeof FILE_WORK_TYPES)[number] }
 	/** A downloadable build for a game or software Work, which becomes its primary download. */
-	| { kind: "build"; platform: string };
+	| { kind: "build"; platform: string }
+	/** A storefront screenshot, appended to the Work's preview set when it lands. */
+	| { kind: "preview-image" }
+	/** A storefront trailer, appended to the Work's preview set when it lands. */
+	| { kind: "preview-video" };
 
 /** The additive target: a file joining a set-kind Work's source set. */
 export type WorkUploadSetRowTarget = Extract<WorkUploadTarget, { kind: "set-row" }>;
@@ -131,7 +135,15 @@ export interface WorkUploadTransport {
 
 const defaultTransport: WorkUploadTransport = {
 	async put(file, target, onProgress, signal) {
-		if (target.kind !== "build" && target.type === "image") {
+		if (target.kind === "preview-image") {
+			// The direct image route stores the key; the attach route is what names it on
+			// the Work, and its inline scan has already answered before the row exists.
+			return (await uploadImageFile(file, "preview-image", signal)).url;
+		}
+		if (target.kind === "preview-video") {
+			return uploadMediaFile(file, "preview-video", onProgress, signal);
+		}
+		if ("type" in target && target.type === "image") {
 			return (await uploadImageFile(file, "image", signal)).url;
 		}
 		const processing = target.kind === "source" ? processingFor(target.type) : null;
@@ -151,6 +163,18 @@ const defaultTransport: WorkUploadTransport = {
 		// kinds; the service keeps the legacy column following the set — a paged set at its
 		// newest file, an image set at its first. The other kinds' attach stays the legacy
 		// column patch.
+		if (target.kind === "preview-image" || target.kind === "preview-video") {
+			const res = await client.api.content.works[":id"].previews.$post({
+				param,
+				json: {
+					kind: target.kind === "preview-image" ? "image" : "video",
+					key,
+					alt: "",
+				},
+			});
+			if (!res.ok) throw new Error(`attach answered ${res.status}`);
+			return;
+		}
 		const res =
 			target.kind === "set-row" || (target.kind === "source" && hasSourceSet(target.type))
 				? await client.api.content.works[":id"]["source-files"].$post({
@@ -293,7 +317,10 @@ export function createWorkUploadStore(transport: WorkUploadTransport): WorkUploa
 				fileSize: file.size,
 				target,
 				status: "uploading",
-				progress: target.kind !== "build" && target.type === "image" ? null : 0,
+				progress:
+					target.kind === "preview-image" || ("type" in target && target.type === "image")
+						? null
+						: 0,
 				error: null,
 				batch,
 			},
