@@ -24,6 +24,7 @@
  */
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import MentionTitleInput from "../components/content/MentionTitleInput";
 import RichTextEditor from "../components/editor/RichTextEditor";
 import FormField from "../components/ui/FormField";
 import { usePayoutsReady } from "../lib/payouts";
@@ -152,13 +153,7 @@ export default function PostFormPage() {
 					<h2 className="text-lg font-semibold">Basics</h2>
 
 					<FormField label="Title">
-						<input
-							type="text"
-							className="input input-bordered w-full"
-							value={title}
-							onChange={(e) => setTitle(e.target.value)}
-							placeholder="Post title"
-						/>
+						<MentionTitleInput canonical={title} onChange={setTitle} />
 						<p className="text-xs text-base-content/50 mt-1">
 							The URL slug is generated from the title, and follows it when the title changes.
 						</p>

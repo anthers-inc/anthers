@@ -103,10 +103,20 @@ export type WorkDetail = Work & {
 	/**
 	 * Where this Work can be found — the facts of the Showings panel. The creator's
 	 * profile is read off `creator`; the Projects carrying it ride here, in the order
-	 * the project places them. Channels, collections and collaborations follow when
+	 * the project places them, and the published posts whose titles name it are the
+	 * conversations about it. Channels, collections and collaborations follow when
 	 * their machinery exists; the panel's stub text is the promise's current shape.
 	 */
-	shownOn?: { projects: Array<{ slug: string; title: string }> };
+	shownOn?: {
+		projects: Array<{ slug: string; title: string }>;
+		posts?: Array<{
+			slug: string;
+			publicId: number;
+			title: string | null;
+			displayTitle: string | null;
+			publishedAt: string | null;
+		}>;
+	};
 };
 
 /** The title's typography, so a control standing in for the title reads as the title. */

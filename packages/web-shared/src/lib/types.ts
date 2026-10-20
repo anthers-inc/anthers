@@ -670,8 +670,23 @@ export interface Post {
 	 * announcement and carries no gate; each Work resolves on its own.
 	 */
 	linkedWorks?: PostWorkRef[];
+	/**
+	 * The title with each `@`-mentioned Work's current name — what a reader sees.
+	 * `title` is the stored form, whose mention text is only the fallback for a Work
+	 * that no longer resolves.
+	 */
+	displayTitle?: string | null;
+	/** The Works the title mentions, resolved for this reader, in first-appearance order. */
+	mentionedWorks?: PostMentionedWork[];
 	/** Transparent edit history (newest first), present on the detail endpoint. */
 	edits?: PostEdit[];
+}
+
+/** A Work a post's title names, as the heading links it. */
+export interface PostMentionedWork {
+	publicId: number;
+	slug: string;
+	title: string;
 }
 
 /** One timestamped entry in a post's edit history. */
@@ -694,6 +709,8 @@ export interface PostListItem {
 	 */
 	creatorId: number | null;
 	title: string | null;
+	/** The title with each mentioned Work's current name — what a card shows. */
+	displayTitle?: string | null;
 	isPinned: boolean;
 	tags: string[] | null;
 	isPublished: boolean | null;
@@ -720,6 +737,8 @@ export interface ProjectPost {
 	publicId: number;
 	slug: string;
 	title: string | null;
+	/** The title with each mentioned Work's current name — what the row shows. */
+	displayTitle?: string | null;
 	isPublished: boolean | null;
 	publishedAt: string | null;
 	sortOrder: number;

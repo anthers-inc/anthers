@@ -63,9 +63,12 @@ export default function PostRow({
 						)}
 					</div>
 					<div className="min-w-0">
-						<p className="font-medium text-sm truncate" title={post.title ?? undefined}>
+						<p
+							className="font-medium text-sm truncate"
+							title={post.displayTitle ?? post.title ?? undefined}
+						>
 							<Link to={editUrl} className="link link-hover">
-								{post.title || "Untitled"}
+								{post.displayTitle || post.title || "Untitled"}
 							</Link>
 						</p>
 						{(post.tags?.length ?? 0) > 0 && (
