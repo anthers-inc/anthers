@@ -78,7 +78,7 @@ export function buildSchedule({
 		items.push({
 			kind: "post",
 			id: `post-${post.id}`,
-			title: post.title || "Untitled",
+			title: post.displayTitle || post.title || "Untitled",
 			href: editPostUrl(post),
 			at: post.scheduledFor,
 			waiting: false,

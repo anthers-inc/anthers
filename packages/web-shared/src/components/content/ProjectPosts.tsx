@@ -261,7 +261,7 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 							</span>
 							<div className="min-w-0 flex-1">
 								<Link to={postUrl(post)} className="link link-hover truncate text-sm font-medium">
-									{post.title || "Untitled"}
+									{post.displayTitle || post.title || "Untitled"}
 								</Link>
 								{!post.isPublished && (
 									<span
@@ -277,7 +277,7 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 								className="btn btn-ghost btn-xs text-error"
 								onClick={() => remove(post.id)}
 								disabled={busy}
-								aria-label={`Remove ${post.title || "Untitled"}`}
+								aria-label={`Remove ${post.displayTitle || post.title || "Untitled"}`}
 							>
 								<XMarkIcon className="h-4 w-4" />
 							</button>
