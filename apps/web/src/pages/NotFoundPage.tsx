@@ -26,7 +26,7 @@ export default function NotFoundPage() {
 				lives at an address beginning with <span className="font-mono">@</span>, like{" "}
 				<span className="font-mono">/@name</span>.
 			</p>
-			{/* One destination, and it is the one that works signed out. `/discover` is behind
+			{/* One destination, and it is the one that works signed out. `/discovery` is behind
 			    ProtectedRoute, so offering it here would bounce a logged-out user to `/login`
 			    from the page that just told them their link was wrong. */}
 			<Link to="/" className="btn btn-primary mt-6">

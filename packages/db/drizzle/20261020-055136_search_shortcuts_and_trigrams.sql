@@ -1,8 +1,8 @@
--- Trigram indexes for the topbar search, beside the shortcut column that shares this
--- deploy. `pg_trgm` is an extension, not a Drizzle schema object, so this half is
--- hand-written and travels in the generated migration rather than in a second file with
--- no snapshot: every migration in the journal must carry one, or the next `db:generate`
--- diffs against a stale baseline.
+-- The topbar search: the account's two shortcuts, and the trigram indexes both passes use.
+--
+-- `pg_trgm` is an extension, not a Drizzle schema object, so the index half is
+-- hand-written and travels in this generated migration rather than in a second file with
+-- no snapshot. The schema half is the column Drizzle saw.
 --
 -- The two passes search different columns, so the indexes are per column rather than one
 -- over a concatenation: a predicate restricted to a title must be able to use the title's

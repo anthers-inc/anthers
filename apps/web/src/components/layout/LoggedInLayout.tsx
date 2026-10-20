@@ -34,9 +34,9 @@ import { ViewFilterProvider } from "./search/filter-context";
 
 /** The sidebar's nav in user mode. Studio mode has `STUDIO_NAV` in its place. */
 const NAV_LINKS = [
-	{ to: "/feed", id: "feed", label: "Feed", icon: RssIcon },
 	{ to: "/library", id: "library", label: "Library", icon: RectangleStackIcon },
-	{ to: "/discover", id: "discover", label: "Discover", icon: MagnifyingGlassIcon },
+	{ to: "/network", id: "network", label: "Network", icon: RssIcon },
+	{ to: "/discovery", id: "discovery", label: "Discovery", icon: MagnifyingGlassIcon },
 ] as const;
 
 /**
@@ -79,11 +79,12 @@ function orderedNavLinks(saved: string[] | null | undefined): readonly NavLinkIt
  * The switch between the two modes, at the top of the sidebar, shown only to an account with
  * creator mode on (Parker, 2026-09-17). The sides name the person rather than the product —
  * User|Creator (Parker, 2026-10-16) — and each side goes to its mode's home, since the mode of
- * the page on screen is decided by where it is (`app-mode.ts`).
+ * the page on screen is decided by where it is (`app-mode.ts`). The user home is the top of
+ * the account's own nav order, the same rule `RootRedirect` follows.
  */
-function ModeSwitch({ mode }: { mode: AppMode }) {
+function ModeSwitch({ mode, userHome }: { mode: AppMode; userHome: string }) {
 	const sides = [
-		{ to: "/feed", label: "User", on: mode === "user" },
+		{ to: userHome, label: "User", on: mode === "user" },
 		{ to: studioUrl("/"), label: "Creator", on: mode === "studio" },
 	];
 	return (
@@ -135,8 +136,11 @@ function LoggedInLayoutInner() {
 		});
 	};
 
+	/** Where user mode begins: the top of the account's own order, never a forced tab. */
+	const userHome = orderedNavLinks(navOrder ?? user?.homeNavOrder ?? null)[0]?.to ?? "/library";
+
 	// An account that has not finished onboarding owns nothing the sidebar points at:
-	// Feed, Library and Discover are all behind ProtectedRoute, which bounces a
+	// Network, Library and Discovery are all behind ProtectedRoute, which bounces a
 	// terms-owing account straight back to /welcome — so every link it offers is a dead
 	// end wearing a nav item. The sidebar stays out of the way until the account has
 	// finished, and the toggle button is part of its chrome and goes with it. (This
@@ -172,7 +176,7 @@ function LoggedInLayoutInner() {
 						{/* A plain flex link rather than a `btn`, for the same reason as the brand link in
 					    LoggedOutLayout: the ghost button's hover background draws a rectangle the trimmed
 					    logo artwork doesn't fill. */}
-						<Link to={studio ? studioUrl("/") : "/feed"} className="flex items-center gap-2 px-2">
+						<Link to={studio ? studioUrl("/") : userHome} className="flex items-center gap-2 px-2">
 							<Logo variant="oneline" className="h-9" />
 							{studio && <span className="text-lg font-bold text-primary">Studio</span>}
 						</Link>
@@ -304,13 +308,13 @@ function LoggedInLayoutInner() {
 						<div className={`${rail ? "w-16" : "w-64"} h-full flex flex-col overflow-y-auto`}>
 							{isCreator && !rail && (
 								<div className="px-3 pt-3">
-									<ModeSwitch mode={mode} />
+									<ModeSwitch mode={mode} userHome={userHome} />
 								</div>
 							)}
 
 							{/* Each mode's own nav, and never both: the Studio's places used to be tabs
 						    under a second header inside this layout, beside a sidebar still offering
-						    Feed, Library and Discover. Each nav is named, so a user (and a spec) can
+						    Network, Library and Discovery. Each nav is named, so a user (and a spec) can
 						    tell which one is on screen. */}
 							{studio ? (
 								<nav aria-label="Studio" className="p-3 flex flex-col gap-0.5">
@@ -494,15 +498,15 @@ function LoggedInLayoutInner() {
 									<div className="max-w-7xl mx-auto">
 										<div className="join join-horizontal w-full">
 											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-												<h6 className="footer-title text-xs">Discover</h6>
-												<Link to="/discover" className="link link-hover">
-													Browse Projects
+												<h6 className="footer-title text-xs">Discovery</h6>
+												<Link to="/discovery" className="link link-hover">
+													Find something new
 												</Link>
 											</nav>
 											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 												<h6 className="footer-title text-xs">Your Stuff</h6>
-												<Link to="/feed" className="link link-hover">
-													Feed
+												<Link to="/network" className="link link-hover">
+													Network
 												</Link>
 												<Link to="/library" className="link link-hover">
 													Library

@@ -63,7 +63,7 @@ test.describe("on a desktop", () => {
 
 	test("collapsing leaves the nav's icons in a rail beside the page", async ({ page }) => {
 		test.setTimeout(60_000);
-		await page.goto(`${WEB_ORIGIN}/feed`);
+		await page.goto(`${WEB_ORIGIN}/network`);
 		await expect(toggle(page)).toBeVisible();
 		await expect.poll(async () => (await railState(page)).asideWidth).toBe(256);
 
@@ -76,7 +76,7 @@ test.describe("on a desktop", () => {
 
 		const rail = await railState(page);
 		expect(rail.mainLeft, "the rail still sits beside the page").toBe(64);
-		expect(rail.rows.map((row) => row.name)).toEqual(["Feed", "Library", "Discover"]);
+		expect(rail.rows.map((row) => row.name)).toEqual(["Library", "Network", "Discovery"]);
 		expect(rail.grips, "the drag grips have no room in the rail").toBe(0);
 		for (const row of rail.rows) {
 			expect(row.title, `${row.name} keeps a hover label`).toBe(row.name);
@@ -89,13 +89,13 @@ test.describe("on a desktop", () => {
 
 		// A rail icon is still a link with a name, not a decorative glyph.
 		await expect(
-			page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Feed" }),
+			page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Network" }),
 		).toBeVisible();
 	});
 
 	test("opening it again restores the labels and the grips", async ({ page }) => {
 		test.setTimeout(60_000);
-		await page.goto(`${WEB_ORIGIN}/feed`);
+		await page.goto(`${WEB_ORIGIN}/network`);
 		await expect(toggle(page)).toBeVisible();
 		await expect.poll(async () => (await railState(page)).asideWidth).toBe(256);
 

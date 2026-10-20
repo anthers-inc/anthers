@@ -6,7 +6,10 @@
  *   GET    /me                      — current user profile (full)
  *   PATCH  /me                      — update current user profile
  *   GET    /me/following            — list creators the current user follows
- *   GET    /me/feed                 — posts AND releases from followed creators, plus your own
+ *   GET    /me/graph                — creators ranked by how many of the people the
+ *                                     current user follows also follow them
+ *   GET    /me/feed                 — posts AND releases from followed creators, plus your own;
+ *                                     `?scope=global` widens it to every creator for Discovery's Ticker
  *   GET    /me/blocks               — who the current user has blocked
  *   GET    /me/adult-access         — the opt-in and adulthood verification, and whether
  *                                     the two together open the Adult rung
@@ -386,7 +389,7 @@ const PARENTAL_LOCKED = {
 	code: "parental_locked",
 } as const;
 
-const NAV_IDS = ["feed", "library", "discover"] as const;
+const NAV_IDS = ["library", "network", "discovery"] as const;
 
 const updateProfileSchema = z.object({
 	displayName: z.string().max(150).optional(),
@@ -509,7 +512,7 @@ const accountRoutes = new Hono()
 			const sent = data.homeNavOrder;
 			if (new Set(sent).size !== NAV_IDS.length) {
 				return c.json(
-					{ error: "homeNavOrder must name each of feed, library and discover once" },
+					{ error: "homeNavOrder must name each of library, network and discovery once" },
 					400,
 				);
 			}
@@ -657,9 +660,154 @@ const accountRoutes = new Hono()
 		});
 	})
 
+	// ── Graph ────────────────────────────────────────────────────────────────
+	//
+	// Discovery's Graph mode. The formula is the point: a creator is here because
+	// some number of the people this account follows also follow them, and the
+	// number travels with the row so the page can say why it is showing them. That
+	// is the visible, choosable alternative to a hidden recommendation engine —
+	// `min_shared` is the reader's control over the formula's one parameter.
+	//
+	// ⚠️ **Creators the reader already follows stay in the list.** The graph is a
+	// picture of the network around them, not a list of strangers; a creator they
+	// follow but whose other followers they share is still a true edge, and the
+	// card says "Following". Excluding them would make a well-connected reader's
+	// graph look empty precisely when their network is richest.
+	//
+	// A reader who follows nobody has no edges to trace: the route falls back to
+	// creators ordered by followers and says so with `basis: "followers"`, which
+	// the page renders as the formula it actually ran rather than pretending the
+	// network produced it.
+	.get("/me/graph", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const minShared = Math.max(1, Math.min(10, Number(c.req.query("min_shared") ?? 1) || 1));
+		const limit = Math.max(1, Math.min(48, Number(c.req.query("limit") ?? 24) || 24));
+
+		const myFollows = await db
+			.select({ creatorId: follows.creatorId })
+			.from(follows)
+			.where(eq(follows.followerId, sessionUser.id));
+		const followedIds = myFollows.map((row) => row.creatorId);
+
+		const followerCount =
+			sql<number>`(SELECT count(*)::int FROM follows WHERE creator_id = ${usersId})`.as(
+				"follower_count",
+			);
+		// What the graph's shared Type and Tags filters run on. A creator row carries
+		// the vocabulary of what they have actually released, so a Type row grays where
+		// nobody in the result holds it rather than promising a narrowing that yields
+		// nothing.
+		const releasedTypes = sql<
+			string[]
+		>`COALESCE((SELECT array_agg(DISTINCT w.type) FROM works w WHERE w.creator_id = ${usersId} AND w.visibility = 'released'), ARRAY[]::text[])`.as(
+			"released_types",
+		);
+		const hasPosts =
+			sql<boolean>`EXISTS(SELECT 1 FROM posts p WHERE p.creator_id = ${usersId} AND p.is_published = true)`.as(
+				"has_posts",
+			);
+		const contentTags = sql<
+			string[]
+		>`COALESCE((SELECT array_agg(DISTINCT tag) FROM (SELECT jsonb_array_elements_text(w.tags) AS tag FROM works w WHERE w.creator_id = ${usersId} AND w.visibility = 'released' UNION SELECT jsonb_array_elements_text(p.tags) AS tag FROM posts p WHERE p.creator_id = ${usersId} AND p.is_published = true) t), ARRAY[]::text[])`.as(
+			"content_tags",
+		);
+
+		if (followedIds.length === 0) {
+			const rows = await db
+				.select({
+					user: users,
+					followerCount,
+					projectCount: publishedProjectCount,
+					releasedTypes,
+					hasPosts,
+					contentTags,
+				})
+				.from(users)
+				.where(
+					and(
+						eq(users.isCreator, true),
+						sql`${users.id} <> ${sessionUser.id}`,
+						notBlockedBy(sessionUser.id, users.id),
+						notSuspendedAccount(users.id),
+						notTestAccount(users.id),
+					),
+				)
+				.orderBy(desc(followerCount))
+				.limit(limit);
+
+			return c.json({
+				basis: "followers" as const,
+				creators: rows.map((row) => ({
+					...serializePublicUser(row.user, {
+						followerCount: Number(row.followerCount),
+						projectCount: Number(row.projectCount),
+						isFollowing: false,
+					}),
+					sharedFollows: 0,
+					types: row.releasedTypes ?? [],
+					hasPosts: Boolean(row.hasPosts),
+					tags: row.contentTags ?? [],
+				})),
+			});
+		}
+
+		const sharedFollows = sql<number>`count(distinct ${follows.followerId})::int`.as(
+			"shared_follows",
+		);
+		const rows = await db
+			.select({
+				user: users,
+				sharedFollows,
+				followerCount,
+				projectCount: publishedProjectCount,
+				releasedTypes,
+				hasPosts,
+				contentTags,
+			})
+			.from(users)
+			.innerJoin(follows, eq(follows.creatorId, users.id))
+			.where(
+				and(
+					inArray(follows.followerId, followedIds),
+					eq(users.isCreator, true),
+					sql`${users.id} <> ${sessionUser.id}`,
+					notBlockedBy(sessionUser.id, users.id),
+					notSuspendedAccount(users.id),
+					notTestAccount(users.id),
+				),
+			)
+			.groupBy(users.id)
+			.having(sql`count(distinct ${follows.followerId}) >= ${minShared}`)
+			.orderBy(desc(sharedFollows), desc(followerCount))
+			.limit(limit);
+
+		return c.json({
+			basis: "network" as const,
+			creators: rows.map((row) => ({
+				...serializePublicUser(row.user, {
+					followerCount: Number(row.followerCount),
+					projectCount: Number(row.projectCount),
+					isFollowing: followedIds.includes(row.user.id),
+				}),
+				sharedFollows: Number(row.sharedFollows),
+				types: row.releasedTypes ?? [],
+				hasPosts: Boolean(row.hasPosts),
+				tags: row.contentTags ?? [],
+			})),
+		});
+	})
+
 	// ── Feed ─────────────────────────────────────────────────────────────────
 	.get("/me/feed", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
+
+		// `scope=global` is Discovery's Ticker: the newest Works and Posts across
+		// Anthers rather than the account's network. It is the same stream shape and
+		// the same card fields, so the Ticker reuses the feed's serialization instead
+		// of growing a second listing that drifts from it. Everything else about the
+		// route is unchanged — the filters, the access verdicts, and the ordering are
+		// the feed's own.
+		const scope = c.req.query("scope") === "global" ? "global" : "network";
 
 		// Get the feed's creator ids: the creators this account follows, plus the
 		// account's own id — a creator reads their own published announcements and
@@ -670,24 +818,30 @@ const accountRoutes = new Hono()
 		// follows table refuses is why own content never arrived here before; the
 		// own id joins at the source instead, which also retired the empty-list
 		// early return — the list is never empty now, and a follow-less creator's
-		// feed is their own.)
-		const followedIds = await db
-			.select({ creatorId: follows.creatorId })
-			.from(follows)
-			.where(
-				and(
-					eq(follows.followerId, sessionUser.id),
-					notBlockedBy(sessionUser.id, follows.creatorId),
-					// Suspension keeps the follow but ends the feed — filtered here, at the
-					// source, for the same reason the block is: every downstream feed
-					// query reads from this id list.
-					notSuspendedAccount(follows.creatorId),
-					// The automated-test account is filtered at the source here too.
-					notTestAccount(follows.creatorId),
-				),
-			);
+		// feed is their own.) A global Ticker has no id list at all: every creator
+		// is eligible, and the queries below drop the `inArray` rather than widen it
+		// to a list assembled from the platform.
+		const followedIds =
+			scope === "global"
+				? []
+				: await db
+						.select({ creatorId: follows.creatorId })
+						.from(follows)
+						.where(
+							and(
+								eq(follows.followerId, sessionUser.id),
+								notBlockedBy(sessionUser.id, follows.creatorId),
+								// Suspension keeps the follow but ends the feed — filtered here, at the
+								// source, for the same reason the block is: every downstream feed
+								// query reads from this id list.
+								notSuspendedAccount(follows.creatorId),
+								// The automated-test account is filtered at the source here too.
+								notTestAccount(follows.creatorId),
+							),
+						);
 
-		const creatorIds = [...followedIds.map((f) => f.creatorId), sessionUser.id];
+		const creatorIds =
+			scope === "global" ? null : [...followedIds.map((f) => f.creatorId), sessionUser.id];
 
 		// The feed shows BOTH what a creator said and what they released.
 		//
@@ -753,7 +907,14 @@ const accountRoutes = new Hono()
 						.innerJoin(users, eq(posts.creatorId, users.id))
 						.where(
 							and(
-								inArray(posts.creatorId, creatorIds),
+								...(creatorIds ? [inArray(posts.creatorId, creatorIds)] : []),
+								// The network's creator list already excludes blocks, suspensions and
+								// the test account, but a global Ticker has no list to filter at the
+								// source. Filtering the rows themselves covers both scopes, and keeps
+								// the guarantee from depending on which branch built the input.
+								notBlockedBy(sessionUser.id, posts.creatorId),
+								notSuspendedAccount(posts.creatorId),
+								notTestAccount(posts.creatorId),
 								eq(posts.isPublished, true),
 								// The tags the user multi-selected, AND semantics over the post's own.
 								...(tagFilter.length > 0
@@ -805,7 +966,13 @@ const accountRoutes = new Hono()
 						.innerJoin(users, eq(works.creatorId, users.id))
 						.where(
 							and(
-								inArray(works.creatorId, creatorIds),
+								...(creatorIds ? [inArray(works.creatorId, creatorIds)] : []),
+								// Same reasoning as the posts half: a global Ticker has no creator
+								// list, so the row filters are what keep a blocked, suspended or
+								// automated-test account out of it.
+								notBlockedBy(sessionUser.id, works.creatorId),
+								notSuspendedAccount(works.creatorId),
+								notTestAccount(works.creatorId),
 								eq(works.visibility, "released"),
 								// The feed is a listing, and a release by a followed creator is
 								// no exception to the invisibility rule — following somebody is
@@ -909,7 +1076,12 @@ const accountRoutes = new Hono()
 					creatorId: p.creatorId,
 					// Why the entry is here: the account made this one, or follows whoever
 					// did (the commitment the feed page carries — every item says why).
-					source: p.creatorId === sessionUser.id ? ("own" as const) : ("following" as const),
+					source:
+						p.creatorId === sessionUser.id
+							? ("own" as const)
+							: scope === "global"
+								? ("discovery" as const)
+								: ("following" as const),
 					title: p.title,
 					// The title with each mentioned Work's current name — what the tile shows.
 					displayTitle: postDisplayTitles[index] ?? p.title,
@@ -949,7 +1121,12 @@ const accountRoutes = new Hono()
 					creatorId: w.creatorId,
 					// Same reason-saying as the posts half: own released work rides the
 					// account's own id in the feed's source list.
-					source: w.creatorId === sessionUser.id ? ("own" as const) : ("following" as const),
+					source:
+						w.creatorId === sessionUser.id
+							? ("own" as const)
+							: scope === "global"
+								? ("discovery" as const)
+								: ("following" as const),
 					title: w.title,
 					type: w.type,
 					// Thumbnails are public by design — they are the preview a locked Work is

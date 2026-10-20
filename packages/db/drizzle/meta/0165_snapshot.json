@@ -1,5 +1,5 @@
 {
-  "id": "4da2aa44-4182-4b8e-9021-97a4fe99464f",
+  "id": "5e6bf1e4-a5fa-4e71-b377-4af9da033aa5",
   "prevId": "a9a411ea-606e-4c08-9dcd-776a3c3d9876",
   "version": "7",
   "dialect": "postgresql",
@@ -8103,12 +8103,6 @@
         },
         "home_nav_order": {
           "name": "home_nav_order",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "search_shortcuts": {
-          "name": "search_shortcuts",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

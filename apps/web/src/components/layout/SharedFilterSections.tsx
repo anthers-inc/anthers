@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The TAB-SHARED sidebar filter sections — TYPE and TAGS — the lower section of the
- * house sidebar structure on every user-mode tab (Parker, 2026-10-11): Feed, Library
- * and Discover all render these behind the sidebar's second divider, each page
+ * house sidebar structure on every user-mode tab (Parker, 2026-10-11): Network, Library
+ * and Discovery all render these behind the sidebar's second divider, each page
  * supplying its own params, so this component binds to nothing.
  *
- * A page decides what a type SELECTION does through its adapter: on the feed the Work
- * types land in `media_type` and "posts" maps to the feed route's `kind=posts` (a post
- * is a kind of feed entry, not a Work type — the URL carries the selection inside
- * `media_type` and the page translates). The Library and Discover adapters are their
- * own tasks'.
+ * A page decides what a type SELECTION does through its adapter: on the Network the
+ * Work types land in `media_type` and "posts" maps to the feed route's `kind=posts` (a
+ * post is a kind of feed entry, not a Work type — the URL carries the selection inside
+ * `media_type` and the page translates). The Library and Discovery adapters are their
+ * own pages.
  *
  * 🚨 The list is the UNIFIED vocabulary — All, then Posts, then every Work type —
  * rendered on every tab, GRAYED where that tab or its active view cannot select it
@@ -21,15 +21,14 @@
  * An `access` prop — the tab's Access filter, supplied where the content carries
  * access state — renders the Access section FIRST among the shared filters (Parker,
  * 2026-10-11: the Library now holds locked saves, which is what earned the row there).
- * Discover leaves it out for now and keeps its own pricing machinery; that placement
- * is the Discover rework's call.
+ * Discovery supplies it only in Ticker mode, where the stream carries an access
+ * verdict; Graph is about people, not deliverables, so the section is omitted there
+ * rather than left inert.
  *
- * Deliberately not a mode of `ContentFilterSections` (Discover's browsing-only
- * machinery): Discover's own tags stay until its task migrates it.
- *
- * The Tags section is the FEED's shape, carried over unchanged: the tags the user
+ * The Tags section is the Network's shape, carried over unchanged: the tags the user
  * filtered on are the only ones that render, and a search names candidates over the
- * curated corpus — the chip wall Discover still has is a different surface, not this.
+ * curated corpus. The vocabularies themselves live in `content-vocabulary.ts`, which
+ * outlived Browse's retired filter machinery.
  */
 
 import {
@@ -40,7 +39,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useMemo, useState } from "react";
 import AccessFilterSection from "./AccessFilterSection";
-import { CONTENT_TYPES, TAGS_BY_TYPE } from "./ContentFilterSections";
+import { CONTENT_TYPES, TAGS_BY_TYPE } from "./content-vocabulary";
 import { sidebarRowClass } from "./sidebar-row-class";
 
 /**

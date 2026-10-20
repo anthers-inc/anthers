@@ -186,13 +186,13 @@ export default function App() {
 				Marketing / logged-out layout
 				These pages always show the marketing chrome (sign up/log in buttons,
 				marketing nav links) — `forceMarketing` keeps it that way even for
-				logged-in users. Authenticated users hitting / get redirected to /feed.
+				logged-in users. Authenticated users hitting / get redirected to their own home tab.
 				Shares the PublicShell component with the shared-content group below so
 				the botanical decor never remounts as you navigate between them.
 			*/}
 				<Route element={<PublicShell forceMarketing />}>
 					{/* The For Users page is the homepage (RootRedirect renders it for logged-out
-					visitors; authed users go to /feed). It renders its own <MeadowDecor>. */}
+					visitors; authed users go to their own home tab). It renders its own <MeadowDecor>. */}
 					<Route path="/" element={<RootRedirect />} />
 					{/* /for-users is retired as a destination — redirect old links to the homepage. */}
 					<Route path="/for-users" element={<Navigate to="/" replace />} />
@@ -236,7 +236,7 @@ export default function App() {
 				{/*
 				Authenticated layout
 				Protected routes that require login. Shows the user-focused nav
-				(discover, library, dashboard, avatar dropdown).
+				(discovery, library, network, avatar dropdown).
 			*/}
 				<Route element={<LoggedInLayout />}>
 					{/*
@@ -248,7 +248,7 @@ export default function App() {
 				*/}
 					<Route path="/welcome" element={<WelcomePage />} />
 					<Route
-						path="/feed"
+						path="/network"
 						element={
 							<ProtectedRoute>
 								<AuthenticatedHomePage />
@@ -268,12 +268,13 @@ export default function App() {
 							</ProtectedRoute>
 						}
 					/>
-					{/* Discover is a logged-in browse/search experience (search sends queries
-					here). It's intentionally gated — logged-out visitors are bounced to
-					login rather than seeing it dressed in marketing chrome. The legacy
-					/discover/:slug redirect stays public (it just bounces to canonical URLs). */}
+					{/* Discovery is a logged-in experience; the top-level search bar sends
+					its queries here. It's intentionally gated — logged-out visitors are
+					bounced to login rather than seeing it dressed in marketing chrome. The
+					legacy /discovery/:slug redirect stays public (it just bounces to canonical
+					URLs). */}
 					<Route
-						path="/discover"
+						path="/discovery"
 						element={
 							<ProtectedRoute>
 								<DiscoverPage />
@@ -348,7 +349,7 @@ export default function App() {
 				mounted when navigating across the whole public surface.
 			*/}
 				<Route element={<PublicShell />}>
-					<Route path="/discover/:slug" element={<ProjectRedirect />} />
+					<Route path="/discovery/:slug" element={<ProjectRedirect />} />
 					<Route path="/posts/:slug" element={<PostPage />} />
 					{/* A Work stands on its own — reachable whether or not a post ever mentioned it. */}
 					<Route path="/works/:slug" element={<WorkPage />} />

@@ -88,15 +88,15 @@ async function signInThroughUi(page: Page, email: string): Promise<void> {
 async function signOutThroughUi(page: Page): Promise<void> {
 	// The menu needs a page to live on; a test that reaches here without navigating
 	// still gets the banner once the shell has rendered.
-	await page.goto("/feed");
+	await page.goto("/network");
 	const header = page.getByRole("banner");
 	await header.getByRole("button", { name: "Your account" }).click();
 	await header.getByRole("button", { name: "Log out" }).click();
 	// The logged-out shell takes the account menu away and lands on the marketing root;
-	// the URL off /feed is the walk's own signal, the same one sign-in uses.
+	// the URL off /network is the walk's own signal, the same one sign-in uses.
 	await expect
 		.poll(() => page.url(), { message: "sign-out never happened", timeout: 15_000 })
-		.not.toContain("/feed");
+		.not.toContain("/network");
 }
 
 /** The signed-in basket, as the server holds it — the truth the badge renders. */
@@ -242,7 +242,7 @@ test("account A's basket stays account A's, and account B starts empty", async (
 
 	// B signs in on the SAME browser: the badge must read nothing.
 	await signInThroughUi(page, buyerBEmail);
-	await page.goto("/feed");
+	await page.goto("/network");
 	await expect(
 		page.getByRole("banner").getByRole("link", { name: /Basket/ }),
 		"B's header offered a basket their account never built",
@@ -283,7 +283,7 @@ test("an anonymous scratch basket survives sign-in — the merge, then the scrat
 
 	// Sign in — the merge is the ceremony's own act, and the badge is what proves it.
 	await signInThroughUi(scratchPage, buyerAEmail);
-	await scratchPage.goto("/feed");
+	await scratchPage.goto("/network");
 	await expect(
 		scratchPage.getByRole("banner").getByRole("link", { name: /Basket \(1 item\)/ }),
 		"the merged item never reached the header badge",
@@ -385,7 +385,7 @@ test("a mixed-creator sign-in merge keeps both the account's and the scratch's i
 	// creators (2026-10-15), so both intents land and the account ends with X and Y.
 	// The banner says so before the server read does.
 	await signInThroughUi(scratchPage, buyerAEmail);
-	await scratchPage.goto("/feed");
+	await scratchPage.goto("/network");
 	await expect(
 		scratchPage.getByRole("banner").getByRole("link", { name: /Basket \(2 items\)/ }),
 	).toBeVisible();

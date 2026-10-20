@@ -10,8 +10,9 @@
  * rather than importing those components into the layout: importing a page into its own
  * header is a dependency cycle, and the copy below is what a reader would say anyway.
  *
- * ⚠️ **The Discovery rework renames and trims these modes.** When that lands, its Phase A
- * is the moment to update this list: a result that names a mode the page no longer has is
+ * ⚠️ **The three tabs are Library, Network, and Discovery, and Discovery's modes are
+ * Graph and Ticker** (the 2026-10-19 rework). A mode that is removed or renamed belongs
+ * in this list in the same change: a result that names a mode the page no longer has is
  * a dead link the reader cannot tell from a live one.
  *
  * ⚠️ **A Settings section's deepest addressable destination is its tab.** The cards have
@@ -34,13 +35,6 @@ export interface NavigationEntry {
 export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 	// ── The three tabs ──────────────────────────────────────────────────────
 	{
-		id: "mode-feed",
-		label: "Feed",
-		keywords: ["home", "timeline", "network", "following", "chronological"],
-		href: "/feed",
-		kind: "mode",
-	},
-	{
 		id: "mode-library",
 		label: "Library",
 		keywords: ["saved", "purchases", "shelf", "collection", "keep"],
@@ -48,40 +42,33 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 		kind: "mode",
 	},
 	{
-		id: "mode-discover",
-		label: "Discover",
-		keywords: ["explore", "discovery", "browse", "find"],
-		href: "/discover",
+		id: "mode-network",
+		label: "Network",
+		keywords: ["feed", "home", "timeline", "following", "chronological"],
+		href: "/network",
+		kind: "mode",
+	},
+	{
+		id: "mode-discovery",
+		label: "Discovery",
+		keywords: ["discover", "explore", "find", "search"],
+		href: "/discovery",
 		kind: "mode",
 	},
 
-	// ── Discover's current modes ────────────────────────────────────────────
+	// ── Discovery's two modes ───────────────────────────────────────────────
 	{
-		id: "mode-discover-browse",
-		label: "Browse",
-		keywords: ["discover", "search", "grid", "catalog"],
-		href: "/discover",
+		id: "mode-discovery-graph",
+		label: "Graph",
+		keywords: ["discovery", "network", "creators", "connections", "formula", "presets"],
+		href: "/discovery",
 		kind: "mode",
 	},
 	{
-		id: "mode-discover-inbox",
-		label: "Inbox",
-		keywords: ["discover", "shared", "friends", "messages"],
-		href: "/discover?mode=inbox",
-		kind: "mode",
-	},
-	{
-		id: "mode-discover-network",
-		label: "Network Graph",
-		keywords: ["discover", "creators", "connections", "graph"],
-		href: "/discover?mode=network",
-		kind: "mode",
-	},
-	{
-		id: "mode-discover-ticker",
+		id: "mode-discovery-ticker",
 		label: "Ticker",
-		keywords: ["discover", "live", "new", "stream", "recent"],
-		href: "/discover?mode=ticker",
+		keywords: ["discovery", "live", "new", "stream", "recent"],
+		href: "/discovery?mode=ticker",
 		kind: "mode",
 	},
 

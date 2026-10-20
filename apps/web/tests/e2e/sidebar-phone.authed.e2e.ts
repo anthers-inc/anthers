@@ -37,7 +37,7 @@ test.describe("on a phone", () => {
 	test.use({ viewport: PHONE, isMobile: true, hasTouch: true });
 
 	test("the sidebar starts closed and the page gets the whole width", async ({ page }) => {
-		await page.goto("/feed");
+		await page.goto("/network");
 		// Render proof: the assertions below are about geometry, which a page that never
 		// mounted the layout would fail for the wrong reason or pass by accident.
 		await expect(toggle(page)).toBeVisible();
@@ -46,7 +46,7 @@ test.describe("on a phone", () => {
 	});
 
 	test("opening the sidebar lays it over the page", async ({ page }) => {
-		await page.goto("/feed");
+		await page.goto("/network");
 		await toggle(page).click();
 
 		// The width animates, so poll for the settled drawer rather than reading mid-transition.
@@ -65,7 +65,7 @@ test.describe("on a phone", () => {
 	});
 
 	test("navigating from the sidebar closes it", async ({ page }) => {
-		await page.goto("/feed");
+		await page.goto("/network");
 		await toggle(page).click();
 		await expect.poll(async () => (await layout(page)).asideWidth).toBe(256);
 
@@ -83,7 +83,7 @@ test.describe("on a desktop", () => {
 	test.use({ viewport: DESKTOP });
 
 	test("the sidebar starts open beside the page", async ({ page }) => {
-		await page.goto("/feed");
+		await page.goto("/network");
 		await expect(toggle(page)).toBeVisible();
 
 		// Polled rather than read once: while the account is still loading the sidebar

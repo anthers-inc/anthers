@@ -141,7 +141,7 @@ export default function ForCreatorsPage() {
 							</Link>
 							{/* ⚠️ This read "See What Others Built" and pointed at `/demo-creator-page`
 							    until that demo was deleted on 2026-08-30. It is deliberately not
-							    repointed at `/discover`, the only place real creator pages are
+							    repointed at `/discovery`, the only place real creator pages are
 							    gathered: that route is behind `RequireAuth`, so a logged-out
 							    visitor following this button would land on the login wall rather
 							    than on the work. The secondary CTA answers the paragraph above it

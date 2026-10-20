@@ -601,7 +601,7 @@ export default function BadgesPage() {
 						<p className="mt-1 text-base-content/40">
 							A Badge from a creator is the monthly amount you give them, picked on their own page.
 						</p>
-						<Link to="/discover" className="btn btn-primary btn-sm mt-3">
+						<Link to="/discovery" className="btn btn-primary btn-sm mt-3">
 							Find creators to back
 						</Link>
 					</div>

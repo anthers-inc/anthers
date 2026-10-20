@@ -167,7 +167,7 @@ function MediaPlaySection() {
 				</p>
 
 				<div className="form-control mt-2">
-					{/* The stop *Your Feed* commits every feed signal to: previews are the
+					{/* The stop *Network* commits every feed signal to: previews are the
 					    cursor's doing, and they stay that way by being stoppable. Turning this
 					    off mid-hover stops the playing preview on the same render. */}
 					<label className="label whitespace-normal cursor-pointer justify-start gap-3">
