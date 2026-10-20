@@ -1,11 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * `project-shelf-sort`'s suite — the comparators the Project shelves render order with,
- * and the one invariant Parker's ruling needs proven: **a non-manual mode never
- * reorders the stored array.**
+ * and the invariant the API and the editor both rely on: **sorting a shelf never
+ * reorders the stored array**, so a saved sort mode governs reading order without
+ * rewriting the membership's own positions.
  */
 import { describe, expect, test } from "bun:test";
-import { moveShelfItem, type ShelfSortable, shelfSortKey, sortShelf } from "./project-shelf-sort";
+import {
+	asShelfSortDirection,
+	asShelfSortMode,
+	moveShelfItem,
+	type ShelfSortable,
+	shelfSortKey,
+	sortShelf,
+} from "./project-shelf-sort";
 
 type Row = ShelfSortable & { id: number };
 
@@ -75,6 +83,44 @@ describe("shelfSortKey", () => {
 		);
 		expect(shelfSortKey({ sortOrder: 0, releasedAt: "2024-01-01" }, "original")).toBe("2024-01-01");
 		expect(shelfSortKey({ sortOrder: 0 }, "original")).toBe(null);
+	});
+
+	test("a post's publish date is its dated key when it has no release date", () => {
+		expect(shelfSortKey({ sortOrder: 0, publishedAt: "2024-02-02" }, "released")).toBe(
+			"2024-02-02",
+		);
+		// A release date wins over a publish date for a member that has both.
+		expect(
+			shelfSortKey(
+				{ sortOrder: 0, releasedAt: "2024-01-01", publishedAt: "2024-02-02" },
+				"released",
+			),
+		).toBe("2024-01-01");
+	});
+
+	test("a Date key and its ISO string are the same key — server and browser agree", () => {
+		const asDate = { sortOrder: 0, releasedAt: new Date("2024-01-01T00:00:00.000Z") };
+		expect(shelfSortKey(asDate, "released")).toBe("2024-01-01T00:00:00.000Z");
+		expect(shelfSortKey(asDate, "released")).toBe(
+			shelfSortKey({ sortOrder: 0, releasedAt: "2024-01-01T00:00:00.000Z" }, "released"),
+		);
+		expect(shelfSortKey({ sortOrder: 0, releasedAt: new Date(Number.NaN) }, "released")).toBe(null);
+	});
+});
+
+describe("stored settings read back", () => {
+	test("a known mode and direction pass through unchanged", () => {
+		expect(asShelfSortMode("original")).toBe("original");
+		expect(asShelfSortMode("manual")).toBe("manual");
+		expect(asShelfSortDirection("desc")).toBe("desc");
+	});
+
+	test("an absent or unrecognized value falls back to Manual ascending", () => {
+		expect(asShelfSortMode(undefined)).toBe("manual");
+		expect(asShelfSortMode("")).toBe("manual");
+		expect(asShelfSortMode("popular")).toBe("manual");
+		expect(asShelfSortDirection(null)).toBe("asc");
+		expect(asShelfSortDirection("sideways")).toBe("asc");
 	});
 });
 

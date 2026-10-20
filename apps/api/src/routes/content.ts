@@ -87,6 +87,13 @@ import {
 } from "@anthers/shared/content-rating";
 import { dailyCapFor, type LimitWindow, spentWindow } from "@anthers/shared/parental-controls";
 import { visiblePostTitle } from "@anthers/shared/post-title";
+import {
+	asShelfSortDirection,
+	asShelfSortMode,
+	SHELF_SORT_DIRECTIONS,
+	SHELF_SORT_MODES,
+	sortShelf,
+} from "@anthers/shared/project-shelf-sort";
 import type { PublicAccessBudget } from "@anthers/shared/public-access";
 import { normalizeTag, normalizeWorkTags, workTagsProblem } from "@anthers/shared/tags";
 import {
@@ -1099,6 +1106,14 @@ const createProjectSchema = z.object({
 	shortDescription: z.string().max(300).optional().default(""),
 	coverImage: z.string().max(500).optional().default(""),
 	pageConfig: z.record(z.unknown()).optional(),
+	// The Project's two shelf settings (2026-10-19). A creator saves these from the sort
+	// dropdown on the Project page; the detail route applies them when it serializes
+	// members, so the choice governs what readers see. `manual` leaves the stored drag
+	// order alone (the column default).
+	worksSortMode: z.enum(SHELF_SORT_MODES).optional(),
+	worksSortDirection: z.enum(SHELF_SORT_DIRECTIONS).optional(),
+	postsSortMode: z.enum(SHELF_SORT_MODES).optional(),
+	postsSortDirection: z.enum(SHELF_SORT_DIRECTIONS).optional(),
 	isPublished: z.boolean().optional().default(false),
 });
 
@@ -6751,6 +6766,10 @@ const contentRoutes = new Hono()
 				shortDescription: data.shortDescription,
 				coverImage: data.coverImage,
 				pageConfig: data.pageConfig ?? {},
+				...(data.worksSortMode ? { worksSortMode: data.worksSortMode } : {}),
+				...(data.worksSortDirection ? { worksSortDirection: data.worksSortDirection } : {}),
+				...(data.postsSortMode ? { postsSortMode: data.postsSortMode } : {}),
+				...(data.postsSortDirection ? { postsSortDirection: data.postsSortDirection } : {}),
 				isPublished: data.isPublished,
 			})
 			.returning();
@@ -6853,11 +6872,56 @@ const contentRoutes = new Hono()
 		]);
 		await Promise.all(itemRows.map((r) => resolveWorkThumbnail(r.work)));
 
+		/*
+		 * The Project's saved sort settings order both shelves (2026-10-19). `sortShelf`
+		 * copies, so each member keeps the `sortOrder` its membership carries — the drag
+		 * order — while the array a reader receives is the reading order the creator
+		 * chose. Manual is the default and returns the stored order untouched.
+		 */
+		const serializedWorks = await Promise.all(
+			itemRows.map(async (m) => ({
+				sortOrder: m.sortOrder,
+				...(await serializeWorkForUser(
+					m.work,
+					assetsByWork.get(m.work.id) ?? [],
+					jobByWork.get(m.work.id) ?? null,
+					resolveAccessSync(
+						m.work as AccessibleWork,
+						contextFor(m.work, userId, workCtx, previewRequest(c)),
+					),
+					deliveryCtx(),
+					projectSpent,
+					userId,
+					pagesByWork.get(m.work.id) ?? 0,
+					sectionsByWork.get(m.work.id) ?? 0,
+					(buildsByWork.get(m.work.id) ?? []).some((b) => b.isPrimary),
+					(buildsByWork.get(m.work.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ?? false,
+				)),
+			})),
+		);
+
 		// The names behind the member posts' title mentions, in one lookup for the page.
 		const memberPostTitles = await displayPostTitles(
 			memberRows.map((m) => m.post.title),
 			userId,
 		);
+		// No per-post access verdict: a post has no gates. The Works a member post
+		// links resolve on their own gates, at the post's own endpoint.
+		const serializedPosts = memberRows.map((m, index) => ({
+			id: m.post.id,
+			publicId: m.post.publicId,
+			slug: m.post.slug,
+			title: m.post.title,
+			displayTitle: memberPostTitles[index] ?? m.post.title,
+			isPublished: m.post.isPublished,
+			publishedAt: m.post.publishedAt,
+			sortOrder: m.sortOrder,
+			creator: embedCreator({
+				handle: m.creatorHandle,
+				displayName: m.creatorDisplayName,
+				avatar: m.creatorAvatar,
+			}),
+		}));
 
 		return c.json({
 			project: {
@@ -6873,45 +6937,16 @@ const contentRoutes = new Hono()
 					displayName: row.creatorDisplayName,
 					avatar: row.creatorAvatar,
 				}),
-				works: await Promise.all(
-					itemRows.map(async (m) => ({
-						sortOrder: m.sortOrder,
-						...(await serializeWorkForUser(
-							m.work,
-							assetsByWork.get(m.work.id) ?? [],
-							jobByWork.get(m.work.id) ?? null,
-							resolveAccessSync(
-								m.work as AccessibleWork,
-								contextFor(m.work, userId, workCtx, previewRequest(c)),
-							),
-							deliveryCtx(),
-							projectSpent,
-							userId,
-							pagesByWork.get(m.work.id) ?? 0,
-							sectionsByWork.get(m.work.id) ?? 0,
-							(buildsByWork.get(m.work.id) ?? []).some((b) => b.isPrimary),
-							(buildsByWork.get(m.work.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ??
-								false,
-						)),
-					})),
+				works: sortShelf(
+					serializedWorks,
+					asShelfSortMode(row.project.worksSortMode),
+					asShelfSortDirection(row.project.worksSortDirection),
 				),
-				// No per-post access verdict: a post has no gates. The Works a member post
-				// links resolve on their own gates, at the post's own endpoint.
-				posts: memberRows.map((m, index) => ({
-					id: m.post.id,
-					publicId: m.post.publicId,
-					slug: m.post.slug,
-					title: m.post.title,
-					displayTitle: memberPostTitles[index] ?? m.post.title,
-					isPublished: m.post.isPublished,
-					publishedAt: m.post.publishedAt,
-					sortOrder: m.sortOrder,
-					creator: embedCreator({
-						handle: m.creatorHandle,
-						displayName: m.creatorDisplayName,
-						avatar: m.creatorAvatar,
-					}),
-				})),
+				posts: sortShelf(
+					serializedPosts,
+					asShelfSortMode(row.project.postsSortMode),
+					asShelfSortDirection(row.project.postsSortDirection),
+				),
 			},
 		});
 	})

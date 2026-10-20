@@ -3,6 +3,13 @@
  * The Works on a Project's shelf — an ordered list the owner arranges by dragging, and
  * reads through one of four sort modes.
  *
+ * ⭐ **The chosen sort is the Project's, and it governs what readers see** (Parker,
+ * 2026-10-19, replacing the 2026-10-17 "Manual is the only real order" ruling): changing
+ * the dropdown saves the mode on the Project row and the API serializes the members in
+ * that order for every reader. Manual is the default and the stored drag order, so the
+ * handles stay the way a creator arranged them until they choose otherwise; a non-manual
+ * mode is a named reading order over the same shelf and never rewrites `sortOrder`.
+ *
  * Lives on the Project's own page now (the unified-editor pass, 2026-10-17): a creator
  * visiting their project sees this as the working surface where users see the grid or
  * the album record. A Project's shelf is NOT a form-held list — the post builder used
@@ -12,11 +19,10 @@
  * twelve tracks should not lose them to a failed save on an unrelated field, and a list
  * that persists per-action can't.
  *
- * 🚨 **Manual is the only real order** (Parker, 2026-10-17). The dropdown's other modes —
- * Release Date, Original Release Date, Alphabetical — are read-only views over the SAME
- * shelf: `sortShelf` copies and never writes, a drag is offered only in Manual, and no
- * mode change touches the reorder endpoint. The Ascending/Descending pair stays visible
- * but disabled under Manual, so the control's shape does not jump between modes.
+ * Drag is Manual's alone — a saved reading order is not an arrangement, so switching to
+ * Manual is what restores the handles and shows the stored order. The Ascending/Descending
+ * pair stays visible but disabled under Manual, so the control's shape does not jump
+ * between modes.
  *
  * The picker it opens is multi-select: tick every Work, then one act adds them all —
  * each member arriving at the shelf's end, positions assigned by the server in turn.
@@ -24,17 +30,18 @@
  * A Project is a shelf: adding a Work here changes nothing about who can open it, and
  * removing it never touches the Work — it stays in the Catalog, released, with its gates.
  */
-import { Bars3Icon, PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { useEffect, useRef, useState } from "react";
-import { client } from "../../lib/rpc";
-import type { Project, ProjectWork, Work } from "../../lib/types";
-import LoadingSpinner from "../ui/LoadingSpinner";
+
 import {
 	moveShelfItem,
 	type ShelfSortDirection,
 	type ShelfSortMode,
 	sortShelf,
-} from "./project-shelf-sort";
+} from "@anthers/shared/project-shelf-sort";
+import { Bars3Icon, PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { useEffect, useRef, useState } from "react";
+import { client } from "../../lib/rpc";
+import type { Project, ProjectWork, Work } from "../../lib/types";
+import LoadingSpinner from "../ui/LoadingSpinner";
 import WorkPicker from "./WorkPicker";
 import { itemPreviewUrl, ProcessingBadge, TypeBadge, TypeIcon } from "./works";
 
@@ -55,8 +62,9 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 	const [picking, setPicking] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	// The reading arrangement. Manual is the shelf; everything else is a view of it,
-	// re-derived here on every render — nothing below ever writes `works` from a sort.
+	// The reading arrangement, read from the Project's saved setting and written back to
+	// it when changed. Manual is the stored drag order; everything else re-derives the
+	// view on every render — nothing below ever writes `works` from a sort.
 	const [sortMode, setSortMode] = useState<ShelfSortMode>("manual");
 	const [sortDirection, setSortDirection] = useState<ShelfSortDirection>("asc");
 	/** Where the drag started, in the stored list's own indices; cleared on every end. */
@@ -69,7 +77,16 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 			.then(async (res) => {
 				if (!res.ok) return;
 				const { project } = (await res.json()) as unknown as { project: Project };
-				if (live) setWorks(project.works ?? []);
+				if (!live) return;
+				/*
+				 * The detail response arrives already sorted by the Project's saved setting.
+				 * The shelf's own state is the STORED order, because that is what a drag
+				 * edits and what the reorder endpoint persists — so restore it by the
+				 * membership's `sortOrder`, then let the mode render a view over it.
+				 */
+				setWorks([...(project.works ?? [])].sort((a, b) => a.sortOrder - b.sortOrder));
+				setSortMode(project.worksSortMode ?? "manual");
+				setSortDirection(project.worksSortDirection ?? "asc");
 			})
 			.catch(() => {})
 			.finally(() => live && setLoading(false));
@@ -77,6 +94,32 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 			live = false;
 		};
 	}, [projectSlug]);
+
+	/**
+	 * Save one sort setting on the Project. Optimistic, and reverted on failure — the
+	 * same rule the drag uses, because a dropdown that visibly changed and then silently
+	 * did not save is the worst of both.
+	 */
+	const saveSort = async (
+		fields: { worksSortMode?: ShelfSortMode; worksSortDirection?: ShelfSortDirection },
+		revert: () => void,
+	) => {
+		setError(null);
+		try {
+			const res = await client.api.content.projects[":slug"].$patch({
+				param: { slug: projectSlug },
+				json: fields,
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => null)) as { error?: string } | null;
+				revert();
+				setError(body?.error || "Couldn't save the sort.");
+			}
+		} catch {
+			revert();
+			setError("Couldn't save the sort.");
+		}
+	};
 
 	const add = async (picked: Work[]) => {
 		setPicking(false);
@@ -193,7 +236,12 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 						aria-label="Sort the works"
 						className="select select-bordered select-sm"
 						value={sortMode}
-						onChange={(e) => setSortMode(e.target.value as ShelfSortMode)}
+						onChange={(e) => {
+							const next = e.target.value as ShelfSortMode;
+							const before = sortMode;
+							setSortMode(next);
+							void saveSort({ worksSortMode: next }, () => setSortMode(before));
+						}}
 					>
 						{SHELF_SORT_OPTIONS.map((opt) => (
 							<option key={opt.mode} value={opt.mode}>
@@ -206,7 +254,12 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 						className="select select-bordered select-sm disabled:opacity-50"
 						value={sortDirection}
 						disabled={manual}
-						onChange={(e) => setSortDirection(e.target.value as ShelfSortDirection)}
+						onChange={(e) => {
+							const next = e.target.value as ShelfSortDirection;
+							const before = sortDirection;
+							setSortDirection(next);
+							void saveSort({ worksSortDirection: next }, () => setSortDirection(before));
+						}}
 					>
 						<option value="asc">Ascending</option>
 						<option value="desc">Descending</option>
