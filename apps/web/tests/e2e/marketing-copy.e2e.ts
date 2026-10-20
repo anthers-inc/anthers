@@ -113,13 +113,13 @@ test.describe("FAQ", () => {
 });
 
 test.describe("release notes", () => {
-	// Presence-of-structure, not copy assertion: the page links back to the roadmap
-	// (the closing button), and every release in the data module renders on the page.
-	// The page groups by month — one `h2` per month — so a release is asserted through
-	// its divider heading (`h3`) rather than its own section, and the version headings
-	// are still read from `RELEASE_NOTES` rather than hardcoded, so a new release that fails
-	// to render fails here without anyone updating the test.
-	test("every release renders, and the page links back to the roadmap", async ({ page }) => {
+	// Presence-of-structure, not copy assertion: the page links to the canonical roadmap
+	// (the closing button, which points at the wiki), and every release in the data module
+	// renders on the page. The page groups by month — one `h2` per month — so a release is
+	// asserted through its divider heading (`h3`) rather than its own section, and the
+	// version headings are still read from `RELEASE_NOTES` rather than hardcoded, so a new
+	// release that fails to render fails here without anyone updating the test.
+	test("every release renders, and the page links to the canonical roadmap", async ({ page }) => {
 		await page.goto("/release-notes");
 		await expect(page.locator("h1").first()).toBeVisible();
 
@@ -134,7 +134,7 @@ test.describe("release notes", () => {
 
 		await expect(page.getByRole("link", { name: "The Roadmap" })).toHaveAttribute(
 			"href",
-			"/roadmap",
+			"https://anthers.wiki/roadmap",
 		);
 	});
 });

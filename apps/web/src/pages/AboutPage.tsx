@@ -41,8 +41,8 @@
 //   3. Who we are ........ Parker, first person, portrait beside the prose.
 //
 // The program pillars, the founding-board invitation and the "what comes next"
-// list are all on /roadmap already. **This page says what is true; the roadmap
-// says when.** That division is why nothing here promises a date.
+// list are all on the wiki's roadmap already. **This page says what is true; the
+// roadmap says when.** That division is why nothing here promises a date.
 //
 // ── 🚨 Federal status: the rule CHANGED on 2026-08-21 ────────────────────────
 //

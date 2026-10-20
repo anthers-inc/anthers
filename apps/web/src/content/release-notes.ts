@@ -34,9 +34,11 @@
 //    the one page where describing a shipped thing plainly is the honest mode. Nothing
 //    here announces; an entry that sells is an entry to rewrite.
 // 4. 🚨 **A roadmap reference is earned by shipping, not by adjacency.** `roadmapIds`
-//    names the roadmap items this release moved to `launched`, and the page links each
-//    entry to `/roadmap#goal-<id>` — the two-way link is the point of this page. Most
-//    entries map to nothing, and that is correct: do not stretch an entry to claim one.
+//    names the roadmap items this release moved to `launched` in `roadmap.ts`, and the
+//    page names each one as a chip linking to the canonical roadmap at `anthers.wiki` —
+//    this app's `/roadmap` is no longer linked from anywhere, so that module is what
+//    still decides the word `launched` the chip depends on. Most entries map to
+//    nothing, and that is correct: do not stretch an entry to claim one.
 //    If a referenced item is still `active` or `planned` in `roadmap.ts`, that is a
 //    defect — move the item in the same PR (its rules apply: one short sentence, and
 //    `launched` carries a quarter).
@@ -71,7 +73,7 @@ export interface ReleaseNotesEntry {
 	lede: string;
 	/** One arc per bullet: what a user or creator can now do, see, or no longer hits. */
 	entries: string[];
-	/** `roadmap.ts` item ids this release shipped; rendered as links both ways. See rule 4. */
+	/** `roadmap.ts` item ids this release shipped; named as chips linking to the canonical roadmap. See rule 4. */
 	roadmapIds?: string[];
 }
 

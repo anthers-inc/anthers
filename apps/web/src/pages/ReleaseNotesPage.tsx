@@ -31,10 +31,11 @@ import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { Eyebrow, H2, Lede, Section } from "@anthers/web-shared/decor/sections";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { usePageTitle } from "@anthers/web-shared/page-title";
-import { Link, useLocation } from "@anthers/web-shared/router";
+import { useLocation } from "@anthers/web-shared/router";
 import { useEffect } from "react";
 import { RELEASE_NOTES, type ReleaseNotesEntry } from "../content/release-notes";
 import { allItems } from "../content/roadmap";
+import { WIKI_ROADMAP_URL } from "../lib/wiki";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -210,21 +211,23 @@ function ReleaseBlock({ release, first }: { release: ReleaseNotesEntry; first: b
 					))}
 				</ul>
 
-				{/* The roadmap items this release moved to launched, linked both ways:
-				    each chip goes to the roadmap card, whose own chip returns here. */}
+				{/* The roadmap items this release moved to launched, named so the release and the
+				    roadmap tell one story. Each chip lands on the canonical roadmap at the wiki;
+				    the vault roadmap organizes its work by lane and milestone rather than by
+				    goal card, so there is no per-goal anchor to carry across. */}
 				{release.roadmapIds && release.roadmapIds.length > 0 && (
 					<div className="mt-6 flex flex-wrap gap-2">
 						{release.roadmapIds.map((id) => {
 							const item = items.find((i) => i.id === id);
 							if (!item) return null;
 							return (
-								<Link
+								<a
 									key={id}
-									to={`/roadmap#goal-${id}`}
+									href={WIKI_ROADMAP_URL}
 									className="inline-flex items-center rounded-full border border-base-content/15 px-3 py-1 text-xs text-base-content/60 transition-colors hover:border-primary/40 hover:text-primary"
 								>
 									{item.title}
-								</Link>
+								</a>
 							);
 						})}
 					</div>
@@ -258,9 +261,9 @@ function Closing({ tint }: { tint: boolean }) {
 					>
 						Every release
 					</a>
-					<Link to="/roadmap" className="btn btn-ghost rounded-lg px-7">
+					<a href={WIKI_ROADMAP_URL} className="btn btn-ghost rounded-lg px-7">
 						The Roadmap
-					</Link>
+					</a>
 				</div>
 			</Reveal>
 		</Section>

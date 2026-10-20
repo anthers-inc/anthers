@@ -36,6 +36,7 @@ import {
 	PuzzlePieceIcon,
 	ScaleIcon,
 } from "@heroicons/react/24/outline";
+import { WIKI_ROADMAP_URL } from "../lib/wiki";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -210,9 +211,9 @@ export default function ResourcesPage() {
 						<Link to="/about" className="btn btn-ghost rounded-lg px-7">
 							About Anthers
 						</Link>
-						<Link to="/roadmap" className="btn btn-ghost rounded-lg px-7">
+						<a href={WIKI_ROADMAP_URL} className="btn btn-ghost rounded-lg px-7">
 							Roadmap
-						</Link>
+						</a>
 					</div>
 				</Reveal>
 			</Section>
