@@ -70,6 +70,7 @@ function releasedWork(overrides: Partial<PublishableWork> = {}): PublishableWork
 		slug: "the-weight-of-small-hours",
 		publicId: 4192,
 		releasedAt: new Date("2026-08-14T00:00:00.000Z"),
+		originallyReleased: null,
 		...overrides,
 	};
 }

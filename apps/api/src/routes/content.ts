@@ -1116,7 +1116,13 @@ const createProjectSchema = z.object({
 	isPublished: z.boolean().optional().default(false),
 });
 
-const updateProjectSchema = createProjectSchema.partial();
+const updateProjectSchema = createProjectSchema.partial().extend({
+	/**
+	 * A cover chosen from one of the Project's Works, by reference. Null clears the choice
+	 * and returns the Project to its uploaded `coverImage`, which this never clears.
+	 */
+	coverWorkId: z.number().int().positive().nullable().optional(),
+});
 
 /**
  * A comment, or a reply when `replyTo` names the comment it answers. A reply is a comment whose
@@ -1299,14 +1305,91 @@ const FRAME_EXTRACT_TIMEOUT_MS = 20_000;
  * Thumbnails render directly as <img src>; older rows stored a bare storage key instead
  * of a URL — resolve those to public URLs in place (new uploads already store URLs).
  */
-async function resolveWorkThumbnail(item: WorkRow): Promise<void> {
-	if (
-		item.thumbnail &&
-		!/^(https?:)?\/\//.test(item.thumbnail) &&
-		!item.thumbnail.startsWith("/")
-	) {
-		item.thumbnail = await storage.getUrl(item.thumbnail);
+async function resolveThumbnailUrl(thumbnail: string | null): Promise<string | null> {
+	if (thumbnail && !/^(https?:)?\/\//.test(thumbnail) && !thumbnail.startsWith("/")) {
+		return storage.getUrl(thumbnail);
 	}
+	return thumbnail;
+}
+
+async function resolveWorkThumbnail(item: WorkRow): Promise<void> {
+	item.thumbnail = await resolveThumbnailUrl(item.thumbnail);
+}
+
+/**
+ * Resolve the Projects whose cover is one of their Works.
+ *
+ * ⭐ **A Project's cover-by-Work is a reference, not a copy** (`projects.cover_work_id`): the
+ * Project follows the Work's own cover, and the Work's visibility and rating decide whether
+ * that cover is shown here. A Work hidden from this viewer — private or withdrawn to a
+ * stranger, Adult-rated to somebody who has not opted in, blocked by a guardian — contributes
+ * no cover at all, so the Project falls back to its uploaded `coverImage` rather than leaking
+ * the thing the viewer may not see.
+ *
+ * ⚠️ **Membership is part of the query, not an assumption about the write path.** A Project's
+ * cover Work must be on its shelf; joining through `project_items` means a row left behind by
+ * a removal or a bug can never dress the Project in a Work it does not hold.
+ *
+ * `seeAll` is the owner's own read: their drafts and every rung are theirs to edit, the same
+ * exception every other owner-facing listing makes.
+ */
+async function resolveProjectCovers(
+	rows: { id: number; coverWorkId: number | null; coverImage: string | null }[],
+	options: { userId: number | null; seeAll: boolean },
+): Promise<Map<number, string>> {
+	const covers = new Map<number, string>();
+	if (rows.length === 0) return covers;
+
+	const wanted = rows.filter((row) => row.coverWorkId != null);
+	if (wanted.length === 0) return covers;
+
+	const conditions: SQL[] = [
+		inArray(
+			projectItems.projectId,
+			wanted.map((row) => row.id),
+		),
+	];
+	if (!options.seeAll) {
+		const [{ prefs }, { policy }] = await Promise.all([
+			adultVisibility(options.userId),
+			parentalVisibility(options.userId),
+		]);
+		conditions.push(
+			options.userId != null
+				? (or(eq(works.visibility, "released"), eq(works.creatorId, options.userId)) as SQL)
+				: eq(works.visibility, "released"),
+		);
+		conditions.push(
+			and(
+				maturityHiddenFrom(
+					prefs,
+					options.userId,
+					sql`works.creator_id`,
+					sql`works.maturity`,
+					sql`works.maturity_rows`,
+				),
+				parentalHiddenFrom(policy, options.userId, sql`works.creator_id`, sql`works.type`),
+			) as SQL,
+		);
+	}
+
+	const coverRows = await db
+		.select({ projectId: projectItems.projectId, workId: works.id, thumbnail: works.thumbnail })
+		.from(projectItems)
+		.innerJoin(works, eq(projectItems.workId, works.id))
+		.where(and(...conditions));
+
+	// The shelf may hold several Works; only the chosen one dresses the Project.
+	const chosenByProject = new Map(wanted.map((row) => [row.id, row.coverWorkId] as const));
+	await Promise.all(
+		coverRows
+			.filter((row) => chosenByProject.get(row.projectId) === row.workId)
+			.map(async (row) => {
+				const url = await resolveThumbnailUrl(row.thumbnail);
+				if (url) covers.set(row.projectId, url);
+			}),
+	);
+	return covers;
 }
 
 /**
@@ -6718,9 +6801,20 @@ const contentRoutes = new Hono()
 			}
 		}
 
+		/**
+		 * A Project whose cover is one of its Works reads that Work's cover here too,
+		 * filtered by what this reader may see — the owner's `mine` listing sees every
+		 * Work of theirs, a public listing only the ones it could open.
+		 */
+		const projectCovers = await resolveProjectCovers(
+			result.map((r) => r.project),
+			{ userId: listingUserId, seeAll: mine === "true" },
+		);
+
 		return c.json({
 			projects: result.map((r) => ({
 				...r.project,
+				coverImage: projectCovers.get(r.project.id) ?? r.project.coverImage,
 				postCount: Number(r.postCount),
 				// Only the Studio's listing carries it; the public shape never does.
 				...(worksByProject ? { worksSummary: worksByProject.get(r.project.id) ?? [] } : {}),
@@ -6870,6 +6964,9 @@ const contentRoutes = new Hono()
 		]);
 		await Promise.all(itemRows.map((r) => resolveWorkThumbnail(r.work)));
 
+		// The cover chosen from a Work is resolved from the shelf this reader already sees:
+		// a Work hidden from them contributes nothing and the uploaded image stands in.
+		const coverWork = itemRows.find((m) => m.work.id === row.project.coverWorkId)?.work;
 		/*
 		 * The Project's saved sort settings order both shelves (2026-10-19). `sortShelf`
 		 * copies, so each member keeps the `sortOrder` its membership carries — the drag
@@ -6924,6 +7021,7 @@ const contentRoutes = new Hono()
 		return c.json({
 			project: {
 				...row.project,
+				coverImage: coverWork?.thumbnail || row.project.coverImage,
 				/**
 				 * The project's public record link, beside the thing it is (the widening task,
 				 * 2026-10-10) — same link a Work's and a post's page carry. Null while there is
@@ -6976,6 +7074,33 @@ const contentRoutes = new Hono()
 			return c.json(FOREIGN_FILE_REFUSAL, 400);
 		}
 
+		// A cover chosen from a Work must be this creator's Work **and on this Project's
+		// shelf** — the reference is what the read resolves, so a Work from another Project
+		// would dress this one in something it does not hold.
+		if (data.coverWorkId != null) {
+			const [onShelf] = await db
+				.select({ id: works.id })
+				.from(projectItems)
+				.innerJoin(works, eq(projectItems.workId, works.id))
+				.where(
+					and(
+						eq(projectItems.projectId, existing.id),
+						eq(works.id, data.coverWorkId),
+						eq(works.creatorId, user.id),
+					),
+				)
+				.limit(1);
+			if (!onShelf) {
+				return c.json({ error: "Choose a Work that is on this Project's shelf." }, 400);
+			}
+		}
+
+		// Uploading a new image is the other way to choose a cover, so it retires the Work
+		// reference unless the same request names one. Removing the uploaded image leaves a
+		// chosen Work alone: the two choices fall back to each other only in one direction.
+		const patch: typeof data & { updatedAt: Date } = { ...data, updatedAt: new Date() };
+		if (data.coverImage && data.coverWorkId === undefined) patch.coverWorkId = null;
+
 		// Asked only on the transition into published, because the editor sends `isPublished`
 		// with every save and an already-published project must stay editable.
 		if (data.isPublished === true && !existing.isPublished) {
@@ -6994,7 +7119,7 @@ const contentRoutes = new Hono()
 
 		const [updated] = await db
 			.update(projects)
-			.set({ ...data, updatedAt: new Date() })
+			.set(patch)
 			.where(eq(projects.id, existing.id))
 			.returning();
 
@@ -7002,7 +7127,12 @@ const contentRoutes = new Hono()
 		// is a reason to rewrite it — and unpublishing is what takes it down.
 		void queueRecordSync("project", updated.id);
 
-		return c.json({ project: updated });
+		// The answer is the page's row, so its cover is whatever the Project now shows —
+		// the Work's own cover when one is chosen and this owner may see it.
+		const covers = await resolveProjectCovers([updated], { userId: user.id, seeAll: true });
+		return c.json({
+			project: { ...updated, coverImage: covers.get(updated.id) ?? updated.coverImage },
+		});
 	})
 
 	.delete("/projects/:slug", requireAuth, async (c) => {
@@ -7095,6 +7225,20 @@ const contentRoutes = new Hono()
 		// Removing a Work from a Project never touches the Work. It stays in the
 		// Catalog, released, with its gates — a Project is a shelf, not an owner.
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
+
+		// A cover chosen from the Work being taken off the shelf returns to the uploaded
+		// image, since the Work no longer dresses this Project.
+		await db
+			.update(projects)
+			.set({ coverWorkId: null })
+			.where(
+				and(
+					eq(projects.slug, slug),
+					eq(projects.creatorId, user.id),
+					eq(projects.coverWorkId, Number(workId)),
+				),
+			);
+
 		return c.body(null, 204);
 	})
 
@@ -7564,6 +7708,7 @@ const contentRoutes = new Hono()
 						slug: projects.slug,
 						title: projects.title,
 						coverImage: projects.coverImage,
+						coverWorkId: projects.coverWorkId,
 						creatorId: projects.creatorId,
 						creatorHandle: users.atprotoHandle,
 						creatorDisplayName: users.displayName,
@@ -7595,33 +7740,81 @@ const contentRoutes = new Hono()
 			: [];
 
 		/*
-		 * How many released Works a saved Project holds, and how many of those are audio.
+		 * The published Projects each saved Work belongs to — the membership the music lens
+		 * groups a saved track under. A track is a track, not a record, and a person who
+		 * saved one from a Project should find that Project in their collection rather than
+		 * a loose row with no way into the rest of it.
 		 *
-		 * Enough for a shelf to render a saved Project *as an album* — cover, artist, track
-		 * count — without fetching each Project's detail, which is an N+1 on a page that
-		 * exists to show a collection. Deliberately a count rather than the members: the
-		 * tracks themselves are fetched when somebody actually presses play, and shipping
-		 * every member of every saved album on a shelf request would be the opposite trade.
+		 * Deliberately metadata only: the Project's cover, artist and member count are
+		 * enough to draw the release card. The track list itself is fetched when the
+		 * release is opened, because a shelf request must not ship every member of every
+		 * Project one saved track touches.
 		 *
-		 * `musicCount === workCount` is what makes it a record rather than a folder — the
-		 * same rule `isAlbum` applies on a Project page, kept in step by both being about
-		 * "every member is music" rather than by sharing code across the boundary. A Project
-		 * of podcast episodes is a series, not an album, so `audio` does not count.
+		 * Only published Projects are listed. A draft Project is its creator's own business,
+		 * so a saved released Work inside one does not advertise the draft to a stranger;
+		 * suspended and automated-test creators' rows drop for the same reason the Project
+		 * listing drops them.
 		 */
-		const memberCounts = projectIds.length
+		const membershipRows = workIds.length
+			? await db
+					.select({
+						workId: projectItems.workId,
+						projectId: projects.id,
+						slug: projects.slug,
+						title: projects.title,
+						coverImage: projects.coverImage,
+						creatorId: projects.creatorId,
+						creatorHandle: users.atprotoHandle,
+						creatorDisplayName: users.displayName,
+					})
+					.from(projectItems)
+					.innerJoin(projects, eq(projects.id, projectItems.projectId))
+					.leftJoin(users, eq(projects.creatorId, users.id))
+					.where(
+						and(
+							inArray(projectItems.workId, workIds),
+							eq(projects.isPublished, true),
+							notSuspendedAccount(projects.creatorId),
+							notTestAccount(projects.creatorId),
+						),
+					)
+					.orderBy(asc(projectItems.projectId), asc(projectItems.sortOrder))
+			: [];
+
+		/*
+		 * How many released Works a Project holds, how many are music, and how many are
+		 * spoken word.
+		 *
+		 * Enough for a shelf to render a release — cover, artist, track count — without
+		 * fetching each Project's detail, which is an N+1 on a page that exists to show a
+		 * collection. Deliberately a count rather than the members: the tracks themselves
+		 * are fetched when somebody actually opens or plays the release, and shipping every
+		 * member of every Project on a shelf request would be the opposite trade.
+		 *
+		 * `musicCount === workCount` is what makes a Project a record rather than a folder —
+		 * the same rule `isAlbum` applies on a Project page. A Project of podcast episodes is
+		 * a series, not an album, so `audio` does not count as music. The music lens itself
+		 * groups a Work under any Project that holds music; this count is what its release
+		 * card advertises, and it stays honest about a Project that also holds other kinds.
+		 */
+		const countedProjectIds = [
+			...new Set([...projectIds, ...membershipRows.map((m) => m.projectId)]),
+		];
+		const memberCounts = countedProjectIds.length
 			? await db
 					.select({
 						projectId: projectItems.projectId,
 						workCount: sql<number>`count(*)::int`,
 						musicCount: sql<number>`count(*) filter (where ${works.type} = 'music')::int`,
+						audioCount: sql<number>`count(*) filter (where ${works.type} = 'audio')::int`,
 					})
 					.from(projectItems)
 					.innerJoin(works, eq(projectItems.workId, works.id))
 					.where(
 						and(
-							inArray(projectItems.projectId, projectIds),
+							inArray(projectItems.projectId, countedProjectIds),
 							eq(works.visibility, "released"),
-							// Counted the way the Project page lists them, so a saved album never
+							// Counted the way the Project page lists them, so a release never
 							// claims a track the user will not find inside it.
 							adultHidden,
 							parentalHidden,
@@ -7630,6 +7823,43 @@ const contentRoutes = new Hono()
 					.groupBy(projectItems.projectId)
 			: [];
 		const countsByProject = new Map(memberCounts.map((m) => [m.projectId, m]));
+
+		/** Each saved Work's release cards, keyed by Work id — the music lens's grouping. */
+		const releasesByWork = new Map<
+			number,
+			Array<{
+				id: number;
+				slug: string;
+				title: string;
+				coverImage: string | null;
+				creatorId: number | null;
+				creatorHandle: string | null;
+				creatorDisplayName: string | null;
+				musicCount: number;
+				audioCount: number;
+			}>
+		>();
+		for (const row of membershipRows) {
+			const musicCount = countsByProject.get(row.projectId)?.musicCount ?? 0;
+			const audioCount = countsByProject.get(row.projectId)?.audioCount ?? 0;
+			// A Project with no music is not a release in this lens. A saved podcast series
+			// stays a series; its episodes are one-track releases like any other saved audio.
+			if (musicCount === 0) continue;
+			const release = {
+				id: row.projectId,
+				slug: row.slug,
+				title: row.title,
+				coverImage: row.coverImage,
+				creatorId: row.creatorId,
+				creatorHandle: row.creatorHandle,
+				creatorDisplayName: row.creatorDisplayName,
+				musicCount,
+				audioCount,
+			};
+			const list = releasesByWork.get(row.workId) ?? [];
+			list.push(release);
+			releasesByWork.set(row.workId, list);
+		}
 
 		const { assetsByWork, jobByWork, pagesByWork, sectionsByWork, buildsByWork } =
 			await loadWorkBundles(workIds);
@@ -7643,6 +7873,12 @@ const contentRoutes = new Hono()
 		const workById = new Map(workRows.map((w) => [w.id, w]));
 		const projectById = new Map(projectRows.map((p) => [p.id, p]));
 		const postById = new Map(postRows.map((p) => [p.id, p]));
+		// A saved Project whose cover is one of its Works reads that cover here too — as the
+		// shelf's reader may see it, not as its owner can.
+		const projectCovers = await resolveProjectCovers(projectRows, {
+			userId: user.id,
+			seeAll: false,
+		});
 		// The names behind the saved posts' title mentions, one lookup for the shelf.
 		const savedPostDisplayTitles = await displayPostTitles(
 			postRows.map((p) => p.title),
@@ -7713,6 +7949,10 @@ const contentRoutes = new Hono()
 									creatorHandle: creator?.creatorHandle ?? null,
 									creatorDisplayName: creator?.creatorDisplayName ?? null,
 									creatorAvatar: creator?.creatorAvatar ?? null,
+									// The published Projects this Work belongs to, for a lens that
+									// groups saved tracks into the release they came from. Empty
+									// for a Work that stands on its own.
+									releases: releasesByWork.get(w.id) ?? [],
 								},
 							};
 						}
@@ -7756,10 +7996,16 @@ const contentRoutes = new Hono()
 							purchased: false,
 							project: {
 								...p,
+								coverImage: projectCovers.get(p.id) ?? p.coverImage,
 								trackCount: counts?.workCount ?? 0,
-								// Every released member is music — i.e. this is a record, not a
-								// folder that happens to contain some music.
-								isAlbum: (counts?.workCount ?? 0) > 0 && counts?.workCount === counts?.musicCount,
+								// How many of those members are music. The music lens draws a
+								// release card from this rather than from `trackCount`: a saved
+								// Project that also holds a game still has a soundtrack worth
+								// playing, and its card should advertise the tracks it has.
+								musicCount: counts?.musicCount ?? 0,
+								// The include-spoken dial widens a release to its audio members,
+								// so the card can count the tracks the detail will show.
+								audioCount: counts?.audioCount ?? 0,
 							},
 						};
 					}),

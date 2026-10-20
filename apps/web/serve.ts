@@ -22,6 +22,11 @@
  * private network), `API_PORT` when the browser session starts a server beside a test
  * API, and the public site as the last resort so a missing variable degrades to a slower
  * read rather than to no previews at all.
+ *
+ * A browser session also needs the page itself to know that non-default API port: the SPA
+ * reads the `anthers-dev-api-port` meta tag, and without it every call falls back to :8000
+ * and the whole authenticated suite walks a signed-out page. `apps/admin/serve.ts` carries
+ * the same tag for the same reason.
  */
 import { resolve, sep } from "node:path";
 import type { WorkPreview } from "@anthers/shared/work-preview";
@@ -67,7 +72,12 @@ const API_ORIGIN =
 const WORK_PATH = /^\/works\/([^/]+)\/?$/;
 
 async function indexHtml(): Promise<string> {
-	return Bun.file(resolve(DIST, "index.html")).text();
+	const html = await Bun.file(resolve(DIST, "index.html")).text();
+	// Announce a non-default API port to the page, the same way `apps/admin/serve.ts` does:
+	// a browser session puts its API on a free port, and `rpc.ts` has no other way to learn
+	// which. Without this the SPA falls back to :8000 and every call fails in a local run.
+	if (!API_PORT) return html;
+	return html.replace("<head>", `<head><meta name="anthers-dev-api-port" content="${API_PORT}">`);
 }
 
 /**
