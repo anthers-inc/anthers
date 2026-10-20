@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
 
 /**
- * Legacy /discover/:slug redirect.
+ * Legacy /discovery/:slug redirect.
  *
  * Fetches the project to resolve the creator's handle, then redirects
  * to the canonical /@handle/:slug URL on the creator's site.

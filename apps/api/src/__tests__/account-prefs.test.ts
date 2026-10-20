@@ -12,6 +12,11 @@
  * no second call to spend).
  */
 import { beforeAll, describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { db } from "@anthers/db/client";
+import { userPreferences } from "@anthers/db/schema";
+import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -42,31 +47,64 @@ function patchMe(body: unknown, c = cookie) {
 
 describe("the home nav order preference", () => {
 	it("persists a whole permutation, to both serializers it must ride", async () => {
-		const res = await patchMe({ homeNavOrder: ["library", "feed", "discover"] });
+		const res = await patchMe({ homeNavOrder: ["library", "network", "discovery"] });
 		expect(res.status).toBe(200);
 
 		const me = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
-		expect(me.user.homeNavOrder).toEqual(["library", "feed", "discover"]);
+		expect(me.user.homeNavOrder).toEqual(["library", "network", "discovery"]);
 
 		// `/auth/me` is the shell's boot payload: the landing redirect reads the
 		// order from it, so a preference that stopped at GET /me would never land.
 		const auth = await (await req("/api/auth/me", { headers: { Cookie: cookie } })).json();
-		expect(auth.user.homeNavOrder).toEqual(["library", "feed", "discover"]);
+		expect(auth.user.homeNavOrder).toEqual(["library", "network", "discovery"]);
 	});
 
 	it("refuses an order that drops or duplicates an id", async () => {
-		expect((await patchMe({ homeNavOrder: ["feed", "library"] })).status).toBe(400);
-		expect((await patchMe({ homeNavOrder: ["feed", "feed", "discover"] })).status).toBe(400);
+		expect((await patchMe({ homeNavOrder: ["network", "library"] })).status).toBe(400);
+		expect((await patchMe({ homeNavOrder: ["network", "network", "discovery"] })).status).toBe(400);
 	});
 
 	it("refuses an id the nav does not have", async () => {
 		// The ids are the client's nav vocabulary; the schema's enum is that refusal.
-		expect((await patchMe({ homeNavOrder: ["feed", "library", "basket"] })).status).toBe(400);
+		expect((await patchMe({ homeNavOrder: ["network", "library", "basket"] })).status).toBe(400);
 	});
 
 	it("accepts a PATCH with no order key at all — other fields still work", async () => {
 		const res = await patchMe({ bio: "Just here to reorder." });
 		expect(res.status).toBe(200);
+	});
+});
+
+describe("the nav-id migration", () => {
+	it("rewrites a stored order's retired ids in place", async () => {
+		const me = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
+		const userId = me.user.id as number;
+		expect(userId).toBeGreaterThan(0);
+
+		// A row written before the rename, which the route's own validation now refuses —
+		// so the migration is the only thing that can turn it back into a valid order.
+		await db
+			.update(userPreferences)
+			.set({ homeNavOrder: ["feed", "library", "discover"] })
+			.where(eq(userPreferences.userId, userId));
+
+		const migration = readFileSync(
+			join(
+				import.meta.dir,
+				"../../../../packages/db/drizzle/20261020-045536_rename_home_nav_ids.sql",
+			),
+			"utf8",
+		);
+		await db.execute(sql.raw(migration));
+
+		const [row] = await db
+			.select({ order: userPreferences.homeNavOrder })
+			.from(userPreferences)
+			.where(eq(userPreferences.userId, userId));
+		expect(row?.order).toEqual(["network", "library", "discovery"]);
+
+		const after = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
+		expect(after.user.homeNavOrder).toEqual(["network", "library", "discovery"]);
 	});
 });
 

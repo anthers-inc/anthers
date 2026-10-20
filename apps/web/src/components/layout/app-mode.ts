@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Which half of the signed-in app somebody is in: **user** mode (Feed, Library, Discover) or
+ * Which half of the signed-in app somebody is in: **user** mode (Network, Library, Discovery) or
  * **studio** mode (the creator's Dashboard, Catalog, Posts, Analytics and Settings). Each has
  * its own header and its own sidebar, and neither shows the other's options (Parker,
  * 2026-09-17).
@@ -12,7 +12,7 @@
  *
  * ⚠️ **It is kept in `sessionStorage`, because React state would not survive what it has to.**
  * A reload of a Work page opened from the Studio should still be in the Studio, and the signed-in
- * layout is mounted in two places, the protected group (`/feed`, `/library` …) and `PublicShell`
+ * layout is mounted in two places, the protected group (`/network`, `/library` …) and `PublicShell`
  * (Work pages, profiles, the Studio), so it remounts whenever a navigation crosses between them.
  * It is per tab rather than `localStorage` because it is where somebody is, not a preference.
  */
@@ -28,9 +28,9 @@ export type AppMode = "user" | "studio";
  * menu's pages are here, and so is the basket, because each is about the person as a user.
  */
 const USER_PATHS = [
-	"/feed",
+	"/network",
 	"/library",
-	"/discover",
+	"/discovery",
 	"/basket",
 	"/badges",
 	"/purchases",

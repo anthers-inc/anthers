@@ -175,7 +175,7 @@ test("somebody whose identity's server is down is told their records are late, a
 		.set({ atprotoPdsUrl: "http://127.0.0.1:9" })
 		.where(eq(users.atprotoDid, did));
 
-	await page.goto(`${ORIGIN}/feed`);
+	await page.goto(`${ORIGIN}/network`);
 	const notice = page.getByRole("status").filter({ hasText: "isn't answering right now" });
 	await expect(notice).toBeVisible();
 	await expect(notice).toContainText("reach the network late");

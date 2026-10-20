@@ -167,7 +167,7 @@ export default function ChannelGuideLens({
 						? "Follow creators and their channels fill the guide as they release."
 						: "Save a video and its creator takes a channel in the guide — free work included. You don't have to buy something to keep it."}
 				</p>
-				<Link to="/discover" className="btn btn-primary btn-sm mt-4">
+				<Link to="/discovery" className="btn btn-primary btn-sm mt-4">
 					{source === "feed" ? "Find channels to follow" : "Find something to watch"}
 				</Link>
 			</div>

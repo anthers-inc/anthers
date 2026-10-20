@@ -1,145 +1,205 @@
 // SPDX-License-Identifier: Apache-2.0
+/**
+ * **Discovery** — the place for what the reader has not found yet.
+ *
+ * Two modes, both carrying a formula the reader can see and change:
+ *
+ * - **Graph** traces the network around the people they follow: creators ranked by
+ *   how many of those people also follow them. A creator the reader already follows
+ *   stays in the list, because the graph is a picture of the network rather than a
+ *   list of strangers, and the card says so.
+ * - **Ticker** is the newest Works and Posts across Anthers, newest first. It reuses
+ *   the feed's `?scope=global` stream, so its cards, access verdicts and maturity
+ *   filtering are the feed's own rather than a second listing that drifts from it.
+ *
+ * 🚨 **The formula is the product.** Discovery's promise is that the reader can
+ * always see how the corpus is being drawn and change it, so every mode renders its
+ * active formula above the content and exposes the parameter behind it. There is no
+ * hidden ranking, and nothing here is paid placement.
+ *
+ * Browse was removed on 2026-10-19, carrying none of its controls: search lives in
+ * the top-level bar, and term filtering rides the `search` parameter the bar already
+ * sends here. Inbox was removed the same day for having no backend to stand on.
+ */
 
+import { useAuth } from "@anthers/web-shared/auth";
 import CreatorCard from "@anthers/web-shared/creator/CreatorCard";
-import { apiFetch, client } from "@anthers/web-shared/rpc";
+import { client } from "@anthers/web-shared/rpc";
 import { useSidebar } from "@anthers/web-shared/sidebar";
-import type { Project, PublicUser } from "@anthers/web-shared/types";
+import type { PublicUser } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import {
+	ArrowPathIcon,
 	BoltIcon,
 	GlobeAltIcon,
-	InboxIcon,
 	MagnifyingGlassIcon,
+	XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import CardImpressionBoundary from "../components/cards/CardImpressionBoundary";
-import ProjectCard from "../components/cards/ProjectCard";
-import ContentFilterSections from "../components/layout/ContentFilterSections";
+import FeedTile from "../components/cards/FeedTile";
+import SharedFilterSections, {
+	SHARED_FILTER_TYPES,
+} from "../components/layout/SharedFilterSections";
 import { sidebarRowClass } from "../components/layout/sidebar-row-class";
+import TabHeader from "../components/layout/TabHeader";
 
-// Exploration modes
-const EXPLORE_MODES = [
+type DiscoveryMode = "graph" | "ticker";
+
+/** One entry of the feed's stream, as `?scope=global` sends it. */
+type FeedEntry = {
+	kind: "post" | "release";
+	id: number;
+	at: string;
+	title?: string | null;
+	creator?: { handle?: string; displayName?: string | null } | null;
+} & Record<string, unknown>;
+
+/** A creator as the graph ranks them: the public card plus the edge that put them here. */
+type GraphCreator = PublicUser & {
+	sharedFollows: number;
+	types: string[];
+	hasPosts: boolean;
+	tags: string[];
+};
+
+type GraphBasis = "network" | "followers";
+
+const DISCOVERY_MODES = [
 	{
-		id: "browse",
-		label: "Browse",
-		icon: MagnifyingGlassIcon,
-		description: "Search and filter all content",
-	},
-	{
-		id: "inbox",
-		label: "Inbox",
-		icon: InboxIcon,
-		description: "Content shared with you by friends and creators",
-	},
-	{
-		id: "network",
-		label: "Network",
+		id: "graph" as const,
+		label: "Graph",
 		icon: GlobeAltIcon,
-		description: "Discover creators connected to your network",
+		description: "Creators connected to the people you follow",
 	},
 	{
-		id: "ticker",
+		id: "ticker" as const,
 		label: "Ticker",
 		icon: BoltIcon,
-		description: "Real-time live feed of new content",
+		description: "The newest Works and Posts across Anthers",
+	},
+];
+
+/** The graph's presets. `minShared` is the one parameter the reader can move. */
+const GRAPH_PRESETS = [
+	{
+		id: "taste",
+		label: "Your network's taste",
+		minShared: 2,
+		description: "Creators at least two of the people you follow also follow.",
+	},
+	{
+		id: "extended",
+		label: "Extended network",
+		minShared: 1,
+		description: "Anyone at least one of the people you follow follows.",
 	},
 ] as const;
 
-// Sort options. Each one the server can actually order by — "Trending" was here and is
-// gone, because it needs views over a window and `works.view_count` is a lifetime
-// counter. Offering a control the handler can't honor is what made every filter on this
-// page inert; don't re-add one ahead of its signal.
-const SORT_OPTIONS = [
-	{ value: "newest", label: "Newest" },
-	{ value: "popular", label: "Popular" },
-	{ value: "most_recommended", label: "Most Recommended" },
-] as const;
+/** The ticker's presets. The window is the parameter; the filters narrow the rest. */
+const TICKER_PRESETS = [
+	{ id: "everything", label: "Everything new", window: "all" as const },
+	{ id: "today", label: "The last day", window: "day" as const },
+	{ id: "week", label: "The last week", window: "week" as const },
+];
 
-function DiscoverSidebarContent({
-	exploreMode,
-	contentType,
-	pricing,
-	showLocked,
-	minPrice,
-	maxPrice,
-	platform,
-	duration,
-	tag,
-	onUpdateParams,
+const sectionTitleClass =
+	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2";
+
+const modeKey = (userId: number | undefined) =>
+	userId == null ? null : `anthers_discovery_mode:${userId}`;
+
+function savedMode(userId: number | undefined): DiscoveryMode | null {
+	const key = modeKey(userId);
+	if (!key) return null;
+	try {
+		const saved = localStorage.getItem(key);
+		return saved === "ticker" || saved === "graph" ? saved : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * The active formula, rendered above the content. It names what is being drawn and
+ * carries the control that changes it, so the reader never has to guess why a card
+ * is on screen.
+ */
+function FormulaBar({
+	preset,
+	formula,
+	children,
+	onRefresh,
 }: {
-	exploreMode: string;
-	contentType: string;
-	pricing: string;
-	showLocked: string;
-	minPrice: string;
-	maxPrice: string;
-	platform: string;
-	duration: string;
-	tag: string;
-	onUpdateParams: (updates: Record<string, string>) => void;
+	preset: string;
+	formula: string;
+	children?: React.ReactNode;
+	onRefresh?: () => void;
 }) {
 	return (
-		<div className="flex flex-col gap-5">
-			{/* Exploration mode */}
-			<section>
-				<h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2">
-					Explore
-				</h3>
-				<div className="flex flex-col gap-0.5">
-					{EXPLORE_MODES.map((mode) => (
-						<button
-							key={mode.id}
-							type="button"
-							className={sidebarRowClass(exploreMode === mode.id)}
-							onClick={() => onUpdateParams({ mode: mode.id === "browse" ? "" : mode.id })}
-							title={mode.description}
-						>
-							<mode.icon className="w-5 h-5 shrink-0" />
-							{mode.label}
-						</button>
-					))}
+		<div className="mb-6 rounded-box border border-base-300 bg-base-200/40 p-4">
+			<div className="flex flex-wrap items-start justify-between gap-3">
+				<div className="min-w-0">
+					<p className="text-[11px] font-semibold uppercase tracking-wider text-base-content/40">
+						Active formula
+					</p>
+					<p className="mt-1 max-w-3xl text-sm leading-relaxed text-base-content/80">
+						<span className="font-medium">{preset}.</span> {formula}
+					</p>
 				</div>
-			</section>
-
-			<div className="divider my-0" />
-
-			{/* Shared filter sections */}
-			<ContentFilterSections
-				contentType={contentType}
-				pricing={pricing}
-				showLocked={showLocked}
-				minPrice={minPrice}
-				maxPrice={maxPrice}
-				platform={platform}
-				duration={duration}
-				tag={tag}
-				onUpdateParams={onUpdateParams}
-			/>
+				<div className="flex flex-wrap items-end gap-2">
+					{children}
+					{onRefresh && (
+						<button
+							type="button"
+							className="btn btn-ghost btn-sm btn-square"
+							onClick={onRefresh}
+							aria-label="Refresh"
+							title="Refresh"
+						>
+							<ArrowPathIcon className="h-4 w-4" />
+						</button>
+					)}
+				</div>
+			</div>
 		</div>
 	);
 }
 
 export default function DiscoverPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const { setPageContent } = useSidebar();
-	const [projects, setProjects] = useState<Project[]>([]);
-	const [creators, setCreators] = useState<PublicUser[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
+	const { setPageContent, setSharedContent } = useSidebar();
+	const { user } = useAuth();
 
-	const exploreMode = searchParams.get("mode") ?? "browse";
+	const [creators, setCreators] = useState<GraphCreator[]>([]);
+	const [basis, setBasis] = useState<GraphBasis>("network");
+	const [graphLoading, setGraphLoading] = useState(false);
+	const [entries, setEntries] = useState<FeedEntry[]>([]);
+	const [tickerLoading, setTickerLoading] = useState(false);
+	const [refreshKey, setRefreshKey] = useState(0);
+
+	const urlMode = searchParams.get("mode");
+	const mode: DiscoveryMode =
+		urlMode === "ticker" || urlMode === "graph" ? urlMode : (savedMode(user?.id) ?? "graph");
+
 	const contentType = searchParams.get("media_type") ?? "";
+	const access = searchParams.get("access") ?? "";
+	const tags = searchParams.get("tags") ?? "";
 	const search = searchParams.get("search") ?? "";
-	const sort = searchParams.get("sort") ?? "newest";
-	const pricing = searchParams.get("pricing") ?? "";
-	const showLocked = searchParams.get("show_locked") ?? "";
-	const minPrice = searchParams.get("min_price") ?? "";
-	const maxPrice = searchParams.get("max_price") ?? "";
-	const platform = searchParams.get("platform") ?? "";
-	const duration = searchParams.get("duration") ?? "";
-	const tag = searchParams.get("tag") ?? "";
+
+	const graphPresetId = searchParams.get("preset") ?? "taste";
+	const graphPreset =
+		GRAPH_PRESETS.find((preset) => preset.id === graphPresetId) ?? GRAPH_PRESETS[0];
+	const minShared = Math.max(
+		1,
+		Math.min(10, Number(searchParams.get("min_shared") ?? graphPreset.minShared) || 1),
+	);
+
+	const tickerPresetId = searchParams.get("preset") ?? "everything";
+	const tickerPreset =
+		TICKER_PRESETS.find((preset) => preset.id === tickerPresetId) ?? TICKER_PRESETS[0];
+	const window = tickerPreset.window;
 
 	const updateParams = useCallback(
 		(updates: Record<string, string>) => {
@@ -147,11 +207,8 @@ export default function DiscoverPage() {
 				(prev) => {
 					const next = new URLSearchParams(prev);
 					for (const [key, value] of Object.entries(updates)) {
-						if (value) {
-							next.set(key, value);
-						} else {
-							next.delete(key);
-						}
+						if (value) next.set(key, value);
+						else next.delete(key);
 					}
 					return next;
 				},
@@ -161,222 +218,354 @@ export default function DiscoverPage() {
 		[setSearchParams],
 	);
 
-	// Register page-specific sidebar content
+	// The mode is sticky per account on this browser. The URL wins when it names one,
+	// so a shared link lands where it says; otherwise the last mode the account used
+	// is where they return.
+	useEffect(() => {
+		const key = modeKey(user?.id);
+		if (!key) return;
+		try {
+			localStorage.setItem(key, mode);
+		} catch {}
+	}, [mode, user?.id]);
+
+	// The URL has to carry the mode once the page has decided one, or a mode switch
+	// would be invisible to the browser's back button and to a copied link.
+	useEffect(() => {
+		if (!urlMode) updateParams({ mode });
+	}, [urlMode, mode, updateParams]);
+
+	// Graph: the creators around the people this account follows.
+	useEffect(() => {
+		if (mode !== "graph") return;
+		// The refresh control bumps this counter; the request itself needs no cache
+		// buster, so the value is read only to make the dependency real to the linter.
+		void refreshKey;
+		setGraphLoading(true);
+		client.api.accounts.me.graph
+			.$get({ query: { min_shared: String(minShared), limit: "24" } })
+			.then(async (res) => {
+				if (!res.ok) return;
+				const data = (await res.json()) as unknown as {
+					basis: GraphBasis;
+					creators: GraphCreator[];
+				};
+				setBasis(data.basis ?? "network");
+				setCreators(data.creators ?? []);
+			})
+			.catch(() => {})
+			.finally(() => setGraphLoading(false));
+	}, [mode, minShared, refreshKey]);
+
+	// Ticker: the same stream the feed draws, widened to every creator.
+	useEffect(() => {
+		if (mode !== "ticker") return;
+		// The refresh control bumps this counter; the feed route has no cache buster.
+		void refreshKey;
+		setTickerLoading(true);
+		client.api.accounts.me.feed
+			.$get({
+				query: {
+					scope: "global",
+					...(contentType === "posts"
+						? { kind: "posts" }
+						: contentType
+							? { media_type: contentType }
+							: {}),
+					...(access ? { access } : {}),
+					...(tags ? { tags } : {}),
+				},
+			})
+			.then(async (res) => {
+				if (!res.ok) return;
+				const data = (await res.json()) as unknown as { entries: FeedEntry[] };
+				setEntries(data.entries ?? []);
+			})
+			.catch(() => {})
+			.finally(() => setTickerLoading(false));
+	}, [mode, contentType, access, tags, refreshKey]);
+
+	const selectedTags = useMemo(
+		() =>
+			tags
+				.split(",")
+				.map((tag) => tag.trim())
+				.filter(Boolean),
+		[tags],
+	);
+
+	// The graph runs the shared Type and Tags filters over each creator's released
+	// content. Access is a verdict about one Work, not about a person, so the graph
+	// omits that control rather than leaving it inert.
+	const visibleCreators = useMemo(() => {
+		const term = search.trim().toLowerCase();
+		return creators.filter((creator) => {
+			if (term) {
+				const haystack = `${creator.displayName ?? ""} ${creator.handle ?? ""}`.toLowerCase();
+				if (!haystack.includes(term)) return false;
+			}
+			if (contentType === "posts" && !creator.hasPosts) return false;
+			if (contentType && contentType !== "posts" && !creator.types.includes(contentType)) {
+				return false;
+			}
+			if (selectedTags.length > 0 && !selectedTags.every((tag) => creator.tags.includes(tag))) {
+				return false;
+			}
+			return true;
+		});
+	}, [creators, search, contentType, selectedTags]);
+
+	const graphUnavailableTypes = useMemo(() => {
+		const held = new Set<string>();
+		for (const creator of creators) {
+			for (const type of creator.types) held.add(type);
+			if (creator.hasPosts) held.add("posts");
+		}
+		const unavailable = new Set<string>();
+		for (const type of SHARED_FILTER_TYPES) {
+			if (type.id && !held.has(type.id)) unavailable.add(type.id);
+		}
+		return unavailable;
+	}, [creators]);
+
+	// The ticker filters the already-fetched page by the window and the term. The
+	// server applies the Type, Access and Tags filters; these two are presentation
+	// over what it returned.
+	const visibleEntries = useMemo(() => {
+		const term = search.trim().toLowerCase();
+		const cutoff =
+			window === "day"
+				? Date.now() - 24 * 60 * 60 * 1000
+				: window === "week"
+					? Date.now() - 7 * 24 * 60 * 60 * 1000
+					: null;
+		return entries.filter((entry) => {
+			if (cutoff != null && new Date(entry.at).getTime() < cutoff) return false;
+			if (term) {
+				const haystack =
+					`${entry.title ?? ""} ${entry.creator?.displayName ?? ""} ${entry.creator?.handle ?? ""}`.toLowerCase();
+				if (!haystack.includes(term)) return false;
+			}
+			return true;
+		});
+	}, [entries, window, search]);
+
+	// Sidebar: Modes is the page's own section; the shared filters sit below the
+	// divider the layout draws, exactly as on the Network and Library tabs.
 	useEffect(() => {
 		setPageContent(
-			<DiscoverSidebarContent
-				exploreMode={exploreMode}
-				contentType={contentType}
-				pricing={pricing}
-				showLocked={showLocked}
-				minPrice={minPrice}
-				maxPrice={maxPrice}
-				platform={platform}
-				duration={duration}
-				tag={tag}
-				onUpdateParams={updateParams}
+			<section>
+				<h3 className={sectionTitleClass}>Modes</h3>
+				<div className="flex flex-col gap-0.5">
+					{DISCOVERY_MODES.map((discoveryMode) => (
+						<button
+							key={discoveryMode.id}
+							type="button"
+							className={sidebarRowClass(mode === discoveryMode.id)}
+							onClick={() =>
+								updateParams({
+									mode: discoveryMode.id,
+									// Access belongs to the ticker's stream, not to a person.
+									...(discoveryMode.id === "graph" ? { access: "" } : {}),
+									// Each mode has its own preset vocabulary.
+									preset: "",
+									min_shared: "",
+								})
+							}
+							title={discoveryMode.description}
+						>
+							<discoveryMode.icon className="h-5 w-5 shrink-0" />
+							{discoveryMode.label}
+						</button>
+					))}
+				</div>
+			</section>,
+		);
+		setSharedContent(
+			<SharedFilterSections
+				type={contentType}
+				onType={(id) => updateParams({ media_type: id })}
+				unavailableTypes={mode === "graph" ? graphUnavailableTypes : undefined}
+				tags={tags}
+				onTags={(value) => updateParams({ tags: value })}
+				access={
+					mode === "ticker"
+						? { value: access, onAccess: (value) => updateParams({ access: value }) }
+						: undefined
+				}
 			/>,
 		);
-		return () => setPageContent(null);
+		return () => {
+			setPageContent(null);
+			setSharedContent(null);
+		};
 	}, [
 		setPageContent,
-		exploreMode,
+		setSharedContent,
+		mode,
 		contentType,
-		pricing,
-		showLocked,
-		minPrice,
-		maxPrice,
-		platform,
-		duration,
-		tag,
+		access,
+		tags,
+		graphUnavailableTypes,
 		updateParams,
 	]);
 
-	useEffect(() => {
-		if (exploreMode !== "browse") return;
+	const graphFormula =
+		basis === "followers"
+			? "You follow nobody yet, so there is no network to trace. This shows creators ordered by followers; it becomes a map of your network as soon as you follow someone."
+			: `Creators followed by at least ${minShared} of the people you follow, ranked by how many of them share the follow.`;
 
-		setLoading(true);
-		const params = new URLSearchParams();
-		if (contentType) params.set("media_type", contentType);
-		if (search) params.set("search", search);
-		if (sort && sort !== "newest") params.set("sort", sort);
-		if (pricing) params.set("pricing", pricing);
-		if (tag) params.set("tag", tag);
-		if (minPrice) params.set("min_price", minPrice);
-		if (maxPrice) params.set("max_price", maxPrice);
-		if (platform) params.set("platform", platform);
-		if (duration) params.set("duration", duration);
-		if (showLocked) params.set("show_locked", showLocked);
-
-		apiFetch(`/api/content/projects?${params.toString()}`)
-			.then((res) => res.json())
-			.then((json) => setProjects(json.projects))
-			.catch(() => {})
-			.finally(() => setLoading(false));
-
-		// Also fetch creators for the "browse" view
-		client.api.accounts.creators
-			.$get()
-			.then((res) => res.json())
-			.then((data) => setCreators(data.creators))
-			.catch(() => {});
-	}, [
-		exploreMode,
-		contentType,
-		search,
-		sort,
-		pricing,
-		tag,
-		minPrice,
-		maxPrice,
-		platform,
-		duration,
-		showLocked,
-	]);
-
-	const handleSearch = (e: React.FormEvent) => {
-		e.preventDefault();
-		updateParams({ search: searchInput.trim() });
-	};
-
-	const renderBrowseContent = () => (
-		<>
-			{/* Search bar */}
-			<form onSubmit={handleSearch} className="flex gap-2 mb-6">
-				<input
-					type="text"
-					placeholder="Search projects, creators, posts..."
-					className="input input-bordered flex-1"
-					value={searchInput}
-					onChange={(e) => setSearchInput(e.target.value)}
-				/>
-				<button type="submit" className="btn btn-primary">
-					<MagnifyingGlassIcon className="w-5 h-5" />
-				</button>
-			</form>
-
-			{/* Sort selector (inline) */}
-			<div className="flex items-center gap-2 mb-6">
-				<span className="text-sm text-base-content/50">Sort by</span>
-				<select
-					className="select select-bordered select-sm"
-					value={sort}
-					onChange={(e) => updateParams({ sort: e.target.value })}
-				>
-					{SORT_OPTIONS.map((opt) => (
-						<option key={opt.value} value={opt.value}>
-							{opt.label}
-						</option>
-					))}
-				</select>
-			</div>
-
-			{/* Results */}
-			{loading ? (
-				<div className="flex justify-center py-16">
-					<LoadingSpinner size="lg" />
-				</div>
-			) : projects.length === 0 ? (
-				<EmptyState
-					title="No projects found"
-					description={
-						search
-							? `No results for "${search}". Try a different search term.`
-							: "No projects have been published yet."
-					}
-				/>
-			) : (
-				<>
-					<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-						{projects.map((project) => (
-							<CardImpressionBoundary key={project.id} subjectKind="project" subjectId={project.id}>
-								<ProjectCard project={project} />
-							</CardImpressionBoundary>
-						))}
-					</div>
-
-					{/* Creators section in browse mode */}
-					{creators.length > 0 && !search && (
-						<section className="border-t border-base-300/30 pt-8">
-							<h2 className="text-lg font-semibold mb-4">Creators</h2>
-							<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-								{creators.slice(0, 6).map((creator) => (
-									<CardImpressionBoundary
-										key={creator.id}
-										subjectKind="creator"
-										subjectId={creator.id}
-									>
-										<CreatorCard creator={creator} />
-									</CardImpressionBoundary>
-								))}
-							</div>
-						</section>
-					)}
-				</>
-			)}
-		</>
-	);
-
-	const renderInboxContent = () => (
-		<div className="py-8">
-			<EmptyState
-				icon={<InboxIcon className="w-12 h-12" />}
-				title="Your inbox is empty"
-				description="When friends or creators share content with you, it will appear here. You can control who can send to your inbox in Settings."
-			/>
-		</div>
-	);
-
-	const renderNetworkContent = () => (
-		<div className="py-8">
-			<div className="text-center max-w-lg mx-auto">
-				<GlobeAltIcon className="w-16 h-16 mx-auto text-base-content/20 mb-4" />
-				<h3 className="text-lg font-semibold mb-2">Creator Network Map</h3>
-				<p className="text-sm text-base-content/60 mb-4">
-					An interactive network visualization showing creators connected to the people you already
-					follow. Creators followed by many of your follows are highlighted -- discover new
-					favorites through your existing relationships.
-				</p>
-				<div className="bg-base-200 rounded-xl p-12 mb-4">
-					<div className="flex items-center justify-center gap-2 text-base-content/30">
-						<GlobeAltIcon className="w-8 h-8" />
-						<span className="text-sm">Network graph coming soon</span>
-					</div>
-				</div>
-				<p className="text-xs text-base-content/40">
-					Powered by force-directed graph layout. Follow more creators to make the network richer.
-				</p>
-			</div>
-		</div>
-	);
-
-	const renderTickerContent = () => (
-		<div className="py-8">
-			<div className="text-center max-w-lg mx-auto">
-				<BoltIcon className="w-16 h-16 mx-auto text-base-content/20 mb-4" />
-				<h3 className="text-lg font-semibold mb-2">Live Ticker</h3>
-				<p className="text-sm text-base-content/60 mb-4">
-					A real-time feed of content as it arrives on the platform. No filters, no rankings -- just
-					the raw stream of new projects, posts, and updates from every creator on Anthers.
-				</p>
-				<div className="bg-base-200 rounded-xl p-12">
-					<div className="flex items-center justify-center gap-2 text-base-content/30">
-						<BoltIcon className="w-8 h-8 motion-safe:animate-pulse" />
-						<span className="text-sm">Live ticker coming soon</span>
-					</div>
-				</div>
-			</div>
-		</div>
-	);
+	const tickerFormula = `The newest Works and Posts across Anthers${
+		window === "all" ? "" : ` from the last ${window === "day" ? "24 hours" : "seven days"}`
+	}, newest first. Every creator is eligible; the sidebar's filters narrow what is drawn.`;
 
 	return (
 		<div className="min-h-full">
-			{/* Page content */}
-			<div className="max-w-5xl mx-auto px-4 py-6">
-				{exploreMode === "browse" && renderBrowseContent()}
-				{exploreMode === "inbox" && renderInboxContent()}
-				{exploreMode === "network" && renderNetworkContent()}
-				{exploreMode === "ticker" && renderTickerContent()}
+			<div className="mx-auto w-full max-w-7xl px-6 py-6">
+				<TabHeader
+					icon={MagnifyingGlassIcon}
+					title="Discovery"
+					subtitle="Explore the Anthers ecosystem to find creators and creations you haven't discovered yet. Use one of our transparent preset formulas, or cook up your own. There are no advertisers or incentives to shove things in front of you; find your next fandom in your own way, for your own reasons."
+				/>
+
+				{search && (
+					<div className="mb-4 flex items-center gap-2 text-sm text-base-content/70">
+						<span>
+							Showing results for <span className="font-medium">&ldquo;{search}&rdquo;</span>
+						</span>
+						<button
+							type="button"
+							className="btn btn-ghost btn-xs btn-circle"
+							onClick={() => updateParams({ search: "" })}
+							aria-label="Clear search"
+						>
+							<XMarkIcon className="h-3.5 w-3.5" />
+						</button>
+					</div>
+				)}
+
+				{mode === "graph" ? (
+					<>
+						<FormulaBar
+							preset={basis === "followers" ? "Creators by followers" : graphPreset.label}
+							formula={graphFormula}
+							onRefresh={() => setRefreshKey((key) => key + 1)}
+						>
+							{basis === "network" && (
+								<>
+									<label className="flex flex-col gap-1 text-xs text-base-content/60">
+										Preset
+										<select
+											className="select select-bordered select-sm"
+											value={graphPreset.id}
+											onChange={(e) => {
+												const preset = GRAPH_PRESETS.find((p) => p.id === e.target.value);
+												updateParams({
+													preset: e.target.value,
+													min_shared: preset ? String(preset.minShared) : "",
+												});
+											}}
+										>
+											{GRAPH_PRESETS.map((preset) => (
+												<option key={preset.id} value={preset.id}>
+													{preset.label}
+												</option>
+											))}
+										</select>
+									</label>
+									<label className="flex flex-col gap-1 text-xs text-base-content/60">
+										Shared follows
+										<input
+											type="number"
+											min={1}
+											max={10}
+											className="input input-bordered input-sm w-20"
+											value={minShared}
+											onChange={(e) =>
+												updateParams({ min_shared: e.target.value.replace(/[^0-9]/g, "") })
+											}
+										/>
+									</label>
+								</>
+							)}
+						</FormulaBar>
+
+						{graphLoading ? (
+							<div className="flex justify-center py-16">
+								<LoadingSpinner size="lg" />
+							</div>
+						) : visibleCreators.length === 0 ? (
+							<EmptyState
+								title={
+									creators.length === 0
+										? "No one in your network's orbit yet"
+										: "No creators match these filters"
+								}
+								description={
+									creators.length === 0
+										? "Follow a few creators and this fills with the people they trust. Discovery has no recommendation engine to fall back on."
+										: "Clear a Type or Tags filter, or lower the shared-follows threshold."
+								}
+							/>
+						) : (
+							<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+								{visibleCreators.map((creator) => (
+									<div key={creator.id} className="flex flex-col gap-1">
+										<CreatorCard creator={creator} />
+										<p className="px-1 text-xs text-base-content/50">
+											{basis === "followers"
+												? `${creator.followerCount ?? 0} followers`
+												: `Followed by ${creator.sharedFollows} ${
+														creator.sharedFollows === 1 ? "person" : "people"
+													} you follow`}
+											{creator.isFollowing ? " · Following" : ""}
+										</p>
+									</div>
+								))}
+							</div>
+						)}
+					</>
+				) : (
+					<>
+						<FormulaBar
+							preset={tickerPreset.label}
+							formula={tickerFormula}
+							onRefresh={() => setRefreshKey((key) => key + 1)}
+						>
+							<label className="flex flex-col gap-1 text-xs text-base-content/60">
+								Preset
+								<select
+									className="select select-bordered select-sm"
+									value={tickerPreset.id}
+									onChange={(e) => updateParams({ preset: e.target.value })}
+								>
+									{TICKER_PRESETS.map((preset) => (
+										<option key={preset.id} value={preset.id}>
+											{preset.label}
+										</option>
+									))}
+								</select>
+							</label>
+						</FormulaBar>
+
+						{tickerLoading ? (
+							<div className="flex justify-center py-16">
+								<LoadingSpinner size="lg" />
+							</div>
+						) : visibleEntries.length === 0 ? (
+							<EmptyState
+								title="Nothing new here"
+								description="No Works or Posts match these filters. Clear a filter, widen the window, or check back soon."
+							/>
+						) : (
+							<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+								{visibleEntries.map((entry) => (
+									<FeedTile key={`${entry.kind}-${entry.id}`} entry={entry} />
+								))}
+							</div>
+						)}
+					</>
+				)}
 			</div>
 		</div>
 	);

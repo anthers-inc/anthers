@@ -8,7 +8,7 @@
  * 🚨 **Every row renders on every tab; the tab decides which rows are live** — that is
  * what makes the vocabulary something a user learns once rather than a per-page
  * reshuffle. A row the tab has not built is GRAYED with "(Coming Soon)", never absent:
- * on the Feed only No Lens is live today, Music Player is live in the Library, and
+ * on the Network only No Lens is live today, Music Player is live in the Library, and
  * Channel Guide and Bookshelf are coming-soon everywhere until their tasks build them
  * per tab. A row may be live on every tab in the future; absent is a state this
  * component no longer has.

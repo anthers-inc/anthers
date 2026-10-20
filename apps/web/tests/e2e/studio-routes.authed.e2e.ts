@@ -126,9 +126,10 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	await page.reload();
 	await expect(studioSidebar).toBeVisible();
 
-	// The switch leaves for the Feed, and user mode is sticky the same way.
+	// The switch leaves for the top of the user's own order, the Library by default,
+	// and user mode is sticky the same way.
 	await modeSwitch.getByRole("link", { name: "User", exact: true }).click();
-	await expect(page).toHaveURL(/\/feed$/);
+	await expect(page).toHaveURL(/\/library$/);
 	await expect(userSidebar).toBeVisible();
 	await expect(studioSidebar).toHaveCount(0);
 	await expect(header.getByPlaceholder("Search...")).toBeVisible();
@@ -148,7 +149,7 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 test("an account without creator mode has no Studio to switch to", async ({ page }) => {
 	// The gauntlet user is not a creator. The switch is the only way into the Studio from the
 	// sidebar, so its absence is also the absence of a door they would be turned back from.
-	await page.goto("/feed");
+	await page.goto("/network");
 	await expect(page.getByRole("navigation", { name: "Anthers", exact: true })).toBeVisible();
 	await expect(page.getByRole("navigation", { name: "User or Creator" })).toHaveCount(0);
 });

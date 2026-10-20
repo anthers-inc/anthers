@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The sidebar nav's own contract — the Feed / Library / Discover rows and the drag
+ * The sidebar nav's own contract — the Library / Network / Discovery rows and the drag
  * handles beside them.
  *
  * 🚨 **Two of these assertions exist because a regression shipped through them.** #437
@@ -35,11 +35,11 @@ test.describe.configure({ mode: "serial" });
 
 test("the nav items read as rows — icon beside label at the nav's small size", async ({ page }) => {
 	test.setTimeout(60_000);
-	await page.goto(`${WEB_ORIGIN}/feed`);
+	await page.goto(`${WEB_ORIGIN}/network`);
 	const nav = page.getByRole("navigation", { name: "Anthers" });
-	const link = nav.getByRole("link", { name: "Feed" });
+	const link = nav.getByRole("link", { name: "Network" });
 	await expect(link).toBeVisible();
-	expect(await labels(page)).toEqual(["Feed", "Library", "Discover"]);
+	expect(await labels(page)).toEqual(["Library", "Network", "Discovery"]);
 
 	// The item carries its real classes (the regression shipped a function's source
 	// as the className — nothing applied, and the row collapsed into stacked text).
@@ -86,7 +86,7 @@ test("the nav items read as rows — icon beside label at the nav's small size",
 	const asideBox = await navEl.evaluate((el) =>
 		(el.closest("aside") as HTMLElement).getBoundingClientRect(),
 	);
-	for (const name of ["Feed", "Library", "Discover"]) {
+	for (const name of ["Library", "Network", "Discovery"]) {
 		const grip = nav
 			.getByRole("link", { name })
 			.locator("..")
@@ -105,11 +105,11 @@ test("the nav items read as rows — icon beside label at the nav's small size",
 
 test("a grip's drag reorders, persists, and the order survives a fresh boot", async ({ page }) => {
 	test.setTimeout(60_000);
-	await page.goto(`${WEB_ORIGIN}/feed`);
+	await page.goto(`${WEB_ORIGIN}/network`);
 	await expect(
-		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Feed" }),
+		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Network" }),
 	).toBeVisible();
-	expect(await labels(page)).toEqual(["Feed", "Library", "Discover"]);
+	expect(await labels(page)).toEqual(["Library", "Network", "Discovery"]);
 
 	// A real HTML5 drag, dispatched in the page (DataTransfer exists only there):
 	// dragstart on the second row's grip, drop on the first row. The drop's PATCH can
@@ -149,27 +149,27 @@ test("a grip's drag reorders, persists, and the order survives a fresh boot", as
 	expect(
 		(await reorder.request().postDataJSON())?.homeNavOrder,
 		"the write carries the drop's whole order",
-	).toEqual(["library", "feed", "discover"]);
+	).toEqual(["library", "network", "discovery"]);
 
 	// Local-first: the drop reorders the sidebar immediately, no boot needed.
 	await expect
 		.poll(() => labels(page), { timeout: 5_000 })
-		.toEqual(["Library", "Feed", "Discover"]);
+		.toEqual(["Network", "Library", "Discovery"]);
 
 	// The reloaded shell boots from the account's saved order — and `/`, the one
 	// route every visit lands on, goes to the top of it.
 	await page.reload();
 	await expect
 		.poll(() => labels(page), { timeout: 5_000 })
-		.toEqual(["Library", "Feed", "Discover"]);
+		.toEqual(["Network", "Library", "Discovery"]);
 	await page.goto(`${WEB_ORIGIN}/`);
-	await expect(page).toHaveURL(/\/library$/);
+	await expect(page).toHaveURL(/\/network$/);
 
 	// The walker is the shared account: put the default order back before anything
 	// else reads it (belt-and-braces afterAll below catches a mid-test failure).
 	await page.request.patch(`${API_URL}/api/accounts/me`, {
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-		data: { homeNavOrder: ["feed", "library", "discover"] },
+		data: { homeNavOrder: ["library", "network", "discovery"] },
 	});
 });
 
@@ -183,7 +183,7 @@ test.afterAll(async ({ browser }) => {
 	const res = await context.request
 		.patch(`${API_URL}/api/accounts/me`, {
 			headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-			data: { homeNavOrder: ["feed", "library", "discover"] },
+			data: { homeNavOrder: ["library", "network", "discovery"] },
 			failOnStatusCode: false,
 		})
 		.catch(() => null);

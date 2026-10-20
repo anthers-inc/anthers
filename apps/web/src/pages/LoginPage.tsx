@@ -103,7 +103,8 @@ export default function LoginPage() {
 	const location = useLocation();
 
 	// Where to land after auth: an explicit ?next=, else the route that bounced us
-	// here (ProtectedRoute stashes it in location.state.from), else the feed.
+	// here (ProtectedRoute stashes it in location.state.from), else the default order's
+	// first tab, the Library.
 	//
 	// ⚠️ Both go through `sanitizeNextPath`. The `?next=` half read the parameter raw
 	// until 2026-08-17, which is an open redirect waiting for someone to swap `navigate()`
@@ -113,7 +114,7 @@ export default function LoginPage() {
 	const from = sanitizeNextPath(
 		(location.state as { from?: { pathname: string } })?.from?.pathname,
 	);
-	const redirectTo = nextParam || from || "/feed";
+	const redirectTo = nextParam || from || "/library";
 
 	/** Whatever was typed — an address or a handle; the routing below decides which. */
 	const [identifier, setIdentifier] = useState("");

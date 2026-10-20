@@ -170,7 +170,7 @@ export default function FirstRun({ arrival, handle }: { arrival: Arrival; handle
 				    use it, and the only honest suggestion is more creators to spend time
 				    with — which is the thing that decides where their money actually goes. */}
 				<Actions
-					primary={["Find more creators", "/discover"]}
+					primary={["Find more creators", "/discovery"]}
 					secondary={["See your Badges", "/badges"]}
 				/>
 			</div>
@@ -203,10 +203,10 @@ export default function FirstRun({ arrival, handle }: { arrival: Arrival; handle
 				<FundPoolLine />
 				<Actions
 					primary={[
-						arrival.follows > 0 ? "Go to your feed" : "Find creators to follow",
-						arrival.follows > 0 ? "/feed" : "/discover",
+						arrival.follows > 0 ? "Go to your Network" : "Find creators to follow",
+						arrival.follows > 0 ? "/network" : "/discovery",
 					]}
-					secondary={["Browse what's open to everyone", "/discover"]}
+					secondary={["See what's new", "/discovery"]}
 				/>
 			</div>
 		);
@@ -236,8 +236,8 @@ export default function FirstRun({ arrival, handle }: { arrival: Arrival; handle
 			 */}
 			<FirstRunPrice />
 			<Actions
-				primary={["Find creators to follow", "/discover"]}
-				secondary={["Go to your feed", "/feed"]}
+				primary={["Find creators to follow", "/discovery"]}
+				secondary={["Go to your Network", "/network"]}
 			/>
 		</div>
 	);

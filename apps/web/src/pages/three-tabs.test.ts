@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: Apache-2.0
+/**
+ * The three-tab rework's structural contract (Parker, 2026-10-19).
+ *
+ * A source-text guard in the family of `basket-layout.test.ts`: the pieces that make
+ * Library, Network, and Discovery one family are a shared header, one nav vocabulary,
+ * and a Discovery body that offers exactly Graph and Ticker. Each is a decision a
+ * refactor can quietly undo — a page growing its own heading again, a renamed route
+ * surviving beside its replacement, Browse creeping back as a third mode — so each is
+ * pinned here.
+ */
+import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const read = (path: string) => readFileSync(join(import.meta.dir, path), "utf8");
+
+const network = read("AuthenticatedHomePage.tsx");
+const library = read("LibraryPage.tsx");
+const discovery = read("DiscoverPage.tsx");
+const layout = read("../components/layout/LoggedInLayout.tsx");
+const app = read("../App.tsx");
+
+describe("the three user tabs share one header", () => {
+	it("renders TabHeader on all three pages", () => {
+		for (const [page, source] of [
+			["Network", network],
+			["Library", library],
+			["Discovery", discovery],
+		] as const) {
+			expect(source, `${page} does not import the shared header`).toContain(
+				'from "../components/layout/TabHeader"',
+			);
+			expect(source, `${page} does not render the shared header`).toContain("<TabHeader");
+		}
+	});
+
+	it("carries the settled copy on each tab", () => {
+		expect(network).toContain("The latest Works and Posts from all of the creators you follow");
+		expect(library).toContain(
+			"All of the Works, Projects, and Posts you've purchased or otherwise saved",
+		);
+		expect(discovery).toContain(
+			"There are no advertisers or incentives to shove things in front of you",
+		);
+	});
+
+	it("keeps the feed's how-it-works control on the Network header", () => {
+		expect(network).toContain("How does the feed work?");
+	});
+});
+
+describe("the nav speaks the one vocabulary", () => {
+	it("orders the tabs Library, Network, and Discovery", () => {
+		const links = [
+			...layout.matchAll(/\{ to: "(\/[a-z]+)", id: "([a-z]+)", label: "([A-Za-z]+)"/g),
+		].map((match) => [match[1], match[3]]);
+		expect(links.slice(0, 3)).toEqual([
+			["/library", "Library"],
+			["/network", "Network"],
+			["/discovery", "Discovery"],
+		]);
+	});
+
+	it("has no old-named route left in the router", () => {
+		expect(app).toContain('path="/network"');
+		expect(app).toContain('path="/discovery"');
+		expect(app).not.toContain('path="/feed"');
+		expect(app).not.toContain('path="/discover"');
+	});
+});
+
+describe("Discovery offers exactly Graph and Ticker", () => {
+	it("names the section Modes and lists the two survivors", () => {
+		expect(discovery).toContain(">Modes<");
+		expect(discovery).toContain('id: "graph"');
+		expect(discovery).toContain('id: "ticker"');
+	});
+
+	it("carries no Browse or Inbox mode", () => {
+		expect(discovery).not.toContain('id: "browse"');
+		expect(discovery).not.toContain('id: "inbox"');
+		expect(discovery).not.toContain('label: "Browse"');
+		expect(discovery).not.toContain('label: "Inbox"');
+	});
+
+	it("shows the active formula above the content", () => {
+		expect(discovery).toContain("Active formula");
+		expect(discovery).toContain("<FormulaBar");
+	});
+});
