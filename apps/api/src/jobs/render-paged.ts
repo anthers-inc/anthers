@@ -31,12 +31,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
 import { transcodingJobs, workPages, workPanels, works } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import sharp from "sharp";
 import { isEpubSource } from "../lib/paged-ingest.js";
 import { detectPanels, sampleInkColor } from "../lib/panel-detection.js";
 import { storage } from "../services/storage/index.js";
 import { listSourceFiles } from "../services/work-source-files.js";
+import { withAdvisoryLock } from "./advisory-lock.js";
 import { MAX_TRANSCODE_RESUMES } from "./resume-orphans.js";
 
 export interface RenderPagedData {
@@ -120,9 +121,49 @@ async function stillProcessing(jobId: number): Promise<boolean> {
 	return row?.status === "processing";
 }
 
+/**
+ * The paged renderer's lock is keyed on the **Work**, not the job.
+ *
+ * 🚨 **A page-by-page upload is one mutation per file, and the queue held 120 jobs for
+ * one comic** (Work 66, 2026-10-19). They were delivered two at a time, and two runs for
+ * the same Work interleaved `delete(work_pages)` with `insert(page)` until
+ * `uq_work_pages` refused the second — eleven failed queue rows, ten failed job rows.
+ * A job-keyed lock would not have helped: the colliding handlers held different jobs.
+ *
+ * Namespaced above the serial id space and above `TRANSCODE_LOCK_KEY_BASE`, so neither
+ * family can collide with the other. The waiting mechanics are the shared
+ * `withAdvisoryLock` in `./advisory-lock.ts`; the re-read after acquiring is this job's
+ * own, because a delivery that waited may find its row already finished.
+ */
+export const PAGED_RENDER_LOCK_KEY_BASE = 9_100_000_000_000;
+
+export function withPagedRenderLock<T>(
+	workId: number,
+	fn: () => Promise<T>,
+	pollMs?: number,
+): Promise<T> {
+	return withAdvisoryLock(
+		PAGED_RENDER_LOCK_KEY_BASE + workId,
+		`[render-paged] work ${workId}`,
+		fn,
+		pollMs,
+	);
+}
+
 export async function renderPaged(data: RenderPagedData) {
 	const { jobId } = data;
 
+	const [claimed] = await db
+		.select({ workId: transcodingJobs.workId })
+		.from(transcodingJobs)
+		.where(eq(transcodingJobs.id, jobId))
+		.limit(1);
+	if (!claimed) throw new Error(`TranscodingJob ${jobId} not found`);
+
+	return withPagedRenderLock(claimed.workId, () => runPagedRender(jobId));
+}
+
+async function runPagedRender(jobId: number) {
 	const [job] = await db
 		.select()
 		.from(transcodingJobs)
@@ -146,6 +187,50 @@ export async function renderPaged(data: RenderPagedData) {
 	}
 	if (job.status === "failed" && job.resumeCount >= MAX_TRANSCODE_RESUMES) {
 		console.log(`[render-paged] job ${jobId} failed past its resume bound; skipping`);
+		return;
+	}
+
+	// 🚨 **One render wins per Work; every earlier job settles without rendering.** A
+	// 120-page upload enqueued 120 full-set renders, and the queue delivered them two at
+	// a time — the storm this lock and this check exist for. The newest job reads the set
+	// as it stands when it runs, so the older ones have nothing to add. A newest job that
+	// is `failed` is the exception: it is not going to render, so this one may be the only
+	// chance left and runs. A newest job that is `canceled` carries the creator's stop
+	// forward, so this one settles canceled rather than resurrecting the work.
+	const [newest] = await db
+		.select({ id: transcodingJobs.id, status: transcodingJobs.status })
+		.from(transcodingJobs)
+		.where(
+			and(
+				eq(transcodingJobs.workId, job.workId),
+				eq(transcodingJobs.mediaType, "ebook"),
+				gt(transcodingJobs.id, jobId),
+			),
+		)
+		.orderBy(desc(transcodingJobs.id))
+		.limit(1);
+	if (newest && newest.status !== "failed") {
+		const settled = newest.status === "canceled" ? "canceled" : "completed";
+		console.log(
+			`[render-paged] job ${jobId} superseded by job ${newest.id}; settling ${settled} without rendering`,
+		);
+		if (settled === "canceled") {
+			await db
+				.update(transcodingJobs)
+				.set({ status: "canceled", etaSeconds: null, errorMessage: "", updatedAt: new Date() })
+				.where(eq(transcodingJobs.id, jobId));
+		} else {
+			await db
+				.update(transcodingJobs)
+				.set({
+					status: "completed",
+					progress: 100,
+					etaSeconds: null,
+					errorMessage: "",
+					updatedAt: new Date(),
+				})
+				.where(eq(transcodingJobs.id, jobId));
+		}
 		return;
 	}
 
@@ -371,7 +456,15 @@ export async function renderPaged(data: RenderPagedData) {
 
 		await db
 			.update(transcodingJobs)
-			.set({ status: "completed", progress: 100, etaSeconds: null, updatedAt: new Date() })
+			.set({
+				status: "completed",
+				progress: 100,
+				etaSeconds: null,
+				// A retry that lands after an earlier attempt failed must not leave its
+				// error text on a row that is now finished — that is what the Studio reads.
+				errorMessage: "",
+				updatedAt: new Date(),
+			})
 			.where(eq(transcodingJobs.id, jobId));
 		console.log(
 			`[render-paged] work ${work.id} → ${flat.length} page(s) from ${sources.length} file(s)`,

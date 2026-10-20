@@ -17,10 +17,12 @@
  * 🚨 **One mutation, one re-render — and a pick is one mutation.** The rasterizer renders
  * the whole current set each time and replaces the Work's pages wholesale, so the re-render
  * the last mutation enqueued is always the correct response to the set a creator sees; two
- * mutations in quick succession enqueue two jobs, and the later one wins on rendering (they
- * serialize on the queue) — never re-order around this, and never skip it for what looks like
- * a no-op change. ⚠️ **A multi-file add arrives as ONE mutation** ({@link appendSourceFiles}):
- * a hundred-file pick sent as a hundred appends would enqueue a hundred renders, each
+ * mutations in quick succession enqueue two jobs, and the later one wins on rendering — the
+ * handler settles every job a newer one supersedes without rendering it, under a Work-keyed
+ * advisory lock, so sequencing comes from the queue rather than from an assumption that it
+ * serializes. Never re-order around this, and never skip it for what looks like a no-op
+ * change. ⚠️ **A multi-file add arrives as ONE mutation** ({@link appendSourceFiles}): a
+ * hundred-file pick sent as a hundred appends would enqueue a hundred renders, each
  * re-uploading the whole set, which is quadratic work for a set that grew by one.
  *
  * **The image kind's set is the gallery the Work displays** (2026-10-18): an image Work that

@@ -56,7 +56,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { client, db } from "@anthers/db";
+import { db } from "@anthers/db";
 import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { FFMPEG_THREADS, ffmpegCommand } from "../lib/ffmpeg.js";
@@ -67,6 +67,7 @@ import {
 	remuxedKeyFor,
 } from "../lib/video-remux.js";
 import { storage } from "../services/storage/index.js";
+import { withAdvisoryLock } from "./advisory-lock.js";
 import { MAX_TRANSCODE_RESUMES } from "./resume-orphans.js";
 import { queueScansForWork } from "./scan-media.js";
 import {
@@ -97,43 +98,23 @@ export interface TranscodeVideoData {
 // else in the application can collide with it.
 export const TRANSCODE_LOCK_KEY_BASE = 9_000_000_000_000;
 
-// How long between lock attempts while another handler holds the job. Waiting releases
-// the pooled connection between attempts — only the asking occupies a connection.
-const LOCK_POLL_MS = 10_000;
-
 /**
  * Run `fn` holding the TranscodingJob's advisory lock, waiting while another handler
- * holds it. Takes `pollMs` because a test needs waiting to be fast.
+ * holds it. The waiting mechanics are the shared `withAdvisoryLock` in
+ * `./advisory-lock.ts`; the key namespace is this job's own. Takes `pollMs` because a
+ * test needs waiting to be fast.
  */
-export async function withTranscodeLock<T>(
+export function withTranscodeLock<T>(
 	jobId: number,
 	fn: () => Promise<T>,
-	pollMs: number = LOCK_POLL_MS,
+	pollMs?: number,
 ): Promise<T> {
-	const key = TRANSCODE_LOCK_KEY_BASE + jobId;
-	let loggedWait = false;
-	while (true) {
-		// The lock lives on the session, so acquire and hold use one reserved connection;
-		// the unlock must ride the same session or it is a no-op. The key is cast to
-		// `bigint` explicitly — pg_try_advisory_lock has int and bigint overloads, and an
-		// untyped parameter must not have its overload chosen by accident.
-		const session = await client.reserve();
-		const [row] = await session`select pg_try_advisory_lock(${key}::bigint) as acquired`;
-		if (row.acquired) {
-			try {
-				return await fn();
-			} finally {
-				await session`select pg_advisory_unlock(${key}::bigint)`;
-				session.release();
-			}
-		}
-		session.release();
-		if (!loggedWait) {
-			loggedWait = true;
-			console.log(`[transcode-video] job ${jobId}: another handler holds the encode lock; waiting`);
-		}
-		await new Promise((resolve) => setTimeout(resolve, pollMs));
-	}
+	return withAdvisoryLock(
+		TRANSCODE_LOCK_KEY_BASE + jobId,
+		`[transcode-video] job ${jobId}`,
+		fn,
+		pollMs,
+	);
 }
 
 /**
@@ -602,7 +583,7 @@ export async function transcodeVideo(data: TranscodeVideoData) {
 		marks[name] = Date.now();
 	};
 	// The lock is the whole reason `runTranscode` can trust what it re-reads: while it
-	// holds `pg_try_advisory_lock` no other handler can be past this point, so a row
+	// holds the encode lock no other handler can be past this point, so a row
 	// read `completed` really means another handler finished the work.
 	return withTranscodeLock(data.jobId, () => runTranscode(data, { marks, mark }));
 }
