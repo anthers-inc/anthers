@@ -15,21 +15,25 @@
  * 2. `toBossSendOptions` forwards the heartbeat, or no job would ever have one;
  * 3. the handler wraps its body in `withTranscodeLock` — the database advisory lock a
  *    re-delivery waits on — and owes the row `ensureStillOurs` re-reads before the
- *    operations a zombie run must not perform. Nothing else in the worker is allowed to
- *    touch the advisory-lock functions, for the same reason `ffmpegCommand` is the only
- *    thing allowed to spawn ffmpeg: a second lock shape is a second semantics nobody
- *    planned.
+ *    operations a zombie run must not perform. **The advisory-lock functions live in
+ *    `jobs/advisory-lock.ts` alone**, for the same reason `ffmpegCommand` is the only
+ *    thing allowed to spawn ffmpeg: one mechanism, one semantics. The video job and the
+ *    paged renderer are its two callers (job-keyed and Work-keyed respectively); a third
+ *    lock goes through `withAdvisoryLock` with its own key namespace, never by copying
+ *    the mechanics.
  */
 import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
 import { JOB_OPTIONS, QUEUES, toBossSendOptions } from "../apps/api/src/jobs/queue";
 
 const ROOT = "apps/api/src";
-const HELPER = "jobs/transcode-video.ts";
+/** The one module allowed to name the advisory-lock functions. */
+const LOCK_HELPER = "jobs/advisory-lock.ts";
+const TRANSCODE = "jobs/transcode-video.ts";
 
 function isExempt(rel: string): boolean {
 	return (
-		rel === HELPER ||
+		rel === LOCK_HELPER ||
 		rel.startsWith("scripts/") ||
 		rel.includes("__tests__/") ||
 		/\.test\.tsx?$/.test(rel)
@@ -79,10 +83,12 @@ describe("the handler's single-encode guard", () => {
 	});
 
 	it("wraps the transcode body in the encode lock and owes the row its re-checks", async () => {
-		const source = await Bun.file(join(ROOT, HELPER)).text();
+		const source = await Bun.file(join(ROOT, TRANSCODE)).text();
 		// The entry point hands the body to the lock, not to free-running code.
 		expect(source).toContain("withTranscodeLock(data.jobId");
-		expect(source).toContain("pg_try_advisory_lock");
+		// The primitive itself owns the advisory calls — the one module that may name them.
+		const lock = await Bun.file(join(ROOT, LOCK_HELPER)).text();
+		expect(lock).toContain("pg_try_advisory_lock");
 		// The zombie run's re-check rides the upload and guards the completion write:
 		// three call sites, and a revert to "check only at claim time" fails here.
 		expect(source.match(/await ensureStillOurs\(\)/g)?.length).toBeGreaterThanOrEqual(3);

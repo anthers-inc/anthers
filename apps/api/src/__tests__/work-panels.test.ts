@@ -125,7 +125,14 @@ describe("/works/:id/panels", () => {
 			.where(eq(works.id, workId));
 		const [job] = await db
 			.insert(transcodingJobs)
-			.values({ workId, mediaType: "ebook", status: "pending", progress: 0 })
+			.values({
+				workId,
+				mediaType: "ebook",
+				status: "pending",
+				progress: 0,
+				// A fresh render of a row whose earlier attempt failed must clear this.
+				errorMessage: "an earlier attempt failed",
+			})
 			.returning({ id: transcodingJobs.id });
 		await renderPaged({ jobId: job.id });
 	}, DB_SETUP_TIMEOUT);
@@ -235,5 +242,16 @@ describe("/works/:id/panels", () => {
 		const { pages } = (await res.json()) as { pages: Array<{ panels: unknown[] }> };
 		expect(pages.flatMap((p) => p.panels).length).toBe(2);
 		await db.delete(users).where(eq(users.id, user.userId as number));
+	});
+
+	it("clears a previous attempt's error when the render completes", async () => {
+		// The row was seeded with an error, the shape a pg-boss retry leaves behind. A
+		// finished row must not keep telling the Studio that it failed.
+		const [row] = await db
+			.select({ status: transcodingJobs.status, errorMessage: transcodingJobs.errorMessage })
+			.from(transcodingJobs)
+			.where(eq(transcodingJobs.workId, workId));
+		expect(row.status).toBe("completed");
+		expect(row.errorMessage).toBe("");
 	});
 });
