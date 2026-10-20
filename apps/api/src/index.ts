@@ -26,6 +26,7 @@ import { moderationRoutes } from "./routes/moderation.js";
 import { nounRoutes } from "./routes/noun.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { createPlayPageRoutes } from "./routes/play-page.js";
+import { searchRoutes } from "./routes/search.js";
 import { statusRoutes } from "./routes/status.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { trafficRoutes } from "./routes/traffic.js";
@@ -113,6 +114,7 @@ const app = new Hono()
 	.route("/api/atproto", atprotoRoutes)
 	.route("/api/accounts", accountRoutes)
 	.route("/api/content", contentRoutes)
+	.route("/api/search", searchRoutes)
 	.route("/api/content/media-upload", mediaUploadSessionRoutes)
 	.route("/api/noun", nounRoutes)
 	.route("/api/payments", paymentRoutes)

@@ -1163,6 +1163,13 @@
       "when": 1792472136870,
       "tag": "20261020-045536_rename_home_nav_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 166,
+      "version": "7",
+      "when": 1792475496275,
+      "tag": "20261020-055136_search_shortcuts_and_trigrams",
+      "breakpoints": true
     }
   ]
 }

@@ -30,6 +30,7 @@ import NotificationBell from "./NotificationBell";
 import PublishingPermissionBanner from "./PublishingPermissionBanner";
 import RouteSuspense from "./RouteSuspense";
 import SearchBar from "./SearchBar";
+import { ViewFilterProvider } from "./search/filter-context";
 
 /** The sidebar's nav in user mode. Studio mode has `STUDIO_NAV` in its place. */
 const NAV_LINKS = [
@@ -165,49 +166,50 @@ function LoggedInLayoutInner() {
 	const navLinkClass = ({ isActive }: { isActive: boolean }) => navItemClass(isActive, rail);
 
 	return (
-		<div className="h-screen flex flex-col overflow-hidden">
-			{/* Top bar: brand on the left, account on the right. It is the one header in both modes;
+		<ViewFilterProvider>
+			<div className="h-screen flex flex-col overflow-hidden">
+				{/* Top bar: brand on the left, account on the right. It is the one header in both modes;
 		    studio mode leaves out search and the basket, which belong to user mode. The sidebar's
 		    own toggle used to live here too and moved onto the sidebar's edge (2026-10-16). */}
-			<header className="navbar nav-edge bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40 h-14 min-h-0">
-				<div className="navbar-start gap-1">
-					{/* A plain flex link rather than a `btn`, for the same reason as the brand link in
+				<header className="navbar nav-edge bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40 h-14 min-h-0">
+					<div className="navbar-start gap-1">
+						{/* A plain flex link rather than a `btn`, for the same reason as the brand link in
 					    LoggedOutLayout: the ghost button's hover background draws a rectangle the trimmed
 					    logo artwork doesn't fill. */}
-					<Link to={studio ? studioUrl("/") : userHome} className="flex items-center gap-2 px-2">
-						<Logo variant="oneline" className="h-9" />
-						{studio && <span className="text-lg font-bold text-primary">Studio</span>}
-					</Link>
-				</div>
+						<Link to={studio ? studioUrl("/") : userHome} className="flex items-center gap-2 px-2">
+							<Logo variant="oneline" className="h-9" />
+							{studio && <span className="text-lg font-bold text-primary">Studio</span>}
+						</Link>
+					</div>
 
-				<div className="navbar-center flex-1 px-4 hidden sm:flex">{!studio && <SearchBar />}</div>
+					<div className="navbar-center flex-1 px-4 hidden sm:flex">{!studio && <SearchBar />}</div>
 
-				<div className="navbar-end gap-1">
-					{/* Basket — only rendered when it has items, so an empty basket costs no
+					<div className="navbar-end gap-1">
+						{/* Basket — only rendered when it has items, so an empty basket costs no
 					    header space. The header is tight on mobile and a permanent "0" badge
 					    would be noise; a control that appears when it has content is strictly
 					    better than one that is always there. The count is a `badge` so a
 					    buyer who navigates away from the Work page can always get back to
 					    the one surface where money changes hands. */}
-					{!studio && basketCount > 0 && (
-						<Link
-							to="/basket"
-							className="btn btn-ghost btn-sm btn-circle relative"
-							aria-label={`Basket (${basketCount} item${basketCount > 1 ? "s" : ""})`}
-						>
-							<ShoppingBagIcon className="w-5 h-5" />
-							<span className="badge badge-primary badge-xs absolute -top-1 -right-1">
-								{basketCount}
-							</span>
-						</Link>
-					)}
-					{/* The bell — the same appear-when-there's-content rule as the basket, with the
+						{!studio && basketCount > 0 && (
+							<Link
+								to="/basket"
+								className="btn btn-ghost btn-sm btn-circle relative"
+								aria-label={`Basket (${basketCount} item${basketCount > 1 ? "s" : ""})`}
+							>
+								<ShoppingBagIcon className="w-5 h-5" />
+								<span className="badge badge-primary badge-xs absolute -top-1 -right-1">
+									{basketCount}
+								</span>
+							</Link>
+						)}
+						{/* The bell — the same appear-when-there's-content rule as the basket, with the
 					    count riding the shared store so one poll serves every surface. Studio mode
 					    leaves it out with search and the basket: creator chrome, not reader chrome. */}
-					{!studio && <NotificationBell />}
-					<ThemeSelect />
-					<div className="dropdown dropdown-end">
-						{/* daisyUI's dropdown is CSS-only: `.dropdown-content` stays `display:none`
+						{!studio && <NotificationBell />}
+						<ThemeSelect />
+						<div className="dropdown dropdown-end">
+							{/* daisyUI's dropdown is CSS-only: `.dropdown-content` stays `display:none`
 						    until the enclosing `.dropdown` matches `:focus-within`, so the trigger
 						    has to be focusable or the menu can never open at all. This was a bare
 						    `<label>` with no `tabIndex` and no control to label, which is focusable
@@ -217,60 +219,60 @@ function LoggedInLayoutInner() {
 						    menu is open, and that literal attribute selector is what lets a second
 						    click land on the page and dismiss it. A `<button>` would focus without
 						    it and then never close. */}
-						<button
-							type="button"
-							tabIndex={0}
-							className="btn btn-ghost btn-circle"
-							aria-label="Your account"
-						>
-							{user?.avatar ? (
-								/* The button names itself above, so the image is decorative — an alt
+							<button
+								type="button"
+								tabIndex={0}
+								className="btn btn-ghost btn-circle"
+								aria-label="Your account"
+							>
+								{user?.avatar ? (
+									/* The button names itself above, so the image is decorative — an alt
 								   here would be a second name for the same control. */
-								<img src={user.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
-							) : (
-								<UserCircleIcon className="w-8 h-8" />
-							)}
-						</button>
-						{/* No `tabIndex` here, deliberately. The older dropdowns in this app carry one
+									<img src={user.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+								) : (
+									<UserCircleIcon className="w-8 h-8" />
+								)}
+							</button>
+							{/* No `tabIndex` here, deliberately. The older dropdowns in this app carry one
 						    on the `<ul>`, which biome flags as `noNoninteractiveTabindex` — a list is
 						    not a control and putting it in the tab order just adds a stop that does
 						    nothing. It is unnecessary as well as unwanted: every item below is a link
 						    or a button, so tabbing off the trigger lands on one of them and the
 						    `.dropdown` keeps matching `:focus-within` on its own. */}
-						<ul className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52">
-							<li className="menu-title px-4 py-1">
-								<span className="text-xs text-base-content/50">
-									{user ? displayHandle(user.handle) : ""}
-								</span>
-							</li>
-							<div className="divider my-0 px-2" />
-							<li>
-								<Link to="/badges">Badges</Link>
-							</li>
-							<li>
-								<Link to="/purchases">Purchases</Link>
-							</li>
-							<li>{user && <Link to={profileUrl(user.handle)}>Profile</Link>}</li>
-							<li>
-								<Link to="/settings">Settings</Link>
-							</li>
-							<div className="divider my-0 px-2" />
-							<li>
-								<button type="button" onClick={handleLogout}>
-									Log out
-								</button>
-							</li>
-						</ul>
+							<ul className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52">
+								<li className="menu-title px-4 py-1">
+									<span className="text-xs text-base-content/50">
+										{user ? displayHandle(user.handle) : ""}
+									</span>
+								</li>
+								<div className="divider my-0 px-2" />
+								<li>
+									<Link to="/badges">Badges</Link>
+								</li>
+								<li>
+									<Link to="/purchases">Purchases</Link>
+								</li>
+								<li>{user && <Link to={profileUrl(user.handle)}>Profile</Link>}</li>
+								<li>
+									<Link to="/settings">Settings</Link>
+								</li>
+								<div className="divider my-0 px-2" />
+								<li>
+									<button type="button" onClick={handleLogout}>
+										Log out
+									</button>
+								</li>
+							</ul>
+						</div>
 					</div>
-				</div>
-			</header>
+				</header>
 
-			<PublishingPermissionBanner />
-			<IdentityServerBanner />
+				<PublishingPermissionBanner />
+				<IdentityServerBanner />
 
-			{/* Body: sidebar + main content */}
-			<div className="relative flex flex-1 overflow-hidden">
-				{/* The sidebar's own toggle, riding its right edge level with the mode pair
+				{/* Body: sidebar + main content */}
+				<div className="relative flex flex-1 overflow-hidden">
+					{/* The sidebar's own toggle, riding its right edge level with the mode pair
 				    (Parker, 2026-10-16): chevron-left over the edge collapses the sidebar, and
 				    when it is closed the button sits on the page's left edge as chevron-right.
 				    ONE button in ONE DOM position across the whole life of the layout — kept
@@ -280,308 +282,313 @@ function LoggedInLayoutInner() {
 				    header home had this same treatment; `sidebar-phone.authed.e2e.ts` is the
 				    guard — it measures the sidebar's width, and the remount's signature there
 				    is a closed sidebar on a desktop that should have started open. */}
-				<button
-					type="button"
-					onClick={toggleSidebar}
-					aria-label="Toggle sidebar"
-					aria-hidden={chromeHidden || undefined}
-					tabIndex={chromeHidden ? -1 : undefined}
-					className={`btn btn-xs btn-circle border-base-300/60 bg-base-100 shadow-md absolute top-4 z-40 transition-all duration-200 ease-in-out ${
-						sidebarOpen
-							? "left-64 -translate-x-1/2"
-							: "left-0 md:left-16 translate-x-0 md:-translate-x-1/2"
-					} ${chromeHidden ? "invisible pointer-events-none" : ""}`}
-				>
-					<ChevronLeftIcon
-						className={`w-3.5 h-3.5 transition-transform duration-200 ${sidebarOpen ? "" : "rotate-180"}`}
-					/>
-				</button>
-				{/* Persistent sidebar. From `md` up it sits beside the page; below that it is
+					<button
+						type="button"
+						onClick={toggleSidebar}
+						aria-label="Toggle sidebar"
+						aria-hidden={chromeHidden || undefined}
+						tabIndex={chromeHidden ? -1 : undefined}
+						className={`btn btn-xs btn-circle border-base-300/60 bg-base-100 shadow-md absolute top-4 z-40 transition-all duration-200 ease-in-out ${
+							sidebarOpen
+								? "left-64 -translate-x-1/2"
+								: "left-0 md:left-16 translate-x-0 md:-translate-x-1/2"
+						} ${chromeHidden ? "invisible pointer-events-none" : ""}`}
+					>
+						<ChevronLeftIcon
+							className={`w-3.5 h-3.5 transition-transform duration-200 ${sidebarOpen ? "" : "rotate-180"}`}
+						/>
+					</button>
+					{/* Persistent sidebar. From `md` up it sits beside the page; below that it is
 				    lifted out of the flex row and laid over the page, so opening it on a phone
 				    never squeezes what it covers. The breakpoint is `SIDEBAR_BESIDE_QUERY`'s, which
 				    is also what decides that a phone starts with it closed. */}
-				<aside
-					className={`${!chromeHidden && sidebarOpen ? "w-64 border-r" : chromeHidden ? "w-0" : "w-0 md:w-16 md:border-r"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-200 overflow-hidden border-base-300/50 bg-base-200/60`}
-				>
-					<div className={`${rail ? "w-16" : "w-64"} h-full flex flex-col overflow-y-auto`}>
-						{isCreator && !rail && (
-							<div className="px-3 pt-3">
-								<ModeSwitch mode={mode} userHome={userHome} />
-							</div>
-						)}
+					<aside
+						className={`${!chromeHidden && sidebarOpen ? "w-64 border-r" : chromeHidden ? "w-0" : "w-0 md:w-16 md:border-r"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-200 overflow-hidden border-base-300/50 bg-base-200/60`}
+					>
+						<div className={`${rail ? "w-16" : "w-64"} h-full flex flex-col overflow-y-auto`}>
+							{isCreator && !rail && (
+								<div className="px-3 pt-3">
+									<ModeSwitch mode={mode} userHome={userHome} />
+								</div>
+							)}
 
-						{/* Each mode's own nav, and never both: the Studio's places used to be tabs
+							{/* Each mode's own nav, and never both: the Studio's places used to be tabs
 						    under a second header inside this layout, beside a sidebar still offering
 						    Network, Library and Discovery. Each nav is named, so a user (and a spec) can
 						    tell which one is on screen. */}
-						{studio ? (
-							<nav aria-label="Studio" className="p-3 flex flex-col gap-0.5">
-								{STUDIO_NAV.map((item) => {
-									const active = isStudioNavActive(item, pathname);
-									return (
-										<Link
-											key={item.to}
-											to={item.to}
-											aria-current={active ? "page" : undefined}
-											title={rail ? item.label : undefined}
-											className={navItemClass(active, rail)}
+							{studio ? (
+								<nav aria-label="Studio" className="p-3 flex flex-col gap-0.5">
+									{STUDIO_NAV.map((item) => {
+										const active = isStudioNavActive(item, pathname);
+										return (
+											<Link
+												key={item.to}
+												to={item.to}
+												aria-current={active ? "page" : undefined}
+												title={rail ? item.label : undefined}
+												className={navItemClass(active, rail)}
+											>
+												<item.icon className="w-5 h-5 shrink-0" />
+												{rail ? <span className="sr-only">{item.label}</span> : item.label}
+											</Link>
+										);
+									})}
+								</nav>
+							) : (
+								<nav aria-label="Anthers" className="p-3 flex flex-col gap-0.5">
+									{orderedNavLinks(navOrder).map((link, index) => (
+										// The drag handle, at the item's own right edge: the grip is what
+										// carries the drag (only the grip is draggable — dragging a label
+										// keeps its selection behavior), and a drop on any part of another
+										// row reorders there. The row, not the grip, is the drop target: a
+										// drop lands on whatever part of the row the cursor is over.
+										// Reordering persists to the account, and the top of the order is
+										// where a signed-in visit lands (see `RootRedirect`). Keyboard
+										// reorder is not built; the gap is named in the task.
+										// biome-ignore lint/a11y/noStaticElementInteractions: the row is the drop target; it has no pointer/keyboard behavior of its own and a static div is honest about that.
+										<div
+											key={link.id}
+											className="flex items-center"
+											onDragOver={(e) => e.preventDefault()}
+											onDrop={(e) => {
+												e.preventDefault();
+												const from = navDragFrom.current;
+												navDragFrom.current = null;
+												if (from !== null && from !== index) reorderNav(from, index);
+											}}
 										>
-											<item.icon className="w-5 h-5 shrink-0" />
-											{rail ? <span className="sr-only">{item.label}</span> : item.label}
-										</Link>
-									);
-								})}
-							</nav>
-						) : (
-							<nav aria-label="Anthers" className="p-3 flex flex-col gap-0.5">
-								{orderedNavLinks(navOrder).map((link, index) => (
-									// The drag handle, at the item's own right edge: the grip is what
-									// carries the drag (only the grip is draggable — dragging a label
-									// keeps its selection behavior), and a drop on any part of another
-									// row reorders there. The row, not the grip, is the drop target: a
-									// drop lands on whatever part of the row the cursor is over.
-									// Reordering persists to the account, and the top of the order is
-									// where a signed-in visit lands (see `RootRedirect`). Keyboard
-									// reorder is not built; the gap is named in the task.
-									// biome-ignore lint/a11y/noStaticElementInteractions: the row is the drop target; it has no pointer/keyboard behavior of its own and a static div is honest about that.
-									<div
-										key={link.id}
-										className="flex items-center"
-										onDragOver={(e) => e.preventDefault()}
-										onDrop={(e) => {
-											e.preventDefault();
-											const from = navDragFrom.current;
-											navDragFrom.current = null;
-											if (from !== null && from !== index) reorderNav(from, index);
-										}}
-									>
-										<NavLink
-											to={link.to}
-											title={rail ? link.label : undefined}
-											className={({ isActive }) => `${navItemClass(isActive, rail)} flex-1 min-w-0`}
-										>
-											<link.icon className="w-5 h-5 shrink-0" />
-											{rail ? <span className="sr-only">{link.label}</span> : link.label}
-										</NavLink>
-										{/* The grip is a pointer affordance for the expanded column only: a rail
+											<NavLink
+												to={link.to}
+												title={rail ? link.label : undefined}
+												className={({ isActive }) =>
+													`${navItemClass(isActive, rail)} flex-1 min-w-0`
+												}
+											>
+												<link.icon className="w-5 h-5 shrink-0" />
+												{rail ? <span className="sr-only">{link.label}</span> : link.label}
+											</NavLink>
+											{/* The grip is a pointer affordance for the expanded column only: a rail
 										    row has no width to hold it, and the drag's own feedback is a label
 										    reordering under the cursor, which a rail does not show. Reordering
 										    stays available the moment the sidebar is open again. */}
-										{!rail && (
-											<>
-												{/* biome-ignore lint/a11y/noStaticElementInteractions: the span is the drag source a native
+											{!rail && (
+												<>
+													{/* biome-ignore lint/a11y/noStaticElementInteractions: the span is the drag source a native
 												     HTML5 drag needs; there is no clickable or focusable behavior on it (the drag itself is
 												     the interaction), and a static span is honest about that. */}
-												<span
-													title="Drag to reorder"
-													draggable
-													onDragStart={(e) => {
-														e.dataTransfer.effectAllowed = "move";
-														// A drag with no payload can be refused before it starts;
-														// the id rides for anything listening.
-														e.dataTransfer.setData("text/plain", link.id);
-														navDragFrom.current = index;
-													}}
-													// A drag that ends anywhere but an accepted drop (Escape, a
-													// drop outside the nav) leaves the source stale; the next drop
-													// would reorder from a drag that never finished.
-													onDragEnd={() => {
-														navDragFrom.current = null;
-													}}
-													className="cursor-grab px-1.5 text-base-content/25 hover:text-base-content/50 transition-colors self-stretch flex items-center active:cursor-grabbing"
-												>
-													<Bars3Icon className="w-3.5 h-3.5 rotate-90 pointer-events-none" />
-												</span>
-											</>
-										)}
-									</div>
-								))}
+													<span
+														title="Drag to reorder"
+														draggable
+														onDragStart={(e) => {
+															e.dataTransfer.effectAllowed = "move";
+															// A drag with no payload can be refused before it starts;
+															// the id rides for anything listening.
+															e.dataTransfer.setData("text/plain", link.id);
+															navDragFrom.current = index;
+														}}
+														// A drag that ends anywhere but an accepted drop (Escape, a
+														// drop outside the nav) leaves the source stale; the next drop
+														// would reorder from a drag that never finished.
+														onDragEnd={() => {
+															navDragFrom.current = null;
+														}}
+														className="cursor-grab px-1.5 text-base-content/25 hover:text-base-content/50 transition-colors self-stretch flex items-center active:cursor-grabbing"
+													>
+														<Bars3Icon className="w-3.5 h-3.5 rotate-90 pointer-events-none" />
+													</span>
+												</>
+											)}
+										</div>
+									))}
 
-								{/* Basket — the sidebar entry mirrors the header icon, for the mobile
+									{/* Basket — the sidebar entry mirrors the header icon, for the mobile
 								    case where the header is tight. Same conditional: only when non-empty. */}
-								{basketCount > 0 && (
-									<NavLink
-										to="/basket"
-										className={navLinkClass}
-										title={
-											rail ? `Basket (${basketCount} item${basketCount > 1 ? "s" : ""})` : undefined
-										}
-									>
-										<ShoppingBagIcon className="w-5 h-5 shrink-0" />
-										{rail ? <span className="sr-only">Basket</span> : "Basket"}
-										<span
-											className={`badge badge-primary badge-sm ${rail ? "sr-only" : "ml-auto"}`}
+									{basketCount > 0 && (
+										<NavLink
+											to="/basket"
+											className={navLinkClass}
+											title={
+												rail
+													? `Basket (${basketCount} item${basketCount > 1 ? "s" : ""})`
+													: undefined
+											}
 										>
-											{basketCount}
-										</span>
-									</NavLink>
-								)}
-							</nav>
-						)}
+											<ShoppingBagIcon className="w-5 h-5 shrink-0" />
+											{rail ? <span className="sr-only">Basket</span> : "Basket"}
+											<span
+												className={`badge badge-primary badge-sm ${rail ? "sr-only" : "ml-auto"}`}
+											>
+												{basketCount}
+											</span>
+										</NavLink>
+									)}
+								</nav>
+							)}
 
-						{!studio && !rail && (
-							<>
-								{/* The divider below the nav is PERSISTENT (Parker, 2026-10-11): it
+							{!studio && !rail && (
+								<>
+									{/* The divider below the nav is PERSISTENT (Parker, 2026-10-11): it
 								    stands whether or not anything is registered below it, so the
 								    sidebar's shape — tabs above, sections below — never depends on
 								    the page. Studio mode is out of this structure's scope. */}
-								<div className="divider my-0 mx-3" />
-								{/* The lower region: the page's middle section, then the tab-shared
+									<div className="divider my-0 mx-3" />
+									{/* The lower region: the page's middle section, then the tab-shared
 								    filters behind one more divider (rendered only when both exist —
 								    a trailing divider would promise content that isn't there). One
 								    scroll region for both, so a long middle section scrolls on into
 								    the filters rather than stopping at a seam. */}
-								<div className="flex-1 min-h-0 overflow-y-auto">
-									{pageContent && <div className="p-3 pb-1">{pageContent}</div>}
-									{pageContent && sharedContent && <div className="divider my-0 mx-3" />}
-									{sharedContent && <div className="p-3 pt-1">{sharedContent}</div>}
-								</div>
-							</>
-						)}
-						{/* Studio keeps the old shape — divider only when a page registers
+									<div className="flex-1 min-h-0 overflow-y-auto">
+										{pageContent && <div className="p-3 pb-1">{pageContent}</div>}
+										{pageContent && sharedContent && <div className="divider my-0 mx-3" />}
+										{sharedContent && <div className="p-3 pt-1">{sharedContent}</div>}
+									</div>
+								</>
+							)}
+							{/* Studio keeps the old shape — divider only when a page registers
 						    content; none does today. This is the seam if that ever changes. */}
-						{studio && !rail && pageContent && (
-							<>
-								<div className="divider my-0 mx-3" />
-								<div className="flex-1 p-3 overflow-y-auto">{pageContent}</div>
-							</>
-						)}
-					</div>
-				</aside>
+							{studio && !rail && pageContent && (
+								<>
+									<div className="divider my-0 mx-3" />
+									<div className="flex-1 p-3 overflow-y-auto">{pageContent}</div>
+								</>
+							)}
+						</div>
+					</aside>
 
-				{/* The drawer's backdrop on a phone: a tap on the covered page closes it. */}
-				{user && sidebarOpen && (
-					<button
-						type="button"
-						aria-label="Close sidebar"
-						className="absolute inset-0 z-20 bg-base-content/20 md:hidden"
-						onClick={closeSidebar}
-					/>
-				)}
+					{/* The drawer's backdrop on a phone: a tap on the covered page closes it. */}
+					{user && sidebarOpen && (
+						<button
+							type="button"
+							aria-label="Close sidebar"
+							className="absolute inset-0 z-20 bg-base-content/20 md:hidden"
+							onClick={closeSidebar}
+						/>
+					)}
 
-				{/* Meadow backdrop behind the whole page area. `relative isolate` scopes the
+					{/* Meadow backdrop behind the whole page area. `relative isolate` scopes the
 				    layer's own stacking: the backdrop carries the negative z-index itself, so
 				    everything on the page paints above it by construction and no decoration
 				    ever rides across a creator's work or a post. The vines are hidden below
 				    `xl`, where the shell is too dense for them. The wrapper stays mounted in
 				    every shell state (onboarding included) — one tree, rebuilt on nothing. */}
-				<div className="relative isolate flex flex-1 min-w-0 flex-col">
-					<MeadowBackdrop />
-					<main
-						className={`flex flex-1 min-h-0 flex-col overflow-y-auto [scrollbar-gutter:stable] ${currentTrack ? "pb-16" : ""}`}
-					>
-						<RouteSuspense>
-							<Outlet />
-						</RouteSuspense>
+					<div className="relative isolate flex flex-1 min-w-0 flex-col">
+						<MeadowBackdrop />
+						<main
+							className={`flex flex-1 min-h-0 flex-col overflow-y-auto [scrollbar-gutter:stable] ${currentTrack ? "pb-16" : ""}`}
+						>
+							<RouteSuspense>
+								<Outlet />
+							</RouteSuspense>
 
-						{/* Footer, on the account pages only: Badges, Purchases and Settings are where a
+							{/* Footer, on the account pages only: Badges, Purchases and Settings are where a
 					    person is managing their own account, and the site map's reference and legal
 					    columns belong there. Every other signed-in page ends at its own content.
 					    Studio mode leaves it out entirely; a working tool has no use for a site map. */}
-						{!studio && showsSiteFooter(pathname) && (
-							<footer
-								data-site-footer
-								// `mt-auto` pins the footer to the bottom of `<main>`'s scroll area:
-								// this flex column is taller than the viewport whenever a page's
-								// content runs short, and without the push the footer hugs the content
-								// and leaves the height below it empty (Settings, in the extreme).
-								// With content taller than the viewport there is no free space and
-								// the margin is zero, leaving the footer directly under the content.
-								className={`mt-auto bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}
-							>
-								<div className="max-w-7xl mx-auto">
-									<div className="join join-horizontal w-full">
-										<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-											<h6 className="footer-title text-xs">Discovery</h6>
-											<Link to="/discovery" className="link link-hover">
-												Find something new
-											</Link>
-										</nav>
-										<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-											<h6 className="footer-title text-xs">Your Stuff</h6>
-											<Link to="/network" className="link link-hover">
-												Network
-											</Link>
-											<Link to="/library" className="link link-hover">
-												Library
-											</Link>
-											<Link to="/badges" className="link link-hover">
-												Badges
-											</Link>
-										</nav>
-										{/* Roadmap and Release Notes in their own column, matching the logged-out
+							{!studio && showsSiteFooter(pathname) && (
+								<footer
+									data-site-footer
+									// `mt-auto` pins the footer to the bottom of `<main>`'s scroll area:
+									// this flex column is taller than the viewport whenever a page's
+									// content runs short, and without the push the footer hugs the content
+									// and leaves the height below it empty (Settings, in the extreme).
+									// With content taller than the viewport there is no free space and
+									// the margin is zero, leaving the footer directly under the content.
+									className={`mt-auto bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}
+								>
+									<div className="max-w-7xl mx-auto">
+										<div className="join join-horizontal w-full">
+											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+												<h6 className="footer-title text-xs">Discovery</h6>
+												<Link to="/discovery" className="link link-hover">
+													Find something new
+												</Link>
+											</nav>
+											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+												<h6 className="footer-title text-xs">Your Stuff</h6>
+												<Link to="/network" className="link link-hover">
+													Network
+												</Link>
+												<Link to="/library" className="link link-hover">
+													Library
+												</Link>
+												<Link to="/badges" className="link link-hover">
+													Badges
+												</Link>
+											</nav>
+											{/* Roadmap and Release Notes in their own column, matching the logged-out
 									    footer's Development column (Parker, 2026-10-03). */}
-										<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-											<h6 className="footer-title text-xs">Development</h6>
-											<Link to="/roadmap" className="link link-hover">
-												Roadmap
-											</Link>
-											<Link to="/release-notes" className="link link-hover">
-												Release Notes
-											</Link>
-											<Link to="/status" className="link link-hover">
-												Status
-											</Link>
-											<Link to="/issues" className="link link-hover">
-												Report an Issue
-											</Link>
-										</nav>
-										<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-											<h6 className="footer-title text-xs">About</h6>
-											<Link to="/about" className="link link-hover">
-												About Us
-											</Link>
-											<Link to="/faq" className="link link-hover">
-												FAQ
-											</Link>
-											<Link to="/supporters" className="link link-hover">
-												Supporters
-											</Link>
-											<Link to="/resources" className="link link-hover">
-												Resources
-											</Link>
-											{/* Under Support rather than Legal — see the note in LoggedOutLayout. */}
-											<Link to="/parents" className="link link-hover">
-												For Parents
-											</Link>
-										</nav>
-										<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
-											<h6 className="footer-title text-xs">Legal</h6>
-											<Link to="/privacy" className="link link-hover">
-												Privacy
-											</Link>
-											<Link to="/terms" className="link link-hover">
-												Terms
-											</Link>
-											<Link to="/copyright" className="link link-hover">
-												Copyright
-											</Link>
-											{/* Matches the URL and the mailbox — see the note in
+											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+												<h6 className="footer-title text-xs">Development</h6>
+												<Link to="/roadmap" className="link link-hover">
+													Roadmap
+												</Link>
+												<Link to="/release-notes" className="link link-hover">
+													Release Notes
+												</Link>
+												<Link to="/status" className="link link-hover">
+													Status
+												</Link>
+												<Link to="/issues" className="link link-hover">
+													Report an Issue
+												</Link>
+											</nav>
+											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+												<h6 className="footer-title text-xs">About</h6>
+												<Link to="/about" className="link link-hover">
+													About Us
+												</Link>
+												<Link to="/faq" className="link link-hover">
+													FAQ
+												</Link>
+												<Link to="/supporters" className="link link-hover">
+													Supporters
+												</Link>
+												<Link to="/resources" className="link link-hover">
+													Resources
+												</Link>
+												{/* Under Support rather than Legal — see the note in LoggedOutLayout. */}
+												<Link to="/parents" className="link link-hover">
+													For Parents
+												</Link>
+											</nav>
+											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
+												<h6 className="footer-title text-xs">Legal</h6>
+												<Link to="/privacy" className="link link-hover">
+													Privacy
+												</Link>
+												<Link to="/terms" className="link link-hover">
+													Terms
+												</Link>
+												<Link to="/copyright" className="link link-hover">
+													Copyright
+												</Link>
+												{/* Matches the URL and the mailbox — see the note in
 										    LoggedOutLayout. */}
-											<Link to="/abuse" className="link link-hover">
-												Abuse
-											</Link>
-										</nav>
-									</div>
+												<Link to="/abuse" className="link link-hover">
+													Abuse
+												</Link>
+											</nav>
+										</div>
 
-									{/* The running version, quiet at the bottom of the page. A support
+										{/* The running version, quiet at the bottom of the page. A support
 								    question or a bug report names the build it saw, and the footer is
 								    where a person looks for it. Logged-in view only (Parker, 2026-10-01):
 								    a logged-out visitor is being pitched to, not debugging. The value
 								    is a committed calver constant — `@anthers/shared/version`'s docblock
 								    carries why it is not computed from git at build time. */}
-									<p className="mt-8 text-center text-[10px] opacity-40 select-none">
-										Anthers {APP_VERSION}
-									</p>
-								</div>
-							</footer>
-						)}
-					</main>
+										<p className="mt-8 text-center text-[10px] opacity-40 select-none">
+											Anthers {APP_VERSION}
+										</p>
+									</div>
+								</footer>
+							)}
+						</main>
+					</div>
 				</div>
-			</div>
 
-			<PlayerBar />
-		</div>
+				<PlayerBar />
+			</div>
+		</ViewFilterProvider>
 	);
 }
 

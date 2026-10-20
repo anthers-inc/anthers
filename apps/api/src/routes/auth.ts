@@ -319,6 +319,7 @@ async function serializeUser(user: typeof users.$inferSelect) {
 			themePreference: userPreferences.themePreference,
 			homeNavOrder: userPreferences.homeNavOrder,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
+			searchShortcuts: userPreferences.searchShortcuts,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
@@ -342,6 +343,9 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		// Where audio playback lives (the persistent footer bar or the page's player).
 		// Null means "never said" and the client reads that as on.
 		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
+		// The search bar's two chords — read at boot with the rest of the chrome, so the
+		// bar never registers a listener against the defaults and then swaps them.
+		searchShortcuts: prefs?.searchShortcuts ?? null,
 		atprotoDid: user.atprotoDid,
 		createdAt: user.createdAt,
 		// Null until the first run accepts the terms on `/welcome` — the signal every

@@ -11,11 +11,14 @@ import FeedTile from "../components/cards/FeedTile";
 import NetworkMembershipSection from "../components/layout/NetworkMembershipSection";
 import SharedFilterSections from "../components/layout/SharedFilterSections";
 import SharedLensesSection from "../components/layout/SharedLensesSection";
+import { useFilterable, useViewFilter } from "../components/layout/search/filter-context";
 import TabHeader from "../components/layout/TabHeader";
 
 export default function AuthenticatedHomePage() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const { setPageContent, setSharedContent } = useSidebar();
+	const viewFilter = useViewFilter();
+	useFilterable("Network");
 	/** One stream over both kinds — `kind` says which card to render. */
 	type FeedEntry = { kind: "post" | "release"; id: number } & Record<string, unknown>;
 	const [feedPosts, setFeedPosts] = useState<FeedEntry[]>([]);
@@ -105,6 +108,9 @@ export default function AuthenticatedHomePage() {
 							: {}),
 					...(access ? { access } : {}),
 					...(tags ? { tags } : {}),
+					// Filter mode's term. The feed paginates, so this is a server condition
+					// rather than a filter over the page already loaded.
+					...(viewFilter.query ? { q: viewFilter.query } : {}),
 					...(networkSource ? { network_source: networkSource } : {}),
 				},
 			})
@@ -115,7 +121,7 @@ export default function AuthenticatedHomePage() {
 			})
 			.catch(() => {})
 			.finally(() => setFeedLoading(false));
-	}, [contentType, access, tags, networkSource]);
+	}, [contentType, access, tags, viewFilter.query, networkSource]);
 
 	return (
 		<div className="min-h-full">
