@@ -2,17 +2,22 @@
 /**
  * How long a video's encode has left, for the estimate a creator reads while they wait.
  *
- * A video is encoded as up to three variants, one after another and highest first, and ffmpeg
- * reports the speed of the one running. What is left is the rest of that variant plus every
- * variant still to come, and the variants are not the same amount of work.
+ * The ladder is encoded in two passes: the smallest rung alone, so a video can publish the
+ * moment its first quality exists, then every taller rung sharing one decode. Each pass has
+ * its own projection below, because what "the rest" means differs between them.
  *
  * ⭐ **A variant's cost is weighted by its HEIGHT, not by its pixel count, and that was measured
  * rather than assumed.** Timed on one thread with the job's settings, a 720p encode cost 0.68
- * of a 1080p one and a 480p encode 0.45, where their pixel counts would say 0.44 and 0.20: every
- * variant decodes the whole source and encodes the audio again, and that part does not shrink
+ * of a 1080p one and a 480p encode 0.45, where their pixel counts would say 0.44 and 0.20: when
+ * each rung was its own pass, every one decoded the whole source, and that decode does not shrink
  * with the output. The heights say 0.67 and 0.44. From a 4K source the same encodes cost 0.70 and
- * 0.52, a little more than the heights say, which the clamp below absorbs. Treating every variant
- * as costing what the running one costs overstates the first stretch of every job.
+ * 0.52, a little more than the heights say, which the clamp below absorbs.
+ *
+ * ⚠️ **The model now looks ahead past a shared pass, so it is an upper bound rather than a
+ * reading.** The tall rungs share one decode, which costs less than the sum of their isolated
+ * passes; pass 1's projection therefore overstates the tail, and pass 2 replaces the figure with
+ * its own measured throughput the moment it starts. Overstating then falling is the direction the
+ * clamp tolerates — never the climb that would read as a job going backwards.
  *
  * ⚠️ **The real ratios sit in a band around the weights, and the preset moves where in the band.**
  * Measured on one real 1080p source (2026-10-11, `Curtains.mp4`): at `fast`/1-thread the 720p
@@ -41,6 +46,22 @@ export function remainingEncodeSeconds(
 	let left = Math.max(0, duration - outSec);
 	for (let j = current + 1; j < heights.length; j++) left += duration * (heights[j] / running);
 	return Math.round(left / speed);
+}
+
+/**
+ * Seconds of wall time left in a shared pass — one ffmpeg whose single decode feeds every
+ * tall rung and the audio rendition at once.
+ *
+ * There is no per-variant position to weight: every output consumes the same frames, so the
+ * pass's own reported speed is the whole answer. The last frame is all of them finishing.
+ */
+export function remainingSharedPassSeconds(
+	outSec: number,
+	duration: number,
+	speed: number,
+): number | null {
+	if (!(speed > 0) || !(duration > 0)) return null;
+	return Math.round(Math.max(0, duration - outSec) / speed);
 }
 
 /**

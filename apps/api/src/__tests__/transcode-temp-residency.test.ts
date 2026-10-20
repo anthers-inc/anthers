@@ -5,10 +5,10 @@
  * 🚨 **The worker's filesystem is ephemeral and small, and the platform replaces a container
  * whose disk fills — silently, with no line the app can log.** A job that held a large
  * source beside all of its output is how a burst of uploads bounced that worker every few
- * minutes, so the contract pinned here is two-sided: each variant's files upload the
- * moment its encode completes (observed by reading the job's own progress at the moment
- * of the first upload — under an end-of-job upload loop the progress is already 80), and
- * nothing of the job's is left on the disk after it completes.
+ * minutes, so the contract pinned here is two-sided: each pass's files upload the moment
+ * its encode completes (observed by reading the job's own progress at the moment of the
+ * first upload — under an end-of-job upload loop the progress is already 80), and nothing
+ * of the job's is left on the disk after it completes.
  *
  * ⭐ **What no stub can show is the interleaving.** The job runs for real, against a real
  * 720p source — 720 keeps a second variant in the plan, because with one variant there is
@@ -34,9 +34,10 @@ purgeAccountsCreatedHere();
 const RUN = crypto.randomUUID().slice(0, 8);
 
 /**
- * A two-second synthetic 720p video WITH an audio track. Height 720 keeps a second
- * variant (480p) in the plan — with one variant there is no next variant to be ahead of —
- * and the audio gives the rendition a part in the freeing contract.
+ * A two-second synthetic 1080p video WITH an audio track. Height 1080 puts three rungs in
+ * the plan, so the shared pass carries two outputs and the rendition — the shape the
+ * decode-once work introduced — and the audio gives the rendition a part in the freeing
+ * contract.
  */
 async function makeVideo(): Promise<Buffer> {
 	const path = join(tmpdir(), `resid_${RUN}.mp4`);
@@ -48,7 +49,7 @@ async function makeVideo(): Promise<Buffer> {
 			"-f",
 			"lavfi",
 			"-i",
-			"testsrc=duration=2:size=1280x720:rate=10",
+			"testsrc=duration=2:size=1920x1080:rate=10",
 			"-f",
 			"lavfi",
 			"-i",
@@ -165,6 +166,7 @@ describe("a transcode's temp residency", () => {
 		expect(await storage.exists(`${prefix}/audio.m3u8`)).toBe(true);
 		expect(await storage.exists(`${prefix}/audio-000.ts`)).toBe(true);
 		expect(await storage.exists(`${prefix}/720p.m3u8`)).toBe(true);
+		expect(await storage.exists(`${prefix}/1080p.m3u8`)).toBe(true);
 		expect(await storage.exists(`${prefix}/480p.m3u8`)).toBe(true);
 
 		const hls = uploads.filter((u) => u.key.includes("/videos/hls/"));
