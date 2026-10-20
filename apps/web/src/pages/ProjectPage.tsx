@@ -151,11 +151,9 @@ export default function ProjectPage() {
 								</Link>
 							</p>
 						)}
-						{(project.description || project.shortDescription) && (
+						{project.description && (
 							<div className="prose prose-sm max-w-none">
-								<Markdown remarkPlugins={[remarkGfm]}>
-									{project.description || project.shortDescription || ""}
-								</Markdown>
+								<Markdown remarkPlugins={[remarkGfm]}>{project.description}</Markdown>
 							</div>
 						)}
 					</>
@@ -175,8 +173,9 @@ export default function ProjectPage() {
 			 * announcements about them.
 			 *
 			 * A Project whose members are ALL audio is a record, and gets rendered as one:
-			 * cover, Play, Shuffle, tracks in `sortOrder`. That column exists precisely
-			 * because "an album could not hold its tracks", and a grid of cards throws the
+			 * cover, Play, Shuffle, tracks in the Project's saved reading order — Manual's
+			 * drag order by default, or the mode its creator chose (2026-10-19). That
+			 * setting is why an album keeps its track order, and a grid of cards throws the
 			 * order away at the moment it matters most. Anything else keeps the grid —
 			 * a game Project holding a soundtrack is not an album, and turning it into a
 			 * track list would bury the game.
@@ -211,11 +210,9 @@ export default function ProjectPage() {
 							action={<SaveButton projectId={project.id} />}
 						/>
 						{/* The sleeve notes, under the record rather than above it. */}
-						{(project.description || project.shortDescription) && (
+						{project.description && (
 							<div className="prose prose-sm max-w-none px-1">
-								<Markdown remarkPlugins={[remarkGfm]}>
-									{project.description || project.shortDescription || ""}
-								</Markdown>
+								<Markdown remarkPlugins={[remarkGfm]}>{project.description}</Markdown>
 							</div>
 						)}
 					</div>

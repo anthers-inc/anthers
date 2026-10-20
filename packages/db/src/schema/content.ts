@@ -7,6 +7,7 @@
  * which are a *user's* records, not the creator's.
  */
 
+import type { ShelfSortDirection, ShelfSortMode } from "@anthers/shared/project-shelf-sort";
 import { sql } from "drizzle-orm";
 import {
 	bigint,
@@ -488,10 +489,23 @@ export const projects = pgTable(
 		slug: text("slug").notNull().unique(),
 		title: text("title").notNull(),
 		description: text("description").default(""),
-		shortDescription: text("short_description").default(""),
 		coverImage: text("cover_image").default(""),
 		// Custom-page layout/showcase config (built out in a later phase).
 		pageConfig: jsonb("page_config").$type<Record<string, unknown>>().default({}),
+		// How the Project's two shelves read, beside the stored drag order they never
+		// rewrite: `manual` is the drag order itself, the other modes are named reading
+		// orders the creator saved (2026-10-19). The API applies these when serializing
+		// members, so every reader gets the same order.
+		worksSortMode: text("works_sort_mode").$type<ShelfSortMode>().notNull().default("manual"),
+		worksSortDirection: text("works_sort_direction")
+			.$type<ShelfSortDirection>()
+			.notNull()
+			.default("asc"),
+		postsSortMode: text("posts_sort_mode").$type<ShelfSortMode>().notNull().default("manual"),
+		postsSortDirection: text("posts_sort_direction")
+			.$type<ShelfSortDirection>()
+			.notNull()
+			.default("asc"),
 		isPublished: boolean("is_published").notNull().default(false),
 		atprotoUri: text("atproto_uri").unique(),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -1349,10 +1363,10 @@ export const reviews = pgTable(
 		// could never grow a third value, and the published Lexicon carries these two as an
 		// open set precisely so a middle verdict stays possible.
 		verdict: text("verdict").notNull(),
-		// A verdict cannot be left without words — the API requires `body` on write.
-		// It is nullable here only because rows predating that rule exist and must
-		// keep rendering; treat "" / null as a legacy verdict-only review, never as a
-		// shape new writes may produce. Plain text, not HTML: like comments, it is
+		// Text is optional (Parker, 2026-10-19): a verdict can stand alone, counts in the
+		// recommended share, and simply does not appear in the public list. Null is the
+		// absence of words; rows predating this rule carry NULL or "" for the same reason
+		// and are treated identically. Plain text, not HTML: like comments, it is
 		// rendered as a React text node and never passed through a sanitizer,
 		// because nothing here is ever interpreted as markup.
 		body: text("body"),

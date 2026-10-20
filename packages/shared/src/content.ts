@@ -11,15 +11,13 @@
  */
 
 /**
- * A review carries a verdict AND written text — a verdict can't be left on its own.
+ * The longest text a review may carry.
  *
- * The minimum is deliberately low, and it is not a quality filter: it's a blunt
- * instrument, and "lol" clears any threshold worth setting. The reason to require
- * text at all is that a written verdict gives a user something to weigh and a
- * moderator something to act on, where a bare thumb is unmoderatable by
- * construction. Raising this to chase quality would mostly punish the terse.
+ * ⭐ **Text is optional and a verdict can stand alone** (Parker, 2026-10-19). A
+ * textless review counts in the recommended share and does not appear in the
+ * list — nothing there for a reader to read. The limit is shared so the
+ * textarea's `maxLength` and the server's validator cannot drift.
  */
-export const REVIEW_MIN = 4;
 export const REVIEW_MAX = 5000;
 
 /**

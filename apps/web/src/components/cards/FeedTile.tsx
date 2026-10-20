@@ -358,7 +358,7 @@ function PostBand({ post }: { post: FeedPost }) {
 		);
 	}
 	if (post.excerpt) return <ContentBand text={post.excerpt} />;
-	return <TypographicBand label="Post" title={post.title} />;
+	return <TypographicBand label="Post" title={post.displayTitle ?? post.title} />;
 }
 
 function MetaRow({
@@ -586,7 +586,9 @@ function PostTile({ entry }: { entry: FeedEntry }) {
 					date={compactDate(post.publishedAt ?? post.createdAt)}
 				/>
 				{!bandIsTitle && post.title && (
-					<h3 className="font-semibold text-sm leading-snug line-clamp-2">{post.title}</h3>
+					<h3 className="font-semibold text-sm leading-snug line-clamp-2">
+						{post.displayTitle ?? post.title}
+					</h3>
 				)}
 				{!bandCarriesContent && post.excerpt && (
 					<p className="text-xs leading-relaxed text-base-content/60 line-clamp-2">
@@ -603,7 +605,11 @@ function PostTile({ entry }: { entry: FeedEntry }) {
 				</div>
 			</TileBody>
 			{/* The tile's own target, stretched over it — see the release tile's overlay. */}
-			<Link to={postUrl(post)} className="absolute inset-0" aria-label={post.title || "A post"} />
+			<Link
+				to={postUrl(post)}
+				className="absolute inset-0"
+				aria-label={post.displayTitle || post.title || "A post"}
+			/>
 		</div>
 	);
 }

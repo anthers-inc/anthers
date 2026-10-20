@@ -11,6 +11,7 @@
 
 import type { WorkType } from "@anthers/shared/content";
 import type { ContentNote, MaturityRating, MaturityRows } from "@anthers/shared/content-rating";
+import type { ShelfSortDirection, ShelfSortMode } from "@anthers/shared/project-shelf-sort";
 
 // ─── User Types ───
 
@@ -685,8 +686,23 @@ export interface Post {
 	 * announcement and carries no gate; each Work resolves on its own.
 	 */
 	linkedWorks?: PostWorkRef[];
+	/**
+	 * The title with each `@`-mentioned Work's current name — what a reader sees.
+	 * `title` is the stored form, whose mention text is only the fallback for a Work
+	 * that no longer resolves.
+	 */
+	displayTitle?: string | null;
+	/** The Works the title mentions, resolved for this reader, in first-appearance order. */
+	mentionedWorks?: PostMentionedWork[];
 	/** Transparent edit history (newest first), present on the detail endpoint. */
 	edits?: PostEdit[];
+}
+
+/** A Work a post's title names, as the heading links it. */
+export interface PostMentionedWork {
+	publicId: number;
+	slug: string;
+	title: string;
 }
 
 /** One timestamped entry in a post's edit history. */
@@ -709,6 +725,8 @@ export interface PostListItem {
 	 */
 	creatorId: number | null;
 	title: string | null;
+	/** The title with each mentioned Work's current name — what a card shows. */
+	displayTitle?: string | null;
 	isPinned: boolean;
 	tags: string[] | null;
 	isPublished: boolean | null;
@@ -735,6 +753,8 @@ export interface ProjectPost {
 	publicId: number;
 	slug: string;
 	title: string | null;
+	/** The title with each mentioned Work's current name — what the row shows. */
+	displayTitle?: string | null;
 	isPublished: boolean | null;
 	publishedAt: string | null;
 	sortOrder: number;
@@ -756,9 +776,18 @@ export interface Project {
 	slug: string;
 	title: string;
 	description: string | null;
-	shortDescription: string | null;
 	coverImage: string | null;
 	pageConfig: Record<string, unknown> | null;
+	/**
+	 * How the Project's shelves read, saved from the sort dropdown on its page
+	 * (2026-10-19). `manual` is the stored drag order and the default; the detail
+	 * response arrives already sorted by these, so a reader renders `works` and
+	 * `posts` in the order given.
+	 */
+	worksSortMode: ShelfSortMode;
+	worksSortDirection: ShelfSortDirection;
+	postsSortMode: ShelfSortMode;
+	postsSortDirection: ShelfSortDirection;
 	isPublished: boolean | null;
 	atprotoUri: string | null;
 	/**
@@ -903,13 +932,16 @@ export interface RemovedComment {
 /** What a thread is made of: comments, and the gaps removed ones left above their replies. */
 export type ThreadComment = Comment | RemovedComment;
 
-/** One written review: a score plus the words that justify it. */
+/** One written review: a verdict and the words that explain it. */
 export interface Review {
 	id: number;
 	userId: number;
 	/** `recommended` or `not-recommended`. An open set — render an unknown value as-is. */
 	verdict: string;
-	/** "" for rows written before reviews required text — render the verdict alone. */
+	/**
+	 * The reviewer's words. Always present here: only reviews with text are listed, and a
+	 * verdict left on its own counts in the aggregate without appearing in this array.
+	 */
 	body: string;
 	/**
 	 * The review's public record link — the record's own address on Taproot, the form a

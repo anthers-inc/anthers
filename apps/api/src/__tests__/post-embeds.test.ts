@@ -11,7 +11,11 @@ import { describe, expect, it } from "bun:test";
 import type { DeclarableMaturity } from "@anthers/shared/content-rating";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import app from "../index";
-import { pgWorkEmbedPattern, workPublicIdsFromBody } from "../lib/post-work-links";
+import {
+	pgWorkEmbedPattern,
+	pgWorkTitleMentionPattern,
+	workPublicIdsFromBody,
+} from "../lib/post-work-links";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
@@ -42,6 +46,22 @@ describe("workPublicIdsFromBody", () => {
 	it("ignores numbers that cannot be a publicId", () => {
 		// A slug carrying small digit groups is not an embed: public ids are 9 digits.
 		expect(workPublicIdsFromBody("page /works/123456-title and /works/2")).toEqual([]);
+	});
+
+	it("reads the trailing publicId even when the slug carries its own digits", () => {
+		// A slug is free text, and `top-1000000-games` is an ordinary one. The id is the
+		// run at the end of the address, never an earlier run inside the slug.
+		expect(workPublicIdsFromBody("/works/top-1000000-games-123456789")).toEqual([123456789]);
+		expect(workPublicIdsFromBody("https://anthers.org/works/2026-10-19-123456789")).toEqual([
+			123456789,
+		]);
+		expect(workPublicIdsFromBody("/works/my-game-123456789/")).toEqual([123456789]);
+	});
+
+	it("reads two links written back to back without whitespace", () => {
+		expect(workPublicIdsFromBody("/works/first-123456789,/works/second-987654321")).toEqual([
+			123456789, 987654321,
+		]);
 	});
 
 	it("ignores another site's path that happens to carry /works", () => {
@@ -170,5 +190,13 @@ describe("Embeds resolve through the Work's own gates", () => {
 		// the helper itself — a change to one shape without the other is the drift.
 		expect(pgWorkEmbedPattern(123456789)).toBe("/works/[^[:space:]()>'\"]*-?123456789([^0-9]|$)");
 		expect(workPublicIdsFromBody("x-123456789 y")).toEqual([]); // no /works/ prefix, no match
+	});
+
+	it("the title-mention pattern recognizes only an @ link, not a plain Work link", () => {
+		// The Showings lookup must agree with `postTitleSegments`: a bare Work link in a
+		// title is text, not a mention.
+		expect(pgWorkTitleMentionPattern(123456789)).toBe(
+			"\\[@[^]]*\\]\\([^)]*?/works/[^[:space:]()>'\"]*-?123456789([^0-9]|$)",
+		);
 	});
 });

@@ -25,6 +25,7 @@ import {
 	assets,
 	badgeCharges,
 	badges,
+	basketItems,
 	billingAccounts,
 	crfLedger,
 	purchases,
@@ -210,6 +211,23 @@ function fakeStripe() {
 					const canned = responses["checkout.sessions.list"];
 					return (canned !== undefined ? canned : asyncList([])) as never;
 				},
+				// The basket's resume read (Parker, 2026-10-19): a revisit to the basket
+				// asks Stripe whether the session an abandoned checkout left behind is
+				// still open. Default EXPIRED — the ordinary case for a test that never
+				// shaped one, which builds a fresh session exactly as it always did. A test
+				// asserting the reuse sets `responses["checkout.sessions.retrieve"]`.
+				retrieve: record("checkout.sessions.retrieve", (id: string) => ({
+					id,
+					object: "checkout.session",
+					status: "expired",
+				})),
+				// Closing a session whose basket has since changed. Only the basket's
+				// resume path calls this, and only when `retrieve` answered `open`.
+				expire: record("checkout.sessions.expire", (id: string) => ({
+					id,
+					object: "checkout.session",
+					status: "expired",
+				})),
 			},
 		},
 		subscriptions: {
@@ -1887,12 +1905,164 @@ describe("Basket checkout — one charge, one card fee", () => {
 		const separately = cardFee(new Decimal(UNIT)).times(3);
 		expect(new Decimal(body.processingFee).lessThan(separately)).toBe(true);
 
-		// The basket the charge was built from is emptied at checkout — the ids are spent
-		// the moment the session exists, and the badge must not count what was just paid.
+		// 🚨 **The basket SURVIVES the moment the charge is built** (Parker, 2026-10-19).
+		// This route runs when the basket page mounts — it is how the embedded checkout
+		// gets its client secret — and it used to empty the basket right here, so opening
+		// the page and walking away erased everything the buyer had chosen. The rows leave
+		// when the charge completes instead (`completeSessionPurchases`), and the next test
+		// walks that half.
 		const after = await req("/api/payments/basket", {
 			headers: { Origin: ORIGIN, Cookie: buyerCookie },
 		});
-		expect(((await after.json()) as { count: number }).count).toBe(0);
+		expect(((await after.json()) as { count: number }).count).toBe(3);
+	});
+
+	it("resumes the open session a previous visit built, rather than a second one", async () => {
+		await seedBasket(
+			items.map((i) => i.id),
+			{ fresh: true },
+		);
+		const workIds = items.map((i) => i.id).join(",");
+		// One session id shared by the create and the later retrieve, so the test reads the
+		// same session Stripe would have kept open for this basket.
+		const sessionId = `cs_${uid()}`;
+		fake.responses["checkout.sessions.create"] = {
+			id: sessionId,
+			client_secret: `${sessionId}_secret_test`,
+		};
+
+		const first = await basket(items.map((i) => i.id));
+		expect(first.res.status).toBe(200);
+		expect(first.body.clientSecret).toBe(`${sessionId}_secret_test`);
+
+		// The revisit: Stripe answers that the session is still open and still carries this
+		// basket, so the route hands back its client secret instead of building another
+		// session (and another set of pending rows) for the same intent.
+		fake.responses["checkout.sessions.retrieve"] = {
+			id: sessionId,
+			object: "checkout.session",
+			status: "open",
+			client_secret: `${sessionId}_secret_test`,
+			metadata: { kind: "direct_purchase_basket", workIds, badgeIds: "" },
+		};
+		try {
+			const second = await basket(items.map((i) => i.id));
+			expect(second.res.status).toBe(200);
+			expect(second.body.clientSecret).toBe(`${sessionId}_secret_test`);
+			// No second session is built — this call resumed the first (the helper reset
+			// the recorded calls, so zero creates here is the assertion).
+			expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
+		} finally {
+			delete fake.responses["checkout.sessions.retrieve"];
+			delete fake.responses["checkout.sessions.create"];
+		}
+	});
+
+	it("leaves a line added while the webhook is in flight in the basket at completion", async () => {
+		// Dedicated Works: this test completes a purchase, and the shared `items` are used
+		// by every other test in this describe against the same buyer. A completed purchase
+		// is access, so completing one of `items` here would silently remove it from every
+		// later basket read.
+		const [boughtA, boughtB, addedLater] = await Promise.all(
+			[`Completion A`, `Completion B`, `Completion later`].map((title) =>
+				insertWork({
+					creatorId,
+					type: "game",
+					title: `${title} ${run}`,
+					streamEnabled: false,
+					downloadEnabled: true,
+					access: ODD,
+				}),
+			),
+		);
+		await seedBasket([boughtA.id, boughtB.id], { fresh: true });
+		const bought = `${boughtA.id},${boughtB.id}`;
+		const sessionId = `cs_${uid()}`;
+		fake.responses["checkout.sessions.create"] = {
+			id: sessionId,
+			client_secret: `${sessionId}_secret_test`,
+		};
+		const started = await basket([boughtA.id, boughtB.id]);
+		expect(started.res.status).toBe(200);
+
+		// A second tab adds a third Work before the payment's webhook lands. It was not part
+		// of the charge, so the completion must leave it alone rather than clearing wholesale.
+		await seedBasket([addedLater.id]);
+
+		const piId = `pi_${uid()}`;
+		const session = fakeSessionFor(piId, { taxCents: 0 });
+		session.id = sessionId;
+		(session as { metadata?: Record<string, string> }).metadata = {
+			buyerId: String(buyerId),
+			workIds: bought,
+			badgeIds: "",
+		};
+		fake.responses["checkout.sessions.list"] = asyncList([session]);
+		try {
+			const event = stripeEvent("payment_intent.succeeded", {
+				id: piId,
+				object: "payment_intent",
+				metadata: { buyerId: String(buyerId) },
+			});
+			expect((await sendWebhook(event)).status).toBe(200);
+
+			const holding = await req("/api/payments/basket", {
+				headers: { Origin: ORIGIN, Cookie: buyerCookie },
+			});
+			const remaining = (await holding.json()) as {
+				items: { kind: string; workId?: number }[];
+			};
+			expect(
+				remaining.items.map((i) => i.workId),
+				"the bought lines should have left and the later add should remain",
+			).toEqual([addedLater.id]);
+
+			// And the ROWS are gone, not merely resolved away as owned — the completion is
+			// the basket's clean-up, and a row left behind would sit in the table forever.
+			const rows = await db
+				.select({ workId: basketItems.workId })
+				.from(basketItems)
+				.where(eq(basketItems.userId, buyerId));
+			expect(rows.map((r) => r.workId)).toEqual([addedLater.id]);
+		} finally {
+			delete fake.responses["checkout.sessions.create"];
+			delete fake.responses["checkout.sessions.list"];
+		}
+	});
+
+	it("refuses rather than charge twice when the basket's payment is already confirming", async () => {
+		// The webhook window: the buyer paid, the completion has not run, the rows are still
+		// pending. A second session here would charge the same basket again.
+		await seedBasket(
+			items.map((i) => i.id),
+			{ fresh: true },
+		);
+		const sessionId = `cs_${uid()}`;
+		fake.responses["checkout.sessions.create"] = {
+			id: sessionId,
+			client_secret: `${sessionId}_secret_test`,
+		};
+		try {
+			await basket(items.map((i) => i.id));
+			fake.responses["checkout.sessions.retrieve"] = {
+				id: sessionId,
+				object: "checkout.session",
+				status: "complete",
+				payment_status: "paid",
+				metadata: {
+					kind: "direct_purchase_basket",
+					workIds: items.map((i) => i.id).join(","),
+					badgeIds: "",
+				},
+			};
+			const again = await basket(items.map((i) => i.id));
+			expect(again.res.status).toBe(409);
+			expect((again.body as { error?: string }).error).toMatch(/being confirmed/i);
+			expect(fake.callsTo("checkout.sessions.create")).toHaveLength(0);
+		} finally {
+			delete fake.responses["checkout.sessions.create"];
+			delete fake.responses["checkout.sessions.retrieve"];
+		}
 	});
 
 	it("builds one session for the whole basket, one line per Work, each coded", async () => {
@@ -2962,7 +3132,8 @@ describe("The badge checkout routes", () => {
 		expect(metadata.kind).toBe("direct_purchase_basket");
 		expect(metadata.badgeIds).toBe(String(issuerRungId));
 
-		// The row keyed to the session id the fake minted; the basket cleared at checkout.
+		// The money's record is the Badge-charge row, keyed to the session the fake minted —
+		// still pending until the completion stamps it, whatever the basket does.
 		const [row] = await db
 			.select()
 			.from(badgeCharges)
@@ -2970,8 +3141,18 @@ describe("The badge checkout routes", () => {
 			.orderBy(desc(badgeCharges.id))
 			.limit(1);
 		expect(row.status).toBe("pending");
-		const after = await req("/api/payments/basket", { headers: { Cookie: cookie } });
-		expect(((await after.json()) as { count: number }).count).toBe(0);
+
+		// 🚨 The basket survives building the charge (Parker, 2026-10-19): the line stays
+		// until the purchase completes, so leaving this page and coming back still shows
+		// what the buyer chose. The clear below is this describe's own housekeeping — the
+		// tests that follow share this buyer's basket — not a behavior under test.
+		const kept = await req("/api/payments/basket", { headers: { Cookie: cookie } });
+		expect(((await kept.json()) as { count: number }).count).toBe(1);
+		const cleared = await req("/api/payments/basket", {
+			method: "DELETE",
+			headers: { Origin: ORIGIN, Cookie: cookie },
+		});
+		expect(cleared.status).toBe(200);
 	});
 
 	it("never saves a card on a plain works-only basket — the 2026-10-06 posture, not the badge's", async () => {

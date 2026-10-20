@@ -55,24 +55,27 @@ const scrollsSideways = (page: Page) =>
 	page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
 
 test.describe("/signup leads with the free door", () => {
-	test("the signup control comes before either support ask", async ({ page }) => {
+	test("the signup control comes before the support ask", async ({ page }) => {
 		await page.goto("/signup");
 
 		const signup = page.locator('[data-signup="top"]');
 		await expect(signup).toBeVisible();
 
-		// The two optional sections. Both must sit BELOW the way in, so that scrolling is
+		// ⚠️ **The creator ask left this page on 2026-10-19**, and its absence is pinned so
+		// a re-add is a decision rather than a drift. What replaced it is a creator's own
+		// page, where the Badge ladder is already a purchase surface.
+		await expect(page.getByRole("heading", { name: /creator badges/i })).toHaveCount(0);
+
+		// The one optional section. It must sit BELOW the way in, so that scrolling is
 		// what it takes to be asked for money — never what it takes to join.
 		//
-		// ⚠️ Matched on "Badges" rather than on the full heading, which was "Support a
-		// creator" / "Support Anthers" until 2026-08-24 and is free to move again. What
-		// this test is about is ORDER; anchoring the exact wording would make it fail for
-		// copy edits it has no opinion on.
-		const creatorAsk = page.getByRole("heading", { name: /creator badges/i });
+		// ⚠️ Matched on "Badges" rather than on the full heading, which was "Support
+		// Anthers" until 2026-08-24 and is free to move again. What this test is about is
+		// ORDER; anchoring the exact wording would make it fail for copy edits it has no
+		// opinion on.
 		const anthersAsk = page.getByRole("heading", { name: /anthers badges/i });
 
 		const signupTop = await topOf(signup);
-		expect(signupTop).toBeLessThan(await topOf(creatorAsk));
 		expect(signupTop).toBeLessThan(await topOf(anthersAsk));
 	});
 
@@ -182,17 +185,15 @@ test.describe("/signup leads with the free door", () => {
 			const section = page.locator("#anthers-badges");
 			await expect(section).toBeVisible();
 
-			// 🚨 **Wait for the page to finish arriving before measuring any of it.** Two
-			// surfaces here fill in from the API after first paint: the signup card grows its
-			// Bluesky tab once `GET /api/atproto/config` answers, and the creator finder swaps
-			// its skeletons for real cards. Either one landing between two readings is ~300px
-			// of movement that has nothing to do with the rung — which is how this test first
-			// failed, on its own warm-up rather than on the thing it is about. Both are above
-			// the ladder, so both move it.
+			// 🚨 **Wait for the page to finish arriving before measuring any of it.** One
+			// surface here fills in from the API after first paint: the signup card grows its
+			// Bluesky tab once `GET /api/atproto/config` answers. It landing between two
+			// readings is ~300px of movement that has nothing to do with the rung — which is
+			// how this test first failed, on its own warm-up rather than on the thing it is
+			// about. It sits above the ladder, so it moves it.
 			await expect(
 				page.locator('[data-signup="top"]').getByRole("tab", { name: "Bluesky", exact: true }),
 			).toBeVisible();
-			await expect(page.locator("#creator-badges .animate-pulse")).toHaveCount(0);
 
 			const readings: string[] = [];
 			for (const name of [/^free/i, /^root/i, /^sprout/i, /^petal/i, /^blossom/i]) {

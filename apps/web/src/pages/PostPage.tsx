@@ -16,6 +16,7 @@
  * see the layout comments below.
  */
 import { useAuth } from "@anthers/web-shared/auth";
+import MentionTitleInput from "@anthers/web-shared/content/MentionTitleInput";
 import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
 import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
 import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
@@ -38,6 +39,7 @@ import remarkGfm from "remark-gfm";
 import WorkCard from "../components/cards/WorkCard";
 import SaveButton from "../components/library/SaveButton";
 import CommentThread from "../components/post/CommentThread";
+import PostTitle from "../components/post/PostTitle";
 import SharePostButton from "../components/post/SharePostButton";
 import StickerBar from "../components/post/StickerBar";
 import VoteControl from "../components/post/VoteControl";
@@ -55,7 +57,7 @@ export default function PostPage() {
 	const { isAuthenticated, user } = useAuth();
 	const [post, setPost] = useState<Post | null>(null);
 	const [loading, setLoading] = useState(true);
-	usePageTitle(post?.title ?? null);
+	usePageTitle(post?.displayTitle ?? post?.title ?? null);
 
 	// ── Owner actions (publish / pin) ──
 	const [showHistory, setShowHistory] = useState(false);
@@ -268,19 +270,18 @@ export default function PostPage() {
 			saved={post.title ?? ""}
 			renderRead={() => (
 				<h1 className="text-3xl font-bold mb-2">
-					{post.title || <span className="text-base-content/40">Untitled</span>}
+					{post.title ? (
+						<PostTitle
+							title={post.title}
+							displayTitle={post.displayTitle}
+							mentionedWorks={post.mentionedWorks}
+						/>
+					) : (
+						<span className="text-base-content/40">Untitled</span>
+					)}
 				</h1>
 			)}
-			renderEdit={(draft, setDraft) => (
-				<input
-					type="text"
-					className="input input-bordered w-full"
-					value={draft}
-					onChange={(e) => setDraft(e.target.value)}
-					placeholder="Post title"
-					aria-label="Post title"
-				/>
-			)}
+			renderEdit={(draft, setDraft) => <MentionTitleInput canonical={draft} onChange={setDraft} />}
 			save={(draft) => saveField({ title: draft.trim() })}
 		/>
 	);
@@ -387,7 +388,15 @@ export default function PostPage() {
 						titleField
 					) : (
 						<h1 className="text-3xl font-bold mb-2">
-							{post.title || <span className="text-base-content/40">Untitled</span>}
+							{post.title ? (
+								<PostTitle
+									title={post.title}
+									displayTitle={post.displayTitle}
+									mentionedWorks={post.mentionedWorks}
+								/>
+							) : (
+								<span className="text-base-content/40">Untitled</span>
+							)}
 						</h1>
 					)}
 				</div>
@@ -521,13 +530,17 @@ export default function PostPage() {
 					variant="boxed"
 					subjectType="post"
 					subjectId={post.id}
-					label={post.title ?? "this post"}
+					label={post.displayTitle ?? post.title ?? "this post"}
 				/>
-				<StickerBar subjectType="post" subjectId={post.id} label={post.title ?? "this post"} />
+				<StickerBar
+					subjectType="post"
+					subjectId={post.id}
+					label={post.displayTitle ?? post.title ?? "this post"}
+				/>
 				<div className="ml-auto flex items-center gap-1">
 					<SharePostButton
 						url={new URL(postUrl(post), window.location.origin).toString()}
-						label={post.title ?? "this post"}
+						label={post.displayTitle ?? post.title ?? "this post"}
 					/>
 					<SaveButton postId={post.id} className="shrink-0" />
 				</div>
