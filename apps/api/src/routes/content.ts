@@ -2724,7 +2724,14 @@ async function loadPostWorksFromBody(
  * handed to the client must be built from FRONTEND_URL, not the request URL.
  */
 function publicOrigin(): string {
-	return (process.env.FRONTEND_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+	const configured = (process.env.FRONTEND_URL ?? "").trim().replace(/\/+$/, "");
+	if (configured) return configured;
+	// A browser session (and CI's copy of one) runs the API on its own port, not on the
+	// SPA's `:3000`. Absolute media URLs have to name the API, so fall back to the port
+	// this process is actually listening on rather than the dev SPA default. Production
+	// always names FRONTEND_URL, so this branch is local and CI only.
+	const port = process.env.API_PORT ?? process.env.PORT ?? "8000";
+	return `http://localhost:${port}`;
 }
 
 /** The display name of whoever shared a link, for the recipient's banner. */
