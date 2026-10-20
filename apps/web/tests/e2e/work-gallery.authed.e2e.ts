@@ -82,11 +82,26 @@ test("an image Work's set grows, reorders, refuses a non-image, and displays", a
 		.select({ id: works.id, publicId: works.publicId, slug: works.slug })
 		.from(works)
 		.where(eq(works.title, TITLE));
+	// 🚨 **The visible row is the upload store's entry, and it appears before the pick's
+	// one attach lands.** Since a pick is a single `attachMany` sent when the pick ends,
+	// waiting on the name alone reads the server before the set has grown, so wait on the
+	// set itself — the thing this assertion is about.
+	await expect
+		.poll(
+			async () =>
+				(
+					await db
+						.select({ filename: workSourceFiles.filename })
+						.from(workSourceFiles)
+						.where(eq(workSourceFiles.workId, row.id))
+				).map((f) => f.filename),
+			{ timeout: 15_000 },
+		)
+		.toEqual(["gallery cover.png", "gallery tail.png"]);
 	const cover1 = (
 		await db.select({ v: works.sourceKey }).from(works).where(eq(works.id, row.id))
 	)[0]?.v;
 	const set = await db.select().from(workSourceFiles).where(eq(workSourceFiles.workId, row.id));
-	expect(set.map((f) => f.filename)).toEqual(["gallery cover.png", "gallery tail.png"]);
 	const firstRow = set.find((f) => f.filename === "gallery cover.png")!;
 	expect(cover1).toBe(firstRow.file);
 
