@@ -26,7 +26,7 @@
 
 import { badges, basketItems, db, users, works } from "@anthers/db";
 import { MAX_BASKET_ITEMS } from "@anthers/shared/constants";
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, or } from "drizzle-orm";
 
 /**
  * The basket's rows, discriminated by what the line names. A Badges line is the rung the
@@ -241,7 +241,35 @@ export async function removeBasketBadge(userId: number, badgeId: number): Promis
 		.where(and(eq(basketItems.userId, userId), eq(basketItems.badgeId, badgeId)));
 }
 
-/** Empty the buyer's basket — the checkout's clean-up once the charge is built. */
+/** Empty the buyer's basket — the buyer's own deliberate clear (the `DELETE /basket` door). */
 export async function clearBasket(userId: number): Promise<void> {
 	await db.delete(basketItems).where(eq(basketItems.userId, userId));
+}
+
+/**
+ * Clear the lines a completed charge bought — the completion's clean-up, not the
+ * checkout's.
+ *
+ * 🚨 **The basket is intent, and intent survives an abandoned checkout** (Parker,
+ * 2026-10-19). The checkout build used to empty the basket the moment a Stripe session
+ * existed, so opening the basket page — which builds that session — and then leaving
+ * without paying erased what the buyer had chosen. The rows now leave only when the
+ * money actually moves: this runs from `completeSessionPurchases`, keyed to the ids the
+ * session's own metadata carried, so a line the buyer added after paying (in another tab,
+ * before the webhook landed) is theirs to keep rather than collateral.
+ *
+ * Idempotent, like everything else on the completion path: a redelivered event deletes
+ * rows that are already gone.
+ */
+export async function clearPurchasedBasketItems(
+	userId: number,
+	workIds: number[],
+	badgeIds: number[],
+): Promise<void> {
+	const bought = [
+		...(workIds.length > 0 ? [inArray(basketItems.workId, workIds)] : []),
+		...(badgeIds.length > 0 ? [inArray(basketItems.badgeId, badgeIds)] : []),
+	];
+	if (bought.length === 0) return;
+	await db.delete(basketItems).where(and(eq(basketItems.userId, userId), or(...bought)));
 }

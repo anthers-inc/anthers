@@ -67,6 +67,7 @@ import { Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
+import { displayPostTitles } from "../lib/post-title-mentions.js";
 import { PG_WORK_URL_PATTERN, workPublicIdsFromBody } from "../lib/post-work-links.js";
 import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
@@ -833,8 +834,15 @@ const accountRoutes = new Hono()
 		// `excerpt` is exception-shaped rather than an exception: a post's body is public
 		// (a post carries no gate of its own, and its page reads signed out), and the plain-text
 		// form the tile renders is lighter than the markdown it is derived from.
+		// The name each post title's `@` mention resolves to for this reader — one lookup for
+		// the feed, beside the thumbnails the same rows already need.
+		const postDisplayTitles = await displayPostTitles(
+			feedPosts.map((row) => row.post.title),
+			sessionUser.id,
+		);
+
 		const entries = [
-			...feedPosts.map((row) => {
+			...feedPosts.map((row, index) => {
 				const p = row.post;
 				return {
 					kind: "post" as const,
@@ -848,6 +856,8 @@ const accountRoutes = new Hono()
 					// did (the commitment the feed page carries — every item says why).
 					source: p.creatorId === sessionUser.id ? ("own" as const) : ("following" as const),
 					title: p.title,
+					// The title with each mentioned Work's current name — what the tile shows.
+					displayTitle: postDisplayTitles[index] ?? p.title,
 					isPinned: p.isPinned,
 					tags: p.tags,
 					isPublished: p.isPublished,
