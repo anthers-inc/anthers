@@ -151,11 +151,9 @@ export default function ProjectPage() {
 								</Link>
 							</p>
 						)}
-						{(project.description || project.shortDescription) && (
+						{project.description && (
 							<div className="prose prose-sm max-w-none">
-								<Markdown remarkPlugins={[remarkGfm]}>
-									{project.description || project.shortDescription || ""}
-								</Markdown>
+								<Markdown remarkPlugins={[remarkGfm]}>{project.description}</Markdown>
 							</div>
 						)}
 					</>
@@ -212,11 +210,9 @@ export default function ProjectPage() {
 							action={<SaveButton projectId={project.id} />}
 						/>
 						{/* The sleeve notes, under the record rather than above it. */}
-						{(project.description || project.shortDescription) && (
+						{project.description && (
 							<div className="prose prose-sm max-w-none px-1">
-								<Markdown remarkPlugins={[remarkGfm]}>
-									{project.description || project.shortDescription || ""}
-								</Markdown>
+								<Markdown remarkPlugins={[remarkGfm]}>{project.description}</Markdown>
 							</div>
 						)}
 					</div>

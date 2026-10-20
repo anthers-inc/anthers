@@ -33,8 +33,8 @@ export default function ProjectCard({ project }: { project: Project }) {
 						{project.creator?.displayName || project.creator?.handle}
 					</span>
 				</p>
-				{project.shortDescription && (
-					<p className="text-sm text-base-content/70 line-clamp-2">{project.shortDescription}</p>
+				{project.description && (
+					<p className="text-sm text-base-content/70 line-clamp-2">{project.description}</p>
 				)}
 				<div className="flex items-center justify-between mt-auto pt-2">
 					<span className="badge badge-sm badge-outline gap-1">

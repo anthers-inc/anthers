@@ -761,7 +761,6 @@ export interface Project {
 	slug: string;
 	title: string;
 	description: string | null;
-	shortDescription: string | null;
 	coverImage: string | null;
 	pageConfig: Record<string, unknown> | null;
 	/**

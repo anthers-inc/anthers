@@ -115,7 +115,6 @@ export default function ProjectFormPage() {
 	const [projectSlug, setProjectSlug] = useState("");
 	const [slugManual, setSlugManual] = useState(false);
 	const [description, setDescription] = useState("");
-	const [shortDescription, setShortDescription] = useState("");
 	const [coverImage, setCoverImage] = useState("");
 	const [coverPreview, setCoverPreview] = useState<string | null>(null);
 	const [isPublished, setIsPublished] = useState(false);
@@ -157,7 +156,6 @@ export default function ProjectFormPage() {
 					title,
 					slug: projectSlug,
 					description,
-					shortDescription,
 					coverImage,
 					isPublished,
 				},
@@ -222,17 +220,6 @@ export default function ProjectFormPage() {
 					<p className="text-xs text-base-content/50 mt-1">
 						URL: /@{user?.handle ?? "you"}/{projectSlug || "..."}
 					</p>
-				</FormField>
-
-				<FormField label="Short Description">
-					<input
-						type="text"
-						className="input input-bordered w-full"
-						value={shortDescription}
-						onChange={(e) => setShortDescription(e.target.value)}
-						maxLength={300}
-						placeholder="A brief tagline for this project"
-					/>
 				</FormField>
 
 				<FormField label="Description">
