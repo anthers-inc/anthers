@@ -624,6 +624,12 @@ export interface WorkInput {
 	sourceUrl?: string;
 }
 
+/** One entry in the tag directory: a tag and how many released Works carry it. */
+export interface TagCount {
+	tag: string;
+	works: number;
+}
+
 /** The universal content unit — full detail shape (GET /posts/:slug). */
 export interface Post {
 	id: number;
