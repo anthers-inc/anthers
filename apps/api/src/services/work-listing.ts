@@ -82,6 +82,9 @@ export async function syncWorkListing(
 			slug: works.slug,
 			publicId: works.publicId,
 			releasedAt: works.releasedAt,
+			// The public listing carries the original release date when the Work has one, and
+			// `PublishableWork` requires the column here for the same reason as the rest.
+			originallyReleased: works.originallyReleased,
 			visibility: works.visibility,
 			takedownStatus: works.takedownStatus,
 			quarantineStatus: works.quarantineStatus,

@@ -24,6 +24,8 @@ export interface PublishableWork extends AccessibleWork {
 	slug: string;
 	publicId: number;
 	releasedAt: Date | null;
+	/** When the work first came out anywhere; null means it first came out here. */
+	originallyReleased: Date | null;
 	visibility: string;
 	/** Public credits; null/undefined treated as "no credits asserted". */
 	credits?: WorkCredit[] | null;
@@ -35,6 +37,7 @@ export interface WorkRecord {
 	title: string;
 	url: string;
 	releasedAt: string;
+	originallyReleased?: string;
 	description?: string;
 	access?: { state: "open" | "gated" };
 	credits?: Array<{
@@ -220,6 +223,12 @@ export function workToRecord(
 	// An empty string is not a value: writing `description: ""` into a public record says
 	// the creator wrote an empty description, where absence says they wrote none.
 	if (work.description) record.description = work.description;
+
+	// Absence says the work first came out here, which `releasedAt` already answers. The field
+	// is deliberately not nullable, so there is no way to write "asserted none" — absence is it.
+	if (work.originallyReleased) {
+		record.originallyReleased = work.originallyReleased.toISOString();
+	}
 
 	const confirmed = opts.confirmedCredits ?? new Set<string>();
 	const visibleCredits = (work.credits ?? [])
