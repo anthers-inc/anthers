@@ -45,7 +45,9 @@ test("a query with no name matches appends the slower body stage", async ({ page
 	// that silently changed.
 	await input(page).fill("free");
 	await expect(listbox(page).getByText("More Results")).toBeVisible();
-	await expect(listbox(page).getByText("Anyone can read this")).toBeVisible();
+	// A Work and its announcement share a title in the gauntlet fixture, so the same
+	// words legitimately appear twice, distinguished by their type chips.
+	await expect(listbox(page).getByText("Anyone can read this").first()).toBeVisible();
 });
 
 test("Tab cycles the type filter", async ({ page }) => {
