@@ -349,6 +349,19 @@ export interface WorkCaptionTrack {
 	cueCount?: number;
 }
 
+/**
+ * One item in a Work's preview set — a screenshot or a trailer shown on the locked page
+ * before a viewer unlocks it. `url` is the reachability-checked preview route, never a
+ * storage key. A trailer carries its caption tracks; a screenshot carries its alt text.
+ */
+export interface PreviewMediaItem {
+	id: number;
+	kind: "image" | "video";
+	alt: string;
+	url: string;
+	captions?: WorkCaptionTrack[];
+}
+
 /** A Work's type. `WORK_TYPES` in `@anthers/shared/content` is the authority on the list. */
 export type ContentType = WorkType;
 
@@ -437,6 +450,14 @@ export interface Work {
 	 * user gets `[]`, gated exactly beside `imageAlt`. Absent on other kinds.
 	 */
 	gallery?: string[];
+	/**
+	 * The Work's storefront preview set, in carousel order — screenshots and trailers shown
+	 * on the locked page (Parker, 2026-10-19). Absent on listing shapes, and empty on a kind
+	 * whose page has no preview support. Preview media is storefront chrome: it travels to
+	 * a locked viewer the Work itself is reachable by, and is never part of the Work's
+	 * published listing.
+	 */
+	previewMedia?: PreviewMediaItem[];
 	estimatedReadMinutes?: number | null;
 	/**
 	 * How many pages an ebook has, or 0.

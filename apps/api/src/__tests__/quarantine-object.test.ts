@@ -371,6 +371,11 @@ describe("The direct-upload door", () => {
 		expect(scannedObjectKind("video")).toBeNull();
 		expect(scannedObjectKind("audio")).toBeNull();
 		expect(scannedObjectKind("asset")).toBeNull();
+		// A trailer is a video (queued at attach) and a trailer caption is text (its parse
+		// is the ingest gate) — neither is an inline perceptual scan. A screenshot is one.
+		expect(scannedObjectKind("preview-video")).toBeNull();
+		expect(scannedObjectKind("preview-caption")).toBeNull();
+		expect(scannedObjectKind("preview-image")).toBe("gallery");
 		// ⭐ And an unrecognized media type IS scanned, which is the opposite direction from
 		// the ACL allowlist next door — failing closed means "withhold" for an ACL and
 		// "look" for detection.

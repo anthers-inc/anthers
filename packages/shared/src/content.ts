@@ -207,6 +207,29 @@ export function hasSourceSet(type: string): boolean {
 }
 
 /**
+ * The Work kinds whose storefront can carry preview media — screenshots and a trailer a
+ * locked viewer sees before buying (Parker, 2026-10-19).
+ *
+ * **This list is the only place the scope lives**, so another kind joins by adding its
+ * type here and deciding what its preview shape is. Text, audio, image and the bookshelf
+ * kinds are deliberately absent: their locked page has nothing a trailer would sell, and
+ * the absence is the correct rendering rather than a gap to fill.
+ */
+export const PREVIEW_MEDIA_WORK_TYPES = ["video", "game"] as const satisfies readonly WorkType[];
+
+/** Whether a Work of this kind may carry a preview media set. */
+export function supportsPreviewMedia(type: string): boolean {
+	return (PREVIEW_MEDIA_WORK_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * How many preview items a Work may carry, screenshots and trailers together. A dozen is
+ * enough for a storefront's first screen without asking a creator to curate a gallery, and
+ * small enough that the carousel's strip stays one row on a phone.
+ */
+export const MAX_PREVIEW_MEDIA = 12;
+
+/**
  * The Work types the Bookshelf lens holds — the book-like shelf, the single bookshelf
  * every written Work stands on (Parker, 2026-09-20): the *reading* experience is
  * different enough for `comic` to be its own Work type, but the shelf metaphor for

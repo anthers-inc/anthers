@@ -39,7 +39,14 @@ describe("upload ACL allowlist", () => {
 	});
 
 	it("keeps deliverables private", () => {
-		for (const type of ["video", "audio", "asset"]) {
+		for (const type of [
+			"video",
+			"audio",
+			"asset",
+			"preview-image",
+			"preview-video",
+			"preview-caption",
+		]) {
 			expect(aclForMediaType(type), type).toBe("private");
 		}
 	});
