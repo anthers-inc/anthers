@@ -112,6 +112,21 @@ test.describe("FAQ", () => {
 	});
 });
 
+test.describe("homepage reveal", () => {
+	// The hero is a `<header>` and the next band is the first `<section>`, so this needs no
+	// heading wording to find the hand-off. At 1440×1200 the hero fills the first screen and
+	// that section's top padding is already visible while its heading sits just below the
+	// fold — the display the scroll-triggered reveal left blank.
+	test("the first section after the hero is revealed on load, not on scroll", async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 1200 });
+		await page.goto("/");
+		await expect(page.locator("h1").first()).toBeVisible();
+
+		const reveal = page.locator("section").first().locator("[data-reveal]").first();
+		await expect(reveal).toHaveAttribute("data-revealed", "");
+	});
+});
+
 test.describe("release notes", () => {
 	// Presence-of-structure, not copy assertion: the page links back to the roadmap
 	// (the closing button), and every release in the data module renders on the page.

@@ -34,8 +34,9 @@
 // to Anthers (Root–Blossom, "+" beyond); ⚠️ a level is an amount and never a count of
 // anything, because there is no unit for it to count.
 //
-// Motion: content fades up on load (hero) and as it scrolls into view (sections),
-// via the shared <Reveal>; content cards get a gentle hover lift (`card-lift`).
+// Motion: content fades up on load (the hero and the first section after it) and as it
+// scrolls into view (the rest), via the shared <Reveal>; content cards get a gentle hover
+// lift (`card-lift`).
 // Both are motion-safe — a visitor who prefers reduced motion sees neither.
 
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
@@ -124,9 +125,11 @@ export default function ForUsersPage() {
 				</div>
 			</header>
 
-			{/* How it works — two products, direct creator support first */}
+			{/* How it works — two products, direct creator support first. Eager: the hero
+			    fills the first screen, so this heading sits just under the fold and the
+			    observer would leave its top padding showing as blank space. */}
 			<Section>
-				<Reveal>
+				<Reveal eager>
 					<Eyebrow>How it works</Eyebrow>
 					<H2>Support the creators you love, and grow the garden for all</H2>
 					<Lede>
