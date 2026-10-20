@@ -47,7 +47,15 @@ const API_ORIGIN =
 const WORK_PATH = /^\/works\/([^/]+)\/?$/;
 
 async function indexHtml(): Promise<string> {
-	return Bun.file(resolve(DIST, "index.html")).text();
+	const html = await Bun.file(resolve(DIST, "index.html")).text();
+	// Announce the browser session's API port, which the page has no other way to learn.
+	// `rpc.ts` reads this tag and falls back to the dev default of 8000 without it — so a
+	// missing tag points every SPA call at whatever is on 8000 instead of the session's API.
+	if (!API_PORT) return html;
+	return html.replace(
+		"</head>",
+		`<meta name="anthers-dev-api-port" content="${API_PORT}" />\n</head>`,
+	);
 }
 
 /**
