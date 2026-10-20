@@ -175,8 +175,9 @@ export default function ProjectPage() {
 			 * announcements about them.
 			 *
 			 * A Project whose members are ALL audio is a record, and gets rendered as one:
-			 * cover, Play, Shuffle, tracks in `sortOrder`. That column exists precisely
-			 * because "an album could not hold its tracks", and a grid of cards throws the
+			 * cover, Play, Shuffle, tracks in the Project's saved reading order — Manual's
+			 * drag order by default, or the mode its creator chose (2026-10-19). That
+			 * setting is why an album keeps its track order, and a grid of cards throws the
 			 * order away at the moment it matters most. Anything else keeps the grid —
 			 * a game Project holding a soundtrack is not an album, and turning it into a
 			 * track list would bury the game.

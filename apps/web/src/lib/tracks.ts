@@ -57,8 +57,9 @@ export function trackFromWork(work: WorkWithCreator, creator?: TrackCreator | nu
 /**
  * The Works of a list that are listened to, in the order given, as a queue.
  *
- * Order is the caller's — for a Project that is `project_items.sortOrder`, which is the
- * whole artifact of an EP and the reason that column exists.
+ * Order is the caller's — for a Project that is the Project's saved reading order: the
+ * sort its creator chose, or `project_items.sortOrder` under Manual. The album's track
+ * order is the artifact, which is why the Project carries that setting at all.
  */
 export function tracksFrom(works: WorkWithCreator[], creator?: TrackCreator | null): QueueTrack[] {
 	return works.filter((w) => isListened(w.type)).map((w) => trackFromWork(w, creator));
