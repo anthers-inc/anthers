@@ -70,7 +70,6 @@ import {
 	isReviewVerdict,
 	processingFor,
 	REVIEW_MAX,
-	REVIEW_MIN,
 	REVIEW_WINDOWS,
 	recommendedPercent,
 	reviewWindowSince,
@@ -1088,11 +1087,12 @@ const createCommentSchema = z.object({
 	replyTo: z.number().int().positive().optional(),
 });
 /**
- * A review: a verdict AND written text. The minimum is deliberately low — it's a
- * blunt instrument and "lol" clears it either way. The point of requiring text
- * isn't to filter by length, it's that a written verdict gives a user something
- * to weigh and a moderator something to act on, where a bare verdict is
- * unmoderatable by construction. Plain text, no markup, so no sanitizer.
+ * A review: a verdict, and optionally the words that explain it.
+ *
+ * ⭐ **Text is optional** (Parker, 2026-10-19). A verdict alone is a review: it
+ * counts in the Work's recommended share and Recent share, and it simply does
+ * not appear in the public list, where only reviews with text belong. Plain
+ * text, no markup, so no sanitizer.
  *
  * ⚠️ The accepted verdicts come from `REVIEW_VERDICTS` rather than being spelled
  * here, so what the API accepts and what the published record may carry cannot
@@ -1100,7 +1100,7 @@ const createCommentSchema = z.object({
  */
 const createReviewSchema = z.object({
 	verdict: z.string().refine(isReviewVerdict, "A review recommends the work or does not"),
-	body: z.string().trim().min(REVIEW_MIN, "Please say a little about why").max(REVIEW_MAX),
+	body: z.string().trim().max(REVIEW_MAX).optional(),
 });
 
 const createAssetSchema = z.object({
@@ -3493,6 +3493,12 @@ const contentRoutes = new Hono()
 			// reason they're excluded from the aggregate — this is a public read. Blocked
 			// pairs are withheld for a different reason: a review carries a name and words,
 			// so it is a place two people meet.
+			//
+			// ⭐ **A textless review counts but does not list** (Parker, 2026-10-19). The
+			// aggregate above includes every visible verdict; here only rows with words
+			// appear, because a list of bare verdicts is nothing a reader can read. New
+			// writes normalize whitespace-only text to NULL, and the trim guards rows
+			// written outside that path.
 			const reviewRows = await db
 				.select({
 					id: reviews.id,
@@ -3510,6 +3516,7 @@ const contentRoutes = new Hono()
 					and(
 						eq(reviews.workId, work.id),
 						visibleReview,
+						sql`coalesce(btrim(${reviews.body}), '') <> ''`,
 						notBlockedBy(currentUserId, reviews.userId),
 						// A suspended reviewer's words go with the rest of their account;
 						// listed beside the block filter because both answer "who may meet
@@ -3552,9 +3559,10 @@ const contentRoutes = new Hono()
 				},
 				userVerdict,
 				userReview,
-				// `body` is null on rows written before reviews required text. They still
-				// render and still count; the client shows the verdict without a quote. Newest
-				// first at this layer so Helpful-first and Newest-first are the CLIENT's two
+				// Every listed row carries text — the query above excludes a verdict left on its
+				// own — so `body` reaches the client as words rather than an empty quote. The
+				// fallback is for the type, not for a shape the query can produce. Newest first
+				// at this layer so Helpful-first and Newest-first are the CLIENT's two
 				// presentations of one payload rather than two queries that could disagree.
 				reviews: reviewRows
 					// The raw address stays in the row's own column; the payload carries the link
@@ -3590,6 +3598,10 @@ const contentRoutes = new Hono()
 		if (unwritable) return c.json(unwritable.body, unwritable.status);
 
 		const { verdict, body } = c.req.valid("json");
+		// A textless review stores NULL rather than "", the same absence a record carries:
+		// an empty string would say the reviewer wrote nothing, where NULL says they left
+		// the words out. Editing one to add text fills it in place.
+		const bodyText = body?.trim() || null;
 		// The conflict branch sets `verdict` and `body` and nothing else — notably not
 		// `moderationStatus`. Re-reviewing changes the verdict and the words on a hidden
 		// row without resurrecting it, so a user can't un-hide their own review by
@@ -3605,10 +3617,10 @@ const contentRoutes = new Hono()
 			.limit(1);
 		const [review] = await db
 			.insert(reviews)
-			.values({ userId: user.id, workId: work.id, verdict, body: body.trim() })
+			.values({ userId: user.id, workId: work.id, verdict, body: bodyText })
 			.onConflictDoUpdate({
 				target: [reviews.userId, reviews.workId],
-				set: { verdict, body: body.trim() },
+				set: { verdict, body: bodyText },
 			})
 			.returning();
 

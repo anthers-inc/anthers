@@ -881,13 +881,16 @@ export interface RemovedComment {
 /** What a thread is made of: comments, and the gaps removed ones left above their replies. */
 export type ThreadComment = Comment | RemovedComment;
 
-/** One written review: a score plus the words that justify it. */
+/** One written review: a verdict and the words that explain it. */
 export interface Review {
 	id: number;
 	userId: number;
 	/** `recommended` or `not-recommended`. An open set — render an unknown value as-is. */
 	verdict: string;
-	/** "" for rows written before reviews required text — render the verdict alone. */
+	/**
+	 * The reviewer's words. Always present here: only reviews with text are listed, and a
+	 * verdict left on its own counts in the aggregate without appearing in this array.
+	 */
 	body: string;
 	/**
 	 * The review's public record link — the record's own address on Taproot, the form a

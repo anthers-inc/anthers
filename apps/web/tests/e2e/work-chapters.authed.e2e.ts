@@ -34,7 +34,6 @@
  * what makes a persistent review row acceptable here.
  */
 import { mediaFixtureWork } from "@anthers/db/media-fixture";
-import { REVIEW_MIN } from "@anthers/shared/content";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
@@ -175,7 +174,7 @@ test("a review's timestamp is a link that starts the bar at the moment it names"
 
 	// The walker's own review, re-posted over its previous self on every run.
 	await page.getByRole("button", { name: "Recommend", exact: true }).click();
-	const body = `Watch from 0:02 on — you're welcome. ${"x".repeat(REVIEW_MIN)}`;
+	const body = "Watch from 0:02 on. You're welcome.";
 	await page.locator("textarea").fill(body);
 	await page.getByRole("button", { name: "Post review" }).click();
 
