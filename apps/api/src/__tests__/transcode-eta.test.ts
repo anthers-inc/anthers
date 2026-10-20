@@ -4,7 +4,11 @@
  * job writes never climbs.
  */
 import { describe, expect, it } from "bun:test";
-import { createEtaClamp, remainingEncodeSeconds } from "../jobs/transcode-eta.js";
+import {
+	createEtaClamp,
+	remainingEncodeSeconds,
+	remainingSharedPassSeconds,
+} from "../jobs/transcode-eta.js";
 
 const FROM_1080 = [1080, 720, 480];
 
@@ -24,6 +28,21 @@ describe("remainingEncodeSeconds", () => {
 	it("has nothing to say before ffmpeg reports a speed", () => {
 		expect(remainingEncodeSeconds(FROM_1080, 0, 0, 60, 0)).toBeNull();
 		expect(remainingEncodeSeconds(FROM_1080, 0, 0, 0, 1)).toBeNull();
+	});
+});
+
+describe("remainingSharedPassSeconds", () => {
+	it("counts only the source left, because every output shares the one timeline", () => {
+		// Halfway through a minute at realtime: 30 s, whatever the number of rungs.
+		expect(remainingSharedPassSeconds(30, 60, 1)).toBe(30);
+		// A minute left of source at twice realtime: 30 s of wall time.
+		expect(remainingSharedPassSeconds(30, 60, 2)).toBe(15);
+		expect(remainingSharedPassSeconds(60, 60, 2)).toBe(0);
+	});
+
+	it("has nothing to say before ffmpeg reports a speed", () => {
+		expect(remainingSharedPassSeconds(0, 60, 0)).toBeNull();
+		expect(remainingSharedPassSeconds(0, 0, 1)).toBeNull();
 	});
 });
 
