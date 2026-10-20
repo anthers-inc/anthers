@@ -44,6 +44,22 @@ describe("workPublicIdsFromBody", () => {
 		expect(workPublicIdsFromBody("page /works/123456-title and /works/2")).toEqual([]);
 	});
 
+	it("reads the trailing publicId even when the slug carries its own digits", () => {
+		// A slug is free text, and `top-1000000-games` is an ordinary one. The id is the
+		// run at the end of the address, never an earlier run inside the slug.
+		expect(workPublicIdsFromBody("/works/top-1000000-games-123456789")).toEqual([123456789]);
+		expect(workPublicIdsFromBody("https://anthers.org/works/2026-10-19-123456789")).toEqual([
+			123456789,
+		]);
+		expect(workPublicIdsFromBody("/works/my-game-123456789/")).toEqual([123456789]);
+	});
+
+	it("reads two links written back to back without whitespace", () => {
+		expect(
+			workPublicIdsFromBody("/works/first-123456789,/works/second-987654321"),
+		).toEqual([123456789, 987654321]);
+	});
+
 	it("ignores another site's path that happens to carry /works", () => {
 		expect(
 			workPublicIdsFromBody("https://example.com/works/something-123456789 and evil-anthers.org/x"),
