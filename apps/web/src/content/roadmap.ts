@@ -95,6 +95,12 @@ export interface LaunchedItem {
 	quarter: string;
 	note?: string;
 	doc?: DocRef;
+	/**
+	 * The wiki roadmap lane this goal belongs to, spelled exactly as `Anthers Roadmap.md`
+	 * spells its heading. `roadmap.test.ts` checks every one against the vault when it is
+	 * present, and the release notes link a shipped goal at that lane's anchor.
+	 */
+	lane?: string;
 }
 
 export interface UnbuiltItem {
@@ -104,6 +110,8 @@ export interface UnbuiltItem {
 	bucket: "active" | "planned";
 	note?: string;
 	doc?: DocRef;
+	/** See `LaunchedItem.lane`. */
+	lane?: string;
 }
 
 export type RoadmapItem = LaunchedItem | UnbuiltItem;
@@ -313,6 +321,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						note: "The reading on the dashboard, the meter in the renewal, and the copy say the ruled shape.",
+						lane: "Creator Storage Billing",
 						doc: { id: "31.04", title: "How Much Space Your Work Takes" },
 					},
 					{
@@ -367,6 +376,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						bucket: "launched",
 						quarter: "Q4 2026",
 						note: "No analytics service, no cookies, and no IP address ever enters the record.",
+						lane: "First-Party Traffic Analytics",
 					},
 					{
 						id: "notifications",
@@ -376,6 +386,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						note: "The feed, bell, per-group choices and unsubscribe are new. Money stays as receipts.",
+						lane: "Notifications",
 					},
 					{
 						id: "custom-pages",
@@ -561,6 +572,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
 						doc: { id: "32.02", title: "Designing Your Badges" },
+						lane: "Creator Badges & the Badge Maker",
 					},
 					{
 						id: "directing",
@@ -898,6 +910,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						bucket: "launched",
 						quarter: "Q4 2026",
 						doc: { id: "83.02", title: "Checks That Can Actually Fail" },
+						lane: "Observability, Alerting & Rate Limiting",
 					},
 				],
 			},

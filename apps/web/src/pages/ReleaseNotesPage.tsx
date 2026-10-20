@@ -35,7 +35,7 @@ import { useLocation } from "@anthers/web-shared/router";
 import { useEffect } from "react";
 import { RELEASE_NOTES, type ReleaseNotesEntry } from "../content/release-notes";
 import { allItems } from "../content/roadmap";
-import { WIKI_ROADMAP_URL } from "../lib/wiki";
+import { WIKI_ROADMAP_URL, wikiAnchor } from "../lib/wiki";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -212,9 +212,8 @@ function ReleaseBlock({ release, first }: { release: ReleaseNotesEntry; first: b
 				</ul>
 
 				{/* The roadmap items this release moved to launched, named so the release and the
-				    roadmap tell one story. Each chip lands on the canonical roadmap at the wiki;
-				    the vault roadmap organizes its work by lane and milestone rather than by
-				    goal card, so there is no per-goal anchor to carry across. */}
+				    roadmap tell one story. A chip lands on the lane's heading in the wiki roadmap
+				    through `wikiAnchor`; an item that names no lane falls back to the page. */}
 				{release.roadmapIds && release.roadmapIds.length > 0 && (
 					<div className="mt-6 flex flex-wrap gap-2">
 						{release.roadmapIds.map((id) => {
@@ -223,7 +222,9 @@ function ReleaseBlock({ release, first }: { release: ReleaseNotesEntry; first: b
 							return (
 								<a
 									key={id}
-									href={WIKI_ROADMAP_URL}
+									href={
+										item.lane ? `${WIKI_ROADMAP_URL}#${wikiAnchor(item.lane)}` : WIKI_ROADMAP_URL
+									}
 									className="inline-flex items-center rounded-full border border-base-content/15 px-3 py-1 text-xs text-base-content/60 transition-colors hover:border-primary/40 hover:text-primary"
 								>
 									{item.title}
