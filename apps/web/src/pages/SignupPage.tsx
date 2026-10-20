@@ -3,28 +3,29 @@
 // The Support page (route: /signup) — the middle of the funnel.
 //
 // Its job is to explain how support works and then open a door: a free account, or a
-// monthly amount pointed at Anthers and at creators. It is NOT a report on what a user
-// already holds — that is /badges, and conflating the two is what the previous
-// revision did.
+// monthly amount pointed at Anthers. It is NOT a report on what a user already holds —
+// that is /badges, and conflating the two is what the previous revision did.
 //
 // The page is a guided sequence, and the order is the argument:
 //
 //   0. **Join.** The five free inclusions as an icon row, then the signup control — an
 //      address or a Bluesky handle, on a tab switcher — before the page asks for anything
-//      at all. Two doors into the optional half close the section.
-//   1. What support for a CREATOR does, with its breakdown, ending in a creator search.
-//   2. What support for ANTHERS does, with the same breakdown, ending in a yes/no.
-//   …then the one place it all adds up, with the same signup control again.
+//      at all.
+//   1. What support for ANTHERS does, with its Badge ladder and its breakdown.
+//   …then the one place it all adds up.
 //
-// ⭐ **The first section was rebuilt on 2026-08-23, and three of its changes are about
-// how the section is READ rather than what it claims.** The inclusions were four bordered
+// ⚠️ **The creator ask left this page on 2026-10-19** (Parker). It was step 1 — a fee
+// breakdown and a creator finder — and a creator's own page has priced its Badge ladder
+// since #544, so the finder was a second, narrower way to do what the creator's page
+// already does. The page asks one optional question now.
+//
+// ⭐ **The first section was rebuilt on 2026-08-23, and two of its changes are about how
+// the section is READ rather than what it claims.** The inclusions were four bordered
 // cards sitting directly above the bordered signup card, so the eye could not tell the
 // list of what you get from the thing you do about it — they are an icon row now, the
 // shape /about used for its governance facts. The Bluesky door was a divider and a second
 // button under the email field, which made it read as an afterthought rather than as the
-// other half of one choice. And the two paragraphs describing where a monthly amount can
-// point are now buttons that scroll to the section that asks for it, so a user does not
-// have to hold a description in their head for two screens before meeting its control.
+// other half of one choice.
 //
 // 🚨 **Signing up moved to the TOP on 2026-08-22, and it moved for a reason about how the
 // page is read rather than about what it says.** The signup control used to live only in
@@ -47,11 +48,12 @@
 // forever" and the cap to be co-present in the same breath; this page now does it in the
 // first thing anybody sees.
 //
-// 🚨 **The creator ask leads and the Anthers ask follows it, and that is a product
-// decision rather than a layout one.** Support for Anthers buys Public Access and nothing
-// else; early visitors arrive at the invitation of a creator already here, and with few
-// creators there is little Public Access to want yet. Reordering these two is a change to
-// what the funnel is for — see the same note on `/`.
+// 🚨 **The creator ask led this page until 2026-10-19, and its removal is a product
+// decision rather than a layout one** (Parker). Support for Anthers buys Public Access
+// and nothing else, so the page asks its one optional question once. Creator support
+// still leads the funnel — a visitor meets the creator before this page — and what
+// changed is where backing begins: a creator's page, not a finder here. Reordering the
+// remaining ask is still a change to what the funnel is for — see the same note on `/`.
 //
 // Each step that asks something answers it in place — a `SectionEcho` under the controls,
 // defaulting to *nothing chosen* — and the closing section adds the page up once. That
@@ -64,15 +66,9 @@
 // band) — see the note beside `SURFACE_BAND` below for why it composes them itself rather
 // than sharing the marketing `<Section>`.
 //
-// The question the page asks is *who* and *which*, never *type a number*: a creator pick
-// is follow-or-back, and a back is one of the Badges on the ladder the creator actually
-// set — the chips on a card are that ladder, each billing the amount printed beside it.
-// The amount is therefore a resolved rung's threshold, never a free-form figure, and
-// asking it costs no information: the creator fixed their own prices.
-//
-// ⚠️ The chips replaced a single "Back" button on 2026-10-17, whose charge was the Public
-// Access entry price whatever ladder the creator had set. Backing still follows first
-// (a back adds the follow), and unbacking keeps the follow, as Back behaved.
+// The question the page asks is *which rung*, never *type a number*: the ladder is a
+// comparison of five Badges and the pick is one of them, so the amount is a rung's
+// threshold rather than a free-form figure.
 //
 // ⚠️ PROPOSAL vs. SHIPPED. Public Access is a proposal — the working plan is the vault's
 // `90-99 Agents/Transient/Public Access Model Revamp 20260811`, and where this disagrees
@@ -82,18 +78,16 @@
 // as of 2026-08-12 and are now read rather than typed.
 //
 // What is wired to real data, and what is not:
-//   • The creator finder is REAL — `GET /api/accounts/creators`, whose `mediums` come from
-//     what each creator has actually released rather than anything they declare.
 //   • Support for ANTHERS commits for real, through the same preview + modal ceremony the
 //     inline post unlock uses.
-//   • Following commits for real.
-//   • Support for a CREATOR rides on the SAME subscription as the Anthers one — ONE ITEM
-//     PER DESTINATION, itemized, so the invoice names them. ⚠️ **Never collapse these back
+//   • A pending signup created before 2026-10-19 can still carry creator picks. `/finish`
+//     commits those on the SAME subscription as the Anthers one — ONE ITEM PER
+//     DESTINATION, itemized, so the invoice names them. ⚠️ **Never collapse those back
 //     into a quantity**: a quantity can only express whole multiples of one price, and
 //     amounts are free to the cent. The split rides in subscription metadata; see
 //     `anthersSupportFromSub` in services/billing.ts.
 //   • Support is the subscription and only the subscription — there is no second, one-off
-//     way to top the creator balance up, so this page is the whole of how money is given.
+//     way to top a creator balance up.
 
 import anthersMark from "@anthers/brand/logo/web/mark-60.png";
 import type { Badge, BadgeKey } from "@anthers/shared/constants";
@@ -106,7 +100,6 @@ import {
 	heldBadgeLabel,
 	heldBadgeName,
 	MERCH_BADGE_DISCOUNT,
-	PUBLIC_ACCESS_PRICE,
 	stickerBudgetFor,
 	storageGibFor,
 	thresholdForBadge,
@@ -115,34 +108,22 @@ import {
 } from "@anthers/shared/constants";
 import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
-import {
-	directedAmountFor,
-	EMPTY_PICKS,
-	normalizePicks,
-	type SignupBadgePick,
-	type SignupPicks,
-	supportTotal,
-} from "@anthers/shared/signup";
+import { EMPTY_PICKS, normalizePicks, type SignupPicks } from "@anthers/shared/signup";
 import { solve } from "@anthers/shared/signup-pow";
 import { useAuth } from "@anthers/web-shared/auth";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
 import { AnthersBadgeMark } from "@anthers/web-shared/economics";
-import { CreatorBadgeMark } from "@anthers/web-shared/economics/CreatorBadgeMark";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { usePageTitle } from "@anthers/web-shared/page-title";
-import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, useLocation, useNavigate } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import type { PublicUser } from "@anthers/web-shared/types";
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import {
 	ArrowDownTrayIcon,
 	BanknotesIcon,
-	HeartIcon,
 	PlayCircleIcon,
 	ServerStackIcon,
 	ShieldCheckIcon,
-	SparklesIcon,
 } from "@heroicons/react/24/outline";
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import BlueskyMark from "../components/auth/BlueskyMark";
@@ -172,20 +153,6 @@ import { useTimePoolFund } from "../lib/time-pool-fund";
  */
 
 /**
- * How a lone directed amount — a fan backing a creator and nothing else on their charge —
- * itemizes, at the worst case.
- *
- * 🚨 **Constant-derived, deliberately** — these are the splits of the DIRECTED DEFAULT, a
- * charge the commit site builds (`directed` below), and the "one list, one total" rule
- * binds every displayed dollar to the dollar charged (`signup-total.test.ts` carries the
- * incident that paid for it). The Public Access price and the directed default happen to
- * be one number today; they are different facts, and only the ladder claim — what removes
- * the streaming limit — moved to the rows.
- */
-const CREATOR_WORST_CASE_FEE = cardFeeDisplay(PUBLIC_ACCESS_PRICE);
-const CREATOR_WORST_CASE_NET = PUBLIC_ACCESS_PRICE - CREATOR_WORST_CASE_FEE;
-
-/**
  * What the free creator allowance holds, in hours of video — **derived, never typed.**
  *
  * A creator's storage carries the master they uploaded plus the whole AV1 ladder Anthers
@@ -203,18 +170,6 @@ const CREATOR_WORST_CASE_NET = PUBLIC_ACCESS_PRICE - CREATOR_WORST_CASE_FEE;
  */
 const FREE_VIDEO_HOURS = Math.floor(FREE_STORAGE_GIB / storedGibPerSourceHour("1080p", 30, "h264"));
 
-/** How many creators a shuffle draws. Two rows at most, at every breakpoint. */
-const HANDFUL = 6;
-
-/** Work types, in the shape a user recognizes. Keys are `works.type` values. */
-const MEDIUMS = [
-	{ key: "game", label: "Games" },
-	{ key: "video", label: "Video" },
-	{ key: "music", label: "Music" },
-	{ key: "audio", label: "Audio" },
-	{ key: "text", label: "Writing" },
-] as const;
-
 /** Picks survive a trip through signup, so nobody loses their choices to a redirect. */
 const PICKS_KEY = "anthers_signup_picks";
 
@@ -231,10 +186,10 @@ const serif = { fontFamily: FONTS.fraunces };
 //
 // ⚠️ Why not the shared <Section> itself: this page is deliberately wider (88rem, not
 // Section's 72rem — Parker, 2026-08-23), its sections are spacers that carry their own
-// `id`s (the doors up top scroll to them) and their own spacing, and its Reveal-wrapped
-// steps sit INSIDE those spacers — Section would paint its band on a wrapper the page's
-// own structure doesn't own. Composing the two paints directly is the smaller change, and
-// the tint strings above are what keeps it honest to the shared look.
+// `id`s and their own spacing, and its Reveal-wrapped steps sit INSIDE those spacers —
+// Section would paint its band on a wrapper the page's own structure doesn't own.
+// Composing the two paints directly is the smaller change, and the tint strings above
+// are what keeps it honest to the shared look.
 const SURFACE_BAND = "bg-base-200/70";
 const SURFACE_PLAIN = "";
 
@@ -269,54 +224,21 @@ export function anthersDollarsOf(badge: string | null): number {
 		: 0;
 }
 
-function initialsOf(name: string): string {
-	return (
-		name
-			.split(/\s+/)
-			.map((w) => w[0])
-			.join("")
-			.replace(/[^a-z]/gi, "")
-			.slice(0, 2)
-			.toLowerCase() || "an"
-	);
-}
-
-/** A creator's display name, falling back to the handle that always exists. */
-function nameOf(creator: PublicUser): string {
-	return creator.displayName || creator.handle;
-}
-
-/** The step marker — numbered because the page really is a sequence. */
-function StepNumber({ n }: { n: number }) {
-	return (
-		<span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-content">
-			{n}
-		</span>
-	);
-}
-
 /**
- * A step's heading block.
+ * A section's heading block.
  *
  * Centered, and in the Fraunces display face at the marketing scale, because this page
  * sits in the same lineup as /for-users and /about and was reading as a different site:
  * bold sans headings hard against the left edge, while every neighboring page centers a
  * light serif inside a capped column.
+ *
+ * ⚠️ **Unnumbered since 2026-10-19.** The page carried numbered step markers while it
+ * asked two optional questions; with the creator step gone there is one, and a lone "1"
+ * would number a sequence of one.
  */
-function StepHeading({
-	n,
-	title,
-	children,
-}: {
-	n: number;
-	title: React.ReactNode;
-	children?: React.ReactNode;
-}) {
+function StepHeading({ title, children }: { title: React.ReactNode; children?: React.ReactNode }) {
 	return (
 		<div className="text-center">
-			<div className="mb-4 flex justify-center">
-				<StepNumber n={n} />
-			</div>
 			<h2 style={serif} className="text-balance text-3xl font-light leading-tight sm:text-4xl">
 				{title}
 			</h2>
@@ -344,10 +266,13 @@ const SEGMENT_BG: Record<Segment["tone"], string> = {
 };
 
 /**
- * Where a month's support goes — one component, used twice.
+ * Where a month's support goes.
  *
- * The two destinations are the same picture with different segments, which is what makes
- * the contrast legible without inventing a second visual language for it.
+ * ⚠️ **One component used twice until 2026-10-19.** It drew a creator's split and
+ * Anthers' own as the same picture with different segments, which is what made the
+ * contrast legible without inventing a second visual language. The Anthers section is the
+ * only caller now, and the shape stays because the breakdown still swaps between a paid
+ * reading and a free one.
  */
 function SupportBreakdown({
 	segments,
@@ -1236,254 +1161,6 @@ function BadgeCards({
 	);
 }
 
-/* ── Step 4 · the creator finder ────────────────────────────────────────────── */
-
-/**
- * Search by name, or tap a medium for a handful.
- *
- * The medium chips SHUFFLE rather than filter: tapping one draws a few creators who work
- * in it, and tapping it again draws different ones. A directory has to be complete before
- * it's worth browsing, and at launch it won't be — a handful that changes always reads as
- * discovery instead.
- */
-function CreatorFinder({
-	creators,
-	loading,
-	picks,
-	onToggle,
-}: {
-	creators: PublicUser[];
-	loading: boolean;
-	picks: Picks;
-	onToggle: (handle: string, kind: "follow" | "badge", badgeId?: number) => void;
-}) {
-	const [query, setQuery] = useState("");
-	const [medium, setMedium] = useState<string | null>(null);
-	const [shuffle, setShuffle] = useState(0);
-
-	const shown = useMemo(() => {
-		const q = query.trim().toLowerCase();
-		if (q) {
-			return creators
-				.filter(
-					(c) =>
-						c.handle.toLowerCase().includes(q) || (c.displayName ?? "").toLowerCase().includes(q),
-				)
-				.slice(0, HANDFUL);
-		}
-		const pool = medium
-			? creators.filter((c) => (c.mediums ?? []).includes(medium))
-			: creators.slice();
-		// Fisher–Yates, so tapping the same medium again genuinely redraws rather than
-		// reordering the same six. `shuffle` is a dependency purely to force the redraw.
-		void shuffle;
-		for (let i = pool.length - 1; i > 0; i--) {
-			const j = Math.floor(Math.random() * (i + 1));
-			[pool[i], pool[j]] = [pool[j], pool[i]];
-		}
-		return pool.slice(0, HANDFUL);
-	}, [creators, query, medium, shuffle]);
-
-	return (
-		<div className="mt-6">
-			<label className="input input-bordered mx-auto flex max-w-md items-center gap-2 rounded-full">
-				<svg
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					strokeWidth="2.2"
-					strokeLinecap="round"
-					className="h-4 w-4 shrink-0 opacity-40"
-					aria-hidden="true"
-				>
-					<circle cx="11" cy="11" r="6" />
-					<path d="M20 20l-4.5-4.5" />
-				</svg>
-				<input
-					type="search"
-					className="grow"
-					placeholder="Search creators by name"
-					aria-label="Search creators by name"
-					value={query}
-					onChange={(e) => setQuery(e.target.value)}
-				/>
-			</label>
-
-			<div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-				{MEDIUMS.map((m) => (
-					<button
-						key={m.key}
-						type="button"
-						className={`btn btn-xs rounded-full ${medium === m.key ? "btn-neutral" : "btn-outline"}`}
-						aria-pressed={medium === m.key}
-						onClick={() => {
-							setQuery("");
-							setMedium(m.key);
-							setShuffle((n) => n + 1);
-						}}
-					>
-						{m.label}
-					</button>
-				))}
-				<span className="text-xs text-base-content/40">
-					{medium ? "Tap again for a different handful." : "Tap one for a handful."}
-				</span>
-			</div>
-
-			<div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-				{loading ? (
-					Array.from({ length: 3 }, (_, i) => (
-						<div
-							// biome-ignore lint/suspicious/noArrayIndexKey: placeholders with no identity of their own, replaced wholesale when the list loads.
-							key={`c-skeleton-${i}`}
-							className="h-28 animate-pulse rounded-xl bg-base-200"
-						/>
-					))
-				) : shown.length === 0 ? (
-					<p className="col-span-full rounded-xl border border-dashed border-base-content/15 p-5 text-center text-sm text-base-content/50">
-						{query
-							? "No one by that name yet. Try a medium, or search a different way."
-							: "No creators here yet. They're on their way."}
-					</p>
-				) : (
-					shown.map((creator) => {
-						const followed = picks.follow.includes(creator.handle);
-						const backingPick: SignupBadgePick | undefined = picks.badges.find(
-							(pick) => pick.handle === creator.handle,
-						);
-						// The ladder as the listing shipped it, ascending by threshold; a creator
-						// who has configured none offers no chips — there is nothing to back yet,
-						// and the follow stands on its own.
-						const ladder = creator.badges ?? [];
-						return (
-							<div
-								key={creator.id}
-								className={`rounded-xl border p-3.5 transition-colors ${
-									followed || backingPick
-										? "border-primary/40 bg-primary/5"
-										: "border-base-content/10 bg-base-100"
-								}`}
-							>
-								<div className="flex items-center gap-2.5">
-									{creator.avatar ? (
-										<img
-											src={creator.avatar}
-											alt=""
-											className="h-9 w-9 shrink-0 rounded-full object-cover"
-										/>
-									) : (
-										<span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-primary-content">
-											{initialsOf(nameOf(creator))}
-										</span>
-									)}
-									<span className="min-w-0">
-										<Link
-											to={profileUrl(creator.handle)}
-											className="block truncate text-sm font-bold hover:underline"
-										>
-											{nameOf(creator)}
-										</Link>
-										<span className="block truncate text-xs text-base-content/45">
-											{(creator.mediums ?? [])
-												.map((m) => MEDIUMS.find((x) => x.key === m)?.label ?? m)
-												.slice(0, 2)
-												.join(" · ") || displayHandle(creator.handle)}
-										</span>
-									</span>
-								</div>
-								<div className="mt-3 flex flex-wrap gap-2">
-									<button
-										type="button"
-										className={`btn btn-xs rounded-full ${followed ? "btn-outline btn-primary" : "btn-outline"}`}
-										aria-pressed={followed}
-										onClick={() => onToggle(creator.handle, "follow")}
-									>
-										{followed ? "✓ Following" : "Follow"}
-									</button>
-									{/* ⭐ The backing chips are the creator's own ladder, each rung as
-									    the image and the amount the creator set — descriptions stay on
-									    the profile, and the hover states what the rung carries. A lit
-									    chip behind a rung-id-less pick is a restored handle-only pick
-									    reading as the ladder's bottom rung, which is also how the
-									    charge resolves it. */}
-									{ladder.map((rung, i) => {
-										const active = backingPick
-											? backingPick.badgeId === null
-												? i === 0
-												: backingPick.badgeId === rung.id
-											: false;
-										// What the hover states: the perks the rung was set up with,
-										// else the rung's own words, else nothing — an empty overlay
-										// is not a better one.
-										const perkLines =
-											rung.perks.length > 0
-												? rung.perks
-												: rung.description
-													? [rung.description]
-													: [];
-										return (
-											<div key={rung.id} className="relative group/badge-chip">
-												<button
-													type="button"
-													className={`btn btn-xs rounded-full gap-1.5 ${active ? "btn-primary" : "btn-outline"}`}
-													aria-pressed={active}
-													aria-label={`${rung.label} at ${amountLabel(Number(rung.threshold))} a month`}
-													onClick={() => onToggle(creator.handle, "badge", rung.id)}
-												>
-													<CreatorBadgeMark
-														badgeId={rung.id}
-														index={i}
-														label={rung.label}
-														art={{
-															hasArt: rung.hasArt,
-															artShape: rung.artShape,
-															artColor: rung.artColor,
-														}}
-														size="h-5 w-5"
-													/>
-													{amountLabel(Number(rung.threshold))}
-												</button>
-												{perkLines.length > 0 && (
-													<div
-														role="tooltip"
-														className="pointer-events-none invisible absolute bottom-full left-1/2 z-30 mb-2 w-60 -translate-x-1/2 rounded-xl border border-base-content/10 bg-base-100 p-3 text-left text-xs text-base-content/70 opacity-0 shadow-lg transition-opacity group-hover/badge-chip:visible group-hover/badge-chip:opacity-100 group-has-[:focus-visible]/badge-chip:visible group-has-[:focus-visible]/badge-chip:opacity-100"
-													>
-														<strong className="text-base-content">
-															{rung.label} · {amountLabel(Number(rung.threshold))}/mo
-														</strong>
-														<ul className="mt-1.5 space-y-0.5">
-															{perkLines.map((perk) => (
-																<li key={perk}>{perk}</li>
-															))}
-														</ul>
-													</div>
-												)}
-											</div>
-										);
-									})}
-								</div>
-							</div>
-						);
-					})
-				)}
-			</div>
-			{/* ⚠️ This said "how much each creator gets is a question for once your account
-			    exists — right now it's just who", which the echo below it contradicts: a
-			    pick adds a real priced line. It then said "starts at $3 a month each", which
-			    the chips above it contradict the same way: the amounts on the chips are the
-			    rungs the creator set, not one shared entry price. The sentence's remaining
-			    jobs are the two the cards don't say — picking starts a backing, and the
-			    amount is not final. 🚨 Every dollar this page ever charges stays
-				constant-derived (see `CREATOR_WORST_CASE_*` above) or resolved from a ladder
-				the listing itself shipped — never typed here. */}
-			<p className="mt-4 text-center text-xs text-base-content/45">
-				Picking a Badge starts backing that creator at the amount on it; you can raise it or lower
-				it whenever you like once your account exists.
-			</p>
-		</div>
-	);
-}
-
 /* ── Per-section feedback, and the summary that adds it up ──────────────────── */
 
 interface PickLine {
@@ -1529,11 +1206,9 @@ const ANTHERS_ECHO_SIZERS = RUNG_AMOUNTS.filter((amount) => amount > 0).map(anth
  * Access is unlimited. Saying it once, in the reading the chosen rung actually has, fixes
  * both: the list is the same length at every rung, and the sentence is true at each of them.
  *
- * ⚠️ **It stays FIRST, ahead of the creators, even though the page asks about creators
- * first.** The two support lines were deliberately ordered to match the steps above them on
- * 2026-08-17, and this row is the exception because it is not only the Anthers answer — it is
- * the account, which exists before either step is asked. Free carries no `key`, since the one
- * thing a user cannot remove is having an account.
+ * ⚠️ **It stays FIRST, ahead of anything else a list might later add.** It is the account,
+ * which exists before any ask, so it is the one row that is not an answer to a question —
+ * Free carries no `key`, since the one thing a user cannot remove is having an account.
  */
 function accountLineFor(amount: number): PickLine {
 	if (amount > 0) return anthersLineFor(amount);
@@ -1610,8 +1285,9 @@ function SectionEcho({
 	 * 🚨 **For a step whose control is a set of options rather than a growing list** — the
 	 * Anthers ladder, where the echo goes from a sentence to exactly one line and back.
 	 * Without it, pressing a rung grew this box by the height of a `sub`, and the page moved
-	 * under the control being pressed. The creator step leaves this off: its echo grows with
-	 * however many creators somebody picks, so there is no tallest answer to hold it at.
+	 * under the control being pressed. The creator step, while it existed, left this off: its
+	 * echo grew with however many creators somebody picked, so there was no tallest answer to
+	 * hold it at.
 	 *
 	 * ⚠️ **The rows, not a `min-h-*` measured off a screenshot.** A reserved height in
 	 * pixels is right at one viewport and one font size; it was wrong at 390px within
@@ -1732,52 +1408,6 @@ function FreeInclusions() {
 				</Reveal>
 			))}
 		</ul>
-	);
-}
-
-/**
- * One of the two optional things, drawn as a door rather than described as a fact.
- *
- * ⚠️ **It scrolls rather than navigates**, because the section it names is on this page —
- * a `<Link to="#…">` would be a router navigation to the same route and would leave the
- * user where they were. `scroll-mt` on the target is what keeps the heading clear of
- * the sticky header.
- */
-function GoFurtherCard({
-	icon: Icon,
-	title,
-	target,
-	children,
-}: {
-	icon: typeof PlayCircleIcon;
-	title: string;
-	target: string;
-	children: React.ReactNode;
-}) {
-	return (
-		<button
-			type="button"
-			className="group flex w-full items-start gap-4 rounded-2xl border border-base-content/10 bg-base-200/60 p-5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
-			onClick={() =>
-				document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" })
-			}
-		>
-			<span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-				<Icon className="h-6 w-6" />
-			</span>
-			<span className="min-w-0">
-				<span className="flex items-center gap-1.5 text-sm font-bold">
-					{title}
-					<span
-						aria-hidden="true"
-						className="translate-y-px text-base-content/35 transition-transform group-hover:translate-x-0.5"
-					>
-						↓
-					</span>
-				</span>
-				<span className="mt-1.5 block text-sm leading-snug text-base-content/60">{children}</span>
-			</span>
-		</button>
 	);
 }
 
@@ -2311,9 +1941,9 @@ function Summary({
 	 * It is the account row from `accountLineFor`, and both halves of it vary: at 390px
 	 * *"Sprout — support for Anthers"* wraps a line further than *"Root — …"* does, so the
 	 * card changed height between two paid rungs as well as between Free and any of them. The
-	 * creator rows below deliberately go without, for the same reason the creator step's echo
-	 * does — that list grows with however many people somebody picks, so it has no tallest
-	 * reading to hold.
+	 * creator rows, while they existed, deliberately went without, for the same reason the
+	 * creator step's echo did — that list grew with however many people somebody picked, so it
+	 * had no tallest reading to hold.
 	 */
 	accountSizers?: PickLine[];
 } & Omit<React.ComponentProps<typeof SignupForm>, "idPrefix">) {
@@ -2466,8 +2096,6 @@ export default function SignupPage() {
 	const [doorsAnswered, setDoorsAnswered] = useState(false);
 
 	const [picks, setPicks] = useState<Picks>(EMPTY_PICKS);
-	const [creators, setCreators] = useState<PublicUser[]>([]);
-	const [loadingCreators, setLoadingCreators] = useState(true);
 	const [busy, setBusy] = useState(false);
 	const [provingPersonhood, setProvingPersonhood] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -2490,10 +2118,15 @@ export default function SignupPage() {
 	// 🚨 `normalizePicks` rather than a spread, because storage holds whatever a previous
 	// visit wrote — including an `anthers` of `null`, which meant "hasn't said" until
 	// 2026-08-25 and is a value the ladder can no longer display.
+	//
+	// ⚠️ **Only the Anthers Badge is restored since 2026-10-19.** A stored object may still
+	// carry creator picks from a visit before the creator step came off the page; this page
+	// can no longer show or edit them, so a new signup started here must not carry them.
+	// Pending signups created earlier keep theirs, and `/finish` still commits them.
 	useEffect(() => {
 		try {
 			const raw = sessionStorage.getItem(PICKS_KEY);
-			if (raw) setPicks(normalizePicks(JSON.parse(raw)));
+			if (raw) setPicks({ ...EMPTY_PICKS, badge: normalizePicks(JSON.parse(raw)).badge });
 		} catch {
 			/* no storage, no restore — the page still works */
 		}
@@ -2539,135 +2172,25 @@ export default function SignupPage() {
 		}
 	}, [picks]);
 
-	useEffect(() => {
-		let live = true;
-		client.api.accounts.creators
-			.$get()
-			.then((res) => res.json())
-			.then((data) => {
-				if (live) setCreators(data.creators as PublicUser[]);
-			})
-			.catch(() => {})
-			.finally(() => {
-				if (live) setLoadingCreators(false);
-			});
-		return () => {
-			live = false;
-		};
+	const dropPick = useCallback(() => {
+		// Back to Free, not to "unanswered" — dropping the Anthers Badge IS choosing Free,
+		// and it is the only choice the ladder can show.
+		setPicks((prev) => ({ ...prev, badge: null }));
 	}, []);
 
 	/**
-	 * Pick and unpick.
+	 * What the picked Anthers Badge costs, in dollars — the rung's threshold, so the total
+	 * contains no number this page could invent: every dollar in it was chosen in the UI.
 	 *
-	 * 🚨 **A back has named its rung since 2026-10-17**: chips carry the rung id, and the
-	 * pick is one per creator — a different chip *switches* the pick rather than stacking
-	 * it, and re-tapping the lit chip drops the backing but keeps the follow, which is what
-	 * the old Back toggle did. Backing follows the creator (adding the follow with it);
-	 * the reverse is not implied. Unfollowing — the follow tap on a followed card — drops
-	 * the backing with it, the one follow/badge coupling this page holds.
-	 */
-	const toggleCreator = useCallback(
-		(handle: string, kind: "follow" | "badge", badgeId?: number) => {
-			setPicks((prev) => {
-				const follow = new Set(prev.follow);
-				if (kind === "follow") {
-					if (follow.has(handle)) {
-						follow.delete(handle);
-						// Unfollowing unmakes the backing too; backing kept its own follow, so
-						// this is the pick's only path back to absent.
-						return {
-							...prev,
-							follow: [...follow],
-							badges: prev.badges.filter((pick) => pick.handle !== handle),
-						};
-					}
-					follow.add(handle);
-					return { ...prev, follow: [...follow] };
-				}
-				if (badgeId === undefined) return prev;
-				const badgeIdPicked = badgeId ?? null;
-				const existing = prev.badges.find((pick) => pick.handle === handle);
-				const badges =
-					existing && existing.badgeId === badgeIdPicked
-						? prev.badges.filter((pick) => pick.handle !== handle)
-						: existing
-							? prev.badges.map((pick) =>
-									pick.handle === handle ? { handle, badgeId: badgeIdPicked } : pick,
-								)
-							: [...prev.badges, { handle, badgeId: badgeIdPicked }];
-				// Backing someone follows them too; the reverse isn't implied.
-				follow.add(handle);
-				return { ...prev, follow: [...follow], badges };
-			});
-		},
-		[],
-	);
-
-	const dropPick = useCallback((key: string) => {
-		setPicks((prev) =>
-			key === "anthers"
-				? // Back to Free, not to "unanswered" — dropping the Anthers Badge IS choosing
-					// Free, and it is the only one of the two the ladder can show.
-					{ ...prev, badge: null }
-				: {
-						...prev,
-						follow: prev.follow.filter((u) => u !== key),
-						badges: prev.badges.filter((pick) => pick.handle !== key),
-					},
-		);
-	}, []);
-
-	const byHandle = useMemo(() => new Map(creators.map((c) => [c.handle, c])), [creators]);
-
-	/**
-	 * 🚨 **The displayed total and the charged total are the SAME function**, and were two
-	 * independent expressions until 2026-08-16.
-	 *
-	 * They agreed, so nothing was visibly wrong — but the page's summary said
-	 * `(anthers + creators) × price` while the charge said `1 + creators`, and only the
-	 * second one broke when the unit changed under it. A page that computes what it shows and
+	 * 🚨 **The displayed total and the charged total are the SAME expression.** They were
+	 * two independent ones until 2026-08-16, and a page that computes what it shows and
 	 * what it bills by different routes is one edit away from showing a number it does not
-	 * charge, which is the exact failure the confirmation ceremony exists to prevent.
-	 *
-	 * ⚠️ **Same function was not the same call, and that gap was real.** The page built one
-	 * argument list to display and `commit` built another to bill, from the same picks — so
-	 * a rung chosen above Root could be shown and Root charged, with both routes still
-	 * "using `supportTotal`". Sabotage confirmed it: substituting the price at the commit
-	 * site alone left every test green, because the e2e picks Root, where the substituted
-	 * value and the chosen one coincide.
-	 *
-	 * There is ONE list and ONE total now. `directed` also carries the creator ids the
-	 * charge needs, which closes a second, quieter divergence: the display used to count
-	 * `picks.badges` while the charge dropped any handle missing from `byHandle`, so a
-	 * pick made before the creator list loaded was quotable and unbillable.
-	 *
-	 * ⚠️ **The amounts are the picked rungs' thresholds since 2026-10-17**, resolved by
-	 * `directedAmountFor` against the ladders the listing itself shipped — the same
-	 * function the summary and the finish page resolve theirs by. No line here can invent
-	 * a price: a chip names a rung, and the rung names its threshold.
-	 */
-	const directed = useMemo(
-		() =>
-			picks.badges
-				.map((pick) => ({ pick, creator: byHandle.get(pick.handle) }))
-				.filter((entry): entry is { pick: SignupBadgePick; creator: PublicUser } =>
-					Boolean(entry.creator),
-				)
-				.map(({ pick, creator }) => ({
-					creatorId: creator.id,
-					amount: directedAmountFor(pick, creator.badges),
-				})),
-		[picks.badges, byHandle],
-	);
-
-	/**
-	 * What the picked Anthers Badge costs, in dollars — the rung's threshold, resolved
-	 * here rather than inside `supportTotal` so the total still contains no number this
-	 * page could invent: every dollar in it was chosen somewhere in the UI.
+	 * charge. With one optional ask on the page the total is the Badge's own threshold —
+	 * do not introduce a second expression for it.
 	 */
 	const anthersAmount = anthersDollarsOf(picks.badge);
 
-	const total = supportTotal(anthersAmount, directed);
+	const total = anthersAmount;
 
 	/**
 	 * The breakdown the chosen rung reads as — see `anthersReading` for the other one.
@@ -2682,52 +2205,33 @@ export default function SignupPage() {
 		fund?.slicePerAccount ?? null,
 	);
 
-	/** Step 3's answer, in the shape the echo and the summary both render. Step 3 is the
-	 *  Anthers ask — it was step 2 until 2026-08-17; see the resequencing note up top. */
+	/** The Anthers ask's answer, in the shape the echo and the summary both render. */
 	const anthersLines: PickLine[] = useMemo(
 		() => (anthersAmount > 0 ? [anthersLineFor(anthersAmount)] : []),
 		[anthersAmount],
 	);
 
-	/** Step 2's answers — one line per creator, whether followed or backed. */
-	const creatorLines: PickLine[] = useMemo(
-		() =>
-			picks.follow.map((handle) => {
-				const creator = byHandle.get(handle);
-				const backing = picks.badges.find((pick) => pick.handle === handle);
-				return {
-					key: handle,
-					label: creator ? nameOf(creator) : handle,
-					sub: backing ? "following · backing" : "following",
-					amount: backing ? directedAmountFor(backing, creator?.badges) : 0,
-				};
-			}),
-		[picks.follow, picks.badges, byHandle],
-	);
-
 	/**
 	 * The whole page, added up once — the only place a total appears.
 	 *
-	 * The account comes first and the creators follow it. That account row is the Anthers
-	 * step's answer as well as the account itself — see `accountLineFor` for why the two are
-	 * one row — which is the single exception to the rule that this list reads in the order
-	 * the page asks. The rule itself stands: the two support lines were the other way round
-	 * until 2026-08-17, and a summary ordered differently from the steps above it makes a
-	 * user re-derive which line came from which choice.
+	 * ⚠️ **One line since 2026-10-19**, because the page asks one optional question: the
+	 * account row is the Anthers step's answer as well as the account itself — see
+	 * `accountLineFor` for why the two are one row. Creator lines preceded it until the
+	 * creator step came off the page; a list re-added later must read in the order the page
+	 * asks, because a summary ordered differently from the steps above it makes a user
+	 * re-derive which line came from which choice.
 	 */
-	const summaryLines: PickLine[] = useMemo(
-		() => [accountLineFor(anthersAmount), ...creatorLines],
-		[anthersAmount, creatorLines],
-	);
+	const summaryLines: PickLine[] = useMemo(() => [accountLineFor(anthersAmount)], [anthersAmount]);
 
 	/**
 	 * Commit what can be committed.
 	 *
 	 * Signed out, the picks are already in session storage, so the account comes first and
-	 * the page is waiting when they come back. Signed in, follows and creator
-	 * allocations are applied, and support for Anthers opens the same confirmation modal the
-	 * inline post unlock uses — one ceremony, so the charge is described identically
-	 * wherever a user commits.
+	 * the page is waiting when they come back. Signed in, a picked Anthers Badge opens the
+	 * same confirmation modal the inline post unlock uses — one ceremony, so the charge is
+	 * described identically wherever a user commits. Creator picks are not collected on this
+	 * page since 2026-10-19; a pending signup that carries them still commits them at
+	 * `/finish`.
 	 */
 	/**
 	 * Tell the auth context about the new session, then go.
@@ -2761,21 +2265,10 @@ export default function SignupPage() {
 		setError(null);
 		setSuccess(null);
 		try {
-			// Following costs nothing, so it is applied straight away rather than waiting on
-			// a charge that may not even happen.
-			for (const handle of picks.follow) {
-				const creator = byHandle.get(handle);
-				if (!creator || creator.isFollowing) continue;
-				await client.api.accounts.users[":handle"].follow.$post({ param: { handle } });
-			}
-
-			// 🚨 `directed`, `anthersAmount` and `total` come from the component, NOT from a
-			// second computation here — see their definition. This function used to rebuild
-			// both, which is what let the displayed and charged amounts drift apart while both
-			// still went through `supportTotal`.
-			//
-			// Each picked creator's rung threshold, on the SAME charge as the Anthers one —
-			// `directedAmountFor` resolved it, and that is the amount the charge bills.
+			// 🚨 `anthersAmount` and `total` come from the component, NOT from a second
+			// computation here — see their definition. This function used to rebuild the
+			// charge, which is what let the displayed and charged amounts drift apart while
+			// both still went through the same helper.
 
 			if (total === 0) {
 				// A signed-in account owes no handle, so there is no onboarding to pass
@@ -2785,14 +2278,12 @@ export default function SignupPage() {
 					await leave(next);
 					return;
 				}
-				setSuccess(
-					picks.follow.length > 0 ? "Saved; you're following them now." : "Nothing to save yet.",
-				);
+				setSuccess("Nothing to save yet.");
 				return;
 			}
 
 			// Preview prices the whole charge, so the modal quotes the total the user is
-			// actually agreeing to rather than the Anthers half of it.
+			// actually agreeing to rather than a component part of it.
 			const res = await client.api.subscriptions.preview[":amount"].$get({
 				param: { amount: String(total) },
 			});
@@ -2803,7 +2294,9 @@ export default function SignupPage() {
 			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
 			setPending({
 				anthersSupport: anthersAmount,
-				directed,
+				// This page carries no creator picks since 2026-10-19; the field stays for
+				// the modal's shared shape, which `/finish` still fills from a pending signup.
+				directed: [],
 				// The honest label is the amount: a commit needn't land on a Badge, and
 				// naming one would describe only the Anthers half of this charge.
 				badgeName: `${amountLabel(total)} a month`,
@@ -2814,7 +2307,7 @@ export default function SignupPage() {
 		} finally {
 			setBusy(false);
 		}
-	}, [directed, total, anthersAmount, leave, next, picks, byHandle]);
+	}, [total, anthersAmount, leave, next]);
 
 	/**
 	 * Ask for the account — the pending one — and hand the visitor to the page that
@@ -2829,12 +2322,12 @@ export default function SignupPage() {
 	 * pending signup rather than being left behind on a page nobody is looking at.
 	 *
 	 * 🚨 **The proof-of-work is solved HERE, on submit, never on page load** (the settled
-	 * decision, 2026-09-30). The funnel leads with creator support and the door must not
-	 * charge anybody CPU for arriving; the grind (about a second at the default difficulty)
-	 * buys the right to reserve a handle and write a pending signup, which is exactly what
-	 * the button was about to do. The button says what is happening while it runs — a small
-	 * honest state, no progress bar, no third party's branding — and a refusal sends the
-	 * person back to the card to press again with a fresh puzzle.
+	 * decision, 2026-09-30). The door must not charge anybody CPU for arriving; the grind
+	 * (about a second at the default difficulty) buys the right to reserve a handle and write
+	 * a pending signup, which is exactly what the button was about to do. The button says what
+	 * is happening while it runs — a small honest state, no progress bar, no third party's
+	 * branding — and a refusal sends the person back to the card to press again with a fresh
+	 * puzzle.
 	 */
 	const beginSignup = useCallback(
 		async (hostedHandle?: string) => {
@@ -3002,11 +2495,11 @@ export default function SignupPage() {
 		// (Fragment, not a wrapping div, so the bands are siblings of the shell's flex
 		// column and each paints edge to edge.)
 		//
-		// Band order: tinted hero → plain creator → tinted Anthers → plain summary →
-		// tinted FAQ — five bands, alternating cleanly. An odd band count ends the page
-		// on the TINT (the shared alternation rule prefers alternation over bookending;
-		// the plain-close convention only applies to an even count, where ending tinted
-		// would bookend the page with two like bands together).
+		// Band order: tinted hero → plain Anthers → tinted summary → plain FAQ — four
+		// bands, alternating cleanly. (The creator band left with its section on
+		// 2026-10-19, and the remaining three flipped so no two like surfaces touch.) An
+		// even band count ends the page on the PLAIN, the plain-close convention: ending
+		// tinted would bookend the page with two like bands together.
 		<>
 			{/* ── Hero · Join, before anything is asked for ─────────────── */}
 			<section className={SURFACE_BAND}>
@@ -3048,107 +2541,35 @@ export default function SignupPage() {
 							</div>
 						</div>
 
-						{/* What support is, as the tail of "it's free" rather than as its own step: the
-						    primitive is one sentence, and giving it a numbered step of its own made the
-						    page look like it asked three things when it asks two.
+						{/* What support is, as the tail of "it's free" rather than as a step of its
+						    own: the primitive is one sentence, and a numbered step made the page look
+						    like it asked more than it does.
 						    ⚠️ The old copy said "a monthly amount, from $3". There is no floor of $3 —
-						    that is what unlimited Public Access costs, and a creator sets their own
-						    levels to whatever rungs they like. Naming a floor describes a mechanism
-						    the unit retirement removed.
-						    ⭐ Each card is now a door into the section that asks for it, rather than a
-						    description a user has to hold in their head while scrolling past two more
-						    screens to find the control it described. */}
+						    that is what unlimited Public Access costs. Naming a floor describes a
+						    mechanism the unit retirement removed.
+						    ⚠️ **The two door cards left on 2026-10-19** with the creator section they
+						    pointed into. The remaining ask needs no door: it is the next band down, and
+						    a sentence that named a direction the screen already shows would be filler. */}
 						<div className="mt-14">
 							<p className="mx-auto max-w-2xl text-center text-lg leading-relaxed text-base-content/65">
-								<strong>Everything above is free forever</strong>, but there is more to love on
-								Anthers if you want it. You can add either of these now, or at any point in the
-								future.
+								<strong>Everything above is free forever</strong>. Supporting Anthers is optional;
+								you can give a Badge now, or at any point in the future.
 							</p>
-							<div className="mx-auto mt-6 grid max-w-4xl gap-4 sm:grid-cols-2">
-								<GoFurtherCard icon={HeartIcon} title="Support creators" target="creator-badges">
-									A creator may leave work free to everyone and put the rest behind a monthly level
-									they set (called a Badge) or a purchase price.
-									<br></br>
-									<br></br>
-									If you have creators in mind, you can back them now.
-								</GoFurtherCard>
-								<GoFurtherCard icon={SparklesIcon} title="Back Anthers" target="anthers-badges">
-									Just {money(ladder.publicAccessPrice)}/month takes the monthly limit off Public
-									Access usage, and it lifts your automatic support for creators from{" "}
-									{fund
-										? `${money(fund.slicePerAccount)}/month`
-										: "the free pool's published share"}{" "}
-									to {money(timePoolFor(ladder.publicAccessPrice))}
-									/month.
-									<br></br>
-									<br></br>
-									Your Anthers Badge also funds the charitable programs (free access for small users
-									and creators included).
-								</GoFurtherCard>
-							</div>
 						</div>
 					</Reveal>
 				</div>
 			</section>
 
-			{/* ── 1 · Support for a creator — the primary ask ───────────
-			    The `id` is the target of the "Support creators" door up top, and the
-			    `scroll-mt` keeps the heading clear of the sticky header when it lands. */}
+			{/* ── Support for Anthers — the optional ask ─────────────────
+			    🚨 The one section this page must not let read as a requirement. Plenty of
+			    people will be served entirely by purchases, creator support on a creator's
+			    page and the free hours, and that is a fine way to use Anthers rather than a
+			    lapse to nudge somebody out of. The heading's first words say so before the
+			    numbers do. (Plain — the alternation is tinted hero → plain → tinted → plain.) */}
 			<section className={SURFACE_PLAIN}>
 				<div className="mx-auto min-w-0 w-full max-w-[88rem] px-6 pt-16 pb-14 sm:pt-20 sm:pb-16">
-					<Reveal delay={80} id="creator-badges" className="scroll-mt-24">
-						<StepHeading n={1} title="Creator Badges">
-							Creators each name their own monthly Badges, which unlock special content,
-							behind-the-scenes access, and more. And when you back a creator with a Badge or a
-							purchase, Anthers takes no cut, no exceptions.
-						</StepHeading>
-						<SupportBreakdown
-							segments={[
-								{
-									tone: "pool",
-									amount: CREATOR_WORST_CASE_NET,
-									label: "Straight to the Creator",
-									desc: "recurring support, and it clears whichever of their levels it reaches",
-								},
-								{
-									tone: "pay",
-									amount: CREATOR_WORST_CASE_FEE,
-									label: "Payments",
-									desc: "card & processing, at cost, paid to the processor",
-								},
-							]}
-							note="This is the worst-case scenario (one subscription/month). The more you support the creators you love, the more of every dollar they receive."
-						/>
-						<p className="mx-auto mt-12 max-w-3xl text-center text-lg leading-relaxed text-base-content/65">
-							<strong>Anyone you&rsquo;d like to start with?</strong> Search for someone by name, or
-							tap a medium to meet a few. Following is free; support someone when you&rsquo;d like
-							to back them.
-						</p>
-						<CreatorFinder
-							creators={creators}
-							loading={loadingCreators}
-							picks={picks}
-							onToggle={toggleCreator}
-						/>
-						<SectionEcho
-							lines={creatorLines}
-							onDrop={dropPick}
-							empty="No creators picked yet; following is free whenever you're ready."
-						/>
-					</Reveal>
-				</div>
-			</section>
-
-			{/* ── 2 · Support for Anthers — the optional second thing ───
-					    🚨 The one section this page must not let read as a requirement. Plenty of
-					    people will be served entirely by purchases, creator support and the free
-					    hours, and that is a fine way to use Anthers rather than a lapse to nudge
-					    somebody out of. The heading's first words say so before the numbers do.
-					    (Tinted — the alternation is tinted hero → plain → tinted → plain → tinted.) */}
-			<section className={SURFACE_BAND}>
-				<div className="mx-auto min-w-0 w-full max-w-[88rem] px-6 pt-16 pb-14 sm:pt-20 sm:pb-16">
 					<Reveal delay={80} id="anthers-badges" className="scroll-mt-24">
-						<StepHeading n={2} title="Anthers Badges">
+						<StepHeading title="Anthers Badges">
 							Anthers' free Public Access never expires; you can stay free as long as you like,
 							streaming {FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month while supporting
 							creators directly with monthly amounts and direct purchases. But if you want a little
@@ -3202,7 +2623,7 @@ export default function SignupPage() {
 			</section>
 
 			{/* ── The one place it all adds up ───────────────────────── */}
-			<section className={SURFACE_PLAIN}>
+			<section className={SURFACE_BAND}>
 				<div className="mx-auto min-w-0 w-full max-w-[88rem] px-6 pt-16 pb-14 sm:pt-20 sm:pb-16">
 					<Reveal delay={80}>
 						<h2 style={serif} className="text-center text-3xl font-light leading-tight sm:text-4xl">
@@ -3239,7 +2660,7 @@ export default function SignupPage() {
 				</div>
 			</section>
 
-			{/* ── Questions — the closing band, tinted ─────────────────
+			{/* ── Questions — the closing band, plain ─────────────────
 			    🚨 Last on this page, and that is the opposite of where the same block
 			    sits on /for-users and /for-creators. Those are pages somebody reads and
 			    then acts on, so their FAQ goes above the closing CTA. This page's
@@ -3252,7 +2673,7 @@ export default function SignupPage() {
 			    The six questions are the ones asked with a hand on the button — what
 			    this costs, what free covers, whether it can be undone — and they are
 			    the same objects /faq renders, from `content/faq.tsx`. */}
-			<section className={SURFACE_BAND}>
+			<section className={SURFACE_PLAIN}>
 				<div className="mx-auto min-w-0 w-full max-w-[88rem] px-6 pt-16 pb-20 sm:pt-20 sm:pb-24">
 					<Reveal delay={80}>
 						<div className="text-center">
