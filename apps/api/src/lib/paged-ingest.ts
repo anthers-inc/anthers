@@ -28,12 +28,21 @@ export type PagedIngestQueue = "ingest-ebook" | "render-paged";
  * EPUB anywhere makes the set reflow-shaped (the reader picks reflow the moment any
  * section exists), so a set that mixes an EPUB with page-shaped files — a PDF, a page
  * image — is refused here rather than half-processed, named by the offending file.
+ *
+ * ⚠️ **The offender named is the shape that is outnumbered**, because that is the file the
+ * creator can act on: one EPUB dropped into a page set names the EPUB, and one PDF dropped
+ * into a reflow set names the PDF. A tie names the page-shaped file, the older assumption
+ * that an EPUB set is the base one.
  */
 export function routePagedIngest(sources: SourceShape[]): PagedIngestQueue {
-	const hasEpub = sources.some((s) => isEpubSource(s));
-	const hasNonEpub = sources.some((s) => !isEpubSource(s));
+	const epubCount = sources.filter((s) => isEpubSource(s)).length;
+	const hasEpub = epubCount > 0;
+	const hasNonEpub = epubCount < sources.length;
 	if (hasEpub && hasNonEpub) {
-		const offender = sources.find((s) => !isEpubSource(s));
+		const offender =
+			epubCount < sources.length - epubCount
+				? sources.find((s) => isEpubSource(s))
+				: sources.find((s) => !isEpubSource(s));
 		throw new Error(
 			`A reflow ebook cannot mix an EPUB with other file types, and this set mixes one in: ${offender?.filename || offender?.file} — upload the EPUB on its own, or keep the set to PDFs and page images`,
 		);

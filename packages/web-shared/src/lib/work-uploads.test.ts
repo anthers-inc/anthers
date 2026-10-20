@@ -45,6 +45,13 @@ function controlledTransport() {
 				failAttach = () => reject(new Error("409"));
 			});
 		},
+		attachMany(workId, _target, items) {
+			calls.push(`attachMany ${workId} ${items.map((item) => item.key).join(",")}`);
+			return new Promise((resolve, reject) => {
+				releaseAttach = resolve;
+				failAttach = () => reject(new Error("409"));
+			});
+		},
 	};
 
 	const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -203,7 +210,7 @@ describe("work uploads", () => {
 	});
 
 	describe("a pick of set rows", () => {
-		it("runs the files one at a time, in the order they were picked", async () => {
+		it("uploads the pick one file at a time and attaches it once at its end", async () => {
 			const t = controlledTransport();
 			const store = createWorkUploadStore(t.transport);
 			const batchId = store.startBatch(
@@ -218,66 +225,90 @@ describe("work uploads", () => {
 				status: "uploading",
 				batch: { id: batchId, index: 1, total: 3 },
 			});
-			expect(store.listBatches()[0]).toMatchObject({ total: 3, waiting: 2, held: null });
+			expect(store.listBatches()[0]).toMatchObject({
+				total: 3,
+				uploaded: 0,
+				waiting: 2,
+				held: null,
+				error: null,
+			});
 
 			await t.putArrives("k1");
-			await t.attachAnswers();
-			// The second file begins only once the first is attached, so the wire never carries
+			// The bytes are up, but a pick's file does not attach on its own: it waits for the
+			// pick's one append, which is what keeps a hundred files to one render.
+			expect(store.list()[0].status).toBe("landed");
+			// The second file has already begun; neither has been attached.
+			expect(t.calls).toEqual(["put", "put"]);
+			expect(store.listBatches()[0]).toMatchObject({ uploaded: 1, waiting: 1 });
+			expect(store.active()).toBe(true);
+			// The second file begins only once the first has landed, so the wire never carries
 			// two digest reads and two part streams at once.
 			expect(store.list()[1]).toMatchObject({
 				fileName: "02.png",
 				status: "uploading",
 				batch: { index: 2 },
 			});
-			expect(store.listBatches()[0]).toMatchObject({ waiting: 1 });
 
 			await t.putArrives("k2");
-			await t.attachAnswers();
 			await t.putArrives("k3");
-			await t.attachAnswers();
+			// One request for the whole pick, in the order it was picked.
+			expect(t.calls).toEqual(["put", "put", "put", "attachMany 7 k1,k2,k3"]);
+			expect(store.list().map((u) => u.status)).toEqual(["attaching", "attaching", "attaching"]);
 
+			await t.attachAnswers();
 			expect(store.list().map((u) => `${u.fileName} ${u.status}`)).toEqual([
 				"01.png done",
 				"02.png done",
 				"03.png done",
 			]);
-			expect(t.calls).toEqual(["put", "attach 7 k1", "put", "attach 7 k2", "put", "attach 7 k3"]);
 			// Finished, so nothing is held any more; the landed entries stay as the tab's record.
 			expect(store.listBatches()).toHaveLength(0);
+			expect(store.active()).toBe(false);
 		});
 
-		it("holds the pick at a failure, and a retry resumes from that file", async () => {
+		it("holds the pick at a failure before anything is attached, and a retry resumes there", async () => {
 			const t = controlledTransport();
 			const store = createWorkUploadStore(t.transport);
 			store.startBatch(7, [page("01.png"), page("02.png"), page("03.png")], SET_ROW);
 			await t.putFails();
 
 			expect(store.list()[0].status).toBe("failed");
-			expect(store.listBatches()[0]).toMatchObject({ waiting: 2, held: "01.png" });
-			// The rest is not attempted into a dead connection: one failure is one failure.
+			expect(store.listBatches()[0]).toMatchObject({
+				uploaded: 0,
+				waiting: 2,
+				held: "01.png",
+			});
+			// The rest is not attempted into a dead connection, and nothing has reached the
+			// Work yet: the pick has no landed file to attach.
 			expect(t.calls).toEqual(["put"]);
 
 			store.retry(store.list()[0].id);
 			await t.putArrives("k1");
+			await t.putArrives("k2");
+			await t.putArrives("k3");
+			expect(t.calls).toEqual(["put", "put", "put", "put", "attachMany 7 k1,k2,k3"]);
 			await t.attachAnswers();
-			expect(store.list().map((u) => u.fileName)).toEqual(["01.png", "02.png"]);
-			expect(store.list()[1].status).toBe("uploading");
+			expect(store.list()).toHaveLength(3);
 		});
 
-		it("ends the pick when the file that failed was its last, keeping the row for its retry", async () => {
-			// A lone refused file is the shape the gallery walk covers: the refusal is permanent, so
-			// holding a pick behind it would block the editor for no one's benefit.
+		it("ends the pick when its last file fails, attaching what landed", async () => {
+			// A refusal is permanent, so holding a pick behind it would block the editor for no
+			// one's benefit — and the files already uploaded are still the creator's work.
 			const t = controlledTransport();
 			const store = createWorkUploadStore(t.transport);
-			store.startBatch(7, [page("01.png")], SET_ROW);
+			store.startBatch(7, [page("01.png"), page("02.png")], SET_ROW);
+			await t.putArrives("k1");
 			await t.putFails();
 
+			expect(t.calls).toEqual(["put", "put", "attachMany 7 k1"]);
+			expect(store.list().map((u) => u.status)).toEqual(["attaching", "failed"]);
+			await t.attachAnswers();
+
 			expect(store.listBatches()).toHaveLength(0);
-			expect(store.list()[0]).toMatchObject({
-				status: "failed",
-				fileName: "01.png",
-				batch: { index: 1, total: 1 },
-			});
+			expect(store.list().map((u) => `${u.fileName} ${u.status}`)).toEqual([
+				"01.png done",
+				"02.png failed",
+			]);
 		});
 
 		it("skips past the file a pick is held on", async () => {
@@ -290,11 +321,12 @@ describe("work uploads", () => {
 			expect(store.list().map((u) => u.fileName)).toEqual(["02.png"]);
 			expect(store.listBatches()[0]).toMatchObject({ waiting: 0, held: null });
 			await t.putArrives("k2");
+			expect(t.calls).toEqual(["put", "put", "attachMany 7 k2"]);
 			await t.attachAnswers();
 			expect(store.listBatches()).toHaveLength(0);
 		});
 
-		it("moves on when the creator cancels the file on the wire", async () => {
+		it("moves on when the creator cancels a file before it lands", async () => {
 			const t = controlledTransport();
 			const store = createWorkUploadStore(t.transport);
 			store.startBatch(7, [page("01.png"), page("02.png")], SET_ROW);
@@ -304,11 +336,28 @@ describe("work uploads", () => {
 			expect(store.list().map((u) => u.fileName)).toEqual(["02.png"]);
 			expect(store.listBatches()[0]).toMatchObject({ waiting: 0, held: null });
 			await t.putArrives("k2");
+			expect(t.calls).toEqual(["put", "put", "attachMany 7 k2"]);
 			await t.attachAnswers();
 			expect(store.listBatches()).toHaveLength(0);
 		});
 
-		it("stops the rest: the live file aborts and the files that never began are dropped", async () => {
+		it("canceling a landed file drops it from the pick", async () => {
+			const t = controlledTransport();
+			const store = createWorkUploadStore(t.transport);
+			store.startBatch(7, [page("01.png"), page("02.png")], SET_ROW);
+			await t.putArrives("k1");
+
+			// Uploaded but not yet handed over: stopping it removes it from the pick rather
+			// than abandoning the pick.
+			store.cancel(store.list()[0].id);
+			expect(store.list().map((u) => u.fileName)).toEqual(["02.png"]);
+			await t.putArrives("k2");
+			expect(t.calls).toEqual(["put", "put", "attachMany 7 k2"]);
+			await t.attachAnswers();
+			expect(store.list()).toHaveLength(1);
+		});
+
+		it("stops the rest, attaching the files already uploaded", async () => {
 			const t = controlledTransport();
 			const store = createWorkUploadStore(t.transport);
 			const batchId = store.startBatch(
@@ -316,9 +365,56 @@ describe("work uploads", () => {
 				[page("01.png"), page("02.png"), page("03.png")],
 				SET_ROW,
 			);
+			await t.putArrives("k1");
 			store.cancelBatch(batchId);
 
-			expect(t.signals[0]?.aborted).toBe(true);
+			// The live file aborts, the ones that never began are dropped, and the upload that
+			// was already paid for on the wire still reaches the Work.
+			expect(t.signals[1]?.aborted).toBe(true);
+			expect(store.list().map((u) => u.fileName)).toEqual(["01.png"]);
+			expect(t.calls).toEqual(["put", "put", "attachMany 7 k1"]);
+			expect(store.listBatches()[0]).toMatchObject({ uploaded: 1, waiting: 0 });
+			await t.attachAnswers();
+			expect(store.listBatches()).toHaveLength(0);
+			expect(store.list()[0].status).toBe("done");
+			expect(store.active()).toBe(false);
+		});
+
+		it("retries a refused attach whole, from any row of the pick", async () => {
+			const t = controlledTransport();
+			const store = createWorkUploadStore(t.transport);
+			store.startBatch(7, [page("01.png"), page("02.png")], SET_ROW);
+			await t.putArrives("k1");
+			await t.putArrives("k2");
+			await t.attachFails();
+
+			// One request carried both files, so both fail together and the batch holds the
+			// server's sentence rather than a row pretending the file landed.
+			expect(store.list().map((u) => u.status)).toEqual(["failed", "failed"]);
+			expect(store.listBatches()[0]).toMatchObject({ error: "409", uploaded: 2 });
+
+			// A retry from either row sends the whole pick again — the server writes all of it
+			// or none of it, so one row's retry is the pick's.
+			store.retry(store.list()[1].id);
+			expect(t.calls.filter((c) => c.startsWith("attachMany"))).toEqual([
+				"attachMany 7 k1,k2",
+				"attachMany 7 k1,k2",
+			]);
+			await t.attachAnswers();
+			expect(store.list().map((u) => u.status)).toEqual(["done", "done"]);
+			expect(store.listBatches()).toHaveLength(0);
+		});
+
+		it("discards a refused pick whole", async () => {
+			const t = controlledTransport();
+			const store = createWorkUploadStore(t.transport);
+			const batchId = store.startBatch(7, [page("01.png"), page("02.png")], SET_ROW);
+			await t.putArrives("k1");
+			await t.putArrives("k2");
+			await t.attachFails();
+
+			store.discardBatch(batchId);
+			// Nothing reached the Work, so the rows leave with the pick.
 			expect(store.list()).toHaveLength(0);
 			expect(store.listBatches()).toHaveLength(0);
 			expect(store.active()).toBe(false);

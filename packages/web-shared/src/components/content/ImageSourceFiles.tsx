@@ -67,7 +67,8 @@ export function ImageSourceFiles({ work }: { work: Work }) {
 		if (upload?.status === "done") void reload();
 	}, [upload?.status, reload]);
 
-	// A picture landing is a row the server wrote, so the gallery re-reads on the count.
+	// A picture landing is a row the server wrote — the pick attaches once, at its end — so the
+	// gallery re-reads when that append settles.
 	const landed = useWorkUploads().filter(
 		(u) => u.workId === work.id && u.target.kind === "set-row" && u.status === "done",
 	).length;

@@ -23,6 +23,7 @@ import type { QuarantineObjectKind } from "../services/quarantine.js";
 import {
 	beginScans,
 	type ScannableKind,
+	type ScannableObject,
 	scanStoredImage,
 	scanStoredVideo,
 } from "../services/safety-scan.js";
@@ -40,8 +41,11 @@ import { JOB_OPTIONS, QUEUES, queue } from "./queue.js";
  * `rescan-owed` sweep found it. `beginScans` decides what is owed; the key set is the one the
  * release gate waits on, so it is never computed a second way.
  */
-export async function queueScansForWork(work: typeof works.$inferSelect): Promise<void> {
-	for (const object of await beginScans(work)) {
+export async function queueScansForWork(
+	work: typeof works.$inferSelect,
+	extra: ReadonlyArray<ScannableObject> = [],
+): Promise<void> {
+	for (const object of await beginScans(work, new Date(), extra)) {
 		await queue.send(
 			QUEUES.SCAN_MEDIA,
 			{ storageKey: object.key, workId: work.id, kind: object.kind },

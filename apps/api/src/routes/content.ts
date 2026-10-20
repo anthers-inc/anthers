@@ -267,7 +267,7 @@ import {
 } from "../services/work-preview-media.js";
 import { releaseRefusal } from "../services/work-release.js";
 import {
-	appendSourceFile,
+	appendSourceFiles,
 	comicSourceProblem,
 	listSourceFiles,
 	removeSourceFile,
@@ -1057,6 +1057,25 @@ const sourceFileSchema = z.object({
 	fileSize: z.number().int().nonnegative().nullable().optional(),
 	mimeType: z.string().max(100).optional(),
 });
+
+/**
+ * A set append: one file, or a whole pick.
+ *
+ * 🚨 **The array is the shape the set editors send** (2026-10-19). A comic's ordinary path is
+ * a hundred page images in one pick, and appending them one file per request enqueued one
+ * render per file — each rendering the whole set (see `services/work-source-files.ts`). The
+ * single object stays accepted because it is the same mutation with a pick of one, and the
+ * desktop and an older web bundle must keep working.
+ *
+ * The cap matches the renderer's own page ceiling (`MAX_PAGES` in `jobs/render-paged.ts`):
+ * a pick larger than that could never render, so it is refused before a byte of it is stored
+ * as a source row.
+ */
+const MAX_SOURCE_PICK = 2000;
+const sourceFilesSchema = z.union([
+	sourceFileSchema,
+	z.object({ files: z.array(sourceFileSchema).min(1).max(MAX_SOURCE_PICK) }),
+]);
 
 /** A whole-set arrangement: the ids in the order the creator is showing. No partial orders. */
 const sourceOrderSchema = z.object({ order: z.array(z.number().int()) });
@@ -6566,42 +6585,62 @@ const contentRoutes = new Hono()
 		return c.json({ files });
 	})
 
-	.post("/works/:id/source-files", requireAuth, zValidator("json", sourceFileSchema), async (c) => {
-		const user = c.get("user");
-		const id = Number(c.req.param("id"));
-		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
-		// A 404 rather than a 403, the way the works routes answer a non-owner — the
-		// existence of another creator's Work is not information to hand out.
-		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
-		if (!hasSourceSet(item.type)) {
-			return c.json(
-				{
-					error: "Only a comic, a book or an image carries a set of files.",
-					code: "sources_not_set",
-				},
-				400,
+	.post(
+		"/works/:id/source-files",
+		requireAuth,
+		zValidator("json", sourceFilesSchema),
+		async (c) => {
+			const user = c.get("user");
+			const id = Number(c.req.param("id"));
+			const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+			// A 404 rather than a 403, the way the works routes answer a non-owner — the
+			// existence of another creator's Work is not information to hand out.
+			if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+			if (!hasSourceSet(item.type)) {
+				return c.json(
+					{
+						error: "Only a comic, a book or an image carries a set of files.",
+						code: "sources_not_set",
+					},
+					400,
+				);
+			}
+			if (item.visibility === "released") {
+				return c.json(
+					{
+						error: "A released Work's files can't change. Make it private first.",
+						code: "sources_not_private",
+					},
+					409,
+				);
+			}
+			const data = c.req.valid("json");
+			const files = "files" in data ? data.files : [data];
+			// The set route signs these keys for the Work's owner, so a file naming another
+			// creator's private original would hand it over. See `storage/keys.ts`. A whole pick
+			// is refused on its first foreign reference, before anything is written.
+			const owned = await Promise.all(files.map((file) => isOwnStorageRef(file.file, user.id)));
+			if (owned.some((own) => !own)) return c.json(FOREIGN_FILE_REFUSAL, 400);
+			const { rows, job, error, code } = await appendSourceFiles(item, files);
+			if (error) {
+				return c.json({ error, code: code ?? "sources_mixed_shapes" }, 400);
+			}
+			// Every file in the pick is a new object to scan. One call carrying the whole pick,
+			// because the legacy column names only one of them and a per-file call would re-ask
+			// for the Work's thumbnail once for every file. The column's value BEFORE this
+			// mutation is dropped from the set: it was scanned when it arrived, and the pick is
+			// what is new. Only the image kind's sources are scannable objects (a paged set's
+			// PDFs and EPUB are not images to fingerprint), which is the coverage the single-file
+			// route had.
+			await queueScansForWork(
+				{ ...item, sourceKey: "" },
+				item.type === "image"
+					? files.map((file) => ({ key: file.file, kind: "image" as const }))
+					: [],
 			);
-		}
-		if (item.visibility === "released") {
-			return c.json(
-				{
-					error: "A released Work's files can't change. Make it private first.",
-					code: "sources_not_private",
-				},
-				409,
-			);
-		}
-		const data = c.req.valid("json");
-		// The set route signs this key for the Work's owner, so a file naming another
-		// creator's private original would hand it over. See `storage/keys.ts`.
-		if (!(await isOwnStorageRef(data.file, user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
-		const { rows, job, error, code } = await appendSourceFile(item, data);
-		if (error) {
-			return c.json({ error, code: code ?? "sources_mixed_shapes" }, 400);
-		}
-		await queueScansForWork({ ...item, sourceKey: data.file });
-		return c.json({ files: rows, transcoding: job }, 201);
-	})
+			return c.json({ files: rows, transcoding: job }, 201);
+		},
+	)
 
 	.patch(
 		"/works/:id/source-files",
