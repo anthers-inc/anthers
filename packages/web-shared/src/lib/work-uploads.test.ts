@@ -10,6 +10,7 @@
 import { describe, expect, it } from "bun:test";
 import {
 	createWorkUploadStore,
+	type WorkUploadSetRowTarget,
 	type WorkUploadTarget,
 	type WorkUploadTransport,
 } from "./work-uploads";
@@ -72,6 +73,9 @@ function controlledTransport() {
 }
 
 const file = () => new File(["bytes"], "clip.mp4", { type: "video/mp4" });
+const page = (name: string) => new File(["page"], name, { type: "image/png" });
+/** A pick of page images, the shape a paged or image set editor hands the store. */
+const SET_ROW: WorkUploadSetRowTarget = { kind: "set-row", type: "comic" };
 
 describe("work uploads", () => {
 	it("does not notify subscribers for a progress event that moved nothing", async () => {
@@ -196,5 +200,119 @@ describe("work uploads", () => {
 		// Canceling an unknown id changes nothing and refuses nothing.
 		store2.cancel("upload-999");
 		expect(store2.list()).toHaveLength(0);
+	});
+
+	describe("a pick of set rows", () => {
+		it("runs the files one at a time, in the order they were picked", async () => {
+			const t = controlledTransport();
+			const store = createWorkUploadStore(t.transport);
+			const batchId = store.startBatch(
+				7,
+				[page("01.png"), page("02.png"), page("03.png")],
+				SET_ROW,
+			);
+
+			expect(store.list()).toHaveLength(1);
+			expect(store.list()[0]).toMatchObject({
+				fileName: "01.png",
+				status: "uploading",
+				batch: { id: batchId, index: 1, total: 3 },
+			});
+			expect(store.listBatches()[0]).toMatchObject({ total: 3, waiting: 2, held: null });
+
+			await t.putArrives("k1");
+			await t.attachAnswers();
+			// The second file begins only once the first is attached, so the wire never carries
+			// two digest reads and two part streams at once.
+			expect(store.list()[1]).toMatchObject({
+				fileName: "02.png",
+				status: "uploading",
+				batch: { index: 2 },
+			});
+			expect(store.listBatches()[0]).toMatchObject({ waiting: 1 });
+
+			await t.putArrives("k2");
+			await t.attachAnswers();
+			await t.putArrives("k3");
+			await t.attachAnswers();
+
+			expect(store.list().map((u) => `${u.fileName} ${u.status}`)).toEqual([
+				"01.png done",
+				"02.png done",
+				"03.png done",
+			]);
+			expect(t.calls).toEqual(["put", "attach 7 k1", "put", "attach 7 k2", "put", "attach 7 k3"]);
+			// Finished, so nothing is held any more; the landed entries stay as the tab's record.
+			expect(store.listBatches()).toHaveLength(0);
+		});
+
+		it("holds the pick at a failure, and a retry resumes from that file", async () => {
+			const t = controlledTransport();
+			const store = createWorkUploadStore(t.transport);
+			store.startBatch(7, [page("01.png"), page("02.png"), page("03.png")], SET_ROW);
+			await t.putFails();
+
+			expect(store.list()[0].status).toBe("failed");
+			expect(store.listBatches()[0]).toMatchObject({ waiting: 2, held: "01.png" });
+			// The rest is not attempted into a dead connection: one failure is one failure.
+			expect(t.calls).toEqual(["put"]);
+
+			store.retry(store.list()[0].id);
+			await t.putArrives("k1");
+			await t.attachAnswers();
+			expect(store.list().map((u) => u.fileName)).toEqual(["01.png", "02.png"]);
+			expect(store.list()[1].status).toBe("uploading");
+		});
+
+		it("skips past the file a pick is held on", async () => {
+			const t = controlledTransport();
+			const store = createWorkUploadStore(t.transport);
+			store.startBatch(7, [page("01.png"), page("02.png")], SET_ROW);
+			await t.putFails();
+
+			store.dismiss(store.list()[0].id);
+			expect(store.list().map((u) => u.fileName)).toEqual(["02.png"]);
+			expect(store.listBatches()[0]).toMatchObject({ waiting: 0, held: null });
+			await t.putArrives("k2");
+			await t.attachAnswers();
+			expect(store.listBatches()).toHaveLength(0);
+		});
+
+		it("moves on when the creator cancels the file on the wire", async () => {
+			const t = controlledTransport();
+			const store = createWorkUploadStore(t.transport);
+			store.startBatch(7, [page("01.png"), page("02.png")], SET_ROW);
+			store.cancel(store.list()[0].id);
+
+			expect(t.signals[0]?.aborted).toBe(true);
+			expect(store.list().map((u) => u.fileName)).toEqual(["02.png"]);
+			expect(store.listBatches()[0]).toMatchObject({ waiting: 0, held: null });
+			await t.putArrives("k2");
+			await t.attachAnswers();
+			expect(store.listBatches()).toHaveLength(0);
+		});
+
+		it("stops the rest: the live file aborts and the files that never began are dropped", async () => {
+			const t = controlledTransport();
+			const store = createWorkUploadStore(t.transport);
+			const batchId = store.startBatch(
+				7,
+				[page("01.png"), page("02.png"), page("03.png")],
+				SET_ROW,
+			);
+			store.cancelBatch(batchId);
+
+			expect(t.signals[0]?.aborted).toBe(true);
+			expect(store.list()).toHaveLength(0);
+			expect(store.listBatches()).toHaveLength(0);
+			expect(store.active()).toBe(false);
+		});
+
+		it("an image's pick bar is indeterminate, since its one request reports no percent", () => {
+			const t = controlledTransport();
+			const store = createWorkUploadStore(t.transport);
+			store.startBatch(7, [page("01.png")], { kind: "set-row", type: "image" });
+			expect(store.list()[0].progress).toBeNull();
+		});
 	});
 });
