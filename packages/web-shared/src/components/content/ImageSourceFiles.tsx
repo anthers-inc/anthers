@@ -3,19 +3,28 @@
  * The source set of an image Work — the gallery the Work displays, as the creator
  * arranges it (2026-10-18). The paged set editor's sibling: the same routes under it
  * (`GET`/`POST`/order-PATCH/DELETE over `work_source_files`), the same first-file rail —
- * the Upload page's pick attaches as the set's first row — and the same refusal to press a
+ * the Upload page's pick attaches as the set's first row — the same `set-row` pick through
+ * `work-uploads` for every picture after it (2026-10-19), and the same refusal to press a
  * second button while a save runs. What differs: each row previews the picture it holds,
- * the first row is the cover the Work's listings show, and nothing re-renders after a
- * mutation, because the files are the deliverable rather than a book's ingredients.
+ * the first row is the cover the Work's listings show, nothing re-renders after a
+ * mutation because the files are the deliverable rather than a book's ingredients, and a
+ * picture's own upload rides one direct request, so its bar is indeterminate rather than a
+ * percent.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { client } from "../../lib/rpc";
 import type { Work } from "../../lib/types";
 import type { WorkSourceFile } from "../../lib/work-sources";
-import { useSourceUpload, type WorkUpload, workUploads } from "../../lib/work-uploads";
-import { uploadImageFile } from "../post/mediaUpload";
+import {
+	useSetRowBatch,
+	useSourceUpload,
+	useWorkUploads,
+	type WorkUpload,
+	workUploads,
+} from "../../lib/work-uploads";
 import FormField from "../ui/FormField";
+import { humanBytes, SourceSetAdds } from "./SourceSetAdds";
 import { UploadProgress } from "./work-media";
 
 /** A row's label: its stored filename, or — for the first file, which arrives attached by
@@ -28,14 +37,9 @@ function rowLabel(row: WorkSourceFile, index: number, upload: WorkUpload | null)
 	return `Image ${index + 1}`;
 }
 
-function humanBytes(bytes: number | null): string {
-	if (bytes == null) return "";
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 export function ImageSourceFiles({ work }: { work: Work }) {
 	const upload = useSourceUpload(work.id);
+	const adding = useSetRowBatch(work.id);
 	const [rows, setRows] = useState<WorkSourceFile[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -63,28 +67,24 @@ export function ImageSourceFiles({ work }: { work: Work }) {
 		if (upload?.status === "done") void reload();
 	}, [upload?.status, reload]);
 
-	/** Add one or many picked images: upload each, attach as a row, in pick order. */
-	const addFiles = async (picked: File[]) => {
-		if (picked.length === 0 || busy) return;
-		setBusy(true);
+	// A picture landing is a row the server wrote, so the gallery re-reads on the count.
+	const landed = useWorkUploads().filter(
+		(u) => u.workId === work.id && u.target.kind === "set-row" && u.status === "done",
+	).length;
+	useEffect(() => {
+		if (landed > 0) void reload();
+	}, [landed, reload]);
+
+	/**
+	 * Add one or many picked pictures. The pick goes to the upload store, which runs it one
+	 * file at a time, so each carries its own name and cancel and the rest survive leaving
+	 * the page. An image is one direct request, so its bar is indeterminate — the honest
+	 * shape, since that request reports no percent.
+	 */
+	const addFiles = (picked: File[]) => {
+		if (picked.length === 0 || busy || adding) return;
 		setError(null);
-		try {
-			for (const file of picked) {
-				const { url } = await uploadImageFile(file, "image");
-				const res = await client.api.content.works[":id"]["source-files"].$post({
-					param: { id: String(work.id) },
-					json: { file: url, filename: file.name, fileSize: file.size, mimeType: file.type },
-				});
-				if (!res.ok) {
-					const body = (await res.json().catch(() => null)) as { error?: string } | null;
-					setError(body?.error || `Couldn't attach ${file.name}.`);
-					break;
-				}
-			}
-			await reload();
-		} finally {
-			setBusy(false);
-		}
+		workUploads.startBatch(work.id, picked, { kind: "set-row", type: "image" });
 	};
 
 	const remove = async (id: number) => {
@@ -189,13 +189,14 @@ export function ImageSourceFiles({ work }: { work: Work }) {
 					))}
 				</div>
 			)}
+			<SourceSetAdds workId={work.id} noun="picture" />
 			{rows && rows.length === 0 && (
 				<p className="mb-2 text-sm text-warning">
 					This Work has no pictures yet, so it can't be released. If it was uploading in a tab that
 					has since closed, upload them again here.
 				</p>
 			)}
-			<MultipleImageInput onFiles={addFiles} disabled={busy} />
+			<MultipleImageInput onFiles={addFiles} disabled={busy || adding != null} />
 		</FormField>
 	);
 }

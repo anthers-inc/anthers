@@ -8,9 +8,11 @@
  * 🚨 **The first file rides the same rail as every other Work's source upload** — created on
  * the Upload page's pick, uploaded through `work-uploads`, attached by the legacy
  * `source_key` PATCH — and the server syncs that attach into this set. So this component's
- * own adds are for files BEYOND the first, each uploaded the same rail and attached as a set
- * row, in the order the creator keeps picking; a multi-pick appends in the picker's order,
- * which is why the control says so.
+ * own adds are for files BEYOND the first, and they ride that store too: a pick becomes a
+ * batch of `set-row` entries (2026-10-19), each with its own progress and cancel, the files
+ * after the first waiting their turn so a hundred-page comic does not open a hundred
+ * concurrent uploads. `SourceSetAdds` renders what the store is carrying; a multi-pick
+ * appends in the picker's order, which is why the control says so.
  *
  * ⚠️ Every mutation re-renders the whole book server-side. The component asks nothing about
  * processing (the page's own processing panel owns that); it only keeps the list it shows
@@ -21,11 +23,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { client } from "../../lib/rpc";
 import type { Work } from "../../lib/types";
-import { uploadMediaFile } from "../../lib/upload";
 import type { WorkSourceFile } from "../../lib/work-sources";
-import { useSourceUpload, type WorkUpload, workUploads } from "../../lib/work-uploads";
+import {
+	useSetRowBatch,
+	useSourceUpload,
+	useWorkUploads,
+	type WorkUpload,
+	workUploads,
+} from "../../lib/work-uploads";
 import FormField from "../ui/FormField";
-import { UploadProgress } from "./work-media";
+import { humanBytes, SourceSetAdds } from "./SourceSetAdds";
+import { type FileWorkType, UploadProgress } from "./work-media";
 
 /** A file's name without its extension. */
 function withoutExtension(name: string): string {
@@ -45,15 +53,9 @@ function rowLabel(row: WorkSourceFile, index: number, upload: WorkUpload | null)
 	return `Page set ${index + 1}`;
 }
 
-function humanBytes(bytes: number | null): string {
-	if (bytes == null) return "";
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-	return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
 export function PagedSourceFiles({ work }: { work: Work }) {
 	const upload = useSourceUpload(work.id);
+	const adding = useSetRowBatch(work.id);
 	const [rows, setRows] = useState<WorkSourceFile[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -81,28 +83,27 @@ export function PagedSourceFiles({ work }: { work: Work }) {
 		if (upload?.status === "done") void reload();
 	}, [upload?.status, reload]);
 
-	/** Add one or many picked files: upload each, attach as a row, in pick order. */
-	const addFiles = async (picked: File[]) => {
-		if (picked.length === 0 || busy) return;
-		setBusy(true);
+	// A page file landing is a row the server wrote, so the list re-reads on the count — the
+	// book grows as the pick goes rather than all at once at its end.
+	const landed = useWorkUploads().filter(
+		(u) => u.workId === work.id && u.target.kind === "set-row" && u.status === "done",
+	).length;
+	useEffect(() => {
+		if (landed > 0) void reload();
+	}, [landed, reload]);
+
+	/**
+	 * Add one or many picked files. The pick goes to the upload store, which runs it a file at
+	 * a time — so each one carries its own progress and cancel, and the rest survive leaving
+	 * this tab instead of being one undifferentiated "Working…" in this component's state.
+	 */
+	const addFiles = (picked: File[]) => {
+		if (picked.length === 0 || busy || adding) return;
 		setError(null);
-		try {
-			for (const file of picked) {
-				const key = await uploadMediaFile(file, "asset");
-				const res = await client.api.content.works[":id"]["source-files"].$post({
-					param: { id: String(work.id) },
-					json: { file: key, filename: file.name, fileSize: file.size, mimeType: file.type },
-				});
-				if (!res.ok) {
-					const body = (await res.json().catch(() => null)) as { error?: string } | null;
-					setError(body?.error || `Couldn't attach ${file.name}.`);
-					break;
-				}
-			}
-			await reload();
-		} finally {
-			setBusy(false);
-		}
+		workUploads.startBatch(work.id, picked, {
+			kind: "set-row",
+			type: work.type as FileWorkType,
+		});
 	};
 
 	const remove = async (id: number) => {
@@ -203,6 +204,7 @@ export function PagedSourceFiles({ work }: { work: Work }) {
 					))}
 				</div>
 			)}
+			<SourceSetAdds workId={work.id} noun="page" />
 			{rows && rows.length === 0 && (
 				<p className="mb-2 text-sm text-warning">
 					This Work has no file yet, so it can't be released. If it was uploading in a tab that has
@@ -221,7 +223,7 @@ export function PagedSourceFiles({ work }: { work: Work }) {
 						: "Drop page images, a PDF or an EPUB, or click to browse"
 				}
 				onFiles={addFiles}
-				disabled={busy}
+				disabled={busy || adding != null}
 			/>
 		</FormField>
 	);
