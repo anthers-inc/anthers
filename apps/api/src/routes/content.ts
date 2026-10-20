@@ -1086,7 +1086,6 @@ const createProjectSchema = z.object({
 		.max(255)
 		.regex(/^[a-z0-9-]+$/, "Slug: lowercase letters, numbers, hyphens"),
 	description: z.string().max(50000).optional().default(""),
-	shortDescription: z.string().max(300).optional().default(""),
 	coverImage: z.string().max(500).optional().default(""),
 	pageConfig: z.record(z.unknown()).optional(),
 	// The Project's two shelf settings (2026-10-19). A creator saves these from the sort
@@ -6693,7 +6692,6 @@ const contentRoutes = new Hono()
 				title: data.title,
 				slug: data.slug,
 				description: data.description,
-				shortDescription: data.shortDescription,
 				coverImage: data.coverImage,
 				pageConfig: data.pageConfig ?? {},
 				...(data.worksSortMode ? { worksSortMode: data.worksSortMode } : {}),
