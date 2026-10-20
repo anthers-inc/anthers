@@ -736,7 +736,14 @@ export interface Project {
 	title: string;
 	description: string | null;
 	shortDescription: string | null;
+	/** The cover this Project shows — an uploaded image, or the chosen Work's cover. */
 	coverImage: string | null;
+	/**
+	 * The Work whose cover this Project wears, by reference; null when the cover is an
+	 * uploaded image or there is none. The response's `coverImage` already resolves it,
+	 * so a reader renders the cover and the editor only needs this to name the choice.
+	 */
+	coverWorkId?: number | null;
 	pageConfig: Record<string, unknown> | null;
 	isPublished: boolean | null;
 	atprotoUri: string | null;

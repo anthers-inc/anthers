@@ -490,6 +490,13 @@ export const projects = pgTable(
 		description: text("description").default(""),
 		shortDescription: text("short_description").default(""),
 		coverImage: text("cover_image").default(""),
+		/**
+		 * The Project's cover chosen from one of its Works, by reference rather than by copy,
+		 * so the Project follows the Work's own cover and inherits its visibility rules on
+		 * every read. The uploaded `cover_image` stays as the alternative and as the fallback
+		 * when the chosen Work is hidden, removed from the shelf, or deleted.
+		 */
+		coverWorkId: integer("cover_work_id").references(() => works.id, { onDelete: "set null" }),
 		// Custom-page layout/showcase config (built out in a later phase).
 		pageConfig: jsonb("page_config").$type<Record<string, unknown>>().default({}),
 		isPublished: boolean("is_published").notNull().default(false),
