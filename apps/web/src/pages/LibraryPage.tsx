@@ -99,6 +99,8 @@ interface ShelfPost {
 	publicId: number;
 	slug: string;
 	title: string | null;
+	/** The title with each mentioned Work's current name — what the card shows. */
+	displayTitle?: string | null;
 	excerpt: string | null;
 	tags: string[];
 	isPublished: boolean;
@@ -135,7 +137,7 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 	const project = item.project;
 	const post = item.post;
 
-	const title = work?.title ?? project?.title ?? post?.title ?? "Untitled";
+	const title = work?.title ?? project?.title ?? post?.displayTitle ?? post?.title ?? "Untitled";
 	const rawCover = work?.thumbnail ?? project?.coverImage ?? null;
 	const to =
 		work?.publicId != null
