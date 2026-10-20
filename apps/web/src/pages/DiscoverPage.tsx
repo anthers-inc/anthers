@@ -512,14 +512,13 @@ export default function DiscoverPage() {
 								{visibleCreators.map((creator) => (
 									<div key={creator.id} className="flex flex-col gap-1">
 										<CreatorCard creator={creator} />
-										<p className="px-1 text-xs text-base-content/50">
-											{basis === "followers"
-												? `${creator.followerCount ?? 0} followers`
-												: `Followed by ${creator.sharedFollows} ${
-														creator.sharedFollows === 1 ? "person" : "people"
-													} you follow`}
-											{creator.isFollowing ? " · Following" : ""}
-										</p>
+										{basis === "network" && (
+											<p className="px-1 text-xs text-base-content/50">
+												Followed by {creator.sharedFollows}{" "}
+												{creator.sharedFollows === 1 ? "person" : "people"} you follow
+												{creator.isFollowing ? " · Following" : ""}
+											</p>
+										)}
 									</div>
 								))}
 							</div>
