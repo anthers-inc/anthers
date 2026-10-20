@@ -35,8 +35,9 @@
 //    here announces; an entry that sells is an entry to rewrite.
 // 4. 🚨 **A roadmap reference is earned by shipping, not by adjacency.** `roadmapIds`
 //    names the roadmap items this release moved to `launched` in `roadmap.ts`, and the
-//    page names each one as a chip linking to the canonical roadmap at `anthers.wiki` —
-//    this app's `/roadmap` is no longer linked from anywhere, so that module is what
+//    page names each one as a chip linking to that goal's lane in the canonical roadmap
+//    at `anthers.wiki` — so a referenced item carries a `lane`, and the test says so.
+//    This app's `/roadmap` is no longer linked from anywhere, so `roadmap.ts` is what
 //    still decides the word `launched` the chip depends on. Most entries map to
 //    nothing, and that is correct: do not stretch an entry to claim one.
 //    If a referenced item is still `active` or `planned` in `roadmap.ts`, that is a

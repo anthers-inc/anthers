@@ -124,6 +124,18 @@ describe("every roadmap cross-reference is real", () => {
 		}
 	});
 
+	it("names a roadmap lane for every referenced item, so its chip can land on a section", () => {
+		for (const release of RELEASE_NOTES) {
+			for (const id of release.roadmapIds ?? []) {
+				const item = items.get(id);
+				if (!item) continue;
+				expect(`${release.version} → ${id}: ${item.lane ?? "«no lane»"}`).toBe(
+					`${release.version} → ${id}: ${item.lane}`,
+				);
+			}
+		}
+	});
+
 	it("🚨 claims no roadmap item that is still unbuilt — the notes never ship something the roadmap still shows planned", () => {
 		// The hard one, and the reason this file exists. An item claimed by a release
 		// must have moved to `launched` in the same PR: a release-notes entry and a roadmap
