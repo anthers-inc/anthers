@@ -39,7 +39,7 @@ export const SESSION_CLEANUP_DAYS = 3;
 const MAX_PARTS = 10_000;
 export const MAX_SESSION_BYTES = UPLOAD_PART_SIZE * MAX_PARTS;
 
-export type UploadMediaType = "video" | "audio" | "asset";
+export type UploadMediaType = "video" | "audio" | "asset" | "preview-video";
 
 /**
  * The destination key for a session — one key naming for every media upload: this
@@ -57,6 +57,9 @@ export function mediaUploadKeyFor(
 		video: `creators/${creatorId}/videos/originals/${uuid}.${ext}`,
 		audio: `creators/${creatorId}/audio/originals/${uuid}.${ext}`,
 		asset: `creators/${creatorId}/assets/${uuid}.${ext}`,
+		// One `previews/` prefix covers every preview object — screenshots, trailers and
+		// their caption files — so the storage sweep and the usage counter see them together.
+		"preview-video": `creators/${creatorId}/previews/videos/${uuid}.${ext}`,
 	} as const;
 	return map[mediaType];
 }

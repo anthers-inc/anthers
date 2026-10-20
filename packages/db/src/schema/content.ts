@@ -836,6 +836,81 @@ export const workCaptionTracks = pgTable(
 	],
 );
 
+/**
+ * The storefront's preview media — the screenshots and trailer a creator shows somebody who
+ * has not unlocked the Work, the Steam and Vimeo On Demand shape (Parker, 2026-10-19).
+ *
+ * 🚨 **Private on purpose, and not part of `org.anthers.work`.** Preview media is platform
+ * display chrome rather than the listing record: it follows the Work's rating and disappears
+ * with the Work, and nothing about it publishes. Its objects live under `creators/{id}/previews/`
+ * and reaches viewers only through the reachability-checked preview route, never a public URL.
+ */
+// node — a creator's own storefront material, cascading with the Work.
+export const workPreviewMedia = pgTable(
+	"work_preview_media",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** `image` or `video` — the two shapes the carousel knows how to render. */
+		kind: text("kind").notNull(),
+		/** Private storage key of the screenshot or trailer file. Never served directly. */
+		file: text("file").notNull(),
+		/** Image description; empty for a video, whose captions carry its text. */
+		alt: text("alt").notNull().default(""),
+		/** 0-based and dense — renumbered on every mutation, so the order is this column's order. */
+		position: integer("position").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_work_preview_media").on(table.workId, table.position),
+		index("idx_work_preview_media_work").on(table.workId, table.position),
+	],
+);
+
+/**
+ * A trailer's caption tracks — its own table rather than a nullable preview column on
+ * `work_caption_tracks`, because that table's unique `(work_id, language, kind)` index is
+ * what keeps one language meaning one track on the Work itself, while each preview needs
+ * the same language to be free to carry its own.
+ *
+ * `services/captions.ts` remains the one writer of both caption tables, and the parse, size
+ * cap and replace-by-language rule are the Work's own, unchanged: a trailer is a video and
+ * its captions are the same authored WebVTT.
+ */
+// node — caption tracks a creator authored for their own trailer. Cascades with the preview.
+export const workPreviewCaptionTracks = pgTable(
+	"work_preview_caption_tracks",
+	{
+		id: serial("id").primaryKey(),
+		previewId: integer("preview_id")
+			.notNull()
+			.references(() => workPreviewMedia.id, { onDelete: "cascade" }),
+		/** BCP-47 language tag as the creator entered it — the `<track srcLang>` and menu key. */
+		language: text("language").notNull(),
+		/** The human label a player menu shows. Empty falls back to the language. */
+		label: text("label").default(""),
+		/** captions | subtitles — the `<track kind>` this row renders as. */
+		kind: text("kind").notNull().default("captions"),
+		/** Private storage key of the .vtt. Never served directly — the caption route is. */
+		storageKey: text("storage_key").notNull(),
+		byteSize: integer("byte_size").notNull(),
+		/** What the upload validation counted — the one honest size signal a creator sees. */
+		cueCount: integer("cue_count").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		uniqueIndex("uq_work_preview_captions_preview_language_kind").on(
+			table.previewId,
+			table.language,
+			table.kind,
+		),
+		index("idx_work_preview_captions_preview").on(table.previewId),
+	],
+);
+
 // node — an ebook Work's extracted reflow sections. Node media, cascades with the Work.
 export const workSections = pgTable(
 	"work_sections",

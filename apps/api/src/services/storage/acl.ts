@@ -72,6 +72,12 @@ export function scannedObjectKind(
 		case "video":
 		case "audio":
 		case "asset":
+		// A trailer is a video and needs decoding rather than whole-file hashing, so it
+		// queues `SCAN_MEDIA` when it is attached, exactly as a Work's source does. A
+		// trailer's caption is text and rides the Work's caption rule: the WebVTT parse is
+		// its ingest gate (`services/captions.ts`), so no perceptual pass here.
+		case "preview-video":
+		case "preview-caption":
 			return null;
 		case "avatar":
 		case "header":
@@ -80,10 +86,12 @@ export function scannedObjectKind(
 		case "inline-image":
 			return mediaType;
 		// One key prefix, so one kind. An operator reading `gallery` and an operator reading
-		// the key are looking at the same place.
+		// the key are looking at the same place. A preview screenshot is display chrome on
+		// the storefront and takes the same inline scan as a gallery image.
 		case "gallery":
 		case "image":
 		case "screenshot":
+		case "preview-image":
 			return "gallery";
 		default:
 			return "upload";
