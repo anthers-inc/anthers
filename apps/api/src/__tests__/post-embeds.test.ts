@@ -55,9 +55,9 @@ describe("workPublicIdsFromBody", () => {
 	});
 
 	it("reads two links written back to back without whitespace", () => {
-		expect(
-			workPublicIdsFromBody("/works/first-123456789,/works/second-987654321"),
-		).toEqual([123456789, 987654321]);
+		expect(workPublicIdsFromBody("/works/first-123456789,/works/second-987654321")).toEqual([
+			123456789, 987654321,
+		]);
 	});
 
 	it("ignores another site's path that happens to carry /works", () => {
