@@ -66,9 +66,11 @@ import {
 	createAccountOnboardingLink,
 	createCheckoutSession,
 	createConnectAccount,
+	expireCheckoutSession,
 	listCheckoutSessions,
 	listRefundsForCharge,
 	paymentsConfigured,
+	retrieveCheckoutSession,
 	retrieveConnectAccount,
 	retrieveConnectBalance,
 	retrieveSubscription,
@@ -82,6 +84,7 @@ import {
 	addBasketBadge,
 	addBasketItem,
 	clearBasket,
+	clearPurchasedBasketItems,
 	listBasket,
 	removeBasketBadge,
 	removeBasketItem,
@@ -892,9 +895,30 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 	// up through the same column.
 	const linkCustomerId =
 		typeof session.customer === "string" ? session.customer : (session.customer?.id ?? null);
-	const buyerUserId = Number(pi.metadata?.buyerId ?? NaN);
+	// The buyer's own id rides the intent's metadata, which every purchase surface stamps.
+	// The session's copy is the fallback: Stripe's own copy of the intent metadata is the
+	// ordinary source, but a PI built outside our checkout (a fixture, a hand-rolled call)
+	// may carry only the session's.
+	const buyerUserId = Number(pi.metadata?.buyerId ?? session.metadata?.buyerId ?? NaN);
 	if (linkCustomerId && Number.isFinite(buyerUserId)) {
 		await linkCheckoutCustomer(buyerUserId, linkCustomerId);
+	}
+
+	// ── The basket's bought lines leave with the money ───────────────────────
+	// This is the ONLY place a purchase empties part of the basket (Parker, 2026-10-19):
+	// the checkout route builds a session on every visit to the basket page and must not
+	// spend the buyer's intent, so the rows leave here, once the charge has actually
+	// completed. Exactly the ids this charge carried — `stamped` and `stampedBadges` are
+	// its completed rows — so a Work the buyer added in another tab while the webhook was
+	// in flight is theirs to keep. Idempotent: a redelivery finds the rows already gone.
+	if (Number.isFinite(buyerUserId)) {
+		const boughtWorkIds = stamped
+			.map(({ row }) => row.workId)
+			.filter((id): id is number => id != null);
+		const boughtBadgeIds = stampedBadges
+			.map(({ row }) => row.badgeId)
+			.filter((id): id is number => id != null);
+		await clearPurchasedBasketItems(buyerUserId, boughtWorkIds, boughtBadgeIds);
 	}
 
 	// ── The Badge half — the support side of a completed first transaction ────
@@ -1131,6 +1155,125 @@ async function resolvedBasketItems(userId: number): Promise<ResolvedBasketItem[]
 		});
 	}
 	return items;
+}
+
+/**
+ * The basket's CONTENT identity, kind-tagged and sorted — the same string the client's
+ * `basketContentKey` computes for its checkout's re-mount guard.
+ *
+ * It exists server-side to answer one question: *is the open Checkout Session an
+ * abandoned visit left behind the very session this basket needs?* If it is, the client
+ * secret is handed back rather than a second session and a second set of pending rows
+ * being built for the same intent.
+ */
+function basketContentKey(items: Array<{ kind: "work" | "badge"; id: number }>): string {
+	return items
+		.map((i) => (i.kind === "badge" ? `b${i.id}` : `w${i.id}`))
+		.sort()
+		.join(",");
+}
+
+/** The content identity a basket Checkout Session was built for, read off its metadata. */
+function sessionBasketContentKey(metadata: Stripe.Metadata | null): string {
+	const ids = (value: string | undefined, prefix: "w" | "b") =>
+		(value ?? "")
+			.split(",")
+			.filter(Boolean)
+			.map((id) => `${prefix}${id}`);
+	return [...ids(metadata?.workIds, "w"), ...ids(metadata?.badgeIds, "b")].sort().join(",");
+}
+
+/**
+ * Settle a checkout session's still-pending ledger rows as failed.
+ *
+ * A session that expired, or one this visit expired because the basket it carried is no
+ * longer the basket the buyer is looking at, will never be paid — its rows are dead
+ * weight in the purchases ledger and in any later reconciliation. A `complete` session is
+ * deliberately NOT passed here: its payment succeeded and the webhook owns those rows,
+ * which may simply not have landed yet.
+ */
+async function failPendingBasketRows(sessionId: string): Promise<void> {
+	await db
+		.update(purchases)
+		.set({ status: "failed", updatedAt: new Date() })
+		.where(and(eq(purchases.stripePaymentIntentId, sessionId), eq(purchases.status, "pending")));
+	await db
+		.update(badgeCharges)
+		.set({ status: "failed", updatedAt: new Date() })
+		.where(
+			and(eq(badgeCharges.stripePaymentIntentId, sessionId), eq(badgeCharges.status, "pending")),
+		);
+}
+
+/**
+ * What the account's existing basket sessions mean for a checkout attempt right now.
+ *
+ * - `resume` — an open session for exactly this basket, whose client secret is handed back.
+ * - `confirming` — a session for this basket has already been PAID, and its webhook has not
+ *   landed yet. Building a second session here is how a buyer pays twice for one basket,
+ *   so the route refuses with a retry-shaped message instead; the completion clears the
+ *   basket within moments.
+ */
+type BasketSessionState =
+	| { state: "resume"; session: Stripe.Checkout.Session }
+	| { state: "confirming" };
+
+/**
+ * The open basket Checkout Session this account already holds for exactly this basket, or
+ * null when a fresh one is needed.
+ *
+ * 🚨 **This is what lets the basket survive an abandoned checkout** (Parker, 2026-10-19).
+ * The basket used to be emptied the moment a session was built — which is the moment the
+ * basket page loads — so opening the page and leaving without paying erased the buyer's
+ * choices. Now the session is the disposable thing: a revisit with the same basket gets
+ * the same session back; a session for a basket that has since changed (or one Stripe has
+ * already expired) is closed and its pending rows failed, and a new one is built from what
+ * the buyer actually holds.
+ *
+ * A session whose id cannot be read is skipped rather than fatal — an unreachable
+ * processor degrades to "build a new one", the same fail-open the checkout already
+ * accepts.
+ */
+async function resumeBasketSession(
+	userId: number,
+	contentKey: string,
+): Promise<BasketSessionState | null> {
+	const [workSessions, badgeSessions] = await Promise.all([
+		db
+			.selectDistinct({ id: purchases.stripePaymentIntentId })
+			.from(purchases)
+			.where(and(eq(purchases.buyerId, userId), eq(purchases.status, "pending"))),
+		db
+			.selectDistinct({ id: badgeCharges.stripePaymentIntentId })
+			.from(badgeCharges)
+			.where(and(eq(badgeCharges.buyerId, userId), eq(badgeCharges.status, "pending"))),
+	]);
+	const ids = [...new Set([...workSessions, ...badgeSessions].map((row) => row.id))];
+
+	for (const id of ids) {
+		const session = await retrieveCheckoutSession(id);
+		if (!session) continue;
+		// Only a BASKET session may be resumed or refused here — a buy-now Badge charge
+		// leaves its own pending rows, and its session is not this basket's even when the
+		// ids happen to coincide.
+		if (session.metadata?.kind !== "direct_purchase_basket") continue;
+		const sameBasket = sessionBasketContentKey(session.metadata) === contentKey;
+		if (session.status === "open") {
+			if (sameBasket) return { state: "resume", session };
+			// The basket changed under it: nobody may pay this one any more, and its
+			// ledger rows will never complete.
+			await expireCheckoutSession(id);
+			await failPendingBasketRows(id);
+			continue;
+		}
+		// A paid session for this very basket is mid-confirmation: its rows are still
+		// pending only because the webhook has not landed. Never build a second charge.
+		if (sameBasket && session.status === "complete" && session.payment_status === "paid") {
+			return { state: "confirming" };
+		}
+		if (session.status === "expired") await failPendingBasketRows(id);
+	}
+	return null;
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -2190,6 +2333,42 @@ const paymentRoutes = new Hono()
 			}
 		}
 
+		// 🚨 **A basket the buyer already has a live session for is not charged twice, and
+		// the intent is not spent until the money moves** (Parker, 2026-10-19). The basket
+		// used to be emptied the moment this route built a session — which is the moment
+		// the basket page loads — so opening the page and leaving without paying erased
+		// what the buyer had chosen. Now a revisit with the same basket gets the same open
+		// session back; a session built for a basket that has since changed is expired, its
+		// pending rows failed, and a fresh one is built below.
+		const known = await resumeBasketSession(
+			user.id,
+			basketContentKey(
+				q.items.map((i) => ({
+					kind: i.kind,
+					id: i.kind === "work" ? i.work.id : i.badge.id,
+				})),
+			),
+		);
+		if (known?.state === "confirming") {
+			// The payment for this basket already went through and its webhook has not
+			// landed yet. A second session here is a second charge for the same basket.
+			return c.json(
+				{ error: "Your payment is being confirmed — this basket clears in a moment." },
+				409,
+			);
+		}
+		if (known?.state === "resume" && known.session.client_secret) {
+			return c.json({
+				subtotal: q.subtotal.toFixed(2),
+				processingFee: q.fees.processingFee.toFixed(2),
+				salesTax: null,
+				creatorEarnings: q.fees.creatorEarnings.toFixed(2),
+				buyerTotal: null,
+				itemCount: q.items.length,
+				clientSecret: known.session.client_secret,
+			});
+		}
+
 		// One line per Work, each with its own tax code — a basket can span media, and a
 		// video and an image are not taxed as the same thing in every jurisdiction. A
 		// Badge line names its rung's own Product, whose tax code the rung's own kinds
@@ -2307,13 +2486,14 @@ const paymentRoutes = new Hono()
 		}));
 		if (badgeChargeRows.length > 0) await db.insert(badgeCharges).values(badgeChargeRows);
 
-		// The basket has been bought — emptied now, at the moment the charge exists, rather
-		// than waiting on the webhook: a buyer who closes the tab at the Pay screen holds a
-		// session they can come back and confirm, and the basket's ids are already spent.
-		// (The webhook completing is what grants access; this only stops the badge counting
-		// what they have just paid for.)
-		await clearBasket(user.id);
-
+		// 🚨 **The basket is NOT cleared here** (Parker, 2026-10-19). This route runs the
+		// moment the basket page mounts — it is how the embedded checkout gets its client
+		// secret — so clearing here meant opening the basket and walking away erased it.
+		// The rows now leave when the charge completes (`completeSessionPurchases` clears
+		// exactly the ids the session carried), or when the buyer empties the basket
+		// themselves. The purchase and Badge-charge rows above are the money's record and
+		// are already keyed to this session; abandoning it leaves them pending, and the
+		// next `/basket/checkout` either resumes this session or fails them.
 		return c.json({
 			subtotal: q.subtotal.toFixed(2),
 			processingFee: q.fees.processingFee.toFixed(2),
