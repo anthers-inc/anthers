@@ -47,6 +47,7 @@ import {
 	isOwnThumbnail,
 	isPaged,
 	needsChosenThumbnail,
+	supportsPreviewMedia,
 } from "@anthers/shared/content";
 import {
 	type ContentNote,
@@ -127,6 +128,7 @@ import WorkReviews from "../project/WorkReviews";
 import { InlineField } from "./Editing";
 import { LyricsBody } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
+import PreviewMediaSection from "./PreviewMediaSection";
 import ShareLinkButton from "./ShareLinkButton";
 import { WorkViewAsSection } from "./ViewAs";
 import WorkInfoTabs, { type InfoTab } from "./WorkInfoTabs";
@@ -1438,6 +1440,12 @@ export default function OwnerWorkEditor({
 								<WebBuildSection work={current} onChanged={() => void refreshMedia()} />
 							</section>
 						</>
+					)}
+					{supportsPreviewMedia(current.type) && (
+						// The storefront set sits after the kind's own machinery (media, file
+						// or builds) and before the thumbnail — the same place a reader meets
+						// it, under the locked card (Parker, 2026-10-19).
+						<PreviewMediaSection work={current} onChanged={() => void refreshMedia()} />
 					)}
 					{isGoods(current.type) && (
 						// Same doubling rule: the InlineField names itself "Details".

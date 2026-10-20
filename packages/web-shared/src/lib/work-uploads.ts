@@ -43,7 +43,11 @@ export type WorkUploadTarget =
 	/** The Work's own file — what a video, a track, an image or a book IS. */
 	| { kind: "source"; type: (typeof FILE_WORK_TYPES)[number] }
 	/** A downloadable build for a game or software Work, which becomes its primary download. */
-	| { kind: "build"; platform: string };
+	| { kind: "build"; platform: string }
+	/** A storefront screenshot, appended to the Work's preview set when it lands. */
+	| { kind: "preview-image" }
+	/** A storefront trailer, appended to the Work's preview set when it lands. */
+	| { kind: "preview-video" };
 
 /**
  * `uploading` is bytes on the wire, `attaching` is telling the Work the file is there, `done`
@@ -88,6 +92,14 @@ export interface WorkUploadTransport {
 
 const defaultTransport: WorkUploadTransport = {
 	async put(file, target, onProgress, signal) {
+		if (target.kind === "preview-image") {
+			// The direct image route stores the key; the attach route is what names it on
+			// the Work, and its inline scan has already answered before the row exists.
+			return (await uploadImageFile(file, "preview-image", signal)).url;
+		}
+		if (target.kind === "preview-video") {
+			return uploadMediaFile(file, "preview-video", onProgress, signal);
+		}
 		if (target.kind === "source" && target.type === "image") {
 			return (await uploadImageFile(file, "image", signal)).url;
 		}
@@ -108,6 +120,18 @@ const defaultTransport: WorkUploadTransport = {
 		// kinds; the service keeps the legacy column following the set — a paged set at its
 		// newest file, an image set at its first. The other kinds' attach stays the legacy
 		// column patch.
+		if (target.kind === "preview-image" || target.kind === "preview-video") {
+			const res = await client.api.content.works[":id"].previews.$post({
+				param,
+				json: {
+					kind: target.kind === "preview-image" ? "image" : "video",
+					key,
+					alt: "",
+				},
+			});
+			if (!res.ok) throw new Error(`attach answered ${res.status}`);
+			return;
+		}
 		const res =
 			target.kind === "source" && hasSourceSet(target.type)
 				? await client.api.content.works[":id"]["source-files"].$post({
@@ -254,7 +278,10 @@ export function createWorkUploadStore(transport: WorkUploadTransport): WorkUploa
 					fileName: file.name,
 					target,
 					status: "uploading",
-					progress: target.kind === "source" && target.type === "image" ? null : 0,
+					progress:
+						(target.kind === "source" && target.type === "image") || target.kind === "preview-image"
+							? null
+							: 0,
 					error: null,
 				},
 			});

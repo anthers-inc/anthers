@@ -25,6 +25,7 @@ export default function Lightbox({
 	index,
 	onIndex,
 	alt = "Gallery",
+	alts,
 }: {
 	images: string[];
 	/** The open image's position, or null while closed. */
@@ -33,6 +34,8 @@ export default function Lightbox({
 	onIndex: (index: number | null) => void;
 	/** The pictures' alt text, as their payload gates it. */
 	alt?: string;
+	/** Per-image alt text where each picture carries its own (the preview carousel). */
+	alts?: string[];
 }) {
 	const close = useCallback(() => onIndex(null), [onIndex]);
 	const prev = useCallback(
@@ -102,7 +105,7 @@ export default function Lightbox({
 			<div className="max-w-5xl max-h-[85vh] p-4">
 				<img
 					src={images[index]}
-					alt={alt}
+					alt={alts?.[index] ?? alt}
 					className="max-w-full max-h-[80vh] object-contain mx-auto"
 				/>
 				<p className="text-center text-white/40 text-xs mt-1">

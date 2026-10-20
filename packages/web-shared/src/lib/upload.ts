@@ -52,7 +52,7 @@ export async function wholeFileSha256Hex(file: File, signal?: AbortSignal): Prom
 
 export async function uploadMediaFile(
 	file: File,
-	mediaType: "video" | "audio" | "asset",
+	mediaType: "video" | "audio" | "asset" | "preview-video",
 	onProgress?: (percent: number | null) => void,
 	signal?: AbortSignal,
 ): Promise<string> {
