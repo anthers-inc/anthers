@@ -11,13 +11,16 @@
  * own adds are for files BEYOND the first, and they ride that store too: a pick becomes a
  * batch of `set-row` entries (2026-10-19), each with its own progress and cancel, the files
  * after the first waiting their turn so a hundred-page comic does not open a hundred
- * concurrent uploads. `SourceSetAdds` renders what the store is carrying; a multi-pick
- * appends in the picker's order, which is why the control says so.
+ * concurrent uploads, and the whole pick attaching in one request when its last file lands.
+ * `SourceSetAdds` renders what the store is carrying; a multi-pick appends in the picker's
+ * order, which is why the control says so.
  *
- * ⚠️ Every mutation re-renders the whole book server-side. The component asks nothing about
- * processing (the page's own processing panel owns that); it only keeps the list it shows
- * equal to the set the server stands at, and refuses a second button-press while a save is
- * running so reordering two files in a blink cannot send two orders that pass in the air.
+ * ⚠️ Every mutation re-renders the whole book server-side, so a pick is sent as ONE append
+ * rather than one per file (2026-10-19): a hundred page images in a hundred requests would be
+ * a hundred renders of a set that grew by one. The component asks nothing about processing
+ * (the page's own processing panel owns that); it only keeps the list it shows equal to the
+ * set the server stands at, and refuses a second button-press while a save is running so
+ * reordering two files in a blink cannot send two orders that pass in the air.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -83,8 +86,8 @@ export function PagedSourceFiles({ work }: { work: Work }) {
 		if (upload?.status === "done") void reload();
 	}, [upload?.status, reload]);
 
-	// A page file landing is a row the server wrote, so the list re-reads on the count — the
-	// book grows as the pick goes rather than all at once at its end.
+	// A page file landing is a row the server wrote — the pick attaches once, at its end — so
+	// the list re-reads when that append settles rather than growing file by file.
 	const landed = useWorkUploads().filter(
 		(u) => u.workId === work.id && u.target.kind === "set-row" && u.status === "done",
 	).length;
@@ -94,8 +97,8 @@ export function PagedSourceFiles({ work }: { work: Work }) {
 
 	/**
 	 * Add one or many picked files. The pick goes to the upload store, which runs it a file at
-	 * a time — so each one carries its own progress and cancel, and the rest survive leaving
-	 * this tab instead of being one undifferentiated "Working…" in this component's state.
+	 * a time — so each one carries its own progress and cancel, the rest survive leaving this
+	 * tab, and the whole pick reaches the Work in one append when the last file lands.
 	 */
 	const addFiles = (picked: File[]) => {
 		if (picked.length === 0 || busy || adding) return;

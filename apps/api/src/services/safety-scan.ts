@@ -627,6 +627,13 @@ export function scannableKeys(
 	 * covered when the carousel is serving ones nobody looked at.
 	 */
 	previews: ReadonlyArray<Pick<PreviewMediaRow, "id" | "kind" | "file">> = [],
+	/**
+	 * Objects the caller has just attached that the Work's own columns do not name yet — a
+	 * set append's files, of which the legacy column names only the newest or the first. Same
+	 * map and the same dedupe, so a whole pick is one call rather than one per file (and one
+	 * re-ask for the thumbnail per file).
+	 */
+	extra: ReadonlyArray<ScannableObject> = [],
 ): ScannableObject[] {
 	const out = new Map<string, ScannableKind>();
 	if (work.type === "image" && work.sourceKey) out.set(work.sourceKey, "image");
@@ -641,6 +648,9 @@ export function scannableKeys(
 		if (!preview.file) continue;
 		const key = urlToKey(preview.file);
 		if (key && !out.has(key)) out.set(key, preview.kind === "video" ? "video" : "image");
+	}
+	for (const object of extra) {
+		if (object.key && !out.has(object.key)) out.set(object.key, object.kind);
 	}
 	return [...out].map(([key, kind]) => ({ key, kind }));
 }
@@ -680,12 +690,13 @@ async function unanswered(objects: ScannableObject[]): Promise<ScannableObject[]
 export async function beginScans(
 	work: WorkRow,
 	now: Date = new Date(),
+	extra: ReadonlyArray<ScannableObject> = [],
 ): Promise<ScannableObject[]> {
 	const previews = await db
 		.select({ id: workPreviewMedia.id, kind: workPreviewMedia.kind, file: workPreviewMedia.file })
 		.from(workPreviewMedia)
 		.where(eq(workPreviewMedia.workId, work.id));
-	const objects = await unanswered(scannableKeys(work, previews));
+	const objects = await unanswered(scannableKeys(work, previews, extra));
 	if (objects.length === 0) return [];
 	await db.update(works).set({ scanQueuedAt: now }).where(eq(works.id, work.id));
 	return objects;

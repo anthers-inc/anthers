@@ -14,7 +14,9 @@
  *   in disagreement.
  * - **The set mutates as rows**: append at the end (dense positions, the legacy column
  *   following the newest file), remove with renumber, reorder as a whole list. Every
- *   mutation enqueues exactly one more rasterize.
+ *   mutation enqueues exactly one more rasterize — and a pick is one mutation, so the
+ *   multi-file append lands all its rows and asks ONE render, while a pick carrying a
+ *   refused file writes none of it and asks none.
  * - **A foreign file is refused**, the storage-ownership rule (`isOwnStorageRef`) applied
  *   like the assets route applies it — a set row signs its key for the Work's owner, so a
  *   row naming another creator's private original would hand it over.
@@ -66,6 +68,13 @@ async function putPdfKey(creatorId: number, name: string): Promise<string> {
 		"application/pdf",
 		"private",
 	);
+	return key;
+}
+
+/** An owned EPUB, the reflow shape a paged set may not mix with page files. */
+async function putEpubKey(creatorId: number, name: string): Promise<string> {
+	const key = `creators/${creatorId}/assets/${name}.epub`;
+	await storage.upload(key, Buffer.from("fake epub bytes"), "application/epub+zip", "private");
 	return key;
 }
 
@@ -183,6 +192,86 @@ describe("a paged Work's source set", () => {
 		expect(rasterizeCalls).toBe(3);
 	});
 
+	it("adds a whole pick as one mutation and one render", async () => {
+		const first = await putKey(creator.id, "pick-first");
+		const second = await putKey(creator.id, "pick-second");
+		const third = await putKey(creator.id, "pick-third");
+		const work = await insertWork({
+			creatorId: creator.id,
+			type: "comic",
+			visibility: "private",
+			sourceKey: first,
+		});
+		workIds.push(work.id);
+		await call("PATCH", `/api/content/works/${work.id}`, creator.cookie, { sourceKey: first });
+
+		const sends = () => sendSpy.mock.calls as Array<[unknown, unknown]>;
+		const renders = () => sends().filter(([q]) => q === QUEUES.RENDER_PAGED).length;
+		const rendersBefore = renders();
+
+		const res = await call("POST", `/api/content/works/${work.id}/source-files`, creator.cookie, {
+			files: [
+				{ file: second, filename: "second.png", fileSize: 123 },
+				{ file: third, filename: "third.png", fileSize: 456 },
+			],
+		});
+		expect(res.status).toBe(201);
+		const { files } = (await res.json()) as { files: SetRow[] };
+		expect(files.map((f) => f.position)).toEqual([0, 1, 2]);
+		expect(files.map((f) => f.filename)).toEqual([expect.any(String), "second.png", "third.png"]);
+		expect(files[2].fileSize).toBe(456);
+
+		// 🚨 The pick is the mutation: two files, ONE render. Sending them as two appends
+		// enqueued two, each rendering and re-uploading the whole set.
+		expect(renders()).toBe(rendersBefore + 1);
+		// The legacy column still follows the set's newest file.
+		const [row] = await db
+			.select({ sourceKey: works.sourceKey })
+			.from(works)
+			.where(eq(works.id, work.id));
+		expect(row.sourceKey).toBe(third);
+	});
+
+	it("refuses a mixed pick whole, writing nothing and rendering nothing", async () => {
+		const first = await putPdfKey(creator.id, "mixed-first");
+		const work = await insertWork({
+			creatorId: creator.id,
+			type: "ebook",
+			visibility: "private",
+			sourceKey: first,
+		});
+		workIds.push(work.id);
+		await call("PATCH", `/api/content/works/${work.id}`, creator.cookie, { sourceKey: first });
+
+		const rendersBefore = (sendSpy.mock.calls as Array<[unknown, unknown]>).filter(
+			([q]) => q === QUEUES.RENDER_PAGED,
+		).length;
+		const res = await call("POST", `/api/content/works/${work.id}/source-files`, creator.cookie, {
+			files: [
+				{
+					file: await putPdfKey(creator.id, "mixed-second"),
+					filename: "second.pdf",
+					mimeType: "application/pdf",
+				},
+				{
+					file: await putEpubKey(creator.id, "mixed-book"),
+					filename: "mixed-book.epub",
+					mimeType: "application/epub+zip",
+				},
+			],
+		});
+		expect(res.status).toBe(400);
+		// The refusal names the file the composition could not take, not a generic "mixed".
+		expect(((await res.json()) as { error?: string }).error).toContain("mixed-book.epub");
+		// Nothing of the pick was written, and nothing was asked to render.
+		const files = await readSet(work.id);
+		expect(files.map((f) => f.file)).toEqual([first]);
+		expect(
+			(sendSpy.mock.calls as Array<[unknown, unknown]>).filter(([q]) => q === QUEUES.RENDER_PAGED)
+				.length,
+		).toBe(rendersBefore);
+	});
+
 	it("removes with a renumber and sweeps the file's object", async () => {
 		const one = await putKey(creator.id, "rem-one");
 		const two = await putKey(creator.id, "rem-two");
@@ -283,6 +372,18 @@ describe("a paged Work's source set", () => {
 		// The storage-ownership refusal's own words, as the assets route states it.
 		expect(body.code).toBe("foreign_file");
 		expect(body.error).toContain("one of your uploads");
+
+		// A whole pick is refused on its first foreign reference, before any of it is written:
+		// one bad key in a hundred-file pick must not land the other ninety-nine.
+		const mixed = await call("POST", `/api/content/works/${work.id}/source-files`, creator.cookie, {
+			files: [
+				{ file: await putKey(creator.id, "foreign-pick-own") },
+				{ file: foreignKey(creator.id, other.id) },
+			],
+		});
+		expect(mixed.status).toBe(400);
+		expect(((await mixed.json()) as { code?: string }).code).toBe("foreign_file");
+		expect(await readSet(work.id)).toHaveLength(1);
 	});
 
 	it("refuses the set on a released Work and on a Work of a kind that is not set-bearing", async () => {
@@ -531,6 +632,69 @@ describe("an image Work's set", () => {
 			creator.cookie,
 		);
 		expect(await sourceKeyOf(work.id)).toBe("");
+	});
+
+	it("appends a gallery pick at the end and leaves the column on the FIRST image", async () => {
+		const cover = await putImage(creator.id, "pick-cover");
+		const second = await putImage(creator.id, "pick-second");
+		const third = await putImage(creator.id, "pick-third");
+		const work = await insertWork({ creatorId: creator.id, type: "image", visibility: "private" });
+		workIds.push(work.id);
+		await call("PATCH", `/api/content/works/${work.id}`, creator.cookie, { sourceKey: cover });
+
+		// The image kind renders nothing, so a pick is one mutation with no render either way;
+		// what this pins is that the whole pick lands in order and the cover does not move.
+		const scansBefore = (sendSpy.mock.calls as Array<[unknown, unknown]>).filter(
+			([q]) => q === QUEUES.SCAN_MEDIA,
+		).length;
+		const res = await call("POST", `/api/content/works/${work.id}/source-files`, creator.cookie, {
+			files: [
+				{ file: second, filename: "second.png", mimeType: "image/png" },
+				{ file: third, filename: "third.png", mimeType: "image/png" },
+			],
+		});
+		expect(res.status).toBe(201);
+
+		const files = await readSet(work.id);
+		expect(files.map((f) => f.position)).toEqual([0, 1, 2]);
+		expect(files.map((f) => f.file)).toEqual([cover, second, third]);
+		// Every picture in the pick is a new object to scan; the legacy column names only one,
+		// so the route carries the pick as the scan set's extra keys.
+		const scanned = (sendSpy.mock.calls as Array<[string, { storageKey: string }]>)
+			.filter(([q]) => q === QUEUES.SCAN_MEDIA)
+			.slice(scansBefore)
+			.map(([, data]) => data.storageKey);
+		expect(scanned).toContain(second);
+		expect(scanned).toContain(third);
+		// 🚨 The load-bearing difference from the paged kinds: the column IS the cover.
+		expect(await sourceKeyOf(work.id)).toBe(cover);
+	});
+
+	it("refuses a pick carrying a non-image, and writes none of it", async () => {
+		const cover = await putImage(creator.id, "pick-guard-cover");
+		const work = await insertWork({ creatorId: creator.id, type: "image", visibility: "private" });
+		workIds.push(work.id);
+		await call("PATCH", `/api/content/works/${work.id}`, creator.cookie, { sourceKey: cover });
+
+		const res = await call("POST", `/api/content/works/${work.id}/source-files`, creator.cookie, {
+			files: [
+				{
+					file: await putImage(creator.id, "pick-guard-picture"),
+					filename: "fine.png",
+					mimeType: "image/png",
+				},
+				{
+					file: await putPdf(creator.id, "pick-guard-pdf"),
+					filename: "not-a-picture.pdf",
+					mimeType: "application/pdf",
+				},
+			],
+		});
+		expect(res.status).toBe(400);
+		expect(((await res.json()) as { code?: string }).code).toBe("sources_not_images");
+		// The refusal names the offender, and the image beside it did not land either.
+		const files = await readSet(work.id);
+		expect(files.map((f) => f.file)).toEqual([cover]);
 	});
 
 	it("refuses the set on a released image Work", async () => {
