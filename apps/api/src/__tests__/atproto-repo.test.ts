@@ -47,6 +47,7 @@ function openWork(overrides: Partial<PublishableWork> = {}): PublishableWork {
 		slug: "a-short-film",
 		publicId: 90210,
 		releasedAt: new Date("2026-07-01T00:00:00.000Z"),
+		originallyReleased: null,
 		...overrides,
 	};
 }
