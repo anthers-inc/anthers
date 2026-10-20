@@ -10,7 +10,7 @@
  * is stronger because entitlement is money.
  *
  * The other half is that the lens is not a filter wearing a new name: it reorganizes the
- * same items into albums you play from, rather than narrowing a grid. Since the sidebar
+ * same items into releases you open, rather than narrowing a grid. Since the sidebar
  * restructure (2026-10-11) the Lenses are the Library's middle sidebar section and the
  * Type and Tags filters the shared section beneath them — the sidebar spec
  * (`sidebar-structure.authed.e2e.ts`) pins the structure; this one pins the Library's
@@ -26,8 +26,9 @@ const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 const TRACK = mediaFixtureWork("track1");
 
 /**
- * Save the fixture album and one loose track for the signed-in user, through the real
- * endpoint. Idempotent server-side, so re-runs need no cleanup.
+ * Save the fixture album and one of its tracks for the signed-in user, through the real
+ * endpoint. Idempotent server-side, so re-runs need no cleanup. The track is a separate
+ * shelf entry and must still group under the saved Project in the lens.
  */
 async function saveFixtures(page: Page) {
 	const cookies = await page.context().cookies();
@@ -171,18 +172,47 @@ test("a type grays where the Library holds nothing of it; a row with stock stays
 });
 
 test("the music lens organizes rather than filters", async ({ page }) => {
+	await saveFixtures(page);
 	await page.goto("/library?lens=music");
 
-	// An album, as an album: cover, artist, track count — not a row in the same grid.
-	await expect(page.getByRole("heading", { name: "Albums" })).toBeVisible();
+	// A release, as a release: cover, artist, track count — not a row in the same grid.
+	await expect(page.getByRole("heading", { name: "Releases" })).toBeVisible();
 	await expect(page.getByText(MEDIA_FIXTURE_PROJECT.title).first()).toBeVisible();
 	await expect(page.getByText(/\d+ tracks?/).first()).toBeVisible();
+
+	// The loose track saved from the Project is grouped under it rather than standing
+	// beside it as a second card. One Project and one of its tracks is one release.
+	await expect(page.getByTestId("release-card")).toHaveCount(1);
+	await expect(page.getByText(TRACK.title, { exact: true })).toHaveCount(0);
 
 	// And the types the lens excludes are GRAYED in the shared section: under the
 	// Music Player the Type list cannot narrow what the lens reorganizes — the lens
 	// decides what it draws on.
 	await expect(page.getByRole("button", { name: "Games", exact: true })).toBeDisabled();
 	await expect(page.getByRole("button", { name: "Music", exact: true })).toBeEnabled();
+});
+
+test("opening a release shows its tracks in the lens, and back returns to the collection", async ({
+	page,
+}) => {
+	await saveFixtures(page);
+	await page.goto("/library?lens=music");
+
+	await expect(page.getByTestId("release-card")).toHaveCount(1);
+	await page
+		.getByRole("button", { name: new RegExp(`^Open ${MEDIA_FIXTURE_PROJECT.title}`) })
+		.click();
+
+	// The release's own header and its whole track list — the Project was saved, so the
+	// release opens whole. The gated member keeps its row and says so rather than vanishing.
+	await expect(page.getByRole("heading", { name: MEDIA_FIXTURE_PROJECT.title })).toBeVisible();
+	await expect(page.getByTestId("track-row")).toHaveCount(4);
+	await expect(page.getByText("Gated", { exact: true })).toHaveCount(1);
+
+	// Back goes to the collection, not to the Project page and not to the plain shelf.
+	await page.getByRole("button", { name: "Releases", exact: true }).click();
+	await expect(page.getByTestId("release-grid")).toBeVisible();
+	await expect(page.getByTestId("release-card")).toHaveCount(1);
 });
 
 test("an album plays straight from the shelf", async ({ page }) => {
