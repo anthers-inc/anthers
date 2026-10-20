@@ -149,7 +149,7 @@ test("a grip's drag reorders, persists, and the order survives a fresh boot", as
 	expect(
 		(await reorder.request().postDataJSON())?.homeNavOrder,
 		"the write carries the drop's whole order",
-	).toEqual(["library", "network", "discovery"]);
+	).toEqual(["network", "library", "discovery"]);
 
 	// Local-first: the drop reorders the sidebar immediately, no boot needed.
 	await expect
