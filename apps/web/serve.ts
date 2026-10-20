@@ -72,12 +72,7 @@ const API_ORIGIN =
 const WORK_PATH = /^\/works\/([^/]+)\/?$/;
 
 async function indexHtml(): Promise<string> {
-	const html = await Bun.file(resolve(DIST, "index.html")).text();
-	// Announce a non-default API port to the page, the same way `apps/admin/serve.ts` does:
-	// a browser session puts its API on a free port, and `rpc.ts` has no other way to learn
-	// which. Without this the SPA falls back to :8000 and every call fails in a local run.
-	if (!API_PORT) return html;
-	return html.replace("<head>", `<head><meta name="anthers-dev-api-port" content="${API_PORT}">`);
+	return Bun.file(resolve(DIST, "index.html")).text();
 }
 
 /**
