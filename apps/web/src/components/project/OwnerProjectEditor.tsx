@@ -64,7 +64,6 @@ export default function OwnerProjectEditor({
 	const patchFields = async (fields: {
 		title?: string;
 		description?: string;
-		shortDescription?: string;
 		coverImage?: string;
 		coverWorkId?: number | null;
 		isPublished?: boolean;
@@ -85,7 +84,6 @@ export default function OwnerProjectEditor({
 	const saveFields = async (fields: {
 		title?: string;
 		description?: string;
-		shortDescription?: string;
 		coverImage?: string;
 		isPublished?: boolean;
 	}): Promise<void> => {
@@ -251,32 +249,9 @@ export default function OwnerProjectEditor({
 				)}
 			</div>
 
-			{/* The tagline, then the description — each field its own pencil, each read the
-			    user's version rendered. An empty field says it is here. */}
+			{/* The description — its own pencil, the user's version rendered. An empty field
+			    says it is here. */}
 			<div className="mb-4 flex flex-col gap-3">
-				<InlineField<string>
-					label="Tagline"
-					saved={project.shortDescription ?? ""}
-					renderRead={() =>
-						project.shortDescription ? (
-							<p className="text-sm text-base-content/70">{project.shortDescription}</p>
-						) : (
-							<p className="text-sm text-base-content/40">No tagline yet.</p>
-						)
-					}
-					renderEdit={(draft, setDraft) => (
-						<input
-							type="text"
-							aria-label="Tagline"
-							className="input input-bordered input-sm w-full"
-							value={draft}
-							maxLength={300}
-							onChange={(e) => setDraft(e.target.value)}
-							placeholder="A brief tagline for this project"
-						/>
-					)}
-					save={(draft) => saveFields({ shortDescription: draft.trim() })}
-				/>
 				<InlineField<string>
 					label="Description"
 					saved={project.description ?? ""}

@@ -170,10 +170,12 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	// Release appears on the far side of create, in the Details tab, at a URL that can
 	// be linked to — the Work's own page is the editing surface (the kinds pass).
 	await expect(page.getByRole("heading", { name: "Release", exact: true })).toBeVisible();
-	// The tab leads with what the Work is, and puts when it came out under it
-	// (Parker, 2026-10-19) — the creator's Details tab carries those two sections.
+	// The tab leads with what the Work is and the tags that describe it, and puts when
+	// it came out under them (Parker, 2026-10-19) — the creator's Details tab carries
+	// those three sections.
 	await expect(page.getByRole("tabpanel", { name: "Details" }).locator("h3")).toHaveText([
 		"Description",
+		"Tags",
 		"Release",
 	]);
 

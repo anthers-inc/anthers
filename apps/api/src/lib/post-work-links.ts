@@ -33,7 +33,25 @@
  * and neither is a `foo/works/…` fragment of some other kind of address.
  */
 const WORK_LINK_RE =
-	/(?<![a-zA-Z0-9./-])(?:https?:\/\/(?:[a-zA-Z0-9-]+\.)*anthers\.org)?\/works\/[^\s()>"']*?(\d{6,})(?!\d)/g;
+	/(?<![a-zA-Z0-9./-])(?:https?:\/\/(?:[a-zA-Z0-9-]+\.)*anthers\.org)?\/works\/((?:(?!\/works\/)[^\s()>"'])*)/g;
+
+/**
+ * The public id at the end of a Work's address, or null when the address has none.
+ *
+ * ⚠️ **It is the trailing digit run, not the first one the regex meets.** A slug may
+ * itself carry a run of digits — `/works/top-1000000-games-123456789` is a real Work —
+ * and an extractor that took the first run read `1000000` as the id, found no such Work,
+ * and dropped the embed. The query and fragment are not part of the address, and a
+ * trailing slash is not part of the id.
+ */
+function trailingPublicId(address: string): number | null {
+	// A sentence's comma or a markdown `**` may follow the link; neither is part of it.
+	const path = address.split(/[?#]/)[0].replace(/[^a-zA-Z0-9]+$/, "");
+	const tail = path.match(/-?(\d{6,})$/);
+	if (!tail) return null;
+	const id = Number(tail[1]);
+	return id >= 100_000_000 ? id : null;
+}
 
 /**
  * The public ids a stored markdown body embeds, first appearance first, deduped.
@@ -47,8 +65,8 @@ export function workPublicIdsFromBody(markdown: string | null | undefined): numb
 	if (!markdown) return [];
 	const ids: number[] = [];
 	for (const m of markdown.matchAll(WORK_LINK_RE)) {
-		const id = Number(m[1]);
-		if (id >= 100_000_000 && !ids.includes(id)) ids.push(id);
+		const id = trailingPublicId(m[1]);
+		if (id !== null && !ids.includes(id)) ids.push(id);
 	}
 	return ids;
 }

@@ -87,7 +87,15 @@ import {
 } from "@anthers/shared/content-rating";
 import { dailyCapFor, type LimitWindow, spentWindow } from "@anthers/shared/parental-controls";
 import { visiblePostTitle } from "@anthers/shared/post-title";
+import {
+	asShelfSortDirection,
+	asShelfSortMode,
+	SHELF_SORT_DIRECTIONS,
+	SHELF_SORT_MODES,
+	sortShelf,
+} from "@anthers/shared/project-shelf-sort";
 import type { PublicAccessBudget } from "@anthers/shared/public-access";
+import { normalizeTag, normalizeWorkTags, workTagsProblem } from "@anthers/shared/tags";
 import {
 	commentScore,
 	isCollapsed,
@@ -226,6 +234,7 @@ import { publishRefusal } from "../services/publish-refusal.js";
 import { findPosition, listPositions, upsertPosition } from "../services/reading-positions.js";
 import { queueRecordSync } from "../services/record-sync.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
+import { rowsOf } from "../services/rows.js";
 import { scanInlineUpload } from "../services/safety-scan.js";
 import { sanitizePostHtml } from "../services/sanitize.js";
 import {
@@ -911,6 +920,21 @@ const originallyReleasedSchema = z.object({
 	originallyReleased: z.string().datetime().nullable().optional(),
 });
 
+/**
+ * A Work's tag list, normalized and refused in the creator's own words.
+ *
+ * 🚨 **The cap is enforced here rather than only in the Details tab**, because the API is
+ * the authority and a second client must meet the same five. Normalization runs before
+ * the check so `["Indie", "indie"]` is one tag rather than two against the cap.
+ */
+const workTagsSchema = z
+	.array(z.string())
+	.transform((tags) => normalizeWorkTags(tags))
+	.superRefine((tags, ctx) => {
+		const problem = workTagsProblem(tags);
+		if (problem) ctx.addIssue({ code: "custom", message: problem });
+	});
+
 const workBaseSchema = z
 	.object({
 		title: z.string().max(255).optional().default(""),
@@ -974,7 +998,7 @@ const workBaseSchema = z
 
 		// Presentation & metadata
 		isPinned: z.boolean().optional(),
-		tags: z.array(z.string()).optional(),
+		tags: workTagsSchema.optional(),
 		websiteUrl: z.string().max(500).optional(),
 		sourceUrl: z.string().max(500).optional(),
 	})
@@ -1079,9 +1103,16 @@ const createProjectSchema = z.object({
 		.max(255)
 		.regex(/^[a-z0-9-]+$/, "Slug: lowercase letters, numbers, hyphens"),
 	description: z.string().max(50000).optional().default(""),
-	shortDescription: z.string().max(300).optional().default(""),
 	coverImage: z.string().max(500).optional().default(""),
 	pageConfig: z.record(z.unknown()).optional(),
+	// The Project's two shelf settings (2026-10-19). A creator saves these from the sort
+	// dropdown on the Project page; the detail route applies them when it serializes
+	// members, so the choice governs what readers see. `manual` leaves the stored drag
+	// order alone (the column default).
+	worksSortMode: z.enum(SHELF_SORT_MODES).optional(),
+	worksSortDirection: z.enum(SHELF_SORT_DIRECTIONS).optional(),
+	postsSortMode: z.enum(SHELF_SORT_MODES).optional(),
+	postsSortDirection: z.enum(SHELF_SORT_DIRECTIONS).optional(),
 	isPublished: z.boolean().optional().default(false),
 });
 
@@ -2739,6 +2770,12 @@ async function rewriteHlsPlaylist(
  * asks for no limit at all. It matches the flat limit this route carried before pagination;
  * a client keeps walking `nextCursor` past it. */
 const FEED_PAGE_MAX = 100;
+
+/** How the tag directory is asked for: a substring and a page size, both bounded. */
+const tagDirectoryQuerySchema = z.object({
+	q: z.string().max(64).optional(),
+	limit: z.coerce.number().int().min(1).max(100).optional().default(20),
+});
 
 const contentRoutes = new Hono()
 	// ══════════════════════════════════════════════════════════════════════════
@@ -4751,6 +4788,53 @@ const contentRoutes = new Hono()
 	})
 
 	/** The caller's own Catalog — every Work, private and released, with processing state. */
+	/**
+	 * The tag directory — the tags released Works actually carry, most-used first, with
+	 * the count beside each one.
+	 *
+	 * ⭐ **This is the vocabulary the Details tab offers**, and it is deliberately the real
+	 * corpus rather than the filter sidebar's curated `TAGS_BY_TYPE` list: a creator deciding
+	 * between a broad tag and a specific new one needs to see how many Works already use
+	 * each, and a tag nobody has used yet must be visibly new rather than absent.
+	 *
+	 * ⚠️ **The count is public Works only.** Drafts and private Works never qualify (they
+	 * are not part of the catalog a reader can browse), and Adult Works are left out for
+	 * the same reason every listing leaves them out: an aggregate is still a statement
+	 * that Adult work exists, and the rung's invisibility is a query condition. Mature
+	 * Works count normally — Mature is a warning and a blur, never invisibility.
+	 */
+	.get("/tags", zValidator("query", tagDirectoryQuerySchema, invalidBody), async (c) => {
+		const { q, limit } = c.req.valid("query");
+		const search = q ? normalizeTag(q) : "";
+		if (q && !search) return c.json({ tags: [] });
+		const visible = and(
+			sql`w.visibility = 'released'`,
+			sql`w.maturity <> 'adult'`,
+			notSuspendedAccount(sql`w.creator_id`),
+			notTestAccount(sql`w.creator_id`),
+		) as SQL;
+		const result = await db.execute(sql`
+			SELECT entry.tag AS tag, count(*)::int AS works
+			FROM ${works} w
+			CROSS JOIN LATERAL (
+				SELECT DISTINCT value AS tag
+				FROM jsonb_array_elements_text(coalesce(w.tags, '[]'::jsonb))
+			) AS entry
+			WHERE ${visible}
+				AND entry.tag <> ''
+				${search ? sql`AND entry.tag ILIKE ${`%${search}%`}` : sql``}
+			GROUP BY entry.tag
+			ORDER BY count(*) DESC, entry.tag ASC
+			LIMIT ${limit}
+		`);
+		return c.json({
+			tags: rowsOf<{ tag: string; works: number }>(result).map((row) => ({
+				tag: row.tag,
+				works: Number(row.works),
+			})),
+		});
+	})
+
 	.get("/works", requireAuth, async (c) => {
 		const user = c.get("user");
 
@@ -6772,9 +6856,12 @@ const contentRoutes = new Hono()
 				title: data.title,
 				slug: data.slug,
 				description: data.description,
-				shortDescription: data.shortDescription,
 				coverImage: data.coverImage,
 				pageConfig: data.pageConfig ?? {},
+				...(data.worksSortMode ? { worksSortMode: data.worksSortMode } : {}),
+				...(data.worksSortDirection ? { worksSortDirection: data.worksSortDirection } : {}),
+				...(data.postsSortMode ? { postsSortMode: data.postsSortMode } : {}),
+				...(data.postsSortDirection ? { postsSortDirection: data.postsSortDirection } : {}),
 				isPublished: data.isPublished,
 			})
 			.returning();
@@ -6880,11 +6967,56 @@ const contentRoutes = new Hono()
 		// The cover chosen from a Work is resolved from the shelf this reader already sees:
 		// a Work hidden from them contributes nothing and the uploaded image stands in.
 		const coverWork = itemRows.find((m) => m.work.id === row.project.coverWorkId)?.work;
+		/*
+		 * The Project's saved sort settings order both shelves (2026-10-19). `sortShelf`
+		 * copies, so each member keeps the `sortOrder` its membership carries — the drag
+		 * order — while the array a reader receives is the reading order the creator
+		 * chose. Manual is the default and returns the stored order untouched.
+		 */
+		const serializedWorks = await Promise.all(
+			itemRows.map(async (m) => ({
+				sortOrder: m.sortOrder,
+				...(await serializeWorkForUser(
+					m.work,
+					assetsByWork.get(m.work.id) ?? [],
+					jobByWork.get(m.work.id) ?? null,
+					resolveAccessSync(
+						m.work as AccessibleWork,
+						contextFor(m.work, userId, workCtx, previewRequest(c)),
+					),
+					deliveryCtx(),
+					projectSpent,
+					userId,
+					pagesByWork.get(m.work.id) ?? 0,
+					sectionsByWork.get(m.work.id) ?? 0,
+					(buildsByWork.get(m.work.id) ?? []).some((b) => b.isPrimary),
+					(buildsByWork.get(m.work.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ?? false,
+				)),
+			})),
+		);
+
 		// The names behind the member posts' title mentions, in one lookup for the page.
 		const memberPostTitles = await displayPostTitles(
 			memberRows.map((m) => m.post.title),
 			userId,
 		);
+		// No per-post access verdict: a post has no gates. The Works a member post
+		// links resolve on their own gates, at the post's own endpoint.
+		const serializedPosts = memberRows.map((m, index) => ({
+			id: m.post.id,
+			publicId: m.post.publicId,
+			slug: m.post.slug,
+			title: m.post.title,
+			displayTitle: memberPostTitles[index] ?? m.post.title,
+			isPublished: m.post.isPublished,
+			publishedAt: m.post.publishedAt,
+			sortOrder: m.sortOrder,
+			creator: embedCreator({
+				handle: m.creatorHandle,
+				displayName: m.creatorDisplayName,
+				avatar: m.creatorAvatar,
+			}),
+		}));
 
 		return c.json({
 			project: {
@@ -6901,45 +7033,16 @@ const contentRoutes = new Hono()
 					displayName: row.creatorDisplayName,
 					avatar: row.creatorAvatar,
 				}),
-				works: await Promise.all(
-					itemRows.map(async (m) => ({
-						sortOrder: m.sortOrder,
-						...(await serializeWorkForUser(
-							m.work,
-							assetsByWork.get(m.work.id) ?? [],
-							jobByWork.get(m.work.id) ?? null,
-							resolveAccessSync(
-								m.work as AccessibleWork,
-								contextFor(m.work, userId, workCtx, previewRequest(c)),
-							),
-							deliveryCtx(),
-							projectSpent,
-							userId,
-							pagesByWork.get(m.work.id) ?? 0,
-							sectionsByWork.get(m.work.id) ?? 0,
-							(buildsByWork.get(m.work.id) ?? []).some((b) => b.isPrimary),
-							(buildsByWork.get(m.work.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ??
-								false,
-						)),
-					})),
+				works: sortShelf(
+					serializedWorks,
+					asShelfSortMode(row.project.worksSortMode),
+					asShelfSortDirection(row.project.worksSortDirection),
 				),
-				// No per-post access verdict: a post has no gates. The Works a member post
-				// links resolve on their own gates, at the post's own endpoint.
-				posts: memberRows.map((m, index) => ({
-					id: m.post.id,
-					publicId: m.post.publicId,
-					slug: m.post.slug,
-					title: m.post.title,
-					displayTitle: memberPostTitles[index] ?? m.post.title,
-					isPublished: m.post.isPublished,
-					publishedAt: m.post.publishedAt,
-					sortOrder: m.sortOrder,
-					creator: embedCreator({
-						handle: m.creatorHandle,
-						displayName: m.creatorDisplayName,
-						avatar: m.creatorAvatar,
-					}),
-				})),
+				posts: sortShelf(
+					serializedPosts,
+					asShelfSortMode(row.project.postsSortMode),
+					asShelfSortDirection(row.project.postsSortDirection),
+				),
 			},
 		});
 	})

@@ -11,6 +11,7 @@
 
 import type { WorkType } from "@anthers/shared/content";
 import type { ContentNote, MaturityRating, MaturityRows } from "@anthers/shared/content-rating";
+import type { ShelfSortDirection, ShelfSortMode } from "@anthers/shared/project-shelf-sort";
 
 // ─── User Types ───
 
@@ -623,6 +624,12 @@ export interface WorkInput {
 	sourceUrl?: string;
 }
 
+/** One entry in the tag directory: a tag and how many released Works carry it. */
+export interface TagCount {
+	tag: string;
+	works: number;
+}
+
 /** The universal content unit — full detail shape (GET /posts/:slug). */
 export interface Post {
 	id: number;
@@ -754,7 +761,6 @@ export interface Project {
 	slug: string;
 	title: string;
 	description: string | null;
-	shortDescription: string | null;
 	/** The cover this Project shows — an uploaded image, or the chosen Work's cover. */
 	coverImage: string | null;
 	/**
@@ -764,6 +770,16 @@ export interface Project {
 	 */
 	coverWorkId?: number | null;
 	pageConfig: Record<string, unknown> | null;
+	/**
+	 * How the Project's shelves read, saved from the sort dropdown on its page
+	 * (2026-10-19). `manual` is the stored drag order and the default; the detail
+	 * response arrives already sorted by these, so a reader renders `works` and
+	 * `posts` in the order given.
+	 */
+	worksSortMode: ShelfSortMode;
+	worksSortDirection: ShelfSortDirection;
+	postsSortMode: ShelfSortMode;
+	postsSortDirection: ShelfSortDirection;
 	isPublished: boolean | null;
 	atprotoUri: string | null;
 	/**

@@ -25,6 +25,7 @@
 		"./content-rating-fixtures": "./src/content-rating-fixtures.ts",
 		"./rights": "./src/rights.ts",
 		"./content": "./src/content.ts",
+		"./tags": "./src/tags.ts",
 		"./post-title": "./src/post-title.ts",
 		"./web-build": "./src/web-build.ts",
 		"./work-preview": "./src/work-preview.ts",
@@ -45,6 +46,7 @@
 		"./us-states": "./src/us-states.ts",
 		"./compliance-calendar": "./src/compliance-calendar.ts",
 		"./resource-thresholds": "./src/resource-thresholds.ts",
+		"./project-shelf-sort": "./src/project-shelf-sort.ts",
 		"./growth": "./src/growth.ts",
 		"./time-pool-fund": "./src/time-pool-fund.ts",
 		"./financial-plan": "./src/financial-plan.ts"

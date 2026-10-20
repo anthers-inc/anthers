@@ -27,6 +27,7 @@ interface OwnedWork {
 	publicId: number;
 	title: string;
 	description: string;
+	tags?: string[] | null;
 }
 
 let session = "";
@@ -43,9 +44,29 @@ async function ownWorks(): Promise<OwnedWork[]> {
 // save having lost the Work. `work-upload.authed.e2e.ts` met the same thing first.
 test.describe.configure({ mode: "serial" });
 
+/**
+ * The media fixture video's tags before this spec borrowed it to seed a popularity count.
+ * Restored in `afterAll`, because the fixture is shared with every other walk.
+ */
+let fixtureTagsBefore: { id: number; tags: string[] } | null = null;
+
+async function patchTags(id: number, tags: string[]) {
+	const res = await fetch(`${API_URL}/api/content/works/${id}`, {
+		method: "PATCH",
+		headers: {
+			"Content-Type": "application/json",
+			Cookie: `session=${session}`,
+			Origin: WEB_ORIGIN,
+		},
+		body: JSON.stringify({ tags }),
+	});
+	expect(res.ok, `patching tags on Work ${id} should answer 200`).toBe(true);
+}
+
 // In `afterAll`, so a walk that fails halfway still takes its Work back.
 test.afterAll(async () => {
 	if (!session) return;
+	if (fixtureTagsBefore) await patchTags(fixtureTagsBefore.id, fixtureTagsBefore.tags);
 	for (const w of (await ownWorks()).filter((w) => w.title.startsWith(TITLE_PREFIX))) {
 		await fetch(`${API_URL}/api/content/works/${w.id}?force=1`, {
 			method: "DELETE",
@@ -320,4 +341,72 @@ test("a comic's Manage tab puts the thumbnail under View As, above Pages", async
 	expect(order.view).toBeGreaterThanOrEqual(0);
 	expect(order.thumbnail).toBeGreaterThan(order.view);
 	expect(order.pages).toBeGreaterThan(order.thumbnail);
+});
+
+/**
+ * Tags are added and changed in the Details tab, below the description.
+ *
+ * The things a form-only build would get wrong are the point: an existing tag shows how
+ * many Works use it, a tag nobody has used is still a choice the creator may make (the
+ * button says so), and the list is editable after saving rather than a create-time field.
+ */
+test("a Work's tags are added and removed from the Details tab", async ({ page, context }) => {
+	session = await signInAsMediaFixture(context);
+	const title = `${STEM} tagged`;
+	const created = await fetch(`${API_URL}/api/content/works`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Cookie: `session=${session}`,
+			Origin: WEB_ORIGIN,
+		},
+		body: JSON.stringify({ type: "text", title }),
+	});
+	const { work } = (await created.json()) as { work: { publicId: number } };
+	const suffix = Date.now().toString(36);
+	// An existing tag needs a released Work carrying it — the media fixture's video is one.
+	// Borrowing it makes the directory's count real rather than a stubbed number, and
+	// `afterAll` puts its tags back.
+	const existing = `walk-existing-${suffix}`;
+	const [video] = (await ownWorks()).filter((w) => w.title === FIXTURE_VIDEO);
+	expect(video, "the media fixture's video is missing").toBeTruthy();
+	if (!video) return;
+	fixtureTagsBefore = { id: video.id, tags: video.tags ?? [] };
+	await patchTags(video.id, [...(video.tags ?? []), existing]);
+	// Unique enough that the "no Work uses it yet" row is true in this session's directory.
+	const fresh = `walk-new-${suffix}`;
+	expect(fresh).not.toBe(existing);
+
+	await page.goto(`/studio/works/${work.publicId}/edit`);
+	await page.getByRole("button", { name: "Edit Tags" }).click();
+	const input = page.getByPlaceholder("Search tags, or type a new one…");
+
+	// The existing tag is offered with the count behind it.
+	await input.fill(existing);
+	const suggestion = page.getByRole("button", { name: new RegExp(`${existing}.*1 work`) });
+	await expect(suggestion).toBeVisible();
+	await suggestion.click();
+
+	// A tag nobody uses yet says so, and can still be added.
+	await input.fill(fresh);
+	await page.getByRole("button", { name: new RegExp(`Use “${fresh}”`) }).click();
+	await page.getByRole("button", { name: "Save Tags" }).click();
+
+	// The read view is the chips, and the server holds the same list.
+	const details = page.getByRole("tabpanel", { name: "Details" });
+	await expect(details.getByText(existing, { exact: true })).toBeVisible();
+	await expect(details.getByText(fresh, { exact: true })).toBeVisible();
+	await page.reload();
+	await expect(details.getByText(existing, { exact: true })).toBeVisible();
+	const [stored] = (await ownWorks()).filter((w) => w.title === title);
+	expect(stored?.tags).toEqual([existing, fresh]);
+
+	// A Work's tags change at any time: remove both from the same field.
+	await page.getByRole("button", { name: "Edit Tags" }).click();
+	await page.getByRole("button", { name: `Remove tag ${existing}` }).click();
+	await page.getByRole("button", { name: `Remove tag ${fresh}` }).click();
+	await page.getByRole("button", { name: "Save Tags" }).click();
+	await expect(details.getByText(existing, { exact: true })).toHaveCount(0);
+	const [cleared] = (await ownWorks()).filter((w) => w.title === title);
+	expect(cleared?.tags).toEqual([]);
 });

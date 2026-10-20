@@ -17,14 +17,24 @@
  * on its own endpoint rather than with any form: a creator arranging twelve devlogs
  * should not lose them to a failed save on an unrelated field.
  *
- * **Manual is the only real order** (the Works shelf's ruling, binding here): a
- * non-manual mode is a read-only view — no drag, no write; the direction pair stays
- * visible but disabled under Manual. A post has no original release date, so this
- * shelf's dated key is the release date alone. The picker it opens is multi-select.
+ * **A Project's saved sort governs what readers see** (Parker, 2026-10-19, replacing the
+ * works shelf's 2026-10-17 "Manual is the only real order" ruling, binding here):
+ * changing a dropdown saves the mode on the Project row, and the API serializes the
+ * members in that order for every reader. Manual remains the default and the stored drag
+ * order; a non-manual mode never writes it. A post has no original release date, so this
+ * shelf's dated key is its publish date — the field the Project serializer carries for a
+ * post — and the Release Date mode reads that. The picker it opens is multi-select.
  *
  * A Project is a shelf: putting a post on it changes nothing about the post, and taking
  * it off never deletes it — it stays on the creator's profile and in their Posts tab.
  */
+
+import {
+	moveShelfItem,
+	type ShelfSortDirection,
+	type ShelfSortMode,
+	sortShelf,
+} from "@anthers/shared/project-shelf-sort";
 import { Bars3Icon, PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { postUrl } from "../../lib/postUrl";
@@ -33,12 +43,6 @@ import { client } from "../../lib/rpc";
 import type { PostListItem, Project, ProjectPost } from "../../lib/types";
 import LoadingSpinner from "../ui/LoadingSpinner";
 import PostPicker from "./PostPicker";
-import {
-	moveShelfItem,
-	type ShelfSortDirection,
-	type ShelfSortMode,
-	sortShelf,
-} from "./project-shelf-sort";
 
 /** A post shelf reads no original date; its modes are the works', minus that one. */
 export const POST_SHELF_SORT_OPTIONS: Array<{ mode: ShelfSortMode; label: string }> = [
@@ -65,7 +69,12 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 			.then(async (res) => {
 				if (!res.ok) return;
 				const { project } = (await res.json()) as unknown as { project: Project };
-				if (live) setPosts(project.posts ?? []);
+				if (!live) return;
+				// The shelf's state is the STORED order (see the Works shelf); the detail
+				// response arrives in the Project's saved reading order.
+				setPosts([...(project.posts ?? [])].sort((a, b) => a.sortOrder - b.sortOrder));
+				setSortMode(project.postsSortMode ?? "manual");
+				setSortDirection(project.postsSortDirection ?? "asc");
 			})
 			.catch(() => {})
 			.finally(() => live && setLoading(false));
@@ -73,6 +82,28 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 			live = false;
 		};
 	}, [projectSlug]);
+
+	/** Save one sort setting on the Project — optimistic, reverted on failure. */
+	const saveSort = async (
+		fields: { postsSortMode?: ShelfSortMode; postsSortDirection?: ShelfSortDirection },
+		revert: () => void,
+	) => {
+		setError(null);
+		try {
+			const res = await client.api.content.projects[":slug"].$patch({
+				param: { slug: projectSlug },
+				json: fields,
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => null)) as { error?: string } | null;
+				revert();
+				setError(body?.error || "Couldn't save the sort.");
+			}
+		} catch {
+			revert();
+			setError("Couldn't save the sort.");
+		}
+	};
 
 	const add = async (picked: PostListItem[]) => {
 		setPicking(false);
@@ -181,7 +212,12 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 						aria-label="Sort the posts"
 						className="select select-bordered select-sm"
 						value={sortMode}
-						onChange={(e) => setSortMode(e.target.value as ShelfSortMode)}
+						onChange={(e) => {
+							const next = e.target.value as ShelfSortMode;
+							const before = sortMode;
+							setSortMode(next);
+							void saveSort({ postsSortMode: next }, () => setSortMode(before));
+						}}
 					>
 						{POST_SHELF_SORT_OPTIONS.map((opt) => (
 							<option key={opt.mode} value={opt.mode}>
@@ -194,7 +230,12 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 						className="select select-bordered select-sm disabled:opacity-50"
 						value={sortDirection}
 						disabled={manual}
-						onChange={(e) => setSortDirection(e.target.value as ShelfSortDirection)}
+						onChange={(e) => {
+							const next = e.target.value as ShelfSortDirection;
+							const before = sortDirection;
+							setSortDirection(next);
+							void saveSort({ postsSortDirection: next }, () => setSortDirection(before));
+						}}
 					>
 						<option value="asc">Ascending</option>
 						<option value="desc">Descending</option>

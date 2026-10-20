@@ -7,6 +7,7 @@
  * which are a *user's* records, not the creator's.
  */
 
+import type { ShelfSortDirection, ShelfSortMode } from "@anthers/shared/project-shelf-sort";
 import { sql } from "drizzle-orm";
 import {
 	bigint,
@@ -488,7 +489,6 @@ export const projects = pgTable(
 		slug: text("slug").notNull().unique(),
 		title: text("title").notNull(),
 		description: text("description").default(""),
-		shortDescription: text("short_description").default(""),
 		coverImage: text("cover_image").default(""),
 		/**
 		 * The Project's cover chosen from one of its Works, by reference rather than by copy,
@@ -499,6 +499,20 @@ export const projects = pgTable(
 		coverWorkId: integer("cover_work_id").references(() => works.id, { onDelete: "set null" }),
 		// Custom-page layout/showcase config (built out in a later phase).
 		pageConfig: jsonb("page_config").$type<Record<string, unknown>>().default({}),
+		// How the Project's two shelves read, beside the stored drag order they never
+		// rewrite: `manual` is the drag order itself, the other modes are named reading
+		// orders the creator saved (2026-10-19). The API applies these when serializing
+		// members, so every reader gets the same order.
+		worksSortMode: text("works_sort_mode").$type<ShelfSortMode>().notNull().default("manual"),
+		worksSortDirection: text("works_sort_direction")
+			.$type<ShelfSortDirection>()
+			.notNull()
+			.default("asc"),
+		postsSortMode: text("posts_sort_mode").$type<ShelfSortMode>().notNull().default("manual"),
+		postsSortDirection: text("posts_sort_direction")
+			.$type<ShelfSortDirection>()
+			.notNull()
+			.default("asc"),
 		isPublished: boolean("is_published").notNull().default(false),
 		atprotoUri: text("atproto_uri").unique(),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

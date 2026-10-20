@@ -48,6 +48,32 @@ describe("workPublicIdsFromBody", () => {
 		expect(workPublicIdsFromBody("page /works/123456-title and /works/2")).toEqual([]);
 	});
 
+	it("takes the trailing publicId even when the slug carries a six-digit group", () => {
+		// The CI id that exposed this was literally `700065d2`: the first six characters
+		// are digits, so the slug is `old-game-700065d2-910000001`. A parser that stopped
+		// at the first long-enough number captured `700065`, rejected it, and lost the embed.
+		expect(workPublicIdsFromBody("/works/old-game-700065d2-910000001")).toEqual([910000001]);
+		expect(
+			workPublicIdsFromBody("https://anthers.org/works/old-game-700065d2-910000001 out now"),
+		).toEqual([910000001]);
+	});
+
+	it("reads the trailing publicId even when the slug carries its own digits", () => {
+		// A slug is free text, and `top-1000000-games` is an ordinary one. The id is the
+		// run at the end of the address, never an earlier run inside the slug.
+		expect(workPublicIdsFromBody("/works/top-1000000-games-123456789")).toEqual([123456789]);
+		expect(workPublicIdsFromBody("https://anthers.org/works/2026-10-19-123456789")).toEqual([
+			123456789,
+		]);
+		expect(workPublicIdsFromBody("/works/my-game-123456789/")).toEqual([123456789]);
+	});
+
+	it("reads two links written back to back without whitespace", () => {
+		expect(workPublicIdsFromBody("/works/first-123456789,/works/second-987654321")).toEqual([
+			123456789, 987654321,
+		]);
+	});
+
 	it("ignores another site's path that happens to carry /works", () => {
 		expect(
 			workPublicIdsFromBody("https://example.com/works/something-123456789 and evil-anthers.org/x"),

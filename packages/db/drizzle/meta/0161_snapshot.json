@@ -1,5 +1,5 @@
 {
-  "id": "df57c5b1-bc55-4814-9aa4-e1e762ed14bb",
+  "id": "235c5dfa-5d59-4dc3-b4df-b78f8460a67f",
   "prevId": "9067e59b-5a6d-4716-b3ed-dea526ef4127",
   "version": "7",
   "dialect": "postgresql",
@@ -10716,18 +10716,40 @@
           "notNull": false,
           "default": "''"
         },
-        "cover_work_id": {
-          "name": "cover_work_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "page_config": {
           "name": "page_config",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false,
           "default": "'{}'::jsonb"
+        },
+        "works_sort_mode": {
+          "name": "works_sort_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
+        "works_sort_direction": {
+          "name": "works_sort_direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'asc'"
+        },
+        "posts_sort_mode": {
+          "name": "posts_sort_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
+        "posts_sort_direction": {
+          "name": "posts_sort_direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'asc'"
         },
         "is_published": {
           "name": "is_published",
@@ -10786,19 +10808,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "projects_cover_work_id_works_id_fk": {
-          "name": "projects_cover_work_id_works_id_fk",
-          "tableFrom": "projects",
-          "tableTo": "works",
-          "columnsFrom": [
-            "cover_work_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
