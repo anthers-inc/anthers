@@ -1281,10 +1281,10 @@ export const reviews = pgTable(
 		// could never grow a third value, and the published Lexicon carries these two as an
 		// open set precisely so a middle verdict stays possible.
 		verdict: text("verdict").notNull(),
-		// A verdict cannot be left without words — the API requires `body` on write.
-		// It is nullable here only because rows predating that rule exist and must
-		// keep rendering; treat "" / null as a legacy verdict-only review, never as a
-		// shape new writes may produce. Plain text, not HTML: like comments, it is
+		// Text is optional (Parker, 2026-10-19): a verdict can stand alone, counts in the
+		// recommended share, and simply does not appear in the public list. Null is the
+		// absence of words; rows predating this rule carry NULL or "" for the same reason
+		// and are treated identically. Plain text, not HTML: like comments, it is
 		// rendered as a React text node and never passed through a sanitizer,
 		// because nothing here is ever interpreted as markup.
 		body: text("body"),

@@ -70,7 +70,6 @@ import {
 	isReviewVerdict,
 	processingFor,
 	REVIEW_MAX,
-	REVIEW_MIN,
 	REVIEW_WINDOWS,
 	recommendedPercent,
 	reviewWindowSince,
@@ -87,6 +86,7 @@ import {
 	requiresAdultVerification,
 } from "@anthers/shared/content-rating";
 import { dailyCapFor, type LimitWindow, spentWindow } from "@anthers/shared/parental-controls";
+import { visiblePostTitle } from "@anthers/shared/post-title";
 import type { PublicAccessBudget } from "@anthers/shared/public-access";
 import {
 	commentScore,
@@ -123,6 +123,13 @@ import { queueScansForWork } from "../jobs/scan-media.js";
 import { ffmpegCommand } from "../lib/ffmpeg.js";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
 import { routePagedIngest } from "../lib/paged-ingest.js";
+import {
+	canonicalizePostTitle,
+	displayPostTitle,
+	displayPostTitles,
+	mentionedWorksForTitle,
+	postsMentioningWork,
+} from "../lib/post-title-mentions.js";
 import { pgWorkEmbedPattern, workPublicIdsFromBody } from "../lib/post-work-links.js";
 import { probeVideo } from "../lib/video-frames.js";
 import { buildDeliveryHost, mintPlayToken, PLAY_TOKEN_TTL_SECONDS } from "../lib/web-build.js";
@@ -1095,11 +1102,12 @@ const createCommentSchema = z.object({
 	replyTo: z.number().int().positive().optional(),
 });
 /**
- * A review: a verdict AND written text. The minimum is deliberately low — it's a
- * blunt instrument and "lol" clears it either way. The point of requiring text
- * isn't to filter by length, it's that a written verdict gives a user something
- * to weigh and a moderator something to act on, where a bare verdict is
- * unmoderatable by construction. Plain text, no markup, so no sanitizer.
+ * A review: a verdict, and optionally the words that explain it.
+ *
+ * ⭐ **Text is optional** (Parker, 2026-10-19). A verdict alone is a review: it
+ * counts in the Work's recommended share and Recent share, and it simply does
+ * not appear in the public list, where only reviews with text belong. Plain
+ * text, no markup, so no sanitizer.
  *
  * ⚠️ The accepted verdicts come from `REVIEW_VERDICTS` rather than being spelled
  * here, so what the API accepts and what the published record may carry cannot
@@ -1107,7 +1115,7 @@ const createCommentSchema = z.object({
  */
 const createReviewSchema = z.object({
 	verdict: z.string().refine(isReviewVerdict, "A review recommends the work or does not"),
-	body: z.string().trim().min(REVIEW_MIN, "Please say a little about why").max(REVIEW_MAX),
+	body: z.string().trim().max(REVIEW_MAX).optional(),
 });
 
 const createAssetSchema = z.object({
@@ -2747,6 +2755,9 @@ const contentRoutes = new Hono()
 		const search = c.req.query("search");
 		const sort = c.req.query("sort") ?? "newest";
 		const effectiveSort = sort === "popular" ? "popular" : "newest";
+		// The viewer, for the two things the feed resolves per person: their own drafts
+		// under `mine=true`, and the names behind the Works their posts' titles mention.
+		const viewerId = await getOptionalUserId(c);
 
 		// ── Cursor pagination ──
 		// Keyset pagination over the full ordering tuple — the row id breaks every tie —
@@ -2789,9 +2800,8 @@ const contentRoutes = new Hono()
 		const conditions: SQL[] = [];
 
 		if (mine === "true") {
-			const userId = await getOptionalUserId(c);
-			if (!userId) return c.json({ posts: [] });
-			conditions.push(eq(posts.creatorId, userId));
+			if (!viewerId) return c.json({ posts: [] });
+			conditions.push(eq(posts.creatorId, viewerId));
 		} else {
 			conditions.push(eq(posts.isPublished, true));
 		}
@@ -2896,6 +2906,13 @@ const contentRoutes = new Hono()
 		const hasMore = fetched.length > limit;
 		const result = hasMore ? fetched.slice(0, limit) : fetched;
 
+		// The name each title's `@` mention resolves to for this viewer — one lookup for
+		// the page, and the card renders this rather than the raw stored title.
+		const displayTitles = await displayPostTitles(
+			result.map((row) => row.post.title),
+			viewerId,
+		);
+
 		let nextCursor: string | null = null;
 		if (hasMore && result.length > 0) {
 			const last = result[result.length - 1];
@@ -2925,7 +2942,7 @@ const contentRoutes = new Hono()
 		}
 
 		return c.json({
-			posts: result.map((r) => {
+			posts: result.map((r, index) => {
 				const p = r.post;
 				const embedded = workPublicIdsFromBody(p.body);
 				return {
@@ -2934,6 +2951,8 @@ const contentRoutes = new Hono()
 					slug: p.slug,
 					creatorId: p.creatorId,
 					title: p.title,
+					// The title with each mentioned Work's current name — what a card shows.
+					displayTitle: displayTitles[index] ?? p.title,
 					isPinned: p.isPinned,
 					tags: p.tags,
 					isPublished: p.isPublished,
@@ -2979,6 +2998,12 @@ const contentRoutes = new Hono()
 		// a Work has nothing to wait for — blocking an announcement on someone's encode was an
 		// artifact of the post owning the media. The gate moved to RELEASE, on the Work.
 
+		// A title's `@` mentions are canonicalized before anything reads the title: the slug
+		// derives from the visible words, never the link destinations, and a mention to a
+		// Work this author cannot publish about is reduced to its plain text rather than
+		// stored as a link that would never resolve.
+		const title = (await canonicalizePostTitle(data.title, user.id)) ?? "";
+
 		// Explicit slug must be free; otherwise derive a unique one from the title.
 		let slug: string;
 		if (data.slug) {
@@ -2987,7 +3012,7 @@ const contentRoutes = new Hono()
 			}
 			slug = data.slug;
 		} else {
-			slug = await makeUniqueSlug(data.title || "post", postSlugExists);
+			slug = await makeUniqueSlug(visiblePostTitle(title) || "post", postSlugExists);
 		}
 
 		const body = postBodyFromCreate(data);
@@ -2999,7 +3024,7 @@ const contentRoutes = new Hono()
 				creatorId: user.id,
 				publicId,
 				slug,
-				title: data.title,
+				title,
 				body,
 				isPinned: data.isPinned,
 				tags: data.tags,
@@ -3050,7 +3075,7 @@ const contentRoutes = new Hono()
 		const linkedWorks = await loadPostWorksFromBody(body, user.id, deliveryCtx());
 		// The row no longer carries `body_html`; the stored body is markdown in `body`,
 		// which the spread ships as it is.
-		return c.json({ post: { ...post, linkedWorks } }, 201);
+		return c.json({ post: { ...post, linkedWorks, displayTitle: visiblePostTitle(title) } }, 201);
 	})
 
 	.get("/posts/:slug", async (c) => {
@@ -3110,6 +3135,11 @@ const contentRoutes = new Hono()
 		// separation the model is for, and why there is no post-level `access` any more.
 		const linkedWorks = await loadPostWorksFromBody(post.body, userId, deliveryCtx());
 
+		// The title's `@` mentions: one resolved name for the card's text, and the Works
+		// themselves so the heading can link each name to its Work.
+		const displayTitle = await displayPostTitle(post.title, userId);
+		const mentionedWorks = await mentionedWorksForTitle(post.title, userId);
+
 		// Transparent edit history — every content edit is logged with a timestamp, and it
 		// carries no user predicate **on purpose** (settled 2026-08-09).
 		//
@@ -3148,6 +3178,10 @@ const contentRoutes = new Hono()
 				recordUrl: recordUrlFor(post.atprotoUri),
 				creator: { ...creator, hasStripe: creatorHasStripe },
 				linkedWorks,
+				// The title as a reader sees it, and the Works behind its mentions so the
+				// heading links each `@` name to the Work it names.
+				displayTitle,
+				mentionedWorks,
 				edits,
 			},
 		});
@@ -3179,6 +3213,15 @@ const contentRoutes = new Hono()
 			if (await postSlugExists(data.slug)) return c.json({ error: "Slug already taken" }, 409);
 		}
 
+		// The title as it will be stored: a mention's destination stays the durable public
+		// id, its text is refreshed to the Work's current name, and a mention this author
+		// cannot publish about is reduced to plain text. Done once, before the slug derives
+		// from the title and before the edit history compares it.
+		const nextTitle =
+			data.title !== undefined
+				? ((await canonicalizePostTitle(data.title, user.id)) ?? "")
+				: undefined;
+
 		// 🚨 **A retitle re-derives the slug** (Parker, 2026-10-16, "Hello, there" still sitting
 		// at `/posts/post-…`): part of why the URL is durable is the ability to name the thing
 		// it is, and the trailing `publicId` is the half that never has to change — old links
@@ -3186,15 +3229,17 @@ const contentRoutes = new Hono()
 		// `findPostRow` and the page settles the address bar to canonical. An explicit slug
 		// still wins as before.
 		let derivedSlug: string | null = null;
-		if (data.slug === undefined && data.title !== undefined && data.title.trim() !== "") {
-			const next = await makeUniqueSlug(data.title, (slug) => postSlugExists(slug, existing.id));
+		if (data.slug === undefined && nextTitle !== undefined && nextTitle.trim() !== "") {
+			const next = await makeUniqueSlug(visiblePostTitle(nextTitle), (slug) =>
+				postSlugExists(slug, existing.id),
+			);
 			if (next !== existing.slug) derivedSlug = next;
 		}
 
 		const updates: Record<string, unknown> = { updatedAt: new Date() };
 		if (data.slug !== undefined) updates.slug = data.slug;
 		else if (derivedSlug) updates.slug = derivedSlug;
-		if (data.title !== undefined) updates.title = data.title;
+		if (nextTitle !== undefined) updates.title = nextTitle;
 		Object.assign(updates, postBodyUpdatesFromPatch(data, existing));
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
 		if (data.tags !== undefined) updates.tags = data.tags;
@@ -3220,7 +3265,11 @@ const contentRoutes = new Hono()
 
 		// Record a timestamped edit-history entry when the post's content actually changed
 		// (publish/unpublish/schedule toggles don't count — see changedPostFields).
-		const editedFields = changedPostFields(existing, data, derivedSlug);
+		const editedFields = changedPostFields(
+			existing,
+			nextTitle !== undefined ? { ...data, title: nextTitle } : data,
+			derivedSlug,
+		);
 		if (editedFields.length > 0) {
 			await db.insert(postEdits).values({
 				postId: existing.id,
@@ -3235,7 +3284,16 @@ const contentRoutes = new Hono()
 		void queueRecordSync("post", updated.id);
 
 		const linkedWorks = await loadPostWorksFromBody(updated.body, user.id, deliveryCtx());
-		return c.json({ post: { ...updated, linkedWorks } });
+		return c.json({
+			post: {
+				...updated,
+				linkedWorks,
+				// The canonicalization just refreshed every mention's text, so the visible
+				// title needs no further lookup here.
+				displayTitle: visiblePostTitle(updated.title),
+				mentionedWorks: await mentionedWorksForTitle(updated.title, user.id),
+			},
+		});
 	})
 
 	.delete("/posts/:slug", requireAuth, zValidator("query", deletePostQuerySchema), async (c) => {
@@ -3577,6 +3635,12 @@ const contentRoutes = new Hono()
 			// reason they're excluded from the aggregate — this is a public read. Blocked
 			// pairs are withheld for a different reason: a review carries a name and words,
 			// so it is a place two people meet.
+			//
+			// ⭐ **A textless review counts but does not list** (Parker, 2026-10-19). The
+			// aggregate above includes every visible verdict; here only rows with words
+			// appear, because a list of bare verdicts is nothing a reader can read. New
+			// writes normalize whitespace-only text to NULL, and the trim guards rows
+			// written outside that path.
 			const reviewRows = await db
 				.select({
 					id: reviews.id,
@@ -3594,6 +3658,7 @@ const contentRoutes = new Hono()
 					and(
 						eq(reviews.workId, work.id),
 						visibleReview,
+						sql`coalesce(btrim(${reviews.body}), '') <> ''`,
 						notBlockedBy(currentUserId, reviews.userId),
 						// A suspended reviewer's words go with the rest of their account;
 						// listed beside the block filter because both answer "who may meet
@@ -3636,9 +3701,10 @@ const contentRoutes = new Hono()
 				},
 				userVerdict,
 				userReview,
-				// `body` is null on rows written before reviews required text. They still
-				// render and still count; the client shows the verdict without a quote. Newest
-				// first at this layer so Helpful-first and Newest-first are the CLIENT's two
+				// Every listed row carries text — the query above excludes a verdict left on its
+				// own — so `body` reaches the client as words rather than an empty quote. The
+				// fallback is for the type, not for a shape the query can produce. Newest first
+				// at this layer so Helpful-first and Newest-first are the CLIENT's two
 				// presentations of one payload rather than two queries that could disagree.
 				reviews: reviewRows
 					// The raw address stays in the row's own column; the payload carries the link
@@ -3674,6 +3740,10 @@ const contentRoutes = new Hono()
 		if (unwritable) return c.json(unwritable.body, unwritable.status);
 
 		const { verdict, body } = c.req.valid("json");
+		// A textless review stores NULL rather than "", the same absence a record carries:
+		// an empty string would say the reviewer wrote nothing, where NULL says they left
+		// the words out. Editing one to add text fills it in place.
+		const bodyText = body?.trim() || null;
 		// The conflict branch sets `verdict` and `body` and nothing else — notably not
 		// `moderationStatus`. Re-reviewing changes the verdict and the words on a hidden
 		// row without resurrecting it, so a user can't un-hide their own review by
@@ -3689,10 +3759,10 @@ const contentRoutes = new Hono()
 			.limit(1);
 		const [review] = await db
 			.insert(reviews)
-			.values({ userId: user.id, workId: work.id, verdict, body: body.trim() })
+			.values({ userId: user.id, workId: work.id, verdict, body: bodyText })
 			.onConflictDoUpdate({
 				target: [reviews.userId, reviews.workId],
-				set: { verdict, body: body.trim() },
+				set: { verdict, body: bodyText },
 			})
 			.returning();
 
@@ -4910,11 +4980,16 @@ const contentRoutes = new Hono()
 
 		/*
 		 * The stub foundation of **Showings** — where a Work can be found. The creator's
-		 * profile card and every Project it sits in today; channels, collections and
-		 * collaborations follow when their machinery exists, and the client's side panel
-		 * is the one place that reads this.
+		 * profile card and every Project it sits in today, plus the published posts whose
+		 * TITLES name it: a discussion post lives on the Work's page rather than only at its
+		 * own URL (`@Curtains Discussion (Spoilers)` is the shape). Channels, collections and
+		 * collaborations follow when their machinery exists, and the client's side panel is
+		 * the one place that reads this.
 		 */
-		const shownOn = { projects: await projectsShowingWork(work.id) };
+		const shownOn = {
+			projects: await projectsShowingWork(work.id),
+			posts: await postsMentioningWork(work.publicId, userId),
+		};
 
 		/*
 		 * The owner short-circuit — and the one place creator preview has to interrupt it.
@@ -6805,6 +6880,11 @@ const contentRoutes = new Hono()
 		// The cover chosen from a Work is resolved from the shelf this reader already sees:
 		// a Work hidden from them contributes nothing and the uploaded image stands in.
 		const coverWork = itemRows.find((m) => m.work.id === row.project.coverWorkId)?.work;
+		// The names behind the member posts' title mentions, in one lookup for the page.
+		const memberPostTitles = await displayPostTitles(
+			memberRows.map((m) => m.post.title),
+			userId,
+		);
 
 		return c.json({
 			project: {
@@ -6845,11 +6925,12 @@ const contentRoutes = new Hono()
 				),
 				// No per-post access verdict: a post has no gates. The Works a member post
 				// links resolve on their own gates, at the post's own endpoint.
-				posts: memberRows.map((m) => ({
+				posts: memberRows.map((m, index) => ({
 					id: m.post.id,
 					publicId: m.post.publicId,
 					slug: m.post.slug,
 					title: m.post.title,
+					displayTitle: memberPostTitles[index] ?? m.post.title,
 					isPublished: m.post.isPublished,
 					publishedAt: m.post.publishedAt,
 					sortOrder: m.sortOrder,
@@ -7610,6 +7691,14 @@ const contentRoutes = new Hono()
 			userId: user.id,
 			seeAll: false,
 		});
+		// The names behind the saved posts' title mentions, one lookup for the shelf.
+		const savedPostDisplayTitles = await displayPostTitles(
+			postRows.map((p) => p.title),
+			user.id,
+		);
+		const savedPostTitleById = new Map(
+			postRows.map((p, index) => [p.id, savedPostDisplayTitles[index] ?? p.title]),
+		);
 
 		// The channel-guide fields, for the work arm only: a creator's display name,
 		// handle and avatar, so a lens that organizes the shelf **by its creators** can
@@ -7687,6 +7776,7 @@ const contentRoutes = new Hono()
 									publicId: saved.publicId,
 									slug: saved.slug,
 									title: saved.title,
+									displayTitle: savedPostTitleById.get(saved.id) ?? saved.title,
 									excerpt: postContentExcerpt(saved.body),
 									tags: saved.tags ?? [],
 									isPublished: saved.isPublished === true,

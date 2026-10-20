@@ -11,7 +11,11 @@ import { describe, expect, it } from "bun:test";
 import type { DeclarableMaturity } from "@anthers/shared/content-rating";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import app from "../index";
-import { pgWorkEmbedPattern, workPublicIdsFromBody } from "../lib/post-work-links";
+import {
+	pgWorkEmbedPattern,
+	pgWorkTitleMentionPattern,
+	workPublicIdsFromBody,
+} from "../lib/post-work-links";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
@@ -170,5 +174,13 @@ describe("Embeds resolve through the Work's own gates", () => {
 		// the helper itself — a change to one shape without the other is the drift.
 		expect(pgWorkEmbedPattern(123456789)).toBe("/works/[^[:space:]()>'\"]*-?123456789([^0-9]|$)");
 		expect(workPublicIdsFromBody("x-123456789 y")).toEqual([]); // no /works/ prefix, no match
+	});
+
+	it("the title-mention pattern recognizes only an @ link, not a plain Work link", () => {
+		// The Showings lookup must agree with `postTitleSegments`: a bare Work link in a
+		// title is text, not a mention.
+		expect(pgWorkTitleMentionPattern(123456789)).toBe(
+			"\\[@[^]]*\\]\\([^)]*?/works/[^[:space:]()>'\"]*-?123456789([^0-9]|$)",
+		);
 	});
 });

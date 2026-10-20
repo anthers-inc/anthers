@@ -664,8 +664,23 @@ export interface Post {
 	 * announcement and carries no gate; each Work resolves on its own.
 	 */
 	linkedWorks?: PostWorkRef[];
+	/**
+	 * The title with each `@`-mentioned Work's current name — what a reader sees.
+	 * `title` is the stored form, whose mention text is only the fallback for a Work
+	 * that no longer resolves.
+	 */
+	displayTitle?: string | null;
+	/** The Works the title mentions, resolved for this reader, in first-appearance order. */
+	mentionedWorks?: PostMentionedWork[];
 	/** Transparent edit history (newest first), present on the detail endpoint. */
 	edits?: PostEdit[];
+}
+
+/** A Work a post's title names, as the heading links it. */
+export interface PostMentionedWork {
+	publicId: number;
+	slug: string;
+	title: string;
 }
 
 /** One timestamped entry in a post's edit history. */
@@ -688,6 +703,8 @@ export interface PostListItem {
 	 */
 	creatorId: number | null;
 	title: string | null;
+	/** The title with each mentioned Work's current name — what a card shows. */
+	displayTitle?: string | null;
 	isPinned: boolean;
 	tags: string[] | null;
 	isPublished: boolean | null;
@@ -714,6 +731,8 @@ export interface ProjectPost {
 	publicId: number;
 	slug: string;
 	title: string | null;
+	/** The title with each mentioned Work's current name — what the row shows. */
+	displayTitle?: string | null;
 	isPublished: boolean | null;
 	publishedAt: string | null;
 	sortOrder: number;
@@ -889,13 +908,16 @@ export interface RemovedComment {
 /** What a thread is made of: comments, and the gaps removed ones left above their replies. */
 export type ThreadComment = Comment | RemovedComment;
 
-/** One written review: a score plus the words that justify it. */
+/** One written review: a verdict and the words that explain it. */
 export interface Review {
 	id: number;
 	userId: number;
 	/** `recommended` or `not-recommended`. An open set — render an unknown value as-is. */
 	verdict: string;
-	/** "" for rows written before reviews required text — render the verdict alone. */
+	/**
+	 * The reviewer's words. Always present here: only reviews with text are listed, and a
+	 * verdict left on its own counts in the aggregate without appearing in this array.
+	 */
 	body: string;
 	/**
 	 * The review's public record link — the record's own address on Taproot, the form a
