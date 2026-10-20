@@ -38,6 +38,7 @@ function openWork(overrides: Partial<PublishableWork> = {}): PublishableWork {
 		slug: "a-short-film",
 		publicId: 90210,
 		releasedAt: RELEASED,
+		originallyReleased: null,
 		...overrides,
 	};
 }
@@ -146,6 +147,25 @@ describe("the release date", () => {
 	});
 });
 
+describe("the original release date", () => {
+	it("carries the date a work first came out elsewhere", () => {
+		const record = workToRecord(
+			openWork({ originallyReleased: new Date("2021-05-01T00:00:00.000Z") }),
+			{ baseUrl: BASE },
+		);
+		expect(record?.originallyReleased).toBe("2021-05-01T00:00:00.000Z");
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
+	it("omits the field when the work first came out here", () => {
+		// Absence, not a null: `releasedAt` already answers when it came out, and the field is
+		// not nullable, so there is no way to write "asserted none" even if a creator wanted to.
+		const record = workToRecord(openWork(), { baseUrl: BASE });
+		expect(record).not.toHaveProperty("originallyReleased");
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+});
+
 describe("access is what a stranger would find", () => {
 	it("marks a freely-openable Work open", () => {
 		expect(workToRecord(openWork(), { baseUrl: BASE })?.access).toEqual({ state: "open" });
@@ -200,20 +220,13 @@ describe("what the record must never carry", () => {
 		// ⭐ The principle that keeps `durationSeconds` off the record: a listing must not
 		// encode assumptions about a Work's shape. Duration assumed time-based media, which
 		// excludes actively developed software, patched games and serial comics — mediums
-		// Anthers welcomes. An original-release date is being validated on our own
-		// back-catalog use before any decision to publish it; it belongs nowhere until then.
+		// Anthers welcomes. An original-release date describes when a work came out, not what
+		// kind of thing it is, which is why it is not in this set.
 		const props = Object.keys(
 			(workRecord.schema as { shape?: Record<string, unknown> }).shape ?? {},
 		);
 		expect(props.length).toBeGreaterThan(3);
-		for (const shaped of [
-			"durationSeconds",
-			"originallyReleased",
-			"readMinutes",
-			"pageCount",
-			"extent",
-			"fileSize",
-		]) {
+		for (const shaped of ["durationSeconds", "readMinutes", "pageCount", "extent", "fileSize"]) {
 			expect(props).not.toContain(shaped);
 		}
 	});
