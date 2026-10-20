@@ -42,7 +42,12 @@
 					"releasedAt": {
 						"type": "string",
 						"format": "datetime",
-						"description": "When the work was released to the public. This is the work's own date and the only one the record carries — record-creation time is already encoded in the record key, so a separate field for it would be a second, weaker answer to a question the key already answers."
+						"description": "When the work was released to the public here. This is the listing's own release date; where the work first came out somewhere else earlier, `originallyReleased` carries that. Record-creation time is already encoded in the record key, so a separate field for it would be a second, weaker answer to a question the key already answers."
+					},
+					"originallyReleased": {
+						"type": "string",
+						"format": "datetime",
+						"description": "When the work first came out, anywhere — asserted by its creator and optional. A companion to `releasedAt`, not a second meaning of it: Anthers is often not the first place a work came out, so this carries the earlier release (released here in 2026, first put out in 2021), and it is not when the work was made, which has several candidate answers where a release has a definite and often verifiable one. Only the date is recorded, so a creator who knows the year alone picks a date; the record never pretends to know more than it was told. Absent when the work first came out here, which `releasedAt` already answers."
 					},
 					"description": {
 						"type": "string",
