@@ -47,7 +47,13 @@ const API_ORIGIN =
 const WORK_PATH = /^\/works\/([^/]+)\/?$/;
 
 async function indexHtml(): Promise<string> {
-	return Bun.file(resolve(DIST, "index.html")).text();
+	const html = await Bun.file(resolve(DIST, "index.html")).text();
+	// 🚨 **The browser session's API port travels in the document.** A session starts its API
+	// on a free port, and `rpc.ts`'s `devApiPort()` reads this tag; without it the app falls
+	// back to `make dev`'s :8000 and every local browser walk dies at connection-refused.
+	// Restored 2026-10-19 after the web-origin rewrite (#616) dropped the injection.
+	if (!API_PORT) return html;
+	return html.replace("<head>", `<head><meta name="anthers-dev-api-port" content="${API_PORT}">`);
 }
 
 /**
