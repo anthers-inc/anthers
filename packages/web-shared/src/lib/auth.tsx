@@ -33,6 +33,11 @@ export interface User {
 	 * rewrite rows.
 	 */
 	persistentMiniplayer: boolean | null;
+	/**
+	 * The search bar's shortcuts, `{ search, filter }`, as portable chord strings.
+	 * Null = never set, so the defaults in `@anthers/shared/keybindings` stand.
+	 */
+	searchShortcuts: Record<string, string> | null;
 	/** Every account holds exactly one ATProto identity, so it is always present. */
 	atprotoDid: string;
 	/** When the terms (and the 13+ assertion) were accepted; null until `/welcome` finishes onboarding. */

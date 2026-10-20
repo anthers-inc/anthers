@@ -53,12 +53,14 @@ import {
 import { isWorkType } from "@anthers/shared/content";
 import { type ContentNote, RATING_ROWS } from "@anthers/shared/content-rating";
 import { CREATOR_EMAIL_KINDS, resolvedCreatorEmailDelivery } from "@anthers/shared/creator-emails";
+import { normalizeSearchShortcuts } from "@anthers/shared/keybindings";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
 	isRightsRequestKind,
 	RIGHTS_DETAILS_MAX,
 	RIGHTS_RESPONSE_DAYS,
 } from "@anthers/shared/rights";
+import { searchTerms } from "@anthers/shared/search";
 import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panels";
 import { isUsState } from "@anthers/shared/us-states";
 import { zValidator } from "@hono/zod-validator";
@@ -124,6 +126,7 @@ import {
 } from "../services/parental-controls.js";
 import { postContentExcerpt } from "../services/post-markdown.js";
 import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
+import { matchesFields } from "../services/search-query.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../services/storage/keys.js";
 import { storageReadingFor } from "../services/storage-reading.js";
 
@@ -192,6 +195,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 			homeNavOrder: userPreferences.homeNavOrder,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
 			creatorEmailDelivery: userPreferences.creatorEmailDelivery,
+			searchShortcuts: userPreferences.searchShortcuts,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
@@ -214,6 +218,8 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		homeNavOrder: prefs?.homeNavOrder ?? null,
 		// Where audio playback lives — null means "never said", the client reads on.
 		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
+		// The bar's two chords; null means the defaults in `@anthers/shared/keybindings`.
+		searchShortcuts: prefs?.searchShortcuts ?? null,
 		atprotoDid: user.atprotoDid,
 		createdAt: user.createdAt,
 		// Surfaced on /me because the cancel path runs through signing back in: someone
@@ -398,6 +404,12 @@ const updateProfileSchema = z.object({
 	 */
 	homeNavOrder: z.array(z.enum(NAV_IDS)).max(NAV_IDS.length).optional(),
 	/**
+	 * The search bar's two chords, as a whole map. The values are validated below with
+	 * `@anthers/shared/keybindings` rather than by a regex here: the grammar is the same
+	 * one the browser matches against, so the two cannot disagree about what a chord is.
+	 */
+	searchShortcuts: z.record(z.string().max(20), z.string().max(40)).optional(),
+	/**
 	 * Per-group notification delivery, as whole-mode writes per key.
 	 *
 	 * ⚠️ **Whole map, not a merge**, per PATCH: the client renders every group's control
@@ -525,6 +537,18 @@ const accountRoutes = new Hono()
 		if (data.persistentMiniplayer !== undefined) {
 			prefUpdates.persistentMiniplayer = data.persistentMiniplayer;
 		}
+		if (data.searchShortcuts !== undefined) {
+			const cleaned = normalizeSearchShortcuts(data.searchShortcuts);
+			if (!cleaned) {
+				return c.json(
+					{
+						error: "A shortcut needs a modifier and a key, and the two search actions must differ.",
+					},
+					400,
+				);
+			}
+			prefUpdates.searchShortcuts = cleaned;
+		}
 		if (Object.keys(prefUpdates).length > 1) {
 			// The key exists only so the `> 1` test means "something was set"; the row's own
 			// `user_id` is what the insert carries.
@@ -540,6 +564,9 @@ const accountRoutes = new Hono()
 				...(data.homeNavOrder !== undefined ? { homeNavOrder: data.homeNavOrder } : {}),
 				...(data.persistentMiniplayer !== undefined
 					? { persistentMiniplayer: data.persistentMiniplayer }
+					: {}),
+				...(data.searchShortcuts !== undefined
+					? { searchShortcuts: prefUpdates.searchShortcuts as Record<string, string> }
 					: {}),
 			};
 			await db
@@ -698,6 +725,11 @@ const accountRoutes = new Hono()
 
 		const kind = c.req.query("kind") ?? "all";
 
+		// Filter mode's term, applied before each half's cap. A client-side filter over
+		// the loaded page would search only what had been scrolled into view, which is the
+		// silent-short-page defect every other listing filter avoids the same way.
+		const searchQs = searchTerms(c.req.query("q") ?? "");
+
 		// The two user-side listing conditions the Works half composes, loaded once rather
 		// than awaited inside the query builder. `adultVisibility` is the allow-list every
 		// other listing uses; it replaced a narrower `adultHiddenFrom` on 2026-08-29 that
@@ -726,6 +758,18 @@ const accountRoutes = new Hono()
 								// The tags the user multi-selected, AND semantics over the post's own.
 								...(tagFilter.length > 0
 									? [sql`${posts.tags} @> ${JSON.stringify(tagFilter)}::jsonb`]
+									: []),
+								// Filter mode's term: title, body and the creator's names, the
+								// same fields the global search's two passes cover between them.
+								...(searchQs.length > 0
+									? [
+											matchesFields(searchQs, [
+												posts.title,
+												posts.body,
+												users.displayName,
+												users.atprotoHandle,
+											]),
+										]
 									: []),
 								// A type filter reads a post through what it announces: some Work
 								// its body embeds matches. (Posts never ship a payload here; the
@@ -774,6 +818,17 @@ const accountRoutes = new Hono()
 								...(mediaTypeFilter ? [eq(works.type, mediaTypeFilter)] : []),
 								...(tagFilter.length > 0
 									? [sql`${works.tags} @> ${JSON.stringify(tagFilter)}::jsonb`]
+									: []),
+								// Filter mode's term, over the release's own words and its creator.
+								...(searchQs.length > 0
+									? [
+											matchesFields(searchQs, [
+												works.title,
+												works.description,
+												users.displayName,
+												users.atprotoHandle,
+											]),
+										]
 									: []),
 							),
 						)

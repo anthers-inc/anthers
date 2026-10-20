@@ -253,6 +253,7 @@ import {
 import { aclForMediaType, scannedObjectKind } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
+import { resolveThumbnailUrl } from "../services/thumbnails.js";
 import { mediaUploadKeyFor } from "../services/upload-sessions.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
 import {
@@ -1352,15 +1353,10 @@ const FRAME_EXTRACT_TIMEOUT_MS = 20_000;
 
 /**
  * Thumbnails render directly as <img src>; older rows stored a bare storage key instead
- * of a URL — resolve those to public URLs in place (new uploads already store URLs).
+ * of a URL — `resolveThumbnailUrl` turns those into public URLs in place (new uploads
+ * already store URLs), and lives in `services/thumbnails.ts` because search resolves the
+ * same covers.
  */
-async function resolveThumbnailUrl(thumbnail: string | null): Promise<string | null> {
-	if (thumbnail && !/^(https?:)?\/\//.test(thumbnail) && !thumbnail.startsWith("/")) {
-		return storage.getUrl(thumbnail);
-	}
-	return thumbnail;
-}
-
 async function resolveWorkThumbnail(item: WorkRow): Promise<void> {
 	item.thumbnail = await resolveThumbnailUrl(item.thumbnail);
 }

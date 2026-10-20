@@ -236,6 +236,21 @@ export const userPreferences = pgTable("user_preferences", {
 	homeNavOrder: jsonb("home_nav_order").$type<string[]>(),
 
 	/**
+	 * The search bar's shortcuts, as a map from action to chord (`{ search, filter }`).
+	 *
+	 * A portable chord string rather than a key code, so `Mod+K` means Command on Apple
+	 * platforms and Control elsewhere from one stored value. Null means the defaults,
+	 * which live in `@anthers/shared/keybindings` rather than here for the same reason
+	 * the content-rating defaults do: a missing row and a never-answered action must read
+	 * as the same default, and a column default would bake one answer into every row.
+	 *
+	 * 🚨 **The server validates with the shared grammar** — a write arrives from a client
+	 * and is not trusted to be a chord this build understands. Whole-map writes, like
+	 * `homeNavOrder` and `notificationDelivery`.
+	 */
+	searchShortcuts: jsonb("search_shortcuts").$type<Record<string, string> | null>(),
+
+	/**
 	 * Whether audio playback rides the persistent footer bar (PlayerBar) rather than the
 	 * page's own player: pressing play on an audio Work hands the track to the bar, which
 	 * survives navigation. Null = never answered, and the client reads that as **on** —

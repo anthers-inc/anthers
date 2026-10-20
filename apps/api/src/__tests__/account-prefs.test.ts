@@ -98,3 +98,27 @@ describe("the persistent miniplayer preference", () => {
 		expect((await patchMe({ persistentMiniplayer: "on" })).status).toBe(400);
 	});
 });
+
+describe("the search shortcut preference", () => {
+	it("starts null and round-trips a canonical pair through both serializers", async () => {
+		const before = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
+		expect(before.user.searchShortcuts).toBeNull();
+
+		const res = await patchMe({ searchShortcuts: { search: "mod+shift+k", filter: "alt+f" } });
+		expect(res.status).toBe(200);
+
+		const expected = { search: "Mod+Shift+K", filter: "Alt+F" };
+		const me = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
+		expect(me.user.searchShortcuts).toEqual(expected);
+		const auth = await (await req("/api/auth/me", { headers: { Cookie: cookie } })).json();
+		expect(auth.user.searchShortcuts).toEqual(expected);
+	});
+
+	it("refuses a bare key, a duplicate pair and a partial map", async () => {
+		expect((await patchMe({ searchShortcuts: { search: "K", filter: "Mod+F" } })).status).toBe(400);
+		expect((await patchMe({ searchShortcuts: { search: "Mod+K", filter: "Mod+K" } })).status).toBe(
+			400,
+		);
+		expect((await patchMe({ searchShortcuts: { search: "Mod+K" } })).status).toBe(400);
+	});
+});
