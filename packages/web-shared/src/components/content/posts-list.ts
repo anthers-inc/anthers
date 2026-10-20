@@ -53,7 +53,9 @@ export function filterPosts(items: PostListItem[], filters: PostsFilters): PostL
 			// An absent title matches the word the page shows for it — "Untitled" — so the
 			// default-named post is findable by what the screen actually says. The tags ride
 			// beside it, the vocabulary a creator writes to gather these together.
-			const haystack = [post.title ?? "Untitled", ...(post.tags ?? [])].join(" ").toLowerCase();
+			const haystack = [post.displayTitle ?? post.title ?? "Untitled", ...(post.tags ?? [])]
+				.join(" ")
+				.toLowerCase();
 			if (!haystack.includes(q)) return false;
 		}
 		return true;

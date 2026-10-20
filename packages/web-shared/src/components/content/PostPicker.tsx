@@ -155,7 +155,7 @@ export default function PostPicker({ excludeIds, onSelect, onClose }: PostPicker
 										<td>
 											<input
 												type="checkbox"
-												aria-label={`Select ${post.title || "Untitled"}`}
+												aria-label={`Select ${post.displayTitle || post.title || "Untitled"}`}
 												className="checkbox checkbox-sm"
 												checked={pickedSet.has(post.id)}
 												// The checkbox is a real toggle — the row's click and this
@@ -167,9 +167,9 @@ export default function PostPicker({ excludeIds, onSelect, onClose }: PostPicker
 										</td>
 										<td
 											className="max-w-[16rem] truncate font-medium"
-											title={post.title ?? undefined}
+											title={post.displayTitle ?? post.title ?? undefined}
 										>
-											{post.title || "Untitled"}
+											{post.displayTitle || post.title || "Untitled"}
 										</td>
 										<td>{statusOf(post)}</td>
 										<td className="text-sm">

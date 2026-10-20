@@ -1,5 +1,5 @@
 {
-  "id": "b8e270b1-d615-4cd8-8f6a-6ff4e1ccd476",
+  "id": "235c5dfa-5d59-4dc3-b4df-b78f8460a67f",
   "prevId": "9067e59b-5a6d-4716-b3ed-dea526ef4127",
   "version": "7",
   "dialect": "postgresql",
@@ -10702,6 +10702,13 @@
           "notNull": false,
           "default": "''"
         },
+        "short_description": {
+          "name": "short_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
         "cover_image": {
           "name": "cover_image",
           "type": "text",
@@ -10715,6 +10722,34 @@
           "primaryKey": false,
           "notNull": false,
           "default": "'{}'::jsonb"
+        },
+        "works_sort_mode": {
+          "name": "works_sort_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
+        "works_sort_direction": {
+          "name": "works_sort_direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'asc'"
+        },
+        "posts_sort_mode": {
+          "name": "posts_sort_mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
+        "posts_sort_direction": {
+          "name": "posts_sort_direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'asc'"
         },
         "is_published": {
           "name": "is_published",

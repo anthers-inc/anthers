@@ -39,7 +39,9 @@ export default function PostCard({ post }: { post: PostListItem }) {
 						<span className="text-xs text-base-content/50 ml-2">{date}</span>
 					</div>
 				</div>
-				{post.title && <h3 className="font-semibold line-clamp-1">{post.title}</h3>}
+				{post.title && (
+					<h3 className="font-semibold line-clamp-1">{post.displayTitle ?? post.title}</h3>
+				)}
 				{/* A post carries no type, no delivery and no gate — it is words and links.
 				    What it can say is how many Works it points at. */}
 				{post.linkedWorkCount > 0 && (
@@ -52,7 +54,11 @@ export default function PostCard({ post }: { post: PostListItem }) {
 				)}
 			</div>
 			{/* The card's own target, stretched over it — see WorkCard's overlay. */}
-			<Link to={postUrl(post)} className="absolute inset-0" aria-label={post.title || "A post"} />
+			<Link
+				to={postUrl(post)}
+				className="absolute inset-0"
+				aria-label={post.displayTitle || post.title || "A post"}
+			/>
 		</div>
 	);
 }

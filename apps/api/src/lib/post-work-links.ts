@@ -91,3 +91,15 @@ export const PG_WORK_URL_PATTERN = "/works/[^[:space:]()>'\"]*?-?([0-9]{6,})([^0
 export function pgWorkEmbedPattern(publicId: number): string {
 	return `/works/[^[:space:]()>'"]*-?${publicId}([^0-9]|$)`;
 }
+
+/**
+ * The pattern for one Work mentioned in a post's TITLE — the Showings lookup.
+ *
+ * A mention is a markdown link whose text begins with `@` (`[@Curtains](/works/…-123456789)`),
+ * and requiring the `@` is what keeps this list equal to the parser's own: a plain Work
+ * link pasted into a title is not a mention, and the Showings panel must not claim it is
+ * one. Same digit boundary as {@link pgWorkEmbedPattern}.
+ */
+export function pgWorkTitleMentionPattern(publicId: number): string {
+	return `\\[@[^]]*\\]\\([^)]*?/works/[^[:space:]()>'"]*-?${publicId}([^0-9]|$)`;
+}

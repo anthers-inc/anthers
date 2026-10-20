@@ -105,6 +105,7 @@ function PostedAbout({ work }: { work: WorkDetail }) {
 export function ShowingsStub({ work }: { work: WorkDetail }) {
 	const creator = work.creator;
 	const projects = work.shownOn?.projects ?? [];
+	const posts = work.shownOn?.posts ?? [];
 	return (
 		<div className="flex flex-col gap-3">
 			{creator && <CreatorCard creator={creator} />}
@@ -115,6 +116,11 @@ export function ShowingsStub({ work }: { work: WorkDetail }) {
 					className="link-hover block"
 				>
 					<Card title={p.title} subtitle="Project" />
+				</Link>
+			))}
+			{posts.map((post) => (
+				<Link key={post.publicId} to={postUrl(post)} className="link-hover block">
+					<Card title={post.displayTitle ?? post.title ?? "Untitled"} subtitle="Post" />
 				</Link>
 			))}
 			<p className="text-xs text-base-content/60">
