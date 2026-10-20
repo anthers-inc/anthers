@@ -326,7 +326,7 @@ export default function MusicLens({ items, includeSpoken, scope = "library" }: M
 						? "Save an album, a track or an episode and it lands here — free work included. You don't have to buy something to keep it."
 						: "Save an album or a track and it lands here — free work included. You don't have to buy something to keep it."}
 				</p>
-				<Link to="/discover" className="btn btn-primary btn-sm mt-4">
+				<Link to="/discovery" className="btn btn-primary btn-sm mt-4">
 					Find something to listen to
 				</Link>
 			</div>

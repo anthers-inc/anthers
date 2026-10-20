@@ -79,7 +79,7 @@ export default function SearchBar() {
 		e.preventDefault();
 		if (!query.trim()) return;
 		setFocused(false);
-		navigate(`/discover?search=${encodeURIComponent(query.trim())}`);
+		navigate(`/discovery?search=${encodeURIComponent(query.trim())}`);
 	};
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -176,7 +176,7 @@ export default function SearchBar() {
 							</ul>
 							<div className="border-t border-base-300/50">
 								<Link
-									to={`/discover?search=${encodeURIComponent(query.trim())}`}
+									to={`/discovery?search=${encodeURIComponent(query.trim())}`}
 									className="flex items-center gap-2 px-3 py-2.5 text-xs text-primary hover:bg-base-300/30 transition-colors"
 									onClick={() => {
 										setFocused(false);

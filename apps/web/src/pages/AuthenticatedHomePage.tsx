@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import FeedTile from "../components/cards/FeedTile";
 import SharedFilterSections from "../components/layout/SharedFilterSections";
 import SharedLensesSection from "../components/layout/SharedLensesSection";
+import TabHeader from "../components/layout/TabHeader";
 
 export default function AuthenticatedHomePage() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -110,22 +111,24 @@ export default function AuthenticatedHomePage() {
 			{/* Feed content. The grid fills the content area — the wide-tile shelf's
 			    whole point is using the width the layout already gives it. */}
 			<div className="w-full px-6 py-6">
-				{/* The feed's own heading, and the page explanation beside it — moved out of
-				    the sidebar, which holds filters; a HOW-does-it-work is a page element. */}
-				<div className="flex items-center justify-between mb-4">
-					<h2 className="text-lg font-semibold flex items-center gap-2">
-						<RssIcon className="w-5 h-5 text-primary" />
-						Your Feed
-					</h2>
-					<button
-						type="button"
-						className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-base-content/60 transition-colors"
-						onClick={() => setShowFeedInfo(!showFeedInfo)}
-					>
-						<InformationCircleIcon className="w-3.5 h-3.5" />
-						How does the feed work?
-					</button>
-				</div>
+				{/* The tab's one shared header (Parker, 2026-10-19): icon, title, and the
+				    paragraph that says what the stream is made of. The how-it-works
+				    affordance rides the header's right edge. */}
+				<TabHeader
+					icon={RssIcon}
+					title="Network"
+					subtitle="The latest Works and Posts from all of the creators you follow, creators you're subscribed to, and creators who have made works or posts that you've saved or purchased. A pure chronological feed with no hidden algorithm."
+					actions={
+						<button
+							type="button"
+							className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-base-content/60 transition-colors"
+							onClick={() => setShowFeedInfo(!showFeedInfo)}
+						>
+							<InformationCircleIcon className="w-3.5 h-3.5" />
+							How does the feed work?
+						</button>
+					}
+				/>
 				{showFeedInfo && (
 					<div className="bg-base-200 rounded-lg p-3 text-sm relative mb-6">
 						<button
@@ -183,8 +186,8 @@ export default function AuthenticatedHomePage() {
 								: "Follow creators to see their latest posts and releases here, newest first."
 						}
 						action={
-							<Link to="/discover" className="btn btn-primary btn-sm">
-								Discover creators
+							<Link to="/discovery" className="btn btn-primary btn-sm">
+								Explore Discovery
 							</Link>
 						}
 					/>

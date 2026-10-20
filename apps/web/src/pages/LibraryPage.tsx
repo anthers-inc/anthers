@@ -46,12 +46,18 @@ import { useSidebar } from "@anthers/web-shared/sidebar";
 import { isAccessResult, type Work } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { EyeIcon, EyeSlashIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import {
+	EyeIcon,
+	EyeSlashIcon,
+	LockClosedIcon,
+	RectangleStackIcon,
+} from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import SharedFilterSections, {
 	SHARED_FILTER_TYPES,
 } from "../components/layout/SharedFilterSections";
 import SharedLensesSection from "../components/layout/SharedLensesSection";
+import TabHeader from "../components/layout/TabHeader";
 import BookshelfLens from "../components/library/BookshelfLens";
 import ChannelGuideLens, {
 	channelGuideChannelsFromShelf,
@@ -489,12 +495,13 @@ export default function LibraryPage() {
 
 	return (
 		<div className="container mx-auto px-4 py-8">
-			<h1 className="mb-2 text-2xl font-bold">Library</h1>
-			<p className="mb-6 text-sm text-base-content/60">
-				Everything you've kept — what you've bought, and anything free you saved.
-			</p>
+			<TabHeader
+				icon={RectangleStackIcon}
+				title="Library"
+				subtitle="All of the Works, Projects, and Posts you've purchased or otherwise saved, with everything you've purchased staying yours."
+			/>
 			{cutTo != null && (
-				<p className="-mt-4 mb-6 text-sm text-base-content/60">
+				<p className="mb-6 text-sm text-base-content/60">
 					Your Library holds more than {cutTo.toLocaleString()} things, and this page shows the{" "}
 					{cutTo.toLocaleString()} you saved most recently. Everything older is still saved.
 				</p>
@@ -549,8 +556,8 @@ export default function LibraryPage() {
 							: "Save anything you want to keep. Free work included — you don't have to buy something to keep it."
 					}
 					action={
-						<Link to="/discover" className="btn btn-primary btn-sm">
-							Discover Content
+						<Link to="/discovery" className="btn btn-primary btn-sm">
+							Explore Discovery
 						</Link>
 					}
 				/>

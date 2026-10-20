@@ -15,7 +15,14 @@ describe("modeForPath", () => {
 	});
 
 	it("puts the user-only pages in user mode", () => {
-		for (const path of ["/feed", "/library", "/discover", "/basket", "/settings", "/purchases"]) {
+		for (const path of [
+			"/network",
+			"/library",
+			"/discovery",
+			"/basket",
+			"/settings",
+			"/purchases",
+		]) {
 			expect(modeForPath(path, "studio")).toBe("user");
 		}
 	});
@@ -28,8 +35,8 @@ describe("modeForPath", () => {
 	});
 
 	it("matches a whole path segment, not a prefix of one", () => {
-		// A path that merely begins with a mode's root, such as `/studios` or `/feedback`, is neither.
+		// A path that merely begins with a mode's root, such as `/studios` or `/networks`, is neither.
 		expect(modeForPath("/studios", "user")).toBe("user");
-		expect(modeForPath("/feedback", "studio")).toBe("studio");
+		expect(modeForPath("/networks", "studio")).toBe("studio");
 	});
 });

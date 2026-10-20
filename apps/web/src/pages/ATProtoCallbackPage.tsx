@@ -77,9 +77,10 @@ export default function ATProtoCallbackPage() {
 				.catch(() => {})
 				.finally(() => {
 					// Every account carries its handle from creation now — there is no usernameless
-					// state left to route around, so a login lands where it was headed, or the feed.
+					// state left to route around, so a login lands where it was headed, or the
+					// default order's first tab.
 					refreshUser().then(() => {
-						navigate(next ?? "/feed", { replace: true });
+						navigate(next ?? "/library", { replace: true });
 					});
 				});
 			return;

@@ -40,9 +40,9 @@ const typeSectionRows = (page: import("@playwright/test").Page) =>
 
 test("the sidebar reads tabs, divider, lenses, divider, shared filters", async ({ page }) => {
 	test.setTimeout(60_000);
-	await page.goto(`${WEB_ORIGIN}/feed`);
+	await page.goto(`${WEB_ORIGIN}/network`);
 	await expect(
-		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Feed" }),
+		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Network" }),
 	).toBeVisible();
 
 	// The section order on the Feed: the tab-shared LENSES (the middles are lenses
@@ -99,9 +99,9 @@ test("the sidebar reads tabs, divider, lenses, divider, shared filters", async (
 
 test("the shared Type list is the unified vocabulary, grayed rows included", async ({ page }) => {
 	test.setTimeout(60_000);
-	await page.goto(`${WEB_ORIGIN}/feed`);
+	await page.goto(`${WEB_ORIGIN}/network`);
 	await expect(
-		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Feed" }),
+		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Network" }),
 	).toBeVisible();
 	// The shared sections mount in an effect after first paint; wait for the
 	// vocabulary rather than racing it.
@@ -127,9 +127,9 @@ test("the shared Type list is the unified vocabulary, grayed rows included", asy
 
 test("a Type selection filters the feed through the page's own adapter", async ({ page }) => {
 	test.setTimeout(60_000);
-	await page.goto(`${WEB_ORIGIN}/feed`);
+	await page.goto(`${WEB_ORIGIN}/network`);
 	await expect(
-		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Feed" }),
+		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Network" }),
 	).toBeVisible();
 	await expect(page.getByRole("heading", { name: "Type", exact: true })).toBeVisible();
 

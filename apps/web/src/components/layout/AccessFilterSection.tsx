@@ -2,9 +2,9 @@
 /**
  * The ACCESS section of the shared sidebar filters (Parker, 2026-10-11): the viewer's
  * own reach over the deliverable, above the kind. Optional per tab — a tab whose
- * content carries access state supplies it (the Feed's stream today, the Library with
+ * content carries access state supplies it (the Network's stream today, the Library with
  * its locked saves) and it renders first among the shared filters; a tab whose content
- * has no such reading (Discover) omits it, and its browsing machinery stays its own.
+ * has no such reading (Discovery's Graph mode) omits it, and its own controls stay its own.
  *
  * Carried over from the feed-bound component this shared section came from — the
  * explainer's copy is the one that a NEW user needs: "unlocked" is a reach verdict,

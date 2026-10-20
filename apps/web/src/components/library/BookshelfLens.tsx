@@ -194,7 +194,7 @@ export default function BookshelfLens({ items }: { items: LensItem[] }) {
 					Save a book, a comic or a piece of writing and it takes its place here — free work
 					included. You don't have to buy something to keep it.
 				</p>
-				<Link to="/discover" className="btn btn-primary btn-sm mt-4">
+				<Link to="/discovery" className="btn btn-primary btn-sm mt-4">
 					Find something to read
 				</Link>
 			</div>

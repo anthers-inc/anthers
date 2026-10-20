@@ -10,9 +10,9 @@ import DesktopSignIn from "../../studio/DesktopSignIn";
 
 /**
  * Handles the / route:
- * - The desktop app opens at the user's chosen home — the feed by default, the
+ * - The desktop app opens at the user's chosen home — the Network tab by default, the
  *   Studio if they set it (see `desktopHome`)
- * - Authenticated users are redirected to /feed
+ * - Authenticated users are redirected to the top of their own nav order
  * - Unauthenticated users see the For Users page, which serves as the homepage
  */
 export default function RootRedirect() {
@@ -51,14 +51,17 @@ export default function RootRedirect() {
 	 */
 	if (desktop) {
 		if (!isAuthenticated) return <DesktopSignIn />;
-		return <Navigate to={desktopHome() === "studio" ? "/studio" : "/feed"} replace />;
+		return <Navigate to={desktopHome() === "studio" ? "/studio" : "/network"} replace />;
 	}
 
 	if (isAuthenticated) {
 		// The home nav's first item is the landing surface of the signed-in site: an
-		// account that rearranged the sidebar arrives at the top of its own order.
+		// account that rearranged the sidebar arrives at the top of its own order. There
+		// is no separate landing setting; the order is the control. An account with no
+		// saved order lands on the default order's first tab, the Library.
 		const first = user?.homeNavOrder?.[0];
-		const target = first === "library" ? "/library" : first === "discover" ? "/discover" : "/feed";
+		const target =
+			first === "network" ? "/network" : first === "discovery" ? "/discovery" : "/library";
 		return <Navigate to={target} replace />;
 	}
 

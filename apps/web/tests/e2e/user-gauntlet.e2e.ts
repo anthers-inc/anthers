@@ -399,7 +399,7 @@ test("rung 1 — the floor: free streams, everything else reads locked", async (
 	const errors = trackErrorsStrict(page, ALLOWED);
 
 	// Following nobody, the feed short-circuits to [] — the gauntlet posts must not leak in.
-	await page.goto("/feed");
+	await page.goto("/network");
 	await expect(page.getByText(walkPost("G1").title)).toBeHidden();
 
 	await expectPostUnlocked(page, "G1");
@@ -437,7 +437,7 @@ test("rung 2 — follow: the feed fills, access does not change", async ({ page 
 	await page.getByRole("button", { name: "Follow", exact: true }).click();
 	await expect(page.getByRole("button", { name: "Following" })).toBeVisible();
 
-	await page.goto("/feed");
+	await page.goto("/network");
 	// The feed interleaves posts and releases, so a Work AND the post announcing it can
 	// both appear — `.first()` rather than a strict single match. Whether the feed should
 	// collapse an announcement into the release it announces is a real question, and not
