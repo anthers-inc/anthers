@@ -284,6 +284,18 @@ describe("routePagedIngest — one set, one shape", () => {
 			]),
 		).toThrow("comic.pdf");
 	});
+
+	it("names the lone EPUB that rode into a page set", () => {
+		// The shape outnumbered is the one the creator can act on: a page set that gained one
+		// EPUB names the EPUB, not a page file it already had.
+		expect(() =>
+			routePagedIngest([
+				row("application/pdf", "one.pdf"),
+				row("application/pdf", "two.pdf"),
+				row("application/epub+zip", "book.epub"),
+			]),
+		).toThrow("book.epub");
+	});
 });
 
 describe("the ingest job, end to end on a fixture book", () => {

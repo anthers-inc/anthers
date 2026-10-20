@@ -14,11 +14,14 @@
  * domain: routes stay thin, and the invariants (dense positions, one re-render enqueued per
  * mutation) live here where they can be seen.
  *
- * 🚨 **One mutation, one re-render.** The rasterizer renders the whole current set each time
- * and replaces the Work's pages wholesale, so the re-render the last mutation enqueued is
- * always the correct response to the set a creator sees; two mutations in quick succession
- * enqueue two jobs, and the later one wins on rendering (they serialize on the queue) — never
- * re-order around this, and never skip it for what looks like a no-op change.
+ * 🚨 **One mutation, one re-render — and a pick is one mutation.** The rasterizer renders
+ * the whole current set each time and replaces the Work's pages wholesale, so the re-render
+ * the last mutation enqueued is always the correct response to the set a creator sees; two
+ * mutations in quick succession enqueue two jobs, and the later one wins on rendering (they
+ * serialize on the queue) — never re-order around this, and never skip it for what looks like
+ * a no-op change. ⚠️ **A multi-file add arrives as ONE mutation** ({@link appendSourceFiles}):
+ * a hundred-file pick sent as a hundred appends would enqueue a hundred renders, each
+ * re-uploading the whole set, which is quadratic work for a set that grew by one.
  *
  * **The image kind's set is the gallery the Work displays** (2026-10-18): an image Work that
  * carries more than one source renders them all, in position order, and the set admits only
@@ -168,10 +171,33 @@ export async function syncFromSourceKey(work: WorkRow): Promise<void> {
 	await askRerender(work);
 }
 
-/** Append an owned file at the end of the set, renumber nothing, re-render a paged set. */
-export async function appendSourceFile(
+/** One file a pick is adding — the shape the `files` array of an append carries. */
+export interface SourceFileInput {
+	file: string;
+	filename?: string;
+	fileSize?: number | null;
+	mimeType?: string;
+}
+
+/**
+ * Append one or more owned files at the end of the set, renumber nothing, and re-render a
+ * paged set ONCE for the whole pick.
+ *
+ * 🚨 **The pick is the mutation** (2026-10-19). `render-paged` renders the whole current set
+ * and replaces the Work's pages each run, so appending a hundred-page comic one file at a
+ * time enqueued a hundred renders — the first rendering one page, the last a hundred, and
+ * every run re-uploading every page — quadratic work over a set that grows by one. The set
+ * editors already upload a pick a file at a time for its progress and cancel; they hand the
+ * whole pick over here in one request instead of one append per file.
+ *
+ * 🚨 **The whole pick is validated against the set it would produce before anything is
+ * written**, so a pick carrying one refused file — a PDF in a comic, a non-image in a
+ * gallery, an EPUB beside page images — writes nothing and enqueues no render rather than
+ * half-landing.
+ */
+export async function appendSourceFiles(
 	work: WorkRow,
-	input: { file: string; filename?: string; fileSize?: number | null; mimeType?: string },
+	inputs: SourceFileInput[],
 ): Promise<{
 	rows: WorkSourceFileRow[];
 	job: TranscodingJobRow | null;
@@ -181,6 +207,9 @@ export async function appendSourceFile(
 	if (!hasSourceSet(work.type)) {
 		return { rows: [], job: null, error: "This kind of Work carries no file set." };
 	}
+	if (inputs.length === 0) {
+		return { rows: [], job: null, error: "No files were given to add." };
+	}
 
 	const existing = await db
 		.select()
@@ -189,24 +218,26 @@ export async function appendSourceFile(
 		.orderBy(asc(workSourceFiles.position));
 	// 🚨 A comic's pages are images now, and the refusal is the service's so every writer
 	// takes it (Parker, 2026-10-19). Existing PDF pages are untouched; this is a new source.
-	const pdfProblem = comicSourceProblem(work.type, {
-		mimeType: input.mimeType,
-		filename: input.filename,
-		file: input.file,
-	});
-	if (pdfProblem) {
-		return { rows: existing, job: null, code: "comic_sources_are_images", error: pdfProblem };
+	for (const input of inputs) {
+		const pdfProblem = comicSourceProblem(work.type, {
+			mimeType: input.mimeType,
+			filename: input.filename,
+			file: input.file,
+		});
+		if (pdfProblem) {
+			return { rows: existing, job: null, code: "comic_sources_are_images", error: pdfProblem };
+		}
 	}
 	// 🚨 **The set is one shape** (the two-shape ingest of 2026-10-11): one EPUB makes the
 	// set reflow, one PDF or page image makes it fixed, and mixing them lands nowhere.
 	// Checked before anything is written, so a refused add leaves the set exactly as it was.
 	const wouldBe = [
 		...existing.map((r) => ({ mimeType: r.mimeType, filename: r.filename, file: r.file })),
-		{
+		...inputs.map((input) => ({
 			mimeType: input.mimeType ?? "",
 			filename: input.filename ?? "",
 			file: input.file,
-		},
+		})),
 	];
 	// A legacy column file with no row joins the considered set the append would seed it
 	// as — the list fallback's row, whose mime reads as the PDF default it has always read as
@@ -252,28 +283,39 @@ export async function appendSourceFile(
 	// before its first add) reads as the one-file set through the list fallback — so an
 	// appending route seeds that file as position 0 rather than letting the set grow while
 	// the column's file silently drops out of every render.
-	if (existing.length === 0 && work.sourceKey) {
-		await db.insert(workSourceFiles).values({
-			workId: work.id,
-			position: 0,
-			file: work.sourceKey,
-			// The seed's mime: what the file's extension names for the image kind; the PDF
-			// default for the paged kinds, whose legacy rows the 0138 backfill wrote the same way.
-			...(isPaged(work.type) ? {} : { mimeType: imageMimeFromUrl(work.sourceKey) }),
-		});
-	}
-	const [{ highest }] = await db
-		.select({ highest: max(workSourceFiles.position) })
-		.from(workSourceFiles)
-		.where(eq(workSourceFiles.workId, work.id));
-	await db.insert(workSourceFiles).values({
-		workId: work.id,
-		position: (highest ?? -1) + 1,
-		file: input.file,
-		filename: input.filename ?? "",
-		fileSize: input.fileSize ?? null,
-		mimeType:
-			input.mimeType ?? (isPaged(work.type) ? "application/pdf" : imageMimeFromUrl(input.file)),
+	//
+	// ⚠️ **One transaction, and the Work's row is locked first.** Positions are dense and
+	// unique per Work (`uq_work_source_files`), so two picks landing on one set at once — a
+	// second tab beside this one — would otherwise race for the position the other just took.
+	// The lock makes them queue; the unique index remains the backstop.
+	await db.transaction(async (tx) => {
+		await tx.select({ id: works.id }).from(works).where(eq(works.id, work.id)).for("update");
+		if (existing.length === 0 && work.sourceKey) {
+			await tx.insert(workSourceFiles).values({
+				workId: work.id,
+				position: 0,
+				file: work.sourceKey,
+				// The seed's mime: what the file's extension names for the image kind; the PDF
+				// default for the paged kinds, whose legacy rows the 0138 backfill wrote the same way.
+				...(isPaged(work.type) ? {} : { mimeType: imageMimeFromUrl(work.sourceKey) }),
+			});
+		}
+		const [{ highest }] = await tx
+			.select({ highest: max(workSourceFiles.position) })
+			.from(workSourceFiles)
+			.where(eq(workSourceFiles.workId, work.id));
+		const first = (highest ?? -1) + 1;
+		await tx.insert(workSourceFiles).values(
+			inputs.map((input, i) => ({
+				workId: work.id,
+				position: first + i,
+				file: input.file,
+				filename: input.filename ?? "",
+				fileSize: input.fileSize ?? null,
+				mimeType:
+					input.mimeType ?? (isPaged(work.type) ? "application/pdf" : imageMimeFromUrl(input.file)),
+			})),
+		);
 	});
 	const rows = await listSourceFiles(work);
 	// The legacy column follows the set — it is what the old readers (the serializer's
@@ -285,7 +327,7 @@ export async function appendSourceFile(
 	// release gate), so it moves when the first row moves.
 	await db
 		.update(works)
-		.set({ sourceKey: isPaged(work.type) ? input.file : rows[0].file })
+		.set({ sourceKey: isPaged(work.type) ? inputs[inputs.length - 1].file : rows[0].file })
 		.where(eq(works.id, work.id));
 	const job = await askRerender(work);
 	return { rows, job };

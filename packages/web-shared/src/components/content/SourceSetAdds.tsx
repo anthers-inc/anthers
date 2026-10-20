@@ -4,14 +4,18 @@
  *
  * The set editors' shared piece (2026-10-19): `PagedSourceFiles` and `ImageSourceFiles` both
  * hand a pick to `lib/work-uploads`, and this renders what the store is carrying — the file on
- * the wire with its name, size and percent, the one that failed with its retry, and how many
- * are waiting their turn. It sits below the landed rows, because these files append to the end
- * of the set.
+ * the wire with its name, size and percent, the files whose bytes are up and waiting for the
+ * pick's one attach, the one that failed with its retry, and how many are waiting their turn.
+ * It sits below the landed rows, because these files append to the end of the set.
  *
  * ⚠️ **The pick outlives the section that started it.** Leaving the Manage tab does not stop
  * anything: the store keeps the batch, the section reads it again when it mounts, and the tab's
  * unload guard already covers it. Only a cancel stops a file, and only "Stop adding the rest"
- * drops the ones that have not started.
+ * drops the ones that have not started — the files already uploaded attach all the same.
+ *
+ * 🚨 **The pick attaches once, so a refused attach is the pick's failure rather than a file's.**
+ * The batch's own message and retry sit above the rows, and the per-file buttons step aside
+ * while it is showing: one request carried every file, so one retry sends them all again.
  */
 
 import {
@@ -41,49 +45,71 @@ export function SourceSetAdds({ workId, noun }: { workId: number; noun: "page" |
 	);
 	if (!batch && stranded.length === 0) return null;
 
-	const added = batch
-		? mine.filter((u) => u.batch?.id === batch.id && u.status === "done").length
-		: 0;
-
 	return (
 		<div className="mb-2 flex flex-col gap-2">
 			{batch && (
 				<div className="flex items-center gap-2 text-xs text-base-content/60">
 					<span className="flex-1">
-						Adding {noun}s: {added} of {batch.total} added
+						Adding {noun}s: {batch.uploaded} of {batch.total} uploaded
 						{batch.waiting > 0 && `, ${batch.waiting} waiting`}
 					</span>
+					{!batch.attaching && !batch.error && (
+						<button
+							type="button"
+							className="btn btn-ghost btn-xs"
+							onClick={() => workUploads.cancelBatch(batch.id)}
+						>
+							Stop adding the rest
+						</button>
+					)}
+				</div>
+			)}
+			{batch?.error && (
+				<div className="alert alert-error text-sm">
+					<span className="flex-1">{batch.error}</span>
 					<button
 						type="button"
-						className="btn btn-ghost btn-xs"
-						onClick={() => workUploads.cancelBatch(batch.id)}
+						className="btn btn-sm"
+						onClick={() => workUploads.retryBatch(batch.id)}
 					>
-						Stop adding the rest
+						Try again
+					</button>
+					<button
+						type="button"
+						className="btn btn-sm btn-ghost"
+						onClick={() => workUploads.discardBatch(batch.id)}
+					>
+						Discard
 					</button>
 				</div>
 			)}
-			{[...live, ...stranded].map((upload) => (
-				<AddRow key={upload.id} upload={upload} />
+			{live.map((upload) => (
+				<AddRow key={upload.id} upload={upload} actions={batch?.error == null} />
+			))}
+			{stranded.map((upload) => (
+				<AddRow key={upload.id} upload={upload} actions />
 			))}
 		</div>
 	);
 }
 
 /** One file of a pick: its name, size and percent, with the one action that file has. */
-function AddRow({ upload }: { upload: WorkUpload }) {
+function AddRow({ upload, actions }: { upload: WorkUpload; actions: boolean }) {
 	const label =
 		upload.status === "attaching"
 			? "Finishing"
-			: upload.progress == null
-				? "Uploading"
-				: `${upload.progress}%`;
+			: upload.status === "landed"
+				? "Uploaded"
+				: upload.progress == null
+					? "Uploading"
+					: `${upload.progress}%`;
 	return (
 		<div className="flex flex-col gap-1 rounded-lg bg-base-200 p-2 text-sm">
 			<div className="flex items-center gap-2">
 				<span className="flex-1 truncate">{upload.fileName}</span>
 				<span className="text-xs text-base-content/50">{humanBytes(upload.fileSize)}</span>
 				<span className="font-mono text-xs">{label}</span>
-				{upload.status === "failed" ? (
+				{actions && upload.status === "failed" && (
 					<>
 						<button
 							type="button"
@@ -101,7 +127,8 @@ function AddRow({ upload }: { upload: WorkUpload }) {
 							Skip
 						</button>
 					</>
-				) : (
+				)}
+				{actions && (upload.status === "uploading" || upload.status === "landed") && (
 					<button
 						type="button"
 						className="btn btn-ghost btn-xs"
@@ -113,7 +140,11 @@ function AddRow({ upload }: { upload: WorkUpload }) {
 				)}
 			</div>
 			{upload.status === "failed" ? (
-				<p className="text-xs text-error">{upload.error}</p>
+				// A pick's refused attach shows its sentence and retry at the batch above, so
+				// a row of that pick does not repeat it (and a screen does not read it twice).
+				actions ? (
+					<p className="text-xs text-error">{upload.error}</p>
+				) : null
 			) : upload.progress == null || upload.status === "attaching" ? (
 				<progress className="progress progress-primary w-full" />
 			) : (
