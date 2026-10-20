@@ -8,8 +8,11 @@
  *   GET    /me/following            — list creators the current user follows
  *   GET    /me/graph                — creators ranked by how many of the people the
  *                                     current user follows also follow them
- *   GET    /me/feed                 — posts AND releases from followed creators, plus your own;
- *                                     `?scope=global` widens it to every creator for Discovery's Ticker
+ *   GET    /me/feed                 — posts AND releases from the account's network (follows,
+ *                                     Badge subscriptions, and the creators behind saved or
+ *                                     purchased content), plus your own;
+ *                                     `?network_source=following|subscribed|saved` narrows it,
+ *                                     and `?scope=global` widens it to every creator for Discovery's Ticker
  *   GET    /me/blocks               — who the current user has blocked
  *   GET    /me/adult-access         — the opt-in and adulthood verification, and whether
  *                                     the two together open the Adult rung
@@ -46,9 +49,12 @@ import {
 	badgePerks,
 	badges,
 	follows,
+	libraryItems,
 	posts,
+	purchases,
 	rightsRequests,
 	studioPreferences,
+	userBadges,
 	userPreferences,
 	users,
 	works,
@@ -782,39 +788,134 @@ const accountRoutes = new Hono()
 		// the feed's own.
 		const scope = c.req.query("scope") === "global" ? "global" : "network";
 
-		// Get the feed's creator ids: the creators this account follows, plus the
-		// account's own id — a creator reads their own published announcements and
-		// released work in the same stream their followers do. Blocked either way is
-		// excluded here rather than at each of the two queries below — the feed's
-		// whole input is this id list, so one filter at the source is also the one
-		// that can't be forgotten by a third feed query later. (The self-follow the
-		// follows table refuses is why own content never arrived here before; the
-		// own id joins at the source instead, which also retired the empty-list
-		// early return — the list is never empty now, and a follow-less creator's
-		// feed is their own.) A global Ticker has no id list at all: every creator
-		// is eligible, and the queries below drop the `inArray` rather than widen it
-		// to a list assembled from the platform.
-		const followedIds =
-			scope === "global"
-				? []
-				: await db
-						.select({ creatorId: follows.creatorId })
-						.from(follows)
-						.where(
-							and(
-								eq(follows.followerId, sessionUser.id),
-								notBlockedBy(sessionUser.id, follows.creatorId),
-								// Suspension keeps the follow but ends the feed — filtered here, at the
-								// source, for the same reason the block is: every downstream feed
-								// query reads from this id list.
-								notSuspendedAccount(follows.creatorId),
-								// The automated-test account is filtered at the source here too.
-								notTestAccount(follows.creatorId),
-							),
-						);
+		// The feed's sources (2026-10-19): the creators this account follows, the
+		// creators whose Badge it holds, and the creators behind the posts and Works it
+		// saved or purchased. A creator who reaches the feed by more than one route is
+		// listed once, and `sourceByCreator` keeps the strongest reason for the card:
+		// following over supporting over saving, because that is the order the reader
+		// chose them in.
+		//
+		// 🚨 **Every source is filtered at the source**, not after the union. A blocked,
+		// suspended or automated-test account must not enter an id list that both feed
+		// queries then trust; the same "one filter at the source" reasoning the original
+		// follows-only list carried. The global Ticker has no list at all, so the two
+		// queries below carry the row filters as well.
+		//
+		// `network_source` narrows the tab to one route in: `following`, `subscribed`, or
+		// `saved` (saved posts and Works, plus purchased Works). The default is `all`,
+		// which is the network the tab's subtitle describes. A creator's own content joins
+		// the default and follows-only streams, as it always has; a narrowed source is
+		// about other people.
+		const networkSourceParam = c.req.query("network_source");
+		const networkSource: "all" | "following" | "subscribed" | "saved" =
+			networkSourceParam === "following" ||
+			networkSourceParam === "subscribed" ||
+			networkSourceParam === "saved"
+				? networkSourceParam
+				: "all";
 
-		const creatorIds =
-			scope === "global" ? null : [...followedIds.map((f) => f.creatorId), sessionUser.id];
+		type NetworkSource = "following" | "subscribed" | "saved";
+		const sourceByCreator = new Map<number, NetworkSource>();
+		let creatorIds: number[] | null = null;
+
+		if (scope === "global") {
+			creatorIds = null;
+		} else {
+			const followedRows = await db
+				.select({ creatorId: follows.creatorId })
+				.from(follows)
+				.where(
+					and(
+						eq(follows.followerId, sessionUser.id),
+						notBlockedBy(sessionUser.id, follows.creatorId),
+						notSuspendedAccount(follows.creatorId),
+						notTestAccount(follows.creatorId),
+					),
+				);
+			const followedIds = followedRows.map((row) => row.creatorId);
+
+			const subscribedRows = await db
+				.selectDistinct({ creatorId: badges.creatorId })
+				.from(userBadges)
+				.innerJoin(badges, eq(badges.id, userBadges.badgeId))
+				.where(
+					and(
+						eq(userBadges.userId, sessionUser.id),
+						notBlockedBy(sessionUser.id, badges.creatorId),
+						notSuspendedAccount(badges.creatorId),
+						notTestAccount(badges.creatorId),
+					),
+				);
+			const subscribedIds = subscribedRows.map((row) => row.creatorId);
+
+			// Saved posts and saved Works are separate joins because a library row names
+			// exactly one subject; the union is the creator set, not the shelf.
+			const savedPostRows = await db
+				.selectDistinct({ creatorId: posts.creatorId })
+				.from(libraryItems)
+				.innerJoin(posts, eq(posts.id, libraryItems.postId))
+				.where(
+					and(
+						eq(libraryItems.userId, sessionUser.id),
+						notBlockedBy(sessionUser.id, posts.creatorId),
+						notSuspendedAccount(posts.creatorId),
+						notTestAccount(posts.creatorId),
+					),
+				);
+			const savedWorkRows = await db
+				.selectDistinct({ creatorId: works.creatorId })
+				.from(libraryItems)
+				.innerJoin(works, eq(works.id, libraryItems.workId))
+				.where(
+					and(
+						eq(libraryItems.userId, sessionUser.id),
+						notBlockedBy(sessionUser.id, works.creatorId),
+						notSuspendedAccount(works.creatorId),
+						notTestAccount(works.creatorId),
+					),
+				);
+			// A purchase row carries the seller directly, and that column survives a
+			// deleted Work — so the purchase is evidence of the relationship even when the
+			// thing bought no longer exists.
+			const purchasedRows = await db
+				.selectDistinct({ creatorId: purchases.creatorId })
+				.from(purchases)
+				.where(
+					and(
+						eq(purchases.buyerId, sessionUser.id),
+						sql`${purchases.creatorId} IS NOT NULL`,
+						notBlockedBy(sessionUser.id, purchases.creatorId),
+						notSuspendedAccount(purchases.creatorId),
+						notTestAccount(purchases.creatorId),
+					),
+				);
+			const purchasedIds = purchasedRows
+				.map((row) => row.creatorId)
+				.filter((id): id is number => id !== null);
+			const savedIds = [
+				...new Set([
+					...savedPostRows.map((row) => row.creatorId).filter((id): id is number => id !== null),
+					...savedWorkRows.map((row) => row.creatorId).filter((id): id is number => id !== null),
+					...purchasedIds,
+				]),
+			];
+
+			for (const id of savedIds) sourceByCreator.set(id, "saved");
+			for (const id of subscribedIds) sourceByCreator.set(id, "subscribed");
+			for (const id of followedIds) sourceByCreator.set(id, "following");
+
+			const selected =
+				networkSource === "following"
+					? followedIds
+					: networkSource === "subscribed"
+						? subscribedIds
+						: networkSource === "saved"
+							? savedIds
+							: [...new Set([...followedIds, ...subscribedIds, ...savedIds])];
+
+			const includeOwn = networkSource === "all" || networkSource === "following";
+			creatorIds = includeOwn ? [...selected, sessionUser.id] : selected;
+		}
 
 		// The feed shows BOTH what a creator said and what they released.
 		//
@@ -1026,7 +1127,7 @@ const accountRoutes = new Hono()
 							? ("own" as const)
 							: scope === "global"
 								? ("discovery" as const)
-								: ("following" as const),
+								: (sourceByCreator.get(p.creatorId ?? -1) ?? ("following" as const)),
 					title: p.title,
 					// The title with each mentioned Work's current name — what the tile shows.
 					displayTitle: postDisplayTitles[index] ?? p.title,
@@ -1071,7 +1172,7 @@ const accountRoutes = new Hono()
 							? ("own" as const)
 							: scope === "global"
 								? ("discovery" as const)
-								: ("following" as const),
+								: (sourceByCreator.get(w.creatorId ?? -1) ?? ("following" as const)),
 					title: w.title,
 					type: w.type,
 					// Thumbnails are public by design — they are the preview a locked Work is

@@ -8,6 +8,7 @@ import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { InformationCircleIcon, RssIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
 import FeedTile from "../components/cards/FeedTile";
+import NetworkMembershipSection from "../components/layout/NetworkMembershipSection";
 import SharedFilterSections from "../components/layout/SharedFilterSections";
 import SharedLensesSection from "../components/layout/SharedLensesSection";
 import TabHeader from "../components/layout/TabHeader";
@@ -30,6 +31,8 @@ export default function AuthenticatedHomePage() {
 	const contentType = searchParams.get("media_type") ?? "";
 	const access = searchParams.get("access") ?? "";
 	const tags = searchParams.get("tags") ?? "";
+	/** `""` is the whole network; the rest narrow to one route in. */
+	const networkSource = searchParams.get("network_source") ?? "";
 
 	const updateParams = useCallback(
 		(updates: Record<string, string>) => {
@@ -51,14 +54,21 @@ export default function AuthenticatedHomePage() {
 		[setSearchParams],
 	);
 
-	// Register the sidebar's two pieces (the house structure, 2026-10-11): the
-	// tab-shared LENSES — on the feed only No Lens is live; the feed's lens builds are
-	// their own later tasks — and the shared filters with the Access control, which
-	// the feed's stream consumes. The old Bookmarks strip is gone: saving is the one
-	// keep action, and the strip had no home in the structure once nothing on this
-	// sidebar was per-tab unique.
+	// Register the sidebar's pieces (the house structure, 2026-10-11): the Network's
+	// own membership filter — the one control that belongs to this tab — above the
+	// tab-shared LENSES, and the shared filters with the Access control below the
+	// divider. The membership filter narrows the stream to the part of the network the
+	// reader means, and the shared filters narrow what that stream draws.
 	useEffect(() => {
-		setPageContent(<SharedLensesSection lens="" onLens={() => {}} />);
+		setPageContent(
+			<div className="flex flex-col gap-5">
+				<NetworkMembershipSection
+					value={networkSource}
+					onValue={(value) => updateParams({ network_source: value })}
+				/>
+				<SharedLensesSection lens="" onLens={() => {}} />
+			</div>,
+		);
 		setSharedContent(
 			<SharedFilterSections
 				type={contentType}
@@ -72,7 +82,7 @@ export default function AuthenticatedHomePage() {
 			setPageContent(null);
 			setSharedContent(null);
 		};
-	}, [setPageContent, setSharedContent, contentType, access, tags, updateParams]);
+	}, [setPageContent, setSharedContent, contentType, access, tags, networkSource, updateParams]);
 
 	useEffect(() => {
 		// Fetch the user's feed. Guard on res.ok before reading the body: an error
@@ -95,6 +105,7 @@ export default function AuthenticatedHomePage() {
 							: {}),
 					...(access ? { access } : {}),
 					...(tags ? { tags } : {}),
+					...(networkSource ? { network_source: networkSource } : {}),
 				},
 			})
 			.then(async (res) => {
@@ -104,7 +115,7 @@ export default function AuthenticatedHomePage() {
 			})
 			.catch(() => {})
 			.finally(() => setFeedLoading(false));
-	}, [contentType, access, tags]);
+	}, [contentType, access, tags, networkSource]);
 
 	return (
 		<div className="min-h-full">
@@ -179,10 +190,12 @@ export default function AuthenticatedHomePage() {
 				) : (
 					<EmptyState
 						icon={<RssIcon className="w-12 h-12" />}
-						title="Your feed is empty"
+						title={
+							networkSource ? "Nothing from this part of your network yet" : "Your feed is empty"
+						}
 						description={
-							contentType || access || tags
-								? "No posts or releases match these filters. Clear one and the stream returns; follow more creators and it grows."
+							contentType || access || tags || networkSource
+								? "No posts or releases match this view. Clear a filter, or follow, support, or save a creator and the stream grows."
 								: "Follow creators to see their latest posts and releases here, newest first."
 						}
 						action={
