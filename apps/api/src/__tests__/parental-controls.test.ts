@@ -50,6 +50,23 @@ async function signUp(username: string) {
 const OPEN = { access: [{ threshold: 0, allow: true, price: "0" }] };
 const PIN = "4821";
 
+/**
+ * A daily cap and the attention range that spends it, sized to fit inside the current day.
+ *
+ * The test runner pins `TZ=UTC`, and the service's day window starts at local midnight, so
+ * a fixture range longer than the time elapsed today straddles that boundary and credits
+ * only its post-midnight seconds. That made the time-limit tests fail for the first half
+ * hour of every UTC day — CI caught it at `00:00:04` on 2026-10-20. Returning the cap as
+ * well as the seconds keeps the fixture and the limit the same number, so the tests say
+ * "spend exactly the cap" whatever time it is.
+ */
+function insideToday(wanted: number): number {
+	const now = new Date();
+	const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+	const elapsed = Math.floor((now.getTime() - start.getTime()) / 1000);
+	return Math.max(1, Math.min(wanted, elapsed - 1));
+}
+
 const id = crypto.randomUUID().slice(0, 8);
 const childName = `pc_child_${id}`;
 const creatorName = `pc_creator_${id}`;
@@ -439,9 +456,10 @@ describe("Parental controls", () => {
 
 	it("🚨 withholds the deliverable once the day's time is spent", async () => {
 		await reset();
+		const cap = insideToday(1800);
 		await send("/api/accounts/me/parental-controls", "PATCH", child, {
 			pin: PIN,
-			limits: { daily: 1800, weekly: null, monthly: null },
+			limits: { daily: cap, weekly: null, monthly: null },
 		});
 
 		const before = await (
@@ -454,7 +472,7 @@ describe("Parental controls", () => {
 			creatorId,
 			workId: textId,
 			eventType: "read",
-			seconds: 1800,
+			seconds: cap,
 			publicAccess: true,
 		});
 
@@ -475,16 +493,17 @@ describe("Parental controls", () => {
 		// somebody has been consuming. Filtering on `public_access` here would let a whole
 		// household limit be bypassed by anything that was bought.
 		await reset();
+		const cap = insideToday(600);
 		await send("/api/accounts/me/parental-controls", "PATCH", child, {
 			pin: PIN,
-			limits: { daily: 600, weekly: null, monthly: null },
+			limits: { daily: cap, weekly: null, monthly: null },
 		});
 		await insertAttentionRange({
 			userId: childId,
 			creatorId,
 			workId: textId,
 			eventType: "read",
-			seconds: 600,
+			seconds: cap,
 			// Not the commons — gated work they cleared, or bought.
 			publicAccess: false,
 		});
@@ -498,16 +517,17 @@ describe("Parental controls", () => {
 
 	it("refuses the delivery routes with a reason, not a price", async () => {
 		await reset();
+		const cap = insideToday(60);
 		await send("/api/accounts/me/parental-controls", "PATCH", child, {
 			pin: PIN,
-			limits: { daily: 60, weekly: null, monthly: null },
+			limits: { daily: cap, weekly: null, monthly: null },
 		});
 		await insertAttentionRange({
 			userId: childId,
 			creatorId,
 			workId: videoId,
 			eventType: "watch",
-			seconds: 60,
+			seconds: cap,
 			publicAccess: true,
 		});
 
@@ -524,12 +544,13 @@ describe("Parental controls", () => {
 
 	it("a per-creator cap bites before the whole-app one", async () => {
 		await reset();
+		const cap = insideToday(600);
 		await send("/api/accounts/me/parental-controls", "PATCH", child, {
 			pin: PIN,
 			limits: { daily: 7200, weekly: null, monthly: null },
 			creators: {
 				defaultAllow: true,
-				rules: [{ key: String(creatorId), allow: true, dailySeconds: 600 }],
+				rules: [{ key: String(creatorId), allow: true, dailySeconds: cap }],
 			},
 		});
 		await insertAttentionRange({
@@ -537,7 +558,7 @@ describe("Parental controls", () => {
 			creatorId,
 			workId: textId,
 			eventType: "read",
-			seconds: 600,
+			seconds: cap,
 			publicAccess: true,
 		});
 
