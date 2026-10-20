@@ -49,8 +49,8 @@ const SITE_FOOTER_PATHS = new Set(["/badges", "/purchases", "/settings"]);
 const showsSiteFooter = (pathname: string) =>
 	SITE_FOOTER_PATHS.has(pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname);
 
-const navItemClass = (active: boolean) =>
-	`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+const navItemClass = (active: boolean, rail: boolean) =>
+	`flex items-center ${rail ? "justify-center px-2" : "gap-3 px-3"} py-2 rounded-lg text-sm transition-colors ${
 		active
 			? "bg-primary/10 text-primary font-medium"
 			: "text-base-content/70 hover:bg-base-300/50 hover:text-base-content"
@@ -144,12 +144,21 @@ function LoggedInLayoutInner() {
 	const onboarding = user ? user.termsAcceptedAt === null : false;
 	const chromeHidden = !user || onboarding;
 
+	/**
+	 * Collapsed reads as a RAIL rather than a closed drawer (Parker, 2026-10-19): on a desktop
+	 * the aside keeps 4rem of itself and shows the nav's icons, so the places stay one click
+	 * away. Below `md` the same state is still width 0 — the aside is a drawer laid over the
+	 * page there, and a rail would squeeze what it is supposed to stay out of — which is why
+	 * only the desktop width is restored by the `md:` class rather than the base one.
+	 */
+	const rail = !sidebarOpen;
+
 	const handleLogout = async () => {
 		await signOut();
 		navigate("/");
 	};
 
-	const navLinkClass = ({ isActive }: { isActive: boolean }) => navItemClass(isActive);
+	const navLinkClass = ({ isActive }: { isActive: boolean }) => navItemClass(isActive, rail);
 
 	return (
 		<div className="h-screen flex flex-col overflow-hidden">
@@ -274,7 +283,9 @@ function LoggedInLayoutInner() {
 					aria-hidden={chromeHidden || undefined}
 					tabIndex={chromeHidden ? -1 : undefined}
 					className={`btn btn-xs btn-circle border-base-300/60 bg-base-100 shadow-md absolute top-4 z-40 transition-all duration-200 ease-in-out ${
-						sidebarOpen ? "left-64 -translate-x-1/2" : "left-0 translate-x-0"
+						sidebarOpen
+							? "left-64 -translate-x-1/2"
+							: "left-0 md:left-16 translate-x-0 md:-translate-x-1/2"
 					} ${chromeHidden ? "invisible pointer-events-none" : ""}`}
 				>
 					<ChevronLeftIcon
@@ -286,10 +297,10 @@ function LoggedInLayoutInner() {
 				    never squeezes what it covers. The breakpoint is `SIDEBAR_BESIDE_QUERY`'s, which
 				    is also what decides that a phone starts with it closed. */}
 				<aside
-					className={`${!chromeHidden && sidebarOpen ? "w-64 border-r" : "w-0"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-200 overflow-hidden border-base-300/50 bg-base-200/60`}
+					className={`${!chromeHidden && sidebarOpen ? "w-64 border-r" : chromeHidden ? "w-0" : "w-0 md:w-16 md:border-r"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-200 overflow-hidden border-base-300/50 bg-base-200/60`}
 				>
-					<div className="w-64 h-full flex flex-col overflow-y-auto">
-						{isCreator && (
+					<div className={`${rail ? "w-16" : "w-64"} h-full flex flex-col overflow-y-auto`}>
+						{isCreator && !rail && (
 							<div className="px-3 pt-3">
 								<ModeSwitch mode={mode} />
 							</div>
@@ -308,10 +319,11 @@ function LoggedInLayoutInner() {
 											key={item.to}
 											to={item.to}
 											aria-current={active ? "page" : undefined}
-											className={navItemClass(active)}
+											title={rail ? item.label : undefined}
+											className={navItemClass(active, rail)}
 										>
 											<item.icon className="w-5 h-5 shrink-0" />
-											{item.label}
+											{rail ? <span className="sr-only">{item.label}</span> : item.label}
 										</Link>
 									);
 								})}
@@ -341,50 +353,69 @@ function LoggedInLayoutInner() {
 									>
 										<NavLink
 											to={link.to}
-											className={({ isActive }) => `${navItemClass(isActive)} flex-1 min-w-0`}
+											title={rail ? link.label : undefined}
+											className={({ isActive }) => `${navItemClass(isActive, rail)} flex-1 min-w-0`}
 										>
 											<link.icon className="w-5 h-5 shrink-0" />
-											{link.label}
+											{rail ? <span className="sr-only">{link.label}</span> : link.label}
 										</NavLink>
-										{/* biome-ignore lint/a11y/noStaticElementInteractions: the span is the drag source a native
-											 HTML5 drag needs; there is no clickable or focusable behavior on it (the drag itself is
-											 the interaction), and a static span is honest about that. */}
-										<span
-											title="Drag to reorder"
-											draggable
-											onDragStart={(e) => {
-												e.dataTransfer.effectAllowed = "move";
-												// A drag with no payload can be refused before it starts;
-												// the id rides for anything listening.
-												e.dataTransfer.setData("text/plain", link.id);
-												navDragFrom.current = index;
-											}}
-											// A drag that ends anywhere but an accepted drop (Escape, a
-											// drop outside the nav) leaves the source stale; the next drop
-											// would reorder from a drag that never finished.
-											onDragEnd={() => {
-												navDragFrom.current = null;
-											}}
-											className="cursor-grab px-1.5 text-base-content/25 hover:text-base-content/50 transition-colors self-stretch flex items-center active:cursor-grabbing"
-										>
-											<Bars3Icon className="w-3.5 h-3.5 rotate-90 pointer-events-none" />
-										</span>
+										{/* The grip is a pointer affordance for the expanded column only: a rail
+										    row has no width to hold it, and the drag's own feedback is a label
+										    reordering under the cursor, which a rail does not show. Reordering
+										    stays available the moment the sidebar is open again. */}
+										{!rail && (
+											<>
+												{/* biome-ignore lint/a11y/noStaticElementInteractions: the span is the drag source a native
+												     HTML5 drag needs; there is no clickable or focusable behavior on it (the drag itself is
+												     the interaction), and a static span is honest about that. */}
+												<span
+													title="Drag to reorder"
+													draggable
+													onDragStart={(e) => {
+														e.dataTransfer.effectAllowed = "move";
+														// A drag with no payload can be refused before it starts;
+														// the id rides for anything listening.
+														e.dataTransfer.setData("text/plain", link.id);
+														navDragFrom.current = index;
+													}}
+													// A drag that ends anywhere but an accepted drop (Escape, a
+													// drop outside the nav) leaves the source stale; the next drop
+													// would reorder from a drag that never finished.
+													onDragEnd={() => {
+														navDragFrom.current = null;
+													}}
+													className="cursor-grab px-1.5 text-base-content/25 hover:text-base-content/50 transition-colors self-stretch flex items-center active:cursor-grabbing"
+												>
+													<Bars3Icon className="w-3.5 h-3.5 rotate-90 pointer-events-none" />
+												</span>
+											</>
+										)}
 									</div>
 								))}
 
 								{/* Basket — the sidebar entry mirrors the header icon, for the mobile
 								    case where the header is tight. Same conditional: only when non-empty. */}
 								{basketCount > 0 && (
-									<NavLink to="/basket" className={navLinkClass}>
+									<NavLink
+										to="/basket"
+										className={navLinkClass}
+										title={
+											rail ? `Basket (${basketCount} item${basketCount > 1 ? "s" : ""})` : undefined
+										}
+									>
 										<ShoppingBagIcon className="w-5 h-5 shrink-0" />
-										Basket
-										<span className="badge badge-primary badge-sm ml-auto">{basketCount}</span>
+										{rail ? <span className="sr-only">Basket</span> : "Basket"}
+										<span
+											className={`badge badge-primary badge-sm ${rail ? "sr-only" : "ml-auto"}`}
+										>
+											{basketCount}
+										</span>
 									</NavLink>
 								)}
 							</nav>
 						)}
 
-						{!studio && (
+						{!studio && !rail && (
 							<>
 								{/* The divider below the nav is PERSISTENT (Parker, 2026-10-11): it
 								    stands whether or not anything is registered below it, so the
@@ -405,7 +436,7 @@ function LoggedInLayoutInner() {
 						)}
 						{/* Studio keeps the old shape — divider only when a page registers
 						    content; none does today. This is the seam if that ever changes. */}
-						{studio && pageContent && (
+						{studio && !rail && pageContent && (
 							<>
 								<div className="divider my-0 mx-3" />
 								<div className="flex-1 p-3 overflow-y-auto">{pageContent}</div>
