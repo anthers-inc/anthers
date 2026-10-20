@@ -88,7 +88,7 @@ export function ImageSourceFiles({ work }: { work: Work }) {
 	};
 
 	const remove = async (id: number) => {
-		if (busy || adding) return;
+		if (busy) return;
 		setBusy(true);
 		setError(null);
 		try {
@@ -103,7 +103,7 @@ export function ImageSourceFiles({ work }: { work: Work }) {
 	};
 
 	const move = async (id: number, delta: -1 | 1) => {
-		if (!rows || busy || adding) return;
+		if (!rows || busy) return;
 		const i = rows.findIndex((row) => row.id === id);
 		const j = i + delta;
 		if (i < 0 || j < 0 || j >= rows.length) return;
@@ -161,7 +161,7 @@ export function ImageSourceFiles({ work }: { work: Work }) {
 							<button
 								type="button"
 								className="btn btn-ghost btn-xs"
-								disabled={busy || adding != null || index === 0}
+								disabled={busy || index === 0}
 								aria-label={`Move ${rowLabel(row, index, upload)} earlier`}
 								onClick={() => move(row.id, -1)}
 							>
@@ -170,7 +170,7 @@ export function ImageSourceFiles({ work }: { work: Work }) {
 							<button
 								type="button"
 								className="btn btn-ghost btn-xs"
-								disabled={busy || adding != null || index === rows.length - 1}
+								disabled={busy || index === rows.length - 1}
 								aria-label={`Move ${rowLabel(row, index, upload)} later`}
 								onClick={() => move(row.id, 1)}
 							>
@@ -179,7 +179,7 @@ export function ImageSourceFiles({ work }: { work: Work }) {
 							<button
 								type="button"
 								className="btn btn-ghost btn-xs text-error"
-								disabled={busy || adding != null}
+								disabled={busy}
 								aria-label={`Remove ${rowLabel(row, index, upload)}`}
 								onClick={() => remove(row.id)}
 							>

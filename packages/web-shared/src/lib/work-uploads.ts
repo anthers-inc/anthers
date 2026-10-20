@@ -214,8 +214,9 @@ export interface WorkUploadStore {
 	start(workId: number, file: File, target: WorkUploadTarget): string;
 	/**
 	 * Start a pick: one entry per file, in the order given, each beginning as the one before it
-	 * settles. A failure holds the pick at that file — its retry resumes from there, and a skip
-	 * (`dismiss`) moves on.
+	 * settles. A failure holds the pick at that file while files remain behind it — its retry
+	 * resumes from there, and a skip (`dismiss`) moves on. A failure on the pick's last file
+	 * ends the pick, and the failed entry stays as its own row.
 	 */
 	startBatch(workId: number, files: File[], target: WorkUploadSetRowTarget): string;
 	retry(uploadId: string): void;
@@ -314,6 +315,9 @@ export function createWorkUploadStore(transport: WorkUploadTransport): WorkUploa
 		const batch = batchId ? batches.get(batchId) : undefined;
 		if (!batch || batch.current !== uploadId) return;
 		if (outcome === "failed") {
+			// Nothing left to hold behind it means the pick is over: the failed entry stays as its
+			// own row (with the retry the creator may still want), and the Work is free again.
+			if (batch.next >= batch.files.length) batches.delete(batch.id);
 			emit();
 			return;
 		}

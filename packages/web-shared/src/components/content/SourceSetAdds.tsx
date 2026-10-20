@@ -32,28 +32,37 @@ export function humanBytes(bytes: number | null): string {
 export function SourceSetAdds({ workId, noun }: { workId: number; noun: "page" | "picture" }) {
 	const batch = useSetRowBatch(workId);
 	const uploads = useWorkUploads();
-	if (!batch) return null;
+	const mine = uploads.filter((u) => u.workId === workId && u.target.kind === "set-row");
+	const live = batch ? mine.filter((u) => u.batch?.id === batch.id && u.status !== "done") : [];
+	// A failure whose pick is over keeps its row: the error is the only record of why the file
+	// is not on the Work, and its retry is still the creator's to take.
+	const stranded = mine.filter(
+		(u) => u.status === "failed" && (!batch || u.batch?.id !== batch.id),
+	);
+	if (!batch && stranded.length === 0) return null;
 
-	const mine = uploads.filter((u) => u.batch?.id === batch.id);
-	const added = mine.filter((u) => u.status === "done").length;
-	const live = mine.filter((u) => u.status !== "done");
+	const added = batch
+		? mine.filter((u) => u.batch?.id === batch.id && u.status === "done").length
+		: 0;
 
 	return (
 		<div className="mb-2 flex flex-col gap-2">
-			<div className="flex items-center gap-2 text-xs text-base-content/60">
-				<span className="flex-1">
-					Adding {noun}s: {added} of {batch.total} added
-					{batch.waiting > 0 && `, ${batch.waiting} waiting`}
-				</span>
-				<button
-					type="button"
-					className="btn btn-ghost btn-xs"
-					onClick={() => workUploads.cancelBatch(batch.id)}
-				>
-					Stop adding the rest
-				</button>
-			</div>
-			{live.map((upload) => (
+			{batch && (
+				<div className="flex items-center gap-2 text-xs text-base-content/60">
+					<span className="flex-1">
+						Adding {noun}s: {added} of {batch.total} added
+						{batch.waiting > 0 && `, ${batch.waiting} waiting`}
+					</span>
+					<button
+						type="button"
+						className="btn btn-ghost btn-xs"
+						onClick={() => workUploads.cancelBatch(batch.id)}
+					>
+						Stop adding the rest
+					</button>
+				</div>
+			)}
+			{[...live, ...stranded].map((upload) => (
 				<AddRow key={upload.id} upload={upload} />
 			))}
 		</div>

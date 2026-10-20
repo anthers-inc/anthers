@@ -264,6 +264,22 @@ describe("work uploads", () => {
 			expect(store.list()[1].status).toBe("uploading");
 		});
 
+		it("ends the pick when the file that failed was its last, keeping the row for its retry", async () => {
+			// A lone refused file is the shape the gallery walk covers: the refusal is permanent, so
+			// holding a pick behind it would block the editor for no one's benefit.
+			const t = controlledTransport();
+			const store = createWorkUploadStore(t.transport);
+			store.startBatch(7, [page("01.png")], SET_ROW);
+			await t.putFails();
+
+			expect(store.listBatches()).toHaveLength(0);
+			expect(store.list()[0]).toMatchObject({
+				status: "failed",
+				fileName: "01.png",
+				batch: { index: 1, total: 1 },
+			});
+		});
+
 		it("skips past the file a pick is held on", async () => {
 			const t = controlledTransport();
 			const store = createWorkUploadStore(t.transport);
