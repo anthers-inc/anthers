@@ -368,6 +368,25 @@ export type UploadableWorkType = Exclude<ContentType, "text">;
 export type WorkVisibility = "private" | "released" | "withdrawn";
 
 /**
+ * A **release** in a saved catalog: the Project a Work belongs to, as the Library shelf
+ * can describe it without fetching the Project's detail. The music lens groups saved
+ * tracks under these, and a saved Project uses the same shape.
+ */
+export interface WorkRelease {
+	id: number;
+	slug: string;
+	title: string;
+	coverImage: string | null;
+	creatorId: number | null;
+	creatorHandle: string | null;
+	creatorDisplayName: string | null;
+	/** How many music Works the Project holds, among those this viewer may see. */
+	musicCount: number;
+	/** How many spoken-word Works it holds. The include-spoken dial adds these to a release. */
+	audioCount: number;
+}
+
+/**
  * A **Work** — one entry in a creator's Catalog, and the unit of published creative work.
  *
  * It owns its media, downloadable variants (assets) and transcodes, AND its visibility,
@@ -394,6 +413,13 @@ export interface Work {
 	creatorHandle?: string | null;
 	creatorDisplayName?: string | null;
 	creatorAvatar?: string | null;
+	/**
+	 * The published Projects this Work belongs to, carried only by the Library shelf
+	 * response. A lens that groups saved tracks into releases reads this to find the
+	 * Project a track came from without a request per Work; empty when the Work stands
+	 * on its own.
+	 */
+	releases?: WorkRelease[];
 	type: ContentType;
 	title: string | null;
 	description?: string | null;
