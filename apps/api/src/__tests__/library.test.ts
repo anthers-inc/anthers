@@ -65,6 +65,14 @@ let gatedWorkId = 0;
 let boughtWorkId = 0;
 let privateWorkId = 0;
 
+/** A published Project of two music Works, and a draft holding one — the release data. */
+let musicProject: { id: number; slug: string; title: string };
+let musicTrackA = 0;
+let musicTrackB = 0;
+let mixedAudioTrack = 0;
+let draftProject: { id: number; slug: string; title: string };
+let draftTrack = 0;
+
 async function signUp(
 	username: string,
 ): Promise<{ cookie: string; userId: number; handle: string }> {
@@ -73,12 +81,17 @@ async function signUp(
 	return { cookie, userId: account.userId as number, handle: account.handle };
 }
 
-async function makeWork(title: string, access: unknown, released = true): Promise<number> {
+async function makeWork(
+	title: string,
+	access: unknown,
+	released = true,
+	type: "audio" | "music" = "audio",
+): Promise<number> {
 	const created = await req("/api/content/works", {
 		method: "POST",
 		headers: creatorAuth,
 		body: JSON.stringify({
-			type: "audio",
+			type,
 			title,
 			maturityRows: rowsRatedAs("general"),
 			credits: CREATED_CREDIT,
@@ -98,6 +111,31 @@ async function makeWork(title: string, access: unknown, released = true): Promis
 	});
 	expect(patched.status).toBe(200);
 	return workId;
+}
+
+/** A Project the creator owns, published unless the test is about a draft. */
+async function makeProject(
+	title: string,
+	isPublished = true,
+): Promise<{ id: number; slug: string; title: string }> {
+	const slug = `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${id}`;
+	const res = await req("/api/content/projects", {
+		method: "POST",
+		headers: creatorAuth,
+		body: JSON.stringify({ title, slug, isPublished }),
+	});
+	expect(res.status).toBe(201);
+	const { project } = await res.json();
+	return { id: project.id as number, slug: project.slug as string, title: project.title };
+}
+
+async function addToProject(projectSlug: string, workId: number): Promise<void> {
+	const res = await req(`/api/content/projects/${projectSlug}/works`, {
+		method: "POST",
+		headers: creatorAuth,
+		body: JSON.stringify({ workId }),
+	});
+	expect(res.status).toBe(201);
 }
 
 /** A published post by the creator, for the shelf's post arm. */
@@ -128,6 +166,23 @@ async function shelf(opts: { hidden?: boolean } = {}) {
 			creatorHandle?: string | null;
 			creatorDisplayName?: string | null;
 			creatorAvatar?: string | null;
+			releases?: Array<{
+				id: number;
+				slug: string;
+				title: string;
+				coverImage: string | null;
+				musicCount: number;
+				audioCount: number;
+			}>;
+		};
+		project?: {
+			id: number;
+			slug: string;
+			title: string;
+			coverImage: string | null;
+			trackCount: number;
+			musicCount: number;
+			audioCount: number;
 		};
 		post?: {
 			id: number;
@@ -176,6 +231,21 @@ describe("the Library", () => {
 		gatedWorkId = await makeWork(`Gated ${id}`, GATED);
 		boughtWorkId = await makeWork(`Bought ${id}`, GATED);
 		privateWorkId = await makeWork(`Private ${id}`, FREE, false);
+
+		// A release the shelf can describe without fetching it: two music Works in a
+		// published Project, plus a draft Project holding a released track, which must
+		// never be advertised through that track's shelf entry.
+		musicProject = await makeProject(`Music release ${id}`);
+		musicTrackA = await makeWork(`Release track A ${id}`, FREE, true, "music");
+		musicTrackB = await makeWork(`Release track B ${id}`, FREE, true, "music");
+		mixedAudioTrack = await makeWork(`Release episode ${id}`, FREE, true, "audio");
+		await addToProject(musicProject.slug, musicTrackA);
+		await addToProject(musicProject.slug, musicTrackB);
+		await addToProject(musicProject.slug, mixedAudioTrack);
+
+		draftProject = await makeProject(`Draft release ${id}`, false);
+		draftTrack = await makeWork(`Draft track ${id}`, FREE, true, "music");
+		await addToProject(draftProject.slug, draftTrack);
 
 		// A completed purchase, written directly: this file is about the Library, and
 		// driving Stripe would test the checkout route instead. The auto-save hook is
@@ -238,6 +308,45 @@ describe("the Library", () => {
 		// regardless, as `creatorAvatar` must (its default is the empty string).
 		expect("creatorDisplayName" in (entry?.work ?? {})).toBe(true);
 		expect("creatorAvatar" in (entry?.work ?? {})).toBe(true);
+	});
+
+	it("carries each saved music Work's published Projects, so the music lens can group it into a release", async () => {
+		// The music lens groups a saved track under the Project it came from. The shelf
+		// carries the metadata a release card needs; the tracks themselves wait for the
+		// open, which is why this is a count and a name rather than an N+1 of members.
+		expect((await save({ workId: musicTrackA })).status).toBe(201);
+		const entry = (await shelf()).find((i) => i.work?.id === musicTrackA);
+		expect(entry?.work?.releases).toHaveLength(1);
+		expect(entry?.work?.releases?.[0]).toMatchObject({
+			id: musicProject.id,
+			slug: musicProject.slug,
+			title: musicProject.title,
+			musicCount: 2,
+			audioCount: 1,
+		});
+
+		// A Work in no Project carries an empty list rather than a missing field, so a
+		// lens can read it without a second shape to handle.
+		const loose = (await shelf()).find((i) => i.work?.id === freeWorkId);
+		expect(loose?.work?.releases).toEqual([]);
+	});
+
+	it("never advertises a draft Project through a saved Work's release list", async () => {
+		// A released Work can sit in a Project its creator has not published. The Work is
+		// the stranger's to keep; the draft is not the stranger's to see.
+		expect((await save({ workId: draftTrack })).status).toBe(201);
+		const entry = (await shelf()).find((i) => i.work?.id === draftTrack);
+		expect(entry?.work?.releases).toEqual([]);
+	});
+
+	it("reports a saved Project's music count beside its whole member count", async () => {
+		// A Project is savable in its own right, so the music lens draws the release whole
+		// rather than as the tracks the user happened to save separately.
+		expect((await save({ projectId: musicProject.id })).status).toBe(201);
+		const entry = (await shelf()).find(
+			(i) => i.kind === "project" && i.project?.id === musicProject.id,
+		);
+		expect(entry?.project).toMatchObject({ trackCount: 3, musicCount: 2, audioCount: 1 });
 	});
 
 	it("is idempotent — pressing Save twice is not an error", async () => {

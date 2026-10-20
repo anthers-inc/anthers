@@ -15,6 +15,7 @@
  * 0. Pressing Play on a record whose first single is gated and having nothing happen is
  * the stall this whole area exists to avoid.
  */
+import { ChevronLeftIcon } from "@heroicons/react/24/outline";
 import { ArrowsRightLeftIcon, PlayIcon } from "@heroicons/react/24/solid";
 import { useMediaPlayer } from "../../lib/media-player";
 import { isPlayable, type QueueTrack } from "../../lib/music-queue";
@@ -27,6 +28,7 @@ export default function AlbumView({
 	cover,
 	tracks,
 	action,
+	back,
 }: {
 	title: string;
 	creator?: React.ReactNode;
@@ -34,6 +36,11 @@ export default function AlbumView({
 	tracks: QueueTrack[];
 	/** An extra control beside Play and Shuffle — the Save button, on a Project. */
 	action?: React.ReactNode;
+	/**
+	 * A way out when the record is opened inside a collection — the music lens's detail
+	 * layer, where the back control belongs in the header rather than above the page.
+	 */
+	back?: { label: string; onClick: () => void };
 }) {
 	const player = useMediaPlayer();
 
@@ -75,6 +82,16 @@ export default function AlbumView({
 					)}
 
 					<div className="min-w-0 flex-1 pb-1">
+						{back && (
+							<button
+								type="button"
+								onClick={back.onClick}
+								className="btn btn-ghost btn-xs -ml-2 mb-2 gap-1"
+							>
+								<ChevronLeftIcon className="size-4" />
+								{back.label}
+							</button>
+						)}
 						<h2 className="truncate text-2xl font-bold leading-tight sm:text-3xl">{title}</h2>
 						{creator && <div className="truncate text-lg text-base-content/80">{creator}</div>}
 						<p className="mt-1 text-xs text-base-content/55">

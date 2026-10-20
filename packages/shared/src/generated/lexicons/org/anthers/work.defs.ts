@@ -29,9 +29,14 @@ type Main = { $type: "org.anthers.work";
   "url":l.UriString;
 
   /**
-   * When the work was released to the public. This is the work's own date and the only one the record carries — record-creation time is already encoded in the record key, so a separate field for it would be a second, weaker answer to a question the key already answers.
+   * When the work was released to the public here. This is the listing's own release date; where the work first came out somewhere else earlier, `originallyReleased` carries that. Record-creation time is already encoded in the record key, so a separate field for it would be a second, weaker answer to a question the key already answers.
    */
   "releasedAt":l.DatetimeString;
+
+  /**
+   * When the work first came out, anywhere — asserted by its creator and optional. A companion to `releasedAt`, not a second meaning of it: Anthers is often not the first place a work came out, so this carries the earlier release (released here in 2026, first put out in 2021), and it is not when the work was made, which has several candidate answers where a release has a definite and often verifiable one. Only the date is recorded, so a creator who knows the year alone picks a date; the record never pretends to know more than it was told. Absent when the work first came out here, which `releasedAt` already answers.
+   */
+  "originallyReleased"?:l.DatetimeString;
 
   /**
    * The creator's own summary of the work. Plain text, so that every consumer can render it safely without a sanitizer.
@@ -46,7 +51,7 @@ type Main = { $type: "org.anthers.work";
 export type { Main };
 
 /** One entry in a creator's Catalog — a game, video, album, essay, or other work they have released. This record is the public LISTING for that work: it says what the work is and where to reach it, and it never carries the work itself. It exists only while the work is publicly listed, and whether a particular person may open the work is decided by the service hosting it, never by this record. */
-const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"kind":/*#__PURE__*/ l.string<{"knownValues":["text","video","music","audio","image","comic","ebook","game","software","physical","service"],"maxLength":64}>({"maxLength":64}),"title":/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000}),"url":/*#__PURE__*/ l.string({"format":"uri"}),"releasedAt":/*#__PURE__*/ l.string({"format":"datetime"}),"description":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":3000,"maxLength":30000})),"access":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Access>((() => access) as any)),"credits":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.array(/*#__PURE__*/ l.ref<Credit>((() => credit) as any), {"maxLength":100}))}));
+const main = /*#__PURE__*/ l.record<"tid", Main>("tid", $nsid, /*#__PURE__*/ l.object({"kind":/*#__PURE__*/ l.string<{"knownValues":["text","video","music","audio","image","comic","ebook","game","software","physical","service"],"maxLength":64}>({"maxLength":64}),"title":/*#__PURE__*/ l.string({"maxGraphemes":300,"maxLength":3000}),"url":/*#__PURE__*/ l.string({"format":"uri"}),"releasedAt":/*#__PURE__*/ l.string({"format":"datetime"}),"originallyReleased":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"datetime"})),"description":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"maxGraphemes":3000,"maxLength":30000})),"access":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.ref<Access>((() => access) as any)),"credits":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.array(/*#__PURE__*/ l.ref<Credit>((() => credit) as any), {"maxLength":100}))}));
 
 export { main };
 
