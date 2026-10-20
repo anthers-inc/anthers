@@ -10,10 +10,13 @@ import { useCallback, useEffect, useState } from "react";
 import FeedTile from "../components/cards/FeedTile";
 import SharedFilterSections from "../components/layout/SharedFilterSections";
 import SharedLensesSection from "../components/layout/SharedLensesSection";
+import { useFilterable, useViewFilter } from "../components/layout/search/filter-context";
 
 export default function AuthenticatedHomePage() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const { setPageContent, setSharedContent } = useSidebar();
+	const viewFilter = useViewFilter();
+	useFilterable("Feed");
 	/** One stream over both kinds — `kind` says which card to render. */
 	type FeedEntry = { kind: "post" | "release"; id: number } & Record<string, unknown>;
 	const [feedPosts, setFeedPosts] = useState<FeedEntry[]>([]);
@@ -94,6 +97,9 @@ export default function AuthenticatedHomePage() {
 							: {}),
 					...(access ? { access } : {}),
 					...(tags ? { tags } : {}),
+					// Filter mode's term. The feed paginates, so this is a server condition
+					// rather than a filter over the page already loaded.
+					...(viewFilter.query ? { q: viewFilter.query } : {}),
 				},
 			})
 			.then(async (res) => {
@@ -103,7 +109,7 @@ export default function AuthenticatedHomePage() {
 			})
 			.catch(() => {})
 			.finally(() => setFeedLoading(false));
-	}, [contentType, access, tags]);
+	}, [contentType, access, tags, viewFilter.query]);
 
 	return (
 		<div className="min-h-full">

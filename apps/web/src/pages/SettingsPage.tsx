@@ -12,6 +12,17 @@ import {
 	type MaturityDisplay,
 	RATING_ROWS,
 } from "@anthers/shared/content-rating";
+import {
+	BROWSER_RESERVED_CHORDS,
+	canonicalChord,
+	DEFAULT_SEARCH_SHORTCUTS,
+	formatChord,
+	keyFromEvent,
+	resolveSearchShortcuts,
+	SEARCH_SHORTCUT_ACTIONS,
+	type SearchShortcutAction,
+	type SearchShortcuts,
+} from "@anthers/shared/keybindings";
 import { useAuth } from "@anthers/web-shared/auth";
 import { useContentPreferences } from "@anthers/web-shared/content-preferences";
 import {
@@ -39,6 +50,7 @@ import {
 import BlueskyMark from "../components/auth/BlueskyMark";
 import BillingAddressSection from "../components/settings/BillingAddressSection";
 import ParentalControlsSection from "../components/settings/ParentalControlsSection";
+import { isApplePlatform } from "../lib/platform";
 import { generateRecoveryKey, type RecoveryKeypair } from "../lib/recovery-key";
 import { getStripe } from "../lib/stripe";
 import { cardElementStyle } from "../lib/stripeCard";
@@ -2433,6 +2445,9 @@ export default function SettingsPage() {
 					    persistent footer bar or the page's own player. */}
 					<MiniPlayerSection />
 
+					{/* The topbar's two chords. Defaults for everybody, rebindable per account. */}
+					<KeyboardShortcutsSection />
+
 					{/* Creator Tools live in the Studio (payouts, connections); Badges are edited
 					    on the creator's own profile, beside the ladder supporters meet. */}
 					{isCreator && (
@@ -2580,6 +2595,197 @@ function SupporterListingSection() {
 						</div>
 					</label>
 				</div>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * The search bar's two shortcuts, rebindable per account.
+ *
+ * 🚨 **A chord is validated by the shared grammar before it is saved, and the server
+ * validates it again.** The recorder is a convenience; the route is the check. That is
+ * also why the card surfaces the server's message instead of inventing its own — a
+ * setting that appears to save and does not is the one outcome worth failing loudly on.
+ *
+ * Recording listens in the capture phase and stops propagation so the bar's own listener
+ * (and the browser) never acts on the chord being recorded.
+ */
+function KeyboardShortcutsSection() {
+	const { user, refreshUser } = useAuth();
+	const apple = isApplePlatform();
+	const stored = useMemo(
+		() => resolveSearchShortcuts(user?.searchShortcuts),
+		[user?.searchShortcuts],
+	);
+	const [draft, setDraft] = useState<SearchShortcuts>(stored);
+	const [recording, setRecording] = useState<SearchShortcutAction | null>(null);
+	const [saving, setSaving] = useState(false);
+	const [notice, setNotice] = useState<{ tone: "error" | "info"; text: string } | null>(null);
+
+	useEffect(() => setDraft(stored), [stored]);
+
+	const save = useCallback(
+		async (next: SearchShortcuts) => {
+			setSaving(true);
+			setNotice(null);
+			try {
+				const res = await apiFetch("/api/accounts/me", {
+					method: "PATCH",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ searchShortcuts: next }),
+				});
+				if (!res.ok) {
+					const body = (await res.json().catch(() => ({}))) as { error?: unknown };
+					throw new Error(
+						typeof body.error === "string" ? body.error : "That shortcut could not be saved.",
+					);
+				}
+				setDraft(next);
+				await refreshUser();
+			} catch (error) {
+				setNotice({
+					tone: "error",
+					text: error instanceof Error ? error.message : "That shortcut could not be saved.",
+				});
+				setDraft(stored);
+			} finally {
+				setSaving(false);
+			}
+		},
+		[refreshUser, stored],
+	);
+
+	useEffect(() => {
+		if (!recording) return;
+		const handler = (event: KeyboardEvent) => {
+			event.preventDefault();
+			event.stopPropagation();
+			if (event.key === "Escape") {
+				setRecording(null);
+				setNotice(null);
+				return;
+			}
+			// A modifier alone is not a chord yet; keep listening for the key after it.
+			if (["Shift", "Control", "Alt", "Meta"].includes(event.key)) return;
+			const key = keyFromEvent(event);
+			if (!key) return;
+
+			const parts: string[] = [];
+			// Only Apple has a second modifier worth recording. Off Apple `Mod` resolves
+			// to Control, so a Meta press (the Windows key) has no portable spelling and
+			// recording it as `Mod` would silently bind Control instead.
+			if (apple && event.metaKey) parts.push("Mod");
+			// On a Mac, Control and Command are different keys, so the recorder preserves
+			// whichever the person pressed. Off Apple they are the same physical key.
+			if (event.ctrlKey) parts.push(apple ? "Ctrl" : "Mod");
+			if (event.altKey) parts.push("Alt");
+			if (event.shiftKey) parts.push("Shift");
+			parts.push(key);
+
+			const chord = canonicalChord(parts.join("+"));
+			if (!chord) {
+				setNotice({
+					tone: "error",
+					text: `A shortcut needs ${apple ? "Command, Control, or Option" : "Ctrl or Alt"} plus one other key.`,
+				});
+				return;
+			}
+			const other = recording === "search" ? draft.filter : draft.search;
+			if (chord === other) {
+				setNotice({
+					tone: "error",
+					text: "The other search action already uses that combination.",
+				});
+				return;
+			}
+			setRecording(null);
+			setNotice(null);
+			void save({ ...draft, [recording]: chord });
+		};
+		window.addEventListener("keydown", handler, true);
+		return () => window.removeEventListener("keydown", handler, true);
+	}, [recording, draft, apple, save]);
+
+	const rowCopy: Record<SearchShortcutAction, { label: string; hint: string }> = {
+		search: {
+			label: "Search everything",
+			hint: "Opens the global search across creators, Works, Projects, Posts, modes, and settings.",
+		},
+		filter: {
+			label: "Filter this view",
+			hint: `Rebinding this gives ${formatChord(DEFAULT_SEARCH_SHORTCUTS.filter, apple)} back to the browser's find.`,
+		},
+	};
+
+	return (
+		<div className="card bg-base-200 mt-6">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Keyboard Shortcuts</h3>
+				<p className="text-sm text-base-content/60">
+					The two shortcuts that open the search bar. They follow this account, so they work on
+					every device you sign in on.
+				</p>
+
+				<div className="mt-2 divide-y divide-base-300/50">
+					{SEARCH_SHORTCUT_ACTIONS.map((action) => {
+						const chord = draft[action];
+						const isDefault = chord === DEFAULT_SEARCH_SHORTCUTS[action];
+						const copy = rowCopy[action];
+						return (
+							<div key={action} className="flex flex-wrap items-center justify-between gap-2 py-3">
+								<div className="min-w-0">
+									<p className="text-sm font-medium">{copy.label}</p>
+									<p className="text-xs text-base-content/50">{copy.hint}</p>
+								</div>
+								<div className="flex shrink-0 items-center gap-2">
+									<kbd className="kbd kbd-sm">{formatChord(chord, apple)}</kbd>
+									<button
+										type="button"
+										className="btn btn-ghost btn-xs"
+										disabled={saving}
+										onClick={() => {
+											setRecording(action);
+											setNotice(null);
+										}}
+									>
+										{recording === action ? "Press keys…" : "Change"}
+									</button>
+									<button
+										type="button"
+										className="btn btn-ghost btn-xs"
+										disabled={saving || isDefault}
+										onClick={() =>
+											void save({ ...draft, [action]: DEFAULT_SEARCH_SHORTCUTS[action] })
+										}
+									>
+										Reset
+									</button>
+								</div>
+								{BROWSER_RESERVED_CHORDS.has(chord) && (
+									<p className="w-full text-xs text-warning">
+										Your browser may keep this combination for itself. If it does, the shortcut will
+										not open the bar.
+									</p>
+								)}
+							</div>
+						);
+					})}
+				</div>
+
+				<p className="mt-2 text-xs text-base-content/50" aria-live="polite">
+					{recording
+						? `Press the combination for ${rowCopy[recording].label}. Escape cancels.`
+						: ""}
+				</p>
+				{notice && !recording && (
+					<p
+						className={`text-xs ${notice.tone === "error" ? "text-error" : "text-base-content/50"}`}
+						aria-live="assertive"
+					>
+						{notice.text}
+					</p>
+				)}
 			</div>
 		</div>
 	);

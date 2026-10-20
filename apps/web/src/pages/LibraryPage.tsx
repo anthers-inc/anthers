@@ -52,6 +52,7 @@ import SharedFilterSections, {
 	SHARED_FILTER_TYPES,
 } from "../components/layout/SharedFilterSections";
 import SharedLensesSection from "../components/layout/SharedLensesSection";
+import { useFilterable, useViewFilter } from "../components/layout/search/filter-context";
 import BookshelfLens from "../components/library/BookshelfLens";
 import ChannelGuideLens, {
 	channelGuideChannelsFromShelf,
@@ -273,6 +274,39 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 }
 
 /**
+ * What the topbar's Filter mode reads on a shelf item: the item's own words, its creator,
+ * and its tags. The shelf is already fully in memory, so this filter is complete rather
+ * than a filter over the loaded page.
+ */
+function shelfSearchFields(item: ShelfItem): (string | null | undefined)[] {
+	const fields: (string | null | undefined)[] = [item.kind];
+	if (item.work) {
+		fields.push(
+			item.work.title,
+			item.work.description,
+			item.work.type,
+			item.work.creatorDisplayName,
+			item.work.creatorHandle,
+			...(item.work.tags ?? []),
+		);
+	}
+	if (item.project) {
+		fields.push(item.project.title, item.project.creatorDisplayName, item.project.creatorHandle);
+	}
+	if (item.post) {
+		fields.push(
+			item.post.title,
+			item.post.displayTitle,
+			item.post.excerpt,
+			item.post.creator?.displayName,
+			item.post.creator?.handle,
+			...(item.post.tags ?? []),
+		);
+	}
+	return fields;
+}
+
+/**
  * The shelf items a tag filter keeps — AND semantics, the feed's comma-list read. A
  * Project carries no tags of its own, so it drops while any tag filter is on, the way
  * a post linking nothing drops while any type filter is on. */
@@ -305,6 +339,8 @@ function matchesAccess(item: ShelfItem, access: string): boolean {
 export default function LibraryPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const { setPageContent, setSharedContent } = useSidebar();
+	const viewFilter = useViewFilter();
+	useFilterable("Library");
 	const [items, setItems] = useState<ShelfItem[]>([]);
 	// How many entries the shelf was cut to, when it was cut at all. The server leaves out the
 	// oldest past its limit, and a shelf that silently ends reads as lost saves.
@@ -361,12 +397,22 @@ export default function LibraryPage() {
 
 	// Hidden entries are filtered HERE rather than by the request — see `load`.
 	const visible = showHidden ? items : items.filter((i) => !i.hidden);
+	// The topbar's Filter mode is the broadest term filter and applies before the shelf's
+	// own controls, so the Access, Type and Tags sections narrow what is already matched
+	// rather than fighting it.
+	const searched = useMemo(
+		() =>
+			viewFilter.terms.length === 0
+				? visible
+				: visible.filter((item) => viewFilter.matches(shelfSearchFields(item))),
+		[visible, viewFilter],
+	);
 	// The Access filter reads the resolved verdict the cards already carry. A Project
 	// has no access reading, so it drops while any access filter is on — the same
 	// rule a post obeys under a type filter, and the same honesty: All is where it lives.
 	const withAccess = useMemo(
-		() => visible.filter((i) => matchesAccess(i, accessParam)),
-		[visible, accessParam],
+		() => searched.filter((i) => matchesAccess(i, accessParam)),
+		[searched, accessParam],
 	);
 	// The tag filter reads the shelf's own tags, client-side: the Library view is a
 	// browser over what is already fetched.
@@ -539,19 +585,33 @@ export default function LibraryPage() {
 			) : filtered.length === 0 ? (
 				<EmptyState
 					title={
-						activeType
-							? `No ${SHARED_FILTER_TYPES.find((t) => t.id === activeType)?.label.toLowerCase()} in your Library`
-							: "Your Library is empty"
+						viewFilter.terms.length > 0
+							? "No matches in your Library"
+							: activeType
+								? `No ${SHARED_FILTER_TYPES.find((t) => t.id === activeType)?.label.toLowerCase()} in your Library`
+								: "Your Library is empty"
 					}
 					description={
-						activeType
-							? "Nothing here yet — save something, or buy it, and it lands here."
-							: "Save anything you want to keep. Free work included — you don't have to buy something to keep it."
+						viewFilter.terms.length > 0
+							? `Nothing here matches “${viewFilter.query.trim()}”.`
+							: activeType
+								? "Nothing here yet — save something, or buy it, and it lands here."
+								: "Save anything you want to keep. Free work included — you don't have to buy something to keep it."
 					}
 					action={
-						<Link to="/discover" className="btn btn-primary btn-sm">
-							Discover Content
-						</Link>
+						viewFilter.terms.length > 0 ? (
+							<button
+								type="button"
+								className="btn btn-primary btn-sm"
+								onClick={() => setParam("q", "")}
+							>
+								Clear filter
+							</button>
+						) : (
+							<Link to="/discover" className="btn btn-primary btn-sm">
+								Discover Content
+							</Link>
+						)
 					}
 				/>
 			) : (
