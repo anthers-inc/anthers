@@ -30,6 +30,7 @@ import { usePageTitle } from "@anthers/web-shared/page-title";
 import { Link } from "@anthers/web-shared/router";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import { useEffect, useState } from "react";
+import { WIKI_ROADMAP_URL } from "../lib/wiki";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -447,9 +448,9 @@ export default function StatusPage() {
 								Report an Issue
 							</Link>
 							; that page is for things misbehaving that a status row cannot see. The{" "}
-							<Link to="/roadmap" className="link">
+							<a href={WIKI_ROADMAP_URL} className="link">
 								roadmap
-							</Link>{" "}
+							</a>{" "}
 							and the{" "}
 							<Link to="/release-notes" className="link">
 								release notes

@@ -24,6 +24,7 @@
 import { Link } from "@anthers/web-shared/router";
 import { apiFetch } from "@anthers/web-shared/rpc";
 import { useState } from "react";
+import { WIKI_ROADMAP_URL } from "../lib/wiki";
 
 /** Where the intake's rows are read. An address a person can also write to directly. */
 const CONTACT_EMAIL = "support@anthers.org";
@@ -73,9 +74,9 @@ export default function IssueReportsPage() {
 			<Section title="What Happens Next">
 				<p>
 					Every report is read by a person. What we take up joins the work shown on our{" "}
-					<Link to="/roadmap" className="link">
+					<a href={WIKI_ROADMAP_URL} className="link">
 						roadmap
-					</Link>
+					</a>
 					, and when a fix ships it is announced on the{" "}
 					<Link to="/release-notes" className="link">
 						release notes

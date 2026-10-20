@@ -60,12 +60,13 @@ const FOOTER_NAV: { title: string; links: [string, string][] }[] = [
 		],
 	},
 	{
-		// Roadmap and Release Notes live here rather than under About (Parker, 2026-10-03):
-		// they are the record of the thing being built, not what the organization is —
-		// and a user looking for "what's next" is looking for development, not "About Us".
+		// Release Notes lives here rather than under About (Parker, 2026-10-03): it is the
+		// record of the thing being built, not what the organization is — and a user looking
+		// for "what's next" is looking for development, not "About Us". The Roadmap link came
+		// out on 2026-10-20: the canonical roadmap is the wiki's, and a footer is not where a
+		// reader is sent away from the site for it (Parker).
 		title: "Development",
 		links: [
-			["Roadmap", "/roadmap"],
 			["Release Notes", "/release-notes"],
 			["Status", "/status"],
 			["Report an Issue", "/issues"],

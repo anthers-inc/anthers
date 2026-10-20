@@ -515,13 +515,12 @@ function LoggedInLayoutInner() {
 													Badges
 												</Link>
 											</nav>
-											{/* Roadmap and Release Notes in their own column, matching the logged-out
-									    footer's Development column (Parker, 2026-10-03). */}
+											{/* Release Notes in its own column, matching the logged-out footer's
+									    Development column (Parker, 2026-10-03). The Roadmap link came out
+									    of both footers on 2026-10-20 — the canonical roadmap is the
+									    wiki's, and a footer is not where a reader is sent off-site. */}
 											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 												<h6 className="footer-title text-xs">Development</h6>
-												<Link to="/roadmap" className="link link-hover">
-													Roadmap
-												</Link>
 												<Link to="/release-notes" className="link link-hover">
 													Release Notes
 												</Link>
