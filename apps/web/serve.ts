@@ -38,6 +38,26 @@ const DIST = resolve(import.meta.dir, "dist");
  */
 const API_PORT = /^\d{2,5}$/.test(process.env.API_PORT ?? "") ? process.env.API_PORT : undefined;
 
+/**
+ * The API port the page must talk to, written into the document it is served with.
+ *
+ * 🚨 **A browser session puts the API on a free port, and the page has no other way to
+ * learn which.** `rpc.ts`'s `devApiPort` reads this tag and falls back to `:8000`, so
+ * without it every API call from a session-served page reaches `make dev`'s address (or
+ * nothing at all) — the symptom is a signed-in page that still redirects to `/login`,
+ * which reads as an auth bug rather than a missing tag. The static site this server
+ * replaced used to carry the tag in its built HTML; this is the half that replaced it.
+ *
+ * Only a digit string is ever written into the markup, and only when a session supplied
+ * one, so a production page can never be pointed at an address by its own document.
+ */
+const DEV_API_META =
+	API_PORT !== undefined ? `<meta name="anthers-dev-api-port" content="${API_PORT}">` : "";
+
+function withDevApiPort(html: string): string {
+	return DEV_API_META ? html.replace("</head>", `${DEV_API_META}</head>`) : html;
+}
+
 const SITE_ORIGIN = (process.env.SITE_ORIGIN ?? "https://anthers.org").replace(/\/$/, "");
 const API_ORIGIN =
 	process.env.API_ORIGIN?.replace(/\/$/, "") ??
@@ -109,7 +129,7 @@ Bun.serve({
 		if (url.pathname === "/dev/web-build") return devBuildPage(devBuildApiOrigin(req, API_PORT));
 		if (url.pathname === "/_health") return new Response("ok");
 		if (url.pathname === "/index.html") {
-			return new Response(await indexHtml(), {
+			return new Response(withDevApiPort(await indexHtml()), {
 				headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-cache" },
 			});
 		}
@@ -132,9 +152,12 @@ Bun.serve({
 
 		// SPA fallback: the shell, with this route's card when it has one.
 		const [html, preview] = await Promise.all([indexHtml(), workPreview(url.pathname)]);
-		return new Response(injectShareHead(html, preview, `${SITE_ORIGIN}${url.pathname}`), {
-			headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-cache" },
-		});
+		return new Response(
+			withDevApiPort(injectShareHead(html, preview, `${SITE_ORIGIN}${url.pathname}`)),
+			{
+				headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-cache" },
+			},
+		);
 	},
 });
 

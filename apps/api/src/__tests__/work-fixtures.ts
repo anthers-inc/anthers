@@ -130,6 +130,8 @@ export interface WorkFixture {
 	metadata?: Record<string, unknown>;
 	/** The alt text of the image an image Work is (`works.image_alt`). */
 	imageAlt?: string;
+	/** The Work's tags, stored as-is; the routes normalize, a fixture seeds a known list. */
+	tags?: string[];
 }
 
 /** Insert a Work with the identity fields filled in. Returns the inserted row. */
@@ -177,6 +179,7 @@ export async function insertWork(fixture: WorkFixture) {
 			credits: fixture.credits ?? CREATED_CREDIT,
 			originallyReleased: fixture.originallyReleased ?? null,
 			metadata: fixture.metadata ?? {},
+			tags: fixture.tags ?? [],
 		})
 		.returning();
 	insertedWorkIds.push(row.id);

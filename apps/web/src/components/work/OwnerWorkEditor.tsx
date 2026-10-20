@@ -61,6 +61,7 @@ import {
 	notesFromRows,
 	ratingFromRows,
 } from "@anthers/shared/content-rating";
+import { normalizeWorkTags } from "@anthers/shared/tags";
 import { useAuth } from "@anthers/web-shared/auth";
 import RatingAppeal from "@anthers/web-shared/content/RatingAppeal";
 import { ReleaseScheduleInput } from "@anthers/web-shared/content/release-date";
@@ -151,6 +152,7 @@ import {
 } from "./WorkLayout";
 import WorkMediaFrame from "./WorkMediaFrame";
 import WorkSideColumn, { ShowingsStub } from "./WorkSideColumn";
+import { WorkTagChips, WorkTagPicker } from "./WorkTags";
 
 const IN_PLACE =
 	"rounded-md border border-transparent bg-transparent px-2 -mx-2 hover:border-base-300 focus:border-primary focus:outline-none";
@@ -184,6 +186,8 @@ export default function OwnerWorkEditor({
 	// ── The fields, as the row holds them ──
 	const [title, setTitle] = useState(work.title ?? "");
 	const [description, setDescription] = useState(work.description ?? "");
+	// The Work's tags — the same list the Details tab shows a reader, edited in place.
+	const [tags, setTags] = useState<string[]>(work.tags ?? []);
 	// A piece of writing's body, written in place in the typography it is read in. The
 	// plain-text shadow goes with it, as it does from the post editor, because search
 	// reads that one.
@@ -755,6 +759,23 @@ export default function OwnerWorkEditor({
 		/>
 	);
 
+	// The Work's tags, below the description in the Details tab. The picker lives only in
+	// the edit state, so its directory request fires when the pencil is opened rather than
+	// on every page load.
+	const tagsField = (
+		<InlineField<string[]>
+			label="Tags"
+			saved={tags}
+			renderRead={() => <WorkTagChips tags={tags} />}
+			renderEdit={(draft, setDraft) => <WorkTagPicker selected={draft} onChange={setDraft} />}
+			save={(draft) => {
+				const next = normalizeWorkTags(draft);
+				setTags(next);
+				return saveFields({ tags: next });
+			}}
+		/>
+	);
+
 	// A song's words — edited where the user reads them: the deliverable's lyrics drawer
 	// takes this field, and the read view is the panel the user already sees.
 	const lyricsField = (
@@ -1302,6 +1323,10 @@ export default function OwnerWorkEditor({
 			<section className="flex flex-col gap-2">
 				<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
 				{descriptionField}
+			</section>
+			<section className="flex flex-col gap-2">
+				<h3 className={WORK_DETAILS_HEADING_CLASS}>Tags</h3>
+				{tagsField}
 			</section>
 			<section className="flex flex-col gap-2">
 				<h3 className={WORK_DETAILS_HEADING_CLASS}>Release</h3>

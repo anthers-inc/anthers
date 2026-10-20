@@ -64,6 +64,7 @@ import {
 } from "../components/work/WorkLayout";
 import WorkMediaFrame from "../components/work/WorkMediaFrame";
 import WorkSideColumn, { ShowingsStub } from "../components/work/WorkSideColumn";
+import { WorkTagChips } from "../components/work/WorkTags";
 import { reportExternalActivity, useAttentionClaim } from "../lib/attention";
 import { useMeteredBudget } from "../lib/public-access";
 import { useShareToken, withShareToken } from "../lib/share-link";
@@ -523,6 +524,12 @@ function VisitorRecord({
 											<h3 className={WORK_DETAILS_HEADING_CLASS}>Description</h3>
 											<WorkDescription work={work} />
 										</section>
+										{(work.tags?.length ?? 0) > 0 && (
+											<section className="flex flex-col gap-2">
+												<h3 className={WORK_DETAILS_HEADING_CLASS}>Tags</h3>
+												<WorkTagChips tags={work.tags ?? []} />
+											</section>
+										)}
 										<section className="flex flex-col gap-2">
 											<h3 className={WORK_DETAILS_HEADING_CLASS}>Release</h3>
 											<div className="flex flex-col gap-2">
