@@ -434,18 +434,24 @@ export default function WorkPage() {
 
 			{/* The byline strip, under the deliverable — every kind now (the kinds pass,
 			    2026-10-14): the title and the maker between the thing and its record, with
-			    Share and Save to the right, and the Access chip that names who may open it. */}
+			    Share and Save to the right, and the Access chip that names who may open it.
+			    ⚠️ Signed out there are no buttons to stand on the right, so the chip takes
+			    their side (Parker, 2026-10-19): the strip fans out symmetrically in both
+			    states rather than leaving the maker and the kind with nothing answering
+			    them. The signed-in strip is unchanged. */}
 			<WorkByline
 				work={work}
 				actions={
-					<div className="flex shrink-0 items-center gap-1">
-						{isAuthenticated && !shareToken && (
-							<ShareLinkButton workId={work.id} slug={work.slug ?? ""} />
-						)}
-						<SaveButton workId={work.id} className="shrink-0" />
-					</div>
+					isAuthenticated ? (
+						<div className="flex shrink-0 items-center gap-1">
+							{!shareToken && <ShareLinkButton workId={work.id} slug={work.slug ?? ""} />}
+							<SaveButton workId={work.id} className="shrink-0" />
+						</div>
+					) : (
+						<WorkAccessChip access={access} />
+					)
 				}
-				chips={<WorkAccessChip access={access} />}
+				chips={isAuthenticated ? <WorkAccessChip access={access} /> : undefined}
 			/>
 
 			{/* Every kind gets the SAME tab groups its editor renders — a user's read-only

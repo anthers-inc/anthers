@@ -1,5 +1,5 @@
 {
-  "id": "c6a6513c-a2fe-4096-9831-a03787d465f3",
+  "id": "135e0146-4c94-4bbf-b36a-80e8c88ded0d",
   "prevId": "41f062df-3c03-4c26-9435-843d9347ffd4",
   "version": "7",
   "dialect": "postgresql",
@@ -10709,6 +10709,12 @@
           "notNull": false,
           "default": "''"
         },
+        "cover_work_id": {
+          "name": "cover_work_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "page_config": {
           "name": "page_config",
           "type": "jsonb",
@@ -10801,6 +10807,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "projects_cover_work_id_works_id_fk": {
+          "name": "projects_cover_work_id_works_id_fk",
+          "tableFrom": "projects",
+          "tableTo": "works",
+          "columnsFrom": [
+            "cover_work_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },

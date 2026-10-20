@@ -496,7 +496,10 @@ export interface WorkBylineProps {
 	work: WorkDetail;
 	/** In place of the title, for a control standing in for it. */
 	title?: ReactNode;
-	/** To the title's right, at the page's edge — a signed-in reader's Share and Save. */
+	/**
+	 * To the title's right, at the page's edge — a signed-in reader's Share and Save, or
+	 * the Access chip where a signed-out page has neither to stand there.
+	 */
 	actions?: ReactNode;
 	/** After the creator, the kind and any chip the page's mode knows first-hand. */
 	chips?: ReactNode;
@@ -508,7 +511,10 @@ export interface WorkBylineProps {
  * the access chip after it. It replaces the header block above the deliverable, whose
  * position a player owns: what a Work is and who made it now stands *between* the thing
  * itself and its record, and Share and Save go with it, to the right, above the side
- * tabs. The rating is deliberately absent — it is the Rating tab's fact.
+ * tabs. **A signed-out page has no Share and Save to stand there, so the caller sends
+ * the Access chip into that slot instead** (Parker, 2026-10-19) and the strip fans out
+ * the same way in both states. The rating is deliberately absent — it is the Rating
+ * tab's fact.
  *
  * Under the strip, the Anthers release date rides again (Parker, 2026-10-16): a second
  * copy of the line the Details tab carries, so the facts around the title answer where
