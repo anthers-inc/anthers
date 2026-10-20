@@ -1128,6 +1128,13 @@
       "when": 1792441564955,
       "tag": "20261019-202604_equal_professor_monster",
       "breakpoints": true
+    },
+    {
+      "idx": 161,
+      "version": "7",
+      "when": 1792453021011,
+      "tag": "20261019-233701_steep_red_wolf",
+      "breakpoints": true
     }
   ]
 }

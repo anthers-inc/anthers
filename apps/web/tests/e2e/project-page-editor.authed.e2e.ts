@@ -7,8 +7,9 @@
  *
  * The API suite carries the endpoint rules (draft 404s, whole-order reorder, the shelf
  * conferring no access); this walk proves the page's behavior on top of them: that a
- * non-manual sort is a view and never writes, that drag belongs to Manual, and that the
- * picker's confirm adds everything ticked in one act.
+ * chosen sort persists on the Project and reads back, that it never rewrites the stored
+ * drag order, that drag belongs to Manual, and that the picker's confirm adds everything
+ * ticked in one act.
  *
  * Runs on `media_fixture`, which carries payout setup (publishing takes it). Serial,
  * because the suite builds one Project across its tests and cleans up by slug and by
@@ -175,7 +176,7 @@ test("the multi-select picker adds everything ticked, in one act", async ({ page
 	await page.getByRole("button", { name: "Close" }).first().click();
 });
 
-test("a non-manual sort is a view: no write, no drag, and Manual gives the stored order back", async ({
+test("a chosen sort persists across visits and leaves the Manual order untouched", async ({
 	page,
 	context,
 }) => {
@@ -188,23 +189,54 @@ test("a non-manual sort is a view: no write, no drag, and Manual gives the store
 	const direction = page.getByLabel("Works sort direction");
 	const rows = shelfRows(page).locator("li .truncate");
 
-	// Manual first: two rows, in the order the adds went in — the stored order.
+	// Manual first: two rows in the order the adds went in — the stored drag order.
 	await expect(direction).toBeDisabled();
 	await expect(rows).toHaveText([zulu, bravo]);
 
-	// Switch to Alphabetical ascending: the view re-orders, the direction pair enables,
-	// and the grips stop dragging — a view is not an arrangement.
+	// Alphabetical ascending: the view re-orders, the direction pair enables, and the
+	// grips stop dragging — a saved reading order is not an arrangement.
+	const savedMode = page.waitForResponse(
+		(res) =>
+			res.url().includes(`/api/content/projects/${SLUG}`) &&
+			res.request().method() === "PATCH" &&
+			res.ok(),
+	);
 	await sortSelect.selectOption("title");
+	await savedMode;
 	await expect(direction).toBeEnabled();
-	const grips = shelfRows(page).locator("span.cursor-grab");
-	await expect(grips).toHaveCount(0);
+	await expect(shelfRows(page).locator("span.cursor-grab")).toHaveCount(0);
 	await expect(rows).toHaveText([bravo, zulu]);
 
-	// Back to Manual: the stored order returns as it was, unsorted by the view — the
-	// sorted view wrote nothing. The handle sits on the rows again.
-	await sortSelect.selectOption("manual");
+	// Revisit the page: the Project carries the setting, so the dropdown and the rows
+	// come back the way they were left rather than resetting to Manual.
+	await page.reload();
+	await expect(sortSelect).toHaveValue("title");
+	await expect(direction).toHaveValue("asc");
+	await expect(rows).toHaveText([bravo, zulu]);
+
+	// Direction is part of the same saved setting.
+	const savedDirection = page.waitForResponse(
+		(res) =>
+			res.url().includes(`/api/content/projects/${SLUG}`) &&
+			res.request().method() === "PATCH" &&
+			res.ok(),
+	);
+	await direction.selectOption("desc");
+	await savedDirection;
 	await expect(rows).toHaveText([zulu, bravo]);
-	await expect(grips).toHaveCount(2);
+
+	// Back to Manual: the stored order returns as it was, because no sort ever wrote it.
+	// The handles sit on the rows again and the direction pair greys out.
+	const savedManual = page.waitForResponse(
+		(res) =>
+			res.url().includes(`/api/content/projects/${SLUG}`) &&
+			res.request().method() === "PATCH" &&
+			res.ok(),
+	);
+	await sortSelect.selectOption("manual");
+	await savedManual;
+	await expect(rows).toHaveText([zulu, bravo]);
+	await expect(shelfRows(page).locator("span.cursor-grab")).toHaveCount(2);
 	await expect(direction).toBeDisabled();
 });
 

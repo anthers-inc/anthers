@@ -239,6 +239,41 @@ describe("a Project's Works", () => {
 		expect(res.status).toBe(404);
 	});
 
+	/**
+	 * The saved sort is the Project's, not the viewer's (2026-10-19): a creator's choice
+	 * orders the shelf for a signed-out reader too, and switching back to Manual returns
+	 * the stored drag order because no sort ever rewrites `sortOrder`.
+	 *
+	 * Descending alphabetical — C, B, A against the stored C, A, B — is deliberate: the
+	 * stored order and the sorted order cannot be confused.
+	 */
+	it("a saved sort orders the shelf for every reader, and Manual gives the stored order back", async () => {
+		const saved = await req(`/api/content/projects/${SLUG}`, {
+			method: "PATCH",
+			headers: auth,
+			body: JSON.stringify({ worksSortMode: "title", worksSortDirection: "desc" }),
+		});
+		expect(saved.status).toBe(200);
+		const { project } = await saved.json();
+		expect(project.worksSortMode).toBe("title");
+		expect(project.worksSortDirection).toBe("desc");
+
+		const reversed = [`Track C ${id}`, `Track B ${id}`, `Track A ${id}`];
+		expect(await orderOf(SLUG)).toEqual(reversed);
+		// A signed-out reader gets the same order: the setting belongs to the Project.
+		expect(await orderOf(SLUG, strangerCookie)).toEqual(reversed);
+
+		const manual = await req(`/api/content/projects/${SLUG}`, {
+			method: "PATCH",
+			headers: auth,
+			body: JSON.stringify({ worksSortMode: "manual" }),
+		});
+		expect(manual.status).toBe(200);
+		// The stored order the cross-Project test above left behind — C, A, B — rather than
+		// the alphabetical view, which is what makes "nothing was rewritten" visible.
+		expect(await orderOf(SLUG)).toEqual([`Track C ${id}`, `Track A ${id}`, `Track B ${id}`]);
+	});
+
 	// ── A shelf is not an owner ───────────────────────────────────────────────
 
 	/**

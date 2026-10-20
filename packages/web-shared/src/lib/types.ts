@@ -11,6 +11,7 @@
 
 import type { WorkType } from "@anthers/shared/content";
 import type { ContentNote, MaturityRating, MaturityRows } from "@anthers/shared/content-rating";
+import type { ShelfSortDirection, ShelfSortMode } from "@anthers/shared/project-shelf-sort";
 
 // ─── User Types ───
 
@@ -738,6 +739,16 @@ export interface Project {
 	shortDescription: string | null;
 	coverImage: string | null;
 	pageConfig: Record<string, unknown> | null;
+	/**
+	 * How the Project's shelves read, saved from the sort dropdown on its page
+	 * (2026-10-19). `manual` is the stored drag order and the default; the detail
+	 * response arrives already sorted by these, so a reader renders `works` and
+	 * `posts` in the order given.
+	 */
+	worksSortMode: ShelfSortMode;
+	worksSortDirection: ShelfSortDirection;
+	postsSortMode: ShelfSortMode;
+	postsSortDirection: ShelfSortDirection;
 	isPublished: boolean | null;
 	atprotoUri: string | null;
 	/**
