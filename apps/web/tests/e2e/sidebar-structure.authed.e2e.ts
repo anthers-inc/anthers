@@ -6,9 +6,9 @@
  * tab consumes it, Type, Tags).
  *
  * Pins in the shape of `sidebar-nav.authed.e2e.ts`: structure and order measured,
- * never a screenshot. The graying half of the shared Type contract (a type absent
- * from a page or excluded by its view) is asserted where the first consumer lands —
- * the Library task's lens section — not here, where no consumer passes the set yet.
+ * never a screenshot. The Network also carries a consumer of the Type gray-out (its
+ * lenses), which this spec exercises through the lens rows themselves; the Library's
+ * own lens spec pins that tab's copy.
  */
 
 import { expect, test } from "@playwright/test";
@@ -73,8 +73,8 @@ test("the sidebar reads tabs, divider, lenses, divider, shared filters", async (
 		"the persistent divider sits between the nav and the Lenses",
 	).toBe(true);
 
-	// The Lenses on the feed: only No Lens is live — the rest grayed with the marker,
-	// never absent.
+	// The Lenses on the feed: the Music Player and the Bookshelf are live over the
+	// feed's releases, the Channel Guide is grayed with the marker — never absent.
 	const lensRows = await page.evaluate(() => {
 		const headings = [...document.querySelectorAll("aside section h3")];
 		const s = headings.find((h) => h.textContent === "Lenses")?.closest("section");
@@ -85,10 +85,23 @@ test("the sidebar reads tabs, divider, lenses, divider, shared filters", async (
 	});
 	expect(lensRows).toEqual([
 		"No Lens",
-		"Music Player(Coming Soon) [grayed]",
+		"Music Player",
 		"Channel Guide(Coming Soon) [grayed]",
-		"Bookshelf(Coming Soon) [grayed]",
+		"Bookshelf",
 	]);
+
+	// A live lens opens its own view over the same stream, and No Lens gives the grid
+	// back — the lens is a view, never a container, on the feed exactly as in the
+	// Library. A feed with no music yet says so in the lens's own words.
+	await page.getByRole("button", { name: "Music Player", exact: true }).click();
+	await expect(
+		page
+			.getByTestId("release-grid")
+			.or(page.getByText(/No music in your feed yet|Nothing to listen to in your feed yet/)),
+	).toBeVisible();
+	await page.getByRole("button", { name: "No Lens", exact: true }).click();
+	await expect(page.getByRole("heading", { name: "Lenses", exact: true })).toBeVisible();
+	await expect(page.getByTestId("release-grid")).toHaveCount(0);
 
 	// The retired names are gone: the shared section's heading is Type, not Work Type
 	// — and Bookmarks, whose strip the Save unification retires, has no heading left
