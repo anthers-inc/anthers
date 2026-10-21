@@ -5,14 +5,16 @@ import { desktopHome } from "@anthers/web-shared/desktop";
 import { isDesktop } from "@anthers/web-shared/rpc";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { Navigate } from "react-router-dom";
+import { userTabPath } from "../../lib/user-tabs";
 import ForUsersPage from "../../pages/ForUsersPage";
 import DesktopSignIn from "../../studio/DesktopSignIn";
 
 /**
  * Handles the / route:
- * - The desktop app opens at the user's chosen home — the Network tab by default, the
- *   Studio if they set it (see `desktopHome`)
- * - Authenticated users are redirected to the top of their own nav order
+ * - The desktop app opens at the user's chosen surface — the Studio if they set it,
+ *   otherwise the account's starting tab (see `desktopHome`)
+ * - Authenticated users are redirected to their account's starting tab — Network unless
+ *   they chose another in Settings
  * - Unauthenticated users see the For Users page, which serves as the homepage
  */
 export default function RootRedirect() {
@@ -33,7 +35,7 @@ export default function RootRedirect() {
 	 *
 	 * It used to send every desktop launch to `/studio` unconditionally — the app was the
 	 * Studio and nothing else, even though the bundle has always carried the whole SPA.
-	 * Anthers Desktop is the whole platform now, so the default is the user's feed and
+	 * Anthers Desktop is the whole platform now, so the default is the user's side and
 	 * the Studio is a preference.
 	 *
 	 * 🚨 An unauthenticated desktop launch renders the sign-in handoff INLINE rather than
@@ -51,18 +53,19 @@ export default function RootRedirect() {
 	 */
 	if (desktop) {
 		if (!isAuthenticated) return <DesktopSignIn />;
-		return <Navigate to={desktopHome() === "studio" ? "/studio" : "/network"} replace />;
+		return (
+			<Navigate
+				to={desktopHome() === "studio" ? "/studio" : userTabPath(user?.homeDefaultTab)}
+				replace
+			/>
+		);
 	}
 
 	if (isAuthenticated) {
-		// The home nav's first item is the landing surface of the signed-in site: an
-		// account that rearranged the sidebar arrives at the top of its own order. There
-		// is no separate landing setting; the order is the control. An account with no
-		// saved order lands on the default order's first tab, the Library.
-		const first = user?.homeNavOrder?.[0];
-		const target =
-			first === "network" ? "/network" : first === "discovery" ? "/discovery" : "/library";
-		return <Navigate to={target} replace />;
+		// The account's starting tab is the landing surface of the signed-in site. An
+		// account that never chose lands on Network, the client's default; the settings
+		// page is the only control, so a session is never sent somewhere it cannot name.
+		return <Navigate to={userTabPath(user?.homeDefaultTab)} replace />;
 	}
 
 	return <ForUsersPage />;

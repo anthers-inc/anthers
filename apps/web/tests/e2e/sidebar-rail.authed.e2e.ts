@@ -77,7 +77,7 @@ test.describe("on a desktop", () => {
 		const rail = await railState(page);
 		expect(rail.mainLeft, "the rail still sits beside the page").toBe(64);
 		expect(rail.rows.map((row) => row.name)).toEqual(["Library", "Network", "Discovery"]);
-		expect(rail.grips, "the drag grips have no room in the rail").toBe(0);
+		expect(rail.grips, "the nav carries no drag grips").toBe(0);
 		for (const row of rail.rows) {
 			expect(row.title, `${row.name} keeps a hover label`).toBe(row.name);
 			expect(row.labelWidth, `${row.name}'s label is not drawn`).toBeLessThanOrEqual(1);
@@ -93,7 +93,7 @@ test.describe("on a desktop", () => {
 		).toBeVisible();
 	});
 
-	test("opening it again restores the labels and the grips", async ({ page }) => {
+	test("opening it again restores the labels", async ({ page }) => {
 		test.setTimeout(60_000);
 		await page.goto(`${WEB_ORIGIN}/network`);
 		await expect(toggle(page)).toBeVisible();
@@ -106,7 +106,8 @@ test.describe("on a desktop", () => {
 
 		const expanded = await railState(page);
 		expect(expanded.mainLeft, "the expanded column sits beside the page").toBe(256);
-		expect(expanded.grips, "every row has its grip back").toBe(3);
+		// The grips went with drag-to-reorder (2026-10-20); the order is the site's now.
+		expect(expanded.grips, "the nav carries no drag grips").toBe(0);
 		for (const row of expanded.rows) {
 			expect(row.title, `${row.name} drops its rail-only hover label`).toBeNull();
 			expect(row.labelWidth, `${row.name}'s label is drawn again`).toBeGreaterThan(1);

@@ -224,16 +224,22 @@ export const userPreferences = pgTable("user_preferences", {
 	notificationUnsubscribeToken: text("notification_unsubscribe_token"),
 
 	/**
-	 * The home sidebar's nav order — the ids of the Feed / Library / Discover items,
-	 * first-what-you-see-first; null means the default order (Feed first).
+	 * The tab a signed-in session opens on — `"library"`, `"network"` or `"discovery"`
+	 * (Parker, 2026-10-20). Null means never answered, and the client reads that as
+	 * **Network** — the same "absent reads as the default" rule `matureDisplay` and
+	 * `persistentMiniplayer` carry, so a later default change would not have to rewrite
+	 * rows.
 	 *
-	 * A preference of the same kind as `themePreference`: which way a signed-in
-	 * account's own chrome reads is not portable identity, so it lives here rather than
-	 * on the identity row. The client's redirect decides the shape; the server validates
-	 * the write as a permutation of the ids it knows and stores it verbatim otherwise
-	 * untouched, because the ids themselves are the client's vocabulary.
+	 * A preference of the same kind as `themePreference`: which tab a person arrives on
+	 * is about the org's own chrome, not portable identity, so it lives here rather than
+	 * on the identity row.
+	 *
+	 * ⚠️ **This replaced `home_nav_order`** when the sidebar's drag-to-reorder went away.
+	 * The three tabs render in one fixed order, so a stored arrangement had nothing left
+	 * to decide. The old column's payload was read only by the landing redirect, and its
+	 * one meaning — the first id in the order — is what this column now states outright.
 	 */
-	homeNavOrder: jsonb("home_nav_order").$type<string[]>(),
+	homeDefaultTab: text("home_default_tab"),
 
 	/**
 	 * The search bar's shortcuts, as a map from action to chord (`{ search, filter }`).
@@ -246,7 +252,7 @@ export const userPreferences = pgTable("user_preferences", {
 	 *
 	 * 🚨 **The server validates with the shared grammar** — a write arrives from a client
 	 * and is not trusted to be a chord this build understands. Whole-map writes, like
-	 * `homeNavOrder` and `notificationDelivery`.
+	 * `notificationDelivery` and `creatorEmailDelivery`.
 	 */
 	searchShortcuts: jsonb("search_shortcuts").$type<Record<string, string> | null>(),
 

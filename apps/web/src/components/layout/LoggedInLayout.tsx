@@ -5,23 +5,14 @@ import { useAuth } from "@anthers/web-shared/auth";
 import { MeadowBackdrop } from "@anthers/web-shared/decor/MeadowBackdrop";
 import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "@anthers/web-shared/router";
-import { client } from "@anthers/web-shared/rpc";
 import { SidebarProvider, useSidebar } from "@anthers/web-shared/sidebar";
 import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeSelect from "@anthers/web-shared/ui/ThemeSelect";
-import {
-	Bars3Icon,
-	ChevronLeftIcon,
-	MagnifyingGlassIcon,
-	RectangleStackIcon,
-	RssIcon,
-	ShoppingBagIcon,
-	UserCircleIcon,
-} from "@heroicons/react/24/outline";
-import { useEffect, useRef, useState } from "react";
+import { ChevronLeftIcon, ShoppingBagIcon, UserCircleIcon } from "@heroicons/react/24/outline";
 import { useBasket } from "../../lib/basket";
 import { useMediaPlayer } from "../../lib/media-player";
 import { studioUrl } from "../../lib/studio";
+import { USER_TABS, userTabPath } from "../../lib/user-tabs";
 import { isStudioNavActive, STUDIO_NAV } from "../../studio/studio-nav";
 import PlayerBar from "../media/PlayerBar";
 import { type AppMode, useAppMode } from "./app-mode";
@@ -31,13 +22,6 @@ import PublishingPermissionBanner from "./PublishingPermissionBanner";
 import RouteSuspense from "./RouteSuspense";
 import SearchBar from "./SearchBar";
 import { ViewFilterProvider } from "./search/filter-context";
-
-/** The sidebar's nav in user mode. Studio mode has `STUDIO_NAV` in its place. */
-const NAV_LINKS = [
-	{ to: "/library", id: "library", label: "Library", icon: RectangleStackIcon },
-	{ to: "/network", id: "network", label: "Network", icon: RssIcon },
-	{ to: "/discovery", id: "discovery", label: "Discovery", icon: MagnifyingGlassIcon },
-] as const;
 
 /**
  * Where the signed-in site-map footer renders: the account pages only. Every other
@@ -58,29 +42,11 @@ const navItemClass = (active: boolean, rail: boolean) =>
 	}`;
 
 /**
- * Put the nav in the account's saved order: the saved ids first (the account's own
- * arrangement), the ids it has never named after them in the default order — so a
- * saved order can never drop an item, whatever a newer build's vocabulary holds.
- */
-type NavLinkItem = (typeof NAV_LINKS)[number];
-
-function orderedNavLinks(saved: string[] | null | undefined): readonly NavLinkItem[] {
-	if (!saved || saved.length === 0) return NAV_LINKS;
-	// An id the payload never named sorts last, so a saved order can never drop an
-	// item however a newer build's ids changed.
-	const pos = (id: NavLinkItem["id"]) => {
-		const at = saved.indexOf(id);
-		return at === -1 ? saved.length : at;
-	};
-	return [...NAV_LINKS].sort((a, b) => pos(a.id) - pos(b.id));
-}
-
-/**
  * The switch between the two modes, at the top of the sidebar, shown only to an account with
  * creator mode on (Parker, 2026-09-17). The sides name the person rather than the product —
  * User|Creator (Parker, 2026-10-16) — and each side goes to its mode's home, since the mode of
- * the page on screen is decided by where it is (`app-mode.ts`). The user home is the top of
- * the account's own nav order, the same rule `RootRedirect` follows.
+ * the page on screen is decided by where it is (`app-mode.ts`). The user home is the account's
+ * starting tab, the same rule `RootRedirect` follows.
  */
 function ModeSwitch({ mode, userHome }: { mode: AppMode; userHome: string }) {
 	const sides = [
@@ -104,7 +70,7 @@ function ModeSwitch({ mode, userHome }: { mode: AppMode; userHome: string }) {
 }
 
 function LoggedInLayoutInner() {
-	const { user, signOut, refreshUser } = useAuth();
+	const { user, signOut } = useAuth();
 	const { currentTrack } = useMediaPlayer();
 	const { sidebarOpen, toggleSidebar, closeSidebar, pageContent, sharedContent } = useSidebar();
 	const navigate = useNavigate();
@@ -114,30 +80,12 @@ function LoggedInLayoutInner() {
 	const mode = useAppMode(isCreator);
 	const studio = mode === "studio";
 
-	// ── The nav's order ──────────────────────────────────────────────────────
-	// Local first, account second: a drop reorders this sidebar immediately and
-	// persists to the account; the saved payload stays what the shell boots with.
-	const [navOrder, setNavOrder] = useState<string[] | null>(user?.homeNavOrder ?? null);
-	const navDragFrom = useRef<number | null>(null);
-	useEffect(() => {
-		setNavOrder(user?.homeNavOrder ?? null);
-	}, [user?.homeNavOrder]);
-
-	const reorderNav = (from: number, to: number) => {
-		setNavOrder((prev) => {
-			const ids = orderedNavLinks(prev ?? user?.homeNavOrder ?? null).map((l) => l.id);
-			const [moved] = ids.splice(from, 1);
-			ids.splice(to, 0, moved);
-			client.api.accounts.me
-				.$patch({ json: { homeNavOrder: ids } })
-				.then(() => refreshUser())
-				.catch(() => {});
-			return ids;
-		});
-	};
-
-	/** Where user mode begins: the top of the account's own order, never a forced tab. */
-	const userHome = orderedNavLinks(navOrder ?? user?.homeNavOrder ?? null)[0]?.to ?? "/library";
+	/**
+	 * Where user mode begins: the account's starting tab, which is Network unless somebody
+	 * chose another in Settings. The three tabs render in one fixed order, so this is the
+	 * only thing that decides where a session lands.
+	 */
+	const userHome = userTabPath(user?.homeDefaultTab);
 
 	// An account that has not finished onboarding owns nothing the sidebar points at:
 	// Network, Library and Discovery are all behind ProtectedRoute, which bounces a
@@ -336,69 +284,19 @@ function LoggedInLayoutInner() {
 								</nav>
 							) : (
 								<nav aria-label="Anthers" className="p-3 flex flex-col gap-0.5">
-									{orderedNavLinks(navOrder).map((link, index) => (
-										// The drag handle, at the item's own right edge: the grip is what
-										// carries the drag (only the grip is draggable — dragging a label
-										// keeps its selection behavior), and a drop on any part of another
-										// row reorders there. The row, not the grip, is the drop target: a
-										// drop lands on whatever part of the row the cursor is over.
-										// Reordering persists to the account, and the top of the order is
-										// where a signed-in visit lands (see `RootRedirect`). Keyboard
-										// reorder is not built; the gap is named in the task.
-										// biome-ignore lint/a11y/noStaticElementInteractions: the row is the drop target; it has no pointer/keyboard behavior of its own and a static div is honest about that.
-										<div
+									{/* One fixed order — Library, Network, Discovery — because the account's
+								    starting tab is a setting rather than a consequence of this list's
+								    arrangement. Nothing here is draggable; see `lib/user-tabs.ts`. */}
+									{USER_TABS.map((link) => (
+										<NavLink
 											key={link.id}
-											className="flex items-center"
-											onDragOver={(e) => e.preventDefault()}
-											onDrop={(e) => {
-												e.preventDefault();
-												const from = navDragFrom.current;
-												navDragFrom.current = null;
-												if (from !== null && from !== index) reorderNav(from, index);
-											}}
+											to={link.to}
+											title={rail ? link.label : undefined}
+											className={navLinkClass}
 										>
-											<NavLink
-												to={link.to}
-												title={rail ? link.label : undefined}
-												className={({ isActive }) =>
-													`${navItemClass(isActive, rail)} flex-1 min-w-0`
-												}
-											>
-												<link.icon className="w-5 h-5 shrink-0" />
-												{rail ? <span className="sr-only">{link.label}</span> : link.label}
-											</NavLink>
-											{/* The grip is a pointer affordance for the expanded column only: a rail
-										    row has no width to hold it, and the drag's own feedback is a label
-										    reordering under the cursor, which a rail does not show. Reordering
-										    stays available the moment the sidebar is open again. */}
-											{!rail && (
-												<>
-													{/* biome-ignore lint/a11y/noStaticElementInteractions: the span is the drag source a native
-												     HTML5 drag needs; there is no clickable or focusable behavior on it (the drag itself is
-												     the interaction), and a static span is honest about that. */}
-													<span
-														title="Drag to reorder"
-														draggable
-														onDragStart={(e) => {
-															e.dataTransfer.effectAllowed = "move";
-															// A drag with no payload can be refused before it starts;
-															// the id rides for anything listening.
-															e.dataTransfer.setData("text/plain", link.id);
-															navDragFrom.current = index;
-														}}
-														// A drag that ends anywhere but an accepted drop (Escape, a
-														// drop outside the nav) leaves the source stale; the next drop
-														// would reorder from a drag that never finished.
-														onDragEnd={() => {
-															navDragFrom.current = null;
-														}}
-														className="cursor-grab px-1.5 text-base-content/25 hover:text-base-content/50 transition-colors self-stretch flex items-center active:cursor-grabbing"
-													>
-														<Bars3Icon className="w-3.5 h-3.5 rotate-90 pointer-events-none" />
-													</span>
-												</>
-											)}
-										</div>
+											<link.icon className="w-5 h-5 shrink-0" />
+											{rail ? <span className="sr-only">{link.label}</span> : link.label}
+										</NavLink>
 									))}
 
 									{/* Basket — the sidebar entry mirrors the header icon, for the mobile
