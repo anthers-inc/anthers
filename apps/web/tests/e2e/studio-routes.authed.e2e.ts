@@ -126,10 +126,10 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	await page.reload();
 	await expect(studioSidebar).toBeVisible();
 
-	// The switch leaves for the top of the user's own order, the Library by default,
-	// and user mode is sticky the same way.
+	// The switch leaves for the account's starting tab — Network unless somebody chose
+	// another in Settings — and user mode is sticky the same way.
 	await modeSwitch.getByRole("link", { name: "User", exact: true }).click();
-	await expect(page).toHaveURL(/\/library$/);
+	await expect(page).toHaveURL(/\/network$/);
 	await expect(userSidebar).toBeVisible();
 	await expect(studioSidebar).toHaveCount(0);
 	await expect(header.getByPlaceholder("Search...")).toBeVisible();

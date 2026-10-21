@@ -19,21 +19,23 @@ export { isDesktop };
  * Where the desktop app opens after sign-in.
  *
  * A **per-install** preference rather than an account setting, deliberately: the same
- * person reasonably wants the Studio on the machine they author on and the feed on the
- * one they read on, and an account-level setting would force one answer onto both.
+ * person reasonably wants the Studio on the machine they author on and the user's tabs on
+ * the one they read on, and an account-level setting would force one answer onto both.
  * That is also why it lives in `localStorage` beside `anthers_theme` rather than on the
- * user record.
+ * user record. ⭐ **Which tab on the user side is the account's answer, not this one's** —
+ * `homeDefaultTab` decides that, and this only decides between the user's tabs and the
+ * Studio.
  *
  * Meaningless in a browser — nothing reads it there, because the browser has a real
  * homepage and an address bar.
  */
-export type DesktopHome = "feed" | "studio";
+export type DesktopHome = "user" | "studio";
 
 const HOME_KEY = "anthers_desktop_home";
-const HOMES: readonly DesktopHome[] = ["feed", "studio"];
+const HOMES: readonly DesktopHome[] = ["user", "studio"];
 
 /**
- * The stored preference, defaulting to the feed.
+ * The stored preference, defaulting to the user's tabs.
  *
  * 🚨 **Anything not exactly one of the known values is treated as absent**, which is the
  * point rather than defensiveness. `localStorage.getItem` returns `null` for a missing
@@ -42,15 +44,19 @@ const HOMES: readonly DesktopHome[] = ["feed", "studio"];
  * `?previewAs=` that locked a creator out of their own page. A `??` default would let
  * `""` through here too, so the membership test is what makes empty and unknown both
  * mean "not set".
+ *
+ * ⚠️ **`"feed"` is the value installs wrote before the user side was renamed** (2026-10-20),
+ * when the choice was between a feed and the Studio. It reads as never answered, which
+ * today means the same place: the user's tabs, starting at the account's chosen tab.
  */
 export function desktopHome(): DesktopHome {
 	try {
 		const raw = globalThis.localStorage?.getItem(HOME_KEY);
-		return HOMES.includes(raw as DesktopHome) ? (raw as DesktopHome) : "feed";
+		return HOMES.includes(raw as DesktopHome) ? (raw as DesktopHome) : "user";
 	} catch {
 		// Storage can throw outright (Safari private mode, a locked-down webview). A
 		// preference is not worth failing a page load over.
-		return "feed";
+		return "user";
 	}
 }
 

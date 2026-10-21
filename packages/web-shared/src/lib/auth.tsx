@@ -4,6 +4,13 @@ import { client } from "./rpc";
 import { applyTheme, storeTheme, type Theme } from "./theme";
 
 /**
+ * The three tabs of the signed-in site, in the sidebar's fixed order (Library, Network,
+ * Discovery). The nav ids are the vocabulary `PATCH /api/accounts/me` accepts, so the
+ * server's enum and this union name the same three things.
+ */
+export type UserTabId = "library" | "network" | "discovery";
+
+/**
  * User shape returned from /api/auth/me.
  * Matches the serializeUser() output in apps/api/src/routes/auth.ts.
  */
@@ -22,10 +29,11 @@ export interface User {
 	emailVerified: boolean | null;
 	themePreference: Theme | null;
 	/**
-	 * The home sidebar's nav order (the Feed / Library / Discover ids, first first);
-	 * null = never rearranged, so the default order stands and `/` lands on the feed.
+	 * The tab a signed-in session opens on. Null = never answered, and the reader
+	 * treats that as **Network** — the column never bakes the default in, so a later
+	 * default change would not have to rewrite rows.
 	 */
-	homeNavOrder: string[] | null;
+	homeDefaultTab: UserTabId | null;
 	/**
 	 * Whether audio playback rides the persistent footer bar rather than a Work page's
 	 * own player. Null = never answered, and the reader treats that as **on** — the

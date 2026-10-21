@@ -1,22 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The signed-in account's home chrome preferences — the nav order write that the
- * sidebar's drag handles persist, and the landing it decides — and the playback-home
- * preference the persistent miniplayer reads.
+ * The signed-in account's home chrome preferences — the tab a session opens on, the
+ * playback-home preference the persistent miniplayer reads, and the search chords.
  *
- * 🚨 **The rule the nav write pins:** the order is a WHOLE-map write (the client always
- * knows the whole order) and must cover every id the nav links, once each — an
- * order that drops or duplicates an id has no meaning, so it is refused rather than
- * merged with the stored one. The payload rides both serializers it needs: the
- * account's GET /me and the shell's boot read `/auth/me` (the landing redirect has
- * no second call to spend).
+ * 🚨 **The default-tab rule this pins:** the write is one id from the nav's vocabulary
+ * (an unknown id is refused here rather than stored), and it rides both serializers it
+ * needs: the account's GET /me and the shell's boot read `/auth/me`, because the landing
+ * redirect has no second call to spend. Null means "never answered" and the client reads
+ * that as Network, so the column never bakes the default in.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { db } from "@anthers/db/client";
-import { userPreferences } from "@anthers/db/schema";
-import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -30,7 +23,7 @@ function req(path: string, options?: RequestInit) {
 	return testFetch(new Request(`http://localhost${path}`, options));
 }
 
-const RUN = `navorder${Date.now().toString(36)}`;
+const RUN = `starttab${Date.now().toString(36)}`;
 let cookie = "";
 
 beforeAll(async () => {
@@ -45,66 +38,35 @@ function patchMe(body: unknown, c = cookie) {
 	});
 }
 
-describe("the home nav order preference", () => {
-	it("persists a whole permutation, to both serializers it must ride", async () => {
-		const res = await patchMe({ homeNavOrder: ["library", "network", "discovery"] });
+describe("the default-tab preference", () => {
+	it("starts null — the client's Network default", async () => {
+		const fresh = `neverasked${Date.now().toString(36)}`;
+		const freshCookie = (await createAccount(fresh)).cookie;
+		const me = await (await req("/api/accounts/me", { headers: { Cookie: freshCookie } })).json();
+		expect(me.user.homeDefaultTab).toBeNull();
+	});
+
+	it("persists a chosen tab, to both serializers it must ride", async () => {
+		const res = await patchMe({ homeDefaultTab: "library" });
 		expect(res.status).toBe(200);
 
 		const me = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
-		expect(me.user.homeNavOrder).toEqual(["library", "network", "discovery"]);
+		expect(me.user.homeDefaultTab).toBe("library");
 
-		// `/auth/me` is the shell's boot payload: the landing redirect reads the
-		// order from it, so a preference that stopped at GET /me would never land.
+		// `/auth/me` is the shell's boot payload: the landing redirect reads the tab
+		// from it, so a preference that stopped at GET /me would never land.
 		const auth = await (await req("/api/auth/me", { headers: { Cookie: cookie } })).json();
-		expect(auth.user.homeNavOrder).toEqual(["library", "network", "discovery"]);
+		expect(auth.user.homeDefaultTab).toBe("library");
 	});
 
-	it("refuses an order that drops or duplicates an id", async () => {
-		expect((await patchMe({ homeNavOrder: ["network", "library"] })).status).toBe(400);
-		expect((await patchMe({ homeNavOrder: ["network", "network", "discovery"] })).status).toBe(400);
-	});
-
-	it("refuses an id the nav does not have", async () => {
+	it("refuses a tab the nav does not have", async () => {
 		// The ids are the client's nav vocabulary; the schema's enum is that refusal.
-		expect((await patchMe({ homeNavOrder: ["network", "library", "basket"] })).status).toBe(400);
+		expect((await patchMe({ homeDefaultTab: "basket" })).status).toBe(400);
 	});
 
-	it("accepts a PATCH with no order key at all — other fields still work", async () => {
-		const res = await patchMe({ bio: "Just here to reorder." });
+	it("accepts a PATCH with no tab key at all — other fields still work", async () => {
+		const res = await patchMe({ bio: "Just here for the Network." });
 		expect(res.status).toBe(200);
-	});
-});
-
-describe("the nav-id migration", () => {
-	it("rewrites a stored order's retired ids in place", async () => {
-		const me = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
-		const userId = me.user.id as number;
-		expect(userId).toBeGreaterThan(0);
-
-		// A row written before the rename, which the route's own validation now refuses —
-		// so the migration is the only thing that can turn it back into a valid order.
-		await db
-			.update(userPreferences)
-			.set({ homeNavOrder: ["feed", "library", "discover"] })
-			.where(eq(userPreferences.userId, userId));
-
-		const migration = readFileSync(
-			join(
-				import.meta.dir,
-				"../../../../packages/db/drizzle/20261020-045536_rename_home_nav_ids.sql",
-			),
-			"utf8",
-		);
-		await db.execute(sql.raw(migration));
-
-		const [row] = await db
-			.select({ order: userPreferences.homeNavOrder })
-			.from(userPreferences)
-			.where(eq(userPreferences.userId, userId));
-		expect(row?.order).toEqual(["network", "library", "discovery"]);
-
-		const after = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
-		expect(after.user.homeNavOrder).toEqual(["network", "library", "discovery"]);
 	});
 });
 

@@ -202,7 +202,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 			themePreference: userPreferences.themePreference,
 			notificationDelivery: userPreferences.notificationDelivery,
 			notificationUnsubscribeToken: userPreferences.notificationUnsubscribeToken,
-			homeNavOrder: userPreferences.homeNavOrder,
+			homeDefaultTab: userPreferences.homeDefaultTab,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
 			creatorEmailDelivery: userPreferences.creatorEmailDelivery,
 			searchShortcuts: userPreferences.searchShortcuts,
@@ -223,9 +223,9 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		location: user.location,
 		emailVerified: user.emailVerified,
 		themePreference: prefs?.themePreference ?? null,
-		// The nav order rides the payload like the theme: the shell reads both at boot,
-		// before any route has rendered.
-		homeNavOrder: prefs?.homeNavOrder ?? null,
+		// The starting tab rides the payload like the theme: the shell reads it before any
+		// route has rendered, so the landing redirect needs no second call.
+		homeDefaultTab: prefs?.homeDefaultTab ?? null,
 		// Where audio playback lives — null means "never said", the client reads on.
 		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
 		// The bar's two chords; null means the defaults in `@anthers/shared/keybindings`.
@@ -408,11 +408,14 @@ const updateProfileSchema = z.object({
 	location: z.string().max(100).optional(),
 	themePreference: z.enum(["light", "dark"]).optional(),
 	/**
-	 * The home sidebar's nav order, whole write per PATCH (the client always knows the
-	 * whole order). The route validates it as covering every id; the ids themselves are
-	 * the client's nav's vocabulary, so an unknown one is refused here rather than stored.
+	 * The tab a signed-in session opens on, one of the nav's ids. Null (never answered)
+	 * reads as Network on the client, so the default lives there rather than in a column
+	 * default — the same rule `persistentMiniplayer` follows.
+	 *
+	 * The sidebar's order is fixed Library, Network, Discovery and is not stored: this
+	 * replaced the `homeNavOrder` payload when drag-to-reorder went away (2026-10-20).
 	 */
-	homeNavOrder: z.array(z.enum(NAV_IDS)).max(NAV_IDS.length).optional(),
+	homeDefaultTab: z.enum(NAV_IDS).optional(),
 	/**
 	 * The search bar's two chords, as a whole map. The values are validated below with
 	 * `@anthers/shared/keybindings` rather than by a regex here: the grammar is the same
@@ -512,19 +515,9 @@ const accountRoutes = new Hono()
 		// table's `set`.
 		const prefUpdates: Record<string, unknown> = { updatedAt: new Date() };
 		if (data.themePreference !== undefined) prefUpdates.themePreference = data.themePreference;
-		// The nav order is a whole-map write like the delivery map, and a permutation:
-		// an order missing an id (or naming one twice) has no meaning, so it is refused
-		// rather than merged with the stored one.
-		if (data.homeNavOrder !== undefined) {
-			const sent = data.homeNavOrder;
-			if (new Set(sent).size !== NAV_IDS.length) {
-				return c.json(
-					{ error: "homeNavOrder must name each of library, network and discovery once" },
-					400,
-				);
-			}
-			prefUpdates.homeNavOrder = sent;
-		}
+		// The starting tab is a whole write — the client always knows which tab it means —
+		// and the schema's enum is what refuses an id this build's nav does not have.
+		if (data.homeDefaultTab !== undefined) prefUpdates.homeDefaultTab = data.homeDefaultTab;
 		// `essential` mail has no switch by design — see services/notifications.ts. The
 		// delivery map stores ONLY real group keys: a wildcard is `resolvedMode`'s business,
 		// and a client sending one is asking the server to guess what it means.
@@ -571,7 +564,7 @@ const accountRoutes = new Hono()
 				...(data.creatorEmailDelivery !== undefined
 					? { creatorEmailDelivery: prefUpdates.creatorEmailDelivery as Record<string, string> }
 					: {}),
-				...(data.homeNavOrder !== undefined ? { homeNavOrder: data.homeNavOrder } : {}),
+				...(data.homeDefaultTab !== undefined ? { homeDefaultTab: data.homeDefaultTab } : {}),
 				...(data.persistentMiniplayer !== undefined
 					? { persistentMiniplayer: data.persistentMiniplayer }
 					: {}),
