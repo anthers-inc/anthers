@@ -410,3 +410,20 @@ test("a Work's tags are added and removed from the Details tab", async ({ page, 
 	const [cleared] = (await ownWorks()).filter((w) => w.title === title);
 	expect(cleared?.tags).toEqual([]);
 });
+
+test("the creator's own comic page renders the book, not the no-pages placeholder", async ({
+	page,
+	context,
+}) => {
+	// The owner's Work page goes through a different serializer from a reader's, and it
+	// used to omit the page and section counts the readers branch on. The result was the
+	// creator seeing "This book has no pages yet" on a Work everyone else could read.
+	session = await signInAsMediaFixture(context);
+	const [comic] = (await ownWorks()).filter((w) => w.title === FIXTURE_COMIC);
+	expect(comic, "the media fixture's comic is missing").toBeTruthy();
+	if (!comic) return;
+
+	await page.goto(`/studio/works/${comic.publicId}/edit`);
+	await expect(page.locator(`[aria-label='Comic reader: ${FIXTURE_COMIC}']`)).toBeVisible();
+	await expect(page.getByText("This book has no pages yet")).toHaveCount(0);
+});

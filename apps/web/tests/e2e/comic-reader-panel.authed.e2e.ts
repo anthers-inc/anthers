@@ -29,20 +29,21 @@ async function panelIndicator(page: import("@playwright/test").Page) {
 }
 
 /**
- * Put the fixture's panels back into the state a freshly rendered comic is in: `auto`
- * rows are the detector's proposals, which only the Studio sees. The seeded fixture is
+ * Put the fixture into the state a freshly rendered comic is in: guided view off on every
+ * page, and the detector's rows left as `auto` proposals. The seeded fixture is on and
  * confirmed so the panel-mode specs above can walk it, so this flips the whole Work.
  */
-async function setPanelsConfirmed(confirmed: boolean) {
+async function setGuidedView(enabled: boolean) {
 	const [work] = await db
 		.select({ id: works.id })
 		.from(works)
 		.where(eq(works.slug, COMIC.slug))
 		.limit(1);
 	if (!work) throw new Error(`No fixture Work with slug ${COMIC.slug}`);
+	await db.update(workPages).set({ guidedView: enabled }).where(eq(workPages.workId, work.id));
 	await db
 		.update(workPanels)
-		.set({ auto: !confirmed })
+		.set({ auto: !enabled })
 		.where(
 			inArray(
 				workPanels.pageId,
@@ -106,21 +107,21 @@ test("a reload restores the saved panel position", async ({ page }) => {
 	await expect(await panelIndicator(page)).toContainText("Panel 2 of 4 · Page 1");
 });
 
-test("a comic with nothing confirmed offers no panel mode and still reads as pages", async ({
+test("a comic with guided view off offers no panel mode and still reads as pages", async ({
 	page,
 }) => {
-	await setPanelsConfirmed(false);
+	await setGuidedView(false);
 	try {
 		await resetReadingPosition(page, COMIC);
 		await page.goto(`/works/${COMIC.slug}-${COMIC.publicId}`);
 		await expect(page.locator(READER)).toBeVisible();
-		// The detector's rows exist in the database, but a reader is sent none of them, so
-		// there is nothing to guide with and the reader stays a page reader.
+		// The detector's rows exist in the database and every page is off, so there is
+		// nothing to guide with and the reader stays a page reader.
 		await expect(page.getByRole("button", { name: "Panel mode" })).toHaveCount(0);
 		await expect(
 			page.getByRole("img", { name: /A comic that really turns, page 1/ }),
 		).toBeVisible();
 	} finally {
-		await setPanelsConfirmed(true);
+		await setGuidedView(true);
 	}
 });

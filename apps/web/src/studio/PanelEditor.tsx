@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Studio's panel-correction surface for a comic Work.
+ * The Studio's guided-view surface for a comic Work.
  *
- * Lists each page with its panel rectangles overlaid as SVG rects. Creators can drag
- * a rectangle to move it, drag a corner handle to resize it, delete the selected panel
- * with the Delete key, add a new panel, set a page back to a whole page, and confirm a
- * page to clear the `auto` flag on its rows. All writes go through the PATCH endpoint
- * atomically per page.
- *
- * ⭐ **Confirming is optional, page by page.** Detection proposes; a page nobody confirms
- * is a whole page to a reader, so a comic publishes without this surface ever being used
- * and gains guided view as pages are confirmed.
+ * ⭐ **Guided view is off until it is turned on, page by page.** Every page starts off and
+ * reads as a whole page to everybody; a page that is off shows no rectangles here and asks
+ * for nothing. Turning guided view on is the creator's opt-in, and only then does the page
+ * show the detected proposals and the controls that define them — drag a rectangle, resize
+ * it, delete it with the Delete key, add one, or confirm the page to clear the `auto` flag.
+ * All writes go through the PATCH endpoint atomically per page.
  */
 
 import { client } from "@anthers/web-shared/rpc";
@@ -31,13 +28,13 @@ interface PageState {
 	pageNumber: number;
 	width: number;
 	height: number;
+	guidedView: boolean;
 	panels: PanelRect[];
 	url: string;
 }
 
 interface PanelEditorProps {
 	workId: number;
-	pageCount: number;
 }
 
 const HANDLE_SIZE = 8;
@@ -51,7 +48,7 @@ function normalizeRect(raw: RectUpdate): RectUpdate {
 	return { x, y, width, height };
 }
 
-export default function PanelEditor({ workId, pageCount }: PanelEditorProps) {
+export default function PanelEditor({ workId }: PanelEditorProps) {
 	const [pages, setPages] = useState<PageState[] | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -209,16 +206,20 @@ export default function PanelEditor({ workId, pageCount }: PanelEditorProps) {
 		setSelectedPanel(page.panels.length);
 	};
 
-	const clearPagePanels = async (page: PageState) => {
+	/** Turn guided view on or off for one page. Turning it off keeps the proposals. */
+	const setGuidedView = async (page: PageState, enabled: boolean) => {
+		setSavingPage(page.pageNumber);
 		try {
 			const res = await client.api.content.works[":id"].panels.$patch({
 				param: { id: String(workId) },
-				json: { pageNumber: page.pageNumber, panels: [] },
+				json: { pageNumber: page.pageNumber, enabled },
 			});
-			if (!res.ok) throw new Error(`Reset failed: ${res.status}`);
+			if (!res.ok) throw new Error(`Save failed: ${res.status}`);
 			await loadPanels();
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setSavingPage(null);
 		}
 	};
 
@@ -229,40 +230,48 @@ export default function PanelEditor({ workId, pageCount }: PanelEditorProps) {
 		);
 	};
 
-	if (loading) return <div className="text-sm text-base-content/60">Loading panel layout…</div>;
+	if (loading) return <div className="text-sm text-base-content/60">Loading pages…</div>;
 	if (error) return <div className="text-sm text-error">{error}</div>;
 	if (!pages || pages.length === 0) {
 		return <div className="text-sm text-base-content/60">No pages to edit yet.</div>;
 	}
 
 	const activePage = pages.find((p) => p.pageNumber === selectedPage) ?? pages[0];
+	const guidedCount = pages.filter((p) => p.guidedView).length;
+	const pending = activePage.panels.some((p) => p.auto);
 
 	return (
 		<section
 			className="flex flex-col gap-4"
 			onKeyDown={handleKeyDown}
 			tabIndex={-1}
-			aria-label="Panel editor"
+			aria-label="Guided view editor"
 		>
 			<div className="flex items-center justify-between">
 				<h3 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-					Panel Reading Order
+					Guided View
 				</h3>
 				<span className="text-xs text-base-content/60">
-					{pageCount} page{pageCount === 1 ? "" : "s"};{" "}
-					{pages.reduce((n, p) => n + p.panels.length, 0)} panel
-					{pages.reduce((n, p) => n + p.panels.length, 0) === 1 ? "" : "s"}
+					{guidedCount} of {pages.length} page{pages.length === 1 ? "" : "s"} on
 				</span>
 			</div>
 
 			<p className="text-xs text-base-content/60">
-				Pages read whole until you confirm their panels, so a comic publishes without this step and
-				gains guided view one page at a time.
+				Guided view is off until you turn it on for a page. Pages without it read whole, need no
+				confirmation, and never hold up publishing.
 			</p>
 
 			<div className="flex gap-2 overflow-x-auto pb-2">
 				{pages.map((page) => {
-					const unconfirmed = page.panels.some((p) => p.auto);
+					// Off shows nothing. On with no panels is the one state an enabled page
+					// should not sit in, so it is flagged rather than reading as done.
+					const badge = !page.guidedView
+						? null
+						: page.panels.length === 0
+							? "no panels"
+							: page.panels.some((p) => p.auto)
+								? "auto"
+								: "on";
 					return (
 						<button
 							key={page.pageNumber}
@@ -281,11 +290,17 @@ export default function PanelEditor({ workId, pageCount }: PanelEditorProps) {
 							<img
 								src={page.url}
 								alt={`Page ${page.pageNumber}`}
-								className="h-full w-full object-contain"
+								className={`h-full w-full object-contain ${page.guidedView ? "" : "opacity-60"}`}
 							/>
-							{unconfirmed && (
-								<span className="absolute right-0 top-0 bg-warning text-warning-content text-[10px] px-1 rounded-bl">
-									auto
+							{badge && (
+								<span
+									className={`absolute right-0 top-0 text-[10px] px-1 rounded-bl ${
+										badge === "on"
+											? "bg-success text-success-content"
+											: "bg-warning text-warning-content"
+									}`}
+								>
+									{badge}
 								</span>
 							)}
 							<span className="absolute bottom-0 left-0 bg-base-300/80 px-1 text-[10px]">
@@ -296,120 +311,155 @@ export default function PanelEditor({ workId, pageCount }: PanelEditorProps) {
 				})}
 			</div>
 
-			<div className="flex flex-wrap items-center gap-2">
-				<button
-					type="button"
-					className="btn btn-primary btn-sm"
-					onClick={() => addPanel(activePage)}
-					disabled={activePage.panels.length >= 20}
-				>
-					Add panel
-				</button>
-				<button
-					type="button"
-					className="btn btn-outline btn-sm"
-					onClick={() => confirmPage(activePage)}
-					disabled={!activePage.panels.some((p) => p.auto) || savingPage === activePage.pageNumber}
-				>
-					{savingPage === activePage.pageNumber ? "Saving…" : "Confirm page"}
-				</button>
-				<button
-					type="button"
-					className="btn btn-outline btn-sm"
-					onClick={() => clearPagePanels(activePage)}
-					disabled={savingPage === activePage.pageNumber}
-				>
-					Use whole page
-				</button>
-				<span className="text-xs text-base-content/60">
-					Click a panel to select it; drag to move; drag a corner to resize; Delete removes it.
-				</span>
-			</div>
+			{activePage.guidedView ? (
+				<>
+					<div className="flex flex-wrap items-center gap-2">
+						<button
+							type="button"
+							className="btn btn-primary btn-sm"
+							onClick={() => addPanel(activePage)}
+							disabled={activePage.panels.length >= 20}
+						>
+							Add panel
+						</button>
+						<button
+							type="button"
+							className="btn btn-outline btn-sm"
+							onClick={() => confirmPage(activePage)}
+							disabled={!pending || savingPage === activePage.pageNumber}
+						>
+							{savingPage === activePage.pageNumber ? "Saving…" : "Confirm page"}
+						</button>
+						<button
+							type="button"
+							className="btn btn-ghost btn-sm"
+							onClick={() => void setGuidedView(activePage, false)}
+							disabled={savingPage === activePage.pageNumber}
+						>
+							Turn off guided view
+						</button>
+						<span className="text-xs text-base-content/60">
+							Click a panel to select it; drag to move; drag a corner to resize; Delete removes it.
+						</span>
+					</div>
 
-			<button
-				type="button"
-				ref={(el) => {
-					if (el) containerRefs.current.set(activePage.pageNumber, el);
-				}}
-				className="relative mx-auto w-fit max-w-full select-none"
-				onClick={() => setSelectedPanel(null)}
-				aria-label="Deselect panel"
-				onKeyDown={(e) => {
-					if (e.key === "Escape") setSelectedPanel(null);
-				}}
-			>
-				<img
-					src={activePage.url}
-					alt={`Page ${activePage.pageNumber}`}
-					className="max-h-[60vh] w-auto rounded"
-					loading="eager"
-				/>
-				<svg
-					className="absolute inset-0 h-full w-full"
-					viewBox={`0 0 ${activePage.width} ${activePage.height}`}
-					preserveAspectRatio="none"
-					role="img"
-					aria-label={`Panel overlays for page ${activePage.pageNumber}`}
-				>
-					{activePage.panels.map((panel, panelIndex) => (
-						<g key={panel.panelNumber}>
-							{/* biome-ignore lint/a11y/noStaticElementInteractions: an SVG rect is the panel; there is no interactive role for it inside an SVG, and the surface's semantics live on the buttons that surround it. */}
-							<rect
-								x={panel.x * activePage.width}
-								y={panel.y * activePage.height}
-								width={panel.width * activePage.width}
-								height={panel.height * activePage.height}
-								fill="transparent"
-								stroke={
-									selectedPanel === panelIndex ? "#3b82f6" : panel.auto ? "#f59e0b" : "#22c55e"
-								}
-								strokeWidth={selectedPanel === panelIndex ? 3 : 2}
-								strokeDasharray={panel.auto ? "6 4" : undefined}
-								onClick={(e) => {
-									e.stopPropagation();
-									setSelectedPanel(panelIndex);
-								}}
-								onMouseDown={(e) => handleMouseDown(e, activePage, panelIndex, "move")}
-								className="cursor-move"
-								aria-label={`Panel ${panel.panelNumber}`}
-							/>
-							{selectedPanel === panelIndex && (
-								<>
-									{/* biome-ignore lint/a11y/noStaticElementInteractions: an SVG circle is the resize handle; there is no interactive role for it inside an SVG. */}
-									<circle
-										cx={(panel.x + panel.width) * activePage.width}
-										cy={(panel.y + panel.height) * activePage.height}
-										r={HANDLE_SIZE}
-										fill="#3b82f6"
-										onMouseDown={(e) => handleMouseDown(e, activePage, panelIndex, "resize-se")}
-										className="cursor-nwse-resize"
-										aria-label="Resize panel"
-									/>
-									<text
+					{activePage.panels.length === 0 && (
+						<p className="text-xs text-warning">
+							This page has guided view on but no panels yet. Add at least one, or turn guided view
+							off to read it whole.
+						</p>
+					)}
+
+					<button
+						type="button"
+						ref={(el) => {
+							if (el) containerRefs.current.set(activePage.pageNumber, el);
+						}}
+						className="relative mx-auto w-fit max-w-full select-none"
+						onClick={() => setSelectedPanel(null)}
+						aria-label="Deselect panel"
+						onKeyDown={(e) => {
+							if (e.key === "Escape") setSelectedPanel(null);
+						}}
+					>
+						<img
+							src={activePage.url}
+							alt={`Page ${activePage.pageNumber}`}
+							className="max-h-[60vh] w-auto rounded"
+							loading="eager"
+						/>
+						<svg
+							className="absolute inset-0 h-full w-full"
+							viewBox={`0 0 ${activePage.width} ${activePage.height}`}
+							preserveAspectRatio="none"
+							role="img"
+							aria-label={`Panel overlays for page ${activePage.pageNumber}`}
+						>
+							{activePage.panels.map((panel, panelIndex) => (
+								<g key={panel.panelNumber}>
+									{/* biome-ignore lint/a11y/noStaticElementInteractions: an SVG rect is the panel; there is no interactive role for it inside an SVG, and the surface's semantics live on the buttons that surround it. */}
+									<rect
 										x={panel.x * activePage.width}
-										y={panel.y * activePage.height - 6}
-										fill="#3b82f6"
-										fontSize={activePage.height * 0.04}
-									>
-										{panel.panelNumber}
-									</text>
-								</>
-							)}
-						</g>
-					))}
-				</svg>
-			</button>
+										y={panel.y * activePage.height}
+										width={panel.width * activePage.width}
+										height={panel.height * activePage.height}
+										fill="transparent"
+										stroke={
+											selectedPanel === panelIndex ? "#3b82f6" : panel.auto ? "#f59e0b" : "#22c55e"
+										}
+										strokeWidth={selectedPanel === panelIndex ? 3 : 2}
+										strokeDasharray={panel.auto ? "6 4" : undefined}
+										onClick={(e) => {
+											e.stopPropagation();
+											setSelectedPanel(panelIndex);
+										}}
+										onMouseDown={(e) => handleMouseDown(e, activePage, panelIndex, "move")}
+										className="cursor-move"
+										aria-label={`Panel ${panel.panelNumber}`}
+									/>
+									{selectedPanel === panelIndex && (
+										<>
+											{/* biome-ignore lint/a11y/noStaticElementInteractions: an SVG circle is the resize handle; there is no interactive role for it inside an SVG. */}
+											<circle
+												cx={(panel.x + panel.width) * activePage.width}
+												cy={(panel.y + panel.height) * activePage.height}
+												r={HANDLE_SIZE}
+												fill="#3b82f6"
+												onMouseDown={(e) => handleMouseDown(e, activePage, panelIndex, "resize-se")}
+												className="cursor-nwse-resize"
+												aria-label="Resize panel"
+											/>
+											<text
+												x={panel.x * activePage.width}
+												y={panel.y * activePage.height - 6}
+												fill="#3b82f6"
+												fontSize={activePage.height * 0.04}
+											>
+												{panel.panelNumber}
+											</text>
+										</>
+									)}
+								</g>
+							))}
+						</svg>
+					</button>
 
-			<div className="flex justify-end gap-2">
-				<button
-					type="button"
-					className="btn btn-primary btn-sm"
-					onClick={() => savePage(activePage.pageNumber, activePage.panels)}
-					disabled={savingPage === activePage.pageNumber}
-				>
-					{savingPage === activePage.pageNumber ? "Saving…" : "Save this page"}
-				</button>
-			</div>
+					<div className="flex justify-end gap-2">
+						<button
+							type="button"
+							className="btn btn-primary btn-sm"
+							onClick={() => savePage(activePage.pageNumber, activePage.panels)}
+							disabled={savingPage === activePage.pageNumber}
+						>
+							{savingPage === activePage.pageNumber ? "Saving…" : "Save this page"}
+						</button>
+					</div>
+				</>
+			) : (
+				<>
+					<div className="flex flex-wrap items-center gap-2">
+						<button
+							type="button"
+							className="btn btn-primary btn-sm"
+							onClick={() => void setGuidedView(activePage, true)}
+							disabled={savingPage === activePage.pageNumber}
+						>
+							{savingPage === activePage.pageNumber ? "Saving…" : "Turn on guided view"}
+						</button>
+						<span className="text-xs text-base-content/60">
+							This page reads as a whole page and needs no confirmation.
+						</span>
+					</div>
+					<div className="relative mx-auto w-fit max-w-full">
+						<img
+							src={activePage.url}
+							alt={`Page ${activePage.pageNumber}`}
+							className="max-h-[60vh] w-auto rounded"
+							loading="eager"
+						/>
+					</div>
+				</>
+			)}
 		</section>
 	);
 }
