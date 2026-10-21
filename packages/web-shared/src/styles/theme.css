@@ -125,6 +125,23 @@
 	color: color-mix(in oklch, var(--color-base-content) 40%, transparent);
 }
 
+/* A keycap's ink is its own, not the ink of whatever button holds it.
+
+   DaisyUI paints a `.kbd` with `background-color: var(--color-base-200)` and declares no
+   color at all, so the chord inherited the text color of its container. Inside a filled
+   button that is the button's label ink — near white on the green toggle — and the chord
+   rendered white on cream and disappeared. DaisyUI's keycap surface is base-200 in both
+   themes, so the ink that belongs on it is base-content: the pair the theme guarantees to
+   contrast, wherever the keycap sits. A chord chip also then looks the same on the bar as
+   inside a button, which is what a key tells a reader it is.
+
+   ⚠️ Unlayered, like the palette above, so a `text-*` utility on a keycap cannot override
+   it. A keycap that should instead recede into a filled button wants a `bg-*` on the same
+   rule rather than a lighter ink, since the surface is what makes it read as a key. */
+:where(.kbd) {
+	color: var(--color-base-content);
+}
+
 /* The CSS-mask primitive behind <BrandGlyph>. Sized/recolored by utilities
    (h-/w-/text-*); the mask itself is set inline per instance by the component
    (the data-URI is content-specific). Lives in the `components` layer so a
