@@ -236,14 +236,14 @@ function LoggedInLayoutInner() {
 						aria-label="Toggle sidebar"
 						aria-hidden={chromeHidden || undefined}
 						tabIndex={chromeHidden ? -1 : undefined}
-						className={`btn btn-xs btn-circle border-base-300/60 bg-base-100 shadow-md absolute top-4 z-40 transition-all duration-200 ease-in-out ${
+						className={`btn btn-xs btn-circle border-base-300/60 bg-base-100 shadow-md absolute top-4 z-40 transition-all duration-base ease-in-out ${
 							sidebarOpen
 								? "left-64 -translate-x-1/2"
 								: "left-0 md:left-16 translate-x-0 md:-translate-x-1/2"
 						} ${chromeHidden ? "invisible pointer-events-none" : ""}`}
 					>
 						<ChevronLeftIcon
-							className={`w-3.5 h-3.5 transition-transform duration-200 ${sidebarOpen ? "" : "rotate-180"}`}
+							className={`w-3.5 h-3.5 transition-transform duration-base ${sidebarOpen ? "" : "rotate-180"}`}
 						/>
 					</button>
 					{/* Persistent sidebar. From `md` up it sits beside the page; below that it is
@@ -251,7 +251,7 @@ function LoggedInLayoutInner() {
 				    never squeezes what it covers. The breakpoint is `SIDEBAR_BESIDE_QUERY`'s, which
 				    is also what decides that a phone starts with it closed. */}
 					<aside
-						className={`${!chromeHidden && sidebarOpen ? "w-64 border-r" : chromeHidden ? "w-0" : "w-0 md:w-16 md:border-r"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-200 overflow-hidden border-base-300/50 bg-base-200/60`}
+						className={`${!chromeHidden && sidebarOpen ? "w-64 border-r" : chromeHidden ? "w-0" : "w-0 md:w-16 md:border-r"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-base overflow-hidden border-base-300/50 bg-base-200/60`}
 					>
 						<div className={`${rail ? "w-16" : "w-64"} h-full flex flex-col overflow-y-auto`}>
 							{isCreator && !rail && (

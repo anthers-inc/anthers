@@ -195,6 +195,16 @@
 			transform: scaleY(1);
 		}
 	}
+
+	/* The motion scale. `duration-fast|base|slow` and `ease-settle` are the utilities a
+	   component writes; the three durations are the whole vocabulary, so a new surface
+	   picks the nearest one rather than inventing a fourth. `--ease-settle` is the curve
+	   the reveal and the login card already used, promoted to the single definition every
+	   entrance and exit below reads. */
+	--transition-duration-fast: 120ms;
+	--transition-duration-base: 200ms;
+	--transition-duration-slow: 280ms;
+	--ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Crisp separation for a sticky top navbar: a hairline plus a short, soft drop so
@@ -216,8 +226,8 @@
 		opacity: 0;
 		transform: translateY(1rem);
 		transition:
-			opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
-			transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+			opacity 0.7s var(--ease-settle),
+			transform 0.7s var(--ease-settle);
 		transition-delay: var(--reveal-delay, 0ms);
 	}
 	[data-reveal][data-revealed] {
@@ -229,8 +239,8 @@
 	   deeper shadow on hover. Opt-in via the `card-lift` class; motion-safe only. */
 	.card-lift {
 		transition:
-			transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
-			box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+			transform 0.3s var(--ease-settle),
+			box-shadow 0.3s var(--ease-settle);
 	}
 	.card-lift:hover {
 		transform: translateY(-0.25rem);
@@ -246,7 +256,7 @@
    and one card still mounts. Motion-safe only, matching the reveal easing above. */
 @media (prefers-reduced-motion: no-preference) {
 	[data-auth-fade] {
-		animation: auth-fade-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+		animation: auth-fade-in 0.32s var(--ease-settle);
 	}
 	@keyframes auth-fade-in {
 		from {
@@ -269,7 +279,7 @@
 	::view-transition-old(root),
 	::view-transition-new(root) {
 		animation-duration: 0.32s;
-		animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+		animation-timing-function: var(--ease-settle);
 	}
 }
 /* Reduced motion: skip the crossfade entirely (the swap is instant). */
@@ -285,6 +295,30 @@
 		   exists to provide. Keep it. */
 		animation: none !important;
 	}
+}
+
+/* One reduced-motion contract for the whole client. The blanket duration is deliberate:
+   it lands every transform-based transition and every hand-written animation on its
+   final state instantly, including ones added after this rule was written, which is what
+   a per-component media query never achieves. `transition-delay` is zeroed too, because a
+   zero duration behind a 700ms delay is still a flash arriving later. The spinner is the
+   one exception — a frozen loading indicator is indistinguishable from a broken one, so
+   it keeps turning, slower. */
+@media (prefers-reduced-motion: reduce) {
+	/* biome-ignore-start lint/complexity/noImportantStyles: every declaration here must beat the utility class that set the duration or behavior, and that is precisely what the blanket rule is for. Removing any of them silently revokes the guarantee for a reduced-motion reader. */
+	*,
+	::before,
+	::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		transition-delay: 0ms !important;
+		scroll-behavior: auto !important;
+	}
+	.loading {
+		animation-duration: 1.6s !important;
+	}
+	/* biome-ignore-end lint/complexity/noImportantStyles: end of the reduced-motion block */
 }
 
 /* Flat Meadow base surface. `<MeadowDecor>` layers the pollen texture and botanical decor
