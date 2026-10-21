@@ -8,10 +8,10 @@
  * 🚨 **Every row renders on every tab; the tab decides which rows are live** — that is
  * what makes the vocabulary something a user learns once rather than a per-page
  * reshuffle. A row the tab has not built is GRAYED with "(Coming Soon)", never absent:
- * No Lens is live on all three tabs, Music Player, Channel Guide, and Bookshelf are
- * live in the Library, and the other tabs light a row up when their meaning for it is
- * built. A row may be live on every tab in the future; absent is a state this
- * component no longer has.
+ * No Lens is live on all three tabs, the Library has all three lenses, the Network has
+ * the Music Player and the Bookshelf, and the other tabs light a row up when their
+ * meaning for it is built. A row may be live on every tab in the future; absent is a
+ * state this component no longer has.
  */
 
 import {
@@ -47,7 +47,8 @@ export default function SharedLensesSection({
 	lens: string;
 	onLens: (id: string) => void;
 	/** The ids this tab has built. No Lens is live on every tab — a tab with no
-	 *  other lens built passes the default; the Library adds "music". */
+	 *  other lens built passes the default; the Library passes all three, and the
+	 *  Network passes the two it has built over the feed. */
 	live?: ReadonlySet<string>;
 	extras?: Partial<Record<(typeof LENSES)[number]["id"], React.ReactNode>>;
 }) {

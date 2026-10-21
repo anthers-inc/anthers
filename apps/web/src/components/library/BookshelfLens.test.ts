@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Work } from "@anthers/web-shared/types";
 import { type ServerPosition, writePage } from "../../lib/reading-positions";
-import { compareByTitle, continueReading } from "./BookshelfLens";
+import { compareByTitle, continueReading, positionLine } from "./BookshelfLens";
 import type { LensItem } from "./MusicLens";
 
 /** A localStorage-shaped store, as `reading-positions.test.ts` runs against. */
@@ -130,5 +130,25 @@ describe("continueReading", () => {
 	test("a Work with no position anywhere never rides, whatever its shelf order", () => {
 		const rail = continueReading(books, new Map([row(3, 0.9, "2026-10-15T12:00:00Z")]));
 		expect(rail.map((r) => r.item.id)).toEqual([3]);
+	});
+});
+
+describe("positionLine", () => {
+	test("names the page of a paged Work", () => {
+		const work = { pageCount: 100 } as unknown as Work;
+
+		expect(positionLine(work, 0.25)).toBe("On page 25 of 100");
+		expect(positionLine(work, 0.995)).toBe("On page 99 of 100");
+	});
+
+	test("says only that it is under way where there is no page count", () => {
+		// A scrolled piece of writing has a depth rather than a page, and a feed entry
+		// carries no count at all — neither may invent one.
+		expect(positionLine({ pageCount: null } as unknown as Work, 0.4)).toBe("In progress");
+		expect(positionLine({} as unknown as Work, 0.4)).toBe("In progress");
+	});
+
+	test("a Work with no position gets no line", () => {
+		expect(positionLine({ pageCount: 100 } as unknown as Work, null)).toBe(null);
 	});
 });

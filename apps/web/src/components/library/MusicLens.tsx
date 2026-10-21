@@ -72,8 +72,9 @@ export interface MusicLensProps {
 	 */
 	includeSpoken: boolean;
 	/**
-	 * Where the lens is drawing from. The Library opens a release as it was kept; a Feed
-	 * lens opens the whole Project. Defaults to the Library, the one that is built.
+	 * Where the lens is drawing from. The Library opens a release as it was kept; the
+	 * Network opens the whole Project, because the feed is what arrived rather than a
+	 * kept list. Only the empty state's words and that opening rule differ.
 	 */
 	scope?: "library" | "feed";
 }
@@ -96,6 +97,9 @@ export interface MusicRelease {
 	creatorDisplayName: string | null;
 	/** What the card advertises: the whole Project's music, or the saved tracks it holds. */
 	trackCount: number;
+	/** What the whole record holds, including members this corpus never saw — the count a
+	 *  feed-scoped lens advertises, because opening the release there fetches it whole. */
+	wholeCount: number;
 	/** True when the release itself is on the shelf — a saved Project or a standalone Work. */
 	wholeRelease: boolean;
 	/** The saved tracks already placed under it, in shelf order; a whole saved Project fetches its own. */
@@ -141,6 +145,7 @@ export function musicReleases(items: LensItem[], includeSpoken: boolean): MusicR
 				creatorHandle: project.creatorHandle,
 				creatorDisplayName: project.creatorDisplayName,
 				trackCount,
+				wholeCount: trackCount,
 				wholeRelease: true,
 				tracks: [],
 			});
@@ -148,6 +153,7 @@ export function musicReleases(items: LensItem[], includeSpoken: boolean): MusicR
 			// its own cover wins over a track thumbnail used as a fallback.
 			release.wholeRelease = true;
 			release.trackCount = trackCount;
+			release.wholeCount = trackCount;
 			if (project.coverImage) release.coverImage = project.coverImage;
 			continue;
 		}
@@ -177,6 +183,7 @@ export function musicReleases(items: LensItem[], includeSpoken: boolean): MusicR
 				creatorHandle: work.creatorHandle ?? null,
 				creatorDisplayName: work.creatorDisplayName ?? null,
 				trackCount: 1,
+				wholeCount: 1,
 				wholeRelease: true,
 				tracks: [track],
 			});
@@ -196,6 +203,7 @@ export function musicReleases(items: LensItem[], includeSpoken: boolean): MusicR
 				creatorHandle: membership.creatorHandle,
 				creatorDisplayName: membership.creatorDisplayName,
 				trackCount: 0,
+				wholeCount: membership.musicCount + (includeSpoken ? membership.audioCount : 0),
 				wholeRelease: false,
 				tracks: [],
 			});
@@ -212,9 +220,29 @@ export function musicReleases(items: LensItem[], includeSpoken: boolean): MusicR
 	return ordered;
 }
 
+/**
+ * The release cards as the scope shows them. The Library opens a release as it was kept,
+ * so the card counts the kept tracks; the Network opens it whole, so the card advertises
+ * the record's own count rather than the handful of tracks that arrived in the feed.
+ */
+export function releasesForScope(
+	releases: MusicRelease[],
+	scope: "library" | "feed",
+): MusicRelease[] {
+	if (scope !== "feed") return releases;
+	return releases.map((release) =>
+		release.kind === "project"
+			? { ...release, trackCount: Math.max(release.trackCount, release.wholeCount) }
+			: release,
+	);
+}
+
 export default function MusicLens({ items, includeSpoken, scope = "library" }: MusicLensProps) {
 	const player = useMediaPlayer();
-	const releases = useMemo(() => musicReleases(items, includeSpoken), [items, includeSpoken]);
+	const releases = useMemo(
+		() => releasesForScope(musicReleases(items, includeSpoken), scope),
+		[items, includeSpoken, scope],
+	);
 	const drawOn = useMemo(() => listenedTypes(includeSpoken), [includeSpoken]);
 
 	/** The release whose tracks layer is open, and the tracks it is showing. */
@@ -315,19 +343,30 @@ export default function MusicLens({ items, includeSpoken, scope = "library" }: M
 	};
 
 	if (releases.length === 0) {
+		const forNetwork = scope === "feed";
 		return (
 			<div className="rounded-box border border-base-300 bg-base-100 px-6 py-14 text-center">
 				<MusicalNoteIcon className="mx-auto size-10 text-base-content/20" />
 				<h2 className="mt-3 text-lg font-bold">
-					{includeSpoken ? "Nothing to listen to kept yet" : "No music kept yet"}
+					{forNetwork
+						? includeSpoken
+							? "Nothing to listen to in your feed yet"
+							: "No music in your feed yet"
+						: includeSpoken
+							? "Nothing to listen to kept yet"
+							: "No music kept yet"}
 				</h2>
 				<p className="mx-auto mt-1 max-w-md text-sm text-base-content/60">
-					{includeSpoken
-						? "Save an album, a track or an episode and it lands here — free work included. You don't have to buy something to keep it."
-						: "Save an album or a track and it lands here — free work included. You don't have to buy something to keep it."}
+					{forNetwork
+						? includeSpoken
+							? "Music and spoken word from the creators in your network arrive here as they release it. Follow, support, or save a creator and their work joins the feed."
+							: "Music from the creators in your network arrives here as they release it. Follow, support, or save a creator and their records join the feed."
+						: includeSpoken
+							? "Save an album, a track or an episode and it lands here — free work included. You don't have to buy something to keep it."
+							: "Save an album or a track and it lands here — free work included. You don't have to buy something to keep it."}
 				</p>
 				<Link to="/discovery" className="btn btn-primary btn-sm mt-4">
-					Find something to listen to
+					{forNetwork ? "Find creators to follow" : "Find something to listen to"}
 				</Link>
 			</div>
 		);
