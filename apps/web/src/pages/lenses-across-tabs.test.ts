@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Lenses section belongs to every user tab (Parker, 2026-10-19).
+ * The Lenses section belongs to every user tab (Parker, 2026-10-19), and each tab lights
+ * the rows it has built (Parker, 2026-10-20 for the Network's two).
  *
  * A source-text guard: the shared component renders every row and grays the ones a tab
  * has not built, so the only per-tab choices are the `live` set and the adapter. This
- * pins the section's presence on Library, Network, and Discovery, Discovery's lens
- * riding the URL beside its mode, and the graying contract that makes an unbuilt row a
- * visible promise rather than a missing word.
+ * pins the section's presence on Library, Network, and Discovery, each tab's live set,
+ * Discovery's lens riding the URL beside its mode, and the graying contract that makes an
+ * unbuilt row a visible promise rather than a missing word.
  */
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -39,9 +40,22 @@ describe("the Lenses section on all three tabs", () => {
 		expect(library).toContain('new Set(["", "music", "channel-guide", "bookshelf"])');
 	});
 
-	it("starts Network and Discovery with No Lens as the only live row", () => {
-		// The prop is absent on both, so the component's default set is what they use.
-		expect(network).not.toContain("live={");
+	it("lights the Music Player and Bookshelf on the Network, over the feed", () => {
+		expect(network).toContain('const NETWORK_LIVES = new Set(["", "music", "bookshelf"])');
+		expect(network).toContain("live={NETWORK_LIVES}");
+		expect(network).toContain('scope="feed"');
+		expect(network).toContain('source="network"');
+	});
+
+	it("keeps the Channel Guide grayed on the Network until it has a corpus it can play", () => {
+		// A feed entry carries no payload, so the guide's inline player has nothing to
+		// open there yet. The row stays, grayed, rather than promising a lens that would
+		// render its locked pane for every program.
+		expect(network).not.toContain("channel-guide");
+	});
+
+	it("starts Discovery with No Lens as the only live row", () => {
+		// The prop is absent, so the component's default set is what Discovery uses.
 		expect(discovery).not.toContain("live={");
 		expect(section).toContain('live = new Set([""])');
 	});

@@ -134,6 +134,7 @@ import {
 	updateParentalControls,
 } from "../services/parental-controls.js";
 import { postContentExcerpt } from "../services/post-markdown.js";
+import { releasesByWorkId } from "../services/project-releases.js";
 import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 import { matchesFields } from "../services/search-query.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../services/storage/keys.js";
@@ -1136,6 +1137,15 @@ const accountRoutes = new Hono()
 			feedWorks.filter((r) => r.work.type === "physical").map((r) => r.work.id),
 		);
 
+		// The published Projects each release belongs to, so the Network's Music Player lens
+		// groups a newly released track under its record the way the Library's groups a saved
+		// one. Same metadata-only membership and the same viewer-scoped counts as the shelf;
+		// one query for the page, and nothing when the feed carried no releases.
+		const { byWork: releasesByWork } = await releasesByWorkId(
+			feedWorks.map((row) => row.work.id),
+			{ adultHidden: maturity.hidden, parentalHidden: parental.hidden },
+		);
+
 		// Enumerate the fields rather than spreading the row. This used to be
 		// `...row.post`, which shipped `body` and `bodyHtml` for every followed creator's
 		// post regardless of gating. A post carries no gate of its own now, so there is no
@@ -1226,6 +1236,9 @@ const accountRoutes = new Hono()
 					// Thumbnails are public by design — they are the preview a locked Work is
 					// supposed to show.
 					thumbnail: w.thumbnail,
+					// The published Projects this release belongs to, so the Music Player lens
+					// can group a track under its record. Metadata only, as the shelf's copy is.
+					releases: releasesByWork.get(w.id) ?? [],
 					// The rating travels with the card, because the card is where a user's
 					// Blur covers the thumbnail. Without it every release here showed uncovered.
 					maturity: w.maturity,
