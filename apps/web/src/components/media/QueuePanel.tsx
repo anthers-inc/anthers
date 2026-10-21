@@ -21,7 +21,7 @@ export default function QueuePanel({ onClose }: { onClose: () => void }) {
 	const { currentTrack, isPlaying, upcoming, jumpTo } = useMediaPlayer();
 
 	return (
-		<div className="absolute bottom-full right-2 z-30 mb-2 flex max-h-[55vh] w-80 flex-col rounded-box border border-base-300 bg-base-100 shadow-2xl">
+		<div className="flex max-h-[55vh] w-80 flex-col rounded-box border border-base-300 bg-base-100 shadow-2xl">
 			<div className="flex items-center justify-between border-b border-base-300 px-3 py-2">
 				<span className="text-xs font-semibold uppercase tracking-wider text-base-content/60">
 					Queue
@@ -110,7 +110,7 @@ function QueueRow({
 		return (
 			<Link
 				to={workUrl({ slug: track.slug, publicId: track.publicId })}
-				className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-base-content/5"
+				className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-fast hover:bg-base-content/5"
 			>
 				{body}
 			</Link>
@@ -122,7 +122,7 @@ function QueueRow({
 			type="button"
 			onClick={onClick}
 			disabled={current}
-			className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left ${
+			className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-fast ${
 				current ? "text-primary" : "hover:bg-base-content/5"
 			}`}
 		>
