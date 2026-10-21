@@ -17,6 +17,16 @@
  * next-up arithmetic, and the autoplay preference, which is deliberately **off by
  * default** and a user's choice to flip.
  *
+ * ⭐ **The guide is drawn as a guide, not as a list of cards.** Every channel is a column
+ * under a fixed-height bug (avatar, name, handle, program count), every program is the
+ * same fixed-height block, and a rank ruler down the left edge names the row positions
+ * — *Latest*, *1 back*, *2 back* — so the level rows read as ranks rather than as a
+ * shared clock. That is the metaphor made visible: a real schedule prints times in that
+ * gutter, and this one prints the only ordinals the model actually has. *Newer* caps the
+ * ruler at the top, and the tuned rail keeps the same axis with a node per program: the
+ * row above the current one is marked *Up next* and the current one *On now*, so the
+ * upward next-up step is something a reader sees before they read the arrow.
+ *
  * 🚨 **A lens is a view, never a container**, and nothing here mutates the shelf: no
  * fetch of its own, selection is view state, and closing the player leaves the guide
  * exactly as it stood. The corpus rides the context (Parker, 2026-10-11): **from the
@@ -34,6 +44,7 @@ import {
 	ArrowDownIcon,
 	ArrowUpIcon,
 	LockClosedIcon,
+	PlayIcon,
 	TvIcon,
 	XMarkIcon,
 } from "@heroicons/react/24/solid";
@@ -47,6 +58,7 @@ import {
 	readAutoplay,
 	writeAutoplay,
 } from "../../lib/channel-guide";
+import PlayingBars from "../media/transport/PlayingBars";
 import VideoPlayer from "../media/VideoPlayer";
 import type { LensItem } from "./MusicLens";
 
@@ -157,10 +169,20 @@ export default function ChannelGuideLens({
 		}
 	}, [selectedEntry, selectedEntry?.index]);
 
+	/*
+	 * The guide's rows are fixed height and every channel column shares the same row
+	 * rhythm, so the blocks line up across channels the way a TV schedule does. The
+	 * gutter beside them is the guide's ruler: a real guide prints times there, and
+	 * this one prints the only ordinal it has — positions back from the newest.
+	 */
+	const rowCount = Math.max(1, ...channels.map((c) => c.programs.length));
+
 	if (channels.length === 0) {
 		return (
 			<div className="rounded-box border border-base-300 bg-base-100 px-6 py-14 text-center">
-				<TvIcon className="mx-auto size-10 text-base-content/20" />
+				<span className="mx-auto flex size-14 items-center justify-center rounded-full bg-base-200">
+					<TvIcon className="size-7 text-base-content/30" />
+				</span>
 				<h2 className="mt-3 text-lg font-bold">No channels yet</h2>
 				<p className="mx-auto mt-1 max-w-md text-sm text-base-content/60">
 					{source === "feed"
@@ -227,10 +249,15 @@ export default function ChannelGuideLens({
 							</div>
 						</div>
 					)}
-					<div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+					<div className="mt-3 flex flex-wrap items-start justify-between gap-3">
 						<div className="min-w-0">
-							<h3 className="truncate text-lg font-bold">{work.title || "Untitled"}</h3>
-							<div className="flex items-center gap-2 text-sm text-base-content/60">
+							<p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
+								On now
+							</p>
+							<h3 className="truncate text-lg font-bold leading-tight">
+								{work.title || "Untitled"}
+							</h3>
+							<div className="mt-1 flex items-center gap-2 text-sm text-base-content/60">
 								{channel.handle && <Link to={profileUrl(channel.handle)}>{channel.name}</Link>}
 								{workUrlFor(work) && (
 									<>
@@ -241,7 +268,7 @@ export default function ChannelGuideLens({
 							</div>
 						</div>
 						{/* Autoplay is a choice, not a default (Parker, 2026-10-11). */}
-						<label className="flex cursor-pointer items-center gap-2 text-sm">
+						<label className="flex cursor-pointer items-center gap-2 rounded-full border border-base-300 bg-base-100 px-3 py-1.5 text-xs font-medium">
 							<input
 								type="checkbox"
 								className="toggle toggle-sm"
@@ -253,10 +280,10 @@ export default function ChannelGuideLens({
 					</div>
 					{/* The upward language, made hard to miss: next lives above, and the
 					    buttons say so in arrows before anyone learns it the hard way. */}
-					<div className="mt-3 flex items-center gap-2">
+					<div className="mt-3 flex items-center gap-2 border-t border-base-300 pt-3">
 						<button
 							type="button"
-							className="btn btn-sm max-w-full"
+							className="group flex min-w-0 max-w-full items-center gap-2.5 rounded-full border border-base-300 bg-base-100 py-1.5 pl-1.5 pr-4 text-left transition enabled:hover:border-primary/40 enabled:hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
 							disabled={nextUp == null}
 							onClick={() => {
 								if (nextWork) {
@@ -271,9 +298,16 @@ export default function ChannelGuideLens({
 									: "Nothing further up this channel"
 							}
 						>
-							<ArrowUpIcon className="size-4 shrink-0" />
-							<span className="truncate">
-								Up next{nextWork ? `: ${nextWork.title || "Untitled"}` : ""}
+							<span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+								<ArrowUpIcon className="size-4" />
+							</span>
+							<span className="min-w-0">
+								<span className="block text-[10px] font-semibold uppercase tracking-wider text-base-content/45">
+									Up next
+								</span>
+								<span className="block truncate text-sm font-semibold text-base-content">
+									{nextWork ? nextWork.title || "Untitled" : "Nothing above — this is the newest"}
+								</span>
 							</span>
 						</button>
 						<button
@@ -292,15 +326,35 @@ export default function ChannelGuideLens({
 					</div>
 				</div>
 				<aside
-					className="flex min-w-0 flex-col rounded-box border border-base-300 bg-base-100 lg:w-1/4 lg:flex-none"
+					className="flex min-w-0 flex-col overflow-hidden rounded-box border border-base-300 bg-base-100 lg:w-1/4 lg:flex-none"
 					aria-label={`${channel.name ?? "Channel"} — programs`}
 				>
-					<header className="flex items-center gap-2 border-b border-base-300 p-3">
-						{channel.avatar && (
-							<img src={channel.avatar} alt="" className="size-8 rounded-full object-cover" />
+					<header className="relative flex items-center gap-2.5 border-b border-base-300 p-3">
+						{/* The channel's tab, the same accent its column carries in the guide. */}
+						<span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-primary" />
+						{channel.avatar ? (
+							<img
+								src={channel.avatar}
+								alt=""
+								className="size-9 shrink-0 rounded-lg object-cover ring-1 ring-base-300"
+							/>
+						) : (
+							<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-base-300 text-xs font-bold">
+								{(channel.name ?? "Unknown").charAt(0).toUpperCase()}
+							</span>
 						)}
-						<span className="min-w-0 flex-1 truncate font-semibold">
-							{channel.name ?? "Unknown channel"}
+						<span className="min-w-0 flex-1">
+							<span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-base-content/45">
+								{channel.programs.length} {channel.programs.length === 1 ? "program" : "programs"}
+							</span>
+							<span className="block truncate font-semibold leading-tight">
+								{channel.name ?? "Unknown channel"}
+							</span>
+							{channel.handle && (
+								<span className="block truncate text-[10px] text-base-content/45">
+									@{channel.handle}
+								</span>
+							)}
 						</span>
 						<button
 							type="button"
@@ -311,25 +365,60 @@ export default function ChannelGuideLens({
 							<XMarkIcon className="size-4" />
 						</button>
 					</header>
-					<ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
-						{channel.programs.map((p, idx) => (
-							<li
-								key={p.id}
-								ref={idx === index ? railSelectedRef : undefined}
-								className={idx === index ? "bg-secondary/20 ring-secondary ring-1 rounded-box" : ""}
-							>
-								<ProgramBlock
-									work={p}
-									ordinal={idx}
-									current={idx === index}
-									variant="rail"
-									onSelect={(id) => {
-										setPlayIntent(true);
-										select(id);
-									}}
-								/>
-							</li>
-						))}
+					<ul className="relative flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
+						{/* The same ruler the guide drew down its left edge, carried into the rail:
+						    an axis with its arrowhead at the top, so the newest program is above
+						    and the next one to play is the node above the current one. */}
+						<span
+							aria-hidden="true"
+							className="pointer-events-none absolute bottom-2 left-3.5 top-2 w-px bg-base-300"
+						/>
+						{channel.programs.map((p, idx) => {
+							const isCurrent = idx === index;
+							const isNext = idx === index - 1;
+							return (
+								<li
+									key={p.id}
+									ref={isCurrent ? railSelectedRef : undefined}
+									className={
+										isCurrent
+											? "relative flex gap-2 rounded-lg bg-primary/10 ring-1 ring-primary/40"
+											: "relative flex gap-2 rounded-lg"
+									}
+								>
+									<span
+										aria-hidden="true"
+										className="relative flex w-3 shrink-0 items-center justify-center"
+									>
+										{idx === 0 && (
+											<ArrowUpIcon className="absolute top-0 left-1/2 size-2.5 -translate-x-1/2 text-base-content/40" />
+										)}
+										<span
+											className={
+												isCurrent
+													? "size-2 rounded-full bg-primary ring-2 ring-primary/25"
+													: isNext
+														? "size-2 rounded-full border-2 border-primary bg-base-100"
+														: "size-1.5 rounded-full bg-base-300"
+											}
+										/>
+									</span>
+									<div className="min-w-0 flex-1">
+										<ProgramBlock
+											work={p}
+											ordinal={idx}
+											current={isCurrent}
+											next={isNext}
+											variant="rail"
+											onSelect={(id) => {
+												setPlayIntent(true);
+												select(id);
+											}}
+										/>
+									</div>
+								</li>
+							);
+						})}
 					</ul>
 				</aside>
 			</div>
@@ -337,59 +426,116 @@ export default function ChannelGuideLens({
 	}
 
 	return (
-		<section aria-label="Channel guide">
-			<h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-base-content/50">
-				Channel Guide
-			</h2>
-			<div className="overflow-x-auto pb-2">
-				<ul aria-label="Channels" className="flex w-max gap-4" data-testid="guide-channels">
-					{channels.map((channel) => (
-						<li key={channel.id} className="w-60 shrink-0" data-testid="guide-channel">
-							<section>
-								<header className="flex items-center gap-2 px-1 pb-2">
-									{channel.avatar ? (
-										<img src={channel.avatar} alt="" className="size-8 rounded-full object-cover" />
-									) : (
-										<span className="flex size-8 items-center justify-center rounded-full bg-base-300 text-xs font-bold">
-											{(channel.name ?? "Unknown").charAt(0).toUpperCase()}
-										</span>
-									)}
-									<span
-										className="min-w-0 flex-1 truncate text-sm font-semibold"
-										title={channel.name ?? "Unknown channel"}
-									>
-										{channel.handle ? (
-											<Link to={profileUrl(channel.handle)}>
-												{channel.name ?? "Unknown channel"}
-											</Link>
-										) : (
-											(channel.name ?? "Unknown channel")
-										)}
-									</span>
-									<span className="text-xs text-base-content/50">{channel.programs.length}</span>
-								</header>
-								<ul className="flex flex-col gap-2">
-									{channel.programs.map((p, idx) => (
-										<li key={p.id}>
-											<ProgramBlock
-												work={p}
-												ordinal={idx}
-												current={false}
-												variant="column"
-												onSelect={(id) => {
-													setPlayIntent(true);
-													select(id);
-												}}
-											/>
-										</li>
-									))}
-								</ul>
-							</section>
-						</li>
-					))}
-				</ul>
+		<section aria-label="Channel guide" className="space-y-3">
+			<div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-base-300 pb-2">
+				<h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+					Channel Guide
+				</h2>
+				<p className="text-[11px] text-base-content/45">
+					{channels.length} {channels.length === 1 ? "channel" : "channels"} · newest at the top
+				</p>
+			</div>
+			<div className="overflow-x-auto scroll-pl-16 pb-3">
+				<div className="flex w-max snap-x snap-proximity items-start gap-2">
+					{/* The guide's ruler. A schedule prints times down its left edge; here the
+					    only honest ordinals are ranks back from the newest, so the ruler says
+					    that instead of inventing a clock. It stays put while channels scroll. */}
+					<div
+						aria-hidden="true"
+						className="sticky left-0 z-10 flex shrink-0 flex-col gap-1.5 border-r border-base-300 bg-base-100"
+					>
+						<div className="flex h-12 items-end justify-end pb-2 pr-2">
+							<span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-base-content/55">
+								Newer
+								<ArrowUpIcon className="size-3 text-primary" />
+							</span>
+						</div>
+						{Array.from({ length: rowCount }, (_, rank) => (
+							// biome-ignore lint/suspicious/noArrayIndexKey: the ruler's rows are positional and never reorder, so the rank IS the identity.
+							<div key={rank} className="flex h-[76px] items-center justify-end">
+								<span className="pr-2 text-[10px] font-medium uppercase tracking-wider tabular-nums text-base-content/45">
+									{rank === 0 ? "Latest" : `${rank} back`}
+								</span>
+								<span className="h-px w-1.5 bg-base-300" />
+							</div>
+						))}
+					</div>
+					<ul aria-label="Channels" className="flex w-max gap-2 pl-2" data-testid="guide-channels">
+						{channels.map((channel) => (
+							<li key={channel.id} className="w-60 shrink-0 snap-start" data-testid="guide-channel">
+								<section className="flex flex-col gap-1.5">
+									<ChannelBug channel={channel} />
+									<ul className="flex flex-col gap-1.5">
+										{channel.programs.map((p, idx) => (
+											<li key={p.id}>
+												<ProgramBlock
+													work={p}
+													ordinal={idx}
+													current={false}
+													variant="column"
+													onSelect={(id) => {
+														setPlayIntent(true);
+														select(id);
+													}}
+												/>
+											</li>
+										))}
+									</ul>
+								</section>
+							</li>
+						))}
+					</ul>
+				</div>
 			</div>
 		</section>
+	);
+}
+
+/**
+ * A channel's bug: the fixed identity plate at the top of its column. It is the one
+ * thing in the guide that must read the same whether the column is long or short, which
+ * is why its height is fixed to the ruler's spacer.
+ */
+function ChannelBug({ channel }: { channel: GuideChannel }) {
+	return (
+		<header className="relative flex h-12 items-center gap-2.5 overflow-hidden rounded-lg border border-base-300 bg-base-100 pl-2.5 pr-2 shadow-sm">
+			{/* The channel's tab, repeated on the rail when this channel is tuned. */}
+			<span aria-hidden="true" className="absolute inset-y-0 left-0 w-1 bg-primary" />
+			{channel.avatar ? (
+				<img
+					src={channel.avatar}
+					alt=""
+					className="size-8 shrink-0 rounded-md object-cover ring-1 ring-base-300"
+				/>
+			) : (
+				<span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-base-300 text-xs font-bold">
+					{(channel.name ?? "Unknown").charAt(0).toUpperCase()}
+				</span>
+			)}
+			<div className="min-w-0 flex-1">
+				<h3
+					className="truncate text-[13px] font-semibold leading-tight"
+					title={channel.name ?? "Unknown channel"}
+				>
+					{channel.handle ? (
+						<Link to={profileUrl(channel.handle)}>{channel.name ?? "Unknown channel"}</Link>
+					) : (
+						(channel.name ?? "Unknown channel")
+					)}
+				</h3>
+				{channel.handle && (
+					<p className="truncate text-[10px] leading-tight text-base-content/45">
+						@{channel.handle}
+					</p>
+				)}
+			</div>
+			<span
+				className="shrink-0 rounded-full bg-base-200 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-base-content/55"
+				title={`${channel.programs.length} ${channel.programs.length === 1 ? "program" : "programs"}`}
+			>
+				{channel.programs.length}
+			</span>
+		</header>
 	);
 }
 
@@ -409,6 +555,7 @@ function ProgramBlock({
 	work,
 	ordinal: _ordinal,
 	current,
+	next,
 	variant,
 	onSelect,
 }: {
@@ -416,16 +563,25 @@ function ProgramBlock({
 	/** The block's position in its column, latest-first — for a future "latest plus one" label. */
 	ordinal: number;
 	current: boolean;
+	/** The rail's row immediately above the current one — the program that plays next. */
+	next?: boolean;
 	variant: "column" | "rail";
 	onSelect: (id: number) => void;
 }) {
 	const locked = isAccessResult(work.access) && work.access.canAccess === false;
 	const to = workUrlFor(work);
+	// One row rhythm across the whole guide: a column block and a rail row are the same
+	// shape at two sizes, and the fixed heights are what keep the columns aligned.
+	const rowClass =
+		variant === "column"
+			? "h-[76px] gap-2 rounded-lg border border-base-300 bg-base-100 p-1.5 shadow-sm hover:border-primary/40 hover:shadow"
+			: "h-[64px] gap-2 rounded-lg border border-transparent p-1.5 hover:bg-base-200";
+	const thumbClass = variant === "column" ? "w-24" : "w-20";
 	const inner = (
-		<span
-			className={`flex gap-2 rounded-box p-1 text-left transition ${current ? "" : "hover:bg-base-200"}`}
-		>
-			<span className="relative aspect-video w-20 shrink-0 overflow-hidden rounded bg-base-300">
+		<span className={`flex w-full items-center text-left transition ${rowClass}`}>
+			<span
+				className={`relative aspect-video shrink-0 self-center overflow-hidden rounded-md bg-base-300 ${thumbClass}`}
+			>
 				{work.thumbnail ? (
 					<img src={work.thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />
 				) : (
@@ -433,24 +589,51 @@ function ProgramBlock({
 						<TvIcon className="size-5 text-base-content/25" />
 					</span>
 				)}
+				{variant === "column" && (
+					// The affordance the guide offers on a program: you tune to it.
+					<span className="absolute inset-0 hidden items-center justify-center bg-black/25 group-hover:flex">
+						<span className="flex size-7 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm">
+							<PlayIcon className="ml-0.5 size-3.5" />
+						</span>
+					</span>
+				)}
 				{work.durationSeconds != null && work.durationSeconds > 0 && (
-					<span className="absolute bottom-0.5 right-0.5 rounded bg-black/70 px-1 text-[9px] font-medium text-white">
+					<span className="absolute bottom-0.5 right-0.5 rounded bg-black/75 px-1 py-px text-[9px] font-semibold tabular-nums text-white">
 						{formatDuration(work.durationSeconds)}
 					</span>
 				)}
+				{locked && (
+					<span className="absolute left-0.5 top-0.5 rounded bg-black/65 p-0.5 text-white">
+						<LockClosedIcon className="size-2.5" />
+					</span>
+				)}
 			</span>
-			<span className="min-w-0 flex-1">
+			<span className="flex min-w-0 flex-1 flex-col justify-center">
 				<span className={`line-clamp-2 text-xs leading-snug ${current ? "font-bold" : ""}`}>
 					{work.title || "Untitled"}
 				</span>
-				<span className="mt-0.5 block text-[10px] text-base-content/50">
-					{compactDate(work.releasedAt ?? work.createdAt)}
-				</span>
-				{locked && (
-					<span className="badge badge-ghost badge-xs mt-1 gap-0.5">
-						<LockClosedIcon className="size-2.5" /> Gated
+				<span className="mt-1 flex items-center gap-1.5 text-[10px] text-base-content/50">
+					<span className="truncate tabular-nums">
+						{compactDate(work.releasedAt ?? work.createdAt)}
 					</span>
-				)}
+					{current && (
+						<span className="inline-flex shrink-0 items-center gap-1 font-semibold uppercase tracking-wide text-primary">
+							<PlayingBars />
+							On now
+						</span>
+					)}
+					{next && (
+						<span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-px font-semibold uppercase tracking-wide text-primary">
+							<ArrowUpIcon className="size-2.5" />
+							Up next
+						</span>
+					)}
+					{locked && (
+						<span className="shrink-0 rounded bg-base-200 px-1 text-[9px] font-semibold uppercase tracking-wide text-base-content/55">
+							Gated
+						</span>
+					)}
+				</span>
 			</span>
 		</span>
 	);
@@ -460,13 +643,14 @@ function ProgramBlock({
 		// released it) but cannot be put on here — so it routes to the Work's page,
 		// where the unlock path lives.
 		return to ? (
-			<Link to={to} className="block rounded-box border border-base-300 bg-base-100">
+			<Link
+				to={to}
+				className="group block rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+			>
 				{inner}
 			</Link>
 		) : (
-			<span className="block cursor-default rounded-box border border-base-300 bg-base-100">
-				{inner}
-			</span>
+			<span className="group block cursor-default rounded-lg">{inner}</span>
 		);
 	}
 	return (
@@ -474,7 +658,7 @@ function ProgramBlock({
 			type="button"
 			onClick={() => onSelect(work.id)}
 			data-testid={variant === "rail" ? "guide-rail-block" : "guide-block"}
-			className="block w-full cursor-pointer rounded-box border border-base-300 bg-base-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+			className="group block w-full cursor-pointer rounded-lg text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
 		>
 			{inner}
 		</button>
