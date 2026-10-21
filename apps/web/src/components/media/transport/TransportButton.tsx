@@ -71,7 +71,7 @@ export default function TransportButton({
 			title={label}
 			className={`btn btn-circle relative ${SIZE_CLASS[size]} ${toneClass} ${
 				active && tone === "ghost" ? "text-primary" : ""
-			} ${className}`}
+			} transition-[transform,color,background-color,border-color,box-shadow] duration-fast ease-settle active:scale-95 ${className}`}
 		>
 			<Icon className={TRANSPORT_ICON_CLASS[size]} />
 			{badge}

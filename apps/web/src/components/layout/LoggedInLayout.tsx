@@ -372,7 +372,7 @@ function LoggedInLayoutInner() {
 					<div className="relative isolate flex flex-1 min-w-0 flex-col">
 						<MeadowBackdrop />
 						<main
-							className={`flex flex-1 min-h-0 flex-col overflow-y-auto [scrollbar-gutter:stable] ${currentTrack ? "pb-16" : ""}`}
+							className={`flex flex-1 min-h-0 flex-col overflow-y-auto [scrollbar-gutter:stable] transition-[padding-bottom] duration-base ease-settle ${currentTrack ? "pb-16" : ""}`}
 						>
 							<RouteSuspense>
 								<Outlet />
@@ -391,7 +391,7 @@ function LoggedInLayoutInner() {
 									// and leaves the height below it empty (Settings, in the extreme).
 									// With content taller than the viewport there is no free space and
 									// the margin is zero, leaving the footer directly under the content.
-									className={`mt-auto bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 ${currentTrack ? "mb-16" : ""}`}
+									className={`mt-auto bg-base-300/30 backdrop-blur-md text-base-content text-xs p-10 transition-[margin-bottom] duration-base ease-settle ${currentTrack ? "mb-16" : ""}`}
 								>
 									<div className="max-w-7xl mx-auto">
 										<div className="join join-horizontal w-full">

@@ -27,7 +27,7 @@ export default function LyricsPanel({
 	onClose: () => void;
 }) {
 	return (
-		<div className="absolute bottom-full right-2 z-30 mb-2 flex max-h-[55vh] w-80 flex-col rounded-box border border-base-300 bg-base-100 shadow-2xl">
+		<div className="flex max-h-[55vh] w-80 flex-col rounded-box border border-base-300 bg-base-100 shadow-2xl">
 			<div className="flex items-center justify-between border-b border-base-300 px-3 py-2">
 				<span className="min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-base-content/60">
 					{title}
