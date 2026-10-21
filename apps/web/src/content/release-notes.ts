@@ -84,6 +84,24 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.30",
+		date: "2026-10-21",
+		lede: "Guided view became a per-page choice for a comic's creator, the Creator Terms state the credits policy, and the feed's music and book lenses went live.",
+		entries: [
+			"Guided view is a per-page setting on a comic now, off by default: a page with it off shows no detected regions, asks for nothing, and reads whole to every reader. Turning it on shows that page's proposals and the controls that define them, and only an enabled page can require its panels. Releasing never waited on a confirmation and still does not, and a creator's preview now matches a reader's.",
+			"The Creator Terms state the credits policy now: every Work a creator releases carries credits, at least one has to name a human, Created and Generated are defined, and a false credit is the violation. The terms also say Anthers does not run AI detection.",
+			"The Music Player and Bookshelf lenses read the Network feed now. A track arriving there groups under the Project it was released on, and the lens opens that record whole with its own track count, while the rows a lens does not draw gray out rather than narrowing the feed it reads. The Channel Guide stays grayed on the feed, because its programs play inline and a feed entry has nothing to play.",
+			"The Channel Guide draws itself like a schedule now: fixed-height channel bugs at the top, program blocks aligned row for row, and a rank ruler down the left naming positions from the newest. The playing view carries that ruler into its rail, marking the row above the current one Up next, and the up-next control became a directional pill that names the next program or says that nothing sits above.",
+			"A Work's owner sees the page and section counts its readers see now: a comic a creator opened no longer says the book has no pages yet, and an ebook owner is sent to the reflow reader rather than the page one.",
+			"The sidebar's Library, Network, and Discovery rows keep one order now, and the drag-to-reorder control is gone. A session opens on a starting tab instead, an account setting that defaults to Network and is chosen from a Where You Start card in Settings; an account that had rearranged its tabs lands on the tab it had put first, and the desktop app opens its user side on that tab.",
+			"The player bar enters and leaves rather than appearing in one frame, and the page's bottom padding moves on the same duration, so pressing play no longer shifts the content under the pointer. A track change cross-fades the cover and lifts the title and creator a few pixels, the queue and lyrics panels enter and leave the same way, and a bar on its way out still shows what it was playing.",
+			"The share sheets, the post page's confirmations, the profile block confirmation, and the three Studio delete dialogs rise a few pixels, settle, and stay through their overlay's fade, keeping the name of what is going away on the box until it is gone.",
+			"Every transition and animation follows the system's reduced-motion setting now, landing on its final state including any added later, and a loading spinner keeps turning at a slower rate because a frozen one reads as broken.",
+			"A Bookshelf spine's tooltip stops inventing a page where a listing carries no page count.",
+			"A keycap carries its own ink now, so a chord inside a button stays legible; Ctrl+K on the active search toggle had been there and unreadable against the button's label color.",
+		],
+	},
+	{
 		version: "2026.10.29",
 		date: "2026-10-20",
 		lede: "The signed-in site reorganized around three tabs and one search box, and the Work page took one media shape whatever the Work holds.",
