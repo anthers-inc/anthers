@@ -708,6 +708,17 @@ export const workPages = pgTable(
 		file: text("file").notNull(),
 		width: integer("width"),
 		height: integer("height"),
+		/**
+		 * Whether this page is read panel by panel — **off until the creator turns it on**.
+		 *
+		 * Detection writes proposal rows onto every page, so the presence of `work_panels`
+		 * cannot be the signal: a proposal is a guess, not an opt-in. This flag is the
+		 * creator's deliberate choice for this page, and it is what decides whether the
+		 * reader may use geometry here at all. A page that is off needs no confirmation and
+		 * publishes as a whole page; turning it on is what makes defining its panels a
+		 * requirement.
+		 */
+		guidedView: boolean("guided_view").notNull().default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
@@ -726,6 +737,11 @@ export const workPages = pgTable(
  * silently move every region. Reading direction is LTR; no Work field for reading direction
  * exists today, and adding one is a future task's job rather than something this table
  * pretends to handle.
+ *
+ * ⭐ **A row here is a proposal, not a decision.** The decision belongs to
+ * `work_pages.guided_view`: a page reads whole until its creator turns guided view on, and
+ * only then do its rows mean anything to a reader. Detection proposing on every page is
+ * why that flag exists rather than treating "has rows" as the opt-in.
  */
 // node — a comic page's panels. Node media, cascades with the page and its Work.
 export const workPanels = pgTable(
