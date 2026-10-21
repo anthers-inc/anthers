@@ -65,6 +65,7 @@
 		"./ui/EmptyState": "./src/components/ui/EmptyState.tsx",
 		"./ui/Appear": "./src/components/ui/Appear.tsx",
 		"./ui/Collapse": "./src/components/ui/Collapse.tsx",
+		"./ui/Modal": "./src/components/ui/Modal.tsx",
 		"./ui/Skeleton": "./src/components/ui/Skeleton.tsx",
 		"./ui/InfoTip": "./src/components/ui/InfoTip.tsx",
 		"./editor/RichTextEditor": "./src/components/editor/RichTextEditor.tsx",

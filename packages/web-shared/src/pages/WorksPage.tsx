@@ -27,7 +27,7 @@
  * predecessor said "Content Library" until 2026-08-13.
  */
 import { PlusIcon, RectangleStackIcon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { WorkReleaseFields } from "../components/content/release-date";
 import WorkRow from "../components/content/WorkRow";
 import { processingState } from "../components/content/works";
@@ -39,6 +39,7 @@ import {
 } from "../components/content/works-list";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import Modal from "../components/ui/Modal";
 import { Link, useSearchParams } from "../lib/router";
 import { client } from "../lib/rpc";
 import { useSidebar } from "../lib/sidebar";
@@ -58,6 +59,10 @@ export default function WorksPage() {
 	const [loading, setLoading] = useState(true);
 
 	const [deleteTarget, setDeleteTarget] = useState<Work | null>(null);
+	// Held across the dialog's exit, so the box keeps naming the Work while it fades.
+	const lastDeleteTarget = useRef<Work | null>(null);
+	if (deleteTarget) lastDeleteTarget.current = deleteTarget;
+	const shownDeleteTarget = deleteTarget ?? lastDeleteTarget.current;
 	const [deleting, setDeleting] = useState(false);
 	/** Posts blocking an unflagged delete — non-null once the server has named them. */
 	const [inUse, setInUse] = useState<
@@ -416,16 +421,16 @@ export default function WorksPage() {
 				</div>
 			)}
 
-			{deleteTarget && (
-				<div className="modal modal-open" role="dialog">
+			<Modal open={deleteTarget !== null}>
+				{shownDeleteTarget && (
 					<div className="modal-box">
 						<h3 className="font-bold text-lg">
 							{sold !== null && sold > 0 ? "Withdraw this work?" : "Delete content?"}
 						</h3>
 						<p className="py-3 text-sm text-base-content/70">
 							{sold !== null && sold > 0
-								? `"${deleteTarget.title || "Untitled"}" will be taken out of public circulation.`
-								: `"${deleteTarget.title || "Untitled"}" and its media, builds, and transcodes will be permanently removed.`}
+								? `"${shownDeleteTarget.title || "Untitled"}" will be taken out of public circulation.`
+								: `"${shownDeleteTarget.title || "Untitled"}" and its media, builds, and transcodes will be permanently removed.`}
 						</p>
 						{sold !== null && sold > 0 && (
 							<div className="alert alert-warning text-sm mb-2">
@@ -489,20 +494,20 @@ export default function WorksPage() {
 							</button>
 						</div>
 					</div>
-					<button
-						type="button"
-						className="modal-backdrop"
-						onClick={() => {
-							setDeleteTarget(null);
-							setInUse(null);
-							setSold(null);
-						}}
-						aria-label="Close"
-					>
-						close
-					</button>
-				</div>
-			)}
+				)}
+				<button
+					type="button"
+					className="modal-backdrop"
+					onClick={() => {
+						setDeleteTarget(null);
+						setInUse(null);
+						setSold(null);
+					}}
+					aria-label="Close"
+				>
+					close
+				</button>
+			</Modal>
 		</div>
 	);
 }

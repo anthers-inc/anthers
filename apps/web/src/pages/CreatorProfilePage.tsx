@@ -31,6 +31,7 @@ import type {
 } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
+import Modal from "@anthers/web-shared/ui/Modal";
 import {
 	BoltIcon,
 	CalendarDaysIcon,
@@ -1183,43 +1184,41 @@ export default function CreatorProfilePage() {
 			    stops resolving afterwards — the undo lives in Settings, so the copy says
 			    where it is rather than leaving someone stuck. Deliberately says nothing
 			    about the other person being told, because they aren't. */}
-			{confirmingBlock && (
-				<div className="modal modal-open">
-					<div className="modal-box">
-						<h3 className="text-lg font-bold">Block @{creator.handle}?</h3>
-						<ul className="list-disc py-3 pl-5 text-sm text-base-content/70 space-y-1">
-							<li>Neither of you will see the other's profile, comments or reviews.</li>
-							<li>Any follows between you are removed, in both directions.</li>
-							<li>Their published work stays where it is — blocking isn't a content filter.</li>
-							<li>You can undo this from Settings.</li>
-						</ul>
-						<div className="modal-action">
-							<button
-								type="button"
-								className="btn btn-ghost"
-								onClick={() => setConfirmingBlock(false)}
-								disabled={blocking}
-							>
-								Cancel
-							</button>
-							<button
-								type="button"
-								className="btn btn-error"
-								onClick={handleBlock}
-								disabled={blocking}
-							>
-								{blocking ? "Blocking…" : "Block"}
-							</button>
-						</div>
+			<Modal open={confirmingBlock} label={`Block @${creator.handle}`}>
+				<div className="modal-box">
+					<h3 className="text-lg font-bold">Block @{creator.handle}?</h3>
+					<ul className="list-disc py-3 pl-5 text-sm text-base-content/70 space-y-1">
+						<li>Neither of you will see the other's profile, comments or reviews.</li>
+						<li>Any follows between you are removed, in both directions.</li>
+						<li>Their published work stays where it is — blocking isn't a content filter.</li>
+						<li>You can undo this from Settings.</li>
+					</ul>
+					<div className="modal-action">
+						<button
+							type="button"
+							className="btn btn-ghost"
+							onClick={() => setConfirmingBlock(false)}
+							disabled={blocking}
+						>
+							Cancel
+						</button>
+						<button
+							type="button"
+							className="btn btn-error"
+							onClick={handleBlock}
+							disabled={blocking}
+						>
+							{blocking ? "Blocking…" : "Block"}
+						</button>
 					</div>
-					<button
-						type="button"
-						className="modal-backdrop"
-						onClick={() => setConfirmingBlock(false)}
-						aria-label="Close"
-					/>
 				</div>
-			)}
+				<button
+					type="button"
+					className="modal-backdrop"
+					onClick={() => setConfirmingBlock(false)}
+					aria-label="Close"
+				/>
+			</Modal>
 
 			{reporting && (
 				<ReportDialog

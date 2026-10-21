@@ -32,6 +32,7 @@ import { client } from "@anthers/web-shared/rpc";
 import { studioUrl } from "@anthers/web-shared/studio";
 import type { Post, PostListItem } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
+import Modal from "@anthers/web-shared/ui/Modal";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
@@ -64,6 +65,10 @@ export default function PostPage() {
 	const [showUnpublish, setShowUnpublish] = useState(false);
 	/** The post a new pin would replace, when there is one — the confirmation's cue. */
 	const [pinTarget, setPinTarget] = useState<PostListItem | null>(null);
+	// Held across the dialog's exit, so the box keeps naming the post while it fades.
+	const lastPinTarget = useRef<PostListItem | null>(null);
+	if (pinTarget) lastPinTarget.current = pinTarget;
+	const shownPinTarget = pinTarget ?? lastPinTarget.current;
 	const [actioning, setActioning] = useState(false);
 
 	const payoutsReady = usePayoutsReady();
@@ -551,101 +556,97 @@ export default function PostPage() {
 			    exactly where it was, which is the point of moving these off the layout. */}
 
 			{/* Edit history — public, opened by the "Edited …" line above. */}
-			{showHistory && edits.length > 0 && (
-				<div className="modal modal-open" role="dialog" aria-label="Edit history">
-					<div className="modal-box">
-						<button
-							type="button"
-							className="btn btn-ghost btn-sm btn-circle absolute right-2 top-2"
-							aria-label="Close"
-							onClick={() => setShowHistory(false)}
-						>
-							<XMarkIcon className="h-4 w-4" />
-						</button>
-						<h3 className="text-lg font-semibold mb-3">Edit History</h3>
-						<ul className="flex flex-col gap-2 text-sm">
-							{edits.map((e) => (
-								<li
-									key={e.editedAt}
-									className="flex flex-wrap justify-between gap-x-4 text-base-content/70"
-								>
-									<span>
-										{new Date(e.editedAt).toLocaleString("en-US", {
-											month: "short",
-											day: "numeric",
-											year: "numeric",
-											hour: "numeric",
-											minute: "2-digit",
-										})}
-									</span>
-									{e.summary && <span className="text-base-content/50">Changed {e.summary}</span>}
-								</li>
-							))}
-						</ul>
-						<p className="mt-4 text-xs text-base-content/50">
-							The history names what changed. Showing the change itself needs the before and after
-							kept, which the edit log does not store yet.
-						</p>
-					</div>
+			<Modal open={showHistory && edits.length > 0} label="Edit history">
+				<div className="modal-box">
 					<button
 						type="button"
-						className="modal-backdrop"
-						onClick={() => setShowHistory(false)}
+						className="btn btn-ghost btn-sm btn-circle absolute right-2 top-2"
 						aria-label="Close"
-					/>
+						onClick={() => setShowHistory(false)}
+					>
+						<XMarkIcon className="h-4 w-4" />
+					</button>
+					<h3 className="text-lg font-semibold mb-3">Edit History</h3>
+					<ul className="flex flex-col gap-2 text-sm">
+						{edits.map((e) => (
+							<li
+								key={e.editedAt}
+								className="flex flex-wrap justify-between gap-x-4 text-base-content/70"
+							>
+								<span>
+									{new Date(e.editedAt).toLocaleString("en-US", {
+										month: "short",
+										day: "numeric",
+										year: "numeric",
+										hour: "numeric",
+										minute: "2-digit",
+									})}
+								</span>
+								{e.summary && <span className="text-base-content/50">Changed {e.summary}</span>}
+							</li>
+						))}
+					</ul>
+					<p className="mt-4 text-xs text-base-content/50">
+						The history names what changed. Showing the change itself needs the before and after
+						kept, which the edit log does not store yet.
+					</p>
 				</div>
-			)}
+				<button
+					type="button"
+					className="modal-backdrop"
+					onClick={() => setShowHistory(false)}
+					aria-label="Close"
+				/>
+			</Modal>
 
 			{/* Unpublish confirmation — the post goes back to being a draft. */}
-			{showUnpublish && (
-				<div className="modal modal-open" role="dialog" aria-label="Unpublish this post">
-					<div className="modal-box">
-						<h3 className="text-lg font-bold">Unpublish this post?</h3>
-						<p className="py-3 text-sm text-base-content/70">
-							It returns to being a draft: it leaves the feed, and its address stops resolving for
-							anyone but you. You can publish it again at any time.
-						</p>
-						<div className="modal-action">
-							<button
-								type="button"
-								className="btn btn-ghost"
-								onClick={() => setShowUnpublish(false)}
-								disabled={actioning}
-							>
-								Cancel
-							</button>
-							<button
-								type="button"
-								className="btn btn-primary"
-								onClick={() => void confirmUnpublish()}
-								disabled={actioning}
-							>
-								{actioning ? "Unpublishing..." : "Unpublish"}
-							</button>
-						</div>
+			<Modal open={showUnpublish} label="Unpublish this post">
+				<div className="modal-box">
+					<h3 className="text-lg font-bold">Unpublish this post?</h3>
+					<p className="py-3 text-sm text-base-content/70">
+						It returns to being a draft: it leaves the feed, and its address stops resolving for
+						anyone but you. You can publish it again at any time.
+					</p>
+					<div className="modal-action">
+						<button
+							type="button"
+							className="btn btn-ghost"
+							onClick={() => setShowUnpublish(false)}
+							disabled={actioning}
+						>
+							Cancel
+						</button>
+						<button
+							type="button"
+							className="btn btn-primary"
+							onClick={() => void confirmUnpublish()}
+							disabled={actioning}
+						>
+							{actioning ? "Unpublishing..." : "Unpublish"}
+						</button>
 					</div>
-					<button
-						type="button"
-						className="modal-backdrop"
-						onClick={() => setShowUnpublish(false)}
-						aria-label="Close"
-					/>
 				</div>
-			)}
+				<button
+					type="button"
+					className="modal-backdrop"
+					onClick={() => setShowUnpublish(false)}
+					aria-label="Close"
+				/>
+			</Modal>
 
 			{/* Pin replacement — only when another post holds the creator's one pin slot. */}
-			{pinTarget && (
-				<div className="modal modal-open" role="dialog" aria-label="Replace the pinned post">
+			<Modal open={pinTarget !== null} label="Replace the pinned post">
+				{shownPinTarget && (
 					<div className="modal-box">
 						<h3 className="text-lg font-bold">Replace your pinned post?</h3>
 						<p className="pt-3 text-sm text-base-content/70">
 							Pinning this post would replace the post you have pinned now:
 						</p>
 						<div className="my-3 rounded-lg border border-base-300 bg-base-200/50 p-4">
-							<p className="font-medium">{pinTarget.title || "Untitled"}</p>
-							{pinTarget.excerpt && (
+							<p className="font-medium">{shownPinTarget.title || "Untitled"}</p>
+							{shownPinTarget.excerpt && (
 								<p className="mt-1 line-clamp-3 text-sm text-base-content/70">
-									{pinTarget.excerpt}
+									{shownPinTarget.excerpt}
 								</p>
 							)}
 						</div>
@@ -669,14 +670,14 @@ export default function PostPage() {
 							</button>
 						</div>
 					</div>
-					<button
-						type="button"
-						className="modal-backdrop"
-						onClick={() => setPinTarget(null)}
-						aria-label="Close"
-					/>
-				</div>
-			)}
+				)}
+				<button
+					type="button"
+					className="modal-backdrop"
+					onClick={() => setPinTarget(null)}
+					aria-label="Close"
+				/>
+			</Modal>
 
 			<CommentThread subject={{ kind: "post", slug: post.slug }} />
 		</div>

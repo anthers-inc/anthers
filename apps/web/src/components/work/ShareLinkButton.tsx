@@ -23,6 +23,7 @@ import {
 	SHARED_PUBLIC_ACCESS_SECONDS,
 } from "@anthers/shared/public-access";
 import { client } from "@anthers/web-shared/rpc";
+import Modal from "@anthers/web-shared/ui/Modal";
 import { CheckIcon, ShareIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useState } from "react";
 
@@ -123,80 +124,78 @@ export default function ShareLinkButton({ workId, slug }: { workId: number; slug
 				Share
 			</button>
 
-			{open && (
-				<div className="modal modal-open" role="dialog" aria-label="Share this Work">
-					<div className="modal-box max-w-md">
-						<button
-							type="button"
-							className="btn btn-ghost btn-sm btn-circle absolute right-2 top-2"
-							aria-label="Close"
-							onClick={() => setOpen(false)}
-						>
-							<XMarkIcon className="h-4 w-4" />
-						</button>
-						<h3 className="text-lg font-semibold mb-3">Share</h3>
+			<Modal open={open} label="Share this Work">
+				<div className="modal-box max-w-md">
+					<button
+						type="button"
+						className="btn btn-ghost btn-sm btn-circle absolute right-2 top-2"
+						aria-label="Close"
+						onClick={() => setOpen(false)}
+					>
+						<XMarkIcon className="h-4 w-4" />
+					</button>
+					<h3 className="text-lg font-semibold mb-3">Share</h3>
 
-						{/* One input, one copy. It opens on the page's own address and
+					{/* One input, one copy. It opens on the page's own address and
 						    upgrades to the watching link when the server mints one — the
 						    clipboard write can be refused (permissions, an insecure origin, a
 						    browser that wants a fresher gesture), and the thing to copy is
 						    selectable either way, so a failed write is never reported as one. */}
-						<div className="flex items-center gap-2">
-							<input
-								type="text"
-								readOnly
-								value={shown}
-								aria-label={shownLabel}
-								className="input input-sm input-bordered flex-1 font-mono text-xs"
-								onFocus={(e) => e.currentTarget.select()}
-							/>
-							<button type="button" className="btn btn-sm gap-1" onClick={copy}>
-								{copied ? <CheckIcon className="h-4 w-4" /> : null}
-								{copied ? "Copied" : "Copy"}
-							</button>
-						</div>
-
-						{allowance && (
-							<div className="mt-3 space-y-2">
-								<div className="flex gap-1" role="tablist" aria-label="Share as">
-									{(["link", "embed"] as const).map((s) => (
-										<button
-											key={s}
-											type="button"
-											role="tab"
-											aria-selected={shape === s}
-											className={`btn btn-xs ${shape === s ? "btn-primary" : "btn-ghost"}`}
-											onClick={() => {
-												setShape(s);
-												setCopied(false);
-											}}
-										>
-											{s === "link" ? "Watching link" : "Embed"}
-										</button>
-									))}
-								</div>
-								<p className="text-xs text-base-content/60">
-									{shape === "embed"
-										? "Paste this into any page to play the work there. Anyone watching counts as your share — from the same separate "
-										: "Anyone with this link can watch without an account. Their time counts as yours and is paid to the creator — from a separate "}
-									{sharedBudgetLabel()} a month, so it never touches your {FREE_PUBLIC_ACCESS_HOURS}{" "}
-									free hours.
-								</p>
-							</div>
-						)}
-
-						{asked && !allowance && !error && (
-							<p className="mt-3 text-xs text-base-content/60">
-								Only work that is free to everyone can be shared as a watching link — a gate, a
-								price or an Adult rating all need the person opening it to have their own account.
-								The page link above is still yours to send: it&apos;s a good way to point somebody
-								at something they might buy, or to pass it to someone who already has access.
-							</p>
-						)}
-						{error && <p className="mt-3 text-sm text-error">{error}</p>}
+					<div className="flex items-center gap-2">
+						<input
+							type="text"
+							readOnly
+							value={shown}
+							aria-label={shownLabel}
+							className="input input-sm input-bordered flex-1 font-mono text-xs"
+							onFocus={(e) => e.currentTarget.select()}
+						/>
+						<button type="button" className="btn btn-sm gap-1" onClick={copy}>
+							{copied ? <CheckIcon className="h-4 w-4" /> : null}
+							{copied ? "Copied" : "Copy"}
+						</button>
 					</div>
+
+					{allowance && (
+						<div className="mt-3 space-y-2">
+							<div className="flex gap-1" role="tablist" aria-label="Share as">
+								{(["link", "embed"] as const).map((s) => (
+									<button
+										key={s}
+										type="button"
+										role="tab"
+										aria-selected={shape === s}
+										className={`btn btn-xs ${shape === s ? "btn-primary" : "btn-ghost"}`}
+										onClick={() => {
+											setShape(s);
+											setCopied(false);
+										}}
+									>
+										{s === "link" ? "Watching link" : "Embed"}
+									</button>
+								))}
+							</div>
+							<p className="text-xs text-base-content/60">
+								{shape === "embed"
+									? "Paste this into any page to play the work there. Anyone watching counts as your share — from the same separate "
+									: "Anyone with this link can watch without an account. Their time counts as yours and is paid to the creator — from a separate "}
+								{sharedBudgetLabel()} a month, so it never touches your {FREE_PUBLIC_ACCESS_HOURS}{" "}
+								free hours.
+							</p>
+						</div>
+					)}
+
+					{asked && !allowance && !error && (
+						<p className="mt-3 text-xs text-base-content/60">
+							Only work that is free to everyone can be shared as a watching link — a gate, a price
+							or an Adult rating all need the person opening it to have their own account. The page
+							link above is still yours to send: it&apos;s a good way to point somebody at something
+							they might buy, or to pass it to someone who already has access.
+						</p>
+					)}
+					{error && <p className="mt-3 text-sm text-error">{error}</p>}
 				</div>
-			)}
+			</Modal>
 		</>
 	);
 }
