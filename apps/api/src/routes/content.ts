@@ -236,6 +236,7 @@ import {
 	postContentExcerpt,
 	postHtmlToMarkdown,
 } from "../services/post-markdown.js";
+import { releaseCounts, releasesByWorkId } from "../services/project-releases.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { publishRefusal } from "../services/publish-refusal.js";
 import { findPosition, listPositions, upsertPosition } from "../services/reading-positions.js";
@@ -8240,121 +8241,23 @@ const contentRoutes = new Hono()
 		 * saved one from a Project should find that Project in their collection rather than
 		 * a loose row with no way into the rest of it.
 		 *
-		 * Deliberately metadata only: the Project's cover, artist and member count are
-		 * enough to draw the release card. The track list itself is fetched when the
-		 * release is opened, because a shelf request must not ship every member of every
-		 * Project one saved track touches.
-		 *
-		 * Only published Projects are listed. A draft Project is its creator's own business,
-		 * so a saved released Work inside one does not advertise the draft to a stranger;
-		 * suspended and automated-test creators' rows drop for the same reason the Project
-		 * listing drops them.
+		 * The query lives in `services/project-releases.ts`, shared with the Network feed's
+		 * release entries. It is deliberately metadata only — cover, artist, title and the
+		 * released-member counts — because the track list itself is fetched when somebody
+		 * opens or plays the release.
 		 */
-		const membershipRows = workIds.length
-			? await db
-					.select({
-						workId: projectItems.workId,
-						projectId: projects.id,
-						slug: projects.slug,
-						title: projects.title,
-						coverImage: projects.coverImage,
-						creatorId: projects.creatorId,
-						creatorHandle: users.atprotoHandle,
-						creatorDisplayName: users.displayName,
-					})
-					.from(projectItems)
-					.innerJoin(projects, eq(projects.id, projectItems.projectId))
-					.leftJoin(users, eq(projects.creatorId, users.id))
-					.where(
-						and(
-							inArray(projectItems.workId, workIds),
-							eq(projects.isPublished, true),
-							notSuspendedAccount(projects.creatorId),
-							notTestAccount(projects.creatorId),
-						),
-					)
-					.orderBy(asc(projectItems.projectId), asc(projectItems.sortOrder))
-			: [];
-
-		/*
-		 * How many released Works a Project holds, how many are music, and how many are
-		 * spoken word.
-		 *
-		 * Enough for a shelf to render a release — cover, artist, track count — without
-		 * fetching each Project's detail, which is an N+1 on a page that exists to show a
-		 * collection. Deliberately a count rather than the members: the tracks themselves
-		 * are fetched when somebody actually opens or plays the release, and shipping every
-		 * member of every Project on a shelf request would be the opposite trade.
-		 *
-		 * `musicCount === workCount` is what makes a Project a record rather than a folder —
-		 * the same rule `isAlbum` applies on a Project page. A Project of podcast episodes is
-		 * a series, not an album, so `audio` does not count as music. The music lens itself
-		 * groups a Work under any Project that holds music; this count is what its release
-		 * card advertises, and it stays honest about a Project that also holds other kinds.
-		 */
-		const countedProjectIds = [
-			...new Set([...projectIds, ...membershipRows.map((m) => m.projectId)]),
-		];
-		const memberCounts = countedProjectIds.length
-			? await db
-					.select({
-						projectId: projectItems.projectId,
-						workCount: sql<number>`count(*)::int`,
-						musicCount: sql<number>`count(*) filter (where ${works.type} = 'music')::int`,
-						audioCount: sql<number>`count(*) filter (where ${works.type} = 'audio')::int`,
-					})
-					.from(projectItems)
-					.innerJoin(works, eq(projectItems.workId, works.id))
-					.where(
-						and(
-							inArray(projectItems.projectId, countedProjectIds),
-							eq(works.visibility, "released"),
-							// Counted the way the Project page lists them, so a release never
-							// claims a track the user will not find inside it.
-							adultHidden,
-							parentalHidden,
-						),
-					)
-					.groupBy(projectItems.projectId)
-			: [];
-		const countsByProject = new Map(memberCounts.map((m) => [m.projectId, m]));
-
-		/** Each saved Work's release cards, keyed by Work id — the music lens's grouping. */
-		const releasesByWork = new Map<
-			number,
-			Array<{
-				id: number;
-				slug: string;
-				title: string;
-				coverImage: string | null;
-				creatorId: number | null;
-				creatorHandle: string | null;
-				creatorDisplayName: string | null;
-				musicCount: number;
-				audioCount: number;
-			}>
-		>();
-		for (const row of membershipRows) {
-			const musicCount = countsByProject.get(row.projectId)?.musicCount ?? 0;
-			const audioCount = countsByProject.get(row.projectId)?.audioCount ?? 0;
-			// A Project with no music is not a release in this lens. A saved podcast series
-			// stays a series; its episodes are one-track releases like any other saved audio.
-			if (musicCount === 0) continue;
-			const release = {
-				id: row.projectId,
-				slug: row.slug,
-				title: row.title,
-				coverImage: row.coverImage,
-				creatorId: row.creatorId,
-				creatorHandle: row.creatorHandle,
-				creatorDisplayName: row.creatorDisplayName,
-				musicCount,
-				audioCount,
-			};
-			const list = releasesByWork.get(row.workId) ?? [];
-			list.push(release);
-			releasesByWork.set(row.workId, list);
-		}
+		const { byWork: releasesByWork, counts: membershipCounts } = await releasesByWorkId(workIds, {
+			adultHidden,
+			parentalHidden,
+		});
+		// A saved Project's own card advertises its released members, whether or not one of
+		// them is also on the shelf. `musicCount` is what makes a Project a record rather
+		// than a folder — the same rule `isAlbum` applies on a Project page — and `audio`
+		// does not count as music, so a series of podcast episodes draws no release card.
+		const countsByProject = new Map([
+			...membershipCounts,
+			...(await releaseCounts(projectIds, { adultHidden, parentalHidden })),
+		]);
 
 		const { assetsByWork, jobByWork, pagesByWork, sectionsByWork, buildsByWork } =
 			await loadWorkBundles(workIds);
