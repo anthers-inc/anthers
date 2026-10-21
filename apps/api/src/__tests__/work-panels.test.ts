@@ -177,6 +177,32 @@ describe("/works/:id/panels", () => {
 		}
 	});
 
+	it("gives the owner's own Work page the counts its reader branches on", async () => {
+		// The owner's short-circuit serializes a different shape from the user path, and it
+		// is the shape a creator's own Work page renders. Without these counts the comic
+		// reader reads `pageCount` as 0 and says the book has no pages, while every other
+		// reader sees it.
+		const ownerRes = await call("GET", `/api/content/works/${workId}`, undefined, cookie);
+		expect(ownerRes.status).toBe(200);
+		const { work: ownerWork } = (await ownerRes.json()) as {
+			work: { pageCount?: number; sectionCount?: number };
+		};
+		expect(ownerWork.pageCount).toBe(2);
+		expect(ownerWork.sectionCount).toBe(0);
+
+		const user = await createAccount(`panels_owner_${RUN}`);
+		try {
+			const readerRes = await call("GET", `/api/content/works/${workId}`, undefined, user.cookie);
+			expect(readerRes.status).toBe(200);
+			const { work: readerWork } = (await readerRes.json()) as {
+				work: { pageCount?: number };
+			};
+			expect(readerWork.pageCount).toBe(2);
+		} finally {
+			await db.delete(users).where(eq(users.id, user.userId as number));
+		}
+	});
+
 	it("PATCH replaces a page's panels and clears auto", async () => {
 		const body = {
 			pageNumber: 1,

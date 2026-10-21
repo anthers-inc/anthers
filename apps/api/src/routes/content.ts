@@ -5306,6 +5306,21 @@ const contentRoutes = new Hono()
 			// always see their own media; `deliveryCtx()` with no share token is the
 			// owner's own session, exactly what this branch serves.
 			const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx());
+			// 🚨 **The owner's shape needs the counts the reader branches on.** This branch
+			// does not go through `loadWorkBundles` or `serializeWorkForUser`, and
+			// `serializeWork` has never carried `pageCount`/`sectionCount` — so without
+			// these two queries a creator opening their own comic got `pageCount` undefined,
+			// read as 0, and rendered "This book has no pages yet" while every other reader
+			// saw the book. An ebook's section count is the same defect in the other
+			// direction: 0 sends the owner to the page reader instead of the reflow one.
+			const [pageRow] = await db
+				.select({ count: sql<number>`count(*)::int` })
+				.from(workPages)
+				.where(eq(workPages.workId, work.id));
+			const [sectionRow] = await db
+				.select({ count: sql<number>`count(*)::int` })
+				.from(workSections)
+				.where(eq(workSections.workId, work.id));
 			return c.json({
 				work: {
 					...(await serializeWork(
@@ -5319,6 +5334,10 @@ const contentRoutes = new Hono()
 						previewRows,
 						previewCaptionRows,
 					)),
+					// The Work page renders this for its owner, so it carries the same shape
+					// signals the user path attaches below.
+					pageCount: pageRow?.count ?? 0,
+					sectionCount: sectionRow?.count ?? 0,
 					shownOn,
 				},
 			});
