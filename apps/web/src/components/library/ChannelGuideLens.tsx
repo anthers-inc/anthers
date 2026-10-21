@@ -22,7 +22,10 @@
  * same fixed-height block, and a rank ruler down the left edge names the row positions
  * — *Latest*, *1 back*, *2 back* — so the level rows read as ranks rather than as a
  * shared clock. That is the metaphor made visible: a real schedule prints times in that
- * gutter, and this one prints the only ordinals the model actually has.
+ * gutter, and this one prints the only ordinals the model actually has. *Newer* caps the
+ * ruler at the top, and the tuned rail keeps the same axis with a node per program: the
+ * row above the current one is marked *Up next* and the current one *On now*, so the
+ * upward next-up step is something a reader sees before they read the arrow.
  *
  * 🚨 **A lens is a view, never a container**, and nothing here mutates the shelf: no
  * fetch of its own, selection is view state, and closing the player leaves the guide
@@ -280,7 +283,7 @@ export default function ChannelGuideLens({
 					<div className="mt-3 flex items-center gap-2 border-t border-base-300 pt-3">
 						<button
 							type="button"
-							className="btn btn-sm max-w-full justify-start border-base-300 bg-base-100"
+							className="group flex min-w-0 max-w-full items-center gap-2.5 rounded-full border border-base-300 bg-base-100 py-1.5 pl-1.5 pr-4 text-left transition enabled:hover:border-primary/40 enabled:hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
 							disabled={nextUp == null}
 							onClick={() => {
 								if (nextWork) {
@@ -295,9 +298,16 @@ export default function ChannelGuideLens({
 									: "Nothing further up this channel"
 							}
 						>
-							<ArrowUpIcon className="size-4 shrink-0" />
-							<span className="truncate">
-								Up next{nextWork ? `: ${nextWork.title || "Untitled"}` : ""}
+							<span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+								<ArrowUpIcon className="size-4" />
+							</span>
+							<span className="min-w-0">
+								<span className="block text-[10px] font-semibold uppercase tracking-wider text-base-content/45">
+									Up next
+								</span>
+								<span className="block truncate text-sm font-semibold text-base-content">
+									{nextWork ? nextWork.title || "Untitled" : "Nothing above — this is the newest"}
+								</span>
 							</span>
 						</button>
 						<button
@@ -355,27 +365,60 @@ export default function ChannelGuideLens({
 							<XMarkIcon className="size-4" />
 						</button>
 					</header>
-					<ul className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
-						{channel.programs.map((p, idx) => (
-							<li
-								key={p.id}
-								ref={idx === index ? railSelectedRef : undefined}
-								className={
-									idx === index ? "rounded-lg bg-primary/10 ring-1 ring-primary/40" : "rounded-lg"
-								}
-							>
-								<ProgramBlock
-									work={p}
-									ordinal={idx}
-									current={idx === index}
-									variant="rail"
-									onSelect={(id) => {
-										setPlayIntent(true);
-										select(id);
-									}}
-								/>
-							</li>
-						))}
+					<ul className="relative flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
+						{/* The same ruler the guide drew down its left edge, carried into the rail:
+						    an axis with its arrowhead at the top, so the newest program is above
+						    and the next one to play is the node above the current one. */}
+						<span
+							aria-hidden="true"
+							className="pointer-events-none absolute bottom-2 left-3.5 top-2 w-px bg-base-300"
+						/>
+						{channel.programs.map((p, idx) => {
+							const isCurrent = idx === index;
+							const isNext = idx === index - 1;
+							return (
+								<li
+									key={p.id}
+									ref={isCurrent ? railSelectedRef : undefined}
+									className={
+										isCurrent
+											? "relative flex gap-2 rounded-lg bg-primary/10 ring-1 ring-primary/40"
+											: "relative flex gap-2 rounded-lg"
+									}
+								>
+									<span
+										aria-hidden="true"
+										className="relative flex w-3 shrink-0 items-center justify-center"
+									>
+										{idx === 0 && (
+											<ArrowUpIcon className="absolute top-0 left-1/2 size-2.5 -translate-x-1/2 text-base-content/40" />
+										)}
+										<span
+											className={
+												isCurrent
+													? "size-2 rounded-full bg-primary ring-2 ring-primary/25"
+													: isNext
+														? "size-2 rounded-full border-2 border-primary bg-base-100"
+														: "size-1.5 rounded-full bg-base-300"
+											}
+										/>
+									</span>
+									<div className="min-w-0 flex-1">
+										<ProgramBlock
+											work={p}
+											ordinal={idx}
+											current={isCurrent}
+											next={isNext}
+											variant="rail"
+											onSelect={(id) => {
+												setPlayIntent(true);
+												select(id);
+											}}
+										/>
+									</div>
+								</li>
+							);
+						})}
 					</ul>
 				</aside>
 			</div>
@@ -389,7 +432,7 @@ export default function ChannelGuideLens({
 					Channel Guide
 				</h2>
 				<p className="text-[11px] text-base-content/45">
-					{channels.length} {channels.length === 1 ? "channel" : "channels"} · newest first
+					{channels.length} {channels.length === 1 ? "channel" : "channels"} · newest at the top
 				</p>
 			</div>
 			<div className="overflow-x-auto scroll-pl-16 pb-3">
@@ -401,7 +444,12 @@ export default function ChannelGuideLens({
 						aria-hidden="true"
 						className="sticky left-0 z-10 flex shrink-0 flex-col gap-1.5 border-r border-base-300 bg-base-100"
 					>
-						<div className="h-12" />
+						<div className="flex h-12 items-end justify-end pb-2 pr-2">
+							<span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-base-content/55">
+								Newer
+								<ArrowUpIcon className="size-3 text-primary" />
+							</span>
+						</div>
 						{Array.from({ length: rowCount }, (_, rank) => (
 							// biome-ignore lint/suspicious/noArrayIndexKey: the ruler's rows are positional and never reorder, so the rank IS the identity.
 							<div key={rank} className="flex h-[76px] items-center justify-end">
@@ -507,6 +555,7 @@ function ProgramBlock({
 	work,
 	ordinal: _ordinal,
 	current,
+	next,
 	variant,
 	onSelect,
 }: {
@@ -514,6 +563,8 @@ function ProgramBlock({
 	/** The block's position in its column, latest-first — for a future "latest plus one" label. */
 	ordinal: number;
 	current: boolean;
+	/** The rail's row immediately above the current one — the program that plays next. */
+	next?: boolean;
 	variant: "column" | "rail";
 	onSelect: (id: number) => void;
 }) {
@@ -558,16 +609,25 @@ function ProgramBlock({
 				)}
 			</span>
 			<span className="flex min-w-0 flex-1 flex-col justify-center">
-				<span className="flex items-start gap-1.5">
-					<span className={`line-clamp-2 text-xs leading-snug ${current ? "font-bold" : ""}`}>
-						{work.title || "Untitled"}
-					</span>
-					{current && <PlayingBars className="mt-0.5 shrink-0 text-primary" />}
+				<span className={`line-clamp-2 text-xs leading-snug ${current ? "font-bold" : ""}`}>
+					{work.title || "Untitled"}
 				</span>
 				<span className="mt-1 flex items-center gap-1.5 text-[10px] text-base-content/50">
 					<span className="truncate tabular-nums">
 						{compactDate(work.releasedAt ?? work.createdAt)}
 					</span>
+					{current && (
+						<span className="inline-flex shrink-0 items-center gap-1 font-semibold uppercase tracking-wide text-primary">
+							<PlayingBars />
+							On now
+						</span>
+					)}
+					{next && (
+						<span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-px font-semibold uppercase tracking-wide text-primary">
+							<ArrowUpIcon className="size-2.5" />
+							Up next
+						</span>
+					)}
 					{locked && (
 						<span className="shrink-0 rounded bg-base-200 px-1 text-[9px] font-semibold uppercase tracking-wide text-base-content/55">
 							Gated
