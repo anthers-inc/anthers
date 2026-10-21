@@ -1446,7 +1446,7 @@ export default function OwnerWorkEditor({
 						<section className="flex flex-col gap-2">
 							<h3 className={WORK_DETAILS_HEADING_CLASS}>Pages</h3>
 							<div className="rounded-box border border-base-300 bg-base-200/40 p-5">
-								<PanelEditor workId={current.id} pageCount={current.pageCount ?? 0} />
+								<PanelEditor workId={current.id} />
 							</div>
 						</section>
 					)}
