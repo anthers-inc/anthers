@@ -3,10 +3,10 @@
  * The comic/ebook reader — page turns by default, with an opt-in panel mode for comics.
  *
  * ⭐ **Guided view is an addition, page by page.** The reader fetches `/works/:id/panels`
- * once, which for a reader carries only the panels a creator confirmed. No confirmed panel
- * anywhere means no panel mode offered at all: the comic is plain pages, which is a
- * complete way to publish it. A page with nothing confirmed walks as one whole page, so
- * guidance can arrive one page at a time without leaving a gap in panel mode.
+ * once, which for a reader carries geometry only on pages the creator turned guided view
+ * on for and confirmed. No such page anywhere means no panel mode offered at all: the comic
+ * is plain pages, which is a complete way to publish it. Any other page walks as one whole
+ * page, so guidance can arrive one page at a time without leaving a gap in panel mode.
  *
  * Panel mode crops each panel from the page image so it fills the reader's media area, and a full-page
  * zoom view is available with `z` without leaving panel mode. Touch swipes advance panels
@@ -28,6 +28,7 @@ import {
 	hasGuidedView,
 	type PanelPage,
 	type PanelPosition,
+	readerPages,
 	usePanelNavigation,
 } from "@/lib/panel-navigation";
 import {
@@ -170,10 +171,13 @@ export default function ComicReader({
 	}, []);
 
 	const [initialPanel] = useState(() => readStoredPanel(workId) ?? { page: 1, panel: 1 });
-	// A page with no confirmed panels is a whole page, so guided view still turns through
-	// it; and a Work with nothing confirmed anywhere offers no guided view at all.
-	const walkable = useMemo(() => guidedPages(panelPages ?? []), [panelPages]);
-	const guidedAvailable = panelPages != null && hasGuidedView(panelPages);
+	// A page with no confirmed panels on an enabled page is a whole page, so guided view
+	// still turns through it; and a Work with nothing confirmed anywhere offers no guided
+	// view at all. `readerPages` drops proposals and pages that are off, which makes the
+	// creator's own preview match what a reader gets.
+	const asReader = useMemo(() => readerPages(panelPages ?? []), [panelPages]);
+	const walkable = useMemo(() => guidedPages(asReader), [asReader]);
+	const guidedAvailable = panelPages != null && hasGuidedView(asReader);
 	const panelNav = usePanelNavigation(
 		walkable,
 		useCallback(

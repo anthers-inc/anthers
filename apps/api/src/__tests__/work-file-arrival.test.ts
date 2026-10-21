@@ -206,12 +206,12 @@ describe("the kinds with no file to wait for", () => {
 
 /**
  * Panel guidance is additive, never a precondition: a comic's pages are a complete Work
- * the moment they render. Detection can fail on every page without failing the render
- * (`render-paged` catches it per page), and a creator who has not opened the panel editor
- * has confirmed nothing, so this is an ordinary state rather than a broken one.
+ * the moment they render. Detection proposes regions on every page, and none of that is a
+ * confirmation the creator owes — so a processed comic whose pages carry only proposals,
+ * with guided view off, releases like any other Work.
  */
 describe("a comic's pages do not wait on panel work", () => {
-	it("releases a processed comic with no panels at all", async () => {
+	it("releases a processed comic whose pages carry only unconfirmed proposals", async () => {
 		const workId = await createWithoutFile("comic");
 		sent = [];
 		expect(
@@ -222,24 +222,43 @@ describe("a comic's pages do not wait on panel work", () => {
 			.update(transcodingJobs)
 			.set({ status: "completed", progress: 100 })
 			.where(eq(transcodingJobs.workId, workId));
-		await db.insert(workPages).values({
-			workId,
-			pageNumber: 1,
-			file: KEY("no-panels-page-0001.jpg"),
-			width: 100,
-			height: 150,
-		});
+		const [page] = await db
+			.insert(workPages)
+			.values({
+				workId,
+				pageNumber: 1,
+				file: KEY("no-panels-page-0001.jpg"),
+				width: 100,
+				height: 150,
+			})
+			.returning({ id: workPages.id, guidedView: workPages.guidedView });
+		// Exactly what `render-paged` writes: proposals marked `auto`, with the page's
+		// opt-in left off.
+		expect(page?.guidedView).toBe(false);
+		await db.insert(workPanels).values([
+			{
+				pageId: page?.id as number,
+				panelNumber: 1,
+				x: 0,
+				y: 0,
+				width: 1,
+				height: 0.5,
+				auto: true,
+			},
+			{
+				pageId: page?.id as number,
+				panelNumber: 2,
+				x: 0,
+				y: 0.5,
+				width: 1,
+				height: 0.5,
+				auto: true,
+			},
+		]);
 
 		const res = await release(workId);
 		expect(res.status).toBe(200);
 		expect((await res.json()).work.visibility).toBe("released");
-
-		const panels = await db
-			.select({ id: workPanels.id })
-			.from(workPanels)
-			.innerJoin(workPages, eq(workPanels.pageId, workPages.id))
-			.where(eq(workPages.workId, workId));
-		expect(panels).toEqual([]);
 	});
 });
 

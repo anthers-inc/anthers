@@ -3,9 +3,9 @@
  * Tests for the `/works/:id/panels` GET/PATCH routes.
  *
  * GET returns panel geometry for the whole Work, grouped by page: the owner sees the
- * detector's proposals, and everybody else sees only the pages the creator confirmed.
- * PATCH replaces one page's panels atomically, clears `auto`, and validates normalized
- * bounds.
+ * detector's proposals, and everybody else sees geometry only on pages whose creator turned
+ * guided view on *and* confirmed. PATCH turns guided view on or off for a page and replaces
+ * one page's panels atomically, clearing `auto`, with normalized bounds validated.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
@@ -155,6 +155,7 @@ describe("/works/:id/panels", () => {
 				pageNumber: number;
 				width: number;
 				height: number;
+				guidedView: boolean;
 				panels: Array<{
 					panelNumber: number;
 					x: number;
@@ -169,8 +170,36 @@ describe("/works/:id/panels", () => {
 		for (const page of pages) {
 			expect(page.width).toBeGreaterThan(0);
 			expect(page.height).toBeGreaterThan(0);
+			// Detection proposes on every page, and none of it is an opt-in yet.
+			expect(page.guidedView).toBe(false);
 			expect(page.panels.length).toBe(2);
 			expect(page.panels[0].auto).toBe(true);
+		}
+	});
+
+	it("gives the owner's own Work page the counts its reader branches on", async () => {
+		// The owner's short-circuit serializes a different shape from the user path, and it
+		// is the shape a creator's own Work page renders. Without these counts the comic
+		// reader reads `pageCount` as 0 and says the book has no pages, while every other
+		// reader sees it.
+		const ownerRes = await call("GET", `/api/content/works/${workId}`, undefined, cookie);
+		expect(ownerRes.status).toBe(200);
+		const { work: ownerWork } = (await ownerRes.json()) as {
+			work: { pageCount?: number; sectionCount?: number };
+		};
+		expect(ownerWork.pageCount).toBe(2);
+		expect(ownerWork.sectionCount).toBe(0);
+
+		const user = await createAccount(`panels_owner_${RUN}`);
+		try {
+			const readerRes = await call("GET", `/api/content/works/${workId}`, undefined, user.cookie);
+			expect(readerRes.status).toBe(200);
+			const { work: readerWork } = (await readerRes.json()) as {
+				work: { pageCount?: number };
+			};
+			expect(readerWork.pageCount).toBe(2);
+		} finally {
+			await db.delete(users).where(eq(users.id, user.userId as number));
 		}
 	});
 
@@ -196,20 +225,78 @@ describe("/works/:id/panels", () => {
 		expect(pageOne[0].work_panels.auto).toBe(false);
 	});
 
-	it("gives a reader only the confirmed pages, and a whole page where none are confirmed", async () => {
-		// Page 1 was confirmed by the PATCH above; page 2 is still only a proposal, so a
-		// reader gets no geometry for it and the page reads whole.
+	it("gives a reader no geometry while every page is off, however many proposals exist", async () => {
+		// Page 1 was confirmed by the PATCH above, but nobody turned guided view on, so a
+		// reader gets nothing and the whole Work reads as pages. This is the state a comic
+		// publishes in.
 		const user = await createAccount(`panels_reader_${RUN}`);
-		const res = await call("GET", `/api/content/works/${workId}/panels`, undefined, user.cookie);
-		expect(res.status).toBe(200);
-		const { pages } = (await res.json()) as {
-			pages: Array<{ pageNumber: number; panels: Array<{ auto: boolean }> }>;
-		};
-		expect(pages.length).toBe(2);
-		expect(pages[0]?.panels.length).toBe(2);
-		expect(pages[0]?.panels.every((p) => p.auto === false)).toBe(true);
-		expect(pages[1]?.panels).toEqual([]);
-		await db.delete(users).where(eq(users.id, user.userId as number));
+		try {
+			const res = await call("GET", `/api/content/works/${workId}/panels`, undefined, user.cookie);
+			expect(res.status).toBe(200);
+			const { pages } = (await res.json()) as {
+				pages: Array<{ pageNumber: number; guidedView: boolean; panels: Array<{ auto: boolean }> }>;
+			};
+			expect(pages.length).toBe(2);
+			expect(pages.every((p) => p.guidedView === false)).toBe(true);
+			expect(pages.flatMap((p) => p.panels)).toEqual([]);
+		} finally {
+			await db.delete(users).where(eq(users.id, user.userId as number));
+		}
+	});
+
+	it("turns a page's guided view on, and gives a reader that page's confirmed panels", async () => {
+		const enabled = await call(
+			"PATCH",
+			`/api/content/works/${workId}/panels`,
+			{ pageNumber: 1, enabled: true },
+			cookie,
+		);
+		expect(enabled.status).toBe(200);
+
+		const user = await createAccount(`panels_reader_on_${RUN}`);
+		try {
+			const res = await call("GET", `/api/content/works/${workId}/panels`, undefined, user.cookie);
+			expect(res.status).toBe(200);
+			const { pages } = (await res.json()) as {
+				pages: Array<{ guidedView: boolean; panels: Array<{ auto: boolean }> }>;
+			};
+			expect(pages[0]?.guidedView).toBe(true);
+			expect(pages[0]?.panels.length).toBe(2);
+			expect(pages[0]?.panels.every((p) => p.auto === false)).toBe(true);
+			// Page 2 was never turned on, so its proposals stay invisible.
+			expect(pages[1]?.guidedView).toBe(false);
+			expect(pages[1]?.panels).toEqual([]);
+		} finally {
+			await db.delete(users).where(eq(users.id, user.userId as number));
+		}
+	});
+
+	it("turning guided view off hides that page's geometry again", async () => {
+		const disabled = await call(
+			"PATCH",
+			`/api/content/works/${workId}/panels`,
+			{ pageNumber: 1, enabled: false },
+			cookie,
+		);
+		expect(disabled.status).toBe(200);
+		const user = await createAccount(`panels_reader_off_${RUN}`);
+		try {
+			const res = await call("GET", `/api/content/works/${workId}/panels`, undefined, user.cookie);
+			const { pages } = (await res.json()) as { pages: Array<{ panels: unknown[] }> };
+			expect(pages.flatMap((p) => p.panels)).toEqual([]);
+		} finally {
+			await db.delete(users).where(eq(users.id, user.userId as number));
+		}
+	});
+
+	it("PATCH refuses a body that changes nothing", async () => {
+		const res = await call(
+			"PATCH",
+			`/api/content/works/${workId}/panels`,
+			{ pageNumber: 1 },
+			cookie,
+		);
+		expect(res.status).toBe(400);
 	});
 
 	it("PATCH refuses a panel with zero size", async () => {
@@ -230,18 +317,6 @@ describe("/works/:id/panels", () => {
 			cookie,
 		);
 		expect(res.status).toBe(400);
-	});
-
-	it("gives a non-creator only confirmed geometry even when the Work is otherwise open", async () => {
-		// The same work the reader test above walked: page 1 confirmed, page 2 still a
-		// proposal. A signed-out caller cannot read it at all, so a signed-in reader is the
-		// boundary case — and their answer is the pages' confirmed panels, never the guess.
-		const user = await createAccount(`panels_view_${RUN}`);
-		const res = await call("GET", `/api/content/works/${workId}/panels`, undefined, user.cookie);
-		expect(res.status).toBe(200);
-		const { pages } = (await res.json()) as { pages: Array<{ panels: unknown[] }> };
-		expect(pages.flatMap((p) => p.panels).length).toBe(2);
-		await db.delete(users).where(eq(users.id, user.userId as number));
 	});
 
 	it("clears a previous attempt's error when the render completes", async () => {

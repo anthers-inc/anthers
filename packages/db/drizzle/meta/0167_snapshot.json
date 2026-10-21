@@ -1,5 +1,5 @@
 {
-  "id": "b80eda43-41da-4b8b-b676-e9730df9f067",
+  "id": "884fec57-7657-4229-baee-2cfad30dc949",
   "prevId": "0d0f970c-0ea0-44ad-bd1e-21c2aaa59bb1",
   "version": "7",
   "dialect": "postgresql",
@@ -8101,9 +8101,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "home_default_tab": {
-          "name": "home_default_tab",
-          "type": "text",
+        "home_nav_order": {
+          "name": "home_nav_order",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -12436,6 +12436,13 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
+        },
+        "guided_view": {
+          "name": "guided_view",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created_at": {
           "name": "created_at",

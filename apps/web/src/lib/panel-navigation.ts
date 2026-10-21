@@ -7,11 +7,12 @@
  * single index so next/previous can advance within a page and across page boundaries
  * without the caller tracking both dimensions.
  *
- * ⭐ **Panel guidance is additive, page by page, and never a precondition.** The endpoint
- * gives a reader only the panels a creator confirmed; a page carrying none of them is a
- * whole page. {@link guidedPages} fills those pages in as one whole-page panel so turning
- * through them still works, and {@link hasGuidedView} is what the reader asks before it
- * offers panel mode at all — a Work whose creator has touched nothing reads as plain pages.
+ * ⭐ **Panel guidance is additive, page by page, and never a precondition.** Guided view is
+ * off on every page until a creator turns it on for that page, and the endpoint gives a
+ * reader geometry only where that happened and the creator confirmed it. A page carrying
+ * none is a whole page. {@link guidedPages} fills those pages in as one whole-page panel so
+ * turning through them still works, and {@link hasGuidedView} is what the reader asks before
+ * it offers panel mode at all — a Work whose creator has touched nothing reads as plain pages.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -20,6 +21,11 @@ export interface PanelPage {
 	pageNumber: number;
 	width: number;
 	height: number;
+	/**
+	 * Whether the creator turned guided view on for this page. Off is the default and a
+	 * page that is off reads whole, whatever proposal rows exist beside it.
+	 */
+	guidedView: boolean;
 	panels: Panel[];
 }
 
@@ -45,7 +51,8 @@ export interface PanelPosition {
  * page itself, and it is what a page with no guidance has always looked like.
  */
 export function guidedPages(pages: PanelPage[]): PanelPage[] {
-	return pages.map((page) =>
+	const walkable = readerPages(pages);
+	return walkable.map((page) =>
 		page.panels.length > 0
 			? page
 			: {
@@ -55,9 +62,24 @@ export function guidedPages(pages: PanelPage[]): PanelPage[] {
 	);
 }
 
-/** Whether the Work has any confirmed panel, and so anything to offer as guided view. */
+/**
+ * The pages as a reader sees them: geometry only where guided view is on and a creator
+ * confirmed it, and no panels everywhere else.
+ *
+ * The server already applies this for anyone but the Work's owner; applying it here too is
+ * what keeps the creator's own preview honest, because the owner is sent the proposals the
+ * Studio needs.
+ */
+export function readerPages(pages: PanelPage[]): PanelPage[] {
+	return pages.map((page) => ({
+		...page,
+		panels: page.guidedView ? page.panels.filter((panel) => !panel.auto) : [],
+	}));
+}
+
+/** Whether the Work has any confirmed panel on an enabled page, and so anything to offer. */
 export function hasGuidedView(pages: PanelPage[]): boolean {
-	return pages.some((page) => page.panels.length > 0);
+	return readerPages(pages).some((page) => page.panels.length > 0);
 }
 
 function totalPanels(pages: PanelPage[]): number {
