@@ -198,6 +198,22 @@ describe("published legal documents", () => {
 		}
 	});
 
+	it("🚨 states the credits rule the release gate enforces", () => {
+		/*
+		 * `work-release.ts` refuses a Work with no Created credit, and the credits
+		 * vocabulary is Created and Generated. The Terms are where a creator is told
+		 * why, and the section that used to carry a one-line placeholder for it was
+		 * the hole this policy was written into. If the gate stays and this copy goes,
+		 * a creator meets a refusal with no rule to read; if the copy stays and the
+		 * gate goes, the instrument promises enforcement the code does not perform.
+		 */
+		const text = CREATOR_TERMS_TEXT();
+		expect(text).toContain("at least one has to name a human");
+		expect(text).toContain("Tick **Created**");
+		expect(text).toContain("tick **Generated**");
+		expect(text).toContain("We do not run AI detection");
+	});
+
 	it("🚨 says a legal hold postpones deletion, wherever deletion is promised", () => {
 		/*
 		 * `eraseAccount` defers an account under hold, because destroying preserved records is
