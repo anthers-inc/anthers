@@ -116,6 +116,18 @@ export function spineFraction(work: Work, position: ServerPosition | null = null
 	return fraction > 0 ? fraction : null;
 }
 
+/**
+ * The spine's tooltip line for a reading position. A paged Work names the page; anything
+ * without pages — a piece of writing scrolled to a depth, or a Work whose page count the
+ * listing did not carry — says only that it is under way, rather than inventing a page.
+ */
+export function positionLine(work: Work, fraction: number | null): string | null {
+	if (fraction == null) return null;
+	if (!work.pageCount || work.pageCount <= 0) return "In progress";
+	const page = Math.max(1, Math.min(work.pageCount, Math.floor(fraction * work.pageCount)));
+	return `On page ${page} of ${work.pageCount}`;
+}
+
 /** One spine, face-out with cover art or as a dust jacket without it — the rail's and the shelf's shared atom. */
 function Spine({
 	work,
@@ -174,7 +186,18 @@ function Spine({
 	);
 }
 
-export default function BookshelfLens({ items }: { items: LensItem[] }) {
+export default function BookshelfLens({
+	items,
+	source = "library",
+}: {
+	items: LensItem[];
+	/**
+	 * Where the shelf is drawing from — the Library's kept books or the Network's feed.
+	 * Only the empty state's words differ: the shelf itself is the same metaphor over
+	 * whichever corpus the tab hands it.
+	 */
+	source?: "library" | "network";
+}) {
 	const books = items
 		.filter(
 			(i) =>
@@ -186,16 +209,20 @@ export default function BookshelfLens({ items }: { items: LensItem[] }) {
 	const positions = useReadingPositions();
 
 	if (books.length === 0) {
+		const forNetwork = source === "network";
 		return (
 			<div className="rounded-box border border-base-300 bg-base-100 px-6 py-14 text-center">
 				<BookOpenIcon className="mx-auto size-10 text-base-content/20" />
-				<h2 className="mt-3 text-lg font-bold">Nothing on the shelf yet</h2>
+				<h2 className="mt-3 text-lg font-bold">
+					{forNetwork ? "Nothing to read in your feed yet" : "Nothing on the shelf yet"}
+				</h2>
 				<p className="mx-auto mt-1 max-w-md text-sm text-base-content/60">
-					Save a book, a comic or a piece of writing and it takes its place here — free work
-					included. You don't have to buy something to keep it.
+					{forNetwork
+						? "Books, comics, and writing from the creators in your network arrive here as they release them. Follow, support, or save a creator and their work joins the feed."
+						: "Save a book, a comic or a piece of writing and it takes its place here — free work included. You don't have to buy something to keep it."}
 				</p>
 				<Link to="/discovery" className="btn btn-primary btn-sm mt-4">
-					Find something to read
+					{forNetwork ? "Find creators to follow" : "Find something to read"}
 				</Link>
 			</div>
 		);
@@ -235,13 +262,7 @@ export default function BookshelfLens({ items }: { items: LensItem[] }) {
 								<li
 									key={item.id}
 									className="group shrink-0"
-									title={[
-										work.title || "Untitled",
-										"Continue",
-										fraction != null
-											? `On page ${Math.max(1, Math.floor(fraction * (work.pageCount ?? 0)))} of ${work.pageCount}`
-											: null,
-									]
+									title={[work.title || "Untitled", "Continue", positionLine(work, fraction)]
 										.filter(Boolean)
 										.join(" — ")}
 								>
@@ -287,9 +308,7 @@ export default function BookshelfLens({ items }: { items: LensItem[] }) {
 								work.title || "Untitled",
 								item.purchased ? "Purchased" : null,
 								locked ? "Gated" : null,
-								fraction != null
-									? `On page ${Math.max(1, Math.floor(fraction * (work.pageCount ?? 0)))} of ${work.pageCount}`
-									: null,
+								positionLine(work, fraction),
 							]
 								.filter(Boolean)
 								.join(" — ")}

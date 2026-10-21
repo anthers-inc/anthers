@@ -1,18 +1,35 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { BOOKSHELF_WORK_TYPES } from "@anthers/shared/content";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { useSidebar } from "@anthers/web-shared/sidebar";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { InformationCircleIcon, RssIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import FeedTile from "../components/cards/FeedTile";
 import NetworkMembershipSection from "../components/layout/NetworkMembershipSection";
-import SharedFilterSections from "../components/layout/SharedFilterSections";
+import SharedFilterSections, {
+	SHARED_FILTER_TYPES,
+} from "../components/layout/SharedFilterSections";
 import SharedLensesSection from "../components/layout/SharedLensesSection";
 import { useFilterable, useViewFilter } from "../components/layout/search/filter-context";
 import TabHeader from "../components/layout/TabHeader";
+import BookshelfLens from "../components/library/BookshelfLens";
+import MusicDial from "../components/library/MusicDial";
+import MusicLens from "../components/library/MusicLens";
+import { feedLensItems } from "../lib/feed-lenses";
+
+/**
+ * The LENSES the Network has built (Parker, 2026-10-20): the Music Player and the
+ * Bookshelf read the feed the way the Library's read the shelf — the same metaphors over
+ * the tab's own corpus, which is what "one vocabulary, two corpora" means in practice.
+ * The Channel Guide is deliberately absent: its blocks play inline, and a feed entry
+ * carries no payload to play, so the row stays grayed here until that lens's Network
+ * behavior is built.
+ */
+const NETWORK_LIVES = new Set(["", "music", "bookshelf"]);
 
 export default function AuthenticatedHomePage() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -36,6 +53,39 @@ export default function AuthenticatedHomePage() {
 	const tags = searchParams.get("tags") ?? "";
 	/** `""` is the whole network; the rest narrow to one route in. */
 	const networkSource = searchParams.get("network_source") ?? "";
+	/** The lens is a second organizing metaphor over the feed, never a filter. */
+	const lens = searchParams.get("lens") ?? "";
+	const includeSpoken = searchParams.get("spoken") === "1";
+
+	/** The lens's corpus: the feed's releases, translated once per fetch. */
+	const lensDraw = useMemo(() => feedLensItems(feedPosts), [feedPosts]);
+
+	/**
+	 * The Work types the active lens draws on, or null with No Lens. The Type rows outside
+	 * this set gray out while it is active — the Library's rule, applied to the feed.
+	 */
+	const lensIncluded = useMemo<string[] | null>(() => {
+		if (lens === "music") return includeSpoken ? ["music", "audio"] : ["music"];
+		if (lens === "bookshelf") return [...BOOKSHELF_WORK_TYPES];
+		return null;
+	}, [lens, includeSpoken]);
+
+	const unavailableTypes = useMemo(() => {
+		if (!lensIncluded) return undefined;
+		const set = new Set<string>();
+		for (const t of SHARED_FILTER_TYPES) {
+			if (t.id && !lensIncluded.includes(t.id)) set.add(t.id);
+		}
+		return set;
+	}, [lensIncluded]);
+
+	/**
+	 * The Type selection rides the request as the feed's server-side condition — except
+	 * under a lens, where the lens decides what it draws on and the rows outside it are
+	 * grayed. Dropping it here is what keeps a lens a view of the corpus rather than a
+	 * filter applied before the corpus arrives.
+	 */
+	const mediaType = lens ? "" : contentType;
 
 	const updateParams = useCallback(
 		(updates: Record<string, string>) => {
@@ -62,6 +112,10 @@ export default function AuthenticatedHomePage() {
 	// tab-shared LENSES, and the shared filters with the Access control below the
 	// divider. The membership filter narrows the stream to the part of the network the
 	// reader means, and the shared filters narrow what that stream draws.
+	//
+	// Under a lens the Type rows the lens does not draw gray out, exactly as the
+	// Library's do: a lens decides what it draws on, so the Type section cannot narrow
+	// the corpus first. The selection stays in the URL and returns with No Lens.
 	useEffect(() => {
 		setPageContent(
 			<div className="flex flex-col gap-5">
@@ -69,13 +123,26 @@ export default function AuthenticatedHomePage() {
 					value={networkSource}
 					onValue={(value) => updateParams({ network_source: value })}
 				/>
-				<SharedLensesSection lens="" onLens={() => {}} />
+				<SharedLensesSection
+					lens={lens}
+					onLens={(id) => updateParams({ lens: id })}
+					live={NETWORK_LIVES}
+					extras={{
+						music: (
+							<MusicDial
+								includeSpoken={includeSpoken}
+								onIncludeSpoken={(on) => updateParams({ spoken: on ? "1" : "" })}
+							/>
+						),
+					}}
+				/>
 			</div>,
 		);
 		setSharedContent(
 			<SharedFilterSections
 				type={contentType}
 				onType={(id) => updateParams({ media_type: id })}
+				unavailableTypes={unavailableTypes}
 				access={{ value: access, onAccess: (value) => updateParams({ access: value }) }}
 				tags={tags}
 				onTags={(value) => updateParams({ tags: value })}
@@ -85,7 +152,18 @@ export default function AuthenticatedHomePage() {
 			setPageContent(null);
 			setSharedContent(null);
 		};
-	}, [setPageContent, setSharedContent, contentType, access, tags, networkSource, updateParams]);
+	}, [
+		setPageContent,
+		setSharedContent,
+		contentType,
+		access,
+		tags,
+		networkSource,
+		lens,
+		includeSpoken,
+		unavailableTypes,
+		updateParams,
+	]);
 
 	useEffect(() => {
 		// Fetch the user's feed. Guard on res.ok before reading the body: an error
@@ -101,10 +179,10 @@ export default function AuthenticatedHomePage() {
 					// "posts" is not a Work type; it is the feed's kind filter over its other
 					// half of entries. A Work type narrows the work side and leaves posts
 					// in place (a post survives a type filter through what it announces).
-					...(contentType === "posts"
+					...(mediaType === "posts"
 						? { kind: "posts" }
-						: contentType
-							? { media_type: contentType }
+						: mediaType
+							? { media_type: mediaType }
 							: {}),
 					...(access ? { access } : {}),
 					...(tags ? { tags } : {}),
@@ -121,7 +199,7 @@ export default function AuthenticatedHomePage() {
 			})
 			.catch(() => {})
 			.finally(() => setFeedLoading(false));
-	}, [contentType, access, tags, viewFilter.query, networkSource]);
+	}, [mediaType, access, tags, viewFilter.query, networkSource]);
 
 	return (
 		<div className="min-h-full">
@@ -178,6 +256,15 @@ export default function AuthenticatedHomePage() {
 					<div className="flex justify-center py-16">
 						<LoadingSpinner size="lg" />
 					</div>
+				) : lens === "music" ? (
+					/* A lens reorganizes the feed, never refetches it: the corpus is the same
+					   stream the grid draws. `scope="feed"` opens a release whole, because the
+					   feed is what arrived rather than a kept list of tracks. */
+					<MusicLens items={lensDraw} includeSpoken={includeSpoken} scope="feed" />
+				) : lens === "bookshelf" ? (
+					/* The same shelf metaphor over the feed's written Works: spines instead of
+					   tiles, alphabetical by title. */
+					<BookshelfLens items={lensDraw} source="network" />
 				) : feedPosts.length > 0 ? (
 					// A uniform grid, still sorted on the one chronological key —
 					// the grid is the layout, never a ranking. Columns keep a workable

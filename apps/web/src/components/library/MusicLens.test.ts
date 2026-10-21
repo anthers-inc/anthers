@@ -7,7 +7,7 @@
 // saved Project carries the whole record.
 import { describe, expect, test } from "bun:test";
 import type { Work, WorkRelease } from "@anthers/web-shared/types";
-import { type LensItem, musicReleases } from "./MusicLens";
+import { type LensItem, musicReleases, releasesForScope } from "./MusicLens";
 
 function release(id: number, title: string, musicCount: number, audioCount = 0): WorkRelease {
 	return {
@@ -177,5 +177,24 @@ describe("musicReleases", () => {
 		expect(releases).toHaveLength(1);
 		expect(releases[0].wholeRelease).toBe(true);
 		expect(releases[0].trackCount).toBe(3);
+	});
+
+	test("a feed-scoped release advertises the whole record, not just what arrived", () => {
+		// The Network opens a release whole, so one track arriving in the feed must not
+		// present a four-track record as a single.
+		const reached = musicReleases(
+			[workItem(12, "music", "Track 2", [release(1, "The Record", 4)])],
+			false,
+		);
+
+		expect(reached[0].trackCount).toBe(1);
+		expect(releasesForScope(reached, "library")[0].trackCount).toBe(1);
+		expect(releasesForScope(reached, "feed")[0].trackCount).toBe(4);
+	});
+
+	test("a feed-scoped one-track release still counts itself", () => {
+		const single = musicReleases([workItem(21, "music", "A Loose Single")], false);
+
+		expect(releasesForScope(single, "feed")[0].trackCount).toBe(1);
 	});
 });
