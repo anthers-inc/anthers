@@ -24,7 +24,7 @@
  */
 
 import { PencilSquareIcon, PlusIcon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PostRow from "../components/content/PostRow";
 import PostsFilterSections from "../components/content/posts-filters";
 import {
@@ -35,6 +35,7 @@ import {
 import SortableHeader, { ariaSort } from "../components/content/SortableHeader";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import Modal from "../components/ui/Modal";
 import { Link, useSearchParams } from "../lib/router";
 import { client } from "../lib/rpc";
 import { useSidebar } from "../lib/sidebar";
@@ -46,6 +47,11 @@ export default function PostsPage() {
 	const [loading, setLoading] = useState(true);
 
 	const [deleteTarget, setDeleteTarget] = useState<PostListItem | null>(null);
+	// Held across the dialog's exit: the state clears on close, but the box should keep
+	// naming what is being deleted while the overlay fades.
+	const lastDeleteTarget = useRef<PostListItem | null>(null);
+	if (deleteTarget) lastDeleteTarget.current = deleteTarget;
+	const shownDeleteTarget = deleteTarget ?? lastDeleteTarget.current;
 	const [actioning, setActioning] = useState(false);
 
 	// The filters and the sort ride the URL, the Works page's pattern — shareable, and
@@ -233,10 +239,10 @@ export default function PostsPage() {
 			)}
 
 			{/* Delete confirmation. */}
-			{deleteTarget && (
-				<div className="modal modal-open" role="dialog">
+			<Modal open={deleteTarget !== null}>
+				{shownDeleteTarget && (
 					<div className="modal-box">
-						<h3 className="text-lg font-bold">Delete "{deleteTarget.title || "Untitled"}"?</h3>
+						<h3 className="text-lg font-bold">Delete "{shownDeleteTarget.title || "Untitled"}"?</h3>
 						<p className="py-3 text-sm text-base-content/70">
 							This permanently removes the post along with its comments. It can't be undone.
 						</p>
@@ -259,14 +265,14 @@ export default function PostsPage() {
 							</button>
 						</div>
 					</div>
-					<button
-						type="button"
-						className="modal-backdrop"
-						onClick={() => setDeleteTarget(null)}
-						aria-label="Close"
-					/>
-				</div>
-			)}
+				)}
+				<button
+					type="button"
+					className="modal-backdrop"
+					onClick={() => setDeleteTarget(null)}
+					aria-label="Close"
+				/>
+			</Modal>
 		</div>
 	);
 }

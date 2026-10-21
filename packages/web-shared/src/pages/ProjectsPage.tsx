@@ -22,7 +22,7 @@
  */
 
 import { PencilSquareIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ProjectsFilterSections from "../components/content/projects-filters";
 import {
 	arrangeProjects,
@@ -33,6 +33,7 @@ import SortableHeader, { ariaSort } from "../components/content/SortableHeader";
 import { TypeIcon } from "../components/content/works";
 import EmptyState from "../components/ui/EmptyState";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import Modal from "../components/ui/Modal";
 import { useAuth } from "../lib/auth";
 import { creatorProjectUrl } from "../lib/profile";
 import { Link, useSearchParams } from "../lib/router";
@@ -53,6 +54,10 @@ export default function ProjectsPage() {
 	 * imply a destructiveness this action does not have.
 	 */
 	const [projectDeleteTarget, setProjectDeleteTarget] = useState<Project | null>(null);
+	// Held across the dialog's exit, so the box keeps naming the Project while it fades.
+	const lastProjectDeleteTarget = useRef<Project | null>(null);
+	if (projectDeleteTarget) lastProjectDeleteTarget.current = projectDeleteTarget;
+	const shownProjectDeleteTarget = projectDeleteTarget ?? lastProjectDeleteTarget.current;
 	const [deletingProject, setDeletingProject] = useState(false);
 
 	// The filters and the sort ride the URL, the Works page's pattern.
@@ -222,11 +227,11 @@ export default function ProjectsPage() {
 
 			{/* Deleting a Project. Says plainly that its contents survive — the whole reason
 			    this dialog is milder than the Work one on the Works page. */}
-			{projectDeleteTarget && (
-				<div className="modal modal-open" role="dialog">
+			<Modal open={projectDeleteTarget !== null}>
+				{shownProjectDeleteTarget && (
 					<div className="modal-box">
 						<h3 className="text-lg font-bold">
-							Delete "{projectDeleteTarget.title || "Untitled"}"?
+							Delete "{shownProjectDeleteTarget.title || "Untitled"}"?
 						</h3>
 						<p className="py-3 text-sm text-base-content/70">
 							This removes the Project and its ordering.{" "}
@@ -253,14 +258,14 @@ export default function ProjectsPage() {
 							</button>
 						</div>
 					</div>
-					<button
-						type="button"
-						className="modal-backdrop"
-						onClick={() => setProjectDeleteTarget(null)}
-						aria-label="Close"
-					/>
-				</div>
-			)}
+				)}
+				<button
+					type="button"
+					className="modal-backdrop"
+					onClick={() => setProjectDeleteTarget(null)}
+					aria-label="Close"
+				/>
+			</Modal>
 		</div>
 	);
 }

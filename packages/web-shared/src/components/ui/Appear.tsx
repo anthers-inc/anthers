@@ -15,27 +15,30 @@
  * immediately, so the content is never waiting on an animation to exist.
  */
 
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { type HTMLAttributes, type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { EASE_SETTLE, MOTION, useReducedMotion } from "../../lib/motion";
 
-export default function Appear({
-	show,
-	children,
-	className = "",
-	/** Vertical travel in pixels. Negative rises from above; `0` is a pure fade. */
-	distance = 8,
-	duration = MOTION.base,
-	exitDuration = MOTION.fast,
-}: {
+type AppearProps = {
 	show: boolean;
 	children: ReactNode;
 	className?: string;
+	/** Vertical travel in pixels. Negative rises from above; `0` is a pure fade. */
 	distance?: number;
 	/** Enter duration in milliseconds; defaults to the motion scale's base step. */
 	duration?: number;
 	/** Exit duration in milliseconds; exits are faster than entrances by default. */
 	exitDuration?: number;
-}) {
+} & Omit<HTMLAttributes<HTMLDivElement>, "children" | "className">;
+
+export default function Appear({
+	show,
+	children,
+	className = "",
+	distance = 8,
+	duration = MOTION.base,
+	exitDuration = MOTION.fast,
+	...rest
+}: AppearProps) {
 	const reduce = useReducedMotion();
 	const [mounted, setMounted] = useState(show);
 	const ref = useRef<HTMLDivElement>(null);
@@ -91,7 +94,7 @@ export default function Appear({
 
 	if (!mounted) return null;
 	return (
-		<div ref={ref} className={className}>
+		<div ref={ref} className={className} data-appear={show ? "open" : "closing"} {...rest}>
 			{children}
 		</div>
 	);

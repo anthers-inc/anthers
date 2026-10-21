@@ -270,6 +270,38 @@
 	}
 }
 
+/* Dialogs. Every dialog's box rises a few pixels and settles, whether or not it has adopted
+   the shared <Modal> wrapper. The overlay fade is separate: a wrapped dialog gets it from
+   <Appear> (which is also what holds it through the exit), and the global rule below skips
+   anything carrying `data-appear` so the two never animate the same property. A dialog that
+   has not adopted the wrapper still gets the box rise, and simply cuts away on close. */
+@media (prefers-reduced-motion: no-preference) {
+	.modal.modal-open:not([data-appear]) {
+		animation: modal-fade-in var(--motion-base) var(--ease-settle);
+	}
+	.modal.modal-open .modal-box {
+		animation: modal-box-rise var(--motion-base) var(--ease-settle);
+	}
+	@keyframes modal-fade-in {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+	@keyframes modal-box-rise {
+		from {
+			translate: 0 8px;
+			scale: 0.98;
+		}
+		to {
+			translate: 0;
+			scale: 1;
+		}
+	}
+}
+
 /* Page cross-fade for client-side navigations. Links opt into the View Transitions
    API (via @anthers/web-shared/router), so the browser snapshots the outgoing and
    incoming pages and fades between them — a soft crossfade instead of an instant
