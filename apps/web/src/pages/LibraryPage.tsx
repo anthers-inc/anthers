@@ -63,6 +63,7 @@ import BookshelfLens from "../components/library/BookshelfLens";
 import ChannelGuideLens, {
 	channelGuideChannelsFromShelf,
 } from "../components/library/ChannelGuideLens";
+import MusicDial from "../components/library/MusicDial";
 import MusicLens, { type LensItem, type LensProject } from "../components/library/MusicLens";
 import { removeItem, setHidden } from "../lib/library";
 
@@ -80,22 +81,6 @@ import { removeItem, setHidden } from "../lib/library";
  * (the shared section's `extras` slot) only while that lens is active.
  */
 const LIBRARY_LIVES = new Set(["", "music", "channel-guide", "bookshelf"]);
-
-/** The Music Player's dial, given to the shared section as the row's `extras` — a
- *  control ON the lens, rendered beneath its row only while the lens is selected. */
-function musicDial(includeSpoken: boolean, onIncludeSpoken: (on: boolean) => void) {
-	return (
-		<label className="mt-1 ml-6 flex w-fit cursor-pointer items-center gap-2 text-xs">
-			<input
-				type="checkbox"
-				className="toggle toggle-sm"
-				checked={includeSpoken}
-				onChange={(e) => onIncludeSpoken(e.target.checked)}
-			/>
-			Include spoken word
-		</label>
-	);
-}
 
 /** The shelf's view of a saved Project — the album card's whole data source. */
 type ShelfProject = LensProject;
@@ -499,7 +484,12 @@ export default function LibraryPage() {
 				onLens={(id) => setParam("lens", id)}
 				live={LIBRARY_LIVES}
 				extras={{
-					music: musicDial(includeSpoken, (on) => setParam("spoken", on ? "1" : "")),
+					music: (
+						<MusicDial
+							includeSpoken={includeSpoken}
+							onIncludeSpoken={(on) => setParam("spoken", on ? "1" : "")}
+						/>
+					),
 				}}
 			/>,
 		);
