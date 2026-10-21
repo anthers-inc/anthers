@@ -699,11 +699,12 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 		} else if (processing === "ebook") {
 			await renderPaged({ jobId: job.id });
 			if (spec.media === "comic") {
-				// The fixture is a comic whose creator has confirmed the detected layout:
-				// a reader is sent only confirmed panels, and the panel-mode specs walk
-				// these regions. Leaving them `auto` would make the fixture read as a Work
-				// nobody has looked at, which is a different (and deliberately untested
-				// here) state.
+				// The fixture is a comic whose creator has turned guided view on and
+				// confirmed the detected layout: a reader is sent geometry only for pages
+				// that are both enabled and confirmed, and the panel-mode specs walk these
+				// regions. Leaving it off would make the fixture read as a Work nobody has
+				// looked at, which is a different state.
+				await db.update(workPages).set({ guidedView: true }).where(eq(workPages.workId, workId));
 				await db
 					.update(workPanels)
 					.set({ auto: false, updatedAt: new Date() })

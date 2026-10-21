@@ -4683,12 +4683,12 @@ const contentRoutes = new Hono()
 	// correction surface. Same access gates as `/pages/:n`: a share link recipient can read
 	// it, but a signed-out caller cannot, and the same public-access / parental gates apply.
 	//
-	// ⭐ **Detection proposes to the creator and to nobody else.** A row still carrying
-	// `auto` is a guess the creator has not looked at, so the Work's owner reads it (the
-	// Studio is where guesses are corrected) and every other caller gets only the pages a
-	// creator confirmed. A page with nothing confirmed comes back with no panels, and the
-	// reader treats it as a whole page — which is how a comic publishes before panel
-	// guidance has been added to any page at all.
+	// ⭐ **Guided view is off until the creator turns it on for that page, and detection
+	// proposes to the creator and to nobody else.** A page's `guided_view` flag is the
+	// opt-in; `work_panels` rows are only proposals until a creator confirms them. So the
+	// Work's owner reads both, and every other caller gets geometry only for pages that are
+	// enabled *and* confirmed. Everything else comes back as a page with no panels, which
+	// the reader treats as a whole page — a comic publishes with no panel work at all.
 	.get("/works/:id/panels", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
 		if (!work) return c.json({ error: "Work not found" }, 404);
@@ -4707,6 +4707,7 @@ const contentRoutes = new Hono()
 				pageNumber: workPages.pageNumber,
 				width: workPages.width,
 				height: workPages.height,
+				guidedView: workPages.guidedView,
 				panelNumber: workPanels.panelNumber,
 				x: workPanels.x,
 				y: workPanels.y,
@@ -4722,7 +4723,7 @@ const contentRoutes = new Hono()
 				workPanels,
 				and(
 					eq(workPanels.pageId, workPages.id),
-					correcting ? undefined : eq(workPanels.auto, false),
+					correcting ? undefined : and(eq(workPages.guidedView, true), eq(workPanels.auto, false)),
 				),
 			)
 			.where(eq(workPages.workId, work.id))
@@ -4734,6 +4735,7 @@ const contentRoutes = new Hono()
 				pageNumber: number;
 				width: number | null;
 				height: number | null;
+				guidedView: boolean;
 				panels: Array<{
 					panelNumber: number;
 					x: number;
@@ -4749,6 +4751,7 @@ const contentRoutes = new Hono()
 				pageNumber: row.pageNumber,
 				width: row.width,
 				height: row.height,
+				guidedView: row.guidedView,
 				panels: [],
 			};
 			if (row.panelNumber != null) {
@@ -4767,6 +4770,16 @@ const contentRoutes = new Hono()
 		return c.json({ pages: Array.from(grouped.values()) });
 	})
 
+	/**
+	 * Turn guided view on or off for one page, and/or replace that page's panels.
+	 *
+	 * 🚩 **`enabled` and `panels` are separate acts, and turning guided view on is the
+	 * opt-in.** `enabled: true` alone keeps the detector's proposals as proposals, which
+	 * the Studio shows for confirming; sending `panels` is what defines them (every row a
+	 * save writes is `auto: false`). `enabled: false` leaves the proposals in place so
+	 * turning the page back on does not lose them, and the reader ignores them either way.
+	 * A request carrying neither is refused rather than read as an accidental no-op.
+	 */
 	.patch(
 		"/works/:id/panels",
 		requireAuth,
@@ -4775,15 +4788,18 @@ const contentRoutes = new Hono()
 			"json",
 			z.object({
 				pageNumber: z.number().int().positive(),
-				panels: z.array(
-					z.object({
-						panelNumber: z.number().int().positive().optional(),
-						x: z.number().min(0).max(1),
-						y: z.number().min(0).max(1),
-						width: z.number().min(0).max(1),
-						height: z.number().min(0).max(1),
-					}),
-				),
+				enabled: z.boolean().optional(),
+				panels: z
+					.array(
+						z.object({
+							panelNumber: z.number().int().positive().optional(),
+							x: z.number().min(0).max(1),
+							y: z.number().min(0).max(1),
+							width: z.number().min(0).max(1),
+							height: z.number().min(0).max(1),
+						}),
+					)
+					.optional(),
 			}),
 			invalidBody,
 		),
@@ -4795,8 +4811,11 @@ const contentRoutes = new Hono()
 			if (userId !== work.creatorId) return c.json({ error: "Forbidden" }, 403);
 			if (!isPaged(work.type)) return c.json({ error: "Not a paged Work" }, 400);
 
-			const { pageNumber, panels } = c.req.valid("json");
-			for (const p of panels) {
+			const { pageNumber, enabled, panels } = c.req.valid("json");
+			if (enabled === undefined && panels === undefined) {
+				return c.json({ error: "Send enabled, panels, or both" }, 400);
+			}
+			for (const p of panels ?? []) {
 				if (p.width === 0 || p.height === 0) {
 					return c.json({ error: "Panel width and height must be greater than 0" }, 400);
 				}
@@ -4806,37 +4825,47 @@ const contentRoutes = new Hono()
 			}
 
 			const [page] = await db
-				.select({ id: workPages.id, width: workPages.width, height: workPages.height })
+				.select({
+					id: workPages.id,
+					width: workPages.width,
+					height: workPages.height,
+					guidedView: workPages.guidedView,
+				})
 				.from(workPages)
 				.where(and(eq(workPages.workId, work.id), eq(workPages.pageNumber, pageNumber)))
 				.limit(1);
 			if (!page) return c.json({ error: "Page not found" }, 404);
 
 			await db.transaction(async (tx) => {
-				await tx.delete(workPanels).where(eq(workPanels.pageId, page.id));
-				if (panels.length > 0) {
-					await tx.insert(workPanels).values(
-						panels
-							.sort((a, b) => {
-								const rowA = Math.round(a.y * 100);
-								const rowB = Math.round(b.y * 100);
-								if (rowA !== rowB) return rowA - rowB;
-								return Math.round(a.x * 100) - Math.round(b.x * 100);
-							})
-							.map((p, i) => ({
-								pageId: page.id,
-								panelNumber: i + 1,
-								x: p.x,
-								y: p.y,
-								width: p.width,
-								height: p.height,
-								auto: false,
-							})),
-					);
+				if (enabled !== undefined) {
+					await tx.update(workPages).set({ guidedView: enabled }).where(eq(workPages.id, page.id));
+				}
+				if (panels !== undefined) {
+					await tx.delete(workPanels).where(eq(workPanels.pageId, page.id));
+					if (panels.length > 0) {
+						await tx.insert(workPanels).values(
+							panels
+								.sort((a, b) => {
+									const rowA = Math.round(a.y * 100);
+									const rowB = Math.round(b.y * 100);
+									if (rowA !== rowB) return rowA - rowB;
+									return Math.round(a.x * 100) - Math.round(b.x * 100);
+								})
+								.map((p, i) => ({
+									pageId: page.id,
+									panelNumber: i + 1,
+									x: p.x,
+									y: p.y,
+									width: p.width,
+									height: p.height,
+									auto: false,
+								})),
+						);
+					}
 				}
 			});
 
-			return c.json({ ok: true });
+			return c.json({ ok: true, guidedView: enabled ?? page.guidedView });
 		},
 	)
 
@@ -5278,6 +5307,21 @@ const contentRoutes = new Hono()
 			// always see their own media; `deliveryCtx()` with no share token is the
 			// owner's own session, exactly what this branch serves.
 			const playableJob = await userTranscoding(jobRows[0] ?? null, true, deliveryCtx());
+			// 🚨 **The owner's shape needs the counts the reader branches on.** This branch
+			// does not go through `loadWorkBundles` or `serializeWorkForUser`, and
+			// `serializeWork` has never carried `pageCount`/`sectionCount` — so without
+			// these two queries a creator opening their own comic got `pageCount` undefined,
+			// read as 0, and rendered "This book has no pages yet" while every other reader
+			// saw the book. An ebook's section count is the same defect in the other
+			// direction: 0 sends the owner to the page reader instead of the reflow one.
+			const [pageRow] = await db
+				.select({ count: sql<number>`count(*)::int` })
+				.from(workPages)
+				.where(eq(workPages.workId, work.id));
+			const [sectionRow] = await db
+				.select({ count: sql<number>`count(*)::int` })
+				.from(workSections)
+				.where(eq(workSections.workId, work.id));
 			return c.json({
 				work: {
 					...(await serializeWork(
@@ -5291,6 +5335,10 @@ const contentRoutes = new Hono()
 						previewRows,
 						previewCaptionRows,
 					)),
+					// The Work page renders this for its owner, so it carries the same shape
+					// signals the user path attaches below.
+					pageCount: pageRow?.count ?? 0,
+					sectionCount: sectionRow?.count ?? 0,
 					shownOn,
 				},
 			});

@@ -1,0 +1,1 @@
+ALTER TABLE "work_pages" ADD COLUMN "guided_view" boolean DEFAULT false NOT NULL;
