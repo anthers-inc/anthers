@@ -19,6 +19,7 @@ const network = read("AuthenticatedHomePage.tsx");
 const library = read("LibraryPage.tsx");
 const discovery = read("DiscoverPage.tsx");
 const layout = read("../components/layout/LoggedInLayout.tsx");
+const tabs = read("../lib/user-tabs.ts");
 const app = read("../App.tsx");
 
 describe("the three user tabs share one header", () => {
@@ -53,13 +54,21 @@ describe("the three user tabs share one header", () => {
 describe("the nav speaks the one vocabulary", () => {
 	it("orders the tabs Library, Network, and Discovery", () => {
 		const links = [
-			...layout.matchAll(/\{ to: "(\/[a-z]+)", id: "([a-z]+)", label: "([A-Za-z]+)"/g),
+			...tabs.matchAll(/to: "(\/[a-z]+)",\s+id: "([a-z]+)",\s+label: "([A-Za-z]+)"/g),
 		].map((match) => [match[1], match[3]]);
-		expect(links.slice(0, 3)).toEqual([
+		expect(links).toEqual([
 			["/library", "Library"],
 			["/network", "Network"],
 			["/discovery", "Discovery"],
 		]);
+	});
+
+	it("offers no way to rearrange them — the order is fixed", () => {
+		expect(layout, "the sidebar renders the one tab list").toContain("{USER_TABS.map(");
+		expect(layout, "a drag grip would rearrange what may not be rearranged").not.toContain(
+			"Drag to reorder",
+		);
+		expect(layout, "no row carries drag handlers").not.toContain("onDragStart");
 	});
 
 	it("has no old-named route left in the router", () => {

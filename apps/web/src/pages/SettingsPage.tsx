@@ -61,6 +61,7 @@ import {
 	usePreviewAudio,
 	usePreviewsEnabled,
 } from "../lib/tile-preview-settings";
+import { DEFAULT_USER_TAB, USER_TABS, type UserTabId } from "../lib/user-tabs";
 
 interface DeviceSession {
 	id: number;
@@ -81,6 +82,78 @@ function formatWhen(value: string | null): string {
 	if (mins < 60) return `${mins}m ago`;
 	if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`;
 	return new Date(value).toLocaleDateString();
+}
+
+/**
+ * Where You Start — the tab a signed-in session opens on (Parker, 2026-10-20).
+ *
+ * The three tabs render in one fixed order, so this is the only control over where a
+ * session lands: sign-in, a fresh tab on `/`, and the mode switch's User side all read
+ * the same answer. Account-level rather than per-browser for the reason the theme is —
+ * which tab a person arrives on is how they use the site, not a property of a computer.
+ *
+ * Null = never answered, and the client reads that as Network; the column never bakes
+ * the default in, so a later default change needs no rows rewritten.
+ */
+function StartingTabSection() {
+	const { user, refreshUser } = useAuth();
+	const current: UserTabId = user?.homeDefaultTab ?? DEFAULT_USER_TAB;
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	const choose = async (tab: UserTabId) => {
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/accounts/me", {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ homeDefaultTab: tab }),
+			});
+			if (!res.ok) throw new Error();
+			await refreshUser();
+		} catch {
+			setError("That preference couldn't be saved.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="card bg-base-200 mb-6">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Where You Start</h3>
+				<p className="text-sm text-base-content/60">
+					The tab a session opens on, whether you have just signed in or come back the next day.
+					It's saved to your account, so every device starts in the same place.
+				</p>
+
+				<fieldset className="form-control mt-2 gap-2">
+					<legend className="sr-only">Starting tab</legend>
+					{USER_TABS.map((tab) => (
+						<label
+							key={tab.id}
+							className="label whitespace-normal cursor-pointer justify-start gap-3 py-1"
+						>
+							<input
+								type="radio"
+								name="home-default-tab"
+								className="radio radio-sm"
+								checked={current === tab.id}
+								onChange={() => choose(tab.id)}
+								disabled={busy}
+							/>
+							<span className="label-text">
+								<span className="font-medium">{tab.label}</span>
+								<span className="block text-xs text-base-content/50">{tab.blurb}</span>
+							</span>
+						</label>
+					))}
+				</fieldset>
+				{error && <p className="text-xs text-error mt-1">{error}</p>}
+			</div>
+		</div>
+	);
 }
 
 /**
@@ -115,13 +188,13 @@ function DesktopHomeSection() {
 							type="radio"
 							name="desktop-home"
 							className="radio radio-sm"
-							checked={home === "feed"}
-							onChange={() => choose("feed")}
+							checked={home === "user"}
+							onChange={() => choose("user")}
 						/>
 						<span className="label-text">
-							<span className="font-medium">Your feed</span>
+							<span className="font-medium">Your tabs</span>
 							<span className="block text-xs text-base-content/50">
-								The creators you follow, and what they've released
+								Your Library, Network or Discovery, starting with the one you chose in Settings
 							</span>
 						</span>
 					</label>
@@ -2429,6 +2502,10 @@ export default function SettingsPage() {
 							</div>
 						</div>
 					</div>
+
+					{/* Where a session starts: one tab, chosen here rather than by the nav's
+					    arrangement, which is fixed. */}
+					<StartingTabSection />
 
 					{/* The one setting that decides whether a person's name appears in public. */}
 					<SupporterListingSection />

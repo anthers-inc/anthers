@@ -317,7 +317,7 @@ async function serializeUser(user: typeof users.$inferSelect) {
 	const [prefs] = await db
 		.select({
 			themePreference: userPreferences.themePreference,
-			homeNavOrder: userPreferences.homeNavOrder,
+			homeDefaultTab: userPreferences.homeDefaultTab,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
 			searchShortcuts: userPreferences.searchShortcuts,
 		})
@@ -337,9 +337,10 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		location: user.location,
 		emailVerified: user.emailVerified,
 		themePreference: (prefs?.themePreference as "light" | "dark" | null) ?? null,
-		// The home sidebar's nav order — read at boot like the theme, so the landing
-		// redirect needs no second call.
-		homeNavOrder: (prefs?.homeNavOrder as string[] | null) ?? null,
+		// The tab a signed-in session opens on — read at boot like the theme, so the landing
+		// redirect needs no second call. Null means never answered, and the client reads
+		// that as Network.
+		homeDefaultTab: (prefs?.homeDefaultTab as "library" | "network" | "discovery" | null) ?? null,
 		// Where audio playback lives (the persistent footer bar or the page's player).
 		// Null means "never said" and the client reads that as on.
 		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
