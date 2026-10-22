@@ -22,6 +22,15 @@
  * sends here. Inbox was removed the same day for having no backend to stand on.
  */
 
+import {
+	DISCOVERY_STAGE_LABELS,
+	type DiscoveryFormula,
+	type DiscoveryReason,
+	type GraphBasis,
+	graphFormula,
+	type TickerWindow,
+	tickerFormula,
+} from "@anthers/shared/discovery";
 import { useAuth } from "@anthers/web-shared/auth";
 import CreatorCard from "@anthers/web-shared/creator/CreatorCard";
 import { client } from "@anthers/web-shared/rpc";
@@ -55,6 +64,8 @@ type FeedEntry = {
 	at: string;
 	title?: string | null;
 	creator?: { handle?: string; displayName?: string | null } | null;
+	/** Why the entry is here, as the API states it. */
+	reason?: DiscoveryReason;
 } & Record<string, unknown>;
 
 /** A creator as the graph ranks them: the public card plus the edge that put them here. */
@@ -64,8 +75,6 @@ type GraphCreator = PublicUser & {
 	hasPosts: boolean;
 	tags: string[];
 };
-
-type GraphBasis = "network" | "followers";
 
 const DISCOVERY_MODES = [
 	{
@@ -99,7 +108,7 @@ const GRAPH_PRESETS = [
 ] as const;
 
 /** The ticker's presets. The window is the parameter; the filters narrow the rest. */
-const TICKER_PRESETS = [
+const TICKER_PRESETS: ReadonlyArray<{ id: string; label: string; window: TickerWindow }> = [
 	{ id: "everything", label: "Everything new", window: "all" as const },
 	{ id: "today", label: "The last day", window: "day" as const },
 	{ id: "week", label: "The last week", window: "week" as const },
@@ -123,9 +132,10 @@ function savedMode(userId: number | undefined): DiscoveryMode | null {
 }
 
 /**
- * The active formula, rendered above the content. It names what is being drawn and
- * carries the control that changes it, so the reader never has to guess why a card
- * is on screen.
+ * The active formula, rendered above the content. It names what is being drawn, the
+ * three stages that drew it, and the control that changes one of them, so the reader
+ * never has to guess why a card is on screen. The stages come from the same module the
+ * route ranks with, so the bar cannot describe a pipeline the server did not run.
  */
 function FormulaBar({
 	preset,
@@ -134,7 +144,7 @@ function FormulaBar({
 	onRefresh,
 }: {
 	preset: string;
-	formula: string;
+	formula: DiscoveryFormula;
 	children?: React.ReactNode;
 	onRefresh?: () => void;
 }) {
@@ -146,8 +156,18 @@ function FormulaBar({
 						Active formula
 					</p>
 					<p className="mt-1 max-w-3xl text-sm leading-relaxed text-base-content/80">
-						<span className="font-medium">{preset}.</span> {formula}
+						<span className="font-medium">{preset}.</span> {formula.sentence}
 					</p>
+					<dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">
+						{formula.stages.map((stage) => (
+							<div key={stage.stage} className="flex items-baseline gap-1.5">
+								<dt className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">
+									{DISCOVERY_STAGE_LABELS[stage.stage]}
+								</dt>
+								<dd className="text-base-content/60">{stage.label}</dd>
+							</div>
+						))}
+					</dl>
 				</div>
 				<div className="flex flex-wrap items-end gap-2">
 					{children}
@@ -421,14 +441,8 @@ export default function DiscoverPage() {
 		updateParams,
 	]);
 
-	const graphFormula =
-		basis === "followers"
-			? "You follow nobody yet, so there is no network to trace. This shows creators ordered by followers; it becomes a map of your network as soon as you follow someone."
-			: `Creators followed by at least ${minShared} of the people you follow, ranked by how many of them share the follow.`;
-
-	const tickerFormula = `The newest Works and Posts across Anthers${
-		window === "all" ? "" : ` from the last ${window === "day" ? "24 hours" : "seven days"}`
-	}, newest first. Every creator is eligible; the sidebar's filters narrow what is drawn.`;
+	const graphPipeline = graphFormula({ basis, minShared });
+	const tickerPipeline = tickerFormula({ window });
 
 	return (
 		<div className="min-h-full">
@@ -459,7 +473,7 @@ export default function DiscoverPage() {
 					<>
 						<FormulaBar
 							preset={basis === "followers" ? "Creators by followers" : graphPreset.label}
-							formula={graphFormula}
+							formula={graphPipeline}
 							onRefresh={() => setRefreshKey((key) => key + 1)}
 						>
 							{basis === "network" && (
@@ -539,7 +553,7 @@ export default function DiscoverPage() {
 					<>
 						<FormulaBar
 							preset={tickerPreset.label}
-							formula={tickerFormula}
+							formula={tickerPipeline}
 							onRefresh={() => setRefreshKey((key) => key + 1)}
 						>
 							<label className="flex flex-col gap-1 text-xs text-base-content/60">

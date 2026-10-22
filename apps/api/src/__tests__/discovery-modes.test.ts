@@ -40,17 +40,25 @@ function withCookie(cookie: string) {
 const SHARED_WORK = `Graph work ${run}`;
 const SHARED_POST = `Graph post ${run}`;
 const BLOCKED_WORK = `Blocked work ${run}`;
+const BUSY_WORK = `Busy creator's run ${run}`;
 const TAG = `graph-tag-${run}`;
 
 let viewerCookie = "";
 let followedCreatorId = 0;
 let unfollowedCreatorId = 0;
+let busyCreatorId = 0;
 
 async function feed(cookie: string, query = "") {
 	const res = await req(`/api/accounts/me/feed${query}`, withCookie(cookie));
 	expect(res.status).toBe(200);
 	return (await res.json()) as {
-		entries: Array<{ kind: "post" | "release"; title: string; source: string }>;
+		entries: Array<{
+			kind: "post" | "release";
+			title: string;
+			source: string;
+			creatorId: number;
+			reason?: { stage: string; code: string; label: string };
+		}>;
 	};
 }
 
@@ -125,6 +133,24 @@ describe("Discovery's graph and ticker routes", () => {
 			method: "POST",
 			headers: { Origin: ORIGIN, Cookie: viewer.cookie },
 		});
+
+		// A creator who posts a run of four, inserted last so they are the newest
+		// entries in the ticker. Without the mix stage this is exactly the run that
+		// takes four of the page's first five cards.
+		await createAccount(`dsc_busy_${run}`, { fields: { isCreator: true } });
+		busyCreatorId = (
+			await db
+				.select({ id: users.id })
+				.from(users)
+				.where(eq(users.email, `dsc_busy_${run}@example.com`))
+		)[0]!.id;
+		for (let index = 0; index < 4; index += 1) {
+			await insertWork({
+				creatorId: busyCreatorId,
+				type: "text",
+				title: `${BUSY_WORK} ${index}`,
+			});
+		}
 	});
 
 	it("ranks a creator by the follows the viewer and their network share", async () => {
@@ -177,5 +203,34 @@ describe("Discovery's graph and ticker routes", () => {
 	it("keeps a blocked creator out of the global ticker", async () => {
 		const ticker = await feed(viewerCookie, "?scope=global");
 		expect(ticker.entries.map((entry) => entry.title)).not.toContain(BLOCKED_WORK);
+	});
+
+	it("carries a structured reason with every entry, saying it is the newest across Anthers", async () => {
+		const ticker = await feed(viewerCookie, "?scope=global");
+		expect(ticker.entries.length).toBeGreaterThan(0);
+		for (const entry of ticker.entries) {
+			expect(entry.reason, `${entry.title} carries no reason`).toBeDefined();
+			expect(entry.reason?.stage).toBe("candidates");
+			expect(entry.reason?.code).toBe("discovery");
+			expect(entry.reason?.label).toBe("Newest across Anthers");
+		}
+	});
+
+	it("spreads one creator's run across the ticker instead of stacking it", async () => {
+		const ticker = await feed(viewerCookie, "?scope=global");
+		const creators = ticker.entries.map((entry) => entry.creatorId);
+		const busyTitles = ticker.entries
+			.filter((entry) => entry.creatorId === busyCreatorId)
+			.map((entry) => entry.title);
+
+		// The run is real and complete: four entries, in the ticker.
+		expect(busyTitles.sort()).toEqual([0, 1, 2, 3].map((index) => `${BUSY_WORK} ${index}`).sort());
+		// The mix ran: round one is one card per creator, so the top of the page covers
+		// every creator in the stream rather than one creator's run. Newest-first would
+		// have made the first four cards all this creator's.
+		const lanes = new Set(creators);
+		expect(lanes.size).toBeGreaterThan(1);
+		expect(new Set(creators.slice(0, lanes.size)).size).toBe(lanes.size);
+		expect(creators.slice(0, 4).filter((id) => id === busyCreatorId).length).toBeLessThan(4);
 	});
 });

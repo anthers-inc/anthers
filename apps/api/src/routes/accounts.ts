@@ -62,6 +62,7 @@ import {
 import { isWorkType } from "@anthers/shared/content";
 import { type ContentNote, RATING_ROWS } from "@anthers/shared/content-rating";
 import { CREATOR_EMAIL_KINDS, resolvedCreatorEmailDelivery } from "@anthers/shared/creator-emails";
+import { interleaveByAuthor, reasonForSource } from "@anthers/shared/discovery";
 import { normalizeSearchShortcuts } from "@anthers/shared/keybindings";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
@@ -1172,6 +1173,15 @@ const accountRoutes = new Hono()
 		const entries = [
 			...feedPosts.map((row, index) => {
 				const p = row.post;
+				// Why the entry is here: the account made this one, or follows whoever
+				// did (the commitment the feed page carries — every item says why). The
+				// structured `reason` beside the source is what a Discovery card announces.
+				const source =
+					p.creatorId === sessionUser.id
+						? ("own" as const)
+						: scope === "global"
+							? ("discovery" as const)
+							: (sourceByCreator.get(p.creatorId ?? -1) ?? ("following" as const));
 				return {
 					kind: "post" as const,
 					// The feed sorts on one key across both kinds; a post's is its publication.
@@ -1180,14 +1190,8 @@ const accountRoutes = new Hono()
 					publicId: p.publicId,
 					slug: p.slug,
 					creatorId: p.creatorId,
-					// Why the entry is here: the account made this one, or follows whoever
-					// did (the commitment the feed page carries — every item says why).
-					source:
-						p.creatorId === sessionUser.id
-							? ("own" as const)
-							: scope === "global"
-								? ("discovery" as const)
-								: (sourceByCreator.get(p.creatorId ?? -1) ?? ("following" as const)),
+					source,
+					reason: reasonForSource(source),
 					title: p.title,
 					// The title with each mentioned Work's current name — what the tile shows.
 					displayTitle: postDisplayTitles[index] ?? p.title,
@@ -1215,6 +1219,14 @@ const accountRoutes = new Hono()
 			}),
 			...feedWorks.map((row) => {
 				const w = row.work;
+				// Same reason-saying as the posts half: own released work rides the
+				// account's own id in the feed's source list.
+				const source =
+					w.creatorId === sessionUser.id
+						? ("own" as const)
+						: scope === "global"
+							? ("discovery" as const)
+							: (sourceByCreator.get(w.creatorId ?? -1) ?? ("following" as const));
 				return {
 					kind: "release" as const,
 					// A release sorts on when it went public, NOT on its Created date — the
@@ -1225,14 +1237,8 @@ const accountRoutes = new Hono()
 					publicId: w.publicId,
 					slug: w.slug,
 					creatorId: w.creatorId,
-					// Same reason-saying as the posts half: own released work rides the
-					// account's own id in the feed's source list.
-					source:
-						w.creatorId === sessionUser.id
-							? ("own" as const)
-							: scope === "global"
-								? ("discovery" as const)
-								: (sourceByCreator.get(w.creatorId ?? -1) ?? ("following" as const)),
+					source,
+					reason: reasonForSource(source),
 					title: w.title,
 					type: w.type,
 					// Thumbnails are public by design — they are the preview a locked Work is
@@ -1271,7 +1277,10 @@ const accountRoutes = new Hono()
 					}),
 				};
 			}),
-		]
+		];
+
+		// The chronological order every feed shares, before Discovery's own mixing pass.
+		const newestFirst = entries
 			.sort((a, b) => b.at.localeCompare(a.at))
 			// The viewer's ACCESS filter, over the verdicts resolved above — this
 			// account's own standing over the deliverable, in the ACCESS section's
@@ -1288,14 +1297,25 @@ const accountRoutes = new Hono()
 					e.access?.canAccess ||
 					(e.type === "physical" && (accessCtx?.purchasedWorkIds.has(e.id) ?? false));
 				return accessFilter === "unlocked" ? unlocked : !unlocked;
-			})
-			.slice(0, 50);
+			});
+
+		// 🚨 **Discovery's Ticker runs the mix stage, and it runs it before the cap.**
+		// Strictly newest-first hands the page to whoever posts most: one creator's run
+		// of ten fills a quarter of a 4-column grid. Interleaving gives every creator one
+		// card before anyone gets a second — the first round is one per creator, then the
+		// next — and because the input was newest-first, it reads as "the newest of
+		// everyone, then the next of everyone" rather than as a re-ranking. The network
+		// feed is a record of what the people you chose did, so it keeps the plain order.
+		const capped =
+			scope === "global"
+				? interleaveByAuthor(newestFirst, (e) => e.creatorId).slice(0, 50)
+				: newestFirst.slice(0, 50);
 
 		return c.json({
-			entries,
+			entries: capped,
 			// `posts` kept as the posts-only projection so an older client keeps working
 			// rather than rendering an empty feed against a key it doesn't know.
-			posts: entries.filter((e) => e.kind === "post"),
+			posts: capped.filter((e) => e.kind === "post"),
 		});
 	})
 
