@@ -30,6 +30,7 @@
 
 import { isListened } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
+import { isDiscoveryReason } from "@anthers/shared/discovery";
 import {
 	coverFor,
 	MaturityVeil,
@@ -435,6 +436,11 @@ function entryIsOwn(entry: FeedEntry): boolean {
  */
 function ReleaseTile({ entry }: { entry: FeedEntry }) {
 	const work = entry as unknown as FeedWork;
+	// Why this card is here, from the reason the API states. The whole Ticker shares one
+	// candidate reason, so the tile announces it rather than repeating it beneath every
+	// card; a stream whose reasons differ (the network feed's follows, supports and
+	// saves) can render them visibly instead.
+	const reason = isDiscoveryReason(entry.reason) ? entry.reason.label : null;
 	const { Icon, label } = contentTypeMeta(work.type);
 	// A text Work with no artist-chosen thumbnail shows its title in the band,
 	// so the body does not repeat it — same rule the post tile keeps.
@@ -550,13 +556,20 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 			    unrevealed veil — rise past it on a positive z-index and keep their clicks.
 			    The veil case is the one that must NOT pass through: its band's click is the
 			    reveal, exactly as it was when the tile itself was the link. */}
-			<Link to={workUrl(work)} className="absolute inset-0" aria-label={work.title || label} />
+			<Link
+				to={workUrl(work)}
+				className="absolute inset-0"
+				aria-label={`${work.title || label}${reason ? `. Why this card: ${reason}` : ""}`}
+			/>
 		</div>
 	);
 }
 
 function PostTile({ entry }: { entry: FeedEntry }) {
 	const post = entry as unknown as FeedPost;
+	// See ReleaseTile: the reason is the card's accessible name where the stream shares
+	// one candidate reason, not a line repeated under every tile.
+	const reason = isDiscoveryReason(entry.reason) ? entry.reason.label : null;
 	// The typographic band is the title (a post with a thumbnail or body content
 	// has one of those as its art instead); repeating it beneath itself reads as
 	// a defect rather than as emphasis.
@@ -608,7 +621,7 @@ function PostTile({ entry }: { entry: FeedEntry }) {
 			<Link
 				to={postUrl(post)}
 				className="absolute inset-0"
-				aria-label={post.displayTitle || post.title || "A post"}
+				aria-label={`${post.displayTitle || post.title || "A post"}${reason ? `. Why this card: ${reason}` : ""}`}
 			/>
 		</div>
 	);
