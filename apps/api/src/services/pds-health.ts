@@ -17,6 +17,9 @@
  * cheap, answers for any server rather than Bluesky's alone, and says whether *this* server is
  * up rather than whether an incident has been posted. Bluesky's status page is linked for the
  * servers it runs, as the place somebody can see what is known about when it will be back.
+ *
+ * The same read asks whether the server serves its `/account` page, because Settings links
+ * there for an identity Anthers does not host and a link is a claim that a page exists.
  */
 
 /** How long one server's answer stands, per process. */
@@ -35,10 +38,19 @@ export interface PdsHealth {
 	downSince: string | null;
 	/** Where to see what is known about an outage, or null when we know of nowhere. */
 	statusUrl: string | null;
+	/**
+	 * Whether the server answers `/account`, the account page the reference PDS ships.
+	 *
+	 * ⚠️ **Asked rather than assumed, because a link is a claim that there is a page.** Every
+	 * PDS built on the reference server since v0.4.5006 answers it, and one still on an older
+	 * release does not, so the only way to know which a stranger's server is is to ask it.
+	 */
+	accountPage: boolean;
 }
 
 interface Remembered {
 	reachable: boolean;
+	accountPage: boolean;
 	checkedAt: number;
 	downSince: number | null;
 }
@@ -82,9 +94,13 @@ export async function pdsHealth(
 
 	let remembered = byOrigin.get(origin);
 	if (!remembered || now - remembered.checkedAt >= PDS_HEALTH_TTL_MS) {
-		const reachable = await ping(origin, opts.fetchImpl ?? fetch);
+		const [reachable, accountPage] = await Promise.all([
+			ping(origin, opts.fetchImpl ?? fetch),
+			answersAccountPage(origin, opts.fetchImpl ?? fetch),
+		]);
 		remembered = {
 			reachable,
+			accountPage,
 			checkedAt: now,
 			downSince: reachable ? null : (remembered?.downSince ?? now),
 		};
@@ -95,6 +111,7 @@ export async function pdsHealth(
 		reachable: remembered.reachable,
 		downSince: remembered.downSince === null ? null : new Date(remembered.downSince).toISOString(),
 		statusUrl,
+		accountPage: remembered.accountPage,
 	};
 }
 
@@ -104,6 +121,28 @@ async function ping(origin: string, doFetch: typeof fetch): Promise<boolean> {
 			signal: AbortSignal.timeout(PING_TIMEOUT_MS),
 		});
 		return res.ok;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Whether a server serves the account page, asked of the page itself.
+ *
+ * ⚠️ **A redirect counts, and the redirect is not followed.** A server may send `/account` to a
+ * sign-in page, or to its own `/` , and either way the page exists; following it, though, would
+ * let a DID document point this process at a host it should not reach, which is why the answer
+ * is read off the first response.
+ */
+async function answersAccountPage(origin: string, doFetch: typeof fetch): Promise<boolean> {
+	try {
+		const res = await doFetch(`${origin}/account`, {
+			signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+			redirect: "manual",
+		});
+		// The body is worth nothing here, and leaving it unread holds the connection.
+		await res.body?.cancel();
+		return res.status >= 200 && res.status < 400;
 	} catch {
 		return false;
 	}

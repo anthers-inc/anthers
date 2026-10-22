@@ -32,6 +32,7 @@ import {
 	setDesktopHome,
 } from "@anthers/web-shared/desktop";
 import { profileUrl } from "@anthers/web-shared/profile";
+import { usePublishingState } from "@anthers/web-shared/publishing";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import type { NotificationDeliveryMode } from "@anthers/web-shared/types";
@@ -831,16 +832,19 @@ function BlockedSection() {
  * states and neither offers a second: a handle Anthers issued, or an identity the person brought
  * from another server. Swapping one for the other is not built, and nothing here implies it is.
  *
- * ⚠️ **Whether an identity is Anthers-issued is derived from the suffix, not from a flag on the
- * account.** `/api/atproto/config` reports the suffix handles hang under, and only Anthers issues
- * names beneath it, so a handle ending in it is one of ours. The server does not trust this
- * derivation — the recovery-key and domain routes ask `hosted_accounts` directly — so the worst a
- * wrong answer here can do is show a card whose button then refuses.
+ * ⚠️ **Whether an identity is Anthers-issued is derived from the publishing route first and the
+ * handle suffix second.** `GET /api/atproto/publishing` answers `hosted` from `hosted_accounts`,
+ * which is the server's own answer and stays right for a hosted identity that has taken a domain
+ * of its own; `/api/atproto/config` reports the suffix only Anthers issues beneath, so it is the
+ * fallback while that answer is in flight. The server does not trust either derivation — the
+ * recovery-key and domain routes ask `hosted_accounts` directly — so the worst a wrong answer here
+ * can do is show a card whose button then refuses.
  */
 function IdentitySection() {
 	const { user } = useAuth();
 	const [suffix, setSuffix] = useState<string | null>(null);
 	const [recovery, setRecovery] = useState<RecoveryKeyState | null>(null);
+	const publishing = usePublishingState({ enabled: user != null });
 
 	useEffect(() => {
 		let live = true;
@@ -877,12 +881,23 @@ function IdentitySection() {
 	}, [user]);
 
 	// ⚠️ Waits for the suffix rather than guessing, so a hosted identity is never shown for a frame
-	// as one somebody brought, or the reverse.
+	// as one somebody brought, or the reverse. The publishing route, once it answers, outranks the
+	// suffix — see this component's note.
 	if (!user || suffix === null) return null;
 	const handle = user.handle;
-	const hosted = !!suffix && handle.endsWith(`.${suffix}`);
+	const hosted = publishing
+		? publishing.route === "hosted"
+		: !!suffix && handle.endsWith(`.${suffix}`);
 
-	if (!hosted) return <BroughtIdentityCard handle={handle} did={user.atprotoDid} />;
+	if (!hosted) {
+		return (
+			<>
+				<BroughtIdentityCard handle={handle} did={user.atprotoDid} />
+				<IdentityServerCard hosted={false} />
+				<ConnectedAppsCard />
+			</>
+		);
+	}
 	return (
 		<>
 			<AnthersHandleCard handle={handle} holdsRecoveryKey={!!recovery?.didKey} />
@@ -891,7 +906,220 @@ function IdentitySection() {
 			    the page loading and the API answering. */}
 			{recovery && <RecoveryKeyCard state={recovery} onSeated={setRecovery} />}
 			<DomainHandleCard handle={handle} did={user.atprotoDid} />
+			<IdentityServerCard hosted />
 		</>
+	);
+}
+
+/**
+ * The server holding this identity, and the account page it keeps for its holder.
+ *
+ * ⭐ **The page belongs to the server, not to Anthers**, and pointing at it is what the reference
+ * PDS's account page made possible: a person manages their identity where it lives instead of in
+ * whichever app they happen to use, or in the Bluesky app that used to be the only alternative.
+ *
+ * 🚨 **A hosted identity gets no link, and the copy says why.** The password on an account
+ * Anthers issues is generated for the hub and never given out (`hosted-accounts.ts`), so the page
+ * has no way in for the person holding the identity, and changing that password through it would
+ * leave the hub's sealed credential stale and stop their records publishing. Anthers' own
+ * controls are on this tab.
+ *
+ * ⚠️ **The link appears only when the server answers that the page exists.** `pds-health.ts`
+ * asks `/account` and remembers the answer per origin, because a link is a claim that there is
+ * a page, and a server still on an older release has none.
+ */
+function IdentityServerCard({ hosted }: { hosted: boolean }) {
+	const { user } = useAuth();
+	const state = usePublishingState({ enabled: !hosted && user != null });
+
+	let host = "";
+	let accountUrl = "";
+	try {
+		const server = new URL(user?.atprotoPdsUrl ?? "");
+		host = server.hostname;
+		accountUrl = `${server.origin}/account`;
+	} catch {
+		return null;
+	}
+
+	return (
+		<div className="card bg-base-200 mt-6">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Your Identity Server</h3>
+
+				{hosted ? (
+					<p className="text-sm text-base-content/60">
+						Your identity lives on {host}, the server Anthers runs. The password on your account was
+						generated for Anthers and never given out, so there is no password for you to change,
+						and a change would stop the records Anthers writes for you from reaching the network.
+					</p>
+				) : (
+					<>
+						<p className="text-sm text-base-content/60">
+							Your identity lives on {host}, which Anthers doesn't run.
+						</p>
+						{state?.server?.accountPage && (
+							<>
+								<p className="text-sm text-base-content/60">
+									That server keeps an account page of its own, where you change the password on the
+									identity, see the devices signed in to it, and revoke any app with access to it.
+								</p>
+								<a className="btn btn-sm w-fit" href={accountUrl} target="_blank" rel="noreferrer">
+									Open {host}/account
+								</a>
+							</>
+						)}
+					</>
+				)}
+			</div>
+		</div>
+	);
+}
+
+/**
+ * The one app Anthers can honestly list for an identity it does not host: itself.
+ *
+ * 🚨 **The server keeps the authoritative list, and this card is not a second one.** Anthers
+ * knows only the grant it holds, so the copy says that, rather than implying the card is
+ * everything connected. The identity server's own page is where the full list lives.
+ *
+ * ⭐ **Disconnecting is the real name for what the route does.** `stopPublishingFor` takes the
+ * Works, posts and projects Anthers published out of the repository *before* it revokes, because
+ * deleting a record needs the permission being returned, and revoking an OAuth session ends every
+ * write rather than only publishing. So the confirm says both halves: the listings go, and so
+ * does the permission to write comments, reviews, votes and follows until it is given again.
+ *
+ * ⚠️ **A hosted identity sees no card.** `hosted_accounts` answers that in `route`, and there is
+ * no OAuth client to revoke when the hub holds the account's own keys; the identity server card
+ * carries that explanation instead.
+ */
+function ConnectedAppsCard() {
+	const { user, grantPublishing } = useAuth();
+	const state = usePublishingState({ enabled: user != null });
+	const [disconnected, setDisconnected] = useState(false);
+	const [confirming, setConfirming] = useState(false);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	if (!user || !state || state.route === "hosted") return null;
+
+	// A revoked session ends every write, so the local answer outranks the state read a moment
+	// before the revocation. The next load asks the server and agrees.
+	const writing = disconnected ? "ungranted" : state.interactions;
+	const publishing = disconnected ? "ungranted" : state.route;
+
+	const disconnect = async () => {
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/atproto/publishing/stop", { method: "POST" });
+			const body = (await res.json().catch(() => null)) as { error?: string } | null;
+			if (!res.ok) throw new Error(body?.error ?? "That couldn't be done. Try again.");
+			setDisconnected(true);
+			setConfirming(false);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "That couldn't be done. Try again.");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<div className="card bg-base-200 mt-6">
+			<div className="card-body">
+				<h3 className="card-title text-lg">Connected Apps</h3>
+				<p className="text-sm text-base-content/60">
+					Anthers asks for what it needs once, when your identity is connected. The server holding
+					the identity keeps the full list of apps, and this is the one Anthers holds.
+				</p>
+
+				{error && (
+					<div className="alert alert-error text-sm mt-2">
+						<span>{error}</span>
+					</div>
+				)}
+
+				<ul className="mt-2 divide-y divide-base-300">
+					<li className="py-3">
+						<div className="flex flex-wrap items-center gap-2">
+							<span className="font-medium">Anthers</span>
+							<span
+								className={`badge badge-sm ${writing === "granted" ? "badge-success" : "badge-error"}`}
+							>
+								{writing === "granted" ? "Writing" : "No access"}
+							</span>
+							{publishing === "granted" && (
+								<span className="badge badge-sm badge-success">Publishing</span>
+							)}
+						</div>
+						<p className="mt-1 text-xs text-base-content/50">
+							{writing === "granted"
+								? "Writes your comments, reviews, votes and follows, and accepts credits you're offered."
+								: "Anthers can't write your comments, reviews, votes or follows. Signing in with this identity again asks for the permission back."}
+						</p>
+						<p className="text-xs text-base-content/50">
+							{publishing === "granted"
+								? "Publishes your Works, posts and projects into your identity."
+								: user.isCreator
+									? "Anthers has no permission to publish for you."
+									: "Publishing is asked for when creator mode is turned on."}
+						</p>
+					</li>
+				</ul>
+
+				{confirming ? (
+					<div className="mt-3 rounded-box border border-warning/40 bg-warning/10 p-3">
+						<p className="text-sm">
+							Anthers will take down the Works, posts and projects it published for you and give its
+							permission to write to your identity back. Comments, reviews, votes and follows you
+							made stay in your repository, and nothing in your Anthers account is deleted.
+						</p>
+						<p className="mt-2 text-xs text-base-content/60">
+							You can give the permission again whenever you want.
+						</p>
+						<div className="mt-3 flex flex-wrap gap-2">
+							<button
+								type="button"
+								className="btn btn-sm btn-warning"
+								onClick={() => void disconnect()}
+								disabled={busy}
+							>
+								{busy ? "Disconnecting…" : "Disconnect Anthers"}
+							</button>
+							<button
+								type="button"
+								className="btn btn-sm btn-ghost"
+								onClick={() => setConfirming(false)}
+								disabled={busy}
+							>
+								Cancel
+							</button>
+						</div>
+					</div>
+				) : (
+					<div className="mt-3 flex flex-wrap items-center gap-3">
+						{publishing === "granted" && (
+							<button
+								type="button"
+								className="btn btn-sm btn-outline w-fit"
+								onClick={() => setConfirming(true)}
+							>
+								Disconnect Anthers
+							</button>
+						)}
+						{publishing === "ungranted" && user.isCreator && state.offered && (
+							<button
+								type="button"
+								className="btn btn-sm btn-primary w-fit"
+								onClick={() => void grantPublishing()}
+							>
+								Give Anthers permission
+							</button>
+						)}
+					</div>
+				)}
+			</div>
+		</div>
 	);
 }
 
