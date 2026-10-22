@@ -348,6 +348,9 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		// bar never registers a listener against the defaults and then swaps them.
 		searchShortcuts: prefs?.searchShortcuts ?? null,
 		atprotoDid: user.atprotoDid,
+		// The server holding that identity. Public — it is in the DID document — and the client
+		// needs it to send somebody to the server's own account page.
+		atprotoPdsUrl: user.atprotoPdsUrl,
 		createdAt: user.createdAt,
 		// Null until the first run accepts the terms on `/welcome` — the signal every
 		// "still needs onboarding" check reads.

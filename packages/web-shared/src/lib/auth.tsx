@@ -48,6 +48,11 @@ export interface User {
 	searchShortcuts: Record<string, string> | null;
 	/** Every account holds exactly one ATProto identity, so it is always present. */
 	atprotoDid: string;
+	/**
+	 * The server holding that identity: Anthers' own node for an identity it issued, or the
+	 * server the person brought it from. Public, since it is in the DID document.
+	 */
+	atprotoPdsUrl: string;
 	/** When the terms (and the 13+ assertion) were accepted; null until `/welcome` finishes onboarding. */
 	termsAcceptedAt: string | null;
 	createdAt: string;

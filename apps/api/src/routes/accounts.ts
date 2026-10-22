@@ -231,6 +231,8 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		// The bar's two chords; null means the defaults in `@anthers/shared/keybindings`.
 		searchShortcuts: prefs?.searchShortcuts ?? null,
 		atprotoDid: user.atprotoDid,
+		// The server holding that identity, so Settings can name it and link its account page.
+		atprotoPdsUrl: user.atprotoPdsUrl,
 		createdAt: user.createdAt,
 		// Surfaced on /me because the cancel path runs through signing back in: someone
 		// who changes their mind has to be TOLD a deletion is pending the moment they
