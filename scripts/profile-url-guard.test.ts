@@ -89,3 +89,40 @@ describe("profile URLs", () => {
 		).toEqual([]);
 	});
 });
+
+/**
+ * The API's half of the same rule, which the scan above cannot see.
+ *
+ * 🚨 **`apps/api/src` writes user-facing URLs too**, and it cannot import the web helper
+ * (the no-web-shared rule), so `lib/handles.ts` carries the API's `profilePath` instead.
+ * The defect this guards is the one that got past both halves: `notifyFollow` built
+ * `/name` from a handle, so every follower notification pointed at a PAGE route that never
+ * existed — the row rendered, the badge counted it, and the click 404'd. A notification
+ * link never has a data-driven FIRST segment: the site's root paths are a fixed set
+ * (`/works`, `/posts`, `/studio`, `/library`, …) and the one exception, a person, is
+ * `/@handle`. So a `linkPath` template that starts `/${…}` is either the profile prefix
+ * missing its `@` or a link naming no route at all, and both are the same defect.
+ */
+describe("notification links in the API", () => {
+	it("🚨 never builds one from an interpolated root segment", async () => {
+		const files: string[] = [];
+		const glob = new Bun.Glob("**/*.ts");
+		for await (const rel of glob.scan({ cwd: "apps/api/src" })) {
+			if (!rel.includes("node_modules/")) files.push(join("apps/api/src", rel));
+		}
+		// Without this every assertion below is satisfied by an empty file list.
+		expect(files.length).toBeGreaterThan(100);
+
+		const offenders: string[] = [];
+		for (const file of files) {
+			const lines = (await Bun.file(file).text()).split("\n");
+			lines.forEach((text, i) => {
+				if (/linkPath:.*`\/\$\{/.test(text)) offenders.push(`${file}:${i + 1} — ${text.trim()}`);
+			});
+		}
+		expect(
+			offenders,
+			"a notification link's first segment is never interpolated — a person is /@handle (lib/handles.ts's profilePath) and every other root path is a literal",
+		).toEqual([]);
+	});
+});

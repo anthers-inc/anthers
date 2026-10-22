@@ -3684,13 +3684,14 @@ const contentRoutes = new Hono()
 			// "posted, unannounced" rather than "failed, try again".
 			try {
 				if (replyTo === undefined) {
-					await notifyPostComment({ commenterId: user.id, post });
+					await notifyPostComment({ commenterId: user.id, commenterHandle: user.handle, post });
 				} else if (parentAuthorId != null) {
 					await notifyReply({
 						replierId: user.id,
+						replierHandle: user.handle,
 						parentId: replyTo,
 						parentAuthorId,
-						post: { slug: post.slug, publicId: post.publicId },
+						post: { slug: post.slug, publicId: post.publicId, title: post.title },
 					});
 				}
 			} catch {
@@ -4051,7 +4052,12 @@ const contentRoutes = new Hono()
 			// The creator is told about a NEW review only — an edit re-notifying is the noise
 			// the branch itself is here to stop. Awaited for the same reason the comment
 			// emitters are; see that call site.
-			await notifyReview({ reviewerId: user.id, work, isNew: true }).catch(() => {});
+			await notifyReview({
+				reviewerId: user.id,
+				reviewerHandle: user.handle,
+				work,
+				isNew: true,
+			}).catch(() => {});
 		}
 
 		void queueRecordSync("review", review.id);

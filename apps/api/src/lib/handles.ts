@@ -23,6 +23,31 @@ import { db } from "@anthers/db";
 import { handleHistory, users } from "@anthers/db/schema";
 import { and, eq, gt } from "drizzle-orm";
 
+/** The character that makes a root path a person rather than a page. */
+const HANDLE_PREFIX = "@";
+
+/**
+ * The path prefix, `"/@"`.
+ *
+ * ⚠️ **The API cannot import `@anthers/web-shared/profile`** (the no-web-shared rule), so
+ * this is the sibling of that module's `profileUrl` rather than a re-export of it, and the
+ * two have to agree. Together they are the only writers of the prefix, one per side: `/name`
+ * is a page and `/@name` is a person, so a path built with the wrong one typechecks,
+ * matches a real route, and renders the wrong page — which is how every follower
+ * notification addressed `/parkerhdavis.com` until a reader noticed.
+ */
+const PROFILE_PREFIX = `/${HANDLE_PREFIX}`;
+
+/** A person's address: `/@handle`. Every profile link the API writes goes through here. */
+export function profilePath(handle: string): string {
+	return `${PROFILE_PREFIX}${handle}`;
+}
+
+/** How a handle is written where it is read rather than followed — a notification, a byline. */
+export function displayHandle(handle: string): string {
+	return `${HANDLE_PREFIX}${handle}`;
+}
+
 /** The account a handle names right now, or nothing — no history consulted. */
 export async function accountByHandle(
 	handle: string,

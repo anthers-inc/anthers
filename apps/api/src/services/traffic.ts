@@ -35,10 +35,8 @@ import {
 } from "@anthers/shared/traffic";
 import { and, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import { profilePath } from "../lib/handles.js";
 import { rowsOf } from "./rows.js";
-
-/** The handle prefix, written here rather than imported from web-shared: the API must not import a browser package for one character. (Mirror-checked by the traffic tests.) */
-const HANDLE_PREFIX = "/@";
 
 /** The card surfaces that can legitimately display a countable card. */
 const CARD_SUBJECT_KINDS = ["project", "creator"] as const;
@@ -297,7 +295,7 @@ export async function creatorTraffic(creatorId: number, days: number): Promise<C
 		.limit(1);
 	if (!creator?.handle) return { profileViews: 0, topWorks: [], topProjects: [] };
 
-	const prefix = `${HANDLE_PREFIX}${creator.handle}`;
+	const prefix = profilePath(creator.handle);
 	const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 	const sinceDay = utcDay(since);
 
@@ -494,7 +492,7 @@ async function creatorPathPrefix(creatorId: number): Promise<string | null> {
 		.where(eq(users.id, creatorId))
 		.limit(1);
 	if (!creator?.handle) return null;
-	return `${HANDLE_PREFIX}${creator.handle}`;
+	return profilePath(creator.handle);
 }
 
 /** The prefix-boundary condition shared by the creator reads: the bare profile path, or anything under it. */

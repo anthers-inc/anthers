@@ -193,7 +193,7 @@ describe("emitters", () => {
 		expect(after.length).toBe(before.length);
 	});
 
-	it("a follow notifies the person followed; a repeat does not", async () => {
+	it("a follow notifies the person followed, and links to their profile, not a page", async () => {
 		const follow = await req(`/api/accounts/users/${people.author.handle}/follow`, {
 			method: "POST",
 			headers: { Origin: ORIGIN, Cookie: people.follower.cookie },
@@ -201,6 +201,13 @@ describe("emitters", () => {
 		expect(follow.status).toBe(201);
 		const row = await lastNotification(people.author.userId, "new_follower");
 		expect(row).not.toBeNull();
+		// 🚨 **The destination, not just the arrival.** Every follower notification
+		// addressed `/parkerhdavis.com`-shaped paths until 2026-10-19: a person is
+		// `/@handle` and the bare form is a PAGE route that never existed, so the row
+		// rendered, the badge counted it, and the click 404'd. Kind and dedupe key both
+		// passed while that was true, which is why this assertion is here.
+		expect(row?.linkPath).toBe(`/@${people.follower.handle}`);
+		expect(row?.title).toContain(people.follower.handle);
 
 		const before = await db
 			.select({ n: notifications.id })
@@ -312,7 +319,7 @@ describe("emitters", () => {
 			headers: { Cookie: people.author.cookie },
 		});
 		expect(res.status).toBe(200);
-		const body = (await res.json()) as { unread: number };
+		const body = (await res.json()) as { unread: number; total: number };
 		// The same number the list read reports — the two endpoints are one count from one
 		// service, and a drift here would be the bell saying something the page's own
 		// header contradicts.
@@ -322,6 +329,9 @@ describe("emitters", () => {
 		const listedBody = (await listed.json()) as { unread: number };
 		expect(body.unread).toBe(listedBody.unread);
 		expect(body.unread).toBeGreaterThan(0);
+		// The bell draws only when `total` is non-zero — the same read answers both, and a
+		// total below the unread count would mean the aggregate's two halves disagreed.
+		expect(body.total).toBeGreaterThanOrEqual(body.unread);
 	});
 });
 
