@@ -65,7 +65,7 @@ async function sweep() {
 	const staleNotes = await db
 		.select({ id: notifications.id })
 		.from(notifications)
-		.where(like(notifications.title, "Somebody replied to your comment"))
+		.where(like(notifications.title, "%replied to your comment"))
 		// Only rows whose link points INTO this run's post — the sweep must take its own
 		// rows and no other test's.
 		.where(like(notifications.linkPath, `%${POST_SLUG}%`));

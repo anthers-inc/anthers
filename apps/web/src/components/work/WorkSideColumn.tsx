@@ -20,9 +20,9 @@
 import CreatorCard from "@anthers/web-shared/creator/CreatorCard";
 import { postUrl } from "@anthers/web-shared/postUrl";
 import { creatorProjectUrl } from "@anthers/web-shared/profile";
-import { Link } from "@anthers/web-shared/router";
+import { Link, useLocation } from "@anthers/web-shared/router";
 import { MegaphoneIcon } from "@heroicons/react/24/outline";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import TabPanels from "./TabPanels";
 import { WORK_DETAILS_HEADING_CLASS, type WorkDetail } from "./WorkLayout";
 
@@ -35,6 +35,28 @@ export interface SideTab {
 export default function WorkSideColumn({ tabs, work }: { tabs: SideTab[]; work: WorkDetail }) {
 	const [active, setActive] = useState(tabs[0]?.key ?? "");
 	const current = tabs.find((t) => t.key === active) ?? tabs[0];
+
+	/**
+	 * 🚨 **A hash naming a tab opens it** — `#reviews` is a real address for this column,
+	 * not decoration.
+	 *
+	 * A "reviewed your Work" notification links to `#reviews` (`services/activity-notify.ts`),
+	 * and the recipient of that one is the CREATOR, whose column opens on Manage
+	 * (`2026-10-16`). Without this the click lands on the Work page with the review it was
+	 * announcing still one tab away — the link resolves, so nothing errors, and the promise
+	 * the row made quietly does not hold. The map is the tab's own key, so the URL a
+	 * notification writes is the label the person then sees.
+	 *
+	 * The effect runs on `hash` alone; `tabs` is an inline array rebuilt every render, and
+	 * depending on it would fire the set on every keystroke elsewhere on the page.
+	 */
+	const { hash } = useLocation();
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `hash` is the trigger; the tab list is read, not watched
+	useEffect(() => {
+		const key = hash.startsWith("#") ? hash.slice(1) : "";
+		if (key && tabs.some((t) => t.key === key)) setActive(key);
+	}, [hash]);
+
 	if (!current) return null;
 
 	// The gap under the tab bar is the Info tabs' `gap-6` (Parker, 2026-10-16): the

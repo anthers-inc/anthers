@@ -160,7 +160,13 @@ export default function CommentThread({ subject }: CommentThreadProps) {
 	return (
 		// No top border of its own: the post renders as one bordered card, and the edge
 		// under it is already the boundary this thread used to draw.
-		<div className="pt-6">
+		//
+		// ⚠️ **`id="comments"` is a link target, not decoration** — a "commented on your
+		// post" notification addresses `#comments` (`services/activity-notify.ts`), and a
+		// fragment nothing renders is a link that lands at the top of the page and looks
+		// like it worked. `scroll-mt-20` keeps the heading clear of the sticky header,
+		// the same offset every comment row below carries.
+		<div id="comments" className="pt-6 scroll-mt-20">
 			<h2 className="text-xl font-bold mb-4">Comments ({count})</h2>
 
 			{isAuthenticated && (
