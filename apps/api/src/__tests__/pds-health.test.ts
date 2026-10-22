@@ -19,10 +19,12 @@ let port = 20000;
 const server = () => `https://pds-${RUN}-${port++}.example`;
 
 /** A fetch that answers from a script of outcomes, counting what it was asked. */
-function scripted(outcomes: Array<"up" | "down" | "error">) {
+function scripted(outcomes: Array<"up" | "down" | "error">, accountPage = 200) {
 	const calls: string[] = [];
 	const fetchImpl = (async (input: string) => {
 		calls.push(String(input));
+		// The account page is a second, independent ask in the same read.
+		if (String(input).endsWith("/account")) return new Response("", { status: accountPage });
 		const next = outcomes.shift() ?? "up";
 		if (next === "error") throw new Error("connection refused");
 		return new Response("{}", { status: next === "up" ? 200 : 503 });
@@ -47,8 +49,26 @@ describe("asking whether a server is up", () => {
 			reachable: true,
 			downSince: null,
 			statusUrl: null,
+			accountPage: true,
 		});
-		expect(calls).toEqual([`${url}/xrpc/_health`]);
+		expect(calls).toEqual([`${url}/xrpc/_health`, `${url}/account`]);
+	});
+
+	it("reports whether the server answers an account page", async () => {
+		const present = scripted(["up"], 200);
+		expect((await pdsHealth(server(), { now: 1, fetchImpl: present.fetchImpl }))?.accountPage).toBe(
+			true,
+		);
+		// A 404 is a server still on a release that has no account page, and a redirect is a
+		// server that has one and wants the browser somewhere else.
+		const absent = scripted(["up"], 404);
+		expect((await pdsHealth(server(), { now: 1, fetchImpl: absent.fetchImpl }))?.accountPage).toBe(
+			false,
+		);
+		const redirects = scripted(["up"], 302);
+		expect(
+			(await pdsHealth(server(), { now: 1, fetchImpl: redirects.fetchImpl }))?.accountPage,
+		).toBe(true);
 	});
 
 	it("reports a server that refuses the connection or answers with an error as down", async () => {
@@ -68,9 +88,9 @@ describe("asking whether a server is up", () => {
 		const { calls, fetchImpl } = scripted(["up", "up"]);
 		await pdsHealth(url, { now: 1000, fetchImpl });
 		await pdsHealth(`${url}/some/path`, { now: 1000 + PDS_HEALTH_TTL_MS - 1, fetchImpl });
-		expect(calls).toHaveLength(1);
-		await pdsHealth(url, { now: 1000 + PDS_HEALTH_TTL_MS, fetchImpl });
 		expect(calls).toHaveLength(2);
+		await pdsHealth(url, { now: 1000 + PDS_HEALTH_TTL_MS, fetchImpl });
+		expect(calls).toHaveLength(4);
 	});
 
 	it("remembers when an outage began until the server answers again", async () => {
