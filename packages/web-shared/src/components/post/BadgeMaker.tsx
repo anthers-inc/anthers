@@ -1,24 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The **Badge Maker** — the one place a creator makes a Badge, rendered on the creator's
- * own profile in the Badges tab, above the ladder a supporter meets.
+ * The **Badge Maker** — the editor for one Badge, opened from the pencil on that Badge's
+ * card in a creator's Badges tab. A Badge is edited one at a time, so this is not a list
+ * of every rung: the grid behind it is the list, and this is what its pencil opens.
  *
- * 🚨 **This replaces the Badge rung editor rather than adding a picker beside it**
- * (Parker, 2026-09-13): naming a rung, setting its monthly amount, describing it, and
- * designing its art are one tool's four jobs. The profile's Badges tab renders this card
- * where the read-only ladder sits below it, so a creator edits a rung and sees the result
- * on the same page.
+ * 🚨 **Naming a rung, setting its monthly amount, describing it, and designing its art
+ * are one tool's four jobs** (Parker, 2026-09-13). The creator meets their ladder as the
+ * same tall cards a supporter does — the read/edit rule the profile's own fields follow —
+ * and the editor is the only thing the pencil reveals, rather than a second list of the
+ * same rungs standing above the first.
  *
  * 🚨 **There are no standard creator Badges any more.** A creator's Badge art is built
  * from the Noun Project catalog here or uploaded as their own file, and nothing else —
  * the old mix-and-match emblem library is retired for creators. **A rung with no art of
- * its own falls back to Anthers' own Badge designs by ladder position** (`index % 4`); *
+ * its own falls back to Anthers' own Badge designs by ladder position** (`index % 4`);
  * that is a fallback and a start, not a design to settle for, so an untouched rung says
  * so and invites the creator to give it an emblem of their own.
  *
  * ⭐ **Composition happens at save, and an unchanged save is free** — the server dedupes
  * on the composition fingerprint before it spends anything, so a creator pressing save
  * repeatedly costs the platform nothing.
+ *
+ * ⚠️ **A new Badge gets its art after it exists**, because every art route is keyed by the
+ * Badge's id. The editor opens empty for one, creates it, and closes: the new card's
+ * pencil is where the design happens. That is the shape the add form has always had.
  */
 
 import {
@@ -27,13 +32,8 @@ import {
 	BADGE_SHAPES,
 	type BadgePerkKind,
 } from "@anthers/shared/badge-art";
-import {
-	amountLabel,
-	BADGE_ART_MAX_BYTES,
-	STRIPE_MIN_CHARGE,
-	supportAmount,
-} from "@anthers/shared/constants";
-import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { BADGE_ART_MAX_BYTES, STRIPE_MIN_CHARGE, supportAmount } from "@anthers/shared/constants";
+import { TrashIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch, client } from "../../lib/rpc";
 import type { CreatorBadge } from "../../lib/types";
@@ -50,15 +50,14 @@ function rungAmount(v: string): string {
 	return (n > 0 ? n : 1).toFixed(2);
 }
 
-/** "$6/mo" — the amount IS the rung now, so nothing has to be derived from it. */
-function rungLabel(threshold: string | number): string {
-	return `${amountLabel(threshold)}/mo`;
-}
-
 /**
  * The art control for one rung: shape, field color, the Noun Project catalog, or the
  * creator's own upload — the four art choices in one place, with the rung's own mark as
  * the button that opens them.
+ *
+ * ⭐ **The panel opens in the flow rather than over the fields.** The editor is a dialog
+ * with its own scroll, so an absolutely positioned panel would hang past its edge; below
+ * the mark is where the room is.
  */
 function BadgeArtControl({
 	badge,
@@ -73,7 +72,6 @@ function BadgeArtControl({
 }) {
 	const input = useRef<HTMLInputElement>(null);
 	const [busy, setBusy] = useState(false);
-	const [_open, _setOpen] = useState(false);
 	const [pickerOpen, setPickerOpen] = useState(false);
 	const [composing, setComposing] = useState(false);
 
@@ -179,28 +177,50 @@ function BadgeArtControl({
 	};
 
 	return (
-		<div className="relative flex flex-col items-center gap-1">
-			<button
-				type="button"
-				className="btn btn-ghost btn-square h-14 w-14 p-0"
-				onClick={() => setPickerOpen((o) => !o)}
-				disabled={busy || composing}
-				title="Change this badge"
-			>
-				<CreatorBadgeMark
-					badgeId={badge.id}
-					index={index}
-					label={`${badge.label} badge`}
-					art={badge}
-				/>
-			</button>
-			{!badge.hasArt && (
-				// The fallback is a start, not a design to settle for — say so where the
-				// creator is looking at it.
-				<span className="text-[10px] text-base-content/50 max-w-16 text-center leading-tight">
-					Give it your own emblem
-				</span>
-			)}
+		<div className="flex flex-col gap-2" data-testid="badge-art-control">
+			<div className="flex items-center gap-3">
+				<button
+					type="button"
+					className="btn btn-ghost h-16 w-16 rounded-box p-0"
+					onClick={() => setPickerOpen((o) => !o)}
+					disabled={busy || composing}
+					aria-expanded={pickerOpen}
+					title="Change this Badge's art"
+				>
+					<CreatorBadgeMark
+						badgeId={badge.id}
+						index={index}
+						label={`${badge.label} badge`}
+						art={badge}
+						size="h-16 w-16"
+					/>
+				</button>
+				<div className="min-w-0">
+					<p className="text-xs font-medium text-base-content/60">
+						{badge.hasArt ? "This Badge's emblem" : "Anthers' design for now"}
+					</p>
+					<div className="mt-1.5 flex flex-wrap items-center gap-2">
+						<button
+							type="button"
+							className="btn btn-xs"
+							onClick={() => setPickerOpen((o) => !o)}
+							disabled={busy || composing}
+						>
+							{pickerOpen ? "Close the art picker" : badge.hasArt ? "Change art" : "Design the art"}
+						</button>
+						{badge.hasArt && (
+							<button
+								type="button"
+								className="btn btn-ghost btn-xs text-base-content/50"
+								onClick={clear}
+								disabled={busy}
+							>
+								Remove
+							</button>
+						)}
+					</div>
+				</div>
+			</div>
 			<input
 				ref={input}
 				type="file"
@@ -213,7 +233,7 @@ function BadgeArtControl({
 			/>
 
 			{pickerOpen && (
-				<div className="absolute top-16 left-0 z-10 w-96 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg">
+				<div className="rounded-box border border-base-300 bg-base-100 p-3">
 					<PickerRow label="Shape">
 						{BADGE_SHAPES.map((s) => (
 							<button
@@ -251,13 +271,11 @@ function BadgeArtControl({
 					{/* 🚨 The catalog. Every emblem here is somebody's artwork, shown with the
 					    artist's name — byline in the picker, credit on the Badge itself. */}
 					<div className="mt-3 border-t border-base-300 pt-3">
-						<div className="mb-2 flex items-baseline justify-between">
+						<div className="mb-2 flex items-baseline justify-between gap-2">
 							<div className="text-xs font-medium text-base-content/60">
 								Emblem from the Noun Project
 							</div>
-							<span className="text-[10px] text-base-content/40">
-								nearly ten million icons, every one by a named artist
-							</span>
+							<span className="text-[10px] text-base-content/40">every icon by a named artist</span>
 						</div>
 						<NounEmblemPicker
 							onSave={(p) => void savePlacement(p)}
@@ -275,22 +293,12 @@ function BadgeArtControl({
 						>
 							{badge.hasArt ? "Replace art" : "Use my own art"}
 						</button>
-						{badge.hasArt && (
-							<button
-								type="button"
-								className="btn btn-ghost btn-xs text-base-content/50"
-								onClick={clear}
-								disabled={busy}
-							>
-								Remove
-							</button>
-						)}
+						{/* Said here rather than discovered at the refusal: the server cannot
+						    safety-scan an SVG without rasterizing it first, so it refuses one. */}
+						<p className="text-[11px] text-base-content/50">
+							PNG, JPEG or WebP. Your art sits on the background you picked.
+						</p>
 					</div>
-					{/* Said here rather than discovered at the refusal: the server cannot
-					    safety-scan an SVG without rasterizing it first, so it refuses one. */}
-					<p className="mt-1 text-[11px] text-base-content/50">
-						PNG, JPEG or WebP. Your art sits on the background you picked.
-					</p>
 				</div>
 			)}
 		</div>
@@ -334,7 +342,7 @@ function PerkEditor({
 
 	return (
 		<div className="rounded-lg border border-base-300 p-2">
-			<div className="mb-1 flex items-baseline justify-between">
+			<div className="mb-1 flex items-baseline justify-between gap-2">
 				<div className="text-xs font-medium text-base-content/60">
 					Perks — what supporters receive
 				</div>
@@ -415,322 +423,265 @@ type PerkDraft = {
 	description?: string;
 };
 
-export default function BadgeMaker({ onChanged }: { onChanged?: () => void } = {}) {
-	const [badges, setBadges] = useState<CreatorBadge[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
+export default function BadgeMaker({
+	badge,
+	index,
+	onChanged,
+	onClose,
+}: {
+	/** The Badge this editor opens on; null when the creator is adding one. */
+	badge: CreatorBadge | null;
+	/** The rung's position on the ladder, for the fallback art. */
+	index: number;
+	/** A save or delete lands; the grid behind the dialog refetches its rows. */
+	onChanged?: () => void;
+	onClose: () => void;
+}) {
+	const creating = badge === null;
+	const badgeId = badge?.id ?? null;
+
+	const [label, setLabel] = useState(badge?.label ?? "");
+	const [threshold, setThreshold] = useState(badge?.threshold ?? "");
+	const [description, setDescription] = useState(badge?.description ?? "");
+	const [perks, setPerks] = useState<PerkDraft[]>([]);
+	const [loadingPerks, setLoadingPerks] = useState(badgeId !== null);
 	const [saving, setSaving] = useState(false);
+	const [confirmingDelete, setConfirmingDelete] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
-	// New-rung form
-	const [newLabel, setNewLabel] = useState("");
-	const [newThreshold, setNewThreshold] = useState("");
-	const [newDescription, setNewDescription] = useState("");
-
-	// Inline edit
-	const [editingId, setEditingId] = useState<number | null>(null);
-	const [editLabel, setEditLabel] = useState("");
-	const [editThreshold, setEditThreshold] = useState("");
-	const [editDescription, setEditDescription] = useState("");
-	// Perks, edited with the rung and saved as one whole-list replace.
-	const [editPerks, setEditPerks] = useState<PerkDraft[]>([]);
-
-	/**
-	 * ⚠️ **Only the FIRST load blanks the ladder.** A refetch after a save used to set
-	 * `loading` unconditionally, which swapped the whole list for "Loading…" and unmounted
-	 * every rung — so a creator picking a shape watched the ladder flash and the picker
-	 * close, and had to reopen it for the color and again for the emblem. Three choices,
-	 * three reopenings, for a component whose entire point is mixing and matching. Found in
-	 * the browser; nothing in the API tests could have shown it.
-	 */
-	const fetchBadges = () => {
-		setLoading((wasLoading) => wasLoading || badges.length === 0);
-		client.api.subscriptions.badges
-			.$get()
+	// Perks are stored rows; load them for the editor (minting keys for React). The editor
+	// stays mounted when an art save refetches the ladder, so this reads once per Badge.
+	useEffect(() => {
+		if (badgeId === null) return;
+		let live = true;
+		setLoadingPerks(true);
+		apiFetch(`/api/subscriptions/badges/${badgeId}/perks`)
 			.then(async (res) => {
-				if (!res.ok) {
-					setBadges([]);
-					return;
-				}
-				const data = (await res.json()) as { badges: CreatorBadge[] };
-				// Every rung the ladder holds is the creator's own Badge — there is no
-				// `gateType` to filter on, and no cross-issuer rung to exclude.
-				setBadges(data.badges ?? []);
-			})
-			.catch(() => setBadges([]))
-			.finally(() => setLoading(false));
-	};
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the first load only. A save refetches by calling `fetchBadges` directly, and depending on `badges.length` would refetch every time a rung is added.
-	useEffect(fetchBadges, []);
-
-	/**
-	 * A change lands in two places: the maker's own list, and the page around it. The
-	 * profile renders the supporter-facing ladder from `creator-status`, so it passes a
-	 * callback to refetch that alongside the maker's rows — one edit, one screen.
-	 */
-	const refreshLadder = () => {
-		fetchBadges();
-		onChanged?.();
-	};
-
-	const handleAdd = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (!newLabel.trim() || !newThreshold.trim()) return;
-		setSaving(true);
-		setError(null);
-		try {
-			const res = await client.api.subscriptions.badges.$post({
-				json: {
-					threshold: rungAmount(newThreshold),
-					label: newLabel.trim(),
-					description: newDescription.trim(),
-				},
-			});
-			if (!res.ok) throw new Error("Failed to add rung.");
-			setNewLabel("");
-			setNewThreshold("");
-			setNewDescription("");
-			refreshLadder();
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to add rung.");
-		} finally {
-			setSaving(false);
-		}
-	};
-
-	const startEdit = async (badge: CreatorBadge) => {
-		setEditingId(badge.id);
-		setEditLabel(badge.label);
-		setEditThreshold(badge.threshold);
-		setEditDescription(badge.description ?? "");
-		// Perks are stored rows; load them for the editor (minting keys for React).
-		setEditPerks([]);
-		try {
-			const res = await apiFetch(`/api/subscriptions/badges/${badge.id}/perks`);
-			if (res.ok) {
+				if (!live || !res.ok) return;
 				const body = (await res.json()) as { perks: Omit<PerkDraft, "key">[] };
-				setEditPerks((body.perks ?? []).map((p) => ({ ...p, key: crypto.randomUUID() })));
-			}
-		} catch {
-			// The editor opens with none on a failed read; saving sends the empty list,
-			// which is the honest state the creator saw.
-		}
-	};
+				setPerks((body.perks ?? []).map((p) => ({ ...p, key: crypto.randomUUID() })));
+			})
+			.catch(() => {
+				// The editor opens with none on a failed read; saving sends the empty list,
+				// which is the honest state the creator saw.
+			})
+			.finally(() => {
+				if (live) setLoadingPerks(false);
+			});
+		return () => {
+			live = false;
+		};
+	}, [badgeId]);
 
-	const handleSaveEdit = async (id: number) => {
+	const handleSave = async (e: React.FormEvent) => {
+		e.preventDefault();
+		if (!label.trim() || !threshold.trim()) return;
 		setSaving(true);
 		setError(null);
 		try {
-			const res = await client.api.subscriptions.badges[":id"].$patch({
-				param: { id: String(id) },
-				json: {
-					threshold: rungAmount(editThreshold),
-					label: editLabel.trim(),
-					description: editDescription.trim(),
-				},
-			});
-			if (!res.ok) throw new Error("Failed to save rung.");
-			// Perks ride along as their own whole-list replace, so one save settles both.
-			const perksRes = await apiFetch(`/api/subscriptions/badges/${id}/perks`, {
-				method: "PUT",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					perks: editPerks
-						.filter((p) => p.label.trim())
-						.map((p) => ({
-							kind: p.kind,
-							label: p.label.trim(),
-							description: p.description ?? "",
-						})),
-				}),
-			});
-			if (!perksRes.ok) throw new Error("Failed to save perks.");
-			setEditingId(null);
-			refreshLadder();
+			if (creating) {
+				const res = await client.api.subscriptions.badges.$post({
+					json: {
+						threshold: rungAmount(threshold),
+						label: label.trim(),
+						description: description.trim(),
+					},
+				});
+				if (!res.ok) throw new Error("Couldn't add this Badge.");
+			} else {
+				const res = await client.api.subscriptions.badges[":id"].$patch({
+					param: { id: String(badge.id) },
+					json: {
+						threshold: rungAmount(threshold),
+						label: label.trim(),
+						description: description.trim(),
+					},
+				});
+				if (!res.ok) throw new Error("Couldn't save this Badge.");
+				// Perks ride along as their own whole-list replace, so one save settles both.
+				const perksRes = await apiFetch(`/api/subscriptions/badges/${badge.id}/perks`, {
+					method: "PUT",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						perks: perks
+							.filter((p) => p.label.trim())
+							.map((p) => ({
+								kind: p.kind,
+								label: p.label.trim(),
+								description: p.description ?? "",
+							})),
+					}),
+				});
+				if (!perksRes.ok) throw new Error("Couldn't save the perks.");
+			}
+			onChanged?.();
+			onClose();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to save rung.");
+			setError(err instanceof Error ? err.message : "Couldn't save this Badge.");
 		} finally {
 			setSaving(false);
 		}
 	};
 
-	const handleDelete = async (id: number) => {
+	const handleDelete = async () => {
+		if (!badge) return;
 		setSaving(true);
 		setError(null);
 		try {
 			const res = await client.api.subscriptions.badges[":id"].$delete({
-				param: { id: String(id) },
+				param: { id: String(badge.id) },
 			});
-			if (!res.ok) throw new Error("Failed to delete rung.");
-			refreshLadder();
+			if (!res.ok) throw new Error("Couldn't delete this Badge.");
+			onChanged?.();
+			onClose();
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to delete rung.");
+			setError(err instanceof Error ? err.message : "Couldn't delete this Badge.");
 		} finally {
 			setSaving(false);
 		}
 	};
 
 	return (
-		<div className="card bg-base-200">
-			<div className="card-body">
-				<h3 className="card-title text-lg">Badge Maker</h3>
-				<p className="text-sm text-base-content/60 mb-2">
-					Badges let supporters unlock work by giving you a monthly amount — you choose the levels,
-					at any amount you like. Design each Badge here: its shape, field color and emblem, drawn
-					from the Noun Project catalog where every emblem was made by a named artist, or your own
-					art. They appear as rows in every Work's access table.
-				</p>
-
-				{error && (
-					<div className="alert alert-error text-sm mb-2">
-						<span>{error}</span>
-					</div>
-				)}
-
-				{loading ? (
-					<p className="text-sm text-base-content/50">Loading...</p>
-				) : (
-					<div className="flex flex-col gap-2">
-						{badges.length === 0 && <p className="text-sm text-base-content/50">No rungs yet.</p>}
-						{badges.map((badge) =>
-							editingId === badge.id ? (
-								<div key={badge.id} className="flex flex-col gap-2 p-3 bg-base-100 rounded-lg">
-									<div className="flex flex-wrap gap-2">
-										<input
-											type="text"
-											className="input input-bordered input-sm flex-1 min-w-40"
-											value={editLabel}
-											onChange={(e) => setEditLabel(e.target.value)}
-											placeholder="Label (e.g. Supporter)"
-										/>
-										<input
-											type="number"
-											className="input input-bordered input-sm w-28"
-											value={editThreshold}
-											onChange={(e) => setEditThreshold(e.target.value)}
-											min={STRIPE_MIN_CHARGE}
-											step="0.01"
-											placeholder="$/mo"
-										/>
-									</div>
-									<TakeHome amount={Number(editThreshold) || 0} kind="badge" />
-									<input
-										type="text"
-										className="input input-bordered input-sm w-full"
-										value={editDescription}
-										onChange={(e) => setEditDescription(e.target.value)}
-										placeholder="Description (optional)"
-									/>
-
-									{/* 🚨 PERKS. What a supporter gets beside access. Access itself is
-									    read from the Work gates — never typed here. The categories are
-									    the sales-tax posture's: a rung is taxed at its most-taxable
-									    kind, which the creator should know is why the tag matters. */}
-									<PerkEditor perks={editPerks} onChange={setEditPerks} />
-
-									<div className="flex gap-2">
-										<button
-											type="button"
-											className="btn btn-primary btn-xs"
-											onClick={() => handleSaveEdit(badge.id)}
-											disabled={saving || !editLabel.trim() || !editThreshold.trim()}
-										>
-											Save
-										</button>
-										<button
-											type="button"
-											className="btn btn-ghost btn-xs"
-											onClick={() => setEditingId(null)}
-										>
-											Cancel
-										</button>
-									</div>
-								</div>
-							) : (
-								<div key={badge.id} className="flex items-center gap-2 p-3 bg-base-100 rounded-lg">
-									<BadgeArtControl
-										badge={badge}
-										index={badges.indexOf(badge)}
-										onChanged={refreshLadder}
-										onError={setError}
-									/>
-									<div className="flex-1">
-										<div className="flex items-center gap-2">
-											<span className="font-medium text-sm">{badge.label}</span>
-											<span className="badge badge-sm">{rungLabel(badge.threshold)}</span>
-										</div>
-										{badge.description && (
-											<p className="text-xs text-base-content/50">{badge.description}</p>
-										)}
-									</div>
-									<button
-										type="button"
-										className="btn btn-ghost btn-xs btn-square"
-										onClick={() => startEdit(badge)}
-										title="Edit rung"
-									>
-										<PencilIcon className="w-4 h-4" />
-									</button>
-									<button
-										type="button"
-										className="btn btn-ghost btn-xs btn-square text-error"
-										onClick={() => handleDelete(badge.id)}
-										disabled={saving}
-										title="Delete rung"
-									>
-										<TrashIcon className="w-4 h-4" />
-									</button>
-								</div>
-							),
-						)}
-
-						{/* Add a new rung */}
-						<form
-							onSubmit={handleAdd}
-							className="flex flex-col gap-2 mt-2 border-t border-base-300 pt-3"
-						>
-							<div className="flex flex-wrap gap-2">
-								<input
-									type="text"
-									className="input input-bordered input-sm flex-1 min-w-40"
-									value={newLabel}
-									onChange={(e) => setNewLabel(e.target.value)}
-									placeholder="Label (e.g. Supporter)"
-								/>
-								<input
-									type="number"
-									className="input input-bordered input-sm w-28"
-									value={newThreshold}
-									onChange={(e) => setNewThreshold(e.target.value)}
-									min={STRIPE_MIN_CHARGE}
-									step="0.01"
-									placeholder="$/mo"
-								/>
-							</div>
-							{/* 🚨 Beside the field the creator is typing in. Until 2026-08-16 this input
-							    stepped whole $3 units, so there was nothing to explain — every level
-							    was a multiple and the deduction was always ~13%. With any amount
-							    allowed, a $1 rung is legal and keeps 67%, and the creator should see
-							    that before they choose rather than discover it on a payout. */}
-							<TakeHome amount={Number(newThreshold) || 0} kind="badge" />
-							<input
-								type="text"
-								className="input input-bordered input-sm w-full"
-								value={newDescription}
-								onChange={(e) => setNewDescription(e.target.value)}
-								placeholder="Description (optional)"
-							/>
-							<button
-								type="submit"
-								className="btn btn-primary btn-sm w-fit"
-								disabled={saving || !newLabel.trim() || !newThreshold.trim()}
-							>
-								Add rung
-							</button>
-						</form>
-					</div>
-				)}
+		<form onSubmit={handleSave} className="flex flex-col gap-3">
+			<div className="flex items-start justify-between gap-2">
+				<div>
+					<h3 className="text-lg font-bold">{creating ? "Add a Badge" : "Edit Badge"}</h3>
+					{creating && (
+						<p className="text-sm text-base-content/60">
+							A Badge is a monthly level supporters can give at. You design its emblem after the
+							first save.
+						</p>
+					)}
+				</div>
+				<button
+					type="button"
+					className="btn btn-ghost btn-sm btn-square"
+					onClick={onClose}
+					aria-label="Close the Badge editor"
+				>
+					<XMarkIcon className="w-5 h-5" />
+				</button>
 			</div>
-		</div>
+
+			{error && (
+				<div className="alert alert-error text-sm">
+					<span>{error}</span>
+				</div>
+			)}
+
+			{creating ? (
+				<div className="flex items-center gap-3">
+					<CreatorBadgeMark
+						badgeId={0}
+						index={index}
+						label="New Badge preview"
+						art={{}}
+						size="h-16 w-16"
+					/>
+					<p className="text-[11px] text-base-content/50">
+						A Badge wears Anthers' design for its place on your ladder until you give it one of your
+						own.
+					</p>
+				</div>
+			) : (
+				<BadgeArtControl
+					badge={badge}
+					index={index}
+					onChanged={() => onChanged?.()}
+					onError={setError}
+				/>
+			)}
+
+			<div className="flex flex-wrap gap-2">
+				<input
+					type="text"
+					aria-label="Badge name"
+					className="input input-bordered input-sm flex-1 min-w-40"
+					value={label}
+					onChange={(e) => setLabel(e.target.value)}
+					placeholder="Label (e.g. Supporter)"
+				/>
+				<input
+					type="number"
+					aria-label="Monthly amount"
+					className="input input-bordered input-sm w-28"
+					value={threshold}
+					onChange={(e) => setThreshold(e.target.value)}
+					min={STRIPE_MIN_CHARGE}
+					step="0.01"
+					placeholder="$/mo"
+				/>
+			</div>
+			{/* 🚨 Beside the field the creator is typing in. Until 2026-08-16 this input
+			    stepped whole $3 units, so there was nothing to explain — every level was a
+			    multiple and the deduction was always ~13%. With any amount allowed, a $1
+			    rung is legal and keeps 67%, and the creator should see that before they
+			    choose rather than discover it on a payout. */}
+			<TakeHome amount={Number(threshold) || 0} kind="badge" />
+			<input
+				type="text"
+				aria-label="Badge description"
+				className="input input-bordered input-sm w-full"
+				value={description}
+				onChange={(e) => setDescription(e.target.value)}
+				placeholder="Description (optional)"
+			/>
+
+			{/* 🚨 PERKS. What a supporter gets beside access. Access itself is read from the
+			    Work gates — never typed here. The categories are the sales-tax posture's: a
+			    rung is taxed at its most-taxable kind, which the creator should know is why
+			    the tag matters. */}
+			{!creating &&
+				(loadingPerks ? (
+					<p className="text-xs text-base-content/50">Loading perks…</p>
+				) : (
+					<PerkEditor perks={perks} onChange={setPerks} />
+				))}
+
+			<div className="modal-action mt-1 flex-wrap items-center">
+				{!creating &&
+					(confirmingDelete ? (
+						<div className="mr-auto flex items-center gap-2">
+							<span className="text-xs text-base-content/60">Delete this Badge?</span>
+							<button
+								type="button"
+								className="btn btn-error btn-xs"
+								onClick={() => void handleDelete()}
+								disabled={saving}
+							>
+								{saving ? "Deleting…" : "Delete"}
+							</button>
+							<button
+								type="button"
+								className="btn btn-ghost btn-xs"
+								onClick={() => setConfirmingDelete(false)}
+								disabled={saving}
+							>
+								Keep it
+							</button>
+						</div>
+					) : (
+						<button
+							type="button"
+							className="btn btn-ghost btn-sm mr-auto text-error"
+							onClick={() => setConfirmingDelete(true)}
+							disabled={saving}
+						>
+							<TrashIcon className="w-4 h-4" />
+							Delete
+						</button>
+					))}
+				<button type="button" className="btn btn-ghost btn-sm" onClick={onClose} disabled={saving}>
+					Cancel
+				</button>
+				<button
+					type="submit"
+					className="btn btn-primary btn-sm"
+					disabled={saving || !label.trim() || !threshold.trim()}
+				>
+					{saving ? "Saving…" : creating ? "Add Badge" : "Save"}
+				</button>
+			</div>
+		</form>
 	);
 }

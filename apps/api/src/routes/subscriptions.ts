@@ -2053,7 +2053,39 @@ const subscriptionRoutes = new Hono()
 	 * what makes the most-taxable-kind re-stamp one operation rather than a sequence.
 	 * Validation is against `@anthers/shared/badge-art`'s fixed kind list — the same list
 	 * the tax code reads.
+	 *
+	 * ⭐ **The read beside it is the editor's own load.** Without it the Badge Maker opened
+	 * every rung with an empty list and its save replaced the perks with nothing — the
+	 * whole-list shape makes an absent read destructive rather than merely blank.
 	 */
+	.get("/badges/:id/perks", requireAuth, async (c) => {
+		const user = c.get("user");
+		const badgeId = Number(c.req.param("id"));
+
+		const [badge] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
+			.limit(1);
+		// Same answer the sibling routes give a non-owner: indistinguishable from a missing
+		// badge, because confirming somebody else's badge exists is itself a disclosure.
+		if (!badge) return c.json({ error: "Badge not found" }, 404);
+
+		const rows = await db
+			.select()
+			.from(badgePerks)
+			.where(eq(badgePerks.badgeId, badgeId))
+			.orderBy(badgePerks.sortOrder);
+		return c.json({
+			perks: rows.map((p) => ({
+				id: p.id,
+				kind: p.kind,
+				label: p.label,
+				description: p.description,
+			})),
+		});
+	})
+
 	.put(
 		"/badges/:id/perks",
 		requireAuth,
