@@ -36,13 +36,11 @@ describe("the three user tabs share one header", () => {
 	});
 
 	it("carries the settled copy on each tab", () => {
-		expect(network).toContain("The latest Works and Posts from all of the creators you follow");
+		expect(network).toContain("Works and Posts from all of the creators you follow");
 		expect(library).toContain(
 			"All of the Works, Projects, and Posts you've purchased or otherwise saved",
 		);
-		expect(discovery).toContain(
-			"There are no advertisers or incentives to shove things in front of you",
-		);
+		expect(discovery).toContain("There's no paid promotion or hidden algorithms");
 	});
 
 	it("keeps the feed's how-it-works control on the Network header", () => {
