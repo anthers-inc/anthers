@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The signed-in site-map footer renders on the account pages only — Badges, Purchases
- * and Settings — and nowhere else in the signed-in shell.
+ * The signed-in site-map footer renders on the account pages only — the Badges & Purchases
+ * page and Settings — and nowhere else in the signed-in shell.
  *
  * 🚨 **Both halves are the contract.** A footer that vanishes from Settings has lost the
  * site's reference and legal entry points on a page where a person manages their own
@@ -14,7 +14,7 @@ import { expect, type Page, test } from "@playwright/test";
 const footer = (page: Page) => page.locator("[data-site-footer]");
 
 test.describe("the signed-in site footer", () => {
-	for (const path of ["/badges", "/purchases", "/settings"]) {
+	for (const path of ["/purchases", "/settings"]) {
 		test(`renders on ${path}`, async ({ page }) => {
 			await page.goto(path);
 			await expect(footer(page), `no site footer on ${path}`).toBeVisible();
