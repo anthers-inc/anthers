@@ -167,6 +167,13 @@ async function snapshotMedia(
 export async function archiveCurrentMedia(
 	work: WorkRow,
 	exec: Executor = db,
+	options: {
+		/**
+		 * A build not to snapshot. The hosted-build completion route promotes a build whose
+		 * row and files already exist, so the media being retired is everything except it.
+		 */
+		excludeWebBuildId?: number;
+	} = {},
 ): Promise<{ version: WorkMediaVersionRow; keeps: Set<string> } | null> {
 	const [sourceRows, assetRows, buildRows, buildFileRows] = await Promise.all([
 		exec.select().from(workSourceFiles).where(eq(workSourceFiles.workId, work.id)),
@@ -178,12 +185,15 @@ export async function archiveCurrentMedia(
 			.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
 			.where(eq(webBuilds.workId, work.id)),
 	]);
+	const excluded = options.excludeWebBuildId;
 	const media = await snapshotMedia(
 		work,
 		sourceRows,
 		assetRows,
-		buildRows,
-		buildFileRows.map((entry) => entry.file),
+		excluded == null ? buildRows : buildRows.filter((row) => row.id !== excluded),
+		buildFileRows
+			.map((entry) => entry.file)
+			.filter((file) => excluded == null || file.buildId !== excluded),
 	);
 	if (!media) return null;
 	const [version] = await exec

@@ -10,7 +10,14 @@
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, users, workMediaVersions, works } from "@anthers/db/schema";
+import {
+	assets,
+	users,
+	webBuildFiles,
+	webBuilds,
+	workMediaVersions,
+	works,
+} from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { unzipSync } from "fflate";
 import app from "../index";
@@ -83,6 +90,74 @@ describe("a Work's archived media versions", () => {
 		}
 		await db.delete(users).where(eq(users.id, ownerId));
 		await db.delete(users).where(eq(users.id, strangerId));
+	});
+
+	it("archives the prior build set when a hosted build is promoted", async () => {
+		const work = await insertWork({
+			type: "game",
+			title: "hosted version",
+			creatorId: ownerId,
+			visibility: "released",
+		});
+		workIds.push(work.id);
+		const before = new Date("2026-03-04T05:06:07.000Z");
+		await db.update(works).set({ versionAddedAt: before }).where(eq(works.id, work.id));
+
+		const [oldBuild] = await db
+			.insert(webBuilds)
+			.values({ workId: work.id, label: "Old", entryPath: "index.html", isPrimary: true })
+			.returning();
+		await db.insert(webBuildFiles).values({
+			buildId: oldBuild.id,
+			path: "index.html",
+			storageKey: `creators/${ownerId}/web-builds/${oldBuild.id}/index.html`,
+			fileSize: 120,
+			mimeType: "text/html",
+		});
+		const [nextBuild] = await db
+			.insert(webBuilds)
+			.values({ workId: work.id, label: "Next", entryPath: "index.html" })
+			.returning();
+		await db.insert(webBuildFiles).values({
+			buildId: nextBuild.id,
+			path: "index.html",
+			storageKey: `creators/${ownerId}/web-builds/${nextBuild.id}/index.html`,
+			fileSize: 200,
+			mimeType: "text/html",
+		});
+
+		const res = await req(`/api/web-builds/works/${work.id}/web-build/${nextBuild.id}/complete`, {
+			method: "POST",
+			headers: {
+				cookie: ownerCookie,
+				Origin: "http://localhost:3000",
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ isPrimary: true }),
+		});
+		expect(res.status).toBe(200);
+
+		// One build stands: the promoted one, as primary.
+		const builds = await db.select().from(webBuilds).where(eq(webBuilds.workId, work.id));
+		expect(builds.map((build) => [build.label, build.isPrimary])).toEqual([["Next", true]]);
+
+		// The old build is the archived version — and the promoted build is not.
+		const [version] = await db
+			.select()
+			.from(workMediaVersions)
+			.where(eq(workMediaVersions.workId, work.id));
+		expect(version?.media.kind).toBe("builds");
+		const archived = version?.media.kind === "builds" ? version.media.webBuilds : [];
+		expect(archived.map((build) => build.label)).toEqual(["Old"]);
+		expect(archived[0]?.files.map((file) => file.path)).toEqual(["index.html"]);
+		expect(version?.uploadedAt).toEqual(before);
+
+		// And the promoted build is the Work's current version.
+		const [row] = await db
+			.select({ versionAddedAt: works.versionAddedAt })
+			.from(works)
+			.where(eq(works.id, work.id));
+		expect(row?.versionAddedAt?.getTime() ?? 0).toBeGreaterThan(before.getTime());
 	});
 
 	it("lists the archive to its owner and hides it from a stranger", async () => {
