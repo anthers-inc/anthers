@@ -336,6 +336,17 @@ export class SpaceClient {
 		return this.request("com.atproto.space.listRepoOps", { params });
 	}
 
+	/**
+	 * The account's public repository as a CAR, which is the export's public half.
+	 *
+	 * ⚠️ **This is `sync.getRepo`, not a space call.** It lives here because it shares this
+	 * client's base URL and credential, and because an export that read the public repository
+	 * with a second client would be one more place for the two to disagree about the server.
+	 */
+	async getPublicRepo(did: string): Promise<SpaceBytes> {
+		return this.request("com.atproto.sync.getRepo", { params: { did }, bytes: true });
+	}
+
 	/** Download the space repo as a CAR. */
 	async getRepo(input: { space: string; repo: string }): Promise<SpaceBytes> {
 		return this.request("com.atproto.space.getRepo", { params: input, bytes: true });

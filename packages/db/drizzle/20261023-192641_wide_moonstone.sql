@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "atproto_exported_at" timestamp with time zone;

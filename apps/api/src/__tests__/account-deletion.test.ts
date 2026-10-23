@@ -193,9 +193,12 @@ describe("the request is scheduled, informed, and reversible", () => {
 	});
 
 	it("schedules rather than wipes, and signs every device out", async () => {
+		// This suite is about the scheduling mechanics, not the export gate, so it takes the
+		// documented bypass. The gate's own refusals are `deletion-export-gate.test.ts`.
 		const res = await req("/api/accounts/me", {
 			method: "DELETE",
-			headers: { Origin: ORIGIN, Cookie: leaver },
+			headers: { Origin: ORIGIN, Cookie: leaver, "Content-Type": "application/json" },
+			body: JSON.stringify({ bypassExport: true }),
 		});
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { scheduledFor: string; graceDays: number };
@@ -232,7 +235,7 @@ describe("the request is scheduled, informed, and reversible", () => {
 	});
 
 	it("does not erase an account whose window has not elapsed", async () => {
-		await requestDeletion(leaverId);
+		await requestDeletion(leaverId, { bypassExport: true });
 		const { erased } = await runDueDeletions();
 		expect(erased).toBe(0);
 		expect(await idOf(leaverName)).toBe(leaverId);
@@ -240,7 +243,7 @@ describe("the request is scheduled, informed, and reversible", () => {
 	});
 
 	it("erases one whose window HAS elapsed", async () => {
-		await requestDeletion(leaverId);
+		await requestDeletion(leaverId, { bypassExport: true });
 		// Reach in and back-date the schedule rather than waiting a week.
 		await db.execute(
 			sql`UPDATE users SET deletion_requested_at = now() - interval '1 day' WHERE id = ${leaverId}`,
