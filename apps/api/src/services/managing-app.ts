@@ -5,10 +5,10 @@
  *
  * The protocol addresses a managing app the way it addresses any service: a DID with an
  * optional fragment, resolved through the DID document at that DID's own location. For a
- * `did:web`, that location is derived from the host — so the document is served by whatever
- * host answers the request, and the `id` it carries is that host made into a DID. Deriving
- * rather than pinning is what keeps dev, a worktree and production from each needing a
- * variable, and it is the correct reading of `did:web` rather than a convenience.
+ * `did:web`, that location is the host. A checkout therefore answers from the host that
+ * served the request, which is what makes dev and a worktree each their own identity without
+ * a variable; a deployment answers from its own recorded origin, because the proxy forwards
+ * over plain HTTP and the scheme on the wire is not the one the network resolves.
  *
  * ⚠️ **`did:web` cannot carry a path here.** The atproto resolver refuses a `did:web` with a
  * path (`UnsupportedDidWebPathError`), so the document is at `/.well-known/did.json` on the

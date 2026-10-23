@@ -5,10 +5,10 @@
  * `GET /.well-known/did.json` is the identity: a `did:web` document naming this API as the
  * `#anthers` service, which a space authority resolves before it calls anything. It is served
  * at the host root rather than under `/api` because that is where `did:web` looks, and its
- * `id` is derived from the host that answered — see `services/managing-app.ts` for why that is
- * the correct reading rather than a shortcut.
+ * `id` names the deployment's own origin — see `services/managing-app.ts` for why that is
+ * configuration in a deployment and the request in a checkout, rather than either everywhere.
  *
- * `GET /api/xrpc/com.atproto.simplespace.checkUserAccess` is the gate itself. The caller is a
+ * `GET /xrpc/com.atproto.simplespace.checkUserAccess` is the gate itself. The caller is a
  * space authority's PDS, not a browser: it authenticates with a service-auth JWT signed by the
  * authority's `#atproto` key, and the route answers `{authorized}` from `resolveAccess`. There
  * is no session on this route and no cookie, which is why it is outside every authenticated
