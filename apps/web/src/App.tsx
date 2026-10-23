@@ -123,7 +123,6 @@ const UnsubscribePage = lazy(() => import("./pages/UnsubscribePage"));
 const SupportersPage = lazy(() => import("./pages/SupportersPage"));
 const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
 const SignupPage = lazy(() => import("./pages/SignupPage"));
-const BadgesPage = lazy(() => import("./pages/BadgesPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const WorkPage = lazy(() => import("./pages/WorkPage"));
 const SharedWorkPage = lazy(() => import("./pages/SharedWorkPage"));
@@ -298,17 +297,11 @@ export default function App() {
 					 * account's basket.
 					 */}
 					<Route path="/basket" element={<BasketPage />} />
-					<Route
-						path="/badges"
-						element={
-							<ProtectedRoute>
-								<BadgesPage />
-							</ProtectedRoute>
-						}
-					/>
-					{/* Legacy name — the page was the subscription's, and the Badges page is
-					    what it became; the old address follows, for anything still holding it. */}
-					<Route path="/subscription" element={<Navigate to="/badges" replace />} />
+					{/* One page, two sections: Badges above and Purchases below. `/purchases` is
+					    the canonical address — see `pages/PurchasesPage.tsx` — and the two older
+					    names follow it, for anything still holding either. */}
+					<Route path="/badges" element={<Navigate to="/purchases" replace />} />
+					<Route path="/subscription" element={<Navigate to="/purchases" replace />} />
 					<Route
 						path="/purchases"
 						element={

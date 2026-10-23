@@ -49,8 +49,8 @@ export const STRIPE_RETURN_PATHS = {
 	 * start again rather than merely explaining. The Payments tab does.
 	 */
 	connectRefresh: "/studio/payments?stripe=refresh",
-	/** Somebody leaving the Stripe billing portal, back to their Badges page. */
-	billingPortalReturn: "/badges",
+	/** Somebody leaving the Stripe billing portal, back to their Badges and purchases page. */
+	billingPortalReturn: "/purchases",
 	/**
 	 * Where a redirect-based payment method returns a buyer mid-Checkout. The buy surfaces
 	 * host Checkout embedded (`ui_mode: "elements"`), and cards confirm in place — this

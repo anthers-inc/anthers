@@ -54,12 +54,14 @@ const EXPECTATIONS: Record<keyof typeof STRIPE_RETURN_PATHS, (page: Page) => Pro
 	},
 
 	/**
-	 * The Badges page. Either heading proves the route matched, and which one appears
-	 * depends on whether the fixture creator has a billing account, which is not this test's
-	 * subject.
+	 * The Badges & Purchases page. Either heading proves the route matched, and which one
+	 * appears depends on whether the fixture creator has a billing account, which is not
+	 * this test's subject.
 	 */
 	billingPortalReturn: async (page) => {
-		await expect(page.getByRole("heading", { name: /Badges|Account unavailable/ })).toBeVisible();
+		await expect(
+			page.getByRole("heading", { name: /Badges & Purchases|Account unavailable/ }),
+		).toBeVisible();
 	},
 
 	/**

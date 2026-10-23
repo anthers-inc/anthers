@@ -4,7 +4,7 @@
 //
 // Its job is to explain how support works and then open a door: a free account, or a
 // monthly amount pointed at Anthers. It is NOT a report on what a user already holds —
-// that is /badges, and conflating the two is what the previous revision did.
+// that is /purchases, and conflating the two is what the previous revision did.
 //
 // The page is a guided sequence, and the order is the argument:
 //
@@ -2698,7 +2698,7 @@ export default function SignupPage() {
 						setPending(null);
 						// `next` rides along so somebody who came from a gated Work is handed back
 						// to it; otherwise, to where the webhook's work becomes visible.
-						void leave(next ?? "/badges");
+						void leave(next ?? "/purchases");
 					}}
 					onClose={() => {
 						// The card was declined or dismissed. The account was already signed in
