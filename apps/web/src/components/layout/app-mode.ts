@@ -32,7 +32,6 @@ const USER_PATHS = [
 	"/library",
 	"/discovery",
 	"/basket",
-	"/badges",
 	"/purchases",
 	"/settings",
 ] as const;

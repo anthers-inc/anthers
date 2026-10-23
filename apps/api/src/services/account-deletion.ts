@@ -90,6 +90,21 @@ import { queueWorkListingSync, takeDownCreatorRecords } from "./work-listing.js"
  */
 export const DELETION_GRACE_DAYS = 7;
 
+/**
+ * How long an AT Protocol export stands as "you have a copy" for the deletion gate.
+ *
+ * Seven days matches the grace period: an export taken when the person started thinking about
+ * leaving is still the copy they had in hand when they confirmed. Older than that and the
+ * question is worth asking again, because a space can have changed since.
+ */
+export const EXPORT_FRESH_DAYS = 7;
+
+/** Whether an export timestamp is recent enough to let a deletion through without a bypass. */
+export function isFreshExport(exportedAt: Date | null, now: Date = new Date()): boolean {
+	if (!exportedAt) return false;
+	return now.getTime() - exportedAt.getTime() <= EXPORT_FRESH_DAYS * 24 * 60 * 60 * 1000;
+}
+
 export interface DeletionPreview {
 	/** Destroyed outright — including reviews, which carry the person's written verdict and
 	 * are destroyed with it rather than tombstoned (the table at the top of this file). */
@@ -117,6 +132,18 @@ export interface DeletionPreview {
 	 * finds that out afterwards has lost something they could have taken with them.
 	 */
 	hostedHandles: string[];
+	/**
+	 * The last AT Protocol bundle, and whether it is recent enough to stand as the copy.
+	 *
+	 * 🚨 **This is the difference between a deletion that is recoverable elsewhere and one
+	 * that is not.** The bundle carries the public repository and every space; deleting
+	 * without one destroys the actor store and leaves the DID in the directory with nothing
+	 * behind it. The gate refuses without a fresh bundle or an explicit bypass.
+	 */
+	exportedAt: string | null;
+	hasRecentExport: boolean;
+	/** Registered spaces, which deletion destroys with the identity. */
+	spaces: number;
 }
 
 /**
@@ -153,6 +180,8 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 		posts_,
 		purchases_,
 		handles,
+		spaces_,
+		exportRow,
 	] = await Promise.all([
 		countRows("follows", "follower_id"),
 		countRows("library_items", "user_id"),
@@ -164,7 +193,15 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 		countRows("posts", "creator_id"),
 		countRows("purchases", "buyer_id"),
 		hostedHandlesFor(userId),
+		countRows("user_spaces", "user_id"),
+		db
+			.select({ atprotoExportedAt: users.atprotoExportedAt })
+			.from(users)
+			.where(eq(users.id, userId))
+			.limit(1),
 	]);
+
+	const exportedAt = exportRow[0]?.atprotoExportedAt ?? null;
 
 	return {
 		follows: follows_,
@@ -179,6 +216,9 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 		worksWithdrawn: purchasedWorkIds.length,
 		purchases: purchases_,
 		hostedHandles: handles,
+		spaces: spaces_,
+		exportedAt: exportedAt ? exportedAt.toISOString() : null,
+		hasRecentExport: isFreshExport(exportedAt),
 	};
 }
 
@@ -198,6 +238,10 @@ async function purchasedAmong(workIds: number[]): Promise<number[]> {
 	return rows.map((r) => r.id).filter((v): v is number => v != null);
 }
 
+export type DeletionRequestResult =
+	| { ok: true; scheduledFor: string }
+	| { ok: false; reason: "export_required"; exportedAt: string | null };
+
 /**
  * Schedule the deletion, and end the session immediately.
  *
@@ -210,14 +254,36 @@ async function purchasedAmong(workIds: number[]): Promise<number[]> {
  * and a deletion you cannot reverse without contacting support is not the "oops"
  * window this was asked for. So sign-in keeps working and the app tells them what is
  * pending.
+ *
+ * 🚨 **A fresh bundle or an explicit bypass, and neither is inferred.** The bundle carries
+ * the public repository and every space; a raw delete destroys the actor store and leaves the
+ * DID in the directory with nothing behind it. The refusal names the timestamp so the screen
+ * can say how old the copy is rather than only that there is none.
  */
-export async function requestDeletion(userId: number): Promise<{ scheduledFor: string }> {
+export async function requestDeletion(
+	userId: number,
+	opts: { bypassExport?: boolean } = {},
+): Promise<DeletionRequestResult> {
+	const [row] = await db
+		.select({ atprotoExportedAt: users.atprotoExportedAt })
+		.from(users)
+		.where(eq(users.id, userId))
+		.limit(1);
+	const exportedAt = row?.atprotoExportedAt ?? null;
+	if (!opts.bypassExport && !isFreshExport(exportedAt)) {
+		return {
+			ok: false,
+			reason: "export_required",
+			exportedAt: exportedAt ? exportedAt.toISOString() : null,
+		};
+	}
+
 	const scheduledFor = new Date(Date.now() + DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000);
 	await db.transaction(async (tx) => {
 		await tx.update(users).set({ deletionRequestedAt: scheduledFor }).where(eq(users.id, userId));
 		await tx.delete(sessions).where(eq(sessions.userId, userId));
 	});
-	return { scheduledFor: scheduledFor.toISOString() };
+	return { ok: true, scheduledFor: scheduledFor.toISOString() };
 }
 
 /** Change of mind. Clearing the column is the whole of it. */

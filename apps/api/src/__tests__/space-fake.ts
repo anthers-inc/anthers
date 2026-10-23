@@ -225,6 +225,17 @@ export class FakeSpacePds {
 				return fail("uploadBlob must carry raw bytes", 400);
 			}
 
+			case "com.atproto.sync.getRepo": {
+				// The public repository's CAR. Nothing in the app parses it; the export only has to
+				// carry the bytes and name them.
+				const payload = new TextEncoder().encode(JSON.stringify({ car: true, did: param("did") }));
+				const copy = new Uint8Array(payload.byteLength);
+				copy.set(payload);
+				return new Response(new Blob([copy], { type: "application/vnd.ipld.car" }), {
+					status: 200,
+				});
+			}
+
 			case "com.atproto.space.getRepo": {
 				const space = this.spaces.get(param("space") ?? "");
 				if (!space) return fail("SpaceNotFound");

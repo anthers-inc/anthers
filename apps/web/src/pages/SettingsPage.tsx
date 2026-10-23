@@ -1554,6 +1554,9 @@ interface DeletionPreview {
 	worksWithdrawn: number;
 	purchases: number;
 	hostedHandles: string[];
+	exportedAt: string | null;
+	hasRecentExport: boolean;
+	spaces: number;
 }
 
 interface ActivityEntry {
@@ -2283,6 +2286,9 @@ function DataSection() {
 	const [state, setState] = useState<DeletionState | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [exporting, setExporting] = useState(false);
+	const [identityExporting, setIdentityExporting] = useState(false);
+	const [identityReady, setIdentityReady] = useState(false);
+	const [bypass, setBypass] = useState(false);
 	const [confirming, setConfirming] = useState(false);
 	const [busy, setBusy] = useState(false);
 
@@ -2322,12 +2328,44 @@ function DataSection() {
 		}
 	};
 
+	const handleIdentityExport = async () => {
+		setIdentityExporting(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/accounts/me/export/atproto", { method: "POST" });
+			if (!res.ok) throw new Error("Your identity bundle could not be built.");
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `anthers-identity-${new Date().toISOString().slice(0, 10)}.zip`;
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+			URL.revokeObjectURL(url);
+			setIdentityReady(true);
+			// The gate now sees a fresh bundle; reload so the confirmation reflects it.
+			load();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Your identity bundle could not be built.");
+		} finally {
+			setIdentityExporting(false);
+		}
+	};
+
 	const handleDelete = async () => {
 		setBusy(true);
 		setError(null);
 		try {
-			const res = await apiFetch("/api/accounts/me", { method: "DELETE" });
-			if (!res.ok) throw new Error("Could not schedule deletion.");
+			const res = await apiFetch("/api/accounts/me", {
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ bypassExport: bypass }),
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => ({}))) as { error?: string };
+				throw new Error(body.error ?? "Could not schedule deletion.");
+			}
 			// Every session went with the request, including this one. A full reload is the
 			// honest response: staying on a logged-in-looking page would be a lie the client
 			// is telling about a server that has already forgotten us.
@@ -2372,8 +2410,23 @@ function DataSection() {
 						{exporting ? "Preparing…" : "Download my data"}
 					</button>
 					<p className="text-xs text-base-content/60">
-						Everything we hold about you, as a JSON file. Nothing in it could sign in as you, or
-						belongs to someone else.
+						Everything Anthers holds about you, as a JSON file. Nothing in it could sign in as you,
+						or belongs to someone else.
+					</p>
+				</div>
+
+				<div className="flex flex-wrap items-center gap-3">
+					<button
+						type="button"
+						className="btn btn-sm"
+						onClick={handleIdentityExport}
+						disabled={identityExporting}
+					>
+						{identityExporting ? "Building…" : "Download my identity"}
+					</button>
+					<p className="text-xs text-base-content/60">
+						Your public repository, every space, and the files in them, as a ZIP. This is the copy
+						that leaves with you.
 					</p>
 				</div>
 
@@ -2465,12 +2518,64 @@ function DataSection() {
 									It takes effect in {state?.graceDays ?? 7} days. Signing back in during that week
 									cancels it. You will be signed out everywhere now.
 								</p>
+								{p ? (
+									<div
+										className={`mt-3 rounded-lg p-3 ${
+											p.hasRecentExport || identityReady
+												? "bg-base-200"
+												: "border border-warning/50 bg-warning/10"
+										}`}
+									>
+										{p.hasRecentExport || identityReady ? (
+											<p className="text-sm">
+												Your identity bundle is ready
+												{p.exportedAt
+													? ` (taken ${new Date(p.exportedAt).toLocaleDateString()})`
+													: ""}
+												. It carries the public repository,{" "}
+												{p.spaces === 1 ? "your space" : `${p.spaces} spaces`}, and the files in
+												them.
+											</p>
+										) : (
+											<>
+												<p className="text-sm font-medium">
+													The JSON file does not contain your identity.
+												</p>
+												<p className="mt-1 text-sm text-base-content/80">
+													Your public repository, your spaces, and the files in them are destroyed
+													with this account. The identity itself stays in the public directory with
+													nothing behind it. Take the bundle if you want a copy you can keep or
+													move.
+												</p>
+												<button
+													type="button"
+													className="btn btn-sm mt-2"
+													onClick={handleIdentityExport}
+													disabled={identityExporting}
+												>
+													{identityExporting ? "Building…" : "Download my identity bundle"}
+												</button>
+												<label className="mt-3 flex items-start gap-2 text-sm">
+													<input
+														type="checkbox"
+														className="checkbox checkbox-sm"
+														checked={bypass}
+														onChange={(e) => setBypass(e.target.checked)}
+													/>
+													<span>
+														I understand this is the only copy, and I am deleting without it.
+													</span>
+												</label>
+											</>
+										)}
+									</div>
+								) : null}
 								<div className="mt-3 flex gap-2">
 									<button
 										type="button"
 										className="btn btn-sm btn-error"
 										onClick={handleDelete}
-										disabled={busy || !p}
+										disabled={busy || !p || (!p.hasRecentExport && !identityReady && !bypass)}
 									>
 										{busy ? "Scheduling…" : "Yes, delete my account"}
 									</button>

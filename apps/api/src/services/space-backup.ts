@@ -29,8 +29,8 @@ import {
 	type SpaceRecord,
 	SpaceRequestError,
 } from "./atproto-space.js";
-import { type RegistryOptions, registeredSpace } from "./space-registry.js";
-import { hostedSpaceSession, spaceClientFor } from "./space-writer.js";
+import { type RegisteredSpace, type RegistryOptions, registeredSpace } from "./space-registry.js";
+import { hostedSpaceSession, type SpaceSession, spaceClientFor } from "./space-writer.js";
 import { storage } from "./storage/index.js";
 
 /** The narrow storage surface a backup needs. Injected so tests need no bucket. */
@@ -109,24 +109,6 @@ export async function captureSpace(
 	const now = opts.now ?? new Date();
 	const capturedAt = new Date(now.getTime());
 	const prefix = backupPrefix(registry.did, registry.spaceType, USER_SPACE_SKEY, capturedAt);
-	const client = spaceClientFor(resolved.session, { fetchImpl: opts.fetchImpl });
-	const { spaceUri } = registry;
-
-	// The registry is a cache, and a backup has to be of what the PDS holds now rather than of
-	// what the row last saw. Reading the space here also refreshes the row, so the two halves of
-	// the three-part backup agree about the policy and the members.
-	const description = await client.getSpace(spaceUri);
-	const liveMembers = (await client.listMembers(spaceUri).catch(() => ({ members: [] }))).members;
-	const livePolicies = {
-		readPolicy: description.readPolicy as unknown as Record<string, unknown>,
-		writePolicy: description.writePolicy as unknown as Record<string, unknown>,
-		appAccess: description.appAccess as unknown as Record<string, unknown>,
-		members: liveMembers.map((member) => ({
-			did: member.did,
-			read: member.read,
-			write: member.write,
-		})),
-	};
 
 	let status: "complete" | "partial" | "failed" = "complete";
 	let commit: SpaceCommit | null = null;
@@ -134,54 +116,29 @@ export async function captureSpace(
 	const skips: string[] = [];
 
 	try {
-		const records = await listAllRecords(client, spaceUri, registry.did);
-		commit = await latestCommitOrNull(client, spaceUri, registry.did);
-		if (commit) {
-			star = (await client.getRepo({ space: spaceUri, repo: registry.did })).bytes;
-		}
-
-		const index: BackupBlobIndex = {};
-		const blobs: Array<{ cid: string; bytes: Uint8Array; contentType: string }> = [];
-		if (commit) {
-			for (const cid of await listAllBlobCids(client, spaceUri, registry.did)) {
-				try {
-					const blob = await client.getBlob({ space: spaceUri, repo: registry.did, cid });
-					const contentType = blob.contentType ?? "application/octet-stream";
-					blobs.push({ cid, bytes: blob.bytes, contentType });
-					index[cid] = { contentType, size: blob.bytes.length };
-				} catch (error) {
-					// A record can reference a blob the blob store no longer has. The records still
-					// restore; the bytes are what the partial status is for.
-					status = "partial";
-					skips.push(`blob ${cid}: ${messageOf(error)}`);
-				}
-			}
-		}
-
-		const registrySnapshot: BackupRegistry = {
-			did: registry.did,
-			spaceUri: registry.spaceUri,
-			spaceType: registry.spaceType,
-			readPolicy: livePolicies.readPolicy,
-			writePolicy: livePolicies.writePolicy,
-			appAccess: livePolicies.appAccess,
-			members: livePolicies.members,
-			verifiedAt: capturedAt.toISOString(),
-		};
+		const artifacts = await readSpaceArtifacts(registry, resolved.session, opts);
+		commit = artifacts.commit;
+		star = artifacts.star;
+		skips.push(...artifacts.skipped);
+		status = skips.length ? "partial" : "complete";
 
 		await store.put(
 			key(prefix, "registry.json"),
-			bytesOf(JSON.stringify(registrySnapshot)),
+			bytesOf(JSON.stringify(artifacts.registry)),
 			"application/json",
 		);
 		await store.put(
 			key(prefix, "records.json"),
-			bytesOf(JSON.stringify({ rev: commit?.rev ?? null, records })),
+			bytesOf(JSON.stringify({ rev: commit?.rev ?? null, records: artifacts.records })),
 			"application/json",
 		);
-		await store.put(key(prefix, "blobs.json"), bytesOf(JSON.stringify(index)), "application/json");
+		await store.put(
+			key(prefix, "blobs.json"),
+			bytesOf(JSON.stringify(artifacts.index)),
+			"application/json",
+		);
 		if (star) await store.put(key(prefix, "star.car"), star, "application/vnd.ipld.car");
-		for (const blob of blobs) {
+		for (const blob of artifacts.blobs) {
 			await store.put(key(prefix, `blobs/${blob.cid}`), blob.bytes, blob.contentType);
 		}
 
@@ -190,7 +147,7 @@ export async function captureSpace(
 			.values({
 				userId,
 				did: registry.did,
-				spaceUri,
+				spaceUri: registry.spaceUri,
 				capturedAt,
 				status,
 				rev: commit?.rev ?? null,
@@ -201,9 +158,9 @@ export async function captureSpace(
 				registryKey: key(prefix, "registry.json"),
 				blobsKey: key(prefix, "blobs.json"),
 				starBytes: star?.length ?? 0,
-				recordCount: records.length,
-				blobCount: blobs.length,
-				blobBytes: blobs.reduce((total, blob) => total + blob.bytes.length, 0),
+				recordCount: artifacts.records.length,
+				blobCount: artifacts.blobs.length,
+				blobBytes: artifacts.blobs.reduce((total, blob) => total + blob.bytes.length, 0),
 				lastError: skips.length ? skips.join("; ") : null,
 				updatedAt: now,
 			})
@@ -214,7 +171,10 @@ export async function captureSpace(
 		await db
 			.update(userSpaces)
 			.set({
-				...livePolicies,
+				readPolicy: artifacts.registry.readPolicy,
+				writePolicy: artifacts.registry.writePolicy,
+				appAccess: artifacts.registry.appAccess,
+				members: artifacts.registry.members,
 				verifiedAt: capturedAt,
 				lastCheckedAt: capturedAt,
 				updatedAt: capturedAt,
@@ -227,7 +187,7 @@ export async function captureSpace(
 			.values({
 				userId,
 				did: registry.did,
-				spaceUri,
+				spaceUri: registry.spaceUri,
 				capturedAt,
 				status: "failed",
 				rev: commit?.rev ?? null,
@@ -243,6 +203,75 @@ export async function captureSpace(
 			.returning();
 		return { ok: false, reason: "capture_failed", backupId: row?.id };
 	}
+}
+
+/**
+ * Everything one space's capture needs, read from the PDS, without writing anything.
+ *
+ * ⭐ **Shared by the backup and the export.** A backup writes these artifacts under a capture
+ * prefix; an export puts the same bytes in a ZIP. Two readers of the same protocol calls is
+ * how one of them ends up carrying a policy the other does not, so there is one reader.
+ */
+export interface SpaceArtifacts {
+	registry: BackupRegistry;
+	records: BackupRecord[];
+	commit: SpaceCommit | null;
+	star: Uint8Array | null;
+	blobs: Array<{ cid: string; bytes: Uint8Array; contentType: string }>;
+	index: BackupBlobIndex;
+	skipped: string[];
+}
+
+/** Read one space's three artifacts from the PDS. Throws when the space cannot be read at all. */
+export async function readSpaceArtifacts(
+	registry: RegisteredSpace,
+	session: SpaceSession,
+	opts: { fetchImpl?: typeof fetch } = {},
+): Promise<SpaceArtifacts> {
+	const client = spaceClientFor(session, { fetchImpl: opts.fetchImpl });
+	const { spaceUri } = registry;
+	const description = await client.getSpace(spaceUri);
+	const members = (await client.listMembers(spaceUri).catch(() => ({ members: [] }))).members;
+
+	const snapshot: BackupRegistry = {
+		did: registry.did,
+		spaceUri,
+		spaceType: registry.spaceType,
+		readPolicy: description.readPolicy as unknown as Record<string, unknown>,
+		writePolicy: description.writePolicy as unknown as Record<string, unknown>,
+		appAccess: description.appAccess as unknown as Record<string, unknown>,
+		members: members.map((member) => ({
+			did: member.did,
+			read: member.read,
+			write: member.write,
+		})),
+		verifiedAt: new Date().toISOString(),
+	};
+
+	const records = await listAllRecords(client, spaceUri, registry.did);
+	const commit = await latestCommitOrNull(client, spaceUri, registry.did);
+	let star: Uint8Array | null = null;
+	const index: BackupBlobIndex = {};
+	const blobs: Array<{ cid: string; bytes: Uint8Array; contentType: string }> = [];
+	const skipped: string[] = [];
+
+	if (commit) {
+		star = (await client.getRepo({ space: spaceUri, repo: registry.did })).bytes;
+		for (const cid of await listAllBlobCids(client, spaceUri, registry.did)) {
+			try {
+				const blob = await client.getBlob({ space: spaceUri, repo: registry.did, cid });
+				const contentType = blob.contentType ?? "application/octet-stream";
+				blobs.push({ cid, bytes: blob.bytes, contentType });
+				index[cid] = { contentType, size: blob.bytes.length };
+			} catch (error) {
+				// A record can reference a blob the blob store no longer has. The records still
+				// restore; the bytes are what the partial status is for.
+				skipped.push(`blob ${cid}: ${messageOf(error)}`);
+			}
+		}
+	}
+
+	return { registry: snapshot, records, commit, star, blobs, index, skipped };
 }
 
 export interface SweepResult {
