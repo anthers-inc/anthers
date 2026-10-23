@@ -8,6 +8,7 @@ import {
 import { fileURLToPath } from "node:url";
 import { GAUNTLET_CREATOR_EMAIL, GAUNTLET_WALKER_EMAIL } from "@anthers/db/gauntlet";
 import { MEDIA_FIXTURE_EMAIL } from "@anthers/db/media-fixture";
+import { defaultDelivery } from "@anthers/shared/content";
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
 import { withSignInLock } from "./signin-lock";
 
@@ -194,6 +195,58 @@ export function signInAsCreator(context: BrowserContext): Promise<string> {
  */
 export function signInAsMediaFixture(context: BrowserContext): Promise<string> {
 	return signInAs(context, MEDIA_FIXTURE_EMAIL);
+}
+
+/** A draft Work created through the API, for the walks that test its page rather than the flow. */
+export interface DraftWorkSeed {
+	type: string;
+	title: string;
+	streamEnabled?: boolean;
+	downloadEnabled?: boolean;
+}
+
+/**
+ * Create a private draft through the same route the New Work flow calls, and return its
+ * durable address. The flow itself has its own walk; the specs that exercise a Work's page,
+ * its media or its release should not have to re-walk four cards to get one.
+ */
+export async function createDraftWork(
+	page: Page,
+	seed: DraftWorkSeed,
+): Promise<{ id: number; publicId: number; slug: string; url: string }> {
+	const delivery = defaultDelivery(seed.type);
+	const cookies = await page.context().cookies();
+	const session = cookies.find((cookie) => cookie.name === "session")?.value;
+	expect(session, "the authed project should carry a session cookie").toBeTruthy();
+
+	const res = await fetch(`${API_URL}/api/content/works`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Cookie: `session=${session}`,
+			Origin: WEB_ORIGIN,
+		},
+		body: JSON.stringify({
+			type: seed.type,
+			title: seed.title,
+			streamEnabled: seed.streamEnabled ?? delivery.streamEnabled,
+			downloadEnabled: seed.downloadEnabled ?? delivery.downloadEnabled,
+			access: [{ threshold: 0, allow: true, price: "0" }],
+		}),
+	});
+	const body = (await res.json().catch(() => null)) as {
+		work?: { id: number; publicId: number; slug: string };
+		error?: string;
+	} | null;
+	expect(res.ok, body?.error ?? "the draft should be created").toBe(true);
+	expect(body?.work, "the create should return the Work").toBeTruthy();
+	const work = body!.work!;
+	return {
+		id: work.id,
+		publicId: Number(work.publicId),
+		slug: work.slug,
+		url: `/works/${work.slug}-${work.publicId}`,
+	};
 }
 
 /**
