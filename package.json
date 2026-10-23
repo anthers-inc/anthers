@@ -53,7 +53,8 @@
 		"brand:usage": "bun run scripts/brand-usage.ts",
 		"brand:logo": "bun run scripts/brand-logo.ts",
 		"space:backup": "bun run apps/api/src/scripts/space-backup.ts",
-		"space:restore": "bun run apps/api/src/scripts/space-restore.ts"
+		"space:restore": "bun run apps/api/src/scripts/space-restore.ts",
+		"space:move": "bun run apps/api/src/scripts/space-move.ts"
 	},
 	"devDependencies": {
 		"@atproto/api": "0.20.42",
