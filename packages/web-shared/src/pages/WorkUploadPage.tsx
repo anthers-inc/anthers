@@ -21,7 +21,7 @@ import type { Work } from "../lib/types";
 export default function WorkUploadPage() {
 	const navigate = useNavigate();
 	return (
-		<div className="mx-auto max-w-4xl px-4 py-8">
+		<div className="mx-auto w-full max-w-4xl px-4 py-8">
 			<h1 className="text-2xl font-bold">New Work</h1>
 			<p className="mt-2 mb-6 max-w-2xl text-sm text-base-content/60">
 				A Work is the thing itself — the file or the writing, its access and its price. Start with

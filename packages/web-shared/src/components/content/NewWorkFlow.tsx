@@ -62,7 +62,7 @@ const DELIVERY_COPY: Record<
 		icon: ArrowDownTrayIcon,
 	},
 	both: {
-		label: "Stream and download",
+		label: "Stream and Download",
 		blurb: "Both doors: played here, and kept by whoever wants the file.",
 		icon: SignalIcon,
 	},
@@ -292,7 +292,7 @@ export default function NewWorkFlow({ onCreated }: NewWorkFlowProps) {
 						</p>
 					</div>
 					<label className="form-control w-full">
-						<span className="label-text mb-1 font-medium">Work name</span>
+						<span className="label-text mb-1 font-medium">Work Name</span>
 						<input
 							ref={nameRef}
 							className="input input-bordered w-full"
@@ -331,8 +331,8 @@ export default function NewWorkFlow({ onCreated }: NewWorkFlowProps) {
 									type="button"
 									className={`flex min-h-44 flex-col items-start gap-3 rounded-box border p-5 text-left transition ${
 										chosen
-											? "border-primary bg-primary/5 ring-2 ring-primary/20"
-											: "border-base-300 bg-base-100 hover:border-primary/50"
+											? "border-primary bg-primary/10 ring-2 ring-primary/20 shadow-sm"
+											: "border-base-300 bg-base-200 shadow-sm hover:border-primary/50"
 									}`}
 									onClick={() => chooseCategory(choice)}
 								>
@@ -375,8 +375,8 @@ export default function NewWorkFlow({ onCreated }: NewWorkFlowProps) {
 									type="button"
 									className={`flex min-h-28 flex-col items-start gap-2 rounded-box border p-4 text-left transition ${
 										chosen
-											? "border-primary bg-primary/5 ring-2 ring-primary/20"
-											: "border-base-300 bg-base-100 hover:border-primary/50"
+											? "border-primary bg-primary/10 ring-2 ring-primary/20 shadow-sm"
+											: "border-base-300 bg-base-200 shadow-sm hover:border-primary/50"
 									} ${creating ? "opacity-60" : ""}`}
 									disabled={creating}
 									onClick={() => void chooseType(option.value)}
@@ -413,10 +413,10 @@ export default function NewWorkFlow({ onCreated }: NewWorkFlowProps) {
 					</div>
 
 					{isGoods ? (
-						<div className="flex items-start gap-3 rounded-box border border-base-300 bg-base-100 p-5">
+						<div className="flex items-start gap-3 rounded-box border border-base-300 bg-base-200 p-5 shadow-sm">
 							<CubeIcon className="size-8 shrink-0 text-primary" aria-hidden />
 							<div>
-								<p className="font-semibold">Sold and fulfilled</p>
+								<p className="font-semibold">Sold and Fulfilled</p>
 								<p className="mt-1 text-sm text-base-content/60">
 									There is no stream or download for this type. Its terms and details live on the
 									Work's page, and how physical goods and services are delivered is not built yet.
@@ -434,8 +434,8 @@ export default function NewWorkFlow({ onCreated }: NewWorkFlowProps) {
 										key={mode}
 										className={`flex cursor-pointer flex-col gap-2 rounded-box border p-4 transition ${
 											chosen
-												? "border-primary bg-primary/5 ring-2 ring-primary/20"
-												: "border-base-300 bg-base-100 hover:border-primary/50"
+												? "border-primary bg-primary/10 ring-2 ring-primary/20 shadow-sm"
+												: "border-base-300 bg-base-200 shadow-sm hover:border-primary/50"
 										}`}
 									>
 										<input
@@ -464,7 +464,7 @@ export default function NewWorkFlow({ onCreated }: NewWorkFlowProps) {
 						<p className="font-medium">
 							A {typeLabel(type)} Work
 							{isGoods
-								? " · Sold and fulfilled"
+								? " · Sold and Fulfilled"
 								: delivery
 									? ` · ${DELIVERY_COPY[delivery].label}`
 									: ""}
@@ -481,7 +481,7 @@ export default function NewWorkFlow({ onCreated }: NewWorkFlowProps) {
 							disabled={creating || (!isGoods && !delivery)}
 							onClick={() => void openTheWork()}
 						>
-							{creating ? "Opening…" : "Open the Work"}
+							{creating ? "Opening…" : "Edit Your New Work"}
 							<ArrowRightIcon className="size-4" />
 						</button>
 					</div>

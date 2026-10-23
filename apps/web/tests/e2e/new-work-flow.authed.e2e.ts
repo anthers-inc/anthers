@@ -44,7 +44,7 @@ test("the New Work flow walks name, category, type and delivery", async ({ page,
 	await expect(page.getByText("Stream on Anthers", { exact: true })).toBeVisible();
 	await page.screenshot({ path: `${SHOTS}/04-delivery.png`, fullPage: true });
 
-	await page.getByText("Stream and download", { exact: true }).click();
+	await page.getByText("Stream and Download", { exact: true }).click();
 	await expect(page.getByText("Selected")).toHaveCount(1);
 	await expect(page.locator("label").filter({ hasText: "Stream on Anthers" })).not.toContainText(
 		"Selected",
@@ -52,7 +52,7 @@ test("the New Work flow walks name, category, type and delivery", async ({ page,
 	await page.waitForTimeout(300);
 	await page.screenshot({ path: `${SHOTS}/05-delivery-chosen.png`, fullPage: true });
 
-	await page.getByRole("button", { name: "Open the Work" }).click();
+	await page.getByRole("button", { name: "Edit Your New Work" }).click();
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 	await expect(page.getByRole("heading", { name: title })).toBeVisible();
 	await page.screenshot({ path: `${SHOTS}/06-work-page.png`, fullPage: true });
@@ -74,9 +74,9 @@ test("the Non-Digital branch stops at fulfillment", async ({ page, context }) =>
 
 	await page.getByRole("button", { name: /^Service/ }).click();
 	await expect(page.getByRole("heading", { name: "How does it reach people?" })).toBeVisible();
-	await expect(page.getByText("Sold and fulfilled", { exact: true })).toBeVisible();
+	await expect(page.getByText("Sold and Fulfilled", { exact: true })).toBeVisible();
 	await page.screenshot({ path: `${SHOTS}/08-goods-delivery.png`, fullPage: true });
 
-	await page.getByRole("button", { name: "Open the Work" }).click();
+	await page.getByRole("button", { name: "Edit Your New Work" }).click();
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 });
