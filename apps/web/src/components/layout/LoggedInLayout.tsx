@@ -28,9 +28,9 @@ import { ViewFilterProvider } from "./search/filter-context";
  * signed-in page ends at its own content, since the sidebar and the header's account
  * menu already carry the reader's navigation. Studio mode omits the footer separately.
  */
-const SITE_FOOTER_PATHS = new Set(["/badges", "/purchases", "/settings"]);
+const SITE_FOOTER_PATHS = new Set(["/purchases", "/settings"]);
 
-/** Treat `/badges/` and `/badges` as the same destination. */
+/** Treat `/purchases/` and `/purchases` as the same destination. */
 const showsSiteFooter = (pathname: string) =>
 	SITE_FOOTER_PATHS.has(pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname);
 
@@ -195,10 +195,7 @@ function LoggedInLayoutInner() {
 								</li>
 								<div className="divider my-0 px-2" />
 								<li>
-									<Link to="/badges">Badges</Link>
-								</li>
-								<li>
-									<Link to="/purchases">Purchases</Link>
+									<Link to="/purchases">Badges &amp; Purchases</Link>
 								</li>
 								<li>{user && <Link to={profileUrl(user.handle)}>Profile</Link>}</li>
 								<li>
@@ -378,8 +375,8 @@ function LoggedInLayoutInner() {
 								<Outlet />
 							</RouteSuspense>
 
-							{/* Footer, on the account pages only: Badges, Purchases and Settings are where a
-					    person is managing their own account, and the site map's reference and legal
+							{/* Footer, on the account pages only: Badges & Purchases and Settings are where
+					    a person is managing their own account, and the site map's reference and legal
 					    columns belong there. Every other signed-in page ends at its own content.
 					    Studio mode leaves it out entirely; a working tool has no use for a site map. */}
 							{!studio && showsSiteFooter(pathname) && (
@@ -409,8 +406,8 @@ function LoggedInLayoutInner() {
 												<Link to="/library" className="link link-hover">
 													Library
 												</Link>
-												<Link to="/badges" className="link link-hover">
-													Badges
+												<Link to="/purchases" className="link link-hover">
+													Badges &amp; Purchases
 												</Link>
 											</nav>
 											{/* Release Notes in its own column, matching the logged-out footer's

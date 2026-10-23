@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /*
- * The Badges page — what the person holds, and what it does.
+ * The Badges half of the account page — what the person holds, and what it does.
  *
  * A Badge is the monthly amount somebody gives a creator, and also the emblem they hold
  * while giving it. Two ladders live here, and they are one kind of object:
  *   1. The Badge held from Anthers — the monthly amount to Anthers, which lifts the
  *      Public Access limit at $3 and funds the Time Pool and the programs. Changed on
- *      /signup; this page displays and manages the subscription around it.
+ *      /signup; this section displays and manages the subscription around it.
  *   2. The Badges held from creators — written by the subscription itself at the rung
  *      each creator names, clearing their ladder with no platform cut. Held and changed
- *      on the creator's own page; this page displays them.
+ *      on the creator's own page; this section displays them.
  *
  * The cycle card beneath is the accounting record — where the month's money went — and
  * the cycle navigation lives there, because reviewing a closed cycle is accounting work
@@ -18,6 +18,10 @@
  *
  * A creator's Badge emblem renders through the same BadgeMark Anthers' own Badges render
  * through (CreatorBadgeMark), so both ladders read as one collection.
+ *
+ * This is the first section of the account page, with PurchasesSection below it: Badges
+ * are the standing relationship and Purchases are the one-time receipts, and they share
+ * a page because both answer what this account has given and what it holds.
  */
 
 // The narrower `Badge` (Anthers' own four, no "free") is what `AnthersBadgeMark` keys on —
@@ -45,7 +49,7 @@ import type {
 } from "@anthers/web-shared/types";
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAnthersLadder } from "../lib/anthers-ladder";
+import { useAnthersLadder } from "../../lib/anthers-ladder";
 
 /* ------------------------------------------------------------------ */
 /*  Formatting helpers                                                 */
@@ -170,7 +174,7 @@ function initials(row: CreatorRow): string {
 /*  Page Component                                                     */
 /* ------------------------------------------------------------------ */
 
-export default function BadgesPage() {
+export default function BadgesSection() {
 	const [searchParams] = useSearchParams();
 
 	// The seeded ladder, for what this page quotes: the rungs strip (the rows are the
@@ -407,8 +411,8 @@ export default function BadgesPage() {
 
 	if (!account || !badgeView)
 		return (
-			<div className="max-w-2xl mx-auto px-4 py-8 text-center">
-				<h1 className="text-2xl font-bold mb-4">Account unavailable</h1>
+			<div className="max-w-2xl mx-auto py-8 text-center">
+				<h2 className="text-xl font-bold mb-4">Account unavailable</h2>
 				<p className="mb-4">{error ?? "We couldn't load your account. Please try again."}</p>
 				<Link to="/signup" className="btn btn-primary">
 					Support Anthers
@@ -417,21 +421,14 @@ export default function BadgesPage() {
 		);
 
 	return (
-		// `min-w-0 w-full max-w-full` breaks the flex-column min-content cascade
-		// so this wrapper can shrink below its inner content's min-content
-		// width on mobile (the same fix the other top-level pages carry).
-		// Without `w-full`, `mx-auto` on a flex item disables the default
-		// `align-self: stretch`, so the wrapper falls back to its content's
-		// intrinsic width (up to the cap), which can push past the mobile
-		// viewport. The page takes a reading measure rather than a dashboard
-		// width — what it holds is lists and a card, not a wide grid.
-		<div className="mx-auto min-w-0 w-full max-w-full max-w-4xl px-4 py-8">
-			<div className="mb-2">
-				<h1 className="text-2xl font-bold">Badges</h1>
-				{/* The one page title; the cards below carry their own section titles. */}
+		<section aria-labelledby="badges-section-heading" className="mb-10">
+			<div className="mb-4">
+				<h2 id="badges-section-heading" className="text-xl font-bold">
+					Badges
+				</h2>
 				<p className="text-sm text-base-content/50">
-					Badges mark how you back Anthers and the creators you choose — held while you're giving,
-					at the amount you pick.
+					You hold a Badge from Anthers and one from each creator you back, and each marks the
+					monthly amount you give them.
 				</p>
 			</div>
 			{error && (
@@ -751,7 +748,7 @@ export default function BadgesPage() {
 					)}
 				</div>
 			)}
-		</div>
+		</section>
 	);
 }
 
