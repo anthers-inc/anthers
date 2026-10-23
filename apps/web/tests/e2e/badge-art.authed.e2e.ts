@@ -17,11 +17,20 @@ import { GAUNTLET_CREATOR_USERNAME, gauntletHandle } from "@anthers/db/gauntlet"
 import { badges } from "@anthers/db/schema";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { eq } from "drizzle-orm";
-import { API_URL, expect, signInAsCreator, test, trackErrorsStrict, WEB_ORIGIN } from "./fixtures";
+import {
+	API_URL,
+	expect,
+	signInAsCreator,
+	signInAsWalker,
+	test,
+	trackErrorsStrict,
+	WEB_ORIGIN,
+} from "./fixtures";
 
 const RUN = Date.now().toString(36);
 const LABEL = `E2E rung ${RUN}`;
 let badgeId = 0;
+let pickBadgeId = 0;
 let token = "";
 
 /**
@@ -90,6 +99,7 @@ function artwork(): Buffer {
 
 test.afterAll(async () => {
 	if (badgeId) await db.delete(badges).where(eq(badges.id, badgeId));
+	if (pickBadgeId) await db.delete(badges).where(eq(badges.id, pickBadgeId));
 });
 
 test("a creator gives a rung its own art, and a rung without one still shows a badge", async ({
@@ -113,33 +123,39 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	expect(created.status, "could not create the fixture rung").toBe(201);
 	badgeId = ((await created.json()) as { badge: { id: number } }).badge.id;
 
-	// The maker lives on the creator's own profile now, in the Badges tab beside the
-	// supporter-facing ladder it edits — not in Studio settings.
+	// The creator meets the same grid a supporter does, with a pencil on each card. The
+	// maker is what that pencil opens — one Badge at a time, in a dialog.
 	const handle = await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME);
 	await page.goto(`${WEB_ORIGIN}${profileUrl(handle)}?tab=badges`);
+	const editButton = page.getByRole("button", { name: `Edit ${LABEL}` });
+	await expect(editButton).toBeVisible();
+	await page.getByTestId("badge-grid").screenshot({ path: `.screenshots/badge-grid-${RUN}.png` });
 
-	// ⚠️ Scoped by the CONTROL rather than by a div containing the label. `locator("div")`
-	// filtered on text and taken `.last()` returns the innermost matching div, which here
-	// is the one wrapping the label alone — it never contains the mark, and the failure
-	// reads as "the feature is missing" when the feature is fine.
-	const markButton = page.getByRole("button", { name: `${LABEL} badge` });
+	await editButton.click();
+	const dialog = page.getByRole("dialog");
+	await expect(dialog.getByRole("heading", { name: "Edit Badge" })).toBeVisible();
+
+	// ⚠️ Scoped by the art control's own test id rather than by a div containing the label.
+	// `locator("div")` filtered on text and taken `.last()` returns the innermost matching
+	// div, which here is the one wrapping the label alone — it never contains the mark, and
+	// the failure reads as "the feature is missing" when the feature is fine.
+	const control = page.getByTestId("badge-art-control");
+	const markButton = control.getByRole("button", { name: `${LABEL} badge` });
 	await expect(markButton).toBeVisible();
-	const control = page.locator("div").filter({ has: markButton }).last();
 
 	// The default first: a rung with no art of its own is still a badge, not a hole.
 	await expect(control.getByRole("img", { name: `${LABEL} badge` })).toBeVisible();
 
-	const ladder = page.locator("div").filter({ hasText: "Badge Maker" }).last();
-	await ladder.screenshot({ path: `.screenshots/badge-maker-default-${RUN}.png` });
+	await dialog.screenshot({ path: `.screenshots/badge-maker-default-${RUN}.png` });
 
 	// The library first — three choices, no file picker. This is the path a creator who
 	// does not draw actually takes, so it is the one worth walking.
 	await markButton.click();
 
 	// ⚠️ One choice at a time, waiting for each to land. Saving refetches the ladder, which
-	// re-renders the row and detaches the button mid-click — clicking the next swatch
-	// straight away fails with "element was detached", which reads like a broken picker and
-	// is a test that did not wait.
+	// re-renders the card behind the dialog — clicking the next swatch straight away fails
+	// with "element was detached", which reads like a broken picker and is a test that did
+	// not wait.
 	for (const choice of ["Hexagon", "Amber"]) {
 		await control.getByRole("button", { name: choice }).click();
 		// 🚨 The picker must still be open for the NEXT choice. Saving refetches the ladder,
@@ -150,7 +166,7 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 			"true",
 		);
 	}
-	await ladder.screenshot({ path: `.screenshots/badge-maker-library-${RUN}.png` });
+	await dialog.screenshot({ path: `.screenshots/badge-maker-library-${RUN}.png` });
 
 	// Then the creator's own art, through the file input the picker opens.
 	await control.locator('input[type="file"]').setInputFiles({
@@ -161,13 +177,66 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 
 	// The mark becomes an <img> pointed at the access-checked route — which is the whole
 	// visible difference, and the only way to see that the upload round-tripped.
-	await expect(control.locator(`img[src$="/api/subscriptions/badges/${badgeId}/art"]`)).toBeVisible(
-		{
-			timeout: 15_000,
-		},
-	);
+	const art = `img[src$="/api/subscriptions/badges/${badgeId}/art"]`;
+	await expect(control.locator(art)).toBeVisible({
+		timeout: 15_000,
+	});
 
-	await ladder.screenshot({ path: `.screenshots/badge-maker-art-${RUN}.png` });
+	await dialog.screenshot({ path: `.screenshots/badge-maker-art-${RUN}.png` });
+
+	// Closing the dialog must leave the grid card wearing the art it just saved: the two
+	// views are one rendering, so a card that still drew the fallback would be the bug.
+	await dialog.getByRole("button", { name: "Close the Badge editor" }).click();
+	await expect(page.locator(art)).toBeVisible();
+
+	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
+});
+
+/**
+ * The other half of the grid: a supporter picking a rung.
+ *
+ * ⭐ **The pick is the card's own action now**, and the picked card says so in the same
+ * surface rather than in a list row beside it. The walker is the gauntlet's ordinary user
+ * — signed in, giving nothing — so every rung above their amount is selectable and the
+ * first pick is a plain selection with no subscription behind it.
+ */
+test("a supporter picks a rung and the card carries the highlight", async ({ page, context }) => {
+	const errors = trackErrorsStrict(page);
+	const label = `E2E pick ${RUN}`;
+
+	// The rung belongs to the creator, so it is made with the creator's session, not the
+	// browser's — then the browser signs in as the supporter who picks it.
+	const creatorToken = await signInAsCreator(context);
+	const created = await fetch(`${API_URL}/api/subscriptions/badges`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${creatorToken}`,
+		},
+		body: JSON.stringify({ threshold: "7.00", label, description: "A rung to pick." }),
+	});
+	expect(created.status, "could not create the pick fixture rung").toBe(201);
+	pickBadgeId = ((await created.json()) as { badge: { id: number } }).badge.id;
+
+	await signInAsWalker(context);
+	const handle = await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME);
+	await page.goto(`${WEB_ORIGIN}${profileUrl(handle)}?tab=badges`);
+
+	const card = page.locator("article").filter({ hasText: label });
+	await expect(card).toBeVisible();
+	await card.getByRole("button", { name: "Select" }).click();
+
+	// The picked card wears "Selected" and the action card under the grid appears — the
+	// purchase itself stays on the basket's one checkout.
+	await expect(card.getByRole("button", { name: "Selected" })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
+	await expect(page.getByTestId("badge-pick-actions")).toBeVisible();
+	await page.getByTestId("badge-grid").screenshot({
+		path: `.screenshots/badge-grid-selected-${RUN}.png`,
+	});
 
 	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
 });
