@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Discovery's two modes, as the routes behind them (Parker, 2026-10-19).
+ * The routes behind Discovery, and the graph it no longer draws (Parker, 2026-10-19;
+ * Discovery became one stream on 2026-10-23).
  *
  * - `GET /me/graph` ranks creators by how many of the people the viewer follows also
  *   follow them, and carries the edge count plus the vocabulary the shared Type and
- *   Tags filters read. A reader who follows nobody gets the stated follower-count
- *   fallback rather than an empty page with no explanation.
- * - `GET /me/feed?scope=global` is the Ticker: the same stream and card fields as the
- *   Network feed, widened to every creator. The default feed stays the network, so a
- *   creator the viewer does not follow must be absent from one and present in the
- *   other.
+ *   Tags filters read. No page calls it today; the graph waits on a platform with
+ *   enough content for the edges to say something, and the route keeps its own shape.
+ *   A reader who follows nobody gets the stated follower-count fallback rather than an
+ *   empty page with no explanation.
+ * - `GET /me/feed?scope=global` is the stream Discovery shows: the same stream and card
+ *   fields as the Network feed, widened to every creator. The default feed stays the
+ *   network, so a creator the viewer does not follow must be absent from one and
+ *   present in the other.
  *
  * 🚨 **The absence is half the test.** A global scope that quietly returned the
  * network's list would pass every presence assertion here, so each half names what it
@@ -176,7 +179,7 @@ describe("Discovery's graph and ticker routes", () => {
 		expect(creator?.tags).toContain(TAG);
 	});
 
-	it("says which formula it ran when the viewer follows nobody", async () => {
+	it("says which recipe it ran when the viewer follows nobody", async () => {
 		const lonely = await createAccount(`dsc_lonely_${run}`);
 		const res = await req("/api/accounts/me/graph", withCookie(lonely.cookie));
 		expect(res.status).toBe(200);

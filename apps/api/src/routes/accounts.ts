@@ -7,12 +7,14 @@
  *   PATCH  /me                      — update current user profile
  *   GET    /me/following            — list creators the current user follows
  *   GET    /me/graph                — creators ranked by how many of the people the
- *                                     current user follows also follow them
+ *                                     current user follows also follow them (no page
+ *                                     draws it today)
  *   GET    /me/feed                 — posts AND releases from the account's network (follows,
  *                                     Badge subscriptions, and the creators behind saved or
  *                                     purchased content), plus your own;
  *                                     `?network_source=following|subscribed|saved` narrows it,
- *                                     and `?scope=global` widens it to every creator for Discovery's Ticker
+ *                                     and `?scope=global` widens it to every creator for
+ *                                     Discovery
  *   GET    /me/blocks               — who the current user has blocked
  *   GET    /me/adult-access         — the opt-in and adulthood verification, and whether
  *                                     the two together open the Adult rung
@@ -667,11 +669,13 @@ const accountRoutes = new Hono()
 
 	// ── Graph ────────────────────────────────────────────────────────────────
 	//
-	// Discovery's Graph mode. The formula is the point: a creator is here because
-	// some number of the people this account follows also follow them, and the
-	// number travels with the row so the page can say why it is showing them. That
-	// is the visible, choosable alternative to a hidden recommendation engine —
-	// `min_shared` is the reader's control over the formula's one parameter.
+	// A deferred Discovery surface: no page draws this today. The recipe is the
+	// point — a creator is here because some number of the people this account
+	// follows also follow them, and the number travels with the row so a page can
+	// say why it is showing them. That is the visible, choosable alternative to a
+	// hidden recommendation engine — `min_shared` is the reader's control over the
+	// recipe's one parameter — and it waits for enough content for the edges to
+	// say more than a plain listing would.
 	//
 	// ⚠️ **Creators the reader already follows stay in the list.** The graph is a
 	// picture of the network around them, not a list of strangers; a creator they
@@ -681,7 +685,7 @@ const accountRoutes = new Hono()
 	//
 	// A reader who follows nobody has no edges to trace: the route falls back to
 	// creators ordered by followers and says so with `basis: "followers"`, which
-	// the page renders as the formula it actually ran rather than pretending the
+	// the page renders as the recipe it actually ran rather than pretending the
 	// network produced it.
 	.get("/me/graph", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
@@ -806,9 +810,9 @@ const accountRoutes = new Hono()
 	.get("/me/feed", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
 
-		// `scope=global` is Discovery's Ticker: the newest Works and Posts across
+		// `scope=global` is Discovery's stream: the newest Works and Posts across
 		// Anthers rather than the account's network. It is the same stream shape and
-		// the same card fields, so the Ticker reuses the feed's serialization instead
+		// the same card fields, so Discovery reuses the feed's serialization instead
 		// of growing a second listing that drifts from it. Everything else about the
 		// route is unchanged — the filters, the access verdicts, and the ordering are
 		// the feed's own.
@@ -1301,7 +1305,7 @@ const accountRoutes = new Hono()
 				return accessFilter === "unlocked" ? unlocked : !unlocked;
 			});
 
-		// 🚨 **Discovery's Ticker runs the mix stage, and it runs it before the cap.**
+		// 🚨 **Discovery's stream runs the mix stage, and it runs it before the cap.**
 		// Strictly newest-first hands the page to whoever posts most: one creator's run
 		// of ten fills a quarter of a 4-column grid. Interleaving gives every creator one
 		// card before anyone gets a second — the first round is one per creator, then the

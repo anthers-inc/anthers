@@ -4,10 +4,9 @@
  *
  * A source-text guard in the family of `basket-layout.test.ts`: the pieces that make
  * Library, Network, and Discovery one family are a shared header, one nav vocabulary,
- * and a Discovery body that offers exactly Graph and Ticker. Each is a decision a
- * refactor can quietly undo — a page growing its own heading again, a renamed route
- * surviving beside its replacement, Browse creeping back as a third mode — so each is
- * pinned here.
+ * and a Discovery body that shows one stream. Each is a decision a refactor can quietly
+ * undo — a page growing its own heading again, a renamed route surviving beside its
+ * replacement, a mode picker creeping back over a single mode — so each is pinned here.
  */
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -79,22 +78,24 @@ describe("the nav speaks the one vocabulary", () => {
 	});
 });
 
-describe("Discovery offers exactly Graph and Ticker", () => {
-	it("names the section Modes and lists the two survivors", () => {
-		expect(discovery).toContain(">Modes<");
-		expect(discovery).toContain('id: "graph"');
-		expect(discovery).toContain('id: "ticker"');
+describe("Discovery shows one stream", () => {
+	it("carries no mode section or mode picker in the sidebar", () => {
+		expect(discovery).not.toContain(">Modes<");
+		expect(discovery).not.toContain("DISCOVERY_MODES");
+		expect(discovery).not.toContain('searchParams.get("mode")');
 	});
 
-	it("carries no Browse or Inbox mode", () => {
+	it("draws no Graph and no Browse or Inbox mode", () => {
+		expect(discovery).not.toContain("GRAPH_PRESETS");
+		expect(discovery).not.toContain('id: "graph"');
 		expect(discovery).not.toContain('id: "browse"');
 		expect(discovery).not.toContain('id: "inbox"');
 		expect(discovery).not.toContain('label: "Browse"');
 		expect(discovery).not.toContain('label: "Inbox"');
 	});
 
-	it("shows the active formula above the content", () => {
-		expect(discovery).toContain("Active formula");
-		expect(discovery).toContain("<FormulaBar");
+	it("shows the active recipe above the content", () => {
+		expect(discovery).toContain("Active recipe");
+		expect(discovery).toContain("<RecipeBar");
 	});
 });
