@@ -66,8 +66,8 @@ const navItemClass = (active: boolean, rail: boolean, dense = false) =>
  * profile — the place that replaced the Studio's old Dashboard tab.
  *
  * ⚠️ **The toggle is bounded, because an unbounded one is unreadable.** Its inactive side used
- * to be `bg-base-200`, the sidebar's own colour, so the pair had no visible edge and the
- * toggle read as one button that changed colour at some arbitrary point. The join carries a
+ * to be `bg-base-200`, the sidebar's own color, so the pair had no visible edge and the
+ * toggle read as one button that changed color at some arbitrary point. The join carries a
  * hairline border and a soft shadow, and the inactive side sits on `base-100` — the surface
  * the page uses — so both halves read as controls against either the header or the sidebar.
  */
