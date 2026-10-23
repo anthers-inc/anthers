@@ -97,11 +97,11 @@ const EXAMPLE_COUNTER_NOTICE: ForwardedCounterNotice = {
 const EXAMPLE_NOTIFICATION_SOCIAL: NotifyInput = {
 	userId: 0,
 	category: "activity",
-	kind: "reply",
+	kind: "comment_reply",
 	title: "Casey Example replied to your comment",
 	body: '"Loved the ending of this one — did you design that yourself?"',
-	/** App-relative path the email links to, as a real notification carries. */
-	linkPath: "/works/example/EXAMPLE",
+	/** A real reply's path: the post's slug-publicId, anchored on the comment answered. */
+	linkPath: "/posts/example-post-123#comment-45",
 	dedupeKey: "example:reply:0",
 };
 

@@ -28,13 +28,20 @@
  */
 
 import type { posts, works } from "@anthers/db/schema";
+import { displayHandle, profilePath } from "../lib/handles.js";
 import { isBlocked } from "./blocks.js";
 import { notify } from "./notifications.js";
 
-/** The URL-shape inputs. Built inline, matching the API's no-web-shared rule — see credit-acceptance.ts. */
+/**
+ * The URL-shape inputs. Built here rather than through `@anthers/web-shared/profile`,
+ * which the API must not import — `lib/handles.ts` is the API's one writer of `/@handle`
+ * and this interface carries the row fields a link needs.
+ */
 interface PostRef {
 	slug: string;
 	publicId: number;
+	/** The post's title, for the body copy. Absent on an untitled post. */
+	title?: string | null;
 }
 
 /**
@@ -51,11 +58,13 @@ interface PostRef {
 export async function notifyReply(input: {
 	/** The reply's author. */
 	replierId: number;
+	/** The reply's author's handle, for the copy — read by the route already. */
+	replierHandle: string;
 	/** The comment the reply answers. */
 	parentId: number;
 	/** The parent's author, already read by the caller's ancestry walk. */
 	parentAuthorId: number;
-	/** The post everything sits under, for the link. */
+	/** The post everything sits under, for the link and the body. */
 	post: PostRef;
 }): Promise<void> {
 	if (input.parentAuthorId === input.replierId) return;
@@ -63,8 +72,8 @@ export async function notifyReply(input: {
 		userId: input.parentAuthorId,
 		category: "activity",
 		kind: "comment_reply",
-		title: "Somebody replied to your comment",
-		body: "See the reply under your comment.",
+		title: `${displayHandle(input.replierHandle)} replied to your comment`,
+		body: input.post.title ? `On “${input.post.title}”.` : "",
 		linkPath: `/posts/${input.post.slug}-${input.post.publicId}#comment-${input.parentId}`,
 		dedupeKey: `comment-reply:${input.replierId}:${input.parentId}`,
 	});
@@ -81,6 +90,8 @@ export async function notifyReply(input: {
 export async function notifyPostComment(input: {
 	/** The comment's author. */
 	commenterId: number;
+	/** The comment's author's handle, for the copy — read by the route already. */
+	commenterHandle: string;
 	/** The post's own row, as the route already holds it. */
 	post: typeof posts.$inferSelect;
 }): Promise<void> {
@@ -92,7 +103,7 @@ export async function notifyPostComment(input: {
 		userId: creatorId,
 		category: "activity",
 		kind: "post_comment",
-		title: "New comment on your post",
+		title: `${displayHandle(input.commenterHandle)} commented on your post`,
 		body: input.post.title ? `On “${input.post.title}”.` : "",
 		linkPath: `/posts/${input.post.slug}-${input.post.publicId}#comments`,
 		dedupeKey: `post-comment:${input.commenterId}:${input.post.id}`,
@@ -110,6 +121,8 @@ export async function notifyPostComment(input: {
 export async function notifyReview(input: {
 	/** The reviewer. */
 	reviewerId: number;
+	/** The reviewer's handle, for the copy — read by the route already. */
+	reviewerHandle: string;
 	/** The Work's creator — resolved here, since the route holds only the Work row. */
 	work: typeof works.$inferSelect;
 	/** True when this was the first review by this person on this Work, not an edit. */
@@ -127,7 +140,7 @@ export async function notifyReview(input: {
 		userId: creatorId,
 		category: "activity",
 		kind: "work_review",
-		title: "New review of your Work",
+		title: `${displayHandle(input.reviewerHandle)} reviewed your Work`,
 		body: work.title ? `On “${work.title}”.` : "",
 		linkPath: `/works/${work.slug}-${work.publicId}#reviews`,
 		dedupeKey: `work-review:${input.reviewerId}:${work.id}`,
@@ -150,7 +163,7 @@ export async function notifyFollow(input: {
 	followerId: number;
 	/** The account followed. */
 	followedId: number;
-	/** The follower's handle, for the copy — read by the route already. */
+	/** The follower's handle, for the copy and the link — read by the route already. */
 	followerHandle: string;
 }): Promise<void> {
 	if (input.followerId === input.followedId) return;
@@ -160,9 +173,13 @@ export async function notifyFollow(input: {
 		userId: input.followedId,
 		category: "activity",
 		kind: "new_follower",
-		title: "You have a new follower",
-		body: name ? `${name} now follows you.` : "",
-		linkPath: name ? `/${name}` : "",
+		title: name ? `${displayHandle(name)} started following you` : "You have a new follower",
+		// 🚨 **`/@handle`, not `/handle`.** A person is `/@name` and a page is `/name`
+		// (`apps/web/src/App.tsx`'s `HandleRoute` refuses a segment without the `@`), so
+		// the bare form addresses a page that never existed and 404s — which is what every
+		// follower notification did until this pass. `profilePath` is the API's only
+		// writer of that prefix; a path typed inline here is how it drifted.
+		linkPath: name ? profilePath(name) : "",
 		dedupeKey: `new-follower:${input.followerId}:${input.followedId}`,
 	});
 }

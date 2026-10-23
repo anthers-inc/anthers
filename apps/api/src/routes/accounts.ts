@@ -121,6 +121,7 @@ import {
 	type DeliveryMode,
 	listNotifications,
 	markRead,
+	notificationCounts,
 	notify,
 	resolvedMode,
 	unreadCount,
@@ -1709,11 +1710,16 @@ const accountRoutes = new Hono()
 		return c.json({ notifications: items, unread });
 	})
 
-	// The bell's poll — one number, one query. Separate from the list read above
+	// The bell's poll — two numbers, one scan. Separate from the list read above
 	// deliberately: the poll runs every 30 seconds in every open tab, and each of those
 	// fetching the whole list to learn a count is 50 rows' serialization per tab per poll.
+	//
+	// ⚠️ **`total` rides along because the bell needs it to decide whether to exist** —
+	// `unread` alone cannot answer that, and the alternative was a bell that vanishes the
+	// moment somebody reads their feed. `services/notifications.ts`'s `notificationCounts`
+	// carries the reasoning.
 	.get("/me/notifications/unread", requireAuth, async (c) => {
-		return c.json({ unread: await unreadCount(c.get("user").id) });
+		return c.json(await notificationCounts(c.get("user").id));
 	})
 
 	.post(

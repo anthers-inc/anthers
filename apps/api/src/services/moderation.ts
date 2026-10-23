@@ -647,7 +647,12 @@ export async function suspendAccount(input: {
 			`Reason: ${moderationReasonLabel(input.reason)}. ` +
 			`While suspended you cannot sign in, and your presence and your works are not shown publicly. ` +
 			`If you believe this is a mistake, reply to this email to appeal.`,
-		linkPath: "/suspended",
+		// 🚨 **No link, because there is nowhere to go.** The row used to point at
+		// `/suspended`, which was never a route — the suspension's own explanation lives in
+		// `LoginPage`'s state after a sign-in attempt, not at an address. `""` is the
+		// interface's honest empty answer and renders the row as words rather than a link
+		// that 404s; the appeal path this body names is the email it arrived in.
+		linkPath: "",
 		dedupeKey: `account-suspended:${input.userId}:${Date.now()}`,
 	}).catch(() => {});
 

@@ -49,7 +49,7 @@
 import { randomBytes } from "node:crypto";
 import { db } from "@anthers/db/client";
 import { notifications, userPreferences, users } from "@anthers/db/schema";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { EMAIL_LINK_COLOR, escapeHtml, sendEmail, shell } from "./email.js";
 
 /**
@@ -283,13 +283,21 @@ export async function notifyMany(inputs: NotifyInput[]): Promise<{ created: numb
 	return { created };
 }
 
-/** A user's own notifications, newest first. */
+/**
+ * A user's own notifications, newest first.
+ *
+ * ⚠️ **The id is the tiebreak, not decoration.** `createdAt` defaults to `now()` at
+ * insert, so a bulk emit (a nightly job's several rows, or two in one transaction) can
+ * share a timestamp to the microsecond — and Postgres is then free to return them in any
+ * order, which makes a feed that reshuffles between two consecutive reads of the same
+ * page. The id is monotonic here, so "newest first" is total rather than approximate.
+ */
 export async function listNotifications(userId: number, limit = 50) {
 	return db
 		.select()
 		.from(notifications)
 		.where(eq(notifications.userId, userId))
-		.orderBy(desc(notifications.createdAt))
+		.orderBy(desc(notifications.createdAt), desc(notifications.id))
 		.limit(limit);
 }
 
@@ -368,6 +376,30 @@ export async function unreadCount(userId: number): Promise<number> {
 		.from(notifications)
 		.where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
 	return rows.length;
+}
+
+/**
+ * Both numbers the bell needs, from one scan: how much is new, and whether this person
+ * has ever been told anything.
+ *
+ * ⭐ **`total` is what decides whether the bell exists at all**, and it is a different
+ * question from `unread`. The bell is chrome that appears once there is something behind
+ * it and stays afterwards (`components/layout/NotificationBell.tsx`), so "unread is zero"
+ * cannot be the test — a person who has read everything still needs the door back to the
+ * feed. Hiding it until the first notification also keeps the header honest for the many
+ * accounts that have never been told anything.
+ */
+export async function notificationCounts(
+	userId: number,
+): Promise<{ total: number; unread: number }> {
+	const [row] = await db
+		.select({
+			total: sql<number>`count(*)::int`,
+			unread: sql<number>`count(*) filter (where ${notifications.readAt} is null)::int`,
+		})
+		.from(notifications)
+		.where(eq(notifications.userId, userId));
+	return { total: row?.total ?? 0, unread: row?.unread ?? 0 };
 }
 
 /** Mark some (or all) of a user's notifications read. Scoped to the owner. */
