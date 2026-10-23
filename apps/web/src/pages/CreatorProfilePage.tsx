@@ -76,12 +76,6 @@ function hostLabel(url: string): string {
 	}
 }
 
-/**
- * The per-card lock chrome that used to live here is gone with the post-level gate.
- * A Work carries its own access and `WorkCard` renders its own locked state, so there is
- * no wrapper deciding what a *post* card may show.
- */
-
 /* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
@@ -438,27 +432,68 @@ export default function CreatorProfilePage() {
 		// layer (the side vines and their bee swarm sit at z-20 — see LoggedOutLayout) so
 		// the bees read as a background, hidden behind the header image and the cards
 		// rather than painted across them. The logged-in layout has no decorative layer.
-		<>
-			<div className="relative z-30">
-				{/* Header banner. 🚨 Inside the container's width, at a 3:1 ratio — that is
+		<div className="relative z-30">
+			{/* Header banner. 🚨 Inside the container's width, at a 3:1 ratio — that is
 			    the banner-size convention (Bluesky: 3:1, recommended 1500×500; YouTube
 			    similar), and full-bleed read as a second, wider site than the one the
 			    rest of this page belongs to. The pencil is the only edit affordance:
 			    a creator and a visitor meet the same banner. */}
-				<div className="container mx-auto px-4">
-					<div className="relative w-full aspect-[3/1] bg-base-300">
-						{creator.headerImage && (
-							<img src={creator.headerImage} alt="Header" className="w-full h-full object-cover" />
+			<div className="container mx-auto px-4">
+				<div className="relative w-full aspect-[3/1] bg-base-300">
+					{creator.headerImage && (
+						<img src={creator.headerImage} alt="Header" className="w-full h-full object-cover" />
+					)}
+					{isAuthenticated && isOwnProfile && (
+						<label
+							className={`btn btn-sm absolute right-2 top-2 bg-base-100/80 backdrop-blur ${
+								imageBusy === "header" ? "btn-disabled" : ""
+							}`}
+							title="Change header image"
+						>
+							<PencilSquareIcon className="w-4 h-4" />
+							<span className="sr-only">Change header image</span>
+							<input
+								type="file"
+								accept="image/*"
+								className="hidden"
+								disabled={imageBusy !== null}
+								onChange={(e) => {
+									const file = e.target.files?.[0];
+									e.target.value = "";
+									if (file) void changeImage("header", file);
+								}}
+							/>
+						</label>
+					)}
+				</div>
+			</div>
+
+			<div className="container mx-auto px-4">
+				{/* Profile info. Every editable field is the page's own read rendering with
+				    a pencil beside it; there is no separate edit view and no page-wide save. */}
+				{imageError && <p className="mt-2 text-xs text-error">{imageError}</p>}
+				<div className="flex flex-col sm:flex-row items-start gap-4 -mt-12 mb-6">
+					<div className="relative">
+						{creator.avatar ? (
+							<img
+								src={creator.avatar}
+								alt={creator.displayName || creator.handle}
+								className="w-24 h-24 rounded-full object-cover border-4 border-base-100"
+							/>
+						) : (
+							<div className="w-24 h-24 rounded-full bg-base-300 border-4 border-base-100 flex items-center justify-center text-3xl font-bold text-base-content/40">
+								{(creator.displayName || creator.handle).charAt(0).toUpperCase()}
+							</div>
 						)}
 						{isAuthenticated && isOwnProfile && (
 							<label
-								className={`btn btn-sm absolute right-2 top-2 bg-base-100/80 backdrop-blur ${
-									imageBusy === "header" ? "btn-disabled" : ""
+								className={`btn btn-xs btn-circle absolute bottom-0 right-0 ${
+									imageBusy === "avatar" ? "btn-disabled" : ""
 								}`}
-								title="Change header image"
+								title="Change profile picture"
 							>
-								<PencilSquareIcon className="w-4 h-4" />
-								<span className="sr-only">Change header image</span>
+								<PencilSquareIcon className="w-3.5 h-3.5" />
+								<span className="sr-only">Change profile picture</span>
 								<input
 									type="file"
 									accept="image/*"
@@ -467,154 +502,42 @@ export default function CreatorProfilePage() {
 									onChange={(e) => {
 										const file = e.target.files?.[0];
 										e.target.value = "";
-										if (file) void changeImage("header", file);
+										if (file) void changeImage("avatar", file);
 									}}
 								/>
 							</label>
 						)}
 					</div>
-				</div>
-
-				<div className="container mx-auto px-4">
-					{/* Profile info. Every editable field is the page's own read rendering with
-				    a pencil beside it; there is no separate edit view and no page-wide save. */}
-					{imageError && <p className="mt-2 text-xs text-error">{imageError}</p>}
-					<div className="flex flex-col sm:flex-row items-start gap-4 -mt-12 mb-6">
-						<div className="relative">
-							{creator.avatar ? (
-								<img
-									src={creator.avatar}
-									alt={creator.displayName || creator.handle}
-									className="w-24 h-24 rounded-full object-cover border-4 border-base-100"
-								/>
-							) : (
-								<div className="w-24 h-24 rounded-full bg-base-300 border-4 border-base-100 flex items-center justify-center text-3xl font-bold text-base-content/40">
-									{(creator.displayName || creator.handle).charAt(0).toUpperCase()}
-								</div>
-							)}
-							{isAuthenticated && isOwnProfile && (
-								<label
-									className={`btn btn-xs btn-circle absolute bottom-0 right-0 ${
-										imageBusy === "avatar" ? "btn-disabled" : ""
-									}`}
-									title="Change profile picture"
-								>
-									<PencilSquareIcon className="w-3.5 h-3.5" />
-									<span className="sr-only">Change profile picture</span>
+					<div className="flex-1 pt-4 sm:pt-14">
+						{isOwnProfile ? (
+							<InlineField<string>
+								label="display name"
+								saved={creator.displayName ?? ""}
+								renderRead={displayNameRead}
+								renderEdit={(draft, setDraft) => (
 									<input
-										type="file"
-										accept="image/*"
-										className="hidden"
-										disabled={imageBusy !== null}
-										onChange={(e) => {
-											const file = e.target.files?.[0];
-											e.target.value = "";
-											if (file) void changeImage("avatar", file);
-										}}
+										type="text"
+										aria-label="Display name"
+										className="input input-bordered w-full max-w-md"
+										value={draft}
+										onChange={(e) => setDraft(e.target.value)}
+										maxLength={150}
 									/>
-								</label>
-							)}
-						</div>
-						<div className="flex-1 pt-4 sm:pt-14">
-							{isOwnProfile ? (
-								<InlineField<string>
-									label="display name"
-									saved={creator.displayName ?? ""}
-									renderRead={displayNameRead}
-									renderEdit={(draft, setDraft) => (
-										<input
-											type="text"
-											aria-label="Display name"
-											className="input input-bordered w-full max-w-md"
-											value={draft}
-											onChange={(e) => setDraft(e.target.value)}
-											maxLength={150}
-										/>
-									)}
-									save={(draft) => saveProfileField({ displayName: draft.trim() })}
-								/>
-							) : (
-								displayNameRead()
-							)}
+								)}
+								save={(draft) => saveProfileField({ displayName: draft.trim() })}
+							/>
+						) : (
+							displayNameRead()
+						)}
+						{/* The actions belong to the person named on this line, so they sit on it
+						    rather than in a column of their own across the page — a visitor's
+						    Follow and more-actions answer "who is this", which is what the handle
+						    and follower count are already answering. */}
+						<div className="flex flex-wrap items-center gap-3">
 							<p className="text-base-content/60">
 								@{creator.handle} · {followerCount} followers
 							</p>
-							{isOwnProfile ? (
-								<InlineField<string>
-									label="bio"
-									saved={creator.bio ?? ""}
-									className="mt-2"
-									renderRead={bioRead}
-									renderEdit={(draft, setDraft) => (
-										<textarea
-											aria-label="Bio"
-											className="textarea textarea-bordered w-full max-w-2xl"
-											rows={4}
-											value={draft}
-											onChange={(e) => setDraft(e.target.value)}
-											maxLength={5000}
-										/>
-									)}
-									save={(draft) => saveProfileField({ bio: draft.trim() })}
-								/>
-							) : (
-								creator.bio && <div className="mt-2">{bioRead()}</div>
-							)}
-							<div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-base-content/60">
-								{isOwnProfile ? (
-									<InlineField<string>
-										label="website"
-										saved={creator.websiteUrl ?? ""}
-										renderRead={websiteRead}
-										renderEdit={(draft, setDraft) => (
-											<input
-												type="url"
-												aria-label="Website URL"
-												className="input input-bordered input-sm w-72"
-												value={draft}
-												onChange={(e) => setDraft(e.target.value)}
-												placeholder="https://example.com"
-												maxLength={500}
-											/>
-										)}
-										save={(draft) => saveProfileField({ websiteUrl: draft.trim() })}
-									/>
-								) : (
-									websiteRead()
-								)}
-								{isOwnProfile ? (
-									<InlineField<string>
-										label="location"
-										saved={creator.location ?? ""}
-										renderRead={locationRead}
-										renderEdit={(draft, setDraft) => (
-											<input
-												type="text"
-												aria-label="Location"
-												className="input input-bordered input-sm w-56"
-												value={draft}
-												onChange={(e) => setDraft(e.target.value)}
-												placeholder="City, country"
-												maxLength={100}
-											/>
-										)}
-										save={(draft) => saveProfileField({ location: draft.trim() })}
-									/>
-								) : (
-									locationRead()
-								)}
-								<span className="flex items-center gap-1">
-									<CalendarDaysIcon className="w-4 h-4" />
-									Member since{" "}
-									{new Date(creator.createdAt).toLocaleDateString("en-US", {
-										month: "long",
-										year: "numeric",
-									})}
-								</span>
-							</div>
-						</div>
-						{isAuthenticated && !isOwnProfile && (
-							<div className="flex flex-col items-end gap-2 mt-4 sm:mt-12">
+							{isAuthenticated && !isOwnProfile && (
 								<div className="flex items-center gap-2">
 									<button
 										type="button"
@@ -660,206 +583,277 @@ export default function CreatorProfilePage() {
 										</ul>
 									</div>
 								</div>
-								{/* The user's Anthers Badge, and the rung held here */}
-								{creatorStatus && creatorStatus.badge !== "free" && (
-									<div className="flex items-center gap-2 text-xs">
-										<span className="badge badge-sm badge-outline">
-											{badgeNameFor(creatorStatus.badge)}
-										</span>
-										{parseFloat(creatorStatus.badgeAmount) > 0 && (
-											<span className="badge badge-sm badge-primary badge-outline">
-												{amountLabel(creatorStatus.badgeAmount)}/mo
-											</span>
-										)}
-									</div>
+							)}
+						</div>
+						{isOwnProfile ? (
+							<InlineField<string>
+								label="bio"
+								saved={creator.bio ?? ""}
+								className="mt-2"
+								renderRead={bioRead}
+								renderEdit={(draft, setDraft) => (
+									<textarea
+										aria-label="Bio"
+										className="textarea textarea-bordered w-full max-w-2xl"
+										rows={4}
+										value={draft}
+										onChange={(e) => setDraft(e.target.value)}
+										maxLength={5000}
+									/>
 								)}
-							</div>
+								save={(draft) => saveProfileField({ bio: draft.trim() })}
+							/>
+						) : (
+							creator.bio && <div className="mt-2">{bioRead()}</div>
 						)}
+						<div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-base-content/60">
+							{isOwnProfile ? (
+								<InlineField<string>
+									label="website"
+									saved={creator.websiteUrl ?? ""}
+									renderRead={websiteRead}
+									renderEdit={(draft, setDraft) => (
+										<input
+											type="url"
+											aria-label="Website URL"
+											className="input input-bordered input-sm w-72"
+											value={draft}
+											onChange={(e) => setDraft(e.target.value)}
+											placeholder="https://example.com"
+											maxLength={500}
+										/>
+									)}
+									save={(draft) => saveProfileField({ websiteUrl: draft.trim() })}
+								/>
+							) : (
+								websiteRead()
+							)}
+							{isOwnProfile ? (
+								<InlineField<string>
+									label="location"
+									saved={creator.location ?? ""}
+									renderRead={locationRead}
+									renderEdit={(draft, setDraft) => (
+										<input
+											type="text"
+											aria-label="Location"
+											className="input input-bordered input-sm w-56"
+											value={draft}
+											onChange={(e) => setDraft(e.target.value)}
+											placeholder="City, country"
+											maxLength={100}
+										/>
+									)}
+									save={(draft) => saveProfileField({ location: draft.trim() })}
+								/>
+							) : (
+								locationRead()
+							)}
+							<span className="flex items-center gap-1">
+								<CalendarDaysIcon className="w-4 h-4" />
+								Member since{" "}
+								{new Date(creator.createdAt).toLocaleDateString("en-US", {
+									month: "long",
+									year: "numeric",
+								})}
+							</span>
+						</div>
 					</div>
+					{/* The user's Anthers Badge, and the rung held here. A status chip rather than
+					    an action, so it keeps the column the buttons have left. */}
+					{isAuthenticated && !isOwnProfile && creatorStatus && creatorStatus.badge !== "free" && (
+						<div className="flex items-center gap-2 text-xs pt-4 sm:pt-14">
+							<span className="badge badge-sm badge-outline">
+								{badgeNameFor(creatorStatus.badge)}
+							</span>
+							{parseFloat(creatorStatus.badgeAmount) > 0 && (
+								<span className="badge badge-sm badge-primary badge-outline">
+									{amountLabel(creatorStatus.badgeAmount)}/mo
+								</span>
+							)}
+						</div>
+					)}
+				</div>
 
-					{/* Tabs. One flat row, but grouped: the timeline views (All, Posts), then the
+				{/* Tabs. One flat row, but grouped: the timeline views (All, Posts), then the
 				    Work-type views — only the types the creator has actually released, so a
 				    profile with no audio shows no Audio tab rather than "Audio (0)" — then
 				    Badges. The dividers sit between the groups, and collapse to a single
 				    divider when the middle group is empty. */}
-					<div className="tabs tabs-bordered mb-6 overflow-x-auto">
-						<button
-							type="button"
-							className={`tab whitespace-nowrap ${tab === "all" ? "tab-active" : ""}`}
-							onClick={() => setTab("all")}
-						>
-							All
-						</button>
-						<button
-							type="button"
-							className={`tab whitespace-nowrap ${tab === "posts" ? "tab-active" : ""}`}
-							onClick={() => setTab("posts")}
-						>
-							Posts
-						</button>
-						{typeTabs.length > 0 && (
-							<>
-								<TabDivider />
-								{typeTabs.map(([key, label]) => (
-									<button
-										type="button"
-										key={key}
-										className={`tab whitespace-nowrap ${tab === key ? "tab-active" : ""}`}
-										onClick={() => setTab(key)}
-									>
-										{label}
-									</button>
-								))}
-								<TabDivider />
-							</>
-						)}
-						<button
-							type="button"
-							className={`tab whitespace-nowrap ${tab === "badges" ? "tab-active" : ""}`}
-							onClick={() => setTab("badges")}
-						>
-							Badges
-						</button>
-					</div>
+				<div className="tabs tabs-bordered mb-6 overflow-x-auto">
+					<button
+						type="button"
+						className={`tab whitespace-nowrap ${tab === "all" ? "tab-active" : ""}`}
+						onClick={() => setTab("all")}
+					>
+						All
+					</button>
+					<button
+						type="button"
+						className={`tab whitespace-nowrap ${tab === "posts" ? "tab-active" : ""}`}
+						onClick={() => setTab("posts")}
+					>
+						Posts
+					</button>
+					{typeTabs.length > 0 && (
+						<>
+							<TabDivider />
+							{typeTabs.map(([key, label]) => (
+								<button
+									type="button"
+									key={key}
+									className={`tab whitespace-nowrap ${tab === key ? "tab-active" : ""}`}
+									onClick={() => setTab(key)}
+								>
+									{label}
+								</button>
+							))}
+							<TabDivider />
+						</>
+					)}
+					<button
+						type="button"
+						className={`tab whitespace-nowrap ${tab === "badges" ? "tab-active" : ""}`}
+						onClick={() => setTab("badges")}
+					>
+						Badges
+					</button>
+				</div>
 
-					{/* Tab content */}
-					<div className="pb-8">
-						{tab === "all" &&
-							(allItems.length > 0 ? (
-								// The same uniform tile grid the feed renders — every listing
-								// surface shares one widget, so a creator's page reads like the
-								// feed the creator's releases also ride. Projects keep ProjectCard:
-								// a project has no tile shape.
-								<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
-									{allItems.map((entry) => {
-										if (entry.type === "project") {
-											return (
-												<ProjectCard
-													key={`proj-${entry.item.id}`}
-													project={entry.item as Project}
-												/>
-											);
-										}
-										if (entry.type === "post") {
-											return (
-												<FeedTile
-													key={`post-${entry.item.id}`}
-													entry={postEntry(entry.item as PostListItem)}
-												/>
-											);
-										}
+				{/* Tab content */}
+				<div className="pb-8">
+					{tab === "all" &&
+						(allItems.length > 0 ? (
+							// The same uniform tile grid the feed renders — every listing
+							// surface shares one widget, so a creator's page reads like the
+							// feed the creator's releases also ride. Projects keep ProjectCard:
+							// a project has no tile shape.
+							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
+								{allItems.map((entry) => {
+									if (entry.type === "project") {
+										return (
+											<ProjectCard key={`proj-${entry.item.id}`} project={entry.item as Project} />
+										);
+									}
+									if (entry.type === "post") {
 										return (
 											<FeedTile
-												key={`work-${(entry.item as CatalogWork).id}`}
-												entry={workEntry(entry.item as CatalogWork)}
+												key={`post-${entry.item.id}`}
+												entry={postEntry(entry.item as PostListItem)}
 											/>
 										);
-									})}
-								</div>
-							) : (
-								<EmptyState
-									title="No content yet"
-									description={`${creator.displayName || creator.handle} hasn't published anything yet.`}
-								/>
-							))}
-
-						{tab === "posts" &&
-							(posts.length > 0 ? (
-								<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
-									{posts.map((p) => (
-										<FeedTile key={`post-${p.id}`} entry={postEntry(p)} />
-									))}
-								</div>
-							) : (
-								<EmptyState
-									title="No posts yet"
-									description={`${creator.displayName || creator.handle} hasn't published any posts yet.`}
-								/>
-							))}
-
-						{tab === "games" &&
-							(gameWorks.length > 0 ? (
-								<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
-									{gameWorks.map((w) => (
-										<FeedTile key={w.id} entry={workEntry(w)} />
-									))}
-								</div>
-							) : (
-								<EmptyState
-									title="No games yet"
-									description={`${creator.displayName || creator.handle} hasn't published any games.`}
-								/>
-							))}
-
-						{tab === "videos" &&
-							(videoWorks.length > 0 ? (
-								<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
-									{videoWorks.map((w) => (
-										<FeedTile key={w.id} entry={workEntry(w)} />
-									))}
-								</div>
-							) : (
-								<EmptyState
-									title="No videos yet"
-									description={`${creator.displayName || creator.handle} hasn't published any videos.`}
-								/>
-							))}
-
-						{tab === "audio" &&
-							(audioWorks.length > 0 ? (
-								<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
-									{audioWorks.map((w) => (
-										<FeedTile key={w.id} entry={workEntry(w)} />
-									))}
-								</div>
-							) : (
-								<EmptyState
-									title="No audio yet"
-									description={`${creator.displayName || creator.handle} hasn't published any audio.`}
-								/>
-							))}
-
-						{tab === "writing" &&
-							(textWorks.length > 0 ? (
-								<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
-									{textWorks.map((w) => (
-										<FeedTile key={w.id} entry={workEntry(w)} />
-									))}
-								</div>
-							) : (
-								<EmptyState
-									title="No writing yet"
-									description={`${creator.displayName || creator.handle} hasn't published any articles.`}
-								/>
-							))}
-
-						{tab === "badges" && (
-							// One surface, read the same way by both people: the creator's pencil
-							// opens the Badge Maker for that card, and a save refetches this ladder.
-							<BadgesTab
-								rungs={creatorStatus?.badges ?? []}
-								unlockedBadges={creatorStatus?.unlockedBadges ?? []}
-								heldAmount={creatorStatus?.badgeAmount ?? "0.00"}
-								creatorName={creator.displayName || creator.handle}
-								creatorHandle={creator.handle}
-								canBuy={!isOwnProfile}
-								authenticated={isAuthenticated === true}
-								preselectedBadgeId={badgeParam != null ? Number(badgeParam) : null}
-								isOwner={isOwnProfile}
-								onEdit={(badge) => setEditingBadgeId(badge.id)}
-								onAdd={() => setEditingBadgeId("new")}
-							/>
-						)}
-
-						{blocked && (
-							<div className="alert alert-info mb-4">
-								<span>
-									You've blocked @{creator.handle}. Neither of you will see the other around
-									Anthers, and you're no longer following each other. You can undo this in Settings.
-								</span>
+									}
+									return (
+										<FeedTile
+											key={`work-${(entry.item as CatalogWork).id}`}
+											entry={workEntry(entry.item as CatalogWork)}
+										/>
+									);
+								})}
 							</div>
-						)}
-					</div>
+						) : (
+							<EmptyState
+								title="No content yet"
+								description={`${creator.displayName || creator.handle} hasn't published anything yet.`}
+							/>
+						))}
+
+					{tab === "posts" &&
+						(posts.length > 0 ? (
+							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
+								{posts.map((p) => (
+									<FeedTile key={`post-${p.id}`} entry={postEntry(p)} />
+								))}
+							</div>
+						) : (
+							<EmptyState
+								title="No posts yet"
+								description={`${creator.displayName || creator.handle} hasn't published any posts yet.`}
+							/>
+						))}
+
+					{tab === "games" &&
+						(gameWorks.length > 0 ? (
+							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
+								{gameWorks.map((w) => (
+									<FeedTile key={w.id} entry={workEntry(w)} />
+								))}
+							</div>
+						) : (
+							<EmptyState
+								title="No games yet"
+								description={`${creator.displayName || creator.handle} hasn't published any games.`}
+							/>
+						))}
+
+					{tab === "videos" &&
+						(videoWorks.length > 0 ? (
+							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
+								{videoWorks.map((w) => (
+									<FeedTile key={w.id} entry={workEntry(w)} />
+								))}
+							</div>
+						) : (
+							<EmptyState
+								title="No videos yet"
+								description={`${creator.displayName || creator.handle} hasn't published any videos.`}
+							/>
+						))}
+
+					{tab === "audio" &&
+						(audioWorks.length > 0 ? (
+							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
+								{audioWorks.map((w) => (
+									<FeedTile key={w.id} entry={workEntry(w)} />
+								))}
+							</div>
+						) : (
+							<EmptyState
+								title="No audio yet"
+								description={`${creator.displayName || creator.handle} hasn't published any audio.`}
+							/>
+						))}
+
+					{tab === "writing" &&
+						(textWorks.length > 0 ? (
+							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
+								{textWorks.map((w) => (
+									<FeedTile key={w.id} entry={workEntry(w)} />
+								))}
+							</div>
+						) : (
+							<EmptyState
+								title="No writing yet"
+								description={`${creator.displayName || creator.handle} hasn't published any articles.`}
+							/>
+						))}
+
+					{tab === "badges" && (
+						// One surface, read the same way by both people: the creator's pencil
+						// opens the Badge Maker for that card, and a save refetches this ladder.
+						<BadgesTab
+							rungs={creatorStatus?.badges ?? []}
+							unlockedBadges={creatorStatus?.unlockedBadges ?? []}
+							heldAmount={creatorStatus?.badgeAmount ?? "0.00"}
+							creatorName={creator.displayName || creator.handle}
+							creatorHandle={creator.handle}
+							canBuy={!isOwnProfile}
+							authenticated={isAuthenticated === true}
+							preselectedBadgeId={badgeParam != null ? Number(badgeParam) : null}
+							isOwner={isOwnProfile}
+							onEdit={(badge) => setEditingBadgeId(badge.id)}
+							onAdd={() => setEditingBadgeId("new")}
+						/>
+					)}
+
+					{blocked && (
+						<div className="alert alert-info mb-4">
+							<span>
+								You've blocked @{creator.handle}. Neither of you will see the other around Anthers,
+								and you're no longer following each other. You can undo this in Settings.
+							</span>
+						</div>
+					)}
 				</div>
 			</div>
 
@@ -944,6 +938,6 @@ export default function CreatorProfilePage() {
 					onClose={() => setReporting(false)}
 				/>
 			)}
-		</>
+		</div>
 	);
 }
