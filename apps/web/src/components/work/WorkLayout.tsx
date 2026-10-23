@@ -31,6 +31,7 @@ import {
 	PhotoIcon,
 	PuzzlePieceIcon,
 	SpeakerWaveIcon,
+	UserIcon,
 	VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { PlayIcon } from "@heroicons/react/24/solid";
@@ -1190,9 +1191,16 @@ function creditBadges(types: string[]): { ai: boolean; blended: boolean } {
 }
 
 /**
- * The Work's credits, rendered as liner notes — one line per credit, with AI involvement
- * badged rather than buried. Public: any user of a released Work sees these, gated or
- * not, as they see the description. A Work with no credits renders nothing.
+ * The Work's credits, rendered as liner notes in two columns — the contribution on one
+ * side, the people who made it on the other, with AI involvement badged rather than
+ * buried. Public: any user of a released Work sees these, gated or not, as they see the
+ * description. A Work with no credits renders nothing.
+ *
+ * ⭐ **A contribution is one row, however many people it names** (Parker, 2026-10-23):
+ * the editor writes one stored credit row per person, so "Illustrated by John Doe, Jane
+ * Doe" arrives as two rows sharing a role and is presented as one line with both names.
+ * The even split between the two columns is what makes a short credits list read as a
+ * table rather than a column of labels hugging the left edge.
  *
  * ⭐ **A DID credit names a person, not a protocol** (Parker, 2026-10-13): the account
  * presents as its avatar and display name, and clicking it goes to the person — their
@@ -1218,43 +1226,84 @@ export function WorkCredits({
 	return (
 		<section className="flex flex-col gap-2">
 			<h3 className={WORK_DETAILS_HEADING_CLASS}>Credits</h3>
-			<ul className="flex flex-col gap-1.5 text-sm">
-				{credits.map((credit, i) => {
-					const badges = creditBadges(credit.types);
-					const awaiting = credit.awaitingYourConfirmation === true;
-					return (
-						<li
-							// biome-ignore lint/suspicious/noArrayIndexKey: a credit row has no id — the row is pure data rendered in table order.
-							key={i}
-							className={`flex flex-wrap items-baseline gap-x-2 ${awaiting ? "items-center rounded-lg border border-base-300 bg-base-200/60 px-3 py-2" : ""}`}
-						>
-							<span>
-								{awaiting && <span className="mr-1 font-medium">You're credited — confirm?</span>}
-								{credit.role}
-								{credit.contributor && (
-									<>
-										{" "}
-										<CreditIdentity credit={credit} />
-									</>
-								)}
-							</span>
-							{badges.blended && <span className="badge badge-xs badge-outline">Human + AI</span>}
-							{badges.ai && !badges.blended && (
-								<span className="badge badge-xs badge-outline">AI</span>
-							)}
-							{awaiting && (
-								<CreditConfirmationControls
-									workId={work.id}
-									role={credit.role}
-									onDecided={() => onCreditDecided?.()}
-								/>
-							)}
-						</li>
-					);
-				})}
-			</ul>
+			<div className="overflow-x-auto">
+				<table className="table table-sm w-full table-fixed">
+					<tbody>
+						{groupCreditsByRole(credits).map((group, i) => (
+							// biome-ignore lint/suspicious/noArrayIndexKey: a credit group has no id — it is pure data rendered in table order.
+							<tr key={i}>
+								<th
+									scope="row"
+									className="w-[38%] whitespace-normal align-top text-right font-medium text-base-content/80"
+								>
+									{group.role || "Unnamed"}
+								</th>
+								<td className="align-top">
+									<ul className="flex flex-col gap-1.5">
+										{group.credits.map((credit, j) => {
+											const badges = creditBadges(credit.types);
+											const awaiting = credit.awaitingYourConfirmation === true;
+											return (
+												<li
+													// biome-ignore lint/suspicious/noArrayIndexKey: a credit row has no id — the row is pure data rendered in table order.
+													key={j}
+													className={`flex flex-wrap items-center gap-x-2 gap-y-1 ${
+														awaiting
+															? "rounded-md border border-base-300 bg-base-200/60 px-2 py-1"
+															: ""
+													}`}
+												>
+													{awaiting && (
+														<span className="text-xs font-medium">You're credited — confirm?</span>
+													)}
+													{credit.contributor && <CreditIdentity credit={credit} />}
+													{badges.blended && (
+														<span className="badge badge-xs badge-outline">Human + AI</span>
+													)}
+													{badges.ai && !badges.blended && (
+														<span className="badge badge-xs badge-outline">AI</span>
+													)}
+													{awaiting && (
+														<CreditConfirmationControls
+															workId={work.id}
+															role={credit.role}
+															onDecided={() => onCreditDecided?.()}
+														/>
+													)}
+												</li>
+											);
+										})}
+									</ul>
+								</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
 		</section>
 	);
+}
+
+/**
+ * Group credits by the contribution they name, first-seen order preserved.
+ *
+ * The role is the whole key: two people on one contribution are stored as two rows with
+ * the same role. Each row keeps its own type badge, so a blend stays visible against the
+ * person it belongs to rather than being absorbed by the line.
+ */
+function groupCreditsByRole(credits: WorkCredit[]): { role: string; credits: WorkCredit[] }[] {
+	const groups: { role: string; credits: WorkCredit[] }[] = [];
+	const byRole = new Map<string, { role: string; credits: WorkCredit[] }>();
+	for (const credit of credits) {
+		let group = byRole.get(credit.role);
+		if (!group) {
+			group = { role: credit.role, credits: [] };
+			byRole.set(credit.role, group);
+			groups.push(group);
+		}
+		group.credits.push(credit);
+	}
+	return groups;
 }
 
 /**
@@ -1303,6 +1352,18 @@ function CreditIdentity({ credit }: { credit: WorkCredit }) {
 			</a>
 		);
 	}
-	// No identity behind it on the network, and no Anthers account: a name as words.
-	return <span className="text-base-content/70">{credit.contributor}</span>;
+	// No identity behind it on the network, and no Anthers account: a name as words,
+	// beside the same-sized circle a resolved identity wears. The icon is what keeps the
+	// contributor list aligned, and what says this credit names nobody on the network.
+	return (
+		<span className="inline-flex items-center gap-1.5">
+			<span
+				aria-hidden="true"
+				className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-base-300"
+			>
+				<UserIcon className="h-3.5 w-3.5 text-base-content/50" />
+			</span>
+			<span className="text-base-content/70">{credit.contributor}</span>
+		</span>
+	);
 }

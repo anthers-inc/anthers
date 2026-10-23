@@ -11,6 +11,14 @@
 export const WIKI_ROADMAP_URL = "https://anthers.wiki/roadmap";
 
 /**
+ * The credits policy, linked from the credits editor above its table the way the Rating
+ * tab links to the Rating Standard. The page is `30.04 Crediting a Work` in the vault, and
+ * the publishing host's two-level slug strips the Johnny.Decimal prefix from the category
+ * and the page alike.
+ */
+export const CREDITS_WIKI_URL = "https://anthers.wiki/publishing/crediting-a-work";
+
+/**
  * The anchor a wiki heading answers to.
  *
  * ⚠️ **This is a copy of the publishing host's `slugifyHeading`** in

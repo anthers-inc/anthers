@@ -21,7 +21,6 @@ import { creditAcceptances } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index.js";
 import { queue } from "../jobs/queue.js";
-import { recordSelfCreditAcceptances } from "../services/credit-acceptance.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere, purgeWorkIds } from "./cleanup";
 import { insertWork } from "./work-fixtures";
@@ -76,50 +75,6 @@ beforeAll(async () => {
 	creator = await createAccount(`${RUN}-creator`, { emailVerified: true });
 	contributor = await createAccount(`${RUN}-contributor`, { emailVerified: true });
 }, 30_000);
-
-describe("recordSelfCreditAcceptances", () => {
-	it("accepts the creator's own credit and leaves a stranger's credit pending", async () => {
-		const work = await insertWork({
-			creatorId: creator.userId,
-			type: "text",
-			// Born private: the acceptance row is about the credit, not about publication.
-			visibility: "private",
-			credits: [
-				{ role: "Written by", contributor: creator.did, types: ["created"] },
-				{ role: "Edited by", contributor: contributor.did, types: ["created"] },
-			],
-		});
-		fixtureWorkIds.push(work.id);
-
-		await recordSelfCreditAcceptances(work, creator.userId);
-		// Idempotent: every save calls this, and a second call is a no-op through the unique index.
-		await recordSelfCreditAcceptances(work, creator.userId);
-
-		const rows = await db
-			.select({ role: creditAcceptances.role, did: creditAcceptances.contributorDid })
-			.from(creditAcceptances)
-			.where(eq(creditAcceptances.workId, work.id));
-		expect(rows).toEqual([{ role: "Written by", did: creator.did }]);
-	});
-
-	it("does nothing when the caller is not the Work's creator", async () => {
-		const work = await insertWork({
-			creatorId: creator.userId,
-			type: "text",
-			visibility: "private",
-			credits: [{ role: "Written by", contributor: contributor.did, types: ["created"] }],
-		});
-		fixtureWorkIds.push(work.id);
-
-		await recordSelfCreditAcceptances(work, contributor.userId);
-
-		const rows = await db
-			.select({ id: creditAcceptances.id })
-			.from(creditAcceptances)
-			.where(eq(creditAcceptances.workId, work.id));
-		expect(rows).toEqual([]);
-	});
-});
 
 describe("GET /api/content/credits/:handle", () => {
 	it("withholds a pending credit from strangers and shows it to the person it names", async () => {

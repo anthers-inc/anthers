@@ -237,7 +237,9 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await page.getByRole("button", { name: "Add a credit" }).click();
 	await page.getByRole("textbox", { name: "Credit 1 role" }).fill("Made by");
 	await page.getByRole("checkbox", { name: "Credit 1 Created" }).check();
-	await page.getByRole("textbox", { name: "Credit 1 contributor" }).fill(CREATOR);
+	const contributor = page.getByRole("textbox", { name: "Credit 1 contributors" });
+	await contributor.fill(CREATOR);
+	await contributor.press("Enter");
 	await page.getByRole("button", { name: "Save Credits" }).click();
 
 	// The original release date, in its own field beside Release. Its whole reason for

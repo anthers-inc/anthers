@@ -296,6 +296,54 @@ export async function findRejectedCredit(
 	return null;
 }
 
+/**
+ * A credit naming the Work's own creator is affirmed by the act of asserting it.
+ *
+ * There is no third party to ask: the creator wrote the row, so waiting for their own
+ * confirmation is a question with no one to answer it. Recording an ordinary
+ * `credit_acceptances` row here — rather than teaching each reader a second rule — keeps
+ * one source of truth for what has been accepted: `creditsForOwner`, `creditsForUser` and
+ * `loadConfirmedCredits` all consult that table and need no self case of their own.
+ *
+ * ⚠️ **No repository record is written.** `acceptCredit` writes `org.anthers.creditAcceptance`
+ * in the caller's own repo to make a claim about them public with their word behind it; a
+ * self-credit's author is already the Work's own creator, and the Work's record carries the
+ * contribution beside their name. The local row is the whole of what the readers need.
+ *
+ * Idempotent: the unique index on (work, contributor, role) makes a re-save an update of
+ * `acceptedAt`, never a second row. It is called on every Work write rather than only when
+ * the credits change, so a self-credit written before this rule existed is healed by the
+ * next edit.
+ */
+export async function affirmSelfCredits(opts: {
+	workId: number;
+	creatorUserId: number;
+	credits: WorkCredit[] | null;
+}): Promise<void> {
+	const credits = opts.credits ?? [];
+	if (credits.length === 0) return;
+
+	const [account] = await db
+		.select({ did: users.atprotoDid })
+		.from(users)
+		.where(eq(users.id, opts.creatorUserId))
+		.limit(1);
+	const did = account?.did?.trim();
+	if (!did) return;
+
+	const roles = [...new Set(credits.filter((c) => c.contributor === did).map((c) => c.role))];
+	if (roles.length === 0) return;
+
+	const acceptedAt = new Date();
+	await db
+		.insert(creditAcceptances)
+		.values(roles.map((role) => ({ workId: opts.workId, contributorDid: did, role, acceptedAt })))
+		.onConflictDoUpdate({
+			target: [creditAcceptances.workId, creditAcceptances.contributorDid, creditAcceptances.role],
+			set: { acceptedAt },
+		});
+}
+
 // ─── The user overlay ───────────────────────────────────────────────────────
 
 /**
@@ -621,50 +669,6 @@ export async function creditAttributionsForContributor(
 	acceptedList.sort(byRoleThenDate);
 	pendingList.sort(byRoleThenDate);
 	return { accepted: acceptedList, pending: pendingList };
-}
-
-/**
- * Accept a creator's own credits on a Work they wrote.
- *
- * A credit naming the Work's own creator is not a claim about a third party, so it needs
- * nobody's confirmation: the creator asserting it in the editor IS the acceptance. Without
- * this row the listing withholds the credit and the creator's own Credits tab asks them to
- * confirm their own word forever.
- *
- * The row is written locally and no `org.anthers.creditAcceptance` record is attempted. The
- * acceptance record is a public statement in the CONTRIBUTOR's repository answering a
- * creator's claim; when the two people are the same, the Work's own listing naming them is
- * that statement already, and a second record would say nothing new.
- *
- * Called wherever a Work's credits are written. Comparing account ids rather than DID
- * strings, as `notifyCreditedAccounts` does, keeps a NULL or odd creator DID from making a
- * self-credit look like somebody else's.
- */
-export async function recordSelfCreditAcceptances(
-	work: { id: number; creatorId: number | null; credits: WorkCredit[] | null },
-	creatorUserId: number,
-): Promise<void> {
-	const credits = (work.credits ?? []).filter((c) => creditContributorIsDid(c.contributor));
-	if (credits.length === 0 || work.creatorId !== creatorUserId) return;
-
-	const [account] = await db
-		.select({ did: users.atprotoDid })
-		.from(users)
-		.where(eq(users.id, creatorUserId))
-		.limit(1);
-	if (!account?.did) return;
-
-	const own = credits.filter((c) => c.contributor === account.did);
-	if (own.length === 0) return;
-
-	await db
-		.insert(creditAcceptances)
-		.values(
-			own.map((credit) => ({ workId: work.id, contributorDid: account.did, role: credit.role })),
-		)
-		// A re-save hits the same (work, contributor, role) row; the unique index makes this
-		// a no-op rather than a second acceptance.
-		.onConflictDoNothing();
 }
 
 // ─── Telling the credited person ──────────────────────────────────────────────
