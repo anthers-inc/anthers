@@ -81,19 +81,26 @@ export interface SpaceCommit {
 	[extra: string]: unknown;
 }
 
-/** One operation in a space repo's oplog. */
+/** One operation in a space repo's oplog. `cid` is null for a delete; `prev` is null for a create. */
 export interface SpaceRepoOp {
 	collection: string;
 	rkey: string;
-	cid: string;
+	cid: string | null;
 	rev?: string;
+	prev?: string | null;
 	value?: unknown;
 	[extra: string]: unknown;
 }
 
 /** One record in a space. `value` is absent when the caller asked for metadata only. */
 export interface SpaceRecord {
-	uri: string;
+	/**
+	 * The record's address. Present from `getRecord`; **`listRecords` answers with
+	 * `collection` and `rkey` instead and omits the URI**, per the branch's Lexicon.
+	 */
+	uri?: string;
+	collection?: string;
+	rkey?: string;
 	cid: string;
 	value?: unknown;
 	[extra: string]: unknown;
