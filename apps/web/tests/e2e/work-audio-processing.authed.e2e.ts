@@ -24,7 +24,14 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
+import {
+	API_URL,
+	createDraftWork,
+	expect,
+	signInAsMediaFixture,
+	test,
+	WEB_ORIGIN,
+} from "./fixtures";
 
 const TITLE_PREFIX = "Audio processing walk ";
 const STEM = `${TITLE_PREFIX}${Date.now()}`;
@@ -85,15 +92,18 @@ test("a music Work plays its original while processing runs", async ({ page, con
 	session = await signInAsMediaFixture(context);
 	await sweep();
 
-	await page.goto("/studio/works/new");
-	await page.locator("select").first().selectOption("music");
-	await page.locator('input[type="file"]').setInputFiles({
+	// A music Work is drafted with a kind and a name; the track joins from the empty media
+	// card's dropper (Parker, 2026-10-23).
+	const draft = await createDraftWork(page, { type: "music", title: STEM });
+	await page.goto(draft.url);
+	const box = page.getByRole("status").filter({ hasText: /player starts here/i });
+	await box.locator('input[type="file"]').setInputFiles({
 		name: `${STEM}.wav`,
 		mimeType: "audio/wav",
 		buffer: tone(),
 	});
 
-	// The landing is the Work's own page in editor mode, as every upload walk reads it.
+	// The page is the Work's own page in editor mode, as every upload walk reads it.
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/, { timeout: 15_000 });
 	// The editing banner is gone (the View As task, 2026-10-16): the editor mode is
 	// what the page is, and the View As row on the Manage tab is its one marker.
@@ -133,8 +143,10 @@ test("a music Work plays its original while processing runs", async ({ page, con
 		audio.locator("xpath=ancestor::*[1]").getByRole("button", { name: "Play" }),
 	).toBeVisible();
 
-	// And the Manage tab's section is video's card adapted to what this pipeline makes:
-	// the original, the MP3 a listener streams and the waveform the player draws.
+	// And the media manager's Source section is video's card adapted to what this pipeline
+	// makes: the original, the MP3 a listener streams and the waveform the player draws.
+	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("tab", { name: "Source" }).click();
 	const media = page.getByRole("region", { name: "Media status" });
 	await expect(media.getByText("Original", { exact: true })).toBeVisible();
 	await expect(media.getByText("MP3", { exact: true })).toBeVisible();

@@ -1389,7 +1389,6 @@ export default function OwnerWorkEditor({
 						<h3 className={WORK_DETAILS_HEADING_CLASS}>Hosted Build</h3>
 						<WebBuildSection work={current} onChanged={() => void refreshMedia()} />
 					</section>
-					<WorkTypeFacts type={current.type} />
 				</div>
 			) : (
 				<div className="flex w-full flex-col gap-3 text-left">
@@ -2379,6 +2378,11 @@ function BuildsEditor({ work, onChanged }: { work: WorkDetail; onChanged: () => 
 			</form>
 
 			{error && <p className="text-xs text-error">{error}</p>}
+
+			{/* The card under the build picker follows its Platform select: what a person can
+			    run is the file type, and the fact that changes with the platform belongs to
+			    the row being added rather than to the kind in the abstract. */}
+			<WorkTypeFacts type={work.type} platform={platform} />
 
 			{assets.length > 0 && (
 				<div className="overflow-x-auto">
