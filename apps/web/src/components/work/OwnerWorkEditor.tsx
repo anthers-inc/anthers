@@ -153,6 +153,7 @@ import {
 import WorkMediaFrame from "./WorkMediaFrame";
 import WorkSideColumn, { ShowingsStub } from "./WorkSideColumn";
 import { WorkTagChips, WorkTagPicker } from "./WorkTags";
+import WorkVersionsSection from "./WorkVersionsSection";
 
 const IN_PLACE =
 	"rounded-md border border-transparent bg-transparent px-2 -mx-2 hover:border-base-300 focus:border-primary focus:outline-none";
@@ -1483,6 +1484,12 @@ export default function OwnerWorkEditor({
 						</section>
 					)}
 					{!isPaged(current.type) && thumbnailSection}
+					{!writing && !isGoods(current.type) && (
+						<section className="flex flex-col gap-2">
+							<h3 className={WORK_DETAILS_HEADING_CLASS}>Versions</h3>
+							<WorkVersionsSection workId={current.id} versionAddedAt={current.versionAddedAt} />
+						</section>
+					)}
 				</div>
 			),
 		},

@@ -143,6 +143,7 @@ import {
 import { pgWorkEmbedPattern, workPublicIdsFromBody } from "../lib/post-work-links.js";
 import { probeVideo } from "../lib/video-frames.js";
 import { buildDeliveryHost, mintPlayToken, PLAY_TOKEN_TTL_SECONDS } from "../lib/web-build.js";
+import { zipStream } from "../lib/zip-stream.js";
 import { getOptionalUserId, requireAuth, requireCreator } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
 import {
@@ -276,6 +277,14 @@ import {
 	reorderSourceFiles,
 	syncFromSourceKey,
 } from "../services/work-source-files.js";
+import {
+	archiveCurrentMedia,
+	findWorkVersion,
+	listWorkVersions,
+	removeWorkVersion,
+	summarizeVersion,
+	versionFiles,
+} from "../services/work-versions.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1566,6 +1575,8 @@ async function serializeWork(
 		// Owner-facing and listing-only: the Reviews column's numbers, where the caller
 		// asked for them. Omitted entirely elsewhere, so no other shape has to explain them.
 		...(reviewCounts ? { reviewCounts } : {}),
+		/** When the current media version was added — the date the Work's page shows. */
+		versionAddedAt: item.versionAddedAt,
 		/** The UPLOAD date. Creator-facing only — the public sees originallyReleased and releasedAt. */
 		createdAt: item.createdAt,
 		updatedAt: item.updatedAt,
@@ -2465,6 +2476,8 @@ async function serializeWorkForUser(
 		sourceUrl: work.sourceUrl,
 		viewCount: work.viewCount,
 		downloadCount: work.downloadCount,
+		/** The current media version's date, for the reader. History stays owner-only. */
+		versionAddedAt: work.versionAddedAt,
 		createdAt: work.createdAt,
 		updatedAt: work.updatedAt,
 		// `clientVariants` are an internal packaging detail (storage keys) — never expose.
@@ -4137,6 +4150,72 @@ const contentRoutes = new Hono()
 		// ignores signing and serves via /content).
 		const url = await storage.getUrl(asset.file, { signed: true, expiresIn: 300 });
 		return c.json({ url });
+	})
+
+	// ── A Work's archived media versions ─────────────────────────────────────────
+	//
+	// Owner-only in every direction. A version holds the ORIGINAL bytes a replacement
+	// retired; the current media is the Work row, the source set and the build tables, and
+	// nothing here is reachable from a share link or a reader's payload. A non-owner gets
+	// the same 404 as a missing Work, because the existence of an old version is not
+	// something a stranger's request should confirm.
+
+	.get("/works/:id/versions", requireAuth, requireCreator, async (c) => {
+		const work = await findWorkRow(c.req.param("id") ?? "");
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		const userId = await getOptionalUserId(c);
+		if (userId !== work.creatorId) return c.json({ error: "Work not found" }, 404);
+
+		const rows = await listWorkVersions(work.id);
+		return c.json({ versions: rows.map(summarizeVersion) });
+	})
+
+	.get("/works/:id/versions/:versionId/download", requireAuth, requireCreator, async (c) => {
+		const work = await findWorkRow(c.req.param("id") ?? "");
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		const userId = await getOptionalUserId(c);
+		if (userId !== work.creatorId) return c.json({ error: "Work not found" }, 404);
+
+		const versionId = parseNumericId(c.req.param("versionId") ?? "");
+		if (versionId == null) return c.json({ error: "Version not found" }, 404);
+		const version = await findWorkVersion(work.id, versionId);
+		if (!version) return c.json({ error: "Version not found" }, 404);
+
+		const files = versionFiles(version);
+		if (files.length === 0) return c.json({ error: "Version not found" }, 404);
+		if (files.length === 1) {
+			// A single original is one attachment URL; the browser saves it without this
+			// process touching the bytes.
+			const url = await storage.getUrl(files[0].file, {
+				signed: true,
+				expiresIn: 300,
+				download: files[0].filename,
+			});
+			c.header("Cache-Control", "no-store");
+			return c.redirect(url, 302);
+		}
+		// A set or build version is many originals. Stream a store-only zip; see
+		// `lib/zip-stream.ts` for why it never materialises the archive.
+		return new Response(zipStream(files), {
+			headers: {
+				"Content-Type": "application/zip",
+				"Content-Disposition": `attachment; filename="version-${version.id}.zip"`,
+				"Cache-Control": "no-store",
+			},
+		});
+	})
+
+	.delete("/works/:id/versions/:versionId", requireAuth, requireCreator, async (c) => {
+		const work = await findWorkRow(c.req.param("id") ?? "");
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		const userId = await getOptionalUserId(c);
+		if (userId !== work.creatorId) return c.json({ error: "Work not found" }, 404);
+
+		const versionId = parseNumericId(c.req.param("versionId") ?? "");
+		if (versionId == null) return c.json({ error: "Version not found" }, 404);
+		const removed = await removeWorkVersion(work, versionId);
+		if (!removed) return c.json({ error: "Version not found" }, 404);
+		return c.json({ removed: true as const });
 	})
 
 	// ── Transcoding status for a Work ────────────────────────────────────────────
@@ -6107,7 +6186,30 @@ const contentRoutes = new Hono()
 		// while the creator may be editing the same Work on its page.
 		if (sourceChanged && isOwnThumbnail(work.type)) updates.thumbnail = data.sourceKey ?? "";
 
-		const [updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
+		// A new source is a new version. The prior original is archived before the write, so
+		// the sweep below can retire its renditions without touching the bytes the version
+		// keeps. A set kind's own rows are the source truth, so its archive belongs in
+		// `syncFromSourceKey`, which owns them.
+		const archivesSource =
+			sourceChanged &&
+			!hasSourceSet(work.type) &&
+			!!data.sourceKey &&
+			!!(work.sourceKey || work.sourceOriginalKey);
+		if (sourceChanged) updates.versionAddedAt = new Date();
+
+		let updated: typeof works.$inferSelect;
+		let archivedKeeps: Set<string> | null = null;
+		if (archivesSource) {
+			const result = await db.transaction(async (tx) => {
+				const archived = await archiveCurrentMedia(work, tx);
+				const [row] = await tx.update(works).set(updates).where(eq(works.id, id)).returning();
+				return { row, keeps: archived?.keeps ?? null };
+			});
+			updated = result.row;
+			archivedKeeps = result.keeps;
+		} else {
+			[updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
+		}
 
 		// The credited are told when the credit becomes PUBLIC: on the request that releases
 		// the Work, or when credits change on one already released. A private Work's credits
@@ -6129,29 +6231,41 @@ const contentRoutes = new Hono()
 		// one file) and re-renders through the service; queueing the job directly here as
 		// well would be two jobs for one file.
 		//
-		// 🚨 **A replacement is replace-in-place: nothing of the old version survives it.**
-		// When the Work already carried media, the retired source — the prior object, its
-		// remux-retained original, every derived output the prior job rows name — is swept
-		// through `media-purge.ts` (the one writer for what may be deleted), and the prior
-		// job rows are deleted so the replacement is the Work's only processing truth.
-		// The no-old-versions ruling (Parker, 2026-10-10): a replaced source's objects
-		// leave the Work and their storage follows. A paged set's own files are retired
-		// by `syncFromSourceKey`, which owns the set and its rows in the same mutation.
-		// An in-flight job's stale pg-boss delivery finds its row gone and throws at the
-		// claim guard — the same precedent DELETE /works/:id's cascade already set.
+		// 🚨 **A replacement archives the version it retires, then sweeps that version's
+		// renditions.** The creator's original is kept in `work_media_versions`; the prior
+		// job rows and every derived output they name leave through `media-purge.ts`, the
+		// one writer for what may be deleted. The 2026-10-23 version ruling replaced the
+		// no-old-versions ruling of 2026-10-10.
+		//
+		// A set's source rows are its truth, so `syncFromSourceKey` archives the old set
+		// before replacing it. An in-flight job's stale pg-boss delivery finds its row gone
+		// and throws at the claim guard — the same precedent DELETE /works/:id's cascade
+		// already set.
 		if (sourceChanged && updated.sourceKey) {
-			if (work.sourceKey || work.sourceOriginalKey) {
-				const priorJobs = await db
-					.select()
-					.from(transcodingJobs)
-					.where(eq(transcodingJobs.workId, id));
-				await purgeReplacedWorkMedia(work, priorJobs);
+			const priorJobs = await db
+				.select()
+				.from(transcodingJobs)
+				.where(eq(transcodingJobs.workId, id));
+			if (hasSourceSet(updated.type)) {
+				// The old set's files become the version's originals; only the processing
+				// rows retire here. `syncFromSourceKey` owns the set rows.
 				if (priorJobs.length > 0) {
 					await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, id));
 				}
+				await syncFromSourceKey(updated, work);
+			} else {
+				if (work.sourceKey || work.sourceOriginalKey) {
+					await purgeReplacedWorkMedia(
+						work,
+						priorJobs,
+						archivedKeeps ? { keep: archivedKeeps } : undefined,
+					);
+					if (priorJobs.length > 0) {
+						await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, id));
+					}
+				}
+				await queueTranscodeForWork(updated);
 			}
-			if (hasSourceSet(updated.type)) await syncFromSourceKey(updated);
-			else await queueTranscodeForWork(updated);
 		}
 		if (sourceChanged || thumbnailChanged) await queueScansForWork(updated);
 
@@ -6580,21 +6694,55 @@ const contentRoutes = new Hono()
 	.post("/works/:id/assets", requireAuth, zValidator("json", createAssetSchema), async (c) => {
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
-		const [item] = await db
-			.select({ id: works.id })
+		const [work] = await db
+			.select()
 			.from(works)
 			.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
 			.limit(1);
-		if (!item) return c.json({ error: "Work not found" }, 404);
+		if (!work) return c.json({ error: "Work not found" }, 404);
 
 		const data = c.req.valid("json");
 		// The asset route signs this key for the Work's owner, so an asset naming another
 		// creator's private original would hand it over. See `storage/keys.ts`.
 		if (!(await isOwnStorageRef(data.file, user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
+
+		const [existingAssets, existingPrimaryWeb] = await Promise.all([
+			db.select().from(assets).where(eq(assets.workId, id)),
+			db
+				.select({ id: webBuilds.id })
+				.from(webBuilds)
+				.where(and(eq(webBuilds.workId, id), eq(webBuilds.isPrimary, true))),
+		]);
+		const replacesPrimary =
+			data.isPrimary &&
+			(existingAssets.some((asset) => asset.isPrimary) || existingPrimaryWeb.length > 0);
+		const firstBuild = existingAssets.length === 0 && existingPrimaryWeb.length === 0;
+
+		if (replacesPrimary) {
+			// A new primary build starts a new version: the current builds become the
+			// archived original and every prior build row retires. Their files stay — the
+			// version owns them — so nothing is swept here.
+			const asset = await db.transaction(async (tx) => {
+				await archiveCurrentMedia(work, tx);
+				await tx.delete(assets).where(eq(assets.workId, id));
+				await tx.delete(webBuilds).where(eq(webBuilds.workId, id));
+				const [created] = await tx
+					.insert(assets)
+					.values({ workId: id, ...data })
+					.returning();
+				await tx.update(works).set({ versionAddedAt: new Date() }).where(eq(works.id, id));
+				return created;
+			});
+			return c.json({ asset }, 201);
+		}
+
 		const [asset] = await db
 			.insert(assets)
 			.values({ workId: id, ...data })
 			.returning();
+		if (firstBuild) {
+			await db.update(works).set({ versionAddedAt: new Date() }).where(eq(works.id, id));
+		}
 		return c.json({ asset }, 201);
 	})
 

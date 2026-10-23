@@ -47,6 +47,7 @@ import { and, asc, eq, max, sql } from "drizzle-orm";
 import { JOB_OPTIONS, QUEUES, queue } from "../jobs/queue.js";
 import { routePagedIngest } from "../lib/paged-ingest.js";
 import { removeSourceFileStorage } from "./media-purge.js";
+import { archiveLegacySource, archiveSourceSet } from "./work-versions.js";
 
 export type WorkSourceFileRow = typeof workSourceFiles.$inferSelect;
 export type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
@@ -151,15 +152,20 @@ export async function listSourceFiles(work: WorkSourceRef): Promise<WorkSourceFi
  * already stands at exactly that file. The set REPLACEs on this sync: a set-kind Work
  * attaching by the old way says "this is the work", not "add it to the pages".
  */
-export async function syncFromSourceKey(work: WorkRow): Promise<void> {
+export async function syncFromSourceKey(work: WorkRow, prior?: WorkRow): Promise<void> {
 	if (!work.sourceKey) return;
-	const rows = await listSourceFiles(work);
+	// The archive reads the PRIOR row: the updated row already names the new source, and a
+	// legacy attach has no source-set rows to read the old file from.
+	const priorWork = prior ?? work;
+	const rows = await listSourceFiles(priorWork);
 	if (rows.length === 1 && rows[0].id !== 0 && rows[0].file === work.sourceKey) return;
-	// The replaced set's objects leave with its rows — the remove path follows the same
-	// rule (`removeSourceFileStorage`), and a set replaced wholesale retires its files
-	// the same way rather than leaving orphaned originals in the creator's prefix.
-	for (const row of rows) {
-		if (row.id !== 0) await removeSourceFileStorage(row, work.creatorId);
+	const uploadedAt = prior?.versionAddedAt ?? prior?.createdAt ?? work.createdAt;
+	// The replaced set is archived before its rows leave: its files are the version's
+	// originals, so they stay in storage while its rows are replaced.
+	if (rows.some((row) => row.id !== 0)) {
+		await archiveSourceSet(work, rows, uploadedAt);
+	} else if (prior?.sourceKey && prior.sourceKey !== work.sourceKey) {
+		await archiveLegacySource(work, prior.sourceKey, uploadedAt);
 	}
 	await db.delete(workSourceFiles).where(eq(workSourceFiles.workId, work.id));
 	// An image row's stored value is the display URL the kind has always stored, and its
