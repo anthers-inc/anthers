@@ -855,9 +855,62 @@ export default function CreatorProfilePage() {
 						) : (
 							displayNameRead()
 						)}
-						<p className="text-base-content/60">
-							@{creator.handle} · {followerCount} followers
-						</p>
+						{/* The actions belong to the person named on this line, so they sit on it
+						    rather than in a column of their own across the page — a visitor's
+						    Follow and more-actions answer "who is this", which is what the handle
+						    and follower count are already answering. */}
+						<div className="flex flex-wrap items-center gap-3">
+							<p className="text-base-content/60">
+								@{creator.handle} · {followerCount} followers
+							</p>
+							{isAuthenticated && !isOwnProfile && (
+								<div className="flex items-center gap-2">
+									<button
+										type="button"
+										className={`btn ${isFollowing ? "btn-outline" : "btn-primary"}`}
+										onClick={handleFollow}
+										// Unfollowing is never blocked; following writes a record.
+										disabled={!isFollowing && followPermissionMissing}
+										title={
+											!isFollowing && followPermissionMissing
+												? INTERACTION_PERMISSION_HINT
+												: undefined
+										}
+									>
+										{isFollowing ? "Following" : "Follow"}
+									</button>
+
+									{/* Block and Report sit together and read differently on purpose.
+									    Blocking is yours and takes effect immediately; reporting asks an
+									    operator to look. Someone who wants to be left alone should not have
+									    to file a report to get it, and someone reporting abuse should not
+									    have to keep seeing it while they wait. */}
+									<div className="dropdown dropdown-end">
+										<button
+											type="button"
+											tabIndex={0}
+											className="btn btn-ghost btn-square"
+											aria-label={`More options for ${creator.handle}`}
+										>
+											<EllipsisHorizontalIcon className="w-5 h-5" />
+										</button>
+										<ul className="dropdown-content menu z-10 w-56 rounded-box bg-base-200 p-2 shadow">
+											<li>
+												<button type="button" onClick={() => setConfirmingBlock(true)}>
+													<NoSymbolIcon className="w-4 h-4" />
+													Block @{creator.handle}
+												</button>
+											</li>
+											<li>
+												<button type="button" onClick={() => setReporting(true)}>
+													Report @{creator.handle}
+												</button>
+											</li>
+										</ul>
+									</div>
+								</div>
+							)}
+						</div>
 						{isOwnProfile ? (
 							<InlineField<string>
 								label="bio"
@@ -932,65 +985,17 @@ export default function CreatorProfilePage() {
 							</span>
 						</div>
 					</div>
-					{isAuthenticated && !isOwnProfile && (
-						<div className="flex flex-col items-end gap-2 mt-4 sm:mt-12">
-							<div className="flex items-center gap-2">
-								<button
-									type="button"
-									className={`btn ${isFollowing ? "btn-outline" : "btn-primary"}`}
-									onClick={handleFollow}
-									// Unfollowing is never blocked; following writes a record.
-									disabled={!isFollowing && followPermissionMissing}
-									title={
-										!isFollowing && followPermissionMissing
-											? INTERACTION_PERMISSION_HINT
-											: undefined
-									}
-								>
-									{isFollowing ? "Following" : "Follow"}
-								</button>
-
-								{/* Block and Report sit together and read differently on purpose.
-									    Blocking is yours and takes effect immediately; reporting asks an
-									    operator to look. Someone who wants to be left alone should not have
-									    to file a report to get it, and someone reporting abuse should not
-									    have to keep seeing it while they wait. */}
-								<div className="dropdown dropdown-end">
-									<button
-										type="button"
-										tabIndex={0}
-										className="btn btn-ghost btn-square"
-										aria-label={`More options for ${creator.handle}`}
-									>
-										<EllipsisHorizontalIcon className="w-5 h-5" />
-									</button>
-									<ul className="dropdown-content menu z-10 w-56 rounded-box bg-base-200 p-2 shadow">
-										<li>
-											<button type="button" onClick={() => setConfirmingBlock(true)}>
-												<NoSymbolIcon className="w-4 h-4" />
-												Block @{creator.handle}
-											</button>
-										</li>
-										<li>
-											<button type="button" onClick={() => setReporting(true)}>
-												Report @{creator.handle}
-											</button>
-										</li>
-									</ul>
-								</div>
-							</div>
-							{/* The user's Anthers Badge, and the rung held here */}
-							{creatorStatus && creatorStatus.badge !== "free" && (
-								<div className="flex items-center gap-2 text-xs">
-									<span className="badge badge-sm badge-outline">
-										{badgeNameFor(creatorStatus.badge)}
-									</span>
-									{parseFloat(creatorStatus.badgeAmount) > 0 && (
-										<span className="badge badge-sm badge-primary badge-outline">
-											{amountLabel(creatorStatus.badgeAmount)}/mo
-										</span>
-									)}
-								</div>
+					{/* The user's Anthers Badge, and the rung held here. A status chip rather than
+					    an action, so it keeps the column the buttons have left. */}
+					{isAuthenticated && !isOwnProfile && creatorStatus && creatorStatus.badge !== "free" && (
+						<div className="flex items-center gap-2 text-xs pt-4 sm:pt-14">
+							<span className="badge badge-sm badge-outline">
+								{badgeNameFor(creatorStatus.badge)}
+							</span>
+							{parseFloat(creatorStatus.badgeAmount) > 0 && (
+								<span className="badge badge-sm badge-primary badge-outline">
+									{amountLabel(creatorStatus.badgeAmount)}/mo
+								</span>
 							)}
 						</div>
 					)}
