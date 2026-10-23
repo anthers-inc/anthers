@@ -96,6 +96,21 @@ describe("badge perks", () => {
 		expect(rows.length).toBe(2); // the first put's row was replaced, not kept
 	});
 
+	it("reads the stored list back in ladder order — the editor's own load", async () => {
+		// 🚨 Without this read the maker opened every rung empty, and its whole-list save
+		// then replaced the creator's perks with nothing. The order is the one they typed.
+		await putPerks([
+			{ kind: "physical_good", label: "Sticker sheet" },
+			{ kind: "recognition", label: "Name in the credits" },
+		]);
+		const res = await req(`/api/subscriptions/badges/${badgeId}/perks`, {
+			headers: { Cookie: cookie },
+		});
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { perks: { kind: string; label: string }[] };
+		expect(body.perks.map((p) => p.label)).toEqual(["Sticker sheet", "Name in the credits"]);
+	});
+
 	it("🚨 refuses an unknown kind", async () => {
 		const res = await putPerks([{ kind: "cash-back", label: "Nope" }]);
 		expect(res.status).toBe(400);
@@ -151,5 +166,9 @@ describe("badge perks", () => {
 		const other = await createAccount(`bp_other_${RUN}`, { fields: { isCreator: true } });
 		const res = await putPerks([{ kind: "service", label: "X" }], other.cookie);
 		expect(res.status).toBe(404);
+		const read = await req(`/api/subscriptions/badges/${badgeId}/perks`, {
+			headers: { Cookie: other.cookie },
+		});
+		expect(read.status).toBe(404);
 	});
 });
