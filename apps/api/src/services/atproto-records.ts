@@ -31,6 +31,19 @@ export interface PublishableWork extends AccessibleWork {
 	credits?: WorkCredit[] | null;
 }
 
+/**
+ * Where a gated Work's audience-readable records live.
+ *
+ * ⚠️ **A pointer is not a permission.** `space` names the space a gated listing points at and
+ * `manifest` names the record inside it; whether a reader may open either is answered by the
+ * app the space names, on every credential request. A listing that treated these as an access
+ * grant would be a second gate, free to disagree with the first.
+ */
+export interface WorkAccessPointers {
+	space?: string | null;
+	manifest?: string | null;
+}
+
 export interface WorkRecord {
 	$type: "org.anthers.work";
 	kind: string;
@@ -39,7 +52,7 @@ export interface WorkRecord {
 	releasedAt: string;
 	originallyReleased?: string;
 	description?: string;
-	access?: { state: "open" | "gated" };
+	access?: { state: "open" | "gated"; space?: string; manifest?: string };
 	credits?: Array<{
 		role?: string;
 		contributor?:
@@ -185,14 +198,14 @@ export function unpublishableReason(work: PublishableWork): UnpublishableReason 
  * a second implementation of a gate rule is a second implementation free to disagree with
  * the first, and this one would disagree in public.
  */
-function accessForStrangers(work: PublishableWork): { state: "open" | "gated" } {
+export function publicAccessState(work: PublishableWork): "open" | "gated" {
 	const ctx = buildPreviewContext({
 		creatorId: work.creatorId ?? -1,
 		given: 0,
 		owned: false,
 		workIds: [],
 	});
-	return { state: resolveAccessSync(work, ctx).isFree ? "open" : "gated" };
+	return resolveAccessSync(work, ctx).isFree ? "open" : "gated";
 }
 
 /** The canonical page for a Work. Mirrors the app's `/works/{slug}-{publicId}` route. */
@@ -200,10 +213,26 @@ export function workUrl(work: PublishableWork, baseUrl: string): string {
 	return `${baseUrl.replace(/\/+$/, "")}/works/${work.slug}-${work.publicId}`;
 }
 
+/**
+ * Where this deployment's public pages live.
+ *
+ * ⚠️ **A job has no request to take an origin from**, so the listing and the creator space
+ * both read the site's own configured address rather than inventing one. The fallback is the
+ * product's canonical host, which is the same address the public design pages already use.
+ */
+export function workBaseUrl(): string {
+	return process.env.FRONTEND_URL?.trim() || "https://anthers.org";
+}
+
 /** Build the public record for a Work, or `null` when it must not have one. */
 export function workToRecord(
 	work: PublishableWork,
-	opts: { baseUrl: string; confirmedCredits?: Set<string> },
+	opts: {
+		baseUrl: string;
+		confirmedCredits?: Set<string>;
+		/** The gated space and manifest, when the creator-space sync has written them. */
+		accessPointers?: WorkAccessPointers;
+	},
 ): WorkRecord | null {
 	if (unpublishableReason(work) !== null) return null;
 	// `unpublishableReason` has already established this. Re-checking rather than asserting
@@ -211,13 +240,26 @@ export function workToRecord(
 	// ever drift apart, and the cost of the extra branch is nothing.
 	if (!work.releasedAt) return null;
 
+	const state = publicAccessState(work);
+	const access: NonNullable<WorkRecord["access"]> = { state };
+	// 🚨 **The pointers appear only on a gated listing and only when both were really
+	// written.** An `open` Work has no audience to read them, and a gated one whose space
+	// write has not landed yet would otherwise advertise a space that does not carry its
+	// manifest — the listing would be the first thing a reader followed to nothing.
+	const space = opts.accessPointers?.space;
+	const manifest = opts.accessPointers?.manifest;
+	if (state === "gated" && space) {
+		access.space = space;
+		if (manifest) access.manifest = manifest;
+	}
+
 	const record: WorkRecord = {
 		$type: "org.anthers.work",
 		kind: work.type,
 		title: work.title ?? "",
 		url: workUrl(work, opts.baseUrl),
 		releasedAt: work.releasedAt.toISOString(),
-		access: accessForStrangers(work),
+		access,
 	};
 
 	// An empty string is not a value: writing `description: ""` into a public record says

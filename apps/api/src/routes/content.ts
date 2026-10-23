@@ -197,6 +197,7 @@ import {
 	ratingOf,
 	resetRatingForTypeChange,
 } from "../services/content-rating.js";
+import { removeCreatorSpace } from "../services/creator-space.js";
 import {
 	acceptCredit,
 	affirmSelfCredits,
@@ -5082,6 +5083,10 @@ const contentRoutes = new Hono()
 		// (see `affirmSelfCredits`). A Work is born private and has no listing yet; the row
 		// is what the record's confirmed set reads when the Work is released.
 		await affirmSelfCredits({ workId: work.id, creatorUserId: user.id, credits: work.credits });
+		// The draft is a creator-space record, and a Work is born private — so the first sync is
+		// what puts it there. The job re-reads and decides; a Work that needs no listing simply
+		// writes no public record.
+		await queueWorkListingSync(work.id);
 		// No credit notification here: a Work is born private, and the notification is owed
 		// when the Work is public — see the PATCH route and `notifyCreditedAccounts`.
 		return c.json({ work: await serializeWork(work, [], job, [], deliveryCtx()) }, 201);
@@ -6695,6 +6700,21 @@ const contentRoutes = new Hono()
 			db.select().from(transcodingJobs).where(eq(transcodingJobs.workId, id)),
 		]);
 		await purgeWorkMedia(item, workAssets, jobRows);
+
+		// The creator's own records go before the row that names them. A gated space for a Work
+		// nobody bought has no audience left, so it is deleted with the Work; a studio space
+		// belongs to the creator and survives, because it may hold other drafts. Best effort:
+		// the creator asked for the Work to go, and being unable to reach a second server is not
+		// a reason to refuse. Whatever is left is recorded under the account-deletion and backup
+		// paths rather than stranded silently.
+		try {
+			await removeCreatorSpace(item);
+		} catch (err) {
+			console.error(
+				`[content] work ${id}: creator-space cleanup failed — ` +
+					`${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
 
 		await db.delete(works).where(eq(works.id, id));
 		return c.body(null, 204);

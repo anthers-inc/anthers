@@ -79,12 +79,22 @@ type Access = { $type?: "org.anthers.work#access";
   /**
    * `open` — anyone may reach the work at no cost. `gated` — reaching it requires supporting the creator or buying it, on terms shown on the work's own page. Terms themselves are deliberately absent: a price shown apart from the total a person actually pays is misleading, and this record cannot control how a consumer renders it.
    */
-  "state":"open" | "gated" | l.UnknownString };
+  "state":"open" | "gated" | l.UnknownString;
+
+  /**
+   * The space that holds what a gated work's audience may read — its manifest, its file list, and its gated notes. Present only when `state` is `gated` and the creator's space carries a manifest this listing points at. ⚠️ The pointer is not the permission: whether a particular person may read the space is answered by the app the space names, on every credential request, and the space does not need a member list for reads.
+   */
+  "space"?:l.UriString;
+
+  /**
+   * The manifest record inside `space`: the deliverable file list with sizes and storage pointers. Present only alongside `space`. ⚠️ It points at where the bytes are kept; the bytes themselves stay in the service's media storage, behind delivery, because a repository is not a CDN.
+   */
+  "manifest"?:l.UriString };
 
 export type { Access };
 
 /** Whether reaching this work costs anything. ⚠️ A display hint and NEVER an authorization: it describes what a stranger would find, not what any particular user is entitled to, and a consumer that treats it as permission is wrong. An object rather than a bare string so that further context — such as where access is granted — can be added later without a breaking change. */
-const access = /*#__PURE__*/ l.typedObject<Access>($nsid, "access", /*#__PURE__*/ l.object({"state":/*#__PURE__*/ l.string<{"knownValues":["open","gated"],"maxLength":32}>({"maxLength":32})}));
+const access = /*#__PURE__*/ l.typedObject<Access>($nsid, "access", /*#__PURE__*/ l.object({"state":/*#__PURE__*/ l.string<{"knownValues":["open","gated"],"maxLength":32}>({"maxLength":32}),"space":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"uri"})),"manifest":/*#__PURE__*/ l.optional(/*#__PURE__*/ l.string({"format":"uri"}))}));
 
 export { access };
 
