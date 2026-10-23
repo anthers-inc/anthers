@@ -35,11 +35,12 @@ test("a video's thumbnail can be the frame its creator paused on", async ({ page
 		.where(eq(works.publicId, CLIP.publicId));
 	previous = before.thumbnail;
 
-	// The editing surface is the Work's own page now (2026-10-13); the thumbnail lives in
-	// the Manage tab since the byline pass — the creator's tab, Media and Thumbnail.
+	// The editing surface is the Work's own page now (2026-10-13); the thumbnail is the
+	// media manager's Thumbnail section since the media-area pass (Parker, 2026-10-23).
 	await page.goto(`/studio/works/${CLIP.publicId}/edit`);
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
-	await page.getByRole("tab", { name: "Manage" }).click();
+	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("tab", { name: "Thumbnail" }).click();
 
 	// The section's shape: the (i) carries the terms beside the heading, and the two
 	// buttons stand beside the thumbnail's place.

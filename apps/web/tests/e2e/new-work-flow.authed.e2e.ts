@@ -9,12 +9,32 @@
  */
 
 import { mkdirSync } from "node:fs";
-import { expect, signInAsMediaFixture, test } from "./fixtures";
+import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 const SHOTS = "/tmp/opencode/new-work-flow";
+const RUN = `Flow walk ${Date.now()}`;
+const TITLE_PREFIX = "Flow walk ";
+let session = "";
+
+// The suite shares `media_fixture` with every other walk, and a leftover service Work
+// would widen the Works table's type filter for whoever reads it next (`studio-works-table`
+// asserts that `service` isolates exactly its own row). Sweep by the run's own prefix.
+test.afterAll(async () => {
+	if (!session) return;
+	const res = await fetch(`${API_URL}/api/content/works`, {
+		headers: { Cookie: `session=${session}` },
+	});
+	const { works } = (await res.json()) as { works: { id: number; title: string }[] };
+	for (const work of works.filter((w) => w.title.startsWith(TITLE_PREFIX))) {
+		await fetch(`${API_URL}/api/content/works/${work.id}?force=1`, {
+			method: "DELETE",
+			headers: { Cookie: `session=${session}`, Origin: WEB_ORIGIN },
+		});
+	}
+});
 
 test("the New Work flow walks name, category, type and delivery", async ({ page, context }) => {
-	await signInAsMediaFixture(context);
+	session = await signInAsMediaFixture(context);
 	mkdirSync(SHOTS, { recursive: true });
 	await page.setViewportSize({ width: 1440, height: 1000 });
 
@@ -24,7 +44,7 @@ test("the New Work flow walks name, category, type and delivery", async ({ page,
 	await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
 	await page.screenshot({ path: `${SHOTS}/01-name.png`, fullPage: true });
 
-	const title = `Screenshot draft ${Date.now()}`;
+	const title = `${RUN} screenshot`;
 	await page.getByPlaceholder("A name").fill(title);
 	await page.getByRole("button", { name: "Continue" }).click();
 
@@ -86,12 +106,12 @@ test("the New Work flow walks name, category, type and delivery", async ({ page,
 });
 
 test("a game's empty media card carries the build intake", async ({ page, context }) => {
-	await signInAsMediaFixture(context);
+	session = await signInAsMediaFixture(context);
 	mkdirSync(SHOTS, { recursive: true });
 	await page.setViewportSize({ width: 1440, height: 1000 });
 
 	await page.goto("/studio/works/new");
-	await page.getByPlaceholder("A name").fill(`Game draft ${Date.now()}`);
+	await page.getByPlaceholder("A name").fill(`${RUN} game`);
 	await page.getByRole("button", { name: "Continue" }).click();
 	await page.getByRole("button", { name: /^Digital/ }).click();
 	await page.getByRole("button", { name: /^Game/ }).click();
@@ -111,12 +131,12 @@ test("a game's empty media card carries the build intake", async ({ page, contex
 });
 
 test("the Non-Digital branch stops at fulfillment", async ({ page, context }) => {
-	await signInAsMediaFixture(context);
+	session = await signInAsMediaFixture(context);
 	mkdirSync(SHOTS, { recursive: true });
 	await page.setViewportSize({ width: 1440, height: 1000 });
 
 	await page.goto("/studio/works/new");
-	await page.getByPlaceholder("A name").fill(`Service draft ${Date.now()}`);
+	await page.getByPlaceholder("A name").fill(`${RUN} service`);
 	await page.getByRole("button", { name: "Continue" }).click();
 	await page.getByRole("button", { name: /^Non-Digital/ }).click();
 
