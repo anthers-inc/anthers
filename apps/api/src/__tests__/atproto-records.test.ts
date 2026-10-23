@@ -383,3 +383,48 @@ describe("credits on the public listing", () => {
 		expect(workRecord.safeParse(record).success).toBe(true);
 	});
 });
+
+describe("a gated listing's space pointers", () => {
+	const SPACE = "at://did:plc:casey/space/org.anthers.creatorSpace/90210";
+	const MANIFEST = `${SPACE}/did:plc:casey/org.anthers.gatedManifest/manifest`;
+
+	const gatedWork = () =>
+		openWork({ access: [{ threshold: 0, allow: true, price: "5.00" }] as never });
+
+	it("carries the space and the manifest when both were written", () => {
+		const record = workToRecord(gatedWork(), {
+			baseUrl: BASE,
+			accessPointers: { space: SPACE, manifest: MANIFEST },
+		});
+		expect(record?.access).toEqual({ state: "gated", space: SPACE, manifest: MANIFEST });
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
+	it("carries the space without a manifest when the manifest has not landed", () => {
+		const record = workToRecord(gatedWork(), {
+			baseUrl: BASE,
+			accessPointers: { space: SPACE, manifest: null },
+		});
+		expect(record?.access).toEqual({ state: "gated", space: SPACE });
+		expect(workRecord.safeParse(record).success).toBe(true);
+	});
+
+	it("never points an open Work at a space", () => {
+		// A Work that used to be gated keeps its space on disk; the listing must not point at it
+		// once nobody is being asked to pay, or a reader would follow a door that no longer means
+		// anything.
+		const record = workToRecord(openWork(), {
+			baseUrl: BASE,
+			accessPointers: { space: SPACE, manifest: MANIFEST },
+		});
+		expect(record?.access).toEqual({ state: "open" });
+	});
+
+	it("never advertises a manifest with no space to hold it", () => {
+		const record = workToRecord(gatedWork(), {
+			baseUrl: BASE,
+			accessPointers: { space: null, manifest: MANIFEST },
+		});
+		expect(record?.access).toEqual({ state: "gated" });
+	});
+});
