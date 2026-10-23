@@ -69,16 +69,48 @@ export async function hostedWriterFor(
 	opts: { fetchImpl?: typeof fetch } = {},
 ): Promise<HostedWriterResult> {
 	const doFetch = opts.fetchImpl ?? fetch;
+	const session = await hostedTokenFor(userId, opts);
+	if (!session.ok) return { writer: null, reason: session.reason };
+
+	return {
+		writer: writerOver(session.did, session.token, doFetch, {
+			// A write the node answered 401 means the token just died out from under us. Drop the
+			// stored session so the NEXT open logs in fresh once, then still throw — the caller's
+			// retry machinery is what should drive the recovery, not a silent in-writer retry.
+			onAuthFailure: () => clearHostedSession(session.did),
+		}),
+	};
+}
+
+/** A hosted identity's session, or why it could not be opened. */
+export type HostedTokenResult =
+	| { ok: true; did: string; token: string }
+	| { ok: false; reason: NoWriterReason };
+
+/**
+ * The DID and access token for an identity Anthers hosts, or the ordinary reason there is none.
+ *
+ * ⭐ **Split out of {@link hostedWriterFor} so a second writer can share it.** A user space is
+ * written over the same hosted session as a public repository, and two copies of the
+ * "one login per account, never route around a broken hub credential" rule is how one of them
+ * quietly stops being true. The reasons are `NoWriterReason`'s because a caller that cannot
+ * get a hosted session cannot get either writer.
+ */
+export async function hostedTokenFor(
+	userId: number,
+	opts: { fetchImpl?: typeof fetch } = {},
+): Promise<HostedTokenResult> {
+	const doFetch = opts.fetchImpl ?? fetch;
 
 	const [row] = await db
 		.select({ did: hostedAccounts.did, sealedPassword: hostedAccounts.sealedPassword })
 		.from(hostedAccounts)
 		.where(eq(hostedAccounts.userId, userId))
 		.limit(1);
-	if (!row) return { writer: null, reason: "not_hosted" };
+	if (!row) return { ok: false, reason: "not_hosted" };
 	// Checked before the credential is opened, so a refused server is reported as what it is
 	// rather than as a node that did not answer.
-	if (!hostedPdsUrl()) return { writer: null, reason: "no_node" };
+	if (!hostedPdsUrl()) return { ok: false, reason: "no_node" };
 
 	// `open` throws on a value this deployment's key cannot open, which is a real state — see
 	// `signup-probe.anthers.social` in the runbook. Retrying never opens it.
@@ -87,23 +119,16 @@ export async function hostedWriterFor(
 		password = open(row.sealedPassword);
 	} catch {
 		console.error(`[repo-writer] cannot open the credential for ${row.did}`);
-		return { writer: null, reason: "credential_unopenable" };
+		return { ok: false, reason: "credential_unopenable" };
 	}
 
 	// ⭐ **One login per account, not one per write.** The store reuses the session already on
 	// file and renews it with `refreshSession`; `createSession` — the call the node limits —
 	// happens only when there is no session or the node refused the refresh.
 	const session = await sessionForHostedAccount(row.did, password, { fetchImpl: doFetch });
-	if (!session.token) return { writer: null, reason: "node_unreachable" };
+	if (!session.token) return { ok: false, reason: "node_unreachable" };
 
-	return {
-		writer: writerOver(row.did, session.token, doFetch, {
-			// A write the node answered 401 means the token just died out from under us. Drop the
-			// stored session so the NEXT open logs in fresh once, then still throw — the caller's
-			// retry machinery is what should drive the recovery, not a silent in-writer retry.
-			onAuthFailure: () => clearHostedSession(row.did),
-		}),
-	};
+	return { ok: true, did: row.did, token: session.token };
 }
 
 /**

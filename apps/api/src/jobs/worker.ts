@@ -67,6 +67,7 @@ import { rescanOwed } from "./rescan-owed.js";
 import { markBenignInterrupted, resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
+import { type SpaceOutboxJobData, spaceOutboxJob } from "./space-outbox.js";
 import { statusSample } from "./status-sample.js";
 import { runStorageUsageSweep } from "./storage-usage.js";
 import { type SyncAtprotoRecordData, syncAtprotoRecordJob } from "./sync-atproto-record.js";
@@ -166,6 +167,18 @@ async function start() {
 	await queue.work(QUEUES.RECONCILE_LISTINGS, async () => {
 		await reconcileListings();
 	});
+
+	// The user-space outbox. Quiet on a clean sweep (the handler says when it spoke), and
+	// bounded so one pass cannot monopolize the worker against the media lane.
+	await queue.work<SpaceOutboxJobData>(
+		QUEUES.SPACE_OUTBOX,
+		{ localConcurrency: 1 },
+		async (jobs) => {
+			for (const job of jobs) {
+				await spaceOutboxJob(job.data);
+			}
+		},
+	);
 
 	await queue.work<DistributePoolData>(QUEUES.DISTRIBUTE_POOL, async (jobs) => {
 		for (const job of jobs) {

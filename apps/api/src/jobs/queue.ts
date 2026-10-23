@@ -256,6 +256,11 @@ export const QUEUES = {
 	// guarantee, because an enqueue that failed, a job that exhausted its retries, and a state
 	// changed directly in SQL all leave a record disagreeing with its row and nothing noticing.
 	RECONCILE_LISTINGS: "reconcile-listings",
+	// Carry a reader's queued state into the reader's own space, and clear each row only after
+	// the write reads back verified. A cron rather than a per-write enqueue: the queue is the
+	// durable record of what is owed, the sweep is what guarantees it moves, and a missed
+	// enqueue costs a minute rather than the write. See services/space-outbox.ts.
+	SPACE_OUTBOX: "space-outbox",
 	PUBLISH_SCHEDULED: "publish-scheduled", // Auto-publish drafts whose scheduledFor has arrived
 	// Release private Works whose scheduled release time has come, once they are ready.
 	RELEASE_SCHEDULED: "release-scheduled",
@@ -633,6 +638,11 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	[QUEUES.WITHDRAWN_SWEEP, "30 2 * * *"], // 2:30 AM daily
 	[QUEUES.PUBLISH_SCHEDULED, "* * * * *"], // every minute — publishes due drafts
 	[QUEUES.RELEASE_SCHEDULED, "* * * * *"], // every minute — releases due Works that are ready
+	// Every minute, because a queued write is a person's Save that has not reached their own
+	// space yet. The interval is the worst-case latency of pressing Save, and a minute is
+	// already longer than anybody expects; the drain is bounded (fifty rows) and quiet when
+	// there is nothing to do, so the cost of the tight schedule is one indexed query.
+	[QUEUES.SPACE_OUTBOX, "* * * * *"],
 	// 3 AM daily, deliberately AFTER distribute-pool's midnight run: the pool pays
 	// creators out of these rows, so pruning ahead of it would cost earnings rather
 	// than privacy. The retention window is months wide, so the ordering has enormous
