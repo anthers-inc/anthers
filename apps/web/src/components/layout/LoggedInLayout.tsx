@@ -4,7 +4,7 @@ import { APP_VERSION } from "@anthers/shared/version";
 import { useAuth } from "@anthers/web-shared/auth";
 import { MeadowBackdrop } from "@anthers/web-shared/decor/MeadowBackdrop";
 import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "@anthers/web-shared/router";
+import { Link, NavLink, Outlet, useLocation } from "@anthers/web-shared/router";
 import { SidebarProvider, useSidebar } from "@anthers/web-shared/sidebar";
 import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeSelect from "@anthers/web-shared/ui/ThemeSelect";
@@ -152,10 +152,9 @@ function ProfileRow({ rail, active }: { rail: boolean; active: boolean }) {
 }
 
 function LoggedInLayoutInner() {
-	const { user, signOut } = useAuth();
+	const { user } = useAuth();
 	const { currentTrack } = useMediaPlayer();
 	const { sidebarOpen, toggleSidebar, closeSidebar, pageContent, sharedContent } = useSidebar();
-	const navigate = useNavigate();
 	const { pathname } = useLocation();
 	const { count: basketCount } = useBasket();
 	const isCreator = Boolean(user?.isCreator);
@@ -195,11 +194,6 @@ function LoggedInLayoutInner() {
 	 * only the desktop width is restored by the `md:` class rather than the base one.
 	 */
 	const rail = !sidebarOpen;
-
-	const handleLogout = async () => {
-		await signOut();
-		navigate("/");
-	};
 
 	const navLinkClass = ({ isActive }: { isActive: boolean }) => navItemClass(isActive, rail);
 
@@ -282,9 +276,9 @@ function LoggedInLayoutInner() {
 							{/* No `tabIndex` here, deliberately. The older dropdowns in this app carry one
 						    on the `<ul>`, which biome flags as `noNoninteractiveTabindex` — a list is
 						    not a control and putting it in the tab order just adds a stop that does
-						    nothing. It is unnecessary as well as unwanted: every item below is a link
-						    or a button, so tabbing off the trigger lands on one of them and the
-						    `.dropdown` keeps matching `:focus-within` on its own. */}
+						    nothing. It is unnecessary as well as unwanted: every item below is a link,
+						    so tabbing off the trigger lands on one of them and the `.dropdown` keeps
+						    matching `:focus-within` on its own. */}
 							<ul className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52">
 								<li className="menu-title px-4 py-1">
 									<span className="text-xs text-base-content/50">
@@ -298,12 +292,6 @@ function LoggedInLayoutInner() {
 								<li>{user && <Link to={profileUrl(user.handle)}>Profile</Link>}</li>
 								<li>
 									<Link to="/settings">Settings</Link>
-								</li>
-								<div className="divider my-0 px-2" />
-								<li>
-									<button type="button" onClick={handleLogout}>
-										Log out
-									</button>
 								</li>
 							</ul>
 						</div>

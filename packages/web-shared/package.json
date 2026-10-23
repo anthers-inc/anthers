@@ -57,6 +57,7 @@
 		"./content/ProjectWorks": "./src/components/content/ProjectWorks.tsx",
 		"./content/ProjectPosts": "./src/components/content/ProjectPosts.tsx",
 		"./creator/CreatorCard": "./src/components/creator/CreatorCard.tsx",
+		"./account/SignedInAccountCard": "./src/components/account/SignedInAccountCard.tsx",
 		"./ui/Logo": "./src/components/ui/Logo.tsx",
 		"./ui/ThemeSelect": "./src/components/ui/ThemeSelect.tsx",
 		"./ui/FormField": "./src/components/ui/FormField.tsx",
