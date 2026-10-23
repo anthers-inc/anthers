@@ -161,18 +161,31 @@ describe("a Work's archived media versions", () => {
 		});
 		workIds.push(work.id);
 		const oldBuild = `creators/${ownerId}/assets/old-game-${id}.zip`;
+		const oldMacBuild = `creators/${ownerId}/assets/old-game-mac-${id}.zip`;
 		const newBuild = `creators/${ownerId}/assets/new-game-${id}.zip`;
 		const uploadedAt = new Date("2026-02-03T04:05:06.000Z");
 		await db.update(works).set({ versionAddedAt: uploadedAt }).where(eq(works.id, work.id));
-		await db.insert(assets).values({
-			workId: work.id,
-			file: oldBuild,
-			filename: "old-game.zip",
-			fileSize: 1000,
-			mimeType: "application/zip",
-			platform: "windows",
-			isPrimary: true,
-		});
+		// One Work, two platform builds: the primary Windows build and a secondary macOS one.
+		await db.insert(assets).values([
+			{
+				workId: work.id,
+				file: oldBuild,
+				filename: "old-game.zip",
+				fileSize: 1000,
+				mimeType: "application/zip",
+				platform: "windows",
+				isPrimary: true,
+			},
+			{
+				workId: work.id,
+				file: oldMacBuild,
+				filename: "old-game-mac.zip",
+				fileSize: 1100,
+				mimeType: "application/zip",
+				platform: "mac",
+				isPrimary: false,
+			},
+		]);
 
 		const res = await req(`/api/content/works/${work.id}/assets`, {
 			method: "POST",
@@ -199,7 +212,14 @@ describe("a Work's archived media versions", () => {
 		expect(version).toBeDefined();
 		expect(version.uploadedAt).toEqual(uploadedAt);
 		expect(version.media.kind).toBe("builds");
-		expect(version.media.kind === "builds" && version.media.assets[0].file).toBe(oldBuild);
+		expect(
+			version.media.kind === "builds"
+				? version.media.assets.map((asset) => [asset.platform, asset.file]).sort()
+				: [],
+		).toEqual([
+			["mac", oldMacBuild],
+			["windows", oldBuild],
+		]);
 
 		const rows = await db.select().from(assets).where(eq(assets.workId, work.id));
 		expect(rows).toHaveLength(1);
