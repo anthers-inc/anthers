@@ -1415,6 +1415,8 @@ export default function OwnerWorkEditor({
 					work={asRead}
 					sourceUpload={sourceUpload}
 					unpublished={unpublished}
+					canReplace={unpublished || current.visibility === "released"}
+					canRemove={unpublished}
 					cancelBusy={cancelBusy}
 					removeBusy={removalBusy}
 					onCancel={() => void cancelProcessing()}
