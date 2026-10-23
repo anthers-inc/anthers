@@ -14,7 +14,10 @@ import { describe, expect, it } from "bun:test";
 import {
 	missingRepoActions,
 	REPO_ACTIONS,
+	readBlobPermissions,
 	readRepoPermissions,
+	readSpacePermissions,
+	scopeAllowsBlob,
 	scopeAllowsWriting,
 } from "../services/atproto-scope.js";
 
@@ -121,5 +124,224 @@ describe("missingRepoActions", () => {
 
 	it("answers about only the actions it was asked about", () => {
 		expect(missingRepoActions(`repo:${WORK}?action=create`, WORK, ["create"])).toEqual([]);
+	});
+});
+
+describe("readSpacePermissions", () => {
+	const DEFAULTS = {
+		authority: "self",
+		skey: "*",
+		collections: undefined,
+		actions: ["read", "create", "update", "delete"],
+		manage: undefined,
+	} as const;
+
+	it("reads a type positionally, with authority self and the protocol defaults", () => {
+		expect(readSpacePermissions("space:com.example.user")).toEqual([
+			{ type: "com.example.user", ...DEFAULTS },
+		]);
+	});
+
+	it("reads a wildcard type and an explicit authority", () => {
+		expect(readSpacePermissions("space:*?authority=did:plc:abc123xyz")).toEqual([
+			{ type: "*", ...DEFAULTS, authority: "did:plc:abc123xyz" },
+		]);
+	});
+
+	it("reads a named type when it is not positional", () => {
+		expect(readSpacePermissions("space?type=com.example.user")).toEqual([
+			{ type: "com.example.user", ...DEFAULTS },
+		]);
+	});
+
+	it("reads the fully specified form", () => {
+		expect(
+			readSpacePermissions(
+				"space:com.example.user?authority=did:plc:abc123xyz&skey=self&collection=com.example.library&action=create&action=update",
+			),
+		).toEqual([
+			{
+				type: "com.example.user",
+				authority: "did:plc:abc123xyz",
+				skey: "self",
+				collections: ["com.example.library"],
+				actions: ["create", "update"],
+				manage: undefined,
+			},
+		]);
+	});
+
+	it("reads read_self on its own", () => {
+		expect(readSpacePermissions("space:com.example.user?action=read_self&collection=*")).toEqual([
+			{
+				type: "com.example.user",
+				authority: "self",
+				skey: "*",
+				collections: ["*"],
+				actions: ["read_self"],
+				manage: undefined,
+			},
+		]);
+	});
+
+	it("reads space-management verbs into manage", () => {
+		expect(
+			readSpacePermissions("space:com.example.user?manage=update&manage=delete")[0]?.manage,
+		).toEqual(["update", "delete"]);
+	});
+
+	it("normalizes a wildcard collection to the wildcard alone", () => {
+		expect(
+			readSpacePermissions("space:com.example.user?collection=com.example.library&collection=*")[0]
+				?.collections,
+		).toEqual(["*"]);
+	});
+
+	it("normalizes actions into the protocol's order", () => {
+		expect(
+			readSpacePermissions("space:com.example.user?action=delete&action=read")[0]?.actions,
+		).toEqual(["read", "delete"]);
+	});
+
+	it("ignores every token that is not a space permission", () => {
+		const scope = "atproto repo:org.anthers.work blob:*/* space:com.example.user";
+		expect(readSpacePermissions(scope)).toHaveLength(1);
+		expect(readSpacePermissions(scope)[0]?.type).toBe("com.example.user");
+	});
+
+	it("finds nothing in an empty or absent scope", () => {
+		expect(readSpacePermissions("")).toEqual([]);
+		expect(readSpacePermissions(null)).toEqual([]);
+		expect(readSpacePermissions(undefined)).toEqual([]);
+	});
+
+	// 🚨 Each of these would otherwise be read as a BROADER grant than was made.
+	it("refuses a permission with no space type", () => {
+		expect(readSpacePermissions("space")).toEqual([]);
+		expect(readSpacePermissions("space?authority=did:plc:abc123xyz")).toEqual([]);
+	});
+
+	it("refuses a type spelled both positionally and by name", () => {
+		expect(readSpacePermissions("space:com.example.user?type=com.example.other")).toEqual([]);
+	});
+
+	it("refuses an invalid type", () => {
+		expect(readSpacePermissions("space:short")).toEqual([]);
+	});
+
+	it("refuses an invalid authority", () => {
+		expect(readSpacePermissions("space:com.example.user?authority=not-a-did")).toEqual([]);
+		expect(readSpacePermissions("space:com.example.user?authority=did:")).toEqual([]);
+	});
+
+	it("refuses a repeated authority", () => {
+		expect(
+			readSpacePermissions(
+				"space:com.example.user?authority=did:plc:abc123xyz&authority=did:plc:def456",
+			),
+		).toEqual([]);
+	});
+
+	it("refuses an invalid space key", () => {
+		expect(readSpacePermissions("space:com.example.user?skey=")).toEqual([]);
+	});
+
+	it("refuses an invalid collection", () => {
+		expect(readSpacePermissions("space:com.example.user?collection=not_an_nsid")).toEqual([]);
+	});
+
+	it("refuses an unknown action", () => {
+		expect(readSpacePermissions("space:com.example.user?action=bogus")).toEqual([]);
+	});
+
+	it("refuses an unknown manage verb", () => {
+		expect(readSpacePermissions("space:com.example.user?manage=bogus")).toEqual([]);
+	});
+
+	it("refuses an unknown parameter rather than falling back to a default", () => {
+		expect(readSpacePermissions("space:com.example.user?aud=did:plc:abc123xyz")).toEqual([]);
+	});
+});
+
+describe("readBlobPermissions", () => {
+	it("reads a positional accept", () => {
+		expect(readBlobPermissions("blob:image/png")).toEqual([{ accepts: ["image/png"] }]);
+	});
+
+	it("reads several named accepts", () => {
+		expect(readBlobPermissions("blob?accept=image/png&accept=image/jpeg")).toEqual([
+			{ accepts: ["image/png", "image/jpeg"] },
+		]);
+	});
+
+	it("reads both wildcard forms", () => {
+		expect(readBlobPermissions("blob:*/*")).toEqual([{ accepts: ["*/*"] }]);
+		expect(readBlobPermissions("blob:image/*")).toEqual([{ accepts: ["image/*"] }]);
+	});
+
+	it("collects every blob permission and ignores other tokens", () => {
+		expect(
+			readBlobPermissions("atproto blob:image/png space:com.example.user blob:application/json"),
+		).toEqual([{ accepts: ["image/png"] }, { accepts: ["application/json"] }]);
+	});
+
+	it("finds nothing in an empty or absent scope", () => {
+		expect(readBlobPermissions("")).toEqual([]);
+		expect(readBlobPermissions(null)).toEqual([]);
+		expect(readBlobPermissions(undefined)).toEqual([]);
+	});
+
+	it("refuses a blob permission with no accept", () => {
+		expect(readBlobPermissions("blob")).toEqual([]);
+		expect(readBlobPermissions("blob?accept=")).toEqual([]);
+	});
+
+	it("refuses a malformed accept", () => {
+		for (const scope of [
+			"blob:invalid",
+			"blob?accept=invalid",
+			"blob?accept=invalid-mime",
+			"blob:*/**",
+			"blob:*/png",
+		]) {
+			expect(readBlobPermissions(scope)).toEqual([]);
+		}
+	});
+
+	it("refuses an accept spelled both positionally and by name", () => {
+		expect(readBlobPermissions("blob:image/png?accept=text/plain")).toEqual([]);
+	});
+});
+
+describe("scopeAllowsBlob", () => {
+	it("accepts a concrete MIME under a wildcard", () => {
+		expect(scopeAllowsBlob("blob:*/*", "image/png")).toBe(true);
+		expect(scopeAllowsBlob("blob:image/*", "image/gif")).toBe(true);
+	});
+
+	it("refuses a different type", () => {
+		expect(scopeAllowsBlob("blob:image/*", "application/json")).toBe(false);
+		expect(scopeAllowsBlob("blob:image/png", "image/jpeg")).toBe(false);
+	});
+
+	it("matches an exact MIME", () => {
+		expect(scopeAllowsBlob("blob:image/png", "image/png")).toBe(true);
+	});
+
+	it("matches each of several accepts", () => {
+		const scope = "blob?accept=image/png&accept=image/jpeg";
+		expect(scopeAllowsBlob(scope, "image/png")).toBe(true);
+		expect(scopeAllowsBlob(scope, "image/jpeg")).toBe(true);
+		expect(scopeAllowsBlob(scope, "image/gif")).toBe(false);
+	});
+
+	it("matches case-insensitively", () => {
+		expect(scopeAllowsBlob("blob:image/png", "image/PNG")).toBe(true);
+	});
+
+	it("refuses a malformed MIME rather than matching the wildcard", () => {
+		for (const mime of ["", "image", "image/png/extra", "image/*"]) {
+			expect(scopeAllowsBlob("blob:*/*", mime)).toBe(false);
+		}
 	});
 });
