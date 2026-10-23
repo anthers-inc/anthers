@@ -17,6 +17,8 @@
  * of this API.
  */
 
+import { publicOrigin } from "../lib/deployment.js";
+
 /** The service fragment a gated space names. It is ours; nothing else publishes one. */
 export const MANAGING_APP_SERVICE = "anthers";
 
@@ -54,6 +56,20 @@ export function managingAppFor(origin: string): ManagingAppIdentity {
 		serviceId: `${did}#${MANAGING_APP_SERVICE}`,
 		endpoint: url.origin,
 	};
+}
+
+/**
+ * The managing-app identity for a request.
+ *
+ * ⚠️ **A deployed process takes its origin from configuration, not from the request.** App
+ * Platform terminates TLS and forwards the request over plain HTTP, so a request-derived
+ * origin can read `http://` while the network resolves the document over `https://` — and the
+ * service endpoint handed to a space authority would then point at a scheme nothing answers
+ * on. `publicOrigin()` is the deployment's own statement of where it is reachable; in a
+ * checkout it answers null, which is exactly where the request's origin is the right answer.
+ */
+export function managingAppForRequest(requestUrl: string): ManagingAppIdentity {
+	return managingAppFor(publicOrigin() ?? new URL(requestUrl).origin);
 }
 
 /**

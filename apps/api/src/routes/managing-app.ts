@@ -23,7 +23,7 @@ import { Hono } from "hono";
 import {
 	CHECK_USER_ACCESS_METHOD,
 	didDocumentFor,
-	managingAppFor,
+	managingAppForRequest,
 } from "../services/managing-app.js";
 import { checkRate, clientIp } from "../services/rate-limit.js";
 import {
@@ -63,7 +63,7 @@ export function createManagingAppRoutes(options: ManagingAppRouteOptions = {}): 
 
 	return new Hono()
 		.get("/.well-known/did.json", (c) => {
-			const identity = managingAppFor(new URL(c.req.url).origin);
+			const identity = managingAppForRequest(c.req.url);
 			// The media type is `application/did+ld+json`; JSON is served because every
 			// resolver accepts it and a proxy that rewrites an unfamiliar type is a worse
 			// failure than the one the precise type would avoid.
@@ -108,7 +108,7 @@ export function createManagingAppRoutes(options: ManagingAppRouteOptions = {}): 
 				return c.json({ error: "AuthRequired", message: "service auth is required" }, 401);
 			}
 
-			const identity = managingAppFor(new URL(c.req.url).origin);
+			const identity = managingAppForRequest(c.req.url);
 			let authority: string;
 			try {
 				const claims = await verifyServiceAuth(token, {

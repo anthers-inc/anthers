@@ -12,7 +12,7 @@ import { describe, expect, it } from "bun:test";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { didKeyFromPublicKey } from "../lib/did-key.js";
 import { createManagingAppRoutes } from "../routes/managing-app.js";
-import { CHECK_USER_ACCESS_METHOD } from "../services/managing-app.js";
+import { CHECK_USER_ACCESS_METHOD, managingAppFor } from "../services/managing-app.js";
 import type { ResolveDid } from "../services/service-auth.js";
 import type { SpaceAccessDecision } from "../services/space-gate.js";
 
@@ -62,6 +62,24 @@ function request(path: string, init: RequestInit = {}) {
 }
 
 const CHECK = `/xrpc/${CHECK_USER_ACCESS_METHOD}?space=at%3A%2F%2F${ISSUER}%2Fspace%2Forg.anthers.creatorSpace%2F42&user=did%3Aplc%3Areader&access=read`;
+
+describe("the managing-app identity", () => {
+	it("percent-encodes a local port into the DID, and keeps the service fragment", () => {
+		expect(managingAppFor("http://localhost:8000")).toEqual({
+			did: "did:web:localhost%3A8000",
+			serviceId: "did:web:localhost%3A8000#anthers",
+			endpoint: "http://localhost:8000",
+		});
+	});
+
+	it("names a bare host without a port", () => {
+		expect(managingAppFor("https://anthers.org")).toEqual({
+			did: "did:web:anthers.org",
+			serviceId: "did:web:anthers.org#anthers",
+			endpoint: "https://anthers.org",
+		});
+	});
+});
 
 describe("the managing-app DID document", () => {
 	it("names the host that served it, and the API under that host", async () => {
