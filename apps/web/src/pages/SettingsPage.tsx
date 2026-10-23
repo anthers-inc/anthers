@@ -48,6 +48,8 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
+import BadgesSection from "../components/account/BadgesSection";
+import PurchasesSection from "../components/account/PurchasesSection";
 import BlueskyMark from "../components/auth/BlueskyMark";
 import BillingAddressSection from "../components/settings/BillingAddressSection";
 import ParentalControlsSection from "../components/settings/ParentalControlsSection";
@@ -2598,14 +2600,22 @@ function DataSection() {
 }
 
 /**
- * The account settings are grouped into four tabs by subject, replacing a single
+ * The account settings are grouped into five tabs by subject, replacing a single
  * scroll of eleven sections. The tab is carried in the URL as `?tab=` so a link can
  * point somebody at the right one.
+ *
+ * ⭐ **Badges & Purchases joined as a tab on 2026-10-23**, rather than staying a page of its
+ * own at `/purchases`. Both halves answer what the account has given, which is a settings
+ * question, and the account had two doors for one subject: a menu item for the money and a
+ * menu item for everything else. It sits second, between the account's switches and its
+ * identity, because a person reviewing what they hold is closer to Settings' own subject
+ * than the identity record is.
  */
-type SettingsTab = "account" | "identity" | "content" | "activity";
+type SettingsTab = "account" | "purchases" | "identity" | "content" | "activity";
 
 const TAB_LABELS: { id: SettingsTab; label: string }[] = [
 	{ id: "account", label: "Account" },
+	{ id: "purchases", label: "Badges & Purchases" },
 	{ id: "identity", label: "Identity & Devices" },
 	{ id: "content", label: "Content & Safety" },
 	{ id: "activity", label: "Activity & Data" },
@@ -2783,13 +2793,19 @@ export default function SettingsPage() {
 			)}
 
 			{/* `tabs-box`, not the retired v4 `tabs-boxed` — the same convention the
-			    Library page uses. */}
-			<div role="tablist" aria-label="Settings" className="tabs tabs-box mb-6 w-fit">
+			    Library page uses. The row scrolls on a narrow screen now that it carries five
+			    labels, the longest of which names two objects. */}
+			<div
+				role="tablist"
+				aria-label="Settings"
+				className="tabs tabs-box mb-6 w-fit max-w-full overflow-x-auto"
+			>
 				{TAB_LABELS.map((t) => (
 					<button
 						key={t.id}
 						type="button"
 						role="tab"
+						aria-selected={activeTab === t.id}
 						className={`tab ${activeTab === t.id ? "tab-active" : ""}`}
 						onClick={() =>
 							setSettingsParams(
@@ -2884,6 +2900,15 @@ export default function SettingsPage() {
 							</div>
 						</div>
 					)}
+				</div>
+			)}
+
+			{visitedTabs.has("purchases") && (
+				<div hidden={activeTab !== "purchases"}>
+					{/* What this account holds and what it has bought — the same two components the
+					    old `/purchases` page mounted, now a tab so the account has one address. */}
+					<BadgesSection />
+					<PurchasesSection />
 				</div>
 			)}
 

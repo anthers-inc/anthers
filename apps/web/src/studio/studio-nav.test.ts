@@ -8,13 +8,18 @@ const active = (pathname: string) =>
 
 describe("isStudioNavActive", () => {
 	it("marks exactly one tab on each Studio page", () => {
-		expect(active("/studio")).toEqual(["Dashboard"]);
 		expect(active("/studio/projects")).toEqual(["Projects"]);
 		expect(active("/studio/works")).toEqual(["Works"]);
 		expect(active("/studio/posts")).toEqual(["Posts"]);
 		expect(active("/studio/analytics")).toEqual(["Analytics"]);
 		expect(active("/studio/payments")).toEqual(["Payments"]);
 		expect(active("/studio/settings")).toEqual(["Settings"]);
+	});
+
+	it("leaves the Studio root to the profile tab that now leads the nav", () => {
+		// `/studio` redirects to the creator's own profile, whose Dashboard is the page; the
+		// tab standing for it is the profile row in `LoggedInLayout`, not an entry here.
+		expect(active("/studio")).toEqual([]);
 	});
 
 	it("counts an object's own pages as its tab's", () => {

@@ -15,16 +15,15 @@ describe("modeForPath", () => {
 	});
 
 	it("puts the user-only pages in user mode", () => {
-		for (const path of [
-			"/network",
-			"/library",
-			"/discovery",
-			"/basket",
-			"/settings",
-			"/purchases",
-		]) {
+		for (const path of ["/network", "/library", "/discovery", "/basket", "/settings"]) {
 			expect(modeForPath(path, "studio")).toBe("user");
 		}
+	});
+
+	it("no longer treats /purchases as a page of its own", () => {
+		// Badges & Purchases is a tab on /settings now; the old address is a redirect whose
+		// pathname (/purchases) is not one this list has any reason to know.
+		expect(modeForPath("/purchases", "studio")).toBe("studio");
 	});
 
 	it("keeps the mode somebody arrived in on a page that belongs to neither", () => {

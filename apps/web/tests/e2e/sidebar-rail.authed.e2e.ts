@@ -23,7 +23,9 @@ async function railState(page: Page) {
 		const main = document.querySelector("main")?.getBoundingClientRect();
 		const nav = document.querySelector("nav[aria-label='Anthers'], nav[aria-label='Studio']");
 		const rows = [...(nav?.querySelectorAll("a") ?? [])].map((a) => {
-			const icon = a.querySelector("svg")?.getBoundingClientRect();
+			// The row's leading glyph — an `svg` for a place, the creator's thumbnail for the
+			// profile tab. It is the first child in either case.
+			const icon = a.firstElementChild?.getBoundingClientRect();
 			// The expanded column keeps the label as a bare text node; the rail swaps it
 			// for an `sr-only` span, which is a 1px box rather than a drawn label.
 			const text = [...a.childNodes].find(
@@ -41,7 +43,10 @@ async function railState(page: Page) {
 				labelWidth = Math.round(hidden.getBoundingClientRect().width);
 			}
 			return {
-				name: (a.textContent ?? "").trim(),
+				// The row's leading glyph is excluded: it is an icon, or the creator's initial
+				// when they have no thumbnail, and neither is part of the row's name.
+				name: (a.textContent ?? "").slice(a.firstElementChild?.textContent?.length ?? 0).trim(),
+				href: a.getAttribute("href"),
 				iconX: icon ? Math.round(icon.x) : -1,
 				iconRight: icon ? Math.round(icon.right) : -1,
 				labelWidth,
@@ -76,10 +81,16 @@ test.describe("on a desktop", () => {
 
 		const rail = await railState(page);
 		expect(rail.mainLeft, "the rail still sits beside the page").toBe(64);
-		expect(rail.rows.map((row) => row.name)).toEqual(["Library", "Network", "Discovery"]);
+		expect(rail.rows.map((row) => row.name)).toEqual([
+			"Library",
+			"Network",
+			"Discovery",
+			"Settings",
+		]);
 		expect(rail.grips, "the nav carries no drag grips").toBe(0);
 		for (const row of rail.rows) {
-			expect(row.title, `${row.name} keeps a hover label`).toBe(row.name);
+			expect(row.title, `${row.name} keeps a hover label`).toBeTruthy();
+			expect(row.name.startsWith(row.title ?? ""), `${row.name}'s label names it`).toBe(true);
 			expect(row.labelWidth, `${row.name}'s label is not drawn`).toBeLessThanOrEqual(1);
 			expect(
 				row.iconX >= rail.asideLeft && row.iconRight <= rail.asideLeft + rail.asideWidth,
@@ -124,14 +135,17 @@ test.describe("on a desktop", () => {
 		await expect(studioNav).toBeVisible();
 		await expect.poll(async () => (await railState(page)).asideWidth).toBe(256);
 
-		const expandedRows = (await railState(page)).rows.map((row) => row.name);
+		const expandedRows = (await railState(page)).rows.map((row) => row.href);
 		await toggle(page).click();
 		await expect.poll(async () => (await railState(page)).asideWidth).toBe(64);
 
 		const rail = await railState(page);
-		expect(rail.rows.map((row) => row.name)).toEqual(expandedRows);
+		// Hrefs rather than names: the profile row's text is a name and a handle on two lines,
+		// and the rail keeps only the name as its accessible label.
+		expect(rail.rows.map((row) => row.href)).toEqual(expandedRows);
 		for (const row of rail.rows) {
-			expect(row.title, `${row.name} keeps a hover label`).toBe(row.name);
+			expect(row.title, `${row.name} keeps a hover label`).toBeTruthy();
+			expect(row.name.startsWith(row.title ?? ""), `${row.name}'s label names it`).toBe(true);
 			expect(row.labelWidth, `${row.name}'s label is not drawn`).toBeLessThanOrEqual(1);
 			expect(
 				row.iconX >= rail.asideLeft && row.iconRight <= rail.asideLeft + rail.asideWidth,
@@ -139,8 +153,14 @@ test.describe("on a desktop", () => {
 			).toBe(true);
 		}
 
-		// The creator's mode switch needs its words, so it stays with the expanded column.
-		expect(await page.getByRole("navigation", { name: "User or Creator" }).count()).toBe(0);
+		// The mode switch moved to the header on 2026-10-23, so the rail no longer takes it
+		// with the sidebar's words — it stands outside the aside and stays put either way.
+		const switchInHeader = await page.evaluate(() => {
+			const nav = document.querySelector("header nav[aria-label='User or Creator']");
+			const aside = document.querySelector("aside");
+			return nav != null && aside != null && !aside.contains(nav);
+		});
+		expect(switchInHeader, "the mode switch lives in the header, not the sidebar").toBe(true);
 		await toggle(page).click();
 		await expect
 			.poll(async () => (await railState(page)).asideWidth, {

@@ -19,22 +19,18 @@
 
 import { useLocation } from "@anthers/web-shared/router";
 import { STUDIO_ROOT } from "@anthers/web-shared/studio";
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 
 export type AppMode = "user" | "studio";
 
 /**
  * The pages that belong to user mode, so that arriving on one leaves the Studio. The account
  * menu's pages are here, and so is the basket, because each is about the person as a user.
+ *
+ * `/purchases` is not among them any more (2026-10-23): Badges and Purchases is a tab on
+ * `/settings`, and the old address is a redirect that resolves to it.
  */
-const USER_PATHS = [
-	"/network",
-	"/library",
-	"/discovery",
-	"/basket",
-	"/purchases",
-	"/settings",
-] as const;
+const USER_PATHS = ["/network", "/library", "/discovery", "/basket", "/settings"] as const;
 
 const MODE_KEY = "anthers_mode";
 
@@ -73,7 +69,15 @@ function storeMode(mode: AppMode): void {
 export function useAppMode(isCreator: boolean): AppMode {
 	const { pathname } = useLocation();
 	const mode = isCreator ? modeForPath(pathname, storedMode()) : "user";
-	useEffect(() => {
+	/**
+	 * ⚠️ **A layout effect, so the mode is recorded before the next route can read it.** A
+	 * mode route may redirect immediately — `/studio` is the creator's home and forwards to
+	 * the Dashboard tab on their own profile, which belongs to neither mode — and React
+	 * Router's `Navigate` navigates from a passive effect. Storing there as one would put the
+	 * write after the redirect, so the neutral destination would read the mode the person
+	 * arrived from and leave them in the wrong sidebar (2026-10-23).
+	 */
+	useLayoutEffect(() => {
 		if (isCreator) storeMode(mode);
 	}, [isCreator, mode]);
 	return mode;

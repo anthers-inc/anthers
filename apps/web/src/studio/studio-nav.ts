@@ -11,6 +11,12 @@
  * bringing one back up here. "Catalog" survives as the noun for a creator's whole body of
  * work (the wiki's *How Anthers Talks About Itself*), never as a tab.
  *
+ * ⭐ **The tab above these is not in this list, and cannot be** (2026-10-23). The creator's own
+ * profile leads the nav, carrying their thumbnail and name, and it lives in
+ * `LoggedInLayout.tsx` because its label is the signed-in account's rather than a constant.
+ * The Dashboard went with it, onto that profile — so a creator's home and the worklist that
+ * tells them what needs them are the same surface, and `/studio` is a redirect to it.
+ *
  * Every path comes from `studioUrl`, the one place the `/studio` prefix is written.
  */
 
@@ -22,7 +28,6 @@ import {
 	PencilSquareIcon,
 	RectangleStackIcon,
 	Square3Stack3DIcon,
-	Squares2X2Icon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType } from "react";
 
@@ -32,13 +37,12 @@ export interface StudioNavItem {
 	icon: ComponentType<{ className?: string }>;
 	/**
 	 * The paths this item is the place for. An object's own pages count as its tab's, so a
-	 * Work's Edit page shows the Catalog as where the creator is rather than showing nothing.
+	 * Work's Edit page shows the Works tab as where the creator is rather than showing nothing.
 	 */
 	owns: readonly string[];
 }
 
 export const STUDIO_NAV: readonly StudioNavItem[] = [
-	{ to: studioUrl("/"), label: "Dashboard", icon: Squares2X2Icon, owns: [] },
 	// A Project is the shelf the Works sit on, so it reads first — the same order the old
 	// Catalog page's sections kept.
 	{
@@ -88,8 +92,7 @@ export const STUDIO_NAV: readonly StudioNavItem[] = [
 	},
 ];
 
-/** Is `item` where `pathname` is? The Dashboard is the Studio's root and matches only exactly. */
+/** Is `item` where `pathname` is? A tab owns its own root and everything beneath it. */
 export function isStudioNavActive(item: StudioNavItem, pathname: string): boolean {
-	if (item.owns.length === 0) return pathname === item.to;
 	return item.owns.some((root) => pathname === root || pathname.startsWith(`${root}/`));
 }
