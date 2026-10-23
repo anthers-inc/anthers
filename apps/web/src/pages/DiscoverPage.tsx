@@ -231,7 +231,7 @@ export default function DiscoverPage() {
 				<TabHeader
 					icon={MagnifyingGlassIcon}
 					title="Discovery"
-					subtitle="Explore the Anthers ecosystem to find creations you haven't discovered yet. There are no advertisers or incentives to shove things in front of you; find your next fandom in your own way, for your own reasons."
+					subtitle="Explore the Anthers ecosystem to find creators and creations you haven't discovered yet. Use one of our transparent preset formulas, or cook up your own. There are no advertisers or incentives to shove things in front of you; find your next fandom in your own way, for your own reasons."
 				/>
 
 				{search && (
