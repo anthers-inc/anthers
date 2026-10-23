@@ -102,6 +102,17 @@ export const users = pgTable("users", {
 	 */
 	atprotoExportedAt: timestamp("atproto_exported_at", { withTimezone: true }),
 	/**
+	 * Which copy of the reader's state is canonical: the database (`db`) or the user's space
+	 * (`space`).
+	 *
+	 * 🚨 **A cutover switch, not a feature flag.** `db` is the state before the migration and
+	 * the state a rollback returns to; `space` means the records in the user's space are the
+	 * truth and the database is the projection. Flipping back is safe because the rows stay
+	 * current during the transition and the space keeps a snapshot; flipping forward again
+	 * re-runs the backfill and overwrites the snapshot with the rows.
+	 */
+	readerStateHome: text("reader_state_home").notNull().default("db"),
+	/**
 	 * When moderation suspended the account, and when the suspension ends. Both null
 	 * means the account is in good standing; `suspendedAt` without `suspendedUntil`
 	 * is an indefinite suspension — it stands until an operator lifts it, not a

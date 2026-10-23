@@ -185,7 +185,10 @@ export async function saveOnPurchase(purchase: {
 export async function removeItem(
 	userId: number,
 	itemId: number,
-): Promise<{ ok: true } | { ok: false; reason: "not_found" | "purchased" }> {
+): Promise<
+	| { ok: true; subject: { kind: "work" | "project" | "post"; id: number } }
+	| { ok: false; reason: "not_found" | "purchased" }
+> {
 	const [item] = await db
 		.select()
 		.from(libraryItems)
@@ -197,8 +200,15 @@ export async function removeItem(
 		return { ok: false, reason: "purchased" };
 	}
 
+	const subject =
+		item.workId != null
+			? { kind: "work" as const, id: item.workId }
+			: item.projectId != null
+				? { kind: "project" as const, id: item.projectId }
+				: { kind: "post" as const, id: item.postId as number };
+
 	await db.delete(libraryItems).where(eq(libraryItems.id, itemId));
-	return { ok: true };
+	return { ok: true, subject };
 }
 
 /** Tidy an entry off the shelf, or bring it back. Never loses anything. */
