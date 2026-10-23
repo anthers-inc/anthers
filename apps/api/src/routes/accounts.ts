@@ -96,6 +96,7 @@ import {
 	notSuspendedAccount,
 	notTestAccount,
 } from "../services/account-visibility.js";
+import { buildAtprotoExport } from "../services/atproto-export.js";
 import { FOLLOW_COLLECTION } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
 import {
@@ -1796,12 +1797,27 @@ const accountRoutes = new Hono()
 
 	.delete("/me", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
-		const { scheduledFor } = await requestDeletion(sessionUser.id);
+		// The body is optional: an older client or a script sends none, which means no bypass.
+		const body = (await c.req.json().catch(() => ({}))) as { bypassExport?: boolean };
+		const result = await requestDeletion(sessionUser.id, {
+			bypassExport: body.bypassExport === true,
+		});
+		if (!result.ok) {
+			return c.json(
+				{
+					error:
+						"Take your identity bundle first, or choose to delete without one. It is the only copy of your repository and spaces.",
+					code: result.reason,
+					exportedAt: result.exportedAt,
+				},
+				409,
+			);
+		}
 		// The session that made the request is gone with the rest of them, so clear the
 		// cookie too rather than leaving the browser holding a token the server has
 		// already forgotten.
 		deleteCookie(c, "session", { path: "/" });
-		return c.json({ scheduledFor, graceDays: DELETION_GRACE_DAYS });
+		return c.json({ scheduledFor: result.scheduledFor, graceDays: DELETION_GRACE_DAYS });
 	})
 
 	.post("/me/deletion/cancel", requireAuth, async (c) => {
@@ -2143,6 +2159,33 @@ const accountRoutes = new Hono()
 		// the failure this header exists for.
 		c.header("Cache-Control", "no-store");
 		return c.body(JSON.stringify(data, null, 2));
+	})
+
+	// The AT Protocol half: the public repository, every space, and the files in them. Separate
+	// from the JSON above because it is a different promise; `services/atproto-export.ts` carries
+	// why the JSON cannot stand in for it.
+	//
+	// ⚠️ **A POST rather than a GET, because it records the export.** The timestamp is the
+	// deletion gate's evidence, and a download a proxy or a link prefetcher could repeat is not
+	// the same act as asking for the bundle.
+	.post("/me/export/atproto", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const built = await buildAtprotoExport(sessionUser.id);
+		if (!built.ok) {
+			return c.json({ error: "Could not build your identity bundle.", code: built.reason }, 500);
+		}
+		const stamp = new Date().toISOString().slice(0, 10);
+		// A fresh view over a plain ArrayBuffer, because the response body takes a Blob and a
+		// Uint8Array view may sit on a shared or oversized buffer.
+		const copy = new Uint8Array(built.zip.byteLength);
+		copy.set(built.zip);
+		return new Response(new Blob([copy], { type: "application/zip" }), {
+			headers: {
+				"Content-Type": "application/zip",
+				"Content-Disposition": `attachment; filename="anthers-identity-${sessionUser.handle}-${stamp}.zip"`,
+				"Cache-Control": "no-store",
+			},
+		});
 	})
 
 	.post("/users/:handle/block", requireAuth, async (c) => {
