@@ -212,7 +212,7 @@ export default function AuthenticatedHomePage() {
 				<TabHeader
 					icon={RssIcon}
 					title="Network"
-					subtitle="The latest Works and Posts from all of the creators you follow, creators you're subscribed to, and creators who have made works or posts that you've saved or purchased. A pure chronological feed with no hidden algorithm."
+					subtitle="Works and Posts from all of the creators you follow, you're subscribed to, or have made content you've saved or purchased."
 					actions={
 						<button
 							type="button"
