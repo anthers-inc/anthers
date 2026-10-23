@@ -23,6 +23,7 @@ import {
 	type SearchShortcutAction,
 	type SearchShortcuts,
 } from "@anthers/shared/keybindings";
+import SignedInAccountCard from "@anthers/web-shared/account/SignedInAccountCard";
 import { useAuth } from "@anthers/web-shared/auth";
 import { useContentPreferences } from "@anthers/web-shared/content-preferences";
 import {
@@ -2825,6 +2826,10 @@ export default function SettingsPage() {
 
 			{visitedTabs.has("account") && (
 				<div hidden={activeTab !== "account"}>
+					{/* Who this browser is signed in as, and the button that ends it. The header
+					    menu no longer carries Log Out; both settings pages do. */}
+					<SignedInAccountCard className="mb-6" />
+
 					{/* Creator mode toggle */}
 					<div
 						className={`card mb-6 ${sentFromStudio ? "bg-base-200 ring-2 ring-info" : "bg-base-200"}`}
