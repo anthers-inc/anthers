@@ -1129,7 +1129,7 @@ export default function OwnerWorkEditor({
 					// field — a creator hunting for the release floor finds it at first glance.
 					return () => (
 						<p className="text-sm text-base-content/40">
-							No credits yet — at least one with its Created box ticked before release.
+							A Work needs at least one Created credit naming a human before it can be released.
 						</p>
 					);
 				}
@@ -1142,7 +1142,12 @@ export default function OwnerWorkEditor({
 					showErrors={showCreditErrors}
 					selfIdentity={
 						user
-							? { did: user.atprotoDid, handle: user.handle, displayName: user.displayName }
+							? {
+									did: user.atprotoDid,
+									handle: user.handle,
+									displayName: user.displayName,
+									avatar: user.avatar,
+								}
 							: null
 					}
 				/>

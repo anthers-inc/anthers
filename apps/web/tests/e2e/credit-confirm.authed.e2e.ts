@@ -185,13 +185,15 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	await page.getByRole("button", { name: "Add a credit" }).click();
 	await page.getByRole("textbox", { name: "Credit 1 role" }).fill(ROLE);
 	await page.getByRole("checkbox", { name: "Credit 1 Created" }).check();
-	// The contributor field is free text; a `did:` string is just text, which is exactly
-	// how a creator pastes the address of a real account.
-	await page.getByRole("textbox", { name: "Credit 1 contributor" }).fill(userDid);
+	// The contributor area accepts a pasted address: a `did:` string is added as an identity
+	// rather than searched for, which is how a creator credits an account they have the DID of.
+	const contributor = page.getByRole("textbox", { name: "Credit 1 contributors" });
+	await contributor.fill(userDid);
+	await contributor.press("Enter");
 
 	// The Studio does NOT yet know whether the person has confirmed — the credit is new —
 	// but the marker appears the moment the save returns the owner overlay's flag.
-	await expect(page.getByText(/waiting on the contributor/i)).toHaveCount(0);
+	await expect(page.getByText(/waiting on/i)).toHaveCount(0);
 
 	await page.getByRole("button", { name: "Save Credits" }).click();
 	await page.getByRole("tab", { name: "Details" }).click();
@@ -209,17 +211,17 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 
 	// The marker reads the OWNER overlay, which arrives on the LOAD and on a save response —
 	// the flag survived the draft mapping and the save sent only role, contributor and
-	// types, so the row comes back flagged with its DID intact. The read shows the flag;
-	// the contributor's textbox is the field's edit state, opened to assert the DID
-	// round-tripped verbatim.
+	// types, so the row comes back flagged with its identity intact. The read shows the flag;
+	// the contributor area's chip is the field's edit state, opened to assert the DID
+	// round-tripped verbatim (the chip's tooltip carries the stored identity).
 
 	await page.reload();
 	await page.getByRole("tab", { name: "Credits" }).click();
 	await page.getByRole("button", { name: "Edit Credits" }).click();
 	// The overlay's flag rides the row the load brought in; the marker is the row note
 	// inside the field's edit state, so it is read there.
-	await expect(page.getByText(/waiting on the contributor/i)).toBeVisible();
-	await expect(page.getByRole("textbox", { name: "Credit 1 contributor" })).toHaveValue(userDid);
+	await expect(page.getByText(/waiting on .*to confirm/i)).toBeVisible();
+	await expect(page.getByTitle(userDid)).toBeVisible();
 
 	// The payload assertion, made while the FLAGGED row sits in draft state: an unrelated
 	// edit's save must send only role, contributor and types. The overlay flags are
@@ -317,9 +319,9 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	await page.reload();
 	await page.getByRole("tab", { name: "Credits" }).click();
 	await page.getByRole("button", { name: "Edit Credits" }).click();
-	await expect(page.getByText(/waiting on the contributor/i)).toHaveCount(0);
+	await expect(page.getByText(/waiting on/i)).toHaveCount(0);
 	await expect(page.getByRole("textbox", { name: "Credit 1 role" })).toHaveValue(`${ROLE} more`);
-	await expect(page.getByRole("textbox", { name: "Credit 1 contributor" })).toHaveValue(userDid);
+	await expect(page.getByTitle(userDid)).toBeVisible();
 
 	// ── A stranger sees no ask and no DID ─────────────────────────────────────────
 	const stranger = await browser.newContext();
@@ -352,23 +354,25 @@ async function viewerSessionCookie(
 	return `session=${session}`;
 }
 
-// ── The contributor input's affordances ────────────────────────────────────────
+// ── The contributor area's affordances ────────────────────────────────────────
 //
-// The bare text input grew three things the task owned: an autocomplete over the
-// identities Anthers knows, a credit-me shortcut, and the guidance copy. What only a
-// browser can prove:
+// The area grew three things the task owned: an autocomplete over the identities Anthers
+// knows, the creator offered first as the self-credit shortcut, and the guidance moved into
+// a hover. What only a browser can prove:
 //
 // - **A picked suggestion writes the DID, not the display name.** The acceptance keys on
-//   the DID and the save sends the field verbatim — a name in its place is the
-//   data-destroying save the serialization rules exist to prevent.
-// - **Credit me writes the signed-in account's own DID** — the same assertion, keyed on
-//   the creator rather than a search hit.
-// - **The guidance copy renders**, because it is the point-of-assignment ask the
-//   re-scope landed there.
+//   the DID and the save sends it verbatim — a name in its place is the data-destroying save
+//   the serialization rules exist to prevent. The chip presents the person and carries the
+//   DID as its tooltip.
+// - **The creator is the first option before any typing**, marked "You" — the same answer
+//   the removed Me button gave, in the field rather than beside it.
+// - **One contribution holds several people**: a plain name typed and entered beside a
+//   picked identity saves as one line and reads as one line.
+// - **The guidance is the policy link and the hovers**, not paragraphs through the table.
 //
-// The API suites prove the endpoint's filters; this walk proves the field actually keys
-// what it was handed.
-test("the contributor field autocompletes the identities Anthers knows and credit-me writes the creator's own DID", async ({
+// The API suites prove the endpoint's filters; this walk proves the field keys what it was
+// handed and that a multi-person contribution survives the round trip.
+test("the contributor area offers the creator first, keys picks by DID, and holds several people on one contribution", async ({
 	page,
 	context,
 }) => {
@@ -407,71 +411,73 @@ test("the contributor field autocompletes the identities Anthers knows and credi
 	// ── The autocomplete ──
 	// The gauntlet user matches by display name prefix — the same fixture the DID walk
 	// uses, reached this time through the search rather than pasted.
-	const contributor = page.getByRole("textbox", { name: "Credit 1 contributor" });
+	const contributor = page.getByRole("textbox", { name: "Credit 1 contributors" });
 	await contributor.click();
 	await contributor.fill("Gauntlet");
-	const suggestion = page.getByRole("button", { name: /Gauntlet User/ }).first();
+	const suggestions = page.getByRole("list", { name: "Contributor suggestions" });
+	const suggestion = suggestions.getByRole("button", { name: /Gauntlet User/ }).first();
 	await expect(suggestion).toBeVisible({ timeout: 15_000 });
 	await suggestion.click();
 
-	// The row now holds the DID, never the display name — read live, before any save,
-	// because this is the moment a wrong value could still be shown to the creator.
-	await expect(contributor).toHaveValue(userDid);
-	await expect(contributor).not.toHaveValue(VIEWER_NAME);
+	// The chip presents the person; the DID is its tooltip and the input is cleared, ready
+	// for the next name. The input never holds the DID as its value — that was the field
+	// reading as a protocol string after a pick.
+	await expect(page.getByTitle(userDid)).toBeVisible();
+	await expect(page.getByTitle(userDid)).toContainText(VIEWER_NAME);
+	await expect(contributor).toHaveValue("");
 
-	// And the index finds the creator themselves the same way: searching one's own
-	// handle is a path to Me as real as the button — the media fixture clears its own
-	// query against the same door. The DID read off the public profile is the same one
-	// the Me section below asserts the button wrote.
-	const ownHandle = await mediaFixtureHandle();
-	const ownProfile = (await (
-		await fetch(`${API_URL}/api/accounts/users/${ownHandle}`)
-	).json()) as PublicProfile;
-	expect(ownProfile.user?.atprotoDid).toBeTruthy();
-	const selfSearch = await fetch(
-		`${API_URL}/api/accounts/identity-search?q=${encodeURIComponent(ownHandle)}`,
-		{ headers: { Cookie: `session=${session}` } },
-	);
-	expect(selfSearch.ok).toBe(true);
-	const selfHits = (await selfSearch.json()) as { identities: { did: string; handle: string }[] };
-	expect(
-		selfHits.identities.some((s) => s.did === ownProfile.user!.atprotoDid!),
-		"the creator's own handle is missing from the identity index",
-	).toBe(true);
-
-	// And the round-trip proves the shape the acceptance keys on: save, reload, the
-	// DID is what the owner overlay sends back untouched.
+	// Save and reopen: the owner overlay hands the DID back untouched, and the chip resolves
+	// it again from the profile the overlay attaches.
 	await page.getByRole("textbox", { name: "Credit 1 role" }).fill(ROLE);
 	await page.getByRole("button", { name: "Save Credits" }).click();
 	await page.reload();
 	await page.getByRole("tab", { name: "Credits" }).click();
 	await page.getByRole("button", { name: "Edit Credits" }).click();
-	await expect(page.getByRole("textbox", { name: "Credit 1 contributor" })).toHaveValue(userDid);
+	await expect(page.getByTitle(userDid)).toBeVisible();
 
-	// ── Me ──
-	// A second row, created like any other: Created ticked, then credited with the button
-	// beside its own field — the creator's own DID, without typing anything.
+	// ── The creator, offered first ──
+	// A second contribution: Created ticked, then the area clicked with nothing typed. The
+	// creator is the first suggestion, wearing the "You" chip — the shortcut without a
+	// second control beside the field.
 	await page.getByRole("button", { name: "Add a credit" }).click();
+	await page.getByRole("textbox", { name: "Credit 2 role" }).fill("Illustrated by");
 	await page.getByRole("checkbox", { name: "Credit 2 Created" }).check();
-	const meButton = page.getByRole("button", { name: "Credit 2 contributor — credit yourself" });
-	await expect(meButton).toBeVisible();
-	await meButton.click();
-	await expect(page.getByRole("textbox", { name: "Credit 2 contributor" })).toHaveValue(
-		ownProfile.user!.atprotoDid!,
-	);
+	const illustrator = page.getByRole("textbox", { name: "Credit 2 contributors" });
+	await illustrator.click();
+	const selfOption = page
+		.getByRole("list", { name: "Contributor suggestions" })
+		.getByRole("button")
+		.first();
+	await expect(selfOption).toContainText("You");
+	await selfOption.click();
+	await expect(illustrator).toHaveValue("");
 
-	// ── The guidance copy ──
-	// The point-of-assignment ask, rendered where the creator is choosing — asserted
-	// while the editor is open, because a save closes it (and a fast save on CI's own
-	// Postgres closes it before the read-back would look).
+	// A plain name typed and entered rides beside the picked identity — one contribution,
+	// two people, nobody on the network required.
+	await illustrator.fill("Jane Doe");
+	await illustrator.press("Enter");
+	await expect(page.getByText("Jane Doe", { exact: true })).toBeVisible();
+
+	// ── The guidance ──
+	// The policy link above the table, and the control's own ask on an (i). The paragraph
+	// that used to run through the flow is gone.
+	await expect(page.getByRole("link", { name: "Learn More About Our Credits" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "About contributors" }).first()).toBeVisible();
 	await expect(
 		page.getByText(/A blend \(Created and Generated together\) is a genuine mixed credit/),
-	).toBeVisible();
-	await page.getByRole("button", { name: "Save Credits" }).click();
-});
+	).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "About the Created type" }).first()).toBeVisible();
 
-/** The media fixture's handle, resolved the way the walker's is. */
-async function mediaFixtureHandle(): Promise<string> {
-	const { MEDIA_FIXTURE_USERNAME } = await import("@anthers/db/media-fixture");
-	return gauntletHandle(API_URL, MEDIA_FIXTURE_USERNAME);
-}
+	await page.getByRole("button", { name: "Save Credits" }).click();
+
+	// ── One contribution, several names, one line ──
+	// The read side groups the two stored rows by their role: one row, both people in the
+	// contributor column. The self-credit is affirmed by the save, so it presents as its
+	// person like any other accepted credit.
+	const creditsPanel = page.getByRole("tabpanel", { name: "Credits" });
+	const illustrated = creditsPanel.locator("table").getByRole("row").filter({
+		hasText: "Illustrated by",
+	});
+	await expect(illustrated).toHaveCount(1);
+	await expect(illustrated).toContainText("Jane Doe");
+});
