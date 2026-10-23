@@ -12,6 +12,7 @@
 import { describe, expect, it } from "bun:test";
 import { p256 } from "@noble/curves/nist.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
+import { base58Encode } from "../lib/base58.js";
 import { didKeyFromPublicKey } from "../lib/did-key.js";
 import {
 	type ResolveDid,
@@ -72,6 +73,30 @@ describe("verifyServiceAuth", () => {
 		expect(verified.iss).toBe(ISSUER);
 		expect(verified.aud).toBe(SERVICE);
 		expect(verified.lxm).toBe(LXM);
+	});
+
+	it("reads a legacy raw-key verification method as well as a Multikey", async () => {
+		// The dev network's PLC directory publishes the older type still: a raw base58btc
+		// SEC1 point, with the curve named by the type rather than by a multicodec prefix.
+		// A verifier that only reads `Multikey` would refuse every authority on that network.
+		const legacyKey = secp256k1.utils.randomSecretKey();
+		const legacyResolver: ResolveDid = async () => ({
+			id: ISSUER,
+			verificationMethod: [
+				{
+					id: `${ISSUER}#atproto`,
+					type: "EcdsaSecp256k1VerificationKey2019",
+					publicKeyMultibase: `z${base58Encode(secp256k1.getPublicKey(legacyKey, false))}`,
+				},
+			],
+		});
+
+		const verified = await verifyServiceAuth(sign(legacyKey, claims()), {
+			serviceId: SERVICE,
+			lxm: LXM,
+			resolveDid: legacyResolver,
+		});
+		expect(verified.iss).toBe(ISSUER);
 	});
 
 	it("accepts an ES256 token as well as ES256K", async () => {
