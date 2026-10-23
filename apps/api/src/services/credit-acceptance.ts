@@ -580,6 +580,97 @@ export async function creditsForOwner(work: OverlayWork): Promise<UserWorkCredit
 	);
 }
 
+// ─── The creator's own credit list ────────────────────────────────────────────
+
+/**
+ * One credit, as it belongs to the person it names rather than to the Work it sits on.
+ *
+ * The Work fields are what a creator's credits list renders — a linked title and a year,
+ * the MobyGames-shaped row. `year` comes from the same fallback every other surface uses
+ * for "when this came out": the creator-asserted original release date, then the release
+ * date, then the row's creation.
+ */
+export interface CreditAttribution {
+	workId: number;
+	slug: string;
+	publicId: number;
+	title: string | null;
+	role: string;
+	year: number;
+}
+
+/** What a Work needs to contribute to its contributor's credit list. */
+export interface AttributedWork {
+	id: number;
+	slug: string;
+	publicId: number;
+	title: string | null;
+	credits: WorkCredit[] | null;
+	originallyReleased: Date | null;
+	releasedAt: Date | null;
+	createdAt: Date;
+}
+
+/**
+ * A creator's credits, split into the ones that stand and the ones waiting on them.
+ *
+ * The acceptance row is the whole distinction: `accepted` is every DID credit that has
+ * one, `pending` is every one that does not. The caller has already decided which Works
+ * the viewer may see — this function only reads the acceptance facts and shapes the rows,
+ * because maturity, blocks and `released` are query conditions (`maturityHiddenFrom`,
+ * `notBlockedBy`) and filtering them here would be filtering after the fact.
+ *
+ * Attributed by identity, not by name: a credit naming a freeform contributor cannot be
+ * safely matched to an account, so only the creator's own DID is theirs.
+ */
+export async function creditAttributionsForContributor(
+	attributedWorks: AttributedWork[],
+	contributorDid: string,
+): Promise<{ accepted: CreditAttribution[]; pending: CreditAttribution[] }> {
+	const workIds = attributedWorks.map((w) => w.id);
+	if (workIds.length === 0) return { accepted: [], pending: [] };
+
+	const acceptedRows = await db
+		.select({ workId: creditAcceptances.workId, role: creditAcceptances.role })
+		.from(creditAcceptances)
+		.where(
+			and(
+				inArray(creditAcceptances.workId, workIds),
+				eq(creditAcceptances.contributorDid, contributorDid),
+			),
+		);
+	const accepted = new Set(acceptedRows.map((r) => `${r.workId}|${r.role}`));
+
+	const acceptedList: CreditAttribution[] = [];
+	const pendingList: CreditAttribution[] = [];
+	for (const work of attributedWorks) {
+		// The same fallback the Work's own page and the public record use, so a list row and
+		// the Work it links to never disagree about the year.
+		const dated = work.originallyReleased ?? work.releasedAt ?? work.createdAt;
+		for (const credit of work.credits ?? []) {
+			if (credit.contributor !== contributorDid) continue;
+			const row: CreditAttribution = {
+				workId: work.id,
+				slug: work.slug,
+				publicId: work.publicId,
+				title: work.title,
+				role: credit.role,
+				year: dated.getFullYear(),
+			};
+			if (accepted.has(`${work.id}|${credit.role}`)) acceptedList.push(row);
+			else pendingList.push(row);
+		}
+	}
+
+	// Role is the creator list's organizing unit, so the server hands the rows in the order
+	// the page groups them; within a role, newest Work first.
+	const byRoleThenDate = (a: CreditAttribution, b: CreditAttribution) =>
+		a.role.localeCompare(b.role) || b.year - a.year;
+	acceptedList.sort(byRoleThenDate);
+	pendingList.sort(byRoleThenDate);
+	return { accepted: acceptedList, pending: pendingList };
+}
+
 // ─── Telling the credited person ──────────────────────────────────────────────
 
 /**
