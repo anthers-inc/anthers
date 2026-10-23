@@ -49,6 +49,35 @@ describe("the three user tabs share one header", () => {
 	});
 });
 
+describe("the three user tabs share one page shell", () => {
+	/**
+	 * The header sits inside each page's own wrapper, not in the layout, so the wrapper's
+	 * padding is what places it. Library carried `container mx-auto px-4 py-8` and its
+	 * header sat eight pixels off in both directions beside the other two's `px-6 py-6`.
+	 */
+	it("pads every tab's content area the same way", () => {
+		for (const [page, source] of [
+			["Network", network],
+			["Library", library],
+			["Discovery", discovery],
+		] as const) {
+			expect(source, `${page} does not use the shared content padding`).toContain("px-6 py-6");
+		}
+	});
+
+	it("brings no padded container of its own", () => {
+		for (const [page, source] of [
+			["Network", network],
+			["Library", library],
+			["Discovery", discovery],
+		] as const) {
+			expect(source, `${page} wraps its content in a container`).not.toContain(
+				"container mx-auto px-4",
+			);
+		}
+	});
+});
+
 describe("the nav speaks the one vocabulary", () => {
 	it("orders the tabs Library, Network, and Discovery", () => {
 		const links = [
