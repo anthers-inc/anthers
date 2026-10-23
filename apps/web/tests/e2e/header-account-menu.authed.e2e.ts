@@ -51,7 +51,9 @@ test("the header avatar opens the account menu", async ({ page }) => {
 		"href",
 		"/settings?tab=purchases",
 	);
-	await expect(header(page).getByRole("button", { name: "Log out" })).toBeVisible();
+	// Log out left the menu on 2026-10-23 and lives on both settings pages, so the header
+	// must not grow a second door to the session's end.
+	await expect(header(page).getByRole("button", { name: "Log out" })).toHaveCount(0);
 
 	// Clicking away must dismiss it; see the note above on why this is load-bearing.
 	await page.locator("main").click({ position: { x: 5, y: 5 } });

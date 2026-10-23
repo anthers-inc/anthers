@@ -6,6 +6,11 @@
  * become-a-creator toggle) stay on anthers.org/settings, and the Badge Maker is on the
  * creator's own profile, in the Badges tab beside the ladder it edits.
  *
+ * ⭐ **The signed-in account card at the top is the one account control this page does
+ * carry**, because ending the session belongs wherever a person is working: it is the
+ * same shared card as the user settings page's Account tab, and the only way to log out
+ * now that the header menu no longer offers it.
+ *
  * ⚠️ **Payout setup is not here.** Its surface is the Studio's Payments tab
  * (`/studio/payments`), which is also where Connect's return legs land and where Stripe's
  * requirements, schedule and balance are shown. A Settings card that only linked there
@@ -19,6 +24,7 @@ import {
 } from "@anthers/shared/creator-emails";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import SignedInAccountCard from "../components/account/SignedInAccountCard";
 import { useAuth } from "../lib/auth";
 import type { PublishingState } from "../lib/publishing";
 import { apiFetch } from "../lib/rpc";
@@ -370,6 +376,7 @@ export default function StudioSettingsPage() {
 			</p>
 
 			<div className="flex flex-col gap-6">
+				<SignedInAccountCard />
 				<CommunicationsSection />
 				<AtmospherePublishingSection />
 			</div>
