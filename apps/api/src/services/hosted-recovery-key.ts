@@ -31,31 +31,10 @@ import { db } from "@anthers/db";
 import { hostedAccounts, hostedIdentities } from "@anthers/db/schema";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { eq } from "drizzle-orm";
+import { base58Decode } from "../lib/base58.js";
 import { nodeCall, recordRecoveryKey } from "./hosted-accounts.js";
 import { readIdentityHead } from "./hosted-identity.js";
 import { open } from "./secret-box.js";
-
-/** The base58btc alphabet — Bitcoin's ordering, which is what multibase `z` means. */
-const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
-function base58Decode(input: string): Uint8Array | null {
-	let n = 0n;
-	for (const ch of input) {
-		const index = BASE58.indexOf(ch);
-		if (index < 0) return null;
-		n = n * 58n + BigInt(index);
-	}
-	const bytes: number[] = [];
-	while (n > 0n) {
-		bytes.unshift(Number(n % 256n));
-		n /= 256n;
-	}
-	for (const ch of input) {
-		if (ch !== "1") break;
-		bytes.unshift(0);
-	}
-	return Uint8Array.from(bytes);
-}
 
 /**
  * Whether this is really a secp256k1 public key, decoded rather than pattern-matched.

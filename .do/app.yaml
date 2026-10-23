@@ -344,6 +344,24 @@ ingress:
       component:
         name: api
         preserve_path_prefix: true
+    # 🚨 The managing app is an atproto service, and both of its public paths sit at the host
+    # root rather than under `/api`. `did:web` looks for its document at `/.well-known/did.json`,
+    # and every XRPC service answers at `/xrpc/<nsid>` — the protocol's client builds that URL by
+    # replacing the base path, so it cannot live under `/api`. Without these rules the site's
+    # catch-all answers both with `index.html`, the managing app looks unreachable, and every
+    # gated space refuses the reader it should have admitted.
+    - match:
+        path:
+          prefix: /.well-known/did.json
+      component:
+        name: api
+        preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /xrpc/
+      component:
+        name: api
+        preserve_path_prefix: true
     # 🚨 The admin host's API rules have to name the host themselves. A rule that matches on
     # authority outranks one that matches on path alone, so without these the admin site's
     # catch-all below took `/api` on admin.anthers.org as well: a GET came back as the app's own
