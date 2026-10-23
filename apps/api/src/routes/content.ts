@@ -65,6 +65,7 @@ import {
 	type CommentSubjectType,
 	embedUrlProblem,
 	hasSourceSet,
+	isGoodsType,
 	isListened,
 	isOwnThumbnail,
 	isPaged,
@@ -5871,7 +5872,7 @@ const contentRoutes = new Hono()
 		const willDownload = data.downloadEnabled ?? work.downloadEnabled;
 		// The floor asks about the kind this edit RESULTS IN, the same way every other
 		// gate below reads the row as the request leaves it.
-		if (!willStream && !willDownload && (data.type ?? work.type) !== "physical") {
+		if (!willStream && !willDownload && !isGoodsType(data.type ?? work.type)) {
 			return c.json({ error: "A Work must enable at least one of stream or download" }, 400);
 		}
 

@@ -29,7 +29,12 @@
  * whole truth.
  */
 
-import { isEmptyWriting, needsChosenThumbnail, workNeedsFile } from "@anthers/shared/content";
+import {
+	isEmptyWriting,
+	isGoodsType,
+	needsChosenThumbnail,
+	workNeedsFile,
+} from "@anthers/shared/content";
 import { gridFor, isRatingComplete } from "@anthers/shared/content-rating";
 import { TrashIcon } from "@heroicons/react/24/outline";
 import { Link } from "../../lib/router";
@@ -82,7 +87,9 @@ export default function WorkRow({
 	// And a piece of writing with nothing in it yet (`text_missing`), which is its body the way a
 	// video is its file.
 	const emptyWriting = item.type === "text" && isEmptyWriting(item.bodyHtml);
-	const noDelivery = !item.streamEnabled && !item.downloadEnabled;
+	// A goods Work has no delivery switches to turn on: it is bought, not streamed or
+	// downloaded (the goods-works rule; Parker, 2026-10-09).
+	const noDelivery = !item.streamEnabled && !item.downloadEnabled && !isGoodsType(item.type);
 	// A Work is born `unrated` and the server refuses to release it until every row of its rating
 	// is answered — so the row, which is how a back catalog gets released thirty at a time, has
 	// to say which ones still need answering rather than earning thirty identical errors. Asked of
