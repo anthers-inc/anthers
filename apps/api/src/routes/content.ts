@@ -276,6 +276,7 @@ import {
 	listSourceFiles,
 	removeSourceFile,
 	reorderSourceFiles,
+	replaceSourceSet,
 	syncFromSourceKey,
 } from "../services/work-source-files.js";
 import {
@@ -6841,6 +6842,43 @@ const contentRoutes = new Hono()
 			return c.json({ files: rows, transcoding: job }, 201);
 		},
 	)
+
+	// ── A released (or draft) set's whole replacement: the new-version path ──
+	// 🚨 **This is the one mutation a released set accepts.** Append, reorder and remove
+	// edit the version a reader is looking at, so they stay draft-only; a new version is a
+	// whole new set, archived first, with the Work's version date moved. See
+	// `replaceSourceSet`.
+	.put("/works/:id/source-files", requireAuth, zValidator("json", sourceFilesSchema), async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!hasSourceSet(item.type)) {
+			return c.json(
+				{
+					error: "Only a comic, a book or an image carries a set of files.",
+					code: "sources_not_set",
+				},
+				400,
+			);
+		}
+		const data = c.req.valid("json");
+		const files = "files" in data ? data.files : [data];
+		const owned = await Promise.all(files.map((file) => isOwnStorageRef(file.file, user.id)));
+		if (owned.some((own) => !own)) return c.json(FOREIGN_FILE_REFUSAL, 400);
+		const { rows, job, error, code } = await replaceSourceSet(item, files);
+		if (error) {
+			return c.json({ error, code: code ?? "sources_mixed_shapes" }, 400);
+		}
+		// Every file in the new set is a new object to scan, as in the append route.
+		await queueScansForWork(
+			{ ...item, sourceKey: "" },
+			item.type === "image"
+				? files.map((file) => ({ key: file.file, kind: "image" as const }))
+				: [],
+		);
+		return c.json({ files: rows, transcoding: job }, 200);
+	})
 
 	.patch(
 		"/works/:id/source-files",

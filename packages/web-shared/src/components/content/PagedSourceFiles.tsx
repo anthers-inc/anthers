@@ -23,7 +23,7 @@
  * reordering two files in a blink cannot send two orders that pass in the air.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
 import type { Work } from "../../lib/types";
 import type { WorkSourceFile } from "../../lib/work-sources";
@@ -35,6 +35,8 @@ import {
 	workUploads,
 } from "../../lib/work-uploads";
 import FormField from "../ui/FormField";
+import MultipleFileInput from "./MultipleFileInput";
+import SetVersionDialog from "./SetVersionDialog";
 import { humanBytes, SourceSetAdds } from "./SourceSetAdds";
 import { type FileWorkType, UploadProgress } from "./work-media";
 
@@ -62,6 +64,9 @@ export function PagedSourceFiles({ work }: { work: Work }) {
 	const [rows, setRows] = useState<WorkSourceFile[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
+	// A released Work's set is the version its readers have. It is read here, never edited
+	// in place: the only act is a whole new set.
+	const released = work.visibility === "released";
 
 	const reload = useCallback(async () => {
 		const res = await client.api.content.works[":id"]["source-files"].$get({
@@ -148,9 +153,11 @@ export function PagedSourceFiles({ work }: { work: Work }) {
 	return (
 		<FormField label="Pages">
 			<p className="mb-2 text-xs text-base-content/50">
-				{work.type === "comic"
-					? "One page image per page (JPG or PNG). Each file becomes a run of this Work's pages, in the order listed here. Adding, removing or reordering re-renders the book."
-					: "JPG or PNG page images, a PDF, or an EPUB. Each page set becomes a run of this Work's pages, in the order listed here; an EPUB reflows on its own and can't mix with page files. Adding, removing or reordering re-renders the book."}
+				{released
+					? "This Work is released, so its pages are the version readers have. Adding a new version replaces the whole set and keeps the current one in the Work's history."
+					: work.type === "comic"
+						? "One page image per page (JPG or PNG). Each file becomes a run of this Work's pages, in the order listed here. Adding, removing or reordering re-renders the book."
+						: "JPG or PNG page images, a PDF, or an EPUB. Each page set becomes a run of this Work's pages, in the order listed here; an EPUB reflows on its own and can't mix with page files. Adding, removing or reordering re-renders the book."}
 			</p>
 			{error && <div className="alert alert-error text-sm mb-2">{error}</div>}
 			{upload && (upload.status === "uploading" || upload.status === "attaching") && (
@@ -176,114 +183,79 @@ export function PagedSourceFiles({ work }: { work: Work }) {
 							<span className="font-mono text-xs text-base-content/50">{index + 1}</span>
 							<span className="flex-1 truncate">{rowLabel(row, index, upload)}</span>
 							<span className="text-xs text-base-content/50">{humanBytes(row.fileSize)}</span>
-							<button
-								type="button"
-								className="btn btn-ghost btn-xs"
-								disabled={busy || index === 0}
-								aria-label={`Move ${rowLabel(row, index, upload)} earlier`}
-								onClick={() => move(row.id, -1)}
-							>
-								↑
-							</button>
-							<button
-								type="button"
-								className="btn btn-ghost btn-xs"
-								disabled={busy || index === rows.length - 1}
-								aria-label={`Move ${rowLabel(row, index, upload)} later`}
-								onClick={() => move(row.id, 1)}
-							>
-								↓
-							</button>
-							<button
-								type="button"
-								className="btn btn-ghost btn-xs text-error"
-								disabled={busy}
-								aria-label={`Remove ${rowLabel(row, index, upload)}`}
-								onClick={() => remove(row.id)}
-							>
-								✕
-							</button>
+							{!released && (
+								<>
+									<button
+										type="button"
+										className="btn btn-ghost btn-xs"
+										disabled={busy || index === 0}
+										aria-label={`Move ${rowLabel(row, index, upload)} earlier`}
+										onClick={() => move(row.id, -1)}
+									>
+										↑
+									</button>
+									<button
+										type="button"
+										className="btn btn-ghost btn-xs"
+										disabled={busy || index === rows.length - 1}
+										aria-label={`Move ${rowLabel(row, index, upload)} later`}
+										onClick={() => move(row.id, 1)}
+									>
+										↓
+									</button>
+									<button
+										type="button"
+										className="btn btn-ghost btn-xs text-error"
+										disabled={busy}
+										aria-label={`Remove ${rowLabel(row, index, upload)}`}
+										onClick={() => remove(row.id)}
+									>
+										✕
+									</button>
+								</>
+							)}
 						</div>
 					))}
 				</div>
 			)}
 			<SourceSetAdds workId={work.id} noun="page" />
-			{rows && rows.length === 0 && (
+			{!released && rows && rows.length === 0 && (
 				<p className="mb-2 text-sm text-warning">
 					This Work has no file yet, so it can't be released. If it was uploading in a tab that has
 					since closed, upload it again here.
 				</p>
 			)}
-			<MultipleFileInput
-				accept={
-					work.type === "comic"
-						? "image/jpeg,image/png"
-						: "image/jpeg,image/png,application/pdf,application/epub+zip,.epub"
-				}
-				label={
-					work.type === "comic"
-						? "Drop page images (JPG or PNG), or click to browse"
-						: "Drop page images, a PDF or an EPUB, or click to browse"
-				}
-				onFiles={addFiles}
-				disabled={busy || adding != null}
-			/>
+			{released ? (
+				<SetVersionDialog
+					work={work}
+					accept={
+						work.type === "comic"
+							? "image/jpeg,image/png"
+							: "image/jpeg,image/png,application/pdf,application/epub+zip,.epub"
+					}
+					label={
+						work.type === "comic"
+							? "Drop the new page images (JPG or PNG), or click to browse"
+							: "Drop the new page images, a PDF or an EPUB, or click to browse"
+					}
+					noun="set of pages"
+				/>
+			) : (
+				<MultipleFileInput
+					accept={
+						work.type === "comic"
+							? "image/jpeg,image/png"
+							: "image/jpeg,image/png,application/pdf,application/epub+zip,.epub"
+					}
+					label={
+						work.type === "comic"
+							? "Drop page images (JPG or PNG), or click to browse"
+							: "Drop page images, a PDF or an EPUB, or click to browse"
+					}
+					onFiles={addFiles}
+					disabled={busy || adding != null}
+				/>
+			)}
 		</FormField>
-	);
-}
-
-/**
- * The several-file input: one drag or browse can join many files at once, attached in
- * the order the picker or drop handed them. A local input rather than a `multiple` flag
- * on the shared `FileUpload`, which every other caller reads as strictly one file.
- */
-function MultipleFileInput({
-	onFiles,
-	accept,
-	label,
-	disabled,
-}: {
-	onFiles: (files: File[]) => void;
-	accept: string;
-	label: string;
-	disabled?: boolean;
-}) {
-	const inputRef = useRef<HTMLInputElement>(null);
-	const [over, setOver] = useState(false);
-	return (
-		<div>
-			<input
-				style={{ display: "none" }}
-				ref={inputRef}
-				type="file"
-				accept={accept}
-				multiple
-				onChange={(e) => {
-					const files = Array.from(e.target.files ?? []);
-					if (files.length > 0) onFiles(files);
-					e.target.value = "";
-				}}
-			/>
-			<button
-				type="button"
-				className={`flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed p-4 text-sm ${
-					over ? "border-primary bg-primary/5" : "border-base-300"
-				}`}
-				onClick={() => inputRef.current?.click()}
-				onDragOver={(e) => {
-					e.preventDefault();
-					setOver(true);
-				}}
-				onDragLeave={() => setOver(false)}
-				onDrop={(e) => {
-					e.preventDefault();
-					setOver(false);
-					const files = Array.from(e.dataTransfer.files);
-					if (files.length > 0 && !disabled) onFiles(files);
-				}}
-			>
-				<span>{disabled ? "Working…" : label}</span>
-			</button>
-		</div>
 	);
 }

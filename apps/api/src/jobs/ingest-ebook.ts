@@ -266,8 +266,23 @@ export async function ingestEbook(data: IngestEbookData) {
 
 		// A re-run replaces the components rather than appending to them, exactly as
 		// renderPaged replaces pages — a unique-index violation is not a retry story.
+		// 🚨 Their storage leaves with them: only the current version keeps the reflow
+		// components (the 2026-10-23 version ruling), and the archive holds originals.
+		const [priorSections, priorAssets] = await Promise.all([
+			db
+				.select({ file: workSections.file })
+				.from(workSections)
+				.where(eq(workSections.workId, work.id)),
+			db
+				.select({ file: workSectionAssets.file })
+				.from(workSectionAssets)
+				.where(eq(workSectionAssets.workId, work.id)),
+		]);
 		await db.delete(workSections).where(eq(workSections.workId, work.id));
 		await db.delete(workSectionAssets).where(eq(workSectionAssets.workId, work.id));
+		for (const row of [...priorSections, ...priorAssets]) {
+			await storage.delete(row.file).catch(() => {});
+		}
 
 		const prefix = `creators/${work.creatorId}/ebook/${work.id}/${randomUUID().replace(/-/g, "")}`;
 		const totalUnits = allSections.length + assets.size;

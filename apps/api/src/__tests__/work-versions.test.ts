@@ -16,6 +16,7 @@ import {
 	webBuildFiles,
 	webBuilds,
 	workMediaVersions,
+	workSourceFiles,
 	works,
 } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
@@ -158,6 +159,81 @@ describe("a Work's archived media versions", () => {
 			.from(works)
 			.where(eq(works.id, work.id));
 		expect(row?.versionAddedAt?.getTime() ?? 0).toBeGreaterThan(before.getTime());
+	});
+
+	it("replaces a released set as a new version", async () => {
+		const work = await insertWork({
+			type: "comic",
+			title: "set version",
+			creatorId: ownerId,
+			visibility: "released",
+		});
+		workIds.push(work.id);
+		const first = `creators/${ownerId}/comics/one-${id}.png`;
+		const second = `creators/${ownerId}/comics/two-${id}.png`;
+		const next = `creators/${ownerId}/comics/next-${id}.png`;
+		await db.insert(workSourceFiles).values([
+			{
+				workId: work.id,
+				position: 0,
+				file: first,
+				filename: "one.png",
+				fileSize: 10,
+				mimeType: "image/png",
+			},
+			{
+				workId: work.id,
+				position: 1,
+				file: second,
+				filename: "two.png",
+				fileSize: 20,
+				mimeType: "image/png",
+			},
+		]);
+		const before = new Date("2026-01-05T00:00:00.000Z");
+		await db
+			.update(works)
+			.set({ sourceKey: second, versionAddedAt: before })
+			.where(eq(works.id, work.id));
+
+		// The append route refuses a released set; this is the one that moves it.
+		const append = await req(`/api/content/works/${work.id}/source-files`, {
+			method: "POST",
+			headers: {
+				cookie: ownerCookie,
+				Origin: "http://localhost:3000",
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({ files: [{ file: next, filename: "next.png", fileSize: 30 }] }),
+		});
+		expect(append.status).toBe(409);
+
+		const res = await req(`/api/content/works/${work.id}/source-files`, {
+			method: "PUT",
+			headers: {
+				cookie: ownerCookie,
+				Origin: "http://localhost:3000",
+				"content-type": "application/json",
+			},
+			body: JSON.stringify({
+				files: [{ file: next, filename: "next.png", fileSize: 30, mimeType: "image/png" }],
+			}),
+		});
+		expect(res.status).toBe(200);
+
+		const rows = await db.select().from(workSourceFiles).where(eq(workSourceFiles.workId, work.id));
+		expect(rows.map((row) => [row.position, row.filename])).toEqual([[0, "next.png"]]);
+
+		// The set it replaced is the version, with both of its pages.
+		const [version] = await db
+			.select()
+			.from(workMediaVersions)
+			.where(eq(workMediaVersions.workId, work.id));
+		expect(version?.media.kind).toBe("set");
+		expect(
+			version?.media.kind === "set" ? version.media.files.map((file) => file.filename) : [],
+		).toEqual(["one.png", "two.png"]);
+		expect(version?.uploadedAt).toEqual(before);
 	});
 
 	it("lists the archive to its owner and hides it from a stranger", async () => {

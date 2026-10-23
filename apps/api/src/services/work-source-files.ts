@@ -188,6 +188,81 @@ export interface SourceFileInput {
 }
 
 /**
+ * Why this pick cannot be the set it would produce, or null. Runs before any write, so a
+ * refused pick leaves the set exactly as it was.
+ *
+ * `existing` is the set the pick joins; a wholesale replacement passes none, because the
+ * old set is leaving and only the new one has to hold together.
+ */
+function setShapeProblem(
+	work: WorkRow,
+	existing: WorkSourceFileRow[],
+	inputs: SourceFileInput[],
+): { code: string; error: string } | null {
+	// 🚨 A comic's pages are images now, and the refusal is the service's so every writer
+	// takes it (Parker, 2026-10-19). Existing PDF pages are untouched; this is a new source.
+	for (const input of inputs) {
+		const pdfProblem = comicSourceProblem(work.type, {
+			mimeType: input.mimeType,
+			filename: input.filename,
+			file: input.file,
+		});
+		if (pdfProblem) return { code: "comic_sources_are_images", error: pdfProblem };
+	}
+	// 🚨 **The set is one shape** (the two-shape ingest of 2026-10-11): one EPUB makes the
+	// set reflow, one PDF or page image makes it fixed, and mixing them lands nowhere.
+	const wouldBe = [
+		...existing.map((r) => ({ mimeType: r.mimeType, filename: r.filename, file: r.file })),
+		...inputs.map((input) => ({
+			mimeType: input.mimeType ?? "",
+			filename: input.filename ?? "",
+			file: input.file,
+		})),
+	];
+	// A legacy column file with no row joins the considered set the append would seed it
+	// as — the list fallback's row, whose mime reads as the PDF default it has always read as
+	// for the paged kinds, and as the image mime the URL's extension names for the image kind.
+	const fallback =
+		existing.length === 0 && work.sourceKey
+			? [
+					{
+						mimeType: isPaged(work.type) ? "application/pdf" : imageMimeFromUrl(work.sourceKey),
+						filename: "",
+						file: work.sourceKey,
+					},
+				]
+			: [];
+
+	// 🚨 **An image Work's set admits only images.** Nothing renders a PDF inside a gallery,
+	// and no ingest would process it — the guard is the whole pipeline's image check. It reads
+	// the set the append would stand at, including the legacy seed, so a set that arrived
+	// honest is never corrupted by one non-image row.
+	if (work.type === "image" && ![...fallback, ...wouldBe].every(looksLikeImage)) {
+		const offender = [...fallback, ...wouldBe].find((s) => !looksLikeImage(s));
+		return {
+			code: "sources_not_images",
+			error: `An image gallery holds only images, and ${
+				offender?.filename || offender?.file
+			} isn't one. Pick an image file, or make a comic or a book of it instead.`,
+		};
+	}
+
+	// The paged ingest routes by composition and refuses mixed shapes legibly; an image set
+	// renders nothing, so it never reaches the router at all.
+	if (isPaged(work.type)) {
+		try {
+			routePagedIngest([...fallback, ...wouldBe]);
+		} catch (error) {
+			return {
+				code: "sources_mixed_shapes",
+				error: error instanceof Error ? error.message : "mixed",
+			};
+		}
+	}
+	return null;
+}
+
+/**
  * Append one or more owned files at the end of the set, renumber nothing, and re-render a
  * paged set ONCE for the whole pick.
  *
@@ -224,68 +299,8 @@ export async function appendSourceFiles(
 		.from(workSourceFiles)
 		.where(eq(workSourceFiles.workId, work.id))
 		.orderBy(asc(workSourceFiles.position));
-	// 🚨 A comic's pages are images now, and the refusal is the service's so every writer
-	// takes it (Parker, 2026-10-19). Existing PDF pages are untouched; this is a new source.
-	for (const input of inputs) {
-		const pdfProblem = comicSourceProblem(work.type, {
-			mimeType: input.mimeType,
-			filename: input.filename,
-			file: input.file,
-		});
-		if (pdfProblem) {
-			return { rows: existing, job: null, code: "comic_sources_are_images", error: pdfProblem };
-		}
-	}
-	// 🚨 **The set is one shape** (the two-shape ingest of 2026-10-11): one EPUB makes the
-	// set reflow, one PDF or page image makes it fixed, and mixing them lands nowhere.
-	// Checked before anything is written, so a refused add leaves the set exactly as it was.
-	const wouldBe = [
-		...existing.map((r) => ({ mimeType: r.mimeType, filename: r.filename, file: r.file })),
-		...inputs.map((input) => ({
-			mimeType: input.mimeType ?? "",
-			filename: input.filename ?? "",
-			file: input.file,
-		})),
-	];
-	// A legacy column file with no row joins the considered set the append would seed it
-	// as — the list fallback's row, whose mime reads as the PDF default it has always read as
-	// for the paged kinds, and as the image mime the URL's extension names for the image kind.
-	const fallback =
-		existing.length === 0 && work.sourceKey
-			? [
-					{
-						mimeType: isPaged(work.type) ? "application/pdf" : imageMimeFromUrl(work.sourceKey),
-						filename: "",
-						file: work.sourceKey,
-					},
-				]
-			: [];
-
-	// 🚨 **An image Work's set admits only images.** Nothing renders a PDF inside a gallery,
-	// and no ingest would process it — the guard is the whole pipeline's image check. It reads
-	// the set the append would stand at, including the legacy seed, so a set that arrived
-	// honest is never corrupted by one non-image row.
-	if (work.type === "image" && ![...fallback, ...wouldBe].every(looksLikeImage)) {
-		const offender = [...fallback, ...wouldBe].find((s) => !looksLikeImage(s));
-		return {
-			rows: existing,
-			job: null,
-			code: "sources_not_images",
-			error: `An image gallery holds only images, and ${
-				offender?.filename || offender?.file
-			} isn't one. Pick an image file, or make a comic or a book of it instead.`,
-		};
-	}
-
-	// The paged ingest routes by composition and refuses mixed shapes legibly; an image set
-	// renders nothing, so it never reaches the router at all.
-	if (isPaged(work.type)) {
-		try {
-			routePagedIngest([...fallback, ...wouldBe]);
-		} catch (error) {
-			return { rows: existing, job: null, error: error instanceof Error ? error.message : "mixed" };
-		}
-	}
+	const problem = setShapeProblem(work, existing, inputs);
+	if (problem) return { rows: existing, job: null, ...problem };
 	// 🚨 **A set that has grown past its legacy column carries the column's file with it.**
 	// A Work with a legacy `source_key` and no rows (a fixture, or any source attached
 	// before its first add) reads as the one-file set through the list fallback — so an
@@ -337,6 +352,73 @@ export async function appendSourceFiles(
 		.update(works)
 		.set({ sourceKey: isPaged(work.type) ? inputs[inputs.length - 1].file : rows[0].file })
 		.where(eq(works.id, work.id));
+	const job = await askRerender(work);
+	return { rows, job };
+}
+
+/**
+ * Replace a Work's whole set — the new-version path for a released comic, book or gallery.
+ *
+ * 🚨 **A released Work's set does not change in place.** The append, reorder and remove
+ * routes refuse it, because those acts edit the version a reader is looking at. This is the
+ * one mutation that moves a released set: the whole new set arrives together, the current
+ * set is archived first, and the Work's version date moves. A draft can use it too; it is
+ * the same wholesale replacement either way.
+ */
+export async function replaceSourceSet(
+	work: WorkRow,
+	inputs: SourceFileInput[],
+): Promise<{
+	rows: WorkSourceFileRow[];
+	job: TranscodingJobRow | null;
+	code?: string;
+	error?: string;
+}> {
+	if (!hasSourceSet(work.type)) {
+		return { rows: [], job: null, error: "This kind of Work carries no file set." };
+	}
+	if (inputs.length === 0) {
+		return { rows: [], job: null, error: "No files were given for the new version." };
+	}
+	const existing = await listSourceFiles(work);
+	// The new set stands alone, so only its own shape has to hold together.
+	const problem = setShapeProblem(work, [], inputs);
+	if (problem) return { rows: existing, job: null, ...problem };
+
+	// The current set becomes history before its rows leave: the version owns the files, so
+	// they stay in storage while the render's derived pages are swept.
+	const uploadedAt = work.versionAddedAt ?? work.createdAt;
+	if (existing.some((row) => row.id !== 0)) {
+		await archiveSourceSet(work, existing, uploadedAt);
+	} else if (work.sourceKey && work.sourceKey !== inputs[0].file) {
+		await archiveLegacySource(work, work.sourceKey, uploadedAt);
+	}
+
+	await db.transaction(async (tx) => {
+		await tx.select({ id: works.id }).from(works).where(eq(works.id, work.id)).for("update");
+		await tx.delete(workSourceFiles).where(eq(workSourceFiles.workId, work.id));
+		await tx.insert(workSourceFiles).values(
+			inputs.map((input, position) => ({
+				workId: work.id,
+				position,
+				file: input.file,
+				filename: input.filename ?? "",
+				fileSize: input.fileSize ?? null,
+				mimeType:
+					input.mimeType ?? (isPaged(work.type) ? "application/pdf" : imageMimeFromUrl(input.file)),
+			})),
+		);
+		await tx
+			.update(works)
+			.set({
+				// The two families follow the column differently; see `appendSourceFiles`.
+				sourceKey: isPaged(work.type) ? inputs[inputs.length - 1].file : inputs[0].file,
+				sourceOriginalKey: "",
+				versionAddedAt: new Date(),
+			})
+			.where(eq(works.id, work.id));
+	});
+	const rows = await listSourceFiles(work);
 	const job = await askRerender(work);
 	return { rows, job };
 }
