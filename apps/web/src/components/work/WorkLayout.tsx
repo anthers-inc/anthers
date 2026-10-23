@@ -254,7 +254,7 @@ export function WorkPlaceholder({
 			<p className="text-sm text-base-content/60">{shape.label}.</p>
 			{note && <p className="max-w-prose text-xs text-base-content/40">{note}</p>}
 			{status}
-			{action && <div className="w-full max-w-lg">{action}</div>}
+			{action && <div className="w-full max-w-2xl">{action}</div>}
 		</div>
 	);
 }
