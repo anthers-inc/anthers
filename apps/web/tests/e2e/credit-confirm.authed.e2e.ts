@@ -14,7 +14,11 @@
  * and on the `authed` project's own signed-in user, `gauntlet_walker`, as the credited
  * person. The user's DID comes off their public profile rather than out of the database:
  * the credit is written the way a creator would write it, by pasting the address of a real
- * account, and the walk then proves that account's own page renders the ask.
+ * account, and the walk then proves that account's own page renders the ask. The
+ * confirmation itself is given on the person's profile Credits tab — the one place they
+ * review every attribution — so the walk also proves the tab exists beside Badges, that it
+ * lists a pending credit with its Work and role, and that accepting there settles the
+ * credit on the Work as well.
  *
  * Serial, and swept by title prefix, for the same reasons `work-release.authed.e2e.ts` gives:
  * a shared fixture must come back to empty even when a walk fails halfway.
@@ -297,9 +301,33 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	expect(offered, "no credit-offered notification for the user").toBeTruthy();
 	expect(offered?.linkPath).toContain(String(work.publicId));
 
-	// Accept, and the credit settles from the server's own answer: the DID is gone and
-	// the user's name is in its place, with no confirm ask left on the page.
-	await userPage.getByRole("button", { name: "Accept", exact: true }).click();
+	// ── The person's own Credits tab ─────────────────────────────────────────────
+	// The attribution also sits in the person's profile, which is the one place to review
+	// every credit naming them. The tab's placement is part of the ask: to the right of
+	// Badges, with the tab row's divider between them.
+	await userPage.goto(`/@${userHandle}?tab=credits`);
+	const creditsTab = userPage.getByRole("button", { name: "Credits", exact: true });
+	await expect(creditsTab).toBeVisible();
+	expect(
+		await creditsTab.evaluate((el) => el.previousElementSibling?.getAttribute("aria-hidden")),
+		"the Credits tab is not separated from Badges by the tab row's divider",
+	).toBe("true");
+
+	const pendingHeading = userPage.getByRole("heading", { name: /Awaiting your confirmation/ });
+	await expect(pendingHeading).toBeVisible();
+	const pendingRow = userPage.locator("li").filter({ hasText: TITLE });
+	await expect(pendingRow).toContainText(`as ${ROLE} more`);
+	// Accepted HERE rather than on the Work — the second section is the review surface,
+	// and one click has to do the same thing it does on the Work's own page.
+	await pendingRow.getByRole("button", { name: "Accept", exact: true }).click();
+	await expect(pendingHeading).toHaveCount(0, { timeout: 15_000 });
+	// The credit joined the accepted list above, under its role heading.
+	await expect(userPage.getByText(TITLE, { exact: true })).toBeVisible();
+
+	// Back on the Work: the credit settled from the server's own answer — the DID is gone
+	// and the user's name is in its place, with no confirm ask left on the page.
+	await userPage.goto(`/works/${work.publicId}`);
+	await userPage.getByRole("tab", { name: "Credits" }).click();
 	await expect(
 		userPage.getByRole("tabpanel", { name: "Credits" }),
 		"the accepted credit did not resolve to the user's name",
@@ -332,6 +360,15 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 	// The accepted credit renders as the name — never a bare DID to anybody.
 	await expect(strangerPage.getByRole("tabpanel", { name: "Credits" })).toContainText(VIEWER_NAME);
 	await expect(strangerPage.getByRole("tabpanel", { name: "Credits" })).not.toContainText("did:");
+
+	// And the person's profile carries the accepted credit without a pending section: a
+	// stranger's answer has the shape but never the rows, so the withholding is invisible
+	// rather than an empty box saying there is nothing to review.
+	await strangerPage.goto(`/@${userHandle}?tab=credits`);
+	await expect(strangerPage.getByText(TITLE, { exact: true })).toBeVisible({ timeout: 15_000 });
+	await expect(
+		strangerPage.getByRole("heading", { name: /Awaiting your confirmation/ }),
+	).toHaveCount(0);
 	await stranger.close();
 
 	await userContext.close();

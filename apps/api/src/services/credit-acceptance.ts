@@ -532,6 +532,141 @@ export async function creditsForOwner(work: OverlayWork): Promise<UserWorkCredit
 	);
 }
 
+// ─── The creator's own credit list ────────────────────────────────────────────
+
+/**
+ * One credit, as it belongs to the person it names rather than to the Work it sits on.
+ *
+ * The Work fields are what a creator's credits list renders — a linked title and a year,
+ * the MobyGames-shaped row. `year` comes from the same fallback every other surface uses
+ * for "when this came out": the creator-asserted original release date, then the release
+ * date, then the row's creation.
+ */
+export interface CreditAttribution {
+	workId: number;
+	slug: string;
+	publicId: number;
+	title: string | null;
+	role: string;
+	year: number;
+}
+
+/** What a Work needs to contribute to its contributor's credit list. */
+export interface AttributedWork {
+	id: number;
+	slug: string;
+	publicId: number;
+	title: string | null;
+	credits: WorkCredit[] | null;
+	originallyReleased: Date | null;
+	releasedAt: Date | null;
+	createdAt: Date;
+}
+
+/**
+ * A creator's credits, split into the ones that stand and the ones waiting on them.
+ *
+ * The acceptance row is the whole distinction: `accepted` is every DID credit that has
+ * one, `pending` is every one that does not. The caller has already decided which Works
+ * the viewer may see — this function only reads the acceptance facts and shapes the rows,
+ * because maturity, blocks and `released` are query conditions (`maturityHiddenFrom`,
+ * `notBlockedBy`) and filtering them here would be filtering after the fact.
+ *
+ * Attributed by identity, not by name: a credit naming a freeform contributor cannot be
+ * safely matched to an account, so only the creator's own DID is theirs.
+ */
+export async function creditAttributionsForContributor(
+	attributedWorks: AttributedWork[],
+	contributorDid: string,
+): Promise<{ accepted: CreditAttribution[]; pending: CreditAttribution[] }> {
+	const workIds = attributedWorks.map((w) => w.id);
+	if (workIds.length === 0) return { accepted: [], pending: [] };
+
+	const acceptedRows = await db
+		.select({ workId: creditAcceptances.workId, role: creditAcceptances.role })
+		.from(creditAcceptances)
+		.where(
+			and(
+				inArray(creditAcceptances.workId, workIds),
+				eq(creditAcceptances.contributorDid, contributorDid),
+			),
+		);
+	const accepted = new Set(acceptedRows.map((r) => `${r.workId}|${r.role}`));
+
+	const acceptedList: CreditAttribution[] = [];
+	const pendingList: CreditAttribution[] = [];
+	for (const work of attributedWorks) {
+		// The same fallback the Work's own page and the public record use, so a list row and
+		// the Work it links to never disagree about the year.
+		const dated = work.originallyReleased ?? work.releasedAt ?? work.createdAt;
+		for (const credit of work.credits ?? []) {
+			if (credit.contributor !== contributorDid) continue;
+			const row: CreditAttribution = {
+				workId: work.id,
+				slug: work.slug,
+				publicId: work.publicId,
+				title: work.title,
+				role: credit.role,
+				year: dated.getFullYear(),
+			};
+			if (accepted.has(`${work.id}|${credit.role}`)) acceptedList.push(row);
+			else pendingList.push(row);
+		}
+	}
+
+	// Role is the creator list's organizing unit, so the server hands the rows in the order
+	// the page groups them; within a role, newest Work first.
+	const byRoleThenDate = (a: CreditAttribution, b: CreditAttribution) =>
+		a.role.localeCompare(b.role) || b.year - a.year;
+	acceptedList.sort(byRoleThenDate);
+	pendingList.sort(byRoleThenDate);
+	return { accepted: acceptedList, pending: pendingList };
+}
+
+/**
+ * Accept a creator's own credits on a Work they wrote.
+ *
+ * A credit naming the Work's own creator is not a claim about a third party, so it needs
+ * nobody's confirmation: the creator asserting it in the editor IS the acceptance. Without
+ * this row the listing withholds the credit and the creator's own Credits tab asks them to
+ * confirm their own word forever.
+ *
+ * The row is written locally and no `org.anthers.creditAcceptance` record is attempted. The
+ * acceptance record is a public statement in the CONTRIBUTOR's repository answering a
+ * creator's claim; when the two people are the same, the Work's own listing naming them is
+ * that statement already, and a second record would say nothing new.
+ *
+ * Called wherever a Work's credits are written. Comparing account ids rather than DID
+ * strings, as `notifyCreditedAccounts` does, keeps a NULL or odd creator DID from making a
+ * self-credit look like somebody else's.
+ */
+export async function recordSelfCreditAcceptances(
+	work: { id: number; creatorId: number | null; credits: WorkCredit[] | null },
+	creatorUserId: number,
+): Promise<void> {
+	const credits = (work.credits ?? []).filter((c) => creditContributorIsDid(c.contributor));
+	if (credits.length === 0 || work.creatorId !== creatorUserId) return;
+
+	const [account] = await db
+		.select({ did: users.atprotoDid })
+		.from(users)
+		.where(eq(users.id, creatorUserId))
+		.limit(1);
+	if (!account?.did) return;
+
+	const own = credits.filter((c) => c.contributor === account.did);
+	if (own.length === 0) return;
+
+	await db
+		.insert(creditAcceptances)
+		.values(
+			own.map((credit) => ({ workId: work.id, contributorDid: account.did, role: credit.role })),
+		)
+		// A re-save hits the same (work, contributor, role) row; the unique index makes this
+		// a no-op rather than a second acceptance.
+		.onConflictDoNothing();
+}
+
 // ─── Telling the credited person ──────────────────────────────────────────────
 
 /**
