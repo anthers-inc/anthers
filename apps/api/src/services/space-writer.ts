@@ -18,6 +18,7 @@
  * for a public-repository write, and the caller treats it as an ordinary skip.
  */
 
+import { isDeepStrictEqual } from "node:util";
 import type { SpaceBytes, SpaceCommit, SpaceRecord, SpaceRepoOp } from "./atproto-space.js";
 import { SpaceClient, SpaceRequestError } from "./atproto-space.js";
 import { hostedPdsUrl } from "./hosted-accounts.js";
@@ -170,6 +171,120 @@ export function spaceWriterFor(
 			return client.listRepoOps({ space, repo: did, limit: 50, ...opts });
 		},
 	};
+}
+
+/**
+ * A write that answered 200 but did not survive a read-back.
+ *
+ * The check is named because the difference matters to whoever reads the log: a bad CID and an
+ * unchanged commit are different failures, and the outbox reports the first by kind while an
+ * operator reads the second as a server that accepted the call without applying it.
+ */
+export class SpaceVerificationError extends Error {
+	constructor(
+		readonly check: "read" | "uri" | "cid" | "value" | "commit" | "oplog",
+		message: string,
+	) {
+		super(message);
+		this.name = "SpaceVerificationError";
+	}
+}
+
+/**
+ * The checks that make a space write verified: address, CID, value, and a commit and oplog
+ * that agree about it.
+ *
+ * ⭐ **One implementation for every writer.** The outbox and the creator-space sync make the
+ * same promise — a record is not believed until it has been read back at the address and CID
+ * the server returned, the commit moved, and the oplog carries the operation — and two copies
+ * of that promise would be free to drift apart. A delete is verified by finding nothing.
+ *
+ * A space with no repo yet answers `RepoNotFound` for the "before" commit; the caller passes
+ * `previousRev: null` for that case rather than treating it as a failure.
+ */
+export async function verifySpaceWrite(
+	writer: SpaceWriter,
+	input: {
+		collection: string;
+		rkey: string;
+		op: "put" | "delete";
+		record?: Record<string, unknown> | null;
+		written: SpaceWriteRef | null;
+		previousRev: string | null;
+	},
+): Promise<void> {
+	if (input.op === "delete") {
+		const read = await writer.get(input.collection, input.rkey);
+		if (read !== null) {
+			throw new SpaceVerificationError("read", "the record is still there after a delete");
+		}
+	} else {
+		const read = await writer.get(input.collection, input.rkey);
+		if (!read) throw new SpaceVerificationError("read", "the record is not there after the write");
+		if (!input.written) throw new SpaceVerificationError("read", "the write returned no address");
+		if (read.uri !== input.written.uri) {
+			throw new SpaceVerificationError(
+				"uri",
+				`read-back uri ${read.uri} is not ${input.written.uri}`,
+			);
+		}
+		if (read.cid !== input.written.cid) {
+			throw new SpaceVerificationError(
+				"cid",
+				`read-back cid ${read.cid} is not ${input.written.cid}`,
+			);
+		}
+		if (!isDeepStrictEqual(read.value, input.record)) {
+			throw new SpaceVerificationError("value", "read-back value is not the record that was sent");
+		}
+	}
+
+	const commit = await writer.commit();
+	if (input.previousRev !== null && commit.rev <= input.previousRev) {
+		throw new SpaceVerificationError("commit", `commit did not advance past ${input.previousRev}`);
+	}
+
+	const oplog = await writer.ops(input.previousRev ? { since: input.previousRev } : {});
+	const op = oplog.ops.find(
+		(entry) => entry.collection === input.collection && entry.rkey === input.rkey,
+	);
+	if (!op) throw new SpaceVerificationError("oplog", "the oplog has no operation for the record");
+	const expectedCid = input.op === "delete" ? null : (input.written as { cid: string }).cid;
+	if ((op.cid ?? null) !== expectedCid) {
+		throw new SpaceVerificationError(
+			"oplog",
+			`oplog cid ${op.cid ?? "null"} is not ${expectedCid ?? "null"}`,
+		);
+	}
+}
+
+/**
+ * Put one record and verify it, for a caller that has no outbox row.
+ *
+ * ⚠️ **A space has no repo until its first write**, so the "before" commit is allowed to be
+ * absent; treating `RepoNotFound` as a failure would make the very first creator-space record
+ * undeliverable.
+ */
+export async function putVerifiedSpaceRecord(
+	writer: SpaceWriter,
+	collection: string,
+	rkey: string,
+	record: Record<string, unknown>,
+): Promise<SpaceWriteRef> {
+	const previous = await writer.commit().catch((error) => {
+		if (error instanceof SpaceRequestError && error.error === "RepoNotFound") return null;
+		throw error;
+	});
+	const written = await writer.put(collection, rkey, record);
+	await verifySpaceWrite(writer, {
+		collection,
+		rkey,
+		op: "put",
+		record,
+		written,
+		previousRev: previous?.rev ?? null,
+	});
+	return written;
 }
 
 /** Re-exported for callers that read bytes; the outbox does not, the backup does. */

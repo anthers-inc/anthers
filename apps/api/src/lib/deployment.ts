@@ -56,6 +56,25 @@ export function publicOrigin(env: Record<string, string | undefined> = process.e
 }
 
 /**
+ * The origin this process is configured to answer at, whatever its scheme.
+ *
+ * ⚠️ **This is for callers with no request to read, and it deliberately accepts `http://`.**
+ * A job writing a space's managing-app identity has to name an address the network can call,
+ * and in a checkout that address really is `http://localhost:3000`. {@link publicOrigin}
+ * answers the different question — "is this deployment public?" — where a lax answer would
+ * relax security, so the two are separate functions rather than one with a flag.
+ */
+export function deploymentOrigin(
+	env: Record<string, string | undefined> = process.env,
+): string | null {
+	for (const key of PUBLIC_ORIGIN_KEYS) {
+		const value = (env[key] ?? "").trim().replace(/\/+$/, "");
+		if (value) return value;
+	}
+	return null;
+}
+
+/**
  * True when this process is serving a public deployment — the question the CORS/CSRF
  * allowlist and both cookie writers ask before they decide how strict to be.
  *

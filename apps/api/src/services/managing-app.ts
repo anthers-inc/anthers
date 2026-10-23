@@ -17,7 +17,7 @@
  * of this API.
  */
 
-import { publicOrigin } from "../lib/deployment.js";
+import { deploymentOrigin, publicOrigin } from "../lib/deployment.js";
 
 /** The service fragment a gated space names. It is ours; nothing else publishes one. */
 export const MANAGING_APP_SERVICE = "anthers";
@@ -70,6 +70,20 @@ export function managingAppFor(origin: string): ManagingAppIdentity {
  */
 export function managingAppForRequest(requestUrl: string): ManagingAppIdentity {
 	return managingAppFor(publicOrigin() ?? new URL(requestUrl).origin);
+}
+
+/**
+ * The managing-app identity for a process with no request to read, such as a job.
+ *
+ * ⚠️ **A gated space names this identity in its read policy at creation time**, so the answer
+ * has to be the same address the network will resolve the DID document at. `deploymentOrigin`
+ * answers that for a deployed process and for a checkout with `FRONTEND_URL` set; null means
+ * the process has no configured address and a caller must not invent one, because a space
+ * created against a guess would point at nothing a reader could resolve.
+ */
+export function managingAppIdentity(): ManagingAppIdentity | null {
+	const origin = deploymentOrigin();
+	return origin ? managingAppFor(origin) : null;
 }
 
 /**
