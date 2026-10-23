@@ -200,6 +200,7 @@ import {
 import {
 	acceptCredit,
 	affirmSelfCredits,
+	creditAttributionsForContributor,
 	creditsForOwner,
 	creditsForUser,
 	findRejectedCredit,
@@ -5766,6 +5767,97 @@ const contentRoutes = new Hono()
 					...(merchMap.has(w.id) ? { merch: merchMap.get(w.id) } : {}),
 				})),
 			),
+		});
+	})
+
+	/**
+	 * A person's credits — every published Work that names this account, split into the
+	 * credits that stand and the ones waiting on their confirmation.
+	 *
+	 * This is the creator-profile counterpart to a Work's liner notes: the same rows turned
+	 * around, as a body of work. A visitor sees only accepted credits; the account itself
+	 * additionally sees the rows it has not answered, because the profile is where a
+	 * person reviews what has been attributed to them.
+	 *
+	 * 🚨 **A listing of Works, so `maturityHiddenFrom` travels with `notBlockedBy`.** An
+	 * Adult Work a viewer may not reach is absent here as everywhere else — title included
+	 * — and a blocked creator's Work is absent too. Takedown and quarantine are checked
+	 * because a credit is not a way around either.
+	 *
+	 * Attributed by identity: only credits whose contributor is the account's own DID count,
+	 * since a freeform name cannot be safely matched to a person.
+	 */
+	.get("/credits/:handle", async (c) => {
+		const handle = c.req.param("handle");
+		const resolution = await resolveHandle(handle);
+		const account =
+			resolution.account ??
+			(resolution.redirectToHandle
+				? await accountByHandle(resolution.redirectToHandle)
+				: undefined);
+		if (!account) return c.json({ error: "Creator not found" }, 404);
+
+		const userId = await getOptionalUserId(c);
+		const isSelf = userId === account.id;
+		// A suspended account's credits are gone with the rest of its presence — the same
+		// 404 an unknown handle returns. The account itself still resolves its own page.
+		if (!isSelf && (await isSuspendedAccount(account.id))) {
+			return c.json({ error: "Creator not found" }, 404);
+		}
+
+		const [{ prefs }, { policy }] = await Promise.all([
+			adultVisibility(userId),
+			parentalVisibility(userId),
+		]);
+
+		const rows = await db
+			.select({
+				id: works.id,
+				slug: works.slug,
+				publicId: works.publicId,
+				title: works.title,
+				credits: works.credits,
+				originallyReleased: works.originallyReleased,
+				releasedAt: works.releasedAt,
+				createdAt: works.createdAt,
+			})
+			.from(works)
+			.where(
+				and(
+					eq(works.visibility, "released"),
+					eq(works.takedownStatus, "active"),
+					eq(works.quarantineStatus, "none"),
+					sql`EXISTS (
+						SELECT 1 FROM jsonb_array_elements(COALESCE(${works.credits}, '[]'::jsonb)) AS credit
+						WHERE credit->>'contributor' = ${account.atprotoDid}
+					)`,
+					notBlockedBy(userId, works.creatorId),
+					notSuspendedAccount(works.creatorId),
+					notTestAccount(works.creatorId),
+					maturityHiddenFrom(
+						prefs,
+						userId,
+						sql`works.creator_id`,
+						sql`works.maturity`,
+						sql`works.maturity_rows`,
+					),
+					parentalHiddenFrom(policy, userId, sql`works.creator_id`, sql`works.type`),
+				),
+			)
+			.orderBy(
+				sql`COALESCE(${works.originallyReleased}, ${works.releasedAt}, ${works.createdAt}) DESC`,
+			)
+			.limit(500);
+
+		const { accepted, pending } = await creditAttributionsForContributor(rows, account.atprotoDid);
+
+		return c.json({
+			creator: { handle: account.atprotoHandle, displayName: account.displayName },
+			accepted,
+			// The pending half is the account's own business: a stranger's serialization
+			// carries the shape but never the rows, so a client cannot mistake a withheld
+			// list for an empty one when it is the owner asking.
+			pending: isSelf ? pending : [],
 		});
 	})
 

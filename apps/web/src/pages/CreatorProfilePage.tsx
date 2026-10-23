@@ -36,6 +36,7 @@ import { createPortal } from "react-dom";
 import FeedTile from "../components/cards/FeedTile";
 import ProjectCard from "../components/cards/ProjectCard";
 import BadgesTab from "../components/creator/BadgesTab";
+import CreatorCredits from "../components/creator/CreatorCredits";
 import ReportDialog from "../components/ui/ReportDialog";
 import { InlineField } from "../components/work/Editing";
 import { useReportVisit } from "../lib/attention";
@@ -60,7 +61,7 @@ function postEntry(post: PostListItem): { kind: "post"; id: number } & Record<st
 	return { kind: "post", ...post };
 }
 
-type Tab = "all" | "posts" | "games" | "videos" | "audio" | "writing" | "badges";
+type Tab = "all" | "posts" | "games" | "videos" | "audio" | "writing" | "badges" | "credits";
 
 function badgeNameFor(id: string): string {
 	if (id === "none" || id === "free" || !id) return "Free";
@@ -80,7 +81,7 @@ function hostLabel(url: string): string {
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
-const TABS: Tab[] = ["all", "posts", "games", "videos", "audio", "writing", "badges"];
+const TABS: Tab[] = ["all", "posts", "games", "videos", "audio", "writing", "badges", "credits"];
 
 /** The separator between the tab row's groups — the timeline, the Work types, and the profile's metadata views. */
 function TabDivider() {
@@ -678,8 +679,8 @@ export default function CreatorProfilePage() {
 				{/* Tabs. One flat row, but grouped: the timeline views (All, Posts), then the
 				    Work-type views — only the types the creator has actually released, so a
 				    profile with no audio shows no Audio tab rather than "Audio (0)" — then
-				    Badges. The dividers sit between the groups, and collapse to a single
-				    divider when the middle group is empty. */}
+				    Badges, then Credits. The dividers sit between the groups, and collapse
+				    to a single divider when the middle group is empty. */}
 				<div className="tabs tabs-bordered mb-6 overflow-x-auto">
 					<button
 						type="button"
@@ -717,6 +718,14 @@ export default function CreatorProfilePage() {
 						onClick={() => setTab("badges")}
 					>
 						Badges
+					</button>
+					<TabDivider />
+					<button
+						type="button"
+						className={`tab whitespace-nowrap ${tab === "credits" ? "tab-active" : ""}`}
+						onClick={() => setTab("credits")}
+					>
+						Credits
 					</button>
 				</div>
 
@@ -843,6 +852,14 @@ export default function CreatorProfilePage() {
 							isOwner={isOwnProfile}
 							onEdit={(badge) => setEditingBadgeId(badge.id)}
 							onAdd={() => setEditingBadgeId("new")}
+						/>
+					)}
+
+					{tab === "credits" && (
+						<CreatorCredits
+							handle={creator.handle}
+							creatorName={creator.displayName || creator.handle}
+							isOwner={isOwnProfile}
 						/>
 					)}
 

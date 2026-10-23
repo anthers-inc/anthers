@@ -21,7 +21,7 @@ import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
-import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
+import { apiBaseUrl } from "@anthers/web-shared/rpc";
 import type { AccessResult, Work, WorkCredit } from "@anthers/web-shared/types";
 import {
 	BookOpenIcon,
@@ -54,6 +54,7 @@ import {
 import { trackFromWork } from "../../lib/tracks";
 import { useSeekPlayer, WorkPlayerProvider } from "../../lib/work-player";
 import GalleryView from "../media/GalleryView";
+import CreditConfirmationControls from "./CreditConfirmationControls";
 import { LyricsBody, WORK_LYRICS_CLASS, WORK_LYRICS_HEADING_CLASS } from "./LyricsPanel";
 import WorkMediaFrame from "./WorkMediaFrame";
 
@@ -1190,85 +1191,6 @@ function creditBadges(types: string[]): { ai: boolean; blended: boolean } {
 }
 
 /**
- * The Accept/Decline row the overlay hands the person a credit names.
- *
- * Renders ONLY from the `awaitingYourConfirmation` flag the server emits on the named
- * person's own serialization — no user logic lives here, and every other user never
- * receives the flag so never receives these controls. The credit ships with role and
- * types intact because those are what the person needs to act on.
- */
-function CreditConfirmationControls({
-	work,
-	role,
-	onDecided,
-}: {
-	work: WorkDetail;
-	role: string;
-	/**
-	 * Re-read the Work after a decision lands, so the credits re-render from the server's
-	 * own answer — accepted resolves the contributor to a name, declined removes the row.
-	 */
-	onDecided: () => void;
-}) {
-	const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
-	const [notice, setNotice] = useState<string | null>(null);
-
-	const decide = async (verb: "accept" | "decline") => {
-		setBusy(verb);
-		setNotice(null);
-		try {
-			const res =
-				verb === "accept"
-					? await client.api.content.works[":id"].credits.accept.$post({
-							param: { id: String(work.id) },
-							json: { role },
-						})
-					: await client.api.content.works[":id"].credits.reject.$post({
-							param: { id: String(work.id) },
-							json: { role },
-						});
-			if (!res.ok) {
-				// The server's own words — every refusal here is a decision the person can act
-				// on (sign back in for the widened scope, the credit changed under them), and a
-				// generic string turns all of them into "something went wrong".
-				const body = (await res.json().catch(() => null)) as { error?: string } | null;
-				setNotice(body?.error ?? "Couldn't record that just now. Please try again.");
-				return;
-			}
-			onDecided();
-		} catch {
-			setNotice("Couldn't record that just now. Please try again.");
-		} finally {
-			setBusy(null);
-		}
-	};
-
-	return (
-		<>
-			<span className="flex flex-wrap items-center gap-2">
-				<button
-					type="button"
-					className="btn btn-xs btn-primary"
-					disabled={busy !== null}
-					onClick={() => decide("accept")}
-				>
-					{busy === "accept" ? "Accepting…" : "Accept"}
-				</button>
-				<button
-					type="button"
-					className="btn btn-xs btn-ghost"
-					disabled={busy !== null}
-					onClick={() => decide("decline")}
-				>
-					{busy === "decline" ? "Declining…" : "Decline"}
-				</button>
-			</span>
-			{notice && <p className="w-full text-xs text-base-content/60">{notice}</p>}
-		</>
-	);
-}
-
-/**
  * The Work's credits, rendered as liner notes in two columns — the contribution on one
  * side, the people who made it on the other, with AI involvement badged rather than
  * buried. Public: any user of a released Work sees these, gated or not, as they see the
@@ -1343,7 +1265,7 @@ export function WorkCredits({
 													)}
 													{awaiting && (
 														<CreditConfirmationControls
-															work={work}
+															workId={work.id}
 															role={credit.role}
 															onDecided={() => onCreditDecided?.()}
 														/>
