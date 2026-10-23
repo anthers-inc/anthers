@@ -38,6 +38,10 @@ export interface RegisteredSpace {
 	did: string;
 	spaceType: string;
 	spaceUri: string;
+	readPolicy: Record<string, unknown>;
+	writePolicy: Record<string, unknown>;
+	appAccess: Record<string, unknown>;
+	members: SpaceMemberSnapshot[];
 	verifiedAt: Date | null;
 	lastCheckedAt: Date | null;
 	lastError: string | null;
@@ -332,6 +336,10 @@ function toRegistered(row: typeof userSpaces.$inferSelect): RegisteredSpace {
 		did: row.did,
 		spaceType: row.spaceType,
 		spaceUri: row.spaceUri,
+		readPolicy: row.readPolicy,
+		writePolicy: row.writePolicy,
+		appAccess: row.appAccess,
+		members: row.members,
 		verifiedAt: row.verifiedAt,
 		lastCheckedAt: row.lastCheckedAt,
 		lastError: row.lastError,

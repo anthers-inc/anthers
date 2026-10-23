@@ -17,6 +17,7 @@
  */
 import { sql } from "drizzle-orm";
 import {
+	bigint,
 	index,
 	integer,
 	jsonb,
@@ -114,6 +115,60 @@ export type SpaceOutboxOp = "put" | "delete";
 
 /** Where a row is in its life. Only `pending` rows are claimable. */
 export type SpaceOutboxStatus = "pending" | "inflight" | "failed";
+
+/**
+ * One logical backup of one space.
+ *
+ * 🚨 **A row is a manifest, not the backup.** The objects live in private storage under the
+ * keys this row names: the STAR, the record list, the registry snapshot and the blob bytes.
+ * Keeping the manifest in Postgres is what makes retention a query and a restore a lookup
+ * rather than somebody remembering which prefix belonged to which space.
+ */
+// org — the manifest of a backup this deployment took. The objects it names are private
+// storage; the row is the index into them.
+export const spaceBackups = pgTable(
+	"space_backups",
+	{
+		id: serial("id").primaryKey(),
+		userId: integer("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		did: text("did").notNull(),
+		spaceUri: text("space_uri").notNull(),
+		/** When the capture ran, to the millisecond; it is also the storage folder's name. */
+		capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
+		/**
+		 * `complete` when every artifact was written, `partial` when the registry and records
+		 * were but a blob or the STAR was not, `failed` when the capture stopped.
+		 */
+		status: text("status").$type<"complete" | "partial" | "failed">().notNull().default("complete"),
+		/** The space repo's commit revision at capture; null for a space with no write yet. */
+		rev: text("rev"),
+		/** The commit's LtHash digest, base64 as JSON carries it; the restore compares it. */
+		commitData: text("commit_data"),
+		/** The storage prefix every artifact of this capture sits under. */
+		prefix: text("prefix").notNull(),
+		starKey: text("star_key"),
+		recordsKey: text("records_key").notNull(),
+		registryKey: text("registry_key").notNull(),
+		/** A sidecar naming each blob's content type and size, by CID. */
+		blobsKey: text("blobs_key"),
+		starBytes: integer("star_bytes").notNull().default(0),
+		recordCount: integer("record_count").notNull().default(0),
+		blobCount: integer("blob_count").notNull().default(0),
+		blobBytes: bigint("blob_bytes", { mode: "number" }).notNull().default(0),
+		lastError: text("last_error"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// One capture per space per millisecond; the folder name is the same fact.
+		uniqueIndex("uq_space_backups_capture").on(table.spaceUri, table.capturedAt),
+		// The restore's lookup and the retention sweep both read by space and recency.
+		index("idx_space_backups_space").on(table.spaceUri, table.capturedAt),
+		index("idx_space_backups_status").on(table.status),
+	],
+);
 
 /**
  * A write that is owed to a user's space.

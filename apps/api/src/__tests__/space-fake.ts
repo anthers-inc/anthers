@@ -15,6 +15,8 @@
  * to those shapes should break this file, which is the point of writing them down here.
  */
 
+import { createHash } from "node:crypto";
+
 interface FakeSpace {
 	uri: string;
 	ownerDid: string;
@@ -57,6 +59,12 @@ export class FakeSpacePds {
 	readonly records = new Map<string, Map<string, FakeRecord>>();
 	/** space URI → operations, oldest first. */
 	readonly ops = new Map<string, FakeOp[]>();
+	/** space URI → DID → flags. */
+	readonly members = new Map<string, Map<string, { read: boolean; write: boolean }>>();
+	/** CID → bytes, across the account's ordinary repository blob store. */
+	readonly blobs = new Map<string, { bytes: Uint8Array; contentType: string }>();
+	/** space URI → blob CIDs its records reference. */
+	readonly spaceBlobs = new Map<string, Set<string>>();
 
 	/** Make the next N `getRecord` answers report a CID the write did not produce. */
 	corruptReads = 0;
@@ -69,6 +77,13 @@ export class FakeSpacePds {
 	readonly fetch = (async (input: URL | string, init?: RequestInit): Promise<Response> => {
 		const url = new URL(input.toString());
 		const method = url.pathname.replace(/^\/xrpc\//, "");
+		// The one upload route carries raw bytes rather than JSON, and it is the only way a space
+		// gets a blob: `com.atproto.repo.uploadBlob` on the account's ordinary repository.
+		if (method === "com.atproto.repo.uploadBlob") {
+			const contentType = new Headers(init?.headers).get("content-type") ?? "";
+			const bytes = new Uint8Array(await new Response(init?.body).arrayBuffer());
+			return this.handleUpload(bytes, contentType);
+		}
 		const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
 		return this.handle(method, url, body);
 	}) as typeof fetch;
@@ -108,6 +123,15 @@ export class FakeSpacePds {
 			this.ops.set(spaceUri, log);
 		}
 		return log;
+	}
+
+	/** The set digest the commit carries: a function of every record CID, order-independent. */
+	private setDigest(spaceUri: string): string {
+		const cids = [...(this.records.get(spaceUri)?.values() ?? [])]
+			.map((record) => record.cid)
+			.sort()
+			.join(",");
+		return Buffer.from(cids).toString("base64");
 	}
 
 	private handle(method: string, url: URL, body: Record<string, unknown>): Response {
@@ -156,7 +180,88 @@ export class FakeSpacePds {
 			}
 
 			case "com.atproto.simplespace.listMembers":
-				return json({ members: [] });
+				return json({
+					members: [...(this.members.get(param("space") ?? "")?.entries() ?? [])].map(
+						([did, flags]) => ({ did, ...flags }),
+					),
+				});
+
+			case "com.atproto.simplespace.putMember": {
+				const space = String(body.space);
+				if (!this.spaces.has(space)) return fail("SpaceNotFound");
+				let list = this.members.get(space);
+				if (!list) {
+					list = new Map();
+					this.members.set(space, list);
+				}
+				list.set(String(body.did), {
+					read: Boolean(body.read),
+					write: Boolean(body.write),
+				});
+				return json({});
+			}
+
+			case "com.atproto.simplespace.deleteSpace": {
+				const space = String(body.space);
+				if (!this.spaces.has(space)) return fail("SpaceNotFound");
+				// The real `deleteSpace` takes the space's blobs with it; the drill depends on that
+				// being true, because the backup must be the only copy afterwards.
+				const referenced = this.spaceBlobs.get(space) ?? new Set<string>();
+				for (const cid of referenced) {
+					const usedElsewhere = [...this.spaceBlobs.entries()].some(
+						([uri, cids]) => uri !== space && cids.has(cid),
+					);
+					if (!usedElsewhere) this.blobs.delete(cid);
+				}
+				this.spaces.delete(space);
+				this.records.delete(space);
+				this.ops.delete(space);
+				this.members.delete(space);
+				this.spaceBlobs.delete(space);
+				return json({});
+			}
+
+			case "com.atproto.repo.uploadBlob": {
+				return fail("uploadBlob must carry raw bytes", 400);
+			}
+
+			case "com.atproto.space.getRepo": {
+				const space = this.spaces.get(param("space") ?? "");
+				if (!space) return fail("SpaceNotFound");
+				if (!this.records.get(space.uri)?.size) return fail("RepoNotFound");
+				// The real answer is a STAR; nothing in the app parses it, so the fake's bytes only
+				// have to be storable and non-empty. The drill checks the records and blobs instead.
+				const payload = new TextEncoder().encode(
+					JSON.stringify({
+						star: true,
+						space: space.uri,
+						records: this.records.get(space.uri)?.size,
+					}),
+				);
+				const copy = new Uint8Array(payload.byteLength);
+				copy.set(payload);
+				return new Response(new Blob([copy], { type: "application/vnd.ipld.car" }), {
+					status: 200,
+				});
+			}
+
+			case "com.atproto.space.listBlobs": {
+				const space = this.spaces.get(param("space") ?? "");
+				if (!space) return fail("SpaceNotFound");
+				return json({ cids: [...(this.spaceBlobs.get(space.uri) ?? [])] });
+			}
+
+			case "com.atproto.space.getBlob": {
+				const space = this.spaces.get(param("space") ?? "");
+				if (!space) return fail("SpaceNotFound");
+				const blob = this.blobs.get(param("cid") ?? "");
+				if (!blob || !this.spaceBlobs.get(space.uri)?.has(param("cid") ?? "")) {
+					return fail("BlobNotFound");
+				}
+				const copy = new Uint8Array(blob.bytes.byteLength);
+				copy.set(blob.bytes);
+				return new Response(new Blob([copy], { type: blob.contentType }), { status: 200 });
+			}
 
 			case "com.atproto.space.putRecord": {
 				const space = this.spaces.get(String(body.space));
@@ -164,11 +269,17 @@ export class FakeSpacePds {
 				const collection = String(body.collection);
 				const rkey = String(body.rkey);
 				const record = body.record as Record<string, unknown>;
-				const cid = this.nextCid();
+				const cid = `bafyrec${hashOf(new TextEncoder().encode(JSON.stringify(record)))}`;
 				const rev = this.nextRev();
 				const uri = `${space.uri}/${this.sessionDid}/${collection}/${rkey}`;
 				this.store(space.uri).set(`${collection}/${rkey}`, { uri, cid, value: record, rev });
 				this.opLog(space.uri).push({ collection, rkey, cid, rev, value: record });
+				let referenced = this.spaceBlobs.get(space.uri);
+				if (!referenced) {
+					referenced = new Set();
+					this.spaceBlobs.set(space.uri, referenced);
+				}
+				for (const blobCid of blobCidsIn(record)) referenced.add(blobCid);
 				if (this.throwAfterWrite > 0) {
 					this.throwAfterWrite -= 1;
 					throw new Error("simulated kill after the write landed");
@@ -228,7 +339,10 @@ export class FakeSpacePds {
 						repo: this.sessionDid,
 						space: space.uri,
 						rev: String(this.clock).padStart(12, "0"),
-						data: "ZmFrZQ==",
+						// A set digest of the record CIDs, so a restore that lost or changed a record
+						// produces a different digest. The real commit's `data` is an LtHash; the
+						// property the restore checks is that it is a function of the whole set.
+						data: { $bytes: this.setDigest(space.uri) },
 					},
 				});
 			}
@@ -248,4 +362,46 @@ export class FakeSpacePds {
 
 	/** The DID the fake treats as the authenticated caller. Set by a test's session. */
 	sessionDid = "did:plc:fake";
+
+	/** The ordinary-repository upload, which is how a space blob comes to exist. */
+	private handleUpload(bytes: Uint8Array, contentType: string): Response {
+		const cid = `bafyblob${hashOf(bytes)}`;
+		this.blobs.set(cid, { bytes, contentType });
+		return json({
+			blob: {
+				$type: "blob",
+				ref: { $link: cid },
+				mimeType: contentType,
+				size: bytes.length,
+			},
+		});
+	}
+}
+
+/** A stable CID for a blob, so a re-upload returns the same address the lab observed. */
+function hashOf(bytes: Uint8Array): string {
+	return createHash("sha256").update(bytes).digest("base64url").slice(0, 24);
+}
+
+/** Every `{$type: "blob", ref: {$link}}` in a record, wherever it is nested. */
+function blobCidsIn(value: unknown): string[] {
+	const found: string[] = [];
+	const walk = (node: unknown): void => {
+		if (Array.isArray(node)) {
+			for (const entry of node) walk(entry);
+			return;
+		}
+		if (!node || typeof node !== "object") return;
+		const record = node as Record<string, unknown>;
+		if (record.$type === "blob") {
+			const ref = record.ref as { $link?: unknown } | undefined;
+			if (typeof ref?.$link === "string") {
+				found.push(ref.$link);
+				return;
+			}
+		}
+		for (const entry of Object.values(record)) walk(entry);
+	};
+	walk(value);
+	return found;
 }

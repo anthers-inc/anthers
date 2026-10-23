@@ -30,69 +30,13 @@ import {
 	outboxBacklog,
 } from "../services/space-outbox.js";
 import { rebuildLibraryProjection } from "../services/space-projection.js";
-import { type LibraryItemState, USER_SPACE_COLLECTIONS } from "../services/space-records.js";
-import {
-	ensureUserSpace,
-	reconcileUserSpace,
-	registeredSpace,
-	userSpaceUri,
-} from "../services/space-registry.js";
-import type { ResolveSpaceSession } from "../services/space-writer.js";
-import { createAccount } from "./account-fixture.js";
+import { USER_SPACE_COLLECTIONS } from "../services/space-records.js";
+import { reconcileUserSpace, registeredSpace, userSpaceUri } from "../services/space-registry.js";
 import { purgeAccountsCreatedHere } from "./cleanup.js";
-import { FakeSpacePds } from "./space-fake.js";
+import { spaceContext as context, shelfEntry } from "./space-fixtures.js";
 import { insertWork } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
-
-let counter = 0;
-
-interface Context {
-	pds: FakeSpacePds;
-	userId: number;
-	did: string;
-	spaceUri: string;
-	workId: number;
-	resolveSession: ResolveSpaceSession;
-}
-
-/** An account, a fake PDS, a Work to save, and the account's space already created. */
-async function context(): Promise<Context> {
-	counter += 1;
-	const account = await createAccount(`spaces-outbox-${counter}`);
-	const pds = new FakeSpacePds();
-	pds.sessionDid = account.did;
-	const resolveSession: ResolveSpaceSession = async (userId) =>
-		userId === account.userId
-			? { session: { did: account.did, pdsUrl: "http://fake.pds", token: "token" } }
-			: { session: null, reason: "not_hosted" };
-	const work = await insertWork({ creatorId: account.userId, type: "text", title: "Nightjar" });
-
-	const ensured = await ensureUserSpace(account.userId, {
-		resolveSession,
-		fetchImpl: pds.fetch,
-	});
-	if (!ensured.space) throw new Error(`space was not created: ${ensured.reason}`);
-
-	return {
-		pds,
-		userId: account.userId,
-		did: account.did,
-		spaceUri: ensured.space.spaceUri,
-		workId: work.id,
-		resolveSession,
-	};
-}
-
-function shelfEntry(workId: number, overrides: Partial<LibraryItemState> = {}): LibraryItemState {
-	return {
-		subject: { kind: "work", id: workId, uri: null },
-		hidden: false,
-		sortOrder: 1,
-		savedAt: new Date("2026-10-23T12:00:00.000Z"),
-		...overrides,
-	};
-}
 
 describe("the user-space outbox", () => {
 	it("01: clears a row only after the write reads back verified", async () => {

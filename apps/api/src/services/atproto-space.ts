@@ -76,9 +76,21 @@ export interface SpaceCommit {
 	repo: string;
 	space: string;
 	rev: string;
-	/** Base64 of the 32-byte LtHash digest, as JSON carries bytes. */
-	data: string;
+	/**
+	 * The 32-byte LtHash digest of the record set, base64.
+	 *
+	 * ⚠️ **The wire form is `{ "$bytes": "…" }`, not a bare string**, because the Lexicon's
+	 * `bytes` format rides the JSON-bytes wrapper. A caller that compares this field directly
+	 * across two reads is comparing two objects and will always answer no; use
+	 * {@link commitDigest}.
+	 */
+	data: string | { $bytes: string };
 	[extra: string]: unknown;
+}
+
+/** The digest's base64 string, whichever JSON form the server answered with. */
+export function commitDigest(commit: Pick<SpaceCommit, "data">): string {
+	return typeof commit.data === "string" ? commit.data : commit.data.$bytes;
 }
 
 /** One operation in a space repo's oplog. `cid` is null for a delete; `prev` is null for a create. */
@@ -172,6 +184,21 @@ interface RequestOptions {
 	bytes?: boolean;
 }
 
+/** A blob reference, as `com.atproto.repo.uploadBlob` answers it. */
+export interface SpaceBlobRef {
+	$type: "blob";
+	ref: { $link: string };
+	mimeType: string;
+	size: number;
+}
+
+/** `putMember`'s body. */
+export interface SpaceMemberGrant {
+	did: string;
+	read: boolean;
+	write: boolean;
+}
+
 /**
  * The space endpoints a user's own space needs.
  *
@@ -199,6 +226,47 @@ export class SpaceClient {
 	/** Read a space's URI and policies. */
 	async getSpace(space: string): Promise<SpaceDescription> {
 		return this.request("com.atproto.simplespace.getSpace", { params: { space } });
+	}
+
+	/** Remove a space and everything in it. The restore drill's delete half. */
+	async deleteSpace(space: string): Promise<Record<string, never>> {
+		return this.request("com.atproto.simplespace.deleteSpace", { body: { space } });
+	}
+
+	/** Add or update one member's read and write flags. */
+	async putMember(space: string, member: SpaceMemberGrant): Promise<Record<string, never>> {
+		return this.request("com.atproto.simplespace.putMember", {
+			body: { space, ...member },
+		});
+	}
+
+	/**
+	 * Upload bytes through the normal repository, which is the only upload route a space has.
+	 *
+	 * ⚠️ **The space namespace has no upload.** The bytes go to the account's ordinary blob
+	 * store and a space record references the CID; `space.listBlobs` then enumerates it. This
+	 * is why a space backup's blob half is an upload plus a record replay rather than a STAR
+	 * import, and why a restoring app needs a `blob:` permission alongside its `space:` one.
+	 */
+	async uploadBlob(bytes: Uint8Array, contentType: string): Promise<SpaceBlobRef> {
+		const url = new URL("/xrpc/com.atproto.repo.uploadBlob", this.baseUrl);
+		const headers: Record<string, string> = {};
+		if (this.token) headers.Authorization = `Bearer ${this.token}`;
+		// A fresh view over a plain ArrayBuffer: the bytes may arrive as a view on a shared or
+		// over-sized buffer, which `Blob` and `BodyInit` refuse.
+		const copy = new Uint8Array(bytes.byteLength);
+		copy.set(bytes);
+		const response = await this.fetchImpl(url, {
+			method: "POST",
+			headers,
+			body: new Blob([copy], { type: contentType }),
+		});
+		if (!response.ok) {
+			throw await this.errorFor("com.atproto.repo.uploadBlob", response);
+		}
+		// The endpoint answers `{ blob: BlobRef }`; the reference is what a record embeds.
+		const body = (await response.json()) as { blob: SpaceBlobRef };
+		return body.blob;
 	}
 
 	/** List spaces under an owner or a type, with the protocol's paging. */
@@ -306,13 +374,7 @@ export class SpaceClient {
 		});
 
 		if (!response.ok) {
-			let detail: { error?: string; message?: string } = {};
-			try {
-				detail = (await response.json()) as typeof detail;
-			} catch {
-				// A non-JSON error body still has a status, which is the useful part.
-			}
-			throw new SpaceRequestError(method, response.status, detail.error, detail.message);
+			throw await this.errorFor(method, response);
 		}
 
 		if (options.bytes) {
@@ -324,5 +386,22 @@ export class SpaceClient {
 
 		const text = await response.text();
 		return (text ? JSON.parse(text) : {}) as T;
+	}
+
+	/**
+	 * Turn a non-OK response into the error the callers branch on.
+	 *
+	 * The server's own error name is what the outbox and the registry match on (`RepoNotFound`,
+	 * `SpaceAlreadyExists`, `RecordNotFound`), so it is read off the body wherever the body is
+	 * JSON. A non-JSON error still has a status, which is the useful part.
+	 */
+	private async errorFor(method: string, response: Response): Promise<SpaceRequestError> {
+		let detail: { error?: string; message?: string } = {};
+		try {
+			detail = (await response.json()) as typeof detail;
+		} catch {
+			// Nothing to add; the status is the fact.
+		}
+		return new SpaceRequestError(method, response.status, detail.error, detail.message);
 	}
 }

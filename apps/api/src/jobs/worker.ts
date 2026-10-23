@@ -67,6 +67,7 @@ import { rescanOwed } from "./rescan-owed.js";
 import { markBenignInterrupted, resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
+import { type SpaceBackupJobData, spaceBackupJob } from "./space-backup.js";
 import { type SpaceOutboxJobData, spaceOutboxJob } from "./space-outbox.js";
 import { statusSample } from "./status-sample.js";
 import { runStorageUsageSweep } from "./storage-usage.js";
@@ -176,6 +177,18 @@ async function start() {
 		async (jobs) => {
 			for (const job of jobs) {
 				await spaceOutboxJob(job.data);
+			}
+		},
+	);
+
+	// The nightly space backup and its prune. One job a night; the handler logs only when it
+	// captured or retired something.
+	await queue.work<SpaceBackupJobData>(
+		QUEUES.SPACE_BACKUP,
+		{ localConcurrency: 1 },
+		async (jobs) => {
+			for (const job of jobs) {
+				await spaceBackupJob(job.data);
 			}
 		},
 	);

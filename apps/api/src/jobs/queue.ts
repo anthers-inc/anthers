@@ -261,6 +261,9 @@ export const QUEUES = {
 	// durable record of what is owed, the sweep is what guarantees it moves, and a missed
 	// enqueue costs a minute rather than the write. See services/space-outbox.ts.
 	SPACE_OUTBOX: "space-outbox",
+	// The logical backup: a STAR, the blob bytes and the registry entry per registered space,
+	// plus the retention sweep beside it. See services/space-backup.ts.
+	SPACE_BACKUP: "space-backup",
 	PUBLISH_SCHEDULED: "publish-scheduled", // Auto-publish drafts whose scheduledFor has arrived
 	// Release private Works whose scheduled release time has come, once they are ready.
 	RELEASE_SCHEDULED: "release-scheduled",
@@ -419,6 +422,15 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 2,
 		retryDelay: 60,
 		expireInMinutes: 30,
+	},
+	// A sweep over every registered space, one at a time, each with a STAR and its blobs. The
+	// cap is generous because a hundred spaces with media is minutes of network and storage
+	// rather than seconds; a re-delivery is bounded by the per-space capture being idempotent
+	// at the same prefix.
+	[QUEUES.SPACE_BACKUP]: {
+		retryLimit: 2,
+		retryDelay: 300,
+		expireInMinutes: 60,
 	},
 	[QUEUES.SCAN_MEDIA]: {
 		// Retried generously and slowly on purpose. A vendor outage must leave the object
@@ -643,6 +655,11 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// already longer than anybody expects; the drain is bounded (fifty rows) and quiet when
 	// there is nothing to do, so the cost of the tight schedule is one indexed query.
 	[QUEUES.SPACE_OUTBOX, "* * * * *"],
+	// 4:40 AM daily, off the hour and after reconcile-listings at 4:20. The backup reads each
+	// space over the network and writes its objects to storage, so it is the longest job in
+	// the night's sweeps and the one most worth keeping clear of the others. Daily is the
+	// retention unit: the prune keeps thirty of them.
+	[QUEUES.SPACE_BACKUP, "40 4 * * *"],
 	// 3 AM daily, deliberately AFTER distribute-pool's midnight run: the pool pays
 	// creators out of these rows, so pruning ahead of it would cost earnings rather
 	// than privacy. The retention window is months wide, so the ordering has enormous
