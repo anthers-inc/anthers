@@ -199,6 +199,7 @@ import {
 } from "../services/content-rating.js";
 import {
 	acceptCredit,
+	affirmSelfCredits,
 	creditsForOwner,
 	creditsForUser,
 	findRejectedCredit,
@@ -5055,6 +5056,11 @@ const contentRoutes = new Hono()
 		const job = await queueTranscodeForWork(work);
 		await queueScansForWork(work);
 		await resolveWorkThumbnail(work);
+		// A credit naming the creator's own identity is affirmed by the act of writing it:
+		// there is no third party to ask, so it is recorded as an ordinary acceptance here
+		// (see `affirmSelfCredits`). A Work is born private and has no listing yet; the row
+		// is what the record's confirmed set reads when the Work is released.
+		await affirmSelfCredits({ workId: work.id, creatorUserId: user.id, credits: work.credits });
 		// No credit notification here: a Work is born private, and the notification is owed
 		// when the Work is public — see the PATCH route and `notifyCreditedAccounts`.
 		return c.json({ work: await serializeWork(work, [], job, [], deliveryCtx()) }, 201);
@@ -6108,6 +6114,12 @@ const contentRoutes = new Hono()
 		if (sourceChanged && isOwnThumbnail(work.type)) updates.thumbnail = data.sourceKey ?? "";
 
 		const [updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
+
+		// The creator's own credits are affirmed by the assertion itself, recorded before the
+		// listing sync below so the record's confirmed set sees them. Run on every write, not
+		// only a credits edit, so a self-credit written before this rule existed is healed by
+		// the next save (`affirmSelfCredits`).
+		await affirmSelfCredits({ workId: id, creatorUserId: user.id, credits: updated.credits });
 
 		// The credited are told when the credit becomes PUBLIC: on the request that releases
 		// the Work, or when credits change on one already released. A private Work's credits
