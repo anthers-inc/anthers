@@ -241,6 +241,13 @@ import {
 import { releaseCounts, releasesByWorkId } from "../services/project-releases.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { publishRefusal } from "../services/publish-refusal.js";
+import {
+	queuePosition,
+	queueShelfEntry,
+	queueShelfRemoval,
+	queueWorkSave,
+	queueWorkSaveRemoval,
+} from "../services/reader-state-migration.js";
 import { findPosition, listPositions, upsertPosition } from "../services/reading-positions.js";
 import { queueRecordSync } from "../services/record-sync.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
@@ -3017,6 +3024,15 @@ const tagDirectoryQuerySchema = z.object({
 	limit: z.coerce.number().int().min(1).max(100).optional().default(20),
 });
 
+/**
+ * Queue the space write after the row has been written, and never let its failure fail the
+ * request. During the cutover the database is still the hot copy, so a queue failure costs
+ * freshness in the space rather than the save itself.
+ */
+function queueReaderWrite(work: () => Promise<void>): void {
+	void work().catch((error) => console.error("[reader-state] queue failed", error));
+}
+
 const contentRoutes = new Hono()
 	// ══════════════════════════════════════════════════════════════════════════
 	// POSTS — the universal content unit
@@ -4647,6 +4663,7 @@ const contentRoutes = new Hono()
 				},
 			})
 			.returning({ id: workSaves.id, updatedAt: workSaves.updatedAt });
+		queueReaderWrite(() => queueWorkSave(user.id, work.id));
 		return c.json({ saved: true as const, updatedAt: save.updatedAt });
 	})
 	.get("/works/:id/save", requireAuth, async (c) => {
@@ -4683,6 +4700,9 @@ const contentRoutes = new Hono()
 			.returning({ id: workSaves.id });
 		// Deleting your own save is a playerRight-shaped act and needs no gate beyond
 		// owning it: it removes only the synced copy, never the game's local one.
+		if (deleted != null) {
+			queueReaderWrite(() => queueWorkSaveRemoval(user.id, Number(c.req.param("id"))));
+		}
 		return c.json({ deleted: deleted != null });
 	})
 
@@ -8562,6 +8582,7 @@ const contentRoutes = new Hono()
 					404,
 				);
 			}
+			queueReaderWrite(() => queueShelfEntry(user.id, result.id));
 			return c.json({ id: result.id }, 201);
 		},
 	)
@@ -8581,6 +8602,7 @@ const contentRoutes = new Hono()
 			const id = parseNumericId(c.req.param("id"));
 			if (id == null) return c.json({ error: "Not found" }, 404);
 			const ok = await setHidden(user.id, id, c.req.valid("json").hidden);
+			if (ok) queueReaderWrite(() => queueShelfEntry(user.id, id));
 			return ok ? c.json({ success: true }) : c.json({ error: "Not found" }, 404);
 		},
 	)
@@ -8599,7 +8621,10 @@ const contentRoutes = new Hono()
 		if (id == null) return c.json({ error: "Not found" }, 404);
 
 		const result = await removeItem(user.id, id);
-		if (result.ok) return c.body(null, 204);
+		if (result.ok) {
+			queueReaderWrite(() => queueShelfRemoval(user.id, result.subject));
+			return c.body(null, 204);
+		}
 		if (result.reason === "purchased") {
 			return c.json(
 				{
@@ -8690,6 +8715,7 @@ const contentRoutes = new Hono()
 				);
 			}
 
+			queueReaderWrite(() => queuePosition(user.id, work.id));
 			const row = await findPosition(user.id, work.id);
 			return c.json({
 				workId: row!.workId,
