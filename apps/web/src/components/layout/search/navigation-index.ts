@@ -102,12 +102,19 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 		kind: "mode",
 	},
 
-	// ── Settings' four tabs ─────────────────────────────────────────────────
+	// ── Settings' five tabs ──────────────────────────────────────────────────
 	{
 		id: "setting-account",
 		label: "Account Settings",
 		keywords: ["settings", "account", "creator mode", "profile"],
 		href: "/settings?tab=account",
+		kind: "setting",
+	},
+	{
+		id: "setting-purchases",
+		label: "Badges & Purchases",
+		keywords: ["settings", "badges", "purchases", "receipts", "support", "billing", "month"],
+		href: "/settings?tab=purchases",
 		kind: "setting",
 	},
 	{

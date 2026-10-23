@@ -193,8 +193,8 @@ test("the divider below the nav is persistent on a page that registers nothing",
 }) => {
 	// A page with no sidebar content of its own still gets the structure's divider:
 	// the shape never depends on the page. (The Library no longer qualifies — its
-	// Lenses grew in with its sidebar task; Purchases never registers anything.)
-	await page.goto(`${WEB_ORIGIN}/purchases`);
+	// Lenses grew in with its sidebar task; Settings never registers anything.)
+	await page.goto(`${WEB_ORIGIN}/settings`);
 	const map = await sidebarMap(page);
 	const nav = map?.find((d) => d.tag === "nav");
 	const anyDivider = map?.some((d) => d.divider && d.y > (nav?.y ?? 0));

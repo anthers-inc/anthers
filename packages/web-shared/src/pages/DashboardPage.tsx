@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Studio's front door: **what needs the creator's attention**, and nothing else.
+ * The creator's Dashboard: **what needs their attention**, and nothing else. It is a tab on
+ * the creator's own profile since 2026-10-23 (Parker), where it used to be the Studio's front
+ * door at `/studio`; the page itself did not change with the move, and `/studio` redirects here.
  *
  * 🚨 **This stopped being an overview of everything on 2026-09-11, deliberately.** It used
  * to list the creator's Projects and their posts in two tables and never mention a Work at
@@ -192,7 +194,7 @@ export default function DashboardPage() {
 	});
 
 	return (
-		<div className="max-w-4xl mx-auto px-4 py-8">
+		<div className="mx-auto max-w-4xl py-4">
 			<div className="mb-6 flex items-center justify-between gap-2">
 				<h1 className="text-2xl font-bold">Dashboard</h1>
 				{user?.isCreator && !arranging && (

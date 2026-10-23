@@ -8,7 +8,12 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from "@anthers/web-sh
 import { SidebarProvider, useSidebar } from "@anthers/web-shared/sidebar";
 import Logo from "@anthers/web-shared/ui/Logo";
 import ThemeSelect from "@anthers/web-shared/ui/ThemeSelect";
-import { ChevronLeftIcon, ShoppingBagIcon, UserCircleIcon } from "@heroicons/react/24/outline";
+import {
+	ChevronLeftIcon,
+	Cog6ToothIcon,
+	ShoppingBagIcon,
+	UserCircleIcon,
+} from "@heroicons/react/24/outline";
 import { useBasket } from "../../lib/basket";
 import { useMediaPlayer } from "../../lib/media-player";
 import { studioUrl } from "../../lib/studio";
@@ -24,48 +29,125 @@ import SearchBar from "./SearchBar";
 import { ViewFilterProvider } from "./search/filter-context";
 
 /**
- * Where the signed-in site-map footer renders: the account pages only. Every other
+ * Where the signed-in site-map footer renders: the account page. Every other
  * signed-in page ends at its own content, since the sidebar and the header's account
  * menu already carry the reader's navigation. Studio mode omits the footer separately.
+ *
+ * Badges & Purchases is a tab on Settings since 2026-10-23, so the address that carries
+ * the account's own pages is one path again.
  */
-const SITE_FOOTER_PATHS = new Set(["/purchases", "/settings"]);
+const SITE_FOOTER_PATHS = new Set(["/settings"]);
 
-/** Treat `/purchases/` and `/purchases` as the same destination. */
+/** Treat `/settings/` and `/settings` as the same destination. */
 const showsSiteFooter = (pathname: string) =>
 	SITE_FOOTER_PATHS.has(pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname);
 
-const navItemClass = (active: boolean, rail: boolean) =>
-	`flex items-center ${rail ? "justify-center px-2" : "gap-3 px-3"} py-2 rounded-lg text-sm transition-colors ${
+/**
+ * A sidebar row. `dense` is for the one row that carries two lines — the creator's profile,
+ * whose name and handle share a single tab's height — so its padding is the two-line one
+ * rather than a class appended over `py-2`, which Tailwind's cascade would decide arbitrarily.
+ */
+const navItemClass = (active: boolean, rail: boolean, dense = false) =>
+	`flex items-center ${rail ? "justify-center px-2" : "gap-3 px-3"} ${
+		dense && !rail ? "py-1.5" : "py-2"
+	} rounded-lg text-sm transition-colors ${
 		active
 			? "bg-primary/10 text-primary font-medium"
 			: "text-base-content/70 hover:bg-base-300/50 hover:text-base-content"
 	}`;
 
 /**
- * The switch between the two modes, at the top of the sidebar, shown only to an account with
- * creator mode on (Parker, 2026-09-17). The sides name the person rather than the product —
- * User|Creator (Parker, 2026-10-16) — and each side goes to its mode's home, since the mode of
- * the page on screen is decided by where it is (`app-mode.ts`). The user home is the account's
- * starting tab, the same rule `RootRedirect` follows.
+ * The switch between the two modes, in the header beside the logo, shown only to an account
+ * with creator mode on (Parker, 2026-09-17; moved here 2026-10-23). The sides name the person
+ * rather than the product — User|Creator (Parker, 2026-10-16) — and each side goes to its
+ * mode's home, since the mode of the page on screen is decided by where it is (`app-mode.ts`).
+ * The user home is the account's starting tab, the same rule `RootRedirect` follows, and the
+ * creator home is the Studio's root, which forwards to the Dashboard tab on the creator's own
+ * profile — the place that replaced the Studio's old Dashboard tab.
+ *
+ * ⚠️ **The toggle is bounded, because an unbounded one is unreadable.** Its inactive side used
+ * to be `bg-base-200`, the sidebar's own colour, so the pair had no visible edge and the
+ * toggle read as one button that changed colour at some arbitrary point. The join carries a
+ * hairline border and a soft shadow, and the inactive side sits on `base-100` — the surface
+ * the page uses — so both halves read as controls against either the header or the sidebar.
  */
-function ModeSwitch({ mode, userHome }: { mode: AppMode; userHome: string }) {
+function ModeSwitch({
+	mode,
+	userHome,
+	creatorHome,
+}: {
+	mode: AppMode;
+	userHome: string;
+	creatorHome: string;
+}) {
 	const sides = [
 		{ to: userHome, label: "User", on: mode === "user" },
-		{ to: studioUrl("/"), label: "Creator", on: mode === "studio" },
+		{ to: creatorHome, label: "Creator", on: mode === "studio" },
 	];
 	return (
-		<nav className="join w-full" aria-label="User or Creator">
+		<nav
+			className="join rounded-lg border border-base-300 bg-base-100 shadow-sm"
+			aria-label="User or Creator"
+		>
 			{sides.map(({ to, label, on }) => (
 				<Link
 					key={label}
 					to={to}
 					aria-current={on ? "true" : undefined}
-					className={`btn btn-sm join-item flex-1 ${on ? "btn-primary" : "btn-ghost bg-base-200"}`}
+					className={`btn btn-sm join-item h-8 min-h-0 border-0 px-3 font-medium ${
+						on
+							? "btn-primary"
+							: "bg-base-100 text-base-content/70 hover:bg-base-200 hover:text-base-content"
+					}`}
 				>
 					{label}
 				</Link>
 			))}
 		</nav>
+	);
+}
+
+/**
+ * The creator's own profile as a sidebar row: their thumbnail where every other tab draws an
+ * icon, their display name where it draws a label, and their handle as the subtext beneath it
+ * (Parker, 2026-10-23). It replaces the Studio's Dashboard tab, which moved to a tab on this
+ * same profile.
+ *
+ * ⚠️ **The thumbnail survives the rail**, because it IS this row's icon — a rail that dropped
+ * it would leave the creator's home as the one tab with nothing drawn in the column.
+ */
+function ProfileRow({ rail, active }: { rail: boolean; active: boolean }) {
+	const { user } = useAuth();
+	if (!user) return null;
+	const name = user.displayName || user.handle;
+	return (
+		<Link
+			to={profileUrl(user.handle)}
+			aria-current={active ? "page" : undefined}
+			title={rail ? name : undefined}
+			className={navItemClass(active, rail, true)}
+		>
+			{user.avatar ? (
+				<img src={user.avatar} alt="" className="w-6 h-6 shrink-0 rounded-full object-cover" />
+			) : (
+				<span
+					aria-hidden="true"
+					className="w-6 h-6 shrink-0 rounded-full bg-base-300 text-[11px] font-semibold flex items-center justify-center text-base-content/60"
+				>
+					{name.charAt(0).toUpperCase()}
+				</span>
+			)}
+			{rail ? (
+				<span className="sr-only">{name}</span>
+			) : (
+				<span className="flex min-w-0 flex-col leading-tight">
+					<span className="truncate">{name}</span>
+					<span className="truncate text-xs text-base-content/50">
+						{displayHandle(user.handle)}
+					</span>
+				</span>
+			)}
+		</Link>
 	);
 }
 
@@ -86,6 +168,14 @@ function LoggedInLayoutInner() {
 	 * only thing that decides where a session lands.
 	 */
 	const userHome = userTabPath(user?.homeDefaultTab);
+
+	/**
+	 * Where creator mode begins: `/studio`, which forwards to the creator's own profile with
+	 * the Dashboard tab open. Keeping the switch pointed at the Studio root rather than at the
+	 * profile itself matters — a profile belongs to neither mode, so a link straight to it
+	 * would leave the sidebar on whichever side the person arrived from.
+	 */
+	const creatorHome = studioUrl("/");
 
 	// An account that has not finished onboarding owns nothing the sidebar points at:
 	// Network, Library and Discovery are all behind ProtectedRoute, which bounces a
@@ -120,14 +210,22 @@ function LoggedInLayoutInner() {
 		    studio mode leaves out search and the basket, which belong to user mode. The sidebar's
 		    own toggle used to live here too and moved onto the sidebar's edge (2026-10-16). */}
 				<header className="navbar nav-edge bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40 h-14 min-h-0">
-					<div className="navbar-start gap-1">
+					<div className="navbar-start gap-3">
 						{/* A plain flex link rather than a `btn`, for the same reason as the brand link in
 					    LoggedOutLayout: the ghost button's hover background draws a rectangle the trimmed
 					    logo artwork doesn't fill. */}
-						<Link to={studio ? studioUrl("/") : userHome} className="flex items-center gap-2 px-2">
+						<Link
+							to={studio ? creatorHome : userHome}
+							className="flex items-center gap-2 pl-2 pr-1"
+						>
 							<Logo variant="oneline" className="h-9" />
-							{studio && <span className="text-lg font-bold text-primary">Studio</span>}
 						</Link>
+						{/* The mode switch sits beside the logo rather than at the top of the sidebar: it names
+						    the two halves of the whole app, so it belongs to the one header both halves share,
+						    and the sidebar's first row is free for where the creator actually is. */}
+						{isCreator && !chromeHidden && (
+							<ModeSwitch mode={mode} userHome={userHome} creatorHome={creatorHome} />
+						)}
 					</div>
 
 					<div className="navbar-center flex-1 px-4 hidden sm:flex">{!studio && <SearchBar />}</div>
@@ -195,7 +293,7 @@ function LoggedInLayoutInner() {
 								</li>
 								<div className="divider my-0 px-2" />
 								<li>
-									<Link to="/purchases">Badges &amp; Purchases</Link>
+									<Link to="/settings?tab=purchases">Badges &amp; Purchases</Link>
 								</li>
 								<li>{user && <Link to={profileUrl(user.handle)}>Profile</Link>}</li>
 								<li>
@@ -251,18 +349,16 @@ function LoggedInLayoutInner() {
 						className={`${!chromeHidden && sidebarOpen ? "w-64 border-r" : chromeHidden ? "w-0" : "w-0 md:w-16 md:border-r"} absolute inset-y-0 left-0 z-30 md:static md:z-auto shrink-0 transition-all duration-base overflow-hidden border-base-300/50 bg-base-200/60`}
 					>
 						<div className={`${rail ? "w-16" : "w-64"} h-full flex flex-col overflow-y-auto`}>
-							{isCreator && !rail && (
-								<div className="px-3 pt-3">
-									<ModeSwitch mode={mode} userHome={userHome} />
-								</div>
-							)}
-
 							{/* Each mode's own nav, and never both: the Studio's places used to be tabs
 						    under a second header inside this layout, beside a sidebar still offering
 						    Network, Library and Discovery. Each nav is named, so a user (and a spec) can
 						    tell which one is on screen. */}
 							{studio ? (
 								<nav aria-label="Studio" className="p-3 flex flex-col gap-0.5">
+									{/* The creator's own profile, where the Dashboard lives now. It leads the nav
+									    because it is the creator's home, and it carries their face rather than an
+									    icon — the one row here that names a person instead of a place in the app. */}
+									<ProfileRow rail={rail} active={pathname === profileUrl(user?.handle ?? "")} />
 									{STUDIO_NAV.map((item) => {
 										const active = isStudioNavActive(item, pathname);
 										return (
@@ -317,6 +413,19 @@ function LoggedInLayoutInner() {
 											</span>
 										</NavLink>
 									)}
+
+									{/* Settings — the account's own door, below the three tabs (Parker, 2026-10-23).
+									    It is a row rather than a fourth entry in `USER_TABS`, deliberately: those
+									    three are the tabs a session can start on, and Settings is where a person
+									    manages the account rather than somewhere the site lands them. */}
+									<NavLink
+										to="/settings"
+										title={rail ? "Settings" : undefined}
+										className={navLinkClass}
+									>
+										<Cog6ToothIcon className="w-5 h-5 shrink-0" />
+										{rail ? <span className="sr-only">Settings</span> : "Settings"}
+									</NavLink>
 								</nav>
 							)}
 
@@ -406,7 +515,7 @@ function LoggedInLayoutInner() {
 												<Link to="/library" className="link link-hover">
 													Library
 												</Link>
-												<Link to="/purchases" className="link link-hover">
+												<Link to="/settings?tab=purchases" className="link link-hover">
 													Badges &amp; Purchases
 												</Link>
 											</nav>

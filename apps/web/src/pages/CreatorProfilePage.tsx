@@ -3,6 +3,7 @@
 import { amountLabel } from "@anthers/shared/constants";
 import { isListened } from "@anthers/shared/content";
 import { useAuth } from "@anthers/web-shared/auth";
+import DashboardPage from "@anthers/web-shared/DashboardPage";
 import { usePageTitle } from "@anthers/web-shared/page-title";
 import BadgeMaker from "@anthers/web-shared/post/BadgeMaker";
 import { displayHandle, handleFromParam } from "@anthers/web-shared/profile";
@@ -61,7 +62,16 @@ function postEntry(post: PostListItem): { kind: "post"; id: number } & Record<st
 	return { kind: "post", ...post };
 }
 
-type Tab = "all" | "posts" | "games" | "videos" | "audio" | "writing" | "badges" | "credits";
+type Tab =
+	| "dashboard"
+	| "all"
+	| "posts"
+	| "games"
+	| "videos"
+	| "audio"
+	| "writing"
+	| "badges"
+	| "credits";
 
 function badgeNameFor(id: string): string {
 	if (id === "none" || id === "free" || !id) return "Free";
@@ -81,7 +91,17 @@ function hostLabel(url: string): string {
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
-const TABS: Tab[] = ["all", "posts", "games", "videos", "audio", "writing", "badges", "credits"];
+const TABS: Tab[] = [
+	"dashboard",
+	"all",
+	"posts",
+	"games",
+	"videos",
+	"audio",
+	"writing",
+	"badges",
+	"credits",
+];
 
 /** The separator between the tab row's groups — the timeline, the Work types, and the profile's metadata views. */
 function TabDivider() {
@@ -103,11 +123,19 @@ export default function CreatorProfilePage() {
 	const [posts, setPosts] = useState<PostListItem[]>([]);
 	const [works, setWorks] = useState<CatalogWork[]>([]);
 	usePageTitle(creator?.displayName ?? null);
+	const isOwnProfile = currentUser?.handle === handle;
+
 	// ?tab=badges is a real entry point, not a nicety: a locked post's unlock panel sends the
 	// user here to act, and dropping them on the default tab loses the intent they arrived with.
 	// ?badge= beside it is the pick carried back across a sign-in detour from the same tab.
+	//
+	// ⭐ **`?tab=dashboard` leads the row for the creator alone** (Parker, 2026-10-23), because it
+	// holds the worklist and the arrangeable panels — the Studio's Dashboard, moved here from
+	// the Studio's own root. A visitor asking for it gets the profile's default tab: the tab is
+	// absent from their row, and a query parameter is not a door around that.
 	const tabParam = searchParams.get("tab") as Tab | null;
-	const tab: Tab = tabParam && TABS.includes(tabParam) ? tabParam : "all";
+	const asked = tabParam && TABS.includes(tabParam) ? tabParam : "all";
+	const tab: Tab = asked === "dashboard" && !isOwnProfile ? "all" : asked;
 	const badgeParam = Number.isFinite(Number(searchParams.get("badge")))
 		? searchParams.get("badge")
 		: null;
@@ -132,8 +160,6 @@ export default function CreatorProfilePage() {
 	 * so an art save's refetch moves the mark in place without closing the dialog.
 	 */
 	const [editingBadgeId, setEditingBadgeId] = useState<number | "new" | null>(null);
-
-	const isOwnProfile = currentUser?.handle === handle;
 
 	// A profile is a single-creator shelf — the Catalog and posts render as cards that
 	// link out to WorkPage, where consumption actually happens and the Time Pool claim
@@ -676,18 +702,30 @@ export default function CreatorProfilePage() {
 					)}
 				</div>
 
-				{/* Tabs. One flat row, but grouped: the timeline views (All, Posts), then the
-				    Work-type views — only the types the creator has actually released, so a
-				    profile with no audio shows no Audio tab rather than "Audio (0)" — then
-				    Badges, then Credits. The dividers sit between the groups, and collapse
-				    to a single divider when the middle group is empty. */}
+				{/* Tabs. One flat row, but grouped: the creator's own Dashboard first (owner only),
+				    then the timeline views (All Content, Posts), then the Work-type views — only the
+				    types the creator has actually released, so a profile with no audio shows no Audio
+				    tab rather than "Audio (0)" — then Badges, then Credits. The dividers sit between
+				    the groups, and collapse to a single divider when the middle group is empty. */}
 				<div className="tabs tabs-bordered mb-6 overflow-x-auto">
+					{isOwnProfile && (
+						<>
+							<button
+								type="button"
+								className={`tab whitespace-nowrap ${tab === "dashboard" ? "tab-active" : ""}`}
+								onClick={() => setTab("dashboard")}
+							>
+								Dashboard
+							</button>
+							<TabDivider />
+						</>
+					)}
 					<button
 						type="button"
 						className={`tab whitespace-nowrap ${tab === "all" ? "tab-active" : ""}`}
 						onClick={() => setTab("all")}
 					>
-						All
+						All Content
 					</button>
 					<button
 						type="button"
@@ -731,6 +769,8 @@ export default function CreatorProfilePage() {
 
 				{/* Tab content */}
 				<div className="pb-8">
+					{tab === "dashboard" && isOwnProfile && <DashboardPage />}
+
 					{tab === "all" &&
 						(allItems.length > 0 ? (
 							// The same uniform tile grid the feed renders — every listing
