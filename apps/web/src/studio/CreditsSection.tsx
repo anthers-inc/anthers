@@ -34,7 +34,7 @@
 
 import { client } from "@anthers/web-shared/rpc";
 import type { WorkCredit, WorkCreditType } from "@anthers/web-shared/types";
-import { InformationCircleIcon } from "@heroicons/react/24/outline";
+import { InformationCircleIcon, UserIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { CREDITS_WIKI_URL } from "../lib/wiki";
 
@@ -507,9 +507,15 @@ function ContributorPicker({
 									/>
 								) : profile?.avatar ? (
 									<img src={profile.avatar} alt="" className="h-5 w-5 rounded-full object-cover" />
-								) : (
+								) : profile ? (
 									<span className="flex h-5 w-5 items-center justify-center rounded-full bg-base-300 text-[10px] font-bold">
 										{name.charAt(0).toUpperCase()}
+									</span>
+								) : (
+									// A plain name wears the same-sized "no identity" circle its read side
+									// does, so a contribution's people line up whatever each one is written as.
+									<span className="flex h-5 w-5 items-center justify-center rounded-full bg-base-300">
+										<UserIcon className="h-3.5 w-3.5 text-base-content/50" />
 									</span>
 								)}
 								<span className="max-w-52 truncate">{name}</span>

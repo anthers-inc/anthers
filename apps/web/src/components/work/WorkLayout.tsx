@@ -31,6 +31,7 @@ import {
 	PhotoIcon,
 	PuzzlePieceIcon,
 	SpeakerWaveIcon,
+	UserIcon,
 	VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { PlayIcon } from "@heroicons/react/24/solid";
@@ -1429,6 +1430,18 @@ function CreditIdentity({ credit }: { credit: WorkCredit }) {
 			</a>
 		);
 	}
-	// No identity behind it on the network, and no Anthers account: a name as words.
-	return <span className="text-base-content/70">{credit.contributor}</span>;
+	// No identity behind it on the network, and no Anthers account: a name as words,
+	// beside the same-sized circle a resolved identity wears. The icon is what keeps the
+	// contributor list aligned, and what says this credit names nobody on the network.
+	return (
+		<span className="inline-flex items-center gap-1.5">
+			<span
+				aria-hidden="true"
+				className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-base-300"
+			>
+				<UserIcon className="h-3.5 w-3.5 text-base-content/50" />
+			</span>
+			<span className="text-base-content/70">{credit.contributor}</span>
+		</span>
+	);
 }
