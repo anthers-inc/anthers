@@ -29,6 +29,10 @@
  * to be a page-level tabs row, kept deliberately apart from the media tabs for the
  * narrow-vs-reorganize distinction; the sidebar replaces that visual argument with the
  * structural one, and the graying contract does the rest.
+ *
+ * The page's own shell is the user tabs' shared one — `min-h-full` around a `w-full px-6
+ * py-6` column — so the header sits exactly where Network's and Discovery's do, and the
+ * shelf grid gets the width the layout already gives it.
  */
 
 import { WITHDRAWN_RESCUE_DAYS } from "@anthers/shared/constants";
@@ -530,94 +534,96 @@ export default function LibraryPage() {
 	const hiddenCount = items.filter((i) => i.hidden).length;
 
 	return (
-		<div className="container mx-auto px-4 py-8">
-			<TabHeader
-				icon={RectangleStackIcon}
-				title="Library"
-				subtitle="All of the Works, Projects, and Posts you've purchased or otherwise saved, with everything you've purchased staying yours."
-			/>
-			{cutTo != null && (
-				<p className="mb-6 text-sm text-base-content/60">
-					Your Library holds more than {cutTo.toLocaleString()} things, and this page shows the{" "}
-					{cutTo.toLocaleString()} you saved most recently. Everything older is still saved.
-				</p>
-			)}
-
-			{/* The page body holds only what the view selects, plus this toggle. */}
-			{(showHidden || hiddenCount > 0) && (
-				<div className="mb-6">
-					<label className="label cursor-pointer gap-2 text-sm">
-						<input
-							type="checkbox"
-							className="toggle toggle-sm"
-							checked={showHidden}
-							onChange={(e) => setParam("hidden", e.target.checked ? "1" : "")}
-						/>
-						Show hidden
-						{!showHidden && hiddenCount > 0 && (
-							<span className="badge badge-xs">{hiddenCount}</span>
-						)}
-					</label>
-				</div>
-			)}
-
-			{lens === "music" ? (
-				/* Same rule as before the lenses moved into the sidebar: the lens
-				   reorganizes what is on the shelf, never fetches a different corpus.
-				   Drawing on `withTags` is what keeps "a lens is a view" true of the whole
-				   family of them. */
-				<MusicLens items={lensDraw as LensItem[]} includeSpoken={includeSpoken} />
-			) : lens === "bookshelf" ? (
-				/* The reading shelf: book-like types as spines, alpha by title. The same
-				   drawn list as every lens — `withTags`, the shelf's own narrowing. */
-				<BookshelfLens items={lensDraw as LensItem[]} />
-			) : lens === "channel-guide" ? (
-				/* The TV-guide: a channel per creator with saved video, that channel's
-				   timeline of saved videos, latest first. Channels translate client-side
-				   from the same drawn list; the guide itself owns selection. */
-				<ChannelGuideLens
-					channels={channelGuideChannelsFromShelf(lensDraw as LensItem[])}
-					source="library"
+		<div className="min-h-full">
+			<div className="w-full px-6 py-6">
+				<TabHeader
+					icon={RectangleStackIcon}
+					title="Library"
+					subtitle="All of the Works, Projects, and Posts you've purchased or otherwise saved, with everything you've purchased staying yours."
 				/>
-			) : filtered.length === 0 ? (
-				<EmptyState
-					title={
-						viewFilter.terms.length > 0
-							? "No matches in your Library"
-							: activeType
-								? `No ${SHARED_FILTER_TYPES.find((t) => t.id === activeType)?.label.toLowerCase()} in your Library`
-								: "Your Library is empty"
-					}
-					description={
-						viewFilter.terms.length > 0
-							? `Nothing here matches “${viewFilter.query.trim()}”.`
-							: activeType
-								? "Nothing here yet — save something, or buy it, and it lands here."
-								: "Save anything you want to keep. Free work included — you don't have to buy something to keep it."
-					}
-					action={
-						viewFilter.terms.length > 0 ? (
-							<button
-								type="button"
-								className="btn btn-primary btn-sm"
-								onClick={() => setParam("q", "")}
-							>
-								Clear filter
-							</button>
-						) : (
-							<Link to="/discovery" className="btn btn-primary btn-sm">
-								Explore Discovery
-							</Link>
-						)
-					}
-				/>
-			) : (
-				<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-					{filtered.map((item) => (
-						<ShelfCard key={item.id} item={item} onChanged={load} />
-					))}
-				</div>
-			)}
+				{cutTo != null && (
+					<p className="mb-6 text-sm text-base-content/60">
+						Your Library holds more than {cutTo.toLocaleString()} things, and this page shows the{" "}
+						{cutTo.toLocaleString()} you saved most recently. Everything older is still saved.
+					</p>
+				)}
+
+				{/* The page body holds only what the view selects, plus this toggle. */}
+				{(showHidden || hiddenCount > 0) && (
+					<div className="mb-6">
+						<label className="label cursor-pointer gap-2 text-sm">
+							<input
+								type="checkbox"
+								className="toggle toggle-sm"
+								checked={showHidden}
+								onChange={(e) => setParam("hidden", e.target.checked ? "1" : "")}
+							/>
+							Show hidden
+							{!showHidden && hiddenCount > 0 && (
+								<span className="badge badge-xs">{hiddenCount}</span>
+							)}
+						</label>
+					</div>
+				)}
+
+				{lens === "music" ? (
+					/* Same rule as before the lenses moved into the sidebar: the lens
+					   reorganizes what is on the shelf, never fetches a different corpus.
+					   Drawing on `withTags` is what keeps "a lens is a view" true of the whole
+					   family of them. */
+					<MusicLens items={lensDraw as LensItem[]} includeSpoken={includeSpoken} />
+				) : lens === "bookshelf" ? (
+					/* The reading shelf: book-like types as spines, alpha by title. The same
+					   drawn list as every lens — `withTags`, the shelf's own narrowing. */
+					<BookshelfLens items={lensDraw as LensItem[]} />
+				) : lens === "channel-guide" ? (
+					/* The TV-guide: a channel per creator with saved video, that channel's
+					   timeline of saved videos, latest first. Channels translate client-side
+					   from the same drawn list; the guide itself owns selection. */
+					<ChannelGuideLens
+						channels={channelGuideChannelsFromShelf(lensDraw as LensItem[])}
+						source="library"
+					/>
+				) : filtered.length === 0 ? (
+					<EmptyState
+						title={
+							viewFilter.terms.length > 0
+								? "No matches in your Library"
+								: activeType
+									? `No ${SHARED_FILTER_TYPES.find((t) => t.id === activeType)?.label.toLowerCase()} in your Library`
+									: "Your Library is empty"
+						}
+						description={
+							viewFilter.terms.length > 0
+								? `Nothing here matches “${viewFilter.query.trim()}”.`
+								: activeType
+									? "Nothing here yet — save something, or buy it, and it lands here."
+									: "Save anything you want to keep. Free work included — you don't have to buy something to keep it."
+						}
+						action={
+							viewFilter.terms.length > 0 ? (
+								<button
+									type="button"
+									className="btn btn-primary btn-sm"
+									onClick={() => setParam("q", "")}
+								>
+									Clear filter
+								</button>
+							) : (
+								<Link to="/discovery" className="btn btn-primary btn-sm">
+									Explore Discovery
+								</Link>
+							)
+						}
+					/>
+				) : (
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+						{filtered.map((item) => (
+							<ShelfCard key={item.id} item={item} onChanged={load} />
+						))}
+					</div>
+				)}
+			</div>
 		</div>
 	);
 }
