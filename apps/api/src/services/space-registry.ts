@@ -351,6 +351,12 @@ export function ownsSpace(did: string, spaceUri: string): boolean {
 	return spaceUri === userSpaceUri(did);
 }
 
+/** Every space this account owns, for an export or a capture that covers all of them. */
+export async function registeredSpacesFor(userId: number): Promise<RegisteredSpace[]> {
+	const rows = await db.select().from(userSpaces).where(eq(userSpaces.userId, userId));
+	return rows.map(toRegistered);
+}
+
 /** One account's row, without a network call. */
 export async function registeredSpace(userId: number): Promise<RegisteredSpace | null> {
 	const [row] = await db.select().from(userSpaces).where(eq(userSpaces.userId, userId)).limit(1);
