@@ -16,10 +16,11 @@
  * here is described as live. What this section does today is put the bytes in the right
  * place with the right records.
  *
- * ⭐ **The Upload page starts the same build** (Parker, 2026-10-19): choosing Web there swaps
- * its single-file picker for this lane, and `lib/web-build-uploads` carries the folder or
- * zip's files here. This section shows that upload's progress so the creator who lands on
- * the Work's page sees the build they just started rather than an empty section.
+ * ⭐ **The Work's media area starts the same build** (Parker, 2026-10-23): the empty card's
+ * intake and the media manager both mount this lane, and `lib/web-build-uploads` carries
+ * the folder or zip's files here. This section shows that upload's progress so the creator
+ * who is already on the Work's page sees the build they just started rather than an empty
+ * section.
  */
 
 import { WEB_BUILD_FILE_MAX } from "@anthers/shared/web-build";
@@ -73,7 +74,7 @@ export default function WebBuildSection({
 	);
 
 	const uploading = phase !== "idle";
-	// A hosted build started on the Upload page keeps going while the creator lands here.
+	// A hosted build started from the media area keeps going while the creator is here.
 	// These are its files and their progress; a completed one disappears into the build
 	// list on the page's re-read.
 	const incoming = useWebBuildUploads().filter((u) => u.workId === work.id && u.status !== "done");
@@ -200,9 +201,9 @@ export default function WebBuildSection({
 		<section className="flex flex-col gap-3">
 			<p className="text-sm text-base-content/60">
 				Upload a build that runs in the browser — the HTML entry, its loader, the wasm and the
-				assets beside it. A game or piece of software can also start one on the Upload page by
-				choosing Web. Delivery to players opens with the hosted-build launch; today this stores the
-				files a player will load.
+				assets beside it. A game or piece of software can also start one from this media area.
+				Delivery to players opens with the hosted-build launch; today this stores the files a player
+				will load.
 			</p>
 
 			{error && (

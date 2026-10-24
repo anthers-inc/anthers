@@ -608,6 +608,12 @@ export interface Work {
 	 * itself, so a locked Work reports none and a reachable Work reports its menu.
 	 */
 	captions?: WorkCaptionTrack[];
+	/**
+	 * When the CURRENT media version was added. The page shows it so a reader can tell a
+	 * 2019 film uploaded yesterday from one updated last week; the creator's Versions tab
+	 * puts the same date above the archive. Absent for a Work with no media.
+	 */
+	versionAddedAt?: string;
 	createdAt?: string;
 	updatedAt?: string;
 	/**
@@ -622,6 +628,20 @@ export interface Work {
 	 * reads, so every reader who can see the Work sees this too. Null means no listing.
 	 */
 	recordUrl?: string | null;
+}
+
+/** One archived media version, as the creator's Versions list serializes it. */
+export interface WorkMediaVersionSummary {
+	id: number;
+	/** When this media was added while it was current. */
+	uploadedAt: string;
+	/** When the next version replaced it. */
+	archivedAt: string;
+	kind: "source" | "set" | "builds";
+	fileCount: number;
+	totalBytes: number;
+	/** Filenames and sizes only — storage keys never reach the client. */
+	files: { filename: string; fileSize: number | null }[];
 }
 
 /**

@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Replace-in-place: a new source retires the version the Work already had.
+ * Replace-in-place: a new source archives the version it replaces, then retires its
+ * renditions.
  *
- * The attach path already re-ran a kind's processing on a source change — the door this
- * task opens is the one beside it: **nothing of the old version survives**. The prior
- * object, the remux-retained original riding `works.source_original_key`, and every
- * derived output the prior job rows name leave storage (swept through `media-purge.ts`,
- * which owns what may be deleted); the prior job rows are deleted so the replacement is
- * the Work's only processing truth; and a paged set is retired with its rows by
- * `syncFromSourceKey`. The no-old-versions ruling (Parker, 2026-10-10, 2026-10-12).
+ * 🚨 **The 2026-10-23 version ruling replaced the no-old-versions ruling of 2026-10-10 and
+ * 2026-10-12.** The creator's original — the remux-retained file where one exists, otherwise
+ * the uploaded source — survives as a creator-only `work_media_versions` row, while every
+ * derived output the prior job rows name (the HLS run, an MP3, a remuxed MP4) leaves storage
+ * through `media-purge.ts`, which owns what may be deleted. The prior job rows are deleted so
+ * the replacement is the Work's only processing truth. A paged set still follows
+ * `syncFromSourceKey`; its archival half lands with the set path.
  *
  * 🚨 **Storage is asserted by the calls made, not by probing the bucket** — a sweep has
  * no observable API effect, so `storage.delete`/`deletePrefix` are spied the
@@ -19,7 +20,14 @@
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { transcodingJobs, users, webBuilds, workSourceFiles, works } from "@anthers/db/schema";
+import {
+	transcodingJobs,
+	users,
+	webBuilds,
+	workMediaVersions,
+	workSourceFiles,
+	works,
+} from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import app from "../index";
 import { QUEUES, queue } from "../jobs/queue";
@@ -114,10 +122,16 @@ describe("replace-in-place retires the old version", () => {
 				expect(row.sourceKey).toBe(newKey);
 				// The image is its own thumbnail: the face follows the replacement.
 				expect(row.thumbnail).toBe(newKey);
-				// The old object leaves storage; the new one is a reference the client just
-				// uploaded, so nothing else is deleted here.
-				expect(deleted).toContain(oldKey);
+				// The old image survives as the version's original; the new one is a
+				// reference the client just uploaded, so nothing is deleted here.
+				expect(deleted).not.toContain(oldKey);
 				expect(deleted).not.toContain(newKey);
+				const [version] = await db
+					.select()
+					.from(workMediaVersions)
+					.where(eq(workMediaVersions.workId, work.id));
+				expect(version.media.kind).toBe("set");
+				expect(version.media.kind === "set" && version.media.files[0].file).toBe(oldKey);
 			} finally {
 				restoreStorage();
 			}
@@ -126,16 +140,21 @@ describe("replace-in-place retires the old version", () => {
 	);
 
 	it(
-		"a video replacement sweeps the old original, the retained remux original and the old HLS prefix, and retires the prior job rows",
+		"a video replacement archives the creator's original and sweeps the remuxed MP4, the HLS prefix and the prior job rows",
 		async () => {
 			const work = await makeWork({ type: "video", title: "vid", visibility: "private" });
 			const oldSource = `creators/${creatorId}/videos/originals/old-${work.id}.mp4`;
 			const oldOriginal = `creators/${creatorId}/videos/originals/old-${work.id}.mkv`;
 			const oldHlsRun = `creators/${creatorId}/videos/hls/run${work.id}a`;
 			const newKey = `creators/${creatorId}/videos/originals/new-${work.id}.mp4`;
+			const uploadedAt = new Date("2026-01-02T03:04:05.000Z");
 			await db
 				.update(works)
-				.set({ sourceKey: oldSource, sourceOriginalKey: oldOriginal })
+				.set({
+					sourceKey: oldSource,
+					sourceOriginalKey: oldOriginal,
+					versionAddedAt: uploadedAt,
+				})
 				.where(eq(works.id, work.id));
 			await db.insert(transcodingJobs).values([
 				{
@@ -156,12 +175,29 @@ describe("replace-in-place retires the old version", () => {
 				});
 				expect(res.status).toBe(200);
 
-				// Old objects and outputs out; the replacement in. The transcode's run prefix
-				// arrives the sweep shape it is derived in — master key minus its file, no
-				// trailing slash.
+				// The creator's original survives in the version; the remuxed MP4 is a
+				// rendition and leaves. The transcode's run prefix arrives the sweep shape
+				// it is derived in — master key minus its file, no trailing slash.
+				expect(deleted).not.toContain(oldOriginal);
 				expect(deleted).toContain(oldSource);
-				expect(deleted).toContain(oldOriginal);
 				expect(sweptPrefixes).toContain(oldHlsRun);
+
+				// The version row carries the date the media was added while it was current.
+				const [version] = await db
+					.select()
+					.from(workMediaVersions)
+					.where(eq(workMediaVersions.workId, work.id));
+				expect(version).toBeDefined();
+				expect(version.uploadedAt).toEqual(uploadedAt);
+				expect(version.media).toEqual({
+					kind: "source",
+					file: {
+						file: oldOriginal,
+						filename: oldOriginal.split("/").pop() ?? "",
+						fileSize: null,
+						mimeType: "",
+					},
+				});
 
 				// The prior job rows are gone; exactly one new pending job stands for the
 				// replacement, which the release gate and the status badge both read.
@@ -176,6 +212,7 @@ describe("replace-in-place retires the old version", () => {
 				const [row] = await db.select().from(works).where(eq(works.id, work.id));
 				expect(row.sourceKey).toBe(newKey);
 				expect(row.sourceOriginalKey).toBe("");
+				expect(row.versionAddedAt.getTime()).toBeGreaterThan(uploadedAt.getTime());
 			} finally {
 				restoreStorage();
 			}
@@ -208,7 +245,16 @@ describe("replace-in-place retires the old version", () => {
 					.where(eq(workSourceFiles.workId, work.id));
 				expect(rows).toHaveLength(1);
 				expect(rows[0].file).toBe(newImage);
-				expect(deleted).toContain(oldImage);
+				// The old page image is the version's original, not a deleted object.
+				expect(deleted).not.toContain(oldImage);
+				const [version] = await db
+					.select()
+					.from(workMediaVersions)
+					.where(eq(workMediaVersions.workId, work.id));
+				expect(version.media.kind).toBe("set");
+				expect(
+					version.media.kind === "set" && version.media.files.map((file) => file.file),
+				).toContain(oldImage);
 
 				// Exactly one re-render was asked, through the queue the route names.
 				const sends = sendSpy!.mock.calls.map((call: unknown[]) => call[0]);

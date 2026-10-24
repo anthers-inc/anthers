@@ -257,7 +257,7 @@ export function WorkPlaceholder({
 			<p className="text-sm text-base-content/60">{shape.label}.</p>
 			{note && <p className="max-w-prose text-xs text-base-content/40">{note}</p>}
 			{status}
-			{action && <div className="w-full max-w-lg">{action}</div>}
+			{action && <div className="w-full max-w-2xl">{action}</div>}
 		</div>
 	);
 }
@@ -534,6 +534,17 @@ export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 				year: "numeric",
 			})
 		: null;
+	// The current media version's date, for everyone. A Work with no uploaded media — a
+	// piece of writing, a good, a service — has no version to name. History is the
+	// creator's, in the manager; only the current version's date is a reader's fact.
+	const versionDate =
+		work.versionAddedAt && work.type !== "text" && !isGoods(work.type)
+			? new Date(work.versionAddedAt).toLocaleDateString("en-US", {
+					month: "long",
+					day: "numeric",
+					year: "numeric",
+				})
+			: null;
 	const creatorEl = work.creator && (
 		<Link to={profileUrl(work.creator.handle)} className="flex items-center gap-2 hover:underline">
 			{work.creator.avatar ? (
@@ -577,14 +588,19 @@ export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 					{actions}
 				</div>
 			</div>
-			{releasedDate && (
-				// The listing's globe rides the Released line (Parker, 2026-10-19): it is
-				// the page's own statement that the Work exists on the network, and it sits
-				// where a reader looks for the date rather than inside the Details tab.
-				<p className="flex items-center justify-center gap-1 text-sm text-base-content/60">
-					Released {releasedDate}
-					<RecordLinkButton recordUrl={work.recordUrl} />
-				</p>
+			{(releasedDate || versionDate) && (
+				<div className="flex flex-col items-center gap-0.5 text-sm text-base-content/60">
+					{releasedDate && (
+						// The listing's globe rides the Released line (Parker, 2026-10-19): it is
+						// the page's own statement that the Work exists on the network, and it sits
+						// where a reader looks for the date rather than inside the Details tab.
+						<p className="flex items-center justify-center gap-1">
+							Released {releasedDate}
+							<RecordLinkButton recordUrl={work.recordUrl} />
+						</p>
+					)}
+					{versionDate && <p>Version added {versionDate}</p>}
+				</div>
 			)}
 		</header>
 	);
