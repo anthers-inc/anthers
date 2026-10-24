@@ -18,7 +18,6 @@ import { afterAll } from "bun:test";
 import { db } from "@anthers/db/client";
 import type { AccessRow, WorkCredit } from "@anthers/db/schema";
 import { works } from "@anthers/db/schema";
-import { needsChosenThumbnail } from "@anthers/shared/content";
 import type { DeclarableMaturity } from "@anthers/shared/content-rating";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq } from "drizzle-orm";
@@ -88,9 +87,8 @@ export interface WorkFixture {
 	lyrics?: string;
 	sourceKey?: string;
 	/**
-	 * Defaults, for a video, to one under its creator's own prefix, because a fixture Work stands
-	 * for one that was properly released and release refuses a video without a thumbnail its
-	 * creator chose (`thumbnail_missing`). Pass `""` when that refusal is what is being tested.
+	 * The thumbnail the creator chose, under their own prefix. Optional: a Work may be released
+	 * with none, and the listing surfaces draw the kind's poster in its place.
 	 */
 	thumbnail?: string;
 	/**
@@ -154,11 +152,7 @@ export async function insertWork(fixture: WorkFixture) {
 			imageAlt: fixture.imageAlt ?? "",
 			sourceKey: fixture.sourceKey ?? "",
 			sourceOriginalKey: fixture.sourceOriginalKey ?? "",
-			thumbnail:
-				fixture.thumbnail ??
-				(needsChosenThumbnail(fixture.type)
-					? `creators/${fixture.creatorId}/thumbnails/fixture-${publicId}.jpg`
-					: ""),
+			thumbnail: fixture.thumbnail ?? "",
 			maturity: fixture.maturity ?? "general",
 			maturityNotes: fixture.maturityNotes ?? [],
 			maturityRows:
@@ -187,29 +181,18 @@ export async function insertWork(fixture: WorkFixture) {
 }
 
 /**
- * Give a Work its file, as though the upload landed and processing finished long ago, and give
- * a video the thumbnail its creator would have chosen by then.
+ * Give a Work its file, as though the upload landed and processing finished long ago.
  *
  * A video, audio, image, comic or ebook Work is created with no file and refused release until
  * one arrives (`media_missing`), because the Studio creates the Work the moment its file is
- * picked, and a video is refused until it has a thumbnail (`thumbnail_missing`). A suite whose
- * subject is not the upload writes the keys straight onto the row rather than through `PATCH`:
- * the route would enqueue a transcode and a scan, pg-boss is not running under the test runner,
- * and a transcode left pending would refuse the release for a second reason that is not the
- * suite's subject either.
+ * picked. A suite whose subject is not the upload writes the keys straight onto the row rather
+ * than through `PATCH`: the route would enqueue a transcode and a scan, pg-boss is not running
+ * under the test runner, and a transcode left pending would refuse the release for a second
+ * reason that is not the suite's subject either.
  */
 export async function giveWorkAFile(workId: number): Promise<void> {
-	const [row] = await db
-		.select({ type: works.type, thumbnail: works.thumbnail })
-		.from(works)
-		.where(eq(works.id, workId));
 	await db
 		.update(works)
-		.set({
-			sourceKey: `creators/0/media/fixture-file-${workId}`,
-			...(row && needsChosenThumbnail(row.type) && !row.thumbnail
-				? { thumbnail: `creators/0/thumbnails/fixture-thumbnail-${workId}.jpg` }
-				: {}),
-		})
+		.set({ sourceKey: `creators/0/media/fixture-file-${workId}` })
 		.where(eq(works.id, workId));
 }

@@ -1034,10 +1034,10 @@ async function runTranscode(
 		await uploadAndFree(outputDir);
 		await updateJobProgress(jobId, 90);
 
-		// 6. Complete. No poster is taken from the video: its creator chooses the thumbnail,
+		// 6. Complete. No poster is taken from the video: a thumbnail is the creator's to choose,
 		// uploaded or picked from a frame in the Studio, because a still taken on their behalf
 		// could be any moment of a Mature or Adult video and a thumbnail is shown to everybody.
-		// Release refuses a video without one (`thumbnail_missing`).
+		// A Work released without one draws its kind's poster (Parker, 2026-10-24).
 		const manifestUrl = await storage.getUrl(`${storagePrefix}/master.m3u8`);
 		// The completion write is the supersession check's whole reason to exist — this is
 		// the write a zombie run used to make, planting its manifest over the finisher's.

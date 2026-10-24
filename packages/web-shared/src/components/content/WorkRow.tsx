@@ -29,12 +29,7 @@
  * whole truth.
  */
 
-import {
-	isEmptyWriting,
-	isGoodsType,
-	needsChosenThumbnail,
-	workNeedsFile,
-} from "@anthers/shared/content";
+import { isEmptyWriting, isGoodsType, workNeedsFile } from "@anthers/shared/content";
 import { gridFor, isRatingComplete } from "@anthers/shared/content-rating";
 import { TrashIcon } from "@heroicons/react/24/outline";
 import { Link } from "../../lib/router";
@@ -44,6 +39,7 @@ import { isUploading, useSourceUpload } from "../../lib/work-uploads";
 import { VideoMediaStatusChips } from "./media-status";
 import { etaLeft } from "./processing";
 import { WorkReleaseCell, type WorkReleaseFields } from "./release-date";
+import WorkPoster from "./work-poster";
 import {
 	AccessBadge,
 	accessState,
@@ -51,7 +47,6 @@ import {
 	MaturityBadge,
 	ProcessingBadge,
 	TypeBadge,
-	TypeIcon,
 } from "./works";
 
 export default function WorkRow({
@@ -96,11 +91,8 @@ export default function WorkRow({
 	// the rows rather than the rating, since a Work rated before the matrix holds a rating with no
 	// rows behind it and is refused all the same.
 	const unrated = !isRatingComplete(item.maturityRows, gridFor(item.type));
-	// And a video with no thumbnail its creator chose (`thumbnail_missing`).
-	const noThumbnail = needsChosenThumbnail(item.type) && !item.thumbnail;
 	const blocked =
-		!released &&
-		(noFile || emptyWriting || processing || canceled || noDelivery || unrated || noThumbnail);
+		!released && (noFile || emptyWriting || processing || canceled || noDelivery || unrated);
 	const blockedWhy = uploading
 		? "Still uploading — it can be released once its file arrives and is processed"
 		: noFile
@@ -113,9 +105,7 @@ export default function WorkRow({
 						? "Replace the media or remove it — its processing was canceled"
 						: unrated
 							? "Rate it before releasing"
-							: noThumbnail
-								? "Choose a thumbnail before releasing"
-								: "Turn on streaming or downloads before releasing";
+							: "Turn on streaming or downloads before releasing";
 
 	return (
 		<tr className="border-b border-base-300/50 hover:bg-base-200/40 align-middle">
@@ -136,9 +126,7 @@ export default function WorkRow({
 						{preview ? (
 							<img src={preview} alt="" className="w-full h-full object-cover" />
 						) : (
-							<span className="w-full h-full flex items-center justify-center">
-								<TypeIcon type={item.type} className="w-6 h-6 text-base-content/30" />
-							</span>
+							<WorkPoster type={item.type} variant="thumb" className="h-full w-full" />
 						)}
 					</Link>
 					<div className="min-w-0">

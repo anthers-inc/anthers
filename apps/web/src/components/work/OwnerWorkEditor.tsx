@@ -46,7 +46,6 @@ import {
 	isListened,
 	isOwnThumbnail,
 	isPaged,
-	needsChosenThumbnail,
 	supportsPreviewMedia,
 } from "@anthers/shared/content";
 import {
@@ -615,7 +614,6 @@ export default function OwnerWorkEditor({
 	// And the same for a piece of writing with nothing in it yet (`text_missing`), the
 	// server's own word for it — the creator's to fix rather than to wait for.
 	const writingEmpty = writing && isEmptyWriting(bodyHtml);
-	const thumbnailMissing = needsChosenThumbnail(current.type) && !thumbnailUrl;
 	const creditsMissing = !creditRows.some((r) => r.types.includes("created"));
 	/**
 	 * The first thing that would refuse a release-now, in the server's own order — the notices
@@ -635,9 +633,7 @@ export default function OwnerWorkEditor({
 							? "Answer every row of the Rating first — every row, no exceptions."
 							: creditsMissing
 								? "Credit at least one person as Created before releasing."
-								: thumbnailMissing
-									? "Choose a thumbnail before releasing a video."
-									: undefined;
+								: undefined;
 
 	// ── The Info tabs' contents ──
 	/**
@@ -1065,11 +1061,6 @@ export default function OwnerWorkEditor({
 									: "Add the Work's file first. There's nothing to release until it arrives."}
 							</p>
 						)}
-						{thumbnailMissing && !releasingNow && (
-							<p className="text-xs text-warning">
-								Choose a thumbnail first — a video isn't released without one.
-							</p>
-						)}
 						{creditsMissing && !releasingNow && (
 							<p className="text-xs text-warning">
 								A Work isn't released until at least one credit has its Created box ticked.
@@ -1364,7 +1355,7 @@ export default function OwnerWorkEditor({
 			    the heading instead of a paragraph the section always carried. */}
 			<h3 className={`${WORK_DETAILS_HEADING_CLASS} flex items-center`}>
 				Thumbnail
-				<InfoTip text="All works need thumbnails. You can choose one from the work (e.g., a frame of video) or upload a custom thumbnail." />
+				<InfoTip text="Leave it empty and the Work shows a placeholder drawn for its kind. You can take one from the Work — a frame of a video, say — or upload an image." />
 			</h3>
 			{thumbnailField}
 		</div>

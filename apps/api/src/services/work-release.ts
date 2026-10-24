@@ -21,12 +21,7 @@
 
 import { db } from "@anthers/db/client";
 import { transcodingJobs, type works } from "@anthers/db/schema";
-import {
-	isEmptyWriting,
-	needsChosenThumbnail,
-	processingFor,
-	workNeedsFile,
-} from "@anthers/shared/content";
+import { isEmptyWriting, processingFor, workNeedsFile } from "@anthers/shared/content";
 import {
 	gridFor,
 	isRatingComplete,
@@ -215,20 +210,6 @@ export async function releaseRefusal(
 				error:
 					"Credit who made this before releasing it — at least one credit needs its Created box ticked, naming the person.",
 				code: "credits_creator_required",
-			},
-			resolves: "creator",
-		};
-	}
-
-	// A video goes out with a thumbnail its creator chose, because nothing takes one on their
-	// behalf: a still picked by the platform could be any moment of a Mature or Adult video, and
-	// the thumbnail is what feeds show to everybody (Parker, 2026-09-18).
-	if (needsChosenThumbnail(work.type) && !work.thumbnail) {
-		return {
-			status: 409,
-			body: {
-				error: "Choose a thumbnail for this video before releasing it.",
-				code: "thumbnail_missing",
 			},
 			resolves: "creator",
 		};
