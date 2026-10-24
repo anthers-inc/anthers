@@ -22,6 +22,11 @@ export interface User {
 	displayName: string | null;
 	bio: string | null;
 	isCreator: boolean | null;
+	/**
+	 * `isCreator` on and at least one released Work — the gate for creator-only surfaces.
+	 * Derived on the server (`@anthers/shared/verified-creator`), never written by a client.
+	 */
+	isVerifiedCreator: boolean;
 	avatar: string | null;
 	headerImage: string | null;
 	websiteUrl: string | null;
