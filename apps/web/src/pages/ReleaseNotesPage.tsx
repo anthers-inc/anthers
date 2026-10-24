@@ -33,7 +33,7 @@ import { usePageTitle } from "@anthers/web-shared/page-title";
 import { useLocation } from "@anthers/web-shared/router";
 import { useEffect } from "react";
 import { RELEASE_NOTES, type ReleaseNotesEntry } from "../content/release-notes";
-import { WIKI_ROADMAP_URL, wikiAnchor } from "../lib/wiki";
+import { WIKI_ROADMAP_URL } from "../lib/wiki";
 
 const serif = { fontFamily: FONTS.fraunces };
 
@@ -94,6 +94,16 @@ export function groupedByMonth(
 		month.releases.push(release);
 	}
 	return months;
+}
+
+/**
+ * A release's date as a reader reads it — `October 23, 2026`. Built from the ISO parts
+ * rather than `Date`, because `new Date("2026-10-23")` is UTC midnight and a negative
+ * offset would print the day before in some readers' timezones.
+ */
+export function fullDate(iso: string): string {
+	const [year, month, day] = iso.split("-").map(Number);
+	return `${MONTH_NAMES[month - 1]} ${day}, ${year}`;
 }
 
 export default function ReleaseNotesPage() {
@@ -169,10 +179,10 @@ function MonthSection({ month, tint }: { month: ReleaseNotesMonth; tint: boolean
 }
 
 /**
- * One release inside its month, opening with the divider that names it — the version
- * and date over a rule, with the raw release on GitHub at the rule's end — followed by
- * the arcs that release shipped. `first` only sets the spacing: the month heading already separates
- * the first release from what is above it.
+ * One release inside its month, opening with the divider that names it — Anthers and the
+ * version, with the full date over a rule and the raw release on GitHub at the rule's end
+ * — followed by the arcs that release shipped. `first` only sets the spacing: the month
+ * heading already separates the first release from what is above it.
  *
  * `id` carries the `/release-notes#<version>` anchor a shared deep link can land on;
  * `scroll-mt-24` keeps the divider clear of the sticky header when it lands.
@@ -182,10 +192,10 @@ function ReleaseBlock({ release, first }: { release: ReleaseNotesEntry; first: b
 		<div id={release.version} className={`scroll-mt-24 ${first ? "" : "mt-16"}`}>
 			<Reveal>
 				<div className="flex items-center gap-4">
-					<h3 className="font-mono text-sm font-medium tracking-wider text-base-content/70">
-						{release.version}
+					<h3 className="text-sm font-medium tracking-wider text-base-content/70">
+						Anthers <span className="font-mono">{release.version}</span>
 					</h3>
-					<span className="text-xs text-base-content/40">{release.date}</span>
+					<span className="text-xs text-base-content/40">{fullDate(release.date)}</span>
 					<div className="h-px flex-1 bg-base-content/10" />
 					<a
 						href={`https://github.com/anthers-inc/anthers/releases/tag/v${release.version}`}
@@ -205,24 +215,6 @@ function ReleaseBlock({ release, first }: { release: ReleaseNotesEntry; first: b
 						</li>
 					))}
 				</ul>
-
-				{/* The goals this release finished, named so a release and the canonical
-				    roadmap tell one story. A chip lands on the lane's heading in the wiki
-				    roadmap through `wikiAnchor`; a goal that names no lane falls back to
-				    the page. */}
-				{release.roadmap && release.roadmap.length > 0 && (
-					<div className="mt-6 flex flex-wrap gap-2">
-						{release.roadmap.map((goal) => (
-							<a
-								key={goal.label}
-								href={goal.lane ? `${WIKI_ROADMAP_URL}#${wikiAnchor(goal.lane)}` : WIKI_ROADMAP_URL}
-								className="inline-flex items-center rounded-full border border-base-content/15 px-3 py-1 text-xs text-base-content/60 transition-colors hover:border-primary/40 hover:text-primary"
-							>
-								{goal.label}
-							</a>
-						))}
-					</div>
-				)}
 			</Reveal>
 		</div>
 	);

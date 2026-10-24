@@ -7,7 +7,7 @@
 // content moves into the public vault and reaches the site through the exporter, so
 // **do not invest in the shape of this TypeScript module, and do not add a field the
 // exporter would have to reproduce.** An entry is: a version, a date, a short prose
-// lede, grouped bullets, and roadmap references.
+// lede, and grouped bullets.
 //
 // The two layers, and the boundary between them:
 //
@@ -33,17 +33,11 @@
 // 3. **Past tense, plain declarative.** The page's whole subject is the past, and it is
 //    the one page where describing a shipped thing plainly is the honest mode. Nothing
 //    here announces; an entry that sells is an entry to rewrite.
-// 4. 🚨 **A roadmap reference is earned by shipping, not by adjacency.** `roadmap` names
-//    the goals a release finished — the goal's label, and the wiki lane it landed in —
-//    and the page renders each as a chip into the canonical roadmap at `anthers.wiki`.
-//    The app keeps no roadmap of its own (2026-10-23), so a chip records what the release
-//    did rather than asserting the roadmap's current state. Most entries name nothing,
-//    and that is correct: do not stretch an entry to claim one.
-// 5. **Money figures are interpolated, never typed** — `econ:figures --check` scans
+// 4. **Money figures are interpolated, never typed** — `econ:figures --check` scans
 //    this directory and a typed figure fails the build. If an entry must name a number
 //    the model generates, the scenario lives in `packages/shared/src/scenarios.ts` and
 //    the entry interpolates the constant.
-// 6. **The voice is the vault's public voice** — `82.01 How Anthers Talks About Itself`
+// 5. **The voice is the vault's public voice** — `82.01 How Anthers Talks About Itself`
 //    in `wiki-anthers/80-89 Development/82 Brand/` governs claims and vocabulary
 //    (Work, Post, Library, Badge, gate, Public Access, Review, time). The pass is
 //    captured as the `anthers-release-notes` skill, which walks the whole procedure.
@@ -70,8 +64,6 @@ export interface ReleaseNotesEntry {
 	lede: string;
 	/** One arc per bullet: what a user or creator can now do, see, or no longer hits. */
 	entries: string[];
-	/** The goals this release finished: a label and the wiki lane it landed in. See rule 4. */
-	roadmap?: ReadonlyArray<{ label: string; lane?: string }>;
 }
 
 /**
@@ -132,7 +124,6 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 			"The signup page carries one optional ask now: the Creator Badges step, its fee breakdown, and its creator finder came off, and the Anthers Badge is the page's only optional step, unnumbered. A pending signup made before the change still applies its creator picks.",
 			"The signed-in footer sits only on the account pages that use it, Badges, Purchases, and Settings, and the homepage's first section after the hero is revealed on load rather than waiting for a scroll. An audio hover preview follows the sound setting and carries the speaker button video previews have, and a dashed rating cell reads N/A where its rung is unreachable.",
 		],
-		roadmap: [{ label: "Search That Finds People and Posts", lane: "Browse & Discover" }],
 	},
 	{
 		version: "2026.10.28",
@@ -239,7 +230,6 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 			"Turning a page while the book is still opening no longer freezes the ebook reader.",
 			"Every promoted release carries the signed web bundle the desktop pins, retiring the separate web-v release channel.",
 		],
-		roadmap: [{ label: "Where Your Readers Come From", lane: "First-Party Traffic Analytics" }],
 	},
 	{
 		version: "2026.10.23",
@@ -353,10 +343,6 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 			"The ATProto Records page fetches its records from the right paths again, and the infrastructure navigation no longer highlights two sections at once.",
 			"The status page's heartbeat reports again, and the queue check inside it can no longer run long past its own timeout.",
 		],
-		roadmap: [
-			{ label: "Knowing What Your Storage Costs", lane: "Creator Storage Billing" },
-			{ label: "Being Told Something Happened", lane: "Notifications" },
-		],
 	},
 	{
 		version: "2026.10.15",
@@ -370,7 +356,6 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 			"Storage moved onto a ruled ladder: the free allowance is 25 GiB across a creator's catalog and their kept files alike, each Badge rung bundles more, and past it a creator pays the object store's rate with no mark-up. The half-again mark-up retired, and the FAQ, legal copy, For Creators and signup pages state the ruled shape.",
 			"The Admin Console gained the financial plan as an editable projection from launch to inflection 1, with the budget shares beside it and the flow diagram a phase's numbers draw.",
 		],
-		roadmap: [{ label: "The Badge Maker", lane: "Creator Badges & the Badge Maker" }],
 	},
 	{
 		version: "2026.10.14",
@@ -403,9 +388,6 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
 		version: "2026.10.11",
 		date: "2026-10-07",
-		roadmap: [
-			{ label: "Knowing Something Broke", lane: "Observability, Alerting & Rate Limiting" },
-		],
 		lede: "The release that can say something broke: a status page, an error tracker, and limits on the doors that had none.",
 		entries: [
 			"A public status page at /status answers what is working right now: the site, the API, the database, storage, and email, with links to the release notes and the roadmap, so an outage question has a place to be answered without asking anybody.",

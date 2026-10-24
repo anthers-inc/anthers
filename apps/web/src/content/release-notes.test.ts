@@ -7,12 +7,6 @@
 // GitHub release holds the raw release notes, and a typo'd version breaks the raw-release
 // link silently, which is why it is checked against the shape the deploy job tags rather
 // than against another list in this file.
-//
-// ⚠️ **The roadmap chips are a record, not a cross-check.** Each names a goal the release
-// finished and the wiki lane it landed in; the app keeps no roadmap to disagree with
-// (2026-10-23). `roadmap` is optional and usually absent because most work is not a
-// roadmap goal, and a stretched claim is the failure mode. What is still checked is that
-// every chip names something, and that a lane, where given, is not blank.
 
 import { describe, expect, it } from "bun:test";
 import { RELEASE_NOTES, type ReleaseNotesEntry } from "./release-notes";
@@ -96,30 +90,13 @@ describe("every entry is user-facing", () => {
 	it("keeps each entry under the length a user skims, and non-empty", () => {
 		// Not enforced to a hard cap yet — the grouping judgment is the skill's, and a
 		// number picked before a second release exists would be a guess. What IS
-		// enforceable: no entry is a fragment, and none is a paragraph. The lede's cap
-		// matches the roadmap blurb's ceiling, which is the page's closest precedent.
+		// enforceable: no entry is a fragment, and none is a paragraph — past the line
+		// below an entry stops being skimmable and becomes prose the page is not for.
 		for (const { where, entry } of located()) {
 			expect(`${where}: ${entry.trim().length} chars`).not.toBe(`${where}: 0 chars`);
 			expect(`${where}: ${entry.length} chars exceeds the paragraph line`).toBe(
 				`${where}: ${Math.min(entry.length, 400)} chars exceeds the paragraph line`,
 			);
-		}
-	});
-});
-
-describe("every roadmap chip names something", () => {
-	it("gives every chip a label, and no blank lane", () => {
-		for (const release of RELEASE_NOTES) {
-			for (const goal of release.roadmap ?? []) {
-				expect(`${release.version} → ${goal.label || "«no label»"}`).toBe(
-					`${release.version} → ${goal.label}`,
-				);
-				if (goal.lane !== undefined) {
-					expect(`${release.version} → ${goal.lane.trim() || "«blank lane»"}`).toBe(
-						`${release.version} → ${goal.lane}`,
-					);
-				}
-			}
 		}
 	});
 });
