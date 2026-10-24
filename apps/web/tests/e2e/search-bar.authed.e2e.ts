@@ -6,6 +6,12 @@
  * people already had; these specs press the chords, cycle with Tab, and close with
  * Escape. The rebind spec is the one that proves the stored preference reaches the
  * listener rather than only the settings card.
+ *
+ * 🚨 **This is the only spec file that touches the account's shortcut map.** The authed
+ * project shares one fixture account, so a reader in another file races a rebind here
+ * exactly as a second writer would; `serial` orders this file's own tests and nothing
+ * more. Every spec that presses or asserts a stored chord belongs here, including the
+ * sidebar's toggle, rather than in the spec that owns the surface the chord moves.
  */
 import { expect, type Page, test } from "@playwright/test";
 
@@ -109,6 +115,45 @@ test("Ctrl+F on the Library filters the shelf and Escape restores it", async ({ 
 	await expect(input(page)).toHaveAttribute("placeholder", "Search...");
 });
 
+/**
+ * The sidebar's own key is pinned here rather than in `sidebar-rail.authed.e2e.ts`, because
+ * this file owns the account's shortcut map and nothing else may read it while a rebind is
+ * in flight. The rail is where this chord is easiest to see: the aside's width says which
+ * state the key put it in, with no drawer animation in the way.
+ */
+test("Ctrl+/ toggles the sidebar, even with a text field focused", async ({ page }) => {
+	test.setTimeout(60_000);
+	const asideWidth = () =>
+		page.evaluate(() =>
+			Math.round(document.querySelector("aside")?.getBoundingClientRect().width ?? -1),
+		);
+
+	await page.goto("/network");
+	await expect.poll(asideWidth).toBe(256);
+
+	// Ctrl+K puts the caret in the search field, which is the state the sidebar's key has
+	// to survive: a page shortcut normally skips an editor, and this one does not.
+	await page.keyboard.press("Control+k");
+	const search = header(page).getByRole("combobox");
+	await expect(search).toBeFocused();
+
+	await page.keyboard.press("Control+/");
+	await expect.poll(asideWidth, { message: "Ctrl+/ did not collapse the sidebar" }).toBe(64);
+	await expect(search, "the toggle took the caret out of the field").toBeFocused();
+
+	await page.keyboard.press("Control+/");
+	await expect.poll(asideWidth, { message: "Ctrl+/ did not open it again" }).toBe(256);
+
+	// The account's card offers the chord, which is where a person rebinds it.
+	await page.goto("/settings?tab=account");
+	const row = page
+		.locator(".card", { has: page.getByRole("heading", { name: "Keyboard Shortcuts" }) })
+		.locator(".flex-wrap")
+		.filter({ hasText: "Toggle the sidebar" });
+	await expect(row).toBeVisible();
+	await expect(row.locator("kbd")).toHaveText(/Ctrl\+\/|⌃\//);
+});
+
 test("a rebound Search shortcut is the one the bar listens for", async ({ page }) => {
 	await page.goto("/settings?tab=account");
 	const card = page.locator(".card", {
@@ -159,9 +204,8 @@ test("a rebound Search shortcut is the one the bar listens for", async ({ page }
  * The sidebar's toggle is the card's third page shortcut, and it is the one whose binding
  * the *layout* reads rather than a component in the header — so this is the test that
  * proves a stored chord reaches the listener, not only the card that wrote it. It lives
- * in this file because this is the one spec file that writes the account's shortcut map;
- * two files patching one field would race under `fullyParallel`, and only this file is
- * serial.
+ * here because this file owns the account's shortcut map; a reader in another file races
+ * a rebind in flight just as surely as a second writer would.
  */
 test("a rebound sidebar shortcut is the one the layout listens for", async ({ page }) => {
 	const card = () =>
