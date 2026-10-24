@@ -103,7 +103,8 @@ const EXEMPT_DB_SCRIPTS: Record<string, string> = {
 	"db:generate": "writes migration FILES from the schema and never opens a connection",
 	"db:snapshots": "rewrites drizzle's own snapshot files; no rows involved",
 	"db:migrate": "runs IN production, as the PRE_DEPLOY job — that is its purpose",
-	"db:gate-badges": "runs IN production, because its subject is the gates already deployed; writes nothing without --apply",
+	"db:gate-badges":
+		"runs IN production, because its subject is the gates already deployed; writes nothing without --apply",
 };
 
 describe("every db: script that writes fixture data holds the guard", () => {
