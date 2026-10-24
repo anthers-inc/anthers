@@ -154,3 +154,61 @@ test("a rebound Search shortcut is the one the bar listens for", async ({ page }
 	await restored;
 	await expect(again.locator("kbd").first()).toHaveText(/Ctrl\+K|⌘K/);
 });
+
+/**
+ * The sidebar's toggle is the card's third page shortcut, and it is the one whose binding
+ * the *layout* reads rather than a component in the header — so this is the test that
+ * proves a stored chord reaches the listener, not only the card that wrote it. It lives
+ * in this file because this is the one spec file that writes the account's shortcut map;
+ * two files patching one field would race under `fullyParallel`, and only this file is
+ * serial.
+ */
+test("a rebound sidebar shortcut is the one the layout listens for", async ({ page }) => {
+	const card = () =>
+		page.locator(".card", { has: page.getByRole("heading", { name: "Keyboard Shortcuts" }) });
+	const row = () => card().locator(".flex-wrap").filter({ hasText: "Toggle the sidebar" });
+	const asideWidth = () =>
+		page.evaluate(() =>
+			Math.round(document.querySelector("aside")?.getBoundingClientRect().width ?? -1),
+		);
+
+	await page.goto("/settings?tab=account");
+	await expect(row()).toBeVisible();
+	await expect(row().locator("kbd")).toHaveText(/Ctrl\+\/|⌃\//);
+
+	const patched = page.waitForResponse(
+		(response) =>
+			response.url().endsWith("/api/accounts/me") && response.request().method() === "PATCH",
+	);
+	await row().getByRole("button", { name: "Change" }).click();
+	await page.keyboard.press("Alt+j");
+	await patched;
+	await expect(row().locator("kbd")).toHaveText(/Alt\+J/);
+
+	const authed = page.waitForResponse(
+		(response) => response.url().includes("/api/auth/me") && response.status() === 200,
+	);
+	await page.goto("/network");
+	await authed;
+	await expect.poll(asideWidth).toBe(256);
+
+	await page.keyboard.press("Alt+j");
+	await expect
+		.poll(asideWidth, { message: "the account's rebound chord did not reach the layout" })
+		.toBe(64);
+	// The chord it replaced is the browser's again rather than a second binding.
+	await page.keyboard.press("Control+/");
+	await page.waitForTimeout(250);
+	expect(await asideWidth(), "the default chord still toggled the sidebar").toBe(64);
+
+	// Put the fixture account back where it started; the shortcut is account state and
+	// the rest of this session shares the account.
+	await page.goto("/settings?tab=account");
+	const restored = page.waitForResponse(
+		(response) =>
+			response.url().endsWith("/api/accounts/me") && response.request().method() === "PATCH",
+	);
+	await row().getByRole("button", { name: "Reset" }).click();
+	await restored;
+	await expect(row().locator("kbd")).toHaveText(/Ctrl\+\/|⌃\//);
+});

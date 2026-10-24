@@ -103,11 +103,12 @@ describe("the keyboard shortcut preference", () => {
 	const chords = {
 		search: "mod+shift+k",
 		filter: "alt+f",
+		sidebar: "ctrl+/",
 		fullscreen: "f",
 		theater: "t",
 	};
 
-	it("starts null and round-trips four canonical chords through both serializers", async () => {
+	it("starts null and round-trips five canonical chords through both serializers", async () => {
 		const before = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
 		expect(before.user.keyboardShortcuts).toBeNull();
 
@@ -117,6 +118,7 @@ describe("the keyboard shortcut preference", () => {
 		const expected = {
 			search: "Mod+Shift+K",
 			filter: "Alt+F",
+			sidebar: "Ctrl+/",
 			fullscreen: "F",
 			theater: "T",
 		};
@@ -134,6 +136,22 @@ describe("the keyboard shortcut preference", () => {
 		expect(
 			(await patchMe({ keyboardShortcuts: { search: "Mod+K", filter: "Mod+F" } })).status,
 		).toBe(400);
+	});
+
+	/**
+	 * Command+K and Control+K are two keys on a Mac and one key everywhere else, and a
+	 * shortcut map follows the account across devices — so the pair is refused rather than
+	 * left to answer two actions on the next machine the account signs in from.
+	 */
+	it("refuses a Mod chord and a Ctrl chord on one key", async () => {
+		expect(
+			(await patchMe({ keyboardShortcuts: { ...chords, search: "Mod+K", sidebar: "Ctrl+K" } }))
+				.status,
+		).toBe(400);
+		expect(
+			(await patchMe({ keyboardShortcuts: { ...chords, search: "Mod+K", sidebar: "Ctrl+F" } }))
+				.status,
+		).toBe(200);
 	});
 
 	/**
