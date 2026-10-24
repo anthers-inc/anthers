@@ -64,6 +64,7 @@ import {
 import { isWorkType } from "@anthers/shared/content";
 import { type ContentNote, RATING_ROWS } from "@anthers/shared/content-rating";
 import { CREATOR_EMAIL_KINDS, resolvedCreatorEmailDelivery } from "@anthers/shared/creator-emails";
+import { creatorPreviewFor } from "@anthers/shared/creator-preview";
 import { asRecipeMix, interleaveByAuthor, reasonForSource } from "@anthers/shared/discovery";
 import { normalizeKeyboardShortcuts } from "@anthers/shared/keybindings";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
@@ -1566,6 +1567,39 @@ const accountRoutes = new Hono()
 				followerCount: Number(row?.followerCount ?? 0),
 				projectCount: Number(row?.projectCount ?? 0),
 				isFollowing: Boolean(row?.isFollowing),
+			}),
+		});
+	})
+
+	/**
+	 * The card a shared profile is unfurled with, for a reader who holds no session.
+	 *
+	 * Beside the profile read because the two answer the same questions: a handle that moved
+	 * resolves to the account it moved to, and a suspended account answers not-found rather
+	 * than being described. Nothing here writes — the profile read counts a view, and an
+	 * unfurl is not one.
+	 *
+	 * The portrait is the card's image and the bio is its line; both are the creator's own
+	 * public facts. The profile's lists stay out of it, since a preview describes a person
+	 * to somebody who has not met their work yet.
+	 */
+	.get("/users/:handle/card", async (c) => {
+		const handle = c.req.param("handle");
+		const resolution = await resolveHandle(handle);
+		const account =
+			resolution.account ??
+			(resolution.redirectToHandle
+				? await accountByHandle(resolution.redirectToHandle)
+				: undefined);
+		if (!account || (await isSuspendedAccount(account.id))) {
+			return c.json({ error: "User not found" }, 404);
+		}
+		return c.json({
+			preview: creatorPreviewFor({
+				displayName: account.displayName,
+				handle: account.atprotoHandle ?? handle,
+				bio: account.bio,
+				image: account.avatar,
 			}),
 		});
 	})
