@@ -92,22 +92,31 @@ export default function ProjectDownloads({
 											className="btn btn-sm btn-primary"
 											onClick={async () => {
 												try {
+													// A grant first. Delivery checks it, it names this one file, and it
+													// expires in ten minutes — so it is asked for immediately before the
+													// download rather than cached with the page.
+													const granted = await client.api.content.works[":id"].grant.$post({
+														param: { id: String(workId) },
+														json: { assetId: asset.id },
+													});
+													if (!granted.ok) return;
+													const { grant } = await granted.json();
+
 													// Downloads are Work-scoped: the asset belongs to a Work, and the
 													// Work carries the gate the endpoint re-checks.
 													const res = await client.api.content.works[":id"].assets[
 														":assetId"
-													].download.$post({
-														param: { id: String(workId), assetId: String(asset.id) },
-													});
-													if (!res.ok) {
-														window.location.href = asset.file;
-														return;
-													}
+													].download.$post(
+														{ param: { id: String(workId), assetId: String(asset.id) } },
+														{ headers: { "X-Anthers-Grant": grant } },
+													);
+													if (!res.ok) return;
 													const data = await res.json();
 													window.location.href = data.url;
 												} catch {
-													// Fallback to direct link
-													window.location.href = asset.file;
+													// A failed grant or download leaves the page where it is. The stored
+													// key is not an address a browser can fetch, and navigating to it
+													// would be a bypass dressed as a fallback.
 												}
 											}}
 										>

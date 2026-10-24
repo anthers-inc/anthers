@@ -16,7 +16,13 @@
  * when present, is preferred on the way back in and is what another client would follow.
  */
 
-/** The collections the user space declares. Only the Library's is written by this build. */
+/**
+ * The collections the user space declares.
+ *
+ * The three reader-state records are written by the outbox and the projection; `receipt` is
+ * written by the access-receipt job from the ledger, because a purchase's proof is not a
+ * projection of the reader's own state.
+ */
 export const USER_SPACE_COLLECTIONS = {
 	libraryItem: "org.anthers.libraryItem",
 	readingPosition: "org.anthers.readingPosition",
