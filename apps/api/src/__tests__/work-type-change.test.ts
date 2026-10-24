@@ -175,3 +175,28 @@ describe("drafting a Work of a changeable kind", () => {
 		expect(body.code).toBe("type_has_media");
 	});
 });
+
+describe("the delivery floor", () => {
+	/**
+	 * 🚨 **A goods Work has no delivery flags to keep on, and that must not make it
+	 * un-editable.** The floor refuses a save that leaves a Work with neither a stream nor
+	 * a download, and its comment always said the goods kinds are exempt; the code named
+	 * only `physical`, so every save of a service Work was refused — the rating, the
+	 * credits, the name — with an error about a choice that kind does not have.
+	 */
+	it("leaves a service Work editable with neither stream nor download", async () => {
+		const work = await insertWork({
+			creatorId: creator.id,
+			type: "service",
+			visibility: "private",
+			streamEnabled: false,
+			downloadEnabled: false,
+		});
+		workIds.push(work.id);
+
+		const res = await call("PATCH", `/api/content/works/${work.id}`, creator.cookie, {
+			maturityRows: rowsRatedAs("general"),
+		});
+		expect(res.status).toBe(200);
+	});
+});

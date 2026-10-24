@@ -26,9 +26,9 @@
  * list is whole. Nothing guesses when an export is finished.
  */
 
-import { db, webBuildFiles, webBuilds, works } from "@anthers/db";
+import { assets, db, webBuildFiles, webBuilds, works } from "@anthers/db";
 import { zValidator } from "@hono/zod-validator";
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { buildPathProblem, WEB_BUILD_FILE_MAX } from "../lib/web-build.js";
@@ -37,6 +37,7 @@ import { webBuildPrefix } from "../services/media-purge.js";
 import { aclForMediaType } from "../services/storage/acl.js";
 import { isLocalStorage, storage } from "../services/storage/index.js";
 import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../services/storage/keys.js";
+import { archiveCurrentMedia } from "../services/work-versions.js";
 
 /** The endpoint the local-dev direct upload POSTs to. */
 function buildDirectPath(workId: number, buildId: number): string {
@@ -84,7 +85,7 @@ const finalizeSchema = z.object({
 /** The Work row a build request needs: owned by the caller, of a type that can carry a build. */
 async function findOwnedBuildWork(workId: number, userId: number) {
 	const [work] = await db
-		.select({ id: works.id, type: works.type })
+		.select()
 		.from(works)
 		.where(and(eq(works.id, workId), eq(works.creatorId, userId)))
 		.limit(1);
@@ -204,19 +205,44 @@ const webBuildRoutes = new Hono()
 
 		// The count is authoritative here rather than the client's list: the first build ever
 		// completed on this Work becomes its primary unless the creator asked for something
-		// else, and any explicit true (or a first build) clears the old primary first — the
-		// partial unique index below backs this up against a writer that skips the flip.
-		const [primaryCount] = await db
-			.select({ count: count() })
+		// else, and any explicit true promotes it.
+		const [primary] = await db
+			.select({ id: webBuilds.id })
 			.from(webBuilds)
-			.where(and(eq(webBuilds.workId, workId), eq(webBuilds.isPrimary, true)));
-		const wantPrimary = data.isPrimary ?? (primaryCount?.count ?? 0) === 0;
-		if (wantPrimary) {
-			await db
-				.update(webBuilds)
-				.set({ isPrimary: false })
-				.where(and(eq(webBuilds.workId, workId), eq(webBuilds.isPrimary, true)));
+			.where(and(eq(webBuilds.workId, workId), eq(webBuilds.isPrimary, true)))
+			.limit(1);
+		const wantPrimary = data.isPrimary ?? !primary;
+		// This completion is what makes the build primary — the first build ever, or a
+		// promotion. Completing the current primary again is an edit, not a new version.
+		const newVersion = wantPrimary && primary?.id !== buildId;
+
+		if (newVersion && primary) {
+			// 🚨 **A promoted hosted build retires the current build set the way a new
+			// primary downloadable build does.** The media being replaced becomes the
+			// archived version; the prior build rows leave the Work. This build's own row
+			// and files are the NEXT version, so they are excluded from the snapshot.
+			const [updated] = await db.transaction(async (tx) => {
+				await archiveCurrentMedia(work, tx, { excludeWebBuildId: buildId });
+				await tx.delete(assets).where(eq(assets.workId, workId));
+				await tx
+					.delete(webBuilds)
+					.where(and(eq(webBuilds.workId, workId), ne(webBuilds.id, buildId)));
+				const [row] = await tx
+					.update(webBuilds)
+					.set({
+						entryPath,
+						label: data.label ?? undefined,
+						isPrimary: true,
+						updatedAt: new Date(),
+					})
+					.where(eq(webBuilds.id, buildId))
+					.returning();
+				await tx.update(works).set({ versionAddedAt: new Date() }).where(eq(works.id, workId));
+				return [row];
+			});
+			return c.json({ build: updated }, 200);
 		}
+
 		const [updated] = await db
 			.update(webBuilds)
 			.set({
@@ -227,6 +253,11 @@ const webBuildRoutes = new Hono()
 			})
 			.where(eq(webBuilds.id, buildId))
 			.returning();
+		// The first build to complete is the Work's media arriving, so its date is the
+		// current version's.
+		if (newVersion) {
+			await db.update(works).set({ versionAddedAt: new Date() }).where(eq(works.id, workId));
+		}
 		return c.json({ build: updated }, 200);
 	})
 	// ── Presign one file of this build ──

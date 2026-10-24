@@ -430,3 +430,101 @@ export function embedUrlProblem(value: string): string | null {
 	}
 	return null;
 }
+
+/**
+ * The parent of a Work's type: whether Anthers delivers bytes or the creator fulfils it.
+ *
+ * A category is derived rather than stored, so a new type cannot compile without being
+ * placed in one. The visible cards call them Digital and Non-Digital; the code calls the
+ * second "goods", the word the schema and the goods rule already use for physical goods
+ * and services.
+ */
+export type WorkCategory = "digital" | "goods";
+
+const WORK_CATEGORY: Record<WorkType, WorkCategory> = {
+	text: "digital",
+	video: "digital",
+	music: "digital",
+	audio: "digital",
+	image: "digital",
+	comic: "digital",
+	ebook: "digital",
+	game: "digital",
+	software: "digital",
+	physical: "goods",
+	service: "goods",
+};
+
+export function workCategory(type: string): WorkCategory {
+	return (WORK_CATEGORY as Record<string, WorkCategory>)[type] ?? "digital";
+}
+
+/** Whether Anthers streams or downloads this type. */
+export function isDigital(type: string): boolean {
+	return workCategory(type) === "digital";
+}
+
+/** Whether this type is sold and fulfilled rather than delivered — a physical good or a service. */
+export function isGoodsType(type: string): boolean {
+	return workCategory(type) === "goods";
+}
+
+/** The three ways a digital Work can reach someone. */
+export type DeliveryMode = "stream" | "download" | "both";
+
+export const DELIVERY_MODES: readonly DeliveryMode[] = ["stream", "download", "both"];
+
+/** The two stored flags behind a delivery mode. */
+export function deliveryFlags(mode: DeliveryMode): {
+	streamEnabled: boolean;
+	downloadEnabled: boolean;
+} {
+	return {
+		streamEnabled: mode !== "download",
+		downloadEnabled: mode !== "stream",
+	};
+}
+
+/** The mode the stored flags describe, or null when neither door is open. */
+export function deliveryModeOf(
+	streamEnabled: boolean | null | undefined,
+	downloadEnabled: boolean | null | undefined,
+): DeliveryMode | null {
+	if (streamEnabled && downloadEnabled) return "both";
+	if (streamEnabled) return "stream";
+	if (downloadEnabled) return "download";
+	return null;
+}
+
+/**
+ * The delivery modes a type can actually honor today.
+ *
+ * A downloadable comic or book is a packaging question that is not built (the reader serves
+ * pages one at a time), so those offer streaming only rather than a download switch that
+ * produces no download. Video, music, audio, games and software have both doors.
+ */
+export function deliveryOffers(type: string): readonly DeliveryMode[] {
+	if (isGoodsType(type)) return [];
+	if (type === "video" || isListened(type) || type === "game" || type === "software") {
+		return DELIVERY_MODES;
+	}
+	return ["stream"];
+}
+
+/**
+ * What the flow proposes for a type before the creator answers the delivery step.
+ *
+ * A game or a piece of software ordinarily arrives as a build, so its default is download;
+ * a video, track, book or picture is played or read here first, so its default is stream.
+ * Goods carry neither flag.
+ */
+export function defaultDelivery(type: string): {
+	streamEnabled: boolean;
+	downloadEnabled: boolean;
+} {
+	if (isGoodsType(type)) return { streamEnabled: false, downloadEnabled: false };
+	if (type === "game" || type === "software") {
+		return { streamEnabled: false, downloadEnabled: true };
+	}
+	return { streamEnabled: true, downloadEnabled: false };
+}

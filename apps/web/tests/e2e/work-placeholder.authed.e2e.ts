@@ -19,7 +19,14 @@
 import { db } from "@anthers/db/client";
 import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
+import {
+	API_URL,
+	createDraftWork,
+	expect,
+	signInAsMediaFixture,
+	test,
+	WEB_ORIGIN,
+} from "./fixtures";
 
 const TITLE_PREFIX = "Placeholder walk ";
 const STEM = `${TITLE_PREFIX}${Date.now()}`;
@@ -40,22 +47,11 @@ test.describe.configure({ mode: "serial" });
 test("a Work mid-processing holds its shape on both surfaces", async ({ page, context }) => {
 	session = await signInAsMediaFixture(context);
 
-	// The Work is drafted from a kind and a name alone (no file is ever picked here).
-	await page.goto("/studio/works/new");
-	await page.locator("select").first().selectOption("comic");
-	await page.getByPlaceholder("Work title").fill(STEM);
-	await page.getByRole("button", { name: /skip for now/i }).click();
+	// The Work is drafted with a kind and a name alone (no file is ever picked here).
+	const draft = await createDraftWork(page, { type: "comic", title: STEM });
+	await page.goto(draft.url);
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
-
-	const created = await fetch(`${API_URL}/api/content/works`, {
-		headers: { Cookie: `session=${session}` },
-	});
-	const { works: owned } = (await created.json()) as {
-		works: { id: number; title: string }[];
-	};
-	const work = owned.find((w) => w.title === STEM);
-	expect(work, "the drafted Work is in the creator's listing").toBeTruthy();
-	workId = work.id;
+	workId = draft.id;
 
 	await db
 		.update(works)

@@ -39,8 +39,10 @@ import type { WorkUpload } from "../../lib/work-uploads";
  *
  * The **Original** chip is the card's one interactive member (Parker's second pass,
  * 2026-10-13): blue, a touch longer than the others, with a pencil opening a dropdown
- * that carries the destructive actions — Replace File and Remove File. The actions live
- * where the file's identity is named, rather than as a button row of their own.
+ * that carries the actions — Add a New Version and, on a draft, Remove File. The actions
+ * live where the file's identity is named, rather than as a button row of their own.
+ * A released Work keeps the replace action (a new version) and loses removal, so the
+ * dropdown is built from whichever actions the page passed.
  */
 export function VariantChip({
 	name,
@@ -48,15 +50,18 @@ export function VariantChip({
 	running,
 	actions,
 	removeBusy,
+	menuAlign = "end",
 }: {
 	name: string;
 	ready: string | "";
 	running?: boolean;
 	/** The dropdown member: never produced → it still carries the pencil, because there is
 	 * exactly nothing to replace until it exists; a chip with no actions is passive. */
-	actions?: { onReplace: () => void; onRemove: () => void };
+	actions?: { onReplace?: () => void; onRemove?: () => void; replaceLabel?: string };
 	/** The removal in flight, while the dropdown's Remove button waits it out. */
 	removeBusy?: boolean;
+	/** Which edge the menu aligns to; the manager's chips sit at the card's left. */
+	menuAlign?: "start" | "end";
 }) {
 	const chip = ready ? (
 		<CheckIcon className="size-3.5" />
@@ -65,7 +70,7 @@ export function VariantChip({
 	) : (
 		<XMarkIcon className="size-3.5" />
 	);
-	if (!actions) {
+	if (!actions?.onReplace && !actions?.onRemove) {
 		return (
 			<span
 				className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs ${
@@ -85,30 +90,34 @@ export function VariantChip({
 	// keyboard user be able to open what a pointer user can): no daisyUI tabindex dance,
 	// no :focus-within magic — the chip is the summary, the menu is the content.
 	return (
-		<details className="dropdown dropdown-end">
+		<details className={`dropdown ${menuAlign === "start" ? "" : "dropdown-end"}`}>
 			<summary className="list-none inline-flex cursor-pointer items-center gap-1 rounded-full border border-info/40 bg-info/10 px-3.5 py-0.5 text-xs text-info hover:border-info marker:hidden [&::-webkit-details-marker]:hidden">
 				{chip}
 				{name}
 				<PencilSquareIcon className="size-3 text-info/70" />
 			</summary>
-			<ul className="dropdown-content menu z-20 rounded-box w-44 border border-base-300 bg-base-100 p-1 shadow-lg">
-				<li>
-					<button type="button" onClick={actions.onReplace}>
-						<ArrowUpTrayIcon className="size-4" />
-						Replace File…
-					</button>
-				</li>
-				<li>
-					<button
-						type="button"
-						className="text-error"
-						onClick={actions.onRemove}
-						disabled={removeBusy}
-					>
-						<XMarkIcon className="size-4" />
-						{removeBusy ? "Removing…" : "Remove File"}
-					</button>
-				</li>
+			<ul className="dropdown-content menu z-20 rounded-box w-52 border border-base-300 bg-base-100 p-1 shadow-lg">
+				{actions.onReplace && (
+					<li>
+						<button type="button" onClick={actions.onReplace}>
+							<ArrowUpTrayIcon className="size-4" />
+							{actions.replaceLabel ?? "Add a New Version…"}
+						</button>
+					</li>
+				)}
+				{actions.onRemove && (
+					<li>
+						<button
+							type="button"
+							className="text-error"
+							onClick={actions.onRemove}
+							disabled={removeBusy}
+						>
+							<XMarkIcon className="size-4" />
+							{removeBusy ? "Removing…" : "Remove File"}
+						</button>
+					</li>
+				)}
 			</ul>
 		</details>
 	);
@@ -153,14 +162,17 @@ export function VideoMediaStatusChips({
 	sourceUpload,
 	originalActions,
 	removeBusy,
+	menuAlign,
 }: {
 	work: Work;
 	/** The latest in-flight (or last settled) source upload this tab knows about. */
 	sourceUpload: WorkUpload | null;
-	/** Replace/Remove on the Original chip, offered only where the page owns the flows. */
-	originalActions?: { onReplace: () => void; onRemove: () => void };
+	/** New version/remove on the Original chip, offered only where the page owns the flows. */
+	originalActions?: { onReplace?: () => void; onRemove?: () => void; replaceLabel?: string };
 	/** The removal in flight, while the Original chip's dropdown waits it out. */
 	removeBusy?: boolean;
+	/** Which edge the menu aligns to; the manager's chips sit at the card's left. */
+	menuAlign?: "start" | "end";
 }) {
 	const job = work.transcoding;
 	const running = job != null && (job.status === "pending" || job.status === "processing");
@@ -176,6 +188,7 @@ export function VideoMediaStatusChips({
 				ready={work.sourceKey ? "ready" : ""}
 				running={uploading}
 				removeBusy={removeBusy}
+				menuAlign={menuAlign}
 				actions={originalActions}
 			/>
 			<VariantChip name="Audio" ready={job?.audioManifestUrl ?? ""} running={running} />
@@ -214,14 +227,17 @@ export function AudioMediaStatusChips({
 	sourceUpload,
 	originalActions,
 	removeBusy,
+	menuAlign,
 }: {
 	work: Work;
 	/** The latest in-flight (or last settled) source upload this tab knows about. */
 	sourceUpload: WorkUpload | null;
-	/** Replace/Remove on the Original chip, offered only where the page owns the flows. */
-	originalActions?: { onReplace: () => void; onRemove: () => void };
+	/** New version/remove on the Original chip, offered only where the page owns the flows. */
+	originalActions?: { onReplace?: () => void; onRemove?: () => void; replaceLabel?: string };
 	/** The removal in flight, while the Original chip's dropdown waits it out. */
 	removeBusy?: boolean;
+	/** Which edge the menu aligns to; the manager's chips sit at the card's left. */
+	menuAlign?: "start" | "end";
 }) {
 	const job = work.transcoding;
 	const running = job != null && (job.status === "pending" || job.status === "processing");
@@ -234,6 +250,7 @@ export function AudioMediaStatusChips({
 				ready={work.sourceKey ? "ready" : ""}
 				running={uploading}
 				removeBusy={removeBusy}
+				menuAlign={menuAlign}
 				actions={originalActions}
 			/>
 			<VariantChip name="MP3" ready={job?.outputFileUrl ?? ""} running={running} />

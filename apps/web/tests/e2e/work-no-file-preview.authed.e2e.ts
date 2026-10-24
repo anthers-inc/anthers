@@ -56,7 +56,7 @@ async function filelessWorkIds(
 	return { id: work.id, publicId: String(work.publicId) };
 }
 
-/** Create an unreleased Work with no file, the way `/studio/works/new` "skip for now" does. */
+/** Create an unreleased Work with no file, the way the New Work flow's type step does. */
 async function filelessWork(type: string, title: string): Promise<string> {
 	return (await filelessWorkIds(type, title)).publicId;
 }
@@ -66,7 +66,7 @@ test.describe.configure({ mode: "serial" });
 /** Dump accessibility trees and screenshots for a debugging session; CI runs assertions only. */
 const ARIA_DEBUG = process.env.ARIA_DEBUG === "1";
 
-test("a fileless draft's editor draws its silhouette, and neither kind's picker rides in it", async ({
+test("a fileless draft's editor draws its silhouette with the picker in it", async ({
 	page,
 	context,
 }) => {
@@ -85,9 +85,10 @@ test("a fileless draft's editor draws its silhouette, and neither kind's picker 
 
 		// The box, in the deliverable's slot, whatever the kind.
 		await expect(emptyBox).toBeVisible();
-		// The box is bare of a picker for both kinds: the source is the Manage tab's
-		// Media Status card (Parker, 2026-10-19, when audio joined video's card).
-		await expect(emptyBox.getByRole("button", { name: /drop /i })).toHaveCount(0);
+		// And the box carries the picker for both kinds: the empty media card is where a
+		// Work's file arrives (the media-area task, 2026-10-23), rather than a section on
+		// the Manage tab beside it.
+		await expect(emptyBox.getByRole("button", { name: /drop /i })).toBeVisible();
 
 		if (ARIA_DEBUG) {
 			const snap = await page.locator("main").ariaSnapshot();
