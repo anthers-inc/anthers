@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { matchesChord, resolveKeyboardShortcuts } from "@anthers/shared/keybindings";
 import { APP_VERSION } from "@anthers/shared/version";
 import { useAuth } from "@anthers/web-shared/auth";
 import { MeadowBackdrop } from "@anthers/web-shared/decor/MeadowBackdrop";
@@ -14,8 +15,10 @@ import {
 	ShoppingBagIcon,
 	UserCircleIcon,
 } from "@heroicons/react/24/outline";
+import { useEffect, useMemo } from "react";
 import { useBasket } from "../../lib/basket";
 import { useMediaPlayer } from "../../lib/media-player";
+import { isApplePlatform } from "../../lib/platform";
 import { studioUrl } from "../../lib/studio";
 import { USER_TABS, userTabPath } from "../../lib/user-tabs";
 import { isStudioNavActive, STUDIO_NAV } from "../../studio/studio-nav";
@@ -196,6 +199,37 @@ function LoggedInLayoutInner() {
 	const rail = !sidebarOpen;
 
 	const navLinkClass = ({ isActive }: { isActive: boolean }) => navItemClass(isActive, rail);
+
+	/**
+	 * The sidebar's own key, bound from the same account map the Settings card edits
+	 * (`Ctrl+/` by default). It is the keyboard twin of the chevron on the sidebar's edge
+	 * rather than a second way of moving the drawer.
+	 *
+	 * ⚠️ **It fires with a text field focused, and that is deliberate.** The search bar skips
+	 * `Ctrl+K` over an editor because that chord is an editing command in a composer;
+	 * `Ctrl+/` is not, so a reader halfway through a comment can put the sidebar away without
+	 * clicking out first. Safety while typing comes from the grammar's modifier requirement,
+	 * which every page shortcut carries, rather than from a target check here.
+	 *
+	 * It is unbound while the chrome is hidden — an account that still owes onboarding has no
+	 * sidebar to toggle, and the chevron is invisible for the same reason.
+	 */
+	const shortcuts = useMemo(
+		() => resolveKeyboardShortcuts(user?.keyboardShortcuts),
+		[user?.keyboardShortcuts],
+	);
+	const apple = isApplePlatform();
+
+	useEffect(() => {
+		if (chromeHidden) return;
+		const handler = (event: globalThis.KeyboardEvent) => {
+			if (!matchesChord(event, shortcuts.sidebar, apple)) return;
+			event.preventDefault();
+			toggleSidebar();
+		};
+		window.addEventListener("keydown", handler);
+		return () => window.removeEventListener("keydown", handler);
+	}, [chromeHidden, shortcuts.sidebar, apple, toggleSidebar]);
 
 	return (
 		<ViewFilterProvider>

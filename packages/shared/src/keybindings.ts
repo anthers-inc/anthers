@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The shortcut grammar for the keys a person can rebind: the search bar's two page
- * shortcuts and a player's full-screen and theater keys.
+ * The shortcut grammar for the keys a person can rebind: the page's own shortcuts — the
+ * search bar's two and the sidebar's toggle — and a player's full-screen and theater keys.
  *
  * A chord is stored as a portable string — `Mod+K`, `F` — rather than as a
  * platform-specific one, because `Mod` is Command on Apple platforms and Control
  * everywhere else. The defaults therefore read as `⌘K` on a Mac and `Ctrl+K` elsewhere
- * from one stored value.
+ * from one stored value. ⚠️ **`sidebar` is the one default that names `Ctrl` instead**,
+ * because Control is the key asked for on every platform; a Mac keeps Control there, and
+ * rebinding it to `Mod+/` is what moves it to Command.
  *
- * ⚠️ **Two scopes, two rules.** `search` and `filter` are listened for on the document, so
- * they must carry a modifier or they would eat typing: at least one real modifier, and
- * `Shift` alone is not one. `fullscreen` and `theater` are listened for by a player that
- * already has focus, which is what makes a bare `f` or `t` correct there — and the
- * grammar refuses a bare key for a page action while accepting one for a player action.
+ * ⚠️ **Two scopes, two rules.** `search`, `filter` and `sidebar` are listened for on the
+ * document, so they must carry a modifier or they would eat typing: at least one real
+ * modifier, and `Shift` alone is not one. `fullscreen` and `theater` are listened for by a
+ * player that already has focus, which is what makes a bare `f` or `t` correct there — and
+ * the grammar refuses a bare key for a page action while accepting one for a player action.
  *
  * 🚨 **The server validates with this module, not only the settings card.** A chord is a
  * value a person can type into a request; a client-side check is a convenience. The rules
@@ -22,7 +24,7 @@
  */
 
 /** Actions listened for on the whole page: they must never fire while somebody is typing. */
-export const PAGE_SHORTCUT_ACTIONS = ["search", "filter"] as const;
+export const PAGE_SHORTCUT_ACTIONS = ["search", "filter", "sidebar"] as const;
 export type PageShortcutAction = (typeof PAGE_SHORTCUT_ACTIONS)[number];
 
 /** Actions listened for by a focused player: a bare letter is the natural binding here. */
@@ -35,12 +37,13 @@ export const KEYBOARD_SHORTCUT_ACTIONS = [
 ] as const;
 export type KeyboardShortcutAction = (typeof KEYBOARD_SHORTCUT_ACTIONS)[number];
 
-/** The stored map. A missing action falls back to its default; the server stores the four. */
+/** The stored map. A missing action falls back to its default; the server stores every action. */
 export type KeyboardShortcuts = Record<KeyboardShortcutAction, string>;
 
 export const DEFAULT_KEYBOARD_SHORTCUTS: KeyboardShortcuts = {
 	search: "Mod+K",
 	filter: "Mod+F",
+	sidebar: "Ctrl+/",
 	fullscreen: "F",
 	theater: "T",
 };
@@ -206,10 +209,32 @@ export function matchesChord(event: ChordEvent, chord: string, apple: boolean): 
 }
 
 /**
+ * Whether two stored chords answer the same physical combination on any platform.
+ *
+ * ⚠️ **This is stricter than string equality, and it has to be.** On Apple `Mod` and `Ctrl`
+ * are Command and Control, two different keys; everywhere else both mean Control. So
+ * `Mod+K` and `Ctrl+K` are distinct chords on a Mac and *one chord* on Windows and Linux —
+ * and because a shortcut map follows the account across devices, a map that is unambiguous
+ * on the machine it was written on can answer two actions at once on the next one. Two
+ * actions may not share a combination on any platform the account may sign in from.
+ *
+ * An unparseable chord takes part in no collision; it is refused or defaulted elsewhere.
+ */
+export function chordsCollide(a: string, b: string): boolean {
+	const left = parseChord(a, { bare: true });
+	const right = parseChord(b, { bare: true });
+	if (!left || !right) return false;
+	if (left.key !== right.key || left.alt !== right.alt || left.shift !== right.shift) return false;
+	const sameOnApple = left.mod === right.mod && left.ctrl === right.ctrl;
+	const sameElsewhere = (left.mod || left.ctrl) === (right.mod || right.ctrl);
+	return sameOnApple || sameElsewhere;
+}
+
+/**
  * Validate and canonicalize a whole stored map.
  *
  * Returns null rather than a repaired map when anything is wrong: a settings write that
- * half-saves is worse than one that says no, and the client always sends all four.
+ * half-saves is worse than one that says no, and the client always sends every action.
  */
 export function normalizeKeyboardShortcuts(raw: Record<string, string>): KeyboardShortcuts | null {
 	const keys = Object.keys(raw);
@@ -218,14 +243,19 @@ export function normalizeKeyboardShortcuts(raw: Record<string, string>): Keyboar
 		if (!(KEYBOARD_SHORTCUT_ACTIONS as readonly string[]).includes(key)) return null;
 	}
 	const out = {} as KeyboardShortcuts;
-	const seen = new Set<string>();
 	for (const action of KEYBOARD_SHORTCUT_ACTIONS) {
 		const chord = raw[action];
 		if (typeof chord !== "string") return null;
 		const canonical = canonicalChord(chord, { bare: isPlayerShortcutAction(action) });
-		if (!canonical || seen.has(canonical)) return null;
-		seen.add(canonical);
+		if (!canonical) return null;
 		out[action] = canonical;
+	}
+	for (let i = 0; i < KEYBOARD_SHORTCUT_ACTIONS.length; i++) {
+		for (let j = i + 1; j < KEYBOARD_SHORTCUT_ACTIONS.length; j++) {
+			const left = out[KEYBOARD_SHORTCUT_ACTIONS[i]];
+			const right = out[KEYBOARD_SHORTCUT_ACTIONS[j]];
+			if (chordsCollide(left, right)) return null;
+		}
 	}
 	return out;
 }
@@ -254,7 +284,11 @@ export function resolveKeyboardShortcuts(
 		if (canonical) out[action] = canonical;
 	}
 	const chords = KEYBOARD_SHORTCUT_ACTIONS.map((action) => out[action]);
-	if (new Set(chords).size !== chords.length) return { ...DEFAULT_KEYBOARD_SHORTCUTS };
+	for (let i = 0; i < chords.length; i++) {
+		for (let j = i + 1; j < chords.length; j++) {
+			if (chordsCollide(chords[i], chords[j])) return { ...DEFAULT_KEYBOARD_SHORTCUTS };
+		}
+	}
 	return out;
 }
 
