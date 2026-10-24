@@ -18,8 +18,20 @@
  * text, so a quote or an angle bracket in it must not be able to close the tag it sits in.
  */
 
-import type { WorkPreview } from "@anthers/shared/work-preview";
 import { pageTitle } from "@anthers/web-shared/page-title";
+
+/**
+ * The three facts a link card carries, and the only three it may carry.
+ *
+ * A Work's card and a post's card are the same shape on purpose: this renderer should not
+ * know which document it is describing, and the two server reads that produce these facts
+ * own their own rules. `WorkPreview` and `PostPreview` both satisfy this structurally.
+ */
+export interface LinkCard {
+	title: string;
+	description: string;
+	image: string | null;
+}
 
 /** The markers `index.html` carries around its site-level share tags. */
 export const SHARE_BEGIN = "<!-- share:begin -->";
@@ -57,7 +69,7 @@ export function escapeText(value: string): string {
  * thumbnail is whatever shape its creator uploaded, and a dimension that is not the
  * image's real one is worse than an absent one — some unfurlers crop to it.
  */
-export function renderShareHead(preview: WorkPreview, canonicalUrl: string): string {
+export function renderShareHead(preview: LinkCard, canonicalUrl: string): string {
 	const title = escapeAttribute(preview.title);
 	const description = escapeAttribute(preview.description);
 	const url = escapeAttribute(canonicalUrl);
@@ -103,7 +115,7 @@ export function renderShareHead(preview: WorkPreview, canonicalUrl: string): str
  */
 export function injectShareHead(
 	html: string,
-	preview: WorkPreview | null,
+	preview: LinkCard | null,
 	canonicalUrl: string,
 ): string {
 	if (!preview) return html;
