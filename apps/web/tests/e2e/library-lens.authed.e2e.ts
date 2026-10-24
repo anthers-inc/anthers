@@ -545,6 +545,47 @@ test("the Channel Guide lens puts a channel per creator and its timeline under t
 	await expect(channels).toHaveCount(1);
 });
 
+test("the Channel Guide flips to rows, creators down the left and programs running right", async ({
+	page,
+}) => {
+	await saveFixtureWork(page, "video");
+
+	await page.goto("/library?lens=channel-guide");
+	await expect(page.getByRole("heading", { name: "Channel Guide" })).toBeVisible();
+
+	// Columns is the default reading, and the toggle says so.
+	const columns = page.getByRole("button", { name: "Columns", exact: true });
+	const rowsButton = page.getByRole("button", { name: "Rows", exact: true });
+	await expect(columns).toHaveAttribute("aria-pressed", "true");
+
+	await rowsButton.click();
+	await expect(rowsButton).toHaveAttribute("aria-pressed", "true");
+	await expect(page.getByText("newest at the right")).toBeVisible();
+	await expect(page.getByText("Newer", { exact: true })).toBeVisible();
+	await expect(page.getByText("Latest", { exact: true })).toBeVisible();
+
+	// One channel still, now a row rather than a column.
+	await expect(page.getByTestId("guide-channel")).toHaveCount(1);
+
+	// The reading is a device preference, so a reload keeps the rows.
+	await page.reload();
+	await expect(page.getByRole("button", { name: "Rows", exact: true })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
+
+	// Tuning a program carries the axis into the rail: next points right, and a
+	// one-program channel has nothing further right to reach.
+	await page.getByTestId("guide-block").click();
+	await expect(page.getByTestId("guide-playing")).toBeVisible();
+	await expect(page.getByTestId("guide-rail-block")).toHaveCount(1);
+	await expect(page.getByTestId("guide-next")).toContainText("Next");
+	await expect(page.getByTestId("guide-next")).toBeDisabled();
+
+	// Leave the device in the default reading for the walks that follow.
+	await page.evaluate(() => localStorage.removeItem("anthers_guide_orientation"));
+});
+
 test("the new lenses are views, not containers — switching through them leaves the shelf exact", async ({
 	page,
 }) => {

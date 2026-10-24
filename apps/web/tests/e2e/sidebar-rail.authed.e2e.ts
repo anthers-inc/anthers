@@ -9,11 +9,9 @@
  * and the expanded column comes back intact. The last test covers Studio mode, whose nav
  * is a separate map and would otherwise be the one branch a rail change could miss.
  *
- * The sidebar's own key (`Ctrl+/` by default) is pinned here too, because the rail is
- * where a toggle is easiest to see: the aside's width says which state the key put it in,
- * with no drawer animation in the way. Its *rebinding* is pinned in
- * `search-bar.authed.e2e.ts`, which owns the one spec file that writes the account's
- * shortcut map — two files patching one field would race under `fullyParallel`.
+ * The sidebar's own key is pinned in `search-bar.authed.e2e.ts`, which owns the one spec
+ * file that touches the account's shortcut map; this spec covers the rail's mechanics
+ * through the toggle button, so no chord read here can race a rebind there.
  */
 import { expect, type Page, test } from "@playwright/test";
 import { signInAsCreator, WEB_ORIGIN } from "./fixtures";
@@ -21,14 +19,6 @@ import { signInAsCreator, WEB_ORIGIN } from "./fixtures";
 const DESKTOP = { width: 1280, height: 800 };
 
 const toggle = (page: Page) => page.getByRole("button", { name: "Toggle sidebar" });
-
-/** The Keyboard Shortcuts card on the account's settings tab. */
-const shortcutsCard = (page: Page) =>
-	page.locator(".card", { has: page.getByRole("heading", { name: "Keyboard Shortcuts" }) });
-
-/** The card's row for one shortcut, found by its label rather than its position. */
-const shortcutRow = (page: Page, label: string) =>
-	shortcutsCard(page).locator(".flex-wrap").filter({ hasText: label });
 
 /** The aside's width, where `<main>` starts, and what each nav row actually draws. */
 async function railState(page: Page) {
@@ -137,41 +127,6 @@ test.describe("on a desktop", () => {
 			expect(row.title, `${row.name} drops its rail-only hover label`).toBeNull();
 			expect(row.labelWidth, `${row.name}'s label is drawn again`).toBeGreaterThan(1);
 		}
-	});
-
-	test("Ctrl+/ toggles it, even with a text field focused", async ({ page }) => {
-		test.setTimeout(60_000);
-		await page.goto(`${WEB_ORIGIN}/network`);
-		await expect.poll(async () => (await railState(page)).asideWidth).toBe(256);
-
-		// Ctrl+K puts the caret in the search field, which is the state the sidebar's key
-		// has to survive: a page shortcut normally skips an editor, and this one does not.
-		await page.keyboard.press("Control+k");
-		const input = page.getByRole("banner").getByRole("combobox");
-		await expect(input).toBeFocused();
-
-		await page.keyboard.press("Control+/");
-		await expect
-			.poll(async () => (await railState(page)).asideWidth, {
-				message: "Ctrl+/ did not collapse the sidebar",
-			})
-			.toBe(64);
-		await expect(input, "the toggle took the caret out of the field").toBeFocused();
-
-		await page.keyboard.press("Control+/");
-		await expect
-			.poll(async () => (await railState(page)).asideWidth, {
-				message: "Ctrl+/ did not open it again",
-			})
-			.toBe(256);
-
-		// The account's card offers it beside the search bar's pair, which is where a person
-		// rebinds it; `search-bar.authed.e2e.ts` owns the write, because one spec file writes
-		// the account's shortcut map.
-		await page.goto("/settings?tab=account");
-		const row = shortcutRow(page, "Toggle the sidebar");
-		await expect(row).toBeVisible();
-		await expect(row.locator("kbd")).toHaveText(/Ctrl\+\/|⌃\//);
 	});
 
 	test("Studio mode's nav collapses to its own icons", async ({ page, context }) => {
