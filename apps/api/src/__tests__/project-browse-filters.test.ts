@@ -19,6 +19,7 @@ import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
+import { createBadgeRung } from "./badge-fixtures.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -40,7 +41,7 @@ const userName = `filt_v_${id}`;
 
 const FREE = [{ threshold: 0, allow: true, price: "0" }];
 const PAID = [{ threshold: 0, allow: true, price: "5.00" }];
-const GATED = [{ threshold: 2, allow: true, price: "0" }];
+const GATED = [{ threshold: 2, allow: true, price: "0", badgeId: 0 }];
 
 /** Slugs of the projects this run created, so assertions ignore everyone else's data. */
 const mine = new Map<string, string>();
@@ -68,6 +69,7 @@ describe("project browse filters", () => {
 		await enablePayouts(creatorName);
 
 		const auth = { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie };
+		GATED[0].badgeId = await createBadgeRung(cookie, "2.00");
 
 		// Each project holds exactly one Work, so a filter that matches the Work and a
 		// filter that matches the project are the same assertion.

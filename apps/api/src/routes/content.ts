@@ -156,6 +156,7 @@ import {
 	buildPreviewContext,
 	defaultSeedAccess,
 	heldAnthersBadgeAmount,
+	normalizeAccessRows,
 	resolveAccessSync,
 } from "../services/access.js";
 import {
@@ -892,6 +893,11 @@ const MONEY = /^\d+(\.\d{1,2})?$/;
  * flag, and a price. The threshold is what the user has given this Work's creator
  * this cycle, and there is exactly one such table.
  *
+ * `badgeId` names the creator's rung the gate sits on; it is absent on the Everyone
+ * baseline, and `normalizeAccessRows` (services/access.ts) is what checks it against the
+ * creator's ladder and stamps the threshold from the rung. The number a client sends with
+ * a badgeId is therefore advisory — the rung's current amount wins.
+ *
  * 🚨 **Cents, not integers, and this is a justification that inverted under its own
  * premise.** Refusing a fractional threshold was once right — a gate nobody could exactly
  * meet is a gate nobody can clear — and became exactly backwards when amounts stopped
@@ -919,6 +925,10 @@ const accessRowSchema = z.object({
 		// The baseline row sits at 0 and must stay legal, which is why this is the "$0 or at
 		// least the floor" predicate rather than a minimum.
 		.refine(isChargeableAmount, { message: CHARGEABLE_AMOUNT_MESSAGE }),
+	// The rung the gate sits on. Nullable rather than optional so a client clearing a gate
+	// says so; whatever is not the Everyone baseline must name one of the creator's own
+	// rungs, which the handler checks.
+	badgeId: z.number().int().positive().nullable().optional(),
 	allow: z.boolean(),
 	// 🚨 **The floor sits on the PRICE, never on the buyer's total.** Sales tax is added on
 	// top of the price at the charge, so flooring the total would make a $0.47 Work
@@ -5318,6 +5328,16 @@ const contentRoutes = new Hono()
 			if (rejected) return c.json(REJECTED_CREDIT_REFUSAL, 400);
 		}
 
+		// Every gate names one of this creator's rungs, and the rung's amount is what is
+		// stored — never the number the request carried. `normalizeAccessRows` carries the
+		// reasoning.
+		let accessRows = defaultSeedAccess();
+		if (data.access !== undefined) {
+			const normalized = await normalizeAccessRows(user.id, data.access);
+			if ("error" in normalized) return c.json({ error: normalized.error }, 400);
+			accessRows = normalized.rows;
+		}
+
 		const [work] = await db
 			.insert(works)
 			.values({
@@ -5354,7 +5374,7 @@ const contentRoutes = new Hono()
 				originallyReleased: data.originallyReleased ? new Date(data.originallyReleased) : null,
 				streamEnabled: data.streamEnabled ?? data.type !== "physical",
 				downloadEnabled: data.downloadEnabled ?? false,
-				access: data.access ?? defaultSeedAccess(),
+				access: accessRows,
 				credits: data.credits ?? [],
 				isPinned: data.isPinned ?? false,
 				tags: data.tags ?? [],
@@ -6450,7 +6470,11 @@ const contentRoutes = new Hono()
 			if (data.streamEnabled !== undefined) updates.streamEnabled = data.streamEnabled;
 			if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
 		}
-		if (data.access !== undefined) updates.access = data.access;
+		if (data.access !== undefined) {
+			const normalized = await normalizeAccessRows(user.id, data.access);
+			if ("error" in normalized) return c.json({ error: normalized.error }, 400);
+			updates.access = normalized.rows;
+		}
 		if (data.credits !== undefined) updates.credits = data.credits;
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
 		if (data.tags !== undefined) updates.tags = data.tags;

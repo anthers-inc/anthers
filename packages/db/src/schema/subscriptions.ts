@@ -1043,7 +1043,7 @@ export const timePoolFundLedger = pgTable(
  * price left to leak and a stored conversion bakes in a ratio that means nothing.
  *
  * Naming the Badges is this table's job; deciding a Work's access is `works.access`'s,
- * and a Work may gate at a threshold no Badge is named for.
+ * and every non-baseline row there names one of these rows (`badgeId`).
  */
 // node — a creator's own Badge ladder is their pricing, node-owned content. The org
 // reads it to resolve access, but the creator defines it. This is the one table in

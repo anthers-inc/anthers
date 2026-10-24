@@ -25,6 +25,7 @@ import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
+import { createBadgeRung } from "./badge-fixtures.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -48,7 +49,7 @@ const userBName = `rp_b_${id}`;
 const FREE = [{ threshold: 0, allow: true, price: "0" }];
 const GATED = [
 	{ threshold: 0, allow: false, price: "0" },
-	{ threshold: 2, allow: true, price: "0" },
+	{ threshold: 2, allow: true, price: "0", badgeId: 0 },
 ];
 
 let creatorAuth: Record<string, string>;
@@ -125,6 +126,7 @@ describe("reading positions", () => {
 		bCookie = b.cookie;
 		creatorAuth = { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creator.cookie };
 		aAuth = { "Content-Type": "application/json", Origin: ORIGIN, Cookie: a.cookie };
+		GATED[1].badgeId = await createBadgeRung(creator.cookie, "2.00");
 
 		freeWorkId = await makeWork(`Free ${id}`, FREE);
 		gatedWorkId = await makeWork(`Gated ${id}`, GATED);

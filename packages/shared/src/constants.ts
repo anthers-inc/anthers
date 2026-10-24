@@ -389,9 +389,9 @@ export function thresholdOf(name: string, badges: readonly BadgeDef[] = ANTHERS_
  * Does a monthly amount clear a gate at `threshold` dollars?
  *
  * This is the ONLY comparison access resolution needs, for both directions — an
- * Anthers' Badges and a creator's differ solely in which amount is passed in. A gate
- * needn't sit on a Badge: with Badges at $2 and $4, a gate at $3 is legal and someone
- * giving $3 clears it.
+ * Anthers' Badges and a creator's differ solely in which amount is passed in. A gate's
+ * threshold is the amount of the rung it sits on (the write enforces that in
+ * `normalizeAccessRows`), so this stays a plain money comparison.
  *
  * 🚨 **It compares in whole cents and ROUNDS rather than floors, and flooring here is a
  * real defect that looks like caution.** Thresholds were integers once and could not go
