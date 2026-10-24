@@ -264,6 +264,11 @@ export const QUEUES = {
 	// The logical backup: a STAR, the blob bytes and the registry entry per registered space,
 	// plus the retention sweep beside it. See services/space-backup.ts.
 	SPACE_BACKUP: "space-backup",
+	// Write the signed receipt a settled purchase or refund owes the reader's own space.
+	// The `access_receipts` row is the worklist — a webhook inserts it and this drains it —
+	// so a PDS that is briefly down costs a minute of latency, not the record. See
+	// services/access-receipts.ts and jobs/access-receipts.ts.
+	ACCESS_RECEIPTS: "access-receipts",
 	PUBLISH_SCHEDULED: "publish-scheduled", // Auto-publish drafts whose scheduledFor has arrived
 	// Release private Works whose scheduled release time has come, once they are ready.
 	RELEASE_SCHEDULED: "release-scheduled",
@@ -431,6 +436,14 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 2,
 		retryDelay: 300,
 		expireInMinutes: 60,
+	},
+	// One small record per reader and a bounded pass; the row's own attempts are the retry
+	// clock, and this budget covers a crash in the middle of a pass. A receipt delayed a
+	// minute is invisible, so the delay is short.
+	[QUEUES.ACCESS_RECEIPTS]: {
+		retryLimit: 2,
+		retryDelay: 120,
+		expireInMinutes: 30,
 	},
 	[QUEUES.SCAN_MEDIA]: {
 		// Retried generously and slowly on purpose. A vendor outage must leave the object
@@ -655,6 +668,10 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// already longer than anybody expects; the drain is bounded (fifty rows) and quiet when
 	// there is nothing to do, so the cost of the tight schedule is one indexed query.
 	[QUEUES.SPACE_OUTBOX, "* * * * *"],
+	// Every minute, for the same reason the outbox is: a receipt is a settled purchase's
+	// proof, and a minute is already longer than anybody expects it to take. Quiet when
+	// nothing is owed; one indexed query when it is.
+	[QUEUES.ACCESS_RECEIPTS, "* * * * *"],
 	// 4:40 AM daily, off the hour and after reconcile-listings at 4:20. The backup reads each
 	// space over the network and writes its objects to storage, so it is the longest job in
 	// the night's sweeps and the one most worth keeping clear of the others. Daily is the
