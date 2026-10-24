@@ -9060,6 +9060,14 @@ const contentRoutes = new Hono()
 				);
 			}
 
+			// 🚨 **Refused before anything is recorded**, like every other user-record path (a
+			// comment, a review, a vote, a follow). The acceptance IS a record in the caller's own
+			// repository, so an identity Anthers cannot write for has not accepted anything yet —
+			// recording the row first and failing after left a row saying accepted beside a record
+			// that never existed, and the retry answered `already_accepted` for ever.
+			const unwritable = await interactionPermissionRefusal(user.id);
+			if (unwritable) return c.json(unwritable.body, unwritable.status);
+
 			const result = await acceptCredit({
 				callerUserId: user.id,
 				callerDid: account.did,
