@@ -58,11 +58,11 @@ async function saveFixtures(page: Page) {
 	}
 }
 
-/** How many cards the bare shelf is showing. */
+/** How many tiles the bare shelf is showing — the same tile the Network and Discovery render. */
 async function shelfCount(page: Page): Promise<number> {
 	await page.goto("/library");
 	await expect(page.getByRole("heading", { name: "Library" })).toBeVisible();
-	return page.locator(".card").count();
+	return page.locator("[data-testid='feed-tile']").count();
 }
 
 /** The sidebar lens rows, by label. */
@@ -293,20 +293,21 @@ test("an Access filter reads the resolved verdict the cards already carry", asyn
 	// Unlocked keeps the free track and drops the album, which has no access reading.
 	await page.getByRole("button", { name: "Unlocked", exact: true }).click();
 	await expect(page).toHaveURL(/access=unlocked/);
-	await expect(page.locator(".card"), "the album drops; the unlocked stock stands").toHaveCount(
-		before - 1,
-	);
+	await expect(
+		page.locator("[data-testid='feed-tile']"),
+		"the album drops; the unlocked stock stands",
+	).toHaveCount(before - 1);
 
 	// Locked is the complement — with nothing locked saved, the view empties rather
 	// than lying.
 	await page.getByRole("button", { name: "Locked", exact: true }).click();
 	await expect(page).toHaveURL(/access=locked/);
-	await expect(page.locator(".card")).toHaveCount(0);
+	await expect(page.locator("[data-testid='feed-tile']")).toHaveCount(0);
 
 	// Any restores.
 	await page.getByRole("button", { name: "Any", exact: true }).click();
 	await expect(page).toHaveURL(/^(?!.*access=).*$/);
-	await expect(page.locator(".card")).toHaveCount(before);
+	await expect(page.locator("[data-testid='feed-tile']")).toHaveCount(before);
 });
 
 test("a removed lens reads as No Lens, and nothing else breaks with it", async ({ page }) => {
@@ -318,7 +319,7 @@ test("a removed lens reads as No Lens, and nothing else breaks with it", async (
 	await expect(page.getByRole("heading", { name: "Watchlist" })).toHaveCount(0);
 	// The library read resolves after load; the Library heading only renders once it has.
 	await expect(page.getByRole("heading", { name: "Library", exact: true })).toBeVisible();
-	await expect(page.locator(".card").first()).toBeVisible();
+	await expect(page.locator("[data-testid='feed-tile']").first()).toBeVisible();
 });
 
 test("a tag filter narrows the shelf and its removal restores it", async ({ page }) => {
@@ -336,12 +337,12 @@ test("a tag filter narrows the shelf and its removal restores it", async ({ page
 	await page.getByPlaceholder("Search tags…").press("Enter");
 	await expect(page).toHaveURL(/tags=zzz-shelf-has-nothing/);
 	await expect(
-		page.locator(".card"),
+		page.locator("[data-testid='feed-tile']"),
 		"nothing carries the tag, so AND semantics empty the view",
 	).toHaveCount(0);
 	await page.getByRole("button", { name: "Remove tag zzz-shelf-has-nothing" }).click();
 	await expect(page).toHaveURL(/^(?!.*tags=).*$/);
-	await expect(page.locator(".card")).toHaveCount(before);
+	await expect(page.locator("[data-testid='feed-tile']")).toHaveCount(before);
 });
 
 // ── The 2026-10-11 lens pair — Bookshelf and Channel Guide ──────────────────

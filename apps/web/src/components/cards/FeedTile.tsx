@@ -21,9 +21,13 @@
 // The rule is the resolver's (`services/access.ts`'s goods branch); this tile
 // is its feed-shaped consequence.
 //
-// This is the widget every listing surface renders: the feed, and — since
-// 2026-10-17 — the creator page's timeline and type tabs, which replaced their
-// own card family with it. WorkCard and PostCard stay the column cards the
+// This is the widget every listing surface renders: the feed, Discovery, the
+// creator page's timeline and type tabs (2026-10-17), and — since 2026-10-24 —
+// the Library's shelf, which replaced its private card so the three tabs and a
+// creator's page show one shape for the same item. A Project renders here too
+// as its own entry kind, because a creator page and a Library shelf both mix
+// Projects in with Works and posts; ProjectCard stays the column card a Project
+// page's own header uses. WorkCard and PostCard stay the column cards the
 // project and post pages render. The tile stays where it is while every
 // consumer is in this app; if a different package wants this shape, move it to
 // @anthers/web-shared then, not now.
@@ -39,9 +43,21 @@ import {
 import { FONTS } from "@anthers/web-shared/fonts";
 import { LockedCover, lockedByBadge, presentsAsLocked } from "@anthers/web-shared/post/unlock";
 import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
+import { creatorProjectUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
-import { isAccessResult, type PostListItem, type Work } from "@anthers/web-shared/types";
-import { DocumentTextIcon, LinkIcon, PlayIcon } from "@heroicons/react/24/solid";
+import {
+	isAccessResult,
+	type PostListItem,
+	type Project,
+	type Work,
+} from "@anthers/web-shared/types";
+import {
+	DocumentTextIcon,
+	LinkIcon,
+	PlayIcon,
+	RectangleStackIcon,
+	UserIcon,
+} from "@heroicons/react/24/solid";
 import {
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
@@ -66,8 +82,11 @@ import PricingBadge from "../ui/PricingBadge";
 import CreatorLink from "./CreatorLink";
 import TileHoverPreview from "./TileHoverPreview";
 
-/** One entry of the feed: a release of a Work, or a post. */
-type FeedEntry = { kind: "post" | "release"; id: number } & Record<string, unknown>;
+/** One entry of a listing: a release of a Work, a post, or a Project. */
+export type FeedEntry = { kind: "post" | "release" | "project"; id: number } & Record<
+	string,
+	unknown
+>;
 
 /** A feed Work as the API sends it: the Work plus the creator the listing joins on. */
 type FeedWork = Work & {
@@ -79,8 +98,35 @@ type FeedWork = Work & {
 	merch?: { mockupUrl: string | null; fromPrice: string | null } | null;
 };
 
+/**
+ * A Project as a listing sends it. The public and creator-page listings join `creator`
+ * as an object; the Library shelf flattens the handle and name beside the row instead
+ * (its query already joins users), so both shapes resolve through {@link projectCreator}.
+ */
+type FeedProject = Project & {
+	creatorHandle?: string | null;
+	creatorDisplayName?: string | null;
+	trackCount?: number;
+};
+
 /** A feed post as the API sends it — the timeline shape plus the plain-text body excerpt. */
 type FeedPost = PostListItem & { excerpt?: string | null };
+
+/**
+ * What a surface adds to a shared tile without changing what the tile is — the Library
+ * shelf's purchased and hidden chips, its withdrawn and back-in-drafts notices, and the
+ * Hide/Remove controls that belong to the shelf rather than to the thing on it.
+ */
+export interface FeedTileExtras {
+	/** Extra chips for the badge row, after the tile's own. */
+	badges?: ReactNode;
+	/** A line under the badge row — a state the shelf states in words rather than a chip. */
+	note?: ReactNode;
+	/** Surface controls, rendered in a raised row under the body, above the tile's overlay. */
+	actions?: ReactNode;
+	/** Extra classes on the tile root — the shelf dims a hidden entry with `opacity-60`. */
+	className?: string;
+}
 
 /**
  * Fallback heights for the decorative waveform, hand-picked to read as an
@@ -362,6 +408,29 @@ function PostBand({ post }: { post: FeedPost }) {
 	return <TypographicBand label="Post" title={post.displayTitle ?? post.title} />;
 }
 
+/**
+ * A Project's cover, or the stack poster when it has none. A Project is a shelf of
+ * Works rather than a Work itself, so its poster is the stack rather than a type
+ * icon: the same band shape every tile keeps, saying what kind of thing it is.
+ */
+function ProjectBand({ project }: { project: FeedProject }) {
+	if (project.coverImage) {
+		return (
+			<div className="relative aspect-video bg-base-300">
+				<img src={project.coverImage} alt="" className="w-full h-full object-cover" />
+			</div>
+		);
+	}
+	return (
+		<div className="aspect-video relative flex flex-col items-center justify-center gap-2 overflow-hidden bg-gradient-to-br from-base-300/60 to-base-100">
+			<RectangleStackIcon className="w-14 h-14 text-base-content/10" />
+			<span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-base-content/40">
+				Project
+			</span>
+		</div>
+	);
+}
+
 function MetaRow({
 	avatar,
 	handle,
@@ -380,9 +449,16 @@ function MetaRow({
 		<div className="flex items-center gap-2 min-w-0">
 			{avatar ? (
 				<img src={avatar} alt={name} className="w-6 h-6 rounded-full object-cover shrink-0" />
-			) : (
+			) : handle ? (
 				<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold shrink-0">
 					{name.charAt(0).toUpperCase()}
+				</div>
+			) : (
+				// A tombstoned creator or a row whose account went away: a neutral face
+				// rather than a bubble holding a "?" — the missing-identity fallback the
+				// tile family used to print wherever a join was absent.
+				<div className="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center shrink-0">
+					<UserIcon className="w-3.5 h-3.5 text-base-content/40" />
 				</div>
 			)}
 			{/* The name is the creator's way out of the tile: it rises past the tile's
@@ -411,8 +487,21 @@ function TileBody({ children }: { children: ReactNode }) {
  * same choice the WorkCard body makes. Handles here are long domain suffixes;
  * a display name is worth the space.
  */
-function creatorLabel(creator: { handle: string; displayName?: string | null }): string {
-	return creator.displayName || creator.handle || "?";
+function creatorLabel(creator: { handle?: string | null; displayName?: string | null }): string {
+	return creator.displayName || creator.handle || "Unknown creator";
+}
+
+/** A Project's creator from either listing shape — the joined object, or the flat pair. */
+function projectCreator(
+	project: FeedProject,
+): { handle: string; displayName: string | null } | null {
+	if (project.creator?.handle) {
+		return { handle: project.creator.handle, displayName: project.creator.displayName };
+	}
+	if (project.creatorHandle) {
+		return { handle: project.creatorHandle, displayName: project.creatorDisplayName ?? null };
+	}
+	return null;
 }
 
 /**
@@ -434,7 +523,7 @@ function entryIsOwn(entry: FeedEntry): boolean {
  * leave. Never autoplay at any scroll position, mobile or desktop: that would
  * be the engagement mechanic this platform is built to not have.
  */
-function ReleaseTile({ entry }: { entry: FeedEntry }) {
+function ReleaseTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtras }) {
 	const work = entry as unknown as FeedWork;
 	// Why this card is here, from the reason the API states. The whole Ticker shares one
 	// candidate reason, so the tile announces it rather than repeating it beneath every
@@ -507,8 +596,7 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 		endPreview();
 	};
 
-	const tileClass =
-		"group relative flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden";
+	const tileClass = `group relative flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden${extras.className ? ` ${extras.className}` : ""}`;
 	return (
 		<div
 			className={tileClass}
@@ -523,7 +611,7 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 				<MetaRow
 					avatar={work.creator?.avatar}
 					handle={work.creator?.handle}
-					name={creatorLabel(work.creator ?? { handle: "?" })}
+					name={creatorLabel(work.creator ?? {})}
 					own={entryIsOwn(entry)}
 					date={compactDate(work.originallyReleased ?? work.releasedAt)}
 				/>
@@ -548,8 +636,15 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 							{work.estimatedReadMinutes} min read
 						</span>
 					) : null}
+					{extras.badges}
 				</div>
+				{extras.note}
 			</TileBody>
+			{extras.actions && (
+				<div className="relative z-10 flex items-center justify-end gap-1 px-1.5 pb-1">
+					{extras.actions}
+				</div>
+			)}
 			{/* The tile's own target, stretched over it: painted last (an absolute layer
 			    above every z-auto sibling), it takes a click anywhere on the tile, while
 			    the parts that are links or controls of their own — CreatorLink, an
@@ -565,7 +660,7 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 	);
 }
 
-function PostTile({ entry }: { entry: FeedEntry }) {
+function PostTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtras }) {
 	const post = entry as unknown as FeedPost;
 	// See ReleaseTile: the reason is the card's accessible name where the stream shares
 	// one candidate reason, not a line repeated under every tile.
@@ -583,8 +678,7 @@ function PostTile({ entry }: { entry: FeedEntry }) {
 	// overlay that its content cannot answer. The band sits inset from the tile's
 	// rounded edge by the tile's own padding, so the tint reads AROUND the preview
 	// the way YouTube's tinted frame reads around a thumbnail.
-	const tileClass =
-		"group relative flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden";
+	const tileClass = `group relative flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden${extras.className ? ` ${extras.className}` : ""}`;
 	return (
 		<div className={tileClass} data-testid="feed-tile">
 			<div className="rounded-lg overflow-hidden">
@@ -594,7 +688,7 @@ function PostTile({ entry }: { entry: FeedEntry }) {
 				<MetaRow
 					avatar={post.creator?.avatar}
 					handle={post.creator?.handle}
-					name={creatorLabel(post.creator ?? { handle: "?" })}
+					name={creatorLabel(post.creator ?? {})}
 					own={entryIsOwn(entry)}
 					date={compactDate(post.publishedAt ?? post.createdAt)}
 				/>
@@ -615,8 +709,15 @@ function PostTile({ entry }: { entry: FeedEntry }) {
 							{post.linkedWorkCount} {post.linkedWorkCount === 1 ? "work" : "works"}
 						</span>
 					)}
+					{extras.badges}
 				</div>
+				{extras.note}
 			</TileBody>
+			{extras.actions && (
+				<div className="relative z-10 flex items-center justify-end gap-1 px-1.5 pb-1">
+					{extras.actions}
+				</div>
+			)}
 			{/* The tile's own target, stretched over it — see the release tile's overlay. */}
 			<Link
 				to={postUrl(post)}
@@ -627,7 +728,63 @@ function PostTile({ entry }: { entry: FeedEntry }) {
 	);
 }
 
-export default function FeedTile({ entry }: { entry: FeedEntry }) {
-	if (entry.kind === "release") return <ReleaseTile entry={entry} />;
-	return <PostTile entry={entry} />;
+/**
+ * The Project tile: a creator's shelf of Works, at the same shape as everything else.
+ * A creator's page and the Library's shelf both list Projects beside Works and posts,
+ * so a Project renders as this tile rather than as a second card family. The Project
+ * page's own header keeps `ProjectCard`, which is a column card rather than a grid item.
+ */
+function ProjectTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtras }) {
+	const project = entry as unknown as FeedProject;
+	const creator = projectCreator(project);
+	const trackCount = project.trackCount ?? 0;
+	const tileClass = `group relative flex flex-col text-left h-full rounded-2xl p-2 bg-base-200 ring-1 ring-transparent hover:ring-base-300/80 hover:bg-base-300/30 transition-all duration-150 overflow-hidden${extras.className ? ` ${extras.className}` : ""}`;
+	return (
+		<div className={tileClass} data-testid="feed-tile">
+			<div className="rounded-lg overflow-hidden">
+				<ProjectBand project={project} />
+			</div>
+			<TileBody>
+				<MetaRow
+					avatar={project.creator?.avatar}
+					handle={creator?.handle}
+					name={creatorLabel(creator ?? {})}
+					date={compactDate(project.createdAt)}
+				/>
+				<h3 className="font-semibold text-sm leading-snug line-clamp-2">{project.title}</h3>
+				<div className="flex items-center gap-1.5 mt-auto pt-1 flex-wrap">
+					<span className="badge badge-sm gap-1">
+						<RectangleStackIcon className="w-3 h-3" />
+						Project
+					</span>
+					{trackCount > 0 && (
+						<span className="text-xs text-base-content/40">
+							{trackCount} {trackCount === 1 ? "track" : "tracks"}
+						</span>
+					)}
+					{extras.badges}
+				</div>
+				{extras.note}
+			</TileBody>
+			{extras.actions && (
+				<div className="relative z-10 flex items-center justify-end gap-1 px-1.5 pb-1">
+					{extras.actions}
+				</div>
+			)}
+			{/* The tile's own target, stretched over it — see the release tile's overlay.
+			    A Project whose creator row is gone keeps the link shape the profile page
+			    has always used; the server resolves the slug. */}
+			<Link
+				to={creatorProjectUrl(creator?.handle ?? "unknown", project.slug)}
+				className="absolute inset-0"
+				aria-label={project.title || "A Project"}
+			/>
+		</div>
+	);
+}
+
+export default function FeedTile({ entry, ...extras }: { entry: FeedEntry } & FeedTileExtras) {
+	if (entry.kind === "release") return <ReleaseTile entry={entry} extras={extras} />;
+	if (entry.kind === "project") return <ProjectTile entry={entry} extras={extras} />;
+	return <PostTile entry={entry} extras={extras} />;
 }
