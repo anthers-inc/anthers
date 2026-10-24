@@ -570,10 +570,9 @@ export default function DiscoverPage() {
 						}
 					/>
 				) : (
-					// A uniform grid, still sorted on the one chronological key — the grid is
-					// the layout, never a ranking. Columns keep a workable minimum width and
-					// count themselves: the row flexes to fewer, larger tiles as the window
-					// narrows and to more of them as it widens.
+					// The same auto-fill grid the Library renders: the columns count
+					// themselves from a working tile width, so the shared tile shows at the
+					// shared size rather than a narrower one.
 					<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
 						{visibleEntries.map((entry) => (
 							<FeedTile key={`${entry.kind}-${entry.id}`} entry={entry} />
