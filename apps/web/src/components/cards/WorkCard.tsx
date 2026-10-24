@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { isListened } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
+import WorkPoster from "@anthers/web-shared/content/work-poster";
 import {
 	coverFor,
 	MaturityVeil,
@@ -16,7 +16,7 @@ import {
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { Link } from "@anthers/web-shared/router";
 import { isAccessResult, type Work } from "@anthers/web-shared/types";
-import { MicrophoneIcon, MusicalNoteIcon, PlayIcon } from "@heroicons/react/24/solid";
+import { PlayIcon } from "@heroicons/react/24/solid";
 import ContentTypeBadge from "../ui/ContentTypeBadge";
 import PricingBadge from "../ui/PricingBadge";
 import CreatorLink from "./CreatorLink";
@@ -83,6 +83,8 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 	   (physical only — a service carries no merch rows). The mockup is public the same
 	   way the store panel is, so the band shows what the variants route shows. */
 	const goodsArtwork = post.type === "physical" ? (post.merch?.mockupUrl ?? null) : null;
+	/* Whatever the creator gave this Work to show: its thumbnail, or the store's mockup. */
+	const coverArt = post.thumbnail || goodsArtwork;
 
 	// What this user asked to meet at this rung, and for each kind of content in it. **A veil is
 	// not a lock**: a veiled Work is listed, reachable and earning, and the user can uncover it
@@ -97,7 +99,7 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 			{/* Thumbnail / cover area */}
 			{locked ? (
 				<LockedCover
-					thumbnail={post.thumbnail || goodsArtwork}
+					thumbnail={coverArt}
 					className="aspect-video"
 					lockedBy={access ? lockedByBadge(access, cardCreatorName(post)) : null}
 				/>
@@ -110,64 +112,34 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 					// reveal rather than the card's navigation.
 					className="z-10 aspect-video"
 				>
-					{post.thumbnail || goodsArtwork ? (
-						<img
-							src={(post.thumbnail || goodsArtwork)!}
-							alt=""
-							className="w-full h-full object-cover"
-						/>
+					{coverArt ? (
+						<img src={coverArt} alt="" className="w-full h-full object-cover" />
 					) : (
-						<div className="w-full h-full bg-gradient-to-br from-base-300 to-base-200" />
+						<WorkPoster type={post.type} className="h-full w-full" />
 					)}
 				</MaturityVeil>
-			) : isGoods ? (
-				/* A goods Work's band is its store face: the creator's thumbnail, or the
-				   first merch mockup the variants route shows a visitor. With neither, a
-				   quiet placeholder stands where a product photo would — a shirt with no
-				   picture is a setup gap the Studio owns, not a lock to render. */
-				goodsArtwork ? (
-					<img src={goodsArtwork} alt="" className="w-full h-full object-cover aspect-video" />
-				) : (
-					<div className="aspect-video bg-gradient-to-br from-base-300 to-base-200" />
-				)
+			) : post.type === "video" ? (
+				/* A video's band carries the play affordance whatever stands behind it —
+				   the creator's picture, or the kind's poster when they left none. */
+				<div className="relative aspect-video bg-base-300">
+					{coverArt ? (
+						<img src={coverArt} alt="" className="w-full h-full object-cover" />
+					) : (
+						<WorkPoster type={post.type} className="h-full w-full" />
+					)}
+					<div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/20">
+						<div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
+							<PlayIcon className="w-6 h-6 text-black ml-0.5" />
+						</div>
+					</div>
+				</div>
+			) : coverArt ? (
+				<img src={coverArt} alt="" className="w-full aspect-video object-cover" />
 			) : (
-				<>
-					{post.type === "video" && (
-						<div className="relative aspect-video bg-base-300">
-							{post.thumbnail ? (
-								<img src={post.thumbnail} alt="" className="w-full h-full object-cover" />
-							) : (
-								<div className="w-full h-full flex items-center justify-center">
-									<PlayIcon className="w-12 h-12 text-base-content/20" />
-								</div>
-							)}
-							{/* Play icon overlay */}
-							<div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/20">
-								<div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
-									<PlayIcon className="w-6 h-6 text-black ml-0.5" />
-								</div>
-							</div>
-						</div>
-					)}
-
-					{isListened(post.type) && (
-						<div className="relative h-24 bg-gradient-to-br from-secondary/20 to-primary/20">
-							<div className="absolute inset-0 flex items-center justify-center">
-								{post.type === "music" ? (
-									<MusicalNoteIcon className="w-10 h-10 text-base-content/20" />
-								) : (
-									<MicrophoneIcon className="w-10 h-10 text-base-content/20" />
-								)}
-							</div>
-						</div>
-					)}
-
-					{post.type === "text" && post.thumbnail && (
-						<figure>
-							<img src={post.thumbnail} alt="" className="w-full h-36 object-cover" />
-						</figure>
-					)}
-				</>
+				/* No picture: the kind's own poster, so a card never reads as a broken
+				   thumbnail. A goods Work's store mockup, where the store has one, wins
+				   above: a shirt with no photo is a setup gap the Studio owns. */
+				<WorkPoster type={post.type} className="aspect-video" />
 			)}
 
 			{/* Card body */}

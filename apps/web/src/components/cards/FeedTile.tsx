@@ -8,12 +8,11 @@
 //
 // The band is where the types differ, deliberately: an entry with artwork
 // (a Work's thumbnail, or a physical Work's store mockup) shows it; a text
-// post renders its content's opening in the slot; a writing Work has no
-// artwork, so its title set in the Fraunces display face IS the artwork;
-// music and audio get a waveform poster; the remaining types get a type-icon
-// poster. The body does not repeat a title the band already set — the band is
-// the poster, and the body is the who-and-when plus the title when the band
-// carries something else.
+// post renders its content's opening in the slot; a Work with no thumbnail
+// shows its kind's own poster (`WorkPoster` — the icon, the kind's name and a
+// foot drawn for the medium), so the band never reads as a missing picture.
+// The body carries the title for every entry, because the band is the poster
+// and the title is what the card is.
 //
 // A goods Work (physical) is never locked presentation while buyable — the
 // purchase gates receiving it, never seeing it — so its tile shows the art
@@ -31,6 +30,7 @@
 import { isListened } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
 import { isDiscoveryReason } from "@anthers/shared/discovery";
+import WorkPoster from "@anthers/web-shared/content/work-poster";
 import {
 	coverFor,
 	MaturityVeil,
@@ -82,16 +82,6 @@ type FeedWork = Work & {
 /** A feed post as the API sends it — the timeline shape plus the plain-text body excerpt. */
 type FeedPost = PostListItem & { excerpt?: string | null };
 
-/**
- * Fallback heights for the decorative waveform, hand-picked to read as an
- * audio waveform rather than a spreadsheet. Purely decorative — the data a
- * real waveform is drawn from is creator content, and the feed serializes no
- * payload.
- */
-const DECORATIVE_WAVEFORM = [
-	38, 62, 45, 80, 55, 30, 70, 50, 88, 40, 60, 75, 35, 55, 68, 48, 30, 80, 58, 42, 66, 36, 74, 52,
-];
-
 /** Who the unlock copy speaks about, matching WorkCard's rule. */
 function creatorName(work: FeedWork): string {
 	return work.creator?.displayName || work.creator?.handle || "this creator";
@@ -112,54 +102,11 @@ function durationLabel(seconds: number | null | undefined): string {
 	return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-/** The band a coverless tile shows when its type has no better treatment. */
-function IconPosterBand({ type }: { type: string }) {
-	const { Icon, label } = contentTypeMeta(type);
-	return (
-		<div className="aspect-video relative flex flex-col items-center justify-center gap-2 overflow-hidden bg-gradient-to-br from-base-300/60 to-base-100">
-			<Icon className="w-14 h-14 text-base-content/10" />
-			<span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-base-content/40">
-				{label}
-			</span>
-		</div>
-	);
-}
-
-/** Music and audio: a soft gradient, the type's icon, and a decorative waveform. */
-function ListenPosterBand({ type, playing = false }: { type: string; playing?: boolean }) {
-	const { Icon, label } = contentTypeMeta(type);
-	return (
-		<div className="aspect-video relative flex flex-col items-center justify-center gap-2 overflow-hidden bg-gradient-to-br from-secondary/25 to-primary/15">
-			<Icon className="w-14 h-14 text-base-content/15" />
-			<span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-base-content/40">
-				{label}
-			</span>
-			<div className="absolute inset-x-4 bottom-3 flex items-end gap-[3px] h-8">
-				{DECORATIVE_WAVEFORM.map((h, i) => (
-					<div
-						// biome-ignore lint/suspicious/noArrayIndexKey: the waveform is a static decorative list, never reordered
-						key={i}
-						// The waveform lights up from the preview's play state — the
-						// decorative bars step with the shared equalizer motion while the
-						// tile's audio plays beneath, and stand still when nothing plays.
-						className={`flex-1 rounded-full bg-base-content/40 origin-bottom ${
-							playing ? "opacity-80 motion-safe:animate-eq-bar" : "opacity-35"
-						}`}
-						style={{
-							height: `${h}%`,
-							...(playing ? { animationDelay: `${i * 40}ms` } : null),
-						}}
-					/>
-				))}
-			</div>
-		</div>
-	);
-}
-
 /**
- * Writing and posts with no artwork: their title set in the display face is
- * the tile's poster. A coverless widget that showed only an icon would read
- * as a broken thumbnail; a tile whose art is typography reads as deliberate.
+ * A post with no artwork: its title set in the display face is the tile's
+ * poster. A coverless widget that showed only an icon would read as a broken
+ * thumbnail; a tile whose art is typography reads as deliberate. A Work never
+ * needs this — every kind has its own poster (Parker, 2026-10-24).
  */
 function TypographicBand({ label, title }: { label: string; title: string | null }) {
 	return (
@@ -303,46 +250,34 @@ function ReleaseBand({
 				{artwork ? (
 					<CoverBand work={work} src={artwork} onDone={onDone} />
 				) : (
-					<DecorativeArtworkFallback work={work} type={work.type} />
+					<WorkPoster type={work.type} />
 				)}
 			</MaturityVeil>
 		);
 	}
 	if (artwork)
 		return <CoverBand work={work} src={artwork} previewing={previewing} onDone={onDone} />;
-	// No artwork: the band is the type's poster instead — and the preview rides it
-	// as an invisible muted element, with the decorative waveform lighting up from
-	// the play state rather than taking any picture.
-	if (isListened(work.type)) {
-		return (
-			<div className="relative">
-				<ListenPosterBand type={work.type} playing={previewing} />
-				{previewing && (
-					<TileHoverPreview
-						work={{ id: work.id, type: work.type, creatorId: work.creatorId ?? null }}
-						onDone={onDone}
-					/>
-				)}
-			</div>
-		);
-	}
-	if (work.type === "text") {
-		return <TypographicBand label={contentTypeMeta(work.type).label} title={work.title} />;
-	}
-	return <IconPosterBand type={work.type} />;
-}
-
-/**
- * The poster band a covered Work shows inside the veil — by the same choice the
- * uncovered path makes below it, so revealing the veil changes shape as little as
- * a thumbnail would.
- */
-function DecorativeArtworkFallback({ work, type }: { work: FeedWork; type: string }) {
-	if (isListened(type)) return <ListenPosterBand type={type} />;
-	if (type === "text") {
-		return <TypographicBand label={contentTypeMeta(type).label} title={work.title} />;
-	}
-	return <IconPosterBand type={type} />;
+	// No artwork: the band is the kind's own poster — and a preview rides it as an
+	// invisible muted element, with the poster's listened foot stepping to the play
+	// state rather than the platform taking a picture (Parker, 2026-10-24).
+	return (
+		<div className="relative">
+			<WorkPoster type={work.type} playing={previewing} />
+			{/* A coverless video keeps the duration chip its covered sibling shows: the
+			    runtime is the Work's own fact, not the picture's. */}
+			{work.type === "video" && durationLabel(work.durationSeconds) && (
+				<span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white">
+					{durationLabel(work.durationSeconds)}
+				</span>
+			)}
+			{previewing && (
+				<TileHoverPreview
+					work={{ id: work.id, type: work.type, creatorId: work.creatorId ?? null }}
+					onDone={onDone}
+				/>
+			)}
+		</div>
+	);
 }
 
 function PostBand({ post }: { post: FeedPost }) {
@@ -442,9 +377,6 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 	// saves) can render them visibly instead.
 	const reason = isDiscoveryReason(entry.reason) ? entry.reason.label : null;
 	const { Icon, label } = contentTypeMeta(work.type);
-	// A text Work with no artist-chosen thumbnail shows its title in the band,
-	// so the body does not repeat it — same rule the post tile keeps.
-	const bandIsTypographic = work.type === "text" && !work.thumbnail;
 
 	// ── The hover preview's state ───────────────────────────────────────────────
 	//
@@ -527,7 +459,7 @@ function ReleaseTile({ entry }: { entry: FeedEntry }) {
 					own={entryIsOwn(entry)}
 					date={compactDate(work.originallyReleased ?? work.releasedAt)}
 				/>
-				{!bandIsTypographic && work.title && (
+				{work.title && (
 					<h3 className="font-semibold text-sm leading-snug line-clamp-2">{work.title}</h3>
 				)}
 				<div className="flex items-center gap-1.5 mt-auto pt-1 flex-wrap">
