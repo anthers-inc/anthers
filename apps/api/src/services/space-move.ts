@@ -30,7 +30,7 @@ import {
 } from "./atproto-space.js";
 import { releaseHostedIdentities } from "./hosted-accounts.js";
 import { readSpaceArtifacts } from "./space-backup.js";
-import { registeredSpacesFor } from "./space-registry.js";
+import { ownedSpacesFor, spaceSkey } from "./space-registry.js";
 import { hostedSpaceSession, type ResolveSpaceSession, spaceClientFor } from "./space-writer.js";
 
 /** Where the identity is going, and the credential it gets there. */
@@ -212,14 +212,17 @@ export async function moveAccount(userId: number, opts: MoveOptions): Promise<Mo
 	// 5. The spaces: policy, blobs, records, members, and the checks that they arrived.
 	const movedSpaces: MovedSpace[] = [];
 	try {
-		const registries = await registeredSpacesFor(userId);
+		// Every space the account owns, enumerated from the server: the Library, the studio and a
+		// gated space per Work. A creator space that has no record yet is still carried, because
+		// the address is the thing that would be lost.
+		const registries = await ownedSpacesFor(userId, { session: old, fetchImpl: opts.fetchImpl });
 		for (const registry of registries) {
 			const artifacts = await readSpaceArtifacts(registry, old, { fetchImpl: opts.fetchImpl });
 			const targetClient = spaceClientFor(
 				{ did, pdsUrl: targetUrl, token: newSession.token },
 				{ fetchImpl: opts.fetchImpl },
 			);
-			const skey = registry.spaceUri.split("/").at(-1) ?? "self";
+			const skey = spaceSkey(registry.spaceUri);
 			await targetClient.createSpace({
 				spaceType: registry.spaceType,
 				skey,
@@ -260,12 +263,13 @@ export async function moveAccount(userId: number, opts: MoveOptions): Promise<Mo
 				});
 			}
 
-			const targetCommit = await targetClient.getLatestCommit({
-				space: registry.spaceUri,
-				repo: did,
-			});
+			// An empty space has no commit to compare. Asking for one would answer `RepoNotFound`
+			// and fail a move that carried the space correctly.
 			const commitMatches = artifacts.commit
-				? commitDigest(artifacts.commit) === commitDigest(targetCommit.commit)
+				? commitDigest(artifacts.commit) ===
+					commitDigest(
+						(await targetClient.getLatestCommit({ space: registry.spaceUri, repo: did })).commit,
+					)
 				: null;
 			if (commitMatches === false) {
 				throw new Error(`${registry.spaceUri} commit digest does not match`);
