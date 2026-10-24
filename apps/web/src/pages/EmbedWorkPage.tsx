@@ -29,7 +29,7 @@ import { isAccessResult } from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useRef, useState } from "react";
 import { PublicAccessWall } from "../components/media/PublicAccessNotice";
-import SharedWorkBanner from "../components/work/SharedWorkBanner";
+import SharedWorkNotice from "../components/work/SharedWorkNotice";
 import {
 	pageHoldsTheMeter,
 	WorkDeliverable,
@@ -141,6 +141,20 @@ export default function EmbedWorkPage() {
 	/** A Work whose original cannot play — the processing note is what shows. */
 	const playsOriginal = (work.type === "video" || isListened(work.type)) && !!work.originalUrl;
 
+	/**
+	 * Who shared it and the way to an account of their own, on the medium rather than under it
+	 * (2026-10-23): inert until the pointer is over it, because the frame's whole job is to be
+	 * the player. It rides the processing box too — a Work still being made is not a reason to
+	 * stop telling somebody who sent them here.
+	 */
+	const notice = token ? (
+		<SharedWorkNotice
+			sharedBy={work.sharedBy ?? null}
+			mode="embed"
+			returnTo={`/works/${work.slug}-${work.publicId}`}
+		/>
+	) : undefined;
+
 	return (
 		<div className="mx-auto max-w-3xl p-3">
 			{canAccess ? (
@@ -153,7 +167,7 @@ export default function EmbedWorkPage() {
 						// The processing note, held inside a media frame rather than replacing
 						// it (the placeholder task, 2026-10-16): an embed's own box does not collapse to
 						// a sentence while the deliverable is being made.
-						<WorkMediaFrame>
+						<WorkMediaFrame overlay={notice}>
 							<WorkPlaceholder
 								type={work.type}
 								note=""
@@ -170,8 +184,15 @@ export default function EmbedWorkPage() {
 					) : (
 						// No media card on the embed route: it is a bare window on one
 						// medium (`WorkDeliverable`'s `framed` opt-out), sized to fill
-						// whatever surface opened it.
-						<WorkDeliverable work={work} shareToken={token ?? null} framed={false} />
+						// whatever surface opened it. The shared-with note rides the medium
+						// itself, inert until the pointer is over it — the frame's whole job
+						// is to be the player, not a landing page with an invitation in it.
+						<WorkDeliverable
+							work={work}
+							shareToken={token ?? null}
+							framed={false}
+							overlay={notice}
+						/>
 					)}
 				</section>
 			) : (
@@ -188,10 +209,6 @@ export default function EmbedWorkPage() {
 					</Link>
 				</div>
 			)}
-
-			{/* Who shared it, and the way to an account of their own — under the deliverable,
-			    exactly as on the full page. */}
-			{token && <SharedWorkBanner sharedBy={work.sharedBy ?? null} />}
 		</div>
 	);
 }
