@@ -126,3 +126,18 @@ describe("Discovery shows one stream", () => {
 		expect(discovery).toContain("<RecipeBar");
 	});
 });
+
+describe("Discovery's recipe can be cooked, not only read", () => {
+	it("offers a choice at each stage the route can run, and sends all three", () => {
+		expect(discovery).toContain("WINDOW_OPTIONS");
+		expect(discovery).toContain("CANDIDATE_OPTIONS");
+		expect(discovery).toContain("MIX_OPTIONS");
+		expect(discovery).toContain('scope: candidates === "network" ? "network" : "global"');
+		expect(discovery).toContain("streamRecipe({ window, candidates, mix })");
+	});
+
+	it("has no single-parameter preset control left", () => {
+		expect(discovery).not.toContain("RECIPE_PRESETS");
+		expect(discovery).not.toContain("updateParams({ preset:");
+	});
+});

@@ -64,7 +64,7 @@ import {
 import { isWorkType } from "@anthers/shared/content";
 import { type ContentNote, RATING_ROWS } from "@anthers/shared/content-rating";
 import { CREATOR_EMAIL_KINDS, resolvedCreatorEmailDelivery } from "@anthers/shared/creator-emails";
-import { interleaveByAuthor, reasonForSource } from "@anthers/shared/discovery";
+import { asRecipeMix, interleaveByAuthor, reasonForSource } from "@anthers/shared/discovery";
 import { normalizeSearchShortcuts } from "@anthers/shared/keybindings";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
@@ -817,6 +817,11 @@ const accountRoutes = new Hono()
 		// route is unchanged — the filters, the access verdicts, and the ordering are
 		// the feed's own.
 		const scope = c.req.query("scope") === "global" ? "global" : "network";
+		// The mix is Discovery's recipe parameter. An absent one keeps each stream's
+		// historic order: Discovery's whole-site stream interleaves, the network feed
+		// stays chronological, so a caller that knows nothing about recipes gets exactly
+		// what it got before this parameter existed.
+		const mix = asRecipeMix(c.req.query("mix"), scope === "global" ? "spread" : "straight");
 
 		// The feed's sources (2026-10-19): the creators this account follows, the
 		// creators whose Badge it holds, and the creators behind the posts and Works it
@@ -1305,17 +1310,17 @@ const accountRoutes = new Hono()
 				return accessFilter === "unlocked" ? unlocked : !unlocked;
 			});
 
-		// 🚨 **Discovery's stream runs the mix stage, and it runs it before the cap.**
-		// Strictly newest-first hands the page to whoever posts most: one creator's run
-		// of ten fills a quarter of a 4-column grid. Interleaving gives every creator one
-		// card before anyone gets a second — the first round is one per creator, then the
+		// 🚨 **Discovery's mix is a recipe value, and it runs before the cap.** Strictly
+		// newest-first hands the page to whoever posts most: one creator's run of ten
+		// fills a quarter of a 4-column grid. `spread` gives every creator one card
+		// before anyone gets a second — the first round is one per creator, then the
 		// next — and because the input was newest-first, it reads as "the newest of
-		// everyone, then the next of everyone" rather than as a re-ranking. The network
-		// feed is a record of what the people you chose did, so it keeps the plain order.
-		const capped =
-			scope === "global"
-				? interleaveByAuthor(newestFirst, (e) => e.creatorId).slice(0, 50)
-				: newestFirst.slice(0, 50);
+		// everyone, then the next of everyone" rather than as a re-ranking. `straight`
+		// is the recipe with no mixing pass, and the network feed's own default, because
+		// that feed is a record of what the people you chose did.
+		const mixed =
+			mix === "spread" ? interleaveByAuthor(newestFirst, (e) => e.creatorId) : newestFirst;
+		const capped = mixed.slice(0, 50);
 
 		return c.json({
 			entries: capped,
