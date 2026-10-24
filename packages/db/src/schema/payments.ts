@@ -268,6 +268,58 @@ export const purchases = pgTable(
  * period ÷ successful payments in that period, and the `disputes` rows here are its numerator
  * — see `disputeActivityRatio` in `services/disputes.ts` for the denominator's caveats.
  */
+// org — what Anthers owes the reader's own space after a purchase or a refund: the row is
+// the worklist, and the space holds the signed record.
+//
+// ⭐ **The row is an issuance log, not a second entitlement.** `purchases` stays the live
+// entitlement; this table answers only "was the receipt record written into the reader's
+// space, and if not why". That is what lets the write be a background job rather than
+// something the payment webhook blocks on: a completion inserts a `pending` row inside the
+// same request that flips the purchase, and a sweep drains it a minute later. A row whose
+// attempts run out stays `failed` with the server's message, so a receipt that never landed
+// is visible rather than absent.
+//
+// ⚠️ **A receipt is immutable, so `written` is terminal.** The job reads the record back
+// before writing; a valid record at the key means there is nothing to do. Reissuing after a
+// PDS loss is an operator action that resets the row to `pending`, never an automatic
+// overwrite of a record that already verifies.
+//
+// `kind` is `purchase` or `refund`: a refund is a second signed record that references the
+// first, never an edit to it.
+export const accessReceipts = pgTable(
+	"access_receipts",
+	{
+		id: serial("id").primaryKey(),
+		purchaseId: integer("purchase_id")
+			.notNull()
+			.references(() => purchases.id, { onDelete: "cascade" }),
+		/** `purchase` or `refund`. */
+		kind: text("kind").notNull(),
+		/** The record key the signed statement lands under, stable across reissues. */
+		receiptId: text("receipt_id").notNull(),
+		/**
+		 * `pending` → `written`, or `failed` once the attempts run out. `skipped` is a
+		 * normal resting state: the reader has no hosted identity to write with, so the
+		 * row waits for a reissue rather than consuming retries.
+		 */
+		state: text("state").notNull().default("pending"),
+		attempts: integer("attempts").notNull().default(0),
+		/** Where it landed, once it has. */
+		spaceUri: text("space_uri"),
+		lastError: text("last_error"),
+		writtenAt: timestamp("written_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// One purchase receipt and one refund record per purchase; a redelivered webhook
+		// inserts nothing.
+		uniqueIndex("uq_access_receipts_purchase_kind").on(table.purchaseId, table.kind),
+		// The sweep's query: whatever is still owed, oldest first.
+		index("idx_access_receipts_state").on(table.state),
+	],
+);
+
 // org — the record of every receipt email Anthers has sent, and the idempotency latch
 // that stops it sending twice. Money cannot federate.
 export const receiptSends = pgTable(
