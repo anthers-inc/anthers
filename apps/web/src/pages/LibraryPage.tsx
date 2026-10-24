@@ -33,30 +33,24 @@
  * The page's own shell is the user tabs' shared one — `min-h-full` around a `w-full px-6
  * py-6` column — so the header sits exactly where Network's and Discovery's do, and the
  * shelf grid gets the width the layout already gives it.
+ *
+ * Every entry renders `FeedTile`, the widget Network, Discovery and a creator's page
+ * already share (2026-10-24). What the shelf contributes to a tile is only what the shelf
+ * means — the Purchased and Hidden chips, a withdrawn or re-drafted notice, and its Hide
+ * and Remove controls — so the same Work reads the same way on every surface that lists it.
  */
 
 import { WITHDRAWN_RESCUE_DAYS } from "@anthers/shared/constants";
 import { BOOKSHELF_WORK_TYPES } from "@anthers/shared/content";
-import { contentNoteLabel } from "@anthers/shared/content-rating";
-import {
-	coverFor,
-	MaturityVeil,
-	useContentPreferences,
-} from "@anthers/web-shared/content-preferences";
-import { postUrl, workUrl } from "@anthers/web-shared/postUrl";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { useSidebar } from "@anthers/web-shared/sidebar";
 import { isAccessResult, type Work } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import {
-	EyeIcon,
-	EyeSlashIcon,
-	LockClosedIcon,
-	RectangleStackIcon,
-} from "@heroicons/react/24/outline";
+import { EyeIcon, EyeSlashIcon, RectangleStackIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import FeedTile, { type FeedEntry } from "../components/cards/FeedTile";
 import SharedFilterSections, {
 	SHARED_FILTER_TYPES,
 } from "../components/layout/SharedFilterSections";
@@ -126,34 +120,57 @@ function rescueDeadline(withdrawnAt: string | null | undefined): string | null {
 	return at.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 }
 
-function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void }) {
+/**
+ * The FeedTile entry a shelf item renders. The shelf wraps a Work, a Project or a post
+ * with the facts that are about keeping it (`hidden`, `purchased`), so this adapter
+ * unwraps one arm into the tile family's entry shape — including the creator the shelf
+ * serializes as a flat handle/name/avatar triple rather than the joined object every
+ * other listing sends.
+ */
+function shelfEntry(item: ShelfItem): FeedEntry | null {
+	if (item.work) {
+		const work = item.work;
+		return {
+			kind: "release",
+			...work,
+			creator:
+				work.creatorHandle || work.creatorDisplayName
+					? {
+							handle: work.creatorHandle ?? "",
+							displayName: work.creatorDisplayName ?? null,
+							avatar: work.creatorAvatar ?? null,
+						}
+					: undefined,
+		};
+	}
+	if (item.post) return { kind: "post", ...item.post };
+	if (item.project) {
+		const project = item.project;
+		return {
+			kind: "project",
+			...project,
+			creator: project.creatorHandle
+				? { handle: project.creatorHandle, displayName: project.creatorDisplayName }
+				: undefined,
+		};
+	}
+	return null;
+}
+
+/**
+ * One entry on the shelf, as the app's one tile.
+ *
+ * The tile is the shared widget Network, Discovery and a creator's page render; what the
+ * shelf adds is only what the shelf means — the Purchased and Hidden chips, the sentence
+ * a withdrawn Work or a re-drafted post needs, and the Hide/Remove controls. Those ride
+ * the tile's slots rather than a second card family, because a shelf that drew a
+ * different card for the same Work made the Library look like a different product.
+ */
+function ShelfTile({ item, onChanged }: { item: ShelfItem; onChanged: () => void }) {
 	const [busy, setBusy] = useState(false);
+	const entry = shelfEntry(item);
 	const work = item.work;
-	const project = item.project;
 	const post = item.post;
-
-	const title = work?.title ?? project?.title ?? post?.displayTitle ?? post?.title ?? "Untitled";
-	const rawCover = work?.thumbnail ?? project?.coverImage ?? null;
-	const to =
-		work?.publicId != null
-			? workUrl({ slug: work.slug, publicId: work.publicId })
-			: project
-				? `/projects/${project.slug}`
-				: post
-					? postUrl(post)
-					: null;
-
-	// A shelf entry the user cannot currently open — saved free and later gated, or
-	// refunded. Stated rather than hidden: it is still theirs to see, just not to open.
-	const locked =
-		item.kind === "work" && isAccessResult(work?.access) && work.access.canAccess === false;
-
-	// A cover is covered here the same way a card covers it — the rung the user blurs,
-	// and each kind of content they asked to cover. The shelf is not exempt: a user who
-	// blurs a rung or a kind expects it covered wherever it appears, their own shelf
-	// included. Projects carry no rating, so an album's cover renders as-is.
-	const { prefs } = useContentPreferences();
-	const cover = work ? coverFor(prefs, work) : null;
 
 	const act = async (fn: () => Promise<unknown>) => {
 		setBusy(true);
@@ -165,105 +182,59 @@ function ShelfCard({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 		}
 	};
 
-	const body = (
-		<>
-			{post ? (
-				// A post has no picture of its own, so the card's top shows its opening the
-				// way the feed's tile does — a post on the shelf reads like a post.
-				<div className="flex h-40 w-full items-start bg-base-300/60 p-4">
-					<p className="line-clamp-4 text-sm text-base-content/70">{post.excerpt || "No text"}</p>
-				</div>
-			) : rawCover ? (
-				cover ? (
-					<MaturityVeil
-						maturity={work?.maturity}
-						notes={(work?.maturityNotes ?? []).map(contentNoteLabel)}
-						because={cover.byRung ? undefined : cover.byNotes.map(contentNoteLabel)}
-						className="h-40 w-full"
-					>
-						<img src={rawCover} alt="" className="h-full w-full object-cover" />
-					</MaturityVeil>
-				) : (
-					<figure>
-						<img src={rawCover} alt="" className="h-40 w-full object-cover" />
-					</figure>
-				)
-			) : (
-				<div className="flex h-40 w-full items-center justify-center bg-base-300">
-					<span className="text-sm text-base-content/30">No thumbnail</span>
-				</div>
-			)}
-			<div className="card-body gap-1 p-4">
-				<h2 className="card-title text-sm">{title}</h2>
-				{post?.creator && (
-					<p className="text-xs text-base-content/60">
-						{post.creator.displayName || `@${post.creator.handle}`}
-					</p>
-				)}
-				<div className="flex flex-wrap items-center gap-1.5">
+	if (!entry) return null;
+
+	return (
+		<FeedTile
+			entry={entry}
+			className={item.hidden ? "opacity-60" : undefined}
+			badges={
+				<>
 					{/* A word, not only a color: "Purchased" is what makes the permanence
 					    rule legible when the remove control refuses. */}
 					{item.purchased && <span className="badge badge-sm badge-soft">Purchased</span>}
-					{item.kind === "project" && <span className="badge badge-sm badge-ghost">Album</span>}
-					{item.kind === "post" && <span className="badge badge-sm badge-ghost">Post</span>}
-					{locked && (
-						<span className="badge badge-sm badge-ghost gap-1">
-							<LockClosedIcon className="size-3" />
-							Gated
-						</span>
-					)}
 					{item.hidden && <span className="badge badge-sm badge-ghost">Hidden</span>}
-				</div>
-				{post && !post.isPublished && (
+				</>
+			}
+			note={
+				post && !post.isPublished ? (
 					<p className="text-xs text-warning">Back in drafts — the creator has unpublished it.</p>
-				)}
-				{work?.visibility === "withdrawn" && (
+				) : work?.visibility === "withdrawn" ? (
 					<p className="text-xs text-warning">
 						Withdrawn by the creator — still yours
 						{rescueDeadline(work.withdrawnAt)
 							? `, and free to download until ${rescueDeadline(work.withdrawnAt)}.`
 							: " to open and download."}
 					</p>
-				)}
-				{to == null && <p className="text-xs text-base-content/40">No longer available to open.</p>}
-			</div>
-		</>
-	);
-
-	return (
-		<div className={`card bg-base-200 ${item.hidden ? "opacity-60" : ""}`}>
-			{to ? (
-				<Link to={to} className="transition-shadow hover:shadow-lg">
-					{body}
-				</Link>
-			) : (
-				<div className="opacity-70">{body}</div>
-			)}
-			<div className="flex items-center justify-end gap-1 px-3 pb-3">
-				<button
-					type="button"
-					className="btn btn-ghost btn-xs gap-1"
-					disabled={busy}
-					onClick={() => act(() => setHidden(item.id, !item.hidden))}
-				>
-					{item.hidden ? <EyeIcon className="size-3.5" /> : <EyeSlashIcon className="size-3.5" />}
-					{item.hidden ? "Show" : "Hide"}
-				</button>
-				{/* Absent entirely on a purchase, rather than present-and-refusing. A control
-				    that exists to say no is worse than one that was never offered — and the
-				    server refuses regardless, so this is presentation, not enforcement. */}
-				{!item.purchased && (
+				) : null
+			}
+			actions={
+				<>
 					<button
 						type="button"
-						className="btn btn-ghost btn-xs"
+						className="btn btn-ghost btn-xs gap-1"
 						disabled={busy}
-						onClick={() => act(() => removeItem(item.id))}
+						onClick={() => act(() => setHidden(item.id, !item.hidden))}
 					>
-						Remove
+						{item.hidden ? <EyeIcon className="size-3.5" /> : <EyeSlashIcon className="size-3.5" />}
+						{item.hidden ? "Show" : "Hide"}
 					</button>
-				)}
-			</div>
-		</div>
+					{/* Absent entirely on a purchase, rather than present-and-refusing. A control
+					    that exists to say no is worse than one that was never offered — and the
+					    server refuses regardless, so this is presentation, not enforcement. */}
+					{!item.purchased && (
+						<button
+							type="button"
+							className="btn btn-ghost btn-xs"
+							disabled={busy}
+							onClick={() => act(() => removeItem(item.id))}
+						>
+							Remove
+						</button>
+					)}
+				</>
+			}
+		/>
 	);
 }
 
@@ -616,9 +587,12 @@ export default function LibraryPage() {
 						}
 					/>
 				) : (
-					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+					/* The same uniform grid the Network and Discovery render: auto-fill
+					   decides the column count, so the shelf reads at the same tile size as
+					   the two tabs whose items it shares rather than as a narrower card. */
+					<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
 						{filtered.map((item) => (
-							<ShelfCard key={item.id} item={item} onChanged={load} />
+							<ShelfTile key={item.id} item={item} onChanged={load} />
 						))}
 					</div>
 				)}

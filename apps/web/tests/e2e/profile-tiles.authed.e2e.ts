@@ -9,7 +9,7 @@
  * The page now renders `FeedTile` and splices the profile's own creator into every
  * entry, so the regression this spec pins is exactly that: a tile on a creator's
  * own page must never carry a "?" — not in the meta row, not as an avatar fallback —
- * and the project, which has no tile shape, stays on ProjectCard.
+ * and the project renders the tile's own album shape, so one grid holds every kind.
  *
  * Read-only: every Work and post it reads belongs to the fixture creators, which
  * nothing here seeds or deletes.
@@ -41,9 +41,9 @@ test("the profile's timeline renders the feed's tiles carrying the creator's own
 		expect(text, "no tile renders the missing-creator fallback").not.toContain("?");
 	}
 
-	// The album Project has no tile shape: it stays the column card and keeps its chip.
-	const project = page.locator(".card").filter({ hasText: "An album that really plays" });
-	await expect(project, "the project stays on ProjectCard").toHaveCount(1);
+	// The album Project renders the same tile family's project shape and keeps its chip.
+	const project = tiles(page).filter({ hasText: "An album that really plays" });
+	await expect(project, "the project renders the shared tile").toHaveCount(1);
 	await expect(project).toContainText("Project");
 });
 
