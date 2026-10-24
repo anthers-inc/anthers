@@ -12,7 +12,13 @@
  * zoom view is available with `z` without leaving panel mode. Touch swipes advance panels
  * on mobile. Page URLs are minted per request for page-flip mode, and panel mode uses the
  * same page endpoint for the underlying image.
+ *
+ * The transport's last pair is full screen then theater mode: the first hands the reader
+ * the monitor, the second grows the page's media card to the content area and leaves the
+ * rest of the page a scroll away. Both keys are the account's own (`useKeyboardShortcuts`).
  */
+
+import { matchesChord } from "@anthers/shared/keybindings";
 import {
 	ArrowsPointingInIcon,
 	ArrowsPointingOutIcon,
@@ -23,6 +29,7 @@ import {
 	ViewfinderCircleIcon,
 } from "@heroicons/react/24/solid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
 import {
 	guidedPages,
 	hasGuidedView,
@@ -31,6 +38,7 @@ import {
 	readerPages,
 	usePanelNavigation,
 } from "@/lib/panel-navigation";
+import { isApplePlatform } from "@/lib/platform";
 import {
 	onReadingPositionsChange,
 	readPage,
@@ -40,7 +48,9 @@ import {
 	writePage,
 	writePanel,
 } from "@/lib/reading-positions";
+import { useWorkTheater } from "@/lib/work-theater";
 import SeekBar from "./transport/SeekBar";
+import TheaterIcon from "./transport/TheaterIcon";
 import TransportButton from "./transport/TransportButton";
 
 /** How the pages are laid out. Spread is two-up, the way a printed book opens. */
@@ -75,6 +85,9 @@ export default function ComicReader({
 	shareToken?: string | null;
 }) {
 	const containerRef = useRef<HTMLDivElement>(null);
+	const theater = useWorkTheater();
+	const shortcuts = useKeyboardShortcuts();
+	const apple = isApplePlatform();
 	const [page, setPage] = useState(() => Math.min(readPage(workId), Math.max(pageCount, 1)));
 	const [layout, setLayout] = useState<Layout>("single");
 	const [fullscreen, setFullscreen] = useState(false);
@@ -222,9 +235,19 @@ export default function ComicReader({
 
 	// Keyboard handling: arrows and space advance panels in panel mode, pages otherwise.
 	const onKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
-		if (e.ctrlKey || e.metaKey || e.altKey) return;
 		const target = e.target as HTMLElement;
 		if (target.tagName === "INPUT") return;
+		// The account's player chords, matched exactly and before the modifier guard: the
+		// reader is the only listener for them, so a modified binding is the person's own.
+		if (matchesChord(e, shortcuts.fullscreen, apple)) {
+			e.preventDefault();
+			return toggleFullscreen();
+		}
+		if (theater && matchesChord(e, shortcuts.theater, apple)) {
+			e.preventDefault();
+			return theater.toggle();
+		}
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
 		if (mode === "panel") {
 			switch (e.key) {
 				case "ArrowRight":
@@ -246,10 +269,6 @@ export default function ComicReader({
 				case "End":
 					e.preventDefault();
 					return panelNav.goTo({ pageNumber: pageCount, panelNumber: 1 });
-				case "f":
-				case "F":
-					e.preventDefault();
-					return toggleFullscreen();
 				default:
 					break;
 			}
@@ -271,10 +290,6 @@ export default function ComicReader({
 			case "End":
 				e.preventDefault();
 				return goTo(pageCount);
-			case "f":
-			case "F":
-				e.preventDefault();
-				return toggleFullscreen();
 			default:
 				break;
 		}
@@ -431,6 +446,14 @@ export default function ComicReader({
 					active={spread}
 					className="hidden sm:inline-flex"
 				/>
+				{theater && (
+					<TransportButton
+						label={theater.theater ? "Exit theater mode" : "Theater mode"}
+						icon={TheaterIcon}
+						onClick={theater.toggle}
+						active={theater.theater}
+					/>
+				)}
 				<TransportButton
 					label={fullscreen ? "Exit full screen" : "Full screen"}
 					icon={fullscreen ? ArrowsPointingInIcon : ArrowsPointingOutIcon}
