@@ -83,7 +83,7 @@ import { Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
-import { displayPostTitles } from "../lib/post-title-mentions.js";
+import { displayPostTitles, mentionableWorks } from "../lib/post-title-mentions.js";
 import { PG_WORK_URL_PATTERN, workPublicIdsFromBody } from "../lib/post-work-links.js";
 import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
@@ -1134,21 +1134,16 @@ const accountRoutes = new Hono()
 		// The Works each post embeds, for a card thumbnail and a count — a post
 		// in the grid has no artwork of its own, and announcing something while
 		// showing nothing would waste the tile. Extracted from the bodies the
-		// rows already carry (`lib/post-work-links.ts` — nothing is stored);
-		// thumbnails are public by design.
-		const thumbByPublicId = new Map<number, string | null>();
+		// rows already carry (`lib/post-work-links.ts` — nothing is stored), and
+		// resolved through the same allow-list a title's mention uses: an image
+		// reaches the same readers a name does, so an Adult Work's cover is not
+		// handed to somebody who has not opted in.
 		const embeddedIds = [...new Set(feedPosts.flatMap((r) => workPublicIdsFromBody(r.post.body)))];
-		if (embeddedIds.length > 0) {
-			const thumbRows = await db
-				.select({ publicId: works.publicId, thumbnail: works.thumbnail })
-				.from(works)
-				.where(inArray(works.publicId, embeddedIds));
-			for (const t of thumbRows) thumbByPublicId.set(t.publicId, t.thumbnail);
-		}
+		const mentionable = await mentionableWorks(embeddedIds, sessionUser.id);
 		const embedsOf = (post: { id: number; body: string | null }) => {
 			const ids = workPublicIdsFromBody(post.body);
 			return {
-				thumbnail: thumbByPublicId.get(ids[0]) ?? null,
+				thumbnail: mentionable.get(ids[0])?.thumbnail ?? null,
 				linkedWorkCount: ids.length,
 			};
 		};

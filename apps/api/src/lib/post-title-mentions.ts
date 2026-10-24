@@ -36,6 +36,15 @@ export interface MentionableWork {
 	publicId: number;
 	slug: string;
 	title: string;
+	/**
+	 * The Work's thumbnail, or null.
+	 *
+	 * Carried because a post's tile shows the first Work its body embeds, and that image
+	 * reaches the same audience a title does — so it answers to the same allow-list. A card
+	 * that read `works` directly for the thumbnail would be showing the cover of an Adult
+	 * Work to a reader the rung keeps from its existence.
+	 */
+	thumbnail: string | null;
 }
 
 /**
@@ -60,7 +69,12 @@ export async function mentionableWorks(
 		parentalVisibility(viewerId),
 	]);
 	const rows = await db
-		.select({ publicId: works.publicId, slug: works.slug, title: works.title })
+		.select({
+			publicId: works.publicId,
+			slug: works.slug,
+			title: works.title,
+			thumbnail: works.thumbnail,
+		})
 		.from(works)
 		.where(
 			and(
@@ -73,7 +87,13 @@ export async function mentionableWorks(
 				parental.hidden,
 			),
 		);
-	for (const row of rows) map.set(row.publicId, { ...row, title: row.title ?? "" });
+	for (const row of rows) {
+		map.set(row.publicId, {
+			...row,
+			title: row.title ?? "",
+			thumbnail: row.thumbnail === "" ? null : row.thumbnail,
+		});
+	}
 	return map;
 }
 

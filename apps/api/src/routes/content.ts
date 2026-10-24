@@ -3347,15 +3347,12 @@ const contentRoutes = new Hono()
 		// the bodies the rows already carry (nothing is stored; see `lib/post-work-links.ts`).
 		// Deliberately NOT resolved for access here: the feed lists announcements, and a
 		// post's readability has nothing to do with whether the Works it embeds are open.
-		const thumbByPublicId = new Map<number, string | null>();
+		// The Works each post embeds, resolved for this reader through the same allow-list a
+		// title's mention uses: a tile's image reaches whoever the listing reaches, so an
+		// Adult Work's cover must not arrive here by a query that never asked whether this
+		// reader may see the Work at all.
 		const allPublicIds = [...new Set(result.flatMap((r) => workPublicIdsFromBody(r.post.body)))];
-		if (allPublicIds.length > 0) {
-			const thumbRows = await db
-				.select({ publicId: works.publicId, thumbnail: works.thumbnail })
-				.from(works)
-				.where(inArray(works.publicId, allPublicIds));
-			for (const t of thumbRows) thumbByPublicId.set(t.publicId, t.thumbnail);
-		}
+		const mentionable = await mentionableWorks(allPublicIds, viewerId);
 
 		return c.json({
 			posts: result.map((r, index) => {
@@ -3382,9 +3379,10 @@ const contentRoutes = new Hono()
 						displayName: r.creatorDisplayName,
 						avatar: r.creatorAvatar,
 					}),
-					// A card image, if the post embeds anything. Thumbnails are public — they are
-					// the preview a locked Work is *supposed* to show.
-					thumbnail: thumbByPublicId.get(embedded[0]) ?? null,
+					// A card image, if the post embeds a Work this reader may see. A locked
+					// Work's thumbnail is the preview it is supposed to show; an Adult Work's
+					// is part of the existence its rung withholds, so it is not here.
+					thumbnail: mentionable.get(embedded[0])?.thumbnail ?? null,
 					linkedWorkCount: embedded.length,
 					// The body as plain text, where the tile's band renders the content —
 					// the same field the feed entries carry (`routes/accounts.ts`), for the
@@ -3597,7 +3595,11 @@ const contentRoutes = new Hono()
 				// The title as a reader sees it, and the Works behind its mentions so the
 				// heading links each `@` name to the Work it names.
 				displayTitle,
-				mentionedWorks,
+				mentionedWorks: mentionedWorks.map(({ publicId, slug, title }) => ({
+					publicId,
+					slug,
+					title,
+				})),
 				edits,
 			},
 		});
@@ -3707,7 +3709,9 @@ const contentRoutes = new Hono()
 				// The canonicalization just refreshed every mention's text, so the visible
 				// title needs no further lookup here.
 				displayTitle: visiblePostTitle(updated.title),
-				mentionedWorks: await mentionedWorksForTitle(updated.title, user.id),
+				mentionedWorks: (await mentionedWorksForTitle(updated.title, user.id)).map(
+					({ publicId, slug, title }) => ({ publicId, slug, title }),
+				),
 			},
 		});
 	})
