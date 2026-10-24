@@ -21,10 +21,16 @@
  * — or whose account is gone, leaving `creator_id` null — has its schedule cleared rather than
  * kept, because a schedule left in place would publish a stale draft the moment the author was
  * set up again.
+ *
+ * ⚠️ **Clearing a schedule is told to the author, not just logged.** A scheduled post is a
+ * decision somebody made about their own writing, and a refusal nobody hears about is a post
+ * that silently never went out. `release-scheduled.ts` carries the same reasoning for Works and
+ * sends the same notice; this sweep is the post half of it.
  */
 import { db } from "@anthers/db";
 import { posts, users } from "@anthers/db/schema";
 import { and, eq, isNotNull, lte } from "drizzle-orm";
+import { notify } from "../services/notifications.js";
 import { publishRefusal } from "../services/publish-refusal.js";
 import { queueRecordSync } from "../services/record-sync.js";
 
@@ -34,6 +40,8 @@ export async function publishScheduled(now: Date = new Date()): Promise<number> 
 		.select({
 			id: posts.id,
 			slug: posts.slug,
+			title: posts.title,
+			scheduledFor: posts.scheduledFor,
 			creatorId: posts.creatorId,
 			isCreator: users.isCreator,
 		})
@@ -50,17 +58,33 @@ export async function publishScheduled(now: Date = new Date()): Promise<number> 
 
 	let published = 0;
 	for (const post of due) {
-		const refused =
-			post.creatorId === null ||
-			(await publishRefusal({ id: post.creatorId, isCreator: post.isCreator }, "publish")) !== null;
-		if (refused) {
+		const refusal =
+			post.creatorId === null
+				? null
+				: await publishRefusal({ id: post.creatorId, isCreator: post.isCreator }, "publish");
+		if (post.creatorId === null || refusal) {
 			await db
 				.update(posts)
 				.set({ scheduledFor: null, updatedAt: now })
 				.where(eq(posts.id, post.id));
 			console.log(
-				`[publish-scheduled] Cleared the schedule on post ${post.id}: its author is not set up to publish`,
+				`[publish-scheduled] Cleared the schedule on post ${post.id}: ` +
+					`${refusal?.body.code ?? "no author"}`,
 			);
+			// A post whose author is gone has nobody to tell. A creator whose setup lapsed is
+			// told what refused them and where the fix is, so the draft is not silently dropped.
+			if (post.creatorId !== null && refusal && post.scheduledFor) {
+				await notify({
+					userId: post.creatorId,
+					category: "essential",
+					kind: "scheduled_publish_refused",
+					title: `“${post.title || "Your post"}” wasn't published as scheduled`,
+					body: `${refusal.body.error} The schedule has been cleared, so nothing goes out until you publish or schedule it again.`,
+					linkPath: `/studio/posts/${post.slug}/edit`,
+					// Per schedule rather than per post: rescheduling and being refused again is news.
+					dedupeKey: `scheduled-publish-refused:${post.id}:${post.scheduledFor.toISOString()}`,
+				});
+			}
 			continue;
 		}
 		await db
