@@ -20,6 +20,9 @@
  * one would be a lie a third party could not verify.
  */
 
+/** The creator-space type: the studio keyed `self`, a gated Work keyed by its public id. */
+export const CREATOR_SPACE_TYPE = "org.anthers.creatorSpace";
+
 /**
  * The collections a creator space declares.
  *

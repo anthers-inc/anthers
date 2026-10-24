@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Network's lens corpus in pure form: the feed's releases become the items the
- * Music Player and Bookshelf lenses draw on, and the translation never invents a
- * payload the feed did not send.
+ * The tabs' lens corpus in pure form: the feed's releases become the items the Music
+ * Player, Channel Guide and Bookshelf lenses draw on, and the translation never invents
+ * a payload the feed did not send.
  *
  * The one seam worth pinning is the delivery address. A listened Work's queue entry is
- * built from `/api/content/works/:id/audio` — the endpoint that re-resolves access on
- * every play — because the feed ships no transcode URL. If this ever starts carrying a
- * signed URL or a `sourceKey`, a lens queue would outlive the permission to use it.
+ * built from `/api/content/works/:id/audio` and a video's guide player from
+ * `/api/content/works/:id/hls/master.m3u8` — endpoints that re-resolve access on every
+ * request — because the feed ships no transcode URL. If this ever starts carrying a
+ * signed URL or a `sourceKey`, a lens queue or a guide player would outlive the
+ * permission to use it.
  */
 import { describe, expect, test } from "bun:test";
 import { type AccessResult, isAccessResult, type WorkRelease } from "@anthers/web-shared/types";
@@ -76,12 +78,22 @@ describe("feedLensItems", () => {
 		expect(items[0]?.work?.transcoding?.outputFileUrl).toMatch(/\/api\/content\/works\/7\/audio$/);
 	});
 
-	test("leaves a video without a payload: only the player-less lenses draw the feed today", () => {
+	test("builds a video's manifest address from the delivery endpoint", () => {
 		const items = feedLensItems([entry({ id: 9, type: "video" })]);
 		const workAccess = items[0]?.work?.access;
 
-		expect(items[0]?.work?.transcoding).toBeUndefined();
+		expect(items[0]?.work?.transcoding?.hlsManifestUrl).toMatch(
+			/\/api\/content\/works\/9\/hls\/master\.m3u8$/,
+		);
 		expect(isAccessResult(workAccess) && workAccess.canAccess).toBe(true);
+	});
+
+	test("leaves a Work no lens player draws without a payload", () => {
+		// The translation adds an address only where a lens has a player to give it to;
+		// a written Work keeps the feed's payload-free shape.
+		const items = feedLensItems([entry({ id: 9, type: "ebook" })]);
+
+		expect(items[0]?.work?.transcoding).toBeUndefined();
 	});
 
 	test("reads the commons off the verdict, not off a field the feed does not send", () => {

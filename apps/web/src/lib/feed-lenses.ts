@@ -15,9 +15,11 @@
  * entry carries the card and the access verdict, never a transcode URL — the rule the
  * route states and the tile preview already obeys (`lib/tile-preview.ts`). A listened
  * Work therefore gets `transcoding.outputFileUrl` from `previewSourceFor`, which is the
- * `/api/content/works/:id/audio` endpoint: the address re-resolves access on every
- * request, so holding it in a queue is safe for exactly the reason `tracks.ts` gives.
- * Nothing here is a signed URL and nothing caches bytes.
+ * `/api/content/works/:id/audio` endpoint, and a video gets `transcoding.hlsManifestUrl`
+ * from the same function, which is its ladder's master manifest. Both addresses
+ * re-resolve access on every request, so holding one in a queue — or in the Channel
+ * Guide's player — is safe for exactly the reason `tracks.ts` gives. Nothing here is a
+ * signed URL and nothing caches bytes.
  */
 import { isListened } from "@anthers/shared/content";
 import type { AccessResult, Work, WorkRelease } from "@anthers/web-shared/types";
@@ -73,6 +75,15 @@ export function feedLensItems(entries: readonly FeedLensEntry[]): LensItem[] {
 		if (!type) continue;
 		const creator = creatorOf(entry.creator);
 		const access = isAccessResult(entry.access) ? entry.access : null;
+		// See the file docblock: the delivery endpoint, composed rather than shipped.
+		// A listened Work plays the audio route; a video plays its ladder's manifest,
+		// which the Channel Guide's inline player needs and which re-checks access on
+		// every request the same way.
+		const delivery = isListened(type)
+			? { transcoding: { outputFileUrl: previewSourceFor({ id: entry.id, type }) } }
+			: type === "video"
+				? { transcoding: { hlsManifestUrl: previewSourceFor({ id: entry.id, type }) } }
+				: {};
 		const work = {
 			...entry,
 			type,
@@ -86,10 +97,7 @@ export function feedLensItems(entries: readonly FeedLensEntry[]): LensItem[] {
 			// released Work is what draws the Public Access allowance (the serializer's
 			// own rule for `publicAccess`), and the feed's Works are released by query.
 			publicAccess: !!access?.isFree && !!access.streamEnabled,
-			// See the file docblock: the delivery endpoint, composed rather than shipped.
-			...(isListened(type)
-				? { transcoding: { outputFileUrl: previewSourceFor({ id: entry.id, type }) } }
-				: {}),
+			...delivery,
 		} as unknown as Work;
 		items.push({ id: entry.id, kind: "work", hidden: false, purchased: false, work });
 	}

@@ -1,29 +1,54 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The shortcut grammar for the search bar's two actions.
+ * The shortcut grammar for the keys a person can rebind: the search bar's two page
+ * shortcuts and a player's full-screen and theater keys.
  *
- * A chord is stored as a portable string — `Mod+K`, `Mod+Shift+F` — rather than as a
+ * A chord is stored as a portable string — `Mod+K`, `F` — rather than as a
  * platform-specific one, because `Mod` is Command on Apple platforms and Control
  * everywhere else. The defaults therefore read as `⌘K` on a Mac and `Ctrl+K` elsewhere
  * from one stored value.
  *
+ * ⚠️ **Two scopes, two rules.** `search` and `filter` are listened for on the document, so
+ * they must carry a modifier or they would eat typing: at least one real modifier, and
+ * `Shift` alone is not one. `fullscreen` and `theater` are listened for by a player that
+ * already has focus, which is what makes a bare `f` or `t` correct there — and the
+ * grammar refuses a bare key for a page action while accepting one for a player action.
+ *
  * 🚨 **The server validates with this module, not only the settings card.** A chord is a
  * value a person can type into a request; a client-side check is a convenience. The rules
- * here are the ones the route enforces: at least one real modifier (`Shift` alone is not
- * one), `Mod` and `Ctrl` are never combined because they name the same physical key off
- * Apple, and the two actions cannot share a chord.
+ * here are the ones the route enforces: each scope's modifier rule, `Mod` and `Ctrl` are
+ * never combined because they name the same physical key off Apple, and no two actions
+ * may share a chord.
  */
 
-export const SEARCH_SHORTCUT_ACTIONS = ["search", "filter"] as const;
-export type SearchShortcutAction = (typeof SEARCH_SHORTCUT_ACTIONS)[number];
+/** Actions listened for on the whole page: they must never fire while somebody is typing. */
+export const PAGE_SHORTCUT_ACTIONS = ["search", "filter"] as const;
+export type PageShortcutAction = (typeof PAGE_SHORTCUT_ACTIONS)[number];
 
-/** The stored map. A missing action falls back to its default; the server stores the pair. */
-export type SearchShortcuts = Record<SearchShortcutAction, string>;
+/** Actions listened for by a focused player: a bare letter is the natural binding here. */
+export const PLAYER_SHORTCUT_ACTIONS = ["fullscreen", "theater"] as const;
+export type PlayerShortcutAction = (typeof PLAYER_SHORTCUT_ACTIONS)[number];
 
-export const DEFAULT_SEARCH_SHORTCUTS: SearchShortcuts = {
+export const KEYBOARD_SHORTCUT_ACTIONS = [
+	...PAGE_SHORTCUT_ACTIONS,
+	...PLAYER_SHORTCUT_ACTIONS,
+] as const;
+export type KeyboardShortcutAction = (typeof KEYBOARD_SHORTCUT_ACTIONS)[number];
+
+/** The stored map. A missing action falls back to its default; the server stores the four. */
+export type KeyboardShortcuts = Record<KeyboardShortcutAction, string>;
+
+export const DEFAULT_KEYBOARD_SHORTCUTS: KeyboardShortcuts = {
 	search: "Mod+K",
 	filter: "Mod+F",
+	fullscreen: "F",
+	theater: "T",
 };
+
+/** Whether an action is the player's rather than the page's. */
+export function isPlayerShortcutAction(action: string): action is PlayerShortcutAction {
+	return (PLAYER_SHORTCUT_ACTIONS as readonly string[]).includes(action);
+}
 
 export interface ParsedChord {
 	mod: boolean;
@@ -65,17 +90,25 @@ function canonicalKey(raw: string): string | null {
 	return NAMED_KEY_LABELS[named] ?? null;
 }
 
-/** Parse a stored chord, or null when it is not one this application understands. */
-export function parseChord(chord: string): ParsedChord | null {
+/**
+ * Parse a stored chord, or null when it is not one this application understands.
+ *
+ * `bare` permits a key with no modifier, which is only correct for a player action — see
+ * the module docblock. The check is a parameter rather than the caller's job so a page
+ * action cannot be validated with the player's rule by accident.
+ */
+export function parseChord(chord: string, options: { bare?: boolean } = {}): ParsedChord | null {
+	const bare = options.bare ?? false;
 	const parts = chord
 		.split("+")
 		.map((part) => part.trim())
 		.filter(Boolean);
-	if (parts.length < 2) return null;
+	if (parts.length === 0) return null;
 	const rawKey = parts.pop();
 	if (!rawKey) return null;
 	const key = canonicalKey(rawKey);
 	if (!key) return null;
+	if (parts.length === 0 && !bare) return null;
 
 	const seen = new Set<string>();
 	for (const part of parts) {
@@ -85,7 +118,7 @@ export function parseChord(chord: string): ParsedChord | null {
 	}
 	// Shift alone is a capital letter, not a shortcut; and Mod and Ctrl are the same
 	// physical key off Apple, so a chord naming both cannot be expressed there.
-	if (!seen.has("mod") && !seen.has("ctrl") && !seen.has("alt")) return null;
+	if (!bare && !seen.has("mod") && !seen.has("ctrl") && !seen.has("alt")) return null;
 	if (seen.has("mod") && seen.has("ctrl")) return null;
 	return {
 		mod: seen.has("mod"),
@@ -107,9 +140,9 @@ export function chordToString(parsed: ParsedChord): string {
 	return parts.join("+");
 }
 
-/** Canonicalize a chord, or null when it is invalid. */
-export function canonicalChord(chord: string): string | null {
-	const parsed = parseChord(chord);
+/** Canonicalize a chord, or null when it is invalid for that scope. */
+export function canonicalChord(chord: string, options: { bare?: boolean } = {}): string | null {
+	const parsed = parseChord(chord, options);
 	return parsed ? chordToString(parsed) : null;
 }
 
@@ -119,7 +152,7 @@ export function canonicalChord(chord: string): string | null {
  * corrupt preference is visible rather than silently renamed.
  */
 export function formatChord(chord: string, apple: boolean): string {
-	const parsed = parseChord(chord);
+	const parsed = parseChord(chord, { bare: true });
 	if (!parsed) return chord;
 	const key = parsed.key.length === 1 ? parsed.key.toUpperCase() : parsed.key;
 	if (apple) {
@@ -163,7 +196,7 @@ export function keyFromEvent(event: Pick<ChordEvent, "key">): string | null {
  * Auto-repeat is ignored — holding a key down should not reopen the panel repeatedly.
  */
 export function matchesChord(event: ChordEvent, chord: string, apple: boolean): boolean {
-	const parsed = parseChord(chord);
+	const parsed = parseChord(chord, { bare: true });
 	if (!parsed || event.repeat) return false;
 	const wantMeta = apple && parsed.mod;
 	const wantCtrl = apple ? parsed.ctrl : parsed.mod || parsed.ctrl;
@@ -176,20 +209,20 @@ export function matchesChord(event: ChordEvent, chord: string, apple: boolean): 
  * Validate and canonicalize a whole stored map.
  *
  * Returns null rather than a repaired map when anything is wrong: a settings write that
- * half-saves is worse than one that says no, and the client always sends the pair.
+ * half-saves is worse than one that says no, and the client always sends all four.
  */
-export function normalizeSearchShortcuts(raw: Record<string, string>): SearchShortcuts | null {
+export function normalizeKeyboardShortcuts(raw: Record<string, string>): KeyboardShortcuts | null {
 	const keys = Object.keys(raw);
-	if (keys.length !== SEARCH_SHORTCUT_ACTIONS.length) return null;
+	if (keys.length !== KEYBOARD_SHORTCUT_ACTIONS.length) return null;
 	for (const key of keys) {
-		if (!(SEARCH_SHORTCUT_ACTIONS as readonly string[]).includes(key)) return null;
+		if (!(KEYBOARD_SHORTCUT_ACTIONS as readonly string[]).includes(key)) return null;
 	}
-	const out = {} as SearchShortcuts;
+	const out = {} as KeyboardShortcuts;
 	const seen = new Set<string>();
-	for (const action of SEARCH_SHORTCUT_ACTIONS) {
+	for (const action of KEYBOARD_SHORTCUT_ACTIONS) {
 		const chord = raw[action];
 		if (typeof chord !== "string") return null;
-		const canonical = canonicalChord(chord);
+		const canonical = canonicalChord(chord, { bare: isPlayerShortcutAction(action) });
 		if (!canonical || seen.has(canonical)) return null;
 		seen.add(canonical);
 		out[action] = canonical;
@@ -200,22 +233,28 @@ export function normalizeSearchShortcuts(raw: Record<string, string>): SearchSho
 /**
  * The map the browser uses, with defaults filling anything a stored map does not carry.
  *
- * An account that has never opened the setting has `null`; an older row may carry only one
- * action. Neither should break the bar, and an invalid stored chord falls back to its
- * default rather than disabling the shortcut.
+ * An account that has never opened the setting has `null`; an older row may carry only the
+ * search pair. Neither should break the bar or the player, and an invalid stored chord
+ * falls back to its default rather than disabling the shortcut. A duplicate pair — which
+ * the server refuses but a legacy row may carry — falls back to the whole default map,
+ * because two actions answering one key is a conflict the client cannot resolve for the
+ * person.
  */
-export function resolveSearchShortcuts(
+export function resolveKeyboardShortcuts(
 	stored: Record<string, string> | null | undefined,
-): SearchShortcuts {
-	const out = { ...DEFAULT_SEARCH_SHORTCUTS };
+): KeyboardShortcuts {
+	const out = { ...DEFAULT_KEYBOARD_SHORTCUTS };
 	if (!stored) return out;
-	for (const action of SEARCH_SHORTCUT_ACTIONS) {
+	for (const action of KEYBOARD_SHORTCUT_ACTIONS) {
 		const chord = stored[action];
-		const canonical = typeof chord === "string" ? canonicalChord(chord) : null;
+		const canonical =
+			typeof chord === "string"
+				? canonicalChord(chord, { bare: isPlayerShortcutAction(action) })
+				: null;
 		if (canonical) out[action] = canonical;
 	}
-	if (out.search === out.filter) out.filter = DEFAULT_SEARCH_SHORTCUTS.filter;
-	if (out.search === out.filter) out.search = DEFAULT_SEARCH_SHORTCUTS.search;
+	const chords = KEYBOARD_SHORTCUT_ACTIONS.map((action) => out[action]);
+	if (new Set(chords).size !== chords.length) return { ...DEFAULT_KEYBOARD_SHORTCUTS };
 	return out;
 }
 

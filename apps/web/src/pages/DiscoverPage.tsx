@@ -8,8 +8,9 @@
  *
  * 🚨 **The recipe is the product.** Discovery's promise is that the reader can
  * always see how the corpus is being drawn and change it, so the stream renders its
- * active recipe above the content and exposes the parameter behind it. There is no
- * hidden ranking, and nothing here is paid placement.
+ * active recipe above the content and exposes the three choices behind it: the
+ * candidate set, the window, and whether the mix spreads creators. There is no hidden
+ * ranking, and nothing here is paid placement.
  *
  * The graph's shared-follow ranking is a route (`GET /api/accounts/me/graph`) and a
  * recipe builder with no page drawing them: a network of follows ranks nearly
@@ -22,10 +23,16 @@
  * sends here. Inbox was removed the same day for having no backend to stand on.
  */
 
+import { BOOKSHELF_WORK_TYPES } from "@anthers/shared/content";
 import {
+	asRecipeCandidates,
+	asRecipeMix,
+	asRecipeWindow,
 	DISCOVERY_STAGE_LABELS,
 	type DiscoveryReason,
 	type DiscoveryRecipe,
+	type RecipeCandidates,
+	type RecipeMix,
 	type RecipeWindow,
 	streamRecipe,
 } from "@anthers/shared/discovery";
@@ -37,9 +44,18 @@ import { ArrowPathIcon, MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import FeedTile from "../components/cards/FeedTile";
-import SharedFilterSections from "../components/layout/SharedFilterSections";
-import SharedLensesSection from "../components/layout/SharedLensesSection";
+import SharedFilterSections, {
+	SHARED_FILTER_TYPES,
+} from "../components/layout/SharedFilterSections";
+import SharedLensesSection, { ALL_LENS_IDS } from "../components/layout/SharedLensesSection";
 import TabHeader from "../components/layout/TabHeader";
+import BookshelfLens from "../components/library/BookshelfLens";
+import ChannelGuideLens, {
+	channelGuideChannelsFromShelf,
+} from "../components/library/ChannelGuideLens";
+import MusicDial from "../components/library/MusicDial";
+import MusicLens from "../components/library/MusicLens";
+import { feedLensItems } from "../lib/feed-lenses";
 
 /** One entry of the feed's stream, as `?scope=global` sends it. */
 type FeedEntry = {
@@ -52,26 +68,40 @@ type FeedEntry = {
 	reason?: DiscoveryReason;
 } & Record<string, unknown>;
 
-/** The stream's presets. The window is the parameter; the filters narrow the rest. */
-const RECIPE_PRESETS: ReadonlyArray<{ id: string; label: string; window: RecipeWindow }> = [
-	{ id: "everything", label: "Everything new", window: "all" as const },
-	{ id: "today", label: "The last day", window: "day" as const },
-	{ id: "week", label: "The last week", window: "week" as const },
+/**
+ * The three choices a recipe is made of. The route runs the first two as query
+ * parameters over one corpus, and the window narrows what came back, so every option
+ * offered here is a value something actually obeys — there is no control whose only
+ * setting is the one already chosen.
+ */
+const WINDOW_OPTIONS: ReadonlyArray<{ value: RecipeWindow; label: string }> = [
+	{ value: "all", label: "Everything" },
+	{ value: "day", label: "The last day" },
+	{ value: "week", label: "The last week" },
+];
+
+const CANDIDATE_OPTIONS: ReadonlyArray<{ value: RecipeCandidates; label: string }> = [
+	{ value: "everyone", label: "Everyone" },
+	{ value: "network", label: "Your network" },
+];
+
+const MIX_OPTIONS: ReadonlyArray<{ value: RecipeMix; label: string }> = [
+	{ value: "spread", label: "Spread creators" },
+	{ value: "straight", label: "Newest first" },
 ];
 
 /**
- * The active recipe, rendered above the content. It names what is being drawn, the
- * three stages that drew it, and the control that changes one of them, so the reader
- * never has to guess why a card is on screen. The stages come from the same module the
- * route ranks with, so the bar cannot describe a pipeline the server did not run.
+ * The active recipe, rendered above the content. It names what is being drawn and the
+ * three stages that drew it, and the controls beside it change those stages, so the
+ * reader never has to guess why a card is on screen. The stages come from the same
+ * module the route ranks with, so the bar cannot describe a pipeline the server did not
+ * run.
  */
 function RecipeBar({
-	preset,
 	recipe,
 	children,
 	onRefresh,
 }: {
-	preset: string;
 	recipe: DiscoveryRecipe;
 	children?: React.ReactNode;
 	onRefresh?: () => void;
@@ -84,7 +114,7 @@ function RecipeBar({
 						Active recipe
 					</p>
 					<p className="mt-1 max-w-3xl text-sm leading-relaxed text-base-content/80">
-						<span className="font-medium">{preset}.</span> {recipe.sentence}
+						{recipe.sentence}
 					</p>
 					<dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">
 						{recipe.stages.map((stage) => (
@@ -130,11 +160,41 @@ export default function DiscoverPage() {
 	const search = searchParams.get("search") ?? "";
 	/** The lens is an organizing metaphor over the stream, never a mode. */
 	const lens = searchParams.get("lens") ?? "";
+	/** The Music Player's dial, carried the way the Network carries it. */
+	const includeSpoken = searchParams.get("spoken") === "1";
 
-	const tickerPresetId = searchParams.get("preset") ?? "everything";
-	const tickerPreset =
-		RECIPE_PRESETS.find((preset) => preset.id === tickerPresetId) ?? RECIPE_PRESETS[0];
-	const window = tickerPreset.window;
+	/**
+	 * The Type selection rides the request as the stream's server-side condition —
+	 * except under a lens, where the lens decides what it draws on and the rows outside
+	 * it are grayed. Dropping it here is what keeps a lens a view of the corpus rather
+	 * than a filter applied before the corpus arrives.
+	 */
+	const mediaType = lens ? "" : contentType;
+
+	/**
+	 * The Work types the active lens draws on, or null with No Lens. The Type rows
+	 * outside this set gray out while it is active — the Library's rule, applied to the
+	 * stream.
+	 */
+	const lensIncluded = useMemo<string[] | null>(() => {
+		if (lens === "music") return includeSpoken ? ["music", "audio"] : ["music"];
+		if (lens === "channel-guide") return ["video"];
+		if (lens === "bookshelf") return [...BOOKSHELF_WORK_TYPES];
+		return null;
+	}, [lens, includeSpoken]);
+
+	const unavailableTypes = useMemo(() => {
+		if (!lensIncluded) return undefined;
+		const set = new Set<string>();
+		for (const type of SHARED_FILTER_TYPES) {
+			if (type.id && !lensIncluded.includes(type.id)) set.add(type.id);
+		}
+		return set;
+	}, [lensIncluded]);
+
+	const window = asRecipeWindow(searchParams.get("window"));
+	const candidates = asRecipeCandidates(searchParams.get("candidates"));
+	const mix = asRecipeMix(searchParams.get("mix"));
 
 	const updateParams = useCallback(
 		(updates: Record<string, string>) => {
@@ -153,20 +213,24 @@ export default function DiscoverPage() {
 		[setSearchParams],
 	);
 
-	// The stream: the feed's own, widened to every creator. The refresh control bumps
-	// this counter; the feed route has no cache buster, so the value exists only to
-	// make the dependency real to the linter.
+	// The stream: the feed's own, over the candidate set the recipe names. `scope` is
+	// how the feed expresses "everyone" versus "your network", and `mix` is the recipe's
+	// ordering stage; both are the route's to run. The refresh control bumps this
+	// counter; the feed route has no cache buster, so the value exists only to make the
+	// dependency real to the linter. `mediaType` is empty under a lens, so the lens draws
+	// on every type it covers.
 	useEffect(() => {
 		void refreshKey;
 		setLoading(true);
 		client.api.accounts.me.feed
 			.$get({
 				query: {
-					scope: "global",
-					...(contentType === "posts"
+					scope: candidates === "network" ? "network" : "global",
+					mix,
+					...(mediaType === "posts"
 						? { kind: "posts" }
-						: contentType
-							? { media_type: contentType }
+						: mediaType
+							? { media_type: mediaType }
 							: {}),
 					...(access ? { access } : {}),
 					...(tags ? { tags } : {}),
@@ -179,7 +243,7 @@ export default function DiscoverPage() {
 			})
 			.catch(() => {})
 			.finally(() => setLoading(false));
-	}, [contentType, access, tags, refreshKey]);
+	}, [mediaType, access, tags, candidates, mix, refreshKey]);
 
 	// The stream filters the already-fetched page by the window and the term. The
 	// server applies the Type, Access and Tags filters; these two are presentation
@@ -203,15 +267,35 @@ export default function DiscoverPage() {
 		});
 	}, [entries, window, search]);
 
+	/** The lens's corpus: the stream's releases, translated once per fetch. */
+	const lensDraw = useMemo(() => feedLensItems(visibleEntries), [visibleEntries]);
+
 	// Sidebar: the lens is the page's own section, and the shared filters sit below the
 	// divider the layout draws, exactly as on the Network and Library tabs. The URL
 	// carries the lens, so a link to "the stream under the Music Player" survives.
+	// Every row is live here (Parker, 2026-10-23): a lens is a view over this stream, and
+	// the Music Player's dial rides its row the way it does on the other two tabs.
 	useEffect(() => {
-		setPageContent(<SharedLensesSection lens={lens} onLens={(id) => updateParams({ lens: id })} />);
+		setPageContent(
+			<SharedLensesSection
+				lens={lens}
+				onLens={(id) => updateParams({ lens: id })}
+				live={ALL_LENS_IDS}
+				extras={{
+					music: (
+						<MusicDial
+							includeSpoken={includeSpoken}
+							onIncludeSpoken={(on) => updateParams({ spoken: on ? "1" : "" })}
+						/>
+					),
+				}}
+			/>,
+		);
 		setSharedContent(
 			<SharedFilterSections
 				type={contentType}
 				onType={(id) => updateParams({ media_type: id })}
+				unavailableTypes={unavailableTypes}
 				tags={tags}
 				onTags={(value) => updateParams({ tags: value })}
 				access={{ value: access, onAccess: (value) => updateParams({ access: value }) }}
@@ -221,9 +305,19 @@ export default function DiscoverPage() {
 			setPageContent(null);
 			setSharedContent(null);
 		};
-	}, [setPageContent, setSharedContent, contentType, access, tags, lens, updateParams]);
+	}, [
+		setPageContent,
+		setSharedContent,
+		contentType,
+		unavailableTypes,
+		access,
+		tags,
+		lens,
+		includeSpoken,
+		updateParams,
+	]);
 
-	const recipe = streamRecipe({ window });
+	const recipe = streamRecipe({ window, candidates, mix });
 
 	return (
 		<div className="min-h-full">
@@ -250,21 +344,53 @@ export default function DiscoverPage() {
 					</div>
 				)}
 
-				<RecipeBar
-					preset={tickerPreset.label}
-					recipe={recipe}
-					onRefresh={() => setRefreshKey((key) => key + 1)}
-				>
+				<RecipeBar recipe={recipe} onRefresh={() => setRefreshKey((key) => key + 1)}>
 					<label className="flex flex-col gap-1 text-xs text-base-content/60">
-						Preset
+						Window
 						<select
 							className="select select-bordered select-sm"
-							value={tickerPreset.id}
-							onChange={(e) => updateParams({ preset: e.target.value })}
+							value={window}
+							onChange={(e) =>
+								// The opening value stays out of the URL so a bare /discovery and a
+								// shared link to the same recipe are the same address.
+								updateParams({ window: e.target.value === "all" ? "" : e.target.value })
+							}
 						>
-							{RECIPE_PRESETS.map((preset) => (
-								<option key={preset.id} value={preset.id}>
-									{preset.label}
+							{WINDOW_OPTIONS.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</select>
+					</label>
+					<label className="flex flex-col gap-1 text-xs text-base-content/60">
+						From
+						<select
+							className="select select-bordered select-sm"
+							value={candidates}
+							onChange={(e) =>
+								updateParams({ candidates: e.target.value === "everyone" ? "" : e.target.value })
+							}
+						>
+							{CANDIDATE_OPTIONS.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</select>
+					</label>
+					<label className="flex flex-col gap-1 text-xs text-base-content/60">
+						Order
+						<select
+							className="select select-bordered select-sm"
+							value={mix}
+							onChange={(e) =>
+								updateParams({ mix: e.target.value === "spread" ? "" : e.target.value })
+							}
+						>
+							{MIX_OPTIONS.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
 								</option>
 							))}
 						</select>
@@ -275,10 +401,28 @@ export default function DiscoverPage() {
 					<div className="flex justify-center py-16">
 						<LoadingSpinner size="lg" />
 					</div>
+				) : lens === "music" ? (
+					/* A lens reorganizes the stream, never refetches it: the corpus is the
+					   same entries the grid draws. `scope="discovery"` opens a release whole,
+					   as the Network's does — nothing here is a kept shelf. */
+					<MusicLens items={lensDraw} includeSpoken={includeSpoken} scope="discovery" />
+				) : lens === "bookshelf" ? (
+					/* The same shelf metaphor over the stream's written Works: spines instead
+					   of tiles, alphabetical by title. */
+					<BookshelfLens items={lensDraw} source="discovery" />
+				) : lens === "channel-guide" ? (
+					/* The stream's videos as creator channels, latest at the top of each
+					   column. The feed ships no payload, so the guide reads the delivery
+					   address `feedLensItems` composes for it. */
+					<ChannelGuideLens channels={channelGuideChannelsFromShelf(lensDraw)} source="discovery" />
 				) : visibleEntries.length === 0 ? (
 					<EmptyState
 						title="Nothing new here"
-						description="No Works or Posts match these filters. Clear a filter, widen the window, or check back soon."
+						description={
+							candidates === "network"
+								? "Nothing from your network matches these filters. Clear a filter, widen the window, or switch From to Everyone."
+								: "No Works or Posts match these filters. Clear a filter, widen the window, or check back soon."
+						}
 					/>
 				) : (
 					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

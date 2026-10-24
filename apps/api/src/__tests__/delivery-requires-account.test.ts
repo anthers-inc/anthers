@@ -35,6 +35,7 @@ import { db } from "@anthers/db/client";
 import { assets, transcodingJobs, users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
+import { downloadAsset } from "./access-fixture";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -193,10 +194,7 @@ describe("Consuming a Work requires an account", () => {
 		});
 		expect(audio.status).toBe(302);
 
-		const download = await req(`/api/content/works/${downloadId}/assets/${assetId}/download`, {
-			method: "POST",
-			headers: { Origin: ORIGIN, Cookie: userCookie },
-		});
+		const download = await downloadAsset(userCookie, downloadId, assetId);
 		expect(download.status).toBe(200);
 		expect((await download.json()).url).toBeTruthy();
 	});

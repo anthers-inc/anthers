@@ -7,11 +7,13 @@
  *
  * 🚨 **Every row renders on every tab; the tab decides which rows are live** — that is
  * what makes the vocabulary something a user learns once rather than a per-page
- * reshuffle. A row the tab has not built is GRAYED with "(Coming Soon)", never absent:
- * No Lens is live on all three tabs, the Library has all three lenses, the Network has
- * the Music Player and the Bookshelf, and the other tabs light a row up when their
- * meaning for it is built. A row may be live on every tab in the future; absent is a
- * state this component no longer has.
+ * reshuffle. A row the tab has not built is GRAYED with "(Coming Soon)", never absent.
+ * Since 2026-10-23 every lens is built on every user tab (Parker), so the Library, the
+ * Network and Discovery each pass {@link ALL_LENS_IDS}: a lens is a view over whatever
+ * corpus its tab hands it, and none of the three needed the tab to be different. The
+ * per-tab set stays the mechanism rather than being deleted — a lens added to the list
+ * is grayed on every tab until its meaning there is built, and absent remains a state
+ * this component does not have.
  */
 
 import {
@@ -32,6 +34,13 @@ export const LENSES = [
 	{ id: "bookshelf", label: "Bookshelf", icon: Square3Stack3DIcon },
 ] as const;
 
+/**
+ * Every row's id, No Lens included — the set a tab passes when it has built all of
+ * them. One constant rather than a literal per page, so a page cannot silently fall
+ * behind the list; a tab with a lens still to build passes its own set instead.
+ */
+export const ALL_LENS_IDS: ReadonlySet<string> = new Set(LENSES.map((lens) => lens.id));
+
 const sectionTitleClass =
 	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2 flex items-center gap-1.5";
 
@@ -46,9 +55,8 @@ export default function SharedLensesSection({
 }: {
 	lens: string;
 	onLens: (id: string) => void;
-	/** The ids this tab has built. No Lens is live on every tab — a tab with no
-	 *  other lens built passes the default; the Library passes all three, and the
-	 *  Network passes the two it has built over the feed. */
+	/** The ids this tab has built. Every user tab passes {@link ALL_LENS_IDS} today;
+	 *  the default is for a surface that has built no lens yet, and keeps No Lens. */
 	live?: ReadonlySet<string>;
 	extras?: Partial<Record<(typeof LENSES)[number]["id"], React.ReactNode>>;
 }) {

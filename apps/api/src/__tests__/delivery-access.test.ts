@@ -27,6 +27,7 @@ import { db } from "@anthers/db/client";
 import { assets, purchases, transcodingJobs, users, workSourceFiles } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
+import { downloadAsset } from "./access-fixture";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { handleOf } from "./handles";
@@ -554,10 +555,7 @@ describe("Delivery-layer access", () => {
 			.returning();
 
 		try {
-			const res = await req(`/api/content/works/${freeWorkId}/assets/${freeAssetId}/download`, {
-				method: "POST",
-				headers: { Origin: ORIGIN, Cookie: userCookie },
-			});
+			const res = await downloadAsset(userCookie, freeWorkId, freeAssetId);
 			expect(res.status).toBe(200);
 
 			// Fire-and-forget on the route, so the write may land just after the response.

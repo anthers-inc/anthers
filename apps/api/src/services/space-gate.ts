@@ -24,9 +24,7 @@ import { db } from "@anthers/db/client";
 import { users, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { type AccessibleWork, resolveAccess } from "./access.js";
-
-/** The creator-space type whose keys are Work public ids. */
-export const CREATOR_SPACE_TYPE = "org.anthers.creatorSpace";
+import { CREATOR_SPACE_TYPE } from "./creator-space-records.js";
 
 /** Why the gate answered the way it did. Reported to logs, never to the caller. */
 export type SpaceAccessReason =

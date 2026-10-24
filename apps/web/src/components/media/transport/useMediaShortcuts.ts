@@ -11,11 +11,18 @@
  *
  * The bindings follow the conventions people already have from YouTube and VLC rather
  * than inventing any: space/k play, j/l jump ten, arrows nudge five, f fullscreen,
- * c captions, m mute, digits seek by tenths, `,`/`.` step a frame while paused. j/l move by ten
- * *seconds on video*; a spoken player overrides the step via `jump`, which is what a
- * podcast pair (−15, +30) binds to instead.
+ * t theater, c captions, m mute, digits seek by tenths, `,`/`.` step a frame while paused.
+ * j/l move by ten *seconds on video*; a spoken player overrides the step via `jump`, which
+ * is what a podcast pair (−15, +30) binds to instead.
+ *
+ * ⚠️ **Full screen and theater are the account's chords, not constants.** They arrive from
+ * `useKeyboardShortcuts`, and are matched before the modifier guard below — a person who
+ * rebinds full screen to `Mod+Shift+F` means it, and the player is the only thing listening.
  */
+import { matchesChord } from "@anthers/shared/keybindings";
 import type { KeyboardEvent } from "react";
+import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
+import { isApplePlatform } from "@/lib/platform";
 
 export interface MediaShortcutHandlers {
 	togglePlay?: () => void;
@@ -32,6 +39,8 @@ export interface MediaShortcutHandlers {
 	adjustVolume?: (delta: number) => void;
 	toggleMuted?: () => void;
 	toggleFullscreen?: () => void;
+	/** The page's theater mode, when the player is mounted where one exists. */
+	toggleTheater?: () => void;
 	/** One frame-ish step; only meaningful for video. */
 	stepFrame?: (direction: 1 | -1) => void;
 	/** Multiplier steps through the speed list. */
@@ -52,12 +61,13 @@ function isTyping(target: EventTarget | null): boolean {
 }
 
 export function useMediaShortcuts(handlers: MediaShortcutHandlers) {
+	const shortcuts = useKeyboardShortcuts();
+	const apple = isApplePlatform();
+
 	return function onKeyDown(e: KeyboardEvent<HTMLElement>) {
 		// A focused range input inside the transport is a control in its own right: its
 		// own arrow keys must seek *it*, not be intercepted here.
 		if (isTyping(e.target)) return;
-		// Leave every browser and OS shortcut alone. Ctrl+F is find, not fullscreen.
-		if (e.ctrlKey || e.metaKey || e.altKey) return;
 
 		const h = handlers;
 		const run = (fn: (() => void) | undefined) => {
@@ -65,6 +75,15 @@ export function useMediaShortcuts(handlers: MediaShortcutHandlers) {
 			e.preventDefault();
 			fn();
 		};
+
+		// The account's player chords come first, before the modifier guard: they are
+		// matched exactly (a chord without Shift will not fire while Shift is held), and a
+		// player is the only listener for them, so a modified binding is safe here.
+		if (matchesChord(e, shortcuts.fullscreen, apple)) return run(h.toggleFullscreen);
+		if (matchesChord(e, shortcuts.theater, apple)) return run(h.toggleTheater);
+
+		// Leave every browser and OS shortcut alone. Ctrl+F is find, not fullscreen.
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
 
 		switch (e.key) {
 			case " ":
@@ -91,9 +110,6 @@ export function useMediaShortcuts(handlers: MediaShortcutHandlers) {
 			case "c":
 			case "C":
 				return run(h.toggleCaptions);
-			case "f":
-			case "F":
-				return run(h.toggleFullscreen);
 			case "n":
 			case "N":
 				return run(h.next);
