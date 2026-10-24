@@ -25,6 +25,7 @@ import {
 	type PublishableWork,
 	type UnpublishableReason,
 	unpublishableReason,
+	type WorkAccessPointers,
 	type WorkRecord,
 	workToRecord,
 } from "./atproto-records.js";
@@ -155,7 +156,12 @@ export function recordFetchUrlFor(
  */
 export function planWorkRecord(
 	work: PublishableWork,
-	opts: { baseUrl: string; existingUri?: string | null; confirmedCredits?: Set<string> },
+	opts: {
+		baseUrl: string;
+		existingUri?: string | null;
+		confirmedCredits?: Set<string>;
+		accessPointers?: WorkAccessPointers;
+	},
 ): WorkRecordPlan {
 	const existingUri = opts.existingUri ?? null;
 	const rkey = existingUri ? rkeyFromAtUri(existingUri, WORK_COLLECTION) : null;
@@ -175,6 +181,7 @@ export function planWorkRecord(
 	const record = workToRecord(work, {
 		baseUrl: opts.baseUrl,
 		confirmedCredits: opts.confirmedCredits,
+		accessPointers: opts.accessPointers,
 	});
 	// Unreachable while `unpublishableReason` is the only thing that makes the mapper return
 	// null, and checked rather than asserted so the two staying in step is enforced instead
@@ -206,7 +213,12 @@ export interface WorkRecordOutcome {
 export async function syncWorkRecord(
 	writer: RepoWriter,
 	work: PublishableWork,
-	opts: { baseUrl: string; existingUri?: string | null; confirmedCredits?: Set<string> },
+	opts: {
+		baseUrl: string;
+		existingUri?: string | null;
+		confirmedCredits?: Set<string>;
+		accessPointers?: WorkAccessPointers;
+	},
 ): Promise<WorkRecordOutcome> {
 	const plan = planWorkRecord(work, opts);
 

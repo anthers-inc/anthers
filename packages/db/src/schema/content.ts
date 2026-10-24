@@ -348,6 +348,23 @@ export const works = pgTable(
 		// granted the permission. Wiki: *Federation → The AT Protocol*.
 		atprotoUri: text("atproto_uri").unique(),
 
+		// ── Creator spaces ──
+		//
+		// The three addresses a Work's creator-space records live at. They are stored rather
+		// than derived for the same reason `atproto_uri` is: the address is what lets a later
+		// write find the record again, and an address lost is a record nobody can correct.
+		// All three are written by `services/creator-space.ts`.
+		//
+		// ⚠️ **`draft_uri` is the creator's private studio copy, `gated_space_uri` and
+		// `manifest_uri` are the gated Work's.** A draft exists for every Work that has a
+		// studio space, released or not; a gated space exists only for a released Work whose
+		// listing is gated, and it is deliberately kept when the Work is withdrawn so its
+		// buyers keep what they paid for. Null means the record was never written, not that
+		// it is absent from the network — a failed write leaves the column as it was.
+		draftUri: text("draft_uri"),
+		gatedSpaceUri: text("gated_space_uri"),
+		manifestUri: text("manifest_uri"),
+
 		/** The UPLOAD date — when the Work entered the Catalog. Creator-visible only. */
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

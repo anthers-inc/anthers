@@ -96,14 +96,16 @@ describe("a video Work whose file has not arrived", () => {
 	// Built on use, because the creator — and so the key's prefix — exists only after `beforeAll`.
 	const sourceKey = () => KEY("clip.mp4");
 
-	it("is created private and unrated, with nothing queued", async () => {
+	it("is created private and unrated, with no media work queued", async () => {
 		sent = [];
 		workId = await createWithoutFile("video");
 		const [row] = await db.select().from(works).where(eq(works.id, workId));
 		expect(row.visibility).toBe("private");
 		expect(row.maturity).toBe("unrated");
 		expect(row.sourceKey).toBe("");
-		expect(sent).toEqual([]);
+		// The listing sync is the creator-space draft write and belongs on every creation; what
+		// must not happen before a file arrives is a transcode or a scan of bytes nobody sent.
+		expect(sent.filter((job) => job.name !== QUEUES.SYNC_WORK_LISTING)).toEqual([]);
 	});
 
 	it("cannot be released, and keeps the rating declared in the same request", async () => {
