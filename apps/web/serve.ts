@@ -38,6 +38,7 @@
  */
 import { resolve, sep } from "node:path";
 import { devBuildApiOrigin, devBuildPage } from "./src/lib/dev-build-page.js";
+import { pageMeta } from "./src/lib/page-meta.js";
 import { previewRoute } from "./src/lib/preview-route.js";
 import { injectShareHead, type LinkCard } from "./src/lib/share-head.js";
 
@@ -115,6 +116,17 @@ async function shareTarget(
 	if (typeof body.publicId !== "number") return null;
 	const param = `${body.slug}-${body.publicId}`;
 	return { kind: "work", param, canonicalPath: `/works/${param}` };
+}
+
+/**
+ * The card a standing page serves: the shell's own image, the page's own words.
+ *
+ * A page listed in `page-meta.ts` has nothing to ask the API for — its title and line are
+ * its own copy, and the card image is the site's. Everything else keeps the shipped block.
+ */
+function pageCard(pathname: string): LinkCard | null {
+	const meta = pageMeta(pathname);
+	return meta ? { title: meta.title, description: meta.description, image: null } : null;
 }
 
 /**
@@ -205,8 +217,12 @@ Bun.serve({
 			}
 		})();
 		const [html, served] = await Promise.all([indexHtml(), previewFor(documentPath)]);
-		const canonical = `${SITE_ORIGIN}${served?.canonicalPath ?? documentPath}`;
-		return new Response(withDevApiPort(injectShareHead(html, served?.preview ?? null, canonical)), {
+		const canonicalPath = served?.canonicalPath ?? documentPath;
+		const canonical = `${SITE_ORIGIN}${canonicalPath}`;
+		// A document that knows what it is comes first; a standing page comes second, and its
+		// own address is what the canonical tag names rather than the site's.
+		const card = served?.preview ?? pageCard(canonicalPath);
+		return new Response(withDevApiPort(injectShareHead(html, card, canonical)), {
 			headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-cache" },
 		});
 	},
