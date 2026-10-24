@@ -37,6 +37,7 @@
  * the same tag for the same reason.
  */
 import { resolve, sep } from "node:path";
+import { robotsTxt, SITEMAP_PATH, sitemapXml } from "./src/lib/crawl.js";
 import { devBuildApiOrigin, devBuildPage } from "./src/lib/dev-build-page.js";
 import { pageMeta } from "./src/lib/page-meta.js";
 import { previewRoute } from "./src/lib/preview-route.js";
@@ -181,6 +182,23 @@ Bun.serve({
 		const url = new URL(req.url);
 		if (url.pathname === "/dev/web-build") return devBuildPage(devBuildApiOrigin(req, API_PORT));
 		if (url.pathname === "/_health") return new Response("ok");
+		// The two documents a crawler asks for, ahead of the shell it would otherwise get.
+		if (url.pathname === "/robots.txt") {
+			return new Response(robotsTxt(SITE_ORIGIN), {
+				headers: {
+					"Content-Type": "text/plain;charset=utf-8",
+					"Cache-Control": "public, max-age=3600",
+				},
+			});
+		}
+		if (url.pathname === SITEMAP_PATH) {
+			return new Response(sitemapXml(SITE_ORIGIN), {
+				headers: {
+					"Content-Type": "application/xml;charset=utf-8",
+					"Cache-Control": "public, max-age=3600",
+				},
+			});
+		}
 		if (url.pathname === "/index.html") {
 			return new Response(withDevApiPort(await indexHtml()), {
 				headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-cache" },

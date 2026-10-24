@@ -157,3 +157,14 @@ export function pageMeta(pathname: string): PageMeta | null {
 	const legal = slug ? LEGAL_DOCUMENTS[slug] : undefined;
 	return legal ? { title: legal.title, description: legal.summary } : null;
 }
+
+/**
+ * The standing pages a crawler may index: the homepage first, then the pages that describe
+ * themselves in this table, then the served instruments.
+ *
+ * The homepage is included here though `pageMeta` answers null for it, because it is the one
+ * route that needs no card of its own and is still the page a sitemap exists to name.
+ */
+export function indexablePaths(): string[] {
+	return ["/", ...Object.keys(PAGES), ...Object.keys(LEGAL_PATHS)];
+}
