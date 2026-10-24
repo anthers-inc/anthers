@@ -425,7 +425,10 @@ export default function DiscoverPage() {
 						}
 					/>
 				) : (
-					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+					// The same auto-fill grid the Network and the Library render: the
+					// columns count themselves from a working tile width, so Discovery
+					// shows the shared tile at the shared size rather than a narrower one.
+					<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
 						{visibleEntries.map((entry) => (
 							<FeedTile key={`${entry.kind}-${entry.id}`} entry={entry} />
 						))}

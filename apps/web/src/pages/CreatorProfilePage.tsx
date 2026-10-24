@@ -35,7 +35,6 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import FeedTile from "../components/cards/FeedTile";
-import ProjectCard from "../components/cards/ProjectCard";
 import BadgesTab from "../components/creator/BadgesTab";
 import CreatorCredits from "../components/creator/CreatorCredits";
 import ReportDialog from "../components/ui/ReportDialog";
@@ -60,6 +59,15 @@ function workEntry(work: CatalogWork): { kind: "release"; id: number } & Record<
 /** The FeedTile entry a listed post renders — same shape rule as a work's. */
 function postEntry(post: PostListItem): { kind: "post"; id: number } & Record<string, unknown> {
 	return { kind: "post", ...post };
+}
+
+/**
+ * The FeedTile entry a listed Project renders. A Project has its own tile shape, so it
+ * sits in the same grid as the creator's Works and posts rather than breaking the grid
+ * with a column card; `ProjectCard` is the Project page's own header, not a grid item.
+ */
+function projectEntry(project: Project): { kind: "project"; id: number } & Record<string, unknown> {
+	return { kind: "project", ...project };
 }
 
 type Tab =
@@ -775,13 +783,16 @@ export default function CreatorProfilePage() {
 						(allItems.length > 0 ? (
 							// The same uniform tile grid the feed renders — every listing
 							// surface shares one widget, so a creator's page reads like the
-							// feed the creator's releases also ride. Projects keep ProjectCard:
-							// a project has no tile shape.
+							// feed the creator's releases also ride. A Project uses the
+							// tile's own album shape, so all three kinds sit in one grid.
 							<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
 								{allItems.map((entry) => {
 									if (entry.type === "project") {
 										return (
-											<ProjectCard key={`proj-${entry.item.id}`} project={entry.item as Project} />
+											<FeedTile
+												key={`proj-${entry.item.id}`}
+												entry={projectEntry(entry.item as Project)}
+											/>
 										);
 									}
 									if (entry.type === "post") {
