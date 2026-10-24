@@ -36,6 +36,7 @@ import {
 } from "../services/auth.js";
 import { addBasketItem } from "../services/basket.js";
 import { releasedWorkCount } from "../services/creator-standing.js";
+import { discordConfigured } from "../services/discord.js";
 import { sendSignInCodeEmail, sendSignupCodeEmail } from "../services/email.js";
 import {
 	checkHandleAvailability,
@@ -337,6 +338,10 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		bio: user.bio,
 		isCreator: user.isCreator,
 		isVerifiedCreator: verifiedCreator({ isCreator: user.isCreator, releasedWorkCount: released }),
+		// Whether the settings card can offer the connection at all, and whether this account
+		// has taken it up. The ID itself stays server-side.
+		isDiscordAvailable: discordConfigured(),
+		isDiscordLinked: user.discordId !== null,
 		avatar: user.avatar,
 		headerImage: user.headerImage,
 		websiteUrl: user.websiteUrl,

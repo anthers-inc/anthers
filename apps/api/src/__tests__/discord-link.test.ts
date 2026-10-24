@@ -20,7 +20,7 @@ import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
-import { reconcileRoles } from "../services/discord";
+import { reconcileRoles, unlinkAccount } from "../services/discord";
 import { createAccount, type FixtureAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { insertWork } from "./work-fixtures";
@@ -186,6 +186,13 @@ describe("the link", () => {
 		expect(res.status).toBe(302);
 		expect(res.headers.get("location")).toContain("discord=linked");
 		expect(await linkedId(plain)).toBe(DISCORD_USER);
+		// The settings card reads this from the boot payload, which is why it rides there.
+		const auth = (await (
+			await req("/api/auth/me", { headers: { Cookie: plain.cookie } })
+		).json()) as {
+			user: { isDiscordLinked: boolean };
+		};
+		expect(auth.user.isDiscordLinked).toBe(true);
 
 		const join = calls.find(
 			(c) => c.method === "PUT" && c.url.endsWith(`/members/${DISCORD_USER}`),
@@ -248,6 +255,23 @@ describe("unlinking", () => {
 		// The member is still in the server, holding the role that lets them stay.
 		expect(members.get("933333333333333333")).toEqual([USER_ROLE]);
 	});
+
+	it("takes both roles when the account itself is being erased", async () => {
+		const account = await createAccount(`${RUN}erase`, { fields: { isCreator: true } });
+		await db
+			.update(users)
+			.set({ discordId: "977777777777777777" })
+			.where(eq(users.id, account.userId));
+		members.set("977777777777777777", [USER_ROLE, CREATOR_ROLE]);
+
+		calls.length = 0;
+		await unlinkAccount(account.userId, { revokeMembershipRole: true });
+
+		expect(written(roleWrites("977777777777777777"))).toEqual(
+			[`DELETE ${CREATOR_ROLE}`, `DELETE ${USER_ROLE}`].sort(),
+		);
+		expect(await linkedId(account)).toBeNull();
+	});
 });
 
 describe("the daily reconcile", () => {
@@ -277,5 +301,30 @@ describe("the daily reconcile", () => {
 		expect(written(roleWrites("944444444444444444"))).toEqual([`PUT ${USER_ROLE}`]);
 		expect(written(roleWrites("955555555555555555"))).toEqual([`DELETE ${CREATOR_ROLE}`]);
 		expect(members.get("944444444444444444")).toContain(ADMIN_ROLE);
+	});
+});
+
+describe("the creator-mode hook", () => {
+	it("takes the Creator role back when creator mode is turned off in settings", async () => {
+		const account = await createAccount(`${RUN}toggle`, { fields: { isCreator: true } });
+		await insertWork({ creatorId: account.userId, type: "text" });
+		await link(account, "966666666666666666");
+		expect(members.get("966666666666666666")?.sort()).toEqual([USER_ROLE, CREATOR_ROLE].sort());
+
+		calls.length = 0;
+		const res = await req("/api/accounts/me", {
+			method: "PATCH",
+			headers: {
+				"Content-Type": "application/json",
+				Origin: "http://localhost:3000",
+				Cookie: account.cookie,
+			},
+			body: JSON.stringify({ isCreator: false }),
+		});
+
+		expect(res.status).toBe(200);
+		expect(written(roleWrites("966666666666666666"))).toEqual([`DELETE ${CREATOR_ROLE}`]);
+		// The membership is untouched — only the role the standing no longer earns.
+		expect(members.get("966666666666666666")).toEqual([USER_ROLE]);
 	});
 });

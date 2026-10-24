@@ -217,6 +217,7 @@ import {
 	notifyCreditedAccounts,
 	rejectCredit,
 } from "../services/credit-acceptance.js";
+import { syncAccountRoles } from "../services/discord.js";
 import { electToKeep, KEEP_REFUSAL_COPY, releaseKeep } from "../services/keeping.js";
 import {
 	permanentWorkIds,
@@ -6465,6 +6466,17 @@ const contentRoutes = new Hono()
 		// (and an un-release/re-release) to one notification. See `notifyCreditedAccounts`.
 		if (releasing || (data.credits !== undefined && updated.visibility === "released")) {
 			await notifyCreditedAccounts(updated, user.id);
+		}
+
+		// The first release is what makes an account a verified creator, so it is the moment
+		// the Discord Creator role is owed. Best-effort: the daily reconcile repairs a
+		// failure, and a release must never fail because Discord is down.
+		if (releasing && !work.releasedAt) {
+			try {
+				await syncAccountRoles(user.id);
+			} catch (error) {
+				console.error("[discord] role sync after a first release failed", error);
+			}
 		}
 
 		// ⭐ **Fired on every edit rather than only on release**, because the record carries the

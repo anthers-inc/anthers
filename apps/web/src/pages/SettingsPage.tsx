@@ -26,6 +26,7 @@ import {
 	PLAYER_SHORTCUT_ACTIONS,
 	resolveKeyboardShortcuts,
 } from "@anthers/shared/keybindings";
+import DiscordCard from "@anthers/web-shared/account/DiscordCard";
 import SignedInAccountCard from "@anthers/web-shared/account/SignedInAccountCard";
 import { useAuth } from "@anthers/web-shared/auth";
 import { useContentPreferences } from "@anthers/web-shared/content-preferences";
@@ -2832,6 +2833,10 @@ export default function SettingsPage() {
 					{/* Who this browser is signed in as, and the button that ends it. The header
 					    menu no longer carries Log Out; both settings pages do. */}
 					<SignedInAccountCard className="mb-6" />
+
+					{/* The Discord connection, directly under the card that says who this is —
+					    the two answer "who am I here" and "where else am I known". */}
+					<DiscordCard surface="account" className="mb-6" />
 
 					{/* Creator mode toggle */}
 					<div

@@ -261,7 +261,10 @@ export async function syncAccountRoles(userId: number): Promise<boolean> {
  * whether or not the role removal succeeds — the daily reconcile never sees the account again,
  * which is the intended end state either way.
  */
-export async function unlinkAccount(userId: number): Promise<void> {
+export async function unlinkAccount(
+	userId: number,
+	options: { revokeMembershipRole?: boolean } = {},
+): Promise<void> {
 	const config = discordConfig();
 	const [user] = await db
 		.select({ discordId: users.discordId })
@@ -271,10 +274,18 @@ export async function unlinkAccount(userId: number): Promise<void> {
 	if (!user?.discordId) return;
 
 	if (config) {
-		try {
-			await removeRole(user.discordId, config.creatorRoleId);
-		} catch (error) {
-			console.error("[discord] creator role removal failed during unlink", error);
+		// The Creator role always; the membership role too when the account itself is going
+		// away, because nothing in the database will identify this member afterwards.
+		const roles = options.revokeMembershipRole
+			? [config.creatorRoleId, config.userRoleId]
+			: [config.creatorRoleId];
+		const results = await Promise.allSettled(
+			roles.map((roleId) => removeRole(user.discordId as string, roleId)),
+		);
+		for (const result of results) {
+			if (result.status === "rejected") {
+				console.error("[discord] role removal failed during unlink", result.reason);
+			}
 		}
 	}
 	await db.update(users).set({ discordId: null }).where(eq(users.id, userId));

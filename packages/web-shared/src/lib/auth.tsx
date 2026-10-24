@@ -27,6 +27,10 @@ export interface User {
 	 * Derived on the server (`@anthers/shared/verified-creator`), never written by a client.
 	 */
 	isVerifiedCreator: boolean;
+	/** Whether this deployment can offer the Discord link at all. */
+	isDiscordAvailable: boolean;
+	/** Whether this account has linked its Discord identity. */
+	isDiscordLinked: boolean;
 	avatar: string | null;
 	headerImage: string | null;
 	websiteUrl: string | null;
