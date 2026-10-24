@@ -268,16 +268,6 @@ export const THUMBNAIL_RULE =
 	"Thumbnail must not contain Mature or Adult content. This makes it easier for us to keep public feeds safe for all users.";
 
 /**
- * Whether a Work of this type must carry a thumbnail its creator chose before it is released,
- * uploaded or picked from a frame. Only a video: *"this is how every other video platform works"*
- * (Parker, 2026-09-18), and a still taken on the creator's behalf could be any moment of a Mature
- * or Adult video. Every other kind shows a placeholder until its creator gives it one.
- */
-export function needsChosenThumbnail(type: string): boolean {
-	return type === "video";
-}
-
-/**
  * Whether a Work of this type is its own thumbnail and takes no other. Only an image, where the
  * Work and its thumbnail are the same picture, so the Work's rating decides how the thumbnail is
  * shown, as it decides how the Work is.

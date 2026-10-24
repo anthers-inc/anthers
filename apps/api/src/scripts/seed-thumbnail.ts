@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Give a seeded video the thumbnail its creator would have chosen, taken from a frame of its clip.
+ * Give a seeded video a thumbnail its creator would have chosen, taken from a frame of its clip.
  *
- * A released video always has one: release refuses a video without (`thumbnail_missing`), and
- * nothing takes one on a creator's behalf (Parker, 2026-09-18). The seeds release their Works
- * directly rather than through that gate, so they stand in for the creator here, or a fixture
- * would be a released video in a state no real path produces.
+ * Optional since 2026-10-24 — a Work may be released with no thumbnail and show its kind's
+ * poster instead — and kept so a seeded catalog looks like a real one: picking a frame is a path
+ * creators take, and the seeds release their Works directly rather than through the Studio, so
+ * they stand in for the creator here.
  */
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";

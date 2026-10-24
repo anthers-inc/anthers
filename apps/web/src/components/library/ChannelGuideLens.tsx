@@ -37,6 +37,8 @@
  * stream's page.** The component renders whatever channels its host translates — that
  * translation for all three corpora is {@link channelGuideChannelsFromShelf}.
  */
+
+import WorkPoster from "@anthers/web-shared/content/work-poster";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
@@ -266,12 +268,14 @@ export default function ChannelGuideLens({
 						// schedule's fact — and the player pane becomes the route to
 						// unlock, the same treatment a locked entry gets on the shelf.
 						<div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-box bg-base-200">
-							{work.thumbnail && (
+							{work.thumbnail ? (
 								<img
 									src={work.thumbnail}
 									alt=""
 									className="absolute inset-0 h-full w-full object-cover opacity-40 blur-sm"
 								/>
+							) : (
+								<WorkPoster type={work.type} className="absolute inset-0 h-full w-full" />
 							)}
 							<div className="relative z-10 flex flex-col items-center gap-2 text-center">
 								<LockClosedIcon className="size-10 text-base-content/50" />
@@ -780,9 +784,7 @@ function ProgramBlock({
 				{work.thumbnail ? (
 					<img src={work.thumbnail} alt="" className="h-full w-full object-cover" loading="lazy" />
 				) : (
-					<span className="flex h-full w-full items-center justify-center">
-						<TvIcon className="size-5 text-base-content/25" />
-					</span>
+					<WorkPoster type={work.type} variant="thumb" className="h-full w-full" />
 				)}
 				{variant !== "rail" && (
 					// The affordance the guide offers on a program: you tune to it.
