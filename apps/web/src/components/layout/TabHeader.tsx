@@ -10,7 +10,7 @@
  *
  * The subtitle is the tab's promise, so it is real prose rather than a label: Network
  * says what the stream is made of, Library says what is kept, and Discovery says how
- * its formula works. `actions` is where a tab's own control rides at the right edge,
+ * its recipe works. `actions` is where a tab's own control rides at the right edge,
  * which is how Network keeps its "How does the feed work?" affordance.
  */
 

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * `discovery`'s suite — the two claims Discovery's formula bar makes: the mix is a real
- * permutation that spreads one creator's run across the page, and the stages the bar
- * renders say what actually ran on both modes.
+ * `discovery`'s suite — the claims Discovery's recipe bar makes: the mix is a real
+ * permutation that spreads one creator's run across the page, the stages the bar
+ * renders say what actually ran, and the Graph's deferred recipe still names the
+ * fallback it would run.
  *
  * 🚨 **The absence is half the test.** An `interleaveByAuthor` that returned its input
  * unchanged would pass every "every entry survives" assertion, so each mix test names
@@ -11,11 +12,11 @@
 import { describe, expect, test } from "bun:test";
 import {
 	type DiscoveryReason,
-	graphFormula,
+	graphRecipe,
 	interleaveByAuthor,
 	isDiscoveryReason,
 	reasonForSource,
-	tickerFormula,
+	streamRecipe,
 } from "./discovery";
 
 type Entry = { id: number; creatorId: number | null };
@@ -117,7 +118,7 @@ describe("reasonForSource", () => {
 		}
 	});
 
-	test("says the Ticker's own reason rather than borrowing a follow", () => {
+	test("says Discovery's own reason rather than borrowing a follow", () => {
 		expect(reasonForSource("discovery").label).toBe("Newest across Anthers");
 		expect(reasonForSource("discovery").code).not.toBe("following");
 	});
@@ -132,26 +133,24 @@ describe("reasonForSource", () => {
 	});
 });
 
-describe("the formula bar's stages", () => {
-	test("names all three stages for both Ticker windows", () => {
+describe("the recipe bar's stages", () => {
+	test("names all three stages for every window", () => {
 		for (const window of ["all", "day", "week"] as const) {
-			const formula = tickerFormula({ window });
-			expect(formula.stages.map((stage) => stage.stage)).toEqual(["candidates", "signals", "mix"]);
-			expect(formula.sentence).toContain("newest Works and Posts");
+			const recipe = streamRecipe({ window });
+			expect(recipe.stages.map((stage) => stage.stage)).toEqual(["candidates", "signals", "mix"]);
+			expect(recipe.sentence).toContain("newest Works and Posts");
 		}
 	});
 
 	test("states the window the reader chose and the mix that actually ran", () => {
-		expect(tickerFormula({ window: "day" }).sentence).toContain("last 24 hours");
-		expect(tickerFormula({ window: "week" }).stages[1]?.label).toContain("seven days");
-		expect(tickerFormula({ window: "all" }).stages[1]?.label).toBe("Newest first");
-		expect(tickerFormula({ window: "all" }).stages[2]?.label).toBe(
-			"One card per creator per round",
-		);
+		expect(streamRecipe({ window: "day" }).sentence).toContain("last 24 hours");
+		expect(streamRecipe({ window: "week" }).stages[1]?.label).toContain("seven days");
+		expect(streamRecipe({ window: "all" }).stages[1]?.label).toBe("Newest first");
+		expect(streamRecipe({ window: "all" }).stages[2]?.label).toBe("One card per creator per round");
 	});
 
-	test("renders the graph's follower fallback as the formula that ran, not the network one", () => {
-		const fallback = graphFormula({ basis: "followers", minShared: 2 });
+	test("renders the graph's follower fallback as the recipe that ran, not the network one", () => {
+		const fallback = graphRecipe({ basis: "followers", minShared: 2 });
 		expect(fallback.sentence).toContain("You follow nobody yet");
 		expect(fallback.stages.map((stage) => stage.label)).toEqual([
 			"Every creator",
@@ -159,7 +158,7 @@ describe("the formula bar's stages", () => {
 			"Ranked straight, one card per creator",
 		]);
 
-		const network = graphFormula({ basis: "network", minShared: 3 });
+		const network = graphRecipe({ basis: "network", minShared: 3 });
 		expect(network.sentence).toContain("at least 3 of the people you follow");
 		expect(network.stages[1]?.label).toContain("at least 3");
 	});

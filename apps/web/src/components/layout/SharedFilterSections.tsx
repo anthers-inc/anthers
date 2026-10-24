@@ -21,9 +21,8 @@
  * An `access` prop — the tab's Access filter, supplied where the content carries
  * access state — renders the Access section FIRST among the shared filters (Parker,
  * 2026-10-11: the Library now holds locked saves, which is what earned the row there).
- * Discovery supplies it only in Ticker mode, where the stream carries an access
- * verdict; Graph is about people, not deliverables, so the section is omitted there
- * rather than left inert.
+ * Discovery supplies it too: its stream is the whole site's newest Works and Posts, so
+ * every card carries an access verdict.
  *
  * The Tags section is the Network's shape, carried over unchanged: the tags the user
  * filtered on are the only ones that render, and a search names candidates over the
