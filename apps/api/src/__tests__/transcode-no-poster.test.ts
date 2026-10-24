@@ -5,9 +5,9 @@
  * 🚨 **A video's thumbnail is its creator's choice, uploaded or picked from a frame** (Parker,
  * 2026-09-18: *"this is how every other video platform works"*). A still the platform takes could
  * be any moment of a Mature or Adult video, and a thumbnail is what feeds show to everybody, so
- * the transcode leaves the Work without one and release refuses it until the creator chooses
- * (`thumbnail_missing`). This runs the real job on a real video, because what is under test is
- * which code the job calls, which no stub can show.
+ * the transcode leaves the Work without one — and since 2026-10-24 a Work may be released that
+ * way, showing its kind's poster instead. This runs the real job on a real video, because what
+ * is under test is which code the job calls, which no stub can show.
  */
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { rm } from "node:fs/promises";

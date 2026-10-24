@@ -136,26 +136,28 @@ describe("a video Work whose file has not arrived", () => {
 		expect((await res.json()).code).toBe("media_not_ready");
 	});
 
-	it("waits for a thumbnail its creator chose once processing has finished", async () => {
+	it("does not ask for a thumbnail once processing has finished", async () => {
 		await db
 			.update(transcodingJobs)
 			.set({ status: "completed", progress: 100 })
 			.where(eq(transcodingJobs.workId, workId));
-		// Nothing took one on the creator's behalf, so there is none until they choose.
+		// Nothing took one on the creator's behalf, and release no longer asks for one: a Work
+		// with no thumbnail shows its kind's poster instead (Parker, 2026-10-24). What is still
+		// owed is the scan of the video's own bytes.
 		const [row] = await db.select().from(works).where(eq(works.id, workId));
 		expect(row.thumbnail ?? "").toBe("");
 		const res = await release(workId);
 		expect(res.status).toBe(409);
-		expect((await res.json()).code).toBe("thumbnail_missing");
+		expect((await res.json()).code).toBe("scan_pending");
 	});
 
-	it("releases once it has a thumbnail and the scans have answered", async () => {
-		const thumbnail = KEY("chosen-frame.jpg");
-		expect((await call("PATCH", `/api/content/works/${workId}`, { thumbnail })).status).toBe(200);
-		await db.insert(mediaScans).values([
-			{ storageKey: sourceKey(), workId, determination: "clean", scannedAt: new Date() },
-			{ storageKey: thumbnail, workId, determination: "clean", scannedAt: new Date() },
-		]);
+	it("releases once the scans have answered", async () => {
+		await db.insert(mediaScans).values({
+			storageKey: sourceKey(),
+			workId,
+			determination: "clean",
+			scannedAt: new Date(),
+		});
 		const res = await release(workId);
 		expect(res.status).toBe(200);
 		expect((await res.json()).work.visibility).toBe("released");

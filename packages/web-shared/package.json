@@ -50,6 +50,7 @@
 		"./content/HostedEmbed": "./src/components/content/HostedEmbed.tsx",
 		"./content/MentionTitleInput": "./src/components/content/MentionTitleInput.tsx",
 		"./content/work-media": "./src/components/content/work-media.tsx",
+		"./content/work-poster": "./src/components/content/work-poster.tsx",
 		"./content/WorkWebBuildSection": "./src/components/content/WorkWebBuildSection.tsx",
 		"./content/work-state": "./src/components/content/work-state.ts",
 		"./content/RatingAppeal": "./src/components/content/RatingAppeal.tsx",
