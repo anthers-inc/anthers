@@ -25,7 +25,7 @@ import { expect, test } from "./fixtures";
  * links. Pointing a test at it lands on `RootRedirect`'s spinner while `/auth/me`
  * resolves, which is how the first draft of this file "passed": see `copy()`.
  */
-const PAGES = ["/", "/for-creators", "/about", "/faq", "/parents", "/roadmap", "/release-notes"];
+const PAGES = ["/", "/for-creators", "/about", "/faq", "/parents", "/release-notes"];
 
 /**
  * Navigate, prove the page actually rendered, and hand back its text.

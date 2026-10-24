@@ -29,13 +29,13 @@
 //
 // Scoped to specific pages on purpose. /about and /resources/how-money-moves are
 // the two pages whose subject is the organization's own money; everything else is
-// the wrong tool: RETIRED_COPY in `scripts/econ-figures.ts` runs repo-wide, and
-// RoadmapPage says "first 990 filed" as a **future milestone on a timeline**, which
-// is exactly correct there. A repo-wide rule would need an `econ:allow` on honest
-// copy, which is how a guard becomes noise people route around. A page whose
-// subject is the organization's own money joins this scan the day it ships — the
-// /resources/revenue drawing was the second such page until 2026-10-15, when the
-// mechanism page replaced it.
+// the wrong tool: RETIRED_COPY in `scripts/econ-figures.ts` runs repo-wide, and the
+// wiki roadmap lists the first Form 990 as a **future milestone in its filings
+// checklist**, which is exactly correct there. A repo-wide rule would need an
+// `econ:allow` on honest copy, which is how a guard becomes noise people route around.
+// A page whose subject is the organization's own money joins this scan the day it
+// ships — the /resources/revenue drawing was the second such page until 2026-10-15,
+// when the mechanism page replaced it.
 //
 // Sources: the wiki's *How Anthers Talks About Itself* § Claims (what may be said), Organizational Structure § Phase 1 (what is true).
 
