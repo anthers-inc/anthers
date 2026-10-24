@@ -64,7 +64,7 @@ function postEntry(post: PostListItem): { kind: "post"; id: number } & Record<st
 /**
  * The FeedTile entry a listed Project renders. A Project has its own tile shape, so it
  * sits in the same grid as the creator's Works and posts rather than breaking the grid
- * with a column card; `ProjectCard` is the Project page's own header, not a grid item.
+ * with a column card of its own.
  */
 function projectEntry(project: Project): { kind: "project"; id: number } & Record<string, unknown> {
 	return { kind: "project", ...project };
