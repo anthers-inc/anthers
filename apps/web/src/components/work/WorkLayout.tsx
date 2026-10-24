@@ -612,6 +612,7 @@ export function WorkDeliverable({
 	startSeconds = null,
 	persistentMiniPlayer = false,
 	framed = true,
+	overlay,
 }: {
 	work: WorkDetail;
 	shareToken?: string | null;
@@ -648,6 +649,13 @@ export function WorkDeliverable({
 	 * medium with no page shape to hold.
 	 */
 	framed?: boolean;
+	/**
+	 * Stands over the medium rather than under it — the shared-with affordance. It rides
+	 * the page's media card when there is one, and a positioned wrapper of its own when
+	 * `framed` is false, so the embed route has the same placement without a page shape to
+	 * hang it on. Both carry `group` and `data-media-stage` for it (`SharedWorkNotice`).
+	 */
+	overlay?: ReactNode;
 }) {
 	/** The chapters the description carries — one parse, shared by every player branch. */
 	const chapters = useMemo(() => workChapters(work.description ?? ""), [work.description]);
@@ -669,14 +677,17 @@ export function WorkDeliverable({
 	const frame = (node: ReactNode, fill = false) => {
 		const meter = holdsMeter ? <PublicAccessFooter /> : undefined;
 		return framed ? (
-			<WorkMediaFrame fill={fill} footer={meter}>
+			<WorkMediaFrame fill={fill} footer={meter} overlay={overlay}>
 				{node}
 			</WorkMediaFrame>
 		) : (
-			<>
+			// The embed's bare window: no card to hold the page's shape, but the overlay still
+			// needs a positioned, hoverable box around the medium it stands over.
+			<div className="group relative h-full w-full" data-media-stage>
 				{node}
 				{meter}
-			</>
+				{overlay}
+			</div>
 		);
 	};
 	return (
