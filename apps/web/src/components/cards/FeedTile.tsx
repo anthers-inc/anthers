@@ -703,6 +703,14 @@ function PostTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtras 
 					</p>
 				)}
 				<div className="flex items-center gap-1.5 mt-auto pt-1 flex-wrap">
+					{/* The kind chip every other tile carries. A post's band is its words or
+					    its linked Work's art, so without this a post reads as a Work with an
+					    odd thumbnail — on the feed where it sits beside releases and on the
+					    Library shelf where it sits beside everything kept. */}
+					<span className="badge badge-sm gap-1">
+						<DocumentTextIcon className="w-3 h-3" />
+						Post
+					</span>
 					{post.linkedWorkCount > 0 && (
 						<span className="badge badge-sm badge-ghost gap-1">
 							<LinkIcon className="w-3 h-3" />
