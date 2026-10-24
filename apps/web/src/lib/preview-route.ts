@@ -4,8 +4,8 @@
  *
  * The shell ships one site-level card because a folder of files cannot know which Work a
  * URL names. The server can, and this is the half that decides *which* it is: a Work's own
- * page, or the share link a Work was pasted as. Both resolve to the same card, and both
- * declare the Work's page as their canonical address rather than the address they were
+ * page, a post's permalink, or the share link a Work was pasted as. Each resolves to a card,
+ * and each declares the document's own canonical address rather than the address it was
  * fetched at — a share link is a locator and never a page of its own, so `/s/{token}` must
  * not claim to be one.
  *
@@ -30,6 +30,13 @@ export type PreviewRoute =
 			canonicalPath: string;
 	  }
 	| {
+			kind: "post";
+			/** The post's `slug` or `slug-publicId`, as the permalink carries it. */
+			param: string;
+			/** Where the post canonically lives, as a path. */
+			canonicalPath: string;
+	  }
+	| {
 			kind: "share";
 			/** The opaque share token, which the API resolves to a Work. */
 			token: string;
@@ -38,6 +45,9 @@ export type PreviewRoute =
 
 /** `/works/{slug}-{publicId}` — a Work's own page. */
 const WORK_PATH = /^\/works\/([^/]+)\/?$/;
+
+/** `/posts/{slug}-{publicId}` — a post's permalink. */
+const POST_PATH = /^\/posts\/([^/]+)\/?$/;
 
 /**
  * `/s/{token}` — where a share link lands — and `/embed/{token}`, the same token rendered as
@@ -49,6 +59,8 @@ const SHARE_PATH = /^\/(?:s|embed)\/([^/]+)\/?$/;
 export function previewRoute(pathname: string): PreviewRoute {
 	const work = WORK_PATH.exec(pathname);
 	if (work) return { kind: "work", param: work[1], canonicalPath: `/works/${work[1]}` };
+	const post = POST_PATH.exec(pathname);
+	if (post) return { kind: "post", param: post[1], canonicalPath: `/posts/${post[1]}` };
 	const share = SHARE_PATH.exec(pathname);
 	if (share) return { kind: "share", token: share[1] };
 	return null;
