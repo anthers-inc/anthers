@@ -160,7 +160,9 @@ export default function WorkUploadForm({ onCreated }: WorkUploadFormProps) {
 		const input: WorkInput & { type: ContentType } = {
 			type,
 			title: title.trim() || (hosted ? hosted.name : file ? titleFromFileName(file.name) : ""),
-			access: serializeAccessRows([{ threshold: 0, label: "Everyone", allow: true, price: "0" }]),
+			access: serializeAccessRows([
+				{ badgeId: null, threshold: 0, label: "Everyone", allow: true, price: "0" },
+			]),
 		};
 		try {
 			const res = await client.api.content.works.$post({ json: input });

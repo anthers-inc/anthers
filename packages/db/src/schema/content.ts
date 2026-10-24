@@ -29,20 +29,23 @@ import { users } from "./auth.js";
  * A Work has **one access table**, and every row is a **monthly dollar** threshold pointed
  * at the Work's own creator.
  *
- * `threshold` is **dollars** — never a count, never a list position. 🚨 A creator sets
- * their own levels to any amount, so there is no shared price that could leak into a
- * stored row — and storing a count would
- * instead bake in a conversion that no longer means anything. A gate needs no Badge to sit
- * on it: with Badges at $2 and $4, a gate at $3 is legal and a user giving $3 clears it.
+ * `threshold` is **dollars** — never a count, never a list position. 🚨 **A gate sits on one
+ * of the creator's own Badge rungs**: `badgeId` names the rung, and the threshold stored
+ * beside it is that rung's amount as of the last write, kept so resolution compares a number
+ * rather than loading a ladder. The Everyone baseline row (`threshold: 0`) is the one row
+ * with no Badge, and it is not a gate at all: allowed at $0 it makes a Work Public Access;
+ * carrying a price it makes the Work purchasable by anyone.
  *
- * `threshold: 0` is the **baseline** row — everyone. It is what makes a Work free to all
- * (allow, price 0) or buyable by all (allow, price > 0), and it is not a gate at all.
+ * 🚨 **Two ways to gate and no third** (Parker, 2026-10-23): a Badge rung, or a price. A
+ * gate at an amount no rung occupies was legal until then and is retired — it could not be
+ * authored in the Studio, which renders the table as the baseline plus one row per rung, so
+ * any such row was invisible to its creator and deleted on their next save.
  *
  * 🚨 **ONE table, and a second one is a model change rather than a refactor.** A
  * platform-side gate reading the user's own Badge stratifies the commons — better public
  * content behind a higher Badge, beside worse public content that is actually free — which
  * is a class-of-citizen problem inside the one part of the platform that exists in order
- * not to have one. A Work is gated by its creator or it is **Public Access**, and a Badge
+ * not to have one. A Work is gated by its creator or it is **Public Access**, and a badge
  * opens nothing. Reasoning: `30.01 Creator Content Gates` § 4.1b; model: `11.01 Support
  * Model Overview`.
  *
@@ -56,6 +59,12 @@ import { users } from "./auth.js";
 export interface AccessRow {
 	/** Monthly dollars required to qualify for this row. 0 = everyone. */
 	threshold: number;
+	/**
+	 * The Badge rung this row gates at; absent on the Everyone baseline and on rows written
+	 * before the reference existed. `normalizeAccessRows` stamps it on every save, and the
+	 * backfill script (`db:gate-badges`) fills it on stored rows.
+	 */
+	badgeId?: number | null;
 	allow: boolean;
 	/** Money string; "0" = free at this threshold when allowed. */
 	price: string;
