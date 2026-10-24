@@ -2,10 +2,11 @@
 //
 // The Channel Guide's model — the rules Parker pinned (2026-10-11) in pure form:
 // a column is a recency *rank* ("latest plus one" aligns across channels without
-// agreeing on a real time), next is UP toward more recent and ends at the top, and
-// autoplay is off until a user turns it on, then remembered on this device. The same
-// localStorage stand-in `listen-positions.test.ts` runs against, because a throwing
-// store must never take the guide down either.
+// agreeing on a real time), next is one rank toward the newest and ends there, and
+// autoplay is off until a user turns it on, then remembered on this device. The
+// orientation (2026-10-24) is a device preference too: columns by default, rows when
+// the reader flips it. The same localStorage stand-in `listen-positions.test.ts` runs
+// against, because a throwing store must never take the guide down either.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { Work } from "@anthers/web-shared/types";
 import {
@@ -15,7 +16,9 @@ import {
 	nextProgramIndex,
 	previousProgramIndex,
 	readAutoplay,
+	readOrientation,
 	writeAutoplay,
+	writeOrientation,
 } from "./channel-guide";
 
 function work(partial: Partial<Work> & { id: number }): Work {
@@ -107,10 +110,11 @@ describe("compareChannelNames — the row's order", () => {
 	});
 });
 
-describe("next is up", () => {
-	// A column is latest-first: index 0 is the newest, so NEXT one step more recent
-	// is index − 1, and the guide ends at the newest, never wraps.
-	test("next steps upward toward more recent", () => {
+describe("next is toward the newer end", () => {
+	// Programs sit latest-first: index 0 is the newest, so NEXT one rank more recent is
+	// index − 1. In columns that is the block above; in rows it is the block to the
+	// right. The guide ends at the newest either way, never wrapping.
+	test("next steps toward more recent", () => {
 		expect(nextProgramIndex(3)).toBe(2);
 		expect(nextProgramIndex(1)).toBe(0);
 	});
@@ -119,13 +123,13 @@ describe("next is up", () => {
 		expect(nextProgramIndex(0)).toBeNull();
 	});
 
-	test("previous steps down toward older, and the oldest has none", () => {
+	test("previous steps toward older, and the oldest has none", () => {
 		expect(previousProgramIndex(0, 5)).toBe(1);
 		expect(previousProgramIndex(4, 5)).toBeNull();
 	});
 });
 
-describe("autoplay is a user's choice", () => {
+describe("device preferences are a user's choice", () => {
 	class MemoryStorage {
 		private data = new Map<string, string>();
 		getItem(key: string): string | null {
@@ -150,15 +154,32 @@ describe("autoplay is a user's choice", () => {
 		Object.assign(globalThis, { localStorage: realStorage });
 	});
 
-	test("off with nothing remembered", () => {
+	test("autoplay is off with nothing remembered", () => {
 		expect(readAutoplay()).toBe(false);
 	});
 
-	test("a turned-on preference sticks; turning it off unsticks it", () => {
+	test("a turned-on autoplay preference sticks; turning it off unsticks it", () => {
 		writeAutoplay(true);
 		expect(readAutoplay()).toBe(true);
 		writeAutoplay(false);
 		expect(readAutoplay()).toBe(false);
 		expect(store.getItem("anthers_guide_autoplay")).toBeNull();
+	});
+
+	test("the guide reads as columns with nothing remembered", () => {
+		expect(readOrientation()).toBe("columns");
+	});
+
+	test("flipping to rows sticks, and flipping back returns the default", () => {
+		writeOrientation("rows");
+		expect(readOrientation()).toBe("rows");
+		writeOrientation("columns");
+		expect(readOrientation()).toBe("columns");
+		expect(store.getItem("anthers_guide_orientation")).toBeNull();
+	});
+
+	test("an unrecognized stored value falls back to columns", () => {
+		store.setItem("anthers_guide_orientation", "sideways");
+		expect(readOrientation()).toBe("columns");
 	});
 });
