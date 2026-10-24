@@ -563,7 +563,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						blurb: "What you give Anthers each month is your Badge. There is no plan to choose.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
-						doc: { id: "21.01", title: "Badges" },
+						doc: { id: "21.02", title: "Anthers Badges" },
 					},
 					{
 						id: "badge-maker",
@@ -582,7 +582,7 @@ export const ROADMAP: RoadmapGroup[] = [
 							"Split what you give across the creators you spend time with, and see where it went.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
-						doc: { id: "21.02", title: "Directing Your Support" },
+						doc: { id: "21.03", title: "Directing Your Support" },
 					},
 					{
 						id: "stickers",
@@ -591,7 +591,7 @@ export const ROADMAP: RoadmapGroup[] = [
 							"Hand part of your Time Pool to a creator you choose, rather than having all of it shared out by the time you spend.",
 						bucket: "launched",
 						quarter: SHIPPED_SO_FAR,
-						doc: { id: "21.01", title: "Badges" },
+						doc: { id: "21.02", title: "Anthers Badges" },
 					},
 					{
 						id: "own-amount",
@@ -599,7 +599,7 @@ export const ROADMAP: RoadmapGroup[] = [
 						blurb: "Deciding what Anthers is worth to you, at any number rather than one of ours.",
 						bucket: "active",
 						note: "A creator's page takes any amount. Anthers' page does not.",
-						doc: { id: "21.01", title: "Badges" },
+						doc: { id: "21.02", title: "Anthers Badges" },
 					},
 					{
 						id: "badge-perks",
@@ -608,7 +608,7 @@ export const ROADMAP: RoadmapGroup[] = [
 							"Giving above the Public Access price buys no more access, by design. What it carries instead must make nobody else poorer.",
 						bucket: "active",
 						note: "Stickers, the ruled storage ladder, merch and purchase preservation are built.",
-						doc: { id: "21.01", title: "Badges" },
+						doc: { id: "21.02", title: "Anthers Badges" },
 					},
 				],
 			},
