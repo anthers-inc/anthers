@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Discovery's formula, as three named stages rather than a sentence about a query.
+ * Discovery's recipe, as three named stages rather than a sentence about a query.
  *
  * The page promises that a reader can always see how the corpus is being drawn and
  * change it, and the promise is architectural: **candidates** decide what is eligible,
  * **signals** decide what is scored and how, and **mix** decides the order the reader
- * actually sees. Both ends of Discovery read this module, so the formula a mode renders
+ * actually sees. The page and the route read this module, so the recipe the bar renders
  * and the ranking the route ran are the same object rather than two descriptions that
  * drift.
  *
@@ -22,7 +22,7 @@
  * client may switch on and is never parsed out of the label.
  */
 
-/** The three stages every Discovery formula names, in the reading order of its bar. */
+/** The three stages every Discovery recipe names, in the reading order of its bar. */
 export const DISCOVERY_STAGES = ["candidates", "signals", "mix"] as const;
 export type DiscoveryStage = (typeof DISCOVERY_STAGES)[number];
 
@@ -35,7 +35,7 @@ export const DISCOVERY_STAGE_LABELS: Record<DiscoveryStage, string> = {
 
 /**
  * Why a feed entry is in front of the reader, as the API states it. `discovery` is
- * unique to Discovery's Ticker; the rest are the network feed's own routes in.
+ * unique to Discovery's whole-site stream; the rest are the network feed's own routes in.
  */
 export const FEED_ENTRY_SOURCES = ["own", "following", "subscribed", "saved", "discovery"] as const;
 export type FeedEntrySource = (typeof FEED_ENTRY_SOURCES)[number];
@@ -49,23 +49,23 @@ export interface DiscoveryReason {
 	label: string;
 }
 
-/** One stage of a formula, as the bar shows it. */
-export interface FormulaStage {
+/** One stage of a recipe, as the bar shows it. */
+export interface RecipeStage {
 	stage: DiscoveryStage;
 	label: string;
 }
 
-/** A formula the page can render and a reader can hold the ranking against. */
-export interface DiscoveryFormula {
-	/** One sentence saying what the pipeline does. */
+/** A recipe the page can render and a reader can hold the ranking against. */
+export interface DiscoveryRecipe {
+	/** One sentence saying what the recipe does. */
 	sentence: string;
 	/** The three stages, each saying what it did in this run. */
-	stages: FormulaStage[];
+	stages: RecipeStage[];
 }
 
-/** The Ticker's window, over the entries the route already returned. */
-export const TICKER_WINDOWS = ["all", "day", "week"] as const;
-export type TickerWindow = (typeof TICKER_WINDOWS)[number];
+/** The recipe's window, over the entries the route already returned. */
+export const RECIPE_WINDOWS = ["all", "day", "week"] as const;
+export type RecipeWindow = (typeof RECIPE_WINDOWS)[number];
 
 /** Which corpus the Graph draws from: the reader's network, or everyone. */
 export type GraphBasis = "network" | "followers";
@@ -144,12 +144,12 @@ export function interleaveByAuthor<T>(
 }
 
 /**
- * The Ticker's formula: every creator's newest work and posts, newest first, mixed so
+ * Discovery's recipe: every creator's newest work and posts, newest first, mixed so
  * that one busy account cannot take the page. The window is applied by the page over
  * the page the route returned, so it is stated here rather than pretending the server
  * filtered it.
  */
-export function tickerFormula(input: { window: TickerWindow }): DiscoveryFormula {
+export function streamRecipe(input: { window: RecipeWindow }): DiscoveryRecipe {
 	const windowLabel =
 		input.window === "day"
 			? "Published in the last 24 hours, newest first"
@@ -174,12 +174,16 @@ export function tickerFormula(input: { window: TickerWindow }): DiscoveryFormula
 }
 
 /**
- * The Graph's formula. With a network to trace, the candidate set is the creators the
+ * The Graph's recipe. With a network to trace, the candidate set is the creators the
  * people the reader follows follow, and the one signal is how many of those people
  * share the follow; with nobody followed, the route says so and falls back to follower
- * count, which this builder renders as the formula it actually ran.
+ * count, which this builder renders as the recipe it actually ran.
+ *
+ * No page draws this today: the graph ranks nearly everyone a reader can already see
+ * until there is enough content for the edges to say something. It stays beside
+ * `GET /me/graph` for the page that returns to it.
  */
-export function graphFormula(input: { basis: GraphBasis; minShared: number }): DiscoveryFormula {
+export function graphRecipe(input: { basis: GraphBasis; minShared: number }): DiscoveryRecipe {
 	if (input.basis === "followers") {
 		return {
 			sentence:
