@@ -8,13 +8,13 @@
  * Work's own title, blurb and thumbnail (see `src/lib/share-head.ts`). Nothing else about
  * the page changes, so the SPA, its routes and its own data fetches are untouched.
  *
- * 🚨 **A Work's page, a post's permalink and the share link that points at a Work all carry
- * that card.** A `/s/{token}` link is what the Share button hands a sharer, so it is the
- * address that actually gets pasted — and the token carries no slug, so the shell cannot
- * describe it without asking. The token resolves through the API's own read, each card comes
- * from the endpoint its document family owns, and the canonical address is the document's
- * own page: a share link is a locator and never a page, and it must not become one to a
- * crawler.
+ * 🚨 **A Work's page, a post's permalink, a creator's profile and the share link that points
+ * at a Work all carry that card.** A `/s/{token}` link is what the Share button hands a
+ * sharer, so it is the address that actually gets pasted — and the token carries no slug, so
+ * the shell cannot describe it without asking. The token resolves through the API's own
+ * read, each card comes from the endpoint its document family owns, and the canonical
+ * address is the document's own page: a share link is a locator and never a page, and it
+ * must not become one to a crawler.
  *
  * 🚨 **Fail open is the rule for the card.** No API reachable, a slow answer, a 404, a
  * malformed body — each returns the shell exactly as it shipped, which carries the site
@@ -88,7 +88,11 @@ interface ServedPreview {
 }
 
 /** The API path family each document kind's card read lives under. */
-const CARD_FAMILY = { work: "works", post: "posts" } as const;
+const CARD_FAMILY = {
+	work: "content/works",
+	post: "content/posts",
+	creator: "accounts/users",
+} as const;
 
 /**
  * Who a document path is about, as the card endpoint's parameter and the canonical path.
@@ -130,7 +134,7 @@ async function previewFor(pathname: string): Promise<ServedPreview | null> {
 		const target = route.kind === "share" ? await shareTarget(route.token, signal) : route;
 		if (!target) return null;
 		const res = await fetch(
-			`${API_ORIGIN}/api/content/${CARD_FAMILY[target.kind]}/${encodeURIComponent(target.param)}/card`,
+			`${API_ORIGIN}/api/${CARD_FAMILY[target.kind]}/${encodeURIComponent(target.param)}/card`,
 			{ headers: { accept: "application/json" }, signal },
 		);
 		if (!res.ok) return null;
@@ -188,8 +192,20 @@ Bun.serve({
 		}
 
 		// SPA fallback: the shell, with this route's card when it has one.
-		const [html, served] = await Promise.all([indexHtml(), previewFor(url.pathname)]);
-		const canonical = `${SITE_ORIGIN}${served?.canonicalPath ?? url.pathname}`;
+		//
+		// The card is matched against the DECODED path, because a client is free to send
+		// `/%40name` for `/@name` and a signature in a Work's URL can arrive encoded too —
+		// matching the raw form would quietly fall back to the site card for those requests.
+		// Asset resolution above keeps its own decode, so this never decodes twice.
+		const documentPath = (() => {
+			try {
+				return decodeURIComponent(url.pathname);
+			} catch {
+				return url.pathname;
+			}
+		})();
+		const [html, served] = await Promise.all([indexHtml(), previewFor(documentPath)]);
+		const canonical = `${SITE_ORIGIN}${served?.canonicalPath ?? documentPath}`;
 		return new Response(withDevApiPort(injectShareHead(html, served?.preview ?? null, canonical)), {
 			headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-cache" },
 		});

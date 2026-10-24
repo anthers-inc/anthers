@@ -43,6 +43,22 @@ describe("previewRoute", () => {
 		});
 	});
 
+	it("names the creator a profile is about, without the address's sigil", () => {
+		expect(previewRoute("/@parkerhdavis.com")).toEqual({
+			kind: "creator",
+			param: "parkerhdavis.com",
+			canonicalPath: "/@parkerhdavis.com",
+		});
+	});
+
+	it("tolerates a trailing slash on a profile", () => {
+		expect(previewRoute("/@parkerhdavis.com/")).toEqual({
+			kind: "creator",
+			param: "parkerhdavis.com",
+			canonicalPath: "/@parkerhdavis.com",
+		});
+	});
+
 	it("reads a share link's token, because that is the address a sharer pastes", () => {
 		expect(previewRoute("/s/8367cc846696bd9cd5abef363e3b6fd1")).toEqual({
 			kind: "share",
@@ -62,13 +78,7 @@ describe("previewRoute", () => {
 	});
 
 	it("leaves every other document route alone", () => {
-		for (const pathname of [
-			"/",
-			"/for-creators",
-			"/about",
-			"/@parkerhdavis.com",
-			"/release-notes",
-		]) {
+		for (const pathname of ["/", "/for-creators", "/about", "/release-notes", "/basket"]) {
 			expect(previewRoute(pathname)).toBeNull();
 		}
 	});
@@ -81,6 +91,10 @@ describe("previewRoute", () => {
 			"/posts",
 			"/posts/",
 			"/posts/a/b",
+			"/@",
+			"/@/",
+			"/@a/b",
+			"/@handle/extra",
 			"/s",
 			"/s/",
 			"/s/tok/extra",
