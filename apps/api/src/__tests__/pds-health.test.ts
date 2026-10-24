@@ -19,7 +19,7 @@ let port = 20000;
 const server = () => `https://pds-${RUN}-${port++}.example`;
 
 /** A fetch that answers from a script of outcomes, counting what it was asked. */
-function scripted(outcomes: Array<"up" | "down" | "error">, accountPage = 200) {
+function scripted(outcomes: Array<"up" | "down" | "refuse" | "error">, accountPage = 200) {
 	const calls: string[] = [];
 	const fetchImpl = (async (input: string) => {
 		calls.push(String(input));
@@ -27,7 +27,9 @@ function scripted(outcomes: Array<"up" | "down" | "error">, accountPage = 200) {
 		if (String(input).endsWith("/account")) return new Response("", { status: accountPage });
 		const next = outcomes.shift() ?? "up";
 		if (next === "error") throw new Error("connection refused");
-		return new Response("{}", { status: next === "up" ? 200 : 503 });
+		return new Response("{}", {
+			status: next === "up" ? 200 : next === "refuse" ? 429 : 503,
+		});
 	}) as unknown as typeof fetch;
 	return { calls, fetchImpl };
 }
@@ -42,7 +44,7 @@ describe("the status page for a server", () => {
 });
 
 describe("asking whether a server is up", () => {
-	it("pings the server's health endpoint and reports it up", async () => {
+	it("asks the door every PDS owes its Lexicon and reports it up", async () => {
 		const url = server();
 		const { calls, fetchImpl } = scripted(["up"]);
 		expect(await pdsHealth(url, { now: 1, fetchImpl })).toEqual({
@@ -51,7 +53,15 @@ describe("asking whether a server is up", () => {
 			statusUrl: null,
 			accountPage: true,
 		});
-		expect(calls).toEqual([`${url}/xrpc/_health`, `${url}/account`]);
+		expect(calls).toEqual([`${url}/xrpc/com.atproto.server.describeServer`, `${url}/account`]);
+	});
+
+	it("counts a server that answers 4xx as up, because it answered", async () => {
+		// A live PDS refusing this ask is not an outage, and a rate limit is not one either.
+		const refusing = scripted(["refuse"]);
+		expect((await pdsHealth(server(), { now: 1, fetchImpl: refusing.fetchImpl }))?.reachable).toBe(
+			true,
+		);
 	});
 
 	it("reports whether the server answers an account page", async () => {
@@ -71,12 +81,20 @@ describe("asking whether a server is up", () => {
 		).toBe(true);
 	});
 
-	it("reports a server that refuses the connection or answers with an error as down", async () => {
-		const refused = scripted(["error"]);
+	it("retries once before believing a failure, so one dropped connection is not an outage", async () => {
+		const url = server();
+		const { calls, fetchImpl } = scripted(["error", "up"]);
+		expect((await pdsHealth(url, { now: 1, fetchImpl }))?.reachable).toBe(true);
+		// Two probe attempts, then the account page's independent ask.
+		expect(calls.filter((c) => c.includes("describeServer"))).toHaveLength(2);
+	});
+
+	it("reports a server that refuses the connection or answers with a 5xx as down", async () => {
+		const refused = scripted(["error", "error"]);
 		expect((await pdsHealth(server(), { now: 1, fetchImpl: refused.fetchImpl }))?.reachable).toBe(
 			false,
 		);
-		const failing = scripted(["down"]);
+		const failing = scripted(["down", "down"]);
 		expect((await pdsHealth(server(), { now: 1, fetchImpl: failing.fetchImpl }))?.reachable).toBe(
 			false,
 		);
@@ -95,7 +113,8 @@ describe("asking whether a server is up", () => {
 
 	it("remembers when an outage began until the server answers again", async () => {
 		const url = server();
-		const { fetchImpl } = scripted(["error", "error", "up"]);
+		// Each read of a down server spends two attempts before it believes the refusal.
+		const { fetchImpl } = scripted(["error", "error", "error", "error", "up"]);
 		const first = await pdsHealth(url, { now: 10_000, fetchImpl });
 		expect(first?.downSince).toBe(new Date(10_000).toISOString());
 		const still = await pdsHealth(url, { now: 10_000 + PDS_HEALTH_TTL_MS, fetchImpl });
