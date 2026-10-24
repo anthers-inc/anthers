@@ -3,18 +3,21 @@
  * The **Channel Guide**'s pure model — the part of the lens that is arithmetic and
  * ordering, kept testable and separate from the component.
  *
- * 🚨 **The guide is ordinal, not temporal across channels.** A column is its creator's
+ * 🚨 **The guide is ordinal, not temporal across channels.** A channel is its creator's
  * programming sorted by recency *for that creator*: creator A's second-most-recent video
- * and creator B's second-most-recent video render at the same vertical position even
- * when one is five minutes old and the other five days old — both are "latest plus one".
- * The blocks never align to real release times (Parker, 2026-10-11); there is no shared
- * clock on this surface, and the column is a rank, not a schedule.
+ * and creator B's second-most-recent video render at the same rank even when one is five
+ * minutes old and the other five days old — both are "latest plus one". The blocks never
+ * align to real release times (Parker, 2026-10-11); there is no shared clock on this
+ * surface, and a channel is a rank, not a schedule.
  *
- * ⭐ **Next is up.** Latest sits at the top of each column, so the next-up step runs
- * from less-recent toward more-recent — *upward*, deliberately reversing the downward
- * convention other platforms' players teach. Everything a player needs to offer follows:
- * next is the block above, previous is the block below, and the UI's arrow language must
- * make the upward direction unmistakable.
+ * ⭐ **Next is toward the newer end.** The guide reads in one of two orientations
+ * (Parker, 2026-10-24), and the rank order is the same in both. In the default *columns*
+ * reading, latest sits at the top of each column, so next runs *upward*, deliberately
+ * reversing the downward convention other platforms' players teach. In *rows*, creators
+ * stack top to bottom and each one's programs run left (older) to right (newer), so next
+ * runs *rightward*. Everything a player needs to offer follows from the axis: next is one
+ * rank more recent, previous is one rank older, and the UI's arrow language must make the
+ * active direction unmistakable.
  *
  * **One vocabulary, contextual corpus.** A channel is always *a creator* and its blocks
  * are always *that creator's videos*, but which videos ride the lens's context — the
@@ -25,7 +28,7 @@
  */
 import type { Work } from "@anthers/web-shared/types";
 
-/** One channel: a creator and their programming, latest-first, top to bottom. */
+/** One channel: a creator and their programming, latest-first in the model's rank order. */
 export interface GuideChannel {
 	/** Stable key for React and for selection bookkeeping — `creator:{id}`. */
 	id: string;
@@ -35,11 +38,41 @@ export interface GuideChannel {
 	name: string | null;
 	avatar: string | null;
 	/**
-	 * The channel's programming, **always latest-first** — the order the guide renders,
-	 * top to bottom. Consumers never re-sort it: a column is a rank, and `next`'s
-	 * arithmetic reads this order directly.
+	 * The channel's programming, **always latest-first** — the model's rank order.
+	 * Consumers never re-sort it: the next arithmetic reads this order directly, and a
+	 * row-oriented reading reverses only what it draws, never the array.
 	 */
 	programs: Work[];
+}
+
+/**
+ * Which way the guide is turned. `"columns"` is the default and the original reading: a
+ * real schedule's — creators left to right, each one's programs stacked downward with the
+ * newest at the top. `"rows"` rotates the metaphor: creators top to bottom, each one's
+ * programs running left (older) to right (newer). The corpus, the per-creator ranks and
+ * the next arithmetic are identical in both; only the axis the ranks advance along changes.
+ */
+export type GuideOrientation = "columns" | "rows";
+
+const ORIENTATION_KEY = "anthers_guide_orientation";
+
+/** The guide's orientation, remembered on this device — `"columns"` when nothing is stored. */
+export function readOrientation(): GuideOrientation {
+	try {
+		return localStorage.getItem(ORIENTATION_KEY) === "rows" ? "rows" : "columns";
+	} catch {
+		/* Storage disabled — the default reading. */
+		return "columns";
+	}
+}
+
+export function writeOrientation(orientation: GuideOrientation): void {
+	try {
+		if (orientation === "rows") localStorage.setItem(ORIENTATION_KEY, "rows");
+		else localStorage.removeItem(ORIENTATION_KEY);
+	} catch {
+		/* Storage disabled — the preference simply never sticks. */
+	}
 }
 
 /**
@@ -66,15 +99,15 @@ export function compareChannelNames(a: GuideChannel, b: GuideChannel): number {
 }
 
 /**
- * The next-up program's index: **up**, one row above the current one, which is one step
- * more recent. `null` ends the guide — the channel's newest video is playing, and there
- * is no next to reach.
+ * The next program's index: one rank more recent. In the columns reading that is the
+ * block *above* the current one; in rows it is the block to its *right*. `null` ends the
+ * guide — the channel's newest video is playing, and there is no next to reach.
  */
 export function nextProgramIndex(index: number): number | null {
 	return index > 0 ? index - 1 : null;
 }
 
-/** The previous program's index: down, one row older. `null` when already the oldest. */
+/** The previous program's index: one rank older — down in columns, left in rows. `null` when already the oldest. */
 export function previousProgramIndex(index: number, count: number): number | null {
 	return index + 1 < count ? index + 1 : null;
 }
