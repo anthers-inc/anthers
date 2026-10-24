@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The public status page. No content module sits behind it — unlike /roadmap and
-// /release-notes, whose content is authored and exported from the wiki, this page renders
+// The public status page. No content module sits behind it — unlike /release-notes,
+// whose content is authored and exported from the wiki, this page renders
 // live answers: GET /api/status polled on a slow interval, and GET /api/status/history
 // beside it, the sampler-maintained record the uptime bars and Past Incidents render
 // from. The vault's own rule is why the page lives here rather than in the wiki: a
@@ -11,7 +11,7 @@
 // nobody should have to take on faith.
 //
 // **Everything renders at once — no tabs, no accordions, no lazy sections**, the same
-// rule the roadmap and release-notes pages carry: a status page in an incident is skimmed,
+// rule the release-notes page carries: a status page in an incident is skimmed,
 // and hiding half of it behind a control is how a reader misses the line that mattered.
 //
 // **The page says what the data can support and no more.** The standalone status page at
@@ -90,9 +90,9 @@ interface HistoryAnswer {
 }
 
 /**
- * State accents. This one, unlike the roadmap's, IS a traffic light — degraded and down
- * are exactly the warning the page exists to deliver, and an incident page that colors
- * nothing is an incident page nobody reads.
+ * State accents. These ARE a traffic light — degraded and down are exactly the warning
+ * the page exists to deliver, and an incident page that colors nothing is an incident
+ * page nobody reads.
  */
 const STATE_STYLE: Record<string, string> = {
 	operational: "bg-success/15 text-success border-success/25",

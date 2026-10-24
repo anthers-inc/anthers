@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "reader_state_home" text DEFAULT 'db' NOT NULL;

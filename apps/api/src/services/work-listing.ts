@@ -33,6 +33,7 @@ import { db } from "@anthers/db";
 import { creditAcceptances, users, type WorkCredit, works } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { recordGrantedScope, revokeAtprotoGrant } from "./atproto-client.js";
+import { workBaseUrl } from "./atproto-records.js";
 import {
 	RepoAuthError,
 	rkeyFromAtUri,
@@ -45,6 +46,12 @@ import {
 	publishedCreatorRecords,
 	removePublishedCreatorRecord,
 } from "./creator-record-listing.js";
+import {
+	type CreatorSpaceOptions,
+	type CreatorSpaceSync,
+	linkCreatorSpace,
+	syncCreatorSpace,
+} from "./creator-space.js";
 import { type NoAccountWriterReason, writerForAccount } from "./repo-writer.js";
 
 /** What syncing one Work's listing did. */
@@ -58,7 +65,7 @@ export type ListingSyncResult =
 
 /** Where a Work's public page lives, which the record points at. */
 function baseUrl(): string {
-	return process.env.FRONTEND_URL?.trim() || "https://anthers.org";
+	return workBaseUrl();
 }
 
 /**
@@ -70,7 +77,7 @@ function baseUrl(): string {
  */
 export async function syncWorkListing(
 	workId: number,
-	opts: { fetchImpl?: typeof fetch } = {},
+	opts: CreatorSpaceOptions = {},
 ): Promise<ListingSyncResult> {
 	const [work] = await db
 		.select({
@@ -97,6 +104,9 @@ export async function syncWorkListing(
 			access: works.access,
 			credits: works.credits,
 			atprotoUri: works.atprotoUri,
+			draftUri: works.draftUri,
+			gatedSpaceUri: works.gatedSpaceUri,
+			manifestUri: works.manifestUri,
 		})
 		.from(works)
 		.where(eq(works.id, workId))
@@ -108,6 +118,30 @@ export async function syncWorkListing(
 	// no listing should exist; a record left behind is cleaned up by whichever sync ran while
 	// the creator was still there.
 	if (work.creatorId === null) return { status: "skipped", reason: "no_creator" };
+
+	// ⭐ **The manifest is written before the listing that points at it.** A gated listing is
+	// public the moment it lands, so a pointer written first would be the first thing a reader
+	// followed to nothing. The draft rides along because it is the same Work and the same call.
+	// ⚠️ A failure here does not stop the public listing: the listing is still truthful without
+	// the pointer, and the reconciling sweep retries the space write. What it must never do is
+	// publish a pointer to a record that was not written, which is why the stored columns — not
+	// this call's intentions — are the fallback.
+	let creatorSpace: CreatorSpaceSync;
+	try {
+		creatorSpace = await syncCreatorSpace(workId, opts);
+	} catch (err) {
+		console.error(
+			`[work-listing] ${workId}: the creator-space write failed — ` +
+				`${err instanceof Error ? err.message : String(err)}`,
+		);
+		creatorSpace = {
+			refs: {
+				draftUri: work.draftUri,
+				spaceUri: work.gatedSpaceUri,
+				manifestUri: work.manifestUri,
+			},
+		};
+	}
 
 	const opened = await writerForAccount(work.creatorId, {
 		collections: [WORK_COLLECTION],
@@ -122,6 +156,10 @@ export async function syncWorkListing(
 			baseUrl: baseUrl(),
 			existingUri: work.atprotoUri,
 			confirmedCredits,
+			accessPointers: {
+				space: creatorSpace.refs.spaceUri,
+				manifest: creatorSpace.refs.manifestUri,
+			},
 		});
 
 		// ⚠️ **Written only when it changed, and cleared with an explicit null.** The column is
@@ -131,6 +169,12 @@ export async function syncWorkListing(
 		if (outcome.uri !== work.atprotoUri) {
 			await db.update(works).set({ atprotoUri: outcome.uri }).where(eq(works.id, workId));
 		}
+
+		// The one pointer the order of writes makes impossible to fill in the first pass: the
+		// draft names the listing, and the manifest names it too. Null clears both, which is what
+		// a withdrawal or an un-release means.
+		await linkCreatorSpace(creatorSpace, outcome.uri, work.atprotoUri, opts);
+
 		return { status: "synced", plan: outcome.plan, uri: outcome.uri };
 	} catch (err) {
 		// 🚨 **A withdrawn permission is not a failure to retry, and the stored URI still stays.**

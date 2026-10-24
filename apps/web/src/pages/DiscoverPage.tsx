@@ -1,61 +1,61 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * **Discovery** — the place for what the reader has not found yet.
+ * **Discovery** — the newest Works and Posts across Anthers, newest first.
  *
- * Two modes, both carrying a formula the reader can see and change:
+ * One stream, reusing the feed's `?scope=global` route, so its cards, access verdicts
+ * and maturity filtering are the feed's own rather than a second listing that drifts
+ * from it. The mix that spreads one creator's run across the page is the feed's too.
  *
- * - **Graph** traces the network around the people they follow: creators ranked by
- *   how many of those people also follow them. A creator the reader already follows
- *   stays in the list, because the graph is a picture of the network rather than a
- *   list of strangers, and the card says so.
- * - **Ticker** is the newest Works and Posts across Anthers, newest first. It reuses
- *   the feed's `?scope=global` stream, so its cards, access verdicts and maturity
- *   filtering are the feed's own rather than a second listing that drifts from it.
+ * 🚨 **The recipe is the product.** Discovery's promise is that the reader can
+ * always see how the corpus is being drawn and change it, so the stream renders its
+ * active recipe above the content and exposes the three choices behind it: the
+ * candidate set, the window, and whether the mix spreads creators. There is no hidden
+ * ranking, and nothing here is paid placement.
  *
- * 🚨 **The formula is the product.** Discovery's promise is that the reader can
- * always see how the corpus is being drawn and change it, so every mode renders its
- * active formula above the content and exposes the parameter behind it. There is no
- * hidden ranking, and nothing here is paid placement.
+ * The graph's shared-follow ranking is a route (`GET /api/accounts/me/graph`) and a
+ * recipe builder with no page drawing them: a network of follows ranks nearly
+ * everyone a reader can already see until the platform holds enough content for the
+ * edges to say something. Discovery carried it as a second mode until 2026-10-23;
+ * the mode picker is gone rather than left holding a single live row.
  *
  * Browse was removed on 2026-10-19, carrying none of its controls: search lives in
  * the top-level bar, and term filtering rides the `search` parameter the bar already
  * sends here. Inbox was removed the same day for having no backend to stand on.
  */
 
+import { BOOKSHELF_WORK_TYPES } from "@anthers/shared/content";
 import {
+	asRecipeCandidates,
+	asRecipeMix,
+	asRecipeWindow,
 	DISCOVERY_STAGE_LABELS,
-	type DiscoveryFormula,
 	type DiscoveryReason,
-	type GraphBasis,
-	graphFormula,
-	type TickerWindow,
-	tickerFormula,
+	type DiscoveryRecipe,
+	type RecipeCandidates,
+	type RecipeMix,
+	type RecipeWindow,
+	streamRecipe,
 } from "@anthers/shared/discovery";
-import { useAuth } from "@anthers/web-shared/auth";
-import CreatorCard from "@anthers/web-shared/creator/CreatorCard";
 import { client } from "@anthers/web-shared/rpc";
 import { useSidebar } from "@anthers/web-shared/sidebar";
-import type { PublicUser } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import {
-	ArrowPathIcon,
-	BoltIcon,
-	GlobeAltIcon,
-	MagnifyingGlassIcon,
-	XMarkIcon,
-} from "@heroicons/react/24/outline";
+import { ArrowPathIcon, MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import FeedTile from "../components/cards/FeedTile";
 import SharedFilterSections, {
 	SHARED_FILTER_TYPES,
 } from "../components/layout/SharedFilterSections";
-import SharedLensesSection from "../components/layout/SharedLensesSection";
-import { sidebarRowClass } from "../components/layout/sidebar-row-class";
+import SharedLensesSection, { ALL_LENS_IDS } from "../components/layout/SharedLensesSection";
 import TabHeader from "../components/layout/TabHeader";
-
-type DiscoveryMode = "graph" | "ticker";
+import BookshelfLens from "../components/library/BookshelfLens";
+import ChannelGuideLens, {
+	channelGuideChannelsFromShelf,
+} from "../components/library/ChannelGuideLens";
+import MusicDial from "../components/library/MusicDial";
+import MusicLens from "../components/library/MusicLens";
+import { feedLensItems } from "../lib/feed-lenses";
 
 /** One entry of the feed's stream, as `?scope=global` sends it. */
 type FeedEntry = {
@@ -68,83 +68,41 @@ type FeedEntry = {
 	reason?: DiscoveryReason;
 } & Record<string, unknown>;
 
-/** A creator as the graph ranks them: the public card plus the edge that put them here. */
-type GraphCreator = PublicUser & {
-	sharedFollows: number;
-	types: string[];
-	hasPosts: boolean;
-	tags: string[];
-};
-
-const DISCOVERY_MODES = [
-	{
-		id: "graph" as const,
-		label: "Graph",
-		icon: GlobeAltIcon,
-		description: "Creators connected to the people you follow",
-	},
-	{
-		id: "ticker" as const,
-		label: "Ticker",
-		icon: BoltIcon,
-		description: "The newest Works and Posts across Anthers",
-	},
+/**
+ * The three choices a recipe is made of. The route runs the first two as query
+ * parameters over one corpus, and the window narrows what came back, so every option
+ * offered here is a value something actually obeys — there is no control whose only
+ * setting is the one already chosen.
+ */
+const WINDOW_OPTIONS: ReadonlyArray<{ value: RecipeWindow; label: string }> = [
+	{ value: "all", label: "Everything" },
+	{ value: "day", label: "The last day" },
+	{ value: "week", label: "The last week" },
 ];
 
-/** The graph's presets. `minShared` is the one parameter the reader can move. */
-const GRAPH_PRESETS = [
-	{
-		id: "taste",
-		label: "Your network's taste",
-		minShared: 2,
-		description: "Creators at least two of the people you follow also follow.",
-	},
-	{
-		id: "extended",
-		label: "Extended network",
-		minShared: 1,
-		description: "Anyone at least one of the people you follow follows.",
-	},
-] as const;
-
-/** The ticker's presets. The window is the parameter; the filters narrow the rest. */
-const TICKER_PRESETS: ReadonlyArray<{ id: string; label: string; window: TickerWindow }> = [
-	{ id: "everything", label: "Everything new", window: "all" as const },
-	{ id: "today", label: "The last day", window: "day" as const },
-	{ id: "week", label: "The last week", window: "week" as const },
+const CANDIDATE_OPTIONS: ReadonlyArray<{ value: RecipeCandidates; label: string }> = [
+	{ value: "everyone", label: "Everyone" },
+	{ value: "network", label: "Your network" },
 ];
 
-const sectionTitleClass =
-	"text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-2";
-
-const modeKey = (userId: number | undefined) =>
-	userId == null ? null : `anthers_discovery_mode:${userId}`;
-
-function savedMode(userId: number | undefined): DiscoveryMode | null {
-	const key = modeKey(userId);
-	if (!key) return null;
-	try {
-		const saved = localStorage.getItem(key);
-		return saved === "ticker" || saved === "graph" ? saved : null;
-	} catch {
-		return null;
-	}
-}
+const MIX_OPTIONS: ReadonlyArray<{ value: RecipeMix; label: string }> = [
+	{ value: "spread", label: "Spread creators" },
+	{ value: "straight", label: "Newest first" },
+];
 
 /**
- * The active formula, rendered above the content. It names what is being drawn, the
- * three stages that drew it, and the control that changes one of them, so the reader
- * never has to guess why a card is on screen. The stages come from the same module the
- * route ranks with, so the bar cannot describe a pipeline the server did not run.
+ * The active recipe, rendered above the content. It names what is being drawn and the
+ * three stages that drew it, and the controls beside it change those stages, so the
+ * reader never has to guess why a card is on screen. The stages come from the same
+ * module the route ranks with, so the bar cannot describe a pipeline the server did not
+ * run.
  */
-function FormulaBar({
-	preset,
-	formula,
+function RecipeBar({
+	recipe,
 	children,
 	onRefresh,
 }: {
-	preset: string;
-	formula: DiscoveryFormula;
+	recipe: DiscoveryRecipe;
 	children?: React.ReactNode;
 	onRefresh?: () => void;
 }) {
@@ -153,13 +111,13 @@ function FormulaBar({
 			<div className="flex flex-wrap items-start justify-between gap-3">
 				<div className="min-w-0">
 					<p className="text-[11px] font-semibold uppercase tracking-wider text-base-content/40">
-						Active formula
+						Active recipe
 					</p>
 					<p className="mt-1 max-w-3xl text-sm leading-relaxed text-base-content/80">
-						<span className="font-medium">{preset}.</span> {formula.sentence}
+						{recipe.sentence}
 					</p>
 					<dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">
-						{formula.stages.map((stage) => (
+						{recipe.stages.map((stage) => (
 							<div key={stage.stage} className="flex items-baseline gap-1.5">
 								<dt className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">
 									{DISCOVERY_STAGE_LABELS[stage.stage]}
@@ -191,38 +149,52 @@ function FormulaBar({
 export default function DiscoverPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const { setPageContent, setSharedContent } = useSidebar();
-	const { user } = useAuth();
 
-	const [creators, setCreators] = useState<GraphCreator[]>([]);
-	const [basis, setBasis] = useState<GraphBasis>("network");
-	const [graphLoading, setGraphLoading] = useState(false);
 	const [entries, setEntries] = useState<FeedEntry[]>([]);
-	const [tickerLoading, setTickerLoading] = useState(false);
+	const [loading, setLoading] = useState(false);
 	const [refreshKey, setRefreshKey] = useState(0);
-
-	const urlMode = searchParams.get("mode");
-	const mode: DiscoveryMode =
-		urlMode === "ticker" || urlMode === "graph" ? urlMode : (savedMode(user?.id) ?? "graph");
 
 	const contentType = searchParams.get("media_type") ?? "";
 	const access = searchParams.get("access") ?? "";
 	const tags = searchParams.get("tags") ?? "";
 	const search = searchParams.get("search") ?? "";
-	/** The lens is a second organizing metaphor over the active mode, never a mode. */
+	/** The lens is an organizing metaphor over the stream, never a mode. */
 	const lens = searchParams.get("lens") ?? "";
+	/** The Music Player's dial, carried the way the Network carries it. */
+	const includeSpoken = searchParams.get("spoken") === "1";
 
-	const graphPresetId = searchParams.get("preset") ?? "taste";
-	const graphPreset =
-		GRAPH_PRESETS.find((preset) => preset.id === graphPresetId) ?? GRAPH_PRESETS[0];
-	const minShared = Math.max(
-		1,
-		Math.min(10, Number(searchParams.get("min_shared") ?? graphPreset.minShared) || 1),
-	);
+	/**
+	 * The Type selection rides the request as the stream's server-side condition —
+	 * except under a lens, where the lens decides what it draws on and the rows outside
+	 * it are grayed. Dropping it here is what keeps a lens a view of the corpus rather
+	 * than a filter applied before the corpus arrives.
+	 */
+	const mediaType = lens ? "" : contentType;
 
-	const tickerPresetId = searchParams.get("preset") ?? "everything";
-	const tickerPreset =
-		TICKER_PRESETS.find((preset) => preset.id === tickerPresetId) ?? TICKER_PRESETS[0];
-	const window = tickerPreset.window;
+	/**
+	 * The Work types the active lens draws on, or null with No Lens. The Type rows
+	 * outside this set gray out while it is active — the Library's rule, applied to the
+	 * stream.
+	 */
+	const lensIncluded = useMemo<string[] | null>(() => {
+		if (lens === "music") return includeSpoken ? ["music", "audio"] : ["music"];
+		if (lens === "channel-guide") return ["video"];
+		if (lens === "bookshelf") return [...BOOKSHELF_WORK_TYPES];
+		return null;
+	}, [lens, includeSpoken]);
+
+	const unavailableTypes = useMemo(() => {
+		if (!lensIncluded) return undefined;
+		const set = new Set<string>();
+		for (const type of SHARED_FILTER_TYPES) {
+			if (type.id && !lensIncluded.includes(type.id)) set.add(type.id);
+		}
+		return set;
+	}, [lensIncluded]);
+
+	const window = asRecipeWindow(searchParams.get("window"));
+	const candidates = asRecipeCandidates(searchParams.get("candidates"));
+	const mix = asRecipeMix(searchParams.get("mix"));
 
 	const updateParams = useCallback(
 		(updates: Record<string, string>) => {
@@ -241,59 +213,24 @@ export default function DiscoverPage() {
 		[setSearchParams],
 	);
 
-	// The mode is sticky per account on this browser. The URL wins when it names one,
-	// so a shared link lands where it says; otherwise the last mode the account used
-	// is where they return.
+	// The stream: the feed's own, over the candidate set the recipe names. `scope` is
+	// how the feed expresses "everyone" versus "your network", and `mix` is the recipe's
+	// ordering stage; both are the route's to run. The refresh control bumps this
+	// counter; the feed route has no cache buster, so the value exists only to make the
+	// dependency real to the linter. `mediaType` is empty under a lens, so the lens draws
+	// on every type it covers.
 	useEffect(() => {
-		const key = modeKey(user?.id);
-		if (!key) return;
-		try {
-			localStorage.setItem(key, mode);
-		} catch {}
-	}, [mode, user?.id]);
-
-	// The URL has to carry the mode once the page has decided one, or a mode switch
-	// would be invisible to the browser's back button and to a copied link.
-	useEffect(() => {
-		if (!urlMode) updateParams({ mode });
-	}, [urlMode, mode, updateParams]);
-
-	// Graph: the creators around the people this account follows.
-	useEffect(() => {
-		if (mode !== "graph") return;
-		// The refresh control bumps this counter; the request itself needs no cache
-		// buster, so the value is read only to make the dependency real to the linter.
 		void refreshKey;
-		setGraphLoading(true);
-		client.api.accounts.me.graph
-			.$get({ query: { min_shared: String(minShared), limit: "24" } })
-			.then(async (res) => {
-				if (!res.ok) return;
-				const data = (await res.json()) as unknown as {
-					basis: GraphBasis;
-					creators: GraphCreator[];
-				};
-				setBasis(data.basis ?? "network");
-				setCreators(data.creators ?? []);
-			})
-			.catch(() => {})
-			.finally(() => setGraphLoading(false));
-	}, [mode, minShared, refreshKey]);
-
-	// Ticker: the same stream the feed draws, widened to every creator.
-	useEffect(() => {
-		if (mode !== "ticker") return;
-		// The refresh control bumps this counter; the feed route has no cache buster.
-		void refreshKey;
-		setTickerLoading(true);
+		setLoading(true);
 		client.api.accounts.me.feed
 			.$get({
 				query: {
-					scope: "global",
-					...(contentType === "posts"
+					scope: candidates === "network" ? "network" : "global",
+					mix,
+					...(mediaType === "posts"
 						? { kind: "posts" }
-						: contentType
-							? { media_type: contentType }
+						: mediaType
+							? { media_type: mediaType }
 							: {}),
 					...(access ? { access } : {}),
 					...(tags ? { tags } : {}),
@@ -305,53 +242,10 @@ export default function DiscoverPage() {
 				setEntries(data.entries ?? []);
 			})
 			.catch(() => {})
-			.finally(() => setTickerLoading(false));
-	}, [mode, contentType, access, tags, refreshKey]);
+			.finally(() => setLoading(false));
+	}, [mediaType, access, tags, candidates, mix, refreshKey]);
 
-	const selectedTags = useMemo(
-		() =>
-			tags
-				.split(",")
-				.map((tag) => tag.trim())
-				.filter(Boolean),
-		[tags],
-	);
-
-	// The graph runs the shared Type and Tags filters over each creator's released
-	// content. Access is a verdict about one Work, not about a person, so the graph
-	// omits that control rather than leaving it inert.
-	const visibleCreators = useMemo(() => {
-		const term = search.trim().toLowerCase();
-		return creators.filter((creator) => {
-			if (term) {
-				const haystack = `${creator.displayName ?? ""} ${creator.handle ?? ""}`.toLowerCase();
-				if (!haystack.includes(term)) return false;
-			}
-			if (contentType === "posts" && !creator.hasPosts) return false;
-			if (contentType && contentType !== "posts" && !creator.types.includes(contentType)) {
-				return false;
-			}
-			if (selectedTags.length > 0 && !selectedTags.every((tag) => creator.tags.includes(tag))) {
-				return false;
-			}
-			return true;
-		});
-	}, [creators, search, contentType, selectedTags]);
-
-	const graphUnavailableTypes = useMemo(() => {
-		const held = new Set<string>();
-		for (const creator of creators) {
-			for (const type of creator.types) held.add(type);
-			if (creator.hasPosts) held.add("posts");
-		}
-		const unavailable = new Set<string>();
-		for (const type of SHARED_FILTER_TYPES) {
-			if (type.id && !held.has(type.id)) unavailable.add(type.id);
-		}
-		return unavailable;
-	}, [creators]);
-
-	// The ticker filters the already-fetched page by the window and the term. The
+	// The stream filters the already-fetched page by the window and the term. The
 	// server applies the Type, Access and Tags filters; these two are presentation
 	// over what it returned.
 	const visibleEntries = useMemo(() => {
@@ -373,56 +267,38 @@ export default function DiscoverPage() {
 		});
 	}, [entries, window, search]);
 
-	// Sidebar: Modes is the page's own section and the lens sits under it, because the
-	// mode decides the corpus and the lens organizes that corpus. The URL carries both,
-	// so a link to "Ticker under the Music Player" survives. The shared filters sit below
-	// the divider the layout draws, exactly as on the Network and Library tabs.
+	/** The lens's corpus: the stream's releases, translated once per fetch. */
+	const lensDraw = useMemo(() => feedLensItems(visibleEntries), [visibleEntries]);
+
+	// Sidebar: the lens is the page's own section, and the shared filters sit below the
+	// divider the layout draws, exactly as on the Network and Library tabs. The URL
+	// carries the lens, so a link to "the stream under the Music Player" survives.
+	// Every row is live here (Parker, 2026-10-23): a lens is a view over this stream, and
+	// the Music Player's dial rides its row the way it does on the other two tabs.
 	useEffect(() => {
 		setPageContent(
-			<div className="flex flex-col gap-5">
-				<section>
-					<h3 className={sectionTitleClass}>Modes</h3>
-					<div className="flex flex-col gap-0.5">
-						{DISCOVERY_MODES.map((discoveryMode) => (
-							<button
-								key={discoveryMode.id}
-								type="button"
-								className={sidebarRowClass(mode === discoveryMode.id)}
-								onClick={() =>
-									updateParams({
-										mode: discoveryMode.id,
-										// Access belongs to the ticker's stream, not to a person.
-										...(discoveryMode.id === "graph" ? { access: "" } : {}),
-										// Each mode has its own preset vocabulary.
-										preset: "",
-										min_shared: "",
-									})
-								}
-								title={discoveryMode.description}
-							>
-								<discoveryMode.icon className="h-5 w-5 shrink-0" />
-								{discoveryMode.label}
-							</button>
-						))}
-					</div>
-				</section>
-				{/* Every lens row renders here; No Lens is the one live on Discovery today.
-				    A future lens lights up when its meaning over these modes is built. */}
-				<SharedLensesSection lens={lens} onLens={(id) => updateParams({ lens: id })} />
-			</div>,
+			<SharedLensesSection
+				lens={lens}
+				onLens={(id) => updateParams({ lens: id })}
+				live={ALL_LENS_IDS}
+				extras={{
+					music: (
+						<MusicDial
+							includeSpoken={includeSpoken}
+							onIncludeSpoken={(on) => updateParams({ spoken: on ? "1" : "" })}
+						/>
+					),
+				}}
+			/>,
 		);
 		setSharedContent(
 			<SharedFilterSections
 				type={contentType}
 				onType={(id) => updateParams({ media_type: id })}
-				unavailableTypes={mode === "graph" ? graphUnavailableTypes : undefined}
+				unavailableTypes={unavailableTypes}
 				tags={tags}
 				onTags={(value) => updateParams({ tags: value })}
-				access={
-					mode === "ticker"
-						? { value: access, onAccess: (value) => updateParams({ access: value }) }
-						: undefined
-				}
+				access={{ value: access, onAccess: (value) => updateParams({ access: value }) }}
 			/>,
 		);
 		return () => {
@@ -432,17 +308,16 @@ export default function DiscoverPage() {
 	}, [
 		setPageContent,
 		setSharedContent,
-		mode,
 		contentType,
+		unavailableTypes,
 		access,
 		tags,
-		graphUnavailableTypes,
 		lens,
+		includeSpoken,
 		updateParams,
 	]);
 
-	const graphPipeline = graphFormula({ basis, minShared });
-	const tickerPipeline = tickerFormula({ window });
+	const recipe = streamRecipe({ window, candidates, mix });
 
 	return (
 		<div className="min-h-full">
@@ -450,7 +325,7 @@ export default function DiscoverPage() {
 				<TabHeader
 					icon={MagnifyingGlassIcon}
 					title="Discovery"
-					subtitle="Explore the Anthers ecosystem to find creators and creations you haven't discovered yet. Use one of our transparent preset formulas, or cook up your own. There are no advertisers or incentives to shove things in front of you; find your next fandom in your own way, for your own reasons."
+					subtitle="Find something new to love on Anthers. Use one of our recipes, or cook up your own. There's no paid promotion or hidden algorithms."
 				/>
 
 				{search && (
@@ -469,126 +344,92 @@ export default function DiscoverPage() {
 					</div>
 				)}
 
-				{mode === "graph" ? (
-					<>
-						<FormulaBar
-							preset={basis === "followers" ? "Creators by followers" : graphPreset.label}
-							formula={graphPipeline}
-							onRefresh={() => setRefreshKey((key) => key + 1)}
+				<RecipeBar recipe={recipe} onRefresh={() => setRefreshKey((key) => key + 1)}>
+					<label className="flex flex-col gap-1 text-xs text-base-content/60">
+						Window
+						<select
+							className="select select-bordered select-sm"
+							value={window}
+							onChange={(e) =>
+								// The opening value stays out of the URL so a bare /discovery and a
+								// shared link to the same recipe are the same address.
+								updateParams({ window: e.target.value === "all" ? "" : e.target.value })
+							}
 						>
-							{basis === "network" && (
-								<>
-									<label className="flex flex-col gap-1 text-xs text-base-content/60">
-										Preset
-										<select
-											className="select select-bordered select-sm"
-											value={graphPreset.id}
-											onChange={(e) => {
-												const preset = GRAPH_PRESETS.find((p) => p.id === e.target.value);
-												updateParams({
-													preset: e.target.value,
-													min_shared: preset ? String(preset.minShared) : "",
-												});
-											}}
-										>
-											{GRAPH_PRESETS.map((preset) => (
-												<option key={preset.id} value={preset.id}>
-													{preset.label}
-												</option>
-											))}
-										</select>
-									</label>
-									<label className="flex flex-col gap-1 text-xs text-base-content/60">
-										Shared follows
-										<input
-											type="number"
-											min={1}
-											max={10}
-											className="input input-bordered input-sm w-20"
-											value={minShared}
-											onChange={(e) =>
-												updateParams({ min_shared: e.target.value.replace(/[^0-9]/g, "") })
-											}
-										/>
-									</label>
-								</>
-							)}
-						</FormulaBar>
+							{WINDOW_OPTIONS.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</select>
+					</label>
+					<label className="flex flex-col gap-1 text-xs text-base-content/60">
+						From
+						<select
+							className="select select-bordered select-sm"
+							value={candidates}
+							onChange={(e) =>
+								updateParams({ candidates: e.target.value === "everyone" ? "" : e.target.value })
+							}
+						>
+							{CANDIDATE_OPTIONS.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</select>
+					</label>
+					<label className="flex flex-col gap-1 text-xs text-base-content/60">
+						Order
+						<select
+							className="select select-bordered select-sm"
+							value={mix}
+							onChange={(e) =>
+								updateParams({ mix: e.target.value === "spread" ? "" : e.target.value })
+							}
+						>
+							{MIX_OPTIONS.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</select>
+					</label>
+				</RecipeBar>
 
-						{graphLoading ? (
-							<div className="flex justify-center py-16">
-								<LoadingSpinner size="lg" />
-							</div>
-						) : visibleCreators.length === 0 ? (
-							<EmptyState
-								title={
-									creators.length === 0
-										? "No one in your network's orbit yet"
-										: "No creators match these filters"
-								}
-								description={
-									creators.length === 0
-										? "Follow a few creators and this fills with the people they trust. Discovery has no recommendation engine to fall back on."
-										: "Clear a Type or Tags filter, or lower the shared-follows threshold."
-								}
-							/>
-						) : (
-							<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-								{visibleCreators.map((creator) => (
-									<div key={creator.id} className="flex flex-col gap-1">
-										<CreatorCard creator={creator} />
-										{basis === "network" && (
-											<p className="px-1 text-xs text-base-content/50">
-												Followed by {creator.sharedFollows}{" "}
-												{creator.sharedFollows === 1 ? "person" : "people"} you follow
-												{creator.isFollowing ? " · Following" : ""}
-											</p>
-										)}
-									</div>
-								))}
-							</div>
-						)}
-					</>
+				{loading ? (
+					<div className="flex justify-center py-16">
+						<LoadingSpinner size="lg" />
+					</div>
+				) : lens === "music" ? (
+					/* A lens reorganizes the stream, never refetches it: the corpus is the
+					   same entries the grid draws. `scope="discovery"` opens a release whole,
+					   as the Network's does — nothing here is a kept shelf. */
+					<MusicLens items={lensDraw} includeSpoken={includeSpoken} scope="discovery" />
+				) : lens === "bookshelf" ? (
+					/* The same shelf metaphor over the stream's written Works: spines instead
+					   of tiles, alphabetical by title. */
+					<BookshelfLens items={lensDraw} source="discovery" />
+				) : lens === "channel-guide" ? (
+					/* The stream's videos as creator channels, latest at the top of each
+					   column. The feed ships no payload, so the guide reads the delivery
+					   address `feedLensItems` composes for it. */
+					<ChannelGuideLens channels={channelGuideChannelsFromShelf(lensDraw)} source="discovery" />
+				) : visibleEntries.length === 0 ? (
+					<EmptyState
+						title="Nothing new here"
+						description={
+							candidates === "network"
+								? "Nothing from your network matches these filters. Clear a filter, widen the window, or switch From to Everyone."
+								: "No Works or Posts match these filters. Clear a filter, widen the window, or check back soon."
+						}
+					/>
 				) : (
-					<>
-						<FormulaBar
-							preset={tickerPreset.label}
-							formula={tickerPipeline}
-							onRefresh={() => setRefreshKey((key) => key + 1)}
-						>
-							<label className="flex flex-col gap-1 text-xs text-base-content/60">
-								Preset
-								<select
-									className="select select-bordered select-sm"
-									value={tickerPreset.id}
-									onChange={(e) => updateParams({ preset: e.target.value })}
-								>
-									{TICKER_PRESETS.map((preset) => (
-										<option key={preset.id} value={preset.id}>
-											{preset.label}
-										</option>
-									))}
-								</select>
-							</label>
-						</FormulaBar>
-
-						{tickerLoading ? (
-							<div className="flex justify-center py-16">
-								<LoadingSpinner size="lg" />
-							</div>
-						) : visibleEntries.length === 0 ? (
-							<EmptyState
-								title="Nothing new here"
-								description="No Works or Posts match these filters. Clear a filter, widen the window, or check back soon."
-							/>
-						) : (
-							<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-								{visibleEntries.map((entry) => (
-									<FeedTile key={`${entry.kind}-${entry.id}`} entry={entry} />
-								))}
-							</div>
-						)}
-					</>
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+						{visibleEntries.map((entry) => (
+							<FeedTile key={`${entry.kind}-${entry.id}`} entry={entry} />
+						))}
+					</div>
 				)}
 			</div>
 		</div>

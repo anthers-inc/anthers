@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Discovery's two modes, as the routes behind them (Parker, 2026-10-19).
+ * The routes behind Discovery, and the graph it no longer draws (Parker, 2026-10-19;
+ * Discovery became one stream on 2026-10-23).
  *
  * - `GET /me/graph` ranks creators by how many of the people the viewer follows also
  *   follow them, and carries the edge count plus the vocabulary the shared Type and
- *   Tags filters read. A reader who follows nobody gets the stated follower-count
- *   fallback rather than an empty page with no explanation.
- * - `GET /me/feed?scope=global` is the Ticker: the same stream and card fields as the
- *   Network feed, widened to every creator. The default feed stays the network, so a
- *   creator the viewer does not follow must be absent from one and present in the
- *   other.
+ *   Tags filters read. No page calls it today; the graph waits on a platform with
+ *   enough content for the edges to say something, and the route keeps its own shape.
+ *   A reader who follows nobody gets the stated follower-count fallback rather than an
+ *   empty page with no explanation.
+ * - `GET /me/feed?scope=global` is the stream Discovery shows: the same stream and card
+ *   fields as the Network feed, widened to every creator. The default feed stays the
+ *   network, so a creator the viewer does not follow must be absent from one and
+ *   present in the other. Discovery's recipe rides two parameters over that stream —
+ *   `mix=spread|straight` reorders it and `scope` chooses the candidate set — and an
+ *   absent `mix` keeps each stream's historic order.
  *
  * 🚨 **The absence is half the test.** A global scope that quietly returned the
  * network's list would pass every presence assertion here, so each half names what it
@@ -47,6 +52,7 @@ let viewerCookie = "";
 let followedCreatorId = 0;
 let unfollowedCreatorId = 0;
 let busyCreatorId = 0;
+let secondFollowedCreatorId = 0;
 
 async function feed(cookie: string, query = "") {
 	const res = await req(`/api/accounts/me/feed${query}`, withCookie(cookie));
@@ -54,6 +60,7 @@ async function feed(cookie: string, query = "") {
 	return (await res.json()) as {
 		entries: Array<{
 			kind: "post" | "release";
+			id: number;
 			title: string;
 			source: string;
 			creatorId: number;
@@ -134,9 +141,33 @@ describe("Discovery's graph and ticker routes", () => {
 			headers: { Origin: ORIGIN, Cookie: viewer.cookie },
 		});
 
+		// A second creator the viewer follows, with a run of three, so the network
+		// candidate set has two lanes and the mix has something to spread. Inserted
+		// before the busy run, which must stay the newest thing in the whole-site stream.
+		const secondFollowed = await createAccount(`dsc_followed2_${run}`, {
+			fields: { isCreator: true },
+		});
+		secondFollowedCreatorId = (
+			await db
+				.select({ id: users.id })
+				.from(users)
+				.where(eq(users.email, `dsc_followed2_${run}@example.com`))
+		)[0]!.id;
+		for (let index = 0; index < 3; index += 1) {
+			await insertWork({
+				creatorId: secondFollowedCreatorId,
+				type: "text",
+				title: `Second followed creator's work ${index} ${run}`,
+			});
+		}
+		await req(`/api/accounts/users/${secondFollowed.handle}/follow`, {
+			method: "POST",
+			headers: { Origin: ORIGIN, Cookie: viewer.cookie },
+		});
+
 		// A creator who posts a run of four, inserted last so they are the newest
-		// entries in the ticker. Without the mix stage this is exactly the run that
-		// takes four of the page's first five cards.
+		// entries in the whole-site stream. Without the mix stage this is exactly the
+		// run that takes four of the page's first five cards.
 		await createAccount(`dsc_busy_${run}`, { fields: { isCreator: true } });
 		busyCreatorId = (
 			await db
@@ -176,7 +207,7 @@ describe("Discovery's graph and ticker routes", () => {
 		expect(creator?.tags).toContain(TAG);
 	});
 
-	it("says which formula it ran when the viewer follows nobody", async () => {
+	it("says which recipe it ran when the viewer follows nobody", async () => {
 		const lonely = await createAccount(`dsc_lonely_${run}`);
 		const res = await req("/api/accounts/me/graph", withCookie(lonely.cookie));
 		expect(res.status).toBe(200);
@@ -216,8 +247,8 @@ describe("Discovery's graph and ticker routes", () => {
 		}
 	});
 
-	it("spreads one creator's run across the ticker instead of stacking it", async () => {
-		const ticker = await feed(viewerCookie, "?scope=global");
+	it("spreads one creator's run across the stream instead of stacking it", async () => {
+		const ticker = await feed(viewerCookie, "?scope=global&mix=spread");
 		const creators = ticker.entries.map((entry) => entry.creatorId);
 		const busyTitles = ticker.entries
 			.filter((entry) => entry.creatorId === busyCreatorId)
@@ -232,5 +263,40 @@ describe("Discovery's graph and ticker routes", () => {
 		expect(lanes.size).toBeGreaterThan(1);
 		expect(new Set(creators.slice(0, lanes.size)).size).toBe(lanes.size);
 		expect(creators.slice(0, 4).filter((id) => id === busyCreatorId).length).toBeLessThan(4);
+	});
+
+	it("leaves the newest run stacked when the recipe asks for no mix, which is the absence the spread test needs", async () => {
+		const straight = await feed(viewerCookie, "?scope=global&mix=straight");
+		const firstFour = straight.entries.slice(0, 4).map((entry) => entry.creatorId);
+
+		expect(firstFour.every((id) => id === busyCreatorId)).toBe(true);
+	});
+
+	it("runs the chosen mix over the network candidate set too", async () => {
+		const straight = await feed(viewerCookie, "?scope=network&mix=straight");
+		const straightCreators = straight.entries.slice(0, 3).map((entry) => entry.creatorId);
+		// The second followed creator's three are the newest thing in this candidate set,
+		// so no mix leaves them adjacent.
+		expect(straightCreators).toEqual([
+			secondFollowedCreatorId,
+			secondFollowedCreatorId,
+			secondFollowedCreatorId,
+		]);
+
+		const spread = await feed(viewerCookie, "?scope=network&mix=spread");
+		const spreadCreators = spread.entries.slice(0, 3).map((entry) => entry.creatorId);
+		expect(new Set(spreadCreators).size).toBeGreaterThan(1);
+		// Same entries, different order: the mix reorders the page, it does not reselect it.
+		expect(spread.entries.map((entry) => entry.id).sort()).toEqual(
+			straight.entries.map((entry) => entry.id).sort(),
+		);
+	});
+
+	it("keeps the network feed's own default order when no recipe names a mix", async () => {
+		const bare = await feed(viewerCookie, "?scope=network");
+		const straight = await feed(viewerCookie, "?scope=network&mix=straight");
+		expect(bare.entries.map((entry) => entry.title)).toEqual(
+			straight.entries.map((entry) => entry.title),
+		);
 	});
 });

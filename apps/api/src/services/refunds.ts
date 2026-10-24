@@ -60,6 +60,7 @@ import { REFUND_AUTO_CAP, REFUND_CAP_WINDOW_MONTHS } from "@anthers/shared/const
 import Decimal from "decimal.js";
 import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { createTransferReversal, issueRefund, paymentsConfigured } from "../lib/processor.js";
+import { oweAccessReceipt } from "./access-receipts.js";
 import { recordNettingForRefund } from "./netting.js";
 import { unwindMerchOrder } from "./printful.js";
 
@@ -379,7 +380,14 @@ export async function settleRefundedPurchase(
 		.where(and(eq(purchases.id, purchase.id), eq(purchases.status, "completed")))
 		.returning();
 
-	if (!updated) return { ok: true, purchase, shortfall: new Decimal(0), alreadyRefunded: true };
+	// The refund event is owed by the reader's space whether this call settled the row or a
+	// previous one did: a redelivery is the repair path for an insert that failed after the
+	// money moved. `oweAccessReceipt` is idempotent on (purchase, kind).
+	if (!updated) {
+		await oweAccessReceipt(purchase.id, "refund");
+		return { ok: true, purchase, shortfall: new Decimal(0), alreadyRefunded: true };
+	}
+	await oweAccessReceipt(updated.id, "refund");
 
 	// A merch purchase unwinds its Printful side with the money: cancellation where
 	// Printful's status still allows it (draft/pending), and the record either way —

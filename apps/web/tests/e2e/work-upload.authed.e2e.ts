@@ -480,8 +480,9 @@ test("a Work's page and the Dashboard follow its processing", async ({ page, con
 		.where(eq(transcodingJobs.workId, work.id));
 	await expect(page.getByText("Processing…")).toHaveCount(0, { timeout: 15_000 });
 
-	// And the Dashboard keeps it for the day, as ready.
-	await page.getByRole("navigation").getByRole("link", { name: "Dashboard", exact: true }).click();
+	// And the Dashboard keeps it for the day, as ready. It is a tab on the creator's own
+	// profile since 2026-10-23, and `/studio` forwards there with that tab open.
+	await page.goto("/studio");
 	const panel = page
 		.locator("section")
 		.filter({ has: page.getByRole("heading", { name: "Processing" }) });

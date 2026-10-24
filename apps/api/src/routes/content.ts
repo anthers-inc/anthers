@@ -89,6 +89,7 @@ import {
 	requiresAdultVerification,
 } from "@anthers/shared/content-rating";
 import { dailyCapFor, type LimitWindow, spentWindow } from "@anthers/shared/parental-controls";
+import { POST_PREVIEW_EXCERPT_LIMIT, postPreviewFor } from "@anthers/shared/post-preview";
 import { visiblePostTitle } from "@anthers/shared/post-title";
 import {
 	asShelfSortDirection,
@@ -138,6 +139,7 @@ import {
 	canonicalizePostTitle,
 	displayPostTitle,
 	displayPostTitles,
+	mentionableWorks,
 	mentionedWorksForTitle,
 	postsMentioningWork,
 } from "../lib/post-title-mentions.js";
@@ -156,6 +158,13 @@ import {
 	heldAnthersBadgeAmount,
 	resolveAccessSync,
 } from "../services/access.js";
+import {
+	type GrantRefusal,
+	mintAccessGrant,
+	verifyAccessGrant,
+} from "../services/access-grants.js";
+import { receiptIdFor } from "../services/access-receipts.js";
+import { accessIssuerDocument, accessSigningKey } from "../services/access-signing.js";
 import {
 	isSuspendedAccount,
 	notSuspendedAccount,
@@ -199,8 +208,11 @@ import {
 	ratingOf,
 	resetRatingForTypeChange,
 } from "../services/content-rating.js";
+import { removeCreatorSpace } from "../services/creator-space.js";
 import {
 	acceptCredit,
+	affirmSelfCredits,
+	creditAttributionsForContributor,
 	creditsForOwner,
 	creditsForUser,
 	findRejectedCredit,
@@ -241,6 +253,13 @@ import {
 import { releaseCounts, releasesByWorkId } from "../services/project-releases.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { publishRefusal } from "../services/publish-refusal.js";
+import {
+	queuePosition,
+	queueShelfEntry,
+	queueShelfRemoval,
+	queueWorkSave,
+	queueWorkSaveRemoval,
+} from "../services/reader-state-migration.js";
 import { findPosition, listPositions, upsertPosition } from "../services/reading-positions.js";
 import { queueRecordSync } from "../services/record-sync.js";
 import { markPurchaseDownloaded } from "../services/refunds.js";
@@ -1059,6 +1078,34 @@ const updateWorkSchema = workBaseSchema
  * rather than a serialized `ZodError`, which reaches a form as "[object Object]". The embed address
  * is the refusal that made this matter; see `invalidBody`.
  */
+/** The one file a grant is asked for: delivery is scoped to the asset being served. */
+const grantBody = zValidator(
+	"json",
+	z.object({ assetId: z.number().int().positive() }),
+	invalidBody,
+);
+
+/**
+ * The answer a client can act on when a grant is missing or wrong.
+ *
+ * Every refusal is a 403 with a `code` the downloader branches on: `grant_expired` means ask
+ * for another, `grant_required` means the client is old enough to be missing the flow, and
+ * the rest mean the token does not belong to this request.
+ */
+function grantRefusal(reason: GrantRefusal): { error: string; code: string } {
+	const messages: Record<GrantRefusal, string> = {
+		issuer_unavailable: "Downloads are not available right now.",
+		malformed: "A download grant is required.",
+		wrong_type: "That is not a download grant.",
+		bad_signature: "That download grant is not valid.",
+		expired: "Your download grant has expired. Try again.",
+		wrong_work: "That download grant is for another Work.",
+		wrong_reader: "That download grant is for another account.",
+		wrong_file: "That download grant is for another file.",
+	};
+	return { error: messages[reason], code: `grant_${reason}` };
+}
+
 const createWorkBody = zValidator("json", createWorkSchema, invalidBody);
 const updateWorkBody = zValidator("json", updateWorkSchema, invalidBody);
 
@@ -1476,6 +1523,51 @@ async function publicWorkCard(param: string) {
 		description: work.description,
 		thumbnail: work.thumbnail,
 		maturity: work.maturity,
+	};
+}
+
+/**
+ * The card a shared post is unfurled with, or null for the site card.
+ *
+ * Mirrors `publicWorkCard`, minus the rating ladder a post does not have: a post carries no
+ * gate and its page reads signed out. The gates here are the permalink's own — an
+ * unpublished post and a suspended author each answer nothing, exactly as they do on
+ * `GET /posts/:slug` — and nothing here writes, because that route counts a view and an
+ * unfurl is not one.
+ *
+ * The image is the first Work the post embeds, resolved through `mentionableWorks` rather
+ * than read off `works` directly: an Adult Work's cover is part of the existence the rung
+ * withholds, and a post that links one must not hand it to an unverified stranger. The
+ * title is resolved the same way, so a mention shows the Work's current name.
+ */
+async function publicPostCard(param: string) {
+	const post = await findPostRow(param);
+	if (!post) return null;
+	if (!post.isPublished) return null;
+	if (post.creatorId != null && (await isSuspendedAccount(post.creatorId))) return null;
+
+	const displayTitle = await displayPostTitle(post.title, null);
+	const embedded = workPublicIdsFromBody(post.body);
+	let image: string | null = null;
+	if (embedded.length > 0) {
+		// `mentionableWorks` is the allow-list a title's mention already resolves through, so
+		// asking it which embedded Works this reader may see keeps the image and the name on
+		// one rule: a Work it filters out contributes no cover either.
+		const mentionable = await mentionableWorks(embedded, null);
+		const first = embedded.find((publicId) => mentionable.has(publicId));
+		if (first !== undefined) {
+			const [row] = await db
+				.select({ thumbnail: works.thumbnail })
+				.from(works)
+				.where(eq(works.publicId, first))
+				.limit(1);
+			image = row?.thumbnail ? row.thumbnail : null;
+		}
+	}
+	return {
+		displayTitle,
+		excerpt: postContentExcerpt(post.body, POST_PREVIEW_EXCERPT_LIMIT),
+		image,
 	};
 }
 
@@ -2182,9 +2274,24 @@ export async function workAccessFor(
 	c: Parameters<typeof getOptionalUserId>[0],
 	work: WorkRow,
 ): Promise<AccessResultLike> {
+	return (await workAccessRequestFor(c, work)).access;
+}
+
+/**
+ * The same resolution, with the two facts the delivery rules turn on.
+ *
+ * `userId` is the signed-in reader and `sharedBy` the sharer whose link the request rode.
+ * The download route needs both: a share link is its own credential and needs no grant,
+ * while a signed-in request must present one. Returning them beside the verdict keeps the
+ * two lookups this resolver already did from being repeated by the caller.
+ */
+export async function workAccessRequestFor(
+	c: Parameters<typeof getOptionalUserId>[0],
+	work: WorkRow,
+): Promise<{ access: AccessResultLike; userId: number | null; sharedBy: number | null }> {
 	const { userId, sharedBy } = await requesterFor(c, work.id);
 	const ctx = await buildAccessContext(userId, { workIds: [work.id], sharedBy });
-	return resolveAccessSync(work as AccessibleWork, ctx);
+	return { access: resolveAccessSync(work as AccessibleWork, ctx), userId, sharedBy };
 }
 
 /**
@@ -3029,6 +3136,15 @@ const tagDirectoryQuerySchema = z.object({
 	q: z.string().max(64).optional(),
 	limit: z.coerce.number().int().min(1).max(100).optional().default(20),
 });
+
+/**
+ * Queue the space write after the row has been written, and never let its failure fail the
+ * request. During the cutover the database is still the hot copy, so a queue failure costs
+ * freshness in the space rather than the save itself.
+ */
+function queueReaderWrite(work: () => Promise<void>): void {
+	void work().catch((error) => console.error("[reader-state] queue failed", error));
+}
 
 const contentRoutes = new Hono()
 	// ══════════════════════════════════════════════════════════════════════════
@@ -4110,9 +4226,99 @@ const contentRoutes = new Hono()
 	 * gap predates this change and is not closed by it; closing it needs a signed-URL
 	 * handoff, and no installer has been built yet.
 	 *
+	 * ── The access artifacts ──────────────────────────────────────────────────────
+	 *
+	 * A receipt is written into the reader's space by the job, not here. What lives on this
+	 * router is the key a third party checks it with, and the grant file delivery needs.
+	 *
+	 * 🚨 **The issuer document is the public half of the signing key, and nothing else.** It
+	 * is served without auth because checking a receipt without Anthers is the point of a
+	 * receipt; a deployment with no key answers 503 rather than publishing an empty JWKS a
+	 * verifier could mistake for a revocation.
+	 */
+	.get("/access/issuer.json", (c) => {
+		const document = accessIssuerDocument();
+		if (!document) return c.json({ error: "No access key is configured." }, 503);
+		return c.json(document, 200, { "Cache-Control": "public, max-age=300" });
+	})
+
+	/**
+	 * Mint a short-lived grant for one file of one Work.
+	 *
+	 * ⭐ **The grant names the file the download is about to serve**, so a grant for one
+	 * asset cannot open another. The ledger decides whether there is anything to grant;
+	 * this only states it in a form delivery can check and a third party could verify.
+	 *
+	 * ⚠️ **A share link is not a grant and cannot mint one.** A recipient with no account
+	 * has no DID for the grant to name; the share token is their credential and the download
+	 * route accepts it in place of a grant.
+	 */
+	.post("/works/:id/grant", requireAuth, grantBody, async (c) => {
+		const work = await findWorkRow(c.req.param("id") ?? "");
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		const user = c.get("user");
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) {
+			return c.json({ error: "Purchase or subscription required", access }, 403);
+		}
+
+		const [asset] = await db
+			.select({ file: assets.file })
+			.from(assets)
+			.where(and(eq(assets.id, c.req.valid("json").assetId), eq(assets.workId, work.id)))
+			.limit(1);
+		if (!asset) return c.json({ error: "Asset not found" }, 404);
+
+		const [reader] = await db
+			.select({ did: users.atprotoDid })
+			.from(users)
+			.where(eq(users.id, user.id))
+			.limit(1);
+		if (!reader?.did) return c.json({ error: "This account has no identity." }, 409);
+
+		if (!accessSigningKey()) {
+			return c.json({ error: "Access grants are not available right now." }, 503);
+		}
+
+		const [purchase] = await db
+			.select({ id: purchases.id })
+			.from(purchases)
+			.where(
+				and(
+					eq(purchases.buyerId, user.id),
+					eq(purchases.workId, work.id),
+					eq(purchases.status, "completed"),
+				),
+			)
+			.orderBy(desc(purchases.id))
+			.limit(1);
+
+		try {
+			const { token, payload } = mintAccessGrant({
+				workId: work.id,
+				workUri: work.atprotoUri,
+				receipt: purchase ? receiptIdFor(purchase.id, "purchase") : null,
+				reader: reader.did,
+				basis: access.reason,
+				files: [asset.file],
+			});
+			return c.json({ grant: token, expiresAt: payload.expiresAt });
+		} catch {
+			return c.json({ error: "Access grants are not available right now." }, 503);
+		}
+	})
+
+	/*
 	 * ── Access-checked asset download ─────────────────────────────────────────────
 	 * Assets belong to a Work, and the Work carries the gate. No post is involved: an
 	 * entitled user can download from the Catalog whether or not anything was announced.
+	 *
+	 * 🚨 **A signed-in download must present a grant; a share link is its own credential.**
+	 * The ledger is read first and still decides, exactly as before — the grant adds the
+	 * scope (this reader, this Work, this file) and the ten-minute life that makes a refund
+	 * stop delivery at the next grant rather than never. Expiry is enforced here so a
+	 * client that cached one must ask again.
 	 */
 	.post("/works/:id/assets/:assetId/download", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
@@ -4126,9 +4332,29 @@ const contentRoutes = new Hono()
 		if (!asset) return c.json({ error: "Asset not found" }, 404);
 
 		// Enforce access server-side — the UI gate is not the source of truth.
-		const access = await workAccessFor(c, work);
+		const { access, userId, sharedBy } = await workAccessRequestFor(c, work);
 		if (!access.canAccess) {
 			return c.json({ error: "Purchase or subscription required", access }, 403);
+		}
+
+		if (sharedBy === null) {
+			const token = c.req.header("x-anthers-grant")?.trim() ?? "";
+			const [reader] = userId
+				? await db
+						.select({ did: users.atprotoDid })
+						.from(users)
+						.where(eq(users.id, userId))
+						.limit(1)
+				: [];
+			const verdict =
+				reader?.did && token
+					? verifyAccessGrant(token, {
+							readerDid: reader.did,
+							workId: work.id,
+							fileKey: asset.file,
+						})
+					: ({ ok: false, reason: token ? "wrong_reader" : "malformed" } as const);
+			if (!verdict.ok) return c.json(grantRefusal(verdict.reason), 403);
 		}
 
 		db.update(works)
@@ -4726,6 +4952,7 @@ const contentRoutes = new Hono()
 				},
 			})
 			.returning({ id: workSaves.id, updatedAt: workSaves.updatedAt });
+		queueReaderWrite(() => queueWorkSave(user.id, work.id));
 		return c.json({ saved: true as const, updatedAt: save.updatedAt });
 	})
 	.get("/works/:id/save", requireAuth, async (c) => {
@@ -4762,6 +4989,9 @@ const contentRoutes = new Hono()
 			.returning({ id: workSaves.id });
 		// Deleting your own save is a playerRight-shaped act and needs no gate beyond
 		// owning it: it removes only the synced copy, never the game's local one.
+		if (deleted != null) {
+			queueReaderWrite(() => queueWorkSaveRemoval(user.id, Number(c.req.param("id"))));
+		}
 		return c.json({ deleted: deleted != null });
 	})
 
@@ -5136,6 +5366,15 @@ const contentRoutes = new Hono()
 		const job = await queueTranscodeForWork(work);
 		await queueScansForWork(work);
 		await resolveWorkThumbnail(work);
+		// A credit naming the creator's own identity is affirmed by the act of writing it:
+		// there is no third party to ask, so it is recorded as an ordinary acceptance here
+		// (see `affirmSelfCredits`). A Work is born private and has no listing yet; the row
+		// is what the record's confirmed set reads when the Work is released.
+		await affirmSelfCredits({ workId: work.id, creatorUserId: user.id, credits: work.credits });
+		// The draft is a creator-space record, and a Work is born private — so the first sync is
+		// what puts it there. The job re-reads and decides; a Work that needs no listing simply
+		// writes no public record.
+		await queueWorkListingSync(work.id);
 		// No credit notification here: a Work is born private, and the notification is owed
 		// when the Work is public — see the PATCH route and `notifyCreditedAccounts`.
 		return c.json({ work: await serializeWork(work, [], job, [], deliveryCtx()) }, 201);
@@ -5299,6 +5538,19 @@ const contentRoutes = new Hono()
 		const card = await publicWorkCard(c.req.param("id"));
 		if (!card) return c.json({ error: "Work not found" }, 404);
 		return c.json({ preview: workPreviewFor(card) });
+	})
+
+	/**
+	 * The card a shared post is unfurled with, for a reader who holds no session.
+	 *
+	 * Separate from `GET /posts/:slug` for the same reason the Work card is: that route
+	 * counts a view, while a crawler wants a heading, a line of text and an image, and must
+	 * leave no trace. `publicPostCard` owns the gates; this only renders what it answers.
+	 */
+	.get("/posts/:slug/card", async (c) => {
+		const card = await publicPostCard(c.req.param("slug"));
+		if (!card) return c.json({ error: "Post not found" }, 404);
+		return c.json({ preview: postPreviewFor(card) });
 	})
 
 	/**
@@ -5825,6 +6077,97 @@ const contentRoutes = new Hono()
 	})
 
 	/**
+	 * A person's credits — every published Work that names this account, split into the
+	 * credits that stand and the ones waiting on their confirmation.
+	 *
+	 * This is the creator-profile counterpart to a Work's liner notes: the same rows turned
+	 * around, as a body of work. A visitor sees only accepted credits; the account itself
+	 * additionally sees the rows it has not answered, because the profile is where a
+	 * person reviews what has been attributed to them.
+	 *
+	 * 🚨 **A listing of Works, so `maturityHiddenFrom` travels with `notBlockedBy`.** An
+	 * Adult Work a viewer may not reach is absent here as everywhere else — title included
+	 * — and a blocked creator's Work is absent too. Takedown and quarantine are checked
+	 * because a credit is not a way around either.
+	 *
+	 * Attributed by identity: only credits whose contributor is the account's own DID count,
+	 * since a freeform name cannot be safely matched to a person.
+	 */
+	.get("/credits/:handle", async (c) => {
+		const handle = c.req.param("handle");
+		const resolution = await resolveHandle(handle);
+		const account =
+			resolution.account ??
+			(resolution.redirectToHandle
+				? await accountByHandle(resolution.redirectToHandle)
+				: undefined);
+		if (!account) return c.json({ error: "Creator not found" }, 404);
+
+		const userId = await getOptionalUserId(c);
+		const isSelf = userId === account.id;
+		// A suspended account's credits are gone with the rest of its presence — the same
+		// 404 an unknown handle returns. The account itself still resolves its own page.
+		if (!isSelf && (await isSuspendedAccount(account.id))) {
+			return c.json({ error: "Creator not found" }, 404);
+		}
+
+		const [{ prefs }, { policy }] = await Promise.all([
+			adultVisibility(userId),
+			parentalVisibility(userId),
+		]);
+
+		const rows = await db
+			.select({
+				id: works.id,
+				slug: works.slug,
+				publicId: works.publicId,
+				title: works.title,
+				credits: works.credits,
+				originallyReleased: works.originallyReleased,
+				releasedAt: works.releasedAt,
+				createdAt: works.createdAt,
+			})
+			.from(works)
+			.where(
+				and(
+					eq(works.visibility, "released"),
+					eq(works.takedownStatus, "active"),
+					eq(works.quarantineStatus, "none"),
+					sql`EXISTS (
+						SELECT 1 FROM jsonb_array_elements(COALESCE(${works.credits}, '[]'::jsonb)) AS credit
+						WHERE credit->>'contributor' = ${account.atprotoDid}
+					)`,
+					notBlockedBy(userId, works.creatorId),
+					notSuspendedAccount(works.creatorId),
+					notTestAccount(works.creatorId),
+					maturityHiddenFrom(
+						prefs,
+						userId,
+						sql`works.creator_id`,
+						sql`works.maturity`,
+						sql`works.maturity_rows`,
+					),
+					parentalHiddenFrom(policy, userId, sql`works.creator_id`, sql`works.type`),
+				),
+			)
+			.orderBy(
+				sql`COALESCE(${works.originallyReleased}, ${works.releasedAt}, ${works.createdAt}) DESC`,
+			)
+			.limit(500);
+
+		const { accepted, pending } = await creditAttributionsForContributor(rows, account.atprotoDid);
+
+		return c.json({
+			creator: { handle: account.atprotoHandle, displayName: account.displayName },
+			accepted,
+			// The pending half is the account's own business: a stranger's serialization
+			// carries the shape but never the rows, so a client cannot mistake a withheld
+			// list for an empty one when it is the owner asking.
+			pending: isSelf ? pending : [],
+		});
+	})
+
+	/**
 	 * Update a Work (owner-only) — including releasing it. Re-queues processing when the
 	 * source changes.
 	 *
@@ -6212,6 +6555,12 @@ const contentRoutes = new Hono()
 		} else {
 			[updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
 		}
+
+		// The creator's own credits are affirmed by the assertion itself, recorded before the
+		// listing sync below so the record's confirmed set sees them. Run on every write, not
+		// only a credits edit, so a self-credit written before this rule existed is healed by
+		// the next save (`affirmSelfCredits`).
+		await affirmSelfCredits({ workId: id, creatorUserId: user.id, credits: updated.credits });
 
 		// The credited are told when the credit becomes PUBLIC: on the request that releases
 		// the Work, or when credits change on one already released. A private Work's credits
@@ -6687,6 +7036,21 @@ const contentRoutes = new Hono()
 			db.select().from(transcodingJobs).where(eq(transcodingJobs.workId, id)),
 		]);
 		await purgeWorkMedia(item, workAssets, jobRows);
+
+		// The creator's own records go before the row that names them. A gated space for a Work
+		// nobody bought has no audience left, so it is deleted with the Work; a studio space
+		// belongs to the creator and survives, because it may hold other drafts. Best effort:
+		// the creator asked for the Work to go, and being unable to reach a second server is not
+		// a reason to refuse. Whatever is left is recorded under the account-deletion and backup
+		// paths rather than stranded silently.
+		try {
+			await removeCreatorSpace(item);
+		} catch (err) {
+			console.error(
+				`[content] work ${id}: creator-space cleanup failed — ` +
+					`${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
 
 		await db.delete(works).where(eq(works.id, id));
 		return c.body(null, 204);
@@ -8645,6 +9009,7 @@ const contentRoutes = new Hono()
 					404,
 				);
 			}
+			queueReaderWrite(() => queueShelfEntry(user.id, result.id));
 			return c.json({ id: result.id }, 201);
 		},
 	)
@@ -8664,6 +9029,7 @@ const contentRoutes = new Hono()
 			const id = parseNumericId(c.req.param("id"));
 			if (id == null) return c.json({ error: "Not found" }, 404);
 			const ok = await setHidden(user.id, id, c.req.valid("json").hidden);
+			if (ok) queueReaderWrite(() => queueShelfEntry(user.id, id));
 			return ok ? c.json({ success: true }) : c.json({ error: "Not found" }, 404);
 		},
 	)
@@ -8682,7 +9048,10 @@ const contentRoutes = new Hono()
 		if (id == null) return c.json({ error: "Not found" }, 404);
 
 		const result = await removeItem(user.id, id);
-		if (result.ok) return c.body(null, 204);
+		if (result.ok) {
+			queueReaderWrite(() => queueShelfRemoval(user.id, result.subject));
+			return c.body(null, 204);
+		}
 		if (result.reason === "purchased") {
 			return c.json(
 				{
@@ -8773,6 +9142,7 @@ const contentRoutes = new Hono()
 				);
 			}
 
+			queueReaderWrite(() => queuePosition(user.id, work.id));
 			const row = await findPosition(user.id, work.id);
 			return c.json({
 				workId: row!.workId,

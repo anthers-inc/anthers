@@ -16,7 +16,13 @@
  * when present, is preferred on the way back in and is what another client would follow.
  */
 
-/** The collections the user space declares. Only the Library's is written by this build. */
+/**
+ * The collections the user space declares.
+ *
+ * The three reader-state records are written by the outbox and the projection; `receipt` is
+ * written by the access-receipt job from the ledger, because a purchase's proof is not a
+ * projection of the reader's own state.
+ */
 export const USER_SPACE_COLLECTIONS = {
 	libraryItem: "org.anthers.libraryItem",
 	readingPosition: "org.anthers.readingPosition",
@@ -91,7 +97,6 @@ export function libraryItemRecord(state: LibraryItemState): LibraryItemRecord {
 
 /** What a read-back produced, or why it could not be read as a shelf entry. */
 export type ParsedLibraryItem = { item: LibraryItemState } | { problem: string };
-
 const SUBJECT_KINDS = new Set<LibrarySubjectKind>(["work", "project", "post"]);
 
 /**
@@ -133,5 +138,97 @@ export function parseLibraryItemRecord(value: unknown): ParsedLibraryItem {
 			sortOrder: record.sortOrder,
 			savedAt,
 		},
+	};
+}
+
+/**
+ * The reading-position record: where a reader stopped in one Work.
+ *
+ * 🚨 **No floating point crosses into the record.** `reading_positions.progress` is a SQL
+ * `real`, and the protocol's data model has integers and strings, not floats. The position is
+ * stored as basis points in `progressBps`, an integer from 0 to 10,000, which is the same
+ * quarter-percent precision the rail draws and compares without a binary-float surprise on
+ * another client. The reverse reads `progressBps / 10_000`.
+ *
+ * The pointer stays opaque: page/panel, a CFI, or nothing at all, and only the client's readers
+ * assign its keys meaning.
+ */
+export type ReadingPositionRecord = {
+	$type: typeof USER_SPACE_COLLECTIONS.readingPosition;
+	subject: { kind: "work"; id: number; uri?: string };
+	progressBps: number;
+	position: Record<string, unknown>;
+	updatedAt: string;
+} & Record<string, unknown>;
+
+export function readingPositionRkey(workId: number): string {
+	return `work-${workId}`;
+}
+
+export function readingPositionRecord(state: {
+	workId: number;
+	workUri?: string | null;
+	progress: number;
+	position: Record<string, unknown>;
+	updatedAt: Date;
+}): ReadingPositionRecord {
+	const clamped = Math.min(1, Math.max(0, state.progress));
+	return {
+		$type: USER_SPACE_COLLECTIONS.readingPosition,
+		subject: {
+			kind: "work",
+			id: state.workId,
+			...(state.workUri ? { uri: state.workUri } : {}),
+		},
+		progressBps: Math.round(clamped * 10_000),
+		position: state.position,
+		updatedAt: state.updatedAt.toISOString(),
+	};
+}
+
+/**
+ * The cloud-save record: the bytes a game wrote, inline rather than as a blob.
+ *
+ * ⚠️ **Inline is a decision, not an omission.** A save is capped small (`SAVE_BLOB_MAX_CHARS`
+ * in the route), and a record carries it as a string; the space namespace has no upload, so a
+ * blob route would mean the ordinary repository, a `blob:` permission and a ref the restore has
+ * to keep in step. A reader's save is text under the cap, so the record is the whole artifact.
+ * If a future save grows past a record, it becomes a blob and this shape changes with it.
+ */
+export type WorkSaveRecord = {
+	$type: typeof USER_SPACE_COLLECTIONS.workSave;
+	subject: { kind: "work"; id: number; uri?: string };
+	save: string;
+	runtime: string;
+	note: string;
+	byteSize: number;
+	updatedAt: string;
+} & Record<string, unknown>;
+
+export function workSaveRkey(workId: number): string {
+	return `work-${workId}`;
+}
+
+export function workSaveRecord(state: {
+	workId: number;
+	workUri?: string | null;
+	save: string;
+	runtime: string;
+	note: string;
+	byteSize: number;
+	updatedAt: Date;
+}): WorkSaveRecord {
+	return {
+		$type: USER_SPACE_COLLECTIONS.workSave,
+		subject: {
+			kind: "work",
+			id: state.workId,
+			...(state.workUri ? { uri: state.workUri } : {}),
+		},
+		save: state.save,
+		runtime: state.runtime,
+		note: state.note,
+		byteSize: state.byteSize,
+		updatedAt: state.updatedAt.toISOString(),
 	};
 }

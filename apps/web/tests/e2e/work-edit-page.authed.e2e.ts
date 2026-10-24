@@ -281,7 +281,9 @@ test("a piece of writing is written on its page and reads as an article", async 
 	await page.getByRole("button", { name: "Add a credit" }).click();
 	await page.getByRole("textbox", { name: "Credit 1 role" }).fill("Written by");
 	await page.getByRole("checkbox", { name: "Credit 1 Created" }).check();
-	await page.getByRole("textbox", { name: "Credit 1 contributor" }).fill("The Walker");
+	const contributor = page.getByRole("textbox", { name: "Credit 1 contributors" });
+	await contributor.fill("The Walker");
+	await contributor.press("Enter");
 	await page.getByRole("button", { name: "Save Credits" }).click();
 	await page.getByRole("tab", { name: "Details" }).click();
 	await page.getByRole("button", { name: "Edit Release" }).click();

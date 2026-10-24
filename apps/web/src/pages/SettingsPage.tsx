@@ -15,14 +15,18 @@ import {
 import {
 	BROWSER_RESERVED_CHORDS,
 	canonicalChord,
-	DEFAULT_SEARCH_SHORTCUTS,
+	DEFAULT_KEYBOARD_SHORTCUTS,
 	formatChord,
+	isPlayerShortcutAction,
+	KEYBOARD_SHORTCUT_ACTIONS,
+	type KeyboardShortcutAction,
+	type KeyboardShortcuts,
 	keyFromEvent,
-	resolveSearchShortcuts,
-	SEARCH_SHORTCUT_ACTIONS,
-	type SearchShortcutAction,
-	type SearchShortcuts,
+	PAGE_SHORTCUT_ACTIONS,
+	PLAYER_SHORTCUT_ACTIONS,
+	resolveKeyboardShortcuts,
 } from "@anthers/shared/keybindings";
+import SignedInAccountCard from "@anthers/web-shared/account/SignedInAccountCard";
 import { useAuth } from "@anthers/web-shared/auth";
 import { useContentPreferences } from "@anthers/web-shared/content-preferences";
 import {
@@ -48,6 +52,8 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
+import BadgesSection from "../components/account/BadgesSection";
+import PurchasesSection from "../components/account/PurchasesSection";
 import BlueskyMark from "../components/auth/BlueskyMark";
 import BillingAddressSection from "../components/settings/BillingAddressSection";
 import ParentalControlsSection from "../components/settings/ParentalControlsSection";
@@ -1554,6 +1560,9 @@ interface DeletionPreview {
 	worksWithdrawn: number;
 	purchases: number;
 	hostedHandles: string[];
+	exportedAt: string | null;
+	hasRecentExport: boolean;
+	spaces: number;
 }
 
 interface ActivityEntry {
@@ -2283,6 +2292,9 @@ function DataSection() {
 	const [state, setState] = useState<DeletionState | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [exporting, setExporting] = useState(false);
+	const [identityExporting, setIdentityExporting] = useState(false);
+	const [identityReady, setIdentityReady] = useState(false);
+	const [bypass, setBypass] = useState(false);
 	const [confirming, setConfirming] = useState(false);
 	const [busy, setBusy] = useState(false);
 
@@ -2322,12 +2334,44 @@ function DataSection() {
 		}
 	};
 
+	const handleIdentityExport = async () => {
+		setIdentityExporting(true);
+		setError(null);
+		try {
+			const res = await apiFetch("/api/accounts/me/export/atproto", { method: "POST" });
+			if (!res.ok) throw new Error("Your identity bundle could not be built.");
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `anthers-identity-${new Date().toISOString().slice(0, 10)}.zip`;
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+			URL.revokeObjectURL(url);
+			setIdentityReady(true);
+			// The gate now sees a fresh bundle; reload so the confirmation reflects it.
+			load();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Your identity bundle could not be built.");
+		} finally {
+			setIdentityExporting(false);
+		}
+	};
+
 	const handleDelete = async () => {
 		setBusy(true);
 		setError(null);
 		try {
-			const res = await apiFetch("/api/accounts/me", { method: "DELETE" });
-			if (!res.ok) throw new Error("Could not schedule deletion.");
+			const res = await apiFetch("/api/accounts/me", {
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ bypassExport: bypass }),
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => ({}))) as { error?: string };
+				throw new Error(body.error ?? "Could not schedule deletion.");
+			}
 			// Every session went with the request, including this one. A full reload is the
 			// honest response: staying on a logged-in-looking page would be a lie the client
 			// is telling about a server that has already forgotten us.
@@ -2372,8 +2416,23 @@ function DataSection() {
 						{exporting ? "Preparing…" : "Download my data"}
 					</button>
 					<p className="text-xs text-base-content/60">
-						Everything we hold about you, as a JSON file. Nothing in it could sign in as you, or
-						belongs to someone else.
+						Everything Anthers holds about you, as a JSON file. Nothing in it could sign in as you,
+						or belongs to someone else.
+					</p>
+				</div>
+
+				<div className="flex flex-wrap items-center gap-3">
+					<button
+						type="button"
+						className="btn btn-sm"
+						onClick={handleIdentityExport}
+						disabled={identityExporting}
+					>
+						{identityExporting ? "Building…" : "Download my identity"}
+					</button>
+					<p className="text-xs text-base-content/60">
+						Your public repository, every space, and the files in them, as a ZIP. This is the copy
+						that leaves with you.
 					</p>
 				</div>
 
@@ -2465,12 +2524,64 @@ function DataSection() {
 									It takes effect in {state?.graceDays ?? 7} days. Signing back in during that week
 									cancels it. You will be signed out everywhere now.
 								</p>
+								{p ? (
+									<div
+										className={`mt-3 rounded-lg p-3 ${
+											p.hasRecentExport || identityReady
+												? "bg-base-200"
+												: "border border-warning/50 bg-warning/10"
+										}`}
+									>
+										{p.hasRecentExport || identityReady ? (
+											<p className="text-sm">
+												Your identity bundle is ready
+												{p.exportedAt
+													? ` (taken ${new Date(p.exportedAt).toLocaleDateString()})`
+													: ""}
+												. It carries the public repository,{" "}
+												{p.spaces === 1 ? "your space" : `${p.spaces} spaces`}, and the files in
+												them.
+											</p>
+										) : (
+											<>
+												<p className="text-sm font-medium">
+													The JSON file does not contain your identity.
+												</p>
+												<p className="mt-1 text-sm text-base-content/80">
+													Your public repository, your spaces, and the files in them are destroyed
+													with this account. The identity itself stays in the public directory with
+													nothing behind it. Take the bundle if you want a copy you can keep or
+													move.
+												</p>
+												<button
+													type="button"
+													className="btn btn-sm mt-2"
+													onClick={handleIdentityExport}
+													disabled={identityExporting}
+												>
+													{identityExporting ? "Building…" : "Download my identity bundle"}
+												</button>
+												<label className="mt-3 flex items-start gap-2 text-sm">
+													<input
+														type="checkbox"
+														className="checkbox checkbox-sm"
+														checked={bypass}
+														onChange={(e) => setBypass(e.target.checked)}
+													/>
+													<span>
+														I understand this is the only copy, and I am deleting without it.
+													</span>
+												</label>
+											</>
+										)}
+									</div>
+								) : null}
 								<div className="mt-3 flex gap-2">
 									<button
 										type="button"
 										className="btn btn-sm btn-error"
 										onClick={handleDelete}
-										disabled={busy || !p}
+										disabled={busy || !p || (!p.hasRecentExport && !identityReady && !bypass)}
 									>
 										{busy ? "Scheduling…" : "Yes, delete my account"}
 									</button>
@@ -2493,14 +2604,22 @@ function DataSection() {
 }
 
 /**
- * The account settings are grouped into four tabs by subject, replacing a single
+ * The account settings are grouped into five tabs by subject, replacing a single
  * scroll of eleven sections. The tab is carried in the URL as `?tab=` so a link can
  * point somebody at the right one.
+ *
+ * ⭐ **Badges & Purchases joined as a tab on 2026-10-23**, rather than staying a page of its
+ * own at `/purchases`. Both halves answer what the account has given, which is a settings
+ * question, and the account had two doors for one subject: a menu item for the money and a
+ * menu item for everything else. It sits second, between the account's switches and its
+ * identity, because a person reviewing what they hold is closer to Settings' own subject
+ * than the identity record is.
  */
-type SettingsTab = "account" | "identity" | "content" | "activity";
+type SettingsTab = "account" | "purchases" | "identity" | "content" | "activity";
 
 const TAB_LABELS: { id: SettingsTab; label: string }[] = [
 	{ id: "account", label: "Account" },
+	{ id: "purchases", label: "Badges & Purchases" },
 	{ id: "identity", label: "Identity & Devices" },
 	{ id: "content", label: "Content & Safety" },
 	{ id: "activity", label: "Activity & Data" },
@@ -2678,13 +2797,19 @@ export default function SettingsPage() {
 			)}
 
 			{/* `tabs-box`, not the retired v4 `tabs-boxed` — the same convention the
-			    Library page uses. */}
-			<div role="tablist" aria-label="Settings" className="tabs tabs-box mb-6 w-fit">
+			    Library page uses. The row scrolls on a narrow screen now that it carries five
+			    labels, the longest of which names two objects. */}
+			<div
+				role="tablist"
+				aria-label="Settings"
+				className="tabs tabs-box mb-6 w-fit max-w-full overflow-x-auto"
+			>
 				{TAB_LABELS.map((t) => (
 					<button
 						key={t.id}
 						type="button"
 						role="tab"
+						aria-selected={activeTab === t.id}
 						className={`tab ${activeTab === t.id ? "tab-active" : ""}`}
 						onClick={() =>
 							setSettingsParams(
@@ -2704,6 +2829,10 @@ export default function SettingsPage() {
 
 			{visitedTabs.has("account") && (
 				<div hidden={activeTab !== "account"}>
+					{/* Who this browser is signed in as, and the button that ends it. The header
+					    menu no longer carries Log Out; both settings pages do. */}
+					<SignedInAccountCard className="mb-6" />
+
 					{/* Creator mode toggle */}
 					<div
 						className={`card mb-6 ${sentFromStudio ? "bg-base-200 ring-2 ring-info" : "bg-base-200"}`}
@@ -2779,6 +2908,15 @@ export default function SettingsPage() {
 							</div>
 						</div>
 					)}
+				</div>
+			)}
+
+			{visitedTabs.has("purchases") && (
+				<div hidden={activeTab !== "purchases"}>
+					{/* What this account holds and what it has bought — the same two components the
+					    old `/purchases` page mounted, now a tab so the account has one address. */}
+					<BadgesSection />
+					<PurchasesSection />
 				</div>
 			)}
 
@@ -2906,12 +3044,17 @@ function SupporterListingSection() {
 }
 
 /**
- * The search bar's two shortcuts, rebindable per account.
+ * The account's rebindable shortcuts: the search bar's two and a player's two.
  *
  * 🚨 **A chord is validated by the shared grammar before it is saved, and the server
  * validates it again.** The recorder is a convenience; the route is the check. That is
  * also why the card surfaces the server's message instead of inventing its own — a
  * setting that appears to save and does not is the one outcome worth failing loudly on.
+ *
+ * The scopes are what decide whether a bare key is allowed. Search and Filter are heard
+ * across the page and must carry a modifier, or they would eat typing; Full screen and
+ * Theater mode are heard by a player that already has focus, where a bare letter is the
+ * binding people expect.
  *
  * Recording listens in the capture phase and stops propagation so the bar's own listener
  * (and the browser) never acts on the chord being recorded.
@@ -2920,25 +3063,25 @@ function KeyboardShortcutsSection() {
 	const { user, refreshUser } = useAuth();
 	const apple = isApplePlatform();
 	const stored = useMemo(
-		() => resolveSearchShortcuts(user?.searchShortcuts),
-		[user?.searchShortcuts],
+		() => resolveKeyboardShortcuts(user?.keyboardShortcuts),
+		[user?.keyboardShortcuts],
 	);
-	const [draft, setDraft] = useState<SearchShortcuts>(stored);
-	const [recording, setRecording] = useState<SearchShortcutAction | null>(null);
+	const [draft, setDraft] = useState<KeyboardShortcuts>(stored);
+	const [recording, setRecording] = useState<KeyboardShortcutAction | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [notice, setNotice] = useState<{ tone: "error" | "info"; text: string } | null>(null);
 
 	useEffect(() => setDraft(stored), [stored]);
 
 	const save = useCallback(
-		async (next: SearchShortcuts) => {
+		async (next: KeyboardShortcuts) => {
 			setSaving(true);
 			setNotice(null);
 			try {
 				const res = await apiFetch("/api/accounts/me", {
 					method: "PATCH",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ searchShortcuts: next }),
+					body: JSON.stringify({ keyboardShortcuts: next }),
 				});
 				if (!res.ok) {
 					const body = (await res.json().catch(() => ({}))) as { error?: unknown };
@@ -2963,6 +3106,7 @@ function KeyboardShortcutsSection() {
 
 	useEffect(() => {
 		if (!recording) return;
+		const playerScoped = isPlayerShortcutAction(recording);
 		const handler = (event: KeyboardEvent) => {
 			event.preventDefault();
 			event.stopPropagation();
@@ -2988,19 +3132,21 @@ function KeyboardShortcutsSection() {
 			if (event.shiftKey) parts.push("Shift");
 			parts.push(key);
 
-			const chord = canonicalChord(parts.join("+"));
+			const chord = canonicalChord(parts.join("+"), { bare: playerScoped });
 			if (!chord) {
 				setNotice({
 					tone: "error",
-					text: `A shortcut needs ${apple ? "Command, Control, or Option" : "Ctrl or Alt"} plus one other key.`,
+					text: `A page shortcut needs ${apple ? "Command, Control, or Option" : "Ctrl or Alt"} plus one other key.`,
 				});
 				return;
 			}
-			const other = recording === "search" ? draft.filter : draft.search;
-			if (chord === other) {
+			const other = KEYBOARD_SHORTCUT_ACTIONS.filter((action) => action !== recording).map(
+				(action) => draft[action],
+			);
+			if (other.includes(chord)) {
 				setNotice({
 					tone: "error",
-					text: "The other search action already uses that combination.",
+					text: "Another shortcut already uses that combination.",
 				});
 				return;
 			}
@@ -3012,14 +3158,27 @@ function KeyboardShortcutsSection() {
 		return () => window.removeEventListener("keydown", handler, true);
 	}, [recording, draft, apple, save]);
 
-	const rowCopy: Record<SearchShortcutAction, { label: string; hint: string }> = {
+	const groups: Array<{ title: string; actions: readonly KeyboardShortcutAction[] }> = [
+		{ title: "Anywhere on the page", actions: PAGE_SHORTCUT_ACTIONS },
+		{ title: "While a player has focus", actions: PLAYER_SHORTCUT_ACTIONS },
+	];
+
+	const rowCopy: Record<KeyboardShortcutAction, { label: string; hint: string }> = {
 		search: {
 			label: "Search everything",
 			hint: "Opens the global search across creators, Works, Projects, Posts, modes, and settings.",
 		},
 		filter: {
 			label: "Filter this view",
-			hint: `Rebinding this gives ${formatChord(DEFAULT_SEARCH_SHORTCUTS.filter, apple)} back to the browser's find.`,
+			hint: `Rebinding this gives ${formatChord(DEFAULT_KEYBOARD_SHORTCUTS.filter, apple)} back to the browser's find.`,
+		},
+		fullscreen: {
+			label: "Full screen",
+			hint: "Hands the work the whole monitor through the browser's own full-screen mode.",
+		},
+		theater: {
+			label: "Theater mode",
+			hint: "Fills the area inside the topbar and sidebar with the work, leaving the rest of the page a scroll away.",
 		},
 	};
 
@@ -3028,55 +3187,65 @@ function KeyboardShortcutsSection() {
 			<div className="card-body">
 				<h3 className="card-title text-lg">Keyboard Shortcuts</h3>
 				<p className="text-sm text-base-content/60">
-					The two shortcuts that open the search bar. They follow this account, so they work on
-					every device you sign in on.
+					These follow your account, so they work on every device you sign in on. Player shortcuts
+					work once the player has focus.
 				</p>
 
-				<div className="mt-2 divide-y divide-base-300/50">
-					{SEARCH_SHORTCUT_ACTIONS.map((action) => {
-						const chord = draft[action];
-						const isDefault = chord === DEFAULT_SEARCH_SHORTCUTS[action];
-						const copy = rowCopy[action];
-						return (
-							<div key={action} className="flex flex-wrap items-center justify-between gap-2 py-3">
-								<div className="min-w-0">
-									<p className="text-sm font-medium">{copy.label}</p>
-									<p className="text-xs text-base-content/50">{copy.hint}</p>
-								</div>
-								<div className="flex shrink-0 items-center gap-2">
-									<kbd className="kbd kbd-sm">{formatChord(chord, apple)}</kbd>
-									<button
-										type="button"
-										className="btn btn-ghost btn-xs"
-										disabled={saving}
-										onClick={() => {
-											setRecording(action);
-											setNotice(null);
-										}}
+				{groups.map((group) => (
+					<div key={group.title} className="mt-2">
+						<p className="text-xs font-semibold uppercase tracking-wider text-base-content/45">
+							{group.title}
+						</p>
+						<div className="divide-y divide-base-300/50">
+							{group.actions.map((action) => {
+								const chord = draft[action];
+								const isDefault = chord === DEFAULT_KEYBOARD_SHORTCUTS[action];
+								const copy = rowCopy[action];
+								return (
+									<div
+										key={action}
+										className="flex flex-wrap items-center justify-between gap-2 py-3"
 									>
-										{recording === action ? "Press keys…" : "Change"}
-									</button>
-									<button
-										type="button"
-										className="btn btn-ghost btn-xs"
-										disabled={saving || isDefault}
-										onClick={() =>
-											void save({ ...draft, [action]: DEFAULT_SEARCH_SHORTCUTS[action] })
-										}
-									>
-										Reset
-									</button>
-								</div>
-								{BROWSER_RESERVED_CHORDS.has(chord) && (
-									<p className="w-full text-xs text-warning">
-										Your browser may keep this combination for itself. If it does, the shortcut will
-										not open the bar.
-									</p>
-								)}
-							</div>
-						);
-					})}
-				</div>
+										<div className="min-w-0">
+											<p className="text-sm font-medium">{copy.label}</p>
+											<p className="text-xs text-base-content/50">{copy.hint}</p>
+										</div>
+										<div className="flex shrink-0 items-center gap-2">
+											<kbd className="kbd kbd-sm">{formatChord(chord, apple)}</kbd>
+											<button
+												type="button"
+												className="btn btn-ghost btn-xs"
+												disabled={saving}
+												onClick={() => {
+													setRecording(action);
+													setNotice(null);
+												}}
+											>
+												{recording === action ? "Press keys…" : "Change"}
+											</button>
+											<button
+												type="button"
+												className="btn btn-ghost btn-xs"
+												disabled={saving || isDefault}
+												onClick={() =>
+													void save({ ...draft, [action]: DEFAULT_KEYBOARD_SHORTCUTS[action] })
+												}
+											>
+												Reset
+											</button>
+										</div>
+										{BROWSER_RESERVED_CHORDS.has(chord) && (
+											<p className="w-full text-xs text-warning">
+												Your browser may keep this combination for itself, in which case it will not
+												reach Anthers.
+											</p>
+										)}
+									</div>
+								);
+							})}
+						</div>
+					</div>
+				))}
 
 				<p className="mt-2 text-xs text-base-content/50" aria-live="polite">
 					{recording

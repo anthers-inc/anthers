@@ -135,8 +135,27 @@ export async function shareLinkFor(
 	const [row] = await db
 		.insert(shareLinks)
 		.values({ token: mintToken(), workId, sharerId })
+		// Two asks can arrive together — a double-clicked Share button, two tabs, or two
+		// browser specs minting the same Work at once — and both reads above see no row.
+		// The losing insert then meets `uq_share_links_sharer_work`, which surfaced as a
+		// 500 from the browser suite's three parallel mints (2026-10-23) and made
+		// "minted on first ask and handed back unchanged after that" true only for
+		// requests that arrived in a polite order. Losing the insert is the same answer
+		// as the read: hand back whichever row won.
+		.onConflictDoNothing({ target: [shareLinks.sharerId, shareLinks.workId] })
 		.returning();
-	return { link: { workId, sharerId, token: row.token } };
+	if (row) return { link: { workId, sharerId, token: row.token } };
+
+	const [raced] = await db
+		.select()
+		.from(shareLinks)
+		.where(and(eq(shareLinks.sharerId, sharerId), eq(shareLinks.workId, workId)))
+		.limit(1);
+	// Unreachable in practice: a conflict means somebody else's row is committed and
+	// visible by the time the losing statement returns. A refusal is still the honest
+	// answer if it somehow is not, rather than a token nobody minted.
+	if (!raced) return { refusal: "not_found" };
+	return { link: { workId, sharerId, token: raced.token } };
 }
 
 /** Stop a link working, without freeing its token for anybody else. */

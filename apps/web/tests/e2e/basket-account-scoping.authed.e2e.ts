@@ -86,17 +86,15 @@ async function signInThroughUi(page: Page, email: string): Promise<void> {
 }
 
 async function signOutThroughUi(page: Page): Promise<void> {
-	// The menu needs a page to live on; a test that reaches here without navigating
-	// still gets the banner once the shell has rendered.
-	await page.goto("/network");
-	const header = page.getByRole("banner");
-	await header.getByRole("button", { name: "Your account" }).click();
-	await header.getByRole("button", { name: "Log out" }).click();
-	// The logged-out shell takes the account menu away and lands on the marketing root;
-	// the URL off /network is the walk's own signal, the same one sign-in uses.
+	// Log out lives on the settings pages now, not in the header's account menu.
+	await page.goto("/settings");
+	const card = page.locator("[data-signed-in-account]");
+	await card.getByRole("button", { name: "Log Out" }).click();
+	// The logged-out shell takes the account card away and lands on the marketing root;
+	// the URL off /settings is the walk's own signal, the same one sign-in uses.
 	await expect
 		.poll(() => page.url(), { message: "sign-out never happened", timeout: 15_000 })
-		.not.toContain("/network");
+		.not.toContain("/settings");
 }
 
 /** The signed-in basket, as the server holds it — the truth the badge renders. */

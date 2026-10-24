@@ -20,7 +20,6 @@
  * queues beside it. That newer row wins the next drain, which is the correct order.
  */
 
-import { isDeepStrictEqual } from "node:util";
 import { db } from "@anthers/db";
 import { type SpaceOutboxOp, type SpaceOutboxStatus, spaceOutbox } from "@anthers/db/schema";
 import { and, asc, eq, inArray, lte, sql } from "drizzle-orm";
@@ -38,9 +37,10 @@ import {
 	hostedSpaceSession,
 	type ResolveSpaceSession,
 	type SpaceSession,
+	SpaceVerificationError,
 	type SpaceWriteRef,
-	type SpaceWriter,
 	spaceWriterFor,
+	verifySpaceWrite,
 } from "./space-writer.js";
 
 /** The payload a queued write carries. */
@@ -279,7 +279,14 @@ async function carryOut(
 		row.op === "delete" ? null : await writer.put(row.collection, row.rkey, row.record ?? {});
 	if (row.op === "delete") await writer.remove(row.collection, row.rkey);
 
-	await verifyWrite(writer, row, written, previous?.rev ?? null);
+	await verifySpaceWrite(writer, {
+		collection: row.collection,
+		rkey: row.rkey,
+		op: row.op,
+		record: row.record,
+		written,
+		previousRev: previous?.rev ?? null,
+	});
 
 	if (row.collection === USER_SPACE_COLLECTIONS.libraryItem && row.op === "put") {
 		const parsed = parseLibraryItemRecord(row.record);
@@ -292,55 +299,6 @@ async function carryOut(
 		// locally has already taken its row by cascade, and removing an absent row is a no-op.
 		const subject = subjectFromRkey(row.rkey);
 		if (subject) await removeProjectedLibraryItem(row.userId, subject);
-	}
-}
-
-/**
- * The four checks that make a write verified: address, CID, value, and a commit and oplog
- * that agree about it.
- */
-async function verifyWrite(
-	writer: SpaceWriter,
-	row: typeof spaceOutbox.$inferSelect,
-	written: SpaceWriteRef | null,
-	previousRev: string | null,
-): Promise<void> {
-	if (row.op === "delete") {
-		const read = await writer.get(row.collection, row.rkey);
-		if (read !== null) {
-			throw new OutboxError("verification", "the record is still there after a delete");
-		}
-	} else {
-		const read = await writer.get(row.collection, row.rkey);
-		if (!read) throw new OutboxError("verification", "the record is not there after the write");
-		if (!written) throw new OutboxError("verification", "the write returned no address");
-		if (read.uri !== written.uri) {
-			throw new OutboxError("verification", `read-back uri ${read.uri} is not ${written.uri}`);
-		}
-		if (read.cid !== written.cid) {
-			throw new OutboxError("verification", `read-back cid ${read.cid} is not ${written.cid}`);
-		}
-		if (!isDeepStrictEqual(read.value, row.record)) {
-			throw new OutboxError("verification", "read-back value is not the record that was sent");
-		}
-	}
-
-	const commit = await writer.commit();
-	if (previousRev !== null && commit.rev <= previousRev) {
-		throw new OutboxError("verification", `commit did not advance past ${previousRev}`);
-	}
-
-	const oplog = await writer.ops(previousRev ? { since: previousRev } : {});
-	const op = oplog.ops.find(
-		(entry) => entry.collection === row.collection && entry.rkey === row.rkey,
-	);
-	if (!op) throw new OutboxError("verification", "the oplog has no operation for the record");
-	const expectedCid = row.op === "delete" ? null : (written as { cid: string }).cid;
-	if ((op.cid ?? null) !== expectedCid) {
-		throw new OutboxError(
-			"verification",
-			`oplog cid ${op.cid ?? "null"} is not ${expectedCid ?? "null"}`,
-		);
 	}
 }
 
@@ -399,6 +357,8 @@ async function park(
 
 /** A request failure the node named is the node's; an unnamed one is the transport's. */
 function kindOfRequest(error: unknown): OutboxFailureKind {
+	// The shared verifier names its own failure; everything else is the request layer.
+	if (error instanceof SpaceVerificationError) return "verification";
 	return error instanceof SpaceRequestError ? "request" : "request";
 }
 

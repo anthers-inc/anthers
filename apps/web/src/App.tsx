@@ -10,6 +10,7 @@ import RouteSuspense from "./components/layout/RouteSuspense";
 import ProjectRedirect from "./components/ui/ProjectRedirect";
 import ProtectedRoute from "./components/ui/ProtectedRoute";
 import RootRedirect from "./components/ui/RootRedirect";
+import StudioHomeRedirect from "./components/ui/StudioHomeRedirect";
 import StudioRedirect from "./components/ui/StudioRedirect";
 import { installBrowserErrorCapture } from "./lib/error-beacon";
 import { useTrafficBeacon } from "./lib/traffic";
@@ -31,7 +32,6 @@ import { useTrafficBeacon } from "./lib/traffic";
  * app, a second origin, a CORS allowlist and a dot-prefixed cookie domain.
  */
 const StudioAuthGate = lazy(() => import("./studio/StudioAuthGate"));
-const DashboardPage = lazy(() => import("@anthers/web-shared/DashboardPage"));
 const ProjectsPage = lazy(() => import("@anthers/web-shared/ProjectsPage"));
 const WorksPage = lazy(() => import("@anthers/web-shared/WorksPage"));
 const AnalyticsDashboardPage = lazy(() => import("@anthers/web-shared/AnalyticsDashboardPage"));
@@ -64,9 +64,8 @@ function StudioLayout() {
 
 /**
  * The /changelog → /release-notes redirect. `Navigate` alone would drop the fragment,
- * which is the part a deep link carries — the roadmap's launched cards linked
- * `/changelog#<version>` during the page's first week — so the hash is read and
- * carried across explicitly.
+ * which is the part a deep link carries — `/changelog#<version>` was in circulation
+ * during the page's first week — so the hash is read and carried across explicitly.
  */
 function RedirectReleaseNotes() {
 	const hash = useLocation().hash;
@@ -113,17 +112,14 @@ const ParentsPage = lazy(() => import("./pages/ParentsPage"));
 const AbusePage = lazy(() => import("./pages/AbusePage"));
 const PostPage = lazy(() => import("./pages/PostPage"));
 const ProjectPage = lazy(() => import("./pages/ProjectPage"));
-const PurchasesPage = lazy(() => import("./pages/PurchasesPage"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
 const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
-const RoadmapPage = lazy(() => import("./pages/RoadmapPage"));
 const IssueReportsPage = lazy(() => import("./pages/IssueReportsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const UnsubscribePage = lazy(() => import("./pages/UnsubscribePage"));
 const SupportersPage = lazy(() => import("./pages/SupportersPage"));
 const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
 const SignupPage = lazy(() => import("./pages/SignupPage"));
-const BadgesPage = lazy(() => import("./pages/BadgesPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const WorkPage = lazy(() => import("./pages/WorkPage"));
 const SharedWorkPage = lazy(() => import("./pages/SharedWorkPage"));
@@ -298,25 +294,13 @@ export default function App() {
 					 * account's basket.
 					 */}
 					<Route path="/basket" element={<BasketPage />} />
-					<Route
-						path="/badges"
-						element={
-							<ProtectedRoute>
-								<BadgesPage />
-							</ProtectedRoute>
-						}
-					/>
-					{/* Legacy name — the page was the subscription's, and the Badges page is
-					    what it became; the old address follows, for anything still holding it. */}
-					<Route path="/subscription" element={<Navigate to="/badges" replace />} />
-					<Route
-						path="/purchases"
-						element={
-							<ProtectedRoute>
-								<PurchasesPage />
-							</ProtectedRoute>
-						}
-					/>
+					{/* Badges & Purchases is a tab on Settings since 2026-10-23 — see
+					    `pages/SettingsPage.tsx`. `/purchases` stays as the address every older
+					    reference, the billing portal's return path and the post-subscribe redirect
+					    already name, and forwards to the tab rather than every reference moving. */}
+					<Route path="/badges" element={<Navigate to="/settings?tab=purchases" replace />} />
+					<Route path="/subscription" element={<Navigate to="/settings?tab=purchases" replace />} />
+					<Route path="/purchases" element={<Navigate to="/settings?tab=purchases" replace />} />
 					<Route
 						path="/notifications"
 						element={
@@ -379,12 +363,10 @@ export default function App() {
 					    the feature. The page itself performs no write (the API redirect
 					    preceded it); see the file's note. */}
 					<Route path="/unsubscribe" element={<UnsubscribePage />} />
-					<Route path="/roadmap" element={<RoadmapPage />} />
 					<Route path="/release-notes" element={<ReleaseNotesPage />} />
 					{/* /changelog is kept as a redirect because the URL is in circulation —
-					    the roadmap's launched cards linked to it for the page's first week,
-					    and the fragment carries across so a deep link to a version still
-					    scrolls to it. */}
+					    it was linked during the page's first week, and the fragment carries
+					    across so a deep link to a version still scrolls to it. */}
 					<Route path="/changelog" element={<RedirectReleaseNotes />} />
 					<Route path="/status" element={<StatusPage />} />
 					{/* Defect reports about the site itself — separate intake from /abuse above,
@@ -432,7 +414,9 @@ export default function App() {
 					route test still passed. A creator named "studio" is no longer a hazard either,
 					since they live at `/@studio`. */}
 					<Route path="/studio" element={<StudioLayout />}>
-						<Route index element={<DashboardPage />} />
+						{/* The Dashboard is a tab on the creator's profile now, so the Studio's root
+						has no page: it sends a creator there with that tab open. */}
+						<Route index element={<StudioHomeRedirect />} />
 						{/* One object, one place (2026-10-10): the old `catalog` page held Projects
 						and Works on one surface and its two halves are pages and tabs of their own
 						now. The old paths are REDIRECTS rather than a second mount — two live URLs

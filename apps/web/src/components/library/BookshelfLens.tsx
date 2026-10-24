@@ -192,11 +192,11 @@ export default function BookshelfLens({
 }: {
 	items: LensItem[];
 	/**
-	 * Where the shelf is drawing from — the Library's kept books or the Network's feed.
-	 * Only the empty state's words differ: the shelf itself is the same metaphor over
-	 * whichever corpus the tab hands it.
+	 * Where the shelf is drawing from — the Library's kept books, the Network's feed, or
+	 * Discovery's whole-site stream. Only the empty state's words differ: the shelf
+	 * itself is the same metaphor over whichever corpus the tab hands it.
 	 */
-	source?: "library" | "network";
+	source?: "library" | "network" | "discovery";
 }) {
 	const books = items
 		.filter(
@@ -209,6 +209,21 @@ export default function BookshelfLens({
 	const positions = useReadingPositions();
 
 	if (books.length === 0) {
+		if (source === "discovery") {
+			return (
+				<div className="rounded-box border border-base-300 bg-base-100 px-6 py-14 text-center">
+					<BookOpenIcon className="mx-auto size-10 text-base-content/20" />
+					<h2 className="mt-3 text-lg font-bold">Nothing to read in the stream yet</h2>
+					<p className="mx-auto mt-1 max-w-md text-sm text-base-content/60">
+						Books, comics, and writing arrive here as creators release them. Widen the window or
+						clear a filter to see more.
+					</p>
+					<Link to="/discovery" className="btn btn-primary btn-sm mt-4">
+						See everything new
+					</Link>
+				</div>
+			);
+		}
 		const forNetwork = source === "network";
 		return (
 			<div className="rounded-box border border-base-300 bg-base-100 px-6 py-14 text-center">

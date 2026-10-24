@@ -10,10 +10,11 @@
  * rather than importing those components into the layout: importing a page into its own
  * header is a dependency cycle, and the copy below is what a reader would say anyway.
  *
- * ⚠️ **The three tabs are Library, Network, and Discovery, and Discovery's modes are
- * Graph and Ticker** (the 2026-10-19 rework). A mode that is removed or renamed belongs
- * in this list in the same change: a result that names a mode the page no longer has is
- * a dead link the reader cannot tell from a live one.
+ * ⚠️ **The three tabs are Library, Network, and Discovery** (the 2026-10-19 rework), and
+ * Discovery carries no modes of its own: its one stream is the page, not a destination
+ * inside it. A mode that is removed or renamed belongs in this list in the same change:
+ * a result that names a mode the page no longer has is a dead link the reader cannot
+ * tell from a live one.
  *
  * ⚠️ **A Settings section's deepest addressable destination is its tab.** The cards have
  * no anchors today, so a result for "Notifications" lands on Activity & Data rather than
@@ -56,22 +57,6 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 		kind: "mode",
 	},
 
-	// ── Discovery's two modes ───────────────────────────────────────────────
-	{
-		id: "mode-discovery-graph",
-		label: "Graph",
-		keywords: ["discovery", "network", "creators", "connections", "formula", "presets"],
-		href: "/discovery",
-		kind: "mode",
-	},
-	{
-		id: "mode-discovery-ticker",
-		label: "Ticker",
-		keywords: ["discovery", "live", "new", "stream", "recent"],
-		href: "/discovery?mode=ticker",
-		kind: "mode",
-	},
-
 	// ── The Library's lenses ────────────────────────────────────────────────
 	{
 		id: "mode-lens-none",
@@ -102,12 +87,19 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 		kind: "mode",
 	},
 
-	// ── Settings' four tabs ─────────────────────────────────────────────────
+	// ── Settings' five tabs ──────────────────────────────────────────────────
 	{
 		id: "setting-account",
 		label: "Account Settings",
 		keywords: ["settings", "account", "creator mode", "profile"],
 		href: "/settings?tab=account",
+		kind: "setting",
+	},
+	{
+		id: "setting-purchases",
+		label: "Badges & Purchases",
+		keywords: ["settings", "badges", "purchases", "receipts", "support", "billing", "month"],
+		href: "/settings?tab=purchases",
 		kind: "setting",
 	},
 	{
@@ -136,7 +128,16 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 	{
 		id: "setting-keyboard-shortcuts",
 		label: "Keyboard Shortcuts",
-		keywords: ["settings", "search", "filter", "keys", "bindings", "chords"],
+		keywords: [
+			"settings",
+			"search",
+			"filter",
+			"keys",
+			"bindings",
+			"chords",
+			"fullscreen",
+			"theater",
+		],
 		href: "/settings?tab=account",
 		kind: "setting",
 	},

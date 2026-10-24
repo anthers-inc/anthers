@@ -44,9 +44,12 @@ import { API_URL, signInAsCreator, WEB_ORIGIN } from "./fixtures";
  * The Studio chrome. Asserting on it is what distinguishes "the link went to the Studio
  * page" from "the link fell through to a page that happens to render". A URL check alone
  * passes on any destination at all, including the ones that look like a page.
+ *
+ * The nav is the marker rather than a row, since 2026-10-23: the row that used to be Dashboard
+ * is now the creator's own profile, and its label is an account's name rather than a constant.
  */
 function studioNav(page: Page) {
-	return page.getByRole("navigation").getByRole("link", { name: "Dashboard" });
+	return page.getByRole("navigation", { name: "Studio", exact: true });
 }
 
 test("/studio resolves to the Studio and its creator gate", async ({ page }) => {
@@ -73,13 +76,18 @@ test("legacy /dashboard paths redirect into /studio", async ({ page }) => {
 	await expect(page).toHaveURL(/\/settings\?tab=account$/);
 });
 
-test("a creator reaches the Studio itself", async ({ page, context }) => {
+test("a creator's Studio root opens the Dashboard on their own profile", async ({
+	page,
+	context,
+}) => {
 	await signInAsCreator(context);
 
 	await page.goto("/studio");
-	// Past the gate: the Studio shell renders rather than bouncing to /login or /settings.
-	await expect(page).toHaveURL(/\/studio$/);
-	await expect(page.getByRole("navigation").getByText("Dashboard")).toBeVisible();
+	// `/studio` has no page of its own since 2026-10-23: the Dashboard moved to a tab on the
+	// creator's profile, and the Studio's root forwards there with that tab open.
+	await expect(page).toHaveURL(/\/@[^/?]+\?tab=dashboard$/);
+	await expect(studioNav(page)).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 });
 
 /**
@@ -88,8 +96,9 @@ test("a creator reaches the Studio itself", async ({ page, context }) => {
  * The Studio's header and tabs used to render INSIDE the signed-in layout, under its header and
  * beside a sidebar still offering Feed, Library and Discover. Parker's direction (2026-09-17) is
  * two modes, each with its own sidebar and neither showing the other's options, switched from the
- * top of the sidebar. ⚠️ **Most of what this pins is an absence**, which nothing else in the
- * repository can see: the user nav and the search box are simply not there in studio mode.
+ * header beside the logo (it sat at the top of the sidebar until 2026-10-23). ⚠️ **Most of what this
+ * pins is an absence**, which nothing else in the repository can see: the user nav and the search
+ * box are simply not there in studio mode.
  *
  * ⭐ **The mode is sticky.** A profile or a Work page belongs to neither mode, so arriving on one
  * from the Studio keeps the Studio's sidebar and arriving from the Feed keeps the user's. It is
@@ -140,15 +149,16 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	await expect(userSidebar).toBeVisible();
 	await expect(studioSidebar).toHaveCount(0);
 
-	// And back again, from the same switch.
+	// And back again, from the same switch. Creator mode's home is the profile's Dashboard
+	// since 2026-10-23 — `/studio` forwards here, and the switch goes straight to it.
 	await modeSwitch.getByRole("link", { name: "Creator", exact: true }).click();
-	await expect(page).toHaveURL(/\/studio$/);
+	await expect(page).toHaveURL(/\/@[^/?]+\?tab=dashboard$/);
 	await expect(studioSidebar).toBeVisible();
 });
 
 test("an account without creator mode has no Studio to switch to", async ({ page }) => {
-	// The gauntlet user is not a creator. The switch is the only way into the Studio from the
-	// sidebar, so its absence is also the absence of a door they would be turned back from.
+	// The gauntlet user is not a creator. The switch is the only way into the Studio from
+	// anywhere, so its absence is also the absence of a door they would be turned back from.
 	await page.goto("/network");
 	await expect(page.getByRole("navigation", { name: "Anthers", exact: true })).toBeVisible();
 	await expect(page.getByRole("navigation", { name: "User or Creator" })).toHaveCount(0);
@@ -161,9 +171,10 @@ test("every Studio tab lands on its own route", async ({ page, context }) => {
 	// 2026-10-10: the Catalog tab that owned Projects and Works split in two, so each of
 	// Anthers' three objects points at its own listing.
 	//
-	// "Import" is absent because the itch.io import endpoints all return "not yet
-	// implemented", so a creator who reached the page found a form that always failed.
-	// Restore the row when the itch.io importer's backend is built.
+	// The profile row leads them and is checked separately, because its label is the account's
+	// name rather than a tab name (2026-10-23). "Import" is absent because the itch.io import
+	// endpoints all return "not yet implemented", so a creator who reached the page found a
+	// form that always failed. Restore the row when the itch.io importer's backend is built.
 	const tabs = [
 		{ name: "Projects", url: /\/studio\/projects$/ },
 		{ name: "Works", url: /\/studio\/works$/ },
@@ -171,11 +182,17 @@ test("every Studio tab lands on its own route", async ({ page, context }) => {
 		{ name: "Analytics", url: /\/studio\/analytics$/ },
 		{ name: "Payments", url: /\/studio\/payments$/ },
 		{ name: "Settings", url: /\/studio\/settings$/ },
-		{ name: "Dashboard", url: /\/studio$/ },
 	];
 
 	await page.goto("/studio");
 	await expect(studioNav(page)).toBeVisible();
+
+	// The first row is the creator's own profile, carrying their thumbnail and name.
+	await studioNav(page).getByRole("link").first().click();
+	await expect(page, "the profile row did not land on the creator's profile").toHaveURL(
+		/\/@[^/?]+$/,
+	);
+	await expect(studioNav(page), "the profile row left the Studio shell").toBeVisible();
 
 	for (const { name, url } of tabs) {
 		await page.getByRole("navigation").getByRole("link", { name, exact: true }).click();

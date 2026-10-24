@@ -42,10 +42,18 @@ test("the header avatar opens the account menu", async ({ page }) => {
 	await trigger.click();
 	await expect(profile, "clicking the avatar did not open the account menu").toBeVisible();
 
-	for (const name of ["Badges", "Purchases", "Settings"]) {
+	for (const name of ["Badges & Purchases", "Settings"]) {
 		await expect(header(page).getByRole("link", { name }), `${name} missing`).toBeVisible();
 	}
-	await expect(header(page).getByRole("button", { name: "Log out" })).toBeVisible();
+	// Badges & Purchases is a tab on Settings now, so the menu item is a deep link into that
+	// page rather than a second destination.
+	await expect(header(page).getByRole("link", { name: "Badges & Purchases" })).toHaveAttribute(
+		"href",
+		"/settings?tab=purchases",
+	);
+	// Log out left the menu on 2026-10-23 and lives on both settings pages, so the header
+	// must not grow a second door to the session's end.
+	await expect(header(page).getByRole("button", { name: "Log out" })).toHaveCount(0);
 
 	// Clicking away must dismiss it; see the note above on why this is load-bearing.
 	await page.locator("main").click({ position: { x: 5, y: 5 } });

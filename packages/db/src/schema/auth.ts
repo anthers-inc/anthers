@@ -92,6 +92,27 @@ export const users = pgTable("users", {
 	 */
 	deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
 	/**
+	 * When this account last took the AT Protocol export bundle: the public repository, every
+	 * space, its blobs and the registry entries.
+	 *
+	 * 🚨 **This is the deletion gate's evidence, not an analytics field.** Deletion refuses
+	 * without a bundle inside the freshness window or an explicit bypass, because a raw
+	 * `deleteAccount` destroys the actor store and leaves the DID in the PLC. The JSON export
+	 * alone is not the bundle: it does not carry the repository or the spaces.
+	 */
+	atprotoExportedAt: timestamp("atproto_exported_at", { withTimezone: true }),
+	/**
+	 * Which copy of the reader's state is canonical: the database (`db`) or the user's space
+	 * (`space`).
+	 *
+	 * 🚨 **A cutover switch, not a feature flag.** `db` is the state before the migration and
+	 * the state a rollback returns to; `space` means the records in the user's space are the
+	 * truth and the database is the projection. Flipping back is safe because the rows stay
+	 * current during the transition and the space keeps a snapshot; flipping forward again
+	 * re-runs the backfill and overwrites the snapshot with the rows.
+	 */
+	readerStateHome: text("reader_state_home").notNull().default("db"),
+	/**
 	 * When moderation suspended the account, and when the suspension ends. Both null
 	 * means the account is in good standing; `suspendedAt` without `suspendedUntil`
 	 * is an indefinite suspension — it stands until an operator lifts it, not a

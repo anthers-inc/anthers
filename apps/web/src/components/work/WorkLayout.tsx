@@ -21,7 +21,7 @@ import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
-import { apiBaseUrl, client } from "@anthers/web-shared/rpc";
+import { apiBaseUrl } from "@anthers/web-shared/rpc";
 import type { AccessResult, Work, WorkCredit } from "@anthers/web-shared/types";
 import {
 	BookOpenIcon,
@@ -31,6 +31,7 @@ import {
 	PhotoIcon,
 	PuzzlePieceIcon,
 	SpeakerWaveIcon,
+	UserIcon,
 	VideoCameraIcon,
 } from "@heroicons/react/24/outline";
 import { PlayIcon } from "@heroicons/react/24/solid";
@@ -52,7 +53,9 @@ import {
 } from "../../lib/reading-positions";
 import { trackFromWork } from "../../lib/tracks";
 import { useSeekPlayer, WorkPlayerProvider } from "../../lib/work-player";
+import { WorkTheaterProvider } from "../../lib/work-theater";
 import GalleryView from "../media/GalleryView";
+import CreditConfirmationControls from "./CreditConfirmationControls";
 import { LyricsBody, WORK_LYRICS_CLASS, WORK_LYRICS_HEADING_CLASS } from "./LyricsPanel";
 import WorkMediaFrame from "./WorkMediaFrame";
 
@@ -626,6 +629,7 @@ export function WorkDeliverable({
 	startSeconds = null,
 	persistentMiniPlayer = false,
 	framed = true,
+	overlay,
 }: {
 	work: WorkDetail;
 	shareToken?: string | null;
@@ -662,6 +666,13 @@ export function WorkDeliverable({
 	 * medium with no page shape to hold.
 	 */
 	framed?: boolean;
+	/**
+	 * Stands over the medium rather than under it — the shared-with affordance. It rides
+	 * the page's media card when there is one, and a positioned wrapper of its own when
+	 * `framed` is false, so the embed route has the same placement without a page shape to
+	 * hang it on. Both carry `group` and `data-media-stage` for it (`SharedWorkNotice`).
+	 */
+	overlay?: ReactNode;
 }) {
 	/** The chapters the description carries — one parse, shared by every player branch. */
 	const chapters = useMemo(() => workChapters(work.description ?? ""), [work.description]);
@@ -683,18 +694,24 @@ export function WorkDeliverable({
 	const frame = (node: ReactNode, fill = false) => {
 		const meter = holdsMeter ? <PublicAccessFooter /> : undefined;
 		return framed ? (
-			<WorkMediaFrame fill={fill} footer={meter}>
+			<WorkMediaFrame fill={fill} footer={meter} overlay={overlay}>
 				{node}
 			</WorkMediaFrame>
 		) : (
-			<>
+			// The embed's bare window: no card to hold the page's shape, but the overlay still
+			// needs a positioned, hoverable box around the medium it stands over.
+			<div className="group relative h-full w-full" data-media-stage>
 				{node}
 				{meter}
-			</>
+				{overlay}
+			</div>
 		);
 	};
 	return (
-		<>
+		// The provider the media card and every player read: theater mode is the page's
+		// state, and the control that flips it lives in each player's transport. The embed
+		// route opts out — a bare window has no page for the work to grow into.
+		<WorkTheaterProvider enabled={framed}>
 			{/*
 			 * A video's ladder is the offered experience, and the original is the
 			 * baseline underneath it (70.06): an existing manifest keeps today's
@@ -971,7 +988,7 @@ export function WorkDeliverable({
 			 * is an <iframe>, an image is an <img>. The players own their own footer;
 			 * everything else has this one.
 			 */}
-		</>
+		</WorkTheaterProvider>
 	);
 }
 
@@ -1205,88 +1222,16 @@ function creditBadges(types: string[]): { ai: boolean; blended: boolean } {
 }
 
 /**
- * The Accept/Decline row the overlay hands the person a credit names.
+ * The Work's credits, rendered as liner notes in two columns — the contribution on one
+ * side, the people who made it on the other, with AI involvement badged rather than
+ * buried. Public: any user of a released Work sees these, gated or not, as they see the
+ * description. A Work with no credits renders nothing.
  *
- * Renders ONLY from the `awaitingYourConfirmation` flag the server emits on the named
- * person's own serialization — no user logic lives here, and every other user never
- * receives the flag so never receives these controls. The credit ships with role and
- * types intact because those are what the person needs to act on.
- */
-function CreditConfirmationControls({
-	work,
-	role,
-	onDecided,
-}: {
-	work: WorkDetail;
-	role: string;
-	/**
-	 * Re-read the Work after a decision lands, so the credits re-render from the server's
-	 * own answer — accepted resolves the contributor to a name, declined removes the row.
-	 */
-	onDecided: () => void;
-}) {
-	const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
-	const [notice, setNotice] = useState<string | null>(null);
-
-	const decide = async (verb: "accept" | "decline") => {
-		setBusy(verb);
-		setNotice(null);
-		try {
-			const res =
-				verb === "accept"
-					? await client.api.content.works[":id"].credits.accept.$post({
-							param: { id: String(work.id) },
-							json: { role },
-						})
-					: await client.api.content.works[":id"].credits.reject.$post({
-							param: { id: String(work.id) },
-							json: { role },
-						});
-			if (!res.ok) {
-				// The server's own words — every refusal here is a decision the person can act
-				// on (sign back in for the widened scope, the credit changed under them), and a
-				// generic string turns all of them into "something went wrong".
-				const body = (await res.json().catch(() => null)) as { error?: string } | null;
-				setNotice(body?.error ?? "Couldn't record that just now. Please try again.");
-				return;
-			}
-			onDecided();
-		} catch {
-			setNotice("Couldn't record that just now. Please try again.");
-		} finally {
-			setBusy(null);
-		}
-	};
-
-	return (
-		<>
-			<span className="flex flex-wrap items-center gap-2">
-				<button
-					type="button"
-					className="btn btn-xs btn-primary"
-					disabled={busy !== null}
-					onClick={() => decide("accept")}
-				>
-					{busy === "accept" ? "Accepting…" : "Accept"}
-				</button>
-				<button
-					type="button"
-					className="btn btn-xs btn-ghost"
-					disabled={busy !== null}
-					onClick={() => decide("decline")}
-				>
-					{busy === "decline" ? "Declining…" : "Decline"}
-				</button>
-			</span>
-			{notice && <p className="w-full text-xs text-base-content/60">{notice}</p>}
-		</>
-	);
-}
-
-/**
- * The Work's credits, rendered as liner notes — one line per credit, with AI involvement
- * badged rather than buried. Public: any user of a released Work sees these, gated or
- * not, as they see the description. A Work with no credits renders nothing.
+ * ⭐ **A contribution is one row, however many people it names** (Parker, 2026-10-23):
+ * the editor writes one stored credit row per person, so "Illustrated by John Doe, Jane
+ * Doe" arrives as two rows sharing a role and is presented as one line with both names.
+ * The even split between the two columns is what makes a short credits list read as a
+ * table rather than a column of labels hugging the left edge.
  *
  * ⭐ **A DID credit names a person, not a protocol** (Parker, 2026-10-13): the account
  * presents as its avatar and display name, and clicking it goes to the person — their
@@ -1312,43 +1257,84 @@ export function WorkCredits({
 	return (
 		<section className="flex flex-col gap-2">
 			<h3 className={WORK_DETAILS_HEADING_CLASS}>Credits</h3>
-			<ul className="flex flex-col gap-1.5 text-sm">
-				{credits.map((credit, i) => {
-					const badges = creditBadges(credit.types);
-					const awaiting = credit.awaitingYourConfirmation === true;
-					return (
-						<li
-							// biome-ignore lint/suspicious/noArrayIndexKey: a credit row has no id — the row is pure data rendered in table order.
-							key={i}
-							className={`flex flex-wrap items-baseline gap-x-2 ${awaiting ? "items-center rounded-lg border border-base-300 bg-base-200/60 px-3 py-2" : ""}`}
-						>
-							<span>
-								{awaiting && <span className="mr-1 font-medium">You're credited — confirm?</span>}
-								{credit.role}
-								{credit.contributor && (
-									<>
-										{" "}
-										<CreditIdentity credit={credit} />
-									</>
-								)}
-							</span>
-							{badges.blended && <span className="badge badge-xs badge-outline">Human + AI</span>}
-							{badges.ai && !badges.blended && (
-								<span className="badge badge-xs badge-outline">AI</span>
-							)}
-							{awaiting && (
-								<CreditConfirmationControls
-									work={work}
-									role={credit.role}
-									onDecided={() => onCreditDecided?.()}
-								/>
-							)}
-						</li>
-					);
-				})}
-			</ul>
+			<div className="overflow-x-auto">
+				<table className="table table-sm w-full table-fixed">
+					<tbody>
+						{groupCreditsByRole(credits).map((group, i) => (
+							// biome-ignore lint/suspicious/noArrayIndexKey: a credit group has no id — it is pure data rendered in table order.
+							<tr key={i}>
+								<th
+									scope="row"
+									className="w-[38%] whitespace-normal align-top text-right font-medium text-base-content/80"
+								>
+									{group.role || "Unnamed"}
+								</th>
+								<td className="align-top">
+									<ul className="flex flex-col gap-1.5">
+										{group.credits.map((credit, j) => {
+											const badges = creditBadges(credit.types);
+											const awaiting = credit.awaitingYourConfirmation === true;
+											return (
+												<li
+													// biome-ignore lint/suspicious/noArrayIndexKey: a credit row has no id — the row is pure data rendered in table order.
+													key={j}
+													className={`flex flex-wrap items-center gap-x-2 gap-y-1 ${
+														awaiting
+															? "rounded-md border border-base-300 bg-base-200/60 px-2 py-1"
+															: ""
+													}`}
+												>
+													{awaiting && (
+														<span className="text-xs font-medium">You're credited — confirm?</span>
+													)}
+													{credit.contributor && <CreditIdentity credit={credit} />}
+													{badges.blended && (
+														<span className="badge badge-xs badge-outline">Human + AI</span>
+													)}
+													{badges.ai && !badges.blended && (
+														<span className="badge badge-xs badge-outline">AI</span>
+													)}
+													{awaiting && (
+														<CreditConfirmationControls
+															workId={work.id}
+															role={credit.role}
+															onDecided={() => onCreditDecided?.()}
+														/>
+													)}
+												</li>
+											);
+										})}
+									</ul>
+								</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
 		</section>
 	);
+}
+
+/**
+ * Group credits by the contribution they name, first-seen order preserved.
+ *
+ * The role is the whole key: two people on one contribution are stored as two rows with
+ * the same role. Each row keeps its own type badge, so a blend stays visible against the
+ * person it belongs to rather than being absorbed by the line.
+ */
+function groupCreditsByRole(credits: WorkCredit[]): { role: string; credits: WorkCredit[] }[] {
+	const groups: { role: string; credits: WorkCredit[] }[] = [];
+	const byRole = new Map<string, { role: string; credits: WorkCredit[] }>();
+	for (const credit of credits) {
+		let group = byRole.get(credit.role);
+		if (!group) {
+			group = { role: credit.role, credits: [] };
+			byRole.set(credit.role, group);
+			groups.push(group);
+		}
+		group.credits.push(credit);
+	}
+	return groups;
 }
 
 /**
@@ -1397,6 +1383,18 @@ function CreditIdentity({ credit }: { credit: WorkCredit }) {
 			</a>
 		);
 	}
-	// No identity behind it on the network, and no Anthers account: a name as words.
-	return <span className="text-base-content/70">{credit.contributor}</span>;
+	// No identity behind it on the network, and no Anthers account: a name as words,
+	// beside the same-sized circle a resolved identity wears. The icon is what keeps the
+	// contributor list aligned, and what says this credit names nobody on the network.
+	return (
+		<span className="inline-flex items-center gap-1.5">
+			<span
+				aria-hidden="true"
+				className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-base-300"
+			>
+				<UserIcon className="h-3.5 w-3.5 text-base-content/50" />
+			</span>
+			<span className="text-base-content/70">{credit.contributor}</span>
+		</span>
+	);
 }

@@ -22,6 +22,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
+	accessReceipts,
 	assets,
 	badgeCharges,
 	badges,
@@ -830,12 +831,32 @@ describe("Webhook: payment_intent.succeeded", () => {
 		const ledger = await db.select().from(crfLedger).where(eq(crfLedger.purchaseId, pending.id));
 		expect(ledger).toHaveLength(0);
 
+		// The reader's space is owed a receipt: the row is the worklist the sweep drains, and
+		// a basket writes one per purchase. It is inserted beside the completion, not by the
+		// job, so a webhook that lands is a receipt that will follow.
+		const owed = await db
+			.select()
+			.from(accessReceipts)
+			.where(eq(accessReceipts.purchaseId, pending.id));
+		expect(owed).toHaveLength(1);
+		expect(owed[0]).toMatchObject({
+			kind: "purchase",
+			receiptId: `purchase-${pending.id}`,
+			state: "pending",
+			attempts: 0,
+		});
+
 		// Redelivery — Stripe retries, and it must not double-complete. The idempotency is
 		// structural (`WHERE status = 'pending'`), which is easy to lose in a refactor and
 		// impossible to notice without this assertion.
 		expect((await sendWebhook(event)).status).toBe(200);
 		const [still] = await db.select().from(purchases).where(eq(purchases.id, pending.id));
 		expect(still.status).toBe("completed");
+		const stillOwed = await db
+			.select()
+			.from(accessReceipts)
+			.where(eq(accessReceipts.purchaseId, pending.id));
+		expect(stillOwed).toHaveLength(1);
 	});
 
 	it("ignores a PaymentIntent it has no purchase row for", async () => {

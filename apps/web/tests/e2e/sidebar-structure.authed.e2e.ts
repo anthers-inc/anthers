@@ -73,8 +73,8 @@ test("the sidebar reads tabs, divider, lenses, divider, shared filters", async (
 		"the persistent divider sits between the nav and the Lenses",
 	).toBe(true);
 
-	// The Lenses on the feed: the Music Player and the Bookshelf are live over the
-	// feed's releases, the Channel Guide is grayed with the marker — never absent.
+	// The Lenses on the feed: all three are live over the feed's own corpora (Parker,
+	// 2026-10-23), so no row carries the grayed marker any more.
 	const lensRows = await page.evaluate(() => {
 		const headings = [...document.querySelectorAll("aside section h3")];
 		const s = headings.find((h) => h.textContent === "Lenses")?.closest("section");
@@ -83,12 +83,7 @@ test("the sidebar reads tabs, divider, lenses, divider, shared filters", async (
 				`${b.textContent?.trim()}${b.getAttribute("aria-disabled") === "true" ? " [grayed]" : ""}`,
 		);
 	});
-	expect(lensRows).toEqual([
-		"No Lens",
-		"Music Player",
-		"Channel Guide(Coming Soon) [grayed]",
-		"Bookshelf",
-	]);
+	expect(lensRows).toEqual(["No Lens", "Music Player", "Channel Guide", "Bookshelf"]);
 
 	// A live lens opens its own view over the same stream, and No Lens gives the grid
 	// back — the lens is a view, never a container, on the feed exactly as in the
@@ -193,8 +188,8 @@ test("the divider below the nav is persistent on a page that registers nothing",
 }) => {
 	// A page with no sidebar content of its own still gets the structure's divider:
 	// the shape never depends on the page. (The Library no longer qualifies — its
-	// Lenses grew in with its sidebar task; Purchases never registers anything.)
-	await page.goto(`${WEB_ORIGIN}/purchases`);
+	// Lenses grew in with its sidebar task; Settings never registers anything.)
+	await page.goto(`${WEB_ORIGIN}/settings`);
 	const map = await sidebarMap(page);
 	const nav = map?.find((d) => d.tag === "nav");
 	const anyDivider = map?.some((d) => d.divider && d.y > (nav?.y ?? 0));

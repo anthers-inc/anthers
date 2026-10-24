@@ -1,5 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
+/*
+ * The Purchases half of the account page — every one-time receipt, month by month.
+ *
+ * A purchase is a single exchange and outlives the Work it bought, so the list holds rows
+ * that name nothing openable any more; PurchaseRow decides per row whether a link is
+ * offered. The month selector scopes both the list and the totals beneath it.
+ *
+ * This is the second section of the account page, under BadgesSection: Badges are the
+ * standing monthly amount, and these are the one-time buys.
+ */
+
 import { amountLabel } from "@anthers/shared/constants";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { profileUrl } from "@anthers/web-shared/profile";
@@ -153,7 +164,7 @@ function PurchaseRow({ purchase: p }: { purchase: Purchase }) {
 /*  Page Component                                                     */
 /* ------------------------------------------------------------------ */
 
-export default function PurchasesPage() {
+export default function PurchasesSection() {
 	const [purchases, setPurchases] = useState<Purchase[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
@@ -188,13 +199,16 @@ export default function PurchasesPage() {
 	const totalCreator = purchases.reduce((sum, p) => sum + parseFloat(p.creatorEarnings), 0);
 
 	return (
-		<div className="max-w-2xl mx-auto px-4 py-8">
-			<div className="flex items-baseline justify-between mb-2">
-				<h1 className="text-2xl font-bold">Purchases</h1>
-			</div>
-
-			{/* Month selector */}
-			<div className="flex justify-center mb-6">
+		<section aria-labelledby="purchases-section-heading">
+			<div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
+				<div>
+					<h2 id="purchases-section-heading" className="text-xl font-bold">
+						Purchases
+					</h2>
+					<p className="text-sm text-base-content/50">
+						Everything you've bought outright, by the month you bought it.
+					</p>
+				</div>
 				<MonthSelector month={selectedMonth} onChange={handleMonthChange} />
 			</div>
 
@@ -245,6 +259,6 @@ export default function PurchasesPage() {
 					</div>
 				</div>
 			)}
-		</div>
+		</section>
 	);
 }

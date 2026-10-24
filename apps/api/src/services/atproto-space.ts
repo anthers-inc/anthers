@@ -169,6 +169,26 @@ export class SpaceRequestError extends Error {
 	}
 }
 
+/**
+ * Whether a server simply has no space endpoints — a skip rather than a failure.
+ *
+ * ⚠️ **Production still runs an image whose PDS tracks `main`**, which does not carry the space
+ * lexicons, so anything that enumerates spaces has to treat "this server has no such method" as
+ * an ordinary empty answer. That is what lets the code ship with the app and start working the
+ * day a spaces-capable image is pinned, instead of failing every export and every sweep until
+ * somebody remembers a flag. Any other failure is still real and still propagates.
+ */
+export function isUnsupportedSpaceServer(error: unknown): boolean {
+	if (!(error instanceof SpaceRequestError)) return false;
+	if (error.status === 404 || error.status === 501) return true;
+	return (
+		error.error === "MethodNotImplemented" ||
+		error.error === "MethodNotFound" ||
+		error.error === "UnknownMethod" ||
+		error.error === "XRPCNotSupported"
+	);
+}
+
 export interface SpaceClientOptions {
 	/** The PDS origin, such as `https://pds.example.com`. */
 	baseUrl: string;
@@ -334,6 +354,17 @@ export class SpaceClient {
 		excludeValues?: boolean;
 	}): Promise<{ ops: SpaceRepoOp[]; commit?: SpaceCommit; cursor?: string }> {
 		return this.request("com.atproto.space.listRepoOps", { params });
+	}
+
+	/**
+	 * The account's public repository as a CAR, which is the export's public half.
+	 *
+	 * ⚠️ **This is `sync.getRepo`, not a space call.** It lives here because it shares this
+	 * client's base URL and credential, and because an export that read the public repository
+	 * with a second client would be one more place for the two to disagree about the server.
+	 */
+	async getPublicRepo(did: string): Promise<SpaceBytes> {
+		return this.request("com.atproto.sync.getRepo", { params: { did }, bytes: true });
 	}
 
 	/** Download the space repo as a CAR. */

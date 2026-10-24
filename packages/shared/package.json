@@ -27,6 +27,7 @@
 		"./content": "./src/content.ts",
 		"./tags": "./src/tags.ts",
 		"./post-title": "./src/post-title.ts",
+		"./post-preview": "./src/post-preview.ts",
 		"./web-build": "./src/web-build.ts",
 		"./work-preview": "./src/work-preview.ts",
 		"./accepted-formats": "./src/accepted-formats.ts",

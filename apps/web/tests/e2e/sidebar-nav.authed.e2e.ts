@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The sidebar nav's own contract — the Library / Network / Discovery rows, their one fixed
- * order, and the account setting that decides which of them a session opens on.
+ * The sidebar nav's own contract — the Library / Network / Discovery rows and the Settings row
+ * beneath them, their one fixed order, and the account setting that decides which of the three
+ * tabs a session opens on.
  *
  * 🚨 **Two of these assertions exist because a regression shipped through them.** #437
  * introduced grips and a wrapper row, and in doing so interpolated the NavLink's
@@ -24,14 +25,14 @@ import { API_URL, WEB_ORIGIN } from "./fixtures";
 
 const ROWS = "nav[aria-label='Anthers'] > a";
 
-/** The three nav labels, in the order they render. */
+/** The nav labels, in the order they render. Settings joined below the three tabs on 2026-10-23. */
 const labels = (page: import("@playwright/test").Page) =>
 	page.evaluate(
 		(sel: string) => [...document.querySelectorAll(sel)].map((a) => a.textContent?.trim()),
 		ROWS,
 	);
 
-const ORDER = ["Library", "Network", "Discovery"];
+const ORDER = ["Library", "Network", "Discovery", "Settings"];
 
 /** The PATCH the settings card fires when a tab radio is chosen. */
 const chooseTab = async (

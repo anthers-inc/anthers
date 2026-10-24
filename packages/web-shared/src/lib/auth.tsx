@@ -42,10 +42,11 @@ export interface User {
 	 */
 	persistentMiniplayer: boolean | null;
 	/**
-	 * The search bar's shortcuts, `{ search, filter }`, as portable chord strings.
+	 * The account's rebindable shortcuts, `{ search, filter, fullscreen, theater }`, as
+	 * portable chord strings.
 	 * Null = never set, so the defaults in `@anthers/shared/keybindings` stand.
 	 */
-	searchShortcuts: Record<string, string> | null;
+	keyboardShortcuts: Record<string, string> | null;
 	/** Every account holds exactly one ATProto identity, so it is always present. */
 	atprotoDid: string;
 	/**

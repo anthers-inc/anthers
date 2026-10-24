@@ -1,5 +1,5 @@
 {
-  "id": "12862e75-d968-45c1-ab8e-26fe3d3dafce",
+  "id": "e4fe8b6a-1bc1-4e52-833d-787e24f5b8f9",
   "prevId": "e844c4f2-3387-4d38-abb5-f5ba0e4d55ea",
   "version": "7",
   "dialect": "postgresql",
@@ -6104,6 +6104,12 @@
         },
         "deletion_requested_at": {
           "name": "deletion_requested_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "atproto_exported_at": {
+          "name": "atproto_exported_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -12963,86 +12969,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.work_media_versions": {
-      "name": "work_media_versions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "work_id": {
-          "name": "work_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "uploaded_at": {
-          "name": "uploaded_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "archived_at": {
-          "name": "archived_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "media": {
-          "name": "media",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "idx_work_media_versions_work": {
-          "name": "idx_work_media_versions_work",
-          "columns": [
-            {
-              "expression": "work_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "uploaded_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "work_media_versions_work_id_works_id_fk": {
-          "name": "work_media_versions_work_id_works_id_fk",
-          "tableFrom": "work_media_versions",
-          "tableTo": "works",
-          "columnsFrom": [
-            "work_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.work_pages": {
       "name": "work_pages",
       "schema": "",
@@ -14312,13 +14238,6 @@
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "version_added_at": {
-          "name": "version_added_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,

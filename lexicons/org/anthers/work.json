@@ -81,6 +81,16 @@
 					"description": "`open` — anyone may reach the work at no cost. `gated` — reaching it requires supporting the creator or buying it, on terms shown on the work's own page. Terms themselves are deliberately absent: a price shown apart from the total a person actually pays is misleading, and this record cannot control how a consumer renders it.",
 					"knownValues": ["open", "gated"],
 					"maxLength": 32
+				},
+				"space": {
+					"type": "string",
+					"format": "uri",
+					"description": "The space that holds what a gated work's audience may read — its manifest, its file list, and its gated notes. Present only when `state` is `gated` and the creator's space carries a manifest this listing points at. ⚠️ The pointer is not the permission: whether a particular person may read the space is answered by the app the space names, on every credential request, and the space does not need a member list for reads."
+				},
+				"manifest": {
+					"type": "string",
+					"format": "uri",
+					"description": "The manifest record inside `space`: the deliverable file list with sizes and storage pointers. Present only alongside `space`. ⚠️ It points at where the bytes are kept; the bytes themselves stay in the service's media storage, behind delivery, because a repository is not a CDN."
 				}
 			}
 		},

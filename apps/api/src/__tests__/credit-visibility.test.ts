@@ -270,6 +270,59 @@ describe("creditsForUser", () => {
 	});
 });
 
+// ─── Self-credits ────────────────────────────────────────────────────────────
+
+describe("a credit naming the Work's own creator", () => {
+	it("is affirmed by creating the Work, so the owner shape never asks the creator to confirm themselves", async () => {
+		const created = await app.request("/api/content/works", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Cookie: `session=${creator.token}`,
+				Origin: ORIGIN,
+			},
+			body: JSON.stringify({
+				type: "text",
+				title: `Self credit ${RUN}`,
+				credits: [{ role: "Written by", contributor: creator.did, types: ["created"] }],
+			}),
+		});
+		expect(created.status).toBe(201);
+		const body = await created.json();
+		fixtureWorkIds.push(body.work.id);
+
+		const [row] = await db.select().from(works).where(eq(works.id, body.work.id)).limit(1);
+		const owned = await creditsForOwner(row);
+		expect(owned[0]?.awaitingContributorConfirmation).toBeUndefined();
+		expect(owned[0]?.contributor).toBe(creator.did);
+
+		// The user path resolves it too: the acceptance row is what both shapes read, so a
+		// signed-out reader sees the creator's name rather than a withheld credit.
+		const publicView = await creditsForUser(row, null);
+		expect(publicView.find((c) => c.role === "Written by")?.contributor).toBe(creator.handle);
+	});
+
+	it("is healed on the next save of a Work written before the rule existed", async () => {
+		const stale = await insertWork({
+			creatorId: creator.userId,
+			type: "text",
+			credits: [{ role: "Directed by", contributor: creator.did, types: ["created"] }],
+		});
+		fixtureWorkIds.push(stale.id);
+
+		// Inserted straight into the row: no route ran, so no acceptance row exists.
+		const before = await creditsForOwner(stale);
+		expect(before[0]?.awaitingContributorConfirmation).toBe(true);
+
+		// An edit that does not touch the credits still affirms them.
+		const res = await patchReq(stale.id, creator.token, { title: `Self credit healed ${RUN}` });
+		expect(res.status).toBe(200);
+
+		const after = await creditsForOwner(stale);
+		expect(after[0]?.awaitingContributorConfirmation).toBeUndefined();
+	});
+});
+
 // ─── The serialization paths ──────────────────────────────────────────────────
 
 describe("work serialization", () => {

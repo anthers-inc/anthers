@@ -7,12 +7,14 @@
  *   PATCH  /me                      — update current user profile
  *   GET    /me/following            — list creators the current user follows
  *   GET    /me/graph                — creators ranked by how many of the people the
- *                                     current user follows also follow them
+ *                                     current user follows also follow them (no page
+ *                                     draws it today)
  *   GET    /me/feed                 — posts AND releases from the account's network (follows,
  *                                     Badge subscriptions, and the creators behind saved or
  *                                     purchased content), plus your own;
  *                                     `?network_source=following|subscribed|saved` narrows it,
- *                                     and `?scope=global` widens it to every creator for Discovery's Ticker
+ *                                     and `?scope=global` widens it to every creator for
+ *                                     Discovery
  *   GET    /me/blocks               — who the current user has blocked
  *   GET    /me/adult-access         — the opt-in and adulthood verification, and whether
  *                                     the two together open the Adult rung
@@ -62,8 +64,8 @@ import {
 import { isWorkType } from "@anthers/shared/content";
 import { type ContentNote, RATING_ROWS } from "@anthers/shared/content-rating";
 import { CREATOR_EMAIL_KINDS, resolvedCreatorEmailDelivery } from "@anthers/shared/creator-emails";
-import { interleaveByAuthor, reasonForSource } from "@anthers/shared/discovery";
-import { normalizeSearchShortcuts } from "@anthers/shared/keybindings";
+import { asRecipeMix, interleaveByAuthor, reasonForSource } from "@anthers/shared/discovery";
+import { normalizeKeyboardShortcuts } from "@anthers/shared/keybindings";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
 	isRightsRequestKind,
@@ -96,6 +98,7 @@ import {
 	notSuspendedAccount,
 	notTestAccount,
 } from "../services/account-visibility.js";
+import { buildAtprotoExport } from "../services/atproto-export.js";
 import { FOLLOW_COLLECTION } from "../services/atproto-record-plan.js";
 import { queueRecordRemoval } from "../services/atproto-record-removal.js";
 import {
@@ -207,7 +210,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 			homeDefaultTab: userPreferences.homeDefaultTab,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
 			creatorEmailDelivery: userPreferences.creatorEmailDelivery,
-			searchShortcuts: userPreferences.searchShortcuts,
+			keyboardShortcuts: userPreferences.keyboardShortcuts,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
@@ -231,7 +234,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		// Where audio playback lives — null means "never said", the client reads on.
 		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
 		// The bar's two chords; null means the defaults in `@anthers/shared/keybindings`.
-		searchShortcuts: prefs?.searchShortcuts ?? null,
+		keyboardShortcuts: prefs?.keyboardShortcuts ?? null,
 		atprotoDid: user.atprotoDid,
 		// The server holding that identity, so Settings can name it and link its account page.
 		atprotoPdsUrl: user.atprotoPdsUrl,
@@ -421,11 +424,12 @@ const updateProfileSchema = z.object({
 	 */
 	homeDefaultTab: z.enum(NAV_IDS).optional(),
 	/**
-	 * The search bar's two chords, as a whole map. The values are validated below with
-	 * `@anthers/shared/keybindings` rather than by a regex here: the grammar is the same
-	 * one the browser matches against, so the two cannot disagree about what a chord is.
+	 * The account's rebindable chords, as a whole map — the search bar's two and the
+	 * player's two. The values are validated below with `@anthers/shared/keybindings`
+	 * rather than by a regex here: the grammar is the same one the browser matches
+	 * against, so the two cannot disagree about what a chord is.
 	 */
-	searchShortcuts: z.record(z.string().max(20), z.string().max(40)).optional(),
+	keyboardShortcuts: z.record(z.string().max(20), z.string().max(40)).optional(),
 	/**
 	 * Per-group notification delivery, as whole-mode writes per key.
 	 *
@@ -544,17 +548,18 @@ const accountRoutes = new Hono()
 		if (data.persistentMiniplayer !== undefined) {
 			prefUpdates.persistentMiniplayer = data.persistentMiniplayer;
 		}
-		if (data.searchShortcuts !== undefined) {
-			const cleaned = normalizeSearchShortcuts(data.searchShortcuts);
+		if (data.keyboardShortcuts !== undefined) {
+			const cleaned = normalizeKeyboardShortcuts(data.keyboardShortcuts);
 			if (!cleaned) {
 				return c.json(
 					{
-						error: "A shortcut needs a modifier and a key, and the two search actions must differ.",
+						error:
+							"A page shortcut needs a modifier and a key, a player shortcut needs a key, and no two shortcuts may be the same.",
 					},
 					400,
 				);
 			}
-			prefUpdates.searchShortcuts = cleaned;
+			prefUpdates.keyboardShortcuts = cleaned;
 		}
 		if (Object.keys(prefUpdates).length > 1) {
 			// The key exists only so the `> 1` test means "something was set"; the row's own
@@ -572,8 +577,8 @@ const accountRoutes = new Hono()
 				...(data.persistentMiniplayer !== undefined
 					? { persistentMiniplayer: data.persistentMiniplayer }
 					: {}),
-				...(data.searchShortcuts !== undefined
-					? { searchShortcuts: prefUpdates.searchShortcuts as Record<string, string> }
+				...(data.keyboardShortcuts !== undefined
+					? { keyboardShortcuts: prefUpdates.keyboardShortcuts as Record<string, string> }
 					: {}),
 			};
 			await db
@@ -666,11 +671,13 @@ const accountRoutes = new Hono()
 
 	// ── Graph ────────────────────────────────────────────────────────────────
 	//
-	// Discovery's Graph mode. The formula is the point: a creator is here because
-	// some number of the people this account follows also follow them, and the
-	// number travels with the row so the page can say why it is showing them. That
-	// is the visible, choosable alternative to a hidden recommendation engine —
-	// `min_shared` is the reader's control over the formula's one parameter.
+	// A deferred Discovery surface: no page draws this today. The recipe is the
+	// point — a creator is here because some number of the people this account
+	// follows also follow them, and the number travels with the row so a page can
+	// say why it is showing them. That is the visible, choosable alternative to a
+	// hidden recommendation engine — `min_shared` is the reader's control over the
+	// recipe's one parameter — and it waits for enough content for the edges to
+	// say more than a plain listing would.
 	//
 	// ⚠️ **Creators the reader already follows stay in the list.** The graph is a
 	// picture of the network around them, not a list of strangers; a creator they
@@ -680,7 +687,7 @@ const accountRoutes = new Hono()
 	//
 	// A reader who follows nobody has no edges to trace: the route falls back to
 	// creators ordered by followers and says so with `basis: "followers"`, which
-	// the page renders as the formula it actually ran rather than pretending the
+	// the page renders as the recipe it actually ran rather than pretending the
 	// network produced it.
 	.get("/me/graph", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
@@ -805,13 +812,18 @@ const accountRoutes = new Hono()
 	.get("/me/feed", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
 
-		// `scope=global` is Discovery's Ticker: the newest Works and Posts across
+		// `scope=global` is Discovery's stream: the newest Works and Posts across
 		// Anthers rather than the account's network. It is the same stream shape and
-		// the same card fields, so the Ticker reuses the feed's serialization instead
+		// the same card fields, so Discovery reuses the feed's serialization instead
 		// of growing a second listing that drifts from it. Everything else about the
 		// route is unchanged — the filters, the access verdicts, and the ordering are
 		// the feed's own.
 		const scope = c.req.query("scope") === "global" ? "global" : "network";
+		// The mix is Discovery's recipe parameter. An absent one keeps each stream's
+		// historic order: Discovery's whole-site stream interleaves, the network feed
+		// stays chronological, so a caller that knows nothing about recipes gets exactly
+		// what it got before this parameter existed.
+		const mix = asRecipeMix(c.req.query("mix"), scope === "global" ? "spread" : "straight");
 
 		// The feed's sources (2026-10-19): the creators this account follows, the
 		// creators whose Badge it holds, and the creators behind the posts and Works it
@@ -1300,17 +1312,17 @@ const accountRoutes = new Hono()
 				return accessFilter === "unlocked" ? unlocked : !unlocked;
 			});
 
-		// 🚨 **Discovery's Ticker runs the mix stage, and it runs it before the cap.**
-		// Strictly newest-first hands the page to whoever posts most: one creator's run
-		// of ten fills a quarter of a 4-column grid. Interleaving gives every creator one
-		// card before anyone gets a second — the first round is one per creator, then the
+		// 🚨 **Discovery's mix is a recipe value, and it runs before the cap.** Strictly
+		// newest-first hands the page to whoever posts most: one creator's run of ten
+		// fills a quarter of a 4-column grid. `spread` gives every creator one card
+		// before anyone gets a second — the first round is one per creator, then the
 		// next — and because the input was newest-first, it reads as "the newest of
-		// everyone, then the next of everyone" rather than as a re-ranking. The network
-		// feed is a record of what the people you chose did, so it keeps the plain order.
-		const capped =
-			scope === "global"
-				? interleaveByAuthor(newestFirst, (e) => e.creatorId).slice(0, 50)
-				: newestFirst.slice(0, 50);
+		// everyone, then the next of everyone" rather than as a re-ranking. `straight`
+		// is the recipe with no mixing pass, and the network feed's own default, because
+		// that feed is a record of what the people you chose did.
+		const mixed =
+			mix === "spread" ? interleaveByAuthor(newestFirst, (e) => e.creatorId) : newestFirst;
+		const capped = mixed.slice(0, 50);
 
 		return c.json({
 			entries: capped,
@@ -1796,12 +1808,27 @@ const accountRoutes = new Hono()
 
 	.delete("/me", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
-		const { scheduledFor } = await requestDeletion(sessionUser.id);
+		// The body is optional: an older client or a script sends none, which means no bypass.
+		const body = (await c.req.json().catch(() => ({}))) as { bypassExport?: boolean };
+		const result = await requestDeletion(sessionUser.id, {
+			bypassExport: body.bypassExport === true,
+		});
+		if (!result.ok) {
+			return c.json(
+				{
+					error:
+						"Take your identity bundle first, or choose to delete without one. It is the only copy of your repository and spaces.",
+					code: result.reason,
+					exportedAt: result.exportedAt,
+				},
+				409,
+			);
+		}
 		// The session that made the request is gone with the rest of them, so clear the
 		// cookie too rather than leaving the browser holding a token the server has
 		// already forgotten.
 		deleteCookie(c, "session", { path: "/" });
-		return c.json({ scheduledFor, graceDays: DELETION_GRACE_DAYS });
+		return c.json({ scheduledFor: result.scheduledFor, graceDays: DELETION_GRACE_DAYS });
 	})
 
 	.post("/me/deletion/cancel", requireAuth, async (c) => {
@@ -2143,6 +2170,33 @@ const accountRoutes = new Hono()
 		// the failure this header exists for.
 		c.header("Cache-Control", "no-store");
 		return c.body(JSON.stringify(data, null, 2));
+	})
+
+	// The AT Protocol half: the public repository, every space, and the files in them. Separate
+	// from the JSON above because it is a different promise; `services/atproto-export.ts` carries
+	// why the JSON cannot stand in for it.
+	//
+	// ⚠️ **A POST rather than a GET, because it records the export.** The timestamp is the
+	// deletion gate's evidence, and a download a proxy or a link prefetcher could repeat is not
+	// the same act as asking for the bundle.
+	.post("/me/export/atproto", requireAuth, async (c) => {
+		const sessionUser = c.get("user");
+		const built = await buildAtprotoExport(sessionUser.id);
+		if (!built.ok) {
+			return c.json({ error: "Could not build your identity bundle.", code: built.reason }, 500);
+		}
+		const stamp = new Date().toISOString().slice(0, 10);
+		// A fresh view over a plain ArrayBuffer, because the response body takes a Blob and a
+		// Uint8Array view may sit on a shared or oversized buffer.
+		const copy = new Uint8Array(built.zip.byteLength);
+		copy.set(built.zip);
+		return new Response(new Blob([copy], { type: "application/zip" }), {
+			headers: {
+				"Content-Type": "application/zip",
+				"Content-Disposition": `attachment; filename="anthers-identity-${sessionUser.handle}-${stamp}.zip"`,
+				"Cache-Control": "no-store",
+			},
+		});
 	})
 
 	.post("/users/:handle/block", requireAuth, async (c) => {

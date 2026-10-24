@@ -22,9 +22,11 @@ import {
 	USER_SPACE_SKEY,
 	USER_SPACE_TYPE,
 	userSpaces,
+	works,
 } from "@anthers/db/schema";
-import { eq } from "drizzle-orm";
-import { type SpacePolicy, SpaceRequestError } from "./atproto-space.js";
+import { and, eq, isNotNull, or } from "drizzle-orm";
+import { isUnsupportedSpaceServer, type SpacePolicy, SpaceRequestError } from "./atproto-space.js";
+import { CREATOR_SPACE_TYPE } from "./creator-space-records.js";
 import {
 	hostedSpaceSession,
 	type ResolveSpaceSession,
@@ -55,6 +57,45 @@ export interface RegisteredSpace {
  */
 export function userSpaceUri(did: string): string {
 	return `at://${did}/space/${USER_SPACE_TYPE}/${USER_SPACE_SKEY}`;
+}
+
+/** The parts of a space address: `at://<owner did>/space/<type>/<key>`. */
+export interface SpaceAddress {
+	did: string;
+	spaceType: string;
+	skey: string;
+}
+
+/**
+ * Split a space URI into the four things every caller needs from it.
+ *
+ * ⚠️ **The key is read from the URI rather than assumed.** A storage prefix that hardcodes
+ * `self` puts a creator's gated space on top of their Library's captures, which is exactly the
+ * collision the backup format's `{did}/{type}/{skey}` shape exists to prevent.
+ */
+export function parseSpaceAddress(spaceUri: string): SpaceAddress | null {
+	if (!spaceUri.startsWith("at://")) return null;
+	const [did, kind, spaceType, skey, ...extra] = spaceUri.slice("at://".length).split("/");
+	if (!did || kind !== "space" || !spaceType || !skey || extra.length > 0) return null;
+	return { did, spaceType, skey };
+}
+
+/** The key in a space URI, which is the last segment of a well-formed address. */
+export function spaceSkey(spaceUri: string): string {
+	return parseSpaceAddress(spaceUri)?.skey ?? (spaceUri.split("/").at(-1) || "self");
+}
+
+/**
+ * One space an account owns, as an address: enough to capture, export or move it.
+ *
+ * ⚠️ **The registry row's cached policy is deliberately absent.** A capture reads the policy
+ * and the member list from the server, because the row is a cache and a backup has to be of
+ * what the server holds now.
+ */
+export interface OwnedSpace {
+	did: string;
+	spaceUri: string;
+	spaceType: string;
 }
 
 /**
@@ -349,6 +390,101 @@ function toRegistered(row: typeof userSpaces.$inferSelect): RegisteredSpace {
 /** Whether a space is one of this account's own, by address. */
 export function ownsSpace(did: string, spaceUri: string): boolean {
 	return spaceUri === userSpaceUri(did);
+}
+
+/** Every space this account owns, for an export or a capture that covers all of them. */
+export async function registeredSpacesFor(userId: number): Promise<RegisteredSpace[]> {
+	const rows = await db.select().from(userSpaces).where(eq(userSpaces.userId, userId));
+	return rows.map(toRegistered);
+}
+
+export interface SpaceEnumerationOptions extends RegistryOptions {
+	/** A session the caller already resolved, so enumerating does not resolve it twice. */
+	session?: SpaceSession;
+}
+
+/**
+ * Every space an account owns: its Library, its studio, and each gated Work's space.
+ *
+ * ⭐ **The PDS's `listSpaces` is the address of record for creator spaces.** `works.draft_uri`,
+ * `gated_space_uri` and `manifest_uri` are pointers to records *inside* those spaces, written
+ * after the record is verified; they are not the enumeration source. Asking the server is what
+ * picks up a studio whose Work rows are gone, a gated space whose pointer a failed write never
+ * stored, and an empty space that was created and holds nothing yet — and it is what keeps a
+ * deleted space out, rather than leaving a row for the nightly sweep to fail against forever.
+ * The 71.05 rule already says this: the registry is an index, and `listSpaces` rebuilds it.
+ *
+ * Registered rows come first, so a caller that wants "the Library" keeps finding it there. The
+ * creator spaces follow, sorted by address so a capture's output does not reorder itself.
+ */
+export async function ownedSpacesFor(
+	userId: number,
+	opts: SpaceEnumerationOptions = {},
+): Promise<OwnedSpace[]> {
+	const registered = await registeredSpacesFor(userId);
+	const owned = new Map<string, OwnedSpace>(
+		registered.map((row) => [
+			row.spaceUri,
+			{ did: row.did, spaceUri: row.spaceUri, spaceType: row.spaceType },
+		]),
+	);
+
+	let session = opts.session;
+	if (!session) {
+		const resolve = opts.resolveSession ?? hostedSpaceSession({ fetchImpl: opts.fetchImpl });
+		session = (await resolve(userId)).session ?? undefined;
+	}
+	if (!session) return [...owned.values()];
+
+	const client = spaceClientFor(session, { fetchImpl: opts.fetchImpl });
+	let listed: Array<{ uri: string }> = [];
+	try {
+		listed = (await client.listSpaces({ did: session.did, spaceType: CREATOR_SPACE_TYPE })).spaces;
+	} catch (error) {
+		// A server with no space endpoints has no creator spaces either; anything else is real.
+		if (!isUnsupportedSpaceServer(error)) throw error;
+	}
+
+	const creatorSpaces: OwnedSpace[] = [];
+	for (const space of listed) {
+		const address = parseSpaceAddress(space.uri);
+		if (!address || owned.has(space.uri)) continue;
+		creatorSpaces.push({ did: address.did, spaceUri: space.uri, spaceType: address.spaceType });
+	}
+	creatorSpaces.sort((a, b) => a.spaceUri.localeCompare(b.spaceUri));
+
+	return [...owned.values(), ...creatorSpaces];
+}
+
+/**
+ * The accounts the nightly sweep should ask about, in id order.
+ *
+ * ⚠️ **The two sources are deliberately different questions.** A registry row is a space this
+ * deployment knows it created; a Work with a draft or gated address is a creator whose space
+ * the Studio has written into. Neither alone reaches every owner — a creator who never saved
+ * anything has no registry row, and a reader who saved but published nothing has no Work. The
+ * union is the smallest set that can hold an owned space, and `ownedSpacesFor` decides which
+ * spaces each account actually has.
+ */
+export async function accountsOwningSpaces(limit = 100): Promise<number[]> {
+	const [registered, creators] = await Promise.all([
+		db.selectDistinct({ userId: userSpaces.userId }).from(userSpaces).limit(limit),
+		db
+			.selectDistinct({ userId: works.creatorId })
+			.from(works)
+			.where(
+				and(
+					isNotNull(works.creatorId),
+					or(isNotNull(works.draftUri), isNotNull(works.gatedSpaceUri)),
+				),
+			)
+			.limit(limit),
+	]);
+	const ids = new Set<number>();
+	for (const row of [...registered, ...creators]) {
+		if (row.userId !== null) ids.add(row.userId);
+	}
+	return [...ids].sort((a, b) => a - b).slice(0, limit);
 }
 
 /** One account's row, without a network call. */

@@ -21,6 +21,7 @@ import { createDevBuildRoutes } from "./routes/dev-build.js";
 import { dmcaRoutes } from "./routes/dmca.js";
 import { errorCaptureRoutes } from "./routes/errors.js";
 import { integrationRoutes } from "./routes/integrations.js";
+import { managingAppRoutes } from "./routes/managing-app.js";
 import { mediaUploadSessionRoutes } from "./routes/media-upload-sessions.js";
 import { moderationRoutes } from "./routes/moderation.js";
 import { nounRoutes } from "./routes/noun.js";
@@ -32,6 +33,7 @@ import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { trafficRoutes } from "./routes/traffic.js";
 import { webBuildRoutes } from "./routes/web-builds.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { workManifestRoutes } from "./routes/work-manifest.js";
 import { alertDue, alertOperational, captureError, redactRoute } from "./services/error-tracker.js";
 import { healthReport } from "./services/health.js";
 import { isQuarantinedKey } from "./services/storage/acl.js";
@@ -112,8 +114,15 @@ const app = new Hono()
 	})
 	.route("/api/auth", authRoutes)
 	.route("/api/atproto", atprotoRoutes)
+	// The managing-app identity and the space gate: `/.well-known/did.json` at the host
+	// root (where `did:web` looks) and `/xrpc/…` (where an atproto service answers). Their
+	// paths are absolute, so the router mounts at the root rather than under a prefix.
+	.route("/", managingAppRoutes)
 	.route("/api/accounts", accountRoutes)
 	.route("/api/content", contentRoutes)
+	// A gated Work's manifest is a read of another server, not a row; it lives beside the
+	// Work routes but has its own service, so the access check and the protocol stay together.
+	.route("/api/content", workManifestRoutes)
 	.route("/api/search", searchRoutes)
 	.route("/api/content/media-upload", mediaUploadSessionRoutes)
 	.route("/api/noun", nounRoutes)

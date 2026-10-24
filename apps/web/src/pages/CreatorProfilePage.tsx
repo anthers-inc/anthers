@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { ANTHERS_BADGES, amountLabel, supportAmount } from "@anthers/shared/constants";
+import { amountLabel } from "@anthers/shared/constants";
 import { isListened } from "@anthers/shared/content";
-import { withNextPath } from "@anthers/shared/next-path";
 import { useAuth } from "@anthers/web-shared/auth";
+import DashboardPage from "@anthers/web-shared/DashboardPage";
 import { usePageTitle } from "@anthers/web-shared/page-title";
 import BadgeMaker from "@anthers/web-shared/post/BadgeMaker";
 import { displayHandle, handleFromParam } from "@anthers/web-shared/profile";
@@ -11,18 +11,10 @@ import {
 	INTERACTION_PERMISSION_HINT,
 	useInteractionPermissionMissing,
 } from "@anthers/web-shared/publishing";
-import {
-	Link,
-	useLocation,
-	useNavigate,
-	useParams,
-	useSearchParams,
-} from "@anthers/web-shared/router";
+import { useParams, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import type {
-	Badge,
 	Creator,
-	CreatorBadge,
 	CreatorStatus,
 	PostListItem,
 	Project,
@@ -33,23 +25,22 @@ import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import Modal from "@anthers/web-shared/ui/Modal";
 import {
-	BoltIcon,
 	CalendarDaysIcon,
-	CheckCircleIcon,
 	EllipsisHorizontalIcon,
 	LinkIcon,
-	LockClosedIcon,
 	MapPinIcon,
 	NoSymbolIcon,
 	PencilSquareIcon,
 } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import FeedTile from "../components/cards/FeedTile";
 import ProjectCard from "../components/cards/ProjectCard";
+import BadgesTab from "../components/creator/BadgesTab";
+import CreatorCredits from "../components/creator/CreatorCredits";
 import ReportDialog from "../components/ui/ReportDialog";
 import { InlineField } from "../components/work/Editing";
 import { useReportVisit } from "../lib/attention";
-import { useBasket } from "../lib/basket";
 
 /** A Work as the public Catalog listing returns it. */
 type CatalogWork = Work & {
@@ -71,7 +62,16 @@ function postEntry(post: PostListItem): { kind: "post"; id: number } & Record<st
 	return { kind: "post", ...post };
 }
 
-type Tab = "all" | "posts" | "games" | "videos" | "audio" | "writing" | "badges";
+type Tab =
+	| "dashboard"
+	| "all"
+	| "posts"
+	| "games"
+	| "videos"
+	| "audio"
+	| "writing"
+	| "badges"
+	| "credits";
 
 function badgeNameFor(id: string): string {
 	if (id === "none" || id === "free" || !id) return "Free";
@@ -88,343 +88,20 @@ function hostLabel(url: string): string {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Support this creator                                                */
-/* ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ */
-/*  Badges tab                                                          */
-/* ------------------------------------------------------------------ */
-
-/**
- * The Badge purchase ladder — the rungs a buyer picks from, and the two actions a pick
- * offers: add it to the basket, or buy it now — which is the same add plus the trip to
- * the one checkout ("Buy Now never skips the basket's checkout flow", the Work page's
- * own rule, applied to Badges).
- *
- * 🚨 **One ladder, one flow, on every creator's page — Anthers' own included.** Holding
- * a Badge is what a subscription to its issuer is; the pick's first Month is charged at
- * the basket (the full threshold, or the upgrade's delta — the server's resolution
- * prices it, never this surface), the recurring line joins the subscription at the next
- * renewal, and the money settles through the cycle distribution. No signup hop, no
- * separate funnel: the visitor picks here, and the account ceremony that interrupts the
- * buy (a signed-out buyer's) comes back to exactly the pick they had.
- *
- * The retired pick-within-budget give the badges tab used to render came out with this:
- * allocating committed support is the subscription dashboard's work, and the model it
- * served is retired by its own sweep task.
- */
-function BadgesTab({
-	rungs,
-	unlockedBadges,
-	heldBadge,
-	heldAmount,
-	creatorName,
-	creatorHandle,
-	canBuy,
-	authenticated,
-	preselectedBadgeId,
-	isOwner,
-}: {
-	rungs: CreatorBadge[];
-	unlockedBadges: number[];
-	heldBadge: string;
-	heldAmount: string;
-	creatorName: string;
-	creatorHandle: string;
-	/** Looking at somebody else's profile — you can't buy your own ladder. */
-	canBuy: boolean;
-	authenticated: boolean;
-	/** A pick carried back across the sign-in detour, as `?badge=`. */
-	preselectedBadgeId: number | null;
-	/** The creator's own page, where the Badge Maker sits above this ladder. */
-	isOwner: boolean;
-}) {
-	const { hasBadge, add } = useBasket();
-	const navigate = useNavigate();
-	const { pathname } = useLocation();
-	const [pickId, setPickId] = useState<number | null>(preselectedBadgeId);
-	const [working, setWorking] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	const [added, setAdded] = useState<number | null>(null);
-
-	// Every rung the ladder holds is this creator's own Badge — there is no `gateType` to
-	// filter on, and no cross-issuer rung to exclude.
-	const unlockedSet = new Set(unlockedBadges);
-	const held = supportAmount(heldAmount);
-
-	// The pick carried back across the detour sticks only to a rung that survives the
-	// ratchet — a ladder edited between the click and the return re-picks clean.
-	const pick = rungs.find((r) => r.id === pickId && Number(r.threshold) > held) ?? null;
-
-	const pickIt = (rung: CreatorBadge) => {
-		setAdded(null);
-		setError(null);
-		setPickId(Number(rung.threshold) > held ? rung.id : null);
-	};
-
-	/**
-	 * Add the picked rung by way of the basket — the same add both buttons make, the
-	 * scratchpad never seeing a Badge (a signed-out pick goes through the doors below
-	 * before anything is held). Buy now is the add plus the trip: the basket page's
-	 * embedded Checkout is the one purchase form, and every kind of line pays in it.
-	 */
-	const addThePick = async (thenBasket: boolean) => {
-		if (!pick) return;
-		setWorking(true);
-		setError(null);
-		try {
-			const result = await Promise.resolve(
-				add({
-					kind: "badge",
-					badgeId: pick.id,
-					title: pick.label,
-					price: "",
-					recurring: String(pick.threshold),
-					creatorHandle: creatorHandle,
-				}),
-			);
-			if (!result.ok) {
-				setError(result.error);
-				return;
-			}
-			if (thenBasket) {
-				navigate("/basket");
-				return;
-			}
-			setAdded(pick.id);
-		} finally {
-			setWorking(false);
-		}
-	};
-
-	// The detour's return trip: back to this page, badges tab, pick carried. The rung's
-	// id in the URL is what survives the ceremony (signing in tears the page down — the
-	// shell unmounts on the auth flip), and the rung above re-picks it on return.
-	const back = `${pathname}?tab=badges&badge=${pick?.id ?? ""}`;
-
-	if (rungs.length === 0) {
-		// The owner has the maker above this ladder; its own empty line and add form are
-		// the invitation, so a second "hasn't set up any Badges yet" would talk about them
-		// in the third person on their own page.
-		if (isOwner) return null;
-		return (
-			<EmptyState
-				title="No Badges configured"
-				description={`${creatorName} hasn't set up any Badges yet. All content is publicly available.`}
-			/>
-		);
-	}
-
-	return (
-		<div className="max-w-2xl space-y-8">
-			{/* User's current status */}
-			{heldBadge !== "none" && heldBadge !== "free" && (
-				<div className="card bg-base-200">
-					<div className="card-body py-3 px-4">
-						<div className="flex items-center justify-between text-sm">
-							<span className="text-base-content/60">Your status with {creatorName}</span>
-							<div className="flex items-center gap-2">
-								<span className="badge badge-sm badge-outline">{badgeNameFor(heldBadge)}</span>
-								{parseFloat(heldAmount) > 0 && (
-									<span className="badge badge-sm badge-primary badge-outline">
-										{amountLabel(heldAmount)}/mo
-									</span>
-								)}
-							</div>
-						</div>
-					</div>
-				</div>
-			)}
-
-			{/* The creator's Badge ladder */}
-			<div>
-				<h3 className="text-lg font-bold mb-1">Badges</h3>
-				<p className="text-sm text-base-content/50 mb-3">
-					Badges set by {creatorName}. Pick one and buy it here — it renews monthly until you stop.
-				</p>
-				<div className="space-y-2">
-					{rungs.map((rung) => {
-						const unlocked = unlockedSet.has(rung.id);
-						const threshold = Number(rung.threshold);
-						const heldNow = supportAmount(heldAmount);
-						const remaining = Math.max(0, threshold - heldNow);
-						// Selectable for every buyer who isn't looking at their own ladder, at
-						// or above the ratchet — a rung below what you already give is not a
-						// purchase, it's a step down the ladder doesn't offer.
-						const selectable = canBuy && threshold > heldNow;
-						const selected = selectable && pick?.id === rung.id;
-						const inBasket = hasBadge(rung.id);
-
-						return (
-							<div
-								key={rung.id}
-								className={`card border ${unlocked ? "border-success/40 bg-success/5" : "border-base-content/10 bg-base-200"} ${selected ? "border-primary ring-1 ring-primary/40" : ""}`}
-							>
-								<div className="card-body p-4">
-									{/* The pick is a real button — keyboard and screen-reader reachable
-									    without composite-widget roles, and the artist credit keeps its
-									    link outside the button, inside the card. */}
-									<button
-										type="button"
-										className="flex w-full items-center justify-between gap-2 text-left"
-										disabled={!selectable}
-										aria-pressed={selectable ? selected : undefined}
-										onClick={() => selectable && pickIt(rung)}
-									>
-										<span className="flex items-center gap-2">
-											{unlocked ? (
-												<CheckCircleIcon className="w-5 h-5 text-success flex-shrink-0" />
-											) : (
-												<LockClosedIcon className="w-5 h-5 text-base-content/30 flex-shrink-0" />
-											)}
-											<span>
-												<span className="font-medium">{rung.label}</span>
-												<span className="text-base-content/40 ml-2 text-sm">
-													{amountLabel(rung.threshold)}/mo
-												</span>
-											</span>
-										</span>
-										{unlocked ? (
-											<span className="badge badge-sm badge-success">Yours</span>
-										) : inBasket ? (
-											<span className="badge badge-sm badge-secondary">In your basket</span>
-										) : selectable ? (
-											<span
-												className={
-													selected ? "badge badge-sm badge-primary" : "badge badge-sm badge-outline"
-												}
-											>
-												{selected ? "Selected" : "Select"}
-											</span>
-										) : (
-											remaining > 0 && (
-												<span className="text-xs text-base-content/40">
-													${remaining.toFixed(2)} more to unlock
-												</span>
-											)
-										)}
-									</button>
-									{rung.description && (
-										<p className="text-sm text-base-content/60 mt-1 ml-7">{rung.description}</p>
-									)}
-									{/* 🚨 THE FLIP — the artist credit a supporter reads on a Badge's
-									    back. Every emblem has a named human behind it, and naming them
-									    here is the promise made when the library was taken on. It
-									    covers uploaded art's credit too when the creator names one. */}
-									{rung.artistCredit && (
-										<p className="text-xs text-base-content/40 mt-1 ml-7">
-											Emblem by{" "}
-											{rung.artistCredit.artistPermalink ? (
-												<a
-													href={rung.artistCredit.artistPermalink}
-													target="_blank"
-													rel="noopener noreferrer"
-													className="underline decoration-dotted underline-offset-2"
-												>
-													{rung.artistCredit.artistName}
-												</a>
-											) : (
-												rung.artistCredit.artistName
-											)}{" "}
-											· Noun Project
-										</p>
-									)}
-								</div>
-							</div>
-						);
-					})}
-				</div>
-			</div>
-
-			{/*
-			 * The picked rung's action card — the whole purchase flow, in place: a signed-out
-			 * buyer gets the account doors (both of them, both of them coming back), a
-			 * signed-in buyer gets the two actions the Work page's buy row carries. The
-			 * signup hop the old upgrade prompt was is gone: the intent's pick happens HERE,
-			 * and the ceremony, when one exists, returns to it.
-			 */}
-			{pick && canBuy && (
-				<div className="card bg-base-200" data-testid="badge-pick-actions">
-					<div className="card-body py-4 px-5 gap-3">
-						{!authenticated ? (
-							<>
-								<p className="text-sm text-base-content/60 text-center mb-0">
-									Log in or make an account to buy {pick.label} — {amountLabel(pick.threshold)}/mo,
-									starting with the first Month at the basket.
-								</p>
-								<div className="flex gap-2 justify-center">
-									<Link to={withNextPath("/signup", back)} className="btn btn-primary btn-sm">
-										Sign up
-									</Link>
-									<Link to={withNextPath("/login", back)} className="btn btn-ghost btn-sm">
-										Log in
-									</Link>
-								</div>
-							</>
-						) : (
-							<>
-								{error && <p className="text-xs text-error">{error}</p>}
-								{added === pick.id && (
-									<p className="text-xs text-success">
-										In your basket. It charges with everything else you've added — the card fee is
-										charged once per purchase.
-									</p>
-								)}
-								<div className="flex gap-2">
-									<button
-										type="button"
-										className="btn btn-outline btn-sm"
-										disabled={working || hasBadge(pick.id)}
-										onClick={() => void addThePick(false)}
-									>
-										{hasBadge(pick.id) ? "In your basket" : working ? "Adding…" : "Add to basket"}
-									</button>
-									<button
-										type="button"
-										className="btn btn-primary btn-sm flex-1"
-										disabled={working}
-										onClick={() => void addThePick(true)}
-									>
-										<BoltIcon className="w-4 h-4" />
-										{working ? "Adding…" : "Buy now"}
-									</button>
-								</div>
-							</>
-						)}
-					</div>
-				</div>
-			)}
-		</div>
-	);
-}
-
-/**
- * The Badge sitting exactly at a gate's threshold ($3 = Root … $12 = Blossom).
- *
- * Matches on threshold rather than indexing by it: a gate is any amount, and a Badge need
- * not sit at every amount, so "no Badge at this threshold" is a real answer — and it is
- * now the ORDINARY answer rather than an edge case, since a creator sets their own levels
- * to whatever they like.
- */
-function _anthersBadgeForRank(rank: number): Badge | null {
-	return (ANTHERS_BADGES.find((b) => b.threshold === rank)?.name as Badge | undefined) ?? null;
-}
-
-/**
- * The per-card lock chrome that used to live here is gone with the post-level gate.
- * A Work carries its own access and `WorkCard` renders its own locked state, so there is
- * no wrapper deciding what a *post* card may show.
- */
-
-/* ------------------------------------------------------------------ */
-/*  Badges tab                                                          */
-/* ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ */
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
-const TABS: Tab[] = ["all", "posts", "games", "videos", "audio", "writing", "badges"];
+const TABS: Tab[] = [
+	"dashboard",
+	"all",
+	"posts",
+	"games",
+	"videos",
+	"audio",
+	"writing",
+	"badges",
+	"credits",
+];
 
 /** The separator between the tab row's groups — the timeline, the Work types, and the profile's metadata views. */
 function TabDivider() {
@@ -446,11 +123,19 @@ export default function CreatorProfilePage() {
 	const [posts, setPosts] = useState<PostListItem[]>([]);
 	const [works, setWorks] = useState<CatalogWork[]>([]);
 	usePageTitle(creator?.displayName ?? null);
+	const isOwnProfile = currentUser?.handle === handle;
+
 	// ?tab=badges is a real entry point, not a nicety: a locked post's unlock panel sends the
 	// user here to act, and dropping them on the default tab loses the intent they arrived with.
 	// ?badge= beside it is the pick carried back across a sign-in detour from the same tab.
+	//
+	// ⭐ **`?tab=dashboard` leads the row for the creator alone** (Parker, 2026-10-23), because it
+	// holds the worklist and the arrangeable panels — the Studio's Dashboard, moved here from
+	// the Studio's own root. A visitor asking for it gets the profile's default tab: the tab is
+	// absent from their row, and a query parameter is not a door around that.
 	const tabParam = searchParams.get("tab") as Tab | null;
-	const tab: Tab = tabParam && TABS.includes(tabParam) ? tabParam : "all";
+	const asked = tabParam && TABS.includes(tabParam) ? tabParam : "all";
+	const tab: Tab = asked === "dashboard" && !isOwnProfile ? "all" : asked;
 	const badgeParam = Number.isFinite(Number(searchParams.get("badge")))
 		? searchParams.get("badge")
 		: null;
@@ -469,8 +154,12 @@ export default function CreatorProfilePage() {
 	const [blocking, setBlocking] = useState(false);
 	/** Set once a block succeeds — the profile 404s on reload, so we say so before then. */
 	const [blocked, setBlocked] = useState(false);
-
-	const isOwnProfile = currentUser?.handle === handle;
+	/**
+	 * The Badges tab's one open editor: a Badge's id, `"new"` for the add card, or null
+	 * with no dialog. The Badge itself is derived from the ladder the page already holds,
+	 * so an art save's refetch moves the mark in place without closing the dialog.
+	 */
+	const [editingBadgeId, setEditingBadgeId] = useState<number | "new" | null>(null);
 
 	// A profile is a single-creator shelf — the Catalog and posts render as cards that
 	// link out to WorkPage, where consumption actually happens and the Time Pool claim
@@ -753,6 +442,18 @@ export default function CreatorProfilePage() {
 			<span className="italic text-base-content/40">Add a location</span>
 		) : null;
 
+	// The Badges tab's editor, resolved from the ladder this page already holds.
+	const ladder = creatorStatus?.badges ?? [];
+	const editingBadge =
+		editingBadgeId !== null && editingBadgeId !== "new"
+			? (ladder.find((b) => b.id === editingBadgeId) ?? null)
+			: null;
+	// A "new" editor previews the fallback design at the end of the ladder; an existing one
+	// keeps its own position, which is what its fallback art keys on.
+	const editingIndex =
+		editingBadgeId === "new" ? ladder.length : editingBadge ? ladder.indexOf(editingBadge) : 0;
+	const editorOpen = editingBadgeId === "new" || editingBadge !== null;
+
 	return (
 		// `relative z-30` lifts the whole page above the logged-out shell's decorative
 		// layer (the side vines and their bee swarm sit at z-20 — see LoggedOutLayout) so
@@ -855,9 +556,62 @@ export default function CreatorProfilePage() {
 						) : (
 							displayNameRead()
 						)}
-						<p className="text-base-content/60">
-							@{creator.handle} · {followerCount} followers
-						</p>
+						{/* The actions belong to the person named on this line, so they sit on it
+						    rather than in a column of their own across the page — a visitor's
+						    Follow and more-actions answer "who is this", which is what the handle
+						    and follower count are already answering. */}
+						<div className="flex flex-wrap items-center gap-3">
+							<p className="text-base-content/60">
+								@{creator.handle} · {followerCount} followers
+							</p>
+							{isAuthenticated && !isOwnProfile && (
+								<div className="flex items-center gap-2">
+									<button
+										type="button"
+										className={`btn ${isFollowing ? "btn-outline" : "btn-primary"}`}
+										onClick={handleFollow}
+										// Unfollowing is never blocked; following writes a record.
+										disabled={!isFollowing && followPermissionMissing}
+										title={
+											!isFollowing && followPermissionMissing
+												? INTERACTION_PERMISSION_HINT
+												: undefined
+										}
+									>
+										{isFollowing ? "Following" : "Follow"}
+									</button>
+
+									{/* Block and Report sit together and read differently on purpose.
+									    Blocking is yours and takes effect immediately; reporting asks an
+									    operator to look. Someone who wants to be left alone should not have
+									    to file a report to get it, and someone reporting abuse should not
+									    have to keep seeing it while they wait. */}
+									<div className="dropdown dropdown-end">
+										<button
+											type="button"
+											tabIndex={0}
+											className="btn btn-ghost btn-square"
+											aria-label={`More options for ${creator.handle}`}
+										>
+											<EllipsisHorizontalIcon className="w-5 h-5" />
+										</button>
+										<ul className="dropdown-content menu z-10 w-56 rounded-box bg-base-200 p-2 shadow">
+											<li>
+												<button type="button" onClick={() => setConfirmingBlock(true)}>
+													<NoSymbolIcon className="w-4 h-4" />
+													Block @{creator.handle}
+												</button>
+											</li>
+											<li>
+												<button type="button" onClick={() => setReporting(true)}>
+													Report @{creator.handle}
+												</button>
+											</li>
+										</ul>
+									</div>
+								</div>
+							)}
+						</div>
 						{isOwnProfile ? (
 							<InlineField<string>
 								label="bio"
@@ -932,82 +686,46 @@ export default function CreatorProfilePage() {
 							</span>
 						</div>
 					</div>
-					{isAuthenticated && !isOwnProfile && (
-						<div className="flex flex-col items-end gap-2 mt-4 sm:mt-12">
-							<div className="flex items-center gap-2">
-								<button
-									type="button"
-									className={`btn ${isFollowing ? "btn-outline" : "btn-primary"}`}
-									onClick={handleFollow}
-									// Unfollowing is never blocked; following writes a record.
-									disabled={!isFollowing && followPermissionMissing}
-									title={
-										!isFollowing && followPermissionMissing
-											? INTERACTION_PERMISSION_HINT
-											: undefined
-									}
-								>
-									{isFollowing ? "Following" : "Follow"}
-								</button>
-
-								{/* Block and Report sit together and read differently on purpose.
-									    Blocking is yours and takes effect immediately; reporting asks an
-									    operator to look. Someone who wants to be left alone should not have
-									    to file a report to get it, and someone reporting abuse should not
-									    have to keep seeing it while they wait. */}
-								<div className="dropdown dropdown-end">
-									<button
-										type="button"
-										tabIndex={0}
-										className="btn btn-ghost btn-square"
-										aria-label={`More options for ${creator.handle}`}
-									>
-										<EllipsisHorizontalIcon className="w-5 h-5" />
-									</button>
-									<ul className="dropdown-content menu z-10 w-56 rounded-box bg-base-200 p-2 shadow">
-										<li>
-											<button type="button" onClick={() => setConfirmingBlock(true)}>
-												<NoSymbolIcon className="w-4 h-4" />
-												Block @{creator.handle}
-											</button>
-										</li>
-										<li>
-											<button type="button" onClick={() => setReporting(true)}>
-												Report @{creator.handle}
-											</button>
-										</li>
-									</ul>
-								</div>
-							</div>
-							{/* The user's Anthers Badge, and the rung held here */}
-							{creatorStatus && creatorStatus.badge !== "free" && (
-								<div className="flex items-center gap-2 text-xs">
-									<span className="badge badge-sm badge-outline">
-										{badgeNameFor(creatorStatus.badge)}
-									</span>
-									{parseFloat(creatorStatus.badgeAmount) > 0 && (
-										<span className="badge badge-sm badge-primary badge-outline">
-											{amountLabel(creatorStatus.badgeAmount)}/mo
-										</span>
-									)}
-								</div>
+					{/* The user's Anthers Badge, and the rung held here. A status chip rather than
+					    an action, so it keeps the column the buttons have left. */}
+					{isAuthenticated && !isOwnProfile && creatorStatus && creatorStatus.badge !== "free" && (
+						<div className="flex items-center gap-2 text-xs pt-4 sm:pt-14">
+							<span className="badge badge-sm badge-outline">
+								{badgeNameFor(creatorStatus.badge)}
+							</span>
+							{parseFloat(creatorStatus.badgeAmount) > 0 && (
+								<span className="badge badge-sm badge-primary badge-outline">
+									{amountLabel(creatorStatus.badgeAmount)}/mo
+								</span>
 							)}
 						</div>
 					)}
 				</div>
 
-				{/* Tabs. One flat row, but grouped: the timeline views (All, Posts), then the
-				    Work-type views — only the types the creator has actually released, so a
-				    profile with no audio shows no Audio tab rather than "Audio (0)" — then
-				    Badges. The dividers sit between the groups, and collapse to a single
-				    divider when the middle group is empty. */}
+				{/* Tabs. One flat row, but grouped: the creator's own Dashboard first (owner only),
+				    then the timeline views (All Content, Posts), then the Work-type views — only the
+				    types the creator has actually released, so a profile with no audio shows no Audio
+				    tab rather than "Audio (0)" — then Badges, then Credits. The dividers sit between
+				    the groups, and collapse to a single divider when the middle group is empty. */}
 				<div className="tabs tabs-bordered mb-6 overflow-x-auto">
+					{isOwnProfile && (
+						<>
+							<button
+								type="button"
+								className={`tab whitespace-nowrap ${tab === "dashboard" ? "tab-active" : ""}`}
+								onClick={() => setTab("dashboard")}
+							>
+								Dashboard
+							</button>
+							<TabDivider />
+						</>
+					)}
 					<button
 						type="button"
 						className={`tab whitespace-nowrap ${tab === "all" ? "tab-active" : ""}`}
 						onClick={() => setTab("all")}
 					>
-						All
+						All Content
 					</button>
 					<button
 						type="button"
@@ -1039,10 +757,20 @@ export default function CreatorProfilePage() {
 					>
 						Badges
 					</button>
+					<TabDivider />
+					<button
+						type="button"
+						className={`tab whitespace-nowrap ${tab === "credits" ? "tab-active" : ""}`}
+						onClick={() => setTab("credits")}
+					>
+						Credits
+					</button>
 				</div>
 
 				{/* Tab content */}
 				<div className="pb-8">
+					{tab === "dashboard" && isOwnProfile && <DashboardPage />}
+
 					{tab === "all" &&
 						(allItems.length > 0 ? (
 							// The same uniform tile grid the feed renders — every listing
@@ -1150,23 +878,29 @@ export default function CreatorProfilePage() {
 						))}
 
 					{tab === "badges" && (
-						<div className="max-w-2xl space-y-8">
-							{/* The maker and the ladder are one surface: edit a rung here and the
-							    supporter-facing row below moves with it. */}
-							{isOwnProfile && <BadgeMaker onChanged={reloadCreatorStatus} />}
-							<BadgesTab
-								rungs={creatorStatus?.badges ?? []}
-								unlockedBadges={creatorStatus?.unlockedBadges ?? []}
-								heldBadge={creatorStatus?.badge ?? "free"}
-								heldAmount={creatorStatus?.badgeAmount ?? "0.00"}
-								creatorName={creator.displayName || creator.handle}
-								creatorHandle={creator.handle}
-								canBuy={!isOwnProfile}
-								authenticated={isAuthenticated === true}
-								preselectedBadgeId={badgeParam != null ? Number(badgeParam) : null}
-								isOwner={isOwnProfile}
-							/>
-						</div>
+						// One surface, read the same way by both people: the creator's pencil
+						// opens the Badge Maker for that card, and a save refetches this ladder.
+						<BadgesTab
+							rungs={creatorStatus?.badges ?? []}
+							unlockedBadges={creatorStatus?.unlockedBadges ?? []}
+							heldAmount={creatorStatus?.badgeAmount ?? "0.00"}
+							creatorName={creator.displayName || creator.handle}
+							creatorHandle={creator.handle}
+							canBuy={!isOwnProfile}
+							authenticated={isAuthenticated === true}
+							preselectedBadgeId={badgeParam != null ? Number(badgeParam) : null}
+							isOwner={isOwnProfile}
+							onEdit={(badge) => setEditingBadgeId(badge.id)}
+							onAdd={() => setEditingBadgeId("new")}
+						/>
+					)}
+
+					{tab === "credits" && (
+						<CreatorCredits
+							handle={creator.handle}
+							creatorName={creator.displayName || creator.handle}
+							isOwner={isOwnProfile}
+						/>
 					)}
 
 					{blocked && (
@@ -1180,45 +914,78 @@ export default function CreatorProfilePage() {
 				</div>
 			</div>
 
-			{/* Confirmed, because it changes what BOTH people see and because this page
-			    stops resolving afterwards — the undo lives in Settings, so the copy says
-			    where it is rather than leaving someone stuck. Deliberately says nothing
+			{/* 🚨 The dialogs leave the page tree. The shell's meadow wrapper is `isolate`,
+			    so a fixed overlay rendered inside it is trapped beneath the sticky navbar
+			    no matter how high its z-index — `document.body` is a root-context child.
+			    Confirmed for the block because it changes what BOTH people see and because
+			    this page stops resolving afterwards; the undo lives in Settings, so the copy
+			    says where it is rather than leaving someone stuck. Deliberately says nothing
 			    about the other person being told, because they aren't. */}
-			<Modal open={confirmingBlock} label={`Block @${creator.handle}`}>
-				<div className="modal-box">
-					<h3 className="text-lg font-bold">Block @{creator.handle}?</h3>
-					<ul className="list-disc py-3 pl-5 text-sm text-base-content/70 space-y-1">
-						<li>Neither of you will see the other's profile, comments or reviews.</li>
-						<li>Any follows between you are removed, in both directions.</li>
-						<li>Their published work stays where it is — blocking isn't a content filter.</li>
-						<li>You can undo this from Settings.</li>
-					</ul>
-					<div className="modal-action">
-						<button
-							type="button"
-							className="btn btn-ghost"
-							onClick={() => setConfirmingBlock(false)}
-							disabled={blocking}
-						>
-							Cancel
-						</button>
-						<button
-							type="button"
-							className="btn btn-error"
-							onClick={handleBlock}
-							disabled={blocking}
-						>
-							{blocking ? "Blocking…" : "Block"}
-						</button>
+			{createPortal(
+				<Modal open={confirmingBlock} label={`Block @${creator.handle}`}>
+					<div className="modal-box">
+						<h3 className="text-lg font-bold">Block @{creator.handle}?</h3>
+						<ul className="list-disc py-3 pl-5 text-sm text-base-content/70 space-y-1">
+							<li>Neither of you will see the other's profile, comments or reviews.</li>
+							<li>Any follows between you are removed, in both directions.</li>
+							<li>Their published work stays where it is — blocking isn't a content filter.</li>
+							<li>You can undo this from Settings.</li>
+						</ul>
+						<div className="modal-action">
+							<button
+								type="button"
+								className="btn btn-ghost"
+								onClick={() => setConfirmingBlock(false)}
+								disabled={blocking}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								className="btn btn-error"
+								onClick={handleBlock}
+								disabled={blocking}
+							>
+								{blocking ? "Blocking…" : "Block"}
+							</button>
+						</div>
 					</div>
-				</div>
-				<button
-					type="button"
-					className="modal-backdrop"
-					onClick={() => setConfirmingBlock(false)}
-					aria-label="Close"
-				/>
-			</Modal>
+					<button
+						type="button"
+						className="modal-backdrop"
+						onClick={() => setConfirmingBlock(false)}
+						aria-label="Close"
+					/>
+				</Modal>,
+				document.body,
+			)}
+
+			{/* The Badge Maker, opened from a card's pencil or the Add card. The Badge is
+			    derived from the ladder above, so an art save's refetch updates the mark
+			    inside the dialog without remounting its fields. */}
+			{isOwnProfile &&
+				createPortal(
+					<Modal open={editorOpen} label="Badge Maker">
+						<div className="modal-box max-w-xl">
+							{editorOpen && (
+								<BadgeMaker
+									key={String(editingBadgeId)}
+									badge={editingBadge}
+									index={editingIndex}
+									onChanged={reloadCreatorStatus}
+									onClose={() => setEditingBadgeId(null)}
+								/>
+							)}
+						</div>
+						<button
+							type="button"
+							className="modal-backdrop"
+							onClick={() => setEditingBadgeId(null)}
+							aria-label="Close"
+						/>
+					</Modal>,
+					document.body,
+				)}
 
 			{reporting && (
 				<ReportDialog
