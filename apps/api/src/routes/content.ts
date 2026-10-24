@@ -88,6 +88,7 @@ import {
 	requiresAdultVerification,
 } from "@anthers/shared/content-rating";
 import { dailyCapFor, type LimitWindow, spentWindow } from "@anthers/shared/parental-controls";
+import { POST_PREVIEW_EXCERPT_LIMIT, postPreviewFor } from "@anthers/shared/post-preview";
 import { visiblePostTitle } from "@anthers/shared/post-title";
 import {
 	asShelfSortDirection,
@@ -137,6 +138,7 @@ import {
 	canonicalizePostTitle,
 	displayPostTitle,
 	displayPostTitles,
+	mentionableWorks,
 	mentionedWorksForTitle,
 	postsMentioningWork,
 } from "../lib/post-title-mentions.js";
@@ -1475,6 +1477,51 @@ async function publicWorkCard(param: string) {
 		description: work.description,
 		thumbnail: work.thumbnail,
 		maturity: work.maturity,
+	};
+}
+
+/**
+ * The card a shared post is unfurled with, or null for the site card.
+ *
+ * Mirrors `publicWorkCard`, minus the rating ladder a post does not have: a post carries no
+ * gate and its page reads signed out. The gates here are the permalink's own — an
+ * unpublished post and a suspended author each answer nothing, exactly as they do on
+ * `GET /posts/:slug` — and nothing here writes, because that route counts a view and an
+ * unfurl is not one.
+ *
+ * The image is the first Work the post embeds, resolved through `mentionableWorks` rather
+ * than read off `works` directly: an Adult Work's cover is part of the existence the rung
+ * withholds, and a post that links one must not hand it to an unverified stranger. The
+ * title is resolved the same way, so a mention shows the Work's current name.
+ */
+async function publicPostCard(param: string) {
+	const post = await findPostRow(param);
+	if (!post) return null;
+	if (!post.isPublished) return null;
+	if (post.creatorId != null && (await isSuspendedAccount(post.creatorId))) return null;
+
+	const displayTitle = await displayPostTitle(post.title, null);
+	const embedded = workPublicIdsFromBody(post.body);
+	let image: string | null = null;
+	if (embedded.length > 0) {
+		// `mentionableWorks` is the allow-list a title's mention already resolves through, so
+		// asking it which embedded Works this reader may see keeps the image and the name on
+		// one rule: a Work it filters out contributes no cover either.
+		const mentionable = await mentionableWorks(embedded, null);
+		const first = embedded.find((publicId) => mentionable.has(publicId));
+		if (first !== undefined) {
+			const [row] = await db
+				.select({ thumbnail: works.thumbnail })
+				.from(works)
+				.where(eq(works.publicId, first))
+				.limit(1);
+			image = row?.thumbnail ? row.thumbnail : null;
+		}
+	}
+	return {
+		displayTitle,
+		excerpt: postContentExcerpt(post.body, POST_PREVIEW_EXCERPT_LIMIT),
+		image,
 	};
 }
 
@@ -5250,6 +5297,19 @@ const contentRoutes = new Hono()
 		const card = await publicWorkCard(c.req.param("id"));
 		if (!card) return c.json({ error: "Work not found" }, 404);
 		return c.json({ preview: workPreviewFor(card) });
+	})
+
+	/**
+	 * The card a shared post is unfurled with, for a reader who holds no session.
+	 *
+	 * Separate from `GET /posts/:slug` for the same reason the Work card is: that route
+	 * counts a view, while a crawler wants a heading, a line of text and an image, and must
+	 * leave no trace. `publicPostCard` owns the gates; this only renders what it answers.
+	 */
+	.get("/posts/:slug/card", async (c) => {
+		const card = await publicPostCard(c.req.param("slug"));
+		if (!card) return c.json({ error: "Post not found" }, 404);
+		return c.json({ preview: postPreviewFor(card) });
 	})
 
 	/**
