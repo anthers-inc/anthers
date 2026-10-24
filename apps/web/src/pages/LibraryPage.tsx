@@ -60,7 +60,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import SharedFilterSections, {
 	SHARED_FILTER_TYPES,
 } from "../components/layout/SharedFilterSections";
-import SharedLensesSection from "../components/layout/SharedLensesSection";
+import SharedLensesSection, { ALL_LENS_IDS } from "../components/layout/SharedLensesSection";
 import { useFilterable, useViewFilter } from "../components/layout/search/filter-context";
 import TabHeader from "../components/layout/TabHeader";
 import BookshelfLens from "../components/library/BookshelfLens";
@@ -71,7 +71,7 @@ import MusicDial from "../components/library/MusicDial";
 import MusicLens, { type LensItem, type LensProject } from "../components/library/MusicLens";
 import { removeItem, setHidden } from "../lib/library";
 
-/**
+/*
  * The LENSES (Parker, 2026-10-11, v2): the tab-shared LENSES section carries the rows
  * — the Library's own contribution to it is the live set. **A lens is a view, never a
  * container** — the shelf stays complete and usable with no lens applied, and switching
@@ -84,7 +84,6 @@ import { removeItem, setHidden } from "../lib/library";
  * The Music Player's dial rides the lens it is a control on, rendered beneath its row
  * (the shared section's `extras` slot) only while that lens is active.
  */
-const LIBRARY_LIVES = new Set(["", "music", "channel-guide", "bookshelf"]);
 
 /** The shelf's view of a saved Project — the album card's whole data source. */
 type ShelfProject = LensProject;
@@ -486,7 +485,7 @@ export default function LibraryPage() {
 			<SharedLensesSection
 				lens={lens}
 				onLens={(id) => setParam("lens", id)}
-				live={LIBRARY_LIVES}
+				live={ALL_LENS_IDS}
 				extras={{
 					music: (
 						<MusicDial
