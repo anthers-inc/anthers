@@ -329,6 +329,15 @@ envs:
   - key: ATPROTO_PUBLISH_ENABLED
     scope: RUN_TIME
     value: "true"
+  # The app's P-256 key for a gated space's client attestation: the private half only, since
+  # the public JWKS is derived and published in /api/atproto/client-metadata.json. A space
+  # authority verifies an attestation against that document before it asks checkUserAccess,
+  # so a deployment without this key publishes no JWKS and refuses to attest. Rotating it is a
+  # redeploy of the metadata, not a quiet change. Filed in Bitwarden Secrets ("Anthers Prod")
+  # and dashboard-set here, like the other app-level secrets.
+  - key: ATPROTO_CLIENT_JWK
+    scope: RUN_TIME
+    type: SECRET
 
 ingress:
   rules:
