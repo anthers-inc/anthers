@@ -69,9 +69,9 @@
 		},
 		{
 			"file": "apps/web/public/brand/og-card.png",
-			"source": "packages/brand/logo/preps/anthersthumb_1x1_light.png",
-			"sourceSha256": "85a36e5c07d9e801012403bf00cd3c852e7cad7fdda0b2cbd0bd2024ceae1b1b",
-			"sha256": "4942034ea83b8d055fb35cf949f41ffacffff93e733d8c3a240389c87391c690"
+			"source": "packages/brand/logo/preps/anthersbanner_16x9_light.png",
+			"sourceSha256": "4fdf8a919b5ce3bd91155162b0b24c46d240dcb17877f2b7f8f1a8ae977050df",
+			"sha256": "0f8329a0db6c72be4f12a6b159aa38c9b5fee1b1641d6a13dfa60e505bd8af40"
 		},
 		{
 			"file": "apps/web/public/brand/icon-192.png",
