@@ -29,20 +29,23 @@ import { users } from "./auth.js";
  * A Work has **one access table**, and every row is a **monthly dollar** threshold pointed
  * at the Work's own creator.
  *
- * `threshold` is **dollars** — never a count, never a list position. 🚨 A creator sets
- * their own levels to any amount, so there is no shared price that could leak into a
- * stored row — and storing a count would
- * instead bake in a conversion that no longer means anything. A gate needs no Badge to sit
- * on it: with Badges at $2 and $4, a gate at $3 is legal and a user giving $3 clears it.
+ * `threshold` is **dollars** — never a count, never a list position. 🚨 **A gate sits on one
+ * of the creator's own Badge rungs**: `badgeId` names the rung, and the threshold stored
+ * beside it is that rung's amount as of the last write, kept so resolution compares a number
+ * rather than loading a ladder. The Everyone baseline row (`threshold: 0`) is the one row
+ * with no Badge, and it is not a gate at all: allowed at $0 it makes a Work Public Access;
+ * carrying a price it makes the Work purchasable by anyone.
  *
- * `threshold: 0` is the **baseline** row — everyone. It is what makes a Work free to all
- * (allow, price 0) or buyable by all (allow, price > 0), and it is not a gate at all.
+ * 🚨 **Two ways to gate and no third** (Parker, 2026-10-23): a Badge rung, or a price. A
+ * gate at an amount no rung occupies was legal until then and is retired — it could not be
+ * authored in the Studio, which renders the table as the baseline plus one row per rung, so
+ * any such row was invisible to its creator and deleted on their next save.
  *
  * 🚨 **ONE table, and a second one is a model change rather than a refactor.** A
  * platform-side gate reading the user's own Badge stratifies the commons — better public
  * content behind a higher Badge, beside worse public content that is actually free — which
  * is a class-of-citizen problem inside the one part of the platform that exists in order
- * not to have one. A Work is gated by its creator or it is **Public Access**, and a Badge
+ * not to have one. A Work is gated by its creator or it is **Public Access**, and a badge
  * opens nothing. Reasoning: `30.01 Creator Content Gates` § 4.1b; model: `11.01 Support
  * Model Overview`.
  *
@@ -56,6 +59,12 @@ import { users } from "./auth.js";
 export interface AccessRow {
 	/** Monthly dollars required to qualify for this row. 0 = everyone. */
 	threshold: number;
+	/**
+	 * The Badge rung this row gates at; absent on the Everyone baseline and on rows written
+	 * before the reference existed. `normalizeAccessRows` stamps it on every save, and the
+	 * backfill script (`db:gate-badges`) fills it on stored rows.
+	 */
+	badgeId?: number | null;
 	allow: boolean;
 	/** Money string; "0" = free at this threshold when allowed. */
 	price: string;
@@ -368,6 +377,16 @@ export const works = pgTable(
 		/** The UPLOAD date — when the Work entered the Catalog. Creator-visible only. */
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+		/**
+		 * When the CURRENT media version was added — the date the Work's page shows a
+		 * reader. Distinct from `createdAt` (the Work entered the Catalog) and `updatedAt`
+		 * (any edit at all): a Work can be edited for months without its media changing,
+		 * and a video can be replaced without the Work being new.
+		 *
+		 * Set on create with a source, on the first attach, and on every new version.
+		 * Historical versions carry the value it held when they were current.
+		 */
+		versionAddedAt: timestamp("version_added_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
 		index("idx_works_creator").on(table.creatorId),
@@ -817,6 +836,85 @@ export const workSourceFiles = pgTable(
 		uniqueIndex("uq_work_source_files").on(table.workId, table.position),
 		index("idx_work_source_files_work").on(table.workId, table.position),
 	],
+);
+
+/** One source-file entry in an archived version — a storage key, never a URL. */
+export interface WorkVersionFile {
+	file: string;
+	filename: string;
+	fileSize: number | null;
+	mimeType: string;
+}
+
+/** One downloadable build in an archived version. */
+export interface WorkVersionAsset {
+	file: string;
+	filename: string;
+	fileSize: number | null;
+	mimeType: string;
+	platform: string;
+	version: string;
+	isPrimary: boolean;
+}
+
+/** One file of a hosted web build in an archived version. */
+export interface WorkVersionWebBuildFile {
+	path: string;
+	storageKey: string;
+	fileSize: number | null;
+	mimeType: string;
+}
+
+/** One hosted web build in an archived version. */
+export interface WorkVersionWebBuild {
+	label: string;
+	entryPath: string;
+	requiresIsolation: boolean;
+	files: WorkVersionWebBuildFile[];
+}
+
+/**
+ * What an archived version holds: the ORIGINAL media, never a rendition.
+ *
+ * The union is the shape the snapshot writer reads and the download route serves. A
+ * single-file Work archives its uploaded source; a set Work its ordered source files; a
+ * build Work its downloadable assets and hosted web build. Transcodes, rendered pages,
+ * reflow sections, thumbnails, captions and preview media are deliberately absent — they
+ * belong to the current version and are swept when it is retired.
+ */
+export type WorkVersionMedia =
+	| { kind: "source"; file: WorkVersionFile }
+	| { kind: "set"; files: WorkVersionFile[] }
+	| { kind: "builds"; assets: WorkVersionAsset[]; webBuilds: WorkVersionWebBuild[] };
+
+/**
+ * A Work's archived media versions — the originals a replace retired, creator-only.
+ *
+ * ⭐ **The current media does not live here.** It stays in `works.source_key`, the source
+ * set and the build tables, because every reader, pipeline and listing already reads it
+ * there; a row in this table is always historical. That is what makes "only the current
+ * version has transcodes" true without a second set of joins.
+ *
+ * 🚨 **The archived files are still storage-usage and purge material.** Their keys are
+ * enumerated from `media` by `media-purge.ts` and the storage-usage job, so a Work delete,
+ * an account delete and a creator's storage total all see them. Removing a version is the
+ * one path that deletes these originals while the Work remains.
+ */
+// node — a Work's archived original media. Node-side, creator-only, cascades with the Work.
+export const workMediaVersions = pgTable(
+	"work_media_versions",
+	{
+		id: serial("id").primaryKey(),
+		workId: integer("work_id")
+			.notNull()
+			.references(() => works.id, { onDelete: "cascade" }),
+		/** When this media was added while it was current — the creator-facing date. */
+		uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull(),
+		/** When the next version replaced it. */
+		archivedAt: timestamp("archived_at", { withTimezone: true }).defaultNow().notNull(),
+		media: jsonb("media").$type<WorkVersionMedia>().notNull(),
+	},
+	(table) => [index("idx_work_media_versions_work").on(table.workId, table.uploadedAt)],
 );
 
 /**

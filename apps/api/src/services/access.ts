@@ -37,8 +37,9 @@
  * Resolution reads two user facts — per-creator dollars this cycle and prior purchases —
  * which `buildAccessContext` loads once so a batch (a Catalog page) resolves without an N+1.
  *
- * Note a gate need not sit on a Badge. Thresholds are amounts, not Badge identities, so a
- * creator may gate at $3 whether or not they have named a Badge there.
+ * Note a gate always sits on a Badge now (2026-10-23): `badgeId` names the creator's rung,
+ * and the stored threshold is that rung's amount as of the last write, so this comparison
+ * stays on a number while the gate itself is the rung the creator chose.
  */
 
 import { db } from "@anthers/db/client";
@@ -271,15 +272,15 @@ export interface UnlockRoute {
 	/** `threshold` rendered as a money string. */
 	price: string;
 	/**
-	 * The Badge sitting EXACTLY at this threshold, or null when the gate sits between
-	 * Badges (which is legal — a gate needn't sit on a Badge). Never the nearest Badge:
-	 * naming one the user would still be short of is the bug this type exists to kill.
+	 * The Badge sitting EXACTLY at this threshold, or null when the caller passed no Badge
+	 * set. Never the nearest Badge: naming one the user would still be short of is the bug
+	 * this type exists to kill.
 	 *
 	 * ⚠️ **Always null today.** It was populated from `ANTHERS_BADGES` for the Anthers
-	 * route, and that route is retired; a creator's own Badges are their rows, not carried
-	 * on the Work. The field stays because creator Badges are what will fill it, and it is
-	 * a plain `string` rather than `BadgeKey` because a creator names theirs whatever they
-	 * like.
+	 * route, and that route is retired. A gate now names its rung in `badgeId`, but the
+	 * rung's label is the creator's and is not carried on the Work, so resolving this would
+	 * mean loading the ladder. The field stays for that change, and it is a plain `string`
+	 * rather than `BadgeKey` because a creator names theirs whatever they like.
 	 */
 	badge: string | null;
 }
@@ -377,7 +378,9 @@ export function unlockRoute(
 	}
 	if (best === null) return null;
 	// Exact match only. The nearest Badge at-or-below would not clear this gate, and
-	// naming it is precisely the error this replaces.
+	// naming it is precisely the error this replaces. A gate whose rung is absent from
+	// the set is a row the backfill (`db:gate-badges`) has not reached; it reports no
+	// Badge rather than a lower one.
 	const badge = badges.find((b) => b.threshold === best) ?? null;
 	return {
 		threshold: best,
@@ -401,11 +404,10 @@ export function unlockRoute(
  *   one-time purchase unlocking the Work's enabled delivery. No qualifying allowed row is
  *   a hard gate. **Each table is cumulative** — a row allowed at $3 is visible at $3 and above.
  * - 🚨 **Resolution reads the THRESHOLD of the user's held Badge, never the Badge's
- *   name or list position.** Under discrete picks the two are the same number — a
- *   holding's dollars are its Badge's threshold by construction — which is what retired
- *   the old hazard of collapsing a raw amount onto the nearest named rung. The
- *   comparison stays on the threshold so a creator gating at a level no Badge is named
- *   for still resolves.
+ *   name or list position.** The threshold is the rung's amount as of the last write
+ *   (`normalizeAccessRows` stamps it), so the comparison needs no ladder load and a
+ *   repriced rung takes its gates with it. The rung is `badgeId`; this function compares
+ *   the number.
  * - **`offersFor` is one function serving both tables**, differing only in which amount is
  *   passed in — Anthers' Badges and a creator's are the same comparison.
  * - 🚨 **`heldAnthersBadgeAmount` is deliberately NOT in `AccessContext`.** A Badge is *structurally*
@@ -757,4 +759,53 @@ export async function resolveAccess(
  */
 export function defaultSeedAccess(): AccessRow[] {
 	return [{ threshold: 0, allow: false, price: "0" }];
+}
+
+/**
+ * Normalize a Work's access rows against its creator's ladder — **the one place the
+ * Badge-or-price rule is enforced** (Parker, 2026-10-23).
+ *
+ * Every non-baseline row names one of the creator's own Badge rungs, and its threshold is
+ * stamped from that rung rather than trusted from the request: the amount a gate opens at is
+ * the rung's amount, and a stale editor must not be able to write an old one. The baseline
+ * row carries no Badge and stays at $0, where `allow` alone makes it Public Access and a
+ * price makes it purchasable.
+ *
+ * A rung cannot be gated twice in one table, because two rows at the same rung would be two
+ * prices for one door.
+ */
+export async function normalizeAccessRows(
+	creatorId: number,
+	rows: readonly AccessRow[],
+): Promise<{ rows: AccessRow[] } | { error: string }> {
+	const rungs = await db
+		.select({ id: badges.id, threshold: badges.threshold })
+		.from(badges)
+		.where(eq(badges.creatorId, creatorId));
+	const byId = new Map(rungs.map((r) => [r.id, Number(r.threshold)]));
+
+	const seen = new Set<number>();
+	const normalized: AccessRow[] = [];
+	for (const row of rows) {
+		if (row.threshold === 0) {
+			normalized.push({ threshold: 0, allow: row.allow, price: row.price });
+			continue;
+		}
+		const badgeId = row.badgeId ?? null;
+		if (badgeId === null || !byId.has(badgeId)) {
+			return {
+				error:
+					"A gate must sit on one of your Badge levels. Add the rung first, or leave the Work open to everyone.",
+			};
+		}
+		if (seen.has(badgeId)) return { error: "A Badge level can gate a Work only once." };
+		seen.add(badgeId);
+		normalized.push({
+			threshold: byId.get(badgeId) as number,
+			badgeId,
+			allow: row.allow,
+			price: row.price,
+		});
+	}
+	return { rows: normalized };
 }

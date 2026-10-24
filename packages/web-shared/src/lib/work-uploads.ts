@@ -58,7 +58,15 @@ export type WorkUploadTarget =
 	 * several rows coexist, so the one-source-per-Work replacement below is keyed to `source`
 	 * alone and never sees these.
 	 */
-	| { kind: "set-row"; type: (typeof FILE_WORK_TYPES)[number] }
+	| {
+			kind: "set-row";
+			type: (typeof FILE_WORK_TYPES)[number];
+			/**
+			 * The whole new set for a released Work: the pick replaces the current set rather
+			 * than joining it, and the server archives what it replaces.
+			 */
+			replace?: boolean;
+	  }
 	/** A downloadable build for a game or software Work, which becomes its primary download. */
 	| { kind: "build"; platform: string }
 	/** A storefront screenshot, appended to the Work's preview set when it lands. */
@@ -168,17 +176,18 @@ async function postSourceFiles(
 	target: WorkUploadSetRowTarget,
 	items: readonly { key: string; file: File }[],
 ): Promise<void> {
-	const res = await client.api.content.works[":id"]["source-files"].$post({
-		param: { id: String(workId) },
-		json: {
-			files: items.map(({ key, file }) => ({
-				file: key,
-				filename: file.name,
-				fileSize: file.size,
-				mimeType: file.type || (isPaged(target.type) ? "application/pdf" : "image"),
-			})),
-		},
-	});
+	const param = { id: String(workId) };
+	const json = {
+		files: items.map(({ key, file }) => ({
+			file: key,
+			filename: file.name,
+			fileSize: file.size,
+			mimeType: file.type || (isPaged(target.type) ? "application/pdf" : "image"),
+		})),
+	};
+	const res = target.replace
+		? await client.api.content.works[":id"]["source-files"].$put({ param, json })
+		: await client.api.content.works[":id"]["source-files"].$post({ param, json });
 	if (res.ok) return;
 	const body = (await res.json().catch(() => null)) as { error?: string } | null;
 	throw new Error(

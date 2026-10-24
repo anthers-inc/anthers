@@ -19,7 +19,7 @@
  * creator with nothing wrong is supposed to see.
  */
 
-import { workNeedsFile } from "@anthers/shared/content";
+import { isGoodsType, workNeedsFile } from "@anthers/shared/content";
 import { gridFor, isRatingComplete } from "@anthers/shared/content-rating";
 import type { Work } from "../../lib/types";
 import { accessState } from "./work-state";
@@ -222,7 +222,13 @@ export function buildWorklist({
 	}
 
 	const noDelivery = group(
-		works.filter((w) => w.visibility !== "released" && !w.streamEnabled && !w.downloadEnabled),
+		works.filter(
+			(w) =>
+				w.visibility !== "released" &&
+				!w.streamEnabled &&
+				!w.downloadEnabled &&
+				!isGoodsType(w.type),
+		),
 	);
 	if (noDelivery.count > 0) {
 		items.push({

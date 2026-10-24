@@ -136,7 +136,7 @@ export function fileRules(type: FileWorkType): {
 }
 
 /**
- * What the Upload page's card says about the kind being chosen, and the platform a build is
+ * What the media intake's card says about the kind being chosen, and the platform a build is
  * for.
  *
  * ⭐ **The card follows the kind rather than stating every kind at once** (Parker, 2026-10-19):
@@ -277,7 +277,7 @@ export function workTypeFacts(type: ContentType, platform?: string): WorkTypeFac
 }
 
 /**
- * The card under the Upload page's picker: what the chosen kind takes, what the platform's
+ * The card under the media intake's picker: what the chosen kind takes, what the platform's
  * build should be, and what the pipeline does with it. A region with an accessible name so
  * the heading is how the card is found, by a screen reader and by a browser walk alike.
  */
@@ -407,7 +407,18 @@ export function UploadProgress({ upload }: { upload: WorkUpload }) {
  * kind's set editor does (it is the Manage tab's form once pictures exist), but a
  * draft's dropper lives in the box like every other non-paged file kind's.
  */
-export function WorkFileDropzone({ work }: { work: Work }) {
+export function WorkFileDropzone({
+	work,
+	showFormats = true,
+}: {
+	work: Work;
+	/**
+	 * Whether the picker carries its own one-line format hint. The New Work page's media
+	 * intake passes false because `WorkTypeFacts` is already below it, and the two
+	 * sentences say the same thing (Parker, 2026-10-23).
+	 */
+	showFormats?: boolean;
+}) {
 	const type = work.type as FileWorkType;
 	const upload = useSourceUpload(work.id);
 	const rules = fileRules(type);
@@ -436,7 +447,7 @@ export function WorkFileDropzone({ work }: { work: Work }) {
 					label="Or choose a different file"
 					onFileSelect={start}
 				/>
-				<FormatsHint type={type} />
+				{showFormats && <FormatsHint type={type} />}
 			</div>
 		);
 	}
@@ -453,7 +464,7 @@ export function WorkFileDropzone({ work }: { work: Work }) {
 				label={`Drop ${rules.noun} or click to browse`}
 				onFileSelect={start}
 			/>
-			<FormatsHint type={type} />
+			{showFormats && <FormatsHint type={type} />}
 		</div>
 	);
 }

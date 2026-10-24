@@ -81,7 +81,19 @@ export interface StorageService {
 	 * - Public files: bare URL (no signing).
 	 * - Private files with `signed: true`: time-limited signed URL.
 	 */
-	getUrl(key: string, opts?: { signed?: boolean; expiresIn?: number }): Promise<string>;
+	getUrl(
+		key: string,
+		opts?: {
+			signed?: boolean;
+			expiresIn?: number;
+			/**
+			 * Hand the object over as an attachment with this filename. A browser that opens
+			 * a signed media URL plays it; a download needs the disposition, and R2/S3 carry
+			 * it only on the signed URL itself.
+			 */
+			download?: string;
+		},
+	): Promise<string>;
 
 	/**
 	 * An input a streaming tool (ffmpeg, ffprobe) reads bytes from directly, **with no local

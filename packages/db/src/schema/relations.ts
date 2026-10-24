@@ -17,6 +17,7 @@ import {
 	transcodingJobs,
 	webBuildFiles,
 	webBuilds,
+	workMediaVersions,
 	workSaves,
 	works,
 } from "./content.js";
@@ -146,6 +147,7 @@ export const worksRelations = relations(works, ({ one, many }) => ({
 	creator: one(users, { fields: [works.creatorId], references: [users.id] }),
 	assets: many(assets),
 	webBuilds: many(webBuilds),
+	mediaVersions: many(workMediaVersions),
 	saves: many(workSaves),
 	transcodingJobs: many(transcodingJobs),
 	projectItems: many(projectItems), // Projects this Work belongs to
@@ -162,6 +164,10 @@ export const assetsRelations = relations(assets, ({ one }) => ({
 export const webBuildsRelations = relations(webBuilds, ({ one, many }) => ({
 	work: one(works, { fields: [webBuilds.workId], references: [works.id] }),
 	files: many(webBuildFiles),
+}));
+
+export const workMediaVersionsRelations = relations(workMediaVersions, ({ one }) => ({
+	work: one(works, { fields: [workMediaVersions.workId], references: [works.id] }),
 }));
 
 export const webBuildFilesRelations = relations(webBuildFiles, ({ one }) => ({

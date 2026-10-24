@@ -15,7 +15,14 @@
  * Runs on `media_fixture`, whose Works nothing else resets, and whose seeded video is a real
  * processed file. Works made here are titled with this spec's prefix and swept in `afterAll`.
  */
-import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
+import {
+	API_URL,
+	createDraftWork,
+	expect,
+	signInAsMediaFixture,
+	test,
+	WEB_ORIGIN,
+} from "./fixtures";
 
 const TITLE_PREFIX = "Edit walk ";
 const STEM = `${TITLE_PREFIX}${Date.now()}`;
@@ -249,10 +256,8 @@ test("a piece of writing is written on its page and reads as an article", async 
 	session = await signInAsMediaFixture(context);
 	const title = `${STEM} writing`;
 
-	await page.goto("/studio/works/new");
-	await page.locator("select").first().selectOption("text");
-	await page.getByPlaceholder("Work title").fill(title);
-	await page.getByRole("button", { name: "Create Work" }).click();
+	const draft = await createDraftWork(page, { type: "text", title });
+	await page.goto(draft.url);
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 
 	// Rated, on its own grid, on the Work's page — and still not releasable, because
@@ -320,29 +325,27 @@ test("a piece of writing is written on its page and reads as an article", async 
 	expect(above && below && above.y < below.y).toBe(true);
 });
 
-test("a comic's Manage tab puts the thumbnail under View As, above Pages", async ({
-	page,
-	context,
-}) => {
+test("a comic's media manager carries Thumbnail before Pages", async ({ page, context }) => {
 	session = await signInAsMediaFixture(context);
 	const [comic] = (await ownWorks()).filter((w) => w.title === FIXTURE_COMIC);
 	expect(comic, "the media fixture's comic is missing").toBeTruthy();
 	if (!comic) return;
 
 	await page.goto(`/studio/works/${comic.publicId}/edit`);
-	// Manage is the tab the creator lands on; the three sections are compared in document
-	// order rather than by pixel, because a section's height moves with its content.
+	// Manage is the tab the creator lands on, and the View As row is still its first fact;
+	// the thumbnail and the pages are the media manager's sections now (Parker, 2026-10-23).
 	await expect(page.getByRole("heading", { name: "View As" })).toBeVisible();
-	await expect(page.getByRole("heading", { name: "Thumbnail" })).toBeVisible();
-	await expect(page.getByRole("heading", { name: "Pages" })).toBeVisible();
-	const order = await page.evaluate(() => {
-		const headings = [...document.querySelectorAll("h3")].map((h) => h.textContent?.trim() ?? "");
-		const at = (text: string) => headings.findIndex((h) => h.startsWith(text));
-		return { view: at("View As"), thumbnail: at("Thumbnail"), pages: at("Pages") };
-	});
-	expect(order.view).toBeGreaterThanOrEqual(0);
-	expect(order.thumbnail).toBeGreaterThan(order.view);
-	expect(order.pages).toBeGreaterThan(order.thumbnail);
+	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	const sections = page.getByRole("tablist", { name: "Media management sections" });
+	// The order is the tab strip's: delivery first, the medium's own sections after it, and
+	// Pages only for the paged kinds, immediately before the version history.
+	await expect(sections.getByRole("tab")).toHaveText([
+		"Delivery",
+		"Source",
+		"Thumbnail",
+		"Pages",
+		"Versions",
+	]);
 });
 
 /**

@@ -47,6 +47,9 @@ export default function MediaStatusCard({
 	work,
 	sourceUpload,
 	unpublished,
+	canReplace,
+	canRemove,
+	replaceLabel,
 	cancelBusy,
 	removeBusy,
 	onCancel,
@@ -57,24 +60,39 @@ export default function MediaStatusCard({
 	work: WorkDetail;
 	/** The latest in-flight (or last settled) source upload this tab knows about. */
 	sourceUpload: WorkUpload | null;
-	/** The removal/replace actions ride the unpublished gate the deliverable's own edit does. */
+	/** The removal action's draft gate; a released Work keeps the new-version action. */
 	unpublished: boolean;
+	/** Whether a new version may be added; defaults to the draft gate. */
+	canReplace?: boolean;
+	/** Whether the current media may be removed; defaults to the draft gate. */
+	canRemove?: boolean;
+	replaceLabel?: string;
 	cancelBusy: boolean;
 	removeBusy: boolean;
 	onCancel: () => void;
 	onRemove: () => void;
-	/** Starts a replacement upload; the page's store watches it land. */
+	/** Starts a new-version upload; the page's store watches it land. */
 	onReplaceFile: (file: File) => void;
 	/** The failed upload's own retry — the store re-runs the put (and attach) alone. */
 	onRetry: () => void;
 }) {
 	const type = work.type;
-	const canReplace = isFileWorkType(type);
+	const fileReplaceable = isFileWorkType(type);
+	const replace = fileReplaceable && (canReplace ?? unpublished);
+	const remove = canRemove ?? unpublished;
 	const job = work.transcoding;
 	const running = job != null && (job.status === "pending" || job.status === "processing");
 	const uploading = sourceUpload?.status === "uploading" || sourceUpload?.status === "attaching";
 	const [replaceOpen, setReplaceOpen] = useState(false);
 	const onOpenReplace = () => setReplaceOpen(true);
+	const originalActions =
+		replace || remove
+			? {
+					onReplace: replace ? () => onOpenReplace() : undefined,
+					onRemove: remove ? onRemove : undefined,
+					replaceLabel,
+				}
+			: undefined;
 
 	return (
 		<section
@@ -86,10 +104,11 @@ export default function MediaStatusCard({
 				<VideoMediaStatusChips
 					work={work}
 					sourceUpload={sourceUpload}
-					// The original is the one chip that acts — replace or remove, from its
-					// pencil — and only this page owns those flows.
-					originalActions={unpublished ? { onReplace: () => onOpenReplace(), onRemove } : undefined}
+					// The original is the one chip that acts — a new version or, on a draft,
+					// removal — and only this page owns those flows.
+					originalActions={originalActions}
 					removeBusy={removeBusy}
+					menuAlign="start"
 				/>
 			)}
 
@@ -97,8 +116,9 @@ export default function MediaStatusCard({
 				<AudioMediaStatusChips
 					work={work}
 					sourceUpload={sourceUpload}
-					originalActions={unpublished ? { onReplace: () => onOpenReplace(), onRemove } : undefined}
+					originalActions={originalActions}
 					removeBusy={removeBusy}
+					menuAlign="start"
 				/>
 			)}
 
@@ -150,7 +170,7 @@ export default function MediaStatusCard({
 				</p>
 			)}
 
-			{canReplace && (
+			{replace && (
 				<ReplaceDialog
 					type={type}
 					open={replaceOpen}
@@ -163,10 +183,11 @@ export default function MediaStatusCard({
 }
 
 /**
- * Replace the file, asked for deliberately: the *Original* chip's dropdown opens it, and
+ * Add a new version, asked for deliberately: the *Original* chip's dropdown opens it, and
  * it states the formats the file must satisfy (the sentence the card carried, said where
  * it is actually needed). The work-uploads store watches the pick, so the dialog close
- * and the progress read are the page's, not this dialog's.
+ * and the progress read are the page's, not this dialog's. The replacement archives the
+ * previous original in `work_media_versions` before its renditions are swept.
  */
 function ReplaceDialog({
 	type,
@@ -179,9 +200,9 @@ function ReplaceDialog({
 	onClose: () => void;
 	onFile: (file: File) => void;
 }) {
-	// State, not a ref: the Replace button's disabled reads this on every render, and a
-	// ref that changed silently would leave the only way forward disabled (the defect the
-	// fresh walkthrough caught, 2026-10-13).
+	// State, not a ref: the Add Version button's disabled reads this on every render, and
+	// a ref that changed silently would leave the only way forward disabled (the defect
+	// the fresh walkthrough caught, 2026-10-13).
 	const [pending, setPending] = useState<File | null>(null);
 
 	const dialog = useRef<HTMLDialogElement>(null);
@@ -205,10 +226,11 @@ function ReplaceDialog({
 					}}
 				>
 					<div className="modal-box">
-						<h3 className="text-lg font-semibold">Replace the file</h3>
+						<h3 className="text-lg font-semibold">Add a New Version</h3>
 						<p className="mt-1 text-xs text-base-content/60">
-							The new file takes the old one's place: its processing runs again, and everything the
-							old version left is swept.
+							The current media becomes a version in this Work's history, and the new file becomes
+							the current version. Its processing starts over; the old original is kept, and its
+							renditions are swept.
 						</p>
 						<div className="mt-4 flex flex-col gap-3">
 							<FileUpload
@@ -240,7 +262,7 @@ function ReplaceDialog({
 									dialog.current?.close();
 								}}
 							>
-								Replace
+								Add Version
 							</button>
 						</div>
 					</div>

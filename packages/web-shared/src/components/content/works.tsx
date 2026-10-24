@@ -73,6 +73,26 @@ export function typeLabel(type: string): string {
 	return LIBRARY_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type;
 }
 
+/**
+ * One line under a type card in the New Work flow: what the thing actually is.
+ *
+ * Kept beside the labels rather than in the flow so the type catalog and its descriptions
+ * move together when a kind is added or renamed.
+ */
+export const WORK_TYPE_DESCRIPTIONS: Record<ContentType, string> = {
+	text: "An essay, a story, or a poem, read as an article.",
+	video: "A film, an episode, or a devlog.",
+	music: "A song or a track from an album.",
+	audio: "A podcast, an audiobook, audio drama, or a soundscape.",
+	image: "A picture or a gallery.",
+	comic: "A comic or graphic novel, read page by page.",
+	ebook: "A novel or a nonfiction book, read page by page.",
+	game: "A game, played in the browser or downloaded.",
+	software: "A tool, a plugin, or an app.",
+	physical: "A good you ship to the buyer.",
+	service: "Something you do for someone — a review, a session, a lesson.",
+};
+
 /** The heroicon for a content type (defaults to the image icon). */
 export function TypeIcon({ type, className }: { type: string; className?: string }) {
 	const Icon =

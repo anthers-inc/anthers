@@ -19,6 +19,7 @@ import { works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import {
 	API_URL,
+	createDraftWork,
 	expect,
 	signInAsMediaFixture,
 	test,
@@ -48,12 +49,10 @@ test("an image Work's description is authored in the Studio and announced by the
 	const errors = trackErrorsStrict(page);
 	session = await signInAsMediaFixture(context);
 
-	// Draft an image Work the way the draft walk does — a kind and a name, no file —
-	// so this stays a walk about description, not about uploads.
-	await page.goto("/studio/works/new");
-	await page.locator("select").first().selectOption("image");
-	await page.getByPlaceholder("Work title").fill(TITLE);
-	await page.getByRole("button", { name: /skip for now/i }).click();
+	// Draft an image Work with a kind and a name and no file, so this stays a walk about
+	// description, not about uploads. The New Work flow has its own walk.
+	const draft = await createDraftWork(page, { type: "image", title: TITLE });
+	await page.goto(draft.url);
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
 
 	// The alt text is the Accessibility tab's field (the kinds pass, 2026-10-14), edited

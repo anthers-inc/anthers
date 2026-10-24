@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Upload a Work — the first of the two pages a Work is made on, and the one "New Work" opens.
+ * New Work — the one page a Work is made on, and the one "New Work" opens.
  *
- * It asks for a type, a title, and — optionally — the file. Picking the file creates the Work
- * and moves the creator to its Edit page while the upload carries on, which is the Vimeo-shaped
- * flow Parker chose over one long form (2026-09-13, and the create-on-pick half 2026-09-16).
- * Since 2026-10-10 the file can also be skipped: a Work is drafted from a type and a name and
- * the file is added on its own page, so an upload that failed costs nothing typed here.
- * `WorkUploadForm` carries the reasoning, including why the Work is born private and unrated and
- * what access it proposes.
+ * The flow asks for a name, a category, a type and a delivery, in that order. The Work is
+ * created when the type is chosen (a Work cannot exist without one), so a draft is in the
+ * Works list from that moment; the delivery step patches it and the creator lands on its
+ * own page. Nothing uploads here: the file, the set, the build and the hosted build belong
+ * to the Work's media area, where the Work is seen.
+ *
+ * `NewWorkFlow` carries the reasoning for the order and the create-on-type decision.
  */
 
 import { useNavigate } from "react-router-dom";
-import WorkUploadForm from "../components/content/WorkUploadForm";
+import NewWorkFlow from "../components/content/NewWorkFlow";
 import { workUrl } from "../lib/postUrl";
 import { Link } from "../lib/router";
 import { studioUrl } from "../lib/studio";
@@ -21,26 +21,24 @@ import type { Work } from "../lib/types";
 export default function WorkUploadPage() {
 	const navigate = useNavigate();
 	return (
-		<div className="max-w-3xl mx-auto px-4 py-8">
-			<h1 className="text-2xl font-bold mb-2">Upload a Work</h1>
-			<p className="text-sm text-base-content/60 mb-6">
-				A Work is the thing itself — the file or the writing, its access and its price. Pick the
-				file if you have it, or name the draft and skip the file for now; you'll add it on the
-				Work's own page. Nothing is public until you release it.
+		<div className="mx-auto w-full max-w-4xl px-4 py-8">
+			<h1 className="text-2xl font-bold">New Work</h1>
+			<p className="mt-2 mb-6 max-w-2xl text-sm text-base-content/60">
+				A Work is the thing itself — the file or the writing, its access and its price. Start with
+				what it is; nothing is public until you release it.
 			</p>
 
-			<WorkUploadForm
+			<NewWorkFlow
 				onCreated={(work: Work) =>
-					// Every kind's editing surface is the Work's own page now (the kinds
-					// pass, 2026-10-14): the fill-in happens during the upload, wherever
-					// the kind landed — video, a track, a comic, a piece of writing.
+					// The flow has already made the draft; this lands on it, where its media and
+					// the rest of its details are filled in.
 					navigate(workUrl(work))
 				}
 			/>
 
 			<div className="mt-6 border-t border-base-300 pt-4">
 				<Link to={studioUrl("/works")} className="btn btn-ghost">
-					Cancel
+					Back to your Works
 				</Link>
 			</div>
 		</div>
