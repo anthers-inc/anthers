@@ -30,6 +30,7 @@ import { useMediaPlayer } from "../../lib/media-player";
 import type { QueueTrack } from "../../lib/music-queue";
 import { refreshBudget, useMeteredBudget } from "../../lib/public-access";
 import { useBindPlayerSeek } from "../../lib/work-player";
+import { useWorkTheater } from "../../lib/work-theater";
 import ChapterList from "./ChapterList";
 import { PublicAccessFooter, PublicAccessWall } from "./PublicAccessNotice";
 import { useMediaShortcuts } from "./transport/useMediaShortcuts";
@@ -665,6 +666,7 @@ export default function VideoPlayer({
 		};
 	}, [isPlaying, wakeControls]);
 
+	const theater = useWorkTheater();
 	const onKeyDown = useMediaShortcuts({
 		togglePlay,
 		nudge: (seconds) => seekTo((videoRef.current?.currentTime ?? 0) + seconds),
@@ -672,6 +674,7 @@ export default function VideoPlayer({
 		adjustVolume: (delta) => setVolumeLevel(volume.level + delta),
 		toggleMuted,
 		toggleFullscreen,
+		toggleTheater: theater?.toggle,
 		toggleCaptions: captions?.length ? toggleCaptions : undefined,
 		stepFrame: (direction) => {
 			// Not a true frame — the element cannot tell us the frame rate — but a step

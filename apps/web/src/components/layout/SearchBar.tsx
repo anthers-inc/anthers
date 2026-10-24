@@ -16,7 +16,7 @@
  * never hardcodes them: `Mod` is Command on a Mac and Control elsewhere, and a person who
  * rebinds Filter gets the browser's find back on the old chord.
  */
-import { formatChord, matchesChord, resolveSearchShortcuts } from "@anthers/shared/keybindings";
+import { formatChord, matchesChord, resolveKeyboardShortcuts } from "@anthers/shared/keybindings";
 import { matchesTerms, searchTerms } from "@anthers/shared/search";
 import { useAuth } from "@anthers/web-shared/auth";
 import { useLocation, useNavigate, useSearchParams } from "@anthers/web-shared/router";
@@ -59,8 +59,8 @@ export default function SearchBar() {
 
 	const apple = isApplePlatform();
 	const shortcuts = useMemo(
-		() => resolveSearchShortcuts(user?.searchShortcuts),
-		[user?.searchShortcuts],
+		() => resolveKeyboardShortcuts(user?.keyboardShortcuts),
+		[user?.keyboardShortcuts],
 	);
 
 	const search = useGlobalSearch({
