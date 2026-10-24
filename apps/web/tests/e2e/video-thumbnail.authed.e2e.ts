@@ -45,7 +45,7 @@ test("a video's thumbnail can be the frame its creator paused on", async ({ page
 	// The section's shape: the (i) carries the terms beside the heading, and the two
 	// buttons stand beside the thumbnail's place.
 	await expect(
-		page.getByText("All works need thumbnails", { exact: false }).first(),
+		page.getByText("shows a placeholder drawn for its kind", { exact: false }).first(),
 	).toBeAttached();
 
 	// Open the picker, wait for its player to report a real picture, then take a moment
