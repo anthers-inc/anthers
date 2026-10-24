@@ -121,6 +121,24 @@ describe("checkUserAccess", () => {
 		]);
 	});
 
+	it("carries the verified client id the authority asked with", async () => {
+		const seen: Array<Record<string, string>> = [];
+		const app = createManagingAppRoutes({
+			resolveDid,
+			authorize: async (query) => {
+				seen.push(query);
+				return { authorized: true, reason: "entitled" };
+			},
+		});
+		const clientId = "https://anthers.org/api/atproto/client-metadata.json";
+		const response = await app.request(
+			`${ORIGIN}${CHECK}&clientId=${encodeURIComponent(clientId)}`,
+			{ headers: { Authorization: `Bearer ${token()}` } },
+		);
+		expect(response.status).toBe(200);
+		expect(seen[0]?.clientId).toBe(clientId);
+	});
+
 	it("carries a refusal as an answer rather than an error", async () => {
 		const app = createManagingAppRoutes({
 			resolveDid,

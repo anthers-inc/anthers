@@ -47,7 +47,8 @@ import {
 	workBaseUrl,
 	workUrl,
 } from "./atproto-records.js";
-import { type SpacePolicy, SpaceRequestError } from "./atproto-space.js";
+import { type SpaceAppAccess, type SpacePolicy, SpaceRequestError } from "./atproto-space.js";
+import { attestableClientId } from "./client-attestation.js";
 import {
 	CREATOR_SPACE_COLLECTIONS,
 	type DraftWorkRecord,
@@ -104,11 +105,27 @@ export const STUDIO_SPACE_POLICIES = {
 	appAccess: { $type: "com.atproto.simplespace.defs#open" } as const,
 };
 
-/** A gated space names Anthers as its managing app, on both policies. */
-function gatedSpacePolicies(managingApp: ManagingAppIdentity): {
+/**
+ * A gated space names Anthers as its managing app, and its app perimeter names the app.
+ *
+ * ⭐ **The allow-list is the first gate, and it is the app's own client id.** A space authority
+ * verifies the client attestation against the JWKS the client id publishes before it asks the
+ * managing app anything, so an app that is not on this list never reaches `checkUserAccess`.
+ * Without an attestable client id — a checkout serving the loopback shape, or a deployment
+ * missing its key — the space stays open rather than allowing a list nobody can satisfy.
+ */
+function gatedSpacePolicies(
+	managingApp: ManagingAppIdentity,
+	clientId: string | null,
+): {
 	readPolicy: SpacePolicy;
 	writePolicy: SpacePolicy;
-	appAccess: { $type: "com.atproto.simplespace.defs#open" };
+	appAccess:
+		| { $type: "com.atproto.simplespace.defs#open" }
+		| {
+				$type: "com.atproto.simplespace.defs#allowList";
+				allowed: string[];
+		  };
 } {
 	const policy: SpacePolicy = {
 		$type: "com.atproto.simplespace.defs#managingAppPolicy",
@@ -117,7 +134,9 @@ function gatedSpacePolicies(managingApp: ManagingAppIdentity): {
 	return {
 		readPolicy: policy,
 		writePolicy: { ...policy },
-		appAccess: { $type: "com.atproto.simplespace.defs#open" },
+		appAccess: clientId
+			? { $type: "com.atproto.simplespace.defs#allowList", allowed: [clientId] }
+			: { $type: "com.atproto.simplespace.defs#open" },
 	};
 }
 
@@ -151,6 +170,8 @@ export interface CreatorSpaceOptions {
 	resolveSession?: ResolveSpaceSession;
 	/** Defaults to the deployment's own identity. */
 	managingApp?: ManagingAppIdentity | null;
+	/** The client id a gated space's app perimeter allow-lists; defaults to the app's own. */
+	clientId?: string | null;
 	fetchImpl?: typeof fetch;
 	now?: Date;
 }
@@ -336,7 +357,10 @@ async function writeCreatorSpace(
 		{
 			spaceType: CREATOR_SPACE_TYPE,
 			skey: String(work.publicId),
-			...gatedSpacePolicies(managingApp),
+			...gatedSpacePolicies(
+				managingApp,
+				opts.clientId !== undefined ? opts.clientId : attestableClientId(),
+			),
 		},
 		opts.fetchImpl,
 	);
@@ -498,7 +522,7 @@ async function ensureSpace(
 		skey: string;
 		readPolicy: SpacePolicy;
 		writePolicy: SpacePolicy;
-		appAccess: { $type: "com.atproto.simplespace.defs#open" };
+		appAccess: SpaceAppAccess;
 	},
 	fetchImpl?: typeof fetch,
 ): Promise<string> {
