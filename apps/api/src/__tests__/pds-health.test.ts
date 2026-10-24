@@ -19,10 +19,7 @@ let port = 20000;
 const server = () => `https://pds-${RUN}-${port++}.example`;
 
 /** A fetch that answers from a script of outcomes, counting what it was asked. */
-function scripted(
-	outcomes: Array<"up" | "down" | "refuse" | "error">,
-	accountPage = 200,
-) {
+function scripted(outcomes: Array<"up" | "down" | "refuse" | "error">, accountPage = 200) {
 	const calls: string[] = [];
 	const fetchImpl = (async (input: string) => {
 		calls.push(String(input));
@@ -56,18 +53,15 @@ describe("asking whether a server is up", () => {
 			statusUrl: null,
 			accountPage: true,
 		});
-		expect(calls).toEqual([
-			`${url}/xrpc/com.atproto.server.describeServer`,
-			`${url}/account`,
-		]);
+		expect(calls).toEqual([`${url}/xrpc/com.atproto.server.describeServer`, `${url}/account`]);
 	});
 
 	it("counts a server that answers 4xx as up, because it answered", async () => {
 		// A live PDS refusing this ask is not an outage, and a rate limit is not one either.
 		const refusing = scripted(["refuse"]);
-		expect(
-			(await pdsHealth(server(), { now: 1, fetchImpl: refusing.fetchImpl }))?.reachable,
-		).toBe(true);
+		expect((await pdsHealth(server(), { now: 1, fetchImpl: refusing.fetchImpl }))?.reachable).toBe(
+			true,
+		);
 	});
 
 	it("reports whether the server answers an account page", async () => {
