@@ -9,7 +9,8 @@
  * upstream's own rewriting machinery is driven by, builds the book interface object the
  * vendored view opens, and hardens every section document on the way out. This component
  * is the Work's chrome around that view — navigation, the table of contents, the seek
- * bar and fullscreen — shaped deliberately like `ComicReader`, whose transport pieces
+ * bar, fullscreen and theater mode — shaped deliberately like `ComicReader`, whose
+ * transport pieces
  * (`TransportButton`, `SeekBar`) it reuses and whose keyboard and touch handling it
  * extends to a reflow book.
  *
@@ -18,6 +19,8 @@
  * open effect appends the element, wires the events, then opens the book. Position is
  * persisted on `relocate` as a CFI the view's own fake-CFI fallback resolves on reopen.
  */
+
+import { matchesChord } from "@anthers/shared/keybindings";
 import {
 	ArrowsPointingInIcon,
 	ArrowsPointingOutIcon,
@@ -30,8 +33,12 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import "@/vendor/foliate-js/view.js";
 import { buildEbookBook, fetchSectionManifest, LadderRefusal, SECTION_CSP } from "@/lib/ebook-book";
+import { useKeyboardShortcuts } from "@/lib/keyboard-shortcuts";
+import { isApplePlatform } from "@/lib/platform";
 import { readStoredReflow, refreshReadingPositions, writeReflow } from "@/lib/reading-positions";
+import { useWorkTheater } from "@/lib/work-theater";
 import SeekBar from "./transport/SeekBar";
+import TheaterIcon from "./transport/TheaterIcon";
 import TransportButton from "./transport/TransportButton";
 
 /**
@@ -91,6 +98,9 @@ export default function EbookReader({
 	shareToken?: string | null;
 }) {
 	const containerRef = useRef<HTMLDivElement>(null);
+	const theater = useWorkTheater();
+	const shortcuts = useKeyboardShortcuts();
+	const apple = isApplePlatform();
 	const viewHostRef = useRef<HTMLDivElement>(null);
 	const viewRef = useRef<FoliateViewInstance | null>(null);
 	const [phase, setPhase] = useState<Phase>("loading");
@@ -241,11 +251,22 @@ export default function EbookReader({
 	}, [flow]);
 
 	const onKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
-		if (e.ctrlKey || e.metaKey || e.altKey) return;
 		const target = e.target as HTMLElement;
 		if (target.tagName === "INPUT") return;
 		const view = viewRef.current;
 		if (!view) return;
+		// The account's player chords, matched exactly and before the modifier guard.
+		if (matchesChord(e, shortcuts.fullscreen, apple)) {
+			e.preventDefault();
+			toggleFullscreen();
+			return;
+		}
+		if (theater && matchesChord(e, shortcuts.theater, apple)) {
+			e.preventDefault();
+			theater.toggle();
+			return;
+		}
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
 		switch (e.key) {
 			case "ArrowLeft":
 			case "ArrowUp":
@@ -264,13 +285,10 @@ export default function EbookReader({
 				e.preventDefault();
 				goTo(0);
 				return;
-			case "f":
-			case "F":
-				e.preventDefault();
-				toggleFullscreen();
-				return;
-			case "t":
+			// Theater took `t`, so the contents list moved to the shifted pair — the
+			// transport's own button is the primary way in, and the key is secondary.
 			case "T":
+				if (!e.shiftKey) return;
 				e.preventDefault();
 				setTocOpen((open) => !open);
 				return;
@@ -410,6 +428,14 @@ export default function EbookReader({
 					active={flow === "scrolled"}
 					className="hidden sm:inline-flex"
 				/>
+				{theater && (
+					<TransportButton
+						label={theater.theater ? "Exit theater mode" : "Theater mode"}
+						icon={TheaterIcon}
+						onClick={theater.toggle}
+						active={theater.theater}
+					/>
+				)}
 				<TransportButton
 					label={fullscreen ? "Exit full screen" : "Full screen"}
 					icon={fullscreen ? ArrowsPointingInIcon : ArrowsPointingOutIcon}

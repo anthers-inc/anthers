@@ -319,7 +319,7 @@ async function serializeUser(user: typeof users.$inferSelect) {
 			themePreference: userPreferences.themePreference,
 			homeDefaultTab: userPreferences.homeDefaultTab,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
-			searchShortcuts: userPreferences.searchShortcuts,
+			keyboardShortcuts: userPreferences.keyboardShortcuts,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
@@ -344,9 +344,9 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		// Where audio playback lives (the persistent footer bar or the page's player).
 		// Null means "never said" and the client reads that as on.
 		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
-		// The search bar's two chords — read at boot with the rest of the chrome, so the
-		// bar never registers a listener against the defaults and then swaps them.
-		searchShortcuts: prefs?.searchShortcuts ?? null,
+		// The account's rebindable chords — read at boot with the rest of the chrome, so
+		// the bar and the players never register against the defaults and then swap them.
+		keyboardShortcuts: prefs?.keyboardShortcuts ?? null,
 		atprotoDid: user.atprotoDid,
 		// The server holding that identity. Public — it is in the DID document — and the client
 		// needs it to send somebody to the server's own account page.
