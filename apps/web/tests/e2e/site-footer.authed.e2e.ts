@@ -24,7 +24,7 @@ test.describe("the signed-in site footer", () => {
 		});
 	}
 
-	for (const path of ["/network", "/library", "/discovery"]) {
+	for (const path of ["/library", "/discovery"]) {
 		test(`is absent on ${path}`, async ({ page }) => {
 			await page.goto(path);
 			await expect(footer(page), `a site footer is on ${path}`).toHaveCount(0);

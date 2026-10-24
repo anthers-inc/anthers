@@ -14,11 +14,19 @@ import {
 	asRecipeCandidates,
 	asRecipeMix,
 	asRecipeWindow,
+	DEFAULT_RECIPE,
 	type DiscoveryReason,
 	graphRecipe,
 	interleaveByAuthor,
 	isDiscoveryReason,
+	presetFor,
+	RECIPE_CANDIDATE_LABELS,
+	RECIPE_CANDIDATES,
+	RECIPE_PRESETS,
 	reasonForSource,
+	recipeFrom,
+	recipePath,
+	recipeQuery,
 	streamRecipe,
 } from "./discovery";
 
@@ -220,5 +228,105 @@ describe("the recipe's URL values", () => {
 		// The route's opening mix depends on the candidate set, so the parser takes the
 		// fallback rather than deciding one for every caller.
 		expect(asRecipeMix(null, "straight")).toBe("straight");
+	});
+});
+
+describe("the candidate stage covers the whole membership narrowing", () => {
+	/**
+	 * The three membership values are the reason the Network tab could retire: they were
+	 * the one control Discovery lacked, and they are answers to the same question the
+	 * candidate stage asks. A suite that only knew `everyone` and `network` would let a
+	 * narrower value reach the page and silently draw the whole network.
+	 */
+	test("names every route into the candidate set", () => {
+		expect([...RECIPE_CANDIDATES]).toEqual([
+			"everyone",
+			"network",
+			"following",
+			"subscribed",
+			"saved",
+		]);
+		for (const value of RECIPE_CANDIDATES) {
+			expect(RECIPE_CANDIDATE_LABELS[value].length).toBeGreaterThan(0);
+		}
+	});
+
+	test("turns each value into the route's own parameters", () => {
+		expect(recipeQuery("everyone", "spread")).toEqual({ scope: "global", mix: "spread" });
+		expect(recipeQuery("network", "straight")).toEqual({ scope: "network", mix: "straight" });
+		// The narrowed three are the network scope plus the `network_source` the feed route
+		// already read — not a third kind of request.
+		for (const value of ["following", "subscribed", "saved"] as const) {
+			expect(recipeQuery(value, "straight")).toEqual({
+				scope: "network",
+				network_source: value,
+				mix: "straight",
+			});
+		}
+	});
+
+	test("says which candidate set drew the page, per value", () => {
+		expect(
+			streamRecipe({ window: "all", candidates: "following", mix: "straight" }).stages[0]?.label,
+		).toBe("The creators you follow");
+		expect(
+			streamRecipe({ window: "all", candidates: "saved", mix: "straight" }).stages[0]?.label,
+		).toBe("Creators you saved work from or bought from");
+	});
+});
+
+describe("the presets", () => {
+	test("opens on My Network, which is the retired Network tab", () => {
+		expect(DEFAULT_RECIPE).toEqual({ window: "all", candidates: "network", mix: "straight" });
+		expect(RECIPE_PRESETS[0]?.id).toBe("my-network");
+		expect(RECIPE_PRESETS[0]?.label).toBe("My Network");
+	});
+
+	test("matches a preset exactly, and nothing for a recipe it would not reproduce", () => {
+		expect(presetFor(RECIPE_PRESETS[0].recipe)?.id).toBe("my-network");
+		expect(presetFor(RECIPE_PRESETS[1].recipe)?.id).toBe("across-anthers");
+		// One stage away from a preset is no preset: a chip that lit up here would lie
+		// about what clicking it does.
+		expect(presetFor({ ...RECIPE_PRESETS[0].recipe, window: "week" })).toBeNull();
+		expect(presetFor({ ...RECIPE_PRESETS[1].recipe, mix: "straight" })).toBeNull();
+	});
+
+	test("gives every preset a stable id and a blurb", () => {
+		const ids = new Set<string>();
+		for (const preset of RECIPE_PRESETS) {
+			expect(preset.id).not.toBe("");
+			expect(ids.has(preset.id)).toBe(false);
+			ids.add(preset.id);
+			expect(preset.blurb.length).toBeGreaterThan(10);
+		}
+	});
+});
+
+describe("a stored recipe", () => {
+	test("reads back as the same recipe", () => {
+		expect(recipeFrom({ window: "week", candidates: "following", mix: "straight" })).toEqual({
+			window: "week",
+			candidates: "following",
+			mix: "straight",
+		});
+	});
+
+	test("falls back to the opening recipe when the account never chose", () => {
+		expect(recipeFrom(null)).toEqual(DEFAULT_RECIPE);
+		expect(recipeFrom(undefined)).toEqual(DEFAULT_RECIPE);
+	});
+
+	test("degrades a value this build does not know rather than carrying it", () => {
+		expect(recipeFrom({ window: "fortnight", candidates: "friends", mix: "chaos" })).toEqual({
+			window: "all",
+			candidates: "everyone",
+			mix: "spread",
+		});
+	});
+
+	test("writes every stage into a link, so the link means the recipe in full", () => {
+		expect(recipePath({ window: "all", candidates: "network", mix: "straight" })).toBe(
+			"/discovery?window=all&candidates=network&mix=straight",
+		);
 	});
 });

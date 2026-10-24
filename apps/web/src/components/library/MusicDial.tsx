@@ -3,8 +3,8 @@
  * The Music Player's **include spoken word** dial — a control ON the lens, rendered
  * beneath its sidebar row only while that row is selected (the shared section's `extras`
  * slot). It belongs to the lens rather than to a page, which is why it lives here: the
- * Library and the Network both carry the row, and both owe it the same control in the
- * same place.
+ * Library and Discovery both carry the row, and both owe it the same control in the same
+ * place.
  *
  * Flipping it is a view change: the dial re-scopes what the lens draws on and never moves
  * anything in or out of a shelf or a feed.

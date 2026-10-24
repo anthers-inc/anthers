@@ -165,9 +165,9 @@ function LoggedInLayoutInner() {
 	const studio = mode === "studio";
 
 	/**
-	 * Where user mode begins: the account's starting tab, which is Network unless somebody
-	 * chose another in Settings. The three tabs render in one fixed order, so this is the
-	 * only thing that decides where a session lands.
+	 * Where user mode begins: the account's starting tab, which is Discovery unless
+	 * somebody chose Library in Settings. The tabs render in one fixed order, so this is
+	 * the only thing that decides where a session lands.
 	 */
 	const userHome = userTabPath(user?.homeDefaultTab);
 
@@ -180,7 +180,7 @@ function LoggedInLayoutInner() {
 	const creatorHome = studioUrl("/");
 
 	// An account that has not finished onboarding owns nothing the sidebar points at:
-	// Network, Library and Discovery are all behind ProtectedRoute, which bounces a
+	// Library and Discovery are both behind ProtectedRoute, which bounces a
 	// terms-owing account straight back to /welcome — so every link it offers is a dead
 	// end wearing a nav item. The sidebar stays out of the way until the account has
 	// finished, and the toggle button is part of its chrome and goes with it. (This
@@ -373,7 +373,7 @@ function LoggedInLayoutInner() {
 						<div className={`${rail ? "w-16" : "w-64"} h-full flex flex-col overflow-y-auto`}>
 							{/* Each mode's own nav, and never both: the Studio's places used to be tabs
 						    under a second header inside this layout, beside a sidebar still offering
-						    Network, Library and Discovery. Each nav is named, so a user (and a spec) can
+						    Library and Discovery. Each nav is named, so a user (and a spec) can
 						    tell which one is on screen. */}
 							{studio ? (
 								<nav aria-label="Studio" className="p-3 flex flex-col gap-0.5">
@@ -399,9 +399,9 @@ function LoggedInLayoutInner() {
 								</nav>
 							) : (
 								<nav aria-label="Anthers" className="p-3 flex flex-col gap-0.5">
-									{/* One fixed order — Library, Network, Discovery — because the account's
-								    starting tab is a setting rather than a consequence of this list's
-								    arrangement. Nothing here is draggable; see `lib/user-tabs.ts`. */}
+									{/* One fixed order — Library, Discovery — because the account's starting
+								    tab is a setting rather than a consequence of this list's arrangement.
+								    Nothing here is draggable; see `lib/user-tabs.ts`. */}
 									{USER_TABS.map((link) => (
 										<NavLink
 											key={link.id}
@@ -531,9 +531,6 @@ function LoggedInLayoutInner() {
 											</nav>
 											<nav className="join-item flex-1 flex flex-col items-center gap-1.5">
 												<h6 className="footer-title text-xs">Your Stuff</h6>
-												<Link to="/network" className="link link-hover">
-													Network
-												</Link>
 												<Link to="/library" className="link link-hover">
 													Library
 												</Link>

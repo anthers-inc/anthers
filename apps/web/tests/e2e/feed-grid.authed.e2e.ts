@@ -162,7 +162,7 @@ test("no creator suggestions ride the feed, and the post reads one excerpt in it
 }) => {
 	test.setTimeout(60_000);
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/network`);
+	await page.goto(`${WEB_ORIGIN}/discovery`);
 
 	// No creator suggestions: the section is the recommendation the feed doesn't make.
 	expect(await page.evaluate(() => document.body.textContent ?? "")).not.toContain(
@@ -201,7 +201,7 @@ test("the creator name inside a tile links to the creator's page, not the tile's
 }) => {
 	test.setTimeout(60_000);
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/network`);
+	await page.goto(`${WEB_ORIGIN}/discovery`);
 	await expect(page.getByRole("link", { name: /Feed grid walk post/ })).toBeVisible();
 
 	// The tile's surface still opens its own target: the stretched overlay takes a
@@ -211,7 +211,7 @@ test("the creator name inside a tile links to the creator's page, not the tile's
 	await postTile.click();
 	await page.waitForURL(`**/posts/${slug}*`);
 	await page.goBack();
-	await page.waitForURL(`**/network`);
+	await page.waitForURL(`**/discovery*`);
 	await expect(page.getByRole("link", { name: /Feed grid walk post/ })).toBeVisible();
 
 	// The name's link is the only anchor in the tile aimed at a profile path — the
@@ -233,7 +233,7 @@ test("the goods and video tiles keep their band shapes and their hover truths", 
 }) => {
 	test.setTimeout(60_000);
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/network`);
+	await page.goto(`${WEB_ORIGIN}/discovery`);
 
 	const shirtTile = page.getByRole("link", { name: /Feed grid shirt/ });
 	await expect(shirtTile).toBeVisible();
@@ -303,7 +303,7 @@ test("the preview stop keeps a held hover a poster, and the default still plays"
 		localStorage.setItem("anthers_tile_previews", "0");
 	});
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/network`);
+	await page.goto(`${WEB_ORIGIN}/discovery`);
 	const stoppedTile = page.getByRole("link", { name: videoName });
 	await expect(stoppedTile).toBeVisible();
 	await stoppedTile.hover();
@@ -321,7 +321,7 @@ test("the preview stop keeps a held hover a poster, and the default still plays"
 	await page.addInitScript(() => {
 		localStorage.removeItem("anthers_tile_previews");
 	});
-	await page.goto(`${WEB_ORIGIN}/network`);
+	await page.goto(`${WEB_ORIGIN}/discovery`);
 	const playingTile = page.getByRole("link", { name: videoName });
 	await expect(playingTile).toBeVisible();
 	await playingTile.hover();
@@ -338,7 +338,7 @@ test("the preview's speaker button turns hover audio on, and that answer persist
 	const videoName = /A short film that really plays/;
 
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/network`);
+	await page.goto(`${WEB_ORIGIN}/discovery`);
 	const tile = page.getByRole("link", { name: videoName });
 	await expect(tile).toBeVisible();
 	await tile.hover();
@@ -368,7 +368,7 @@ test("the preview's speaker button turns hover audio on, and that answer persist
 	// A later visit reads the remembered answer: the fresh document has had no
 	// gesture of its own, so the audibility of the element is the browser's call —
 	// what persists is the setting, and the button state carries it.
-	await page.goto(`${WEB_ORIGIN}/network`);
+	await page.goto(`${WEB_ORIGIN}/discovery`);
 	const nextTile = page.getByRole("link", { name: videoName });
 	await expect(nextTile).toBeVisible();
 	await nextTile.hover();
@@ -386,7 +386,7 @@ test("an audio preview carries the same speaker button and the same remembered a
 	const audioName = /Track 1/;
 
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/network`);
+	await page.goto(`${WEB_ORIGIN}/discovery`);
 	const tile = page.getByRole("link", { name: audioName });
 	await expect(tile).toBeVisible();
 	await tile.hover();
@@ -416,7 +416,7 @@ test("an audio preview carries the same speaker button and the same remembered a
 test("the grid fills the content area and flexes as the window narrows", async ({ page }) => {
 	test.setTimeout(60_000);
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/network`);
+	await page.goto(`${WEB_ORIGIN}/discovery`);
 	await expect(page.getByRole("link", { name: /Feed grid walk post/ })).toBeVisible();
 
 	const colsAt = () =>

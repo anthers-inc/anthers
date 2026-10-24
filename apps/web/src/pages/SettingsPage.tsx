@@ -96,13 +96,14 @@ function formatWhen(value: string | null): string {
 /**
  * Where You Start — the tab a signed-in session opens on (Parker, 2026-10-20).
  *
- * The three tabs render in one fixed order, so this is the only control over where a
- * session lands: sign-in, a fresh tab on `/`, and the mode switch's User side all read
- * the same answer. Account-level rather than per-browser for the reason the theme is —
- * which tab a person arrives on is how they use the site, not a property of a computer.
+ * The tabs render in one fixed order, so this is the only control over where a session
+ * lands: sign-in, a fresh tab on `/`, and the mode switch's User side all read the same
+ * answer. Account-level rather than per-browser for the reason the theme is — which tab a
+ * person arrives on is how they use the site, not a property of a computer.
  *
- * Null = never answered, and the client reads that as Network; the column never bakes
- * the default in, so a later default change needs no rows rewritten.
+ * Null = never answered, and the client reads that as Discovery; the column never bakes
+ * the default in, so a later default change needs no rows rewritten. A stored `network`
+ * from before the tabs merged reads the same way — it is the same tab now.
  */
 function StartingTabSection() {
 	const { user, refreshUser } = useAuth();
@@ -136,6 +137,10 @@ function StartingTabSection() {
 					The tab a session opens on, whether you have just signed in or come back the next day.
 					It's saved to your account, so every device starts in the same place.
 				</p>
+				{/* The merged tab remembers its own recipe separately (Discovery's recipe
+				    bar), so this card deliberately says nothing about which stream a reader
+				    sees once they land — that would be a second setting wearing this one's
+				    clothes. */}
 
 				<fieldset className="form-control mt-2 gap-2">
 					<legend className="sr-only">Starting tab</legend>
@@ -203,7 +208,7 @@ function DesktopHomeSection() {
 						<span className="label-text">
 							<span className="font-medium">Your tabs</span>
 							<span className="block text-xs text-base-content/50">
-								Your Library, Network or Discovery, starting with the one you chose in Settings
+								Your Library or Discovery, starting with the one you chose in Settings
 							</span>
 						</span>
 					</label>
@@ -249,7 +254,7 @@ function MediaPlaySection() {
 				</p>
 
 				<div className="form-control mt-2">
-					{/* The stop *Network* commits every feed signal to: previews are the
+					{/* The stop the stream commits every feed signal to: previews are the
 					    cursor's doing, and they stay that way by being stoppable. Turning this
 					    off mid-hover stops the playing preview on the same render. */}
 					<label className="label whitespace-normal cursor-pointer justify-start gap-3">

@@ -25,6 +25,7 @@
  * *first* ask rather than a second.
  */
 
+import { RECIPE_PRESETS, recipePath } from "@anthers/shared/discovery";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { FONTS } from "@anthers/web-shared/fonts";
 import { Link } from "@anthers/web-shared/router";
@@ -201,10 +202,16 @@ export default function FirstRun({ arrival, handle }: { arrival: Arrival; handle
 				 * monthly), never a typed constant.
 				 */}
 				<FundPoolLine />
+				{/*
+				 * "Your Network" is a recipe now, not a tab (2026-10-24): the address it
+				 * points at is the My Network preset, so somebody who follows creators
+				 * lands on the chronological feed while somebody who follows nobody is
+				 * offered the whole site first.
+				 */}
 				<Actions
 					primary={[
 						arrival.follows > 0 ? "Go to your Network" : "Find creators to follow",
-						arrival.follows > 0 ? "/network" : "/discovery",
+						arrival.follows > 0 ? recipePath(RECIPE_PRESETS[0].recipe) : "/discovery",
 					]}
 					secondary={["See what's new", "/discovery"]}
 				/>
@@ -237,7 +244,7 @@ export default function FirstRun({ arrival, handle }: { arrival: Arrival; handle
 			<FirstRunPrice />
 			<Actions
 				primary={["Find creators to follow", "/discovery"]}
-				secondary={["Go to your Network", "/network"]}
+				secondary={["Go to your Network", recipePath(RECIPE_PRESETS[0].recipe)]}
 			/>
 		</div>
 	);

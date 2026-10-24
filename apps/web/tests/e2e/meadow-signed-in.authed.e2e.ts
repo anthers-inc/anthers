@@ -23,7 +23,7 @@ import { expect, type Page, test } from "@playwright/test";
 const backdrop = (page: Page) => page.locator("[data-meadow-backdrop]");
 
 test("the signed-in shell renders the Meadow backdrop behind its pages", async ({ page }) => {
-	await page.goto("/network");
+	await page.goto("/discovery");
 
 	const layer = backdrop(page);
 	await expect(layer, "the shell mounted no decor layer").toBeAttached();
@@ -52,7 +52,7 @@ test("the signed-in shell renders the Meadow backdrop behind its pages", async (
 });
 
 test("the backdrop and the page content share their stacking context", async ({ page }) => {
-	await page.goto("/network");
+	await page.goto("/discovery");
 
 	// A stacking context is created by a positioned element with a non-auto
 	// z-index; by isolation, opacity, transforms and filters; and by several
@@ -110,7 +110,7 @@ test("the backdrop and the page content share their stacking context", async ({ 
 
 test("the backdrop carries the vines and the grass floor at wide viewports", async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
-	await page.goto("/network");
+	await page.goto("/discovery");
 
 	const layer = backdrop(page);
 	await expect(layer).toBeAttached();

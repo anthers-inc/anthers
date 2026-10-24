@@ -240,7 +240,7 @@ test("account A's basket stays account A's, and account B starts empty", async (
 
 	// B signs in on the SAME browser: the badge must read nothing.
 	await signInThroughUi(page, buyerBEmail);
-	await page.goto("/network");
+	await page.goto("/discovery");
 	await expect(
 		page.getByRole("banner").getByRole("link", { name: /Basket/ }),
 		"B's header offered a basket their account never built",
@@ -281,7 +281,7 @@ test("an anonymous scratch basket survives sign-in — the merge, then the scrat
 
 	// Sign in — the merge is the ceremony's own act, and the badge is what proves it.
 	await signInThroughUi(scratchPage, buyerAEmail);
-	await scratchPage.goto("/network");
+	await scratchPage.goto("/discovery");
 	await expect(
 		scratchPage.getByRole("banner").getByRole("link", { name: /Basket \(1 item\)/ }),
 		"the merged item never reached the header badge",
@@ -383,7 +383,7 @@ test("a mixed-creator sign-in merge keeps both the account's and the scratch's i
 	// creators (2026-10-15), so both intents land and the account ends with X and Y.
 	// The banner says so before the server read does.
 	await signInThroughUi(scratchPage, buyerAEmail);
-	await scratchPage.goto("/network");
+	await scratchPage.goto("/discovery");
 	await expect(
 		scratchPage.getByRole("banner").getByRole("link", { name: /Basket \(2 items\)/ }),
 	).toBeVisible();

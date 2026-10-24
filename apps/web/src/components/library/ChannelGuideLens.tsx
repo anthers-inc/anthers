@@ -32,10 +32,10 @@
  * 🚨 **A lens is a view, never a container**, and nothing here mutates the shelf: no
  * fetch of its own, selection is view state, and closing the player leaves the guide
  * exactly as it stood. The corpus rides the context (Parker, 2026-10-11): **from the
- * Library, a channel's programs are the creator's videos you have saved; from the
- * Network's feed, every video the feed carries; from Discovery, every video on the
- * stream's page.** The component renders whatever channels its host translates — that
- * translation for all three corpora is {@link channelGuideChannelsFromShelf}.
+ * Library, a channel's programs are the creator's videos you have saved; from a stream,
+ * every video the stream's page carries.** The component renders whatever channels its
+ * host translates — that translation, for both corpora, is
+ * {@link channelGuideChannelsFromShelf}.
  */
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { profileUrl } from "@anthers/web-shared/profile";

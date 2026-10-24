@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { RECIPE_PRESETS, recipePath } from "@anthers/shared/discovery";
 import { handleFromParam } from "@anthers/web-shared/profile";
 import { lazy, useEffect } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useParams } from "react-router-dom";
@@ -89,7 +90,6 @@ function RedirectReleaseNotes() {
  */
 const AboutPage = lazy(() => import("./pages/AboutPage"));
 const ATProtoCallbackPage = lazy(() => import("./pages/ATProtoCallbackPage"));
-const AuthenticatedHomePage = lazy(() => import("./pages/AuthenticatedHomePage"));
 const ReleaseNotesPage = lazy(() => import("./pages/ReleaseNotesPage"));
 const StatusPage = lazy(() => import("./pages/StatusPage"));
 const CompareGhostPage = lazy(() => import("./pages/CompareGhostPage"));
@@ -232,7 +232,7 @@ export default function App() {
 				{/*
 				Authenticated layout
 				Protected routes that require login. Shows the user-focused nav
-				(discovery, library, network, avatar dropdown).
+				(discovery, library, avatar dropdown).
 			*/}
 				<Route element={<LoggedInLayout />}>
 					{/*
@@ -243,11 +243,19 @@ export default function App() {
 					business here (signed out, or already named).
 				*/}
 					<Route path="/welcome" element={<WelcomePage />} />
+					{/*
+					/network retired into Discovery on 2026-10-24 (the two tabs ran one route,
+					and Network became the My Network recipe preset). The address stays as a
+					redirect rather than a 404 because the site is publicly reachable and the
+					tab was where most accounts landed: a bookmark or an old footer link keeps
+					working, and it lands on the recipe the address actually named rather than
+					on whatever this reader's account happens to open on.
+				*/}
 					<Route
 						path="/network"
 						element={
 							<ProtectedRoute>
-								<AuthenticatedHomePage />
+								<Navigate to={recipePath(RECIPE_PRESETS[0].recipe)} replace />
 							</ProtectedRoute>
 						}
 					/>
