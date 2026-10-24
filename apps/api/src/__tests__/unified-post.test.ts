@@ -19,6 +19,7 @@ import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { POST_COLLECTION } from "../services/atproto-record-plan.js";
+import { downloadAsset } from "./access-fixture";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
@@ -224,18 +225,12 @@ describe("Catalog vertical slice", () => {
 	});
 
 	it("refuses the download to a user without access (403)", async () => {
-		const res = await req(`/api/content/works/${oldGameId}/assets/${paidAssetId}/download`, {
-			method: "POST",
-			headers: { Origin: ORIGIN, Cookie: otherCookie },
-		});
+		const res = await downloadAsset(otherCookie, oldGameId, paidAssetId);
 		expect(res.status).toBe(403);
 	});
 
 	it("hands the owner a signed download URL (200)", async () => {
-		const res = await req(`/api/content/works/${oldGameId}/assets/${paidAssetId}/download`, {
-			method: "POST",
-			headers: { Origin: ORIGIN, Cookie: creatorCookie },
-		});
+		const res = await downloadAsset(creatorCookie, oldGameId, paidAssetId);
 		expect(res.status).toBe(200);
 		expect((await res.json()).url).toBeTruthy();
 	});

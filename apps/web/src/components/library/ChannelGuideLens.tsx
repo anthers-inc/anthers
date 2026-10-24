@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The **Channel Guide lens** — the Library (or, later, the Feed), organized the way a
- * TV schedule is browsed.
+ * The **Channel Guide lens** — the Library, the Network's feed or Discovery's stream,
+ * organized the way a TV schedule is browsed.
  *
  * 🚨 **This is not a filter, and the difference is the whole idea** — the same invariant
  * the music, video and Bookshelf lenses carry: a different *organizing metaphor* over a
@@ -30,10 +30,10 @@
  * 🚨 **A lens is a view, never a container**, and nothing here mutates the shelf: no
  * fetch of its own, selection is view state, and closing the player leaves the guide
  * exactly as it stood. The corpus rides the context (Parker, 2026-10-11): **from the
- * Library, a channel's programs are the creator's videos you have saved; from the Feed,
- * every video they have released, followed or not.** The component renders whatever
- * channels its host translates — that translation for the Library shelf is
- * {@link channelGuideChannelsFromShelf}.
+ * Library, a channel's programs are the creator's videos you have saved; from the
+ * Network's feed, every video the feed carries; from Discovery, every video on the
+ * stream's page.** The component renders whatever channels its host translates — that
+ * translation for all three corpora is {@link channelGuideChannelsFromShelf}.
  */
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { profileUrl } from "@anthers/web-shared/profile";
@@ -123,7 +123,7 @@ export interface ChannelGuideLensProps {
 	selectedId?: number | null;
 	onSelectedIdChange?: (id: number | null) => void;
 	/** Which corpus fills the columns — changes the empty-state's sentence, nothing else. */
-	source?: "library" | "feed";
+	source?: "library" | "feed" | "discovery";
 }
 
 export default function ChannelGuideLens({
@@ -187,10 +187,16 @@ export default function ChannelGuideLens({
 				<p className="mx-auto mt-1 max-w-md text-sm text-base-content/60">
 					{source === "feed"
 						? "Follow creators and their channels fill the guide as they release."
-						: "Save a video and its creator takes a channel in the guide — free work included. You don't have to buy something to keep it."}
+						: source === "discovery"
+							? "Channels fill the guide as creators release videos. Widen the window or clear a filter to see more."
+							: "Save a video and its creator takes a channel in the guide — free work included. You don't have to buy something to keep it."}
 				</p>
 				<Link to="/discovery" className="btn btn-primary btn-sm mt-4">
-					{source === "feed" ? "Find channels to follow" : "Find something to watch"}
+					{source === "feed"
+						? "Find channels to follow"
+						: source === "discovery"
+							? "See everything new"
+							: "Find something to watch"}
 				</Link>
 			</div>
 		);

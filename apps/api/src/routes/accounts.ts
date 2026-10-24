@@ -65,7 +65,7 @@ import { isWorkType } from "@anthers/shared/content";
 import { type ContentNote, RATING_ROWS } from "@anthers/shared/content-rating";
 import { CREATOR_EMAIL_KINDS, resolvedCreatorEmailDelivery } from "@anthers/shared/creator-emails";
 import { asRecipeMix, interleaveByAuthor, reasonForSource } from "@anthers/shared/discovery";
-import { normalizeSearchShortcuts } from "@anthers/shared/keybindings";
+import { normalizeKeyboardShortcuts } from "@anthers/shared/keybindings";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
 	isRightsRequestKind,
@@ -75,6 +75,7 @@ import {
 import { searchTerms } from "@anthers/shared/search";
 import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panels";
 import { isUsState } from "@anthers/shared/us-states";
+import { verifiedCreator } from "@anthers/shared/verified-creator";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -116,6 +117,7 @@ import {
 	enableAdultAccess,
 	setMaturityDisplay,
 } from "../services/content-preferences.js";
+import { releasedWorkCount } from "../services/creator-standing.js";
 import { ensureFollow } from "../services/follows.js";
 import { merchStoreFactsByWork } from "../services/merch-store.js";
 import {
@@ -210,11 +212,15 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 			homeDefaultTab: userPreferences.homeDefaultTab,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
 			creatorEmailDelivery: userPreferences.creatorEmailDelivery,
-			searchShortcuts: userPreferences.searchShortcuts,
+			keyboardShortcuts: userPreferences.keyboardShortcuts,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
 		.limit(1);
+	// Verified creator standing — `isCreator` plus a released Work. The count is asked for only
+	// when the first half is true: this serializer backs the shell's boot read, and most accounts
+	// never ask the second question.
+	const released = user.isCreator ? await releasedWorkCount(user.id) : 0;
 	return {
 		id: user.id,
 		handle: user.atprotoHandle,
@@ -222,6 +228,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		displayName: user.displayName,
 		bio: user.bio,
 		isCreator: user.isCreator,
+		isVerifiedCreator: verifiedCreator({ isCreator: user.isCreator, releasedWorkCount: released }),
 		avatar: user.avatar,
 		headerImage: user.headerImage,
 		websiteUrl: user.websiteUrl,
@@ -234,7 +241,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		// Where audio playback lives — null means "never said", the client reads on.
 		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
 		// The bar's two chords; null means the defaults in `@anthers/shared/keybindings`.
-		searchShortcuts: prefs?.searchShortcuts ?? null,
+		keyboardShortcuts: prefs?.keyboardShortcuts ?? null,
 		atprotoDid: user.atprotoDid,
 		// The server holding that identity, so Settings can name it and link its account page.
 		atprotoPdsUrl: user.atprotoPdsUrl,
@@ -424,11 +431,12 @@ const updateProfileSchema = z.object({
 	 */
 	homeDefaultTab: z.enum(NAV_IDS).optional(),
 	/**
-	 * The search bar's two chords, as a whole map. The values are validated below with
-	 * `@anthers/shared/keybindings` rather than by a regex here: the grammar is the same
-	 * one the browser matches against, so the two cannot disagree about what a chord is.
+	 * The account's rebindable chords, as a whole map — the search bar's two and the
+	 * player's two. The values are validated below with `@anthers/shared/keybindings`
+	 * rather than by a regex here: the grammar is the same one the browser matches
+	 * against, so the two cannot disagree about what a chord is.
 	 */
-	searchShortcuts: z.record(z.string().max(20), z.string().max(40)).optional(),
+	keyboardShortcuts: z.record(z.string().max(20), z.string().max(40)).optional(),
 	/**
 	 * Per-group notification delivery, as whole-mode writes per key.
 	 *
@@ -547,17 +555,18 @@ const accountRoutes = new Hono()
 		if (data.persistentMiniplayer !== undefined) {
 			prefUpdates.persistentMiniplayer = data.persistentMiniplayer;
 		}
-		if (data.searchShortcuts !== undefined) {
-			const cleaned = normalizeSearchShortcuts(data.searchShortcuts);
+		if (data.keyboardShortcuts !== undefined) {
+			const cleaned = normalizeKeyboardShortcuts(data.keyboardShortcuts);
 			if (!cleaned) {
 				return c.json(
 					{
-						error: "A shortcut needs a modifier and a key, and the two search actions must differ.",
+						error:
+							"A page shortcut needs a modifier and a key, a player shortcut needs a key, and no two shortcuts may be the same.",
 					},
 					400,
 				);
 			}
-			prefUpdates.searchShortcuts = cleaned;
+			prefUpdates.keyboardShortcuts = cleaned;
 		}
 		if (Object.keys(prefUpdates).length > 1) {
 			// The key exists only so the `> 1` test means "something was set"; the row's own
@@ -575,8 +584,8 @@ const accountRoutes = new Hono()
 				...(data.persistentMiniplayer !== undefined
 					? { persistentMiniplayer: data.persistentMiniplayer }
 					: {}),
-				...(data.searchShortcuts !== undefined
-					? { searchShortcuts: prefUpdates.searchShortcuts as Record<string, string> }
+				...(data.keyboardShortcuts !== undefined
+					? { keyboardShortcuts: prefUpdates.keyboardShortcuts as Record<string, string> }
 					: {}),
 			};
 			await db

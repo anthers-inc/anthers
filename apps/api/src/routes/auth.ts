@@ -6,6 +6,7 @@ import { userPreferences, users } from "@anthers/db/schema";
 // the names, so a rung added to the ladder is pickable the moment it exists.
 import { BADGE_ORDER, MAX_BASKET_ITEMS } from "@anthers/shared/constants";
 import { MAX_PICKED_CREATORS } from "@anthers/shared/signup";
+import { verifiedCreator } from "@anthers/shared/verified-creator";
 import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
@@ -34,6 +35,7 @@ import {
 	validateSession,
 } from "../services/auth.js";
 import { addBasketItem } from "../services/basket.js";
+import { releasedWorkCount } from "../services/creator-standing.js";
 import { sendSignInCodeEmail, sendSignupCodeEmail } from "../services/email.js";
 import {
 	checkHandleAvailability,
@@ -319,11 +321,14 @@ async function serializeUser(user: typeof users.$inferSelect) {
 			themePreference: userPreferences.themePreference,
 			homeDefaultTab: userPreferences.homeDefaultTab,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
-			searchShortcuts: userPreferences.searchShortcuts,
+			keyboardShortcuts: userPreferences.keyboardShortcuts,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
 		.limit(1);
+	// Verified creator standing — `isCreator` plus a released Work. This is the shell's boot
+	// payload, so a non-creator's answer costs no second query.
+	const released = user.isCreator ? await releasedWorkCount(user.id) : 0;
 	return {
 		id: user.id,
 		handle: user.atprotoHandle,
@@ -331,6 +336,7 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		displayName: user.displayName,
 		bio: user.bio,
 		isCreator: user.isCreator,
+		isVerifiedCreator: verifiedCreator({ isCreator: user.isCreator, releasedWorkCount: released }),
 		avatar: user.avatar,
 		headerImage: user.headerImage,
 		websiteUrl: user.websiteUrl,
@@ -344,9 +350,9 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		// Where audio playback lives (the persistent footer bar or the page's player).
 		// Null means "never said" and the client reads that as on.
 		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
-		// The search bar's two chords — read at boot with the rest of the chrome, so the
-		// bar never registers a listener against the defaults and then swaps them.
-		searchShortcuts: prefs?.searchShortcuts ?? null,
+		// The account's rebindable chords — read at boot with the rest of the chrome, so
+		// the bar and the players never register against the defaults and then swap them.
+		keyboardShortcuts: prefs?.keyboardShortcuts ?? null,
 		atprotoDid: user.atprotoDid,
 		// The server holding that identity. Public — it is in the DID document — and the client
 		// needs it to send somebody to the server's own account page.

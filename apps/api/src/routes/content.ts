@@ -157,6 +157,13 @@ import {
 	resolveAccessSync,
 } from "../services/access.js";
 import {
+	type GrantRefusal,
+	mintAccessGrant,
+	verifyAccessGrant,
+} from "../services/access-grants.js";
+import { receiptIdFor } from "../services/access-receipts.js";
+import { accessIssuerDocument, accessSigningKey } from "../services/access-signing.js";
+import {
 	isSuspendedAccount,
 	notSuspendedAccount,
 	notTestAccount,
@@ -1060,6 +1067,34 @@ const updateWorkSchema = workBaseSchema
  * rather than a serialized `ZodError`, which reaches a form as "[object Object]". The embed address
  * is the refusal that made this matter; see `invalidBody`.
  */
+/** The one file a grant is asked for: delivery is scoped to the asset being served. */
+const grantBody = zValidator(
+	"json",
+	z.object({ assetId: z.number().int().positive() }),
+	invalidBody,
+);
+
+/**
+ * The answer a client can act on when a grant is missing or wrong.
+ *
+ * Every refusal is a 403 with a `code` the downloader branches on: `grant_expired` means ask
+ * for another, `grant_required` means the client is old enough to be missing the flow, and
+ * the rest mean the token does not belong to this request.
+ */
+function grantRefusal(reason: GrantRefusal): { error: string; code: string } {
+	const messages: Record<GrantRefusal, string> = {
+		issuer_unavailable: "Downloads are not available right now.",
+		malformed: "A download grant is required.",
+		wrong_type: "That is not a download grant.",
+		bad_signature: "That download grant is not valid.",
+		expired: "Your download grant has expired. Try again.",
+		wrong_work: "That download grant is for another Work.",
+		wrong_reader: "That download grant is for another account.",
+		wrong_file: "That download grant is for another file.",
+	};
+	return { error: messages[reason], code: `grant_${reason}` };
+}
+
 const createWorkBody = zValidator("json", createWorkSchema, invalidBody);
 const updateWorkBody = zValidator("json", updateWorkSchema, invalidBody);
 
@@ -2226,9 +2261,24 @@ export async function workAccessFor(
 	c: Parameters<typeof getOptionalUserId>[0],
 	work: WorkRow,
 ): Promise<AccessResultLike> {
+	return (await workAccessRequestFor(c, work)).access;
+}
+
+/**
+ * The same resolution, with the two facts the delivery rules turn on.
+ *
+ * `userId` is the signed-in reader and `sharedBy` the sharer whose link the request rode.
+ * The download route needs both: a share link is its own credential and needs no grant,
+ * while a signed-in request must present one. Returning them beside the verdict keeps the
+ * two lookups this resolver already did from being repeated by the caller.
+ */
+export async function workAccessRequestFor(
+	c: Parameters<typeof getOptionalUserId>[0],
+	work: WorkRow,
+): Promise<{ access: AccessResultLike; userId: number | null; sharedBy: number | null }> {
 	const { userId, sharedBy } = await requesterFor(c, work.id);
 	const ctx = await buildAccessContext(userId, { workIds: [work.id], sharedBy });
-	return resolveAccessSync(work as AccessibleWork, ctx);
+	return { access: resolveAccessSync(work as AccessibleWork, ctx), userId, sharedBy };
 }
 
 /**
@@ -4161,9 +4211,99 @@ const contentRoutes = new Hono()
 	 * gap predates this change and is not closed by it; closing it needs a signed-URL
 	 * handoff, and no installer has been built yet.
 	 *
+	 * ── The access artifacts ──────────────────────────────────────────────────────
+	 *
+	 * A receipt is written into the reader's space by the job, not here. What lives on this
+	 * router is the key a third party checks it with, and the grant file delivery needs.
+	 *
+	 * 🚨 **The issuer document is the public half of the signing key, and nothing else.** It
+	 * is served without auth because checking a receipt without Anthers is the point of a
+	 * receipt; a deployment with no key answers 503 rather than publishing an empty JWKS a
+	 * verifier could mistake for a revocation.
+	 */
+	.get("/access/issuer.json", (c) => {
+		const document = accessIssuerDocument();
+		if (!document) return c.json({ error: "No access key is configured." }, 503);
+		return c.json(document, 200, { "Cache-Control": "public, max-age=300" });
+	})
+
+	/**
+	 * Mint a short-lived grant for one file of one Work.
+	 *
+	 * ⭐ **The grant names the file the download is about to serve**, so a grant for one
+	 * asset cannot open another. The ledger decides whether there is anything to grant;
+	 * this only states it in a form delivery can check and a third party could verify.
+	 *
+	 * ⚠️ **A share link is not a grant and cannot mint one.** A recipient with no account
+	 * has no DID for the grant to name; the share token is their credential and the download
+	 * route accepts it in place of a grant.
+	 */
+	.post("/works/:id/grant", requireAuth, grantBody, async (c) => {
+		const work = await findWorkRow(c.req.param("id") ?? "");
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		const user = c.get("user");
+
+		const access = await workAccessFor(c, work);
+		if (!access.canAccess) {
+			return c.json({ error: "Purchase or subscription required", access }, 403);
+		}
+
+		const [asset] = await db
+			.select({ file: assets.file })
+			.from(assets)
+			.where(and(eq(assets.id, c.req.valid("json").assetId), eq(assets.workId, work.id)))
+			.limit(1);
+		if (!asset) return c.json({ error: "Asset not found" }, 404);
+
+		const [reader] = await db
+			.select({ did: users.atprotoDid })
+			.from(users)
+			.where(eq(users.id, user.id))
+			.limit(1);
+		if (!reader?.did) return c.json({ error: "This account has no identity." }, 409);
+
+		if (!accessSigningKey()) {
+			return c.json({ error: "Access grants are not available right now." }, 503);
+		}
+
+		const [purchase] = await db
+			.select({ id: purchases.id })
+			.from(purchases)
+			.where(
+				and(
+					eq(purchases.buyerId, user.id),
+					eq(purchases.workId, work.id),
+					eq(purchases.status, "completed"),
+				),
+			)
+			.orderBy(desc(purchases.id))
+			.limit(1);
+
+		try {
+			const { token, payload } = mintAccessGrant({
+				workId: work.id,
+				workUri: work.atprotoUri,
+				receipt: purchase ? receiptIdFor(purchase.id, "purchase") : null,
+				reader: reader.did,
+				basis: access.reason,
+				files: [asset.file],
+			});
+			return c.json({ grant: token, expiresAt: payload.expiresAt });
+		} catch {
+			return c.json({ error: "Access grants are not available right now." }, 503);
+		}
+	})
+
+	/*
 	 * ── Access-checked asset download ─────────────────────────────────────────────
 	 * Assets belong to a Work, and the Work carries the gate. No post is involved: an
 	 * entitled user can download from the Catalog whether or not anything was announced.
+	 *
+	 * 🚨 **A signed-in download must present a grant; a share link is its own credential.**
+	 * The ledger is read first and still decides, exactly as before — the grant adds the
+	 * scope (this reader, this Work, this file) and the ten-minute life that makes a refund
+	 * stop delivery at the next grant rather than never. Expiry is enforced here so a
+	 * client that cached one must ask again.
 	 */
 	.post("/works/:id/assets/:assetId/download", requireUserOrShareLink, async (c) => {
 		const work = await findWorkRow(c.req.param("id"));
@@ -4177,9 +4317,29 @@ const contentRoutes = new Hono()
 		if (!asset) return c.json({ error: "Asset not found" }, 404);
 
 		// Enforce access server-side — the UI gate is not the source of truth.
-		const access = await workAccessFor(c, work);
+		const { access, userId, sharedBy } = await workAccessRequestFor(c, work);
 		if (!access.canAccess) {
 			return c.json({ error: "Purchase or subscription required", access }, 403);
+		}
+
+		if (sharedBy === null) {
+			const token = c.req.header("x-anthers-grant")?.trim() ?? "";
+			const [reader] = userId
+				? await db
+						.select({ did: users.atprotoDid })
+						.from(users)
+						.where(eq(users.id, userId))
+						.limit(1)
+				: [];
+			const verdict =
+				reader?.did && token
+					? verifyAccessGrant(token, {
+							readerDid: reader.did,
+							workId: work.id,
+							fileKey: asset.file,
+						})
+					: ({ ok: false, reason: token ? "wrong_reader" : "malformed" } as const);
+			if (!verdict.ok) return c.json(grantRefusal(verdict.reason), 403);
 		}
 
 		db.update(works)

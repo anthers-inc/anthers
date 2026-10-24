@@ -23,6 +23,7 @@
  * sends here. Inbox was removed the same day for having no backend to stand on.
  */
 
+import { BOOKSHELF_WORK_TYPES } from "@anthers/shared/content";
 import {
 	asRecipeCandidates,
 	asRecipeMix,
@@ -43,9 +44,18 @@ import { ArrowPathIcon, MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import FeedTile from "../components/cards/FeedTile";
-import SharedFilterSections from "../components/layout/SharedFilterSections";
-import SharedLensesSection from "../components/layout/SharedLensesSection";
+import SharedFilterSections, {
+	SHARED_FILTER_TYPES,
+} from "../components/layout/SharedFilterSections";
+import SharedLensesSection, { ALL_LENS_IDS } from "../components/layout/SharedLensesSection";
 import TabHeader from "../components/layout/TabHeader";
+import BookshelfLens from "../components/library/BookshelfLens";
+import ChannelGuideLens, {
+	channelGuideChannelsFromShelf,
+} from "../components/library/ChannelGuideLens";
+import MusicDial from "../components/library/MusicDial";
+import MusicLens from "../components/library/MusicLens";
+import { feedLensItems } from "../lib/feed-lenses";
 
 /** One entry of the feed's stream, as `?scope=global` sends it. */
 type FeedEntry = {
@@ -150,6 +160,37 @@ export default function DiscoverPage() {
 	const search = searchParams.get("search") ?? "";
 	/** The lens is an organizing metaphor over the stream, never a mode. */
 	const lens = searchParams.get("lens") ?? "";
+	/** The Music Player's dial, carried the way the Network carries it. */
+	const includeSpoken = searchParams.get("spoken") === "1";
+
+	/**
+	 * The Type selection rides the request as the stream's server-side condition —
+	 * except under a lens, where the lens decides what it draws on and the rows outside
+	 * it are grayed. Dropping it here is what keeps a lens a view of the corpus rather
+	 * than a filter applied before the corpus arrives.
+	 */
+	const mediaType = lens ? "" : contentType;
+
+	/**
+	 * The Work types the active lens draws on, or null with No Lens. The Type rows
+	 * outside this set gray out while it is active — the Library's rule, applied to the
+	 * stream.
+	 */
+	const lensIncluded = useMemo<string[] | null>(() => {
+		if (lens === "music") return includeSpoken ? ["music", "audio"] : ["music"];
+		if (lens === "channel-guide") return ["video"];
+		if (lens === "bookshelf") return [...BOOKSHELF_WORK_TYPES];
+		return null;
+	}, [lens, includeSpoken]);
+
+	const unavailableTypes = useMemo(() => {
+		if (!lensIncluded) return undefined;
+		const set = new Set<string>();
+		for (const type of SHARED_FILTER_TYPES) {
+			if (type.id && !lensIncluded.includes(type.id)) set.add(type.id);
+		}
+		return set;
+	}, [lensIncluded]);
 
 	const window = asRecipeWindow(searchParams.get("window"));
 	const candidates = asRecipeCandidates(searchParams.get("candidates"));
@@ -176,7 +217,8 @@ export default function DiscoverPage() {
 	// how the feed expresses "everyone" versus "your network", and `mix` is the recipe's
 	// ordering stage; both are the route's to run. The refresh control bumps this
 	// counter; the feed route has no cache buster, so the value exists only to make the
-	// dependency real to the linter.
+	// dependency real to the linter. `mediaType` is empty under a lens, so the lens draws
+	// on every type it covers.
 	useEffect(() => {
 		void refreshKey;
 		setLoading(true);
@@ -185,10 +227,10 @@ export default function DiscoverPage() {
 				query: {
 					scope: candidates === "network" ? "network" : "global",
 					mix,
-					...(contentType === "posts"
+					...(mediaType === "posts"
 						? { kind: "posts" }
-						: contentType
-							? { media_type: contentType }
+						: mediaType
+							? { media_type: mediaType }
 							: {}),
 					...(access ? { access } : {}),
 					...(tags ? { tags } : {}),
@@ -201,7 +243,7 @@ export default function DiscoverPage() {
 			})
 			.catch(() => {})
 			.finally(() => setLoading(false));
-	}, [contentType, access, tags, candidates, mix, refreshKey]);
+	}, [mediaType, access, tags, candidates, mix, refreshKey]);
 
 	// The stream filters the already-fetched page by the window and the term. The
 	// server applies the Type, Access and Tags filters; these two are presentation
@@ -225,15 +267,35 @@ export default function DiscoverPage() {
 		});
 	}, [entries, window, search]);
 
+	/** The lens's corpus: the stream's releases, translated once per fetch. */
+	const lensDraw = useMemo(() => feedLensItems(visibleEntries), [visibleEntries]);
+
 	// Sidebar: the lens is the page's own section, and the shared filters sit below the
 	// divider the layout draws, exactly as on the Network and Library tabs. The URL
 	// carries the lens, so a link to "the stream under the Music Player" survives.
+	// Every row is live here (Parker, 2026-10-23): a lens is a view over this stream, and
+	// the Music Player's dial rides its row the way it does on the other two tabs.
 	useEffect(() => {
-		setPageContent(<SharedLensesSection lens={lens} onLens={(id) => updateParams({ lens: id })} />);
+		setPageContent(
+			<SharedLensesSection
+				lens={lens}
+				onLens={(id) => updateParams({ lens: id })}
+				live={ALL_LENS_IDS}
+				extras={{
+					music: (
+						<MusicDial
+							includeSpoken={includeSpoken}
+							onIncludeSpoken={(on) => updateParams({ spoken: on ? "1" : "" })}
+						/>
+					),
+				}}
+			/>,
+		);
 		setSharedContent(
 			<SharedFilterSections
 				type={contentType}
 				onType={(id) => updateParams({ media_type: id })}
+				unavailableTypes={unavailableTypes}
 				tags={tags}
 				onTags={(value) => updateParams({ tags: value })}
 				access={{ value: access, onAccess: (value) => updateParams({ access: value }) }}
@@ -243,7 +305,17 @@ export default function DiscoverPage() {
 			setPageContent(null);
 			setSharedContent(null);
 		};
-	}, [setPageContent, setSharedContent, contentType, access, tags, lens, updateParams]);
+	}, [
+		setPageContent,
+		setSharedContent,
+		contentType,
+		unavailableTypes,
+		access,
+		tags,
+		lens,
+		includeSpoken,
+		updateParams,
+	]);
 
 	const recipe = streamRecipe({ window, candidates, mix });
 
@@ -329,6 +401,20 @@ export default function DiscoverPage() {
 					<div className="flex justify-center py-16">
 						<LoadingSpinner size="lg" />
 					</div>
+				) : lens === "music" ? (
+					/* A lens reorganizes the stream, never refetches it: the corpus is the
+					   same entries the grid draws. `scope="discovery"` opens a release whole,
+					   as the Network's does — nothing here is a kept shelf. */
+					<MusicLens items={lensDraw} includeSpoken={includeSpoken} scope="discovery" />
+				) : lens === "bookshelf" ? (
+					/* The same shelf metaphor over the stream's written Works: spines instead
+					   of tiles, alphabetical by title. */
+					<BookshelfLens items={lensDraw} source="discovery" />
+				) : lens === "channel-guide" ? (
+					/* The stream's videos as creator channels, latest at the top of each
+					   column. The feed ships no payload, so the guide reads the delivery
+					   address `feedLensItems` composes for it. */
+					<ChannelGuideLens channels={channelGuideChannelsFromShelf(lensDraw)} source="discovery" />
 				) : visibleEntries.length === 0 ? (
 					<EmptyState
 						title="Nothing new here"

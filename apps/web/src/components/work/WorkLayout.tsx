@@ -53,6 +53,7 @@ import {
 } from "../../lib/reading-positions";
 import { trackFromWork } from "../../lib/tracks";
 import { useSeekPlayer, WorkPlayerProvider } from "../../lib/work-player";
+import { WorkTheaterProvider } from "../../lib/work-theater";
 import GalleryView from "../media/GalleryView";
 import CreditConfirmationControls from "./CreditConfirmationControls";
 import { LyricsBody, WORK_LYRICS_CLASS, WORK_LYRICS_HEADING_CLASS } from "./LyricsPanel";
@@ -691,7 +692,10 @@ export function WorkDeliverable({
 		);
 	};
 	return (
-		<>
+		// The provider the media card and every player read: theater mode is the page's
+		// state, and the control that flips it lives in each player's transport. The embed
+		// route opts out — a bare window has no page for the work to grow into.
+		<WorkTheaterProvider enabled={framed}>
 			{/*
 			 * A video's ladder is the offered experience, and the original is the
 			 * baseline underneath it (70.06): an existing manifest keeps today's
@@ -968,7 +972,7 @@ export function WorkDeliverable({
 			 * is an <iframe>, an image is an <img>. The players own their own footer;
 			 * everything else has this one.
 			 */}
-		</>
+		</WorkTheaterProvider>
 	);
 }
 

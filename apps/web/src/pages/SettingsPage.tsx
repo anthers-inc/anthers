@@ -15,13 +15,16 @@ import {
 import {
 	BROWSER_RESERVED_CHORDS,
 	canonicalChord,
-	DEFAULT_SEARCH_SHORTCUTS,
+	DEFAULT_KEYBOARD_SHORTCUTS,
 	formatChord,
+	isPlayerShortcutAction,
+	KEYBOARD_SHORTCUT_ACTIONS,
+	type KeyboardShortcutAction,
+	type KeyboardShortcuts,
 	keyFromEvent,
-	resolveSearchShortcuts,
-	SEARCH_SHORTCUT_ACTIONS,
-	type SearchShortcutAction,
-	type SearchShortcuts,
+	PAGE_SHORTCUT_ACTIONS,
+	PLAYER_SHORTCUT_ACTIONS,
+	resolveKeyboardShortcuts,
 } from "@anthers/shared/keybindings";
 import SignedInAccountCard from "@anthers/web-shared/account/SignedInAccountCard";
 import { useAuth } from "@anthers/web-shared/auth";
@@ -3041,12 +3044,17 @@ function SupporterListingSection() {
 }
 
 /**
- * The search bar's two shortcuts, rebindable per account.
+ * The account's rebindable shortcuts: the search bar's two and a player's two.
  *
  * 🚨 **A chord is validated by the shared grammar before it is saved, and the server
  * validates it again.** The recorder is a convenience; the route is the check. That is
  * also why the card surfaces the server's message instead of inventing its own — a
  * setting that appears to save and does not is the one outcome worth failing loudly on.
+ *
+ * The scopes are what decide whether a bare key is allowed. Search and Filter are heard
+ * across the page and must carry a modifier, or they would eat typing; Full screen and
+ * Theater mode are heard by a player that already has focus, where a bare letter is the
+ * binding people expect.
  *
  * Recording listens in the capture phase and stops propagation so the bar's own listener
  * (and the browser) never acts on the chord being recorded.
@@ -3055,25 +3063,25 @@ function KeyboardShortcutsSection() {
 	const { user, refreshUser } = useAuth();
 	const apple = isApplePlatform();
 	const stored = useMemo(
-		() => resolveSearchShortcuts(user?.searchShortcuts),
-		[user?.searchShortcuts],
+		() => resolveKeyboardShortcuts(user?.keyboardShortcuts),
+		[user?.keyboardShortcuts],
 	);
-	const [draft, setDraft] = useState<SearchShortcuts>(stored);
-	const [recording, setRecording] = useState<SearchShortcutAction | null>(null);
+	const [draft, setDraft] = useState<KeyboardShortcuts>(stored);
+	const [recording, setRecording] = useState<KeyboardShortcutAction | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [notice, setNotice] = useState<{ tone: "error" | "info"; text: string } | null>(null);
 
 	useEffect(() => setDraft(stored), [stored]);
 
 	const save = useCallback(
-		async (next: SearchShortcuts) => {
+		async (next: KeyboardShortcuts) => {
 			setSaving(true);
 			setNotice(null);
 			try {
 				const res = await apiFetch("/api/accounts/me", {
 					method: "PATCH",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ searchShortcuts: next }),
+					body: JSON.stringify({ keyboardShortcuts: next }),
 				});
 				if (!res.ok) {
 					const body = (await res.json().catch(() => ({}))) as { error?: unknown };
@@ -3098,6 +3106,7 @@ function KeyboardShortcutsSection() {
 
 	useEffect(() => {
 		if (!recording) return;
+		const playerScoped = isPlayerShortcutAction(recording);
 		const handler = (event: KeyboardEvent) => {
 			event.preventDefault();
 			event.stopPropagation();
@@ -3123,19 +3132,21 @@ function KeyboardShortcutsSection() {
 			if (event.shiftKey) parts.push("Shift");
 			parts.push(key);
 
-			const chord = canonicalChord(parts.join("+"));
+			const chord = canonicalChord(parts.join("+"), { bare: playerScoped });
 			if (!chord) {
 				setNotice({
 					tone: "error",
-					text: `A shortcut needs ${apple ? "Command, Control, or Option" : "Ctrl or Alt"} plus one other key.`,
+					text: `A page shortcut needs ${apple ? "Command, Control, or Option" : "Ctrl or Alt"} plus one other key.`,
 				});
 				return;
 			}
-			const other = recording === "search" ? draft.filter : draft.search;
-			if (chord === other) {
+			const other = KEYBOARD_SHORTCUT_ACTIONS.filter((action) => action !== recording).map(
+				(action) => draft[action],
+			);
+			if (other.includes(chord)) {
 				setNotice({
 					tone: "error",
-					text: "The other search action already uses that combination.",
+					text: "Another shortcut already uses that combination.",
 				});
 				return;
 			}
@@ -3147,14 +3158,27 @@ function KeyboardShortcutsSection() {
 		return () => window.removeEventListener("keydown", handler, true);
 	}, [recording, draft, apple, save]);
 
-	const rowCopy: Record<SearchShortcutAction, { label: string; hint: string }> = {
+	const groups: Array<{ title: string; actions: readonly KeyboardShortcutAction[] }> = [
+		{ title: "Anywhere on the page", actions: PAGE_SHORTCUT_ACTIONS },
+		{ title: "While a player has focus", actions: PLAYER_SHORTCUT_ACTIONS },
+	];
+
+	const rowCopy: Record<KeyboardShortcutAction, { label: string; hint: string }> = {
 		search: {
 			label: "Search everything",
 			hint: "Opens the global search across creators, Works, Projects, Posts, modes, and settings.",
 		},
 		filter: {
 			label: "Filter this view",
-			hint: `Rebinding this gives ${formatChord(DEFAULT_SEARCH_SHORTCUTS.filter, apple)} back to the browser's find.`,
+			hint: `Rebinding this gives ${formatChord(DEFAULT_KEYBOARD_SHORTCUTS.filter, apple)} back to the browser's find.`,
+		},
+		fullscreen: {
+			label: "Full screen",
+			hint: "Hands the work the whole monitor through the browser's own full-screen mode.",
+		},
+		theater: {
+			label: "Theater mode",
+			hint: "Fills the area inside the topbar and sidebar with the work, leaving the rest of the page a scroll away.",
 		},
 	};
 
@@ -3163,55 +3187,65 @@ function KeyboardShortcutsSection() {
 			<div className="card-body">
 				<h3 className="card-title text-lg">Keyboard Shortcuts</h3>
 				<p className="text-sm text-base-content/60">
-					The two shortcuts that open the search bar. They follow this account, so they work on
-					every device you sign in on.
+					These follow your account, so they work on every device you sign in on. Player shortcuts
+					work once the player has focus.
 				</p>
 
-				<div className="mt-2 divide-y divide-base-300/50">
-					{SEARCH_SHORTCUT_ACTIONS.map((action) => {
-						const chord = draft[action];
-						const isDefault = chord === DEFAULT_SEARCH_SHORTCUTS[action];
-						const copy = rowCopy[action];
-						return (
-							<div key={action} className="flex flex-wrap items-center justify-between gap-2 py-3">
-								<div className="min-w-0">
-									<p className="text-sm font-medium">{copy.label}</p>
-									<p className="text-xs text-base-content/50">{copy.hint}</p>
-								</div>
-								<div className="flex shrink-0 items-center gap-2">
-									<kbd className="kbd kbd-sm">{formatChord(chord, apple)}</kbd>
-									<button
-										type="button"
-										className="btn btn-ghost btn-xs"
-										disabled={saving}
-										onClick={() => {
-											setRecording(action);
-											setNotice(null);
-										}}
+				{groups.map((group) => (
+					<div key={group.title} className="mt-2">
+						<p className="text-xs font-semibold uppercase tracking-wider text-base-content/45">
+							{group.title}
+						</p>
+						<div className="divide-y divide-base-300/50">
+							{group.actions.map((action) => {
+								const chord = draft[action];
+								const isDefault = chord === DEFAULT_KEYBOARD_SHORTCUTS[action];
+								const copy = rowCopy[action];
+								return (
+									<div
+										key={action}
+										className="flex flex-wrap items-center justify-between gap-2 py-3"
 									>
-										{recording === action ? "Press keys…" : "Change"}
-									</button>
-									<button
-										type="button"
-										className="btn btn-ghost btn-xs"
-										disabled={saving || isDefault}
-										onClick={() =>
-											void save({ ...draft, [action]: DEFAULT_SEARCH_SHORTCUTS[action] })
-										}
-									>
-										Reset
-									</button>
-								</div>
-								{BROWSER_RESERVED_CHORDS.has(chord) && (
-									<p className="w-full text-xs text-warning">
-										Your browser may keep this combination for itself. If it does, the shortcut will
-										not open the bar.
-									</p>
-								)}
-							</div>
-						);
-					})}
-				</div>
+										<div className="min-w-0">
+											<p className="text-sm font-medium">{copy.label}</p>
+											<p className="text-xs text-base-content/50">{copy.hint}</p>
+										</div>
+										<div className="flex shrink-0 items-center gap-2">
+											<kbd className="kbd kbd-sm">{formatChord(chord, apple)}</kbd>
+											<button
+												type="button"
+												className="btn btn-ghost btn-xs"
+												disabled={saving}
+												onClick={() => {
+													setRecording(action);
+													setNotice(null);
+												}}
+											>
+												{recording === action ? "Press keys…" : "Change"}
+											</button>
+											<button
+												type="button"
+												className="btn btn-ghost btn-xs"
+												disabled={saving || isDefault}
+												onClick={() =>
+													void save({ ...draft, [action]: DEFAULT_KEYBOARD_SHORTCUTS[action] })
+												}
+											>
+												Reset
+											</button>
+										</div>
+										{BROWSER_RESERVED_CHORDS.has(chord) && (
+											<p className="w-full text-xs text-warning">
+												Your browser may keep this combination for itself, in which case it will not
+												reach Anthers.
+											</p>
+										)}
+									</div>
+								);
+							})}
+						</div>
+					</div>
+				))}
 
 				<p className="mt-2 text-xs text-base-content/50" aria-live="polite">
 					{recording

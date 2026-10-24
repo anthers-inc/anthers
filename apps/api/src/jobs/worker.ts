@@ -38,6 +38,7 @@ import { runRetentionSweep } from "../services/retention.js";
 import { sweepSignupChallenges } from "../services/signup-challenges.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { publishFundLedger } from "../services/time-pool-fund.js";
+import { type AccessReceiptsJobData, accessReceiptsJob } from "./access-receipts.js";
 import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { runConnectionCensus } from "./connection-census.js";
 import { runDeadlineReminderSweep } from "./deadline-reminders.js";
@@ -189,6 +190,18 @@ async function start() {
 		async (jobs) => {
 			for (const job of jobs) {
 				await spaceBackupJob(job.data);
+			}
+		},
+	);
+
+	// The receipts owed to readers' spaces. A minute apart, because the row is the worklist
+	// and a settled purchase's proof should not lag the purchase.
+	await queue.work<AccessReceiptsJobData>(
+		QUEUES.ACCESS_RECEIPTS,
+		{ localConcurrency: 1 },
+		async (jobs) => {
+			for (const job of jobs) {
+				await accessReceiptsJob(job.data);
 			}
 		},
 	);
