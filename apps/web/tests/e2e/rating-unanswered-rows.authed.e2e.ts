@@ -104,9 +104,12 @@ test("a Work rated before the matrix is released only once every row is answered
 	// The release field waits for the same reason, said beside its control.
 	await page.getByRole("tab", { name: "Details" }).click();
 	await page.getByRole("button", { name: "Edit Release" }).click();
-	const released = page.getByLabel("Released to my public Catalog");
+	const saveRelease = page.getByRole("button", { name: "Save Release" });
 	await expect(page.getByText(/answer every row of the rating first/i)).toBeVisible();
-	await expect(released).toBeDisabled();
+	// The field offers a future time while unrated — that is a schedule — and refuses the
+	// release-now the Now button fills in.
+	await page.getByRole("button", { name: "Now", exact: true }).click();
+	await expect(saveRelease).toBeDisabled();
 	// (The schedule input itself stays offered while unrated, as the batch editor's rule had it.)
 
 	// Answering the rows is the whole fix: the None heading answers them all in one click,
@@ -117,12 +120,11 @@ test("a Work rated before the matrix is released only once every row is answered
 	await matrix.getByRole("button", { name: "None", exact: true }).click();
 	await page.getByRole("button", { name: "Save Rating" }).click();
 	// ⭐ The flip back finds the release edit still open (TabPanels keeps every panel
-	//    mounted), answering the saved rows: the checkbox the first opening showed
-	//    disabled is enabled again by the answer the save carried.
+	//    mounted), answering the saved rows: the draft the first opening could not save
+	//    is savable now, on the answer the rating save carried.
 	await page.getByRole("tab", { name: "Details" }).click();
-	await expect(released).toBeEnabled({ timeout: 15_000 });
-	await released.check();
-	await page.getByRole("button", { name: "Save Release" }).click();
+	await expect(saveRelease).toBeEnabled({ timeout: 15_000 });
+	await saveRelease.click();
 
 	// POLLED: the DB read waits for what the server holds, rather than racing the save's
 	// response home under a full suite's load.

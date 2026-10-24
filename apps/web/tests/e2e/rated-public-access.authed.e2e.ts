@@ -75,14 +75,13 @@ test("a creator releasing rated work into Public Access is told who will see it"
 	// field, the rating matrix and the access table each carry their own edit state now,
 	// so the walk visits them in turn and re-opens the release read after each change.
 	const note = page.getByText(NOTE);
-	const released = page.getByLabel("Released to my public Catalog");
 
 	// A Mature Work in Public Access that is not being released says nothing yet.
 	await page.getByRole("button", { name: "Edit Release" }).click();
-	await expect(released).toBeEnabled();
 	await expect(note).toHaveCount(0);
 
-	await released.check();
+	// Now makes the draft a release-now — the act every note in the field qualifies.
+	await page.getByRole("button", { name: "Now", exact: true }).click();
 	await expect(note).toBeVisible();
 
 	// The rating alone never decides it: General is met by every user. The walk saves
