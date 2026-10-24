@@ -338,6 +338,14 @@ envs:
   - key: ATPROTO_CLIENT_JWK
     scope: RUN_TIME
     type: SECRET
+  # The key Anthers signs access receipts and delivery grants with: private half only, since
+  # the public JWKS is derived and served at /api/content/access/issuer.json. A deployment
+  # without it signs no receipt (the job records why) and mints no grant, rather than
+  # publishing a key nothing can verify against. Separate from the attestation key above so
+  # rotating one does not invalidate the other. Filed in Bitwarden Secrets ("Anthers Prod").
+  - key: ACCESS_SIGNING_JWK
+    scope: RUN_TIME
+    type: SECRET
 
 ingress:
   rules:
