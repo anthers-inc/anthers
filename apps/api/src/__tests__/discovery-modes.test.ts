@@ -60,6 +60,7 @@ async function feed(cookie: string, query = "") {
 	return (await res.json()) as {
 		entries: Array<{
 			kind: "post" | "release";
+			id: number;
 			title: string;
 			source: string;
 			creatorId: number;
