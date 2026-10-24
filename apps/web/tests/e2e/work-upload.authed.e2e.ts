@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Uploading a video Work, walked in a browser: the Work exists the moment its file is picked,
- * the creator is on its Edit page while the file is still going up, and a save made after the
- * file lands keeps the file.
+ * Uploading a video Work, walked in a browser: the Work is drafted from a name and a kind,
+ * its file arrives on its own page from the empty media card, the creator edits while the
+ * file is still going up, and a save made after the file lands keeps the file.
  *
- * 🚨 **The save is the assertion worth the spec.** The Edit page is opened before the file
+ * 🚨 **The save is the assertion worth the spec.** The page is opened before the file
  * arrives, so everything it loaded says the Work has no file, and a save that sent what it
  * loaded would erase the file the upload attached a moment earlier. Nothing on screen would
  * show it — the save succeeds and lands on the Catalog — until the Work turned out to have no
@@ -26,8 +26,14 @@ import { join } from "node:path";
 import { db } from "@anthers/db/client";
 import { transcodingJobs, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { zipSync } from "fflate";
-import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
+import {
+	API_URL,
+	createDraftWork,
+	expect,
+	signInAsMediaFixture,
+	test,
+	WEB_ORIGIN,
+} from "./fixtures";
 
 const TITLE_PREFIX = "Upload walk ";
 const STEM = `${TITLE_PREFIX}${Date.now()}`;
@@ -131,25 +137,24 @@ test.describe.configure({ mode: "serial" });
  *
  * The page used to state every accepted format at once, above the form: four media a creator
  * had to sort through for the one they chose, and nothing at all about a build's platform.
- * The card now names the kind on screen (Parker, 2026-10-19), so this walk asserts the fact a
- * creator actually needs at the moment of choosing — and that it sits under the picker.
+ * The card now names the kind on screen (Parker, 2026-10-19) and lives in the Work's media
+ * area (Parker, 2026-10-23), so this walk asserts the fact a creator needs at the moment of
+ * filling the Work — and that it sits under the picker it explains.
  */
-test("the Upload page states what the chosen kind takes, under its picker", async ({
+test("the media card states what the chosen kind takes, under its picker", async ({
 	page,
 	context,
 }) => {
 	session = await signInAsMediaFixture(context);
-	await page.goto("/studio/works/new");
-	await expect(page.getByRole("heading", { name: "Upload a Work" })).toBeVisible();
 
-	// Video is the page's default kind, and its card carries the accepted set and the cap.
+	// Video: its card carries the accepted set and the cap, below the dropper.
+	await page.goto((await createDraftWork(page, { type: "video", title: `${STEM} facts` })).url);
 	const videoCard = page.getByRole("region", { name: "What Anthers accepts for a video" });
 	await expect(videoCard).toBeVisible();
 	await expect(videoCard).toContainText("H.264");
 	await expect(videoCard).toContainText("VP9");
 	await expect(videoCard).toContainText("2 GB");
 
-	// It sits below the picker rather than above the form.
 	const picker = page.getByRole("button", { name: "Drop a video file or click to browse" });
 	const pickerBox = await picker.boundingBox();
 	const cardBox = await videoCard.boundingBox();
@@ -158,123 +163,96 @@ test("the Upload page states what the chosen kind takes, under its picker", asyn
 	expect(cardBox?.y ?? 0).toBeGreaterThan(pickerBox?.y ?? 0);
 
 	// A game's card is about builds, and its middle fact follows the Platform select.
-	await page.getByLabel("Type").selectOption("game");
+	await page.goto((await createDraftWork(page, { type: "game", title: `${STEM} game` })).url);
 	const gameCard = page.getByRole("region", { name: "What Anthers accepts for a game" });
 	await expect(gameCard).toBeVisible();
 	await expect(gameCard).toContainText(".exe");
-	await page.getByLabel("Platform").selectOption("mac");
+	await page.getByRole("combobox", { name: "Platform" }).selectOption("mac");
 	await expect(gameCard).toContainText(".dmg");
 	await expect(gameCard).not.toContainText(".exe");
 
-	// Writing uploads nothing, and the card says so instead of listing media formats.
-	await page.getByLabel("Type").selectOption("text");
-	await expect(page.getByRole("region", { name: "What a written Work is" })).toContainText(
-		"Nothing is uploaded",
-	);
-
 	// A comic's card no longer offers a PDF, and says how to prepare the pages.
+	await page.goto((await createDraftWork(page, { type: "comic", title: `${STEM} comic` })).url);
 	const comicCard = page.getByRole("region", { name: "What Anthers accepts for a comic" });
-	await page.getByLabel("Type").selectOption("comic");
 	await expect(comicCard).toContainText("JPG or PNG");
 	await expect(comicCard).toContainText("PDF or a CBZ isn't taken");
 });
 
 /**
- * A Web build goes up from the Upload page as the hosted lane — a folder or a `.zip` of the
- * engine's export, in one step, with the entry and the threaded question answered where the
- * build row fixes them.
+ * A Web build goes up from the Work's media area as the hosted lane — the export's files,
+ * with the entry the picker guessed, answered where the build row fixes them.
  *
- * What this walk proves is the join the page-one lane exists for: the pick becomes a Work, its
- * files reach the hosted-build rows with the paths the export wrote, and the Work's page shows
- * the build rather than an empty section. The zip half is the source that never had a directory
- * picker — the archive is unpacked in the browser and registers the same list.
+ * What this walk proves is the join: the pick becomes a completed hosted build, its files
+ * reach the hosted-build rows with the paths the export wrote, and the Work's page shows the
+ * build rather than an empty section. The folder picker is the one the Work page carries;
+ * the `.zip` unpacker that the retired Upload page offered has no caller now.
  */
-for (const source of [
-	{ kind: "folder", title: "web folder", entry: "web/index.html" },
-	{ kind: "zip", title: "web zip", entry: "index.html" },
-] as const) {
-	test(`a ${source.kind} of an export becomes a hosted build on the Upload page`, async ({
-		page,
-		context,
-	}) => {
-		session = await signInAsMediaFixture(context);
-		const title = `${STEM} ${source.title}`;
-		await sweep();
+test("a folder of an export becomes a hosted build from the media card", async ({
+	page,
+	context,
+}) => {
+	session = await signInAsMediaFixture(context);
+	const title = `${STEM} web folder`;
+	await sweep();
 
-		const dir = mkdtempSync(join(tmpdir(), "anthers-webbuild-"));
-		try {
-			const folder = join(dir, "web");
-			writeExport(folder);
-			let picked = folder;
-			if (source.kind === "zip") {
-				// No system archiver is assumed on CI: the archive is built with the same
-				// library the browser unpacks it with.
-				picked = join(dir, "export.zip");
-				const entries: Record<string, Uint8Array> = {};
-				for (const [name] of EXPORT_FILES) {
-					entries[name] = new Uint8Array(readFileSync(join(folder, name)));
-				}
-				writeFileSync(picked, zipSync(entries));
-			}
+	const dir = mkdtempSync(join(tmpdir(), "anthers-webbuild-"));
+	try {
+		const folder = join(dir, "web");
+		writeExport(folder);
 
-			await page.goto("/studio/works/new");
-			await page.getByLabel("Type").selectOption("game");
-			await page.getByLabel("Platform").selectOption("web");
-			await page.getByLabel("Title").fill(title);
+		await page.goto((await createDraftWork(page, { type: "game", title })).url);
 
-			// The card tells the creator what a browser build needs, and the downloadable
-			// lane's picker is not what Web offers.
-			await expect(page.getByRole("region", { name: "What a browser build needs" })).toContainText(
-				"index.html",
-			);
-			await expect(page.getByText("Drop a build or click to browse")).toHaveCount(0);
+		// The card tells the creator what a browser build needs, and the downloadable
+		// lane's picker is not what Web offers.
+		await page.getByRole("combobox", { name: "Platform" }).selectOption("web");
+		await expect(page.getByRole("region", { name: "What a browser build needs" })).toContainText(
+			"index.html",
+		);
+		await expect(page.getByText("Drop a build or click to browse")).toHaveCount(0);
 
-			// The folder picker is first; the zip picker beside it. Both land the same list.
-			const picker = page.locator('input[type="file"]').nth(source.kind === "folder" ? 0 : 1);
-			await picker.setInputFiles(picked);
-			await expect(page.getByText(/5 files/)).toBeVisible();
+		// The Hosted Build section takes the export folder and guesses its entry.
+		await page.getByRole("button", { name: "Add browser build" }).click();
+		await page.locator('input[type="file"][webkitdirectory]').setInputFiles(folder);
+		await expect(page.getByPlaceholder("index.html")).toHaveValue("web/index.html");
+		await page.getByRole("button", { name: "Upload build" }).click();
 
-			await page.getByRole("button", { name: "Create Work and upload build" }).click();
-			await expect(page).toHaveURL(/\/works\/[^/?]+$/, { timeout: 15_000 });
-			await expect(page.getByRole("heading", { name: "Hosted Build", exact: true })).toBeVisible();
+		await expect(page.getByRole("heading", { name: "Hosted Build", exact: true })).toBeVisible();
 
-			// The build lands with the export's own paths, the entry it guessed, and every
-			// file the folder (or the archive) carried.
-			await expect
-				.poll(
-					async () => {
-						const work = (await ownWorks()).find((w) => w.title === title);
-						if (!work) return null;
-						const builds = await ownBuilds(work.id);
-						const build = builds?.find((b) => b.isPrimary);
-						return build ? `${build.entryPath}|${build.files.length}` : null;
-					},
-					{ timeout: 30_000 },
-				)
-				.toBe(`${source.entry}|5`);
+		// The build lands with the export's own paths, the entry it guessed, and every
+		// file the folder carried.
+		await expect
+			.poll(
+				async () => {
+					const work = (await ownWorks()).find((w) => w.title === title);
+					if (!work) return null;
+					const builds = await ownBuilds(work.id);
+					const build = builds?.find((b) => b.isPrimary);
+					return build ? `${build.entryPath}|${build.files.length}` : null;
+				},
+				{ timeout: 30_000 },
+			)
+			.toBe("web/index.html|5");
 
-			const work = (await ownWorks()).find((w) => w.title === title)!;
-			const [build] = (await ownBuilds(work.id)) ?? [];
-			const prefix = source.kind === "folder" ? "web/" : "";
-			expect(build.files.map((f) => f.path).sort()).toEqual(
-				[
-					`${prefix}index.audio.worklet.js`,
-					`${prefix}index.html`,
-					`${prefix}index.js`,
-					`${prefix}index.pck`,
-					`${prefix}index.wasm`,
-				].sort(),
-			);
-		} finally {
-			rmSync(dir, { recursive: true, force: true });
-		}
-	});
-}
+		const work = (await ownWorks()).find((w) => w.title === title)!;
+		const [build] = (await ownBuilds(work.id)) ?? [];
+		expect(build.files.map((f) => f.path).sort()).toEqual(
+			[
+				"web/index.audio.worklet.js",
+				"web/index.html",
+				"web/index.js",
+				"web/index.pck",
+				"web/index.wasm",
+			].sort(),
+		);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
 
 const rowFor = (page: import("@playwright/test").Page) =>
 	page.locator("tbody tr").filter({ hasText: STEM });
 
-test("a video Work is made from its file and edited while the file uploads", async ({
+test("a video Work takes its file on the page and edits while the file uploads", async ({
 	page,
 	context,
 }) => {
@@ -291,29 +269,25 @@ test("a video Work is made from its file and edited while the file uploads", asy
 		await route.continue();
 	});
 
-	await page.goto("/studio/works/new");
-	await expect(page.getByRole("heading", { name: "Upload a Work" })).toBeVisible();
+	const draft = await createDraftWork(page, { type: "video", title: STEM });
+	await page.goto(draft.url);
 
-	// Video is the default kind, and picking the file is the whole of creating the Work.
-	await page.locator('input[type="file"]').setInputFiles({
+	// The empty media card is the intake now: the dropper rides inside the box the Work
+	// will fill (the media-area task, 2026-10-23).
+	const box = page.getByRole("status").filter({ hasText: /player starts here/i });
+	await box.locator('input[type="file"]').setInputFiles({
 		name: `${STEM}.mp4`,
 		mimeType: "video/mp4",
 		buffer: clip(),
 	});
 
 	// ── On the Work's own page, while the file is still going up ────────────
-	// The upload's landing is the Work's page now (2026-10-13): the editing surface a
-	// creator meets while the file is still on the wire is the page itself, in editor mode.
+	// The page is the editing surface a creator meets while the file is still on the
+	// wire, and the View As row is its one mode marker.
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/, { timeout: 15_000 });
-	// The editing banner is gone (the View As task, 2026-10-16): the editor mode is
-	// what the page is, and the View As row on the Manage tab is its one marker.
 	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
-	// No title was typed, so the file's name became one — read as the title it is,
-	// not as a form field holding a file name.
 	await expect(page.locator("h1").filter({ hasText: STEM })).toBeVisible();
 	// The in-flight upload says where it is, and that the tab's life is the upload's.
-	// The top banner is scoped (`role=status`): the Manage tab, open by default now, rides
-	// the same warning inside its file section (the View As task, 2026-10-16).
 	await expect(page.getByRole("status").getByText(/Keep this tab open/)).toBeVisible();
 	// A Work whose file has not arrived cannot be released (`media_missing`), and the
 	// control says so rather than earning the refusal.
@@ -391,36 +365,41 @@ for (const source of [
 		),
 	},
 ] as const) {
-	test(`a ${source.label.toLowerCase()} is made from its ${source.type === "comic" ? "page image" : "PDF"}`, async ({
+	test(`a ${source.label.toLowerCase()} takes its ${source.type === "comic" ? "page image" : "PDF"} on the page`, async ({
 		page,
 		context,
 	}) => {
 		session = await signInAsMediaFixture(context);
+		const title = `${STEM} ${source.type}`;
 
-		await page.goto("/studio/works/new");
-		await page.getByLabel("Type").selectOption(source.type);
-		await page.locator('input[type="file"]').setInputFiles({
+		// Drafted with a kind and a name, then filled from the empty media card's set
+		// editor — the intake the media-area task put there (2026-10-23).
+		await page.goto((await createDraftWork(page, { type: source.type, title })).url);
+		await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
+		const box = page
+			.getByRole("status")
+			.filter({ hasText: source.type === "comic" ? /pages open here/i : /book opens here/i });
+		await box.locator('input[type="file"]').setInputFiles({
 			name: source.name,
 			mimeType: source.mimeType,
 			buffer: source.buffer,
 		});
 
-		// The Work's page is the landing for every kind now (the kinds pass,
-		// 2026-10-14), and the set editor lives in its Manage tab; arrival is the file's
-		// row in the set — the label from its filename, extension stripped by the
-		// rowLabel rule. The row's span, not the page's title (whose text the file's
-		// name became): the set row is the one place that text is the FILE's arrival.
-		await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
-		await page.getByRole("tab", { name: /Manage/ }).click();
+		// Arrival is the file's row in the set — the label from its filename, extension
+		// stripped by the rowLabel rule. The set editor is the manager's Source section
+		// once the set exists.
+		await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+		await page.getByRole("tab", { name: "Source" }).click();
 		await expect(
 			page
+				.getByRole("tabpanel")
 				.locator("span.flex-1.truncate")
 				.filter({ hasText: new RegExp(`${STEM} ${source.type}`) }),
 		).toBeVisible({ timeout: 30_000 });
 
 		await expect
 			.poll(async () => {
-				const [work] = (await ownWorks()).filter((w) => w.title === `${STEM} ${source.type}`);
+				const [work] = (await ownWorks()).filter((w) => w.title === title);
 				return work?.transcoding ? `${work.sourceKey?.includes("/assets/")}` : null;
 			})
 			.toBe("true");
@@ -462,10 +441,11 @@ test("a Work's page and the Dashboard follow its processing", async ({ page, con
 	});
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
-	// The editing surface is the Work's own page (2026-10-13); the processing reads on
-	// the creator's Manage tab, where the file's machinery lives.
+	// The editing surface is the Work's own page (2026-10-13); the processing reads in the
+	// media manager's Source section, where the file's machinery lives (2026-10-23).
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/);
-	await page.getByRole("tab", { name: "Manage" }).click();
+	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("tab", { name: "Source" }).click();
 	await expect(page.getByText("43%", { exact: true })).toBeVisible();
 	await expect(page.getByText("About 3 minutes left")).toBeVisible();
 
@@ -479,8 +459,10 @@ test("a Work's page and the Dashboard follow its processing", async ({ page, con
 	await expect(row.getByText("Ladder", { exact: true })).toBeVisible();
 	await expect(row.getByText("About 3 minutes left")).toBeVisible();
 	await page.goto(`/studio/works/${work.publicId}/edit`);
-	// The fresh page's tabs open on Details; the processing lives on Manage.
-	await page.getByRole("tab", { name: "Manage" }).click();
+	// The fresh page opens on the Work's own page; the processing lives in the media
+	// manager's Source section, which each visit opens on Delivery.
+	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("tab", { name: "Source" }).click();
 
 	// The page re-reads the job on its own. An audio or ebook job has no estimate, and the page
 	// says nothing about one rather than an empty "left".

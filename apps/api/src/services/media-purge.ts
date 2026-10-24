@@ -24,6 +24,7 @@ import {
 	db,
 	transcodingJobs,
 	webBuilds,
+	workMediaVersions,
 	workPreviewCaptionTracks,
 	workPreviewMedia,
 	workSourceFiles,
@@ -33,6 +34,7 @@ import { isPaged } from "@anthers/shared/content";
 import { and, eq, inArray } from "drizzle-orm";
 import { storage } from "./storage/index.js";
 import { isKeyUnder, urlToKey } from "./storage/keys.js";
+import { keysInMedia } from "./work-versions.js";
 
 type WorkRow = typeof works.$inferSelect;
 type AssetRow = typeof assets.$inferSelect;
@@ -147,6 +149,20 @@ export async function sweepOrphanedVideoHlsPrefixes(): Promise<number> {
  * written before the check, or by a path that forgot it. A Work whose creator is gone names no
  * prefix, so it sweeps nothing, which strands objects rather than destroying someone's.
  */
+/** The archived originals a Work's version manifests name, owner-filtered like the rest. */
+function versionKeysForWork(
+	creatorId: number | null,
+	versions: { media: Parameters<typeof keysInMedia>[0] }[],
+): Set<string> {
+	const keys = new Set<string>();
+	for (const version of versions) {
+		for (const key of keysInMedia(version.media)) {
+			if (creatorId != null && isKeyUnder(key, creatorId)) keys.add(key);
+		}
+	}
+	return keys;
+}
+
 function keysForWork(
 	item: WorkRow,
 	workAssets: AssetRow[],
@@ -292,6 +308,10 @@ export async function purgeWorkMedia(
 							previewRows.map((p) => p.id),
 						),
 					);
+	const versionRows = await db
+		.select({ media: workMediaVersions.media })
+		.from(workMediaVersions)
+		.where(eq(workMediaVersions.workId, item.id));
 	const { keys, prefixes } = keysForWork(
 		item,
 		workAssets,
@@ -300,6 +320,7 @@ export async function purgeWorkMedia(
 		previewRows,
 		previewCaptionRows,
 	);
+	for (const key of versionKeysForWork(item.creatorId, versionRows)) keys.add(key);
 	// A browser build is swept by prefix — one whole `web-builds/{buildId}/` prefix per
 	// build — rather than file by file, because the number of files a real engine export
 	// carries makes enumerating keys the wrong shape and a missed file an ungated copy of
@@ -336,16 +357,21 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 	const prefixes = new Set<string>();
 	if (workIds.length === 0) return { keys, prefixes };
 
-	const [workRows, assetRows, jobRows, sourceFileRows, previewRows] = await Promise.all([
-		db.select().from(works).where(inArray(works.id, workIds)),
-		db.select().from(assets).where(inArray(assets.workId, workIds)),
-		db
-			.select()
-			.from(transcodingJobs)
-			.where(and(inArray(transcodingJobs.workId, workIds))),
-		db.select().from(workSourceFiles).where(inArray(workSourceFiles.workId, workIds)),
-		db.select().from(workPreviewMedia).where(inArray(workPreviewMedia.workId, workIds)),
-	]);
+	const [workRows, assetRows, jobRows, sourceFileRows, previewRows, versionRows] =
+		await Promise.all([
+			db.select().from(works).where(inArray(works.id, workIds)),
+			db.select().from(assets).where(inArray(assets.workId, workIds)),
+			db
+				.select()
+				.from(transcodingJobs)
+				.where(and(inArray(transcodingJobs.workId, workIds))),
+			db.select().from(workSourceFiles).where(inArray(workSourceFiles.workId, workIds)),
+			db.select().from(workPreviewMedia).where(inArray(workPreviewMedia.workId, workIds)),
+			db
+				.select({ workId: workMediaVersions.workId, media: workMediaVersions.media })
+				.from(workMediaVersions)
+				.where(inArray(workMediaVersions.workId, workIds)),
+		]);
 	const previewCaptionRows =
 		previewRows.length === 0
 			? []
@@ -372,6 +398,12 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
 		);
 		for (const k of forThis.keys) keys.add(k);
 		for (const p of forThis.prefixes) prefixes.add(p);
+		for (const key of versionKeysForWork(
+			w.creatorId,
+			versionRows.filter((v) => v.workId === w.id),
+		)) {
+			keys.add(key);
+		}
 	}
 
 	return { keys, prefixes };
@@ -435,18 +467,22 @@ export async function removeSourceFileStorage(
 export async function purgeReplacedWorkMedia(
 	prior: Pick<WorkRow, "sourceKey" | "sourceOriginalKey" | "creatorId">,
 	priorJobs: Pick<TranscodingJobRow, "hlsManifestUrl" | "outputFileUrl">[],
+	opts: { keep?: Set<string> } = {},
 ): Promise<void> {
 	const keys = new Set<string>();
 	const prefixes = new Set<string>();
 	const mine = (key: string) => prior.creatorId != null && isKeyUnder(key, prior.creatorId);
+	// A version archives one of these two pointers as the original it keeps. Everything
+	// else a replacement retires — the other pointer and every derived output — still goes.
+	const keep = opts.keep ?? new Set<string>();
 
 	if (prior.sourceKey) {
 		const key = urlToKey(prior.sourceKey);
-		if (mine(key)) keys.add(key);
+		if (mine(key) && !keep.has(key)) keys.add(key);
 	}
 	if (prior.sourceOriginalKey) {
 		const key = urlToKey(prior.sourceOriginalKey);
-		if (mine(key)) keys.add(key);
+		if (mine(key) && !keep.has(key)) keys.add(key);
 	}
 	for (const job of priorJobs) {
 		if (job.hlsManifestUrl) {

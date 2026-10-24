@@ -18,9 +18,9 @@
  * whether or not any of it works — see the note at the top of `studio-routes.authed.e2e.ts`
  * for why that vacuity is worth avoiding rather than tolerating.
  *
- * Uses a `service` Work throughout: it needs no media, so nothing here waits on ffmpeg or
- * on pg-boss, and the release-readiness gate (which applies only to processed types) stays
- * out of the way of the thing being tested.
+ * Uses a writing Work throughout: it needs no media, so nothing here waits on ffmpeg or
+ * on pg-boss, and the release-readiness gate asks only for its body — the one thing a
+ * writer can supply on the page itself.
  */
 import { gauntletHandle } from "@anthers/db/gauntlet";
 import { MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
@@ -130,11 +130,12 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 
 	// ── Create ──────────────────────────────────────────────────────────────
 	//
-	// ⭐ **Two pages, not one form** (2026-09-16). "New Work" opens the Upload page, which asks
-	// for a type, a title and the file and nothing else, and creating lands on the Work's own
-	// Edit page because everything else lives there — Release included, since `POST /works`
-	// refuses `visibility: "released"` outright. The walk asserts on URLs between the steps
-	// because each step is a page with an address, and "the right page opened" is the claim.
+	// ⭐ **The flow asks only what a Work needs, and Release is not one of those questions**
+	// (2026-09-16; the four-step flow, 2026-10-23). The type step creates the draft — a Work
+	// cannot exist without a type — and Release, the rating and access are not rendered until
+	// the Work's own page, since `POST /works` refuses `visibility: "released"` outright. The
+	// walk asserts on each step's heading because the heading is the claim that the flow asked
+	// its question.
 	await page.goto("/studio/works");
 	await expect(page.getByRole("heading", { name: "Works", exact: true })).toBeVisible();
 
@@ -143,23 +144,21 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 		.first()
 		.click();
 	await expect(page).toHaveURL(/\/studio\/works\/new$/);
-	await expect(page.getByRole("heading", { name: "Upload a Work" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "New Work" })).toBeVisible();
 
-	// The Upload page asks for nothing past the three inputs, and this is the assertion for
-	// it: Release, the rating and access are not rendered at all before the Work exists.
+	// Nothing on the way in asks the questions the Work's page owns.
 	for (const section of ["Release", "Rating", "Access"]) {
 		await expect(page.getByRole("heading", { name: section })).toHaveCount(0);
 	}
 
-	// ⚠️ Located by position and placeholder, never by label: `FormField` renders its label as
-	// a SIBLING of the input with no `htmlFor`, so `getByLabel` matches nothing on this form
-	// whether or not the field exists — a locator that cannot fail. Same note as
-	// `studio-routes.authed.e2e.ts`. The Release checkbox below is the exception and is
-	// reached by role+name, because that input really is nested inside its `<label>`.
-	await page.locator("select").first().selectOption("service");
-	await page.getByPlaceholder("Work title").fill(TITLE);
-
-	await page.getByRole("button", { name: /create work/i }).click();
+	await page.getByPlaceholder("A name").fill(TITLE);
+	await page.getByRole("button", { name: "Continue" }).click();
+	await page.getByRole("button", { name: /^Digital/ }).click();
+	await page.getByRole("button", { name: /^Writing/ }).click();
+	await expect(page.getByRole("heading", { name: "How does it reach people?" })).toBeVisible();
+	// Streaming is a writing Work's default, so the flow is one click from here.
+	await expect(page.getByText("Stream on Anthers", { exact: true })).toBeVisible();
+	await page.getByRole("button", { name: "Edit Your New Work" }).click();
 	// ⚠️ A longer wait than the 5s default, here and at Save below — both are a navigation on
 	// the far side of a write, and this suite shares its Postgres with the unit suites.
 	// Headroom only: it is NOT the explanation for the flakiness this spec was famous for,
@@ -223,6 +222,20 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 		.getByRole("button", { name: "None", exact: true })
 		.click();
 	await page.getByRole("button", { name: "Save Rating" }).click();
+	await expect
+		.poll(
+			async () => {
+				const res = await fetch(`${API_URL}/api/content/works`, {
+					headers: { Cookie: `session=${session}` },
+				});
+				const { works } = (await res.json()) as {
+					works: { title: string; maturity?: string }[];
+				};
+				return works.find((w) => w.title === TITLE)?.maturity ?? null;
+			},
+			{ message: "the rating save never reached the row" },
+		)
+		.toBe("general");
 	// The Rating tab is the badge and the table, with no line explaining what a
 	// General rating means (Parker, 2026-10-19) — neither the visitor's wording nor
 	// the creator's shorter copy.
@@ -240,6 +253,14 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await contributor.fill(CREATOR);
 	await contributor.press("Enter");
 	await page.getByRole("button", { name: "Save Credits" }).click();
+
+	// The body, in the Manage tab's editor. Release refuses a Work whose writing is empty
+	// (`text_missing`), and a writing Work's body is its deliverable.
+	await page.getByRole("tab", { name: /Manage/ }).click();
+	await page.getByRole("button", { name: "Edit Body" }).click();
+	await page.locator(".tiptap").click();
+	await page.keyboard.type("A release walk's only sentence.");
+	await page.getByRole("button", { name: "Save Body" }).click();
 
 	// The original release date, in its own field beside Release. Its whole reason for
 	// existing is back-dating a catalog, which is what a creator arriving with years of

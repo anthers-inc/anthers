@@ -122,6 +122,19 @@ describe("buildWorklist", () => {
 		expect(kinds([stuck])).toEqual(["no-delivery"]);
 	});
 
+	it("stays quiet about a goods Work, which has no delivery to turn on", () => {
+		// A service is bought, not streamed or downloaded, so neither switch exists to be
+		// turned on and the Dashboard must not send its creator looking for one.
+		const service = work({
+			visibility: "private",
+			type: "service",
+			sourceKey: "",
+			streamEnabled: false,
+			downloadEnabled: false,
+		});
+		expect(kinds([service])).toEqual([]);
+	});
+
 	it("reports a failed encode and stays quiet about one still running", () => {
 		// 🚨 The distinction this list rests on. A failed encode is the creator's to act on;
 		// a running one resolves itself, and a list carrying what resolves itself is a list

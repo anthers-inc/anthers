@@ -17,7 +17,14 @@
 import { db } from "@anthers/db/client";
 import { workSourceFiles, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
+import {
+	API_URL,
+	createDraftWork,
+	expect,
+	signInAsMediaFixture,
+	test,
+	WEB_ORIGIN,
+} from "./fixtures";
 
 const TITLE = `Gallery walk ${Date.now()}`;
 
@@ -63,18 +70,23 @@ test("an image Work's set grows, reorders, refuses a non-image, and displays", a
 	page.on("console", (msg) => console.log("[browser]", msg.text()));
 	session = await signInAsMediaFixture(context);
 
-	// An image made the ordinary way: type, pick of the first picture.
-	await page.goto("/studio/works/new");
-	await page.locator("select").first().selectOption("image");
-	await page.getByPlaceholder("Work title").fill(TITLE);
-	await page.locator('input[type="file"]').setInputFiles(stubImage("gallery cover.png"));
+	// An image Work is drafted with a kind and a name; the first picture joins from the
+	// empty media card's set editor (Parker, 2026-10-23).
+	const draft = await createDraftWork(page, { type: "image", title: TITLE });
+	await page.goto(draft.url);
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
-	await page.getByRole("tab", { name: /Manage/ }).click();
-	await expect(page.getByText(/gallery cover\.png$/)).toBeVisible({ timeout: 30_000 });
+	const box = page.getByRole("status").filter({ hasText: /hangs here/i });
+	await box.locator('input[type="file"][multiple]').setInputFiles(stubImage("gallery cover.png"));
+	// Once the first picture lands the card shows the gallery, so the set editor is the
+	// media manager's Source section rather than the page body.
+	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("tab", { name: "Source" }).click();
+	const source = page.getByRole("tabpanel");
+	await expect(source.getByText(/gallery cover\.png$/)).toBeVisible({ timeout: 30_000 });
 
 	// A second picture joins by one pick, as an appended row.
-	await page.locator('input[type="file"][multiple]').setInputFiles(stubImage("gallery tail.png"));
-	await expect(page.getByText(/gallery tail\.png$/)).toBeVisible({ timeout: 30_000 });
+	await source.locator('input[type="file"][multiple]').setInputFiles(stubImage("gallery tail.png"));
+	await expect(source.getByText(/gallery tail\.png$/)).toBeVisible({ timeout: 30_000 });
 
 	// The server's set matches the page, and the cover — the legacy column — is the
 	// FIRST image, not the one just added.
@@ -106,7 +118,7 @@ test("an image Work's set grows, reorders, refuses a non-image, and displays", a
 	expect(cover1).toBe(firstRow.file);
 
 	// A PDF is refused legibly, and the set stands exactly as it was.
-	await page.locator('input[type="file"][multiple]').setInputFiles(stubPdf("not-a-picture.pdf"));
+	await source.locator('input[type="file"][multiple]').setInputFiles(stubPdf("not-a-picture.pdf"));
 	await expect(page.getByText(/isn't one/)).toBeVisible({ timeout: 30_000 });
 	const still = await db.select().from(workSourceFiles).where(eq(workSourceFiles.workId, row.id));
 	expect(still).toHaveLength(2);
