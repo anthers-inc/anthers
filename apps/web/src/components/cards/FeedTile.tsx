@@ -26,11 +26,11 @@
 // the Library's shelf, which replaced its private card so the three tabs and a
 // creator's page show one shape for the same item. A Project renders here too
 // as its own entry kind, because a creator page and a Library shelf both mix
-// Projects in with Works and posts; ProjectCard stays the column card a Project
-// page's own header uses. WorkCard and PostCard stay the column cards the
-// project and post pages render. The tile stays where it is while every
-// consumer is in this app; if a different package wants this shape, move it to
-// @anthers/web-shared then, not now.
+// Projects in with Works and posts; the old column ProjectCard had no reader
+// left once that landed and is gone. WorkCard and PostCard stay the column
+// cards the project and post pages render. The tile stays where it is while
+// every consumer is in this app; if a different package wants this shape, move
+// it to @anthers/web-shared then, not now.
 
 import { isListened } from "@anthers/shared/content";
 import { contentNoteLabel } from "@anthers/shared/content-rating";
@@ -739,8 +739,7 @@ function PostTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtras 
 /**
  * The Project tile: a creator's shelf of Works, at the same shape as everything else.
  * A creator's page and the Library's shelf both list Projects beside Works and posts,
- * so a Project renders as this tile rather than as a second card family. The Project
- * page's own header keeps `ProjectCard`, which is a column card rather than a grid item.
+ * so a Project renders as this tile rather than as a second card family.
  */
 function ProjectTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtras }) {
 	const project = entry as unknown as FeedProject;
