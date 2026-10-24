@@ -18,6 +18,7 @@ import { authRoutes } from "./routes/auth.js";
 import { createBuildDeliveryRoutes, isBuildDeliveryRequest } from "./routes/build-delivery.js";
 import { contentRoutes } from "./routes/content.js";
 import { createDevBuildRoutes } from "./routes/dev-build.js";
+import { discordRoutes } from "./routes/discord.js";
 import { dmcaRoutes } from "./routes/dmca.js";
 import { errorCaptureRoutes } from "./routes/errors.js";
 import { integrationRoutes } from "./routes/integrations.js";
@@ -119,6 +120,7 @@ const app = new Hono()
 	// paths are absolute, so the router mounts at the root rather than under a prefix.
 	.route("/", managingAppRoutes)
 	.route("/api/accounts", accountRoutes)
+	.route("/api/discord", discordRoutes)
 	.route("/api/content", contentRoutes)
 	// A gated Work's manifest is a read of another server, not a row; it lives beside the
 	// Work routes but has its own service, so the access check and the protocol stay together.
