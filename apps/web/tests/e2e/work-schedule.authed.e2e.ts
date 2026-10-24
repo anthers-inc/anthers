@@ -30,6 +30,7 @@ interface OwnedWork {
 	id: number;
 	publicId: number;
 	title: string;
+	visibility: string;
 	scheduledReleaseAt: string | null;
 }
 
@@ -83,13 +84,11 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 
 	await page.goto(`/studio/works/${work.publicId}/edit`);
 	// The schedule lives in the Release field's edit state, on the Work's page (the
-	// kinds pass, 2026-10-14) — the field saves alone.
+	// kinds pass, 2026-10-14) — one date field and its Now shortcut, saved alone.
 	await page.getByRole("button", { name: "Edit Release" }).click();
-	const releaseTime = page.getByLabel("Release time");
-	await expect(releaseTime).toBeEnabled();
-	await expect(
-		page.getByText("Pick a time and save, and it releases then on its own."),
-	).toBeVisible();
+	const releaseAt = page.getByLabel("Anthers Release Date");
+	await expect(releaseAt).toBeEnabled();
+	await expect(releaseAt).toHaveValue("");
 
 	// Two days out at 09:00 on the BROWSER's clock. Computed there rather than here: Auckland can
 	// already be tomorrow, and "tomorrow at nine" by this machine's clock was once in its past.
@@ -99,8 +98,7 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 		const pad = (n: number) => String(n).padStart(2, "0");
 		return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T09:00`;
 	});
-	await releaseTime.fill(local);
-	await expect(page.getByText(/It releases at this time once it's ready/)).toBeVisible();
+	await releaseAt.fill(local);
 
 	await page.getByRole("button", { name: "Save Release" }).click();
 	// Saving keeps the creator on the Work's page, looking at the result.
@@ -118,10 +116,23 @@ test("a creator schedules a Work's release from its page", async ({ page, contex
 		expected,
 	);
 
-	// Ticking release now clears the schedule in the form, as the server would.
+	// Now replaces the schedule with the release-now act, as the server would.
 	await page.goto(`/studio/works/${work.publicId}/edit`);
 	await page.getByRole("button", { name: "Edit Release" }).click();
-	await expect(releaseTime).toHaveValue(local);
-	await page.getByRole("checkbox", { name: /released to my public catalog/i }).check();
-	await expect(page.getByLabel("Release time")).toHaveCount(0);
+	await expect(releaseAt).toHaveValue(local);
+	await page.getByRole("button", { name: "Now", exact: true }).click();
+	await expect(releaseAt).not.toHaveValue(local);
+	await page.getByRole("button", { name: "Save Release" }).click();
+	await expect(page.getByText(/scheduled for/i)).toHaveCount(0, { timeout: 15_000 });
+	// A time the field holds that has already passed is the release act, not a schedule:
+	// the row is out, and its schedule is gone.
+	await expect
+		.poll(
+			async () => {
+				const [row] = (await ownWorks()).filter((w) => w.title === TITLE);
+				return row ? `${row.visibility}:${row.scheduledReleaseAt}` : "gone";
+			},
+			{ message: "the Now save never released the row" },
+		)
+		.toBe("released:null");
 });

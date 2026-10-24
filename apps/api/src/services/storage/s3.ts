@@ -208,14 +208,30 @@ export class S3StorageService implements StorageService {
 		}
 	}
 
-	async getUrl(key: string, opts?: { signed?: boolean; expiresIn?: number }): Promise<string> {
+	async getUrl(
+		key: string,
+		opts?: { signed?: boolean; expiresIn?: number; download?: string },
+	): Promise<string> {
 		// The second denial. See `assertServableKey` — this is one of the two doors bytes
 		// leave through, and it refuses regardless of what any caller resolved.
 		assertServableKey(key);
 		if (opts?.signed) {
 			return getSignedUrl(
 				this.s3,
-				new GetObjectCommand({ Bucket: this.bucketForKey(key), Key: key }),
+				new GetObjectCommand({
+					Bucket: this.bucketForKey(key),
+					Key: key,
+					// A quote or a newline in a creator's filename would otherwise break the
+					// header the browser parses; the name is theirs, so sanitize rather than
+					// reject.
+					...(opts.download
+						? {
+								ResponseContentDisposition: `attachment; filename="${
+									opts.download.replace(/["\\\r\n]/g, "").trim() || "download"
+								}"`,
+							}
+						: {}),
+				}),
 				{
 					expiresIn: opts.expiresIn ?? 3600,
 				},

@@ -20,6 +20,7 @@ import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
+import { createBadgeRung } from "./badge-fixtures.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { handleOf } from "./handles.js";
 import { enablePayouts } from "./payouts-fixture.js";
@@ -45,7 +46,7 @@ const FREE = [{ threshold: 0, allow: true, price: "0" }];
 /** Locked at the baseline, open at $2 given to this creator. */
 const GATED_AT_2 = [
 	{ threshold: 0, allow: false, price: "0" },
-	{ threshold: 2, allow: true, price: "0" },
+	{ threshold: 2, allow: true, price: "0", badgeId: 0 },
 ];
 /** Buyable by anyone, at a price. */
 const FOR_SALE = [{ threshold: 0, allow: true, price: "5.00" }];
@@ -118,6 +119,7 @@ describe("creator preview", () => {
 		strangerCookie = await signUp(strangerName);
 		await enablePayouts(strangerName);
 		creatorAuth = { "Content-Type": "application/json", Origin: ORIGIN, Cookie: creatorCookie };
+		GATED_AT_2[1].badgeId = await createBadgeRung(creatorCookie, "2.00");
 
 		gatedId = await makeWork(`Gated ${id}`, GATED_AT_2);
 		freeId = await makeWork(`Free ${id}`, FREE);

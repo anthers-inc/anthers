@@ -64,17 +64,22 @@ import {
 import { normalizeWorkTags } from "@anthers/shared/tags";
 import { useAuth } from "@anthers/web-shared/auth";
 import RatingAppeal from "@anthers/web-shared/content/RatingAppeal";
-import { ReleaseScheduleInput } from "@anthers/web-shared/content/release-date";
+import { RELEASE_FIELD_HINT } from "@anthers/web-shared/content/release-date";
 import WebBuildSection from "@anthers/web-shared/content/WorkWebBuildSection";
 import {
 	type FileWorkType,
 	isFileWorkType,
 	WorkFileDropzone,
 	WorkFileSection,
+	WorkTypeFacts,
 } from "@anthers/web-shared/content/work-media";
 import { isBuildType, LIBRARY_TYPE_OPTIONS, typeLabel } from "@anthers/web-shared/content/works";
 import RichTextEditor from "@anthers/web-shared/editor/RichTextEditor";
-import { isoToLocalInput, localInputToIso } from "@anthers/web-shared/local-datetime";
+import {
+	isoToLocalInput,
+	localInputToIso,
+	nowLocalInput,
+} from "@anthers/web-shared/local-datetime";
 import TranscodingStatus from "@anthers/web-shared/media/TranscodingStatus";
 import { usePayoutsReady } from "@anthers/web-shared/payouts";
 import AccessTables, {
@@ -151,8 +156,10 @@ import {
 	workTitleTypography,
 } from "./WorkLayout";
 import WorkMediaFrame from "./WorkMediaFrame";
+import WorkMediaManager, { type MediaManagerTab } from "./WorkMediaManager";
 import WorkSideColumn, { ShowingsStub } from "./WorkSideColumn";
 import { WorkTagChips, WorkTagPicker } from "./WorkTags";
+import WorkVersionsSection from "./WorkVersionsSection";
 
 const IN_PLACE =
 	"rounded-md border border-transparent bg-transparent px-2 -mx-2 hover:border-base-300 focus:border-primary focus:outline-none";
@@ -165,6 +172,13 @@ const IN_PLACE_EMPTY =
 
 /** A text area that grows with what is in it, the way the text it stands in for would. */
 const GROWS = "resize-none [field-sizing:content]";
+
+/**
+ * The Original Release Date explainer, on the (i) beside its label (Parker, 2026-10-23).
+ * It was printed under the input until the field's own control needed the room.
+ */
+const ORIGINAL_RELEASE_HINT =
+	"When this first came out anywhere, if it was somewhere else first. Leave it empty if this is its first release. If you only know the year, pick a date in it.";
 
 export default function OwnerWorkEditor({
 	work,
@@ -304,6 +318,10 @@ export default function OwnerWorkEditor({
 	}, [current.credits]);
 
 	const [error, setError] = useState<string | null>(null);
+	/** Whether the media area is showing its management surface instead of the medium. */
+	const [mediaManaging, setMediaManaging] = useState(false);
+	/** The management tab the card opens on; the manager falls back if a type lacks it. */
+	const [mediaTab, setMediaTab] = useState("delivery");
 	/** Which of the two thumbnail pickers is open — the frame's or the upload's. */
 	const [thumbPicker, setThumbPicker] = useState<"none" | "frame" | "upload">("none");
 	/** Whether the upload failed, said beside the thumbnail and inside the upload modal. */
@@ -311,18 +329,17 @@ export default function OwnerWorkEditor({
 	/** Which Info tab is open — lifted, because the header's *Change* rating link opens Rating. */
 	const [activeInfoTab, setActiveInfoTab] = useState("details");
 
-	const [visibility, setVisibility] = useState<"private" | "released">(
-		work.visibility === "released" ? "released" : "private",
+	/**
+	 * The Release field's draft, as the datetime input holds it: the Work's own release
+	 * instant when it is out, its schedule when one is set, and empty when it is neither.
+	 * One field carries all three states, so `releaseField`'s save reads the draft to decide
+	 * which act it is (Parker, 2026-10-23).
+	 */
+	const releaseSaved = isoToLocalInput(
+		current.visibility === "released"
+			? (current.releasedAt ?? current.scheduledReleaseAt)
+			: current.scheduledReleaseAt,
 	);
-
-	// A scheduled release, as the datetime input holds it. Sent only when changed — an
-	// unchanged one in the past would read as a new time that has already gone by. Read
-	// off the SAVED row, because the field saves alone and the page stays open.
-	const loadedSchedule = isoToLocalInput(current.scheduledReleaseAt);
-	const [scheduledRelease, setScheduledRelease] = useState(loadedSchedule);
-	const scheduledIso = localInputToIso(scheduledRelease);
-	// The hint under the input is the shared one — the Works table's Release Date cell
-	// says the same sentences (`@anthers/web-shared/content/release-date`).
 
 	/** Whether payouts are set up, so the release control can say so before it is clicked. */
 	const payoutsReady = usePayoutsReady();
@@ -354,6 +371,21 @@ export default function OwnerWorkEditor({
 		adopt(updated as Work);
 	};
 
+	/** Save a delivery switch from the manager; a refusal stands the switches back. */
+	const saveDelivery = async (stream: boolean, download: boolean): Promise<void> => {
+		const priorStream = streamEnabled;
+		const priorDownload = downloadEnabled;
+		setStreamEnabled(stream);
+		setDownloadEnabled(download);
+		try {
+			await saveFields({ streamEnabled: stream, downloadEnabled: download });
+		} catch (err) {
+			setStreamEnabled(priorStream);
+			setDownloadEnabled(priorDownload);
+			setError(err instanceof Error ? err.message : "The delivery change didn't save.");
+		}
+	};
+
 	// ── The Work's file: the media half of the row re-read as it changes under us ──
 	const sourceUpload = useSourceUpload(current.id);
 	const fileUploading = sourceUpload != null && isUploading(sourceUpload);
@@ -374,7 +406,7 @@ export default function OwnerWorkEditor({
 		void refreshMedia();
 	}, [uploads]);
 
-	// A hosted build started on the Upload page lands the same way, one file list at a time.
+	// A hosted build started from the media area lands the same way, one file list at a time.
 	const webBuilds = useWebBuildUploads().filter((u) => u.workId === current.id);
 	const webBuildsLandedSeen = useRef<Set<string>>(new Set());
 	const webBuildsLanded = webBuilds.filter(
@@ -585,15 +617,27 @@ export default function OwnerWorkEditor({
 	const writingEmpty = writing && isEmptyWriting(bodyHtml);
 	const thumbnailMissing = needsChosenThumbnail(current.type) && !thumbnailUrl;
 	const creditsMissing = !creditRows.some((r) => r.types.includes("created"));
-	const releaseBlocked =
-		payoutsReady === false ||
-		((!fromRows ||
-			fileMissing ||
-			writingEmpty ||
-			thumbnailMissing ||
-			creditsMissing ||
-			permissionMissing === true) &&
-			visibility !== "released");
+	/**
+	 * The first thing that would refuse a release-now, in the server's own order — the notices
+	 * below say each one in full, and this short form rides the checkmark's tooltip while it
+	 * waits. A schedule is still offered while these stand, as the batch editor's rule had it.
+	 */
+	const releaseNowRefusal =
+		payoutsReady === false
+			? "Set up payouts before releasing — the notice below says where."
+			: permissionMissing === true
+				? "Give Anthers permission to publish before releasing — the notice below says where."
+				: fileMissing
+					? "This Work's file has to arrive before it can be released."
+					: writingEmpty
+						? "This piece of writing is empty."
+						: !fromRows
+							? "Answer every row of the Rating first — every row, no exceptions."
+							: creditsMissing
+								? "Credit at least one person as Created before releasing."
+								: thumbnailMissing
+									? "Choose a thumbnail before releasing a video."
+									: undefined;
 
 	// ── The Info tabs' contents ──
 	/**
@@ -618,38 +662,26 @@ export default function OwnerWorkEditor({
 	const deliverableEmpty =
 		fileUploading || deliverableIsEmpty(writing ? { ...current, bodyHtml } : current);
 	/**
-	 * Whether the empty box is itself the file's pick — file kinds but the paged ones
-	 * (comic, ebook — their set editor is the Manage tab's form in every state) and
-	 * but the media kinds, whose source is the Media Status card's: video first, and
-	 * the listened kinds since 2026-10-19, when audio joined video's card rather than
-	 * keeping the older filename row. The dropzone mounts in the placeholder and the
-	 * Manage tab keeps only the arrived-state section.
+	 * Whether the empty box is itself the intake — every media kind now, not only the
+	 * single-file ones. The paged kinds' set editor and the build kinds' embed/builds
+	 * moved into the box (Parker, 2026-10-23), so the act of filling the Work happens
+	 * where the Work will be. A writing's body and a good's details are page-level
+	 * fields and stay on the Manage tab; the box simply names that.
 	 */
-	const deliverableDropsInBox =
-		isFileWorkType(current.type) &&
-		!isPaged(current.type) &&
-		current.type !== "video" &&
-		!isListened(current.type);
+	const deliverableIntake = !writing && !isGoods(current.type);
 	/**
-	 * The silhouette's note, said per kind — what fills the box, and where. For the
-	 * file kinds whose dropper lives IN the box (the dropper task, 2026-10-17), the
-	 * note is silent — the dropzone's own line says a file is missing and the picker
-	 * right under it is how one lands. The paged kinds, whose set editor stays on the
-	 * Manage tab, and the build kinds, whose embed and builds stay there, keep pointing.
+	 * The silhouette's note, said per kind — what fills the box, and where. The intake's
+	 * own controls say what to do, so a media Work's note is silent; an upload in flight
+	 * says so, and the two kinds without an intake point at the Manage tab.
 	 */
 	const deliverableNote = writing
 		? "Its Manage tab is where the pen is."
-		: isFileWorkType(current.type)
-			? fileUploading
-				? "It's uploading now — keep this tab open until it lands."
-				: deliverableDropsInBox
-					? ""
-					: "Manage — the right column's first tab — takes one."
-			: "Manage — the right column's first tab — takes an embed or a build.";
+		: fileUploading
+			? "It's uploading now — keep this tab open until it lands."
+			: "";
 	/** The kind, while a private draft could still be another kind. */
 	const kindChangeable =
 		current.visibility !== "released" &&
-		visibility !== "released" &&
 		!current.sourceKey &&
 		!current.embedUrl &&
 		!fileUploading &&
@@ -859,7 +891,7 @@ export default function OwnerWorkEditor({
 					<p className="text-sm break-all">{current.embedUrl}</p>
 				) : (
 					<p className="text-sm text-base-content/40">
-						No embed — a hosted build in Manage plays instead of one.
+						No embed — a hosted build below plays instead of one.
 					</p>
 				)
 			}
@@ -927,156 +959,183 @@ export default function OwnerWorkEditor({
 	);
 
 	const releaseField = (
-		<InlineField
+		<InlineField<string>
 			label="Release"
-			saved={visibility}
+			saved={releaseSaved}
+			disabledSave={(draft) => {
+				const iso = localInputToIso(draft);
+				// Only a release-now waits on readiness; a future time is a schedule, which is
+				// offered while those stand.
+				return iso && Date.parse(iso) <= Date.now() ? releaseNowRefusal : undefined;
+			}}
 			renderRead={() => (
 				<div className="flex flex-col gap-2">
 					{/* The record link's globe moved to the byline's Released line
 					    (Parker, 2026-10-19); this line only says when there is no
 					    listing on the network yet. */}
-					<ReleaseSummary work={current} scheduled={scheduledIso} />
+					<ReleaseSummary work={current} scheduled={current.scheduledReleaseAt ?? null} />
 					{current.visibility === "released" && !current.recordUrl && (
 						<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
 					)}
 				</div>
 			)}
-			renderEdit={(_draft, setDraft) => (
-				<div className="flex flex-col gap-3">
-					<label className="label cursor-pointer justify-start gap-2">
-						<input
-							type="checkbox"
-							className="checkbox checkbox-sm checkbox-primary"
-							checked={visibility === "released"}
-							disabled={releaseBlocked}
-							onChange={(e) => {
-								// The draft is what Save sends, so the edit writes it as well as
-								// the state — the checkbox is the field's draft (the batch
-								// editor's rule: a save carries the edit, not what the page
-								// opened with).
-								setVisibility(e.target.checked ? "released" : "private");
-								setDraft(e.target.checked ? "released" : "private");
-								// Releasing now supersedes a schedule, as it does on the server.
-								if (e.target.checked) setScheduledRelease("");
-							}}
-						/>
-						<span className="label-text text-sm">Released to my public Catalog</span>
-					</label>
-					{current.visibility === "released" && !current.recordUrl && (
-						<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
-					)}
-					{visibility !== "released" && (
-						// The schedule row is the shared one — the Works table's Release Date
-						// cell renders the same input and the same hint.
-						<ReleaseScheduleInput
-							value={scheduledRelease}
-							savedIso={current.scheduledReleaseAt}
-							onChange={setScheduledRelease}
-						/>
-					)}
-					{visibility === "released" && !anyoneAllowed && (
-						<div className="alert alert-warning text-sm">
-							<span>
-								Nobody can open this. Released puts it in your Catalog; the Access tab is what lets
-								anyone in — allow <strong>Everyone</strong> at $0 to make it Public Access.
-							</span>
+			renderEdit={(draft, setDraft) => {
+				const draftIso = localInputToIso(draft);
+				// A time that has already passed is the release-now act, so every note that
+				// qualifies a release answers from the draft rather than from the saved row.
+				const releasingNow = draftIso !== null && Date.parse(draftIso) <= Date.now();
+				return (
+					<div className="flex flex-col gap-3">
+						<div className="flex flex-col gap-2">
+							<div className="flex items-center gap-1.5">
+								<label className="text-sm" htmlFor="owner-anthers-release">
+									Anthers Release Date
+								</label>
+								<InfoTip text={RELEASE_FIELD_HINT} />
+							</div>
+							<div className="flex flex-wrap items-center gap-2 py-1">
+								<input
+									id="owner-anthers-release"
+									type="datetime-local"
+									aria-label="Anthers Release Date"
+									className="input input-bordered w-full max-w-56"
+									value={draft}
+									onChange={(e) => setDraft(e.target.value)}
+								/>
+								<button
+									type="button"
+									className="btn btn-sm"
+									title="Set the release date to right now"
+									onClick={() => setDraft(nowLocalInput())}
+								>
+									Now
+								</button>
+								{draft && (
+									// Empty is "not released": this is how a creator takes the Work back out
+									// or drops a schedule, where the checkbox's unticking used to say it.
+									<button
+										type="button"
+										className="btn btn-ghost btn-sm"
+										onClick={() => setDraft("")}
+									>
+										Clear
+									</button>
+								)}
+							</div>
 						</div>
-					)}
-					{visibility === "released" && publicAccessNow && (
-						<p className="text-xs text-success">
-							Public Access — free to everyone, and earning from the Time Pool.
-						</p>
-					)}
-					{showsRatedPublicAccessNotice({
-						released: visibility === "released",
-						publicAccess: publicAccessNow,
-						maturity,
-					}) && (
-						// Info rather than warning: nothing is wrong, and the note must not read as a
-						// reason to rate lower or leave Public Access.
-						<div className="alert alert-info text-sm">
-							<span>
-								Heads up: Mature and Adult Works aren't shown to everyone. Users (or parents) can
-								choose to hide Mature Works, and Adult work is shown only to users who are 18+ and
-								have opted in.{" "}
-								<Link to={RATED_PUBLIC_ACCESS_HELP} className="link">
-									How Ratings Affect Who Sees a Work
-								</Link>
-							</span>
-						</div>
-					)}
-					<p className="text-xs text-base-content/50">
-						Released means listed publicly. It does not mean free — the Access tab decides that.
-					</p>
-					{/* The waiting states a creator can act on, gathered from the batch editor. */}
-					{fileMissing && visibility !== "released" && (
-						<p className="text-xs text-warning">
-							{fileUploading
-								? "This can be released once its file has finished uploading and processing."
-								: "Add the Work's file first. There's nothing to release until it arrives."}
-						</p>
-					)}
-					{thumbnailMissing && visibility !== "released" && (
-						<p className="text-xs text-warning">
-							Choose a thumbnail first — a video isn't released without one.
-						</p>
-					)}
-					{creditsMissing && visibility !== "released" && (
-						<p className="text-xs text-warning">
-							A Work isn't released until at least one credit has its Created box ticked.
-						</p>
-					)}
-					{!fromRows && visibility !== "released" && (
-						<p className="text-xs text-warning">
-							Answer every row of the Rating first — every row, no exceptions.
-						</p>
-					)}
-					{serverDown && visibility !== "released" && (
-						<div className="alert alert-info text-sm">
-							<span>
-								The server holding your identity isn't answering right now. You can still release
-								this: it goes out on Anthers straight away, and its listing reaches the network once
-								the server is back.
-							</span>
-						</div>
-					)}
-					{permissionMissing === true && visibility !== "released" && (
-						<div className="alert alert-warning text-sm">
-							<span>
-								<strong>Give Anthers permission to publish before releasing.</strong> A release
-								writes this Work's listing into your own repository.{" "}
-								<Link to={studioUrl("/settings")} className="link">
-									Give it in Studio settings
-								</Link>
-								.
-							</span>
-						</div>
-					)}
-					{payoutsReady === false && (
-						<div className="alert alert-warning text-sm">
-							<span>
-								<strong>Set up payouts before releasing.</strong> It is how you get paid, and it is
-								also what lets us say every creator here is an adult — Stripe checks identity so
-								Anthers never has to ask you for an ID. Anthers takes no cut, so all of it comes to
-								you.{" "}
-								<Link to={studioUrl("/payments")} className="link">
-									Set it up in the Studio's Payments tab
-								</Link>
-								.
-							</span>
-						</div>
-					)}
-				</div>
-			)}
+						{current.visibility === "released" && !current.recordUrl && (
+							<p className="text-xs text-base-content/50">Its listing isn't on the network yet.</p>
+						)}
+						{releasingNow && !anyoneAllowed && (
+							<div className="alert alert-warning text-sm">
+								<span>
+									Nobody can open this. Released puts it in your Catalog; the Access tab is what
+									lets anyone in — allow <strong>Everyone</strong> at $0 to make it Public Access.
+								</span>
+							</div>
+						)}
+						{releasingNow && publicAccessNow && (
+							<p className="text-xs text-success">
+								Public Access — free to everyone, and earning from the Time Pool.
+							</p>
+						)}
+						{showsRatedPublicAccessNotice({
+							released: releasingNow,
+							publicAccess: publicAccessNow,
+							maturity,
+						}) && (
+							// Info rather than warning: nothing is wrong, and the note must not read as a
+							// reason to rate lower or leave Public Access.
+							<div className="alert alert-info text-sm">
+								<span>
+									Heads up: Mature and Adult Works aren't shown to everyone. Users (or parents) can
+									choose to hide Mature Works, and Adult work is shown only to users who are 18+ and
+									have opted in.{" "}
+									<Link to={RATED_PUBLIC_ACCESS_HELP} className="link">
+										How Ratings Affect Who Sees a Work
+									</Link>
+								</span>
+							</div>
+						)}
+						{/* The waiting states a creator can act on, gathered from the batch editor. */}
+						{fileMissing && !releasingNow && (
+							<p className="text-xs text-warning">
+								{fileUploading
+									? "This can be released once its file has finished uploading and processing."
+									: "Add the Work's file first. There's nothing to release until it arrives."}
+							</p>
+						)}
+						{thumbnailMissing && !releasingNow && (
+							<p className="text-xs text-warning">
+								Choose a thumbnail first — a video isn't released without one.
+							</p>
+						)}
+						{creditsMissing && !releasingNow && (
+							<p className="text-xs text-warning">
+								A Work isn't released until at least one credit has its Created box ticked.
+							</p>
+						)}
+						{!fromRows && !releasingNow && (
+							<p className="text-xs text-warning">
+								Answer every row of the Rating first — every row, no exceptions.
+							</p>
+						)}
+						{serverDown && !releasingNow && (
+							<div className="alert alert-info text-sm">
+								<span>
+									The server holding your identity isn't answering right now. You can still release
+									this: it goes out on Anthers straight away, and its listing reaches the network
+									once the server is back.
+								</span>
+							</div>
+						)}
+						{permissionMissing === true && !releasingNow && (
+							<div className="alert alert-warning text-sm">
+								<span>
+									<strong>Give Anthers permission to publish before releasing.</strong> A release
+									writes this Work's listing into your own repository.{" "}
+									<Link to={studioUrl("/settings")} className="link">
+										Give it in Studio settings
+									</Link>
+									.
+								</span>
+							</div>
+						)}
+						{payoutsReady === false && (
+							<div className="alert alert-warning text-sm">
+								<span>
+									<strong>Set up payouts before releasing.</strong> It is how you get paid, and it
+									is also what lets us say every creator here is an adult — Stripe checks identity
+									so Anthers never has to ask you for an ID. Anthers takes no cut, so all of it
+									comes to you.{" "}
+									<Link to={studioUrl("/payments")} className="link">
+										Set it up in the Studio's Payments tab
+									</Link>
+									.
+								</span>
+							</div>
+						)}
+					</div>
+				);
+			}}
 			save={async (draft) => {
-				const typed = draft as "private" | "released";
-				await saveFields({
-					visibility: typed,
-					...(typed !== "released" && scheduledRelease !== loadedSchedule
-						? { scheduledReleaseAt: scheduledIso }
-						: {}),
-				});
-				if (typed === "released") setScheduledRelease("");
+				const iso = localInputToIso(draft);
+				if (!iso) {
+					// Empty is "not released": it takes a released Work back out of the Catalog and
+					// clears a schedule, and does nothing to a Work that is neither.
+					if (current.visibility === "released") await saveFields({ visibility: "private" });
+					else if (current.scheduledReleaseAt) await saveFields({ scheduledReleaseAt: null });
+					return;
+				}
+				if (Date.parse(iso) <= Date.now()) {
+					// A passed time is the release-now act. The server refuses a past schedule, and a
+					// creator who picks today's date — or presses Now — means "out now".
+					await saveFields({ visibility: "released", scheduledReleaseAt: null });
+					return;
+				}
+				// A future time is a schedule, and a schedule is a private Work's: on a released
+				// one, this takes it back out and lines it up for the new date.
+				await saveFields({ visibility: "private", scheduledReleaseAt: iso });
 			}}
 		/>
 	);
@@ -1092,22 +1151,21 @@ export default function OwnerWorkEditor({
 				/>
 			)}
 			renderEdit={(draft, setDraft) => (
-				<div>
-					<label className="text-sm" htmlFor="owner-original-release">
-						Original Release Date
-					</label>
+				<div className="flex flex-col gap-2">
+					<div className="flex items-center gap-1.5">
+						<label className="text-sm" htmlFor="owner-original-release">
+							Original Release Date
+						</label>
+						<InfoTip text={ORIGINAL_RELEASE_HINT} />
+					</div>
 					<input
 						id="owner-original-release"
 						type="date"
 						aria-label="Original release date"
-						className="input input-bordered input-sm"
+						className="input input-bordered w-full max-w-56"
 						value={draft}
 						onChange={(e) => setDraft(e.target.value)}
 					/>
-					<p className="text-xs text-base-content/40">
-						When this first came out anywhere, if it was somewhere else first. Leave it empty if
-						this is its first release. If you only know the year, pick a date in it.
-					</p>
 				</div>
 			)}
 			save={(draft) => {
@@ -1180,10 +1238,6 @@ export default function OwnerWorkEditor({
 		<OwnerAccessChipEditor
 			rows={accessRows}
 			publicAccess={publicAccessNow}
-			streamEnabled={streamEnabled}
-			downloadEnabled={downloadEnabled}
-			onStream={setStreamEnabled}
-			onDownload={setDownloadEnabled}
 			onSave={async (draft) => {
 				await saveFields({
 					streamEnabled,
@@ -1304,8 +1358,8 @@ export default function OwnerWorkEditor({
 	// The thumbnail block is one object, placed by kind: the paged kinds carry it high in
 	// the Manage tab, under View As and above Pages (Parker, 2026-10-19), because the cover
 	// and the pages are the two things a comic is. Every other kind keeps it at the tab's end.
-	const thumbnailSection = !isOwnThumbnail(current.type) ? (
-		<section className="flex flex-col gap-2">
+	const thumbnailTab = !isOwnThumbnail(current.type) ? (
+		<div className="flex flex-col gap-2">
 			{/* The terms ride the (i) now (Parker, 2026-10-16) — a hoverable beside
 			    the heading instead of a paragraph the section always carried. */}
 			<h3 className={`${WORK_DETAILS_HEADING_CLASS} flex items-center`}>
@@ -1313,7 +1367,7 @@ export default function OwnerWorkEditor({
 				<InfoTip text="All works need thumbnails. You can choose one from the work (e.g., a frame of video) or upload a custom thumbnail." />
 			</h3>
 			{thumbnailField}
-		</section>
+		</div>
 	) : null;
 
 	const detailsSection = (
@@ -1367,6 +1421,119 @@ export default function OwnerWorkEditor({
 		}
 	};
 
+	// ── The media area's two modes ──
+	// The intake is the empty card's content for a kind whose media is uploaded; the
+	// manager is the same card swapped to its controls. Both reuse the sections the
+	// Manage tab used to carry, so the two surfaces cannot drift apart.
+	const mediaIntake =
+		!writing && !isGoods(current.type) ? (
+			isBuildType(current.type) ? (
+				<div className="flex w-full flex-col gap-6 text-left">
+					<section className="flex flex-col gap-2">
+						<h3 className={WORK_DETAILS_HEADING_CLASS}>Embed</h3>
+						{embedUrlField}
+					</section>
+					<section className="flex flex-col gap-2">
+						<h3 className={WORK_DETAILS_HEADING_CLASS}>Downloadable Builds</h3>
+						<BuildsEditor work={current} onChanged={() => void refreshMedia()} />
+					</section>
+					<section className="flex flex-col gap-2">
+						<h3 className={WORK_DETAILS_HEADING_CLASS}>Hosted Build</h3>
+						<WebBuildSection work={current} onChanged={() => void refreshMedia()} />
+					</section>
+				</div>
+			) : (
+				<div className="flex w-full flex-col gap-3 text-left">
+					{isFileWorkType(current.type) && !isPaged(current.type) && current.type !== "image" ? (
+						<WorkFileDropzone work={current} showFormats={false} />
+					) : (
+						<WorkFileSection work={current} />
+					)}
+					<WorkTypeFacts type={current.type} />
+				</div>
+			)
+		) : undefined;
+
+	const sourceContent =
+		current.type === "video" || isListened(current.type) ? (
+			!current.sourceKey && !fileUploading ? (
+				<div className="flex flex-col gap-3">
+					<WorkFileDropzone work={current} showFormats={false} />
+					<WorkTypeFacts type={current.type} />
+				</div>
+			) : (
+				<MediaStatusCard
+					work={asRead}
+					sourceUpload={sourceUpload}
+					unpublished={unpublished}
+					canReplace={unpublished || current.visibility === "released"}
+					canRemove={unpublished}
+					cancelBusy={cancelBusy}
+					removeBusy={removalBusy}
+					onCancel={() => void cancelProcessing()}
+					onRemove={() => void removeMedia()}
+					onReplaceFile={(file) =>
+						workUploads.start(current.id, file, {
+							kind: "source",
+							type: current.type as FileWorkType,
+						})
+					}
+					onRetry={() => {
+						if (sourceUpload) workUploads.retry(sourceUpload.id);
+					}}
+				/>
+			)
+		) : isBuildType(current.type) ? (
+			<div className="flex flex-col gap-6">
+				<section className="flex flex-col gap-2">
+					<h3 className={WORK_DETAILS_HEADING_CLASS}>Embed</h3>
+					{embedUrlField}
+				</section>
+				<section className="flex flex-col gap-2">
+					<h3 className={WORK_DETAILS_HEADING_CLASS}>Downloadable Builds</h3>
+					<BuildsEditor work={current} onChanged={() => void refreshMedia()} />
+				</section>
+				<section className="flex flex-col gap-2">
+					<h3 className={WORK_DETAILS_HEADING_CLASS}>Hosted Build</h3>
+					<WebBuildSection work={current} onChanged={() => void refreshMedia()} />
+				</section>
+			</div>
+		) : (
+			<WorkFileSection work={current} />
+		);
+
+	const mediaManagerTabs: MediaManagerTab[] = [];
+	if (!writing && !isGoods(current.type)) {
+		mediaManagerTabs.push({
+			key: "delivery",
+			label: "Delivery",
+			content: (
+				<DeliverySwitches
+					streamEnabled={streamEnabled}
+					downloadEnabled={downloadEnabled}
+					onStream={(next) => void saveDelivery(next, downloadEnabled)}
+					onDownload={(next) => void saveDelivery(streamEnabled, next)}
+				/>
+			),
+		});
+		mediaManagerTabs.push({ key: "source", label: "Source", content: sourceContent });
+		if (thumbnailTab) {
+			mediaManagerTabs.push({ key: "thumbnail", label: "Thumbnail", content: thumbnailTab });
+		}
+		if (isPaged(current.type)) {
+			mediaManagerTabs.push({
+				key: "pages",
+				label: "Pages",
+				content: <PanelEditor workId={current.id} />,
+			});
+		}
+		mediaManagerTabs.push({
+			key: "versions",
+			label: "Versions",
+			content: <WorkVersionsSection workId={current.id} versionAddedAt={current.versionAddedAt} />,
+		});
+	}
+
 	const sideTabs = [
 		{
 			// The creator's tab, FIRST on the right column and active by default on it
@@ -1410,67 +1577,6 @@ export default function OwnerWorkEditor({
 					    default, at the top of the page itself, standing where the editing
 					    banner stood. */}
 					<WorkViewAsSection />
-					{isPaged(current.type) && thumbnailSection}
-					{(current.type === "video" || isListened(current.type)) && (
-						<section className="flex flex-col gap-2">
-							<h3 className={WORK_DETAILS_HEADING_CLASS}>Media Status</h3>
-							<MediaStatusCard
-								work={asRead}
-								sourceUpload={sourceUpload}
-								unpublished={unpublished}
-								cancelBusy={cancelBusy}
-								removeBusy={removalBusy}
-								onCancel={() => void cancelProcessing()}
-								onRemove={() => void removeMedia()}
-								onReplaceFile={(file) =>
-									workUploads.start(current.id, file, {
-										kind: "source",
-										type: current.type as FileWorkType,
-									})
-								}
-								onRetry={() => {
-									if (sourceUpload) workUploads.retry(sourceUpload.id);
-								}}
-							/>
-						</section>
-					)}
-					{isFileWorkType(current.type) &&
-						current.type !== "video" &&
-						!isListened(current.type) &&
-						(isPaged(current.type) || !!current.sourceKey || fileUploading) && (
-							// No section heading of its own: the file section's own label names it,
-							// and the doubled "File / File" was the rhythm reading twice. The
-							// never-arrived and failed states no longer reach this — their dropper
-							// moved into the Work's own placeholder (the dropper task, 2026-10-17);
-							// this is the arrived form now, plus the paged kinds' set editor.
-							<section className="flex flex-col gap-2">
-								<WorkFileSection work={current} />
-							</section>
-						)}
-					{isPaged(current.type) && fileReady && (
-						<section className="flex flex-col gap-2">
-							<h3 className={WORK_DETAILS_HEADING_CLASS}>Pages</h3>
-							<div className="rounded-box border border-base-300 bg-base-200/40 p-5">
-								<PanelEditor workId={current.id} />
-							</div>
-						</section>
-					)}
-					{isBuildType(current.type) && (
-						<>
-							<section className="flex flex-col gap-2">
-								<h3 className={WORK_DETAILS_HEADING_CLASS}>Embed</h3>
-								{embedUrlField}
-							</section>
-							<section className="flex flex-col gap-2">
-								<h3 className={WORK_DETAILS_HEADING_CLASS}>Downloadable Builds</h3>
-								<BuildsEditor work={current} onChanged={() => void refreshMedia()} />
-							</section>
-							<section className="flex flex-col gap-2">
-								<h3 className={WORK_DETAILS_HEADING_CLASS}>Hosted Build</h3>
-								<WebBuildSection work={current} onChanged={() => void refreshMedia()} />
-							</section>
-						</>
-					)}
 					{supportsPreviewMedia(current.type) && (
 						// The storefront set sits after the kind's own machinery (media, file
 						// or builds) and before the thumbnail — the same place a reader meets
@@ -1487,7 +1593,6 @@ export default function OwnerWorkEditor({
 							{bodyField}
 						</section>
 					)}
-					{!isPaged(current.type) && thumbnailSection}
 				</div>
 			),
 		},
@@ -1552,8 +1657,26 @@ export default function OwnerWorkEditor({
 			    the thing and its record. A piece of writing reads at its measure centered
 			    inside the card; a good's deliverable is the store panel, exactly where
 			    every user meets it. ── */}
-			<section>
-				{isGoods(current.type) ? (
+			<section className="relative">
+				{!writing && !isGoods(current.type) && !mediaManaging && (
+					<button
+						type="button"
+						className="btn btn-ghost btn-sm btn-circle absolute right-4 top-4 z-10 bg-base-100/80 text-base-content/70 backdrop-blur hover:text-base-content"
+						aria-label={mediaManaging ? "Close Media Management" : "Manage This Work's Media"}
+						aria-expanded={mediaManaging}
+						onClick={() => setMediaManaging((open) => !open)}
+					>
+						<PencilSquareIcon className="size-4" />
+					</button>
+				)}
+				{mediaManaging ? (
+					<WorkMediaManager
+						tabs={mediaManagerTabs}
+						active={mediaTab}
+						onActive={setMediaTab}
+						onDone={() => setMediaManaging(false)}
+					/>
+				) : isGoods(current.type) ? (
 					// The creator's copy of the user's store panel: it mounts without a
 					// verdict, the same absence a creator's own visit has always read.
 					// `w-full` as on the user page: the panel has no width of its own and
@@ -1583,7 +1706,7 @@ export default function OwnerWorkEditor({
 						<WorkPlaceholder
 							type={current.type}
 							note={deliverableNote}
-							action={deliverableDropsInBox ? <WorkFileDropzone work={current} /> : undefined}
+							action={deliverableIntake ? mediaIntake : undefined}
 						/>
 					</WorkMediaFrame>
 				) : kindWaiting ? (
@@ -2007,18 +2130,10 @@ export function AccessSummary({
 function OwnerAccessChipEditor({
 	rows,
 	publicAccess,
-	streamEnabled,
-	downloadEnabled,
-	onStream,
-	onDownload,
 	onSave,
 }: {
 	rows: AccessRowDraft[];
 	publicAccess: boolean;
-	streamEnabled: boolean;
-	downloadEnabled: boolean;
-	onStream: (next: boolean) => void;
-	onDownload: (next: boolean) => void;
 	onSave: (rows: AccessRowDraft[]) => Promise<void>;
 }) {
 	const [open, setOpen] = useState(false);
@@ -2085,12 +2200,6 @@ function OwnerAccessChipEditor({
 									</span>
 								</div>
 							)}
-							<DeliverySwitches
-								streamEnabled={streamEnabled}
-								downloadEnabled={downloadEnabled}
-								onStream={onStream}
-								onDownload={onDownload}
-							/>
 							{draft.length === 1 && user?.handle && (
 								<p className="text-xs text-base-content/50">
 									Want to gate this by monthly support?{" "}
@@ -2321,6 +2430,11 @@ function BuildsEditor({ work, onChanged }: { work: WorkDetail; onChanged: () => 
 			</form>
 
 			{error && <p className="text-xs text-error">{error}</p>}
+
+			{/* The card under the build picker follows its Platform select: what a person can
+			    run is the file type, and the fact that changes with the platform belongs to
+			    the row being added rather than to the kind in the abstract. */}
+			<WorkTypeFacts type={work.type} platform={platform} />
 
 			{assets.length > 0 && (
 				<div className="overflow-x-auto">

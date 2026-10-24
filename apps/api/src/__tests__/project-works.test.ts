@@ -30,6 +30,7 @@ import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { PROJECT_COLLECTION } from "../services/atproto-record-plan.js";
 import { createAccount } from "./account-fixture";
+import { createBadgeRung } from "./badge-fixtures.js";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { enablePayouts } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -54,7 +55,7 @@ const OTHER_SLUG = `pw-other-${id}`;
 const DRAFT_SLUG = `pw-draft-${id}`;
 
 const FREE = [{ threshold: 0, allow: true, price: "0" }];
-const GATED = [{ threshold: 2, allow: true, price: "0" }];
+const GATED = [{ threshold: 2, allow: true, price: "0", badgeId: 0 }];
 
 let auth: Record<string, string>;
 let strangerCookie: string;
@@ -112,6 +113,7 @@ describe("a Project's Works", () => {
 		strangerCookie = await signUp(strangerName);
 		await enablePayouts(strangerName);
 		auth = { "Content-Type": "application/json", Origin: ORIGIN, Cookie: cookie };
+		GATED[0].badgeId = await createBadgeRung(cookie, "2.00");
 
 		for (const slug of [SLUG, OTHER_SLUG]) {
 			const project = await req("/api/content/projects", {

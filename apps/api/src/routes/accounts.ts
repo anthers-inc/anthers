@@ -76,6 +76,7 @@ import {
 import { searchTerms } from "@anthers/shared/search";
 import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panels";
 import { isUsState } from "@anthers/shared/us-states";
+import { verifiedCreator } from "@anthers/shared/verified-creator";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -117,6 +118,7 @@ import {
 	enableAdultAccess,
 	setMaturityDisplay,
 } from "../services/content-preferences.js";
+import { releasedWorkCount } from "../services/creator-standing.js";
 import { ensureFollow } from "../services/follows.js";
 import { merchStoreFactsByWork } from "../services/merch-store.js";
 import {
@@ -216,6 +218,10 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
 		.limit(1);
+	// Verified creator standing — `isCreator` plus a released Work. The count is asked for only
+	// when the first half is true: this serializer backs the shell's boot read, and most accounts
+	// never ask the second question.
+	const released = user.isCreator ? await releasedWorkCount(user.id) : 0;
 	return {
 		id: user.id,
 		handle: user.atprotoHandle,
@@ -223,6 +229,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		displayName: user.displayName,
 		bio: user.bio,
 		isCreator: user.isCreator,
+		isVerifiedCreator: verifiedCreator({ isCreator: user.isCreator, releasedWorkCount: released }),
 		avatar: user.avatar,
 		headerImage: user.headerImage,
 		websiteUrl: user.websiteUrl,

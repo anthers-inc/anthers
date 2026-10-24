@@ -110,11 +110,11 @@ describe('the "+" rule applies between Badges, not only past the top', () => {
 	});
 });
 
-describe("gates are thresholds, and need not sit on a Badge", () => {
+describe("gates are amounts, cleared at or above what they require", () => {
 	test("a supporter clears any gate at or below what they give", () => {
 		expect(amountMeets(4, 4)).toBe(true);
 		expect(amountMeets(3, 4)).toBe(false);
-		// No Badge sits at $4 in SPARSE, yet a $4 gate is legal and cleared.
+		// The comparison is pure money: a threshold clears whatever the ladder looks like.
 		expect(thresholdOf("ember", SPARSE)).toBe(2.5);
 		expect(SPARSE.some((b) => b.threshold === 4)).toBe(false);
 		expect(amountMeets(4, 4)).toBe(true);

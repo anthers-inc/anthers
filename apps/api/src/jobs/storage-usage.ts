@@ -54,6 +54,7 @@ import {
 	transcodingJobs,
 	webBuildFiles,
 	webBuilds,
+	workMediaVersions,
 	workPreviewMedia,
 	workSaves,
 	workSourceFiles,
@@ -66,6 +67,7 @@ import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { keptShareBytes } from "../services/keeping.js";
 import { storage } from "../services/storage/index.js";
 import { urlToKey } from "../services/storage/keys.js";
+import { keysInMedia } from "../services/work-versions.js";
 
 /**
  * The byte size of one stored object, by key — `null` when absent.
@@ -255,6 +257,24 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		if (row.creatorId == null) continue;
 		const size = await sizeOfKey(row.file);
 		if (size != null) add(account(row.creatorId).purposes, "catalog", size);
+	}
+
+	// ── Archived media versions ──────────────────────────────────────────────────
+	// A version keeps the original bytes a replacement retired, so it still occupies the
+	// creator's storage after it stops being served. Its manifest names the keys; the
+	// history is small enough that one size() per archived object is the same bounded
+	// read the source set above already pays.
+	const versionRows = await db
+		.select({ creatorId: works.creatorId, media: workMediaVersions.media })
+		.from(workMediaVersions)
+		.innerJoin(works, eq(workMediaVersions.workId, works.id))
+		.where(isNotNull(works.creatorId));
+	for (const row of versionRows) {
+		if (row.creatorId == null) continue;
+		for (const key of keysInMedia(row.media)) {
+			const size = await sizeOfKey(key);
+			if (size != null) add(account(row.creatorId).purposes, "catalog", size);
+		}
 	}
 
 	// ── A paged Work's derived storage, one prefix read per creator ─────────────

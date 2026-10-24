@@ -18,7 +18,14 @@
 import { db } from "@anthers/db/client";
 import { workSourceFiles, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
+import {
+	API_URL,
+	createDraftWork,
+	expect,
+	signInAsMediaFixture,
+	test,
+	WEB_ORIGIN,
+} from "./fixtures";
 
 const TITLE = `Page set walk ${Date.now()}`;
 
@@ -50,23 +57,25 @@ test("a comic's set grows by a multi-pick, reorders and removes", async ({ page,
 	page.on("console", (msg) => console.log("[browser]", msg.text()));
 	session = await signInAsMediaFixture(context);
 
-	// A comic made the ordinary way: type, pick of the first file.
-	await page.goto("/studio/works/new");
-	await page.locator("select").first().selectOption("comic");
-	await page.getByPlaceholder("Work title").fill(TITLE);
-	await page.locator('input[type="file"]').setInputFiles(stubImage("lead page.png"));
-	// The Work's own page is the landing for every kind now (the kinds pass,
-	// 2026-10-14); the set editor lives in its Manage tab.
+	// A comic is drafted with a kind and a name; the first page joins from the empty media
+	// card's set editor (Parker, 2026-10-23).
+	const draft = await createDraftWork(page, { type: "comic", title: TITLE });
+	await page.goto(draft.url);
 	await expect(page).toHaveURL(/\/works\/[a-z0-9-]+$/, { timeout: 15_000 });
-	await page.getByRole("tab", { name: /Manage/ }).click();
-	await expect(page.getByText(/lead page,?$/)).toBeVisible({ timeout: 30_000 });
+	const box = page.getByRole("status").filter({ hasText: /pages open here/i });
+	await box.locator('input[type="file"][multiple]').setInputFiles(stubImage("lead page.png"));
+	// The set editor is the manager's Source section once the set exists.
+	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
+	await page.getByRole("tab", { name: "Source" }).click();
+	const source = page.getByRole("tabpanel");
+	await expect(source.getByText(/lead page,?$/)).toBeVisible({ timeout: 30_000 });
 
 	// The set gains two files in one browse — attached in the picked order.
-	await page
+	await source
 		.locator('input[type="file"][multiple]')
 		.setInputFiles([stubImage("chapter two page.png"), stubImage("chapter three page.png")]);
-	await expect(page.getByText(/chapter two page,?$/)).toBeVisible({ timeout: 30_000 });
-	await expect(page.getByText(/chapter three page,?$/)).toBeVisible({ timeout: 30_000 });
+	await expect(source.getByText(/chapter two page,?$/)).toBeVisible({ timeout: 30_000 });
+	await expect(source.getByText(/chapter three page,?$/)).toBeVisible({ timeout: 30_000 });
 
 	// The arrangement is the page's own: move the third file to the top (two moves), and
 	// the visible list follows — strict, not a number that the un-reordered list also passes.
@@ -83,7 +92,7 @@ test("a comic's set grows by a multi-pick, reorders and removes", async ({ page,
 	await expect(page.getByText(/chapter two page$/)).toHaveCount(0);
 
 	// A page image joins the same way — the leaf path is the lead story, not the exotic one.
-	await page.locator('input[type="file"][multiple]').setInputFiles([stubImage("leaf page.png")]);
+	await source.locator('input[type="file"][multiple]').setInputFiles([stubImage("leaf page.png")]);
 	await expect(page.getByText(/leaf page,?$/)).toBeVisible({ timeout: 30_000 });
 
 	// The server's set equals what the page showed — order and mime included.

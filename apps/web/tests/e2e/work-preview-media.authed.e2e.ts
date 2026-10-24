@@ -18,9 +18,15 @@ import { readFile } from "node:fs/promises";
 import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 const STEM = "Preview carousel";
-const GATED = [{ threshold: 300, allow: true, price: "3.00" }];
+/**
+ * A locked Work, gated at a $3 rung its creator owns. A gate names one of the creator's
+ * own Badges (`normalizeAccessRows`), so `ensureGateRung` makes the rung the row points
+ * at; the viewer the spec previews as gives nothing, so the page stays locked.
+ */
+const GATED = [{ threshold: 3, allow: true, price: "3.00", badgeId: 0 }];
 
 let session = "";
+let gateRung = 0;
 const created: number[] = [];
 
 interface CreatedWork {
@@ -36,7 +42,21 @@ function headers(): Record<string, string> {
 	};
 }
 
+async function ensureGateRung(): Promise<void> {
+	if (gateRung) return;
+	const res = await fetch(`${API_URL}/api/subscriptions/badges`, {
+		method: "POST",
+		headers: headers(),
+		body: JSON.stringify({ threshold: "3.00", label: "Preview gate" }),
+	});
+	expect(res.status, "creating the preview gate rung").toBe(201);
+	const { badge } = (await res.json()) as { badge: { id: number } };
+	gateRung = badge.id;
+	GATED[0].badgeId = badge.id;
+}
+
 async function createWork(title: string): Promise<CreatedWork> {
+	await ensureGateRung();
 	const res = await fetch(`${API_URL}/api/content/works`, {
 		method: "POST",
 		headers: headers(),

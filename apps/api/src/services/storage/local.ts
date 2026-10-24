@@ -73,7 +73,10 @@ export class LocalStorageService implements StorageService {
 		return new Uint8Array(await file.slice(offset, offset + length).arrayBuffer());
 	}
 
-	async getUrl(key: string, _opts?: { signed?: boolean; expiresIn?: number }): Promise<string> {
+	async getUrl(
+		key: string,
+		_opts?: { signed?: boolean; expiresIn?: number; download?: string },
+	): Promise<string> {
 		// 🚨 Refused here as well as in S3, and it matters MORE here: `/content` is served
 		// unsigned by the static middleware, so in local mode a quarantined object under
 		// CONTENT_ROOT is reachable by anyone who can guess the path. The middleware itself

@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The **release date** as an editable field — the one control both the Works table's
- * Release Date column and the Release field on a Work's own page render (2026-10-17),
- * so the two cannot drift apart in vocabulary or behavior.
+ * The **release date** as an editable field — the vocabulary and the schedule input the
+ * Works table's Release Date column renders, kept here so its words cannot drift from the
+ * Work page's own Release field (which carries the same acts, with a Now button, and whose
+ * explainer lives beside this).
  *
- * The acts are the server's own, one PATCH each: publish now (`visibility: "released"`,
- * which supersedes any schedule), schedule (`visibility: "private"` plus a future
- * `scheduledReleaseAt`), clear a schedule, and unrelease. The page keeps its
- * InlineField model around a checkbox; the table's cell commits each act as it is
- * taken. What is shared is the schedule input, its hint and its words — the pieces a
- * creator meets on both surfaces and would notice disagreeing.
+ * The acts are the server's own: publish now (`visibility: "released"`, which supersedes any
+ * schedule), schedule (`visibility: "private"` plus a future `scheduledReleaseAt`), clear a
+ * schedule, and unrelease. The table's cell commits each act as it is taken; a Work's page
+ * keeps its InlineField model around the same acts.
  */
 
 import { PencilSquareIcon, XMarkIcon } from "@heroicons/react/24/outline";
@@ -39,9 +38,21 @@ export function releaseScheduleHint(draft: string, savedIso: string | null | und
 }
 
 /**
+ * The Work page's Release field explainer, on the (i) beside the field's label (Parker,
+ * 2026-10-23). It carries what the field no longer prints under itself: what "released"
+ * means, what an empty field and a future time each do, and what a passed time does.
+ */
+export const RELEASE_FIELD_HINT =
+	"Released means listed publicly, and it does not mean free — the Access tab decides that. " +
+	"Leave it empty and the Work stays private. A future time schedules it, and it goes out then once " +
+	"it's ready; if its file is still uploading or processing, as soon as that finishes. A time that " +
+	"has already passed releases it straight away. If something only you can fix stops a scheduled " +
+	"release, the schedule is cleared and we'll email you.";
+
+/**
  * The "Or release it later" row: the local-time input and its Clear. The commit is the
- * caller's — the page's field commits with its checkmark, the table's cell with its
- * Schedule button — so this is the input and its hint, not a save.
+ * caller's — the table's cell commits with its Schedule button — so this is the input and
+ * its hint, not a save.
  */
 export function ReleaseScheduleInput({
 	value,
