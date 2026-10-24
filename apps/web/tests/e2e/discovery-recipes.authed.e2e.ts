@@ -45,9 +45,10 @@ test("a chosen recipe is remembered, and a link is only an override", async ({ p
 		(r) => r.url().endsWith("/api/accounts/me") && r.request().method() === "PATCH",
 	);
 	await chip(page, "Across Anthers").click();
+	const save = await saved;
 	await expect(chip(page, "Across Anthers")).toHaveAttribute("aria-pressed", "true");
 	await expect(page).toHaveURL(/candidates=everyone/);
-	expect((await saved.request().postDataJSON()).homeRecipe).toEqual({
+	expect(save.request().postDataJSON().homeRecipe).toEqual({
 		window: "all",
 		candidates: "everyone",
 		mix: "spread",
