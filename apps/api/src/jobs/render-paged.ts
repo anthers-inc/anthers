@@ -392,7 +392,16 @@ async function runPagedRender(jobId: number) {
 			);
 			return;
 		}
+		// 🚨 **The pages this run replaces leave storage with their rows.** Only the current
+		// version keeps rendered pages (the 2026-10-23 version ruling), so a re-render after a
+		// set replacement must not leave the prior version's page images behind: the version
+		// archive holds the originals, and these are derived copies nothing points at again.
+		const priorPages = await db
+			.select({ file: workPages.file })
+			.from(workPages)
+			.where(eq(workPages.workId, work.id));
 		await db.delete(workPages).where(eq(workPages.workId, work.id));
+		for (const page of priorPages) await storage.delete(page.file).catch(() => {});
 
 		const prefix = `creators/${work.creatorId}/ebook/${work.id}/${randomUUID().replace(/-/g, "")}`;
 		const flat = rendered.flat();

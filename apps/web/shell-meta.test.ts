@@ -69,6 +69,15 @@ describe("the shell's link-preview tags", () => {
 		expect(existsSync(join(import.meta.dir, "public/brand/og-card.png"))).toBe(true);
 	});
 
+	it("describes the card in the same words the renderer does", async () => {
+		// The shell writes the neutral card's alt text, and `share-head.ts` repeats it for
+		// every route whose card falls back to the site's. Two copies of one sentence drift
+		// the moment the artwork changes, which is exactly what happened when the card moved
+		// from the thumb to the banner.
+		const { SITE_CARD_ALT } = await import("./src/lib/share-head.js");
+		expect(tag("property", "og:image:alt")).toBe(SITE_CARD_ALT);
+	});
+
 	it("the manifest's icons exist at the addresses it writes down", () => {
 		expect(MANIFEST.name).toBe("Anthers");
 		for (const icon of MANIFEST.icons as Array<{ src: string; sizes: string }>) {

@@ -26,3 +26,12 @@ export function localInputToIso(value: string): string | null {
 	const d = new Date(value);
 	return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
+
+/**
+ * The input's local value for right now — what a "Now" button beside a release date fills.
+ * Read through the same conversion both directions use, so "now" here is the same instant
+ * the input would hand back if somebody typed this minute's digits.
+ */
+export function nowLocalInput(): string {
+	return isoToLocalInput(new Date().toISOString());
+}

@@ -10,7 +10,8 @@
  * 2560×1440 and several hundred kilobytes each, which is right for a source and wrong for
  * a navbar, so this trims each lockup to its artwork, scales it to a few times the largest
  * size it is drawn at, cuts the tab and home-screen icons from the 1:1 thumb, trims the
- * bare 1:1 mark for drawing inline, and pads the link-preview card out to og:size.
+ * bare 1:1 mark for drawing inline, and crops the light 16:9 banner to the link-preview
+ * card's size.
  *
  * **Run it after re-exporting from a PSD, and commit what it writes.** The outputs are
  * committed rather than built so the site builds without an image library on the deploy
@@ -34,9 +35,9 @@ type Output = {
 	source: string;
 	/** Trim to the artwork and scale to this height (lockups), or cover this square (icons). */
 	height: number;
-	/** Card only: the full canvas width; height stays the fit height. */
+	/** Banner only: the canvas width. Absent for a square cut, which is `height` wide. */
 	width?: number;
-	kind: "lockup" | "icon" | "card";
+	kind: "lockup" | "icon" | "banner";
 };
 
 // Heights are roughly three times the tallest place each cut is drawn — `<Logo>` is sized
@@ -80,17 +81,22 @@ export const OUTPUTS: Output[] = [
 		height: 256,
 		kind: "icon",
 	},
-	// The link-preview card: the size every og:image unwrapper crops to, joined to the
-	// stable-address family for the same reason anthers-mark-256 is — the app shell's meta
-	// tags write its address down, and external crawlers read them. See
-	// apps/web/public/brand/README.md before moving it. The pad takes the prep's own
-	// background, sampled at its corner, so no color constant sits here to drift.
+	// The link-preview card: the size every og:image unwrapper crops to, cut from the light
+	// 16:9 banner rather than from the thumb. Joined to the stable-address family for the
+	// same reason anthers-mark-256 is — the app shell's meta tags write its address down,
+	// and external crawlers read them. See apps/web/public/brand/README.md before moving it.
+	//
+	// 🚨 **Cover, not contain.** The banner is 16:9 and a card is 1.9:1, so the aspects
+	// disagree by about four percent of the height. Padding that difference would put a
+	// framed banner inside a cream field, which reads as a picture of a banner rather than
+	// as one; the crop takes a sliver of grass and margin the composition has to spare, and
+	// keeps the wordmark and the spray whole.
 	{
 		file: "apps/web/public/brand/og-card.png",
-		source: `${LOGO}/preps/anthersthumb_1x1_light.png`,
+		source: `${LOGO}/preps/anthersbanner_16x9_light.png`,
 		width: 1200,
 		height: 630,
-		kind: "card",
+		kind: "banner",
 	},
 	// The home-screen icon pair, named by apps/web/public/site.webmanifest — stable-address
 	// like the card, for the same reason the manifest writes their addresses down.
@@ -129,12 +135,6 @@ async function alphaBox(path: string) {
 	return { left, top, width: right - left + 1, height: bottom - top + 1 };
 }
 
-/** The pixel at the export's top-left corner: the background the artwork sits on. */
-async function backgroundColor(path: string) {
-	const raw = await sharp(path).extract({ left: 0, top: 0, width: 1, height: 1 }).raw().toBuffer();
-	return { r: raw[0], g: raw[1], b: raw[2], alpha: 1 };
-}
-
 async function render(o: Output) {
 	const src = join(REPO, o.source);
 	const image =
@@ -142,14 +142,8 @@ async function render(o: Output) {
 			? sharp(src)
 					.extract(await alphaBox(src))
 					.resize({ height: o.height })
-			: o.kind === "card"
-				? sharp(src).resize(o.width ?? o.height, o.height, {
-						// Contain, not cover: the art is never cropped, and the pad carries
-						// the prep's own background color.
-						fit: "contain",
-						background: await backgroundColor(src),
-					})
-				: sharp(src).resize(o.height, o.height, { fit: "cover" });
+			: // A square cut covers its own height; the banner covers the canvas it is given.
+				sharp(src).resize(o.width ?? o.height, o.height, { fit: "cover" });
 	mkdirSync(dirname(join(REPO, o.file)), { recursive: true });
 	await image.png({ compressionLevel: 9, palette: true, quality: 100 }).toFile(join(REPO, o.file));
 }

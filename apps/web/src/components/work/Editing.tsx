@@ -53,6 +53,10 @@ const PENCIL =
  * gutter on both sides that keeps the text centered while the pencil hangs in the right
  * one. Capping the block at the column's width means a long title truncates rather than
  * pushing the pencil past the page's edge.
+ *
+ * ⭐ **The cancel and save pair sits to the right of the working control, not beneath it**
+ * (Parker, 2026-10-23): the edit area keeps the width it needs and the eye finds the two
+ * acts where the pencil was, instead of below a block of text that grew as it was typed.
  */
 export function InlineField<V>({
 	label,
@@ -61,6 +65,7 @@ export function InlineField<V>({
 	renderEdit,
 	save,
 	disabledReason,
+	disabledSave,
 	className = "",
 	pencilPlacement = "beside",
 	fill = false,
@@ -82,6 +87,13 @@ export function InlineField<V>({
 	save: (draft: V) => Promise<void>;
 	/** Set when the field cannot open — said beside the read view, never as silence. */
 	disabledReason?: string;
+	/**
+	 * Set when the draft as it stands cannot be committed — the checkmark is disabled and
+	 * carries the reason as its tooltip. For a field whose value means different acts: a
+	 * release date already in the past is a release-now, which the readiness notices beside
+	 * it may refuse, while the same field holding a future time is only a schedule.
+	 */
+	disabledSave?: (draft: V) => string | undefined;
 	className?: string;
 	/**
 	 * The stage's fill (the listened Work's aside column — see `ListenStage`): the
@@ -101,9 +113,11 @@ export function InlineField<V>({
 	const [error, setError] = useState<string | null>(null);
 	/** The field's own root, the anchor `keepScroll` measures the page's scroller from. */
 	const rootRef = useRef<HTMLDivElement | null>(null);
+	/** Why the draft as it stands cannot be committed, when its own rules say so. */
+	const saveRefusal = mode === "busy" ? undefined : disabledSave?.(draft);
 
 	const commit = async () => {
-		if (mode === "busy") return;
+		if (mode === "busy" || saveRefusal) return;
 		setMode("busy");
 		setError(null);
 		try {
@@ -163,17 +177,19 @@ export function InlineField<V>({
 					</div>
 				)
 			) : (
-				<div className="space-y-2">
-					{renderEdit(draft, setDraft, () => {
-						// Cancel — the field shrinks back to its read view; the place stays.
-						keepScroll(rootRef.current, () => {
-							setDraft(saved);
-							setError(null);
-							setMode("read");
-						});
-					})}
-					{error && <p className="text-xs text-error">{error}</p>}
-					<div className="flex items-center gap-1">
+				<div className="flex items-start gap-2">
+					<div className="min-w-0 flex-1 space-y-2">
+						{renderEdit(draft, setDraft, () => {
+							// Cancel — the field shrinks back to its read view; the place stays.
+							keepScroll(rootRef.current, () => {
+								setDraft(saved);
+								setError(null);
+								setMode("read");
+							});
+						})}
+						{error && <p className="text-xs text-error">{error}</p>}
+					</div>
+					<div className="flex shrink-0 items-center gap-1">
 						{mode === "busy" ? (
 							<span className="text-xs text-base-content/60">Saving…</span>
 						) : (
@@ -196,7 +212,8 @@ export function InlineField<V>({
 								<button
 									type="button"
 									aria-label={`Save ${label}`}
-									title="Save"
+									title={saveRefusal ?? "Save"}
+									disabled={saveRefusal !== undefined}
 									className="btn btn-success btn-xs"
 									onClick={() => void commit()}
 								>

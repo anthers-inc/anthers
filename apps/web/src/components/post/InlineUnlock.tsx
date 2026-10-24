@@ -130,8 +130,8 @@ export default function InlineUnlock({
 	// The unlock route comes from the RESOLVER, which owns the thresholds — the client no
 	// longer derives them. It used to, and got the label wrong: it named the highest Badge
 	// at-or-below the gate, which by definition does not clear a gate sitting above it, and
-	// silently dropped the price whenever the gate fell between Badges. `badge` on the route
-	// is the Badge sitting EXACTLY at the threshold, or null when none does.
+	// silently dropped the price. `badge` on the route is the Badge sitting EXACTLY at the
+	// threshold, or null when the resolver had no Badge set to match against.
 	const creatorRoute = access.unlock?.creator ?? null;
 
 	return (

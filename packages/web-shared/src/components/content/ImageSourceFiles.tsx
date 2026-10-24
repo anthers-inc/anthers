@@ -12,7 +12,7 @@
  * percent.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
 import type { Work } from "../../lib/types";
 import type { WorkSourceFile } from "../../lib/work-sources";
@@ -24,6 +24,8 @@ import {
 	workUploads,
 } from "../../lib/work-uploads";
 import FormField from "../ui/FormField";
+import MultipleFileInput from "./MultipleFileInput";
+import SetVersionDialog from "./SetVersionDialog";
 import { humanBytes, SourceSetAdds } from "./SourceSetAdds";
 import { UploadProgress } from "./work-media";
 
@@ -43,6 +45,8 @@ export function ImageSourceFiles({ work }: { work: Work }) {
 	const [rows, setRows] = useState<WorkSourceFile[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
+	// A released gallery is the version its readers have; the only act is a whole new one.
+	const released = work.visibility === "released";
 
 	const reload = useCallback(async () => {
 		const res = await client.api.content.works[":id"]["source-files"].$get({
@@ -127,8 +131,9 @@ export function ImageSourceFiles({ work }: { work: Work }) {
 	return (
 		<FormField label="Images">
 			<p className="mb-2 text-xs text-base-content/50">
-				One image or several. The Work displays them in the order listed here, and the first one is
-				what listings show.
+				{released
+					? "This Work is released, so its gallery is the version readers have. Adding a new version replaces the whole gallery and keeps the current one in the Work's history."
+					: "One image or several. The Work displays them in the order listed here, and the first one is what listings show."}
 			</p>
 			{error && <div className="alert alert-error text-sm mb-2">{error}</div>}
 			{upload && (upload.status === "uploading" || upload.status === "attaching") && (
@@ -159,97 +164,63 @@ export function ImageSourceFiles({ work }: { work: Work }) {
 							/>
 							<span className="flex-1 truncate">{rowLabel(row, index, upload)}</span>
 							<span className="text-xs text-base-content/50">{humanBytes(row.fileSize)}</span>
-							<button
-								type="button"
-								className="btn btn-ghost btn-xs"
-								disabled={busy || index === 0}
-								aria-label={`Move ${rowLabel(row, index, upload)} earlier`}
-								onClick={() => move(row.id, -1)}
-							>
-								↑
-							</button>
-							<button
-								type="button"
-								className="btn btn-ghost btn-xs"
-								disabled={busy || index === rows.length - 1}
-								aria-label={`Move ${rowLabel(row, index, upload)} later`}
-								onClick={() => move(row.id, 1)}
-							>
-								↓
-							</button>
-							<button
-								type="button"
-								className="btn btn-ghost btn-xs text-error"
-								disabled={busy}
-								aria-label={`Remove ${rowLabel(row, index, upload)}`}
-								onClick={() => remove(row.id)}
-							>
-								✕
-							</button>
+							{!released && (
+								<>
+									<button
+										type="button"
+										className="btn btn-ghost btn-xs"
+										disabled={busy || index === 0}
+										aria-label={`Move ${rowLabel(row, index, upload)} earlier`}
+										onClick={() => move(row.id, -1)}
+									>
+										↑
+									</button>
+									<button
+										type="button"
+										className="btn btn-ghost btn-xs"
+										disabled={busy || index === rows.length - 1}
+										aria-label={`Move ${rowLabel(row, index, upload)} later`}
+										onClick={() => move(row.id, 1)}
+									>
+										↓
+									</button>
+									<button
+										type="button"
+										className="btn btn-ghost btn-xs text-error"
+										disabled={busy}
+										aria-label={`Remove ${rowLabel(row, index, upload)}`}
+										onClick={() => remove(row.id)}
+									>
+										✕
+									</button>
+								</>
+							)}
 						</div>
 					))}
 				</div>
 			)}
 			<SourceSetAdds workId={work.id} noun="picture" />
-			{rows && rows.length === 0 && (
+			{!released && rows && rows.length === 0 && (
 				<p className="mb-2 text-sm text-warning">
 					This Work has no pictures yet, so it can't be released. If it was uploading in a tab that
 					has since closed, upload them again here.
 				</p>
 			)}
-			<MultipleImageInput onFiles={addFiles} disabled={busy || adding != null} />
+			{released ? (
+				<SetVersionDialog
+					work={work}
+					accept="image/*"
+					label="Drop the new images, or click to browse"
+					noun="gallery"
+				/>
+			) : (
+				<MultipleFileInput
+					onFiles={addFiles}
+					accept="image/*"
+					label="Drop images to add, or click to browse"
+					disabled={busy || adding != null}
+				/>
+			)}
 		</FormField>
-	);
-}
-
-/**
- * The several-image input: one drag or browse can join many pictures at once, attached in
- * the order the picker or drop handed them. A local input rather than a `multiple` flag
- * on the shared `FileUpload`, which every other caller reads as strictly one file.
- */
-function MultipleImageInput({
-	onFiles,
-	disabled,
-}: {
-	onFiles: (files: File[]) => void;
-	disabled?: boolean;
-}) {
-	const inputRef = useRef<HTMLInputElement>(null);
-	const [over, setOver] = useState(false);
-	return (
-		<div>
-			<input
-				style={{ display: "none" }}
-				ref={inputRef}
-				type="file"
-				accept="image/*"
-				multiple
-				onChange={(e) => {
-					const files = Array.from(e.target.files ?? []);
-					if (files.length > 0) onFiles(files);
-					e.target.value = "";
-				}}
-			/>
-			<button
-				type="button"
-				className={`flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed p-4 text-sm ${
-					over ? "border-primary bg-primary/5" : "border-base-300"
-				}`}
-				onClick={() => inputRef.current?.click()}
-				onDragOver={(e) => {
-					e.preventDefault();
-					setOver(true);
-				}}
-				onDragLeave={() => setOver(false)}
-				onDrop={(e) => {
-					e.preventDefault();
-					setOver(false);
-					const files = Array.from(e.dataTransfer.files);
-					if (files.length > 0 && !disabled) onFiles(files);
-				}}
-			>
-				<span>{disabled ? "Working…" : "Drop images to add, or click to browse"}</span>
-			</button>
-		</div>
 	);
 }

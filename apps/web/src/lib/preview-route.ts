@@ -4,10 +4,10 @@
  *
  * The shell ships one site-level card because a folder of files cannot know which Work a
  * URL names. The server can, and this is the half that decides *which* it is: a Work's own
- * page, a post's permalink, or the share link a Work was pasted as. Each resolves to a card,
- * and each declares the document's own canonical address rather than the address it was
- * fetched at — a share link is a locator and never a page of its own, so `/s/{token}` must
- * not claim to be one.
+ * page, a post's permalink, a creator's profile, or the share link a Work was pasted as.
+ * Each resolves to a card, and each declares the document's own canonical address rather
+ * than the address it was fetched at — a share link is a locator and never a page of its
+ * own, so `/s/{token}` must not claim to be one.
  *
  * Resolution is here rather than in `serve.ts` because the path shapes are the thing worth
  * testing on their own: the fetches beside them need a live API, and a matcher that quietly
@@ -37,6 +37,13 @@ export type PreviewRoute =
 			canonicalPath: string;
 	  }
 	| {
+			kind: "creator";
+			/** The handle without the address's `@`, which is what the profile read takes. */
+			param: string;
+			/** Where the profile canonically lives, as the `@handle` path it is served at. */
+			canonicalPath: string;
+	  }
+	| {
 			kind: "share";
 			/** The opaque share token, which the API resolves to a Work. */
 			token: string;
@@ -50,6 +57,12 @@ const WORK_PATH = /^\/works\/([^/]+)\/?$/;
 const POST_PATH = /^\/posts\/([^/]+)\/?$/;
 
 /**
+ * `/@{handle}` — a creator's profile. The `@` is part of the address rather than a route
+ * parameter, because React Router cannot compile `/:handle` with the sigil inside it.
+ */
+const CREATOR_PATH = /^\/@([^/]+)\/?$/;
+
+/**
  * `/s/{token}` — where a share link lands — and `/embed/{token}`, the same token rendered as
  * a player. The server answers both with the Work's card, because the address a sharer
  * actually pastes is the share link, not the page it points at.
@@ -61,6 +74,8 @@ export function previewRoute(pathname: string): PreviewRoute {
 	if (work) return { kind: "work", param: work[1], canonicalPath: `/works/${work[1]}` };
 	const post = POST_PATH.exec(pathname);
 	if (post) return { kind: "post", param: post[1], canonicalPath: `/posts/${post[1]}` };
+	const creator = CREATOR_PATH.exec(pathname);
+	if (creator) return { kind: "creator", param: creator[1], canonicalPath: `/@${creator[1]}` };
 	const share = SHARE_PATH.exec(pathname);
 	if (share) return { kind: "share", token: share[1] };
 	return null;

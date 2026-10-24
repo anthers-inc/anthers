@@ -24,7 +24,7 @@ import {
 	type WorkCredit,
 	works,
 } from "@anthers/db/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
 	CREDIT_ACCEPTANCE_COLLECTION,
 	CREDIT_ACCEPTANCE_KIND,
@@ -112,7 +112,11 @@ export async function acceptCredit(opts: {
 	if (rejected) return { ok: false, code: "rejected" };
 
 	const [alreadyAccepted] = await db
-		.select({ id: creditAcceptances.id })
+		.select({
+			id: creditAcceptances.id,
+			atprotoUri: creditAcceptances.atprotoUri,
+			acceptedAt: creditAcceptances.acceptedAt,
+		})
 		.from(creditAcceptances)
 		.where(
 			and(
@@ -122,36 +126,32 @@ export async function acceptCredit(opts: {
 			),
 		)
 		.limit(1);
-	if (alreadyAccepted) return { ok: false, code: "already_accepted" };
+	// A row that already has an address already has its record; there is nothing left to do.
+	// A row WITHOUT one is an acceptance whose record never landed, and accepting again is how
+	// it gets written — see the ordering note below.
+	if (alreadyAccepted?.atprotoUri) return { ok: false, code: "already_accepted" };
 
-	const acceptedAt = new Date();
+	// ⭐ The repair keeps the moment the person said yes, not the moment the record caught up.
+	const acceptedAt = alreadyAccepted?.acceptedAt ?? new Date();
 
-	// Upsert the local acceptance row. The unique index on (workId, contributorDid, role)
-	// makes a second accept a no-op at this layer.
-	await db
-		.insert(creditAcceptances)
-		.values({
-			workId: opts.workId,
-			contributorDid: opts.callerDid,
-			role: opts.role,
-			acceptedAt,
-		})
-		.onConflictDoUpdate({
-			target: [creditAcceptances.workId, creditAcceptances.contributorDid, creditAcceptances.role],
-			set: { acceptedAt },
-		});
-
-	// Attempt the record write. While the collection is unpublished this yields a `none`
-	// plan and no network traffic; the row above still records the acceptance.
+	// 🚨 **The writer is opened BEFORE the acceptance row is written, and that order is the
+	// rule.** An acceptance is a published record — the contributor saying "yes, I did this" in
+	// their own repository — so an identity Anthers cannot write for has not accepted anything
+	// yet. Recording the row first and then failing left a row saying accepted beside a record
+	// that did not exist, and the next attempt answered `already_accepted` for ever: the split
+	// this whole chain exists to prevent, with the person told their acceptance had failed.
+	// Every other user-record path refuses before it writes for the same reason (`ensureFollow`).
+	//
+	// ⚠️ A hosted identity always gets a writer; this branch is an OAuth identity that has not
+	// granted the credit-confirmation collection, and it leaves nothing behind.
 	const opened = await writerForAccount(opts.callerUserId, {
 		collections: [CREDIT_ACCEPTANCE_COLLECTION],
 	});
 	if (!opened.writer) {
-		// Hosted identities always get a writer; this branch matters for OAuth identities that
-		// have not granted the credit-confirmation collection.
 		return { ok: false, code: opened.reason === "no_identity" ? "no_identity" : "not_granted" };
 	}
 
+	// While the collection is unpublished this yields a `none` plan and no network traffic.
 	const outcome = await carryOutPlan(
 		opened.writer,
 		CREDIT_ACCEPTANCE_COLLECTION,
@@ -163,19 +163,37 @@ export async function acceptCredit(opts: {
 		null,
 	);
 
-	// Store the record address when one was created or replaced. With the Lexicon unpublished
-	// this stays null, which is the expected inert state.
-	if (outcome.uri) {
+	// Now the row, carrying the address the write returned. The unique index on
+	// (workId, contributorDid, role) makes a concurrent second accept land on the same row;
+	// a repair updates the row it found rather than restamping when the person said yes.
+	if (alreadyAccepted) {
 		await db
 			.update(creditAcceptances)
 			.set({ atprotoUri: outcome.uri })
 			.where(
-				and(
-					eq(creditAcceptances.workId, opts.workId),
-					eq(creditAcceptances.contributorDid, opts.callerDid),
-					eq(creditAcceptances.role, opts.role),
-				),
+				and(eq(creditAcceptances.id, alreadyAccepted.id), isNull(creditAcceptances.atprotoUri)),
 			);
+	} else {
+		await db
+			.insert(creditAcceptances)
+			.values({
+				workId: opts.workId,
+				contributorDid: opts.callerDid,
+				role: opts.role,
+				acceptedAt,
+				atprotoUri: outcome.uri,
+			})
+			.onConflictDoUpdate({
+				target: [
+					creditAcceptances.workId,
+					creditAcceptances.contributorDid,
+					creditAcceptances.role,
+				],
+				// A concurrent accept that already stored an address keeps it; overwriting would
+				// abandon the record it names for one nobody can find.
+				set: { atprotoUri: outcome.uri },
+				setWhere: isNull(creditAcceptances.atprotoUri),
+			});
 	}
 
 	// Re-queue the Work listing so the newly accepted credit is included in the next sync.

@@ -64,6 +64,7 @@ import {
 import { isWorkType } from "@anthers/shared/content";
 import { type ContentNote, RATING_ROWS } from "@anthers/shared/content-rating";
 import { CREATOR_EMAIL_KINDS, resolvedCreatorEmailDelivery } from "@anthers/shared/creator-emails";
+import { creatorPreviewFor } from "@anthers/shared/creator-preview";
 import { asRecipeMix, interleaveByAuthor, reasonForSource } from "@anthers/shared/discovery";
 import { normalizeKeyboardShortcuts } from "@anthers/shared/keybindings";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
@@ -82,7 +83,7 @@ import { Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
-import { displayPostTitles } from "../lib/post-title-mentions.js";
+import { displayPostTitles, mentionableWorks } from "../lib/post-title-mentions.js";
 import { PG_WORK_URL_PATTERN, workPublicIdsFromBody } from "../lib/post-work-links.js";
 import { getOptionalUserId, requireAuth } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
@@ -1149,21 +1150,16 @@ const accountRoutes = new Hono()
 		// The Works each post embeds, for a card thumbnail and a count — a post
 		// in the grid has no artwork of its own, and announcing something while
 		// showing nothing would waste the tile. Extracted from the bodies the
-		// rows already carry (`lib/post-work-links.ts` — nothing is stored);
-		// thumbnails are public by design.
-		const thumbByPublicId = new Map<number, string | null>();
+		// rows already carry (`lib/post-work-links.ts` — nothing is stored), and
+		// resolved through the same allow-list a title's mention uses: an image
+		// reaches the same readers a name does, so an Adult Work's cover is not
+		// handed to somebody who has not opted in.
 		const embeddedIds = [...new Set(feedPosts.flatMap((r) => workPublicIdsFromBody(r.post.body)))];
-		if (embeddedIds.length > 0) {
-			const thumbRows = await db
-				.select({ publicId: works.publicId, thumbnail: works.thumbnail })
-				.from(works)
-				.where(inArray(works.publicId, embeddedIds));
-			for (const t of thumbRows) thumbByPublicId.set(t.publicId, t.thumbnail);
-		}
+		const mentionable = await mentionableWorks(embeddedIds, sessionUser.id);
 		const embedsOf = (post: { id: number; body: string | null }) => {
 			const ids = workPublicIdsFromBody(post.body);
 			return {
-				thumbnail: thumbByPublicId.get(ids[0]) ?? null,
+				thumbnail: mentionable.get(ids[0])?.thumbnail ?? null,
 				linkedWorkCount: ids.length,
 			};
 		};
@@ -1589,6 +1585,39 @@ const accountRoutes = new Hono()
 				followerCount: Number(row?.followerCount ?? 0),
 				projectCount: Number(row?.projectCount ?? 0),
 				isFollowing: Boolean(row?.isFollowing),
+			}),
+		});
+	})
+
+	/**
+	 * The card a shared profile is unfurled with, for a reader who holds no session.
+	 *
+	 * Beside the profile read because the two answer the same questions: a handle that moved
+	 * resolves to the account it moved to, and a suspended account answers not-found rather
+	 * than being described. Nothing here writes — the profile read counts a view, and an
+	 * unfurl is not one.
+	 *
+	 * The portrait is the card's image and the bio is its line; both are the creator's own
+	 * public facts. The profile's lists stay out of it, since a preview describes a person
+	 * to somebody who has not met their work yet.
+	 */
+	.get("/users/:handle/card", async (c) => {
+		const handle = c.req.param("handle");
+		const resolution = await resolveHandle(handle);
+		const account =
+			resolution.account ??
+			(resolution.redirectToHandle
+				? await accountByHandle(resolution.redirectToHandle)
+				: undefined);
+		if (!account || (await isSuspendedAccount(account.id))) {
+			return c.json({ error: "User not found" }, 404);
+		}
+		return c.json({
+			preview: creatorPreviewFor({
+				displayName: account.displayName,
+				handle: account.atprotoHandle ?? handle,
+				bio: account.bio,
+				image: account.avatar,
 			}),
 		});
 	})

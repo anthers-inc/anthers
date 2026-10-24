@@ -1,5 +1,5 @@
 {
-  "id": "9eb51814-339f-44ad-965f-a62de23a8bd8",
+  "id": "acdf18b7-1626-46df-8a7d-8ac9314b26ef",
   "prevId": "f28d568d-3791-4040-b402-97d9faf8d675",
   "version": "7",
   "dialect": "postgresql",
@@ -6217,12 +6217,6 @@
           "notNull": false,
           "default": false
         },
-        "discord_id": {
-          "name": "discord_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "atproto_did": {
           "name": "atproto_did",
           "type": "text",
@@ -6302,13 +6296,6 @@
           "nullsNotDistinct": false,
           "columns": [
             "email"
-          ]
-        },
-        "users_discord_id_unique": {
-          "name": "users_discord_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "discord_id"
           ]
         },
         "users_atproto_did_unique": {
@@ -13123,6 +13110,86 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.work_media_versions": {
+      "name": "work_media_versions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "work_id": {
+          "name": "work_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "uploaded_at": {
+          "name": "uploaded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "media": {
+          "name": "media",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "idx_work_media_versions_work": {
+          "name": "idx_work_media_versions_work",
+          "columns": [
+            {
+              "expression": "work_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "uploaded_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "work_media_versions_work_id_works_id_fk": {
+          "name": "work_media_versions_work_id_works_id_fk",
+          "tableFrom": "work_media_versions",
+          "tableTo": "works",
+          "columnsFrom": [
+            "work_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.work_pages": {
       "name": "work_pages",
       "schema": "",
@@ -14410,6 +14477,13 @@
         },
         "updated_at": {
           "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "version_added_at": {
+          "name": "version_added_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,

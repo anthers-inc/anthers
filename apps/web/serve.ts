@@ -8,13 +8,13 @@
  * Work's own title, blurb and thumbnail (see `src/lib/share-head.ts`). Nothing else about
  * the page changes, so the SPA, its routes and its own data fetches are untouched.
  *
- * 🚨 **A Work's page, a post's permalink and the share link that points at a Work all carry
- * that card.** A `/s/{token}` link is what the Share button hands a sharer, so it is the
- * address that actually gets pasted — and the token carries no slug, so the shell cannot
- * describe it without asking. The token resolves through the API's own read, each card comes
- * from the endpoint its document family owns, and the canonical address is the document's
- * own page: a share link is a locator and never a page, and it must not become one to a
- * crawler.
+ * 🚨 **A Work's page, a post's permalink, a creator's profile and the share link that points
+ * at a Work all carry that card.** A `/s/{token}` link is what the Share button hands a
+ * sharer, so it is the address that actually gets pasted — and the token carries no slug, so
+ * the shell cannot describe it without asking. The token resolves through the API's own
+ * read, each card comes from the endpoint its document family owns, and the canonical
+ * address is the document's own page: a share link is a locator and never a page, and it
+ * must not become one to a crawler.
  *
  * 🚨 **Fail open is the rule for the card.** No API reachable, a slow answer, a 404, a
  * malformed body — each returns the shell exactly as it shipped, which carries the site
@@ -37,7 +37,9 @@
  * the same tag for the same reason.
  */
 import { resolve, sep } from "node:path";
+import { robotsTxt, SITEMAP_PATH, sitemapXml } from "./src/lib/crawl.js";
 import { devBuildApiOrigin, devBuildPage } from "./src/lib/dev-build-page.js";
+import { pageMeta } from "./src/lib/page-meta.js";
 import { previewRoute } from "./src/lib/preview-route.js";
 import { injectShareHead, type LinkCard } from "./src/lib/share-head.js";
 
@@ -88,7 +90,11 @@ interface ServedPreview {
 }
 
 /** The API path family each document kind's card read lives under. */
-const CARD_FAMILY = { work: "works", post: "posts" } as const;
+const CARD_FAMILY = {
+	work: "content/works",
+	post: "content/posts",
+	creator: "accounts/users",
+} as const;
 
 /**
  * Who a document path is about, as the card endpoint's parameter and the canonical path.
@@ -114,6 +120,17 @@ async function shareTarget(
 }
 
 /**
+ * The card a standing page serves: the shell's own image, the page's own words.
+ *
+ * A page listed in `page-meta.ts` has nothing to ask the API for — its title and line are
+ * its own copy, and the card image is the site's. Everything else keeps the shipped block.
+ */
+function pageCard(pathname: string): LinkCard | null {
+	const meta = pageMeta(pathname);
+	return meta ? { title: meta.title, description: meta.description, image: null } : null;
+}
+
+/**
  * The card the document at this path is served with, or null for the site card.
  *
  * A null answer is the neutral one for all of: a route with no card, no API, a 404 (which
@@ -130,7 +147,7 @@ async function previewFor(pathname: string): Promise<ServedPreview | null> {
 		const target = route.kind === "share" ? await shareTarget(route.token, signal) : route;
 		if (!target) return null;
 		const res = await fetch(
-			`${API_ORIGIN}/api/content/${CARD_FAMILY[target.kind]}/${encodeURIComponent(target.param)}/card`,
+			`${API_ORIGIN}/api/${CARD_FAMILY[target.kind]}/${encodeURIComponent(target.param)}/card`,
 			{ headers: { accept: "application/json" }, signal },
 		);
 		if (!res.ok) return null;
@@ -165,6 +182,23 @@ Bun.serve({
 		const url = new URL(req.url);
 		if (url.pathname === "/dev/web-build") return devBuildPage(devBuildApiOrigin(req, API_PORT));
 		if (url.pathname === "/_health") return new Response("ok");
+		// The two documents a crawler asks for, ahead of the shell it would otherwise get.
+		if (url.pathname === "/robots.txt") {
+			return new Response(robotsTxt(SITE_ORIGIN), {
+				headers: {
+					"Content-Type": "text/plain;charset=utf-8",
+					"Cache-Control": "public, max-age=3600",
+				},
+			});
+		}
+		if (url.pathname === SITEMAP_PATH) {
+			return new Response(sitemapXml(SITE_ORIGIN), {
+				headers: {
+					"Content-Type": "application/xml;charset=utf-8",
+					"Cache-Control": "public, max-age=3600",
+				},
+			});
+		}
 		if (url.pathname === "/index.html") {
 			return new Response(withDevApiPort(await indexHtml()), {
 				headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-cache" },
@@ -188,9 +222,25 @@ Bun.serve({
 		}
 
 		// SPA fallback: the shell, with this route's card when it has one.
-		const [html, served] = await Promise.all([indexHtml(), previewFor(url.pathname)]);
-		const canonical = `${SITE_ORIGIN}${served?.canonicalPath ?? url.pathname}`;
-		return new Response(withDevApiPort(injectShareHead(html, served?.preview ?? null, canonical)), {
+		//
+		// The card is matched against the DECODED path, because a client is free to send
+		// `/%40name` for `/@name` and a signature in a Work's URL can arrive encoded too —
+		// matching the raw form would quietly fall back to the site card for those requests.
+		// Asset resolution above keeps its own decode, so this never decodes twice.
+		const documentPath = (() => {
+			try {
+				return decodeURIComponent(url.pathname);
+			} catch {
+				return url.pathname;
+			}
+		})();
+		const [html, served] = await Promise.all([indexHtml(), previewFor(documentPath)]);
+		const canonicalPath = served?.canonicalPath ?? documentPath;
+		const canonical = `${SITE_ORIGIN}${canonicalPath}`;
+		// A document that knows what it is comes first; a standing page comes second, and its
+		// own address is what the canonical tag names rather than the site's.
+		const card = served?.preview ?? pageCard(canonicalPath);
+		return new Response(withDevApiPort(injectShareHead(html, card, canonical)), {
 			headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-cache" },
 		});
 	},

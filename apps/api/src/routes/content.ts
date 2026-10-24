@@ -65,6 +65,7 @@ import {
 	type CommentSubjectType,
 	embedUrlProblem,
 	hasSourceSet,
+	isGoodsType,
 	isListened,
 	isOwnThumbnail,
 	isPaged,
@@ -145,6 +146,7 @@ import {
 import { pgWorkEmbedPattern, workPublicIdsFromBody } from "../lib/post-work-links.js";
 import { probeVideo } from "../lib/video-frames.js";
 import { buildDeliveryHost, mintPlayToken, PLAY_TOKEN_TTL_SECONDS } from "../lib/web-build.js";
+import { zipStream } from "../lib/zip-stream.js";
 import { getOptionalUserId, requireAuth, requireCreator } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
 import {
@@ -154,6 +156,7 @@ import {
 	buildPreviewContext,
 	defaultSeedAccess,
 	heldAnthersBadgeAmount,
+	normalizeAccessRows,
 	resolveAccessSync,
 } from "../services/access.js";
 import {
@@ -294,8 +297,17 @@ import {
 	listSourceFiles,
 	removeSourceFile,
 	reorderSourceFiles,
+	replaceSourceSet,
 	syncFromSourceKey,
 } from "../services/work-source-files.js";
+import {
+	archiveCurrentMedia,
+	findWorkVersion,
+	listWorkVersions,
+	removeWorkVersion,
+	summarizeVersion,
+	versionFiles,
+} from "../services/work-versions.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -882,6 +894,11 @@ const MONEY = /^\d+(\.\d{1,2})?$/;
  * flag, and a price. The threshold is what the user has given this Work's creator
  * this cycle, and there is exactly one such table.
  *
+ * `badgeId` names the creator's rung the gate sits on; it is absent on the Everyone
+ * baseline, and `normalizeAccessRows` (services/access.ts) is what checks it against the
+ * creator's ladder and stamps the threshold from the rung. The number a client sends with
+ * a badgeId is therefore advisory — the rung's current amount wins.
+ *
  * 🚨 **Cents, not integers, and this is a justification that inverted under its own
  * premise.** Refusing a fractional threshold was once right — a gate nobody could exactly
  * meet is a gate nobody can clear — and became exactly backwards when amounts stopped
@@ -909,6 +926,10 @@ const accessRowSchema = z.object({
 		// The baseline row sits at 0 and must stay legal, which is why this is the "$0 or at
 		// least the floor" predicate rather than a minimum.
 		.refine(isChargeableAmount, { message: CHARGEABLE_AMOUNT_MESSAGE }),
+	// The rung the gate sits on. Nullable rather than optional so a client clearing a gate
+	// says so; whatever is not the Everyone baseline must name one of the creator's own
+	// rungs, which the handler checks.
+	badgeId: z.number().int().positive().nullable().optional(),
 	allow: z.boolean(),
 	// 🚨 **The floor sits on the PRICE, never on the buyer's total.** Sales tax is added on
 	// top of the price at the charge, so flooring the total would make a $0.47 Work
@@ -1659,6 +1680,8 @@ async function serializeWork(
 		// Owner-facing and listing-only: the Reviews column's numbers, where the caller
 		// asked for them. Omitted entirely elsewhere, so no other shape has to explain them.
 		...(reviewCounts ? { reviewCounts } : {}),
+		/** When the current media version was added — the date the Work's page shows. */
+		versionAddedAt: item.versionAddedAt,
 		/** The UPLOAD date. Creator-facing only — the public sees originallyReleased and releasedAt. */
 		createdAt: item.createdAt,
 		updatedAt: item.updatedAt,
@@ -2573,6 +2596,8 @@ async function serializeWorkForUser(
 		sourceUrl: work.sourceUrl,
 		viewCount: work.viewCount,
 		downloadCount: work.downloadCount,
+		/** The current media version's date, for the reader. History stays owner-only. */
+		versionAddedAt: work.versionAddedAt,
 		createdAt: work.createdAt,
 		updatedAt: work.updatedAt,
 		// `clientVariants` are an internal packaging detail (storage keys) — never expose.
@@ -3323,15 +3348,12 @@ const contentRoutes = new Hono()
 		// the bodies the rows already carry (nothing is stored; see `lib/post-work-links.ts`).
 		// Deliberately NOT resolved for access here: the feed lists announcements, and a
 		// post's readability has nothing to do with whether the Works it embeds are open.
-		const thumbByPublicId = new Map<number, string | null>();
+		// The Works each post embeds, resolved for this reader through the same allow-list a
+		// title's mention uses: a tile's image reaches whoever the listing reaches, so an
+		// Adult Work's cover must not arrive here by a query that never asked whether this
+		// reader may see the Work at all.
 		const allPublicIds = [...new Set(result.flatMap((r) => workPublicIdsFromBody(r.post.body)))];
-		if (allPublicIds.length > 0) {
-			const thumbRows = await db
-				.select({ publicId: works.publicId, thumbnail: works.thumbnail })
-				.from(works)
-				.where(inArray(works.publicId, allPublicIds));
-			for (const t of thumbRows) thumbByPublicId.set(t.publicId, t.thumbnail);
-		}
+		const mentionable = await mentionableWorks(allPublicIds, viewerId);
 
 		return c.json({
 			posts: result.map((r, index) => {
@@ -3358,9 +3380,10 @@ const contentRoutes = new Hono()
 						displayName: r.creatorDisplayName,
 						avatar: r.creatorAvatar,
 					}),
-					// A card image, if the post embeds anything. Thumbnails are public — they are
-					// the preview a locked Work is *supposed* to show.
-					thumbnail: thumbByPublicId.get(embedded[0]) ?? null,
+					// A card image, if the post embeds a Work this reader may see. A locked
+					// Work's thumbnail is the preview it is supposed to show; an Adult Work's
+					// is part of the existence its rung withholds, so it is not here.
+					thumbnail: mentionable.get(embedded[0])?.thumbnail ?? null,
 					linkedWorkCount: embedded.length,
 					// The body as plain text, where the tile's band renders the content —
 					// the same field the feed entries carry (`routes/accounts.ts`), for the
@@ -3573,7 +3596,11 @@ const contentRoutes = new Hono()
 				// The title as a reader sees it, and the Works behind its mentions so the
 				// heading links each `@` name to the Work it names.
 				displayTitle,
-				mentionedWorks,
+				mentionedWorks: mentionedWorks.map(({ publicId, slug, title }) => ({
+					publicId,
+					slug,
+					title,
+				})),
 				edits,
 			},
 		});
@@ -3683,7 +3710,9 @@ const contentRoutes = new Hono()
 				// The canonicalization just refreshed every mention's text, so the visible
 				// title needs no further lookup here.
 				displayTitle: visiblePostTitle(updated.title),
-				mentionedWorks: await mentionedWorksForTitle(updated.title, user.id),
+				mentionedWorks: (await mentionedWorksForTitle(updated.title, user.id)).map(
+					({ publicId, slug, title }) => ({ publicId, slug, title }),
+				),
 			},
 		});
 	})
@@ -4364,6 +4393,72 @@ const contentRoutes = new Hono()
 		// ignores signing and serves via /content).
 		const url = await storage.getUrl(asset.file, { signed: true, expiresIn: 300 });
 		return c.json({ url });
+	})
+
+	// ── A Work's archived media versions ─────────────────────────────────────────
+	//
+	// Owner-only in every direction. A version holds the ORIGINAL bytes a replacement
+	// retired; the current media is the Work row, the source set and the build tables, and
+	// nothing here is reachable from a share link or a reader's payload. A non-owner gets
+	// the same 404 as a missing Work, because the existence of an old version is not
+	// something a stranger's request should confirm.
+
+	.get("/works/:id/versions", requireAuth, requireCreator, async (c) => {
+		const work = await findWorkRow(c.req.param("id") ?? "");
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		const userId = await getOptionalUserId(c);
+		if (userId !== work.creatorId) return c.json({ error: "Work not found" }, 404);
+
+		const rows = await listWorkVersions(work.id);
+		return c.json({ versions: rows.map(summarizeVersion) });
+	})
+
+	.get("/works/:id/versions/:versionId/download", requireAuth, requireCreator, async (c) => {
+		const work = await findWorkRow(c.req.param("id") ?? "");
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		const userId = await getOptionalUserId(c);
+		if (userId !== work.creatorId) return c.json({ error: "Work not found" }, 404);
+
+		const versionId = parseNumericId(c.req.param("versionId") ?? "");
+		if (versionId == null) return c.json({ error: "Version not found" }, 404);
+		const version = await findWorkVersion(work.id, versionId);
+		if (!version) return c.json({ error: "Version not found" }, 404);
+
+		const files = versionFiles(version);
+		if (files.length === 0) return c.json({ error: "Version not found" }, 404);
+		if (files.length === 1) {
+			// A single original is one attachment URL; the browser saves it without this
+			// process touching the bytes.
+			const url = await storage.getUrl(files[0].file, {
+				signed: true,
+				expiresIn: 300,
+				download: files[0].filename,
+			});
+			c.header("Cache-Control", "no-store");
+			return c.redirect(url, 302);
+		}
+		// A set or build version is many originals. Stream a store-only zip; see
+		// `lib/zip-stream.ts` for why it never materialises the archive.
+		return new Response(zipStream(files), {
+			headers: {
+				"Content-Type": "application/zip",
+				"Content-Disposition": `attachment; filename="version-${version.id}.zip"`,
+				"Cache-Control": "no-store",
+			},
+		});
+	})
+
+	.delete("/works/:id/versions/:versionId", requireAuth, requireCreator, async (c) => {
+		const work = await findWorkRow(c.req.param("id") ?? "");
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		const userId = await getOptionalUserId(c);
+		if (userId !== work.creatorId) return c.json({ error: "Work not found" }, 404);
+
+		const versionId = parseNumericId(c.req.param("versionId") ?? "");
+		if (versionId == null) return c.json({ error: "Version not found" }, 404);
+		const removed = await removeWorkVersion(work, versionId);
+		if (!removed) return c.json({ error: "Version not found" }, 404);
+		return c.json({ removed: true as const });
 	})
 
 	// ── Transcoding status for a Work ────────────────────────────────────────────
@@ -5238,6 +5333,16 @@ const contentRoutes = new Hono()
 			if (rejected) return c.json(REJECTED_CREDIT_REFUSAL, 400);
 		}
 
+		// Every gate names one of this creator's rungs, and the rung's amount is what is
+		// stored — never the number the request carried. `normalizeAccessRows` carries the
+		// reasoning.
+		let accessRows = defaultSeedAccess();
+		if (data.access !== undefined) {
+			const normalized = await normalizeAccessRows(user.id, data.access);
+			if ("error" in normalized) return c.json({ error: normalized.error }, 400);
+			accessRows = normalized.rows;
+		}
+
 		const [work] = await db
 			.insert(works)
 			.values({
@@ -5274,7 +5379,7 @@ const contentRoutes = new Hono()
 				originallyReleased: data.originallyReleased ? new Date(data.originallyReleased) : null,
 				streamEnabled: data.streamEnabled ?? data.type !== "physical",
 				downloadEnabled: data.downloadEnabled ?? false,
-				access: data.access ?? defaultSeedAccess(),
+				access: accessRows,
 				credits: data.credits ?? [],
 				isPinned: data.isPinned ?? false,
 				tags: data.tags ?? [],
@@ -6136,7 +6241,7 @@ const contentRoutes = new Hono()
 		const willDownload = data.downloadEnabled ?? work.downloadEnabled;
 		// The floor asks about the kind this edit RESULTS IN, the same way every other
 		// gate below reads the row as the request leaves it.
-		if (!willStream && !willDownload && (data.type ?? work.type) !== "physical") {
+		if (!willStream && !willDownload && !isGoodsType(data.type ?? work.type)) {
 			return c.json({ error: "A Work must enable at least one of stream or download" }, 400);
 		}
 
@@ -6370,7 +6475,11 @@ const contentRoutes = new Hono()
 			if (data.streamEnabled !== undefined) updates.streamEnabled = data.streamEnabled;
 			if (data.downloadEnabled !== undefined) updates.downloadEnabled = data.downloadEnabled;
 		}
-		if (data.access !== undefined) updates.access = data.access;
+		if (data.access !== undefined) {
+			const normalized = await normalizeAccessRows(user.id, data.access);
+			if ("error" in normalized) return c.json({ error: normalized.error }, 400);
+			updates.access = normalized.rows;
+		}
 		if (data.credits !== undefined) updates.credits = data.credits;
 		if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
 		if (data.tags !== undefined) updates.tags = data.tags;
@@ -6451,7 +6560,30 @@ const contentRoutes = new Hono()
 		// while the creator may be editing the same Work on its page.
 		if (sourceChanged && isOwnThumbnail(work.type)) updates.thumbnail = data.sourceKey ?? "";
 
-		const [updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
+		// A new source is a new version. The prior original is archived before the write, so
+		// the sweep below can retire its renditions without touching the bytes the version
+		// keeps. A set kind's own rows are the source truth, so its archive belongs in
+		// `syncFromSourceKey`, which owns them.
+		const archivesSource =
+			sourceChanged &&
+			!hasSourceSet(work.type) &&
+			!!data.sourceKey &&
+			!!(work.sourceKey || work.sourceOriginalKey);
+		if (sourceChanged) updates.versionAddedAt = new Date();
+
+		let updated: typeof works.$inferSelect;
+		let archivedKeeps: Set<string> | null = null;
+		if (archivesSource) {
+			const result = await db.transaction(async (tx) => {
+				const archived = await archiveCurrentMedia(work, tx);
+				const [row] = await tx.update(works).set(updates).where(eq(works.id, id)).returning();
+				return { row, keeps: archived?.keeps ?? null };
+			});
+			updated = result.row;
+			archivedKeeps = result.keeps;
+		} else {
+			[updated] = await db.update(works).set(updates).where(eq(works.id, id)).returning();
+		}
 
 		// The creator's own credits are affirmed by the assertion itself, recorded before the
 		// listing sync below so the record's confirmed set sees them. Run on every write, not
@@ -6490,29 +6622,41 @@ const contentRoutes = new Hono()
 		// one file) and re-renders through the service; queueing the job directly here as
 		// well would be two jobs for one file.
 		//
-		// 🚨 **A replacement is replace-in-place: nothing of the old version survives it.**
-		// When the Work already carried media, the retired source — the prior object, its
-		// remux-retained original, every derived output the prior job rows name — is swept
-		// through `media-purge.ts` (the one writer for what may be deleted), and the prior
-		// job rows are deleted so the replacement is the Work's only processing truth.
-		// The no-old-versions ruling (Parker, 2026-10-10): a replaced source's objects
-		// leave the Work and their storage follows. A paged set's own files are retired
-		// by `syncFromSourceKey`, which owns the set and its rows in the same mutation.
-		// An in-flight job's stale pg-boss delivery finds its row gone and throws at the
-		// claim guard — the same precedent DELETE /works/:id's cascade already set.
+		// 🚨 **A replacement archives the version it retires, then sweeps that version's
+		// renditions.** The creator's original is kept in `work_media_versions`; the prior
+		// job rows and every derived output they name leave through `media-purge.ts`, the
+		// one writer for what may be deleted. The 2026-10-23 version ruling replaced the
+		// no-old-versions ruling of 2026-10-10.
+		//
+		// A set's source rows are its truth, so `syncFromSourceKey` archives the old set
+		// before replacing it. An in-flight job's stale pg-boss delivery finds its row gone
+		// and throws at the claim guard — the same precedent DELETE /works/:id's cascade
+		// already set.
 		if (sourceChanged && updated.sourceKey) {
-			if (work.sourceKey || work.sourceOriginalKey) {
-				const priorJobs = await db
-					.select()
-					.from(transcodingJobs)
-					.where(eq(transcodingJobs.workId, id));
-				await purgeReplacedWorkMedia(work, priorJobs);
+			const priorJobs = await db
+				.select()
+				.from(transcodingJobs)
+				.where(eq(transcodingJobs.workId, id));
+			if (hasSourceSet(updated.type)) {
+				// The old set's files become the version's originals; only the processing
+				// rows retire here. `syncFromSourceKey` owns the set rows.
 				if (priorJobs.length > 0) {
 					await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, id));
 				}
+				await syncFromSourceKey(updated, work);
+			} else {
+				if (work.sourceKey || work.sourceOriginalKey) {
+					await purgeReplacedWorkMedia(
+						work,
+						priorJobs,
+						archivedKeeps ? { keep: archivedKeeps } : undefined,
+					);
+					if (priorJobs.length > 0) {
+						await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, id));
+					}
+				}
+				await queueTranscodeForWork(updated);
 			}
-			if (hasSourceSet(updated.type)) await syncFromSourceKey(updated);
-			else await queueTranscodeForWork(updated);
 		}
 		if (sourceChanged || thumbnailChanged) await queueScansForWork(updated);
 
@@ -6956,21 +7100,55 @@ const contentRoutes = new Hono()
 	.post("/works/:id/assets", requireAuth, zValidator("json", createAssetSchema), async (c) => {
 		const user = c.get("user");
 		const id = Number(c.req.param("id"));
-		const [item] = await db
-			.select({ id: works.id })
+		const [work] = await db
+			.select()
 			.from(works)
 			.where(and(eq(works.id, id), eq(works.creatorId, user.id)))
 			.limit(1);
-		if (!item) return c.json({ error: "Work not found" }, 404);
+		if (!work) return c.json({ error: "Work not found" }, 404);
 
 		const data = c.req.valid("json");
 		// The asset route signs this key for the Work's owner, so an asset naming another
 		// creator's private original would hand it over. See `storage/keys.ts`.
 		if (!(await isOwnStorageRef(data.file, user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
+
+		const [existingAssets, existingPrimaryWeb] = await Promise.all([
+			db.select().from(assets).where(eq(assets.workId, id)),
+			db
+				.select({ id: webBuilds.id })
+				.from(webBuilds)
+				.where(and(eq(webBuilds.workId, id), eq(webBuilds.isPrimary, true))),
+		]);
+		const replacesPrimary =
+			data.isPrimary &&
+			(existingAssets.some((asset) => asset.isPrimary) || existingPrimaryWeb.length > 0);
+		const firstBuild = existingAssets.length === 0 && existingPrimaryWeb.length === 0;
+
+		if (replacesPrimary) {
+			// A new primary build starts a new version: the current builds become the
+			// archived original and every prior build row retires. Their files stay — the
+			// version owns them — so nothing is swept here.
+			const asset = await db.transaction(async (tx) => {
+				await archiveCurrentMedia(work, tx);
+				await tx.delete(assets).where(eq(assets.workId, id));
+				await tx.delete(webBuilds).where(eq(webBuilds.workId, id));
+				const [created] = await tx
+					.insert(assets)
+					.values({ workId: id, ...data })
+					.returning();
+				await tx.update(works).set({ versionAddedAt: new Date() }).where(eq(works.id, id));
+				return created;
+			});
+			return c.json({ asset }, 201);
+		}
+
 		const [asset] = await db
 			.insert(assets)
 			.values({ workId: id, ...data })
 			.returning();
+		if (firstBuild) {
+			await db.update(works).set({ versionAddedAt: new Date() }).where(eq(works.id, id));
+		}
 		return c.json({ asset }, 201);
 	})
 
@@ -7068,6 +7246,43 @@ const contentRoutes = new Hono()
 			return c.json({ files: rows, transcoding: job }, 201);
 		},
 	)
+
+	// ── A released (or draft) set's whole replacement: the new-version path ──
+	// 🚨 **This is the one mutation a released set accepts.** Append, reorder and remove
+	// edit the version a reader is looking at, so they stay draft-only; a new version is a
+	// whole new set, archived first, with the Work's version date moved. See
+	// `replaceSourceSet`.
+	.put("/works/:id/source-files", requireAuth, zValidator("json", sourceFilesSchema), async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (!hasSourceSet(item.type)) {
+			return c.json(
+				{
+					error: "Only a comic, a book or an image carries a set of files.",
+					code: "sources_not_set",
+				},
+				400,
+			);
+		}
+		const data = c.req.valid("json");
+		const files = "files" in data ? data.files : [data];
+		const owned = await Promise.all(files.map((file) => isOwnStorageRef(file.file, user.id)));
+		if (owned.some((own) => !own)) return c.json(FOREIGN_FILE_REFUSAL, 400);
+		const { rows, job, error, code } = await replaceSourceSet(item, files);
+		if (error) {
+			return c.json({ error, code: code ?? "sources_mixed_shapes" }, 400);
+		}
+		// Every file in the new set is a new object to scan, as in the append route.
+		await queueScansForWork(
+			{ ...item, sourceKey: "" },
+			item.type === "image"
+				? files.map((file) => ({ key: file.file, kind: "image" as const }))
+				: [],
+		);
+		return c.json({ files: rows, transcoding: job }, 200);
+	})
 
 	.patch(
 		"/works/:id/source-files",
@@ -9047,6 +9262,14 @@ const contentRoutes = new Hono()
 					400,
 				);
 			}
+
+			// 🚨 **Refused before anything is recorded**, like every other user-record path (a
+			// comment, a review, a vote, a follow). The acceptance IS a record in the caller's own
+			// repository, so an identity Anthers cannot write for has not accepted anything yet —
+			// recording the row first and failing after left a row saying accepted beside a record
+			// that never existed, and the retry answered `already_accepted` for ever.
+			const unwritable = await interactionPermissionRefusal(user.id);
+			if (unwritable) return c.json(unwritable.body, unwritable.status);
 
 			const result = await acceptCredit({
 				callerUserId: user.id,

@@ -8,17 +8,17 @@
  * as "Unlock with Blossom" — a Badge that by definition does not clear it — with the price
  * silently missing, because the price came from a Badge-rung lookup that found nothing.
  *
- * Anthers' own Badges sit at 1/2/3/4, so that only misfired above 4 and nobody hit it. But
- * `accessRowSchema` accepts any non-negative threshold and the whole point of the
- * threshold-not-position work is that a gate needn't sit on a Badge — so the tests below
- * deliberately gate at levels no Badge occupies. It is the same failure mode `badgeRank()`
- * had: correct only by accident of a consecutive ladder, and failing toward OVER-claiming.
+ * 🚨 **Gates sit on a Badge rung now** (`badgeId`, Parker 2026-10-23), so a real gate always
+ * has a rung to name and the exact-match rule is satisfied by construction. The unmatched
+ * case these tests still drive is the row the backfill (`db:gate-badges`) has not reached:
+ * naming the nearest lower Badge there would be exactly the over-claim above, so it names
+ * nothing instead.
  *
  * 🚨 **Half of this file used to drive the Anthers side**, gating on the user's Badge.
- * There is one destination — the creator's own ladder — so the same
- * assertions run against the creator's ladder. The Badge-naming tests survive on
- * `unlockRoute` directly, which still takes an issuer's Badge set — that is the seam a
- * creator's own Badges will arrive through.
+ * There is one destination — the creator's own ladder — so the same assertions run against
+ * the creator's ladder. The Badge-naming tests survive on `unlockRoute` directly, which
+ * still takes an issuer's Badge set — that is the seam a creator's own Badges arrive
+ * through.
  */
 import { describe, expect, it } from "bun:test";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
@@ -130,12 +130,12 @@ describe("unlock offer — naming a Badge", () => {
 		expect(got.unlock?.creator?.threshold).toBe(2);
 	});
 
-	it("names no Badge for a gate BETWEEN two Badges, or above them all", () => {
-		// Sparse ladders are legal — a creator's 1/3/5/7 is as valid as Anthers' 1/2/3/4 —
-		// so "between" has to work as well as "above". Driven through `unlockRoute` directly
-		// against a deliberately gappy set: this is the seam an issuer's Badges arrive
-		// through, and it is the one place the naming rule can still be exercised now that
-		// no caller passes a Badge set. Same discipline as `packages/shared/src/badges.test.ts`.
+	it("names the rung a gate sits on, and never a lower one", () => {
+		// A gate is written on one of the creator's own rungs, so its amount and the rung's
+		// agree by construction (the server stamps the amount). The unmatched leg survives
+		// for a row the backfill has not reached: with rungs at $2 and $6, a $4 gate names
+		// nothing, because the nearest Badge below does not clear it. Naming it was the
+		// original over-claim, and this is its guard.
 		const sparse = [
 			{ name: "blorp", threshold: 2 },
 			{ name: "zorp", threshold: 6 },
@@ -145,12 +145,8 @@ describe("unlock offer — naming a Badge", () => {
 			{ threshold, allow: true, price: "0" },
 		];
 
-		// A gate at 4 sits in the gap: the nearest Badge below is "blorp" at 2, which a
-		// gate at $4 does not accept. Naming it would be the original bug.
 		expect(unlockRoute(gate(4), 0, sparse)?.badge).toBeNull();
-		// Above the top Badge, likewise.
 		expect(unlockRoute(gate(9), 0, sparse)?.badge).toBeNull();
-		// And on a Badge, it still names it.
 		expect(unlockRoute(gate(6), 0, sparse)?.badge).toBe("zorp");
 		expect(unlockRoute(gate(2), 0, sparse)?.badge).toBe("blorp");
 	});

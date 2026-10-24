@@ -15,6 +15,7 @@ import {
 import {
 	BROWSER_RESERVED_CHORDS,
 	canonicalChord,
+	chordsCollide,
 	DEFAULT_KEYBOARD_SHORTCUTS,
 	formatChord,
 	isPlayerShortcutAction,
@@ -3148,7 +3149,7 @@ function KeyboardShortcutsSection() {
 			const other = KEYBOARD_SHORTCUT_ACTIONS.filter((action) => action !== recording).map(
 				(action) => draft[action],
 			);
-			if (other.includes(chord)) {
+			if (other.some((existing) => chordsCollide(existing, chord))) {
 				setNotice({
 					tone: "error",
 					text: "Another shortcut already uses that combination.",
@@ -3176,6 +3177,10 @@ function KeyboardShortcutsSection() {
 		filter: {
 			label: "Filter this view",
 			hint: `Rebinding this gives ${formatChord(DEFAULT_KEYBOARD_SHORTCUTS.filter, apple)} back to the browser's find.`,
+		},
+		sidebar: {
+			label: "Toggle the sidebar",
+			hint: "Collapses it to its rail on a wide screen, and closes the drawer over the page on a phone.",
 		},
 		fullscreen: {
 			label: "Full screen",

@@ -22,11 +22,13 @@ import { TakeHome } from "../economics/TakeHome";
 // ─── Row drafts ───
 
 /**
- * A draft row: a monthly-dollar threshold, an allow flag, a price. `label` is display only
- * — the threshold is what is saved and what decides access, so renaming a rung never moves
- * a gate.
+ * A draft row: the Badge rung it gates at, a monthly-dollar threshold, an allow flag, and a
+ * price. `label` is display only — the rung's amount decides access, so renaming it never
+ * moves a gate, and the threshold comes back stamped from the server on save.
  */
 export interface AccessRowDraft {
+	/** The creator's rung this row gates at; null on the Everyone baseline. */
+	badgeId: number | null;
 	/** Dollars a month to this Work's creator, cents included. 0 = everyone. */
 	threshold: number;
 	label: string;
@@ -48,21 +50,36 @@ export function buildAccessRows(
 	rungs: CreatorBadge[],
 	existing?: AccessRow[] | null,
 ): AccessRowDraft[] {
+	// A stored gate names its rung; the threshold map is the fallback for rows written
+	// before that reference existed (`db:gate-badges` fills them). Matching by rung rather
+	// than by amount is what keeps a repriced rung's gate on its rung instead of silently
+	// dropping it from this table.
+	const byBadge = new Map<number, AccessRow>();
 	const byThreshold = new Map<number, AccessRow>();
-	for (const r of existing ?? []) byThreshold.set(r.threshold, r);
+	for (const r of existing ?? []) {
+		if (r.badgeId != null) byBadge.set(r.badgeId, r);
+		byThreshold.set(r.threshold, r);
+	}
 
 	const base = byThreshold.get(0);
 	const rows: AccessRowDraft[] = [
-		{ threshold: 0, label: "Everyone", allow: base?.allow ?? false, price: base?.price ?? "0" },
+		{
+			badgeId: null,
+			threshold: 0,
+			label: "Everyone",
+			allow: base?.allow ?? false,
+			price: base?.price ?? "0",
+		},
 	];
 
 	const sorted = rungs
-		.map((r) => ({ threshold: Number(r.threshold), label: r.label }))
+		.map((r) => ({ id: r.id, threshold: Number(r.threshold), label: r.label }))
 		.sort((a, b) => a.threshold - b.threshold);
 
 	for (const rung of sorted) {
-		const ex = byThreshold.get(rung.threshold);
+		const ex = byBadge.get(rung.id) ?? byThreshold.get(rung.threshold);
 		rows.push({
+			badgeId: rung.id,
 			threshold: rung.threshold,
 			label: rung.label,
 			allow: ex?.allow ?? false,
@@ -75,6 +92,7 @@ export function buildAccessRows(
 /** The label is editor-only and never stored. */
 function serializeRows(rows: AccessRowDraft[]): AccessRowDraft[] {
 	return rows.map((r) => ({
+		badgeId: r.badgeId,
 		threshold: r.threshold,
 		allow: r.allow,
 		price: normalizeMoney(r.price),
@@ -82,7 +100,12 @@ function serializeRows(rows: AccessRowDraft[]): AccessRowDraft[] {
 }
 
 export function serializeAccessRows(rows: AccessRowDraft[]): AccessRow[] {
-	return serializeRows(rows).map(({ threshold, allow, price }) => ({ threshold, allow, price }));
+	return serializeRows(rows).map(({ badgeId, threshold, allow, price }) => ({
+		badgeId,
+		threshold,
+		allow,
+		price,
+	}));
 }
 
 // ─── Component ───
@@ -127,7 +150,7 @@ export default function AccessTables({ rows, onRowsChange }: AccessTablesProps) 
 						</thead>
 						<tbody>
 							{rows.map((row, i) => (
-								<tr key={row.threshold}>
+								<tr key={row.badgeId ?? "everyone"}>
 									<td>
 										<span className="font-medium">{row.label}</span>
 										{/* The threshold hint only earns its place on a rung. The baseline row's
