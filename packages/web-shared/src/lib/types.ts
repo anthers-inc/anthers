@@ -28,6 +28,10 @@ export interface User {
 	 * payloads only; a public listing does not pay for a count per row.
 	 */
 	isVerifiedCreator?: boolean;
+	/** Whether this deployment can offer the Discord link at all. Private payloads only. */
+	isDiscordAvailable?: boolean;
+	/** Whether this account has linked its Discord identity. Private payloads only. */
+	isDiscordLinked?: boolean;
 	avatar: string | null;
 	headerImage: string | null;
 	websiteUrl: string | null;

@@ -49,6 +49,17 @@ export const users = pgTable("users", {
 	location: text("location").default(""),
 	emailVerified: boolean("email_verified").default(false),
 	/**
+	 * The Discord account this person linked, and the only thing tying an Anthers account to
+	 * a member of the Anthers server. Org-imposed like `isCreator` — Discord is a surface
+	 * Anthers runs, not part of the person's identity.
+	 *
+	 * ⚠️ **One row per Discord account, both ways.** `unique` gives "one Anthers account per
+	 * Discord account", and the link route refuses a Discord account another row already
+	 * holds, which is the same statement from the other side. Null means never linked, and
+	 * unlinking sets it back to null rather than deleting anything.
+	 */
+	discordId: text("discord_id").unique(),
+	/**
 	 * The ATProto identity this account is. **Every account holds one**, either an identity
 	 * the person already had (a Bluesky account, say) or one Anthers issued and hosts for
 	 * them on `anthers.social`.

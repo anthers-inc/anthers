@@ -19,6 +19,7 @@ import {
 	deleteExpiredAdminSignInCodes,
 } from "../services/admin-accounts.js";
 import { deleteExpiredSessions } from "../services/auth.js";
+import { reconcileRoles } from "../services/discord.js";
 import {
 	finalizeNotice,
 	isNoticeStatusRefusal,
@@ -168,6 +169,21 @@ async function start() {
 
 	await queue.work(QUEUES.RECONCILE_LISTINGS, async () => {
 		await reconcileListings();
+	});
+
+	// The Discord backstop, on the same reasoning as the listings one: a grant Discord refused,
+	// a creator who turned creator mode off, and a role changed by hand in the server all leave
+	// the two records disagreeing with nothing noticing. Quiet when every linked account is
+	// already right.
+	await queue.work(QUEUES.DISCORD_RECONCILE, async (jobs) => {
+		for (const job of jobs) {
+			const summary = await reconcileRoles();
+			if (summary.checked > 0) {
+				console.log(
+					`[discord-reconcile] job ${job.id}: checked ${summary.checked}, failed ${summary.failed}`,
+				);
+			}
+		}
 	});
 
 	// The user-space outbox. Quiet on a clean sweep (the handler says when it spoke), and

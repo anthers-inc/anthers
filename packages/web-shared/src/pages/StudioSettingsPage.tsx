@@ -24,6 +24,7 @@ import {
 } from "@anthers/shared/creator-emails";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import DiscordCard from "../components/account/DiscordCard";
 import SignedInAccountCard from "../components/account/SignedInAccountCard";
 import { useAuth } from "../lib/auth";
 import type { PublishingState } from "../lib/publishing";
@@ -377,6 +378,7 @@ export default function StudioSettingsPage() {
 
 			<div className="flex flex-col gap-6">
 				<SignedInAccountCard />
+				<DiscordCard surface="creator" />
 				<CommunicationsSection />
 				<AtmospherePublishingSection />
 			</div>

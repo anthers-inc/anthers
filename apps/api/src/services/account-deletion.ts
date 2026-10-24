@@ -73,6 +73,7 @@ import {
 import { and, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { revokeAtprotoGrant } from "./atproto-client.js";
 import { clearSavedBillingAddress } from "./billing.js";
+import { unlinkAccount } from "./discord.js";
 import { escapeHtml, sendOperationalAlert } from "./email.js";
 import { hostedHandlesFor, isHostedIdentity, releaseHostedIdentities } from "./hosted-accounts.js";
 import { isUnderHold } from "./legal-hold.js";
@@ -323,6 +324,12 @@ export async function eraseAccount(
 		console.warn(`account-deletion: user ${userId} is under a legal hold — deletion deferred`);
 		return { erased: false };
 	}
+
+	// The Discord link and its roles leave before the row does. They are the only thing about
+	// this account that lives outside this database, and deleting the row first would strand
+	// them with nothing left to identify the member. Erasure never waits on Discord: the
+	// service swallows a failed removal and the link is gone either way.
+	await unlinkAccount(userId, { revokeMembershipRole: true });
 
 	const [user] = await db
 		.select({

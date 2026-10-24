@@ -35,6 +35,7 @@ import { db } from "@anthers/db";
 import { users, works } from "@anthers/db/schema";
 import { and, eq, isNotNull, lte, ne } from "drizzle-orm";
 import { notifyCreditedAccounts } from "../services/credit-acceptance.js";
+import { syncAccountRoles } from "../services/discord.js";
 import { notify } from "../services/notifications.js";
 import { queueWorkListingSync } from "../services/work-listing.js";
 import { releaseRefusal } from "../services/work-release.js";
@@ -126,6 +127,16 @@ export async function releaseScheduled(now: Date = new Date()): Promise<ReleaseS
 		// should carry what a released Work actually says.
 		const [current] = await db.select().from(works).where(eq(works.id, work.id)).limit(1);
 		if (current) await notifyCreditedAccounts(current, current.creatorId ?? work.creatorId);
+		// The sweep is the second door a Work reaches the public by, so it owes the same
+		// Discord grant the route does — on a first release only, which the pre-release row
+		// already answers.
+		if (!work.releasedAt && work.creatorId) {
+			try {
+				await syncAccountRoles(work.creatorId);
+			} catch (error) {
+				console.error("[discord] role sync after a scheduled release failed", error);
+			}
+		}
 		console.log(`[release-scheduled] Released Work ${work.id} (${work.slug})`);
 	}
 

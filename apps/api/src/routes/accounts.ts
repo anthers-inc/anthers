@@ -119,6 +119,7 @@ import {
 	setMaturityDisplay,
 } from "../services/content-preferences.js";
 import { releasedWorkCount } from "../services/creator-standing.js";
+import { discordConfigured, syncAccountRoles } from "../services/discord.js";
 import { ensureFollow } from "../services/follows.js";
 import { merchStoreFactsByWork } from "../services/merch-store.js";
 import {
@@ -230,6 +231,10 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		bio: user.bio,
 		isCreator: user.isCreator,
 		isVerifiedCreator: verifiedCreator({ isCreator: user.isCreator, releasedWorkCount: released }),
+		// Whether the settings card can offer the connection at all, and whether this account
+		// has taken it up. The ID itself stays server-side.
+		isDiscordAvailable: discordConfigured(),
+		isDiscordLinked: user.discordId !== null,
 		avatar: user.avatar,
 		headerImage: user.headerImage,
 		websiteUrl: user.websiteUrl,
@@ -623,6 +628,17 @@ const accountRoutes = new Hono()
 			.set(updates)
 			.where(eq(users.id, sessionUser.id))
 			.returning();
+
+		// Turning creator mode on or off changes what the server should show, so the Discord
+		// role follows the write. Best-effort: a settings save must not fail because Discord
+		// is down, and the daily reconcile is the repair.
+		if (data.isCreator !== undefined) {
+			try {
+				await syncAccountRoles(updated.id);
+			} catch (error) {
+				console.error("[discord] role sync after a creator-mode change failed", error);
+			}
+		}
 
 		return c.json({ user: await serializePrivateUser(updated) });
 	})

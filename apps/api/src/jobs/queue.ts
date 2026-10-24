@@ -256,6 +256,11 @@ export const QUEUES = {
 	// guarantee, because an enqueue that failed, a job that exhausted its retries, and a state
 	// changed directly in SQL all leave a record disagreeing with its row and nothing noticing.
 	RECONCILE_LISTINGS: "reconcile-listings",
+	// Bring every linked account's Discord roles in line with its creator standing, in both
+	// directions. The grant at link time is the easy half; this is what answers the member who
+	// stopped being a creator months ago and the grant Discord refused on a bad night. See
+	// services/discord.ts.
+	DISCORD_RECONCILE: "discord-reconcile",
 	// Carry a reader's queued state into the reader's own space, and clear each row only after
 	// the write reads back verified. A cron rather than a per-write enqueue: the queue is the
 	// durable record of what is owed, the sweep is what guarantees it moves, and a missed
@@ -677,6 +682,10 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// the night's sweeps and the one most worth keeping clear of the others. Daily is the
 	// retention unit: the prune keeps thirty of them.
 	[QUEUES.SPACE_BACKUP, "40 4 * * *"],
+	// 5:10 AM daily, clear of the 4 AM money run and the 4:20 and 4:40 sweeps. Discord's rate
+	// limiter makes this the one job whose duration scales with the number of linked accounts;
+	// off the hour is what keeps it out of the night's other work.
+	[QUEUES.DISCORD_RECONCILE, "10 5 * * *"],
 	// 3 AM daily, deliberately AFTER distribute-pool's midnight run: the pool pays
 	// creators out of these rows, so pruning ahead of it would cost earnings rather
 	// than privacy. The retention window is months wide, so the ordering has enormous
