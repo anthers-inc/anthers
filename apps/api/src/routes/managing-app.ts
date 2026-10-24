@@ -43,6 +43,8 @@ export interface ManagingAppRouteOptions {
 		authority: string;
 		userDid: string;
 		access: string;
+		/** The client id the authority verified, when it asked with an attested client. */
+		clientId?: string;
 	}) => Promise<SpaceAccessDecision>;
 	now?: () => number;
 }
@@ -90,9 +92,10 @@ export function createManagingAppRoutes(options: ManagingAppRouteOptions = {}): 
 			const space = c.req.query("space");
 			const user = c.req.query("user");
 			const access = c.req.query("access");
-			// `clientId` is present when the authority verified a client attestation
-			// before asking. It reaches the resolver's answer only through the PDS's own
-			// perimeter today; accepted here so the claim is not dropped on the floor.
+			// `clientId` is present when the authority verified a client attestation before
+			// asking. The app perimeter has already enforced the allow-list; carrying the id
+			// here is what lets the answer say which app asked, and is what the lab's 11 asserts.
+			const clientId = c.req.query("clientId");
 			if (!space || !user || !access) {
 				return c.json(
 					{
@@ -127,7 +130,13 @@ export function createManagingAppRoutes(options: ManagingAppRouteOptions = {}): 
 				return c.json({ error: code, message }, 401);
 			}
 
-			const decision = await authorize({ space, authority, userDid: user, access });
+			const decision = await authorize({
+				space,
+				authority,
+				userDid: user,
+				access,
+				...(clientId ? { clientId } : {}),
+			});
 			return c.json({ authorized: decision.authorized }, 200, {
 				"Cache-Control": "no-store",
 			});
