@@ -64,9 +64,8 @@ function StudioLayout() {
 
 /**
  * The /changelog → /release-notes redirect. `Navigate` alone would drop the fragment,
- * which is the part a deep link carries — the roadmap's launched cards linked
- * `/changelog#<version>` during the page's first week — so the hash is read and
- * carried across explicitly.
+ * which is the part a deep link carries — `/changelog#<version>` was in circulation
+ * during the page's first week — so the hash is read and carried across explicitly.
  */
 function RedirectReleaseNotes() {
 	const hash = useLocation().hash;
@@ -115,7 +114,6 @@ const PostPage = lazy(() => import("./pages/PostPage"));
 const ProjectPage = lazy(() => import("./pages/ProjectPage"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
 const ResourcesPage = lazy(() => import("./pages/ResourcesPage"));
-const RoadmapPage = lazy(() => import("./pages/RoadmapPage"));
 const IssueReportsPage = lazy(() => import("./pages/IssueReportsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const UnsubscribePage = lazy(() => import("./pages/UnsubscribePage"));
@@ -365,12 +363,10 @@ export default function App() {
 					    the feature. The page itself performs no write (the API redirect
 					    preceded it); see the file's note. */}
 					<Route path="/unsubscribe" element={<UnsubscribePage />} />
-					<Route path="/roadmap" element={<RoadmapPage />} />
 					<Route path="/release-notes" element={<ReleaseNotesPage />} />
 					{/* /changelog is kept as a redirect because the URL is in circulation —
-					    the roadmap's launched cards linked to it for the page's first week,
-					    and the fragment carries across so a deep link to a version still
-					    scrolls to it. */}
+					    it was linked during the page's first week, and the fragment carries
+					    across so a deep link to a version still scrolls to it. */}
 					<Route path="/changelog" element={<RedirectReleaseNotes />} />
 					<Route path="/status" element={<StatusPage />} />
 					{/* Defect reports about the site itself — separate intake from /abuse above,

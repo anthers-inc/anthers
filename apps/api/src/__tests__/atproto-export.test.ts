@@ -14,11 +14,16 @@ import { eq } from "drizzle-orm";
 import { unzipSync } from "fflate";
 import app from "../index";
 import { buildAtprotoExport } from "../services/atproto-export.js";
+import { gatedSpaceUri, studioSpaceUri, syncCreatorSpace } from "../services/creator-space.js";
+import { CREATOR_SPACE_COLLECTIONS } from "../services/creator-space-records.js";
+import { managingAppFor } from "../services/managing-app.js";
 import { USER_SPACE_COLLECTIONS } from "../services/space-records.js";
 import { spaceClientFor } from "../services/space-writer.js";
+import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup.js";
 import { spaceContext } from "./space-fixtures.js";
+import { insertWork } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
 
@@ -81,6 +86,55 @@ describe("the AT Protocol export", () => {
 			.from(users)
 			.where(eq(users.id, ctx.userId));
 		expect(row?.atprotoExportedAt).not.toBeNull();
+	});
+
+	it("carries a creator's studio and a gated Work's space alongside the Library", async () => {
+		const ctx = await spaceContext();
+		const mediaKey = `creators/${ctx.userId}/media/nightjar.epub`;
+		await storage.upload(mediaKey, SAVE, "application/epub+zip");
+		const work = await insertWork({
+			creatorId: ctx.userId,
+			type: "text",
+			title: "Nightjar",
+			visibility: "released",
+			access: [{ threshold: 0, allow: true, price: "5.00" }],
+			sourceKey: mediaKey,
+		});
+		await syncCreatorSpace(work.id, {
+			resolveSession: ctx.resolveSession,
+			managingApp: managingAppFor("http://localhost:4321"),
+			fetchImpl: ctx.pds.fetch,
+		});
+		const studio = studioSpaceUri(ctx.did);
+		const gated = gatedSpaceUri(ctx.did, work.publicId);
+
+		try {
+			const built = await buildAtprotoExport(ctx.userId, {
+				resolveSession: ctx.resolveSession,
+				fetchImpl: ctx.pds.fetch,
+			});
+			if (!built.ok) throw new Error(`export failed: ${built.reason}`);
+
+			expect(built.manifest.spaces.map((space) => space.spaceUri).sort()).toEqual(
+				[ctx.spaceUri, studio, gated].sort(),
+			);
+			const files = unzipSync(built.zip);
+			const names = Object.keys(files);
+			const studioDir = `spaces/org.anthers.creatorSpace/self`;
+			const gatedDir = `spaces/org.anthers.creatorSpace/${work.publicId}`;
+			expect(names).toContain(`${studioDir}/records.json`);
+			expect(names).toContain(`${gatedDir}/records.json`);
+
+			const gatedRecords = JSON.parse(
+				new TextDecoder().decode(files[`${gatedDir}/records.json`]),
+			) as { records: Array<{ collection: string; value: { files?: Array<{ key?: string }> } }> };
+			expect(gatedRecords.records).toHaveLength(1);
+			expect(gatedRecords.records[0]?.collection).toBe(CREATOR_SPACE_COLLECTIONS.manifest);
+			// The manifest travels as a pointer into storage; the bytes stay in R2.
+			expect(gatedRecords.records[0]?.value.files?.[0]?.key).toBe(mediaKey);
+		} finally {
+			await storage.delete(mediaKey).catch(() => undefined);
+		}
 	});
 
 	it("serves the bundle from the route as a ZIP", async () => {

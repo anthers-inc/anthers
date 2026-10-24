@@ -8,8 +8,9 @@
  *
  * 🚨 **The recipe is the product.** Discovery's promise is that the reader can
  * always see how the corpus is being drawn and change it, so the stream renders its
- * active recipe above the content and exposes the parameter behind it. There is no
- * hidden ranking, and nothing here is paid placement.
+ * active recipe above the content and exposes the three choices behind it: the
+ * candidate set, the window, and whether the mix spreads creators. There is no hidden
+ * ranking, and nothing here is paid placement.
  *
  * The graph's shared-follow ranking is a route (`GET /api/accounts/me/graph`) and a
  * recipe builder with no page drawing them: a network of follows ranks nearly
@@ -24,9 +25,14 @@
 
 import { BOOKSHELF_WORK_TYPES } from "@anthers/shared/content";
 import {
+	asRecipeCandidates,
+	asRecipeMix,
+	asRecipeWindow,
 	DISCOVERY_STAGE_LABELS,
 	type DiscoveryReason,
 	type DiscoveryRecipe,
+	type RecipeCandidates,
+	type RecipeMix,
 	type RecipeWindow,
 	streamRecipe,
 } from "@anthers/shared/discovery";
@@ -62,26 +68,40 @@ type FeedEntry = {
 	reason?: DiscoveryReason;
 } & Record<string, unknown>;
 
-/** The stream's presets. The window is the parameter; the filters narrow the rest. */
-const RECIPE_PRESETS: ReadonlyArray<{ id: string; label: string; window: RecipeWindow }> = [
-	{ id: "everything", label: "Everything new", window: "all" as const },
-	{ id: "today", label: "The last day", window: "day" as const },
-	{ id: "week", label: "The last week", window: "week" as const },
+/**
+ * The three choices a recipe is made of. The route runs the first two as query
+ * parameters over one corpus, and the window narrows what came back, so every option
+ * offered here is a value something actually obeys — there is no control whose only
+ * setting is the one already chosen.
+ */
+const WINDOW_OPTIONS: ReadonlyArray<{ value: RecipeWindow; label: string }> = [
+	{ value: "all", label: "Everything" },
+	{ value: "day", label: "The last day" },
+	{ value: "week", label: "The last week" },
+];
+
+const CANDIDATE_OPTIONS: ReadonlyArray<{ value: RecipeCandidates; label: string }> = [
+	{ value: "everyone", label: "Everyone" },
+	{ value: "network", label: "Your network" },
+];
+
+const MIX_OPTIONS: ReadonlyArray<{ value: RecipeMix; label: string }> = [
+	{ value: "spread", label: "Spread creators" },
+	{ value: "straight", label: "Newest first" },
 ];
 
 /**
- * The active recipe, rendered above the content. It names what is being drawn, the
- * three stages that drew it, and the control that changes one of them, so the reader
- * never has to guess why a card is on screen. The stages come from the same module the
- * route ranks with, so the bar cannot describe a pipeline the server did not run.
+ * The active recipe, rendered above the content. It names what is being drawn and the
+ * three stages that drew it, and the controls beside it change those stages, so the
+ * reader never has to guess why a card is on screen. The stages come from the same
+ * module the route ranks with, so the bar cannot describe a pipeline the server did not
+ * run.
  */
 function RecipeBar({
-	preset,
 	recipe,
 	children,
 	onRefresh,
 }: {
-	preset: string;
 	recipe: DiscoveryRecipe;
 	children?: React.ReactNode;
 	onRefresh?: () => void;
@@ -94,7 +114,7 @@ function RecipeBar({
 						Active recipe
 					</p>
 					<p className="mt-1 max-w-3xl text-sm leading-relaxed text-base-content/80">
-						<span className="font-medium">{preset}.</span> {recipe.sentence}
+						{recipe.sentence}
 					</p>
 					<dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">
 						{recipe.stages.map((stage) => (
@@ -172,10 +192,9 @@ export default function DiscoverPage() {
 		return set;
 	}, [lensIncluded]);
 
-	const tickerPresetId = searchParams.get("preset") ?? "everything";
-	const tickerPreset =
-		RECIPE_PRESETS.find((preset) => preset.id === tickerPresetId) ?? RECIPE_PRESETS[0];
-	const window = tickerPreset.window;
+	const window = asRecipeWindow(searchParams.get("window"));
+	const candidates = asRecipeCandidates(searchParams.get("candidates"));
+	const mix = asRecipeMix(searchParams.get("mix"));
 
 	const updateParams = useCallback(
 		(updates: Record<string, string>) => {
@@ -194,17 +213,20 @@ export default function DiscoverPage() {
 		[setSearchParams],
 	);
 
-	// The stream: the feed's own, widened to every creator. The refresh control bumps
-	// this counter; the feed route has no cache buster, so the value exists only to
-	// make the dependency real to the linter. `mediaType` is empty under a lens, so the
-	// lens draws on every type it covers.
+	// The stream: the feed's own, over the candidate set the recipe names. `scope` is
+	// how the feed expresses "everyone" versus "your network", and `mix` is the recipe's
+	// ordering stage; both are the route's to run. The refresh control bumps this
+	// counter; the feed route has no cache buster, so the value exists only to make the
+	// dependency real to the linter. `mediaType` is empty under a lens, so the lens draws
+	// on every type it covers.
 	useEffect(() => {
 		void refreshKey;
 		setLoading(true);
 		client.api.accounts.me.feed
 			.$get({
 				query: {
-					scope: "global",
+					scope: candidates === "network" ? "network" : "global",
+					mix,
 					...(mediaType === "posts"
 						? { kind: "posts" }
 						: mediaType
@@ -221,7 +243,7 @@ export default function DiscoverPage() {
 			})
 			.catch(() => {})
 			.finally(() => setLoading(false));
-	}, [mediaType, access, tags, refreshKey]);
+	}, [mediaType, access, tags, candidates, mix, refreshKey]);
 
 	// The stream filters the already-fetched page by the window and the term. The
 	// server applies the Type, Access and Tags filters; these two are presentation
@@ -295,7 +317,7 @@ export default function DiscoverPage() {
 		updateParams,
 	]);
 
-	const recipe = streamRecipe({ window });
+	const recipe = streamRecipe({ window, candidates, mix });
 
 	return (
 		<div className="min-h-full">
@@ -322,21 +344,53 @@ export default function DiscoverPage() {
 					</div>
 				)}
 
-				<RecipeBar
-					preset={tickerPreset.label}
-					recipe={recipe}
-					onRefresh={() => setRefreshKey((key) => key + 1)}
-				>
+				<RecipeBar recipe={recipe} onRefresh={() => setRefreshKey((key) => key + 1)}>
 					<label className="flex flex-col gap-1 text-xs text-base-content/60">
-						Preset
+						Window
 						<select
 							className="select select-bordered select-sm"
-							value={tickerPreset.id}
-							onChange={(e) => updateParams({ preset: e.target.value })}
+							value={window}
+							onChange={(e) =>
+								// The opening value stays out of the URL so a bare /discovery and a
+								// shared link to the same recipe are the same address.
+								updateParams({ window: e.target.value === "all" ? "" : e.target.value })
+							}
 						>
-							{RECIPE_PRESETS.map((preset) => (
-								<option key={preset.id} value={preset.id}>
-									{preset.label}
+							{WINDOW_OPTIONS.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</select>
+					</label>
+					<label className="flex flex-col gap-1 text-xs text-base-content/60">
+						From
+						<select
+							className="select select-bordered select-sm"
+							value={candidates}
+							onChange={(e) =>
+								updateParams({ candidates: e.target.value === "everyone" ? "" : e.target.value })
+							}
+						>
+							{CANDIDATE_OPTIONS.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
+								</option>
+							))}
+						</select>
+					</label>
+					<label className="flex flex-col gap-1 text-xs text-base-content/60">
+						Order
+						<select
+							className="select select-bordered select-sm"
+							value={mix}
+							onChange={(e) =>
+								updateParams({ mix: e.target.value === "spread" ? "" : e.target.value })
+							}
+						>
+							{MIX_OPTIONS.map((option) => (
+								<option key={option.value} value={option.value}>
+									{option.label}
 								</option>
 							))}
 						</select>
@@ -364,7 +418,11 @@ export default function DiscoverPage() {
 				) : visibleEntries.length === 0 ? (
 					<EmptyState
 						title="Nothing new here"
-						description="No Works or Posts match these filters. Clear a filter, widen the window, or check back soon."
+						description={
+							candidates === "network"
+								? "Nothing from your network matches these filters. Clear a filter, widen the window, or switch From to Everyone."
+								: "No Works or Posts match these filters. Clear a filter, widen the window, or check back soon."
+						}
 					/>
 				) : (
 					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

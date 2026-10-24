@@ -19,12 +19,26 @@ import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { SpaceClient } from "../services/atproto-space.js";
+import {
+	gatedSpaceUri,
+	STUDIO_SPACE_POLICIES,
+	studioSpaceUri,
+	syncCreatorSpace,
+} from "../services/creator-space.js";
+import {
+	CREATOR_SPACE_COLLECTIONS,
+	CREATOR_SPACE_TYPE,
+	GATED_MANIFEST_RKEY,
+} from "../services/creator-space-records.js";
+import { managingAppFor } from "../services/managing-app.js";
 import { moveAccount } from "../services/space-move.js";
 import { USER_SPACE_COLLECTIONS } from "../services/space-records.js";
 import { ensureUserSpace } from "../services/space-registry.js";
 import { type ResolveSpaceSession, spaceClientFor } from "../services/space-writer.js";
+import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup.js";
+import { insertWork } from "./work-fixtures.js";
 
 const CONTROL = process.env.MOVE_CONTROL_URL ?? null;
 
@@ -81,9 +95,25 @@ interface Staged {
 	spaceUri: string;
 	userId: number;
 	resolveSession: ResolveSpaceSession;
+	/**
+	 * The creator half: a studio, a gated Work's space, the media key its manifest names, and an
+	 * empty space of the same type — the state a crash between `createSpace` and its first record
+	 * leaves behind, and the one a commit comparison has to treat as vacuously true.
+	 */
+	creator: {
+		studio: string;
+		gated: string;
+		empty: string;
+		publicId: number;
+		mediaKey: string;
+	};
 }
 
-/** An account on the old PDS, a local row for the registry, a space, a blob and a member. */
+/**
+ * An account on the old PDS, a local row for the registry, a space, a blob and a member — and
+ * the creator half: a studio and a gated Work's space, whose manifest names an R2 key rather
+ * than a blob.
+ */
 async function stage(network: Network, label: string): Promise<Staged> {
 	const tag = `${label}${Date.now().toString(36)}`;
 	const handle = `${tag}.spaces.test`;
@@ -130,6 +160,36 @@ async function stage(network: Network, label: string): Promise<Staged> {
 		write: false,
 	});
 
+	const mediaKey = `creators/${local.userId}/media/nightjar-${tag}.epub`;
+	const media = new TextEncoder().encode(`a moved creator's novel ${tag}\n`.repeat(20));
+	await storage.upload(mediaKey, media, "application/epub+zip");
+	const work = await insertWork({
+		creatorId: local.userId,
+		type: "text",
+		title: "Nightjar",
+		visibility: "released",
+		access: [{ threshold: 0, allow: true, price: "5.00" }],
+		sourceKey: mediaKey,
+	});
+	await syncCreatorSpace(work.id, {
+		resolveSession,
+		managingApp: managingAppFor("http://localhost:4321"),
+	});
+	const emptySkey = `empty-${tag}`;
+	const emptySpace = `at://${did}/space/${CREATOR_SPACE_TYPE}/${emptySkey}`;
+	await client.createSpace({
+		spaceType: CREATOR_SPACE_TYPE,
+		skey: emptySkey,
+		...STUDIO_SPACE_POLICIES,
+	});
+	const creator = {
+		studio: studioSpaceUri(did),
+		gated: gatedSpaceUri(did, work.publicId),
+		empty: emptySpace,
+		publicId: work.publicId,
+		mediaKey,
+	};
+
 	// A public record, so the CAR has something in it beyond the empty root.
 	await xrpc(network.oldPds, "com.atproto.repo.createRecord", {
 		token,
@@ -151,6 +211,7 @@ async function stage(network: Network, label: string): Promise<Staged> {
 		spaceUri: ensured.space.spaceUri,
 		userId: local.userId,
 		resolveSession,
+		creator,
 	};
 }
 
@@ -196,14 +257,33 @@ drill("the hosted-identity move against two PDSes", () => {
 
 		expect(report.did).toBe(moved.did);
 		expect(report.repoImported).toBe(true);
-		expect(report.spaces).toHaveLength(1);
-		expect(report.spaces[0]).toMatchObject({
-			spaceUri: moved.spaceUri,
+		// The Library, the creator's studio, the gated Work's space and one empty space.
+		expect(report.spaces).toHaveLength(4);
+		expect(report.spaces.find((space) => space.spaceUri === moved.spaceUri)).toMatchObject({
 			records: 1,
 			blobs: 1,
 			members: 1,
 			recordsMatched: 1,
 			commitMatches: true,
+		});
+		expect(report.spaces.find((space) => space.spaceUri === moved.creator.studio)).toMatchObject({
+			records: 1,
+			blobs: 0,
+			members: 0,
+			recordsMatched: 1,
+			commitMatches: true,
+		});
+		expect(report.spaces.find((space) => space.spaceUri === moved.creator.gated)).toMatchObject({
+			records: 1,
+			blobs: 0,
+			recordsMatched: 1,
+			commitMatches: true,
+		});
+		// No records, so no commit to compare: `null`, not a failure.
+		expect(report.spaces.find((space) => space.spaceUri === moved.creator.empty)).toMatchObject({
+			records: 0,
+			recordsMatched: 0,
+			commitMatches: null,
 		});
 		expect(report.didPointsAtNew).toBe(true);
 		// The staging identity was created directly on the old PDS, not through Anthers' hosting,
@@ -240,6 +320,26 @@ drill("the hosted-identity move against two PDSes", () => {
 		expect([...bytes.bytes]).toEqual([...SAVE]);
 		const members = await reader.listMembers(moved.spaceUri);
 		expect(members.members).toHaveLength(1);
+
+		// The creator's records arrived with their addresses and their media pointers intact.
+		const manifest = await reader.getRecord({
+			space: moved.creator.gated,
+			repo: moved.did,
+			collection: CREATOR_SPACE_COLLECTIONS.manifest,
+			rkey: GATED_MANIFEST_RKEY,
+		});
+		const manifestFiles = (manifest.value as { files: Array<{ key: string }> }).files;
+		expect(manifestFiles[0]?.key).toBe(moved.creator.mediaKey);
+		// ⚠️ The move carries the pointer, not the bytes: R2 is the home of the media, and the
+		// check is that the pointer still resolves rather than that the space holds a blob.
+		expect(await storage.size(moved.creator.mediaKey)).toBeGreaterThan(0);
+		const draft = await reader.getRecord({
+			space: moved.creator.studio,
+			repo: moved.did,
+			collection: CREATOR_SPACE_COLLECTIONS.draft,
+			rkey: String(moved.creator.publicId),
+		});
+		expect(draft.value).toMatchObject({ publicId: moved.creator.publicId, title: "Nightjar" });
 	});
 
 	it("leaves the old copy intact when the move cannot start", async () => {
@@ -259,7 +359,8 @@ drill("the hosted-identity move against two PDSes", () => {
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.reason).toBe("move_failed");
 
-		// The old PDS still has the space, the record and the blob.
+		// The old PDS still has the Library space, the record and the blob, and the creator's
+		// spaces were never reached because the move failed before the PLC operation.
 		const client = spaceClientFor({
 			did: survivor.did,
 			pdsUrl: network.oldPds,

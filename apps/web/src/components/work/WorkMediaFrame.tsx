@@ -37,6 +37,7 @@ import type { ReactNode } from "react";
 export default function WorkMediaFrame({
 	children,
 	footer,
+	overlay,
 	fill = false,
 	className = "",
 }: {
@@ -50,11 +51,25 @@ export default function WorkMediaFrame({
 	footer?: ReactNode;
 	/** The medium draws its own box; the 16:9 stage contains it. */
 	fill?: boolean;
+	/**
+	 * Something that stands over the stage rather than inside its composition — today the
+	 * shared-with affordance, which belongs on the media rather than below the player.
+	 *
+	 * It rides the stage itself, not the medium's slot, so a scrolling composition (the
+	 * readers, a piece of writing) scrolls under it instead of carrying it away, and the
+	 * stage's `overflow-hidden` keeps a popover from escaping the media card. The stage also
+	 * carries `group` and `data-media-stage` for it: an embed reveals the affordance on hover
+	 * through those two, with no pointer tracking in JavaScript.
+	 */
+	overlay?: ReactNode;
 	className?: string;
 }) {
 	return (
 		<div className={`border border-base-300 bg-base-200 p-2 ${className}`}>
-			<div className="relative aspect-video w-full overflow-hidden rounded-sm bg-base-300">
+			<div
+				className="group relative aspect-video w-full overflow-hidden rounded-sm bg-base-300"
+				data-media-stage
+			>
 				{fill ? (
 					<div className="absolute inset-0 flex flex-col">
 						<div className="min-h-0 flex-1">{children}</div>
@@ -66,6 +81,7 @@ export default function WorkMediaFrame({
 						{footer}
 					</div>
 				)}
+				{overlay}
 			</div>
 		</div>
 	);

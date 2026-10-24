@@ -25,7 +25,6 @@ const BANDED_ROUTES = [
 	"/signup",
 	"/about",
 	"/faq",
-	"/roadmap",
 	"/resources",
 	"/compare/itch-io",
 	"/compare/ghost",

@@ -109,7 +109,7 @@ export default function ShareLinkButton({ workId, slug }: { workId: number; slug
 
 	const shown =
 		shape === "embed" && allowance ? embedSnippet(allowance.embedUrl) : (allowance?.url ?? pageUrl);
-	const shownLabel = shape === "embed" ? "Embed code" : allowance ? "Share link" : "Work link";
+	const shownLabel = shape === "embed" ? "Embed Code" : allowance ? "Share Link" : "Work Link";
 	const copy = () => {
 		navigator.clipboard.writeText(shown).then(
 			() => setCopied(true),
@@ -171,7 +171,7 @@ export default function ShareLinkButton({ workId, slug }: { workId: number; slug
 											setCopied(false);
 										}}
 									>
-										{s === "link" ? "Watching link" : "Embed"}
+										{s === "link" ? "Share Link" : "Embed Code"}
 									</button>
 								))}
 							</div>
@@ -187,10 +187,10 @@ export default function ShareLinkButton({ workId, slug }: { workId: number; slug
 
 					{asked && !allowance && !error && (
 						<p className="mt-3 text-xs text-base-content/60">
-							Only work that is free to everyone can be shared as a watching link — a gate, a price
-							or an Adult rating all need the person opening it to have their own account. The page
-							link above is still yours to send: it&apos;s a good way to point somebody at something
-							they might buy, or to pass it to someone who already has access.
+							Only work that is free to everyone can be shared this way — a gate, a price or an
+							Adult rating all need the person opening it to have their own account. The page link
+							above is still yours to send: it&apos;s a good way to point somebody at something they
+							might buy, or to pass it to someone who already has access.
 						</p>
 					)}
 					{error && <p className="mt-3 text-sm text-error">{error}</p>}

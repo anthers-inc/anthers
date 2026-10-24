@@ -11,20 +11,20 @@
  * captures (no registered spaces yet) should not write a line that trains a reader to skip the
  * output.
  */
-import { backupRegisteredSpaces, pruneSpaceBackups } from "../services/space-backup.js";
+import { backupOwnedSpaces, pruneSpaceBackups } from "../services/space-backup.js";
 
 export interface SpaceBackupJobData {
 	limit?: number;
 }
 
 export async function spaceBackupJob(data: SpaceBackupJobData = {}): Promise<void> {
-	const captured = await backupRegisteredSpaces({ limit: data.limit ?? 100 });
+	const captured = await backupOwnedSpaces({ limit: data.limit ?? 100 });
 	const pruned = await pruneSpaceBackups();
 	if (captured.complete > 0 || captured.partial > 0 || captured.failed > 0 || pruned.removed > 0) {
 		console.log(
-			`[space-backup] ${captured.spaces} space(s): ${captured.complete} complete, ` +
-				`${captured.partial} partial, ${captured.failed} failed, ${captured.skipped} skipped; ` +
-				`pruned ${pruned.removed}, kept ${pruned.kept}`,
+			`[space-backup] ${captured.accounts} account(s), ${captured.spaces} space(s): ` +
+				`${captured.complete} complete, ${captured.partial} partial, ${captured.failed} failed, ` +
+				`${captured.skipped} skipped; pruned ${pruned.removed}, kept ${pruned.kept}`,
 		);
 	}
 }

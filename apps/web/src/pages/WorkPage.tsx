@@ -42,7 +42,7 @@ import OwnerWorkEditor, {
 	ReleaseSummary,
 } from "../components/work/OwnerWorkEditor";
 import PreviewCarousel from "../components/work/PreviewCarousel";
-import SharedWorkBanner from "../components/work/SharedWorkBanner";
+import SharedWorkNotice from "../components/work/SharedWorkNotice";
 import ShareLinkButton from "../components/work/ShareLinkButton";
 import { WorkViewAsSection } from "../components/work/ViewAs";
 import WorkInfoTabs from "../components/work/WorkInfoTabs";
@@ -282,6 +282,18 @@ export default function WorkPage() {
 		return <OwnerWorkEditor work={work} onRefetch={refetch} />;
 	}
 
+	/**
+	 * Who sent them, and the way to an account of their own — on the media rather than under
+	 * it (2026-10-23). It rides every branch that draws the media area, not only the playing
+	 * one: a Work still processing or not yet carrying bytes is exactly where somebody who
+	 * followed a link has the least idea what they are looking at. A signed-in reader is never
+	 * told they were shared to, because the token changes nothing for them.
+	 */
+	const shareNotice =
+		shareToken && !user ? (
+			<SharedWorkNotice sharedBy={work.sharedBy ?? null} mode="page" />
+		) : undefined;
+
 	return (
 		// One width everywhere, for every kind (the kinds pass, 2026-10-14 — the video
 		// rule propagated): the creator's editor, the unlocked visitor page and the
@@ -366,7 +378,7 @@ export default function WorkPage() {
 						</WorkMediaFrame>
 					)
 				) : spentOnThis ? (
-					<WorkMediaFrame>
+					<WorkMediaFrame overlay={shareNotice}>
 						{isWriting(work.type) && (
 							<div className="mx-auto w-full max-w-2xl">
 								<WorkDescription work={work} />
@@ -383,7 +395,7 @@ export default function WorkPage() {
 					// The processing block, held inside the media frame rather than replacing
 					// it (the placeholder task, 2026-10-16): the page's proportions do not move
 					// while the Work's processed deliverable is being made.
-					<WorkMediaFrame>
+					<WorkMediaFrame overlay={shareNotice}>
 						<WorkPlaceholder
 							type={work.type}
 							note=""
@@ -405,7 +417,7 @@ export default function WorkPage() {
 					// was gone entirely). Silent on purpose: the editor's own silhouette is
 					// the one that points at a Manage tab, and this surface cannot know
 					// whose reading it is.
-					<WorkMediaFrame>
+					<WorkMediaFrame overlay={shareNotice}>
 						{isWriting(work.type) && <WorkDescription work={work} />}
 						<WorkPlaceholder type={work.type} note="" />
 					</WorkMediaFrame>
@@ -423,14 +435,12 @@ export default function WorkPage() {
 						// article where a user expects one — and it also rides in the Details
 						// tab below, kept in both places on purpose (Parker, 2026-10-14).
 						lead={isWriting(work.type) ? <WorkDescription work={work} /> : undefined}
+						// A share link announces itself on arrival and then gets out of the way;
+						// see `shareNotice` above.
+						overlay={shareNotice}
 					/>
 				)}
 			</section>
-
-			{/* Who sent them, and the way to an account of their own. Rendered under the
-			    deliverable rather than above it: they came here for the thing, and an
-			    invitation that interrupted that would be the funnel this deliberately is not. */}
-			{shareToken && !user && <SharedWorkBanner sharedBy={work.sharedBy ?? null} />}
 
 			{/* The byline strip, under the deliverable — every kind now (the kinds pass,
 			    2026-10-14): the title and the maker between the thing and its record, with

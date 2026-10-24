@@ -32,7 +32,6 @@ export const MOBILE_ROUTES = [
 	"/about",
 	"/faq",
 	"/parents",
-	"/roadmap",
 	"/compare/itch-io",
 	"/compare/ghost",
 	"/resources",
