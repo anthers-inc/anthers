@@ -228,6 +228,42 @@ envs:
   - key: NOUN_PROJECT_MONTHLY_CAP_USD
     scope: RUN_TIME
     value: "25"
+  # Discord account linking — the OAuth door and the bot that grants the roles.
+  # At APP level because the api runs the link and the worker runs the daily reconcile,
+  # and a component-level copy would shadow the app-level value for the other.
+  #
+  # The three IDs are identifiers rather than credentials — anybody in the server can
+  # copy them — but they are declared as secrets with the rest so a checkout carries none
+  # of the server's configuration. Every name matches the `Anthers Prod` entry exactly,
+  # which is how `make spec-apply FROM_BWS=1` resolves them.
+  #
+  # Unset means `discordConfig()` returns null: the settings card renders nothing and the
+  # connect route answers 503, so a deployment without an application has no connection
+  # rather than a broken one.
+  - key: DISCORD_CLIENT_ID
+    scope: RUN_TIME
+    type: SECRET
+  - key: DISCORD_CLIENT_SECRET
+    scope: RUN_TIME
+    type: SECRET
+  - key: DISCORD_BOT_TOKEN
+    scope: RUN_TIME
+    type: SECRET
+  - key: DISCORD_SERVER_ID
+    scope: RUN_TIME
+    type: SECRET
+  - key: DISCORD_USER_ROLE_ID
+    scope: RUN_TIME
+    type: SECRET
+  - key: DISCORD_CREATOR_ROLE_ID
+    scope: RUN_TIME
+    type: SECRET
+  # The OAuth redirect, and it must equal the URI registered on the Discord application
+  # exactly. A public URL rather than a secret, so it is committed with the rest of the
+  # app's shape; the dev checkout names its own API address in `.env`.
+  - key: DISCORD_REDIRECT_URI
+    scope: RUN_TIME
+    value: https://anthers.org/api/discord/callback
   # COOKIE_DOMAIN lives on the api component below, NOT here — see the note there.
   # It was declared at app level and valueless in this file for weeks while production
   # ran `.anthers.org` on the component, which is the drift `make spec-diff` exists to
