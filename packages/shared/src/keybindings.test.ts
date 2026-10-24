@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The shortcut grammar, pinned where a second implementation would drift: the canonical
- * order, the two platforms' meaning of `Mod`, the exact-modifier rule, and the server's
- * whole-map validation.
+ * order, the two platforms' meaning of `Mod`, the exact-modifier rule, the page/player
+ * split over bare keys, and the server's whole-map validation.
  */
 import { describe, expect, it } from "bun:test";
 import {
 	canonicalChord,
 	chordToString,
-	DEFAULT_SEARCH_SHORTCUTS,
+	DEFAULT_KEYBOARD_SHORTCUTS,
 	formatChord,
 	keyFromEvent,
 	matchesChord,
-	normalizeSearchShortcuts,
+	normalizeKeyboardShortcuts,
 	parseChord,
-	resolveSearchShortcuts,
+	resolveKeyboardShortcuts,
 } from "./keybindings";
 
 describe("parsing and formatting", () => {
@@ -23,7 +23,7 @@ describe("parsing and formatting", () => {
 		expect(canonicalChord("Alt+Ctrl+Enter")).toBe("Ctrl+Alt+Enter");
 	});
 
-	it("refuses a bare key, Shift alone, both Mod and Ctrl, duplicates and unknown keys", () => {
+	it("refuses a bare key for a page action, Shift alone, both Mod and Ctrl, duplicates and unknown keys", () => {
 		expect(parseChord("K")).toBeNull();
 		expect(parseChord("Shift+K")).toBeNull();
 		expect(parseChord("Mod+Ctrl+K")).toBeNull();
@@ -31,11 +31,18 @@ describe("parsing and formatting", () => {
 		expect(parseChord("Mod+Banana")).toBeNull();
 	});
 
+	it("accepts a bare key only when the caller says the scope allows one", () => {
+		expect(canonicalChord("f", { bare: true })).toBe("F");
+		expect(canonicalChord("Shift+T", { bare: true })).toBe("Shift+T");
+		expect(canonicalChord("f")).toBeNull();
+	});
+
 	it("renders Apple symbols and the rest with words", () => {
 		expect(formatChord("Mod+K", true)).toBe("⌘K");
 		expect(formatChord("Mod+Shift+F", true)).toBe("⌘⇧F");
 		expect(formatChord("Mod+K", false)).toBe("Ctrl+K");
 		expect(formatChord("Ctrl+Alt+ArrowUp", false)).toBe("Ctrl+Alt+ArrowUp");
+		expect(formatChord("F", false)).toBe("F");
 	});
 
 	it("round-trips a parsed chord", () => {
@@ -60,6 +67,13 @@ describe("matching an event", () => {
 		expect(matchesChord({ ...event, metaKey: false, ctrlKey: true }, "Mod+K", false)).toBe(true);
 	});
 
+	it("matches a player's bare key, and only without the modifiers it did not name", () => {
+		const bare = { ...event, key: "f", metaKey: false };
+		expect(matchesChord(bare, "F", false)).toBe(true);
+		expect(matchesChord({ ...bare, ctrlKey: true }, "F", false)).toBe(false);
+		expect(matchesChord({ ...bare, key: "F", shiftKey: true }, "F", false)).toBe(false);
+	});
+
 	it("requires every modifier to match exactly", () => {
 		expect(matchesChord({ ...event, shiftKey: true }, "Mod+K", true)).toBe(false);
 		expect(matchesChord({ ...event, altKey: true }, "Mod+K", true)).toBe(false);
@@ -79,32 +93,56 @@ describe("matching an event", () => {
 });
 
 describe("the stored map", () => {
-	it("accepts the whole pair and canonicalizes it", () => {
-		expect(normalizeSearchShortcuts({ search: "mod+k", filter: "alt+f" })).toEqual({
+	const stored = {
+		search: "mod+k",
+		filter: "alt+f",
+		fullscreen: "f",
+		theater: "t",
+	};
+
+	it("accepts all four and canonicalizes them within each action's scope", () => {
+		expect(normalizeKeyboardShortcuts(stored)).toEqual({
 			search: "Mod+K",
 			filter: "Alt+F",
+			fullscreen: "F",
+			theater: "T",
 		});
 	});
 
 	it("refuses a missing action, an unknown action and a duplicate chord", () => {
-		expect(normalizeSearchShortcuts({ search: "Mod+K" })).toBeNull();
-		expect(
-			normalizeSearchShortcuts({ search: "Mod+K", filter: "Mod+F", extra: "Mod+X" }),
-		).toBeNull();
-		expect(normalizeSearchShortcuts({ search: "Mod+K", filter: "Mod+K" })).toBeNull();
+		const { theater: _theater, ...partial } = stored;
+		expect(normalizeKeyboardShortcuts(partial)).toBeNull();
+		expect(normalizeKeyboardShortcuts({ ...stored, extra: "Mod+X" })).toBeNull();
+		expect(normalizeKeyboardShortcuts({ ...stored, theater: "Mod+K" })).toBeNull();
+	});
+
+	it("refuses a bare page action and a modified player action that collides with one", () => {
+		expect(normalizeKeyboardShortcuts({ ...stored, search: "K" })).toBeNull();
+		expect(normalizeKeyboardShortcuts({ ...stored, fullscreen: "Alt+F" })).toBeNull();
 	});
 
 	it("fills defaults for an account that never set any", () => {
-		expect(resolveSearchShortcuts(null)).toEqual(DEFAULT_SEARCH_SHORTCUTS);
-		expect(resolveSearchShortcuts({ search: "Alt+S" })).toEqual({
+		expect(resolveKeyboardShortcuts(null)).toEqual(DEFAULT_KEYBOARD_SHORTCUTS);
+		expect(resolveKeyboardShortcuts({ search: "Alt+S" })).toEqual({
+			...DEFAULT_KEYBOARD_SHORTCUTS,
 			search: "Alt+S",
-			filter: "Mod+F",
 		});
 	});
 
 	it("falls back rather than disabling a broken stored chord", () => {
-		expect(resolveSearchShortcuts({ search: "Banana", filter: "Mod+F" })).toEqual(
-			DEFAULT_SEARCH_SHORTCUTS,
+		expect(
+			resolveKeyboardShortcuts({
+				search: "Banana",
+				filter: "Mod+F",
+				fullscreen: "f",
+				theater: "t",
+			}),
+		).toEqual(DEFAULT_KEYBOARD_SHORTCUTS);
+	});
+
+	it("falls back to the whole default map when a legacy row carries a collision", () => {
+		expect(resolveKeyboardShortcuts({ search: "Mod+K", filter: "Mod+K" })).toEqual(
+			DEFAULT_KEYBOARD_SHORTCUTS,
 		);
 	});
 });

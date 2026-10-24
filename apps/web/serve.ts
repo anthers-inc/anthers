@@ -8,12 +8,13 @@
  * Work's own title, blurb and thumbnail (see `src/lib/share-head.ts`). Nothing else about
  * the page changes, so the SPA, its routes and its own data fetches are untouched.
  *
- * 🚨 **Both a Work's page and the share link that points at it carry that card.** A
- * `/s/{token}` link is what the Share button hands a sharer, so it is the address that
- * actually gets pasted — and the token carries no slug, so the shell cannot describe it
- * without asking. The token resolves through the API's own read, the card comes from the
- * Work page's endpoint, and the canonical address in both cases is the Work's own page:
- * a share link is a locator and never a page, and it must not become one to a crawler.
+ * 🚨 **A Work's page, a post's permalink and the share link that points at a Work all carry
+ * that card.** A `/s/{token}` link is what the Share button hands a sharer, so it is the
+ * address that actually gets pasted — and the token carries no slug, so the shell cannot
+ * describe it without asking. The token resolves through the API's own read, each card comes
+ * from the endpoint its document family owns, and the canonical address is the document's
+ * own page: a share link is a locator and never a page, and it must not become one to a
+ * crawler.
  *
  * 🚨 **Fail open is the rule for the card.** No API reachable, a slow answer, a 404, a
  * malformed body — each returns the shell exactly as it shipped, which carries the site
@@ -36,10 +37,9 @@
  * the same tag for the same reason.
  */
 import { resolve, sep } from "node:path";
-import type { WorkPreview } from "@anthers/shared/work-preview";
 import { devBuildApiOrigin, devBuildPage } from "./src/lib/dev-build-page.js";
 import { previewRoute } from "./src/lib/preview-route.js";
-import { injectShareHead } from "./src/lib/share-head.js";
+import { injectShareHead, type LinkCard } from "./src/lib/share-head.js";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 const DIST = resolve(import.meta.dir, "dist");
@@ -80,24 +80,27 @@ async function indexHtml(): Promise<string> {
 	return Bun.file(resolve(DIST, "index.html")).text();
 }
 
-/** The card a Work document is served with, and the address it canonically lives at. */
+/** The card a document is served with, and the address it canonically lives at. */
 interface ServedPreview {
-	preview: WorkPreview;
-	/** The Work's own page, which is what the card and the canonical link name. */
+	preview: LinkCard;
+	/** The document's own page, which is what the card and the canonical link name. */
 	canonicalPath: string;
 }
+
+/** The API path family each document kind's card read lives under. */
+const CARD_FAMILY = { work: "works", post: "posts" } as const;
 
 /**
  * Who a document path is about, as the card endpoint's parameter and the canonical path.
  *
- * A Work's page carries both in its own address. A share link carries an opaque token, so
- * it costs one read to learn which Work it names — and that read is the API's, answered
- * with the slug and public id the Work's own page would use.
+ * A Work's page and a post's permalink carry both in their own address. A share link
+ * carries an opaque token, so it costs one read to learn which Work it names — and that
+ * read is the API's, answered with the slug and public id the Work's own page would use.
  */
 async function shareTarget(
 	token: string,
 	signal: AbortSignal,
-): Promise<{ param: string; canonicalPath: string } | null> {
+): Promise<{ kind: "work"; param: string; canonicalPath: string } | null> {
 	const res = await fetch(`${API_ORIGIN}/api/content/share/${encodeURIComponent(token)}`, {
 		headers: { accept: "application/json" },
 		signal,
@@ -107,33 +110,31 @@ async function shareTarget(
 	if (typeof body.slug !== "string" || body.slug === "") return null;
 	if (typeof body.publicId !== "number") return null;
 	const param = `${body.slug}-${body.publicId}`;
-	return { param, canonicalPath: `/works/${param}` };
+	return { kind: "work", param, canonicalPath: `/works/${param}` };
 }
 
 /**
  * The card the document at this path is served with, or null for the site card.
  *
  * A null answer is the neutral one for all of: a route with no card, no API, a 404 (which
- * is what an Adult Work, a withdrawn Work and a suspended creator's Work answer), a rating
- * above General (the endpoint answers `preview: null`), and any failure at all.
+ * is what an Adult Work, a withdrawn Work, a suspended creator's Work and an unpublished
+ * post answer), a rating above General (the endpoint answers `preview: null`), and any
+ * failure at all.
  */
-async function workPreview(pathname: string): Promise<ServedPreview | null> {
+async function previewFor(pathname: string): Promise<ServedPreview | null> {
 	const route = previewRoute(pathname);
 	if (!route) return null;
 	// One deadline for the whole lookup, so a share link cannot spend the budget twice.
 	const signal = AbortSignal.timeout(1500);
 	try {
-		const target =
-			route.kind === "work"
-				? { param: route.param, canonicalPath: route.canonicalPath }
-				: await shareTarget(route.token, signal);
+		const target = route.kind === "share" ? await shareTarget(route.token, signal) : route;
 		if (!target) return null;
 		const res = await fetch(
-			`${API_ORIGIN}/api/content/works/${encodeURIComponent(target.param)}/card`,
+			`${API_ORIGIN}/api/content/${CARD_FAMILY[target.kind]}/${encodeURIComponent(target.param)}/card`,
 			{ headers: { accept: "application/json" }, signal },
 		);
 		if (!res.ok) return null;
-		const body = (await res.json()) as { preview?: WorkPreview | null };
+		const body = (await res.json()) as { preview?: LinkCard | null };
 		if (!body.preview) return null;
 		return { preview: body.preview, canonicalPath: target.canonicalPath };
 	} catch {
@@ -187,7 +188,7 @@ Bun.serve({
 		}
 
 		// SPA fallback: the shell, with this route's card when it has one.
-		const [html, served] = await Promise.all([indexHtml(), workPreview(url.pathname)]);
+		const [html, served] = await Promise.all([indexHtml(), previewFor(url.pathname)]);
 		const canonical = `${SITE_ORIGIN}${served?.canonicalPath ?? url.pathname}`;
 		return new Response(withDevApiPort(injectShareHead(html, served?.preview ?? null, canonical)), {
 			headers: { "Content-Type": "text/html;charset=utf-8", "Cache-Control": "no-cache" },

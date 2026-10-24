@@ -79,6 +79,7 @@ import {
 import { getOptionalUserId, requireAuth, requireVerified } from "../middleware/auth.js";
 import { invalidBody } from "../middleware/validate.js";
 import { resolveAccess } from "../services/access.js";
+import { oweAccessReceipt } from "../services/access-receipts.js";
 import { anthersUserId } from "../services/anthers-badges.js";
 import {
 	addBasketBadge,
@@ -2867,6 +2868,16 @@ const paymentRoutes = new Hono()
 			// built from rows that had not yet settled would show the transaction at
 			// the wrong moment, which is why this sits after the loop above.
 			await sendPurchaseReceipts(completedRows);
+
+			// What the reader's own space is owed: one signed receipt per purchase row.
+			// 🚨 Read back by intent rather than reused from `completedRows`, because a
+			// redelivery has no newly-completed rows — that is what makes an insert that
+			// failed last time get repaired this time. The insert is idempotent either way.
+			const settled = await db
+				.select({ id: purchases.id })
+				.from(purchases)
+				.where(and(eq(purchases.stripePaymentIntentId, pi.id), eq(purchases.status, "completed")));
+			for (const row of settled) await oweAccessReceipt(row.id, "purchase");
 		} else if (event.type === "payment_intent.payment_failed") {
 			const pi = event.data.object as Stripe.PaymentIntent;
 			await db

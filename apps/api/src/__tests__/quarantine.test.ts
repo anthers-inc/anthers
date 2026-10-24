@@ -44,6 +44,7 @@ import {
 } from "../services/quarantine.js";
 import { QUARANTINE_PREFIX } from "../services/storage/acl.js";
 import { storage } from "../services/storage/index.js";
+import { downloadAsset } from "./access-fixture";
 import { createAccount } from "./account-fixture";
 import { createAdminFixture } from "./admin-fixture";
 import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
@@ -135,10 +136,7 @@ async function seedSoldWork(title: string) {
 
 /** The buyer's own download call — the exact request a purchaser makes for the bytes. */
 function download(workId: number, assetId: number, cookie: string) {
-	return req(`/api/content/works/${workId}/assets/${assetId}/download`, {
-		method: "POST",
-		headers: { Origin: ORIGIN, Cookie: cookie },
-	});
+	return downloadAsset(cookie, workId, assetId);
 }
 
 beforeAll(async () => {

@@ -1603,10 +1603,10 @@ const RETIRED_COPY: { pattern: RegExp; why: string }[] = [
 		// ⚠️ The adjective is the claim and the noun is not. **"federated" always describes
 		// Anthers as already federated**; "federation" is the subject a page may legitimately
 		// discuss — /compare/itch writes *"federation is a direction we're committed to, not
-		// something we've shipped"*, /roadmap lists *"federation functioning"* as a milestone,
-		// and the wiki index calls a section *"AT Protocol, federation, and community
-		// guidelines"*. All three must stay silent, and all three do, because none of them
-		// uses the adjective. Verified by sabotage against each.
+		// something we've shipped"*, the wiki roadmap's Federation lane discusses the subject
+		// without the adjective, and the wiki index calls a section *"AT Protocol, federation,
+		// and community guidelines"*. All three must stay silent, and all three do, because
+		// none of them uses the adjective. Verified by sabotage against each.
 		pattern: new RegExp(`${NOT_NEGATED}\\bfederated\\b`, "gi"),
 		why: "Anthers is centralized-first — write federation as coming, never as a property it already has (the wiki's *How Anthers Talks About Itself*; wiki: The Anthers PDS and Creator Nodes § Where This Stands)",
 	},

@@ -47,10 +47,16 @@ import {
 	workBaseUrl,
 	workUrl,
 } from "./atproto-records.js";
-import { type SpaceAppAccess, type SpacePolicy, SpaceRequestError } from "./atproto-space.js";
+import {
+	isUnsupportedSpaceServer,
+	type SpaceAppAccess,
+	type SpacePolicy,
+	SpaceRequestError,
+} from "./atproto-space.js";
 import { attestableClientId } from "./client-attestation.js";
 import {
 	CREATOR_SPACE_COLLECTIONS,
+	CREATOR_SPACE_TYPE,
 	type DraftWorkRecord,
 	draftWorkRecord,
 	draftWorkRkey,
@@ -60,7 +66,6 @@ import {
 	type ManifestFile,
 } from "./creator-space-records.js";
 import { type ManagingAppIdentity, managingAppIdentity } from "./managing-app.js";
-import { CREATOR_SPACE_TYPE } from "./space-gate.js";
 import {
 	hostedSpaceSession,
 	putVerifiedSpaceRecord,
@@ -240,26 +245,6 @@ function refsOf(work: {
 		spaceUri: work.gatedSpaceUri,
 		manifestUri: work.manifestUri,
 	};
-}
-
-/**
- * A server that has no space endpoints at all.
- *
- * ⚠️ **Production still runs an image whose PDS tracks `main`**, which does not carry the
- * space lexicons, so this feature is staged before it is live. Treating "this server has no
- * such method" as an ordinary skip is what lets the code ship with the app and start working
- * the day a spaces-capable image is pinned — rather than failing every listing sync until
- * somebody remembers a flag. Any other failure is still real and still retried.
- */
-function isUnsupportedSpaceServer(error: unknown): boolean {
-	if (!(error instanceof SpaceRequestError)) return false;
-	if (error.status === 404 || error.status === 501) return true;
-	return (
-		error.error === "MethodNotImplemented" ||
-		error.error === "MethodNotFound" ||
-		error.error === "UnknownMethod" ||
-		error.error === "XRPCNotSupported"
-	);
 }
 
 /**

@@ -169,6 +169,26 @@ export class SpaceRequestError extends Error {
 	}
 }
 
+/**
+ * Whether a server simply has no space endpoints — a skip rather than a failure.
+ *
+ * ⚠️ **Production still runs an image whose PDS tracks `main`**, which does not carry the space
+ * lexicons, so anything that enumerates spaces has to treat "this server has no such method" as
+ * an ordinary empty answer. That is what lets the code ship with the app and start working the
+ * day a spaces-capable image is pinned, instead of failing every export and every sweep until
+ * somebody remembers a flag. Any other failure is still real and still propagates.
+ */
+export function isUnsupportedSpaceServer(error: unknown): boolean {
+	if (!(error instanceof SpaceRequestError)) return false;
+	if (error.status === 404 || error.status === 501) return true;
+	return (
+		error.error === "MethodNotImplemented" ||
+		error.error === "MethodNotFound" ||
+		error.error === "UnknownMethod" ||
+		error.error === "XRPCNotSupported"
+	);
+}
+
 export interface SpaceClientOptions {
 	/** The PDS origin, such as `https://pds.example.com`. */
 	baseUrl: string;

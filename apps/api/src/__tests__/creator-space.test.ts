@@ -21,10 +21,10 @@ import {
 } from "../services/creator-space.js";
 import {
 	CREATOR_SPACE_COLLECTIONS,
+	CREATOR_SPACE_TYPE,
 	GATED_MANIFEST_RKEY,
 } from "../services/creator-space-records.js";
 import { managingAppFor } from "../services/managing-app.js";
-import { CREATOR_SPACE_TYPE } from "../services/space-gate.js";
 import type { ResolveSpaceSession } from "../services/space-writer.js";
 import { createAccount } from "./account-fixture.js";
 import { purgeAccountsCreatedHere } from "./cleanup.js";

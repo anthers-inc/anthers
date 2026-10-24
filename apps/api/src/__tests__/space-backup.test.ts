@@ -14,12 +14,25 @@ import { describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { spaceBackups } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { type BackupStore, captureSpace, pruneSpaceBackups } from "../services/space-backup.js";
+import { SpaceClient } from "../services/atproto-space.js";
+import { gatedSpaceUri, studioSpaceUri, syncCreatorSpace } from "../services/creator-space.js";
+import {
+	CREATOR_SPACE_COLLECTIONS,
+	GATED_MANIFEST_RKEY,
+} from "../services/creator-space-records.js";
+import { managingAppFor } from "../services/managing-app.js";
+import {
+	type BackupStore,
+	captureOwnedSpaces,
+	pruneSpaceBackups,
+} from "../services/space-backup.js";
 import { USER_SPACE_COLLECTIONS } from "../services/space-records.js";
 import { restoreSpace } from "../services/space-restore.js";
 import { spaceClientFor } from "../services/space-writer.js";
+import { storage } from "../services/storage/index.js";
 import { purgeAccountsCreatedHere } from "./cleanup.js";
 import { spaceContext } from "./space-fixtures.js";
+import { insertWork } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
 
@@ -67,13 +80,14 @@ describe("the space backup", () => {
 		await client.putMember(ctx.spaceUri, { did: member, read: true, write: false });
 
 		const store = new MapStore();
-		const captured = await captureSpace(ctx.userId, {
+		const captured = await captureOwnedSpaces(ctx.userId, {
 			store,
 			resolveSession: ctx.resolveSession,
 			fetchImpl: ctx.pds.fetch,
 		});
 		if (!captured.ok) throw new Error(`capture failed: ${captured.reason}`);
-		const backup = captured.backup;
+		const [backup] = captured.backups;
+		if (!backup) throw new Error("the Library space was not captured");
 
 		expect(backup.status).toBe("complete");
 		expect(backup.recordCount).toBe(1);
@@ -179,13 +193,121 @@ describe("the space backup", () => {
 
 	it("takes no copy of a space whose identity Anthers does not host", async () => {
 		const ctx = await spaceContext();
-		const captured = await captureSpace(ctx.userId, {
+		const captured = await captureOwnedSpaces(ctx.userId, {
 			store: new MapStore(),
 			resolveSession: async () => ({ session: null, reason: "not_hosted" }),
 		});
-		expect(captured).toEqual({ ok: false, reason: "not_hosted" });
+		expect(captured).toEqual({ ok: false, reason: "not_hosted", backups: [] });
 
 		const rows = await db.select().from(spaceBackups).where(eq(spaceBackups.userId, ctx.userId));
 		expect(rows).toHaveLength(0);
+	});
+
+	it("captures a creator's studio and gated space as their own captures, without colliding", async () => {
+		const ctx = await spaceContext();
+		const mediaKey = `creators/${ctx.userId}/media/nightjar.epub`;
+		const media = new TextEncoder().encode("a novel\n".repeat(30));
+		await storage.upload(mediaKey, media, "application/epub+zip");
+
+		const work = await insertWork({
+			creatorId: ctx.userId,
+			type: "text",
+			title: "Nightjar",
+			visibility: "released",
+			access: [{ threshold: 0, allow: true, price: "5.00" }],
+			sourceKey: mediaKey,
+		});
+		const synced = await syncCreatorSpace(work.id, {
+			resolveSession: ctx.resolveSession,
+			managingApp: managingAppFor("http://localhost:4321"),
+			fetchImpl: ctx.pds.fetch,
+		});
+		const studio = studioSpaceUri(ctx.did);
+		const gated = gatedSpaceUri(ctx.did, work.publicId);
+		expect(synced.refs.spaceUri).toBe(gated);
+
+		try {
+			const store = new MapStore();
+			const captured = await captureOwnedSpaces(ctx.userId, {
+				store,
+				resolveSession: ctx.resolveSession,
+				fetchImpl: ctx.pds.fetch,
+			});
+			if (!captured.ok) throw new Error(`capture failed: ${captured.reason}`);
+
+			// The Library, the studio and the gated space — three addresses under one owner.
+			expect(captured.backups.map((backup) => backup.spaceUri).sort()).toEqual(
+				[ctx.spaceUri, studio, gated].sort(),
+			);
+			// 🚨 The prefix is per space, not per owner-and-type: the studio and the gated space
+			// share both and only the key tells them apart.
+			const prefixes = captured.backups.map((backup) => backup.prefix);
+			expect(new Set(prefixes).size).toBe(3);
+			expect(prefixes.some((prefix) => prefix.includes(`/org.anthers.creatorSpace/self/`))).toBe(
+				true,
+			);
+			expect(
+				prefixes.some((prefix) => prefix.includes(`/org.anthers.creatorSpace/${work.publicId}/`)),
+			).toBe(true);
+
+			const gatedBackup = captured.backups.find((backup) => backup.spaceUri === gated);
+			const studioBackup = captured.backups.find((backup) => backup.spaceUri === studio);
+			if (!gatedBackup || !studioBackup) throw new Error("a creator space was not captured");
+			expect(gatedBackup.recordCount).toBe(1);
+			expect(studioBackup.recordCount).toBe(1);
+
+			// The capture is the only copy of both spaces from here.
+			await spaceClientFor(ctx.session, { fetchImpl: ctx.pds.fetch })
+				.deleteSpace(gated)
+				.catch(() => undefined);
+			await spaceClientFor(ctx.session, { fetchImpl: ctx.pds.fetch })
+				.deleteSpace(studio)
+				.catch(() => undefined);
+
+			for (const backup of [studioBackup, gatedBackup]) {
+				const restored = await restoreSpace(backup.id, {
+					store,
+					resolveSession: ctx.resolveSession,
+					fetchImpl: ctx.pds.fetch,
+				});
+				if (!restored.ok) throw new Error(`restore refused: ${restored.reason}`);
+				expect(restored.report.records.mismatched).toEqual([]);
+				expect(restored.report.records.matched).toBe(1);
+				expect(restored.report.policy.matches).toBe(true);
+				expect(restored.report.commit.matches).toBe(true);
+				// The draft and the manifest name R2 keys; the restore says whether they still
+				// resolve rather than assuming the media layer is where it was.
+				expect(restored.report.files).toEqual({
+					references: 1,
+					present: 1,
+					missing: [],
+				});
+			}
+
+			const reader = new SpaceClient({
+				baseUrl: ctx.session.pdsUrl,
+				token: ctx.session.token,
+				fetch: ctx.pds.fetch,
+			});
+			const manifest = await reader.getRecord({
+				space: gated,
+				repo: ctx.did,
+				collection: CREATOR_SPACE_COLLECTIONS.manifest,
+				rkey: GATED_MANIFEST_RKEY,
+			});
+			expect(manifest.value).toMatchObject({
+				publicId: work.publicId,
+				files: [{ role: "source", key: mediaKey, bytes: media.length }],
+			});
+			const draft = await reader.getRecord({
+				space: studio,
+				repo: ctx.did,
+				collection: CREATOR_SPACE_COLLECTIONS.draft,
+				rkey: String(work.publicId),
+			});
+			expect(draft.value).toMatchObject({ publicId: work.publicId, title: "Nightjar" });
+		} finally {
+			await storage.delete(mediaKey).catch(() => undefined);
+		}
 	});
 });

@@ -29,7 +29,14 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, creatorNettings, crfLedger, purchases, users } from "@anthers/db/schema";
+import {
+	accessReceipts,
+	assets,
+	creatorNettings,
+	crfLedger,
+	purchases,
+	users,
+} from "@anthers/db/schema";
 import { REFUND_AUTO_CAP, REFUND_CAP_WINDOW_MONTHS } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
@@ -690,6 +697,20 @@ describe("The purchase row after a refund", () => {
 		// shortfall against the remainder.
 		expect(fake.callsTo("refunds.create")).toHaveLength(1);
 		expect(await ledgerFor(purchase.id)).toHaveLength(1);
+
+		// And one refund record owed to the reader's space, from either door: the first
+		// settle inserted it, and the replay is the repair path for an insert that failed
+		// after the money moved — not a second record.
+		const owed = await db
+			.select()
+			.from(accessReceipts)
+			.where(eq(accessReceipts.purchaseId, purchase.id));
+		expect(owed).toHaveLength(1);
+		expect(owed[0]).toMatchObject({
+			kind: "refund",
+			receiptId: `refund-${purchase.id}`,
+			state: "pending",
+		});
 	});
 
 	it("refuses a purchase that belongs to someone else, without confirming it exists", async () => {

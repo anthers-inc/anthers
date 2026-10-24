@@ -13,23 +13,24 @@ import NetworkMembershipSection from "../components/layout/NetworkMembershipSect
 import SharedFilterSections, {
 	SHARED_FILTER_TYPES,
 } from "../components/layout/SharedFilterSections";
-import SharedLensesSection from "../components/layout/SharedLensesSection";
+import SharedLensesSection, { ALL_LENS_IDS } from "../components/layout/SharedLensesSection";
 import { useFilterable, useViewFilter } from "../components/layout/search/filter-context";
 import TabHeader from "../components/layout/TabHeader";
 import BookshelfLens from "../components/library/BookshelfLens";
+import ChannelGuideLens, {
+	channelGuideChannelsFromShelf,
+} from "../components/library/ChannelGuideLens";
 import MusicDial from "../components/library/MusicDial";
 import MusicLens from "../components/library/MusicLens";
 import { feedLensItems } from "../lib/feed-lenses";
 
-/**
- * The LENSES the Network has built (Parker, 2026-10-20): the Music Player and the
- * Bookshelf read the feed the way the Library's read the shelf — the same metaphors over
- * the tab's own corpus, which is what "one vocabulary, two corpora" means in practice.
- * The Channel Guide is deliberately absent: its blocks play inline, and a feed entry
- * carries no payload to play, so the row stays grayed here until that lens's Network
- * behavior is built.
+/*
+ * The LENSES the Network carries (Parker, 2026-10-23): all three, over the feed. The
+ * Music Player and Bookshelf read the feed the way the Library's read the shelf, and the
+ * Channel Guide draws the feed's videos as creator channels — its player gets its
+ * address from `feedLensItems`, which composes the delivery endpoint the feed omits.
+ * The set is the shared all-lenses constant so no tab can fall behind the list.
  */
-const NETWORK_LIVES = new Set(["", "music", "bookshelf"]);
 
 export default function AuthenticatedHomePage() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -66,6 +67,7 @@ export default function AuthenticatedHomePage() {
 	 */
 	const lensIncluded = useMemo<string[] | null>(() => {
 		if (lens === "music") return includeSpoken ? ["music", "audio"] : ["music"];
+		if (lens === "channel-guide") return ["video"];
 		if (lens === "bookshelf") return [...BOOKSHELF_WORK_TYPES];
 		return null;
 	}, [lens, includeSpoken]);
@@ -126,7 +128,7 @@ export default function AuthenticatedHomePage() {
 				<SharedLensesSection
 					lens={lens}
 					onLens={(id) => updateParams({ lens: id })}
-					live={NETWORK_LIVES}
+					live={ALL_LENS_IDS}
 					extras={{
 						music: (
 							<MusicDial
@@ -265,6 +267,11 @@ export default function AuthenticatedHomePage() {
 					/* The same shelf metaphor over the feed's written Works: spines instead of
 					   tiles, alphabetical by title. */
 					<BookshelfLens items={lensDraw} source="network" />
+				) : lens === "channel-guide" ? (
+					/* The feed's videos as creator channels, latest at the top of each column.
+					   A feed entry ships no payload, so the guide's inline player reads the
+					   delivery address `feedLensItems` composes for it. */
+					<ChannelGuideLens channels={channelGuideChannelsFromShelf(lensDraw)} source="feed" />
 				) : feedPosts.length > 0 ? (
 					// A uniform grid, still sorted on the one chronological key —
 					// the grid is the layout, never a ranking. Columns keep a workable

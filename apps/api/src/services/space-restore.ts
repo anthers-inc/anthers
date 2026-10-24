@@ -34,6 +34,7 @@ import {
 	objectBackupStore,
 } from "./space-backup.js";
 import { hostedSpaceSession, type ResolveSpaceSession, spaceClientFor } from "./space-writer.js";
+import { storage } from "./storage/index.js";
 
 export interface RestoreOptions {
 	store?: BackupStore;
@@ -52,6 +53,12 @@ export interface RestoreReport {
 		mismatched: Array<{ collection: string; rkey: string; expected: string; actual: string }>;
 	};
 	blobs: { total: number; matched: number; missing: string[] };
+	/**
+	 * The storage keys the restored records point at. A creator's draft and a gated manifest
+	 * name R2 keys rather than blobs, and the logical backup deliberately does not carry R2;
+	 * this says whether the media layer still has them instead of assuming it does.
+	 */
+	files: { references: number; present: number; missing: string[] };
 	members: { total: number; restored: number };
 	policy: { matches: boolean };
 	commit: { expected: string | null; actual: string | null; matches: boolean | null };
@@ -144,7 +151,30 @@ export async function restoreSpace(
 		membersRestored++;
 	}
 
-	// 4. Independent checks: the policy that came back, and the whole set's digest.
+	// 4. The media the records point at. A `files[].key` is a storage pointer, not a blob, so
+	// nothing in the capture carries its bytes; asking storage is the only way to know the
+	// restored record still describes something a reader can be served.
+	const fileKeys = new Set<string>();
+	for (const record of records.records) {
+		const files = (record.value as { files?: unknown }).files;
+		if (!Array.isArray(files)) continue;
+		for (const file of files) {
+			const key = (file as { key?: unknown } | null)?.key;
+			if (typeof key === "string" && key) fileKeys.add(key);
+		}
+	}
+	const missingFiles: string[] = [];
+	let filesPresent = 0;
+	for (const key of fileKeys) {
+		// A browser build's key is a prefix; a single file's key is the object itself.
+		const bytes = key.endsWith("/")
+			? await storage.prefixSize(key).catch(() => 0)
+			: await storage.size(key).catch(() => null);
+		if (bytes !== null && bytes > 0) filesPresent++;
+		else missingFiles.push(key);
+	}
+
+	// 5. Independent checks: the policy that came back, and the whole set's digest.
 	const description = await client.getSpace(spaceUri);
 	const policyMatches =
 		description.readPolicy.$type === (registry.readPolicy as { $type?: string }).$type &&
@@ -170,6 +200,11 @@ export async function restoreSpace(
 				mismatched,
 			},
 			blobs: { total: Object.keys(blobs).length, matched: blobsMatched, missing },
+			files: {
+				references: fileKeys.size,
+				present: filesPresent,
+				missing: missingFiles,
+			},
 			members: { total: registry.members.length, restored: membersRestored },
 			policy: { matches: policyMatches },
 			commit: {

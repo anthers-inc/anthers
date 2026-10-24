@@ -99,26 +99,52 @@ describe("the persistent miniplayer preference", () => {
 	});
 });
 
-describe("the search shortcut preference", () => {
-	it("starts null and round-trips a canonical pair through both serializers", async () => {
-		const before = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
-		expect(before.user.searchShortcuts).toBeNull();
+describe("the keyboard shortcut preference", () => {
+	const chords = {
+		search: "mod+shift+k",
+		filter: "alt+f",
+		fullscreen: "f",
+		theater: "t",
+	};
 
-		const res = await patchMe({ searchShortcuts: { search: "mod+shift+k", filter: "alt+f" } });
+	it("starts null and round-trips four canonical chords through both serializers", async () => {
+		const before = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
+		expect(before.user.keyboardShortcuts).toBeNull();
+
+		const res = await patchMe({ keyboardShortcuts: chords });
 		expect(res.status).toBe(200);
 
-		const expected = { search: "Mod+Shift+K", filter: "Alt+F" };
+		const expected = {
+			search: "Mod+Shift+K",
+			filter: "Alt+F",
+			fullscreen: "F",
+			theater: "T",
+		};
 		const me = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
-		expect(me.user.searchShortcuts).toEqual(expected);
+		expect(me.user.keyboardShortcuts).toEqual(expected);
 		const auth = await (await req("/api/auth/me", { headers: { Cookie: cookie } })).json();
-		expect(auth.user.searchShortcuts).toEqual(expected);
+		expect(auth.user.keyboardShortcuts).toEqual(expected);
 	});
 
-	it("refuses a bare key, a duplicate pair and a partial map", async () => {
-		expect((await patchMe({ searchShortcuts: { search: "K", filter: "Mod+F" } })).status).toBe(400);
-		expect((await patchMe({ searchShortcuts: { search: "Mod+K", filter: "Mod+K" } })).status).toBe(
-			400,
-		);
-		expect((await patchMe({ searchShortcuts: { search: "Mod+K" } })).status).toBe(400);
+	it("refuses a bare page shortcut, a duplicate pair and a partial map", async () => {
+		expect((await patchMe({ keyboardShortcuts: { ...chords, search: "K" } })).status).toBe(400);
+		expect(
+			(await patchMe({ keyboardShortcuts: { ...chords, theater: "mod+shift+k" } })).status,
+		).toBe(400);
+		expect(
+			(await patchMe({ keyboardShortcuts: { search: "Mod+K", filter: "Mod+F" } })).status,
+		).toBe(400);
+	});
+
+	/**
+	 * A player shortcut is listened for by a focused player, so a bare key is the natural
+	 * binding — while the same bare key on Search would eat typing. The split is the whole
+	 * reason the grammar has two scopes, so it gets its own refusal.
+	 */
+	it("accepts a bare player shortcut and refuses it on a page action", async () => {
+		expect(
+			(await patchMe({ keyboardShortcuts: { ...chords, fullscreen: "g", theater: "h" } })).status,
+		).toBe(200);
+		expect((await patchMe({ keyboardShortcuts: { ...chords, filter: "K" } })).status).toBe(400);
 	});
 });

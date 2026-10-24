@@ -27,6 +27,22 @@ describe("previewRoute", () => {
 		});
 	});
 
+	it("names the post a permalink is about, with its canonical path", () => {
+		expect(previewRoute("/posts/hello-there-534000269")).toEqual({
+			kind: "post",
+			param: "hello-there-534000269",
+			canonicalPath: "/posts/hello-there-534000269",
+		});
+	});
+
+	it("takes a post's bare slug, which the card endpoint also resolves", () => {
+		expect(previewRoute("/posts/hello-there/")).toEqual({
+			kind: "post",
+			param: "hello-there",
+			canonicalPath: "/posts/hello-there",
+		});
+	});
+
 	it("reads a share link's token, because that is the address a sharer pastes", () => {
 		expect(previewRoute("/s/8367cc846696bd9cd5abef363e3b6fd1")).toEqual({
 			kind: "share",
@@ -50,7 +66,6 @@ describe("previewRoute", () => {
 			"/",
 			"/for-creators",
 			"/about",
-			"/posts/hello-there-534000269",
 			"/@parkerhdavis.com",
 			"/release-notes",
 		]) {
@@ -63,6 +78,9 @@ describe("previewRoute", () => {
 			"/works",
 			"/works/",
 			"/works/a/b",
+			"/posts",
+			"/posts/",
+			"/posts/a/b",
 			"/s",
 			"/s/",
 			"/s/tok/extra",

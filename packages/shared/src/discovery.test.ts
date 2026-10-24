@@ -11,6 +11,9 @@
  */
 import { describe, expect, test } from "bun:test";
 import {
+	asRecipeCandidates,
+	asRecipeMix,
+	asRecipeWindow,
 	type DiscoveryReason,
 	graphRecipe,
 	interleaveByAuthor,
@@ -134,19 +137,56 @@ describe("reasonForSource", () => {
 });
 
 describe("the recipe bar's stages", () => {
+	const recipe = (overrides: Partial<Parameters<typeof streamRecipe>[0]> = {}) =>
+		streamRecipe({ window: "all", candidates: "everyone", mix: "spread", ...overrides });
+
 	test("names all three stages for every window", () => {
 		for (const window of ["all", "day", "week"] as const) {
-			const recipe = streamRecipe({ window });
-			expect(recipe.stages.map((stage) => stage.stage)).toEqual(["candidates", "signals", "mix"]);
-			expect(recipe.sentence).toContain("newest Works and Posts");
+			const built = recipe({ window });
+			expect(built.stages.map((stage) => stage.stage)).toEqual(["candidates", "signals", "mix"]);
+			expect(built.sentence).toContain("newest Works and Posts");
 		}
 	});
 
 	test("states the window the reader chose and the mix that actually ran", () => {
-		expect(streamRecipe({ window: "day" }).sentence).toContain("last 24 hours");
-		expect(streamRecipe({ window: "week" }).stages[1]?.label).toContain("seven days");
-		expect(streamRecipe({ window: "all" }).stages[1]?.label).toBe("Newest first");
-		expect(streamRecipe({ window: "all" }).stages[2]?.label).toBe("One card per creator per round");
+		expect(recipe({ window: "day" }).sentence).toContain("last 24 hours");
+		expect(recipe({ window: "week" }).stages[1]?.label).toContain("seven days");
+		expect(recipe({ window: "all" }).stages[1]?.label).toBe("Newest first");
+		expect(recipe({ window: "all" }).stages[2]?.label).toBe("One card per creator per round");
+	});
+
+	test("says when the stream is drawn from the reader's network, and not when it is not", () => {
+		const network = recipe({ candidates: "network" });
+		expect(network.sentence).toContain("by you and the creators you follow, support or have saved");
+		expect(network.stages[0]?.label).toBe("You and the creators you follow, support or have saved");
+
+		const everyone = recipe({ candidates: "everyone" });
+		expect(everyone.sentence).toContain("across Anthers");
+		expect(everyone.sentence).not.toContain("you and the creators");
+	});
+
+	test("says when the reader turned the mix off, and the stage list changes with it", () => {
+		const straight = recipe({ mix: "straight" });
+		expect(straight.sentence).toContain("with no mixing pass");
+		expect(straight.sentence).not.toContain("mixed so one creator");
+		expect(straight.stages[2]?.label).toBe("Straight, no interleaving");
+
+		expect(recipe({ mix: "spread" }).sentence).toContain(
+			"mixed so one creator cannot take the page",
+		);
+	});
+
+	test("renders every combination as a sentence that names all three choices", () => {
+		for (const candidates of ["everyone", "network"] as const) {
+			for (const mix of ["spread", "straight"] as const) {
+				for (const window of ["all", "day", "week"] as const) {
+					const built = recipe({ candidates, mix, window });
+					expect(built.stages).toHaveLength(3);
+					expect(built.stages.every((stage) => stage.label.length > 0)).toBe(true);
+					expect(built.sentence.endsWith(".")).toBe(true);
+				}
+			}
+		}
 	});
 
 	test("renders the graph's follower fallback as the recipe that ran, not the network one", () => {
@@ -161,5 +201,24 @@ describe("the recipe bar's stages", () => {
 		const network = graphRecipe({ basis: "network", minShared: 3 });
 		expect(network.sentence).toContain("at least 3 of the people you follow");
 		expect(network.stages[1]?.label).toContain("at least 3");
+	});
+});
+
+describe("the recipe's URL values", () => {
+	test("reads each value it knows and falls back to the opening recipe for the rest", () => {
+		expect(asRecipeWindow("day")).toBe("day");
+		expect(asRecipeWindow("fortnight")).toBe("all");
+		expect(asRecipeWindow(null)).toBe("all");
+
+		expect(asRecipeCandidates("network")).toBe("network");
+		expect(asRecipeCandidates("friends")).toBe("everyone");
+		expect(asRecipeCandidates(undefined)).toBe("everyone");
+
+		expect(asRecipeMix("straight")).toBe("straight");
+		expect(asRecipeMix("random")).toBe("spread");
+		expect(asRecipeMix("")).toBe("spread");
+		// The route's opening mix depends on the candidate set, so the parser takes the
+		// fallback rather than deciding one for every caller.
+		expect(asRecipeMix(null, "straight")).toBe("straight");
 	});
 });

@@ -64,8 +64,8 @@ import {
 import { isWorkType } from "@anthers/shared/content";
 import { type ContentNote, RATING_ROWS } from "@anthers/shared/content-rating";
 import { CREATOR_EMAIL_KINDS, resolvedCreatorEmailDelivery } from "@anthers/shared/creator-emails";
-import { interleaveByAuthor, reasonForSource } from "@anthers/shared/discovery";
-import { normalizeSearchShortcuts } from "@anthers/shared/keybindings";
+import { asRecipeMix, interleaveByAuthor, reasonForSource } from "@anthers/shared/discovery";
+import { normalizeKeyboardShortcuts } from "@anthers/shared/keybindings";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
 	isRightsRequestKind,
@@ -210,7 +210,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 			homeDefaultTab: userPreferences.homeDefaultTab,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
 			creatorEmailDelivery: userPreferences.creatorEmailDelivery,
-			searchShortcuts: userPreferences.searchShortcuts,
+			keyboardShortcuts: userPreferences.keyboardShortcuts,
 		})
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
@@ -234,7 +234,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		// Where audio playback lives — null means "never said", the client reads on.
 		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
 		// The bar's two chords; null means the defaults in `@anthers/shared/keybindings`.
-		searchShortcuts: prefs?.searchShortcuts ?? null,
+		keyboardShortcuts: prefs?.keyboardShortcuts ?? null,
 		atprotoDid: user.atprotoDid,
 		// The server holding that identity, so Settings can name it and link its account page.
 		atprotoPdsUrl: user.atprotoPdsUrl,
@@ -424,11 +424,12 @@ const updateProfileSchema = z.object({
 	 */
 	homeDefaultTab: z.enum(NAV_IDS).optional(),
 	/**
-	 * The search bar's two chords, as a whole map. The values are validated below with
-	 * `@anthers/shared/keybindings` rather than by a regex here: the grammar is the same
-	 * one the browser matches against, so the two cannot disagree about what a chord is.
+	 * The account's rebindable chords, as a whole map — the search bar's two and the
+	 * player's two. The values are validated below with `@anthers/shared/keybindings`
+	 * rather than by a regex here: the grammar is the same one the browser matches
+	 * against, so the two cannot disagree about what a chord is.
 	 */
-	searchShortcuts: z.record(z.string().max(20), z.string().max(40)).optional(),
+	keyboardShortcuts: z.record(z.string().max(20), z.string().max(40)).optional(),
 	/**
 	 * Per-group notification delivery, as whole-mode writes per key.
 	 *
@@ -547,17 +548,18 @@ const accountRoutes = new Hono()
 		if (data.persistentMiniplayer !== undefined) {
 			prefUpdates.persistentMiniplayer = data.persistentMiniplayer;
 		}
-		if (data.searchShortcuts !== undefined) {
-			const cleaned = normalizeSearchShortcuts(data.searchShortcuts);
+		if (data.keyboardShortcuts !== undefined) {
+			const cleaned = normalizeKeyboardShortcuts(data.keyboardShortcuts);
 			if (!cleaned) {
 				return c.json(
 					{
-						error: "A shortcut needs a modifier and a key, and the two search actions must differ.",
+						error:
+							"A page shortcut needs a modifier and a key, a player shortcut needs a key, and no two shortcuts may be the same.",
 					},
 					400,
 				);
 			}
-			prefUpdates.searchShortcuts = cleaned;
+			prefUpdates.keyboardShortcuts = cleaned;
 		}
 		if (Object.keys(prefUpdates).length > 1) {
 			// The key exists only so the `> 1` test means "something was set"; the row's own
@@ -575,8 +577,8 @@ const accountRoutes = new Hono()
 				...(data.persistentMiniplayer !== undefined
 					? { persistentMiniplayer: data.persistentMiniplayer }
 					: {}),
-				...(data.searchShortcuts !== undefined
-					? { searchShortcuts: prefUpdates.searchShortcuts as Record<string, string> }
+				...(data.keyboardShortcuts !== undefined
+					? { keyboardShortcuts: prefUpdates.keyboardShortcuts as Record<string, string> }
 					: {}),
 			};
 			await db
@@ -817,6 +819,11 @@ const accountRoutes = new Hono()
 		// route is unchanged — the filters, the access verdicts, and the ordering are
 		// the feed's own.
 		const scope = c.req.query("scope") === "global" ? "global" : "network";
+		// The mix is Discovery's recipe parameter. An absent one keeps each stream's
+		// historic order: Discovery's whole-site stream interleaves, the network feed
+		// stays chronological, so a caller that knows nothing about recipes gets exactly
+		// what it got before this parameter existed.
+		const mix = asRecipeMix(c.req.query("mix"), scope === "global" ? "spread" : "straight");
 
 		// The feed's sources (2026-10-19): the creators this account follows, the
 		// creators whose Badge it holds, and the creators behind the posts and Works it
@@ -1305,17 +1312,17 @@ const accountRoutes = new Hono()
 				return accessFilter === "unlocked" ? unlocked : !unlocked;
 			});
 
-		// 🚨 **Discovery's stream runs the mix stage, and it runs it before the cap.**
-		// Strictly newest-first hands the page to whoever posts most: one creator's run
-		// of ten fills a quarter of a 4-column grid. Interleaving gives every creator one
-		// card before anyone gets a second — the first round is one per creator, then the
+		// 🚨 **Discovery's mix is a recipe value, and it runs before the cap.** Strictly
+		// newest-first hands the page to whoever posts most: one creator's run of ten
+		// fills a quarter of a 4-column grid. `spread` gives every creator one card
+		// before anyone gets a second — the first round is one per creator, then the
 		// next — and because the input was newest-first, it reads as "the newest of
-		// everyone, then the next of everyone" rather than as a re-ranking. The network
-		// feed is a record of what the people you chose did, so it keeps the plain order.
-		const capped =
-			scope === "global"
-				? interleaveByAuthor(newestFirst, (e) => e.creatorId).slice(0, 50)
-				: newestFirst.slice(0, 50);
+		// everyone, then the next of everyone" rather than as a re-ranking. `straight`
+		// is the recipe with no mixing pass, and the network feed's own default, because
+		// that feed is a record of what the people you chose did.
+		const mixed =
+			mix === "spread" ? interleaveByAuthor(newestFirst, (e) => e.creatorId) : newestFirst;
+		const capped = mixed.slice(0, 50);
 
 		return c.json({
 			entries: capped,
