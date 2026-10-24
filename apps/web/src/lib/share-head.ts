@@ -44,7 +44,7 @@ export const SHARE_END = "<!-- share:end -->";
  */
 export const SITE_CARD_URL = "https://anthers.org/brand/og-card.png";
 export const SITE_CARD_ALT =
-	"The Anthers mark, a striped bee on a cream round with orchids beneath.";
+	"The Anthers wordmark, an orchid spray, and a bee above pale meadow grass.";
 export const SITE_CARD_WIDTH = "1200";
 export const SITE_CARD_HEIGHT = "630";
 
