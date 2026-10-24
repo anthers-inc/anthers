@@ -157,6 +157,96 @@ describe("acceptCredit", () => {
 		expect(result).toEqual({ ok: false, code: "not_credited" });
 	});
 
+	it("records nothing when the contributor's identity cannot be written to", async () => {
+		// An acceptance is a record in the contributor's own repository, so an identity whose
+		// permission Anthers does not hold has not accepted anything yet. The row used to be
+		// written before the writer was opened, leaving "accepted" on file beside a record that
+		// never existed and making every later attempt answer `already_accepted`.
+		const brought = await createAccount(`${RUN}-brought`, {
+			emailVerified: true,
+			identity: "brought",
+		});
+		const work = await insertWork({
+			creatorId: creator.userId,
+			type: "text",
+			credits: [{ role: "Written by", contributor: brought.did, types: ["created"] }],
+		});
+		insertedWorkIds.push(work.id);
+
+		const result = await acceptCredit({
+			callerUserId: brought.userId,
+			callerDid: brought.did,
+			workId: work.id,
+			workUri: `at://${creator.did}/org.anthers.work/abc123`,
+			role: "Written by",
+		});
+		expect(result).toEqual({ ok: false, code: "not_granted" });
+
+		const rows = await db
+			.select({ id: creditAcceptances.id })
+			.from(creditAcceptances)
+			.where(
+				and(
+					eq(creditAcceptances.workId, work.id),
+					eq(creditAcceptances.contributorDid, brought.did),
+				),
+			);
+		expect(rows).toHaveLength(0);
+	});
+
+	it("writes the record for an acceptance whose record never landed, keeping its date", async () => {
+		// The repair half: a row written before the ordering above existed has no address, and
+		// accepting again is how it gets one. The moment the person said yes is what the record
+		// carries, not the moment it caught up.
+		const work = await insertWork({
+			creatorId: creator.userId,
+			type: "text",
+			credits: [{ role: "Written by", contributor: contributor.did, types: ["created"] }],
+		});
+		insertedWorkIds.push(work.id);
+		const saidYes = new Date("2026-10-01T12:00:00.000Z");
+		await db.insert(creditAcceptances).values({
+			workId: work.id,
+			contributorDid: contributor.did,
+			role: "Written by",
+			acceptedAt: saidYes,
+		});
+
+		const result = await acceptCredit({
+			callerUserId: contributor.userId,
+			callerDid: contributor.did,
+			workId: work.id,
+			workUri: `at://${creator.did}/org.anthers.work/abc123`,
+			role: "Written by",
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.atprotoUri).toMatch(/^at:\/\//);
+
+		const [row] = await db
+			.select()
+			.from(creditAcceptances)
+			.where(
+				and(
+					eq(creditAcceptances.workId, work.id),
+					eq(creditAcceptances.contributorDid, contributor.did),
+				),
+			)
+			.limit(1);
+		expect(row.atprotoUri).toBe(result.atprotoUri);
+		expect(row.acceptedAt.toISOString()).toBe(saidYes.toISOString());
+
+		// And a second accept now has nothing left to do.
+		const again = await acceptCredit({
+			callerUserId: contributor.userId,
+			callerDid: contributor.did,
+			workId: work.id,
+			workUri: `at://${creator.did}/org.anthers.work/abc123`,
+			role: "Written by",
+		});
+		expect(again).toEqual({ ok: false, code: "already_accepted" });
+	});
+
 	it("refuses when the credit has been rejected", async () => {
 		const work = await insertWork({
 			creatorId: creator.userId,
