@@ -87,6 +87,16 @@ describe("the two user tabs share one page shell", () => {
 		expect(discovery).toContain("repeat(auto-fill,minmax(280px,1fr))");
 		expect(discovery, "the old fixed ladder is back").not.toContain("xl:grid-cols-4");
 	});
+
+	/**
+	 * The width, not only the columns. Discovery's centered `max-w-7xl` container capped the
+	 * grid 48 pixels short of the content area at a wide window, which is the difference the
+	 * old feed's full-width wrapper existed to avoid.
+	 */
+	it("lets the grid use the width the layout gives it", () => {
+		expect(discovery).not.toContain("max-w-7xl");
+		expect(discovery).toContain('<div className="w-full px-6 py-6">');
+	});
 });
 
 describe("the nav speaks the one vocabulary", () => {

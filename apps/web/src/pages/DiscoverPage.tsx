@@ -503,7 +503,10 @@ export default function DiscoverPage() {
 
 	return (
 		<div className="min-h-full">
-			<div className="mx-auto w-full max-w-7xl px-6 py-6">
+			{/* The feed's wrapper, not a centered container: the grid is meant to use the width
+			    the layout already gives it, and Discovery's old centered column capped it 48
+			    pixels short of the content area at a wide window. */}
+			<div className="w-full px-6 py-6">
 				<TabHeader
 					icon={MagnifyingGlassIcon}
 					title="Discovery"
