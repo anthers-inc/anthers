@@ -33,6 +33,7 @@ import { eq, lt } from "drizzle-orm";
 import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { publicOrigin } from "../lib/deployment.js";
 import { WORK_COLLECTION } from "./atproto-repo.js";
+import { clientJwks } from "./client-attestation.js";
 
 /** How long a half-finished authorization stays resumable. */
 const STATE_TTL_MS = 60 * 60 * 1000;
@@ -389,6 +390,13 @@ const DECLARED_SCOPE = ["atproto", EMAIL_SCOPE, ...USER_SCOPES, ...CREATOR_SCOPE
  */
 export function buildClientMetadata() {
 	const baseUrl = getBaseUrl();
+	const explicit = process.env.ATPROTO_CLIENT_ID?.trim();
+
+	// ⭐ **An explicit client id is a discoverable document even in a checkout.** The staging
+	// runs serve this metadata from a local server and name it as the client, because a space
+	// authority resolves the client id by fetching it — and the loopback id below is a client
+	// identifier, not a document. Production sets nothing here and uses its own https origin.
+	if (explicit) return discoverableClientMetadata(explicit, baseUrl);
 
 	// 🚨 An authorization server accepts exactly two shapes of `client_id`, and a plain
 	// `http://localhost:8000/...` URL is NEITHER — it is not a discoverable https client and
@@ -409,18 +417,39 @@ export function buildClientMetadata() {
 		};
 	}
 
-	const clientId = process.env.ATPROTO_CLIENT_ID ?? `${baseUrl}/api/atproto/client-metadata.json`;
+	return discoverableClientMetadata(`${baseUrl}/api/atproto/client-metadata.json`, baseUrl);
+}
+
+/**
+ * The discoverable document: a client id that is the URL this document is served from.
+ *
+ * `jwks` is the app's attestation key, published so a space authority can verify the client
+ * attestation before it asks the managing app anything. It is absent only when this process
+ * has no key — a deployment that has not been given `ATPROTO_CLIENT_JWK`, where attestation is
+ * refused rather than published unverifiable. The token-auth method stays `none`: the app's
+ * own OAuth flows use DPoP, and this key signs attestations rather than token requests.
+ */
+function discoverableClientMetadata(clientId: string, baseUrl: string) {
+	const origin = new URL(clientId);
+	const jwks = clientJwks();
+	// RFC 8252 refuses `localhost` as a redirect host; a checkout's client id may still use
+	// it, so the redirect names the loopback IP while the identity keeps the hostname.
+	const redirectHost = origin.hostname === "localhost" ? "127.0.0.1" : origin.hostname;
+	const redirectPort = origin.port ? `:${origin.port}` : "";
 	return {
 		client_id: clientId,
 		client_name: "Anthers",
 		client_uri: baseUrl,
-		redirect_uris: [`${baseUrl}/api/atproto/callback`] as [string],
+		redirect_uris: [`${origin.protocol}//${redirectHost}${redirectPort}/api/atproto/callback`] as [
+			string,
+		],
 		scope: DECLARED_SCOPE,
 		grant_types: ["authorization_code", "refresh_token"] as ["authorization_code", "refresh_token"],
 		response_types: ["code"] as ["code"],
 		token_endpoint_auth_method: "none" as const,
 		application_type: "web" as const,
 		dpop_bound_access_tokens: true as const,
+		...(jwks ? { jwks } : {}),
 	};
 }
 

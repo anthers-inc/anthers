@@ -33,6 +33,7 @@ import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { trafficRoutes } from "./routes/traffic.js";
 import { webBuildRoutes } from "./routes/web-builds.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { workManifestRoutes } from "./routes/work-manifest.js";
 import { alertDue, alertOperational, captureError, redactRoute } from "./services/error-tracker.js";
 import { healthReport } from "./services/health.js";
 import { isQuarantinedKey } from "./services/storage/acl.js";
@@ -119,6 +120,9 @@ const app = new Hono()
 	.route("/", managingAppRoutes)
 	.route("/api/accounts", accountRoutes)
 	.route("/api/content", contentRoutes)
+	// A gated Work's manifest is a read of another server, not a row; it lives beside the
+	// Work routes but has its own service, so the access check and the protocol stay together.
+	.route("/api/content", workManifestRoutes)
 	.route("/api/search", searchRoutes)
 	.route("/api/content/media-upload", mediaUploadSessionRoutes)
 	.route("/api/noun", nounRoutes)
