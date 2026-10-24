@@ -73,10 +73,11 @@ export interface MusicLensProps {
 	includeSpoken: boolean;
 	/**
 	 * Where the lens is drawing from. The Library opens a release as it was kept; the
-	 * Network opens the whole Project, because the feed is what arrived rather than a
-	 * kept list. Only the empty state's words and that opening rule differ.
+	 * feed-shaped scopes — the Network's feed and Discovery's whole-site stream — open
+	 * the whole Project, because what arrived is not a kept list. Only the empty state's
+	 * words and that opening rule differ.
 	 */
-	scope?: "library" | "feed";
+	scope?: "library" | "feed" | "discovery";
 }
 
 /** The Work types this lens draws on, before grouping them into releases. */
@@ -222,14 +223,15 @@ export function musicReleases(items: LensItem[], includeSpoken: boolean): MusicR
 
 /**
  * The release cards as the scope shows them. The Library opens a release as it was kept,
- * so the card counts the kept tracks; the Network opens it whole, so the card advertises
- * the record's own count rather than the handful of tracks that arrived in the feed.
+ * so the card counts the kept tracks; the feed-shaped scopes — the Network and Discovery —
+ * open it whole, so the card advertises the record's own count rather than the handful of
+ * tracks that arrived in the stream.
  */
 export function releasesForScope(
 	releases: MusicRelease[],
-	scope: "library" | "feed",
+	scope: "library" | "feed" | "discovery",
 ): MusicRelease[] {
-	if (scope !== "feed") return releases;
+	if (scope === "library") return releases;
 	return releases.map((release) =>
 		release.kind === "project"
 			? { ...release, trackCount: Math.max(release.trackCount, release.wholeCount) }
@@ -287,7 +289,7 @@ export default function MusicLens({ items, includeSpoken, scope = "library" }: M
 
 	/** Whether opening this release means fetching its whole track list. */
 	const isWholeProject = (release: MusicRelease) =>
-		release.kind === "project" && (release.wholeRelease || scope === "feed");
+		release.kind === "project" && (release.wholeRelease || scope !== "library");
 
 	const openRelease = async (release: MusicRelease) => {
 		setOpenError(null);
@@ -343,6 +345,26 @@ export default function MusicLens({ items, includeSpoken, scope = "library" }: M
 	};
 
 	if (releases.length === 0) {
+		if (scope === "discovery") {
+			return (
+				<div className="rounded-box border border-base-300 bg-base-100 px-6 py-14 text-center">
+					<MusicalNoteIcon className="mx-auto size-10 text-base-content/20" />
+					<h2 className="mt-3 text-lg font-bold">
+						{includeSpoken
+							? "Nothing to listen to in the stream yet"
+							: "No music in the stream yet"}
+					</h2>
+					<p className="mx-auto mt-1 max-w-md text-sm text-base-content/60">
+						{includeSpoken
+							? "Music and spoken word arrive here as creators release it. Widen the window or clear a filter to see more."
+							: "Music arrives here as creators release it. Widen the window or clear a filter to see more."}
+					</p>
+					<Link to="/discovery" className="btn btn-primary btn-sm mt-4">
+						See everything new
+					</Link>
+				</div>
+			);
+		}
 		const forNetwork = scope === "feed";
 		return (
 			<div className="rounded-box border border-base-300 bg-base-100 px-6 py-14 text-center">
