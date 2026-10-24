@@ -21,7 +21,7 @@
  * cost is bought deliberately; a later sweep can dedupe with the manifests in hand.
  */
 import { db } from "@anthers/db";
-import { spaceBackups, USER_SPACE_SKEY, userSpaces } from "@anthers/db/schema";
+import { spaceBackups, userSpaces } from "@anthers/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import {
 	commitDigest,
@@ -29,8 +29,19 @@ import {
 	type SpaceRecord,
 	SpaceRequestError,
 } from "./atproto-space.js";
-import { type RegisteredSpace, type RegistryOptions, registeredSpace } from "./space-registry.js";
-import { hostedSpaceSession, type SpaceSession, spaceClientFor } from "./space-writer.js";
+import {
+	accountsOwningSpaces,
+	type OwnedSpace,
+	ownedSpacesFor,
+	parseSpaceAddress,
+	type RegistryOptions,
+} from "./space-registry.js";
+import {
+	hostedSpaceSession,
+	type SpaceSession,
+	type SpaceSessionResult,
+	spaceClientFor,
+} from "./space-writer.js";
 import { storage } from "./storage/index.js";
 
 /** The narrow storage surface a backup needs. Injected so tests need no bucket. */
@@ -80,14 +91,24 @@ export interface CaptureOptions extends RegistryOptions {
 	store?: BackupStore;
 	/** The capture's clock; the folder name and the row both read it. */
 	now?: Date;
+	/** A session the caller already resolved, so a multi-space capture resolves it once. */
+	session?: SpaceSession;
 }
 
 export type CaptureResult =
 	| { ok: true; backup: typeof spaceBackups.$inferSelect }
 	| { ok: false; reason: string; backupId?: number };
 
+/** Every row one account's capture wrote, in the order the spaces were read. */
+export interface CaptureAllResult {
+	ok: boolean;
+	reason?: string;
+	/** Includes `failed` rows: a capture that broke is evidence, not an absence. */
+	backups: Array<typeof spaceBackups.$inferSelect>;
+}
+
 /**
- * Capture one account's space.
+ * Capture one space the account owns.
  *
  * A missing session is ordinary and produces no row: an identity Anthers does not host has no
  * credential this deployment may use, and the promise for that space is an export on demand
@@ -95,20 +116,21 @@ export type CaptureResult =
  * backup that stops working is visible rather than absent.
  */
 export async function captureSpace(
+	space: OwnedSpace,
 	userId: number,
 	opts: CaptureOptions = {},
 ): Promise<CaptureResult> {
-	const registry = await registeredSpace(userId);
-	if (!registry) return { ok: false, reason: "no_registry_row" };
-
-	const resolve = opts.resolveSession ?? hostedSpaceSession({ fetchImpl: opts.fetchImpl });
-	const resolved = await resolve(userId);
-	if (!resolved.session) return { ok: false, reason: resolved.reason };
+	let session = opts.session;
+	if (!session) {
+		const resolve = opts.resolveSession ?? hostedSpaceSession({ fetchImpl: opts.fetchImpl });
+		session = (await resolve(userId)).session ?? undefined;
+	}
+	if (!session) return { ok: false, reason: "no_session" };
 
 	const store = opts.store ?? objectBackupStore;
 	const now = opts.now ?? new Date();
 	const capturedAt = new Date(now.getTime());
-	const prefix = backupPrefix(registry.did, registry.spaceType, USER_SPACE_SKEY, capturedAt);
+	const prefix = backupPrefix(space.spaceUri, capturedAt);
 
 	let status: "complete" | "partial" | "failed" = "complete";
 	let commit: SpaceCommit | null = null;
@@ -116,7 +138,7 @@ export async function captureSpace(
 	const skips: string[] = [];
 
 	try {
-		const artifacts = await readSpaceArtifacts(registry, resolved.session, opts);
+		const artifacts = await readSpaceArtifacts(space, session, opts);
 		commit = artifacts.commit;
 		star = artifacts.star;
 		skips.push(...artifacts.skipped);
@@ -146,8 +168,8 @@ export async function captureSpace(
 			.insert(spaceBackups)
 			.values({
 				userId,
-				did: registry.did,
-				spaceUri: registry.spaceUri,
+				did: space.did,
+				spaceUri: space.spaceUri,
 				capturedAt,
 				status,
 				rev: commit?.rev ?? null,
@@ -167,7 +189,8 @@ export async function captureSpace(
 			.returning();
 
 		// The row is refreshed from what the PDS just said: the registry is a cache, and a capture
-		// that read the live policy and member list has the current answer in hand.
+		// that read the live policy and member list has the current answer in hand. Scoped to the
+		// address, because a creator space has no row and must never overwrite the Library's.
 		await db
 			.update(userSpaces)
 			.set({
@@ -179,15 +202,15 @@ export async function captureSpace(
 				lastCheckedAt: capturedAt,
 				updatedAt: capturedAt,
 			})
-			.where(eq(userSpaces.userId, userId));
+			.where(and(eq(userSpaces.userId, userId), eq(userSpaces.spaceUri, space.spaceUri)));
 		return { ok: true, backup: row };
 	} catch (error) {
 		const [row] = await db
 			.insert(spaceBackups)
 			.values({
 				userId,
-				did: registry.did,
-				spaceUri: registry.spaceUri,
+				did: space.did,
+				spaceUri: space.spaceUri,
 				capturedAt,
 				status: "failed",
 				rev: commit?.rev ?? null,
@@ -224,7 +247,7 @@ export interface SpaceArtifacts {
 
 /** Read one space's three artifacts from the PDS. Throws when the space cannot be read at all. */
 export async function readSpaceArtifacts(
-	registry: RegisteredSpace,
+	registry: OwnedSpace,
 	session: SpaceSession,
 	opts: { fetchImpl?: typeof fetch } = {},
 ): Promise<SpaceArtifacts> {
@@ -274,40 +297,83 @@ export async function readSpaceArtifacts(
 	return { registry: snapshot, records, commit, star, blobs, index, skipped };
 }
 
+/**
+ * Capture every space one account owns, resolving its session once.
+ *
+ * ⭐ **One account is the unit, not one space.** A creator owns a Library space, a studio and
+ * a gated space per published Work; resolving a session per space would multiply the PDS's
+ * login budget by the number of things somebody published. The enumeration is
+ * `ownedSpacesFor`, so "every space" means what the server says it is rather than what this
+ * deployment remembers creating.
+ */
+export async function captureOwnedSpaces(
+	userId: number,
+	opts: CaptureOptions = {},
+): Promise<CaptureAllResult> {
+	const resolve = opts.resolveSession ?? hostedSpaceSession({ fetchImpl: opts.fetchImpl });
+	const resolved: SpaceSessionResult = opts.session
+		? { session: opts.session }
+		: await resolve(userId);
+	if (!resolved.session) {
+		return {
+			ok: false,
+			reason: "reason" in resolved ? resolved.reason : "no_session",
+			backups: [],
+		};
+	}
+
+	const spaces = await ownedSpacesFor(userId, {
+		...opts,
+		session: resolved.session,
+	});
+	if (spaces.length === 0) return { ok: false, reason: "no_spaces", backups: [] };
+
+	const backups: Array<typeof spaceBackups.$inferSelect> = [];
+	for (const space of spaces) {
+		const captured = await captureSpace(space, userId, { ...opts, session: resolved.session });
+		if (captured.ok) backups.push(captured.backup);
+	}
+	return { ok: true, backups };
+}
+
 export interface SweepResult {
+	/** Accounts asked about, one session each. */
+	accounts: number;
+	/** Spaces attempted across those accounts. */
 	spaces: number;
 	complete: number;
 	partial: number;
 	failed: number;
+	/** Accounts with no credential here, or with no space to capture. */
 	skipped: number;
 }
 
-/** Capture a page of registered spaces, one at a time. */
-export async function backupRegisteredSpaces(
+/** Capture a page of accounts that own spaces, all of each account's spaces at a time. */
+export async function backupOwnedSpaces(
 	opts: CaptureOptions & { limit?: number } = {},
 ): Promise<SweepResult> {
-	const rows = await db
-		.select({ userId: userSpaces.userId })
-		.from(userSpaces)
-		.limit(opts.limit ?? 100);
+	const userIds = await accountsOwningSpaces(opts.limit ?? 100);
 
 	const result: SweepResult = {
-		spaces: rows.length,
+		accounts: userIds.length,
+		spaces: 0,
 		complete: 0,
 		partial: 0,
 		failed: 0,
 		skipped: 0,
 	};
-	for (const row of rows) {
-		const captured = await captureSpace(row.userId, opts);
+	for (const userId of userIds) {
+		const captured = await captureOwnedSpaces(userId, opts);
 		if (!captured.ok) {
-			if (captured.backupId) result.failed++;
-			else result.skipped++;
+			result.skipped++;
 			continue;
 		}
-		if (captured.backup.status === "complete") result.complete++;
-		else if (captured.backup.status === "partial") result.partial++;
-		else result.failed++;
+		result.spaces += captured.backups.length;
+		for (const backup of captured.backups) {
+			if (backup.status === "complete") result.complete++;
+			else if (backup.status === "partial") result.partial++;
+			else result.failed++;
+		}
 	}
 	return result;
 }
@@ -395,14 +461,19 @@ export async function pruneSpaceBackups(
 	return { removed: doomed.length, kept };
 }
 
-/** The storage prefix for one capture. DIDs, NSIDs and record keys are all path-safe. */
-export function backupPrefix(
-	did: string,
-	spaceType: string,
-	skey: string,
-	capturedAt: Date,
-): string {
-	return `space-backups/${did}/${spaceType}/${skey}/${stampFor(capturedAt)}`;
+/**
+ * The storage prefix for one capture.
+ *
+ * ⚠️ **The key comes from the space URI, not from a constant.** The prefix is
+ * `space-backups/{did}/{type}/{skey}/{stamp}` so a creator's studio (`self`) and a gated Work's
+ * space (its public id) are different folders under one owner; interpolating a fixed
+ * `USER_SPACE_SKEY` here put every creator space on top of the Library's captures. DIDs, NSIDs
+ * and record keys are all path-safe by their own grammars.
+ */
+export function backupPrefix(spaceUri: string, capturedAt: Date): string {
+	const address = parseSpaceAddress(spaceUri);
+	if (!address) throw new Error(`not a space address: ${spaceUri}`);
+	return `space-backups/${address.did}/${address.spaceType}/${address.skey}/${stampFor(capturedAt)}`;
 }
 
 /** A filesystem- and URL-safe timestamp: no colons, no dots. */
