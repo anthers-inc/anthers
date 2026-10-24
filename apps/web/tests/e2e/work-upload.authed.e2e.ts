@@ -318,9 +318,8 @@ test("a video Work is made from its file and edited while the file uploads", asy
 	// A Work whose file has not arrived cannot be released (`media_missing`), and the
 	// control says so rather than earning the refusal.
 	await page.getByRole("button", { name: "Edit Release" }).click();
-	await expect(
-		page.getByRole("checkbox", { name: /released to my public catalog/i }),
-	).toBeDisabled();
+	await page.getByRole("button", { name: "Now", exact: true }).click();
+	await expect(page.getByRole("button", { name: "Save Release" })).toBeDisabled();
 
 	// The per-field model is what this walk is about: the description saves THROUGH the
 	// upload, not after it — one field, one save, whatever else is in flight.

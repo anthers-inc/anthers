@@ -62,9 +62,8 @@ test("a Work is drafted from a kind and a name, and its kind changes on its page
 	const box = page.getByRole("status").filter({ hasText: /the pages open here/i });
 	await expect(box.getByRole("button", { name: /drop .* or click to browse/i })).toHaveCount(0);
 	await page.getByRole("button", { name: "Edit Release" }).click();
-	await expect(
-		page.getByRole("checkbox", { name: /released to my public catalog/i }),
-	).toBeDisabled();
+	await page.getByRole("button", { name: "Now", exact: true }).click();
+	await expect(page.getByRole("button", { name: "Save Release" })).toBeDisabled();
 	await page.getByRole("button", { name: "Cancel editing Release" }).click();
 
 	// The kind control offers itself for an empty private draft — on the MANAGE tab
