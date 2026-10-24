@@ -89,8 +89,8 @@ export function unlockLabel(access: AccessResult, creatorName = "this creator"):
 
 /**
  * What the Work is locked BY, for the lock chip — the Badge sitting at the gate, when
- * one does. Null when the gate falls between Badges, which is legal and must not be
- * papered over by naming the nearest one.
+ * the caller supplied a Badge set. Null today, because the resolver carries no ladder for
+ * a creator's rungs; it is never papered over by naming the nearest one.
  */
 export function lockedByBadge(access: AccessResult, creatorName = "this creator"): string | null {
 	const badge = cheapestRoute(access, creatorName)?.route.badge;

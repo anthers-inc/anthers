@@ -1214,17 +1214,17 @@ const REPO_BLOCKS: Block[] = [
  */
 const PUBLIC_WIKI_BLOCKS: Block[] = [
 	{
-		file: "20-29 Using Anthers/21 Supporting Creators/21.01 Badges.md",
+		file: "20-29 Using Anthers/21 Supporting Creators/21.02 Anthers Badges.md",
 		key: "badge-table",
 		render: renderBadgePublicMarkdown,
 	},
 	{
-		file: "20-29 Using Anthers/21 Supporting Creators/21.01 Badges.md",
+		file: "20-29 Using Anthers/21 Supporting Creators/21.02 Anthers Badges.md",
 		key: "perk-ladder",
 		render: renderPerkLadderMarkdown,
 	},
 	{
-		file: "20-29 Using Anthers/21 Supporting Creators/21.01 Badges.md",
+		file: "20-29 Using Anthers/21 Supporting Creators/21.02 Anthers Badges.md",
 		key: "merch-discount",
 		render: renderMerchDiscountMarkdown,
 	},

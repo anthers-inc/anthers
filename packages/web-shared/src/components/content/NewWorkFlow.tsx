@@ -164,7 +164,7 @@ export default function NewWorkFlow({ onCreated }: NewWorkFlowProps) {
 					title: name.trim(),
 					...defaults,
 					access: serializeAccessRows([
-						{ threshold: 0, label: "Everyone", allow: true, price: "0" },
+						{ badgeId: null, threshold: 0, label: "Everyone", allow: true, price: "0" },
 					]),
 				};
 				const res = await client.api.content.works.$post({ json: input });

@@ -531,7 +531,14 @@ export default function BadgeMaker({
 			const res = await client.api.subscriptions.badges[":id"].$delete({
 				param: { id: String(badge.id) },
 			});
-			if (!res.ok) throw new Error("Couldn't delete this Badge.");
+			if (!res.ok) {
+				// The refusal that matters is a rung a Work still gates on (409): the server's
+				// sentence names how many, and a generic "couldn't delete" would hide the fix.
+				const body = (await res.json().catch(() => null)) as unknown as {
+					error?: string;
+				} | null;
+				throw new Error(body?.error ?? "Couldn't delete this Badge.");
+			}
 			onChanged?.();
 			onClose();
 		} catch (err) {

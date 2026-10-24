@@ -1854,13 +1854,39 @@ const subscriptionRoutes = new Hono()
 		async (c) => {
 			const user = c.get("user");
 			const { id } = c.req.param();
+			const badgeId = Number(id);
 			const data = c.req.valid("json");
 
-			const [updated] = await db
-				.update(badges)
-				.set({ ...data, updatedAt: new Date() })
-				.where(and(eq(badges.id, Number(id)), eq(badges.creatorId, user.id)))
-				.returning();
+			const updated = await db.transaction(async (tx) => {
+				const [row] = await tx
+					.update(badges)
+					.set({ ...data, updatedAt: new Date() })
+					.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
+					.returning();
+				if (!row) return null;
+
+				// 🚨 **A repriced rung takes its gates with it.** A gate's stored threshold is
+				// the rung's amount (`normalizeAccessRows` stamps it), so leaving the old number
+				// behind would leave a gate no rung sits on — the shape this model retired.
+				if (data.threshold !== undefined) {
+					const gated = await tx
+						.select({ id: works.id, access: works.access })
+						.from(works)
+						.where(
+							and(
+								eq(works.creatorId, user.id),
+								sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${works.access}) AS g WHERE (g->>'badgeId')::int = ${badgeId})`,
+							),
+						);
+					for (const work of gated) {
+						const rows = (work.access ?? []).map((r) =>
+							r.badgeId === badgeId ? { ...r, threshold: Number(row.threshold) } : r,
+						);
+						await tx.update(works).set({ access: rows }).where(eq(works.id, work.id));
+					}
+				}
+				return row;
+			});
 
 			if (!updated) return c.json({ error: "Badge not found" }, 404);
 			return c.json({ badge: publicBadge(updated) });
@@ -1870,6 +1896,33 @@ const subscriptionRoutes = new Hono()
 	.delete("/badges/:id", requireAuth, async (c) => {
 		const user = c.get("user");
 		const { id } = c.req.param();
+		const badgeId = Number(id);
+
+		// 🚨 **A rung a Work still gates on cannot be deleted out from under it.** The row
+		// would name a Badge that no longer exists, and nobody could open that Work; the
+		// creator moves the gate first, deliberately.
+		const [gated] = await db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(works)
+			.where(
+				and(
+					eq(works.creatorId, user.id),
+					sql`EXISTS (SELECT 1 FROM jsonb_array_elements(${works.access}) AS g WHERE (g->>'badgeId')::int = ${badgeId})`,
+				),
+			);
+		const inUse = Number(gated?.count ?? 0);
+		if (inUse > 0) {
+			return c.json(
+				{
+					error:
+						inUse === 1
+							? "One Work is gated at this Badge. Change its gate before deleting the rung."
+							: `${inUse} Works are gated at this Badge. Change their gates before deleting the rung.`,
+					code: "badge_in_use",
+				},
+				409,
+			);
+		}
 
 		const deleted = await db
 			.delete(badges)

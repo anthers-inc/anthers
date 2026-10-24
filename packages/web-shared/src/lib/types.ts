@@ -89,9 +89,9 @@ export interface Creator {
 // ─── Access & pricing ───
 
 /**
- * One row of a post's access table — the SAME shape for both tables (migration `0007`).
- * `threshold` is **monthly dollars**: what the user gives Anthers for the Anthers table,
- * what they direct at this creator for the creator table. 0 = everyone.
+ * One row of a Work's access table — the SAME shape the API and the database hold. The
+ * threshold is **monthly dollars**: what the user directs at this Work's creator, compared
+ * to the cent. 0 = everyone, and it is the only row with no Badge.
  *
  * ⚠️ The column is `numeric` and the resolver compares dollars **to the cent**. A comment
  * here once claimed whole units, and the dev seeder built every gate at a third of its
@@ -99,6 +99,8 @@ export interface Creator {
  */
 export interface AccessRow {
 	threshold: number;
+	/** The creator's Badge rung this row gates at; absent on the Everyone baseline. */
+	badgeId?: number | null;
 	allow: boolean;
 	price: string; // money string; "0" = free when allowed
 }
@@ -162,8 +164,8 @@ export interface WorkCredit {
  * One way a denied user could open a post. `moreNeeded` is the marginal ask — what
  * they still have to add — and it is computed server-side on purpose: the UI naming its
  * own Badge from a threshold is what produced a button offering a Badge that could not
- * clear the gate it sat above. `badge` is the Badge sitting EXACTLY at `threshold`, or
- * null when the gate falls between Badges (legal — a gate needn't sit on one).
+ * clear the gate it sat above. `badge` is the Badge sitting EXACTLY at `threshold`, and it
+ * is null whenever the caller passes no Badge set — which is every caller today.
  */
 export interface UnlockRoute {
 	threshold: number;
