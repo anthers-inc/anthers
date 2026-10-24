@@ -271,7 +271,9 @@ test("a piece of writing is written on its page and reads as an article", async 
 		.getByRole("button", { name: "None", exact: true })
 		.click();
 	await page.getByRole("button", { name: "Save Rating" }).click();
-	const released = page.getByRole("checkbox", { name: /released to my public catalog/i });
+	// The release act is a release date already in the past — the Now button fills it — and
+	// the field's check waits while a readiness condition stands (Parker, 2026-10-23).
+	const saveRelease = page.getByRole("button", { name: "Save Release" });
 
 	// And not releasable until a human is credited either (`credits_creator_required`):
 	// one credit row with its Created box ticked, naming the writer. The field lives in
@@ -287,7 +289,8 @@ test("a piece of writing is written on its page and reads as an article", async 
 	await page.getByRole("button", { name: "Save Credits" }).click();
 	await page.getByRole("tab", { name: "Details" }).click();
 	await page.getByRole("button", { name: "Edit Release" }).click();
-	await expect(released).toBeDisabled();
+	await page.getByRole("button", { name: "Now", exact: true }).click();
+	await expect(saveRelease).toBeDisabled();
 
 	// The standfirst is the Description field, edited in the Details tab where a user
 	// reads it as a line of the record.
@@ -307,9 +310,9 @@ test("a piece of writing is written on its page and reads as an article", async 
 	// The release walk returns to the Details tab, where the release field lives.
 	await page.getByRole("tab", { name: "Details" }).click();
 	await page.getByRole("button", { name: "Edit Release" }).click();
-	await expect(released).toBeEnabled();
-	await released.check();
-	await page.getByRole("button", { name: "Save Release" }).click();
+	await page.getByRole("button", { name: "Now", exact: true }).click();
+	await expect(saveRelease).toBeEnabled();
+	await saveRelease.click();
 
 	// Where the writing is, is the page: the article in the deliverable's reading
 	// measure, the standfirst above it — the body's save adopted the row in place, so
