@@ -22,6 +22,12 @@ export interface User {
 	displayName: string | null;
 	bio: string | null;
 	isCreator: boolean | null;
+	/**
+	 * `isCreator` on and at least one released Work — the gate for creator-only surfaces.
+	 * Derived on the server (`@anthers/shared/verified-creator`) and carried by the signed-in
+	 * payloads only; a public listing does not pay for a count per row.
+	 */
+	isVerifiedCreator?: boolean;
 	avatar: string | null;
 	headerImage: string | null;
 	websiteUrl: string | null;
