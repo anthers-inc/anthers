@@ -20,11 +20,10 @@
 // here from what each entry already carries, because the content module is a way
 // station that must not gain fields the exporter would have to reproduce.
 //
-// **Everything renders at once — no tabs, no accordions, no lazy sections**, for the
-// same reasons as the roadmap page beside it: release notes are skimmed, and
-// `marketing-copy.e2e.ts` reads this page's `body.textContent` and asserts that
-// retired claims are *absent* — a negative assertion that unrendered copy satisfies
-// perfectly.
+// **Everything renders at once — no tabs, no accordions, no lazy sections**, because
+// release notes are skimmed, and `marketing-copy.e2e.ts` reads this page's
+// `body.textContent` and asserts that retired claims are *absent* — a negative
+// assertion that unrendered copy satisfies perfectly.
 
 import { Sprig } from "@anthers/web-shared/decor/LineArt";
 import { Reveal } from "@anthers/web-shared/decor/Reveal";
@@ -34,7 +33,6 @@ import { usePageTitle } from "@anthers/web-shared/page-title";
 import { useLocation } from "@anthers/web-shared/router";
 import { useEffect } from "react";
 import { RELEASE_NOTES, type ReleaseNotesEntry } from "../content/release-notes";
-import { allItems } from "../content/roadmap";
 import { WIKI_ROADMAP_URL, wikiAnchor } from "../lib/wiki";
 
 const serif = { fontFamily: FONTS.fraunces };
@@ -100,10 +98,9 @@ export function groupedByMonth(
 
 export default function ReleaseNotesPage() {
 	usePageTitle("Release Notes");
-	// `/release-notes#<version>` scrolls to that release, which is how the roadmap's card
-	// for a launched item links to the version that shipped it. Scrolled by hand
-	// because the router does not follow a fragment on navigation, and a browser's
-	// own jump happens before this renders.
+	// `/release-notes#<version>` scrolls to that release; the fragment is also what a
+	// shared deep link carries. Scrolled by hand because the router does not follow a
+	// fragment on navigation, and a browser's own jump happens before this renders.
 	const target = useLocation().hash.slice(1);
 	useEffect(() => {
 		if (target) document.getElementById(target)?.scrollIntoView({ block: "start" });
@@ -177,12 +174,10 @@ function MonthSection({ month, tint }: { month: ReleaseNotesMonth; tint: boolean
  * the arcs that release shipped. `first` only sets the spacing: the month heading already separates
  * the first release from what is above it.
  *
- * `id` carries the `/release-notes#<version>` anchor the roadmap's launched cards link
- * back to; `scroll-mt-24` keeps the divider clear of the sticky header when it lands.
+ * `id` carries the `/release-notes#<version>` anchor a shared deep link can land on;
+ * `scroll-mt-24` keeps the divider clear of the sticky header when it lands.
  */
 function ReleaseBlock({ release, first }: { release: ReleaseNotesEntry; first: boolean }) {
-	const items = allItems();
-
 	return (
 		<div id={release.version} className={`scroll-mt-24 ${first ? "" : "mt-16"}`}>
 			<Reveal>
@@ -211,26 +206,21 @@ function ReleaseBlock({ release, first }: { release: ReleaseNotesEntry; first: b
 					))}
 				</ul>
 
-				{/* The roadmap items this release moved to launched, named so the release and the
-				    roadmap tell one story. A chip lands on the lane's heading in the wiki roadmap
-				    through `wikiAnchor`; an item that names no lane falls back to the page. */}
-				{release.roadmapIds && release.roadmapIds.length > 0 && (
+				{/* The goals this release finished, named so a release and the canonical
+				    roadmap tell one story. A chip lands on the lane's heading in the wiki
+				    roadmap through `wikiAnchor`; a goal that names no lane falls back to
+				    the page. */}
+				{release.roadmap && release.roadmap.length > 0 && (
 					<div className="mt-6 flex flex-wrap gap-2">
-						{release.roadmapIds.map((id) => {
-							const item = items.find((i) => i.id === id);
-							if (!item) return null;
-							return (
-								<a
-									key={id}
-									href={
-										item.lane ? `${WIKI_ROADMAP_URL}#${wikiAnchor(item.lane)}` : WIKI_ROADMAP_URL
-									}
-									className="inline-flex items-center rounded-full border border-base-content/15 px-3 py-1 text-xs text-base-content/60 transition-colors hover:border-primary/40 hover:text-primary"
-								>
-									{item.title}
-								</a>
-							);
-						})}
+						{release.roadmap.map((goal) => (
+							<a
+								key={goal.label}
+								href={goal.lane ? `${WIKI_ROADMAP_URL}#${wikiAnchor(goal.lane)}` : WIKI_ROADMAP_URL}
+								className="inline-flex items-center rounded-full border border-base-content/15 px-3 py-1 text-xs text-base-content/60 transition-colors hover:border-primary/40 hover:text-primary"
+							>
+								{goal.label}
+							</a>
+						))}
 					</div>
 				)}
 			</Reveal>

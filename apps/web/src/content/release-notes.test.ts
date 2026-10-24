@@ -1,25 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The release notes' rules, made enforceable. Mirrors `roadmap.test.ts` beside it, and
-// exists for the same reason: a rule that only lives in a docblock produces something
-// that still looks right when broken.
+// The release notes' rules, made enforceable. It exists because a rule that only lives in
+// a docblock produces something that still looks right when broken.
 //
-// 🚨 **The version rule is the two-way link's foundation.** An entry names the version
-// whose GitHub release holds the raw release notes, and the roadmap's card for a shipped
-// item names the version that launched it — a typo'd version breaks the link from both
-// directions at once, silently, which is why it is checked against the shape the deploy
-// job tags rather than against another list in this file.
+// 🚨 **The version rule is the deploy job's shape.** An entry names the version whose
+// GitHub release holds the raw release notes, and a typo'd version breaks the raw-release
+// link silently, which is why it is checked against the shape the deploy job tags rather
+// than against another list in this file.
 //
-// ⚠️ **The roadmap cross-reference check is the page's honesty mechanism.** The two-way
-// link is the point of `/release-notes`: an entry may only claim roadmap items that
-// exist, and — harder to catch, and the reason this is a test — an item it claims may not
-// still be sitting in `active` or `planned` on the roadmap while the notes say it shipped.
-// `roadmapIds` is deliberately optional and usually absent for exactly this reason: most
-// work is not a roadmap item, and a stretched claim is the failure mode.
+// ⚠️ **The roadmap chips are a record, not a cross-check.** Each names a goal the release
+// finished and the wiki lane it landed in; the app keeps no roadmap to disagree with
+// (2026-10-23). `roadmap` is optional and usually absent because most work is not a
+// roadmap goal, and a stretched claim is the failure mode. What is still checked is that
+// every chip names something, and that a lane, where given, is not blank.
 
 import { describe, expect, it } from "bun:test";
 import { RELEASE_NOTES, type ReleaseNotesEntry } from "./release-notes";
-import { allItems, type RoadmapItem } from "./roadmap";
 
 /** Calver, the shape `scripts/promote-version.ts` writes and the deploy job tags. */
 const CALVER = /^(\d{4})\.(\d{1,2})\.(\d+)$/;
@@ -79,7 +75,7 @@ describe("the release notes version and order themselves", () => {
 		}
 	});
 
-	it("holds no duplicate versions — the roadmap's reverse link resolves a version to one release", () => {
+	it("holds no duplicate versions — a shared deep link resolves a version to one release", () => {
 		const versions = RELEASE_NOTES.map((r) => r.version);
 		expect(versions.length).toBe(new Set(versions).size);
 	});
@@ -111,43 +107,18 @@ describe("every entry is user-facing", () => {
 	});
 });
 
-describe("every roadmap cross-reference is real", () => {
-	const items: Map<string, RoadmapItem> = new Map(allItems().map((i) => [i.id, i]));
-
-	it("resolves each reference to a real roadmap item", () => {
+describe("every roadmap chip names something", () => {
+	it("gives every chip a label, and no blank lane", () => {
 		for (const release of RELEASE_NOTES) {
-			for (const id of release.roadmapIds ?? []) {
-				expect(`${release.version} → ${id} ${items.get(id)?.title ?? "«no such item»"}`).toBe(
-					`${release.version} → ${id} ${items.get(id)?.title}`,
+			for (const goal of release.roadmap ?? []) {
+				expect(`${release.version} → ${goal.label || "«no label»"}`).toBe(
+					`${release.version} → ${goal.label}`,
 				);
-			}
-		}
-	});
-
-	it("names a roadmap lane for every referenced item, so its chip can land on a section", () => {
-		for (const release of RELEASE_NOTES) {
-			for (const id of release.roadmapIds ?? []) {
-				const item = items.get(id);
-				if (!item) continue;
-				expect(`${release.version} → ${id}: ${item.lane ?? "«no lane»"}`).toBe(
-					`${release.version} → ${id}: ${item.lane}`,
-				);
-			}
-		}
-	});
-
-	it("🚨 claims no roadmap item that is still unbuilt — the notes never ship something the roadmap still shows planned", () => {
-		// The hard one, and the reason this file exists. An item claimed by a release
-		// must have moved to `launched` in the same PR: a release-notes entry and a roadmap
-		// card disagreeing about whether something shipped is the two surfaces the
-		// exporter plan is meant to unify, contradicting each other in public.
-		for (const release of RELEASE_NOTES) {
-			for (const id of release.roadmapIds ?? []) {
-				const item = items.get(id);
-				if (!item) continue;
-				expect(`${release.version} → ${id} (${item.bucket})`).toBe(
-					`${release.version} → ${id} (launched)`,
-				);
+				if (goal.lane !== undefined) {
+					expect(`${release.version} → ${goal.lane.trim() || "«blank lane»"}`).toBe(
+						`${release.version} → ${goal.lane}`,
+					);
+				}
 			}
 		}
 	});
