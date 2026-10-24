@@ -24,7 +24,7 @@ import { eq } from "drizzle-orm";
 import { strToU8, type Zippable, zipSync } from "fflate";
 import { buildAccountExport } from "./account-data.js";
 import { type BackupRegistry, readSpaceArtifacts, type SpaceArtifacts } from "./space-backup.js";
-import { type RegisteredSpace, registeredSpacesFor } from "./space-registry.js";
+import { type OwnedSpace, ownedSpacesFor, registeredSpacesFor } from "./space-registry.js";
 import { hostedSpaceSession, type ResolveSpaceSession, spaceClientFor } from "./space-writer.js";
 import { storage } from "./storage/index.js";
 
@@ -106,11 +106,24 @@ export async function buildAtprotoExport(
 		"This is a snapshot taken at generatedAt, not a live feed.",
 		"public-repo.car is the account's public repository, in the protocol's own repository format.",
 		"Each folder under spaces/ is one permissioned space: its registry entry, records, STAR and blobs.",
+		"A creator's studio and each gated Work's space are spaces like any other; their manifests name media in storage rather than carrying the bytes.",
 		"account.json is the same JSON export the Download my data button produces: the rows Anthers holds.",
 	];
 
 	if (session) {
-		const registries = await registeredSpacesFor(userId);
+		// ⚠️ **A listing failure must not cost the reader the bundle.** The public repository and
+		// the JSON export are still theirs; a creator space the server would not list is reported
+		// as a gap rather than turning the whole export into an error.
+		let registries: OwnedSpace[];
+		try {
+			registries = await ownedSpacesFor(userId, { session, fetchImpl: opts.fetchImpl });
+		} catch (error) {
+			registries = await registeredSpacesFor(userId);
+			notes.push(
+				`Creator spaces could not be listed (${messageOf(error)}). The bundle carries only the ` +
+					"spaces Anthers had already registered.",
+			);
+		}
 		for (const registry of registries) {
 			const artifacts = await readSpaceArtifacts(registry, session, { fetchImpl: opts.fetchImpl });
 			const skey = lastSegment(registry.spaceUri);
@@ -183,6 +196,10 @@ export async function latestExportKey(userId: number): Promise<string | null> {
 	return `exports/${userId}/${stampFor(row.atprotoExportedAt)}/anthers-atproto-export.zip`;
 }
 
+function messageOf(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
 /** A filesystem-safe timestamp for the export prefix. */
 function stampFor(at: Date): string {
 	return at.toISOString().replace(/[:.]/g, "-");
@@ -192,7 +209,7 @@ function lastSegment(uri: string): string {
 	return uri.split("/").at(-1) ?? "self";
 }
 
-function summarize(registry: RegisteredSpace, artifacts: SpaceArtifacts): AtprotoExportSpace {
+function summarize(registry: OwnedSpace, artifacts: SpaceArtifacts): AtprotoExportSpace {
 	return {
 		spaceUri: registry.spaceUri,
 		spaceType: registry.spaceType,

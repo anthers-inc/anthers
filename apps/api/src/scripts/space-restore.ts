@@ -88,6 +88,7 @@ async function main(): Promise<void> {
 	const clean =
 		report.records.mismatched.length === 0 &&
 		report.blobs.missing.length === 0 &&
+		report.files.missing.length === 0 &&
 		report.policy.matches &&
 		report.commit.matches !== false;
 	if (!clean) process.exitCode = 1;
