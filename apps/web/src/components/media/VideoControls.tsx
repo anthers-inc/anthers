@@ -5,8 +5,8 @@
  * Built from the same pieces as the music bar (`transport/`), so the two read as one
  * product: same play button, same scrub interaction, same volume control, same time
  * formatting. What differs is only what a video needs and audio does not — speed,
- * quality, fullscreen — and those sit together in one settings panel rather than
- * sprawling across the bar.
+ * quality, fullscreen, theater mode — and those sit together in one settings panel
+ * rather than sprawling across the bar.
  *
  * ⚠️ **The settings panel is a plain positioned element, not a daisyUI `dropdown`.**
  * The canonical dropdown uses the popover API with CSS anchor positioning, which is not
@@ -25,8 +25,10 @@ import {
 	SpeakerWaveIcon,
 } from "@heroicons/react/24/solid";
 import { useEffect, useRef, useState } from "react";
+import { useWorkTheater } from "@/lib/work-theater";
 import { formatTime } from "./transport/format";
 import SeekBar from "./transport/SeekBar";
+import TheaterIcon from "./transport/TheaterIcon";
 import TransportButton from "./transport/TransportButton";
 import VolumeControl from "./transport/VolumeControl";
 
@@ -108,6 +110,7 @@ export default function VideoControls({
 	chapters: WorkChapter[];
 	onPodcastThis?: () => void;
 }) {
+	const theater = useWorkTheater();
 	const [settingsOpen, setSettingsOpen] = useState(false);
 	const settingsRef = useRef<HTMLDivElement>(null);
 	/** The chapter the playhead is inside, for the name beside the clock. */
@@ -329,6 +332,15 @@ export default function VideoControls({
 					)}
 				</div>
 
+				{theater && (
+					<TransportButton
+						label={theater.theater ? "Exit theater mode" : "Theater mode"}
+						icon={TheaterIcon}
+						onClick={theater.toggle}
+						active={theater.theater}
+						size="sm"
+					/>
+				)}
 				<TransportButton
 					label={fullscreen ? "Exit full screen" : "Full screen"}
 					icon={fullscreen ? ArrowsPointingInIcon : ArrowsPointingOutIcon}

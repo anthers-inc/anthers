@@ -128,7 +128,16 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 	{
 		id: "setting-keyboard-shortcuts",
 		label: "Keyboard Shortcuts",
-		keywords: ["settings", "search", "filter", "keys", "bindings", "chords"],
+		keywords: [
+			"settings",
+			"search",
+			"filter",
+			"keys",
+			"bindings",
+			"chords",
+			"fullscreen",
+			"theater",
+		],
 		href: "/settings?tab=account",
 		kind: "setting",
 	},

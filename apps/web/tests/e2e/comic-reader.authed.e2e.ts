@@ -134,3 +134,71 @@ test("it reopens where you stopped reading", async ({ page }) => {
 	await openReader(page);
 	expect(await shownPages(page)).toEqual([3]);
 });
+
+/**
+ * Theater mode is the page's answer to full screen: the media card grows to the content
+ * column's own box — inside the topbar and sidebar — while the page stays in flow, so the
+ * title, byline and tabs below are still a scroll away. The measurements are what make
+ * that a claim rather than a look: the frame's own rect has to be the scroll container's
+ * content box, at both the window's size and a resized one.
+ */
+test("theater mode fills the content area, follows the window and leaves the page scrollable", async ({
+	page,
+}) => {
+	await resetReadingPosition(page, COMIC);
+	await openReader(page);
+	const reader = page.locator(READER);
+	await reader.getByRole("button", { name: "Theater mode" }).click();
+	await expect(reader.getByRole("button", { name: "Exit theater mode" })).toBeVisible();
+
+	const measure = () =>
+		page.evaluate(() => {
+			const main = document.querySelector("main");
+			const frame = document.querySelector("[data-media-stage]")?.parentElement;
+			if (!main || !frame) return null;
+			const m = main.getBoundingClientRect();
+			const f = frame.getBoundingClientRect();
+			return {
+				content: { x: m.x, y: m.y, width: main.clientWidth, height: main.clientHeight },
+				frame: { x: f.x, y: f.y, width: f.width, height: f.height },
+				scrollHeight: main.scrollHeight,
+			};
+		});
+
+	const grown = await measure();
+	expect(grown).not.toBeNull();
+	// The content column, not the page: the sidebar and the topbar are outside this box.
+	expect(grown!.frame.x).toBe(grown!.content.x);
+	expect(grown!.frame.width).toBe(grown!.content.width);
+	expect(grown!.frame.height).toBe(grown!.content.height);
+	expect(grown!.frame.y).toBeGreaterThanOrEqual(grown!.content.y);
+	// A full-height work makes the page scroll, which is the whole difference from full
+	// screen — the rest of the page is below it rather than behind it.
+	expect(grown!.scrollHeight).toBeGreaterThan(grown!.content.height);
+
+	await page.locator("main").evaluate((el) => el.scrollTo({ top: el.clientHeight }));
+	await expect(page.getByRole("heading", { name: COMIC.title })).toBeInViewport();
+
+	// The window's own resize is the size the mode follows.
+	await page.setViewportSize({ width: 980, height: 760 });
+	await expect
+		.poll(async () => {
+			const now = await measure();
+			return now ? now.frame.width - now.content.width : Number.NaN;
+		})
+		.toBe(0);
+	const resized = await measure();
+	expect(resized!.frame.height).toBe(resized!.content.height);
+});
+
+test("t is theater mode's default key once the reader has focus", async ({ page }) => {
+	await resetReadingPosition(page, COMIC);
+	await openReader(page);
+	const reader = page.locator(READER);
+	await reader.focus();
+
+	await page.keyboard.press("t");
+	await expect(reader.getByRole("button", { name: "Exit theater mode" })).toBeVisible();
+	await page.keyboard.press("t");
+	await expect(reader.getByRole("button", { name: "Theater mode" })).toBeVisible();
+});
