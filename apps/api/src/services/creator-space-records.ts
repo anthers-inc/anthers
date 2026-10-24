@@ -4,7 +4,7 @@
  * Work's audience can.
  *
  * ⚠️ **These are draft record shapes, not a published Lexicon.** The design page names the
- * collections (`draftWork`, `gatedManifest`) and nothing has published them; the field names
+ * collections (`draft`, `manifest`) and nothing has published them; the field names
  * are this build's, because a published `org.anthers.*` schema is a commitment that goes to
  * Parker before it goes to the network. Keeping the shapes in one module means the writer,
  * the tests and a future Lexicon disagree with one place rather than with three call sites.
@@ -20,14 +20,18 @@
  * one would be a lie a third party could not verify.
  */
 
-/** The collections the creator's private studio space declares. */
-export const STUDIO_SPACE_COLLECTIONS = {
-	draftWork: "org.anthers.draftWork",
-} as const;
-
-/** The collections a gated Work's space declares. */
-export const GATED_SPACE_COLLECTIONS = {
-	gatedManifest: "org.anthers.gatedManifest",
+/**
+ * The collections a creator space declares.
+ *
+ * ⭐ **One type, two audiences, and both collections.** The approved creator-space shape is
+ * `org.anthers.creatorSpace` with `draft` and `manifest`; a creator's private space is the
+ * same type keyed `self`, and a gated Work's is keyed by its public id. Declaring both
+ * collections on the type is what lets one permission over the type cover the creator's own
+ * spaces, whether the app is writing a draft or reading a manifest it owns.
+ */
+export const CREATOR_SPACE_COLLECTIONS = {
+	draft: "org.anthers.draft",
+	manifest: "org.anthers.manifest",
 } as const;
 
 /**
@@ -64,7 +68,7 @@ export interface DraftWorkState {
 }
 
 /**
- * One `org.anthers.draftWork` record.
+ * One `org.anthers.draft` record.
  *
  * ⚠️ **The draft is a copy of the Work's private half, not a second editable copy.** The
  * Studio still writes the row, and this record is the projection the creator owns; two
@@ -73,7 +77,7 @@ export interface DraftWorkState {
  * legible without pretending their URIs are the same.
  */
 export type DraftWorkRecord = {
-	$type: typeof STUDIO_SPACE_COLLECTIONS.draftWork;
+	$type: typeof CREATOR_SPACE_COLLECTIONS.draft;
 	workId: number;
 	publicId: number;
 	kind: string;
@@ -99,7 +103,7 @@ export interface GatedManifestState {
 }
 
 /**
- * One `org.anthers.gatedManifest` record.
+ * One `org.anthers.manifest` record.
  *
  * The space is keyed by `publicId`, so a Work's manifest is the only thing of its kind there;
  * `work` points back at the public listing for a consumer that found the space first. It is
@@ -108,7 +112,7 @@ export interface GatedManifestState {
  * would be the one order that cannot be repaired.
  */
 export type GatedManifestRecord = {
-	$type: typeof GATED_SPACE_COLLECTIONS.gatedManifest;
+	$type: typeof CREATOR_SPACE_COLLECTIONS.manifest;
 	workId: number;
 	publicId: number;
 	work?: string;
@@ -129,7 +133,7 @@ export const GATED_MANIFEST_RKEY = "manifest";
 
 export function draftWorkRecord(state: DraftWorkState): DraftWorkRecord {
 	return {
-		$type: STUDIO_SPACE_COLLECTIONS.draftWork,
+		$type: CREATOR_SPACE_COLLECTIONS.draft,
 		workId: state.workId,
 		publicId: state.publicId,
 		kind: state.kind,
@@ -144,7 +148,7 @@ export function draftWorkRecord(state: DraftWorkState): DraftWorkRecord {
 
 export function gatedManifestRecord(state: GatedManifestState): GatedManifestRecord {
 	return {
-		$type: GATED_SPACE_COLLECTIONS.gatedManifest,
+		$type: CREATOR_SPACE_COLLECTIONS.manifest,
 		workId: state.workId,
 		publicId: state.publicId,
 		...(state.work ? { work: state.work } : {}),

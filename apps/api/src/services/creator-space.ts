@@ -2,13 +2,14 @@
 /**
  * The creator spaces: the Studio's private draft and a gated Work's manifest.
  *
- * ⭐ **Two spaces, because they have two audiences.** A draft is readable by its creator and
- * nobody else, and every creator has one — the design calls that a creator's private studio.
- * A gated Work's manifest is readable by the audience its gate admits, which for a purchase is
- * one Work's buyers, so that space is per Work and keyed by the Work's durable `publicId`. The
- * gate already maps `at://<creator-did>/space/org.anthers.creatorSpace/<publicId>` back to the
- * Work, so the listing's `access.space` pointer and the authority's question are the same
- * address by construction rather than by a second convention.
+ * ⭐ **Two spaces of one type, because they have two audiences.** A draft is readable by its
+ * creator and nobody else, and every creator has one — the design calls that a creator's
+ * private studio. A gated Work's manifest is readable by the audience its gate admits, which
+ * for a purchase is one Work's buyers, so that space is per Work. Both are
+ * `org.anthers.creatorSpace`: keyed `self` for the creator's own space, and keyed by the Work's
+ * durable `publicId` for a gated one, which is the address the gate already maps back to the
+ * Work. The listing's `access.space` pointer and the authority's question are therefore the
+ * same address by construction rather than by a second convention.
  *
  * 🚨 **The record is written before the listing that points at it.** A listing is public the
  * moment it lands, so a gated listing that names a space whose manifest has not been written
@@ -25,7 +26,7 @@
  * job.
  *
  * ⚠️ **Only a hosted identity can write here today.** A creator whose identity lives elsewhere
- * needs an OAuth grant whose scope includes `space:org.anthers.studioSpace…`, and the app's
+ * needs an OAuth grant whose scope includes `space:org.anthers.creatorSpace…`, and the app's
  * permission sets ship with the production image. Until then this answers `no_session` for
  * those creators, exactly as the public-repository writer answers `not_granted`, and the
  * listing is written without a space pointer.
@@ -48,15 +49,14 @@ import {
 } from "./atproto-records.js";
 import { type SpacePolicy, SpaceRequestError } from "./atproto-space.js";
 import {
+	CREATOR_SPACE_COLLECTIONS,
 	type DraftWorkRecord,
 	draftWorkRecord,
 	draftWorkRkey,
 	GATED_MANIFEST_RKEY,
-	GATED_SPACE_COLLECTIONS,
 	type GatedManifestRecord,
 	gatedManifestRecord,
 	type ManifestFile,
-	STUDIO_SPACE_COLLECTIONS,
 } from "./creator-space-records.js";
 import { type ManagingAppIdentity, managingAppIdentity } from "./managing-app.js";
 import { CREATOR_SPACE_TYPE } from "./space-gate.js";
@@ -71,13 +71,19 @@ import {
 import { storage } from "./storage/index.js";
 import { urlToKey } from "./storage/keys.js";
 
-/** The creator's private space: one per creator, holding drafts and private notes. */
-export const STUDIO_SPACE_TYPE = "org.anthers.studioSpace";
+/**
+ * The creator's private space: one per creator, holding drafts and private notes.
+ *
+ * ⚠️ **The same type as a gated Work's space.** The approved creator-space type is
+ * `org.anthers.creatorSpace`; `self` is the creator's own space and a Work's public id is that
+ * Work's gated space. The gate maps only the numeric keys back to a Work, so `self` is not a
+ * gate it can be asked about — which is right, because the private space never asks anybody.
+ */
 export const STUDIO_SPACE_SKEY = "self";
 
 /** A draft's key is the Work's public id, and a Work's gated space is keyed by it too. */
 export function studioSpaceUri(did: string): string {
-	return `at://${did}/space/${STUDIO_SPACE_TYPE}/${STUDIO_SPACE_SKEY}`;
+	return `at://${did}/space/${CREATOR_SPACE_TYPE}/${STUDIO_SPACE_SKEY}`;
 }
 
 export function gatedSpaceUri(did: string, publicId: number): string {
@@ -281,7 +287,7 @@ async function writeCreatorSpace(
 	const studio = await ensureSpace(
 		session,
 		{
-			spaceType: STUDIO_SPACE_TYPE,
+			spaceType: CREATOR_SPACE_TYPE,
 			skey: STUDIO_SPACE_SKEY,
 			...STUDIO_SPACE_POLICIES,
 		},
@@ -300,7 +306,7 @@ async function writeCreatorSpace(
 	});
 	const draftRef = await putVerifiedSpaceRecord(
 		spaceWriterFor(session, studio, { fetchImpl: opts.fetchImpl }),
-		STUDIO_SPACE_COLLECTIONS.draftWork,
+		CREATOR_SPACE_COLLECTIONS.draft,
 		draftWorkRkey(work.publicId),
 		draftRecord,
 	);
@@ -346,7 +352,7 @@ async function writeCreatorSpace(
 	});
 	const manifestRef = await putVerifiedSpaceRecord(
 		spaceWriterFor(session, space, { fetchImpl: opts.fetchImpl }),
-		GATED_SPACE_COLLECTIONS.gatedManifest,
+		CREATOR_SPACE_COLLECTIONS.manifest,
 		GATED_MANIFEST_RKEY,
 		manifestRecord,
 	);
@@ -403,7 +409,7 @@ export async function linkCreatorSpace(
 				})();
 		await putVerifiedSpaceRecord(
 			spaceWriterFor(sync.session, sync.draft.space, writerOpts),
-			STUDIO_SPACE_COLLECTIONS.draftWork,
+			CREATOR_SPACE_COLLECTIONS.draft,
 			draftWorkRkey(record.publicId),
 			record,
 		);
@@ -418,7 +424,7 @@ export async function linkCreatorSpace(
 				})();
 		await putVerifiedSpaceRecord(
 			spaceWriterFor(sync.session, sync.manifest.space, writerOpts),
-			GATED_SPACE_COLLECTIONS.gatedManifest,
+			CREATOR_SPACE_COLLECTIONS.manifest,
 			GATED_MANIFEST_RKEY,
 			record,
 		);
@@ -463,7 +469,7 @@ export async function removeCreatorSpace(
 		await spaceWriterFor(session, studioSpaceUri(session.did), {
 			fetchImpl: opts.fetchImpl,
 		})
-			.remove(STUDIO_SPACE_COLLECTIONS.draftWork, draftWorkRkey(work.publicId))
+			.remove(CREATOR_SPACE_COLLECTIONS.draft, draftWorkRkey(work.publicId))
 			.catch((error) => {
 				if (
 					error instanceof SpaceRequestError &&

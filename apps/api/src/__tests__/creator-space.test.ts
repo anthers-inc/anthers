@@ -16,14 +16,12 @@ import {
 	gatedSpaceUri,
 	linkCreatorSpace,
 	removeCreatorSpace,
-	STUDIO_SPACE_TYPE,
 	studioSpaceUri,
 	syncCreatorSpace,
 } from "../services/creator-space.js";
 import {
+	CREATOR_SPACE_COLLECTIONS,
 	GATED_MANIFEST_RKEY,
-	GATED_SPACE_COLLECTIONS,
-	STUDIO_SPACE_COLLECTIONS,
 } from "../services/creator-space-records.js";
 import { managingAppFor } from "../services/managing-app.js";
 import { CREATOR_SPACE_TYPE } from "../services/space-gate.js";
@@ -83,7 +81,7 @@ describe("creator spaces", () => {
 		const result = await sync(ctx, row.id);
 		const studio = studioSpaceUri(ctx.did);
 		expect(result.refs.draftUri).toBe(
-			`${studio}/${ctx.did}/${STUDIO_SPACE_COLLECTIONS.draftWork}/${row.publicId}`,
+			`${studio}/${ctx.did}/${CREATOR_SPACE_COLLECTIONS.draft}/${row.publicId}`,
 		);
 		expect(result.refs.spaceUri).toBeNull();
 		expect(result.refs.manifestUri).toBeNull();
@@ -93,10 +91,10 @@ describe("creator spaces", () => {
 			$type: "com.atproto.simplespace.defs#memberListPolicy",
 		});
 
-		const drafts = ctx.pds.recordsIn(studio, STUDIO_SPACE_COLLECTIONS.draftWork);
+		const drafts = ctx.pds.recordsIn(studio, CREATOR_SPACE_COLLECTIONS.draft);
 		expect(drafts).toHaveLength(1);
 		expect(drafts[0]?.value).toMatchObject({
-			$type: STUDIO_SPACE_COLLECTIONS.draftWork,
+			$type: CREATOR_SPACE_COLLECTIONS.draft,
 			publicId: row.publicId,
 			kind: "text",
 			title: "Nightjar",
@@ -137,7 +135,7 @@ describe("creator spaces", () => {
 		const space = gatedSpaceUri(ctx.did, row.publicId);
 		expect(result.refs.spaceUri).toBe(space);
 		expect(result.refs.manifestUri).toBe(
-			`${space}/${ctx.did}/${GATED_SPACE_COLLECTIONS.gatedManifest}/${GATED_MANIFEST_RKEY}`,
+			`${space}/${ctx.did}/${CREATOR_SPACE_COLLECTIONS.manifest}/${GATED_MANIFEST_RKEY}`,
 		);
 
 		// The audience is decided by Anthers on every credential request, not by a member list.
@@ -146,10 +144,10 @@ describe("creator spaces", () => {
 			managingApp: MANAGING_APP.serviceId,
 		});
 
-		const manifests = ctx.pds.recordsIn(space, GATED_SPACE_COLLECTIONS.gatedManifest);
+		const manifests = ctx.pds.recordsIn(space, CREATOR_SPACE_COLLECTIONS.manifest);
 		expect(manifests).toHaveLength(1);
 		expect(manifests[0]?.value).toMatchObject({
-			$type: GATED_SPACE_COLLECTIONS.gatedManifest,
+			$type: CREATOR_SPACE_COLLECTIONS.manifest,
 			publicId: row.publicId,
 			kind: "game",
 			title: "Nightjar",
@@ -185,9 +183,9 @@ describe("creator spaces", () => {
 		const result = await sync(ctx, row.id);
 		expect(result.refs.draftUri).not.toBeNull();
 		expect(result.refs.spaceUri).toBeNull();
-		expect(
-			[...ctx.pds.spaces.keys()].filter((uri) => uri.includes(`/${CREATOR_SPACE_TYPE}/`)),
-		).toHaveLength(0);
+		// Only the creator's own space (`self`), never one keyed by the Work.
+		expect(ctx.pds.spaces.has(gatedSpaceUri(ctx.did, row.publicId))).toBe(false);
+		expect(ctx.pds.spaces.has(studioSpaceUri(ctx.did))).toBe(true);
 	});
 
 	it("converges on a second run and fills the one pointer the order of writes defers", async () => {
@@ -201,29 +199,31 @@ describe("creator spaces", () => {
 
 		const first = await sync(ctx, row.id);
 		const studio = studioSpaceUri(ctx.did);
-		expect(ctx.pds.recordsIn(studio, STUDIO_SPACE_COLLECTIONS.draftWork)).toHaveLength(1);
+		expect(ctx.pds.recordsIn(studio, CREATOR_SPACE_COLLECTIONS.draft)).toHaveLength(1);
 
 		const listing = `at://${ctx.did}/org.anthers.work/3kabc`;
 		await linkCreatorSpace(first, listing, null, { fetchImpl: ctx.pds.fetch });
 
-		const draft = ctx.pds.recordsIn(studio, STUDIO_SPACE_COLLECTIONS.draftWork)[0];
+		const draft = ctx.pds.recordsIn(studio, CREATOR_SPACE_COLLECTIONS.draft)[0];
 		expect((draft?.value as { publishedAs?: string }).publishedAs).toBe(listing);
 		const manifest = ctx.pds.recordsIn(
 			gatedSpaceUri(ctx.did, row.publicId),
-			GATED_SPACE_COLLECTIONS.gatedManifest,
+			CREATOR_SPACE_COLLECTIONS.manifest,
 		)[0];
 		expect((manifest?.value as { work?: string }).work).toBe(listing);
 
-		// A second sync writes the same records again rather than creating a second space.
+		// A second sync writes the same records again rather than creating a second space. The
+		// type holds the creator's `self` space and this Work's gated one, so the count is two.
 		const second = await sync(ctx, row.id);
 		expect(
-			[...ctx.pds.spaces.keys()].filter((uri) => uri.includes(`/${STUDIO_SPACE_TYPE}/`)),
+			[...ctx.pds.spaces.keys()].filter((uri) => uri.endsWith(`/${CREATOR_SPACE_TYPE}/self`)),
 		).toHaveLength(1);
-		expect(ctx.pds.recordsIn(studio, STUDIO_SPACE_COLLECTIONS.draftWork)).toHaveLength(1);
+		expect(ctx.pds.spaces.has(gatedSpaceUri(ctx.did, row.publicId))).toBe(true);
+		expect(ctx.pds.recordsIn(studio, CREATOR_SPACE_COLLECTIONS.draft)).toHaveLength(1);
 
 		// Taking the listing down clears the pointer; it does not delete the creator's copy.
 		await linkCreatorSpace(second, null, listing, { fetchImpl: ctx.pds.fetch });
-		const cleared = ctx.pds.recordsIn(studio, STUDIO_SPACE_COLLECTIONS.draftWork)[0];
+		const cleared = ctx.pds.recordsIn(studio, CREATOR_SPACE_COLLECTIONS.draft)[0];
 		expect((cleared?.value as { publishedAs?: string }).publishedAs).toBeUndefined();
 	});
 
@@ -245,14 +245,14 @@ describe("creator spaces", () => {
 			{
 				creatorId: ctx.userId,
 				publicId: row.publicId,
-				draftUri: `${studio}/${ctx.did}/${STUDIO_SPACE_COLLECTIONS.draftWork}/${row.publicId}`,
+				draftUri: `${studio}/${ctx.did}/${CREATOR_SPACE_COLLECTIONS.draft}/${row.publicId}`,
 				gatedSpaceUri: gated,
 			},
 			{ resolveSession: ctx.resolveSession, fetchImpl: ctx.pds.fetch },
 		);
 
 		expect(ctx.pds.spaces.has(gated)).toBe(false);
-		expect(ctx.pds.recordsIn(studio, STUDIO_SPACE_COLLECTIONS.draftWork)).toHaveLength(0);
+		expect(ctx.pds.recordsIn(studio, CREATOR_SPACE_COLLECTIONS.draft)).toHaveLength(0);
 		expect(ctx.pds.spaces.has(studio)).toBe(true);
 	});
 

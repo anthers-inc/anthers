@@ -35,10 +35,9 @@ import {
 	syncCreatorSpace,
 } from "../services/creator-space.js";
 import {
+	CREATOR_SPACE_COLLECTIONS,
 	draftWorkRkey,
 	GATED_MANIFEST_RKEY,
-	GATED_SPACE_COLLECTIONS,
-	STUDIO_SPACE_COLLECTIONS,
 } from "../services/creator-space-records.js";
 import { managingAppFor } from "../services/managing-app.js";
 import type { ResolveDid } from "../services/service-auth.js";
@@ -213,9 +212,9 @@ staged("the creator draft and the gated manifest against a staging PDS", () => {
 		studio = studioSpaceUri(creator.did);
 		gated = gatedSpaceUri(creator.did, publicId);
 		const spaceUri = gated;
-		const manifestUri = `${gated}/${creator.did}/${GATED_SPACE_COLLECTIONS.gatedManifest}/${GATED_MANIFEST_RKEY}`;
+		const manifestUri = `${gated}/${creator.did}/${CREATOR_SPACE_COLLECTIONS.manifest}/${GATED_MANIFEST_RKEY}`;
 		expect(sync.refs.draftUri).toBe(
-			`${studio}/${creator.did}/${STUDIO_SPACE_COLLECTIONS.draftWork}/${draftWorkRkey(publicId)}`,
+			`${studio}/${creator.did}/${CREATOR_SPACE_COLLECTIONS.draft}/${draftWorkRkey(publicId)}`,
 		);
 		expect(sync.refs.spaceUri).toBe(spaceUri);
 		expect(sync.refs.manifestUri).toBe(manifestUri);
@@ -225,7 +224,7 @@ staged("the creator draft and the gated manifest against a staging PDS", () => {
 		const draft = await client.getRecord({
 			space: studio,
 			repo: creator.did,
-			collection: STUDIO_SPACE_COLLECTIONS.draftWork,
+			collection: CREATOR_SPACE_COLLECTIONS.draft,
 			rkey: draftWorkRkey(publicId),
 		});
 		expect(draft.value).toMatchObject({ title: "Nightjar", publicId });
@@ -239,7 +238,7 @@ staged("the creator draft and the gated manifest against a staging PDS", () => {
 		const manifest = await client.getRecord({
 			space: gated,
 			repo: creator.did,
-			collection: GATED_SPACE_COLLECTIONS.gatedManifest,
+			collection: CREATOR_SPACE_COLLECTIONS.manifest,
 			rkey: GATED_MANIFEST_RKEY,
 		});
 		expect(manifest.value).toMatchObject({
@@ -284,7 +283,7 @@ staged("the creator draft and the gated manifest against a staging PDS", () => {
 			xrpc("com.atproto.repo.getRecord", {
 				params: {
 					repo: creator.did,
-					collection: GATED_SPACE_COLLECTIONS.gatedManifest,
+					collection: CREATOR_SPACE_COLLECTIONS.manifest,
 					rkey: GATED_MANIFEST_RKEY,
 				},
 			}),
@@ -295,7 +294,7 @@ staged("the creator draft and the gated manifest against a staging PDS", () => {
 			outsiderClient.getRecord({
 				space: gated,
 				repo: creator.did,
-				collection: GATED_SPACE_COLLECTIONS.gatedManifest,
+				collection: CREATOR_SPACE_COLLECTIONS.manifest,
 				rkey: GATED_MANIFEST_RKEY,
 			}),
 		).rejects.toMatchObject({ error: "RepoNotFound" });
@@ -303,7 +302,7 @@ staged("the creator draft and the gated manifest against a staging PDS", () => {
 			outsiderClient.getRecord({
 				space: studio,
 				repo: creator.did,
-				collection: STUDIO_SPACE_COLLECTIONS.draftWork,
+				collection: CREATOR_SPACE_COLLECTIONS.draft,
 				rkey: draftWorkRkey(publicId),
 			}),
 		).rejects.toMatchObject({ error: "RepoNotFound" });
@@ -313,14 +312,14 @@ staged("the creator draft and the gated manifest against a staging PDS", () => {
 		const linkedDraft = await client.getRecord({
 			space: studio,
 			repo: creator.did,
-			collection: STUDIO_SPACE_COLLECTIONS.draftWork,
+			collection: CREATOR_SPACE_COLLECTIONS.draft,
 			rkey: draftWorkRkey(publicId),
 		});
 		expect((linkedDraft.value as { publishedAs?: string }).publishedAs).toBe(atUri);
 		const linkedManifest = await client.getRecord({
 			space: gated,
 			repo: creator.did,
-			collection: GATED_SPACE_COLLECTIONS.gatedManifest,
+			collection: CREATOR_SPACE_COLLECTIONS.manifest,
 			rkey: GATED_MANIFEST_RKEY,
 		});
 		expect((linkedManifest.value as { work?: string }).work).toBe(atUri);
