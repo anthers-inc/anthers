@@ -12,10 +12,19 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { atprotoSessions, follows, notifications, posts, users, works } from "@anthers/db/schema";
+import {
+	atprotoSessions,
+	creditAcceptances,
+	follows,
+	notifications,
+	posts,
+	users,
+	works,
+} from "@anthers/db/schema";
 import { TokenRevokedError } from "@atproto/oauth-client";
 import { and, eq, inArray } from "drizzle-orm";
 import app from "../index";
+import { publishScheduled } from "../jobs/publish-scheduled";
 import { queue } from "../jobs/queue";
 import { releaseScheduled } from "../jobs/release-scheduled";
 import { interactionPermissionRefusal, publishingStateFor } from "../services/atproto";
@@ -206,6 +215,110 @@ describe("every way of publishing", () => {
 			.from(posts)
 			.where(eq(posts.title, `Perm post ${run}`));
 		expect(stored).toBeUndefined();
+	});
+
+	it("refuses publishing a post or a project that already exists", async () => {
+		// The create paths are above. These are the transitions into published, which are a
+		// different branch of the same routes and were the ones a draft could walk past.
+		const draftPost = await call("POST", "/api/content/posts", brought.cookie, {
+			title: `Perm draft post ${run}`,
+		});
+		expect(draftPost.status).toBe(201);
+		const { post } = (await draftPost.json()) as { post: { slug: string } };
+
+		const publishedPost = await call("PATCH", `/api/content/posts/${post.slug}`, brought.cookie, {
+			isPublished: true,
+		});
+		expect(publishedPost.status).toBe(409);
+		expect((await publishedPost.json()).code).toBe("publishing_permission_required");
+
+		const draftProject = await call("POST", "/api/content/projects", brought.cookie, {
+			title: "Perm draft project",
+			slug: `perm-draft-project-${run}`,
+		});
+		expect(draftProject.status).toBe(201);
+		const { project } = (await draftProject.json()) as { project: { slug: string } };
+
+		const publishedProject = await call(
+			"PATCH",
+			`/api/content/projects/${project.slug}`,
+			brought.cookie,
+			{ isPublished: true },
+		);
+		expect(publishedProject.status).toBe(409);
+		expect((await publishedProject.json()).code).toBe("publishing_permission_required");
+
+		const [stored] = await db
+			.select({ isPublished: posts.isPublished })
+			.from(posts)
+			.where(eq(posts.slug, post.slug));
+		expect(stored?.isPublished).toBe(false);
+	});
+
+	it("gives up a scheduled post and tells its author, when the grant lapsed before its time", async () => {
+		// The route refuses a schedule it can see will not run; this is the creator who was set
+		// up when they scheduled and lost the permission before the date. The sweep is the one
+		// publish path with nobody at the screen, so it has to tell them rather than drop it.
+		const draft = await call("POST", "/api/content/posts", brought.cookie, {
+			title: `Perm scheduled post ${run}`,
+		});
+		expect(draft.status).toBe(201);
+		const { post } = (await draft.json()) as { post: { id: number; slug: string } };
+		const at = new Date(Date.now() - 60_000);
+		await db.update(posts).set({ scheduledFor: at }).where(eq(posts.id, post.id));
+
+		await publishScheduled();
+
+		const [row] = await db.select().from(posts).where(eq(posts.id, post.id));
+		expect(row.isPublished).toBe(false);
+		expect(row.scheduledFor).toBeNull();
+		const notices = await db
+			.select()
+			.from(notifications)
+			.where(
+				and(
+					eq(notifications.userId, brought.id),
+					eq(notifications.dedupeKey, `scheduled-publish-refused:${post.id}:${at.toISOString()}`),
+				),
+			);
+		expect(notices).toHaveLength(1);
+		expect(notices[0].kind).toBe("scheduled_publish_refused");
+		expect(notices[0].body).toContain("permission");
+	});
+
+	it("refuses a credit acceptance rather than recording one it cannot write", async () => {
+		// An acceptance is a record in the contributor's own repository, so it takes the user
+		// tier and not the creator tier. The row used to be written before the refusal was known,
+		// which left "accepted" on file beside a record that never existed and made every retry
+		// answer `already_accepted`.
+		const work = await insertWork({
+			creatorId: hosted.id,
+			type: "text",
+			visibility: "released",
+			credits: [{ role: "Written by", contributor: brought.did, types: ["created"] }],
+		});
+		workIds.push(work.id);
+		await db
+			.update(works)
+			.set({ atprotoUri: `at://${hosted.did}/org.anthers.work/perm-${run}` })
+			.where(eq(works.id, work.id));
+
+		const res = await call("POST", `/api/content/works/${work.id}/credits/accept`, brought.cookie, {
+			role: "Written by",
+		});
+		expect(res.status).toBe(409);
+		expect((await res.json()).code).toBe("interaction_permission_required");
+
+		const rows = await db
+			.select({ id: creditAcceptances.id })
+			.from(creditAcceptances)
+			.where(
+				and(
+					eq(creditAcceptances.workId, work.id),
+					eq(creditAcceptances.contributorDid, brought.did),
+				),
+			);
+		expect(rows).toHaveLength(0);
 	});
 
 	it("gives up a scheduled release and tells the creator, when the grant lapsed before its time", async () => {
