@@ -563,7 +563,7 @@ export async function eraseAccount(
 				category: "essential" as const,
 				kind: "work_withdrawn_creator_left",
 				title: `“${b.workTitle}” has been withdrawn`,
-				body: "The creator closed their Anthers account. You still own this and it stays in your library — but it is no longer publicly available, so download a copy if you want one you keep.",
+				body: "The creator closed their Anthers account. You still own this and it stays in your library — Anthers keeps it available, so there is nothing you need to do.",
 				linkPath: "/library",
 				// Per purchase, so two people who bought the same Work each get told, and
 				// neither gets told twice.

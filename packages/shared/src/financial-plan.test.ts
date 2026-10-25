@@ -51,7 +51,9 @@ describe("the plan's hierarchy", () => {
 			for (const access of [0, 0.1, 0.4]) {
 				const L = ledgerAt(payingShare, undefined, access);
 				expect(L.freeAccess + L.freeStorage + L.otherPrograms).toBeCloseTo(L.programs);
-				expect(L.spending.freeCatalog + L.spending.payingAllowances).toBeCloseTo(L.freeStorage);
+				expect(
+					L.spending.freeCatalog + L.spending.payingAllowances + L.spending.preservation,
+				).toBeCloseTo(L.freeStorage);
 			}
 		}
 	});

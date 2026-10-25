@@ -130,6 +130,40 @@ describe("the storage meter", () => {
 		expect(creatorRow!.purposes["cloud-saves"]).toBe(0);
 	});
 
+	// SABOTAGE: the `preserved = false` predicate dropped (predict: the program's bytes
+	// come back onto the creator's catalog line, which is the charge the program exists
+	// to remove).
+	it("counts nothing for a Work the preservation program holds", async () => {
+		const work = await insertWork({ creatorId, type: "game" });
+		workIds.push(work.id);
+		const assetKey = await store(`creators/${creatorId}/assets/${work.id}/kept.zip`, 5000);
+		await db.insert(assets).values({
+			workId: work.id,
+			file: assetKey,
+			filename: "kept.zip",
+			fileSize: 5000,
+			platform: "windows",
+		});
+
+		await runStorageUsageSweep();
+		const [before] = await db
+			.select({ catalog: storageUsage.purposes })
+			.from(storageUsage)
+			.where(eq(storageUsage.userId, creatorId))
+			.limit(1);
+		const catalogBefore = (before!.catalog as Record<string, number>).catalog;
+
+		await db.update(works).set({ preserved: true }).where(eq(works.id, work.id));
+		await runStorageUsageSweep();
+
+		const [after] = await db
+			.select({ purposes: storageUsage.purposes })
+			.from(storageUsage)
+			.where(eq(storageUsage.userId, creatorId))
+			.limit(1);
+		expect((after!.purposes as Record<string, number>).catalog).toBe(catalogBefore - 5000);
+	});
+
 	it("is idempotent per cycle — a second sweep rewrites, never duplicates", async () => {
 		const first = await runStorageUsageSweep();
 		expect(first).toBeGreaterThan(0);
@@ -167,9 +201,8 @@ describe("the storage meter", () => {
 			.where(eq(storageUsage.userId, creatorId))
 			.limit(1);
 		expect(Object.keys(row!.purposes).sort()).toEqual([...STORAGE_USE_KINDS].sort());
-		// 3000 assets + 900 inline = the catalog line; kept-files rides at zero.
+		// 3000 assets + 900 inline = the catalog line.
 		expect(row!.purposes.catalog).toBe(3900);
-		expect(row!.purposes["kept-files"]).toBe(0);
 		expect(row!.bytes).toBe(3900);
 	});
 });

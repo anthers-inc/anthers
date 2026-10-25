@@ -40,7 +40,6 @@
  * and Remove controls — so the same Work reads the same way on every surface that lists it.
  */
 
-import { WITHDRAWN_RESCUE_DAYS } from "@anthers/shared/constants";
 import { BOOKSHELF_WORK_TYPES } from "@anthers/shared/content";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
@@ -106,18 +105,6 @@ interface ShelfItem {
 	work?: Work | null;
 	project?: ShelfProject | null;
 	post?: ShelfPost | null;
-}
-
-/**
- * The last day a withdrawn Work can still be rescued, or null when we don't know
- * when it was withdrawn (a row from before `0017` stamped the column).
- */
-function rescueDeadline(withdrawnAt: string | null | undefined): string | null {
-	if (!withdrawnAt) return null;
-	const at = new Date(withdrawnAt);
-	if (Number.isNaN(at.getTime())) return null;
-	at.setDate(at.getDate() + WITHDRAWN_RESCUE_DAYS);
-	return at.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 }
 
 /**
@@ -200,11 +187,11 @@ function ShelfTile({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 				post && !post.isPublished ? (
 					<p className="text-xs text-warning">Back in drafts — the creator has unpublished it.</p>
 				) : work?.visibility === "withdrawn" ? (
+					// ⭐ **No date, because there is no deadline** (Parker, 2026-10-25).
+					// Preservation is a program: a Work on somebody's shelf is kept
+					// indefinitely, so the card states the fact and asks nothing.
 					<p className="text-xs text-warning">
-						Withdrawn by the creator — still yours
-						{rescueDeadline(work.withdrawnAt)
-							? `, and free to download until ${rescueDeadline(work.withdrawnAt)}.`
-							: " to open and download."}
+						Withdrawn by the creator — still yours to open and download.
 					</p>
 				) : null
 			}

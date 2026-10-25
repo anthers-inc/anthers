@@ -215,26 +215,53 @@ export const works = pgTable(
 		// uploading or processing goes out as soon as it is ready rather than on the clock. A
 		// condition only the creator can fix clears it — see `jobs/release-scheduled.ts`.
 		scheduledReleaseAt: timestamp("scheduled_release_at", { withTimezone: true }),
-		// When it left public circulation. Recorded rather than derived because the
-		// retention model gives buyers a *funded rescue window* — notified, with time to
-		// download, after which the Work is removed for real. That sweep is NOT built:
-		// its duration and the notification mechanism are both open questions in the
-		// privacy-policy work. Stamping the timestamp now is what makes the sweep a
-		// later addition rather than a later migration.
+		// When it left public circulation. Recorded rather than derived because it is
+		// what the buyer-facing notice and the Library card state, and because a
+		// withdrawn Work's listing has to say when it went.
+		// ⚠️ **No window is counted from it any more.** Preservation became a program
+		// (2026-10-25): a Work anyone has saved is kept indefinitely, and one nobody
+		// saved has no buyer to protect. This column is when, not until when.
 		withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
 		/**
-		 * When the claim-aware sweep removed the Work's media — the claim side of the
-		 * rescue window's expiry (the Badge storage ladder's build, 2026-10-09).
+		 * When the claim-aware sweep removed the Work's media — the sweep's own
+		 * idempotency marker, not a state a Work is in.
 		 *
-		 * 🚨 **The "done" marker, not a state.** The row, its purchases, the Library
-		 * entries and the buyers' cloud saves all outlive the bytes (a purchase
-		 * outlives everything), and a sweep that re-listed every historical withdrawn
-		 * Work forever would be a daily full scan of a table that only ever grows.
-		 * Null while any claim remains; stamped by the sweep's own purge pass.
-		 * Delivery of a media-purged Work answers with the access the buyer no longer
-		 * has bytes behind — the record saying so, not a dead link.
+		 * 🚨 **The row, its purchases, the Library entries and the buyers' cloud saves
+		 * all outlive the bytes** (a purchase outlives everything), and a sweep that
+		 * re-listed every historical withdrawn Work forever would be a daily full scan
+		 * of a table that only ever grows. Null while the bytes are still present;
+		 * stamped by the sweep's own purge pass.
+		 *
+		 * ⚠️ **Since preservation became a program, the only Works the sweep purges are
+		 * ones nobody saved.** A preserved Work is never purged, so this stays null for
+		 * it, and the sweep's candidate query excludes preserved rows rather than
+		 * re-checking them daily.
 		 */
 		mediaPurgedAt: timestamp("media_purged_at", { withTimezone: true }),
+		/**
+		 * **In the preservation program** — somebody has saved this Work to their
+		 * Library, so Anthers keeps its media indefinitely rather than for a window.
+		 *
+		 * ⭐ **A property of the WORK, not of a buyer or an account** (Parker,
+		 * 2026-10-25). Preservation is a cultural benefit whether or not any individual
+		 * chooses to carry it, so it sits beside free access among the charitable
+		 * programs rather than on the Badge ladder: no buyer elects anything, nothing
+		 * expires, and no allowance is charged for the bytes.
+		 *
+		 * 🚨 **A boolean, never a date.** A preservation timestamp would record only
+		 * when the decision was made, which is not interesting; what a reader wants to
+		 * know is when the bytes they can still fetch were uploaded, and every version
+		 * already carries that. The Studio shows a `Preserved` tag on the version
+		 * record for exactly that reason.
+		 *
+		 * **The write is one-way.** A Work enters when its first Library entry lands
+		 * (`services/preservation.ts`, called from every save door) and never leaves:
+		 * unsaving later, or a refund releasing a shelf entry, does not un-preserve
+		 * something Anthers already promised to keep. The sweep reads this column and
+		 * nothing else, which is what replaced the keeper election and the ninety-day
+		 * clock.
+		 */
+		preserved: boolean("preserved").notNull().default(false),
 
 		// ── Dates ──
 		// Three dates exist for a Work. `createdAt` is the UPLOAD date (ours,

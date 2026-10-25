@@ -12,6 +12,12 @@
  * ⚠️ **The list reloads when the Work's `versionAddedAt` moves**, which is what a replace
  * changes; the upload store's landing already re-reads the Work, so the new row appears
  * without a second polling timer.
+ *
+ * ⭐ **A `Preserved` tag says the bytes are kept indefinitely** (Parker, 2026-10-25). It
+ * rides the Work rather than the version: the program is entered when anybody saves the
+ * Work, and every version's bytes are kept with it. The date beside the tag is the
+ * version's own upload date, which is what a reader wants to know — when the bytes they can
+ * still fetch were made — rather than when the preservation decision was taken.
  */
 
 import { client } from "@anthers/web-shared/rpc";
@@ -27,6 +33,18 @@ function dateTime(iso: string): string {
 		hour: "numeric",
 		minute: "2-digit",
 	});
+}
+
+/** The program's mark, explained once beside the tab's own heading. */
+function PreservedTag() {
+	return (
+		<span
+			className="badge badge-ghost badge-sm align-middle font-normal"
+			title="Somebody saved this Work to their Library, so Anthers keeps these bytes indefinitely — no allowance is charged for them, and nothing expires."
+		>
+			Preserved
+		</span>
+	);
 }
 
 function bytes(value: number): string {
@@ -49,6 +67,7 @@ export default function WorkVersionsSection({
 	versionLabel?: string | null;
 }) {
 	const [versions, setVersions] = useState<WorkMediaVersionSummary[]>([]);
+	const [preserved, setPreserved] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [busyId, setBusyId] = useState<number | null>(null);
@@ -75,8 +94,12 @@ export default function WorkVersionsSection({
 			setLoading(false);
 			return;
 		}
-		const body = (await res.json()) as { versions: WorkMediaVersionSummary[] };
+		const body = (await res.json()) as {
+			versions: WorkMediaVersionSummary[];
+			preserved: boolean;
+		};
 		setVersions(body.versions);
+		setPreserved(body.preserved);
 		setLoading(false);
 	};
 
@@ -93,8 +116,12 @@ export default function WorkVersionsSection({
 					setLoading(false);
 					return;
 				}
-				const body = (await res.json()) as { versions: WorkMediaVersionSummary[] };
+				const body = (await res.json()) as {
+					versions: WorkMediaVersionSummary[];
+					preserved: boolean;
+				};
 				setVersions(body.versions);
+				setPreserved(body.preserved);
 				setLoading(false);
 			})
 			.catch(() => {
@@ -164,7 +191,7 @@ export default function WorkVersionsSection({
 	return (
 		<section className="flex flex-col gap-3">
 			<div className="rounded-lg bg-base-200/50 p-3 text-sm">
-				<p className="font-medium">Current version</p>
+				<p className="font-medium">Current version {preserved && <PreservedTag />}</p>
 				<p className="text-xs text-base-content/60">
 					{versionAddedAt ? `Added ${dateTime(versionAddedAt)}` : "No media version yet"}
 				</p>
@@ -216,7 +243,8 @@ export default function WorkVersionsSection({
 								<p className="text-sm">
 									{version.versionLabel
 										? `${version.versionLabel} · ${dateTime(version.uploadedAt)}`
-										: dateTime(version.uploadedAt)}
+										: dateTime(version.uploadedAt)}{" "}
+									{version.preserved && <PreservedTag />}
 								</p>
 								<p className="text-xs text-base-content/50">
 									{[

@@ -35,21 +35,26 @@
  *   ladder, all under `creators/{id}/ebook/` (the prefix `media-purge.ts` sweeps), so
  *   one `prefixSize` per creator with paged Works, on the inline-images pattern.
  * - **Cloud saves** — `work_saves.byte_size`, attributed to the *player's* account: the
- *   settled design's rule is that the blob charges the player's floor like any kept
- *   file, not the creator's.
+ *   blob charges the player's floor like anything else they keep.
  *
- * Attribution is per-purpose (`catalog`, `cloud-saves`, `kept-files`) under one summed
- * figure, because the allowance is combined but the reading a creator sees and the audit
- * the rescue window's 1/N keeper-share check needs are per-purpose lines. `kept-files`
- * stays zero until the rescue-window sweep lands its surface; the kind exists so the
- * sweep's first row is a line in an existing vocabulary rather than a migration.
+ * 🚨 **A Work in the preservation program is counted for nobody.** Those bytes are the
+ * program's cost (`services/preservation.ts`), so every per-Work query here carries
+ * `works.preserved = false`: a saved Work's media does not draw its creator's allowance,
+ * and no buyer draws a share of it either. Two figures cannot be attributed per Work —
+ * the creator-level inline-image prefix, which is post body content with no Work link,
+ * and a Work's preview objects, whose keys carry no Work id — so previews are subtracted
+ * one preserved row at a time and inline images stay where they are. Both are display and
+ * body bytes rather than a Work's own media, and saying so is more honest than pretending
+ * the exclusion is total.
+ *
+ * Attribution is per-purpose (`catalog`, `cloud-saves`) under one summed figure, because
+ * the allowance is combined but the reading a creator sees is per-purpose.
  */
 
 import { db } from "@anthers/db/client";
 import {
 	assets,
 	inlineImages,
-	purchases,
 	storageUsage,
 	transcodingJobs,
 	webBuildFiles,
@@ -63,8 +68,7 @@ import {
 import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import { STORAGE_USE_KINDS, type StorageUseKind } from "@anthers/shared/constants";
 import { isPaged } from "@anthers/shared/content";
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
-import { keptShareBytes } from "../services/keeping.js";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { storage } from "../services/storage/index.js";
 import { urlToKey } from "../services/storage/keys.js";
 import { keysInMedia } from "../services/work-versions.js";
@@ -161,7 +165,7 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		})
 		.from(assets)
 		.innerJoin(works, eq(assets.workId, works.id))
-		.where(sql`${works.creatorId} IS NOT NULL`)
+		.where(and(sql`${works.creatorId} IS NOT NULL`, eq(works.preserved, false)))
 		.groupBy(works.creatorId);
 	for (const row of assetRows) {
 		if (row.creatorId == null) continue;
@@ -177,7 +181,7 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		.from(webBuildFiles)
 		.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
 		.innerJoin(works, eq(webBuilds.workId, works.id))
-		.where(sql`${works.creatorId} IS NOT NULL`)
+		.where(and(sql`${works.creatorId} IS NOT NULL`, eq(works.preserved, false)))
 		.groupBy(works.creatorId);
 	for (const row of buildRows) {
 		if (row.creatorId == null) continue;
@@ -189,7 +193,12 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		.select({ creatorId: works.creatorId, manifestKey: transcodingJobs.hlsManifestUrl })
 		.from(transcodingJobs)
 		.innerJoin(works, eq(transcodingJobs.workId, works.id))
-		.where(sql`${works.creatorId} IS NOT NULL AND ${transcodingJobs.hlsManifestUrl} <> ''`);
+		.where(
+			and(
+				sql`${works.creatorId} IS NOT NULL AND ${transcodingJobs.hlsManifestUrl} <> ''`,
+				eq(works.preserved, false),
+			),
+		);
 	for (const row of hlsRows) {
 		if (row.creatorId == null) continue;
 		// The manifest's key minus its file IS the rendition prefix — the same read
@@ -230,7 +239,7 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 			thumbnail: works.thumbnail,
 		})
 		.from(works)
-		.where(sql`${works.creatorId} IS NOT NULL`);
+		.where(and(sql`${works.creatorId} IS NOT NULL`, eq(works.preserved, false)));
 	for (const row of mediaRows) {
 		if (row.creatorId == null) continue;
 		const purposes = account(row.creatorId).purposes;
@@ -252,7 +261,8 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 	const setRows = await db
 		.select({ creatorId: works.creatorId, file: workSourceFiles.file })
 		.from(workSourceFiles)
-		.innerJoin(works, eq(workSourceFiles.workId, works.id));
+		.innerJoin(works, eq(workSourceFiles.workId, works.id))
+		.where(eq(works.preserved, false));
 	for (const row of setRows) {
 		if (row.creatorId == null) continue;
 		const size = await sizeOfKey(row.file);
@@ -268,7 +278,7 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		.select({ creatorId: works.creatorId, media: workMediaVersions.media })
 		.from(workMediaVersions)
 		.innerJoin(works, eq(workMediaVersions.workId, works.id))
-		.where(isNotNull(works.creatorId));
+		.where(and(isNotNull(works.creatorId), eq(works.preserved, false)));
 	for (const row of versionRows) {
 		if (row.creatorId == null) continue;
 		for (const key of keysInMedia(row.media)) {
@@ -286,18 +296,35 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 	const pagedWorks = await db
 		.selectDistinct({ creatorId: works.creatorId, type: works.type })
 		.from(works)
-		.where(isNotNull(works.creatorId));
+		.where(and(isNotNull(works.creatorId), eq(works.preserved, false)));
 	for (const row of pagedWorks) {
 		if (row.creatorId == null || !isPaged(row.type)) continue;
 		const bytes = await prefixBytes(`creators/${row.creatorId}/ebook/`);
 		if (bytes > 0) add(account(row.creatorId).purposes, "catalog", bytes);
 	}
+	// ⚠️ **The prefix is per creator, so a preserved Work's run sits inside the figure
+	// above.** Its own sub-prefix IS per Work, so it can be taken back exactly — the
+	// opposite of the preview case, where the keys carry no Work id.
+	const preservedPaged = await db
+		.selectDistinct({ id: works.id, creatorId: works.creatorId, type: works.type })
+		.from(works)
+		.where(and(isNotNull(works.creatorId), eq(works.preserved, true)));
+	for (const row of preservedPaged) {
+		if (row.creatorId == null || !isPaged(row.type)) continue;
+		const bytes = await prefixBytes(`creators/${row.creatorId}/ebook/${row.id}/`);
+		if (bytes <= 0) continue;
+		const purposes = account(row.creatorId).purposes;
+		purposes.catalog = Math.max(0, purposes.catalog - bytes);
+	}
 
-	// ── Preview media, one prefix read per creator ───────────────────────────────
+	// ── Preview media, one prefix read per creator, less what the program holds ──
 	// A Work's storefront screenshots, trailer and trailer captions all live under
-	// `creators/{id}/previews/` by construction, and no row carries their byte sizes —
-	// the inline-images bend again, bounded to creators who actually have previews.
-	// Preview media is creator storage rather than free bytes.
+	// `creators/{id}/previews/` by construction, and no row carries the images' byte
+	// sizes — the inline-images bend again, bounded to creators who have previews.
+	// ⚠️ **The prefix is creator-wide and its keys carry no Work id**, so a preserved
+	// Work's previews cannot be excluded from the walk. They are subtracted instead, one
+	// preserved row at a time: a `size()` per object, which is the same bounded read the
+	// Work record's own media already pays, and only for Works the program holds.
 	const previewCreators = await db
 		.selectDistinct({ creatorId: works.creatorId })
 		.from(workPreviewMedia)
@@ -307,6 +334,20 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		if (row.creatorId == null) continue;
 		const bytes = await prefixBytes(`creators/${row.creatorId}/previews/`);
 		if (bytes > 0) add(account(row.creatorId).purposes, "catalog", bytes);
+	}
+	const preservedPreviewRows = await db
+		.select({ creatorId: works.creatorId, file: workPreviewMedia.file })
+		.from(workPreviewMedia)
+		.innerJoin(works, eq(workPreviewMedia.workId, works.id))
+		.where(and(isNotNull(works.creatorId), eq(works.preserved, true)));
+	for (const row of preservedPreviewRows) {
+		if (row.creatorId == null) continue;
+		const size = await sizeOfKey(row.file);
+		if (size == null) continue;
+		const purposes = account(row.creatorId).purposes;
+		// `add` floors at zero by design (a sum of sizes is never negative); a
+		// subtraction is the one place that floor would swallow the correction.
+		purposes.catalog = Math.max(0, purposes.catalog - size);
 	}
 
 	// ── Cloud saves, by the player ───────────────────────────────────────────────
@@ -321,54 +362,10 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		add(account(row.userId).purposes, "cloud-saves", Number(row.total));
 	}
 
-	// ── Kept files, the buying keeper's 1/N share ────────────────────────────────
-	// A withdrawn Work kept by its buyers is stored ONCE, and each keeper draws an
-	// equal share of the counted media against their own allowance — the 1/N arithmetic
-	// the ladder task's design fixed and `keptShareBytes` derives per Work. The sweep
-	// walks the kept purchases (keptAt present, media not yet purged), groups keeper
-	// counts per Work, and attributes each buyer's share into their kept-files line.
-	const keptRows = (
-		await db
-			.select({ workId: purchases.workId, buyerId: purchases.buyerId })
-			.from(purchases)
-			.innerJoin(works, eq(purchases.workId, works.id))
-			.where(
-				and(
-					eq(purchases.status, "completed"),
-					isNotNull(purchases.keptAt),
-					eq(works.visibility, "withdrawn"),
-					isNull(works.mediaPurgedAt),
-				),
-			)
-	).filter((r): r is { workId: number; buyerId: number } => r.buyerId != null);
-	const keeperCount = new Map<number, number>();
-	for (const row of keptRows) {
-		keeperCount.set(row.workId, (keeperCount.get(row.workId) ?? 0) + 1);
-	}
-	// Per-buyer attribution, share-divided: group keptRows by buyer, add each Work's
-	// 1/N share (deriving the share via the service, which reads the counted media
-	// rather than trusting any column here).
-	const byBuyer = new Map<number, number[]>();
-	for (const row of keptRows) {
-		if (row.buyerId == null) continue;
-		const list = byBuyer.get(row.buyerId) ?? [];
-		list.push(row.workId);
-		byBuyer.set(row.buyerId, list);
-	}
-	for (const [buyerId, workIdList] of byBuyer) {
-		let shareSum = 0;
-		for (const workId of workIdList) {
-			shareSum += await keptShareBytes(workId, keeperCount.get(workId) ?? 1);
-		}
-		if (shareSum > 0) add(account(buyerId).purposes, "kept-files", shareSum);
-	}
-
 	// ── Upsert, one row per account with any bytes at all ────────────────────────
 	// An account with zero bytes across every kind writes no row: an empty reading is
 	// indistinguishable from "not yet metered", and a row of zeros per idle account is
-	// noise the reading surface would have to filter. The `kept-files` kind therefore
-	// rides in every written row's split at zero until its surface lands, which is the
-	// visible-in-the-vocabulary posture `emptyPurposes` chose.
+	// noise the reading surface would have to filter.
 	let written = 0;
 	for (const [userId, entry] of byUser) {
 		const total = STORAGE_USE_KINDS.reduce((sum, k) => sum + entry.purposes[k], 0);

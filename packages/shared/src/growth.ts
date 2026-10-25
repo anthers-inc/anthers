@@ -262,6 +262,18 @@ export interface GrowthInputs {
 	/** The admin budget's share of charitable revenue; defaults to the locked ceiling. */
 	adminBudgetShare?: number;
 	mix?: Record<number, number>;
+	/**
+	 * The preservation program's holdings, in GiB — the media of every Work somebody has
+	 * saved, which Anthers keeps indefinitely rather than for a window.
+	 *
+	 * ⚠️ **An input rather than a derivation, because the catalog is not simulated.** The
+	 * model knows how many creators there are and how big their catalogs might be; it
+	 * cannot know which Works have been saved. The live figure is
+	 * `services/preservation.ts`'s inventory, and the plan takes it as a scenario: zero
+	 * until somebody saves something, then whatever the saved catalog costs at the
+	 * vendor's rate.
+	 */
+	preservedGiB?: number;
 }
 
 export interface CreatorSegmentLedger extends CreatorSegment {
@@ -320,7 +332,17 @@ export interface GrowthLedger {
 	freeCatalogSubsidy: number;
 	/** Paying rungs' bundled storage allowances, paid to the vendor at cost. */
 	payingAllowanceSubsidy: number;
-	/** The two parts' aggregate — `freeAccess` minus the free pool and PA incentives. */
+	/**
+	 * The preservation program: the saved catalog's bytes, kept indefinitely at cost.
+	 *
+	 * ⭐ **Published as its own line inside Free Storage** (Parker, 2026-10-25). It is
+	 * storage nobody is charged for, which is Free Storage's own definition, and the
+	 * answer to "which line does it report under" is therefore both: the aggregate is
+	 * Free Storage, and the plan draws its parts separately — the shape
+	 * `freeCatalogSubsidy` and `payingAllowanceSubsidy` already had.
+	 */
+	preservationSubsidy: number;
+	/** The three parts' aggregate — `freeAccess` minus the free pool and PA incentives. */
 	freeStorageSubsidy: number;
 	/**
 	 * The paying accounts apportioned across the modeled rungs (`byLevel`) — the
@@ -361,6 +383,7 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		freeAccessShare = FREE_ACCESS_SHARE_DEFAULT,
 		adminBudgetShare = ADMIN_CEILING,
 		mix = payingBadgeMix(),
+		preservedGiB = 0,
 	} = input;
 
 	const creators = creatorCap(accounts);
@@ -483,6 +506,11 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 	// program, and the next incentive should land here rather than rebuild the accounting.
 	const paIncentiveCost = 0;
 
+	// The preservation program's cost. Zero when nothing is preserved, which is the state
+	// the model starts in; the live inventory is `services/preservation.ts`.
+	const preservationSubsidy = Math.max(0, preservedGiB) * STORAGE_PER_GIB_MONTH;
+	freeStorageSubsidy += preservationSubsidy;
+
 	// ---- The charitable budget, read obligations-first ----
 	const charitableRevenue = charitableFromUsers + storageCharge;
 	const variableInfra =
@@ -521,6 +549,7 @@ export function modelAt(input: GrowthInputs): GrowthLedger {
 		reserves,
 		freeCatalogSubsidy,
 		payingAllowanceSubsidy,
+		preservationSubsidy,
 		freeStorageSubsidy,
 		bySupportRung: rungs.map((n, i) => ({ amount: n, accounts: byLevel[i] })),
 	};

@@ -254,6 +254,54 @@ function ComponentCard({ entry }: { entry: ComponentView }) {
 	);
 }
 
+/**
+ * What the preservation program is holding.
+ *
+ * ⭐ **The program's inventory, not its policy.** Purchase preservation keeps the media of
+ * any Work somebody saved, indefinitely and at Anthers' cost, so an operator needs the two
+ * figures that grow: how many Works, and how many bytes the vendor bills for them. The cost
+ * line applies the storage rate to the byte count rather than quoting a separate number, so
+ * a vendor move shows up here without an edit.
+ */
+interface Preservation {
+	works: number;
+	bytes: number;
+	monthlyCost: number;
+}
+
+function PreservationSection() {
+	const { data, loading, error } = useAdminData<Preservation>("/api/admin/preservation");
+
+	return (
+		<section>
+			<SectionHeading>Preservation</SectionHeading>
+			{error && <ErrorAlert>{error}</ErrorAlert>}
+			{loading && !data ? (
+				<Loading />
+			) : data ? (
+				<div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+					<div className="rounded-box border border-base-300 bg-base-100 p-4">
+						<p className="text-xs uppercase tracking-wide text-base-content/50">Works kept</p>
+						<p className="mt-1 text-2xl font-semibold tabular-nums">{data.works}</p>
+					</div>
+					<div className="rounded-box border border-base-300 bg-base-100 p-4">
+						<p className="text-xs uppercase tracking-wide text-base-content/50">Bytes held</p>
+						<p className="mt-1 text-2xl font-semibold tabular-nums">
+							{(data.bytes / 1024 ** 3).toFixed(2)} GiB
+						</p>
+					</div>
+					<div className="rounded-box border border-base-300 bg-base-100 p-4">
+						<p className="text-xs uppercase tracking-wide text-base-content/50">At cost, monthly</p>
+						<p className="mt-1 text-2xl font-semibold tabular-nums">
+							${data.monthlyCost.toFixed(2)}
+						</p>
+					</div>
+				</div>
+			) : null}
+		</section>
+	);
+}
+
 function ResourcesSection() {
 	const { data, loading, error } = useAdminData<Resources>("/api/admin/infrastructure/resources");
 
@@ -419,6 +467,10 @@ export default function Infrastructure() {
 					</div>
 				)
 			)}
+
+			<section className="mt-10">
+				<PreservationSection />
+			</section>
 
 			<section className="mt-10">
 				<SectionHeading>Resources</SectionHeading>

@@ -279,13 +279,13 @@ async function start() {
 		}
 	});
 
-	// The claim-aware rescue sweep: purges a withdrawn Work's media when no claim
-	// remains, warns buyers inside the last week. Both figures logged only when nonzero.
+	// The withdrawn-Work sweep: removes the media of a withdrawn Work nobody saved, and
+	// spares every Work the preservation program holds. Logged only when nonzero.
 	await queue.work(QUEUES.WITHDRAWN_SWEEP, async (jobs) => {
 		for (const job of jobs) {
-			const { sweptCount, warnedCount } = await runWithdrawnSweep();
-			if (sweptCount > 0 || warnedCount > 0) {
-				console.log(`[withdrawn-sweep] job ${job.id}: swept ${sweptCount}, warned ${warnedCount}`);
+			const { sweptCount, keptCount } = await runWithdrawnSweep();
+			if (sweptCount > 0 || keptCount > 0) {
+				console.log(`[withdrawn-sweep] job ${job.id}: swept ${sweptCount}, held ${keptCount}`);
 			}
 		}
 	});

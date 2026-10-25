@@ -1,27 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The claim-aware sweep and the keeping election — the boundary of the rescue window.
+ * The preservation program and the withdrawn-Work sweep — the boundary of what Anthers keeps.
  *
- * 🚨 **Every rule here is a promise somebody believed**: a buyer warned once, a keeper
- * spared past ninety days, a released keeper's clock re-armed, media purged only when
- * no claim remains. So the assertions are rows and bytes and notification counts —
- * never "the code ran" — and each describe names the failures its sabotage pass
- * produced before the suite was trusted.
+ * 🚨 **Every rule here is a promise somebody believed.** A Work anybody saved is kept
+ * indefinitely, whatever its creator does; a Work nobody saved has no buyer to protect and
+ * its bytes go; and three things — a copyright takedown, a child-safety quarantine, a legal
+ * hold — outrank the program. So the assertions are rows and bytes, never "the code ran".
  *
- * Fixtures: one creator and three buyers (a keeper, a free buyer inside the window,
- * a second buyer for the 1/N arithmetic), each through `createAccount`. Each Work
- * carries one real stored asset (real bytes, so `purgeWorkMedia`'s sweep has something
- * to remove) and is taken back in `afterAll`, on success or failure.
+ * The design this replaced (the keeping election, the ninety-day clock, the last-chance
+ * warning) is gone, and its tests with it. What survives as a test is the rule that made it
+ * worth replacing: **the buyer's copy does not depend on the buyer doing anything.**
+ *
+ * Fixtures: one creator and three buyers through `createAccount`. Each Work carries one real
+ * stored asset (real bytes, so `purgeWorkMedia`'s sweep has something to remove) and is
+ * taken back in `afterAll`, on success or failure.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, notifications, purchases, works } from "@anthers/db/schema";
-import { WITHDRAWN_RESCUE_DAYS } from "@anthers/shared/constants";
-import { and, eq, inArray } from "drizzle-orm";
-import app from "../index";
-import { releaseKeepersFor, runWithdrawnSweep } from "../jobs/withdrawn-sweep.js";
-import { electToKeep, releaseKeep } from "../services/keeping.js";
+import { assets, libraryItems, purchases, works } from "@anthers/db/schema";
+import { eq, inArray } from "drizzle-orm";
+import { runWithdrawnSweep } from "../jobs/withdrawn-sweep.js";
+import { placeHold } from "../services/legal-hold.js";
+import { removeItem, saveOnPurchase, saveWork } from "../services/library.js";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -30,29 +31,16 @@ import { insertWork } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
 
-const ORIGIN = "http://localhost:3000";
 const RUN = crypto.randomUUID().slice(0, 8);
 
 let creatorId = 0;
-let keeperId = 0;
-let keeperCookie: string;
-let freeBuyerId = 0;
+let buyerId = 0;
 let otherBuyerId = 0;
 const workIds: number[] = [];
 const storedKeys: string[] = [];
 
-function req(path: string, options?: RequestInit) {
-	return app.fetch(new Request(`http://localhost${path}`, options));
-}
-
-/** A fixture-side payment intent id — marked as what it is, so the credential guard passes. */
-
-/** A withdrawn Work with one real stored asset and one completed purchase per buyer. */
-async function soldWithdrawnWork(opts: {
-	title: string;
-	buyers: number[];
-	withdrawnDaysAgo: number;
-}): Promise<number> {
+/** A Withdrawn Work carrying one real stored asset, with nobody having saved it. */
+async function withdrawnWork(opts: { title: string; withdrawnDaysAgo?: number }): Promise<number> {
 	const work = await insertWork({ creatorId, type: "game", title: opts.title });
 	workIds.push(work.id);
 	const key = `creators/${creatorId}/assets/${work.id}/build.zip`;
@@ -65,27 +53,45 @@ async function soldWithdrawnWork(opts: {
 		fileSize: 2048,
 		platform: "windows",
 	});
-	for (const buyer of opts.buyers) {
-		await db.insert(purchases).values({
-			buyerId: buyer,
-			workId: work.id,
-			creatorId,
-			workTitle: opts.title,
-			workType: "game",
-			workPublicId: work.publicId,
-			type: "digital",
-			amount: "5.00",
-			processingFee: "0.45",
-			creatorEarnings: "4.55",
-			// A fixture-side id, per the credential-shape rule: marked as a fixture, not
-			// shaped like a real vendor's.
-			stripePaymentIntentId: `pi_fixture_${work.id}_${buyer}_${crypto.randomUUID().slice(0, 8)}`,
-			status: "completed",
-		});
-	}
-	const withdrawnAt = new Date(Date.now() - opts.withdrawnDaysAgo * 86400_000);
+	const withdrawnAt = new Date(Date.now() - (opts.withdrawnDaysAgo ?? 1) * 86400_000);
 	await db.update(works).set({ visibility: "withdrawn", withdrawnAt }).where(eq(works.id, work.id));
 	return work.id;
+}
+
+/** A Withdrawn Work somebody bought — the purchase is what puts it in the program. */
+async function soldWork(opts: { title: string; buyer: number; withdrawnDaysAgo: number }) {
+	const workId = await withdrawnWork(opts);
+	const [work] = await db
+		.select({ publicId: works.publicId })
+		.from(works)
+		.where(eq(works.id, workId));
+	await db.insert(purchases).values({
+		buyerId: opts.buyer,
+		workId,
+		creatorId,
+		workTitle: opts.title,
+		workType: "game",
+		workPublicId: work!.publicId,
+		type: "digital",
+		amount: "5.00",
+		processingFee: "0.45",
+		creatorEarnings: "4.55",
+		// Fixture-side id: marked as one, so the credential-shape guard passes.
+		stripePaymentIntentId: `pi_fixture_${workId}_${crypto.randomUUID().slice(0, 8)}`,
+		status: "completed",
+	});
+	// The purchase's own library save is what the checkout calls; doing it here keeps the
+	// fixture on the same path production takes rather than setting the flag by hand.
+	await saveOnPurchase({ buyerId: opts.buyer, workId, type: "digital" });
+	return workId;
+}
+
+async function preserved(workId: number): Promise<boolean> {
+	const [row] = await db
+		.select({ preserved: works.preserved })
+		.from(works)
+		.where(eq(works.id, workId));
+	return row?.preserved === true;
 }
 
 /** Whether the Work's stored asset still exists — the media's presence, from the object. */
@@ -99,180 +105,121 @@ async function mediaExists(workId: number): Promise<boolean> {
 }
 
 beforeAll(async () => {
-	const creator = await createAccount(`kf_c_${RUN}`, { fields: { creatorMode: true } });
+	const creator = await createAccount(`pf_c_${RUN}`, { fields: { creatorMode: true } });
 	creatorId = creator.userId;
-	const keeper = await createAccount(`kf_keep_${RUN}`);
-	keeperId = keeper.userId;
-	keeperCookie = keeper.cookie;
-	const other = await createAccount(`kf_other_${RUN}`);
+	const buyer = await createAccount(`pf_b_${RUN}`);
+	buyerId = buyer.userId;
+	const other = await createAccount(`pf_o_${RUN}`);
 	otherBuyerId = other.userId;
-	const free = await createAccount(`kf_free_${RUN}`);
-	freeBuyerId = free.userId;
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
-	// The works rows (their cascade carries assets, purchases, library items and the
-	// saves), and the objects the rows pointed at — cascade reaches rows, not bytes.
 	if (workIds.length > 0) await db.delete(works).where(inArray(works.id, workIds));
 	for (const key of storedKeys) await storage.delete(key).catch(() => {});
 });
 
-describe("the keeping election", () => {
-	it("a buyer elects through the route; the claim is the timestamp", async () => {
-		const workId = await soldWithdrawnWork({
-			title: "Elect",
-			buyers: [keeperId],
-			withdrawnDaysAgo: 1,
-		});
-		const res = await req(`/api/content/works/${workId}/keep`, {
-			method: "POST",
-			headers: { Cookie: keeperCookie, Origin: ORIGIN },
-		});
-		expect(res.status).toBe(200);
-		const [row] = await db
-			.select({ keptAt: purchases.keptAt })
-			.from(purchases)
-			.where(and(eq(purchases.buyerId, keeperId), eq(purchases.workId, workId)));
-		expect(row?.keptAt).not.toBeNull();
-	});
-
-	it("a release drops the claim; the service is the one writer", async () => {
-		const result = await releaseKeep(keeperId, workIds[0]);
-		expect(result.ok).toBe(true);
-		const [row] = await db
-			.select({ keptAt: purchases.keptAt, updatedAt: purchases.updatedAt })
-			.from(purchases)
-			.where(and(eq(purchases.buyerId, keeperId), eq(purchases.workId, workIds[0])));
-		expect(row?.keptAt).toBeNull();
-	});
-
-	it("refuses a non-purchaser and a published Work, naming why", async () => {
-		// not_purchased: a buyer-less account electing on any Work.
-		const refused = await electToKeep(otherBuyerId, workIds[0]);
-		expect(refused).toEqual({ ok: false, reason: "not_purchased" });
-
-		// not_withdrawn: keeping a published Work says nothing, so it is refused.
-		const work = await insertWork({ creatorId, type: "game", title: "StillUp" });
+describe("coming into the program", () => {
+	it("a purchase puts the Work in it, because a purchase saves itself to the shelf", async () => {
+		const work = await insertWork({ creatorId, type: "game", title: "BoughtAndSaved" });
 		workIds.push(work.id);
-		await db.insert(purchases).values({
-			buyerId: keeperId,
-			workId: work.id,
-			creatorId,
-			workTitle: "StillUp",
-			workType: "game",
-			workPublicId: work.publicId,
-			type: "digital",
-			amount: "5.00",
-			processingFee: "0.45",
-			creatorEarnings: "4.55",
-			stripePaymentIntentId: `pi_fixture_${work.id}_${crypto.randomUUID().slice(0, 8)}`,
-			status: "completed",
-		});
-		const published = await electToKeep(keeperId, work.id);
-		expect(published).toEqual({ ok: false, reason: "not_withdrawn" });
+		expect(await preserved(work.id)).toBe(false);
+
+		await saveOnPurchase({ buyerId, workId: work.id, type: "digital" });
+
+		expect(await preserved(work.id)).toBe(true);
+	});
+
+	it("a manual save puts the Work in it, and unsaving does not take it out", async () => {
+		const work = await insertWork({ creatorId, type: "game", title: "SavedByHand" });
+		workIds.push(work.id);
+		expect(await preserved(work.id)).toBe(false);
+
+		const saved = await saveWork(otherBuyerId, work.id);
+		expect(saved.ok).toBe(true);
+		expect(await preserved(work.id)).toBe(true);
+
+		// ⭐ **The write is one-way.** A shelf entry can be removed, but a Work Anthers has
+		// undertaken to keep is not un-kept by somebody tidying their library.
+		const [item] = await db
+			.select({ id: libraryItems.id })
+			.from(libraryItems)
+			.where(eq(libraryItems.userId, otherBuyerId));
+		expect(item).toBeDefined();
+		await removeItem(otherBuyerId, item!.id);
+		expect(await preserved(work.id)).toBe(true);
 	});
 });
 
-describe("the claim-aware sweep", () => {
-	// SABOTAGE: the keeper check dropped (predict: exactly the keeper-spared case fails —
-	// the keeper's Work swept, which is the one wrong deletion this window can make).
-	it("spares a keeper past ninety days, sweeps a free buyer past them", async () => {
-		// The keeper's Work: withdrawn 120 days ago, elected.
-		const kept = await soldWithdrawnWork({
-			title: "KeptPastWindow",
-			buyers: [keeperId],
-			withdrawnDaysAgo: 120,
-		});
-		await electToKeep(keeperId, kept);
-		// The free buyer's Work: withdrawn 120 days ago, no election.
-		const abandoned = await soldWithdrawnWork({
-			title: "AbandonedPastWindow",
-			buyers: [freeBuyerId],
-			withdrawnDaysAgo: 120,
-		});
-		// A buyer inside the window: withdrawn 5 days ago.
-		const inside = await soldWithdrawnWork({
-			title: "InsideWindow",
-			buyers: [otherBuyerId],
-			withdrawnDaysAgo: 5,
-		});
+describe("the sweep's one question", () => {
+	it("keeps what the program holds, and purges what nobody saved", async () => {
+		const kept = await soldWork({ title: "KeptForever", buyer: buyerId, withdrawnDaysAgo: 400 });
+		const abandoned = await withdrawnWork({ title: "NobodySaved", withdrawnDaysAgo: 400 });
 
 		const result = await runWithdrawnSweep();
-		expect(result.sweptCount).toBe(1); // only the abandoned one
 
 		expect(await mediaExists(kept)).toBe(true);
-		expect(await mediaExists(inside)).toBe(true);
 		expect(await mediaExists(abandoned)).toBe(false);
+		expect(result.sweptCount).toBe(1);
+		expect(result.keptCount).toBe(0);
 
-		// The swept Work's ROW and its purchase survive — the record outlives the bytes.
-		const [sweptRow] = await db
+		// The purged Work's ROW survives — the record outlives the bytes.
+		const [row] = await db
 			.select({ visibility: works.visibility, mediaPurgedAt: works.mediaPurgedAt })
 			.from(works)
 			.where(eq(works.id, abandoned));
-		expect(sweptRow?.visibility).toBe("withdrawn");
-		expect(sweptRow?.mediaPurgedAt).not.toBeNull();
-		const [sweptPurchase] = await db
-			.select({ id: purchases.id })
-			.from(purchases)
-			.where(eq(purchases.workId, abandoned));
-		expect(sweptPurchase).toBeDefined();
+		expect(row?.visibility).toBe("withdrawn");
+		expect(row?.mediaPurgedAt).not.toBeNull();
 	});
 
 	it("is idempotent — a swept Work is not re-listed, and a second run costs nothing", async () => {
 		const second = await runWithdrawnSweep();
 		expect(second.sweptCount).toBe(0);
-		expect(second.warnedCount).toBe(0);
+		expect(second.keptCount).toBe(0);
 	});
 
-	// SABOTAGE: the dedupe key dropped (predict: the warning count doubles).
-	it("warns a buyer inside the last week — once per purchase, every buyer told", async () => {
-		// Withdrawn 88 days ago: inside the window's last week (90−7=83 days ago is the
-		// warning's first moment), not yet at the deadline. **Two buyers of the same
-		// Work** — the exact shape the withdrawal-notice suite names: keying per Work
-		// tells one buyer and silently drops the other.
-		const workId = await soldWithdrawnWork({
-			title: "NearlyThere",
-			buyers: [keeperId, otherBuyerId],
-			withdrawnDaysAgo: WITHDRAWN_RESCUE_DAYS - 2,
+	// SABOTAGE: the override dropped from the candidate query (predict: the preserved Work
+	// stays, and a takedown's bytes outlive the act that took them).
+	it("purges a preserved Work the law or a quarantine has taken", async () => {
+		const taken = await soldWork({ title: "TakenDown", buyer: buyerId, withdrawnDaysAgo: 10 });
+		await db.update(works).set({ takedownStatus: "taken_down" }).where(eq(works.id, taken));
+
+		const quarantined = await soldWork({
+			title: "Quarantined",
+			buyer: otherBuyerId,
+			withdrawnDaysAgo: 10,
 		});
-		const result = await runWithdrawnSweep();
-		expect(result.warnedCount).toBeGreaterThanOrEqual(2);
+		await db
+			.update(works)
+			.set({ quarantineStatus: "quarantined" })
+			.where(eq(works.id, quarantined));
 
-		const notices = await db
-			.select({ dedupeKey: notifications.dedupeKey, userId: notifications.userId })
-			.from(notifications)
-			.where(eq(notifications.kind, "work_withdrawn_last_chance"));
-		// Every buyer of the warned Work was told — the count, not just existence.
-		const told = new Set(notices.map((n) => n.userId));
-		expect(told.has(keeperId)).toBe(true);
-		expect(told.has(otherBuyerId)).toBe(true);
-		const keys = new Set(notices.map((n) => n.dedupeKey));
-		// One key per purchase: a key shared by two buyers would have dropped the second.
-		expect(keys.size).toBe(notices.length);
+		await runWithdrawnSweep();
 
-		// A re-run re-sends nothing — the notification's dedupe holds.
-		const again = await runWithdrawnSweep();
-		expect(again.warnedCount).toBe(0);
+		expect(await mediaExists(taken)).toBe(false);
+		expect(await mediaExists(quarantined)).toBe(false);
+	});
 
-		const mediaStillThere = await mediaExists(workId); // inside the window: media stays
-		expect(mediaStillThere).toBe(true);
+	// SABOTAGE: the hold check dropped (predict: a held Work's bytes are purged, which is
+	// the one unrecoverable thing a retention sweep can do).
+	it("defers to a legal hold, preserved or not", async () => {
+		const held = await withdrawnWork({ title: "UnderHold", withdrawnDaysAgo: 30 });
+		await placeHold({
+			subjectType: "work",
+			subjectId: held,
+			reason: "Fixture: a preservation duty outranks the sweep.",
+			note: "withdrawn-sweep fixture",
+		});
+
+		await runWithdrawnSweep();
+
+		expect(await mediaExists(held)).toBe(true);
 		const [row] = await db
 			.select({ mediaPurgedAt: works.mediaPurgedAt })
 			.from(works)
-			.where(eq(works.id, workId));
+			.where(eq(works.id, held));
 		expect(row?.mediaPurgedAt).toBeNull();
-	});
-
-	it("the lapse rule: a released keeper's claim drops and their Work loses its spare", async () => {
-		// The keeper elected on KeptPastWindow; the release must drop the claim and the
-		// next sweep — with 120 days gone — must sweep it.
-		const releasedCount = await releaseKeepersFor(keeperId);
-		expect(releasedCount).toBeGreaterThanOrEqual(1);
-		const result = await runWithdrawnSweep();
-		expect(result.sweptCount).toBe(1); // KeptPastWindow, now unkept and out of window
 	});
 });
 
-// The route's own wiring asserts through the service above; the sweep's job shape
-// (queue registration, cron) is asserted by retired-queues and the schedule assertion
-// suite, which read the registration tables directly.
+// The sweep's job shape (queue registration, cron) is asserted by retired-queues and the
+// schedule assertion suite, which read the registration tables directly.

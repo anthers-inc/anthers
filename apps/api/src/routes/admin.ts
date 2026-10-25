@@ -24,6 +24,7 @@ import {
 	rightsRequests,
 	users,
 } from "@anthers/db/schema";
+import { STORAGE_PER_GIB_MONTH } from "@anthers/shared/constants";
 import { RATING_NOTE_MAX } from "@anthers/shared/content-rating";
 import {
 	HOLD_SUBJECT_TYPES,
@@ -116,6 +117,7 @@ import {
 	removeFromBlocklist,
 } from "../services/noun-blocklist.js";
 import { releasePayoutHold, suspensionPayoutReview } from "../services/payouts.js";
+import { preservationInventory } from "../services/preservation.js";
 import {
 	clearObjectQuarantine,
 	clearQuarantine,
@@ -442,6 +444,19 @@ const adminRoutes = new Hono<AdminEnv>()
 			// the site is small, not a published metric; it dies with raw retention by
 			// design (services/traffic.ts's union note says why it cannot be summed).
 			sessionsSeen,
+		});
+	})
+
+	// ── The preservation program ────────────────────────────────────────────────
+	// What Anthers is keeping on the public's behalf: how many Works, how many bytes,
+	// and what those bytes cost a month at the storage vendor's rate. The count and the
+	// byte figure are live; the rate is the dial, so the cost line moves with the vendor
+	// rather than with a number somebody typed here.
+	.get("/preservation", async (c) => {
+		const inventory = await preservationInventory();
+		return c.json({
+			...inventory,
+			monthlyCost: Math.round(inventory.bytes * STORAGE_PER_GIB_MONTH * 100) / 100,
 		});
 	})
 

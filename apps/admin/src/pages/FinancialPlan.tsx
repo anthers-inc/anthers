@@ -910,10 +910,11 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 			prose: (
 				<>
 					Its complement, and a program in its own right: storage nobody is charged for — free and
-					new creators&rsquo; catalogs (${Math.round(S.freeCatalog).toLocaleString("en-US")}/mo) and
+					new creators&rsquo; catalogs (${Math.round(S.freeCatalog).toLocaleString("en-US")}/mo),
 					the bundled allowances every paying rung grants ( $
-					{Math.round(S.payingAllowances).toLocaleString("en-US")}/mo), both paid to the vendor at
-					cost.
+					{Math.round(S.payingAllowances).toLocaleString("en-US")}/mo), and the preservation
+					program&rsquo;s saved catalog (${Math.round(S.preservation).toLocaleString("en-US")}/mo),
+					all paid to the vendor at cost.
 				</>
 			),
 		},
@@ -1045,6 +1046,17 @@ function PhaseDiagram({ ledger: L }: { ledger: PlanLedger }) {
 			group: "storage",
 			label: `Paying rungs' allowances ${usd(S.payingAllowances)}`,
 			value: S.payingAllowances,
+		},
+		{
+			// ⭐ The preservation program: the saved catalog Anthers keeps indefinitely.
+			// Zero until something is preserved, and a line of its own inside Free Storage
+			// because it is a growing obligation somebody should see rather than a
+			// rounding inside the other two.
+			name: "preservation",
+			fill: C.storage,
+			group: "storage",
+			label: `Preservation ${usd(S.preservation)}`,
+			value: S.preservation,
 		},
 		{
 			name: "unallocated",

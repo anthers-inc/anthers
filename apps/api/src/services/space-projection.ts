@@ -16,6 +16,7 @@
 import { db } from "@anthers/db";
 import { libraryItems, posts, projects, works } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
+import { preserveWork } from "./preservation.js";
 import {
 	type LibraryItemState,
 	type LibrarySubject,
@@ -66,6 +67,11 @@ export async function projectLibraryItem(
 	if (!(await subjectExists(item.subject))) {
 		return { problem: `${item.subject.kind} ${item.subject.id} no longer exists` };
 	}
+
+	// The third door into the shelf, and the same rule as the other two: a Work on
+	// somebody's shelf is a Work in the preservation program. Called before the
+	// insert/update branch so a record the projection leaves unchanged still counts.
+	if (item.subject.kind === "work") await preserveWork(item.subject.id);
 
 	const [existing] = await db
 		.select({ id: libraryItems.id, hidden: libraryItems.hidden, sortOrder: libraryItems.sortOrder })

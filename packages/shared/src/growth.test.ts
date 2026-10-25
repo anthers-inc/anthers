@@ -223,15 +223,40 @@ describe("the ledger balances", () => {
 		const staffings = [NO_STAFFING, full, { staff: 6_700, tooling: 250, services: 200 }] as const;
 		for (const accounts of [100, 15_000, 80_000, 2_000_000]) {
 			for (const staffing of staffings) {
-				const m = modelAt({ accounts, payingShare: SHARE, staffing });
-				const staffed = staffing.staff + staffing.tooling + staffing.services;
-				expect(m.infrastructure + staffed + m.reserves).toBeCloseTo(m.overhead, 6);
-				expect(m.freeCatalogSubsidy + m.payingAllowanceSubsidy).toBeCloseTo(
-					m.freeStorageSubsidy,
-					6,
-				);
+				// The preservation program is non-zero here, so the aggregate has to carry a
+				// third part rather than passing on a default that is always zero.
+				for (const preservedGiB of [0, 12]) {
+					const m = modelAt({ accounts, payingShare: SHARE, staffing, preservedGiB });
+					const staffed = staffing.staff + staffing.tooling + staffing.services;
+					expect(m.infrastructure + staffed + m.reserves).toBeCloseTo(m.overhead, 6);
+					expect(
+						m.freeCatalogSubsidy + m.payingAllowanceSubsidy + m.preservationSubsidy,
+					).toBeCloseTo(m.freeStorageSubsidy, 6);
+				}
 			}
 		}
+	});
+
+	/**
+	 * The preservation program's cost is the saved catalog at the vendor's rate, and it
+	 * lands inside Free Storage — storage nobody is charged for — rather than as a fifth
+	 * bucket somewhere else.
+	 */
+	test("preserved bytes cost the vendor rate and join Free Storage", () => {
+		const baseline = modelAt({ accounts: 15_000, payingShare: SHARE, staffing: full });
+		const preserved = modelAt({
+			accounts: 15_000,
+			payingShare: SHARE,
+			staffing: full,
+			preservedGiB: 40,
+		});
+		expect(preserved.preservationSubsidy).toBeCloseTo(40 * STORAGE_PER_GIB_MONTH, 9);
+		expect(preserved.freeStorageSubsidy - baseline.freeStorageSubsidy).toBeCloseTo(
+			preserved.preservationSubsidy,
+			9,
+		);
+		// And it is a real cost, so it comes off the programs rather than appearing.
+		expect(baseline.programs - preserved.programs).toBeCloseTo(preserved.preservationSubsidy, 9);
 	});
 
 	test("every account is either paying or free, and none is both", () => {

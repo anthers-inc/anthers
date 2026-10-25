@@ -56,6 +56,14 @@ export interface WorkVersionSummary {
 	fileCount: number;
 	totalBytes: number;
 	files: { filename: string; fileSize: number | null }[];
+	/**
+	 * The Work is in the preservation program, so these bytes are kept indefinitely.
+	 *
+	 * ⚠️ **Derived from the Work, not stored per version.** Preservation is a property of
+	 * the Work ("anybody saved it"), and every version's bytes are kept with it — a
+	 * per-version flag could describe a half-preserved Work, which is not a state.
+	 */
+	preserved: boolean;
 }
 
 /**
@@ -339,7 +347,7 @@ export async function publicWorkVersions(work: WorkRow): Promise<PublicWorkVersi
 }
 
 /** The list shape the Versions tab reads. */
-export function summarizeVersion(row: WorkMediaVersionRow): WorkVersionSummary {
+export function summarizeVersion(row: WorkMediaVersionRow, preserved: boolean): WorkVersionSummary {
 	const media = row.media;
 	const files =
 		media.kind === "source"
@@ -367,6 +375,7 @@ export function summarizeVersion(row: WorkMediaVersionRow): WorkVersionSummary {
 		fileCount: files.length,
 		totalBytes: files.reduce((sum, file) => sum + (file.fileSize ?? 0), 0),
 		files,
+		preserved,
 	};
 }
 

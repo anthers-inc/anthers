@@ -228,8 +228,10 @@ export function StudioPanelBody({ panel, data }: { panel: StudioPanel; data: Pan
 							</div>
 							<p className="mt-2 text-xs text-base-content/50">
 								Your allowance rises with the Badge you hold, and holds your catalog and your own
-								kept files together. Past it, more bytes are available at cost — the provider's
-								rate, no mark-up. Figures are this cycle's running estimate.{" "}
+								cloud saves together. Past it, more bytes are available at cost — the provider's
+								rate, no mark-up. Saved Works are kept by Anthers as a charitable program, so
+								preserving what people bought is never charged to your allowance. Figures are this
+								cycle's running estimate.{" "}
 								{data.storage.sampledAt &&
 									`Last sampled ${new Date(data.storage.sampledAt).toLocaleDateString("en-US", {
 										month: "short",
