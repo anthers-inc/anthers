@@ -115,7 +115,7 @@ beforeAll(async () => {
 	operator = await createAdminFixture("mod-operator");
 	admin = operator.cookie;
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE email = ${`${creatorName}@example.com`}`,
+		sql`UPDATE users SET creator_mode = true WHERE email = ${`${creatorName}@example.com`}`,
 	);
 
 	const itemRes = await post("/api/content/works", creator, {

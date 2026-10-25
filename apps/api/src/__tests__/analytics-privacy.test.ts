@@ -114,7 +114,7 @@ beforeAll(async () => {
 	const userB = await signUp(userBName);
 	await enablePayouts(userBName);
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE email = ${`${creatorName}@example.com`}`,
+		sql`UPDATE users SET creator_mode = true WHERE email = ${`${creatorName}@example.com`}`,
 	);
 
 	const idOf = async (username: string) => {
@@ -248,7 +248,7 @@ describe("creator analytics never expose per-user identity", () => {
 		const other = await signUp(otherName);
 		await enablePayouts(otherName);
 		await db.execute(
-			sql`UPDATE users SET is_creator = true WHERE email = ${`${otherName}@example.com`}`,
+			sql`UPDATE users SET creator_mode = true WHERE email = ${`${otherName}@example.com`}`,
 		);
 
 		const overview = await (await req(ANALYTICS_ROUTES[0], { headers: { Cookie: other } })).json();

@@ -182,7 +182,7 @@ test.beforeAll(async () => {
 			.where(eq(users.email, email))
 			.limit(1);
 		expect(creator, `${label} exists`).toBeTruthy();
-		await db.update(users).set({ isCreator: true }).where(eq(users.id, creator!.id));
+		await db.update(users).set({ creatorMode: true }).where(eq(users.id, creator!.id));
 		await db
 			.insert(stripeAccounts)
 			.values({

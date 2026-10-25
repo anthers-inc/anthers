@@ -43,14 +43,14 @@ const OLD_HANDLE = `creator_card_old_${run}`;
 beforeAll(async () => {
 	account = await createAccount(`creator_card_${run}`, {
 		fields: {
-			isCreator: true,
+			creatorMode: true,
 			displayName: "A Card Fixture",
 			bio: "Composing, drawing and building a garden.",
 			avatar: PORTRAIT,
 		},
 	});
 	bare = await createAccount(`creator_card_bare_${run}`, {
-		fields: { isCreator: true, displayName: null, bio: null, avatar: null },
+		fields: { creatorMode: true, displayName: null, bio: null, avatar: null },
 	});
 
 	const [row] = await db
@@ -111,7 +111,7 @@ describe("GET /accounts/users/:handle/card", () => {
 		"hides a suspended account rather than describing it",
 		async () => {
 			const author = await createAccount(`creator_card_susp_${run}`, {
-				fields: { isCreator: true, displayName: "Suspended Fixture" },
+				fields: { creatorMode: true, displayName: "Suspended Fixture" },
 			});
 			const operator = await createAdminFixture("creator-card-op");
 

@@ -82,10 +82,10 @@ describe("publishing requires a fully set-up creator", () => {
 		// The payout-state accounts are creators, so the only thing each lacks is what it is named for.
 		await db
 			.update(users)
-			.set({ isCreator: true })
+			.set({ creatorMode: true })
 			.where(inArray(users.id, [none.userId, held.userId]));
 		await enablePayoutsFor(payer.userId);
-		await db.update(users).set({ isCreator: false }).where(eq(users.id, payer.userId));
+		await db.update(users).set({ creatorMode: false }).where(eq(users.id, payer.userId));
 
 		// Onboarding finished, but Stripe will not send money — under review, a missing
 		// document, a restricted country. The state that proves the gate reads BOTH flags:

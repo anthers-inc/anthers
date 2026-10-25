@@ -18,7 +18,7 @@
  * the loaded list. Filtering and sorting are `posts-list.ts`'s, extracted so a suite can fail
  * on them; the row is `PostRow.tsx`'s.
  *
- * ⚠️ **No `isCreator` gates on this page** — the Studio's `StudioAuthGate` already admits
+ * ⚠️ **No `creatorMode` gates on this page** — the Studio's `StudioAuthGate` already admits
  * only signed-in creators, so gating the New button again was checking the same thing the
  * gate did, one layer late; the Works and Projects pages carry no such gate.
  */

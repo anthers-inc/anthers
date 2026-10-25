@@ -93,7 +93,7 @@ beforeAll(async () => {
 	const other = await createAccount(`bskt_store_other_${run}`);
 	otherCookie = other.cookie;
 	const sellerAccount = await createAccount(`bskt_store_seller_${run}`, {
-		fields: { isCreator: true },
+		fields: { creatorMode: true },
 	});
 	// 🚨 The seller must have a verified email — `requireVerified` gates checkout, and a
 	// Work whose creator was never verified is a refusal with no route to fix it in-test.
@@ -126,7 +126,7 @@ beforeAll(async () => {
 	).id;
 	// A third Work by a DIFFERENT creator, for the multi-creator append pins.
 	const clashingCreator = await createAccount(`bskt_store_clash_${run}`, {
-		fields: { isCreator: true },
+		fields: { creatorMode: true },
 	});
 	await db.update(users).set({ emailVerified: true }).where(eq(users.id, clashingCreator.userId));
 	otherCreatorWorkId = (
@@ -558,7 +558,7 @@ describe("basket storage — the Badge line", () => {
 		secondBuyerCookie = second.cookie;
 		secondBuyerId = second.userId;
 		const issuerAccount = await createAccount(`bskt_store_ladder_${run}`, {
-			fields: { isCreator: true },
+			fields: { creatorMode: true },
 		});
 		await db.update(users).set({ emailVerified: true }).where(eq(users.id, issuerAccount.userId));
 		ladderIssuerId = issuerAccount.userId;

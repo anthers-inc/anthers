@@ -25,6 +25,7 @@ import { inArray } from "drizzle-orm";
 import app from "../index";
 import { createAccount, type FixtureAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { enablePayoutsFor } from "./payouts-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -58,15 +59,16 @@ const projectIds: number[] = [];
 
 beforeAll(async () => {
 	author = await createAccount(`search_a_${run}`, {
-		fields: { isCreator: true, displayName: "Parker Davis", bio: "Quiet songs and field notes." },
+		fields: { creatorMode: true, displayName: "Parker Davis", bio: "Quiet songs and field notes." },
 	});
 	stranger = await createAccount(`search_s_${run}`, {
-		fields: { isCreator: true, displayName: "Carla Davis", bio: "Parker Davis writes here too." },
+		fields: { creatorMode: true, displayName: "Carla Davis", bio: "Parker Davis writes here too." },
 	});
 	viewer = await createAccount(`search_v_${run}`);
 	blocked = await createAccount(`search_b_${run}`, {
-		fields: { isCreator: true, displayName: "Parker Davis", bio: "Blocked." },
+		fields: { creatorMode: true, displayName: "Parker Davis", bio: "Blocked." },
 	});
+	for (const acct of [author, stranger, blocked]) await enablePayoutsFor(acct.userId);
 
 	await db.insert(follows).values({ followerId: viewer.userId, creatorId: author.userId });
 

@@ -138,11 +138,11 @@ let suspendedWorkId = 0;
 let emptyGameId = 0;
 
 beforeAll(async () => {
-	creator = await createAccount(`preview-owner-${run}`, { fields: { isCreator: true } });
-	stranger = await createAccount(`preview-stranger-${run}`, { fields: { isCreator: true } });
+	creator = await createAccount(`preview-owner-${run}`, { fields: { creatorMode: true } });
+	stranger = await createAccount(`preview-stranger-${run}`, { fields: { creatorMode: true } });
 	viewer = await createAccount(`preview-viewer-${run}`);
 	suspendedCreator = await createAccount(`preview-suspended-${run}`, {
-		fields: { isCreator: true },
+		fields: { creatorMode: true },
 	});
 	await db
 		.update(users)

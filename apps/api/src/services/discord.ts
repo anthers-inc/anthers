@@ -8,8 +8,8 @@
  * directly. A new caller goes through a function here.
  *
  * ⭐ **Roles follow Anthers' own record, not which invitation somebody used.** Only two roles
- * are ever written — `User` on join and `Creator` for an account `@anthers/shared/verified-creator`
- * calls verified — and every other role in the server (`Admin`, `Dev`) is invisible to this
+ * are ever written — `User` on join and `Creator` for an account `services/creator-standing`
+ * calls a creator — and every other role in the server (`Admin`, `Dev`) is invisible to this
  * module. That is why the diff below removes only the Creator role rather than reconciling the
  * member's whole set: a bot that "tidied" roles would take away the ones people are given by hand.
  *
@@ -22,9 +22,8 @@
  */
 import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
-import { verifiedCreator } from "@anthers/shared/verified-creator";
 import { eq, isNotNull } from "drizzle-orm";
-import { releasedWorkCount } from "./creator-standing.js";
+import { isCreator } from "./creator-standing.js";
 
 const API = "https://discord.com/api/v10";
 const AUTHORIZE = "https://discord.com/oauth2/authorize";
@@ -210,16 +209,18 @@ async function removeRole(discordUserId: string, roleId: string): Promise<void> 
 }
 
 /**
- * The roles this account should hold: `User` always, `Creator` only while it is verified.
+ * The roles this account should hold: `User` always, `Creator` while it is a creator.
  *
- * The predicate is the shared one, so the server's answer and the site's cannot disagree.
+ * ⭐ **Completed creator setup, not a released Work** (Parker, 2026-10-24). The creators
+ * channels are for creators, and a creator who has published posts and released no Work is
+ * one. The predicate is `services/creator-standing`, the same one the site reads, so the
+ * server's answer and the site's cannot disagree.
  */
-async function desiredRoles(user: { id: number; isCreator: boolean | null }): Promise<Set<string>> {
+async function desiredRoles(user: { id: number }): Promise<Set<string>> {
 	const config = discordConfig();
 	if (!config) throw new Error("Discord is not configured.");
-	const released = user.isCreator ? await releasedWorkCount(user.id) : 0;
-	const verified = verifiedCreator({ isCreator: user.isCreator, releasedWorkCount: released });
-	return new Set(verified ? [config.userRoleId, config.creatorRoleId] : [config.userRoleId]);
+	const creator = await isCreator(user.id);
+	return new Set(creator ? [config.userRoleId, config.creatorRoleId] : [config.userRoleId]);
 }
 
 /**
@@ -233,7 +234,7 @@ export async function syncAccountRoles(userId: number): Promise<boolean> {
 	const config = discordConfig();
 	if (!config) throw new Error("Discord is not configured.");
 	const [user] = await db
-		.select({ id: users.id, isCreator: users.isCreator, discordId: users.discordId })
+		.select({ id: users.id, discordId: users.discordId })
 		.from(users)
 		.where(eq(users.id, userId))
 		.limit(1);

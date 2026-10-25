@@ -40,12 +40,20 @@ export interface PublishRefusal {
  *   the Creator Terms in saying everyone who publishes is a verified adult.
  *
  * Drafting stays open, so a creator can prepare everything before any of these clears.
+ *
+ * ⭐ **This is the same standing `services/creator-standing` answers**, asked here in the order
+ * the person can act on it: the two conditions this adds to the standing predicate are the
+ * publishing grant and the payout setup, and the messages differ because the fixes do. A
+ * surface asking *is this person a creator* reads that module rather than this function,
+ * because a refusal message is not a predicate — and until 2026-10-24 this function was the
+ * only place the definition existed at all, which is how the rest of the platform came to
+ * ask `creatorMode` instead.
  */
 export async function publishRefusal(
-	user: { id: number; isCreator: boolean | null },
+	user: { id: number; creatorMode: boolean | null },
 	act: PublishAct,
 ): Promise<PublishRefusal | null> {
-	if (!user.isCreator) {
+	if (!user.creatorMode) {
 		return {
 			status: 403,
 			body: {

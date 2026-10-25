@@ -35,7 +35,7 @@ let creatorId: number;
 beforeAll(async () => {
 	creatorId = (
 		await createAccount(`hcg_${crypto.randomUUID().slice(0, 8)}`, {
-			fields: { isCreator: true },
+			fields: { creatorMode: true },
 		})
 	).userId;
 }, DB_SETUP_TIMEOUT);

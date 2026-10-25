@@ -83,7 +83,7 @@ describe("the noun search proxy", () => {
 	let reader: { cookie: string; userId: number };
 
 	beforeAll(async () => {
-		creator = await createAccount(`ns_creator_${RUN}`, { fields: { isCreator: true } });
+		creator = await createAccount(`ns_creator_${RUN}`, { fields: { creatorMode: true } });
 		reader = await createAccount(`ns_reader_${RUN}`);
 		await db.delete(nounSpend).where(eq(nounSpend.creatorId, creator.userId));
 	}, DB_SETUP_TIMEOUT);

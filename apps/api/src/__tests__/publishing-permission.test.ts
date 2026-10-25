@@ -74,7 +74,7 @@ let restore: (did: string) => Promise<unknown> = async () => {
 async function makeCreator(tag: string, identity: "hosted" | "brought"): Promise<Creator> {
 	const account = await createAccount(`perm_${tag}_${run}`, {
 		identity,
-		fields: { isCreator: true },
+		fields: { creatorMode: true },
 	});
 	const id = account.userId as number;
 	await enablePayoutsFor(id);
@@ -136,30 +136,30 @@ afterAll(async () => {
 
 describe("who is refused", () => {
 	it("refuses a creator whose identity is held elsewhere and who has not granted it", async () => {
-		const refusal = await publishRefusal({ id: brought.id, isCreator: true }, "release");
+		const refusal = await publishRefusal({ id: brought.id, creatorMode: true }, "release");
 		expect(refusal?.status).toBe(409);
 		expect(refusal?.body.code).toBe("publishing_permission_required");
 		expect(refusal?.body.error).toContain("Studio settings");
 	});
 
 	it("lets a creator with the grant publish", async () => {
-		expect(await publishRefusal({ id: granted.id, isCreator: true }, "release")).toBeNull();
+		expect(await publishRefusal({ id: granted.id, creatorMode: true }, "release")).toBeNull();
 	});
 
 	it("never refuses an identity Anthers hosts, which has nothing to grant", async () => {
-		expect(await publishRefusal({ id: hosted.id, isCreator: true }, "release")).toBeNull();
+		expect(await publishRefusal({ id: hosted.id, creatorMode: true }, "release")).toBeNull();
 	});
 
 	// A refusal nobody could act on: with asking closed there is no button that gives it.
 	it("does not refuse anybody while Anthers is not asking for the permission", async () => {
 		delete process.env.ATPROTO_PUBLISH_ENABLED;
-		expect(await publishRefusal({ id: brought.id, isCreator: true }, "release")).toBeNull();
+		expect(await publishRefusal({ id: brought.id, creatorMode: true }, "release")).toBeNull();
 	});
 
 	it("counts a grant over Work listings alone as not granted", async () => {
 		// Posts and projects would go unwritten under it, so it is not a working state.
 		await holdGrant(brought.did, brought.id, "atproto repo:org.anthers.work");
-		const refusal = await publishRefusal({ id: brought.id, isCreator: true }, "publish");
+		const refusal = await publishRefusal({ id: brought.id, creatorMode: true }, "publish");
 		expect(refusal?.body.code).toBe("publishing_permission_required");
 	});
 });

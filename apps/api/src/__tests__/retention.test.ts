@@ -159,7 +159,7 @@ beforeAll(async () => {
 		sql`DELETE FROM users WHERE email IN (${sql.join([sql`${`${creatorName}@example.com`}`, sql`${`${reporterName}@example.com`}`], sql`, `)})`,
 	);
 	creatorId = (
-		await createAccount(creatorName, { emailVerified: true, fields: { isCreator: true } })
+		await createAccount(creatorName, { emailVerified: true, fields: { creatorMode: true } })
 	).userId;
 	reporterId = (await createAccount(reporterName, { emailVerified: true })).userId;
 	operatorId = (await createAdminFixture("ret-operator")).id;

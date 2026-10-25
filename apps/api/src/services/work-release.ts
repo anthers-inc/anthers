@@ -90,7 +90,7 @@ export async function unreadyWorks(
  */
 export async function releaseRefusal(
 	work: WorkRow,
-	creator: { id: number; isCreator: boolean | null },
+	creator: { id: number; creatorMode: boolean | null },
 ): Promise<ReleaseRefusal | null> {
 	// 🚨 **The first condition, and the only one that is about the CREATOR rather than the Work.**
 	// Releasing takes a fully set-up creator — creator mode, a permission Anthers can write their

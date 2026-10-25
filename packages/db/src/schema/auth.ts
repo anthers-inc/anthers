@@ -30,7 +30,7 @@ import {
 import { adminAccounts } from "./admin.js";
 
 // node — a person's identity. Node-canonical, because identity lives in the person's own
-// ATProto repository rather than with Anthers. `emailVerified` and `isCreator` are org-imposed
+// ATProto repository rather than with Anthers. `emailVerified` and `creatorMode` are org-imposed
 // annotations on the row, which is why this is `node` rather than `both`: the row's owner is
 // the person, not the org, and the org's flags are columns on someone else's record.
 export const users = pgTable("users", {
@@ -42,7 +42,21 @@ export const users = pgTable("users", {
 	// being read.
 	displayName: text("display_name").default(""),
 	bio: text("bio").default(""),
-	isCreator: boolean("is_creator").default(false),
+	/**
+	 * Whether this person has turned creator mode on — **not** whether they are a creator.
+	 *
+	 * ⭐ **The switch says what interface the person is owed, never what they may do or
+	 * receive** (Parker, 2026-10-24). It is self-serve behind a verified email, so it opens
+	 * the Studio, the settings that finish creator setup, and the request for the ATProto
+	 * creator permission tier. Every gate that asks *is this person a creator* asks
+	 * `creatorStanding` instead, which is this column plus completed payout setup.
+	 *
+	 * 🚨 **The old name was `is_creator`, and the name was the bug.** Discovery, creator
+	 * search and the post gate all read it as though it answered "is a creator", so anybody
+	 * who flipped the switch was listed and treated as one. The column was renamed with the
+	 * predicate so a reader cannot make that mistake from the name alone.
+	 */
+	creatorMode: boolean("creator_mode").default(false),
 	avatar: text("avatar").default(""),
 	headerImage: text("header_image").default(""),
 	websiteUrl: text("website_url").default(""),
@@ -50,7 +64,7 @@ export const users = pgTable("users", {
 	emailVerified: boolean("email_verified").default(false),
 	/**
 	 * The Discord account this person linked, and the only thing tying an Anthers account to
-	 * a member of the Anthers server. Org-imposed like `isCreator` — Discord is a surface
+	 * a member of the Anthers server. Org-imposed like `creatorMode` — Discord is a surface
 	 * Anthers runs, not part of the person's identity.
 	 *
 	 * ⚠️ **One row per Discord account, both ways.** `unique` gives "one Anthers account per

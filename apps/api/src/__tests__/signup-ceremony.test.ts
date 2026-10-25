@@ -41,6 +41,7 @@ import {
 } from "../services/signup-codes.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { enablePayoutsFor } from "./payouts-fixture";
 import { clearThrottle, signUp, spendCode } from "./signup-fixture";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -507,25 +508,35 @@ describe("POST /auth/signin/verify", () => {
 });
 
 describe("a pending account has no hidden public existence", () => {
-	test("a fresh account is a creator in the listing only once flagged one", async () => {
+	test("a fresh account is a creator in the listing only once it is set up", async () => {
 		const email = addr("ghost");
 		await signUp(email);
 
-		const before = (await (await app.request("/api/accounts/creators")).json()) as {
-			creators: { id: number; handle: string }[];
+		const list = async () => {
+			const body = (await (await app.request("/api/accounts/creators")).json()) as {
+				creators: { id: number; handle: string }[];
+			};
+			return body.creators;
 		};
+
 		const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
-		expect(before.creators.some((c) => c.id === row.id)).toBe(false);
+		expect((await list()).some((c) => c.id === row.id)).toBe(false);
 
-		await db.update(users).set({ isCreator: true }).where(eq(users.email, email));
+		// ⭐ Turning creator mode on is not being a creator (Parker, 2026-10-24): it is
+		// somebody asking for the Studio, and the listing answers standing rather than
+		// intent. This half is the one the old predicate got wrong — it listed the account
+		// here, which put every person who flipped the switch into discovery and the signup
+		// finder.
+		await db.update(users).set({ creatorMode: true }).where(eq(users.email, email));
+		expect((await list()).some((c) => c.id === row.id)).toBe(false);
 
-		const after = (await (await app.request("/api/accounts/creators")).json()) as {
-			creators: { id: number; handle: string }[];
-		};
-		expect(after.creators.some((c) => c.id === row.id)).toBe(true);
+		// Completed payout setup is the other half, and the moment the listing gains them.
+		await enablePayoutsFor(row.id);
+		const after = await list();
+		expect(after.some((c) => c.id === row.id)).toBe(true);
 		// And nothing in the payload carries a null handle, which is the shape the
 		// browser's `PublicUser.handle: string` promises.
-		expect(after.creators.every((c) => typeof c.handle === "string")).toBe(true);
+		expect(after.every((c) => typeof c.handle === "string")).toBe(true);
 	});
 });
 

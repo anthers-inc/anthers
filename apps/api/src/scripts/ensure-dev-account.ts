@@ -53,7 +53,7 @@ async function main() {
 
 	const username = process.env.DEV_ACCOUNT_USERNAME?.trim();
 	const email = process.env.DEV_ACCOUNT_EMAIL?.trim();
-	const isCreator = (process.env.DEV_ACCOUNT_CREATOR ?? "true").toLowerCase() !== "false";
+	const creatorMode = (process.env.DEV_ACCOUNT_CREATOR ?? "true").toLowerCase() !== "false";
 	const isAdmin = (process.env.DEV_ACCOUNT_ADMIN ?? "false").toLowerCase() === "true";
 
 	if (!username || !email) {
@@ -88,10 +88,10 @@ async function main() {
 		email,
 		handleName: username,
 		emailVerified: true,
-		fields: { displayName: username, isCreator },
+		fields: { displayName: username, creatorMode },
 	});
 	console.log(
-		`${TAG} created "${username}" (${email}) as @${user.atprotoHandle} — creator=${isCreator}.`,
+		`${TAG} created "${username}" (${email}) as @${user.atprotoHandle} — creator=${creatorMode}.`,
 	);
 
 	// Anthers' own Badge ladder, seeded as real rows this session — owned by the session's
@@ -119,7 +119,7 @@ async function main() {
 			emailVerified: true,
 			fields: {
 				displayName: "Anthers (dev stand-in)",
-				isCreator: false,
+				creatorMode: false,
 			},
 		});
 		await ensureAnthersBadges(standIn.id);

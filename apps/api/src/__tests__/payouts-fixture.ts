@@ -4,7 +4,7 @@
  *
  * Publishing anything — releasing a Work, publishing or scheduling a post, publishing a
  * project — takes creator mode AND completed payout setup (`publishRefusal`), so this sets
- * both. An account that should be a creator without payouts sets `is_creator` itself.
+ * both. An account that should be a creator without payouts sets `creator_mode` itself.
  *
  * 🚨 **Most callers are suites whose real subject is something else** — the Catalog, the
  * Library, DMCA, reviews, blocking — that need a released Work or a published post to test
@@ -41,7 +41,7 @@ export async function enablePayouts(name: string): Promise<void> {
 
 /** The same, when the caller already has the id. */
 export async function enablePayoutsFor(userId: number): Promise<void> {
-	await db.update(users).set({ isCreator: true }).where(eq(users.id, userId));
+	await db.update(users).set({ creatorMode: true }).where(eq(users.id, userId));
 	await db
 		.insert(stripeAccounts)
 		.values({

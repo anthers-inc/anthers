@@ -160,8 +160,8 @@ function LoggedInLayoutInner() {
 	const { sidebarOpen, toggleSidebar, closeSidebar, pageContent, sharedContent } = useSidebar();
 	const { pathname } = useLocation();
 	const { count: basketCount } = useBasket();
-	const isCreator = Boolean(user?.isCreator);
-	const mode = useAppMode(isCreator);
+	const creatorMode = Boolean(user?.creatorMode);
+	const mode = useAppMode(creatorMode);
 	const studio = mode === "studio";
 
 	/**
@@ -251,7 +251,7 @@ function LoggedInLayoutInner() {
 						{/* The mode switch sits beside the logo rather than at the top of the sidebar: it names
 						    the two halves of the whole app, so it belongs to the one header both halves share,
 						    and the sidebar's first row is free for where the creator actually is. */}
-						{isCreator && !chromeHidden && (
+						{creatorMode && !chromeHidden && (
 							<ModeSwitch mode={mode} userHome={userHome} creatorHome={creatorHome} />
 						)}
 					</div>

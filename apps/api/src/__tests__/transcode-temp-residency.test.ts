@@ -91,7 +91,7 @@ describe("a transcode's temp residency", () => {
 	let strayTemps: string[] = [];
 
 	beforeAll(async () => {
-		creatorId = (await createAccount(`resid_${RUN}`, { fields: { isCreator: true } })).userId;
+		creatorId = (await createAccount(`resid_${RUN}`, { fields: { creatorMode: true } })).userId;
 		originalUpload = storage.upload.bind(storage);
 		uploadSpy = spyOn(storage, "upload").mockImplementation((async (
 			key: string,

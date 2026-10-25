@@ -77,7 +77,7 @@ describe("a video transcode", () => {
 	}
 
 	beforeAll(async () => {
-		creatorId = (await createAccount(`tts_${RUN}`, { fields: { isCreator: true } })).userId;
+		creatorId = (await createAccount(`tts_${RUN}`, { fields: { creatorMode: true } })).userId;
 		sendSpy = spyOn(queue, "send").mockImplementation((async (
 			name: string,
 			data: unknown,

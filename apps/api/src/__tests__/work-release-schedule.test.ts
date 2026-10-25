@@ -80,7 +80,7 @@ beforeAll(async () => {
 	const a = await createAccount(creatorName);
 	await enablePayouts(creatorName);
 	creator = { id: a.userId as number, cookie: a.cookie };
-	const b = await createAccount(unpaidName, { fields: { isCreator: true } });
+	const b = await createAccount(unpaidName, { fields: { creatorMode: true } });
 	unpaid = { id: b.userId as number, cookie: b.cookie };
 	sendSpy = spyOn(queue, "send").mockImplementation((async (name: string, data: unknown) => {
 		sent.push({ name, data: data as Record<string, unknown> });

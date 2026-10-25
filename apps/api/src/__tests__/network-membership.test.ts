@@ -75,11 +75,11 @@ async function userIdFor(email: string) {
 
 beforeAll(async () => {
 	const viewer = await createAccount(`netmem_viewer_${run}`);
-	await createAccount(`netmem_followed_${run}`, { fields: { isCreator: true } });
-	await createAccount(`netmem_subscribed_${run}`, { fields: { isCreator: true } });
-	await createAccount(`netmem_saved_${run}`, { fields: { isCreator: true } });
-	await createAccount(`netmem_purchased_${run}`, { fields: { isCreator: true } });
-	await createAccount(`netmem_stranger_${run}`, { fields: { isCreator: true } });
+	await createAccount(`netmem_followed_${run}`, { fields: { creatorMode: true } });
+	await createAccount(`netmem_subscribed_${run}`, { fields: { creatorMode: true } });
+	await createAccount(`netmem_saved_${run}`, { fields: { creatorMode: true } });
+	await createAccount(`netmem_purchased_${run}`, { fields: { creatorMode: true } });
+	await createAccount(`netmem_stranger_${run}`, { fields: { creatorMode: true } });
 	viewerCookie = viewer.cookie;
 
 	followedId = await userIdFor(`netmem_followed_${run}@example.com`);

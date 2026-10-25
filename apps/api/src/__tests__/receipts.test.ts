@@ -54,7 +54,7 @@ const createdWorkIds: number[] = [];
 beforeAll(async () => {
 	const [buyer, creator] = [
 		await createAccount(`rcp_buyer_${run}`),
-		await createAccount(`rcp_creator_${run}`, { fields: { isCreator: true } }),
+		await createAccount(`rcp_creator_${run}`, { fields: { creatorMode: true } }),
 	];
 	buyerId = buyer.userId;
 	creatorId = creator.userId;

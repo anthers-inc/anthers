@@ -94,7 +94,7 @@ let pdfPath: string | null = null;
 
 describe("/works/:id/panels", () => {
 	beforeAll(async () => {
-		const account = await createAccount(`panels_${RUN}`, { fields: { isCreator: true } });
+		const account = await createAccount(`panels_${RUN}`, { fields: { creatorMode: true } });
 		creatorId = account.userId as number;
 		cookie = account.cookie;
 		const res = await call(

@@ -63,7 +63,7 @@ describe("the audio-only rendition", () => {
 	let jobId: number;
 
 	beforeAll(async () => {
-		creatorId = (await createAccount(`podcast_${RUN}`, { fields: { isCreator: true } })).userId;
+		creatorId = (await createAccount(`podcast_${RUN}`, { fields: { creatorMode: true } })).userId;
 		// The send spy from sibling suites is irrelevant here: the job runs directly.
 		const sourceKey = `creators/${creatorId}/videos/originals/${RUN}.mp4`;
 		await storage.upload(sourceKey, await makeVideo(), "video/mp4", "private");

@@ -75,11 +75,11 @@ async function makeVersionedWork() {
 
 describe("a Work's archived media versions", () => {
 	beforeAll(async () => {
-		const owner = await createAccount(ownerName, { fields: { isCreator: true } });
+		const owner = await createAccount(ownerName, { fields: { creatorMode: true } });
 		ownerId = owner.userId;
 		ownerCookie = owner.cookie;
 		const stranger = await createAccount(`${ownerName}_stranger`, {
-			fields: { isCreator: true },
+			fields: { creatorMode: true },
 		});
 		strangerId = stranger.userId;
 		strangerCookie = stranger.cookie;

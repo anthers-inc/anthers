@@ -182,7 +182,7 @@ async function main(): Promise<void> {
 		email: flag("email") ?? `${name}@example.com`,
 		handleName: name,
 		fields: {
-			isCreator: process.argv.includes("--creator"),
+			creatorMode: process.argv.includes("--creator"),
 		},
 	});
 	const session = process.argv.includes("--session") ? await createSession(user.id) : undefined;

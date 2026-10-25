@@ -25,6 +25,7 @@ import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { handleOf } from "./handles";
+import { enablePayoutsFor } from "./payouts-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -83,7 +84,7 @@ beforeAll(async () => {
 		.from(users)
 		.where(eq(users.email, `${makerName}@example.com`));
 	makerId = maker.id;
-	await db.update(users).set({ isCreator: true }).where(eq(users.id, makerId));
+	await enablePayoutsFor(makerId);
 
 	// Two released Works of different types, plus one that is NOT released — the
 	// unreleased one is what proves `mediums` describes the public catalog rather than

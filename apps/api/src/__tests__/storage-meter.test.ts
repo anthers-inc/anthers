@@ -55,7 +55,7 @@ async function storageUpload(key: string, bytes: number): Promise<void> {
 }
 
 beforeAll(async () => {
-	const creator = await createAccount(`meter_c_${RUN}`, { fields: { isCreator: true } });
+	const creator = await createAccount(`meter_c_${RUN}`, { fields: { creatorMode: true } });
 	creatorCookie = creator.cookie;
 	creatorId = creator.userId;
 	const player = await createAccount(`meter_p_${RUN}`);

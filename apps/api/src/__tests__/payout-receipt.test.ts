@@ -77,7 +77,7 @@ afterAll(async () => {
 /** A payout-enabled creator fixture. */
 async function makeCreator(opts: { receiptsOff?: boolean } = {}): Promise<number> {
 	n += 1;
-	const account = await createAccount(`${tag}_creator_${n}`, { fields: { isCreator: true } });
+	const account = await createAccount(`${tag}_creator_${n}`, { fields: { creatorMode: true } });
 	madeCreatorIds.push(account.userId);
 	await enablePayoutsFor(account.userId);
 	if (opts.receiptsOff) {

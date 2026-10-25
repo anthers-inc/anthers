@@ -60,8 +60,8 @@ async function signUp(username: string): Promise<{ cookie: string; id: number }>
 	return { cookie: account.cookie, id: row.id };
 }
 
-async function setCreator(userId: number, isCreator: boolean) {
-	await db.update(users).set({ isCreator }).where(eq(users.id, userId));
+async function setCreator(userId: number, creatorMode: boolean) {
+	await db.update(users).set({ creatorMode }).where(eq(users.id, userId));
 }
 
 async function postRow(slug: string) {

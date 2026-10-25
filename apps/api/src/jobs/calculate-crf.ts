@@ -38,6 +38,7 @@ import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import { estimateStorageCost, MAX_MONTHLY_SUBSIDY } from "@anthers/shared/fees";
 import Decimal from "decimal.js";
 import { and, count, eq, inArray, sql, sum } from "drizzle-orm";
+import { isCreatorWhere } from "../services/creator-standing.js";
 
 /**
  * The current cycle key, for Drizzle date columns.
@@ -115,7 +116,7 @@ export async function calculateCrfSubsidies() {
 		.from(users)
 		.innerJoin(posts, eq(posts.creatorId, users.id))
 		.leftJoin(billingAccounts, eq(billingAccounts.userId, users.id))
-		.where(and(eq(users.isCreator, true), eq(posts.isPublished, true)));
+		.where(and(isCreatorWhere(users.id), eq(posts.isPublished, true)));
 
 	// What each creator gives Anthers this cycle — their held Anthers Badge's threshold,
 	// which IS the amount (`user_badges`' docblock). Same read shape as the access

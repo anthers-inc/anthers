@@ -133,13 +133,13 @@ afterAll(async () => {
  */
 async function makeUser(
 	tag: string,
-	opts: { identity?: "hosted" | "brought"; isCreator?: boolean } = {},
+	opts: { identity?: "hosted" | "brought"; creatorMode?: boolean } = {},
 ) {
 	const { user } = await createAccount(`${RUN}${tag}`, {
 		email: `${RUN}${tag}@example.test`,
 		emailVerified: true,
 		identity: opts.identity ?? "brought",
-		fields: { isCreator: opts.isCreator ?? true },
+		fields: { creatorMode: opts.creatorMode ?? true },
 	});
 	dids.set(tag, user.atprotoDid);
 	return user;
@@ -276,7 +276,7 @@ describe("asking for the permission", () => {
 	// for identity alone would throw away a permission this creator had already granted — and
 	// the first sign anybody would get is a listing that stopped updating.
 	it("carries the creator permission through a later sign-in", async () => {
-		const user = await makeUser("back", { isCreator: true });
+		const user = await makeUser("back", { creatorMode: true });
 		await seedSession(did("back"), user.id);
 
 		await startAuth({ handle: did("back"), intent: "login" });
@@ -288,7 +288,7 @@ describe("asking for the permission", () => {
 	// A user's own records are Anthers working, so every user is asked for them — and never
 	// for the creator set, over records they will not make.
 	it("asks a user for their own records and not for the creator permission", async () => {
-		const user = await makeUser("read", { isCreator: false });
+		const user = await makeUser("read", { creatorMode: false });
 		await seedSession(did("read"), user.id);
 
 		await startAuth({ handle: did("read"), intent: "login" });
@@ -301,7 +301,7 @@ describe("asking for the permission", () => {
 	});
 
 	it("needs no handle at all, and still requires one from every other intent", async () => {
-		const user = await makeUser("nohandle", { isCreator: true });
+		const user = await makeUser("nohandle", { creatorMode: true });
 		const token = await createSession(user.id, undefined, undefined);
 
 		expect((await startAuth({ intent: "publish" }, token)).status).toBe(200);
@@ -315,7 +315,7 @@ describe("asking for the permission", () => {
 	// switch gates asking creators to publish and nothing else, and a user is asked only for the
 	// user tier.
 	it("asks a user for the user tier alone, whatever the publishing switch says", async () => {
-		const user = await makeUser("rgrant", { isCreator: false });
+		const user = await makeUser("rgrant", { creatorMode: false });
 		const token = await createSession(user.id, undefined, undefined);
 		delete process.env.ATPROTO_PUBLISH_ENABLED;
 		try {
@@ -405,7 +405,7 @@ describe("coming back from the consent screen", () => {
 
 	// ⚠️ Judged against the creator tier, every user's answer would read as a decline.
 	it("records a user's grant of the user tier as given, and sends them back where they were", async () => {
-		const user = await makeUser("rback", { isCreator: false });
+		const user = await makeUser("rback", { creatorMode: false });
 		await seedSession(did("rback"), user.id);
 
 		const url = await runCallback({

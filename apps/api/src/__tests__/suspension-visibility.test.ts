@@ -27,6 +27,7 @@ import { suspendAccount, unsuspendAccount } from "../services/moderation.js";
 import { createAccount } from "./account-fixture";
 import { createAdminFixture } from "./admin-fixture";
 import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
+import { enablePayoutsFor } from "./payouts-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -80,8 +81,8 @@ describe("Suspension visibility — a suspended account goes dark", () => {
 		otherId = other.user.id;
 		void other;
 
-		await db.update(users).set({ isCreator: true }).where(eq(users.id, creatorId));
-		await db.update(users).set({ isCreator: true }).where(eq(users.id, otherId));
+		await enablePayoutsFor(creatorId);
+		await enablePayoutsFor(otherId);
 
 		// A released Work on the suspended creator, and a completed purchase of it by
 		// the fixture buyer — written directly, because this suite is about reads and

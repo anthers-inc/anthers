@@ -83,7 +83,6 @@ import {
 import { searchTerms } from "@anthers/shared/search";
 import { resolveStudioPanels, STUDIO_PANELS } from "@anthers/shared/studio-panels";
 import { isUsState } from "@anthers/shared/us-states";
-import { verifiedCreator } from "@anthers/shared/verified-creator";
 import { zValidator } from "@hono/zod-validator";
 import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -125,7 +124,7 @@ import {
 	enableAdultAccess,
 	setMaturityDisplay,
 } from "../services/content-preferences.js";
-import { releasedWorkCount } from "../services/creator-standing.js";
+import { isCreator, isCreatorWhere } from "../services/creator-standing.js";
 import { discordConfigured, syncAccountRoles } from "../services/discord.js";
 import { ensureFollow } from "../services/follows.js";
 import { merchStoreFactsByWork } from "../services/merch-store.js";
@@ -183,6 +182,14 @@ function serializePublicUser(
 		followerCount: number;
 		projectCount: number;
 		isFollowing: boolean;
+		/**
+		 * Whether this account is a creator — completed setup, from {@link isCreatorWhere}.
+		 *
+		 * ⚠️ **Required, not defaulted.** `creatorMode` and `isCreator` are different claims,
+		 * and a listing that forgot the second would tell every reader that a person who only
+		 * flipped the switch is a creator.
+		 */
+		isCreator: boolean;
 		/** Work types this creator has actually released — absent where not queried. */
 		mediums?: string[];
 		/** This creator's Badge ladder, ascending — absent where not queried. */
@@ -196,7 +203,8 @@ function serializePublicUser(
 		handle: user.atprotoHandle,
 		displayName: user.displayName,
 		bio: user.bio,
-		isCreator: user.isCreator,
+		creatorMode: user.creatorMode,
+		isCreator: extra.isCreator,
 		avatar: user.avatar,
 		headerImage: user.headerImage,
 		websiteUrl: user.websiteUrl,
@@ -227,18 +235,18 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
 		.limit(1);
-	// Verified creator standing — `isCreator` plus a released Work. The count is asked for only
-	// when the first half is true: this serializer backs the shell's boot read, and most accounts
-	// never ask the second question.
-	const released = user.isCreator ? await releasedWorkCount(user.id) : 0;
+	// Creator standing — completed creator setup, never a Work count. This serializer backs
+	// the shell's boot read and the settings page, so it answers once and the client reads it
+	// rather than deriving its own idea of what a creator is.
+	const creator = await isCreator(user.id);
 	return {
 		id: user.id,
 		handle: user.atprotoHandle,
 		email: user.email,
 		displayName: user.displayName,
 		bio: user.bio,
-		isCreator: user.isCreator,
-		isVerifiedCreator: verifiedCreator({ isCreator: user.isCreator, releasedWorkCount: released }),
+		creatorMode: user.creatorMode,
+		isCreator: creator,
 		// Whether the settings card can offer the connection at all, and whether this account
 		// has taken it up. The ID itself stays server-side.
 		isDiscordAvailable: discordConfigured(),
@@ -437,7 +445,7 @@ const NAV_IDS = ["library", "discovery"] as const;
 const updateProfileSchema = z.object({
 	displayName: z.string().max(150).optional(),
 	bio: z.string().max(5000).optional(),
-	isCreator: z.boolean().optional(),
+	creatorMode: z.boolean().optional(),
 	avatar: z.string().max(500).optional(),
 	headerImage: z.string().max(500).optional(),
 	websiteUrl: z.string().max(500).optional(),
@@ -525,7 +533,7 @@ const accountRoutes = new Hono()
 
 		// Enabling creator mode requires a verified email — creators can receive
 		// funds, so we hold the same bar as spending money.
-		if (data.isCreator === true && !sessionUser.emailVerified) {
+		if (data.creatorMode === true && !sessionUser.emailVerified) {
 			return c.json(
 				{
 					error: "Verify your email address before enabling creator mode.",
@@ -643,7 +651,7 @@ const accountRoutes = new Hono()
 		const updates: Partial<typeof users.$inferInsert> = {};
 		if (data.displayName !== undefined) updates.displayName = data.displayName;
 		if (data.bio !== undefined) updates.bio = data.bio;
-		if (data.isCreator !== undefined) updates.isCreator = data.isCreator;
+		if (data.creatorMode !== undefined) updates.creatorMode = data.creatorMode;
 		if (data.avatar !== undefined) updates.avatar = data.avatar;
 		if (data.headerImage !== undefined) updates.headerImage = data.headerImage;
 		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
@@ -667,7 +675,7 @@ const accountRoutes = new Hono()
 		// Turning creator mode on or off changes what the server should show, so the Discord
 		// role follows the write. Best-effort: a settings save must not fail because Discord
 		// is down, and the daily reconcile is the repair.
-		if (data.isCreator !== undefined) {
+		if (data.creatorMode !== undefined) {
 			try {
 				await syncAccountRoles(updated.id);
 			} catch (error) {
@@ -690,6 +698,7 @@ const accountRoutes = new Hono()
 						"follower_count",
 					),
 				projectCount: publishedProjectCount.as("project_count"),
+				isCreator: isCreatorWhere(users.id),
 			})
 			.from(users)
 			.innerJoin(
@@ -720,6 +729,7 @@ const accountRoutes = new Hono()
 			// filter above already refuses to rely on.
 			users: followedUsers.map((row) =>
 				serializePublicUser(row.user, {
+					isCreator: Boolean(row.isCreator),
 					followerCount: Number(row.followerCount),
 					projectCount: Number(row.projectCount),
 					isFollowing: true, // by definition, you follow everyone in this list
@@ -791,11 +801,12 @@ const accountRoutes = new Hono()
 					releasedTypes,
 					hasPosts,
 					contentTags,
+					isCreator: isCreatorWhere(users.id),
 				})
 				.from(users)
 				.where(
 					and(
-						eq(users.isCreator, true),
+						isCreatorWhere(users.id),
 						sql`${users.id} <> ${sessionUser.id}`,
 						notBlockedBy(sessionUser.id, users.id),
 						notSuspendedAccount(users.id),
@@ -809,6 +820,7 @@ const accountRoutes = new Hono()
 				basis: "followers" as const,
 				creators: rows.map((row) => ({
 					...serializePublicUser(row.user, {
+						isCreator: Boolean(row.isCreator),
 						followerCount: Number(row.followerCount),
 						projectCount: Number(row.projectCount),
 						isFollowing: false,
@@ -833,13 +845,14 @@ const accountRoutes = new Hono()
 				releasedTypes,
 				hasPosts,
 				contentTags,
+				isCreator: isCreatorWhere(users.id),
 			})
 			.from(users)
 			.innerJoin(follows, eq(follows.creatorId, users.id))
 			.where(
 				and(
 					inArray(follows.followerId, followedIds),
-					eq(users.isCreator, true),
+					isCreatorWhere(users.id),
 					sql`${users.id} <> ${sessionUser.id}`,
 					notBlockedBy(sessionUser.id, users.id),
 					notSuspendedAccount(users.id),
@@ -855,6 +868,7 @@ const accountRoutes = new Hono()
 			basis: "network" as const,
 			creators: rows.map((row) => ({
 				...serializePublicUser(row.user, {
+					isCreator: Boolean(row.isCreator),
 					followerCount: Number(row.followerCount),
 					projectCount: Number(row.projectCount),
 					isFollowing: followedIds.includes(row.user.id),
@@ -1398,6 +1412,7 @@ const accountRoutes = new Hono()
 						"follower_count",
 					),
 				projectCount: publishedProjectCount.as("project_count"),
+				isCreator: isCreatorWhere(users.id),
 				// What a creator actually makes, taken from what they have released rather
 				// than from anything they declare — a self-described medium drifts the moment
 				// the catalog does. Feeds the medium chips on /signup.
@@ -1421,7 +1436,7 @@ const accountRoutes = new Hono()
 			// run into each other without going looking.
 			.where(
 				and(
-					eq(users.isCreator, true),
+					isCreatorWhere(users.id),
 					notBlockedBy(currentUserId, users.id),
 					notSuspendedAccount(users.id),
 					// The automated-test account stays off Discover — hidden by handle,
@@ -1491,6 +1506,7 @@ const accountRoutes = new Hono()
 		return c.json({
 			creators: creatorList.map((row) =>
 				serializePublicUser(row.user, {
+					isCreator: Boolean(row.isCreator),
 					followerCount: Number(row.followerCount),
 					projectCount: Number(row.projectCount),
 					isFollowing: "isFollowing" in row && Boolean(row.isFollowing),
@@ -1617,6 +1633,7 @@ const accountRoutes = new Hono()
 
 		return c.json({
 			user: serializePublicUser(account, {
+				isCreator: await isCreator(account.id),
 				followerCount: Number(row?.followerCount ?? 0),
 				projectCount: Number(row?.projectCount ?? 0),
 				isFollowing: Boolean(row?.isFollowing),
@@ -2036,7 +2053,7 @@ const accountRoutes = new Hono()
 
 	.get("/me/storage", requireAuth, async (c) => {
 		// The reading is composed in the service, never here — the route is the thin
-		// door every other surface is. Deliberately not gated on `isCreator`: the ladder
+		// door every other surface is. Deliberately not gated on `creatorMode`: the ladder
 		// is an account allowance (combined-free, every account), so a player holding
 		// cloud saves reads their own figure just as a creator does.
 		return c.json(await storageReadingFor(c.get("user").id));

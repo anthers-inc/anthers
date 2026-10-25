@@ -107,7 +107,7 @@ describe("a video transcode's ingest three-way", () => {
 	}
 
 	beforeAll(async () => {
-		creatorId = (await createAccount(`trx_${RUN}`, { fields: { isCreator: true } })).userId;
+		creatorId = (await createAccount(`trx_${RUN}`, { fields: { creatorMode: true } })).userId;
 		sendSpy = spyOn(queue, "send").mockImplementation((async (
 			name: string,
 			data: { storageKey: string; workId: number; kind?: string },

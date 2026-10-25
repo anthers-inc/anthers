@@ -68,7 +68,7 @@ async function jobRow(jobId: number) {
 
 describe("canceling processing", () => {
 	beforeAll(async () => {
-		const account = await createAccount(creatorName, { fields: { isCreator: true } });
+		const account = await createAccount(creatorName, { fields: { creatorMode: true } });
 		creatorId = account.userId;
 		cookie = account.cookie;
 		await enablePayoutsFor(creatorId);
@@ -176,7 +176,7 @@ describe("canceling processing", () => {
 			.set({ sourceKey: `creators/${creatorId}/media/gate.mp4` })
 			.where(eq(works.id, workId));
 		const [row] = await db.select().from(works).where(eq(works.id, workId));
-		const refusal = await releaseRefusal(row, { id: creatorId, isCreator: true });
+		const refusal = await releaseRefusal(row, { id: creatorId, creatorMode: true });
 		expect(refusal?.body).toMatchObject({ code: "media_not_ready" });
 		expect(refusal?.resolves).toBe("creator");
 	});

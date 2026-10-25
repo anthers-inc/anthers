@@ -45,7 +45,7 @@ const RUN = crypto.randomUUID().slice(0, 8);
 
 describe("the credits vocabulary migration", () => {
 	it("rewrites every first-edition row per the settled rules", async () => {
-		const account = await createAccount(`credmig_${RUN}`, { fields: { isCreator: true } });
+		const account = await createAccount(`credmig_${RUN}`, { fields: { creatorMode: true } });
 		const statement = readFileSync(MIGRATION, "utf8");
 
 		// The case matrix, one Work carrying every row shape side by side.
@@ -115,7 +115,7 @@ describe("the credits vocabulary migration", () => {
 	});
 
 	it("drops an unnamed licensed import rather than keeping a credit asserting nothing", async () => {
-		const account = await createAccount(`credmig_drop_${RUN}`, { fields: { isCreator: true } });
+		const account = await createAccount(`credmig_drop_${RUN}`, { fields: { creatorMode: true } });
 		const statement = readFileSync(MIGRATION, "utf8");
 		const work = await insertWork({
 			creatorId: account.userId as number,

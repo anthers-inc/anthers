@@ -39,6 +39,7 @@ interface PersonRow {
 	handle: string;
 	displayName: string;
 	bio: string | null;
+	creatorMode: boolean;
 	isCreator: boolean;
 	suspendedAt: string | null;
 	suspendedUntil: string | null;
@@ -376,8 +377,17 @@ function PeopleList() {
 										<td>
 											<div className="font-medium">{p.displayName || `@${p.handle}`}</div>
 											<div className="text-xs text-base-content/60">@{p.handle}</div>
-											{p.isCreator && (
+											{p.isCreator ? (
 												<span className="badge badge-sm badge-ghost mt-1">creator</span>
+											) : (
+												p.creatorMode && (
+													<span
+														className="badge badge-sm badge-outline mt-1"
+														title="Turned creator mode on and has not finished setup"
+													>
+														creator mode
+													</span>
+												)
 											)}
 										</td>
 										<td>
@@ -483,7 +493,18 @@ function PersonDetail() {
 
 			<div className="mb-6 flex flex-wrap items-center gap-3">
 				<SuspensionBadge person={person} />
-				{person.isCreator && <span className="badge badge-sm badge-ghost">creator</span>}
+				{person.isCreator ? (
+					<span className="badge badge-sm badge-ghost">creator</span>
+				) : (
+					person.creatorMode && (
+						<span
+							className="badge badge-sm badge-outline"
+							title="Turned creator mode on and has not finished setup"
+						>
+							creator mode
+						</span>
+					)
+				)}
 				{person.openReports > 0 && (
 					<span className="badge badge-sm badge-warning">{person.openReports} reports open</span>
 				)}

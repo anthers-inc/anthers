@@ -43,7 +43,7 @@ export async function publishScheduled(now: Date = new Date()): Promise<number> 
 			title: posts.title,
 			scheduledFor: posts.scheduledFor,
 			creatorId: posts.creatorId,
-			isCreator: users.isCreator,
+			creatorMode: users.creatorMode,
 		})
 		.from(posts)
 		.leftJoin(users, eq(posts.creatorId, users.id))
@@ -61,7 +61,7 @@ export async function publishScheduled(now: Date = new Date()): Promise<number> 
 		const refusal =
 			post.creatorId === null
 				? null
-				: await publishRefusal({ id: post.creatorId, isCreator: post.isCreator }, "publish");
+				: await publishRefusal({ id: post.creatorId, creatorMode: post.creatorMode }, "publish");
 		if (post.creatorId === null || refusal) {
 			await db
 				.update(posts)

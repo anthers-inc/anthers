@@ -23,7 +23,7 @@ import app from "../index";
 import { reconcileRoles, unlinkAccount } from "../services/discord";
 import { createAccount, type FixtureAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { insertWork } from "./work-fixtures";
+import { enablePayoutsFor } from "./payouts-fixture";
 
 purgeAccountsCreatedHere();
 
@@ -201,11 +201,11 @@ describe("the link", () => {
 		expect(written(roleWrites(DISCORD_USER))).toEqual([`PUT ${USER_ROLE}`]);
 	});
 
-	it("grants the Creator role too when the account is a verified creator", async () => {
+	it("grants the Creator role too when the account is a fully set-up creator", async () => {
 		members.clear();
 		calls.length = 0;
-		const creatorAccount = await createAccount(`${RUN}creator`, { fields: { isCreator: true } });
-		await insertWork({ creatorId: creatorAccount.userId, type: "text" });
+		const creatorAccount = await createAccount(`creator`);
+		await enablePayoutsFor(creatorAccount.userId);
 
 		const res = await link(creatorAccount, "922222222222222222");
 		expect(res.headers.get("location")).toContain("discord=linked");
@@ -233,7 +233,7 @@ describe("the link", () => {
 
 describe("unlinking", () => {
 	it("forgets the link and takes back only the Creator role, never the membership", async () => {
-		const account = await createAccount(`${RUN}unlink`, { fields: { isCreator: true } });
+		const account = await createAccount(`${RUN}unlink`, { fields: { creatorMode: true } });
 		await db
 			.update(users)
 			.set({ discordId: "933333333333333333" })
@@ -257,7 +257,7 @@ describe("unlinking", () => {
 	});
 
 	it("takes both roles when the account itself is being erased", async () => {
-		const account = await createAccount(`${RUN}erase`, { fields: { isCreator: true } });
+		const account = await createAccount(`${RUN}erase`, { fields: { creatorMode: true } });
 		await db
 			.update(users)
 			.set({ discordId: "977777777777777777" })
@@ -276,7 +276,7 @@ describe("unlinking", () => {
 
 describe("the daily reconcile", () => {
 	it("adds a missing role and removes a Creator role the account no longer earns", async () => {
-		const stale = await createAccount(`${RUN}stale`, { fields: { isCreator: true } });
+		const stale = await createAccount(`${RUN}stale`, { fields: { creatorMode: true } });
 		const demoted = await createAccount(`${RUN}demoted`);
 		await db
 			.update(users)
@@ -306,8 +306,8 @@ describe("the daily reconcile", () => {
 
 describe("the creator-mode hook", () => {
 	it("takes the Creator role back when creator mode is turned off in settings", async () => {
-		const account = await createAccount(`${RUN}toggle`, { fields: { isCreator: true } });
-		await insertWork({ creatorId: account.userId, type: "text" });
+		const account = await createAccount(`toggle`);
+		await enablePayoutsFor(account.userId);
 		await link(account, "966666666666666666");
 		expect(members.get("966666666666666666")?.sort()).toEqual([USER_ROLE, CREATOR_ROLE].sort());
 
@@ -319,7 +319,7 @@ describe("the creator-mode hook", () => {
 				Origin: "http://localhost:3000",
 				Cookie: account.cookie,
 			},
-			body: JSON.stringify({ isCreator: false }),
+			body: JSON.stringify({ creatorMode: false }),
 		});
 
 		expect(res.status).toBe(200);

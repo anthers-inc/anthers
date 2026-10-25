@@ -159,7 +159,7 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 			headerImage: user.headerImage,
 			websiteUrl: user.websiteUrl,
 			location: user.location,
-			isCreator: user.isCreator,
+			creatorMode: user.creatorMode,
 			emailVerified: user.emailVerified,
 			createdAt: user.createdAt,
 			// The DID and handle are public identifiers the user chose to link. The tokens

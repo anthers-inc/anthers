@@ -67,7 +67,8 @@ async function insertPost(body: string) {
 }
 
 beforeAll(async () => {
-	creatorId = (await createAccount(`tile_creator_${run}`, { fields: { isCreator: true } })).userId;
+	creatorId = (await createAccount(`tile_creator_${run}`, { fields: { creatorMode: true } }))
+		.userId;
 	const viewer = await createAccount(`tile_viewer_${run}`);
 	const grown = await createAccount(`tile_grown_${run}`);
 	viewerCookie = viewer.cookie;

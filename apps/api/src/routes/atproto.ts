@@ -47,8 +47,8 @@ import {
 	atprotoPublishEnabled,
 	findUserByAtprotoDid,
 	getBlueskyProfile,
-	isCreatorAccount,
-	isCreatorIdentity,
+	hasCreatorMode,
+	hasCreatorModeForIdentity,
 	publishingStateFor,
 	readPdsEmail,
 	recordPublishGrant,
@@ -201,8 +201,8 @@ async function scopeForFlow(intent: AppState["intent"], subject: string): Promis
 	// An explicit ask, from somebody who went looking for it.
 	// Giving the permission again asks for what the account holds, as a sign-in does: the creator
 	// tier only for a creator, so a user restoring their comments is not asked about publishing.
-	if (intent === "publish") return scopeFor({ creator: await isCreatorIdentity(subject) });
-	return scopeFor({ creator: await isCreatorIdentity(subject) });
+	if (intent === "publish") return scopeFor({ creator: await hasCreatorModeForIdentity(subject) });
+	return scopeFor({ creator: await hasCreatorModeForIdentity(subject) });
 }
 
 /**
@@ -295,7 +295,7 @@ const atprotoRoutes = new Hono()
 		if (intent === "publish") {
 			// The switch gates asking for the creator tier. A user giving back the permission for
 			// their comments, reviews, votes and follows is never behind it.
-			if (!atprotoPublishEnabled() && (await isCreatorAccount(userId as number))) {
+			if (!atprotoPublishEnabled() && (await hasCreatorMode(userId as number))) {
 				return c.json({ error: "Publishing to your own repository isn't open yet." }, 403);
 			}
 			const state = await publishingStateFor(userId as number);

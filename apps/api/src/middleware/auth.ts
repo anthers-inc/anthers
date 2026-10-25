@@ -11,7 +11,7 @@ type SessionUser = {
 	handle: string;
 	email: string;
 	displayName: string | null;
-	isCreator: boolean | null;
+	creatorMode: boolean | null;
 	emailVerified: boolean | null;
 };
 
@@ -59,7 +59,7 @@ export const requireAuth = createMiddleware<AuthEnv>(async (c, next) => {
 		handle: result.user.atprotoHandle,
 		email: result.user.email,
 		displayName: result.user.displayName,
-		isCreator: result.user.isCreator,
+		creatorMode: result.user.creatorMode,
 		emailVerified: result.user.emailVerified,
 	});
 	c.set("sessionToken", token);
@@ -133,7 +133,7 @@ export const requireVerified = createMiddleware<AuthEnv>(async (c, next) => {
  */
 export const requireCreator = createMiddleware<AuthEnv>(async (c, next) => {
 	const user = c.get("user");
-	if (!user?.isCreator) {
+	if (!user?.creatorMode) {
 		return c.json(
 			{
 				error: "Posting is for creators. Turn on creator mode in your account settings first.",

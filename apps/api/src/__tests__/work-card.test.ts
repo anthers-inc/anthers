@@ -39,7 +39,7 @@ const THUMBNAIL = "https://cdn.anthers.org/creators/1/card-fixture.png";
 
 let creatorId: number;
 beforeAll(async () => {
-	creatorId = (await createAccount(creatorName, { fields: { isCreator: true } })).userId;
+	creatorId = (await createAccount(creatorName, { fields: { creatorMode: true } })).userId;
 }, DB_SETUP_TIMEOUT);
 
 async function aWork(overrides: Partial<WorkFixture>) {

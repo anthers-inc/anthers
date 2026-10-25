@@ -85,8 +85,8 @@ let gatedWorkId = 0;
 const BASELINE_ROW: AccessRow = { threshold: 0, allow: true, price: "0" };
 
 beforeAll(async () => {
-	creator.push(await createAccount("captions-owner", { fields: { isCreator: true } }));
-	stranger.push(await createAccount("captions-stranger", { fields: { isCreator: true } }));
+	creator.push(await createAccount("captions-owner", { fields: { creatorMode: true } }));
+	stranger.push(await createAccount("captions-stranger", { fields: { creatorMode: true } }));
 
 	const ungated = await insertWork({
 		creatorId: creator[0].userId,

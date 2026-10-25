@@ -75,7 +75,7 @@ describe("Catalog CRUD and post links", () => {
 			strangerCookie = await signUp(strangerName);
 			await enablePayouts(strangerName);
 			await db.execute(
-				sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${`${ownerName}@example.com`}`, sql`${`${strangerName}@example.com`}`], sql`, `)})`,
+				sql`UPDATE users SET creator_mode = true WHERE email IN (${sql.join([sql`${`${ownerName}@example.com`}`, sql`${`${strangerName}@example.com`}`], sql`, `)})`,
 			);
 			expect(ownerCookie).toBeTruthy();
 			expect(strangerCookie).toBeTruthy();
