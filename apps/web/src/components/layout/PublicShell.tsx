@@ -6,8 +6,9 @@ import LoggedOutLayout from "./LoggedOutLayout";
 
 /**
  * The single shell for the whole public surface — both the always-marketing pages
- * (For Users / For Creators / About / compare / demos) and the auth-switching
- * shared pages (subscribe, faq, resources, creator profiles).
+ * (For Users / For Creators / About / compare / the FAQ / the resources / the policies /
+ * the release notes and status page) and the auth-switching shared pages (a Work, a post,
+ * a creator's profile).
  *
  * Both route groups render THIS component, so React keeps one shell instance
  * mounted across every public navigation instead of tearing it down and rebuilding
