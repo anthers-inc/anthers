@@ -10,8 +10,14 @@
  * or does not. `@anthers/shared/content` carries why, and it is the same reasoning that gives
  * Anthers one opinion primitive rather than two. It comes in two rows — **All Time** over every
  * review, and a **Recent** share over a user-chosen window — so a Work that changed after
- * release can be seen to have changed its users' minds. All Time is always the constant; the
- * Recent share simply has nothing to say (and says so) when its window holds too few reviews.
+ * release can be seen to have changed its users' minds. The Recent share simply has nothing to
+ * say (and says so) when its window holds too few reviews.
+ *
+ * ⭐ **A Work with more than one media version may be narrowed to the current one**, and when it
+ * is, every figure on the row describes that narrower set — which is why the filter is a query
+ * parameter rather than a local list filter, and why the label stops saying All Time. A review
+ * names no version, so the server measures it by `createdAt` against the version's date; the
+ * proxy and its two leaks are documented where the cutoff is computed.
  *
  * ⭐ **The list sorts by helpfulness, not by when the review was written** (2026-09-12). What
  * a user finds worth reading is what other users found helpful, so the default is Helpful
@@ -54,6 +60,9 @@ type ReviewSort = "helpful" | "newest";
 
 /** A verdict the list may be narrowed to, or everything. */
 type VerdictFilter = "all" | "recommended" | "not-recommended";
+
+/** Which versions' reviews to read, when the Work has more than one. */
+type VersionFilter = "all" | "current";
 
 /** How a window reads next to its share. */
 const WINDOW_LABELS: Record<ReviewWindow, string> = {
@@ -102,6 +111,11 @@ export default function WorkReviews({
 	const [window, setWindow] = useState<ReviewWindow>("month");
 	const [sort, setSort] = useState<ReviewSort>("helpful");
 	const [filter, setFilter] = useState<VerdictFilter>("all");
+	const [versionFilter, setVersionFilter] = useState<VersionFilter>("all");
+	// Which scope the payload in `agg` actually answers. Held separately from the select so a
+	// figure is never labeled with a scope the server has not returned yet: the label follows
+	// the data, not the reader's next click.
+	const [appliedVersion, setAppliedVersion] = useState<VersionFilter>("all");
 	const [draftVerdict, setDraftVerdict] = useState<string | null>(null);
 	const [draftBody, setDraftBody] = useState("");
 	const [submitting, setSubmitting] = useState(false);
@@ -109,21 +123,26 @@ export default function WorkReviews({
 	const [reportingReview, setReportingReview] = useState<number | null>(null);
 
 	const fetchReviews = useCallback(
-		(w: ReviewWindow) => {
+		(w: ReviewWindow, version: VersionFilter) => {
 			client.api.content.works[":id"].reviews
-				.$get({ param: { id: String(workId) }, query: { window: w } })
+				.$get({ param: { id: String(workId) }, query: { window: w, version } })
 				.then(async (res) => {
 					if (!res.ok) return;
 					setAgg((await res.json()) as unknown as ReviewAggregate);
+					setAppliedVersion(version);
 				})
 				.catch(console.error);
 		},
 		[workId],
 	);
 
+	// The version scope is the server's, so changing it re-reads the section: both shares
+	// are computed over the reviews that arrive, which is the difference between this
+	// control and the verdict one below — a verdict narrows a list, a version narrows the
+	// Work's whole review history as far as this section is concerned.
 	useEffect(() => {
-		fetchReviews(window);
-	}, [fetchReviews, window]);
+		fetchReviews(window, versionFilter);
+	}, [fetchReviews, window, versionFilter]);
 
 	// The composer stands open always now; a returning reviewer opens on what they already
 	// said, so editing is a correction rather than a retype (the same intent the verdict
@@ -159,7 +178,7 @@ export default function WorkReviews({
 			}
 			setDraftVerdict(null);
 			setDraftBody("");
-			fetchReviews(window);
+			fetchReviews(window, versionFilter);
 		} catch {
 			setError("That review couldn't be saved. Please try again.");
 		} finally {
@@ -184,6 +203,9 @@ export default function WorkReviews({
 	if (!agg) return null;
 
 	const chosen = draftVerdict ?? agg.userVerdict;
+	// True only while the payload really is the current version's: a Work with a single
+	// version never offers the control, and the label follows the scope the server answered.
+	const narrowed = appliedVersion === "current" && agg.versionSince !== null;
 
 	return (
 		<div>
@@ -193,7 +215,11 @@ export default function WorkReviews({
 					<span className="text-sm text-base-content/70">
 						<span className="font-semibold">{agg.recommendedPercent}% Recommended</span>{" "}
 						<span className="text-base-content/50">
-							All Time ({agg.recommended} of {agg.count})
+							{/* Narrowed to the current version, the figures below describe that set
+							    and not the Work's whole history, so the label cannot say All
+							    Time — the number beside it would then be a count of something
+							    else. */}
+							{narrowed ? "Since this version" : "All Time"} ({agg.recommended} of {agg.count})
 						</span>
 					</span>
 				)}
@@ -311,7 +337,20 @@ export default function WorkReviews({
 
 			{agg.reviews.length === 0 ? (
 				<p className="text-sm text-base-content/50">
-					{agg.count > 0 ? (
+					{/* The controls above only render beside a list, so a narrowed section with
+					    nothing in it must carry its own way back — otherwise the version select
+					    disappears with the rows and the reader is stuck in a narrower view
+					    until the page reloads. */}
+					{narrowed ? (
+						<>
+							{agg.count > 0
+								? "No written reviews since this version."
+								: "No reviews since this version."}{" "}
+							<button type="button" className="link" onClick={() => setVersionFilter("all")}>
+								Show every version
+							</button>
+						</>
+					) : agg.count > 0 ? (
 						<>No written reviews yet. {isAuthenticated ? "Add yours." : "Log in to add yours."}</>
 					) : (
 						<>
@@ -363,6 +402,21 @@ export default function WorkReviews({
 							<option value="recommended">Recommended</option>
 							<option value="not-recommended">Not Recommended</option>
 						</select>
+						{/* Only a Work whose current build arrived after its release has anything to
+						    narrow: with one version, every review is already the current one's. The
+						    option names the version by what it is rather than by a name the
+						    payload does not carry; the page's byline states the date. */}
+						{agg.versionSince && (
+							<select
+								className="select select-xs select-bordered"
+								value={versionFilter}
+								onChange={(e) => setVersionFilter(e.target.value as VersionFilter)}
+								aria-label="Filter reviews by media version"
+							>
+								<option value="all">Every version</option>
+								<option value="current">Since this version</option>
+							</select>
+						)}
 					</div>
 
 					{shown.length === 0 ? (

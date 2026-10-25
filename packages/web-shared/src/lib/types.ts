@@ -1048,6 +1048,15 @@ export interface ReviewAggregate {
 	recommended: number;
 	count: number;
 	/**
+	 * When the current media version was added, or null when every review is of the
+	 * current build because there has only ever been one.
+	 *
+	 * The reviews endpoint measures `version=current` against this date
+	 * (`reviews.createdAt >= versionSince`), and the client offers the control only when
+	 * it is non-null — a Work with a single version has nothing to narrow.
+	 */
+	versionSince: string | null;
+	/**
 	 * The same share over the reviews from a recent window — the user's choice of week,
 	 * month or year (default month). `recommendedPercent` is null when the window holds
 	 * too few reviews to mean anything, distinguishable from All-Time's null.
