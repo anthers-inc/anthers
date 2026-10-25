@@ -271,6 +271,35 @@ export const userPreferences = pgTable("user_preferences", {
 	} | null>(),
 
 	/**
+	 * The Discovery recipes this account saved, in the order their chips render (Parker,
+	 * 2026-10-24).
+	 *
+	 * ⭐ **A jsonb list rather than a `saved_recipes` table.** A saved recipe is a
+	 * preference of the same kind as `homeRecipe` directly above: one person's naming of
+	 * the org's own discovery chrome, read whole by one surface, never joined, never
+	 * queried across accounts and never ported anywhere. A table would buy per-row
+	 * addressing nobody uses and a join on every boot read; the whole list is one write
+	 * because the client always holds all of it, exactly like `keyboardShortcuts`.
+	 *
+	 * Shape: `{ id, label, color, recipe }[]`, where `recipe` is the same three values
+	 * `home_recipe` stores and `color` is a token from `@anthers/shared/discovery`'s
+	 * palette rather than a hex value — the palette has to be able to change for contrast
+	 * without rewriting every row.
+	 *
+	 * ⚠️ **Bounded at `SAVED_RECIPE_LIMIT` by the route**, because the chips are one
+	 * horizontal line: an unbounded list is a storage and a layout hazard at once.
+	 *
+	 * Null and `[]` mean the same thing — no saved recipes — and the client reads either
+	 * as the two built-in presets alone.
+	 */
+	savedRecipes: jsonb("saved_recipes").$type<Array<{
+		id: string;
+		label: string;
+		color: string;
+		recipe: { window: string; candidates: string; mix: string };
+	}> | null>(),
+
+	/**
 	 * The account's rebindable shortcuts, as a map from action to chord
 	 * (`{ search, filter, fullscreen, theater }`).
 	 *

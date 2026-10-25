@@ -69,9 +69,14 @@ import {
 	asRecipeMix,
 	interleaveByAuthor,
 	RECIPE_CANDIDATES,
+	RECIPE_COLORS,
 	RECIPE_MIXES,
+	RECIPE_PRESETS,
 	RECIPE_WINDOWS,
 	reasonForSource,
+	SAVED_RECIPE_LABEL_MAX,
+	SAVED_RECIPE_LIMIT,
+	sameRecipe,
 } from "@anthers/shared/discovery";
 import { normalizeKeyboardShortcuts } from "@anthers/shared/keybindings";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
@@ -220,6 +225,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 			notificationUnsubscribeToken: userPreferences.notificationUnsubscribeToken,
 			homeDefaultTab: userPreferences.homeDefaultTab,
 			homeRecipe: userPreferences.homeRecipe,
+			savedRecipes: userPreferences.savedRecipes,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
 			creatorEmailDelivery: userPreferences.creatorEmailDelivery,
 			keyboardShortcuts: userPreferences.keyboardShortcuts,
@@ -260,6 +266,9 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		// The last-used Discovery recipe, read at boot with the rest of the chrome so a
 		// bare `/discovery` opens on it without a second request.
 		homeRecipe: prefs?.homeRecipe ?? null,
+		// The reader's own Discovery recipes, in chip order. Null and `[]` mean the same
+		// thing, and the client parses each row rather than trusting the column.
+		savedRecipes: prefs?.savedRecipes ?? null,
 		// Where audio playback lives — null means "never said", the client reads on.
 		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
 		// The bar's two chords; null means the defaults in `@anthers/shared/keybindings`.
@@ -434,6 +443,53 @@ const PARENTAL_LOCKED = {
 
 const NAV_IDS = ["library", "discovery"] as const;
 
+/**
+ * The three stages of a Discovery recipe, as `homeRecipe` and a saved recipe both state
+ * them.
+ *
+ * The enums are the shared vocabulary rather than restatements of it: the page parses the
+ * same three lists, so a write this route accepts is one the reader can run.
+ */
+const recipeSchema = z.object({
+	window: z.enum(RECIPE_WINDOWS),
+	candidates: z.enum(RECIPE_CANDIDATES),
+	mix: z.enum(RECIPE_MIXES),
+});
+
+/**
+ * One recipe a reader saved: a name and a color over three values.
+ *
+ * 🚨 **Three refusals beyond the field shapes, and each is about a chip that would lie.**
+ * Two saved recipes may not share an id, because the chips key on it; two may not be the
+ * same three stages, and a saved one may not repeat a built-in preset, because
+ * `choiceForRecipe` matches by recipe — the first match wins, so the second chip could
+ * never light and its affordances would do nothing.
+ */
+const savedRecipeSchema = z.object({
+	id: z.string().min(1).max(64),
+	label: z.string().trim().min(1).max(SAVED_RECIPE_LABEL_MAX),
+	color: z.enum(RECIPE_COLORS),
+	recipe: recipeSchema,
+});
+
+const savedRecipesSchema = z
+	.array(savedRecipeSchema)
+	.max(SAVED_RECIPE_LIMIT)
+	.refine((rows) => new Set(rows.map((row) => row.id)).size === rows.length, {
+		message: "Two saved recipes cannot share an id.",
+	})
+	.refine(
+		(rows) =>
+			new Set(rows.map((row) => `${row.recipe.window}|${row.recipe.candidates}|${row.recipe.mix}`))
+				.size === rows.length,
+		{ message: "Two saved recipes cannot be the same recipe." },
+	)
+	.refine(
+		(rows) =>
+			rows.every((row) => !RECIPE_PRESETS.some((preset) => sameRecipe(preset.recipe, row.recipe))),
+		{ message: "That recipe is already one of the site's presets." },
+	);
+
 const updateProfileSchema = z.object({
 	displayName: z.string().max(150).optional(),
 	bio: z.string().max(5000).optional(),
@@ -460,18 +516,21 @@ const updateProfileSchema = z.object({
 	 * The enums are the shared vocabulary rather than restatements of it: the page parses
 	 * the same three lists, so a write this route accepts is one the reader can run.
 	 */
-	homeRecipe: z
-		.object({
-			window: z.enum(RECIPE_WINDOWS),
-			candidates: z.enum(RECIPE_CANDIDATES),
-			mix: z.enum(RECIPE_MIXES),
-		})
-		.optional(),
+	homeRecipe: recipeSchema.optional(),
 	/**
-	 * The account's rebindable chords, as a whole map — the search bar's two and the
-	 * player's two. The values are validated below with `@anthers/shared/keybindings`
-	 * rather than by a regex here: the grammar is the same one the browser matches
-	 * against, so the two cannot disagree about what a chord is.
+	 * The recipes this account saved, written whole and in chip order.
+	 *
+	 * ⚠️ **Whole list, not a merge**, for the reason `notificationDelivery` states: the
+	 * client holds the entire list, and a per-row protocol would need a delete story and
+	 * an ordering story for a set of at most `SAVED_RECIPE_LIMIT`. Reordering is a write of
+	 * the same list in a different order, which is why no position column exists.
+	 */
+	savedRecipes: savedRecipesSchema.optional(),
+	/**
+	 * The account's rebindable chords, as a whole map — the page's five and the player's
+	 * two. The values are validated below with `@anthers/shared/keybindings` rather than
+	 * by a regex here: the grammar is the same one the browser matches against, so the two
+	 * cannot disagree about what a chord is.
 	 */
 	keyboardShortcuts: z.record(z.string().max(20), z.string().max(40)).optional(),
 	/**
@@ -573,6 +632,8 @@ const accountRoutes = new Hono()
 		// The last-used recipe, written whole for the same reason: the page sends the
 		// triple it is showing, and the schema's enums are the shared vocabulary's.
 		if (data.homeRecipe !== undefined) prefUpdates.homeRecipe = data.homeRecipe;
+		// The saved recipes, whole list and in chip order: reordering is this same write.
+		if (data.savedRecipes !== undefined) prefUpdates.savedRecipes = data.savedRecipes;
 		// `essential` mail has no switch by design — see services/notifications.ts. The
 		// delivery map stores ONLY real group keys: a wildcard is `resolvedMode`'s business,
 		// and a client sending one is asking the server to guess what it means.
@@ -622,6 +683,7 @@ const accountRoutes = new Hono()
 					: {}),
 				...(data.homeDefaultTab !== undefined ? { homeDefaultTab: data.homeDefaultTab } : {}),
 				...(data.homeRecipe !== undefined ? { homeRecipe: data.homeRecipe } : {}),
+				...(data.savedRecipes !== undefined ? { savedRecipes: data.savedRecipes } : {}),
 				...(data.persistentMiniplayer !== undefined
 					? { persistentMiniplayer: data.persistentMiniplayer }
 					: {}),
