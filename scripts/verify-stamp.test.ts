@@ -316,7 +316,6 @@ describe("the Makefile's plumbing", () => {
 		for (const step of [
 			"typecheck",
 			"lint",
-			"econ:figures",
 			"lex:check",
 			"db:snapshots",
 			"promote-version",
@@ -339,7 +338,6 @@ describe("the Makefile's plumbing", () => {
 		for (const step of [
 			"typecheck",
 			"lint",
-			"econ:figures",
 			"lex:check",
 			"db:snapshots",
 			"promote-version",

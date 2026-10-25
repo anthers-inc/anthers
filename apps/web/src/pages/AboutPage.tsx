@@ -100,9 +100,9 @@
 // headline and the lede. Quote it rather than writing a fresh introduction, so
 // the platform sounds like one thing wherever a user meets it. ⚠️ It replaced
 // a hero reading *"Anthers is a federated, open content network…"*, which
-// asserted federation that has not shipped — `RETIRED_COPY` carries a rule for
-// the wording now, since its ATProto rule matched the claim's other phrasings
-// and sailed straight past this one.
+// asserted federation that has not shipped. That phrasing must not come back: it is
+// the claim the wiki's vocabulary rules forbid, and a narrower check on its other
+// phrasings sails straight past this one.
 //
 // ⚠️ A big italic Fraunces display line was tried here as a mission pull-quote
 // and rejected on sight — at that size the face reads as a wedding invitation.

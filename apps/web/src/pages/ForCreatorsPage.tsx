@@ -913,7 +913,7 @@ const CS_NOTE = "funds the charitable programs";
 const PASSTHROUGH = "pure passthrough";
 const NO_CUT = "no cut";
 
-/** Derived, never typed — see scripts/econ-figures.ts. */
+/** Derived, never typed — read from the published `SALE_TABLE`. */
 const SALE_10_2GIB = SALE_TABLE.find((r) => r.label === "game-10-2gib")!;
 const SALE_25_PHYSICAL = SALE_TABLE.find((r) => r.label === "merch-25-physical")!;
 
@@ -950,7 +950,7 @@ const STREAM_FAN = `a Sprout fan (${fmtMoney(STREAM_FAN_SPEND)}/mo to Anthers, ~
  * this page shipped one: a stray multiplier left behind by a rename made it compute a $2
  * scenario while every sentence around it said $6, including the note telling the user
  * rival figures were all-in take-home at the same $6. Nothing caught it, because a
- * scenario basis is arithmetic rather than a typed figure `econ:figures` can see.
+ * scenario basis is arithmetic rather than a typed figure any scan could see.
  *
  * Two Public Access prices is the editorial choice, so it is written as that rather than
  * as a bare 6 — the figure moves if the price does.
@@ -1521,9 +1521,9 @@ function ReceiptLine({ label, amount, bold }: { label: string; amount: string; b
 /**
  * A pricing-model card (Free / Badge Access / Fixed Price).
  *
- * ⚠️ Said "Free / PWYW / Fixed" until 2026-08-16, and a grep is the only thing that could
- * have caught it: `econ:figures` blanks comments before matching, deliberately, so a
- * docstring naming a mechanism we do not have is out of the guard's reach by design.
+ * ⚠️ Said "Free / PWYW / Fixed" until 2026-08-16, when a grep found it. A docstring naming
+ * a mechanism we do not have is the kind of stale prose a scan of published copy cannot
+ * reach, so the comment sweep is where this class of defect is caught.
  */
 function PricingOption({ title, children }: { title: string; children: React.ReactNode }) {
 	return (

@@ -2,11 +2,11 @@
 /**
  * Retired vocabulary may not accumulate in comments.
  *
- * 🚨 **`econ:figures` blanks comments before it scans, deliberately and correctly** — its
- * job is published copy, and an identifier that legitimately says `seed_allocations` is not
- * a claim to a user. The cost of that choice is that comments were the one surface where
- * the retired model could pile up unwatched, and it did: **440 comment lines named a retired
- * mechanism** by 2026-08-29, most of them narrating a rename nobody reading today needs.
+ * 🚨 **An identifier that legitimately says `seed_allocations` is not a claim to a user**, so
+ * a scan of published copy has to let it through. The cost is that comments were the one
+ * surface where the retired model could pile up unwatched, and it did: **440 comment lines
+ * named a retired mechanism** by 2026-08-29, most of them narrating a rename nobody reading
+ * today needs.
  *
  * ⚠️ **A flat ban is not available, and pretending otherwise is how a guard becomes noise.**
  * Some mentions genuinely earn their place — a rule that says *never floor this, a whole-unit
@@ -33,8 +33,8 @@ import { join } from "node:path";
  * reach too: *"Seed the database"* is ordinary English and this repository's dev fixtures are
  * full of it.
  *
- * ⚠️ **`watch-time` and `watch-hour` are deliberately absent.** The the wiki's *How Anthers Talks About Itself* bans them
- * in user-facing copy and `econ:figures` enforces that; a byte-derived engineering figure may
+ * ⚠️ **`watch-time` and `watch-hour` are deliberately absent.** The wiki's *How Anthers
+ * Talks About Itself* bans them in user-facing copy; a byte-derived engineering figure may
  * say "per watch-hour" because there it names a real unit of streaming cost. Putting them here
  * would flag the one place they are correct.
  */
@@ -86,10 +86,6 @@ const SELF = "retired-vocabulary-guard.test.ts";
  * to be a file whose *job* is the vocabulary rather than one that merely has a lot of it.
  */
 const EXEMPT: { pattern: RegExp; why: string }[] = [
-	{
-		pattern: /scripts\/econ-figures\.ts$/,
-		why: "carries the RETIRED_COPY rules themselves — it cannot forbid a phrase without spelling it",
-	},
 	{ pattern: new RegExp(`${SELF}$`), why: "this file" },
 ];
 
@@ -106,10 +102,9 @@ const BUDGET: Record<string, number> = {
 	"apps/api/src/routes/content.ts": 1,
 	"apps/api/src/jobs/distribute-pool.ts": 1,
 	"apps/web/src/content/faq.tsx": 1,
-	"apps/web/src/content/faq.test.ts": 1,
 	"apps/web/src/pages/ForCreatorsPage.tsx": 1,
 	"packages/shared/src/badges.test.ts": 1,
-	"packages/shared/src/figures.generated.ts": 1,
+	"packages/shared/src/figures.ts": 1,
 	"packages/shared/src/public-access.test.ts": 1,
 	"packages/shared/src/public-access.ts": 1,
 	"packages/web-shared/src/components/economics/economics.tsx": 1,
@@ -133,7 +128,7 @@ async function mentions(): Promise<Map<string, string[]>> {
 	for (const file of await sourceFiles()) {
 		const hits: string[] = [];
 		(await Bun.file(file).text()).split("\n").forEach((line, i) => {
-			// Comment lines only. Code is `econ:figures`' problem and identifiers are fine.
+			// Comment lines only. Code and identifiers are fine; this guard is about prose.
 			if (!/^\s*(\/\/|\*|\/\*)/.test(line)) return;
 			if (RETIRED.some((re) => re.test(line))) hits.push(`${file}:${i + 1} — ${line.trim()}`);
 		});

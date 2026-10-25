@@ -33,7 +33,7 @@ import {
 	reductionFor,
 	supportBreakdown,
 } from "./fees.js";
-import { BADGE_TABLE } from "./figures.generated.js";
+import { BADGE_TABLE } from "./figures.js";
 import { badgeTable } from "./scenarios.js";
 
 /** Anthers' own rungs, in dollars — $3/$6/$9/$12. */
@@ -299,9 +299,9 @@ describe("badgeViews", () => {
 		for (const row of BADGE_TABLE) {
 			const v = views.find((x) => x.price === row.monthly);
 			expect(v, `no view for $${row.monthly}`).toBeDefined();
-			// Pinned against `figures.generated.ts`, which `econ:figures` derives
-			// independently — never against badgeViews' own arithmetic, which is what an
-			// assertion copied from the implementation would do.
+			// Pinned against `figures.ts`, the published money tables, which are maintained
+			// independently of `badgeViews` — never against its own arithmetic, which is
+			// what an assertion copied from the implementation would do.
 			expect({ badge: row.badge, remainder: v?.supportsAnthers }).toEqual({
 				badge: row.badge,
 				remainder: row.remainder,

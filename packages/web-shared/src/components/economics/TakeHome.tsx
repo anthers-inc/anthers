@@ -34,7 +34,7 @@ import { RIVAL_STOREFRONTS } from "@anthers/shared/figures";
  * ⚠️ **Everything here is DERIVED, never typed.** `cardFeeDisplay` is the browser-side card
  * formula — floats and dependency-free, pinned equal to `fees.ts`'s `cardFee()` across
  * ~2,900 amounts by `economics.test.ts` — because the SPA must never import `fees.ts` and
- * pull decimal.js in. Rival rates come from `figures.generated.ts`, so a page cannot
+ * pull decimal.js in. Rival rates come from `figures.ts`, so a page cannot
  * quietly disagree with 62.04.
  */
 
@@ -46,9 +46,8 @@ const usd = (n: number) => `$${n.toFixed(2)}`;
 /**
  * The lowest price at which a sale returns the creator anything at all.
  *
- * 🚨 **Derived, not typed** — `econ:figures --check` refused a hardcoded `$0.32`, and it
- * was right to twice over: it is a published figure, and it moves with `CARD_RATE` and
- * `CARD_FLAT`. Searched rather than solved (`CARD_FLAT / (1 - CARD_RATE)` gives $0.31,
+ * 🚨 **Derived, not typed** — this is a published figure and it moves with `CARD_RATE`
+ * and `CARD_FLAT`. Searched rather than solved (`CARD_FLAT / (1 - CARD_RATE)` gives $0.31,
  * which nets exactly zero once the fee is rounded to the cent — and "you receive nothing"
  * is not break-even).
  */

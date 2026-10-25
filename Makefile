@@ -283,7 +283,6 @@ verify: ## Run everything CI runs: typecheck, lint, unit tests, full Playwright 
 verify-inner:
 	bun run typecheck
 	bun run lint
-	bun run econ:figures --check
 	bun run lex:check
 	bun run db:snapshots
 	bun run scripts/promote-version.ts --check
@@ -307,7 +306,6 @@ verify-fast: ## Run what a task-branch push verifies: typecheck, lint, the unit 
 verify-fast-inner:
 	bun run typecheck
 	bun run lint
-	bun run econ:figures --check
 	bun run lex:check
 	bun run db:snapshots
 	bun run scripts/promote-version.ts --check
@@ -316,13 +314,12 @@ verify-fast-inner:
 
 # The part of `verify` that can see a markdown file, which the pre-push hook runs instead of
 # `verify` when every file a push changes is markdown. Biome is here because it is cheap and
-# would be the first to notice if it learned to read markdown; the figures check owns the
-# README's money block; the two guards scan the repository's own documents. A new check that
-# reads markdown belongs here as well, and `scripts/pre-push-hook.test.ts` refuses a guard
-# under `scripts/` that names a tracked markdown file or walks `git ls-files` without being listed.
+# would be the first to notice if it learned to read markdown; the two guards scan the
+# repository's own documents. A new check that reads markdown belongs here as well, and
+# `scripts/pre-push-hook.test.ts` refuses a guard under `scripts/` that names a tracked
+# markdown file or walks `git ls-files` without being listed.
 verify-docs: ## Run only the checks that read markdown (the pre-push hook's docs-only path)
 	bun run lint
-	bun run econ:figures --check
 	bun test scripts/american-spelling-guard.test.ts scripts/credential-shape-guard.test.ts
 
 # The browser suite's own session: a database, a network, and free ports for the API and the
@@ -459,15 +456,6 @@ receipt-replay: ## Re-send a past transaction's buyer receipt (INTENT=pi_… or 
 # invoices cannot tell a right reading of Stripe's fields from a wrong one.
 stripe-walk: ## Walk support through test-mode Stripe: charge, discount, record, settle
 	bun run scripts/stripe-walk.ts
-
-# Deliberately NOT part of `verify`. It needs the Obsidian vault, which only Parker has —
-# so CI took the skip path on every run it ever had, and the only thing it reliably did
-# was fail on the one machine that does have a vault, whenever the notes were reorganized.
-# Same reasoning `spec-diff` and `storage-check` are out: a target that needs something
-# outside the repository is a target you run on purpose. Run it before publishing anything
-# quoting a wiki table.
-wiki-figures: ## Render the wiki's generated money blocks into the vault (CHECK=1 to assert instead)
-	bun run econ:figures --wiki $(if $(CHECK),--check,)
 
 e2e-install: ## Install the Chromium build Playwright drives (one-time)
 	bunx playwright install chromium

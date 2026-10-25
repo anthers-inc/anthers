@@ -608,8 +608,8 @@ function NotBuiltYet() {
  *
  * 🚨 **Every figure is derived**: the Time Pool proper, the Sticker budget, the storage
  * reserve and Anthers Support come from `timePoolByTimeFor`, `stickerBudgetFor`,
- * `storageReserveFor` and `supportLineFor` in `constants.ts` rather than from any table,
- * and `econ:figures` fails the build on a figure typed into a page.
+ * `storageReserveFor` and `supportLineFor` in `constants.ts` rather than from any table, so
+ * a change to the model reaches this matrix without an edit here.
  *
  * ⚠️ **The Sticker denominations are deliberately not here.** They live in
  * `@anthers/shared/stickers` as `STICKER_BATCHES`, and a matrix row is the wrong place to

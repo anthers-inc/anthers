@@ -52,9 +52,8 @@ export const PRICE_TOKEN = "[public-access-price]" as const;
 export const FUND_TOKEN = "[free-pool-share]" as const;
 
 /**
- * Money figures come from the generated table, never typed here — see
- * `scripts/econ-figures.ts`. A hand-typed $9.40 sat in the FAQ for months against a model
- * that said something else.
+ * Money figures come from the published tables, never typed here. A hand-typed $9.40 sat
+ * in the FAQ for months against a model that said something else.
  */
 const SUPPORT = DIRECTED_SUPPORT_WORST_CASE;
 const GAME_10 = SALE_TABLE.find((r) => r.label === "game-10-1gib")!;

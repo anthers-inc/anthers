@@ -535,8 +535,6 @@ export default function BadgesSection() {
 								? "Unlimited"
 								: `${FREE_PUBLIC_ACCESS_HOURS} hrs/mo`}
 						</div>
-						{/* econ:allow — this states the ABSENCE of the retired mechanism, which is the
-						    one place naming it is correct. */}
 						<div className="text-[11px] text-base-content/40">
 							downloads always free — no allowance, no per-GiB charge
 						</div>

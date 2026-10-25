@@ -27,9 +27,8 @@ const ALLOWED = [
 	"packages/shared/src/constants.ts", // the definition itself
 	"packages/shared/src/scenarios.ts", // sample receipts and case studies
 	"packages/shared/src/scenarios.test.ts",
-	"packages/shared/src/figures.generated.ts", // generated from scenarios
+	"packages/shared/src/figures.ts", // the published money tables
 	"packages/web-shared/src/components/economics/economics.tsx", // the economics display
-	"scripts/econ-figures.ts", // renders the published figures
 ] as const;
 
 /** Every import of the illustrative rate, with where it came from. */

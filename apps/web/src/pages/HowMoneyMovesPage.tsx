@@ -14,9 +14,9 @@
 // page muddier rather than more transparent. Everything here is a single charge's
 // arithmetic — no account mix, no phase, no forecast — so a strand's percentages
 // hold whatever the platform's size turns out to be. `MONEY_FLOWS` from
-// `@anthers/shared/figures` carries the routes (computed by `scripts/econ-figures.ts`
-// from the checkout's own primitives, conservation asserted in the generator); the
-// charges named there are inputs, and nothing on this page is a projection of scale.
+// `@anthers/shared/figures` carries the routes, derived from the checkout's own
+// primitives; the charges named there are inputs, and nothing on this page is a projection
+// of scale.
 // Actual-to-budget reporting belongs to real operating history, and the copy below
 // says so in plain terms rather than implying a report exists.
 //
