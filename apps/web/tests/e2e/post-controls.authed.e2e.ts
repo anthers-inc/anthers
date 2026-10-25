@@ -159,7 +159,7 @@ test("the owner's controls are one pack, and every confirmation asks first", asy
 	await expect(page.getByRole("button", { name: "Pin", exact: true })).toBeVisible();
 	await expect(page.getByRole("dialog")).toHaveCount(0);
 
-	// ── Share shows the post's own address; Save lands it on the Library shelf. ──
+	// ── Share shows the post's own address; Save lands it in the Library. ──
 	await page.getByRole("button", { name: "Share", exact: true }).click();
 	const share = page.getByRole("dialog", { name: `Share ${PREFIX}draft ${RUN}` });
 	await expect(share).toBeVisible();

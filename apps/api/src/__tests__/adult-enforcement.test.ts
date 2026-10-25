@@ -494,7 +494,7 @@ describe("what an Adult rating costs", () => {
 			expect(mature.status).toBe(200);
 		});
 
-		it("leaves it off the shelf of a user who has not opted in, and on a verified one's", async () => {
+		it("leaves it out of the Library of a user who has not opted in, and on a verified one's", async () => {
 			expect(await titlesIn("/api/content/library", userCookie)).not.toContain(ADULT_TITLE);
 			expect(await titlesIn("/api/content/library", grownCookie)).toContain(ADULT_TITLE);
 		});

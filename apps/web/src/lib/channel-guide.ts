@@ -22,7 +22,7 @@
  * **One vocabulary, contextual corpus.** A channel is always *a creator* and its blocks
  * are always *that creator's videos*, but which videos ride the lens's context — the
  * Feed's variant carries every released video from the creator, followed or not, while
- * the Library's variant carries only the ones the user has on their shelf. The component
+ * the Library's variant carries only the ones the user has in their Library. The component
  * takes already-translated channels; this model defines the shape both translators
  * produce.
  */

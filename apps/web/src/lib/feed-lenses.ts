@@ -3,7 +3,7 @@
  * Turning the Network's feed into the corpus its lenses draw on.
  *
  * A lens is a view over a corpus, and the corpus is the tab's: the Library's lenses draw
- * on the shelf, the Network's draw on the feed. The two are different *shapes* of the same
+ * on the Library, the Network's draw on the feed. The two are different *shapes* of the same
  * fact, and this module is the one translation between a feed entry and the `LensItem` the
  * Music Player and Bookshelf lenses render.
  *
@@ -91,7 +91,7 @@ export function feedLensItems(entries: readonly FeedLensEntry[]): LensItem[] {
 			creatorDisplayName: creator?.displayName ?? null,
 			creatorAvatar: creator?.avatar ?? null,
 			// The published Projects the Work belongs to — what groups a track under its
-			// release. The feed sends metadata only, as the shelf does.
+			// release. The feed sends metadata only, as the Library does.
 			releases: Array.isArray(entry.releases) ? (entry.releases as WorkRelease[]) : [],
 			// The commons, read off the verdict rather than fetched: a free, streaming,
 			// released Work is what draws the Public Access allowance (the serializer's

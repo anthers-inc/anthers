@@ -93,7 +93,7 @@ import { useFilterable, useViewFilter } from "../components/layout/search/filter
 import TabHeader from "../components/layout/TabHeader";
 import BookshelfLens from "../components/library/BookshelfLens";
 import ChannelGuideLens, {
-	channelGuideChannelsFromShelf,
+	channelGuideChannelsFromLibrary,
 } from "../components/library/ChannelGuideLens";
 import MusicDial from "../components/library/MusicDial";
 import MusicLens from "../components/library/MusicLens";
@@ -838,7 +838,7 @@ export default function DiscoverPage() {
 					   column. The feed ships no payload, so the guide reads the delivery
 					   address `feedLensItems` composes for it. */
 					<ChannelGuideLens
-						channels={channelGuideChannelsFromShelf(lensDraw)}
+						channels={channelGuideChannelsFromLibrary(lensDraw)}
 						source={drawsEveryone ? "discovery" : "feed"}
 					/>
 				) : visibleEntries.length === 0 ? (

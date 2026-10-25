@@ -250,8 +250,8 @@ export function StudioPanelBody({ panel, data }: { panel: StudioPanel; data: Pan
 				<Panel title="Projects">
 					{data.projects.length === 0 ? (
 						<p className="text-sm text-base-content/60">
-							No Projects yet. A Project is a shelf — an album and its tracks, a game and its
-							devlogs.
+							No Projects yet. A Project groups related Works and Posts — an album and its tracks, a
+							game and its devlogs.
 						</p>
 					) : (
 						<ul className="flex flex-col gap-1 text-sm">

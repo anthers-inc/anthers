@@ -3,10 +3,10 @@
  * The Library projection: `library_items` rebuilt from the reader's space.
  *
  * 🚨 **The space is the record and this table is the read model.** That is why a rebuild can
- * delete a local row: if the shelf does not contain the entry, the reader's own space — the
+ * delete a local row: if the Library does not contain the entry, the reader's own space — the
  * one place the keep actually lives — does not either. The table still exists because every
  * list, count and access check on Anthers reads a local row in one query, and a page that
- * listed a space to draw a shelf would put a PDS in the path of every render.
+ * listed a space to draw the Library would put a PDS in the path of every render.
  *
  * ⚠️ **A subject that has been deleted locally is skipped, not resurrected.** A Work removed
  * from Anthers leaves a record in the space pointing at an id nothing answers to; inserting
@@ -53,7 +53,7 @@ const SUBJECT_COLUMNS = {
 const SUBJECT_TABLES = { work: works, project: projects, post: posts } as const;
 
 /**
- * Apply one shelf entry from the space.
+ * Apply one Library entry from the space.
  *
  * Returns what happened rather than throwing on a missing subject: the worker projecting one
  * verified record should not fail its whole drain because the Work it points at was deleted
@@ -68,8 +68,8 @@ export async function projectLibraryItem(
 		return { problem: `${item.subject.kind} ${item.subject.id} no longer exists` };
 	}
 
-	// The third door into the shelf, and the same rule as the other two: a Work on
-	// somebody's shelf is a Work in the preservation program. Called before the
+	// The third door into the Library, and the same rule as the other two: a Work on
+	// somebody's Library is a Work in the preservation program. Called before the
 	// insert/update branch so a record the projection leaves unchanged still counts.
 	if (item.subject.kind === "work") await preserveCurrentVersion(item.subject.id);
 
@@ -100,7 +100,7 @@ export async function projectLibraryItem(
 	return "inserted";
 }
 
-/** Remove one projected shelf entry, by subject. Absent is a no-op. */
+/** Remove one projected Library entry, by subject. Absent is a no-op. */
 export async function removeProjectedLibraryItem(
 	userId: number,
 	subject: Pick<LibrarySubject, "kind" | "id">,
@@ -241,7 +241,7 @@ function subjectColumnValue(subject: LibrarySubject): {
 	}
 }
 
-/** `work:12`, the stable identity of a shelf entry across a rebuild. */
+/** `work:12`, the stable identity of a Library entry across a rebuild. */
 function subjectIdOf(row: {
 	workId: number | null;
 	projectId: number | null;

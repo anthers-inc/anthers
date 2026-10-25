@@ -52,7 +52,7 @@ export default function ProjectPage() {
 	}, [slug, previewKey]);
 
 	// Attention tracking — a Project view is a page_view for the creator.
-	// A Project is a shelf holding no work of its own, so browsing one records the visit
+	// A Project holds no work of its own, so browsing one records the visit
 	// and earns no Time Pool minutes. The time is earned on the **Works**, which is where
 	// consumption actually happens. (This said "on the posts" until Works could appear
 	// here at all; only a Work has ever been able to earn — see the wiki's *What the Time Pool Pays For*.)

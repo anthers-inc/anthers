@@ -91,12 +91,12 @@ import { dailyCapFor, type LimitWindow, spentWindow } from "@anthers/shared/pare
 import { POST_PREVIEW_EXCERPT_LIMIT, postPreviewFor } from "@anthers/shared/post-preview";
 import { visiblePostTitle } from "@anthers/shared/post-title";
 import {
-	asShelfSortDirection,
-	asShelfSortMode,
-	SHELF_SORT_DIRECTIONS,
-	SHELF_SORT_MODES,
-	sortShelf,
-} from "@anthers/shared/project-shelf-sort";
+	asProjectSortDirection,
+	asProjectSortMode,
+	PROJECT_SORT_DIRECTIONS,
+	PROJECT_SORT_MODES,
+	sortProjectItems,
+} from "@anthers/shared/project-sort";
 import type { PublicAccessBudget } from "@anthers/shared/public-access";
 import { normalizeTag, normalizeWorkTags, workTagsProblem } from "@anthers/shared/tags";
 import {
@@ -222,9 +222,9 @@ import {
 } from "../services/credit-acceptance.js";
 import { syncAccountRoles } from "../services/discord.js";
 import {
+	LIBRARY_LIMIT,
 	permanentWorkIds,
 	removeItem,
-	SHELF_LIMIT,
 	savePost,
 	saveProject,
 	saveWork,
@@ -255,9 +255,9 @@ import { releaseCounts, releasesByWorkId } from "../services/project-releases.js
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { publishRefusal } from "../services/publish-refusal.js";
 import {
+	queueLibraryEntry,
+	queueLibraryRemoval,
 	queuePosition,
-	queueShelfEntry,
-	queueShelfRemoval,
 	queueWorkSave,
 	queueWorkSaveRemoval,
 } from "../services/reader-state-migration.js";
@@ -1231,14 +1231,14 @@ const createProjectSchema = z.object({
 	description: z.string().max(50000).optional().default(""),
 	coverImage: z.string().max(500).optional().default(""),
 	pageConfig: z.record(z.unknown()).optional(),
-	// The Project's two shelf settings (2026-10-19). A creator saves these from the sort
+	// The Project's two sort settings (2026-10-19). A creator saves these from the sort
 	// dropdown on the Project page; the detail route applies them when it serializes
 	// members, so the choice governs what readers see. `manual` leaves the stored drag
 	// order alone (the column default).
-	worksSortMode: z.enum(SHELF_SORT_MODES).optional(),
-	worksSortDirection: z.enum(SHELF_SORT_DIRECTIONS).optional(),
-	postsSortMode: z.enum(SHELF_SORT_MODES).optional(),
-	postsSortDirection: z.enum(SHELF_SORT_DIRECTIONS).optional(),
+	worksSortMode: z.enum(PROJECT_SORT_MODES).optional(),
+	worksSortDirection: z.enum(PROJECT_SORT_DIRECTIONS).optional(),
+	postsSortMode: z.enum(PROJECT_SORT_MODES).optional(),
+	postsSortDirection: z.enum(PROJECT_SORT_DIRECTIONS).optional(),
 	isPublished: z.boolean().optional().default(false),
 });
 
@@ -1448,7 +1448,7 @@ async function resolveWorkThumbnail(item: WorkRow): Promise<void> {
  * the thing the viewer may not see.
  *
  * ⚠️ **Membership is part of the query, not an assumption about the write path.** A Project's
- * cover Work must be on its shelf; joining through `project_items` means a row left behind by
+ * cover Work must be in its list; joining through `project_items` means a row left behind by
  * a removal or a bug can never dress the Project in a Work it does not hold.
  *
  * `seeAll` is the owner's own read: their drafts and every rung are theirs to edit, the same
@@ -1500,7 +1500,7 @@ async function resolveProjectCovers(
 		.innerJoin(works, eq(projectItems.workId, works.id))
 		.where(and(...conditions));
 
-	// The shelf may hold several Works; only the chosen one dresses the Project.
+	// The list may hold several Works; only the chosen one dresses the Project.
 	const chosenByProject = new Map(wanted.map((row) => [row.id, row.coverWorkId] as const));
 	await Promise.all(
 		coverRows
@@ -2198,7 +2198,7 @@ function previewRequest(c: {
  * 🚨 **The ownership guard is here, per Work, and is the whole safety argument.** A
  * preview only ever subtracts access *because* it is only ever applied to a Work the
  * requester created, and a creator already sees everything of theirs. Guarding per Work
- * rather than per request means a Work that somehow isn't theirs — on a shared shelf, in
+ * rather than per request means a Work that somehow isn't theirs — on a shared Project, in
  * a future collab — silently resolves normally instead of resolving as somebody with a
  * different amount of access.
  */
@@ -2482,7 +2482,7 @@ async function serializeWorkForUser(
 	 * check on a listing serves a card to somebody who cannot open the Work anyway, because
 	 * the four delivery routes and this branch both refuse independently. The default is
 	 * therefore the safe one at every call site that has no user to ask about — a Catalog
-	 * page, a project shelf, a post's references.
+	 * page, a project's list, a post's references.
 	 */
 	timeLimited = false,
 	/**
@@ -6051,7 +6051,7 @@ const contentRoutes = new Hono()
 					// now the only rule standing between the commons and an unverified
 					// visitor.
 					(await adultVisibility(userId)).hidden,
-					// A guardian's blocks hide as well as refuse — a shelf of cards a child
+					// A guardian's blocks hide as well as refuse — a grid of cards a child
 					// cannot click is an advertisement, not a protection.
 					(await parentalVisibility(userId)).hidden,
 				),
@@ -6120,7 +6120,7 @@ const contentRoutes = new Hono()
 		const adultHidden = (await adultVisibility(userId)).hidden;
 		const parentalHidden = (await parentalVisibility(userId)).hidden;
 		if (adultHidden) conditions.push(adultHidden);
-		// A guardian's blocks hide as well as refuse — a shelf of cards a child cannot
+		// A guardian's blocks hide as well as refuse — a grid of cards a child cannot
 		// click is an advertisement, not a protection.
 		if (parentalHidden) conditions.push(parentalHidden);
 
@@ -7876,8 +7876,8 @@ const contentRoutes = new Hono()
 			)
 			.orderBy(asc(projectPosts.sortOrder), asc(posts.createdAt));
 
-		// The Works in this Project, each resolved on its own gates. A Project is a
-		// shelf: putting a Work on it changes nothing about who can open it.
+		// The Works in this Project, each resolved on its own gates. A Project groups its
+		// Works: putting one here changes nothing about who can open it.
 		const itemRows = await db
 			.select({ work: works, sortOrder: projectItems.sortOrder })
 			.from(projectItems)
@@ -7890,7 +7890,7 @@ const contentRoutes = new Hono()
 					// A project is a listing like any other, so an Adult member is absent
 					// from it rather than present and locked.
 					(await adultVisibility(userId)).hidden,
-					// A guardian's blocks hide as well as refuse — a shelf of cards a child
+					// A guardian's blocks hide as well as refuse — a grid of cards a child
 					// cannot click is an advertisement, not a protection.
 					(await parentalVisibility(userId)).hidden,
 				),
@@ -7906,11 +7906,11 @@ const contentRoutes = new Hono()
 		]);
 		await Promise.all(itemRows.map((r) => resolveWorkThumbnail(r.work)));
 
-		// The cover chosen from a Work is resolved from the shelf this reader already sees:
+		// The cover chosen from a Work is resolved from the list this reader already sees:
 		// a Work hidden from them contributes nothing and the uploaded image stands in.
 		const coverWork = itemRows.find((m) => m.work.id === row.project.coverWorkId)?.work;
 		/*
-		 * The Project's saved sort settings order both shelves (2026-10-19). `sortShelf`
+		 * The Project's saved sort settings order both shelves (2026-10-19). `sortProjectItems`
 		 * copies, so each member keeps the `sortOrder` its membership carries — the drag
 		 * order — while the array a reader receives is the reading order the creator
 		 * chose. Manual is the default and returns the stored order untouched.
@@ -7975,15 +7975,15 @@ const contentRoutes = new Hono()
 					displayName: row.creatorDisplayName,
 					avatar: row.creatorAvatar,
 				}),
-				works: sortShelf(
+				works: sortProjectItems(
 					serializedWorks,
-					asShelfSortMode(row.project.worksSortMode),
-					asShelfSortDirection(row.project.worksSortDirection),
+					asProjectSortMode(row.project.worksSortMode),
+					asProjectSortDirection(row.project.worksSortDirection),
 				),
-				posts: sortShelf(
+				posts: sortProjectItems(
 					serializedPosts,
-					asShelfSortMode(row.project.postsSortMode),
-					asShelfSortDirection(row.project.postsSortDirection),
+					asProjectSortMode(row.project.postsSortMode),
+					asProjectSortDirection(row.project.postsSortDirection),
 				),
 			},
 		});
@@ -8016,11 +8016,11 @@ const contentRoutes = new Hono()
 			return c.json(FOREIGN_FILE_REFUSAL, 400);
 		}
 
-		// A cover chosen from a Work must be this creator's Work **and on this Project's
-		// shelf** — the reference is what the read resolves, so a Work from another Project
+		// A cover chosen from a Work must be this creator's Work **and in this Project's
+		// list** — the reference is what the read resolves, so a Work from another Project
 		// would dress this one in something it does not hold.
 		if (data.coverWorkId != null) {
-			const [onShelf] = await db
+			const [onProject] = await db
 				.select({ id: works.id })
 				.from(projectItems)
 				.innerJoin(works, eq(projectItems.workId, works.id))
@@ -8032,8 +8032,8 @@ const contentRoutes = new Hono()
 					),
 				)
 				.limit(1);
-			if (!onShelf) {
-				return c.json({ error: "Choose a Work that is on this Project's shelf." }, 400);
+			if (!onProject) {
+				return c.json({ error: "Choose a Work that is in this Project." }, 400);
 			}
 		}
 
@@ -8165,10 +8165,10 @@ const contentRoutes = new Hono()
 			.returning({ id: projectItems.id });
 
 		// Removing a Work from a Project never touches the Work. It stays in the
-		// Catalog, released, with its gates — a Project is a shelf, not an owner.
+		// Catalog, released, with its gates — a Project groups Works, not an owner.
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 
-		// A cover chosen from the Work being taken off the shelf returns to the uploaded
+		// A cover chosen from the Work being taken out of the list returns to the uploaded
 		// image, since the Work no longer dresses this Project.
 		await db
 			.update(projects)
@@ -8837,9 +8837,9 @@ const contentRoutes = new Hono()
 	// comment carry the reasoning, and `resolveAccess` does not read any of it.
 
 	/**
-	 * The user's shelf.
+	 * The user's Library.
 	 *
-	 * Access is resolved per item exactly as the Catalog resolves it, because a shelf can
+	 * Access is resolved per item exactly as the Catalog resolves it, because a Library can
 	 * hold a Work its owner cannot currently open: a free Work they saved and its creator
 	 * later gated, or a refunded purchase. Those render locked with the route to unlock,
 	 * which is the same behavior a gated track gets in the play queue.
@@ -8847,7 +8847,7 @@ const contentRoutes = new Hono()
 	 * `?hidden=1` includes tidied-away entries — the "show hidden" toggle. They are
 	 * excluded by default and never deleted.
 	 *
-	 * At most `SHELF_LIMIT` entries come back, the newest ones, still in saved order; `truncated`
+	 * At most `LIBRARY_LIMIT` entries come back, the newest ones, still in saved order; `truncated`
 	 * says whether older entries were left out.
 	 */
 	.get("/library", requireAuth, async (c) => {
@@ -8858,21 +8858,21 @@ const contentRoutes = new Hono()
 		if (!includeHidden) conditions.push(eq(libraryItems.hidden, false));
 
 		// Newest first to choose which entries fit, one extra to learn whether any did not, then
-		// back into saved order for the shelf.
+		// back into saved order for the Library.
 		const newest = await db
 			.select()
 			.from(libraryItems)
 			.where(and(...conditions))
 			.orderBy(desc(libraryItems.sortOrder))
-			.limit(SHELF_LIMIT + 1);
-		const truncated = newest.length > SHELF_LIMIT;
-		const rows = newest.slice(0, SHELF_LIMIT).reverse();
+			.limit(LIBRARY_LIMIT + 1);
+		const truncated = newest.length > LIBRARY_LIMIT;
+		const rows = newest.slice(0, LIBRARY_LIMIT).reverse();
 
 		const workIds = rows.map((r) => r.workId).filter((id): id is number => id != null);
 		const projectIds = rows.map((r) => r.projectId).filter((id): id is number => id != null);
 		const postIds = rows.map((r) => r.postId).filter((id): id is number => id != null);
 
-		// 🚨 A shelf is a listing like any other, so a Work the user may not see is absent from
+		// 🚨 A Library is a listing like any other, so a Work the user may not see is absent from
 		// it rather than present and locked — including one they saved or bought before it was
 		// corrected into Adult, or before a guardian blocked it. The entry itself survives in
 		// `library_items` and comes back if they opt in or the block lifts.
@@ -8902,8 +8902,8 @@ const contentRoutes = new Hono()
 					.leftJoin(users, eq(projects.creatorId, users.id))
 					.where(inArray(projects.id, projectIds))
 			: [];
-		// A saved post is a shelf entry like any other, and its card reads like a post card
-		// (title, excerpt, the creator). Published state rides along so the shelf can say
+		// A saved post is a Library entry like any other, and its card reads like a post card
+		// (title, excerpt, the creator). Published state rides along so the Library can say
 		// when a saved post has gone back to draft rather than rendering a dead link.
 		const postRows = postIds.length
 			? await db
@@ -8940,7 +8940,7 @@ const contentRoutes = new Hono()
 			parentalHidden,
 		});
 		// A saved Project's own card advertises its released members, whether or not one of
-		// them is also on the shelf. `musicCount` is what makes a Project a record rather
+		// them is also in the Library. `musicCount` is what makes a Project a record rather
 		// than a folder — the same rule `isAlbum` applies on a Project page — and `audio`
 		// does not count as music, so a series of podcast episodes draws no release card.
 		const countsByProject = new Map([
@@ -8961,12 +8961,12 @@ const contentRoutes = new Hono()
 		const projectById = new Map(projectRows.map((p) => [p.id, p]));
 		const postById = new Map(postRows.map((p) => [p.id, p]));
 		// A saved Project whose cover is one of its Works reads that cover here too — as the
-		// shelf's reader may see it, not as its owner can.
+		// Library's reader may see it, not as its owner can.
 		const projectCovers = await resolveProjectCovers(projectRows, {
 			userId: user.id,
 			seeAll: false,
 		});
-		// The names behind the saved posts' title mentions, one lookup for the shelf.
+		// The names behind the saved posts' title mentions, one lookup for the Library.
 		const savedPostDisplayTitles = await displayPostTitles(
 			postRows.map((p) => p.title),
 			user.id,
@@ -8976,8 +8976,8 @@ const contentRoutes = new Hono()
 		);
 
 		// The channel-guide fields, for the work arm only: a creator's display name,
-		// handle and avatar, so a lens that organizes the shelf **by its creators** can
-		// label channels without an N+1 of profile fetches on a shelf-sized page. The
+		// handle and avatar, so a lens that organizes the Library **by its creators** can
+		// label channels without an N+1 of profile fetches on a Library-sized page. The
 		// project arm has carried the same two fields since the album lens; a Work's own
 		// serialization withholds them because nothing until now needed them wholesale.
 		// Deliberately additive and route-local — a Work's public serialization is a
@@ -9074,7 +9074,7 @@ const contentRoutes = new Hono()
 						}
 						const p = row.projectId != null ? projectById.get(row.projectId) : null;
 						if (!p) return null;
-						// A Project is a shelf, not a payload: it has no gates of its own and
+						// A Project is a grouping, not a payload: it has no gates of its own and
 						// nothing to withhold. Its members resolve their own access when opened.
 						const counts = countsByProject.get(p.id);
 						return {
@@ -9099,7 +9099,7 @@ const contentRoutes = new Hono()
 				)
 			).filter((x) => x != null),
 			truncated,
-			limit: SHELF_LIMIT,
+			limit: LIBRARY_LIMIT,
 		});
 	})
 
@@ -9141,13 +9141,13 @@ const contentRoutes = new Hono()
 					404,
 				);
 			}
-			queueReaderWrite(() => queueShelfEntry(user.id, result.id));
+			queueReaderWrite(() => queueLibraryEntry(user.id, result.id));
 			return c.json({ id: result.id }, 201);
 		},
 	)
 
 	/**
-	 * Tidy an entry off the shelf, or bring it back.
+	 * Tidy an entry out of the Library, or bring it back.
 	 *
 	 * Separate from DELETE on purpose: for a purchased Work this is the *only* control,
 	 * and conflating the two would put "remove" on a button that must never remove.
@@ -9161,7 +9161,7 @@ const contentRoutes = new Hono()
 			const id = parseNumericId(c.req.param("id"));
 			if (id == null) return c.json({ error: "Not found" }, 404);
 			const ok = await setHidden(user.id, id, c.req.valid("json").hidden);
-			if (ok) queueReaderWrite(() => queueShelfEntry(user.id, id));
+			if (ok) queueReaderWrite(() => queueLibraryEntry(user.id, id));
 			return ok ? c.json({ success: true }) : c.json({ error: "Not found" }, 404);
 		},
 	)
@@ -9170,7 +9170,7 @@ const contentRoutes = new Hono()
 	 * Un-save.
 	 *
 	 * 🚨 **Refuses a purchased Work**, with `409` and the alternative named. Somebody who
-	 * tidies a purchase off their shelf and cannot work out how to get it back has
+	 * tidies a purchase out of their Library and cannot work out how to get it back has
 	 * effectively lost the thing they paid for, so the control they get is *hide*, which
 	 * is reversible and loses nothing.
 	 */
@@ -9181,7 +9181,7 @@ const contentRoutes = new Hono()
 
 		const result = await removeItem(user.id, id);
 		if (result.ok) {
-			queueReaderWrite(() => queueShelfRemoval(user.id, result.subject));
+			queueReaderWrite(() => queueLibraryRemoval(user.id, result.subject));
 			return c.body(null, 204);
 		}
 		if (result.reason === "purchased") {
@@ -9215,7 +9215,7 @@ const contentRoutes = new Hono()
 	 *
 	 * The list is the whole store, not a page of it: a user's positions number in the
 	 * dozens (one per book-like Work they ever opened), and the rail filters, orders and
-	 * joins them against the shelf client-side.
+	 * joins them against the Library client-side.
 	 */
 	.get("/reading-positions", requireAuth, async (c) => {
 		const user = c.get("user");

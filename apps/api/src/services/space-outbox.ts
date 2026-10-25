@@ -7,7 +7,7 @@
  * at the address and CID the caller was handed, that the repo's commit moved, or that the
  * oplog carries the operation. All four are checked here, and any disagreement leaves the row
  * and its payload in place for the next drain. A failure that retried forever would be bad; a
- * failure that quietly cleared would be the reader's shelf silently not existing.
+ * failure that quietly cleared would be the reader's Library silently not existing.
  *
  * ⭐ **Every row is absolute state rather than an increment**, which is what makes the retry
  * safe: the record carries the whole entry (its hidden flag, its order), so writing it again
@@ -118,7 +118,7 @@ export type EnqueueResult =
 	| { queued: false; reason: "no_registry_row" };
 
 /**
- * Queue a shelf entry's write, which is what a Save, a hide or an unsave becomes.
+ * Queue a Library entry's write, which is what a Save, a hide or an unsave becomes.
  *
  * ⚠️ **This does not create the space.** Creation needs a PDS call and belongs to the worker;
  * an account with no registered space answers `no_registry_row` and the caller decides
@@ -268,7 +268,7 @@ async function carryOut(
 	const writer = spaceWriterFor(session, spaceUri, { fetchImpl: opts.fetchImpl });
 	// ⭐ **A space has no repo until its first write**, so the "before" commit is allowed to be
 	// absent. The branch answers `RepoNotFound` for a space nothing has been written into yet,
-	// and treating that as a failure would make the very first shelf entry undeliverable. Any
+	// and treating that as a failure would make the very first Library entry undeliverable. Any
 	// other failure is real and stops the row here.
 	const previous = await writer.commit().catch((error) => {
 		if (error instanceof SpaceRequestError && error.error === "RepoNotFound") return null;

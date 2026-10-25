@@ -43,7 +43,7 @@ export interface StudioNavItem {
 }
 
 export const STUDIO_NAV: readonly StudioNavItem[] = [
-	// A Project is the shelf the Works sit on, so it reads first — the same order the old
+	// A Project groups the Works, so it reads first — the same order the old
 	// Catalog page's sections kept.
 	{
 		to: studioUrl("/projects"),

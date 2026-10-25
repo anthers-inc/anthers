@@ -8,7 +8,7 @@
  * Library made both feel like half a feature.
  *
  * 🚨 **Saving is not buying and not unlocking.** This appears on gated Works too, where it
- * means "keep this" and grants nothing — the shelf shows it locked with the route to
+ * means "keep this" and grants nothing — the Library shows it locked with the route to
  * unlock. The label must never drift toward ownership language ("Get", "Add to collection",
  * "Own it"), because a free save and a purchase would then be indistinguishable at the one
  * moment the difference costs money.
@@ -24,7 +24,7 @@ import {
 	saveProject,
 	saveWork,
 	setHidden,
-	useShelf,
+	useLibrary,
 } from "../../lib/library";
 
 export default function SaveButton({
@@ -41,22 +41,22 @@ export default function SaveButton({
 	className?: string;
 }) {
 	const { isAuthenticated } = useAuth();
-	const shelf = useShelf();
+	const library = useLibrary();
 	const [busy, setBusy] = useState(false);
 	/** Set when the server refuses removal because it was purchased. */
 	const [purchased, setPurchased] = useState(false);
 
-	// Signed out there is no shelf to put anything on, and a control that prompts a
+	// Signed out there is no Library to put anything in, and a control that prompts a
 	// sign-in from every card is noise. The Library is reachable from the nav.
 	if (!isAuthenticated) return null;
 
 	const itemId =
 		workId != null
-			? shelf.works.get(workId)
+			? library.works.get(workId)
 			: projectId != null
-				? shelf.projects.get(projectId)
+				? library.projects.get(projectId)
 				: postId != null
-					? shelf.posts.get(postId)
+					? library.posts.get(postId)
 					: undefined;
 	const saved = itemId != null;
 

@@ -26,7 +26,7 @@
  * somebody reading a storage bar, which is the wrong person at the wrong moment.
  *
  * 🚨 **The write is one-way, and that is the promise.** A Work enters when its first Library
- * entry lands and never leaves: unsaving later, or a refund releasing a shelf entry, does
+ * entry lands and never leaves: unsaving later, or a refund releasing a Library entry, does
  * not un-preserve a Work Anthers has already undertaken to keep. Nothing here ever sets the
  * column back to false, and nothing should.
  *
@@ -47,7 +47,7 @@ import { and, eq, exists, or, sql } from "drizzle-orm";
  * a repeat a no-op the database answers without a row version changing.
  *
  * ⚠️ **Called from every door that writes a Library entry for a Work** — a person pressing
- * Save, a purchase completing, and a reader's space projecting its shelf. A fourth door that
+ * Save, a purchase completing, and a reader's space projecting its Library. A fourth door that
  * forgets this call creates a Work whose current version a buyer can lose, so the door
  * belongs beside the save it follows rather than anywhere else.
  */

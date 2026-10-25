@@ -5,7 +5,7 @@
  * The cover is the Project's whole face in every listing, so the interesting half of this
  * suite is not "the Work's image appears" but the three ways that reference must NOT show
  * anything: a Work from another Project or another creator cannot be chosen, an Adult Work
- * does not dress a Project for somebody who has not opted in, and a Work taken off the shelf
+ * does not dress a Project for somebody who has not opted in, and a Work taken out of the list
  * (or deleted) stops dressing it. In each of those the uploaded `coverImage` stands in,
  * which is why the two choices fall back to each other rather than replacing one another.
  *
@@ -70,7 +70,7 @@ async function detail(cookie?: string): Promise<ProjectRow> {
 	return ((await res.json()) as { project: ProjectRow }).project;
 }
 
-async function addToShelf(workId: number) {
+async function addToLibrary(workId: number) {
 	const res = await authed("POST", `/api/content/projects/${SLUG}/works`, { workId });
 	expect(res.status).toBe(201);
 }
@@ -106,7 +106,7 @@ describe("a Project's cover chosen from one of its Works", () => {
 			thumbnail: thumb("general"),
 		});
 		generalWorkId = general.id;
-		await addToShelf(general.id);
+		await addToLibrary(general.id);
 
 		uploadedCover = await storage.getUrl(`creators/${creator.id}/covers/cover-${run}.png`);
 	}, DB_SETUP_TIMEOUT);
@@ -157,14 +157,14 @@ describe("a Project's cover chosen from one of its Works", () => {
 		}
 	});
 
-	it("carries the Work's cover on the saved-library shelf too", async () => {
+	it("carries the Work's cover in the saved Library too", async () => {
 		const saved = await authed("POST", "/api/content/library", { projectId });
 
 		expect([200, 201]).toContain(saved.status);
 
-		const shelf = await authed("GET", "/api/content/library");
-		expect(shelf.status).toBe(200);
-		const { items } = (await shelf.json()) as {
+		const library = await authed("GET", "/api/content/library");
+		expect(library.status).toBe(200);
+		const { items } = (await library.json()) as {
 			items: { kind: string; project?: ProjectRow }[];
 		};
 		const entry = items.find((item) => item.kind === "project" && item.project?.slug === SLUG);
@@ -190,15 +190,15 @@ describe("a Project's cover chosen from one of its Works", () => {
 		await authed("PATCH", `/api/content/projects/${SLUG}`, { coverWorkId: generalWorkId });
 	});
 
-	it("refuses a Work that is not on this Project's shelf", async () => {
-		const offShelf = await insertWork({
+	it("refuses a Work that is not in this Project", async () => {
+		const offProject = await insertWork({
 			creatorId: creator.id,
 			type: "image",
-			title: `Off shelf ${run}`,
-			thumbnail: thumb("off-shelf"),
+			title: `Off list ${run}`,
+			thumbnail: thumb("off-list"),
 		});
 		const res = await authed("PATCH", `/api/content/projects/${SLUG}`, {
-			coverWorkId: offShelf.id,
+			coverWorkId: offProject.id,
 		});
 		expect(res.status).toBe(400);
 	});
@@ -224,7 +224,7 @@ describe("a Project's cover chosen from one of its Works", () => {
 			thumbnail: thumb("adult"),
 			maturity: "adult",
 		});
-		await addToShelf(adult.id);
+		await addToLibrary(adult.id);
 		try {
 			const chosen = await authed("PATCH", `/api/content/projects/${SLUG}`, {
 				coverWorkId: adult.id,
@@ -247,7 +247,7 @@ describe("a Project's cover chosen from one of its Works", () => {
 		}
 	});
 
-	it("falls back to the uploaded image when the chosen Work leaves the shelf", async () => {
+	it("falls back to the uploaded image when the chosen Work leaves the list", async () => {
 		await authed("PATCH", `/api/content/projects/${SLUG}`, { coverWorkId: generalWorkId });
 		const removed = await authed("DELETE", `/api/content/projects/${SLUG}/works/${generalWorkId}`);
 		expect(removed.status).toBe(204);
@@ -264,7 +264,7 @@ describe("a Project's cover chosen from one of its Works", () => {
 			title: `Doomed ${run}`,
 			thumbnail: thumb("doomed"),
 		});
-		await addToShelf(doomed.id);
+		await addToLibrary(doomed.id);
 		await authed("PATCH", `/api/content/projects/${SLUG}`, { coverWorkId: doomed.id });
 
 		await db.delete(works).where(eq(works.id, doomed.id));
@@ -278,7 +278,7 @@ describe("a Project's cover chosen from one of its Works", () => {
 		const row = await detail();
 		expect(row.coverWorkId).toBeNull();
 		expect(row.coverImage).toBe(uploadedCover);
-		// The shelf is empty of visible members, which is its own ordinary shape.
+		// The list is empty of visible members, which is its own ordinary shape.
 		expect((row.works ?? []).length).toBe(0);
 	});
 });

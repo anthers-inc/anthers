@@ -10,7 +10,7 @@
  *     outbox row and its payload stay and nothing is projected.
  *   - **02, a write that survives a kill.** The process dies after the write landed; the next
  *     drain writes the same bytes to the same key and converges.
- *   - **08, a projection rebuilt from `listRecords`.** The local shelf is deleted, rebuilt from
+ *   - **08, a projection rebuilt from `listRecords`.** The local Library is deleted, rebuilt from
  *     the space alone, and a row the space does not carry is retracted.
  *   - **09, the registry's two sources.** An empty space is found through `listSpaces`, and a
  *     deliberately corrupted address is repaired from it.
@@ -33,7 +33,7 @@ import { rebuildLibraryProjection } from "../services/space-projection.js";
 import { USER_SPACE_COLLECTIONS } from "../services/space-records.js";
 import { reconcileUserSpace, registeredSpace, userSpaceUri } from "../services/space-registry.js";
 import { purgeAccountsCreatedHere } from "./cleanup.js";
-import { spaceContext as context, shelfEntry } from "./space-fixtures.js";
+import { spaceContext as context, libraryEntry } from "./space-fixtures.js";
 import { insertWork } from "./work-fixtures.js";
 
 purgeAccountsCreatedHere();
@@ -41,7 +41,7 @@ purgeAccountsCreatedHere();
 describe("the user-space outbox", () => {
 	it("01: clears a row only after the write reads back verified", async () => {
 		const ctx = await context();
-		const queued = await enqueueLibraryItem(ctx.userId, shelfEntry(ctx.workId));
+		const queued = await enqueueLibraryItem(ctx.userId, libraryEntry(ctx.workId));
 		expect(queued.queued).toBe(true);
 
 		const report = await drainSpaceOutbox({
@@ -53,14 +53,14 @@ describe("the user-space outbox", () => {
 		expect(report.cleared).toBe(1);
 		expect(report.failures).toEqual([]);
 
-		// The space holds the record, and the projection now holds the shelf row.
+		// The space holds the record, and the projection now holds the Library row.
 		const [record] = ctx.pds.recordsIn(ctx.spaceUri, USER_SPACE_COLLECTIONS.libraryItem);
 		expect(record.value).toMatchObject({ subject: { kind: "work", id: ctx.workId } });
-		const [shelf] = await db
+		const [library] = await db
 			.select()
 			.from(libraryItems)
 			.where(and(eq(libraryItems.userId, ctx.userId), eq(libraryItems.workId, ctx.workId)));
-		expect(shelf?.hidden).toBe(false);
+		expect(library?.hidden).toBe(false);
 
 		// Nothing is owed, and the registry knows the address.
 		expect(await rowsFor(ctx.userId)).toHaveLength(0);
@@ -71,7 +71,7 @@ describe("the user-space outbox", () => {
 
 	it("01F: a failed read-back keeps the row and the record, and projects nothing", async () => {
 		const ctx = await context();
-		await enqueueLibraryItem(ctx.userId, shelfEntry(ctx.workId));
+		await enqueueLibraryItem(ctx.userId, libraryEntry(ctx.workId));
 		ctx.pds.corruptReads = 1;
 
 		const failed = await drainSpaceOutbox({
@@ -83,13 +83,13 @@ describe("the user-space outbox", () => {
 		expect(failed.failures[0].kind).toBe("verification");
 		expect(failed.failures[0].error).toContain("cid");
 
-		// The row is still owed, with its payload, and no shelf row was projected.
+		// The row is still owed, with its payload, and no Library row was projected.
 		const rows = await rowsFor(ctx.userId);
 		expect(rows).toHaveLength(1);
 		expect(rows[0].status).toBe("pending");
 		expect(rows[0].attempts).toBe(1);
 		expect(rows[0].record).toMatchObject({ subject: { id: ctx.workId } });
-		expect(await shelfRows(ctx.userId)).toHaveLength(0);
+		expect(await libraryRows(ctx.userId)).toHaveLength(0);
 
 		// The write itself did land, which is exactly the state the verification exists to catch.
 		expect(ctx.pds.recordsIn(ctx.spaceUri, USER_SPACE_COLLECTIONS.libraryItem)).toHaveLength(1);
@@ -102,12 +102,12 @@ describe("the user-space outbox", () => {
 		});
 		expect(retried.cleared).toBe(1);
 		expect(await rowsFor(ctx.userId)).toHaveLength(0);
-		expect(await shelfRows(ctx.userId)).toHaveLength(1);
+		expect(await libraryRows(ctx.userId)).toHaveLength(1);
 	});
 
 	it("02: a write that landed before a kill is written again and converges", async () => {
 		const ctx = await context();
-		await enqueueLibraryItem(ctx.userId, shelfEntry(ctx.workId));
+		await enqueueLibraryItem(ctx.userId, libraryEntry(ctx.workId));
 		ctx.pds.throwAfterWrite = 1;
 
 		const killed = await drainSpaceOutbox({
@@ -129,11 +129,11 @@ describe("the user-space outbox", () => {
 		expect(ctx.pds.recordsIn(ctx.spaceUri, USER_SPACE_COLLECTIONS.libraryItem)).toHaveLength(1);
 	});
 
-	it("08: rebuilds the shelf from listRecords and retracts a row the space lacks", async () => {
+	it("08: rebuilds the Library from listRecords and retracts a row the space lacks", async () => {
 		const ctx = await context();
-		await enqueueLibraryItem(ctx.userId, shelfEntry(ctx.workId));
+		await enqueueLibraryItem(ctx.userId, libraryEntry(ctx.workId));
 		await drainSpaceOutbox({ resolveSession: ctx.resolveSession, fetchImpl: ctx.pds.fetch });
-		expect(await shelfRows(ctx.userId)).toHaveLength(1);
+		expect(await libraryRows(ctx.userId)).toHaveLength(1);
 
 		// A stray local row the space knows nothing about, which the rebuild must retract.
 		const strayWork = await insertWork({ creatorId: ctx.userId, type: "text", title: "Stray" });
@@ -150,9 +150,9 @@ describe("the user-space outbox", () => {
 		expect(rebuilt.scanned).toBe(1);
 		expect(rebuilt.inserted).toBe(1);
 
-		const shelf = await shelfRows(ctx.userId);
-		expect(shelf).toHaveLength(1);
-		expect(shelf[0].workId).toBe(ctx.workId);
+		const library = await libraryRows(ctx.userId);
+		expect(library).toHaveLength(1);
+		expect(library[0].workId).toBe(ctx.workId);
 
 		// And a row the space does not carry is removed rather than kept.
 		await db.insert(libraryItems).values({ userId: ctx.userId, workId: strayWork.id });
@@ -162,7 +162,7 @@ describe("the user-space outbox", () => {
 		});
 		if ("reason" in again) throw new Error(`rebuild failed: ${again.reason}`);
 		expect(again.removed).toBe(1);
-		expect(await shelfRows(ctx.userId)).toHaveLength(1);
+		expect(await libraryRows(ctx.userId)).toHaveLength(1);
 	});
 
 	it("09: finds an empty space and repairs a corrupted registry address", async () => {
@@ -189,7 +189,7 @@ describe("the user-space outbox", () => {
 
 	it("parks a row that keeps failing and tells the alert path", async () => {
 		const ctx = await context();
-		await enqueueLibraryItem(ctx.userId, shelfEntry(ctx.workId));
+		await enqueueLibraryItem(ctx.userId, libraryEntry(ctx.workId));
 		ctx.pds.corruptReads = 99;
 
 		const alerts: OutboxFailure[] = [];
@@ -229,6 +229,6 @@ async function rowsFor(userId: number) {
 	return db.select().from(spaceOutbox).where(eq(spaceOutbox.userId, userId));
 }
 
-async function shelfRows(userId: number) {
+async function libraryRows(userId: number) {
 	return db.select().from(libraryItems).where(eq(libraryItems.userId, userId));
 }

@@ -4,7 +4,7 @@
  * rollback that makes the database canonical again.
  *
  * The test reads the records out of the fake PDS rather than trusting the migration's counts,
- * because the promise is that the reader's shelf, progress and save are in the space at the
+ * because the promise is that the reader's Library, progress and save are in the space at the
  * same values. It also proves the two directions the flag owns: a forward write queues only on
  * `space`, and a failed read-back refuses the flip.
  */
@@ -16,7 +16,7 @@ import { eq } from "drizzle-orm";
 import { saveWork } from "../services/library.js";
 import {
 	migrateReaderState,
-	queueShelfEntry,
+	queueLibraryEntry,
 	readerStateHome,
 	rollbackReaderState,
 } from "../services/reader-state-migration.js";
@@ -36,7 +36,7 @@ async function rowsFor(userId: number) {
 }
 
 describe("the reader-state cutover", () => {
-	it("backfills the shelf, progress and save, then flips to the space", async () => {
+	it("backfills the Library, progress and save, then flips to the space", async () => {
 		const ctx = await spaceContext();
 		const saved = await saveWork(ctx.userId, ctx.workId);
 		if (!saved.ok) throw new Error("the fixture Work could not be saved");
@@ -55,10 +55,13 @@ describe("the reader-state cutover", () => {
 			fetchImpl: ctx.pds.fetch,
 		});
 		if (!migrated.ok) throw new Error(`migration refused: ${migrated.reason}`);
-		expect(migrated.report).toMatchObject({ shelf: 1, positions: 1, saves: 1, remaining: 0 });
+		expect(migrated.report).toMatchObject({ library: 1, positions: 1, saves: 1, remaining: 0 });
 
-		const [shelf] = ctx.pds.recordsIn(ctx.spaceUri, USER_SPACE_COLLECTIONS.libraryItem);
-		expect(shelf.value).toMatchObject({ subject: { kind: "work", id: ctx.workId }, hidden: false });
+		const [library] = ctx.pds.recordsIn(ctx.spaceUri, USER_SPACE_COLLECTIONS.libraryItem);
+		expect(library.value).toMatchObject({
+			subject: { kind: "work", id: ctx.workId },
+			hidden: false,
+		});
 
 		const [position] = ctx.pds.recordsIn(ctx.spaceUri, USER_SPACE_COLLECTIONS.readingPosition);
 		expect(position.value).toMatchObject({
@@ -92,7 +95,7 @@ describe("the reader-state cutover", () => {
 		const extra = await insertWork({ creatorId: ctx.userId, type: "text", title: "Second" });
 		const saved = await saveWork(ctx.userId, extra.id);
 		if (!saved.ok) throw new Error("the second Work could not be saved");
-		await queueShelfEntry(ctx.userId, saved.id);
+		await queueLibraryEntry(ctx.userId, saved.id);
 		expect(await rowsFor(ctx.userId)).toHaveLength(1);
 		const drained = await drainSpaceOutbox({
 			resolveSession: ctx.resolveSession,
@@ -107,7 +110,7 @@ describe("the reader-state cutover", () => {
 		const third = await insertWork({ creatorId: ctx.userId, type: "text", title: "Third" });
 		const afterRollback = await saveWork(ctx.userId, third.id);
 		if (!afterRollback.ok) throw new Error("the third Work could not be saved");
-		await queueShelfEntry(ctx.userId, afterRollback.id);
+		await queueLibraryEntry(ctx.userId, afterRollback.id);
 		expect(await rowsFor(ctx.userId)).toHaveLength(0);
 		expect(ctx.pds.recordsIn(ctx.spaceUri, USER_SPACE_COLLECTIONS.libraryItem)).toHaveLength(1);
 	});

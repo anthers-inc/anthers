@@ -306,7 +306,7 @@ test("a creator can create a Project and lands on its page, which is the editor"
 		// behind the sticky Studio header. Nothing errored and the URL was right.
 		//
 		// ⚠️ **This asserts where the page ARRIVES, so it has to run before anything scrolls
-		// it.** The shelf walk below reaches the bottom of the form; putting it first made
+		// it.** The list walk below reaches the bottom of the form; putting it first made
 		// this fail for a reason that had nothing to do with the scroll behavior it guards.
 		await expect(page.getByRole("heading", { name: "View As" })).toBeInViewport();
 
@@ -315,7 +315,7 @@ test("a creator can create a Project and lands on its page, which is the editor"
 		await expect(page).toHaveURL(new RegExp(`/@[^/]+/${slug}$`));
 		await expect(page.getByRole("heading", { name: "View As" })).toBeInViewport();
 
-		// 🚨 **The absence of the picker's mint is a tested absence.** The Works shelf's
+		// 🚨 **The absence of the picker's mint is a tested absence.** The Works list's
 		// picker minted a Work through a ghost "New Work" button until 2026-10-10, when
 		// pickers became pickers only — a Project is edited by assigning existing Works, and
 		// making one is `/studio/works/new`'s job. A removed button looks like a renamed one

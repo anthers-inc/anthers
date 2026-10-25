@@ -54,8 +54,8 @@ export async function spaceContext(): Promise<SpaceContext> {
 	};
 }
 
-/** One shelf entry, with the fields a test does not care about filled in. */
-export function shelfEntry(
+/** One Library entry, with the fields a test does not care about filled in. */
+export function libraryEntry(
 	workId: number,
 	overrides: Partial<LibraryItemState> = {},
 ): LibraryItemState {

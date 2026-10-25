@@ -174,7 +174,7 @@ export const spaceBackups = pgTable(
  * A write that is owed to a user's space.
  *
  * 🚨 **The row is the intent, and the record is the payload.** A `put` carries the complete
- * record, because every record this path writes is absolute state (a shelf entry's hidden
+ * record, because every record this path writes is absolute state (a Library entry's hidden
  * flag, a sort order) rather than an increment; a later write therefore replaces an earlier
  * one rather than stacking on it, and a `delete` supersedes whatever was queued for the same
  * key. That is what lets a retry write the same bytes and converge.

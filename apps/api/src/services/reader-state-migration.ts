@@ -43,7 +43,7 @@ import { registeredSpace } from "./space-registry.js";
 import type { ResolveSpaceSession } from "./space-writer.js";
 
 export interface ReaderStateReport {
-	shelf: number;
+	library: number;
 	positions: number;
 	saves: number;
 	cleared: number;
@@ -74,7 +74,7 @@ export async function readerStateHome(userId: number): Promise<"db" | "space"> {
 /**
  * Backfill this account's reader state into its space and flip the cutover.
  *
- * The outbox is drained in bounded passes so a large shelf does not hold one request or job
+ * The outbox is drained in bounded passes so a large Library does not hold one request or job
  * forever; the caller sees the count that remained and can run it again.
  */
 export async function migrateReaderState(
@@ -84,21 +84,21 @@ export async function migrateReaderState(
 	const space = await registeredSpace(userId);
 	if (!space) return { ok: false, reason: "no_space" };
 
-	const [shelf, positions, saves] = await Promise.all([
+	const [library, positions, saves] = await Promise.all([
 		db.select().from(libraryItems).where(eq(libraryItems.userId, userId)),
 		db.select().from(readingPositions).where(eq(readingPositions.userId, userId)),
 		db.select().from(workSaves).where(eq(workSaves.userId, userId)),
 	]);
 
 	const workIds = [
-		...shelf.map((row) => row.workId),
+		...library.map((row) => row.workId),
 		...positions.map((row) => row.workId),
 		...saves.map((row) => row.workId),
 	].filter((id): id is number => id != null);
 	const uris = await workUris(workIds);
 
-	for (const row of shelf) {
-		const subject = shelfSubject(row);
+	for (const row of library) {
+		const subject = librarySubject(row);
 		if (!subject) continue;
 		const state: LibraryItemState = {
 			subject: { ...subject, uri: subject.kind === "work" ? (uris.get(subject.id) ?? null) : null },
@@ -150,7 +150,7 @@ export async function migrateReaderState(
 	}
 
 	const report: ReaderStateReport = {
-		shelf: shelf.length,
+		library: library.length,
 		positions: positions.length,
 		saves: saves.length,
 		cleared: 0,
@@ -199,8 +199,8 @@ export async function rollbackReaderState(userId: number): Promise<{ ok: true }>
 // written; an account on `db` queues nothing, which is what makes the rollback take effect for
 // the next request rather than only for the backfill.
 
-/** Queue one shelf entry by its row id, if this account is on the space copy. */
-export async function queueShelfEntry(userId: number, itemId: number): Promise<void> {
+/** Queue one Library entry by its row id, if this account is on the space copy. */
+export async function queueLibraryEntry(userId: number, itemId: number): Promise<void> {
 	if ((await readerStateHome(userId)) !== "space") return;
 	const [row] = await db
 		.select()
@@ -208,7 +208,7 @@ export async function queueShelfEntry(userId: number, itemId: number): Promise<v
 		.where(and(eq(libraryItems.id, itemId), eq(libraryItems.userId, userId)))
 		.limit(1);
 	if (!row) return;
-	const subject = shelfSubject(row);
+	const subject = librarySubject(row);
 	if (!subject) return;
 	const uris = subject.kind === "work" ? await workUris([subject.id]) : new Map<number, string>();
 	await enqueueLibraryItem(userId, {
@@ -219,8 +219,8 @@ export async function queueShelfEntry(userId: number, itemId: number): Promise<v
 	});
 }
 
-/** Queue the removal of a shelf entry the caller is about to delete. */
-export async function queueShelfRemoval(
+/** Queue the removal of a Library entry the caller is about to delete. */
+export async function queueLibraryRemoval(
 	userId: number,
 	subject: { kind: "work" | "project" | "post"; id: number },
 ): Promise<void> {
@@ -303,7 +303,7 @@ export async function queueWorkSaveRemoval(userId: number, workId: number): Prom
 }
 
 /** The subject a `library_items` row names, or null when the row names none. */
-function shelfSubject(row: typeof libraryItems.$inferSelect): {
+function librarySubject(row: typeof libraryItems.$inferSelect): {
 	kind: "work" | "project" | "post";
 	id: number;
 } | null {

@@ -5,7 +5,7 @@
  * the shelves below with their sort modes and their multi-select picker — while anyone
  * else reaches the plain rendering, because only the owner reads a draft's URL at all.
  *
- * The API suite carries the endpoint rules (draft 404s, whole-order reorder, the shelf
+ * The API suite carries the endpoint rules (draft 404s, whole-order reorder, the list
  * conferring no access); this walk proves the page's behavior on top of them: that a
  * chosen sort persists on the Project and reads back, that it never rewrites the stored
  * drag order, that drag belongs to Manual, and that the picker's confirm adds everything
@@ -93,8 +93,8 @@ test.afterAll(async () => {
 	}
 });
 
-/** The Works shelf's list, by its own role and name. */
-function shelfRows(page: import("@playwright/test").Page) {
+/** The Works list's rows, by the list's own role and name. */
+function projectRows(page: import("@playwright/test").Page) {
 	return page.getByRole("list", { name: "Works on this Project" });
 }
 
@@ -129,7 +129,7 @@ test("the editor is the page: the creator finds the shelves, the sort and the pe
 	await expect(page.getByRole("button", { name: "Edit Title" })).toHaveCount(1);
 	await expect(page.getByRole("heading", { name: "Works" })).toBeVisible();
 	await expect(
-		page.getByText("No Works yet. A Project is a shelf", { exact: false }),
+		page.getByText("No Works yet. Add the album's tracks", { exact: false }),
 	).toBeVisible();
 
 	// The sort's controls: Manual is the default and the direction pair is greyed out —
@@ -159,7 +159,7 @@ test("the multi-select picker adds everything ticked, in one act", async ({ page
 	await expect(confirm).toBeEnabled();
 	// Untick the SECOND row and retick it — the toggle has to toggle, and the count
 	// follows. (Reticking Bravo keeps Zulu first in the picked order, so the adds — and
-	// thus the shelf's Manual order — read [Zulu, Bravo], the reverse of Alphabetical.)
+	// thus the list's Manual order — read [Zulu, Bravo], the reverse of Alphabetical.)
 	await page.getByLabel(`Select ${bravo}`).click();
 	await expect(page.getByText("1 selected")).toBeVisible();
 	await page.getByLabel(`Select ${bravo}`).click();
@@ -167,8 +167,8 @@ test("the multi-select picker adds everything ticked, in one act", async ({ page
 
 	await confirm.click();
 	await expect(page.getByRole("heading", { name: "Add Works" })).toHaveCount(0);
-	await expect(shelfRows(page)).toContainText(zulu);
-	await expect(shelfRows(page)).toContainText(bravo);
+	await expect(projectRows(page)).toContainText(zulu);
+	await expect(projectRows(page)).toContainText(bravo);
 
 	// Already-shelved Works are offered nowhere — reopen, and the row is not there.
 	await page.getByRole("button", { name: "Add a Work" }).click();
@@ -187,7 +187,7 @@ test("a chosen sort persists across visits and leaves the Manual order untouched
 	const bravo = `${TITLE_PREFIX} Bravo`;
 	const sortSelect = page.getByLabel("Sort the works");
 	const direction = page.getByLabel("Works sort direction");
-	const rows = shelfRows(page).locator("li .truncate");
+	const rows = projectRows(page).locator("li .truncate");
 
 	// Manual first: two rows in the order the adds went in — the stored drag order.
 	await expect(direction).toBeDisabled();
@@ -204,7 +204,7 @@ test("a chosen sort persists across visits and leaves the Manual order untouched
 	await sortSelect.selectOption("title");
 	await savedMode;
 	await expect(direction).toBeEnabled();
-	await expect(shelfRows(page).locator("span.cursor-grab")).toHaveCount(0);
+	await expect(projectRows(page).locator("span.cursor-grab")).toHaveCount(0);
 	await expect(rows).toHaveText([bravo, zulu]);
 
 	// Revisit the page: the Project carries the setting, so the dropdown and the rows
@@ -236,7 +236,7 @@ test("a chosen sort persists across visits and leaves the Manual order untouched
 	await sortSelect.selectOption("manual");
 	await savedManual;
 	await expect(rows).toHaveText([zulu, bravo]);
-	await expect(shelfRows(page).locator("span.cursor-grab")).toHaveCount(2);
+	await expect(projectRows(page).locator("span.cursor-grab")).toHaveCount(2);
 	await expect(direction).toBeDisabled();
 });
 

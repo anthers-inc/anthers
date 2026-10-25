@@ -39,7 +39,7 @@ async function makeProject(slug: string, title: string, isPublished: boolean): P
 
 test.describe.configure({ mode: "serial" });
 test.afterAll(async () => {
-	// Leave no shelf behind; the slugs are unique per run as the studio-routes walk's are.
+	// Leave no Project behind; the slugs are unique per run as the studio-routes walk's are.
 	if (!session) return;
 	for (const slug of [PUBLISHED_SLUG, DRAFT_SLUG]) {
 		await fetch(`${API_URL}/api/content/projects/${slug}`, {
@@ -107,7 +107,7 @@ test("the works grid renders the project's summary thumbnails as a way into each
 }) => {
 	session = await signInAsMediaFixture(context);
 	// A Work made while this run is signed in does not join a Project by itself; the
-	// shelf is edit-only, and this is the assignment the Studio's shelf picker makes.
+	// Works list is edit-only, and this is the assignment the Studio's Works picker makes.
 	const work = await fetch(`${API_URL}/api/content/works`, {
 		method: "POST",
 		headers: await sessioned(),

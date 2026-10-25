@@ -4,7 +4,7 @@
  *
  * 🚨 **One object, one place** (Parker, 2026-10-10). This, the Works page, and Posts were one
  * "Catalog" page with a Projects table above a Works grid, and each object now has its own
- * listing, its own New button and its own tab. A Project is the shelf a set of Works sit on —
+ * listing, its own New button and its own tab. A Project groups a set of Works —
  * grouping, ordering, nothing else — so a Project's listing is a table of names and states,
  * not a grid: the substance lives on the Works it holds.
  *
@@ -170,7 +170,7 @@ export default function ProjectsPage() {
 				<EmptyState
 					icon={<PlusIcon className="w-12 h-12" />}
 					title="No projects yet"
-					description="A Project is a shelf that groups related Works and Posts — an album and its tracks, a game and its devlogs, a book and its chapters. It holds no files, prices or gates of its own: everything it shows belongs to the Works inside it. A Works page sits beside this one, and a single can ship there first and join an album here as the album forms."
+					description="A Project groups related Works and Posts — an album and its tracks, a game and its devlogs, a book and its chapters. It holds no files, prices or gates of its own: everything it shows belongs to the Works inside it. A Works page sits beside this one, and a single can ship there first and join an album here as the album forms."
 					action={
 						<Link to={studioNewProjectUrl()} className="btn btn-primary btn-sm">
 							<PlusIcon className="w-4 h-4" /> New Project
@@ -179,7 +179,7 @@ export default function ProjectsPage() {
 				/>
 			) : rows.length === 0 ? (
 				/* Every Project is filtered out — distinguishable from an empty list, and
-				   its remedy is a click, not a new shelf. */
+				   its remedy is a click, not a new Project. */
 				<div className="text-sm text-base-content/60">
 					<p className="mb-2">No Projects match these filters.</p>
 					<button
@@ -332,8 +332,8 @@ function ProjectRow({
 				</p>
 			</td>
 
-			{/* WORKS — the row's right zone: the shelf's contents as a grid of thumbnails,
-			    each opening the Work's Edit page. Six show; a bigger shelf says by how much. */}
+			{/* WORKS — the row's right zone: the Project's contents as a grid of thumbnails,
+			    each opening the Work's Edit page. Six show; a longer list says by how much. */}
 			<td className="py-3 pr-4">
 				<WorksGrid works={works} />
 			</td>
