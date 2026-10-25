@@ -345,7 +345,9 @@ test("⭐ giving a Sticker lands the outline, closes the picker, and the count m
 	// — the picker is where taking one back lives now that the chips are gone.
 	const fresh = await openPickerPlain(page, "Anyone can read this");
 	await expect(fresh.first()).toContainText(`(${leftFor(0.25) - 1} left)`, { timeout: 5_000 });
-	await expect(page.getByText("What you gave")).toBeVisible();
+	// ⚠️ Scoped to the open picker: a `<details>` renders its contents whether or not it is
+	// open, so every comment row's picker also holds this line in the DOM.
+	await expect(page.locator("details[open]").getByText("What you gave")).toBeVisible();
 	expect(errors).toEqual([]);
 });
 
@@ -398,14 +400,16 @@ test("⭐ the picker is where a giver takes one back, now that no chip carries a
 	await openPickerPlain(page, "Anyone can read this");
 
 	// The give above left this giver a row under "What you gave" — that section is the home
-	// removal has without chips to click.
-	await expect(page.getByText("What you gave")).toBeVisible();
+	// removal has without chips to click. Scoped to the open picker, because a closed
+	// `<details>` still holds its contents and every other row has one of these too.
+	const open = page.locator("details[open]");
+	await expect(open.getByText("What you gave")).toBeVisible();
 	page.once("dialog", (dialog) => dialog.accept());
-	await page.getByRole("button", { name: "Remove" }).first().click();
+	await open.getByRole("button", { name: "Remove" }).first().click();
 
 	// The row goes and the section goes with it; the money stays spent, which is the
 	// confirmation's whole point and is asserted on the API side.
-	await expect(page.getByText("What you gave")).toHaveCount(0, { timeout: 5_000 });
+	await expect(open.getByText("What you gave")).toHaveCount(0, { timeout: 5_000 });
 });
 
 test("⭐ the review composer carries the Work's chooser, with the same rows", async ({
