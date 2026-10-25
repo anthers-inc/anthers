@@ -24,13 +24,13 @@ import { RIVAL_SPEND } from "@anthers/shared/figures";
 import { purchaseCase, userCases } from "@anthers/shared/scenarios";
 import Decimal from "decimal.js";
 import {
-	cardFloor,
 	cent,
 	computeMonth,
 	crossover,
 	patreonPledgeReach,
 	startLines,
 	storefrontItemReach,
+	supportFloor,
 } from "./media-month";
 
 /** The re-point, untouched. */
@@ -191,17 +191,48 @@ describe("the honest-null and losing cases", () => {
 	});
 });
 
-describe("the card fee's floor is computed, and it bites below the floor", () => {
-	test("the floor is the dials' arithmetic, rounded to the cent it is quoted at", () => {
-		// 0.30 / (1 − 0.5 − 0.029) computed from the dials, not typed.
-		expect(cardFloor()).toBe(Math.round((0.3 / (1 - 0.5 - 0.029)) * 100) / 100);
+describe("the support line's floor is computed, and it bites below the floor", () => {
+	const lines = (() => {
+		const l = startLines();
+		for (const k of ["video", "music", "purchases", "direct", "free"] as const) l[k].on = false;
+		return l;
+	})();
+
+	test("a charge at the floor funds every line; a cent below it does not", () => {
+		const floor = supportFloor();
+		const at = computeMonth(lines, { anthersAmt: floor, directedAmt: 0, directedTouched: true });
+		const below = computeMonth(lines, {
+			anthersAmt: Math.round((floor - 0.01) * 100) / 100,
+			directedAmt: 0,
+			directedTouched: true,
+		});
+		expect(at.anthers.breakdown.support).toBeGreaterThanOrEqual(0);
+		expect(below.anthers.floorless).toBe(true);
+		expect(at.anthers.floorless).toBe(false);
 	});
 
-	test("an Anthers charge below the floor is flagged floorless, not shown as a remainder", () => {
-		const lines = startLines();
-		for (const k of ["video", "music", "purchases", "direct", "free"] as const) lines[k].on = false;
-		const m = computeMonth(lines, { anthersAmt: 0.5, directedAmt: 0, directedTouched: true });
-		expect(m.anthers.floorless).toBe(true);
+	test("the five lines are the Anthers side, to the cent", () => {
+		for (const anthersAmt of [3, 6, 9, 12, 25.5]) {
+			const b = computeMonth(lines, { anthersAmt, directedAmt: 0, directedTouched: true }).anthers
+				.breakdown;
+			const sum = b.timePoolByTime + b.stickers + b.storage + b.cardOnAnthers + b.support;
+			expect(cent(sum)).toBe(cent(b.anthers));
+			// The two creator channels are the half, and neither contains the other.
+			expect(cent(b.timePoolByTime + b.stickers)).toBe(cent(b.timePool));
+		}
+	});
+
+	test("a charge carrying directed money charges this side only its share of the fee", () => {
+		const b = computeMonth(lines, {
+			anthersAmt: 6,
+			directedAmt: 6,
+			directedTouched: true,
+		}).anthers.breakdown;
+		// One fee on the whole charge, and the two shares reconstruct it.
+		expect(cent(b.cardOnAnthers + b.cardOnDirected)).toBe(cent(b.card));
+		// The support line is the side's own remainder, not the fee's whole weight.
+		const sum = b.timePoolByTime + b.stickers + b.storage + b.cardOnAnthers + b.support;
+		expect(cent(sum)).toBe(cent(b.anthers));
 	});
 });
 

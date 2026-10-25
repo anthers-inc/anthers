@@ -17,10 +17,14 @@ import {
 	SELF_HOST_FEE,
 	STORAGE_LADDER_GIB,
 	STORAGE_PER_GIB_MONTH,
+	stickerBudgetFor,
+	storageGibFor,
 	storageReserveFor,
 	supportBreakdownDisplay,
+	supportLineFor,
 	TIME_POOL_RATE,
 	thresholdForBadge,
+	timePoolByTimeFor,
 	timePoolFor,
 } from "./constants.js";
 import {
@@ -229,6 +233,42 @@ describe("supportBreakdownDisplay — the spend calculator's copy of the whole c
 				expect(toCent(s.chargedWithTax)).toBe(taxedWithDecimal);
 			}
 		}
+	});
+
+	/**
+	 * The spend calculator and the signup panel both publish the ladder's five lines, so
+	 * the breakdown is where they are defined once. Two properties make that publishable:
+	 * the lines sum to what was given to Anthers, and the two creator channels are the
+	 * half with neither containing the other.
+	 */
+	test("publishes the ladder's five lines, summing to the Anthers side", () => {
+		for (const a of [0, 3, 6, 9, 12, 30]) {
+			const s = supportBreakdownDisplay(a, 0);
+			expect(s.timePoolByTime).toBeCloseTo(timePoolByTimeFor(a), 8);
+			expect(s.stickers).toBeCloseTo(stickerBudgetFor(a), 8);
+			expect(s.storage).toBe(storageReserveFor(a));
+			expect(s.support).toBeCloseTo(supportLineFor(a), 8);
+			expect(s.timePoolByTime + s.stickers).toBeCloseTo(s.timePool, 8);
+			expect(s.storage + s.support).toBeCloseTo(s.remainder, 8);
+			expect(s.timePoolByTime + s.stickers + s.storage + s.cardOnAnthers + s.support).toBeCloseTo(
+				s.anthers,
+				8,
+			);
+		}
+	});
+
+	test("a batched charge takes this side's share of the fee, not the whole fee", () => {
+		const alone = supportBreakdownDisplay(6, 0);
+		const batched = supportBreakdownDisplay(6, 6);
+		expect(batched.cardOnAnthers).toBeLessThan(alone.cardOnAnthers);
+		expect(batched.support).toBeCloseTo(supportLineFor(6, batched.cardOnAnthers), 8);
+		expect(
+			batched.timePoolByTime +
+				batched.stickers +
+				batched.storage +
+				batched.cardOnAnthers +
+				batched.support,
+		).toBeCloseTo(batched.anthers, 8);
 	});
 });
 
@@ -569,8 +609,8 @@ describe("badgeTable — the published ladder adds up", () => {
  * ladder makes is its ceiling, and every bundled byte is paid to the storage vendor.
  */
 describe("storageReserveFor — the allowance at the vendor's rate", () => {
-	test("every rung is the ruled allowance at the rate, rounded once to cents", () => {
-		for (const key of BADGE_ORDER) {
+	test("every paying rung is the ruled allowance at the rate, rounded once to cents", () => {
+		for (const key of BADGE_ORDER.filter((k) => k !== "free")) {
 			const gib = STORAGE_LADDER_GIB[key];
 			const expected = new Decimal(gib)
 				.mul(STORAGE_PER_GIB_MONTH)
@@ -580,7 +620,16 @@ describe("storageReserveFor — the allowance at the vendor's rate", () => {
 		}
 	});
 
-	test("nothing is charged below the free floor's own rate", () => {
-		expect(storageReserveFor(0)).toBe(0.4);
+	/**
+	 * The free floor is a different question from a free charge: every account holds
+	 * `FREE_STORAGE_GIB` whether it pays anything or not, so a gift below Root buys no
+	 * storage and reserves nothing. Reserving it would charge somebody for space they
+	 * were already given — and would make a small charge's support line negative.
+	 */
+	test("a free or unbaded amount reserves nothing", () => {
+		expect(storageReserveFor(0)).toBe(0);
+		expect(storageReserveFor(1)).toBe(0);
+		expect(storageReserveFor(thresholdForBadge("root") - 0.01)).toBe(0);
+		expect(storageGibFor(1)).toBe(STORAGE_LADDER_GIB.free);
 	});
 });

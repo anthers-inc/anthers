@@ -7,6 +7,23 @@
 // constants.ts and the formulas in fees.ts, and a change to the model lands in this file
 // in the same commit rather than being regenerated. Periodic drift passes reconcile the
 // two; nothing fails the build when they disagree.
+//
+// ⚠️ **One section is the exception, and it says so where it lives**: `MONEY_FLOWS`'s
+// Anthers-subscription lines are computed from the ladder's own helpers, because the page
+// that reads them draws a five-line column a reader is expected to add up. The rest of the
+// file keeps the contract above.
+
+import {
+	ANTHERS_BADGES,
+	badgeLabel,
+	cardFeeDisplay,
+	PUBLIC_ACCESS_PRICE,
+	stickerBudgetFor,
+	storageReserveFor,
+	supportLineFor,
+	timePoolByTimeFor,
+	timePoolFor,
+} from "./constants.js";
 
 /**
  * Per-Badge decomposition of the monthly charge. Exact, not illustrative — it stopped
@@ -134,68 +151,66 @@ export const DIRECTED_SUPPORT_WORST_CASE = {
 } as const;
 
 /**
+ * The paid rungs, in the ladder's own order — what the diagram's receipts table walks.
+ */
+const PAID_BADGES = ANTHERS_BADGES.filter((b) => b.threshold > 0);
+
+/**
+ * One Anthers subscription's split, at `monthly` dollars a month: the ladder's five lines
+ * and each one's share of the charge.
+ *
+ * The five are the model's own functions rather than arithmetic done here, so this column
+ * and `/signup`, the Badges page and The Support Model cannot disagree. `timePool` is the
+ * creator half — the envelope the two creator lines are drawn from — and it is kept beside
+ * them because the page also states the half as a share.
+ */
+function anthersSubLines(monthly: number) {
+	const share = (n: number) => Math.round((n / monthly) * 1000) / 10;
+	const timePool = timePoolFor(monthly);
+	const timePoolByTime = timePoolByTimeFor(monthly);
+	const stickers = stickerBudgetFor(monthly);
+	const storage = storageReserveFor(monthly);
+	const card = cardFeeDisplay(monthly);
+	const support = supportLineFor(monthly);
+	// What the charitable side can be at its best: the support floor plus whatever of the
+	// storage reserve the month does not use.
+	const remainder = Math.round((storage + support) * 100) / 100;
+	return {
+		monthly,
+		timePool,
+		timePoolByTime,
+		stickers,
+		storage,
+		card,
+		support,
+		remainder,
+		timePoolPct: share(timePool),
+		timePoolByTimePct: share(timePoolByTime),
+		stickersPct: share(stickers),
+		storagePct: share(storage),
+		cardPct: share(card),
+		supportPct: share(support),
+		remainderPct: share(remainder),
+	};
+}
+
+/**
  * The money routes behind `/resources/how-money-moves` — the mechanism as it
  * works today, at representative charges: what an Anthers subscription splits
- * into (half to the Time Pool by construction, the card line at cost, the rest
- * the remainder), and what a creator subscription and a purchase pass through
- * with. The charges named are inputs; every split and percentage is computed
- * from the checkout's own primitives, with conservation asserted in the
- * generator. No account mix, no phase, no forecast — the plan's projections
- * live only in the admin console.
+ * into, and what a creator subscription and a purchase pass through with. No
+ * account mix, no phase, no forecast — the plan's projections live only in the
+ * admin console.
+ *
+ * 🚨 **The Anthers subscription's lines are read from the ladder's own helpers rather than
+ * typed here** (2026-10-25). This file exists to keep `fees.ts` and its decimal chain out of
+ * the browser bundle, not to hold a second copy of the split: the diagram draws five lines
+ * that a reader can add up, and `/signup`, the Badges page and this page must all be
+ * describing the same five. `supportLineFor` is the definition of the last one, so the
+ * column cannot drift from the model by a cent.
  */
 export const MONEY_FLOWS = {
-	anthersSub: {
-		badge: "Root",
-		monthly: 3,
-		timePool: 1.5,
-		card: 0.39,
-		remainder: 1.11,
-		timePoolPct: 50,
-		cardPct: 13,
-		remainderPct: 37,
-	},
-	ladder: [
-		{
-			badge: "Root",
-			monthly: 3,
-			timePool: 1.5,
-			card: 0.39,
-			remainder: 1.11,
-			timePoolPct: 50,
-			cardPct: 13,
-			remainderPct: 37,
-		},
-		{
-			badge: "Sprout",
-			monthly: 6,
-			timePool: 3,
-			card: 0.47,
-			remainder: 2.53,
-			timePoolPct: 50,
-			cardPct: 7.8,
-			remainderPct: 42.2,
-		},
-		{
-			badge: "Petal",
-			monthly: 9,
-			timePool: 4.5,
-			card: 0.56,
-			remainder: 3.94,
-			timePoolPct: 50,
-			cardPct: 6.2,
-			remainderPct: 43.8,
-		},
-		{
-			badge: "Blossom",
-			monthly: 12,
-			timePool: 6,
-			card: 0.65,
-			remainder: 5.35,
-			timePoolPct: 50,
-			cardPct: 5.4,
-			remainderPct: 44.6,
-		},
-	],
+	anthersSub: { badge: "Root", ...anthersSubLines(PUBLIC_ACCESS_PRICE) },
+	ladder: PAID_BADGES.map((b) => ({ badge: badgeLabel(b.name), ...anthersSubLines(b.threshold) })),
 	creatorSub: {
 		at: {
 			monthly: 10,

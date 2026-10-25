@@ -36,7 +36,13 @@
 // rule (82.01) applies to every string on this page; a Badge is bought, like
 // any other subscription, and the verb for paying it is "give".
 
-import { ANTHERS_BADGES, badgeLabel, PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
+import {
+	ANTHERS_BADGES,
+	badgeLabel,
+	FREE_STORAGE_GIB,
+	PUBLIC_ACCESS_PRICE,
+	storageGibFor,
+} from "@anthers/shared/constants";
 import { RIVAL_SPEND } from "@anthers/shared/figures";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { useMemo, useState } from "react";
@@ -48,7 +54,6 @@ import {
 	StatCard,
 } from "../components/calculators/ui";
 import {
-	cardFloor,
 	computeMonth,
 	crossover,
 	type LineKey,
@@ -57,6 +62,7 @@ import {
 	pct,
 	type SpendLine,
 	startLines,
+	supportFloor,
 } from "../lib/media-month";
 
 // ─── Static labels and rival rows ──────────────────────────────────────────────
@@ -446,10 +452,11 @@ function Inputs({
 				</div>
 				{floorless && (
 					<p className="text-warning text-xs mt-3 leading-relaxed">
-						A monthly charge under about {money2(cardFloor())} is consumed entirely: the flat part
-						of the card fee alone is bigger than what would be left. Nothing funds anything at this
-						size, and the calculator shows it as a gap rather than a remainder. The floor is
-						computed from the card rate and moves with it.
+						A monthly charge under about {money2(supportFloor())} cannot cover its own lines: the
+						flat part of the card fee alone is bigger than what is left, so Anthers Support would
+						come out below zero and Anthers absorbs the difference. The calculator states that gap
+						rather than a figure that balances. The floor is computed from the card rate and the
+						storage ladder, and moves with them.
 					</p>
 				)}
 			</div>
@@ -571,19 +578,77 @@ function FlowAnthers({
 	const reachCreators = m.anthers.reachCreators ?? 0;
 	const byName = m.anthers.byName ?? 0;
 
-	const chargeItems: { label: string; value: number; sub?: string }[] = [
-		{ label: "Given to Anthers", value: breakdown.anthers },
-		{ label: "Directed at Creators", value: breakdown.directed },
-		{
-			label: "The One Card Fee, at Cost",
-			value: breakdown.card,
-			sub: "Paid to the processor — the whole charge's fee, once, split pro-rata.",
-		},
-		{ label: "Directed Money Reaches", value: breakdown.directedNet },
-		{ label: "The Time Pool — by Time Spent", value: breakdown.timePool },
-		{ label: "The Remainder — Funds the Charitable Programs", value: breakdown.remainder },
-		{ label: "You Pay, with Tax", value: breakdown.chargedWithTax },
-	];
+	/**
+	 * The same money as the ladder's own receipt: what went to Anthers, split five ways,
+	 * then what was directed and what of it arrives. A row carrying `depth` is part of
+	 * the total above it, which is the only reading that makes the five lines add up on
+	 * the page as well as in the books.
+	 */
+	const chargeItems: {
+		label: string;
+		value: number;
+		sub?: string;
+		strong?: boolean;
+		depth?: number;
+	}[] = [];
+	if (breakdown.anthers > 0) {
+		chargeItems.push(
+			{ label: "Given to Anthers", value: breakdown.anthers, strong: true },
+			{
+				label: "The Time Pool — by Time Spent",
+				value: breakdown.timePoolByTime,
+				depth: 1,
+				sub: "Split by the share of your Public Access time each creator earned.",
+			},
+			{
+				label: "Your Sticker Budget — Aimed by Hand",
+				value: breakdown.stickers,
+				depth: 1,
+				sub: "Stickers you place yourself; whatever you leave unspent pours into the Time Pool at month's end.",
+			},
+			{
+				label: "Cloud Storage — Reserved at Cost",
+				value: breakdown.storage,
+				depth: 1,
+				sub:
+					breakdown.storage > 0
+						? `${storageGibFor(breakdown.anthers)} GiB at the provider's rate, held whether or not you use it; whatever you don't store pours into Anthers Support.`
+						: `Nothing reserved at this size — your ${FREE_STORAGE_GIB} GiB floor is funded by the rungs above you, the same as a free account's.`,
+			},
+			{
+				label: "Anthers Support — the Charitable Programs",
+				value: breakdown.support,
+				depth: 1,
+				sub:
+					breakdown.support < 0
+						? "Below zero: this charge cannot cover its own card fee, so the difference is Anthers' to absorb."
+						: "The only unreserved line, so it is a floor — free access included.",
+			},
+			{
+				label: "Payments — This Side's Share",
+				value: breakdown.cardOnAnthers,
+				depth: 1,
+				sub: "At cost, paid to the processor. One fee on the whole charge, split pro-rata.",
+			},
+		);
+	}
+	if (breakdown.directed > 0) {
+		chargeItems.push(
+			{ label: "Directed at Creators", value: breakdown.directed, strong: true },
+			{
+				label: "Payments — Its Share of the Same Fee",
+				value: breakdown.cardOnDirected,
+				depth: 1,
+				sub: "The same fee, not a second one.",
+			},
+			{ label: "Directed Money Reaches Those Creators", value: breakdown.directedNet, depth: 1 },
+		);
+	}
+	chargeItems.push({
+		label: "This Charge, with Tax",
+		value: breakdown.chargedWithTax,
+		strong: true,
+	});
 
 	return (
 		<section className="card bg-base-200/40 border border-base-300">
@@ -600,7 +665,7 @@ function FlowAnthers({
 						<p>
 							Your comparable month here is the free account: {FREE_PUBLIC_ACCESS_HOURS} hours of
 							Public Access, funded by Anthers, not by you — the pools that pay the creators whose
-							work free accounts watch are funded by the remainder.
+							work free accounts watch are funded by Anthers Support.
 						</p>
 						<p>
 							With {lines.free.hours} hours a month, a free account covers{" "}
@@ -663,7 +728,7 @@ function FlowAnthers({
 							<StatCard
 								label="The split of what arrives"
 								value={money2(byName + m.anthers.byPool)}
-								sub={`${money2(byName)} by name · ${money2(m.anthers.byPool)} by the time spent`}
+								sub={`${money2(byName)} by name · ${money2(breakdown.timePoolByTime)} by Time Pool · ${money2(breakdown.stickers)} by Sticker`}
 							/>
 						</div>
 
@@ -696,12 +761,28 @@ function FlowAnthers({
 }
 
 /** One label/value row of the support-charge itemization, mono value right-aligned. */
-function ChargeRow({ label, value, sub }: { label: string; value: number; sub?: string }) {
+function ChargeRow({
+	label,
+	value,
+	sub,
+	strong = false,
+	depth = 0,
+}: {
+	label: string;
+	value: number;
+	sub?: string;
+	strong?: boolean;
+	depth?: number;
+}) {
 	return (
-		<div>
+		<div className={depth ? "pl-4" : undefined}>
 			<div className="flex items-baseline justify-between gap-3 text-sm">
-				<span className="text-base-content/70">{label}</span>
-				<span className="font-mono text-sm tabular-nums">{money2(value)}</span>
+				<span className={strong ? "font-semibold text-base-content/80" : "text-base-content/70"}>
+					{label}
+				</span>
+				<span className={`font-mono text-sm tabular-nums${strong ? " font-semibold" : ""}`}>
+					{money2(value)}
+				</span>
 			</div>
 			{sub && <p className="text-xs text-base-content/40 mt-0.5">{sub}</p>}
 		</div>
