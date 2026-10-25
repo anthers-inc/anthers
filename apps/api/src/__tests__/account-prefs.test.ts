@@ -12,9 +12,12 @@
  * ⚠️ **There are two tabs as of 2026-10-24**, when Network retired into Discovery as a
  * recipe preset. A stored `network` is not refused on read — the serializers treat any id
  * this build's nav does not have as never-answered — so the account lands on the merged
- * tab rather than nowhere. The recipe the merged tab remembers is pinned below.
+ * tab rather than nowhere. The recipe the merged tab remembers is pinned below, and so are
+ * the recipes a reader saved beside the built-in presets.
  */
+
 import { beforeAll, describe, expect, it } from "bun:test";
+import { SAVED_RECIPE_LIMIT } from "@anthers/shared/discovery";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -123,6 +126,94 @@ describe("the Discovery recipe preference", () => {
 	});
 });
 
+describe("the saved Discovery recipes", () => {
+	const recipeA = { window: "all", candidates: "following", mix: "straight" };
+	const recipeB = { window: "week", candidates: "everyone", mix: "spread" };
+	const rows = [
+		{ id: "a", label: "Close friends", color: "rose", recipe: recipeA },
+		{ id: "b", label: "Wide net", color: "sky", recipe: recipeB },
+	];
+
+	it("starts empty and round-trips the list through both serializers", async () => {
+		const fresh = `savedrecipes${Date.now().toString(36)}`;
+		const freshCookie = (await createAccount(fresh)).cookie;
+		const before = await (
+			await req("/api/accounts/me", { headers: { Cookie: freshCookie } })
+		).json();
+		expect(before.user.savedRecipes).toBeNull();
+
+		expect((await patchMe({ savedRecipes: rows })).status).toBe(200);
+		const me = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
+		expect(me.user.savedRecipes).toEqual(rows);
+		// The chips render before anything is clicked, so the list has to ride the boot read
+		// rather than only the settings page's GET.
+		const auth = await (await req("/api/auth/me", { headers: { Cookie: cookie } })).json();
+		expect(auth.user.savedRecipes).toEqual(rows);
+	});
+
+	it("keeps the order the client sent, because order is which chip renders first", async () => {
+		expect((await patchMe({ savedRecipes: [...rows].reverse() })).status).toBe(200);
+		const me = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
+		expect(me.user.savedRecipes.map((row: { id: string }) => row.id)).toEqual(["b", "a"]);
+	});
+
+	it("refuses a row the page could not render", async () => {
+		const withRow = (overrides: Record<string, unknown>) =>
+			patchMe({ savedRecipes: [{ ...rows[0], ...overrides }] });
+
+		expect((await withRow({ label: "" })).status).toBe(400);
+		expect((await withRow({ label: "x".repeat(41) })).status).toBe(400);
+		expect((await withRow({ color: "chartreuse" })).status).toBe(400);
+		expect((await withRow({ recipe: { ...recipeA, mix: "chaos" } })).status).toBe(400);
+	});
+
+	/**
+	 * Two chips keyed on one id would be one chip React cannot tell from the other, and a
+	 * saved recipe identical to a built-in preset would be a chip that can never light —
+	 * `choiceForRecipe` matches by recipe, so the first match wins and the other is an
+	 * affordance that does nothing. Two saved rows of the same recipe have the same
+	 * problem. All three are refusals at the route because the UI is not the only client a
+	 * preference can arrive from.
+	 */
+	it("refuses duplicate ids, a repeated recipe and a copy of a built-in preset", async () => {
+		expect(
+			(await patchMe({ savedRecipes: [rows[0], { ...rows[1], id: rows[0].id }] })).status,
+		).toBe(400);
+		// Same stages, different id and name: still one chip that could never light.
+		expect(
+			(await patchMe({ savedRecipes: [rows[0], { ...rows[1], recipe: rows[0].recipe }] })).status,
+		).toBe(400);
+		expect(
+			(
+				await patchMe({
+					savedRecipes: [
+						{
+							id: "copy",
+							label: "Same as My Network",
+							color: "moss",
+							recipe: { window: "all", candidates: "network", mix: "straight" },
+						},
+					],
+				})
+			).status,
+		).toBe(400);
+	});
+
+	it("refuses more recipes than the chip row is bounded to", async () => {
+		const tooMany = Array.from({ length: SAVED_RECIPE_LIMIT + 1 }, (_, index) => ({
+			...rows[0],
+			id: `row-${index}`,
+		}));
+		expect((await patchMe({ savedRecipes: tooMany })).status).toBe(400);
+	});
+
+	it("leaves the list alone when a PATCH does not mention it", async () => {
+		expect((await patchMe({ bio: "Still reading." })).status).toBe(200);
+		const me = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
+		expect(me.user.savedRecipes.map((row: { id: string }) => row.id)).toEqual(["b", "a"]);
+	});
+});
+
 describe("the persistent miniplayer preference", () => {
 	it("rides both serializers: the account's GET /me and the shell's boot read", async () => {
 		const res = await patchMe({ persistentMiniplayer: false });
@@ -157,11 +248,13 @@ describe("the keyboard shortcut preference", () => {
 		search: "mod+shift+k",
 		filter: "alt+f",
 		sidebar: "ctrl+/",
+		previousRecipe: "ctrl+[",
+		nextRecipe: "ctrl+]",
 		fullscreen: "f",
 		theater: "t",
 	};
 
-	it("starts null and round-trips five canonical chords through both serializers", async () => {
+	it("starts null and round-trips every canonical chord through both serializers", async () => {
 		const before = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
 		expect(before.user.keyboardShortcuts).toBeNull();
 
@@ -172,6 +265,8 @@ describe("the keyboard shortcut preference", () => {
 			search: "Mod+Shift+K",
 			filter: "Alt+F",
 			sidebar: "Ctrl+/",
+			previousRecipe: "Ctrl+[",
+			nextRecipe: "Ctrl+]",
 			fullscreen: "F",
 			theater: "T",
 		};

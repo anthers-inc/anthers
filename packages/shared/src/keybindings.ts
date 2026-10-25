@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * The shortcut grammar for the keys a person can rebind: the page's own shortcuts — the
- * search bar's two and the sidebar's toggle — and a player's full-screen and theater keys.
+ * search bar's two, the sidebar's toggle, and Discovery's recipe cycle — and a player's
+ * full-screen and theater keys.
  *
  * A chord is stored as a portable string — `Mod+K`, `F` — rather than as a
  * platform-specific one, because `Mod` is Command on Apple platforms and Control
@@ -10,11 +11,19 @@
  * because Control is the key asked for on every platform; a Mac keeps Control there, and
  * rebinding it to `Mod+/` is what moves it to Command.
  *
- * ⚠️ **Two scopes, two rules.** `search`, `filter` and `sidebar` are listened for on the
- * document, so they must carry a modifier or they would eat typing: at least one real
- * modifier, and `Shift` alone is not one. `fullscreen` and `theater` are listened for by a
- * player that already has focus, which is what makes a bare `f` or `t` correct there — and
- * the grammar refuses a bare key for a page action while accepting one for a player action.
+ * ⚠️ **Two scopes, two rules.** `search`, `filter`, `sidebar`, `previousRecipe` and
+ * `nextRecipe` are listened for on the document, so they must carry a modifier or they
+ * would eat typing: at least one real modifier, and `Shift` alone is not one. `fullscreen`
+ * and `theater` are listened for by a player that already has focus, which is what makes a
+ * bare `f` or `t` correct there — and the grammar refuses a bare key for a page action
+ * while accepting one for a player action.
+ *
+ * ⚠️ **The recipe pair is a `Ctrl` chord rather than `Mod`** (Parker, 2026-10-24). A bare
+ * `Tab` was the first instinct and cannot work: `Tab` is keyboard focus traversal, so
+ * taking it would remove the way every reader moves through the page, and it is not a
+ * modifier limitation to route around — it is the accessibility boundary the grammar
+ * encodes. `Ctrl+[` and `Ctrl+]` need no grammar change, since `sidebar` already proves a
+ * `Ctrl` chord is valid there.
  *
  * 🚨 **The server validates with this module, not only the settings card.** A chord is a
  * value a person can type into a request; a client-side check is a convenience. The rules
@@ -24,7 +33,13 @@
  */
 
 /** Actions listened for on the whole page: they must never fire while somebody is typing. */
-export const PAGE_SHORTCUT_ACTIONS = ["search", "filter", "sidebar"] as const;
+export const PAGE_SHORTCUT_ACTIONS = [
+	"search",
+	"filter",
+	"sidebar",
+	"previousRecipe",
+	"nextRecipe",
+] as const;
 export type PageShortcutAction = (typeof PAGE_SHORTCUT_ACTIONS)[number];
 
 /** Actions listened for by a focused player: a bare letter is the natural binding here. */
@@ -44,6 +59,8 @@ export const DEFAULT_KEYBOARD_SHORTCUTS: KeyboardShortcuts = {
 	search: "Mod+K",
 	filter: "Mod+F",
 	sidebar: "Ctrl+/",
+	previousRecipe: "Ctrl+[",
+	nextRecipe: "Ctrl+]",
 	fullscreen: "F",
 	theater: "T",
 };

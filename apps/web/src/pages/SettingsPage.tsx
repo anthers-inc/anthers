@@ -3187,6 +3187,14 @@ function KeyboardShortcutsSection() {
 			label: "Toggle the sidebar",
 			hint: "Collapses it to its rail on a wide screen, and closes the drawer over the page on a phone.",
 		},
+		previousRecipe: {
+			label: "Previous recipe",
+			hint: "Steps back through Discovery's recipes, wrapping from the first to the last.",
+		},
+		nextRecipe: {
+			label: "Next recipe",
+			hint: "Steps forward through Discovery's recipes, wrapping from the last to the first.",
+		},
 		fullscreen: {
 			label: "Full screen",
 			hint: "Hands the work the whole monitor through the browser's own full-screen mode.",

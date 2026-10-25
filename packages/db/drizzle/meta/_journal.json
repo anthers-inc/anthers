@@ -1254,6 +1254,13 @@
       "when": 1792881768726,
       "tag": "20261024-224248_faulty_eternity",
       "breakpoints": true
+    },
+    {
+      "idx": 179,
+      "version": "7",
+      "when": 1792887084795,
+      "tag": "20261025-001124_naive_magneto",
+      "breakpoints": true
     }
   ]
 }
