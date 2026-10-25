@@ -389,9 +389,10 @@ export async function hideSubject(input: {
 				),
 			);
 
-		// A Sticker can ride a comment, and one Anthers hid stops paying the thread's creator.
-		if (input.subjectType === "comment") {
-			await voidStickersOnSubject("comment", input.subjectId, tx);
+		// A Sticker can ride a comment or a review, and one Anthers hid stops paying — for a comment,
+		// the creator it pays and the replies beneath it that pay them too.
+		if (input.subjectType === "comment" || input.subjectType === "review") {
+			await voidStickersOnSubject(input.subjectType, input.subjectId, tx);
 		}
 	});
 
@@ -447,10 +448,10 @@ export async function restoreSubject(input: {
 			note,
 		});
 
-		// Through `tx`, where the comment already reads as visible. A Sticker stays voided while
-		// the Work its thread hangs off is still removed.
-		if (input.subjectType === "comment") {
-			await restoreStickersOnSubject("comment", input.subjectId, tx);
+		// Through `tx`, where the subject already reads as visible. A Sticker stays voided while
+		// the Work above it is still removed, or while the creator it pays is still hidden.
+		if (input.subjectType === "comment" || input.subjectType === "review") {
+			await restoreStickersOnSubject(input.subjectType, input.subjectId, tx);
 		}
 	});
 

@@ -36,12 +36,12 @@
  */
 
 import { db } from "@anthers/db/client";
-import { comments, monthSettlements, stickers, works } from "@anthers/db/schema";
+import { comments, monthSettlements, reviews, stickers, works } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull, isNull, or, type SQL } from "drizzle-orm";
-import { commentRoots, threadCommentIds } from "./comment-thread.js";
+import { commentAncestry, commentRoots, threadCommentIds } from "./comment-thread.js";
 
 /** What a Sticker can sit on. */
-export type StickerSubjectType = "work" | "post" | "comment";
+export type StickerSubjectType = "work" | "post" | "comment" | "review";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -71,16 +71,67 @@ async function settledCycles(cycles: string[]): Promise<Set<string>> {
 	return new Set(rows.map((r) => r.cycle));
 }
 
-/** The Stickers a removal of this subject reaches: on it, and on any comment its thread roots. */
+/**
+ * The Stickers a removal of this subject reaches.
+ *
+ * 🚨 **A removal reaches the Stickers a subject PAYS as well as the ones sitting on it**
+ * (Parker, 2026-10-24). The money follows the nearest creator up the thread, so hiding a
+ * creator's comment has to reach the replies beneath it whose resolved recipient is that
+ * creator — otherwise a moderation action would quietly re-route their money to the next
+ * creator up, which is the giver's aim being changed by something they never asked for. A
+ * non-creator's comment reaches only itself, because nothing beneath it pays them.
+ *
+ * A Work still reaches its whole thread and its reviews: the thread and every review are
+ * part of a context Anthers took down, whether or not the individual Sticker's money was
+ * aimed at the Work's own creator.
+ */
 async function reachedBy(subjectType: StickerSubjectType, subjectId: number): Promise<SQL> {
 	const onSubject = and(eq(stickers.subjectType, subjectType), eq(stickers.subjectId, subjectId));
-	if (subjectType === "comment") return onSubject as SQL;
+	if (subjectType === "comment") {
+		const [row] = await db
+			.select({ userId: comments.userId })
+			.from(comments)
+			.where(eq(comments.id, subjectId))
+			.limit(1);
+		const below = await threadCommentIds({ subjectType: "comment", subjectId });
+		if (row?.userId == null || below.length === 0) return onSubject as SQL;
+		return or(
+			onSubject,
+			and(
+				eq(stickers.subjectType, "comment"),
+				inArray(stickers.subjectId, below),
+				eq(stickers.creatorId, row.userId),
+			),
+		) as SQL;
+	}
+	if (subjectType === "review") return onSubject as SQL;
+
 	const thread = await threadCommentIds({ subjectType, subjectId });
-	if (thread.length === 0) return onSubject as SQL;
-	return or(
-		onSubject,
-		and(eq(stickers.subjectType, "comment"), inArray(stickers.subjectId, thread)),
-	) as SQL;
+	const parts: SQL[] = [];
+	if (thread.length > 0) {
+		parts.push(
+			and(eq(stickers.subjectType, "comment"), inArray(stickers.subjectId, thread)) as SQL,
+		);
+	}
+	if (subjectType === "work") {
+		const onThisWork = await db
+			.select({ id: reviews.id })
+			.from(reviews)
+			.where(eq(reviews.workId, subjectId));
+		if (onThisWork.length > 0) {
+			parts.push(
+				and(
+					eq(stickers.subjectType, "review"),
+					inArray(
+						stickers.subjectId,
+						onThisWork.map((r) => r.id),
+					),
+				) as SQL,
+			);
+		}
+	}
+	if (parts.length === 0) return onSubject as SQL;
+	return or(onSubject, ...parts) as SQL;
 }
 
 /**
@@ -122,27 +173,94 @@ export async function voidStickersOnSubject(
 /**
  * Which of these Stickers sit on something Anthers still has removed, by any path.
  *
- * A Work is removed while it is taken down or quarantined, a comment while it is hidden or while
- * the Work its thread hangs off is removed. A post has no removal state of its own.
+ * A Work is removed while it is taken down or quarantined; a comment while it is hidden, while
+ * the Work its thread hangs off is removed, or while the creator its money pays has a comment
+ * hidden above it; a review while it is hidden or the Work it reviews is removed. A post has no
+ * removal state of its own.
+ *
+ * ⚠️ **The ancestor half is about the RECIPIENT, not about the comment.** A Sticker on a
+ * stranger's reply pays whichever creator is nearest above it, so what has to be checked is
+ * whether that creator's own comment is still hidden — not whether some unrelated comment in
+ * the chain is. Asking the wider question would keep Stickers voided that the hide never
+ * reached.
  */
 async function stillRemoved(
 	exec: StickerExecutor,
-	rows: { id: number; subjectType: string; subjectId: number }[],
+	rows: { id: number; subjectType: string; subjectId: number; creatorId: number | null }[],
 ): Promise<Set<number>> {
-	const commentIds = rows.filter((r) => r.subjectType === "comment").map((r) => r.subjectId);
-	const roots = await commentRoots(commentIds);
+	const commentRows = rows.filter((r) => r.subjectType === "comment");
+	const roots = await commentRoots(commentRows.map((r) => r.subjectId));
 	const hiddenComments = new Set<number>();
-	if (commentIds.length > 0) {
+	if (commentRows.length > 0) {
 		const hidden = await exec
 			.select({ id: comments.id })
 			.from(comments)
-			.where(and(inArray(comments.id, commentIds), eq(comments.moderationStatus, "hidden")));
+			.where(
+				and(
+					inArray(
+						comments.id,
+						commentRows.map((r) => r.subjectId),
+					),
+					eq(comments.moderationStatus, "hidden"),
+				),
+			);
 		for (const row of hidden) hiddenComments.add(row.id);
+	}
+
+	// The creator a comment Sticker pays, and whether any comment that creator wrote above the
+	// subject is still hidden. Usually the nearest one is the subject's direct parent, so the
+	// walk stops early in practice.
+	const hiddenRecipientAbove = new Set<number>();
+	for (const row of commentRows) {
+		for (const node of await commentAncestry(row.subjectId)) {
+			if (node.userId !== row.creatorId) continue;
+			const [state] = await exec
+				.select({ moderationStatus: comments.moderationStatus })
+				.from(comments)
+				.where(eq(comments.id, node.id))
+				.limit(1);
+			if (state?.moderationStatus === "hidden") {
+				hiddenRecipientAbove.add(row.id);
+				break;
+			}
+		}
+	}
+
+	const reviewRows = rows.filter((r) => r.subjectType === "review");
+	const reviewWorkIds = new Map<number, number>();
+	if (reviewRows.length > 0) {
+		const reviewRowsRead = await exec
+			.select({ id: reviews.id, workId: reviews.workId })
+			.from(reviews)
+			.where(
+				inArray(
+					reviews.id,
+					reviewRows.map((r) => r.subjectId),
+				),
+			);
+		for (const r of reviewRowsRead) reviewWorkIds.set(r.id, r.workId);
+	}
+	const hiddenReviews = new Set<number>();
+	if (reviewRows.length > 0) {
+		const hidden = await exec
+			.select({ id: reviews.id })
+			.from(reviews)
+			.where(
+				and(
+					inArray(
+						reviews.id,
+						reviewRows.map((r) => r.subjectId),
+					),
+					eq(reviews.moderationStatus, "hidden"),
+				),
+			);
+		for (const row of hidden) hiddenReviews.add(row.id);
 	}
 
 	const workIds = [
 		...rows.filter((r) => r.subjectType === "work").map((r) => r.subjectId),
 		...[...roots.values()].filter((root) => root.subjectType === "work").map((r) => r.subjectId),
+		...[...reviewWorkIds.values()],
 	];
 	const removedWorks = new Set<number>();
 	if (workIds.length > 0) {
@@ -164,7 +282,14 @@ async function stillRemoved(
 		if (row.subjectType === "comment") {
 			const root = roots.get(row.subjectId);
 			const rootRemoved = root?.subjectType === "work" && removedWorks.has(root.subjectId);
-			if (hiddenComments.has(row.subjectId) || rootRemoved) out.add(row.id);
+			if (hiddenComments.has(row.subjectId) || rootRemoved || hiddenRecipientAbove.has(row.id)) {
+				out.add(row.id);
+			}
+		}
+		if (row.subjectType === "review") {
+			const workId = reviewWorkIds.get(row.subjectId);
+			const workRemoved = workId !== undefined && removedWorks.has(workId);
+			if (hiddenReviews.has(row.subjectId) || workRemoved) out.add(row.id);
 		}
 	}
 	return out;
@@ -194,6 +319,7 @@ export async function restoreStickersOnSubject(
 			cycle: stickers.billingCycle,
 			subjectType: stickers.subjectType,
 			subjectId: stickers.subjectId,
+			creatorId: stickers.creatorId,
 		})
 		.from(stickers)
 		.where(and(await reachedBy(subjectType, subjectId), isNotNull(stickers.voidedAt)));

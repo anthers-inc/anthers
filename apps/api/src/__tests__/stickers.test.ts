@@ -2,11 +2,16 @@
 /**
  * Giving a Sticker: who gets paid, and how much may be directed.
  *
- * 🚨 **A Sticker pays the creator of the Work, never the author of the comment.** It rides
- * the giver's own comment, so on a comment thread the two are different people and the
- * wrong one is a single line away. Paying commenters would have Anthers moving money
- * between users, which is a different regulatory question and a different product — so that
- * is the first thing asserted here.
+ * ⭐ **The money follows the nearest creator up the thread, and the decoration stays where it
+ * was put** (Parker, 2026-10-24). Any visible comment or reply may carry a Sticker — the
+ * author's standing decides who is paid, never whether it may be given. A creator's own
+ * comment pays them; a reply under it pays them; a chain of ordinary users pays the creator of
+ * the post at the root.
+ *
+ * 🚨 **The line the walk must not cross is that money never reaches a non-creator.** Paying a
+ * commenter who is not a creator would have Anthers moving money between users, which is a
+ * different regulatory question and a different product — so the first thing asserted here is
+ * that a thread of ordinary users pays its root.
  *
  * ⭐ **The cap counts removed Stickers.** Removing one returns no money, so if the cap
  * ignored them a user could give, remove, and give again on the same allowance — the
@@ -19,6 +24,7 @@ import {
 	billingAccounts,
 	comments,
 	posts,
+	reviews,
 	stickers,
 	stripeAccounts,
 	userBadges,
@@ -30,7 +36,7 @@ import app from "../index";
 import { createAccount } from "./account-fixture";
 import { ensureAnthersLadder } from "./anthers-ladder-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
-import { userIdByName } from "./handles.js";
+import { handleOf, userIdByName } from "./handles.js";
 import { enablePayoutsFor } from "./payouts-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork, testPublicId } from "./work-fixtures.js";
@@ -111,27 +117,43 @@ function give(cookie: string, body: Record<string, unknown>) {
 
 describe("giving a Sticker", () => {
 	let giverCookie: string;
+	let creatorCookie: string;
 	let giverId: number;
 	let creatorId: number;
 	let strangerId: number;
 	let workId: number;
-	/** The giver's own comment on the creator's Work — where a Sticker may ride. */
+	/** The giver's own comment on the creator's Work. */
 	let ownCommentId: number;
-	/** Somebody else's comment on the same Work — where one may not. */
+	/** Somebody else's comment on the same Work, which is now a valid subject. */
 	let otherCommentId: number;
+	/** A second creator, payable, whose comment and replies route money to them. */
+	let neighborCookie: string;
+	let neighborId: number;
+	/** The neighbor's comment under the root creator's post, and an ordinary user's reply to it. */
+	let neighborCommentId: number;
+	let replyUnderNeighborId: number;
+	/** A published post by the root creator, which the thread above hangs off. */
+	let rootPostId: number;
+	/** A review of the root creator's Work, by the giver. */
+	let reviewId: number;
 
 	beforeAll(async () => {
 		giverCookie = await signUp(`stk_giver_${RUN}`);
-		await signUp(`stk_creator_${RUN}`);
+		creatorCookie = await signUp(`stk_creator_${RUN}`);
 		await signUp(`stk_other_${RUN}`);
+		neighborCookie = await signUp(`stk_neighbor_${RUN}`);
 		giverId = await userIdByName(`stk_giver_${RUN}`);
 		creatorId = await userIdByName(`stk_creator_${RUN}`);
 		strangerId = await userIdByName(`stk_other_${RUN}`);
+		neighborId = await userIdByName(`stk_neighbor_${RUN}`);
 		// A Sticker only reaches a creator who can be paid, which publishing already required.
 		await enablePayoutsFor(creatorId);
+		await enablePayoutsFor(neighborId);
 
 		// The giver is at Blossom, so they have $2.00 of their Time Pool to direct.
 		await atSupport(giverId, SUPPORT, "2031-06-01");
+		// The neighbor gives one Sticker in the own-content case, so they need an allowance too.
+		await atSupport(neighborId, SUPPORT, "2031-06-01");
 
 		workId = (await insertWork({ creatorId, type: "text", title: `Sticker work ${RUN}` })).id;
 		const made = await db
@@ -143,9 +165,51 @@ describe("giving a Sticker", () => {
 			.returning({ id: comments.id, userId: comments.userId });
 		ownCommentId = made.find((m) => m.userId === giverId)!.id;
 		otherCommentId = made.find((m) => m.userId === strangerId)!.id;
+
+		// A thread where the nearest creator is NOT the root: the neighbor comments on the
+		// root creator's post, and an ordinary user replies beneath the neighbor. Those two
+		// comments are what prove the walk stops at the neighbor rather than at the post.
+		const [post] = await db
+			.insert(posts)
+			.values({
+				creatorId,
+				publicId: testPublicId(),
+				slug: `stk-nearest-${RUN}`,
+				title: "Nearest creator",
+				isPublished: true,
+				publishedAt: new Date(),
+			})
+			.returning({ id: posts.id });
+		rootPostId = post.id;
+		const [neighborComment] = await db
+			.insert(comments)
+			.values({
+				userId: neighborId,
+				subjectType: "post",
+				subjectId: rootPostId,
+				body: `a creator here ${RUN}`,
+			})
+			.returning({ id: comments.id });
+		neighborCommentId = neighborComment.id;
+		const [underNeighbor] = await db
+			.insert(comments)
+			.values({
+				userId: strangerId,
+				subjectType: "comment",
+				subjectId: neighborCommentId,
+				body: `an ordinary reply ${RUN}`,
+			})
+			.returning({ id: comments.id });
+		replyUnderNeighborId = underNeighbor.id;
+
+		const [review] = await db
+			.insert(reviews)
+			.values({ userId: giverId, workId, verdict: "recommend", body: `review ${RUN}` })
+			.returning({ id: reviews.id });
+		reviewId = review.id;
 	}, DB_SETUP_TIMEOUT);
 
-	it("🚨 pays the Work's creator, not the author of the comment it rides", async () => {
+	it("pays the Work's creator for a Sticker on your own comment", async () => {
 		const res = await give(giverCookie, {
 			subjectType: "comment",
 			subjectId: ownCommentId,
@@ -158,14 +222,109 @@ describe("giving a Sticker", () => {
 		expect(sticker.creatorId).not.toBe(giverId);
 	});
 
-	it("🚨 refuses a Sticker on somebody else's comment", async () => {
+	it("accepts somebody else's comment, paying the creator the thread hangs off", async () => {
 		const res = await give(giverCookie, {
 			subjectType: "comment",
 			subjectId: otherCommentId,
 			artKey: "butterfly-small",
 		});
-		expect(res.status).toBe(403);
-		expect((await res.json()).code).toBe("not_yours");
+		expect(res.status).toBe(201);
+		const { sticker } = (await res.json()) as { sticker: { creatorId: number } };
+		expect(sticker.creatorId).toBe(creatorId);
+	});
+
+	it("🚨 pays a creator for their own comment, not the author of the post above it", async () => {
+		const res = await give(giverCookie, {
+			subjectType: "comment",
+			subjectId: neighborCommentId,
+			artKey: "butterfly-small",
+		});
+		expect(res.status).toBe(201);
+		const { sticker } = (await res.json()) as { sticker: { creatorId: number } };
+		expect(sticker.creatorId).toBe(neighborId);
+		expect(sticker.creatorId).not.toBe(creatorId);
+	});
+
+	it("🚨 walks past an ordinary reply to the creator above it", async () => {
+		const res = await give(giverCookie, {
+			subjectType: "comment",
+			subjectId: replyUnderNeighborId,
+			artKey: "butterfly-small",
+		});
+		expect(res.status).toBe(201);
+		const { sticker } = (await res.json()) as { sticker: { creatorId: number } };
+		expect(sticker.creatorId).toBe(neighborId);
+	});
+
+	it("⭐ pays the Work's creator for a Sticker on a review of it", async () => {
+		const res = await give(giverCookie, {
+			subjectType: "review",
+			subjectId: reviewId,
+			artKey: "butterfly-small",
+		});
+		expect(res.status).toBe(201);
+		const { sticker } = (await res.json()) as { sticker: { creatorId: number } };
+		expect(sticker.creatorId).toBe(creatorId);
+	});
+
+	it("⭐ names the creator a Sticker would pay, so the picker can say it", async () => {
+		const res = await req(
+			`/api/subscriptions/stickers/recipient?subjectType=comment&subjectId=${replyUnderNeighborId}`,
+			{ headers: { Cookie: giverCookie } },
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			recipient: { handle: string | null; displayName: string | null };
+		};
+		// The reply's author is an ordinary user, so the picker names the creator above it —
+		// the person the money actually reaches, not the person whose words carry the Sticker.
+		expect(body.recipient.handle).toBe(await handleOf(`stk_neighbor_${RUN}`));
+	});
+
+	it("answers with the refusal a Sticker would get, rather than a name", async () => {
+		const res = await req(
+			`/api/subscriptions/stickers/recipient?subjectType=work&subjectId=${workId}`,
+			{ headers: { Cookie: creatorCookie } },
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { recipient: unknown; error: string; code: string };
+		expect(body.recipient).toBeNull();
+		expect(body.code).toBe("own_work");
+	});
+
+	it("🚨 refuses a creator stickering a reply under their own post", async () => {
+		// The neighbor answers a stranger's comment on their own post: the walk lands on the
+		// neighbor, which is the giver, so paying it would cycle money back to itself.
+		const [ownThread] = await db
+			.insert(comments)
+			.values({
+				userId: strangerId,
+				subjectType: "post",
+				subjectId: rootPostId,
+				body: `a stranger under the neighbor ${RUN}`,
+			})
+			.returning({ id: comments.id });
+		try {
+			const [neighborsReply] = await db
+				.insert(comments)
+				.values({
+					userId: neighborId,
+					subjectType: "comment",
+					subjectId: ownThread.id,
+					body: `neighbor answering ${RUN}`,
+				})
+				.returning({ id: comments.id });
+			const res = await give(neighborCookie, {
+				subjectType: "comment",
+				subjectId: neighborsReply.id,
+				// The neighbor needs an allowance of their own.
+				artKey: "butterfly-small",
+			});
+			expect(res.status).toBe(403);
+			expect((await res.json()).code).toBe("own_work");
+		} finally {
+			await db.delete(comments).where(eq(comments.id, ownThread.id));
+		}
 	});
 
 	// 🚨 A reply's subject is another comment, so reading its `subject_id` as a post's id goes

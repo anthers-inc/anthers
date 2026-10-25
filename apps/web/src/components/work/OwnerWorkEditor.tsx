@@ -127,7 +127,6 @@ import PanelEditor from "../../studio/PanelEditor";
 import RatingMatrix from "../../studio/RatingMatrix";
 import WorkCaptionsEditor from "../../studio/WorkCaptionsEditor";
 import SaveButton from "../library/SaveButton";
-import StickerBar from "../post/StickerBar";
 import ProjectPricing from "../project/ProjectPricing";
 import WorkReviews from "../project/WorkReviews";
 import { InlineField } from "./Editing";
@@ -1596,22 +1595,9 @@ export default function OwnerWorkEditor({
 		{
 			key: "reviews",
 			label: "Reviews",
-			// The give rides with the verdict row (the design placement, 2026-09-13) — the
-			// bar itself leaves this page when Stickers attach from the editor itself,
-			// which is its own task.
-			content: (
-				<WorkReviews
-					workId={current.id}
-					aside={
-						<StickerBar
-							subjectType="work"
-							subjectId={current.id}
-							label={current.title ?? "this Work"}
-							align="end"
-						/>
-					}
-				/>
-			),
+			// The Sticker for a Work rides a review, added from the review editor itself
+			// (Parker, 2026-09-13) — there is no give on the Work page.
+			content: <WorkReviews workId={current.id} />,
 		},
 		{
 			key: "showings",

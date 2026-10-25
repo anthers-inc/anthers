@@ -31,13 +31,16 @@ import {
 	useState,
 } from "react";
 import ReportDialog from "../ui/ReportDialog";
+import StickerBar from "./StickerBar";
+import StickerChooser, { givePendingSticker } from "./StickerChooser";
 import VoteControl from "./VoteControl";
 
 /** How many levels of reply indent before deeper replies line up at the last one. */
 export const MAX_INDENT = 3;
 
 interface CommentThreadProps {
-	subject: { kind: "post"; slug: string };
+	/** `id` is what a Sticker on a new comment resolves its recipient from. */
+	subject: { kind: "post"; slug: string; id: number };
 }
 
 interface ThreadState {
@@ -46,7 +49,8 @@ interface ThreadState {
 	byId: Map<number, ThreadComment>;
 	replyingTo: number | null;
 	setReplyingTo: (id: number | null) => void;
-	submitReply: (replyTo: number, body: string) => Promise<boolean>;
+	/** Answers the new reply's id, or null when it was refused. */
+	submitReply: (replyTo: number, body: string) => Promise<number | null>;
 	report: (target: { id: number; label: string }) => void;
 }
 
@@ -77,6 +81,8 @@ export default function CommentThread({ subject }: CommentThreadProps) {
 	const [submitting, setSubmitting] = useState(false);
 	const [reporting, setReporting] = useState<{ id: number; label: string } | null>(null);
 	const [replyingTo, setReplyingTo] = useState<number | null>(null);
+	const [stickerKey, setStickerKey] = useState<string | null>(null);
+	const [stickerProblem, setStickerProblem] = useState<string | null>(null);
 
 	const key = subject.slug;
 
@@ -101,6 +107,13 @@ export default function CommentThread({ subject }: CommentThreadProps) {
 				json: { body: body.trim() },
 			});
 			if (res.ok) {
+				const { comment } = (await res.json()) as { comment: { id: number } };
+				// The Sticker rides the comment that was just written: its id is the subject,
+				// and a failure here is reported without taking the words back.
+				if (stickerKey) {
+					setStickerProblem(await givePendingSticker("comment", comment.id, stickerKey));
+					setStickerKey(null);
+				}
 				setBody("");
 				await fetchComments();
 			}
@@ -118,8 +131,9 @@ export default function CommentThread({ subject }: CommentThreadProps) {
 			// A refusal means the comment went while the reply was being written — removed, or
 			// out of this user's view. Reloading shows the thread as it now stands.
 			await fetchComments();
-			if (res.ok) setReplyingTo(null);
-			return res.ok;
+			if (!res.ok) return null;
+			setReplyingTo(null);
+			return ((await res.json()) as { comment: { id: number } }).comment.id;
 		},
 		[key, fetchComments],
 	);
@@ -182,13 +196,30 @@ export default function CommentThread({ subject }: CommentThreadProps) {
 					{permissionMissing && (
 						<p className="text-xs text-warning mt-1">{INTERACTION_PERMISSION_HINT}</p>
 					)}
-					<button
-						type="submit"
-						className="btn btn-primary btn-sm mt-2"
-						disabled={submitting || !body.trim() || permissionMissing}
-					>
-						{submitting ? <span className="loading loading-spinner loading-sm" /> : "Post comment"}
-					</button>
+					<div className="flex flex-wrap items-center gap-2 mt-2">
+						<button
+							type="submit"
+							className="btn btn-primary btn-sm"
+							disabled={submitting || !body.trim() || permissionMissing}
+						>
+							{submitting ? (
+								<span className="loading loading-spinner loading-sm" />
+							) : (
+								"Post comment"
+							)}
+						</button>
+						<StickerChooser
+							value={stickerKey}
+							onChange={setStickerKey}
+							label="your comment"
+							recipientOf={{ subjectType: "post", subjectId: subject.id }}
+						/>
+					</div>
+					{stickerProblem && (
+						<p className="text-xs text-error mt-1" role="alert">
+							Your comment is posted, but the Sticker could not be given: {stickerProblem}
+						</p>
+					)}
 				</form>
 			)}
 
@@ -379,6 +410,13 @@ function CommentRow({ comment, isReply }: { comment: Comment; isReply: boolean }
 						label={`${author}'s ${noun}`}
 					/>
 					{isAuthenticated && (
+						<StickerBar
+							subjectType="comment"
+							subjectId={comment.id}
+							label={`${author}'s ${noun}`}
+						/>
+					)}
+					{isAuthenticated && (
 						<button
 							type="button"
 							className="link link-hover text-xs text-base-content/60"
@@ -415,6 +453,8 @@ function ReplyForm({ replyTo, author }: { replyTo: number; author: string }) {
 	const [body, setBody] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [refused, setRefused] = useState(false);
+	const [stickerKey, setStickerKey] = useState<string | null>(null);
+	const [stickerProblem, setStickerProblem] = useState<string | null>(null);
 	const field = useRef<HTMLTextAreaElement>(null);
 
 	// Opening the form is asking to type, so the cursor goes where the words go.
@@ -428,7 +468,15 @@ function ReplyForm({ replyTo, author }: { replyTo: number; author: string }) {
 		setSubmitting(true);
 		setRefused(false);
 		try {
-			if (!(await submitReply(replyTo, body.trim()))) setRefused(true);
+			const replyId = await submitReply(replyTo, body.trim());
+			if (replyId === null) {
+				setRefused(true);
+				return;
+			}
+			if (stickerKey) {
+				setStickerProblem(await givePendingSticker("comment", replyId, stickerKey));
+				setStickerKey(null);
+			}
 		} finally {
 			setSubmitting(false);
 		}
@@ -453,7 +501,7 @@ function ReplyForm({ replyTo, author }: { replyTo: number; author: string }) {
 			{permissionMissing && (
 				<p className="text-xs text-warning mt-1">{INTERACTION_PERMISSION_HINT}</p>
 			)}
-			<div className="flex gap-2 mt-2">
+			<div className="flex flex-wrap items-center gap-2 mt-2">
 				<button
 					type="submit"
 					className="btn btn-primary btn-xs"
@@ -461,10 +509,21 @@ function ReplyForm({ replyTo, author }: { replyTo: number; author: string }) {
 				>
 					{submitting ? <span className="loading loading-spinner loading-xs" /> : "Post reply"}
 				</button>
+				<StickerChooser
+					value={stickerKey}
+					onChange={setStickerKey}
+					label="your reply"
+					recipientOf={{ subjectType: "comment", subjectId: replyTo }}
+				/>
 				<button type="button" className="btn btn-ghost btn-xs" onClick={() => setReplyingTo(null)}>
 					Cancel
 				</button>
 			</div>
+			{stickerProblem && (
+				<p className="text-xs text-error mt-1" role="alert">
+					Your reply is posted, but the Sticker could not be given: {stickerProblem}
+				</p>
+			)}
 		</form>
 	);
 }
