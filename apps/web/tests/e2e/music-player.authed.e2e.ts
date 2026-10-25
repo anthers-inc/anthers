@@ -163,9 +163,9 @@ test("listening survives navigating away", async ({ page }) => {
 	// own navigation; a Work's page has no site footer to borrow a link from.
 	await page
 		.getByRole("navigation", { name: "Anthers" })
-		.getByRole("link", { name: "Network" })
+		.getByRole("link", { name: "Discovery" })
 		.click();
-	await expect(page).toHaveURL(/\/network$/);
+	await expect(page).toHaveURL(/\/discovery$/);
 	await expect(page.locator(BAR)).toBeVisible();
 	expect(await playing(page)).toBe(MEDIA_FIXTURE_TRACKS[0].title);
 });

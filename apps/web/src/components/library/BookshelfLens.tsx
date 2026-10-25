@@ -192,9 +192,10 @@ export default function BookshelfLens({
 }: {
 	items: LensItem[];
 	/**
-	 * Where the shelf is drawing from — the Library's kept books, the Network's feed, or
-	 * Discovery's whole-site stream. Only the empty state's words differ: the shelf
-	 * itself is the same metaphor over whichever corpus the tab hands it.
+	 * Where the shelf is drawing from — the Library's kept books, or Discovery's stream,
+	 * whose network-shaped words differ from its whole-site ones. Only the empty state's
+	 * words differ: the shelf itself is the same metaphor over whichever corpus the page
+	 * hands it.
 	 */
 	source?: "library" | "network" | "discovery";
 }) {

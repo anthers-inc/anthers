@@ -25,7 +25,7 @@ const input = (page: Page) => header(page).getByRole("combobox");
 const listbox = (page: Page) => header(page).getByRole("listbox", { name: "Search results" });
 
 test("Ctrl+K opens global search and finds a creator", async ({ page }) => {
-	await page.goto("/network");
+	await page.goto("/discovery");
 	await expect(header(page).getByRole("button", { name: "Your account" })).toBeVisible();
 
 	await page.keyboard.press("Control+k");
@@ -44,7 +44,7 @@ test("Ctrl+K opens global search and finds a creator", async ({ page }) => {
 });
 
 test("a query with no name matches appends the slower body stage", async ({ page }) => {
-	await page.goto("/network");
+	await page.goto("/discovery");
 	await page.keyboard.press("Control+k");
 	// No creator or title says "free"; the free post's body does, so only the second
 	// stage can answer — and it arrives under its own heading rather than as one list
@@ -57,7 +57,7 @@ test("a query with no name matches appends the slower body stage", async ({ page
 });
 
 test("Tab cycles the type filter", async ({ page }) => {
-	await page.goto("/network");
+	await page.goto("/discovery");
 	await page.keyboard.press("Control+k");
 	await input(page).fill("gauntlet");
 	await expect(listbox(page)).toBeVisible();
@@ -173,7 +173,7 @@ test("a rebound Search shortcut is the one the bar listens for", async ({ page }
 	const authed = page.waitForResponse(
 		(response) => response.url().includes("/api/auth/me") && response.status() === 200,
 	);
-	await page.goto("/network");
+	await page.goto("/discovery");
 	await authed;
 	// The response resolves a tick before React re-renders with it; the toggle's printed
 	// chord is the signal that the bar itself has the stored map, not just the loader.
@@ -232,7 +232,7 @@ test("a rebound sidebar shortcut is the one the layout listens for", async ({ pa
 	const authed = page.waitForResponse(
 		(response) => response.url().includes("/api/auth/me") && response.status() === 200,
 	);
-	await page.goto("/network");
+	await page.goto("/discovery");
 	await authed;
 	await expect.poll(asideWidth).toBe(256);
 

@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * One card for one thing (Parker, 2026-10-24): the Library shelf renders the same
- * `FeedTile` the Network, Discovery and a creator's page render. The shelf used to draw
- * its own `ShelfCard`, so the same Work looked like a different product depending on
- * which tab happened to list it — and the creator page's Projects sat in a second card
- * family inside the one grid.
+ * `FeedTile` Discovery and a creator's page render. The shelf used to draw its own
+ * `ShelfCard`, so the same Work looked like a different product depending on which tab
+ * happened to list it — and the creator page's Projects sat in a second card family
+ * inside the one grid.
+ *
+ * ⚠️ **Network was the fourth surface until 2026-10-24**, when it merged into Discovery
+ * as a recipe preset; the merged page is the surface this guard now reads for it.
  *
  * A source-text guard, because the surfaces share a widget rather than a stylesheet: what
  * can regress is a page quietly growing a private card again, a grid drifting away from
@@ -17,7 +20,6 @@ import { join } from "node:path";
 
 const read = (path: string) => readFileSync(join(import.meta.dir, path), "utf8");
 
-const network = read("AuthenticatedHomePage.tsx");
 const discovery = read("DiscoverPage.tsx");
 const library = read("LibraryPage.tsx");
 const creator = read("CreatorProfilePage.tsx");
@@ -27,7 +29,6 @@ const tile = read("../components/cards/FeedTile.tsx");
 const SHARED_GRID = "grid-cols-[repeat(auto-fill,minmax(280px,1fr))]";
 
 const SURFACES = [
-	["Network", network],
 	["Discovery", discovery],
 	["Library", library],
 	["Creator page", creator],

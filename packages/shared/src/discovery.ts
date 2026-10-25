@@ -75,12 +75,37 @@ export const RECIPE_WINDOWS = ["all", "day", "week"] as const;
 export type RecipeWindow = (typeof RECIPE_WINDOWS)[number];
 
 /**
- * Which creators a recipe may draw from: everyone on Anthers, or the network the
- * reader built (follows, Badge subscriptions, and the creators behind saved or
- * purchased work). The second is the same creator set the Network tab reads.
+ * Which creators a recipe may draw from.
+ *
+ * ⭐ **The membership narrowing is a value here rather than a second control.** The
+ * network is a union of follows, Badge subscriptions and the creators behind saved or
+ * purchased work, and a reader who wants one route in is answering the same question
+ * this stage asks — *whose work am I drawing from* — so `following`, `subscribed` and
+ * `saved` are candidates rather than a filter applied after them.
+ *
+ * ⚠️ **This is the set that let the Network tab retire into a preset.** Before it, the
+ * narrowing lived in a section of its own on a page whose every other control was a
+ * recipe value; with it, one control set expresses both surfaces exactly. The feed
+ * route still takes `scope` and `network_source` separately — `recipeQuery` is the one
+ * place the five values become those two parameters.
  */
-export const RECIPE_CANDIDATES = ["everyone", "network"] as const;
+export const RECIPE_CANDIDATES = [
+	"everyone",
+	"network",
+	"following",
+	"subscribed",
+	"saved",
+] as const;
 export type RecipeCandidates = (typeof RECIPE_CANDIDATES)[number];
+
+/** What each candidate value is called, wherever a reader sees it. */
+export const RECIPE_CANDIDATE_LABELS: Record<RecipeCandidates, string> = {
+	everyone: "Everyone",
+	network: "Everyone in your network",
+	following: "Creators you follow",
+	subscribed: "Creators you support",
+	saved: "Saved or purchased from",
+};
 
 /**
  * How the recipe orders the page it drew: interleaved one card per creator per round,
@@ -113,6 +138,136 @@ export function asRecipeMix(
 	return (RECIPE_MIXES as readonly string[]).includes(value ?? "")
 		? (value as RecipeMix)
 		: fallback;
+}
+
+/** A whole recipe, as the URL, the account and a preset all state it. */
+export interface Recipe {
+	window: RecipeWindow;
+	candidates: RecipeCandidates;
+	mix: RecipeMix;
+}
+
+/**
+ * The feed route's two parameters, from the candidate stage's one value.
+ *
+ * The route took `scope` and `network_source` before there was a recipe system, and
+ * they still are what it reads; this is the only place the five candidate values turn
+ * into the two. A caller that mapped them by hand would be the second place the
+ * vocabulary lived, and the first to drift.
+ */
+export function recipeQuery(
+	candidates: RecipeCandidates,
+	mix: RecipeMix,
+): {
+	scope: "global" | "network";
+	network_source?: "following" | "subscribed" | "saved";
+	mix: RecipeMix;
+} {
+	if (candidates === "everyone") return { scope: "global", mix };
+	if (candidates === "network") return { scope: "network", mix };
+	return { scope: "network", network_source: candidates, mix };
+}
+
+/** One named recipe a reader can select in a click. */
+export interface RecipePreset {
+	/** Stable identity, for the chips and for a future saved-recipe store. */
+	id: string;
+	label: string;
+	/** What the preset draws, for the chip's title. */
+	blurb: string;
+	recipe: Recipe;
+}
+
+/**
+ * The presets a new account starts with, in the order the chips render.
+ *
+ * ⭐ **My Network first, because it is where a new account opens.** The merged Discovery
+ * was the Network tab's home as much as its own, and a reader whose only interest is the
+ * chronological feed should land on it without learning the recipe system first — the
+ * preset is that page, named.
+ *
+ * ⭐ **Across Anthers is the opening recipe Discovery always had.** It stays second
+ * rather than first: the whole site's newest entries are what a reader goes looking for,
+ * and the feed is what they come back for.
+ *
+ * Saving, renaming, recoloring and sharing presets are a later task, so this list is
+ * code rather than rows. A preset carries a `recipe` and nothing else, which is what
+ * makes that migration a data move rather than a shape change.
+ */
+export const RECIPE_PRESETS: readonly RecipePreset[] = [
+	{
+		id: "my-network",
+		label: "My Network",
+		blurb: "Works and Posts from you and the creators you follow, support or have saved.",
+		recipe: { window: "all", candidates: "network", mix: "straight" },
+	},
+	{
+		id: "across-anthers",
+		label: "Across Anthers",
+		blurb: "The newest Works and Posts from every creator on Anthers.",
+		recipe: { window: "all", candidates: "everyone", mix: "spread" },
+	},
+];
+
+/** The recipe a reader lands on when their account has never chosen one. */
+export const DEFAULT_RECIPE: Recipe = RECIPE_PRESETS[0].recipe;
+
+/**
+ * The preset whose recipe is exactly this one, or null for a combination no preset
+ * names.
+ *
+ * Exact rather than nearest: a chip that lit up for a recipe it would not reproduce is
+ * a chip that lies about what a click does. A reader who has narrowed My Network to
+ * "Creators you follow" is on no preset, and the chips say so.
+ */
+export function presetFor(recipe: Recipe): RecipePreset | null {
+	return (
+		RECIPE_PRESETS.find(
+			(preset) =>
+				preset.recipe.window === recipe.window &&
+				preset.recipe.candidates === recipe.candidates &&
+				preset.recipe.mix === recipe.mix,
+		) ?? null
+	);
+}
+
+/**
+ * A recipe as stored or as received, parsed stage by stage.
+ *
+ * Null — an account that never answered — reads as `DEFAULT_RECIPE`, so the merged tab
+ * opens on My Network without a row being written. A stage this build does not know
+ * degrades to that stage's opening value rather than to the whole default: a future
+ * build's new candidate name still opens the reader's saved window and mix.
+ */
+export function recipeFrom(
+	raw:
+		| { window?: string | null; candidates?: string | null; mix?: string | null }
+		| null
+		| undefined,
+): Recipe {
+	if (!raw) return DEFAULT_RECIPE;
+	return {
+		window: asRecipeWindow(raw.window),
+		candidates: asRecipeCandidates(raw.candidates),
+		mix: asRecipeMix(raw.mix),
+	};
+}
+
+/**
+ * A recipe as a `/discovery` address, for a link that names one.
+ *
+ * Every stage is written rather than only the ones that differ from a default, so the
+ * address means the recipe in full: a link that left a stage out would mean "whatever
+ * the account says" for that stage, which is right for a bare tab link and wrong for one
+ * that names a recipe.
+ */
+export function recipePath(recipe: Recipe): string {
+	const params = new URLSearchParams({
+		window: recipe.window,
+		candidates: recipe.candidates,
+		mix: recipe.mix,
+	});
+	return `/discovery?${params.toString()}`;
 }
 
 /** Which corpus the Graph draws from: the reader's network, or everyone. */
@@ -214,23 +369,33 @@ export function streamRecipe(input: {
 			: input.window === "week"
 				? ", from the last seven days"
 				: "";
-	const candidateLabel =
-		input.candidates === "network"
-			? "You and the creators you follow, support or have saved"
-			: "Every creator's newest Works and Posts";
-	const candidateClause =
-		input.candidates === "network"
-			? "by you and the creators you follow, support or have saved"
-			: "across Anthers";
+	// Each candidate value says what it draws in the stage row, and how the sentence
+	// reads around it. Two records rather than one sentence per value: the stage row is a
+	// noun phrase and the sentence needs a preposition, and trying to share one string
+	// between them produces prose that reads like a database row.
+	const candidateLabel: Record<RecipeCandidates, string> = {
+		everyone: "Every creator's newest Works and Posts",
+		network: "You and the creators you follow, support or have saved",
+		following: "The creators you follow",
+		subscribed: "The creators you support",
+		saved: "Creators you saved work from or bought from",
+	};
+	const candidateClause: Record<RecipeCandidates, string> = {
+		everyone: "across Anthers",
+		network: "by you and the creators you follow, support or have saved",
+		following: "by the creators you follow",
+		subscribed: "by the creators you support",
+		saved: "by creators you saved from or bought from",
+	};
 	const mixLabel =
 		input.mix === "spread" ? "One card per creator per round" : "Straight, no interleaving";
 
 	return {
-		sentence: `The newest Works and Posts ${candidateClause}${windowClause}, ${
+		sentence: `The newest Works and Posts ${candidateClause[input.candidates]}${windowClause}, ${
 			input.mix === "spread" ? "mixed so one creator cannot take the page" : "with no mixing pass"
 		}.`,
 		stages: [
-			{ stage: "candidates", label: candidateLabel },
+			{ stage: "candidates", label: candidateLabel[input.candidates] },
 			{ stage: "signals", label: windowLabel },
 			{ stage: "mix", label: mixLabel },
 		],

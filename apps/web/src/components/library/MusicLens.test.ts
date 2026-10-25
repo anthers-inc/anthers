@@ -180,7 +180,7 @@ describe("musicReleases", () => {
 	});
 
 	test("a feed-scoped release advertises the whole record, not just what arrived", () => {
-		// The Network opens a release whole, so one track arriving in the feed must not
+		// A feed-shaped scope opens a release whole, so one track arriving in the stream must not
 		// present a four-track record as a single.
 		const reached = musicReleases(
 			[workItem(12, "music", "Track 2", [release(1, "The Record", 4)])],

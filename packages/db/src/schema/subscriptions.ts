@@ -224,22 +224,51 @@ export const userPreferences = pgTable("user_preferences", {
 	notificationUnsubscribeToken: text("notification_unsubscribe_token"),
 
 	/**
-	 * The tab a signed-in session opens on — `"library"`, `"network"` or `"discovery"`
-	 * (Parker, 2026-10-20). Null means never answered, and the client reads that as
-	 * **Network** — the same "absent reads as the default" rule `matureDisplay` and
-	 * `persistentMiniplayer` carry, so a later default change would not have to rewrite
-	 * rows.
+	 * The tab a signed-in session opens on — `"library"` or `"discovery"` (Parker,
+	 * 2026-10-20, reduced to two when Network retired into Discovery on 2026-10-24).
+	 * Null means never answered, and the client reads that as **Discovery** — the same
+	 * "absent reads as the default" rule `matureDisplay` and `persistentMiniplayer`
+	 * carry, so a later default change would not have to rewrite rows.
 	 *
 	 * A preference of the same kind as `themePreference`: which tab a person arrives on
 	 * is about the org's own chrome, not portable identity, so it lives here rather than
 	 * on the identity row.
 	 *
 	 * ⚠️ **This replaced `home_nav_order`** when the sidebar's drag-to-reorder went away.
-	 * The three tabs render in one fixed order, so a stored arrangement had nothing left
-	 * to decide. The old column's payload was read only by the landing redirect, and its
+	 * The tabs render in one fixed order, so a stored arrangement had nothing left to
+	 * decide. The old column's payload was read only by the landing redirect, and its
 	 * one meaning — the first id in the order — is what this column now states outright.
+	 *
+	 * ⚠️ **A stored `"network"` is the merged tab now**, and the serializers read any id
+	 * this build's nav does not have as null, which lands that account on the default
+	 * rather than on a tab that no longer exists.
 	 */
 	homeDefaultTab: text("home_default_tab"),
+
+	/**
+	 * The Discovery recipe the account last chose — the three values a reader sets, stored
+	 * whole rather than as a preset id, so a shared link, a preset that is later deleted
+	 * and a hand-built combination all survive (Parker, 2026-10-24).
+	 *
+	 * ⭐ **The account is the default layer and the URL is the override.** A bare
+	 * `/discovery` opens on this; a link carrying recipe parameters answers that visit
+	 * without writing here, which is what keeps somebody else's shared recipe — or an
+	 * onboarding link — from silently rewriting what a reader opens on.
+	 *
+	 * A preference of the same kind as `themePreference` and `homeDefaultTab`: how a
+	 * person reads the site is account-level, not a property of one machine. Null means
+	 * never answered, and the client reads that as **My Network**, the preset the merged
+	 * tab opens on; the column never bakes the default in.
+	 *
+	 * 🚨 **Validated through `@anthers/shared/discovery` on write**, and read through the
+	 * same parsers, so a value this build does not recognize degrades to the default
+	 * rather than rendering a recipe nothing can run.
+	 */
+	homeRecipe: jsonb("home_recipe").$type<{
+		window: string;
+		candidates: string;
+		mix: string;
+	} | null>(),
 
 	/**
 	 * The account's rebindable shortcuts, as a map from action to chord

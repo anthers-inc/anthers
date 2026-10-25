@@ -65,7 +65,14 @@ import { isWorkType } from "@anthers/shared/content";
 import { type ContentNote, RATING_ROWS } from "@anthers/shared/content-rating";
 import { CREATOR_EMAIL_KINDS, resolvedCreatorEmailDelivery } from "@anthers/shared/creator-emails";
 import { creatorPreviewFor } from "@anthers/shared/creator-preview";
-import { asRecipeMix, interleaveByAuthor, reasonForSource } from "@anthers/shared/discovery";
+import {
+	asRecipeMix,
+	interleaveByAuthor,
+	RECIPE_CANDIDATES,
+	RECIPE_MIXES,
+	RECIPE_WINDOWS,
+	reasonForSource,
+} from "@anthers/shared/discovery";
 import { normalizeKeyboardShortcuts } from "@anthers/shared/keybindings";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
@@ -212,6 +219,7 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 			notificationDelivery: userPreferences.notificationDelivery,
 			notificationUnsubscribeToken: userPreferences.notificationUnsubscribeToken,
 			homeDefaultTab: userPreferences.homeDefaultTab,
+			homeRecipe: userPreferences.homeRecipe,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
 			creatorEmailDelivery: userPreferences.creatorEmailDelivery,
 			keyboardShortcuts: userPreferences.keyboardShortcuts,
@@ -242,8 +250,16 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		emailVerified: user.emailVerified,
 		themePreference: prefs?.themePreference ?? null,
 		// The starting tab rides the payload like the theme: the shell reads it before any
-		// route has rendered, so the landing redirect needs no second call.
-		homeDefaultTab: prefs?.homeDefaultTab ?? null,
+		// route has rendered, so the landing redirect needs no second call. An id this
+		// build's nav no longer has (a stored `"network"` from before the tabs merged)
+		// reads as never-answered, so it lands on the default rather than nowhere.
+		homeDefaultTab:
+			prefs?.homeDefaultTab === "library" || prefs?.homeDefaultTab === "discovery"
+				? prefs.homeDefaultTab
+				: null,
+		// The last-used Discovery recipe, read at boot with the rest of the chrome so a
+		// bare `/discovery` opens on it without a second request.
+		homeRecipe: prefs?.homeRecipe ?? null,
 		// Where audio playback lives — null means "never said", the client reads on.
 		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,
 		// The bar's two chords; null means the defaults in `@anthers/shared/keybindings`.
@@ -416,7 +432,7 @@ const PARENTAL_LOCKED = {
 	code: "parental_locked",
 } as const;
 
-const NAV_IDS = ["library", "network", "discovery"] as const;
+const NAV_IDS = ["library", "discovery"] as const;
 
 const updateProfileSchema = z.object({
 	displayName: z.string().max(150).optional(),
@@ -429,13 +445,28 @@ const updateProfileSchema = z.object({
 	themePreference: z.enum(["light", "dark"]).optional(),
 	/**
 	 * The tab a signed-in session opens on, one of the nav's ids. Null (never answered)
-	 * reads as Network on the client, so the default lives there rather than in a column
-	 * default — the same rule `persistentMiniplayer` follows.
+	 * reads as Discovery on the client, so the default lives there rather than in a
+	 * column default — the same rule `persistentMiniplayer` follows.
 	 *
-	 * The sidebar's order is fixed Library, Network, Discovery and is not stored: this
-	 * replaced the `homeNavOrder` payload when drag-to-reorder went away (2026-10-20).
+	 * The sidebar's order is fixed Library, Discovery and is not stored: this replaced
+	 * the `homeNavOrder` payload when drag-to-reorder went away (2026-10-20).
 	 */
 	homeDefaultTab: z.enum(NAV_IDS).optional(),
+	/**
+	 * The Discovery recipe the account last chose, written whole — the three stages a
+	 * reader sets. Stored as values rather than a preset id so a recipe survives a preset
+	 * being renamed or removed, and so a hand-built combination is saveable at all.
+	 *
+	 * The enums are the shared vocabulary rather than restatements of it: the page parses
+	 * the same three lists, so a write this route accepts is one the reader can run.
+	 */
+	homeRecipe: z
+		.object({
+			window: z.enum(RECIPE_WINDOWS),
+			candidates: z.enum(RECIPE_CANDIDATES),
+			mix: z.enum(RECIPE_MIXES),
+		})
+		.optional(),
 	/**
 	 * The account's rebindable chords, as a whole map — the search bar's two and the
 	 * player's two. The values are validated below with `@anthers/shared/keybindings`
@@ -539,6 +570,9 @@ const accountRoutes = new Hono()
 		// The starting tab is a whole write — the client always knows which tab it means —
 		// and the schema's enum is what refuses an id this build's nav does not have.
 		if (data.homeDefaultTab !== undefined) prefUpdates.homeDefaultTab = data.homeDefaultTab;
+		// The last-used recipe, written whole for the same reason: the page sends the
+		// triple it is showing, and the schema's enums are the shared vocabulary's.
+		if (data.homeRecipe !== undefined) prefUpdates.homeRecipe = data.homeRecipe;
 		// `essential` mail has no switch by design — see services/notifications.ts. The
 		// delivery map stores ONLY real group keys: a wildcard is `resolvedMode`'s business,
 		// and a client sending one is asking the server to guess what it means.
@@ -587,6 +621,7 @@ const accountRoutes = new Hono()
 					? { creatorEmailDelivery: prefUpdates.creatorEmailDelivery as Record<string, string> }
 					: {}),
 				...(data.homeDefaultTab !== undefined ? { homeDefaultTab: data.homeDefaultTab } : {}),
+				...(data.homeRecipe !== undefined ? { homeRecipe: data.homeRecipe } : {}),
 				...(data.persistentMiniplayer !== undefined
 					? { persistentMiniplayer: data.persistentMiniplayer }
 					: {}),

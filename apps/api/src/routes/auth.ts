@@ -321,6 +321,7 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		.select({
 			themePreference: userPreferences.themePreference,
 			homeDefaultTab: userPreferences.homeDefaultTab,
+			homeRecipe: userPreferences.homeRecipe,
 			persistentMiniplayer: userPreferences.persistentMiniplayer,
 			keyboardShortcuts: userPreferences.keyboardShortcuts,
 		})
@@ -350,8 +351,15 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		themePreference: (prefs?.themePreference as "light" | "dark" | null) ?? null,
 		// The tab a signed-in session opens on — read at boot like the theme, so the landing
 		// redirect needs no second call. Null means never answered, and the client reads
-		// that as Network.
-		homeDefaultTab: (prefs?.homeDefaultTab as "library" | "network" | "discovery" | null) ?? null,
+		// that as Discovery. An id this build's nav no longer has (a stored `"network"` from
+		// before the tabs merged) reads the same way, so it lands on the default.
+		homeDefaultTab:
+			prefs?.homeDefaultTab === "library" || prefs?.homeDefaultTab === "discovery"
+				? prefs.homeDefaultTab
+				: null,
+		// The last-used Discovery recipe — read at boot with the chrome, so a bare
+		// `/discovery` opens on it without a second request.
+		homeRecipe: prefs?.homeRecipe ?? null,
 		// Where audio playback lives (the persistent footer bar or the page's player).
 		// Null means "never said" and the client reads that as on.
 		persistentMiniplayer: prefs?.persistentMiniplayer ?? null,

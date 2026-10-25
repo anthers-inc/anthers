@@ -256,12 +256,12 @@ test("the header shows a basket link with a count when the basket has items", as
 }) => {
 	const context = await newBuyerContext(browser);
 	const page = await context.newPage();
-	await page.goto("/network");
+	await page.goto("/discovery");
 	await seedThisBuyersBasket(await buyerCookie(context));
 	// The header reads the server on the page's own terms — a navigation, not a guess.
 	await page.reload();
 
-	await expect(page.getByRole("heading", { name: "Network", exact: true })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Discovery", exact: true })).toBeVisible();
 	const link = header(page).getByRole("link", { name: /Basket \(1 item\)/ });
 	await expect(link, "the basket link did not appear in the header").toBeVisible();
 	await expect(link).toHaveAttribute("href", "/basket");
@@ -275,7 +275,7 @@ test("the header hides the basket link when the basket is empty", async ({ brows
 	const context = await newBuyerContext(browser);
 	const page = await context.newPage();
 	// No seed — an empty basket is what an account nobody added to holds.
-	await page.goto("/network");
+	await page.goto("/discovery");
 	await expect(
 		header(page).getByRole("link", { name: /Basket/ }),
 		"the basket link appeared when the basket was empty",
@@ -286,7 +286,7 @@ test("the header hides the basket link when the basket is empty", async ({ brows
 test("the basket link reaches the basket page and shows the seeded item", async ({ browser }) => {
 	const context = await newBuyerContext(browser);
 	const page = await context.newPage();
-	await page.goto("/network");
+	await page.goto("/discovery");
 	await seedThisBuyersBasket(await buyerCookie(context));
 	await page.reload();
 

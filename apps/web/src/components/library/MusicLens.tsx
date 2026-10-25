@@ -73,9 +73,9 @@ export interface MusicLensProps {
 	includeSpoken: boolean;
 	/**
 	 * Where the lens is drawing from. The Library opens a release as it was kept; the
-	 * feed-shaped scopes — the Network's feed and Discovery's whole-site stream — open
-	 * the whole Project, because what arrived is not a kept list. Only the empty state's
-	 * words and that opening rule differ.
+	 * feed-shaped scopes — Discovery's network-shaped recipe and its whole-site stream —
+	 * open the whole Project, because what arrived is not a kept list. Only the empty
+	 * state's words and that opening rule differ.
 	 */
 	scope?: "library" | "feed" | "discovery";
 }
@@ -223,9 +223,9 @@ export function musicReleases(items: LensItem[], includeSpoken: boolean): MusicR
 
 /**
  * The release cards as the scope shows them. The Library opens a release as it was kept,
- * so the card counts the kept tracks; the feed-shaped scopes — the Network and Discovery —
- * open it whole, so the card advertises the record's own count rather than the handful of
- * tracks that arrived in the stream.
+ * so the card counts the kept tracks; the feed-shaped scopes — Discovery's two — open it
+ * whole, so the card advertises the record's own count rather than the handful of tracks
+ * that arrived in the stream.
  */
 export function releasesForScope(
 	releases: MusicRelease[],

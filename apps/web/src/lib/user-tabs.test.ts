@@ -16,12 +16,19 @@ describe("userTabPath", () => {
 	});
 
 	it("sends an account that never chose to the default tab", () => {
-		expect(DEFAULT_USER_TAB).toBe("network");
-		expect(userTabPath(null)).toBe("/network");
-		expect(userTabPath(undefined)).toBe("/network");
+		expect(DEFAULT_USER_TAB).toBe("discovery");
+		expect(userTabPath(null)).toBe("/discovery");
+		expect(userTabPath(undefined)).toBe("/discovery");
 	});
 
 	it("sends an id this build dropped to the default tab", () => {
-		expect(userTabPath("browse")).toBe("/network");
+		expect(userTabPath("browse")).toBe("/discovery");
+	});
+
+	// The case that exists in real rows: an account whose starting tab was Network before
+	// the tabs merged. It must land on the merged tab rather than on a route that only
+	// redirects, so the address a reader keeps in a bookmark is the one they mean.
+	it("sends a stored network starting tab to the merged tab", () => {
+		expect(userTabPath("network")).toBe("/discovery");
 	});
 });

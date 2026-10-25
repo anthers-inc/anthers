@@ -28,7 +28,7 @@ import { expect, type Page, test } from "@playwright/test";
 const header = (page: Page) => page.getByRole("banner");
 
 test("the header avatar opens the account menu", async ({ page }) => {
-	await page.goto("/network");
+	await page.goto("/discovery");
 
 	const trigger = header(page).getByRole("button", { name: "Your account" });
 	await expect(trigger, "no account button in the header").toBeVisible();
@@ -61,7 +61,7 @@ test("the header avatar opens the account menu", async ({ page }) => {
 });
 
 test("Profile in the account menu reaches the user's own page", async ({ page }) => {
-	await page.goto("/network");
+	await page.goto("/discovery");
 
 	await header(page).getByRole("button", { name: "Your account" }).click();
 	const profile = header(page).getByRole("link", { name: "Profile" });

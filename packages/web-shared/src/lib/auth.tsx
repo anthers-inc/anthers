@@ -4,11 +4,16 @@ import { client } from "./rpc";
 import { applyTheme, storeTheme, type Theme } from "./theme";
 
 /**
- * The three tabs of the signed-in site, in the sidebar's fixed order (Library, Network,
- * Discovery). The nav ids are the vocabulary `PATCH /api/accounts/me` accepts, so the
- * server's enum and this union name the same three things.
+ * The tabs of the signed-in site, in the sidebar's fixed order (Library, Discovery).
+ * The nav ids are the vocabulary `PATCH /api/accounts/me` accepts, so the server's enum
+ * and this union name the same two things.
+ *
+ * ⚠️ **There were three until 2026-10-24**, when Network retired into Discovery as a
+ * recipe preset. The union shrank with the nav rather than keeping a retired id: an
+ * account whose stored starting tab was `network` now reads as never-answered and lands
+ * on the default, which is the merged tab.
  */
-export type UserTabId = "library" | "network" | "discovery";
+export type UserTabId = "library" | "discovery";
 
 /**
  * User shape returned from /api/auth/me.
@@ -39,10 +44,18 @@ export interface User {
 	themePreference: Theme | null;
 	/**
 	 * The tab a signed-in session opens on. Null = never answered, and the reader
-	 * treats that as **Network** — the column never bakes the default in, so a later
+	 * treats that as **Discovery** — the column never bakes the default in, so a later
 	 * default change would not have to rewrite rows.
 	 */
 	homeDefaultTab: UserTabId | null;
+	/**
+	 * The Discovery recipe the account last chose, as the three raw values the column
+	 * stores. The page parses them through `@anthers/shared/discovery` rather than
+	 * trusting them: a value written by a build that knew a candidate this one does not
+	 * degrades to the default instead of rendering a recipe nothing can run.
+	 * Null = never answered, read as the **My Network** preset.
+	 */
+	homeRecipe: { window: string; candidates: string; mix: string } | null;
 	/**
 	 * Whether audio playback rides the persistent footer bar rather than a Work page's
 	 * own player. Null = never answered, and the reader treats that as **on** — the

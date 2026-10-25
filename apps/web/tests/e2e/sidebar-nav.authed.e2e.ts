@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The sidebar nav's own contract — the Library / Network / Discovery rows and the Settings row
- * beneath them, their one fixed order, and the account setting that decides which of the three
- * tabs a session opens on.
+ * The sidebar nav's own contract — the Library / Discovery rows and the Settings row beneath
+ * them, their one fixed order, and the account setting that decides which of the two tabs a
+ * session opens on.
  *
  * 🚨 **Two of these assertions exist because a regression shipped through them.** #437
  * introduced grips and a wrapper row, and in doing so interpolated the NavLink's
@@ -15,7 +15,7 @@
  * the breakage they caught was in the row's shape, not in the drag.
  *
  * ⚠️ **The second test writes the shared gauntlet walker's starting tab** — the account
- * every authed spec shares. It puts Network back the moment it finishes asserting, and
+ * every authed spec shares. It puts Discovery back the moment it finishes asserting, and
  * the `afterAll` repeats that on the failure path. The one route another spec reads is
  * `/` (video-player's `goto("/")`), which navigates on to a `/works/…` slug regardless of
  * where the redirect lands it.
@@ -32,13 +32,10 @@ const labels = (page: import("@playwright/test").Page) =>
 		ROWS,
 	);
 
-const ORDER = ["Library", "Network", "Discovery", "Settings"];
+const ORDER = ["Library", "Discovery", "Settings"];
 
 /** The PATCH the settings card fires when a tab radio is chosen. */
-const chooseTab = async (
-	page: import("@playwright/test").Page,
-	label: "Library" | "Network" | "Discovery",
-) => {
+const chooseTab = async (page: import("@playwright/test").Page, label: "Library" | "Discovery") => {
 	const patch = page.waitForResponse(
 		(r) => r.url().includes("/api/accounts/me") && r.request().method() === "PATCH",
 		{ timeout: 10_000 },
@@ -61,9 +58,9 @@ test.describe.configure({ mode: "serial" });
 
 test("the nav items read as rows — icon beside label at the nav's small size", async ({ page }) => {
 	test.setTimeout(60_000);
-	await page.goto(`${WEB_ORIGIN}/network`);
+	await page.goto(`${WEB_ORIGIN}/discovery`);
 	const nav = page.getByRole("navigation", { name: "Anthers" });
-	const link = nav.getByRole("link", { name: "Network" });
+	const link = nav.getByRole("link", { name: "Discovery" });
 	await expect(link).toBeVisible();
 	expect(await labels(page)).toEqual(ORDER);
 
@@ -133,9 +130,9 @@ test("the account's starting tab decides where / lands, and the order never move
 	page,
 }) => {
 	test.setTimeout(60_000);
-	await page.goto(`${WEB_ORIGIN}/network`);
+	await page.goto(`${WEB_ORIGIN}/discovery`);
 	await expect(
-		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Network" }),
+		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Discovery" }),
 	).toBeVisible();
 
 	// Choosing a tab in Settings is the only control, and it takes effect on the next
@@ -150,11 +147,11 @@ test("the account's starting tab decides where / lands, and the order never move
 		.poll(() => labels(page), { message: "the sidebar keeps its fixed order" })
 		.toEqual(ORDER);
 
-	// Back at the default: Network is where a session lands when nothing else is chosen.
+	// Back at the default: Discovery is where a session lands when nothing else is chosen.
 	await page.goto(`${WEB_ORIGIN}/settings?tab=account`);
-	await chooseTab(page, "Network");
+	await chooseTab(page, "Discovery");
 	await page.goto(`${WEB_ORIGIN}/`);
-	await expect(page).toHaveURL(/\/network$/);
+	await expect(page).toHaveURL(/\/discovery$/);
 	await expect
 		.poll(() => labels(page), { message: "choosing a tab never rearranges the nav" })
 		.toEqual(ORDER);
@@ -163,8 +160,31 @@ test("the account's starting tab decides where / lands, and the order never move
 	// else reads it (belt-and-braces afterAll below catches a mid-test failure).
 	await page.request.patch(`${API_URL}/api/accounts/me`, {
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-		data: { homeDefaultTab: "network" },
+		data: { homeDefaultTab: "discovery" },
 	});
+});
+
+test("the retired Network address lands on the My Network recipe", async ({ page }) => {
+	test.setTimeout(60_000);
+	// Network retired into Discovery on 2026-10-24, and its address is a redirect rather
+	// than a 404 because the site is publicly reachable and this was where most accounts
+	// landed. The address meant the network feed, so it lands on that recipe — explicitly,
+	// not on whatever this account happens to open on.
+	await page.goto(`${WEB_ORIGIN}/network`);
+	await expect(page).toHaveURL(/\/discovery\?window=all&candidates=network&mix=straight/);
+	await expect(page.getByRole("heading", { name: "Discovery", exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "My Network" })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
+	// Arriving by link is an override, not a preference: it must not rewrite the account.
+	// The next bare visit is the one that proves it, and the walker's stored recipe is
+	// untouched by this file, so `/discovery` opens on the default preset.
+	await page.goto(`${WEB_ORIGIN}/discovery`);
+	await expect(page.getByRole("button", { name: "My Network" })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
 });
 
 test.afterAll(async ({ browser }) => {
@@ -177,7 +197,7 @@ test.afterAll(async ({ browser }) => {
 	const res = await context.request
 		.patch(`${API_URL}/api/accounts/me`, {
 			headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-			data: { homeDefaultTab: "network" },
+			data: { homeDefaultTab: "discovery" },
 			failOnStatusCode: false,
 		})
 		.catch(() => null);

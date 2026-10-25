@@ -135,10 +135,10 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	await page.reload();
 	await expect(studioSidebar).toBeVisible();
 
-	// The switch leaves for the account's starting tab — Network unless somebody chose
+	// The switch leaves for the account's starting tab — Discovery unless somebody chose
 	// another in Settings — and user mode is sticky the same way.
 	await modeSwitch.getByRole("link", { name: "User", exact: true }).click();
-	await expect(page).toHaveURL(/\/network$/);
+	await expect(page).toHaveURL(/\/discovery$/);
 	await expect(userSidebar).toBeVisible();
 	await expect(studioSidebar).toHaveCount(0);
 	await expect(header.getByPlaceholder("Search...")).toBeVisible();
@@ -159,7 +159,7 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 test("an account without creator mode has no Studio to switch to", async ({ page }) => {
 	// The gauntlet user is not a creator. The switch is the only way into the Studio from
 	// anywhere, so its absence is also the absence of a door they would be turned back from.
-	await page.goto("/network");
+	await page.goto("/discovery");
 	await expect(page.getByRole("navigation", { name: "Anthers", exact: true })).toBeVisible();
 	await expect(page.getByRole("navigation", { name: "User or Creator" })).toHaveCount(0);
 });

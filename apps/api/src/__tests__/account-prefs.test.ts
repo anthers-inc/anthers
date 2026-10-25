@@ -7,7 +7,12 @@
  * (an unknown id is refused here rather than stored), and it rides both serializers it
  * needs: the account's GET /me and the shell's boot read `/auth/me`, because the landing
  * redirect has no second call to spend. Null means "never answered" and the client reads
- * that as Network, so the column never bakes the default in.
+ * that as Discovery, so the column never bakes the default in.
+ *
+ * ⚠️ **There are two tabs as of 2026-10-24**, when Network retired into Discovery as a
+ * recipe preset. A stored `network` is not refused on read — the serializers treat any id
+ * this build's nav does not have as never-answered — so the account lands on the merged
+ * tab rather than nowhere. The recipe the merged tab remembers is pinned below.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import app from "../index";
@@ -39,7 +44,7 @@ function patchMe(body: unknown, c = cookie) {
 }
 
 describe("the default-tab preference", () => {
-	it("starts null — the client's Network default", async () => {
+	it("starts null — the client's Discovery default", async () => {
 		const fresh = `neverasked${Date.now().toString(36)}`;
 		const freshCookie = (await createAccount(fresh)).cookie;
 		const me = await (await req("/api/accounts/me", { headers: { Cookie: freshCookie } })).json();
@@ -60,13 +65,61 @@ describe("the default-tab preference", () => {
 	});
 
 	it("refuses a tab the nav does not have", async () => {
-		// The ids are the client's nav vocabulary; the schema's enum is that refusal.
+		// The ids are the client's nav vocabulary; the schema's enum is that refusal. The
+		// retired tab is in that set: it is a redirect now, not a place to open on.
 		expect((await patchMe({ homeDefaultTab: "basket" })).status).toBe(400);
+		expect((await patchMe({ homeDefaultTab: "network" })).status).toBe(400);
 	});
 
 	it("accepts a PATCH with no tab key at all — other fields still work", async () => {
 		const res = await patchMe({ bio: "Just here for the Network." });
 		expect(res.status).toBe(200);
+	});
+});
+
+describe("the Discovery recipe preference", () => {
+	it("starts null — the client's My Network preset", async () => {
+		const fresh = `norecipe${Date.now().toString(36)}`;
+		const freshCookie = (await createAccount(fresh)).cookie;
+		const me = await (await req("/api/accounts/me", { headers: { Cookie: freshCookie } })).json();
+		expect(me.user.homeRecipe).toBeNull();
+	});
+
+	it("persists the whole recipe, to both serializers it must ride", async () => {
+		const recipe = { window: "week", candidates: "following", mix: "straight" };
+		expect((await patchMe({ homeRecipe: recipe })).status).toBe(200);
+
+		const me = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
+		expect(me.user.homeRecipe).toEqual(recipe);
+		// A bare `/discovery` opens on this from the shell's boot payload, so a recipe that
+		// stopped at GET /me would open on the default instead.
+		const auth = await (await req("/api/auth/me", { headers: { Cookie: cookie } })).json();
+		expect(auth.user.homeRecipe).toEqual(recipe);
+	});
+
+	it("refuses a stage value neither the page nor the route can run", async () => {
+		// One refusal per stage, because the schema's three enums are the shared
+		// vocabulary: a stored value the page cannot parse would draw something else.
+		expect(
+			(await patchMe({ homeRecipe: { window: "fortnight", candidates: "network", mix: "spread" } }))
+				.status,
+		).toBe(400);
+		expect(
+			(await patchMe({ homeRecipe: { window: "all", candidates: "friends", mix: "spread" } }))
+				.status,
+		).toBe(400);
+		expect(
+			(await patchMe({ homeRecipe: { window: "all", candidates: "network", mix: "chaos" } }))
+				.status,
+		).toBe(400);
+	});
+
+	it("leaves the stored recipe alone when a PATCH does not mention it", async () => {
+		await patchMe({ homeRecipe: { window: "day", candidates: "saved", mix: "spread" } });
+		expect((await patchMe({ bio: "Still reading." })).status).toBe(200);
+
+		const me = await (await req("/api/accounts/me", { headers: { Cookie: cookie } })).json();
+		expect(me.user.homeRecipe).toEqual({ window: "day", candidates: "saved", mix: "spread" });
 	});
 });
 

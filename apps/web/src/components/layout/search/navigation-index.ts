@@ -10,11 +10,11 @@
  * rather than importing those components into the layout: importing a page into its own
  * header is a dependency cycle, and the copy below is what a reader would say anyway.
  *
- * ⚠️ **The three tabs are Library, Network, and Discovery** (the 2026-10-19 rework), and
- * Discovery carries no modes of its own: its one stream is the page, not a destination
- * inside it. A mode that is removed or renamed belongs in this list in the same change:
- * a result that names a mode the page no longer has is a dead link the reader cannot
- * tell from a live one.
+ * ⚠️ **The tabs are Library and Discovery** (2026-10-24, when Network retired into
+ * Discovery as a recipe preset), and Discovery carries no modes of its own: its one
+ * stream is the page, not a destination inside it. A mode that is removed or renamed
+ * belongs in this list in the same change: a result that names a mode the page no longer
+ * has is a dead link the reader cannot tell from a live one.
  *
  * ⚠️ **A Settings section's deepest addressable destination is its tab.** The cards have
  * no anchors today, so a result for "Notifications" lands on Activity & Data rather than
@@ -34,7 +34,7 @@ export interface NavigationEntry {
 }
 
 export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
-	// ── The three tabs ──────────────────────────────────────────────────────
+	// ── The tabs ────────────────────────────────────────────────────────────
 	{
 		id: "mode-library",
 		label: "Library",
@@ -43,16 +43,9 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 		kind: "mode",
 	},
 	{
-		id: "mode-network",
-		label: "Network",
-		keywords: ["feed", "home", "timeline", "following", "chronological"],
-		href: "/network",
-		kind: "mode",
-	},
-	{
 		id: "mode-discovery",
 		label: "Discovery",
-		keywords: ["discover", "explore", "find", "search"],
+		keywords: ["discover", "explore", "find", "search", "feed", "network", "timeline"],
 		href: "/discovery",
 		kind: "mode",
 	},
