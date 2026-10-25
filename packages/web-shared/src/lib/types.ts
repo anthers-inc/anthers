@@ -11,7 +11,7 @@
 
 import type { WorkType } from "@anthers/shared/content";
 import type { ContentNote, MaturityRating, MaturityRows } from "@anthers/shared/content-rating";
-import type { ShelfSortDirection, ShelfSortMode } from "@anthers/shared/project-shelf-sort";
+import type { ProjectSortDirection, ProjectSortMode } from "@anthers/shared/project-sort";
 
 // ─── User Types ───
 
@@ -398,7 +398,7 @@ export type UploadableWorkType = Exclude<ContentType, "text">;
 export type WorkVisibility = "private" | "released" | "withdrawn";
 
 /**
- * A **release** in a saved catalog: the Project a Work belongs to, as the Library shelf
+ * A **release** in a saved catalog: the Project a Work belongs to, as the Library
  * can describe it without fetching the Project's detail. The music lens groups saved
  * tracks under these, and a saved Project uses the same shape.
  */
@@ -435,16 +435,16 @@ export interface Work {
 	creatorId?: number;
 	/**
 	 * The creator's display surface, carried only by listings that organize **by** their
-	 * creators — the Library shelf response attaches them at the route (the project arm
+	 * creators — the Library response attaches them at the route (the project arm
 	 * has always carried the handle/name pair); `serializeWorkForUser` withholds them
-	 * everywhere else. Present so a lens that groups the shelf by creator can label
+	 * everywhere else. Present so a lens that groups the Library by creator can label
 	 * channels wholesale instead of fetching profiles per creator.
 	 */
 	creatorHandle?: string | null;
 	creatorDisplayName?: string | null;
 	creatorAvatar?: string | null;
 	/**
-	 * The published Projects this Work belongs to, carried only by the Library shelf
+	 * The published Projects this Work belongs to, carried only by the Library
 	 * response. A lens that groups saved tracks into releases reads this to find the
 	 * Project a track came from without a request per Work; empty when the Work stands
 	 * on its own.
@@ -881,10 +881,10 @@ export interface Project {
 	 * response arrives already sorted by these, so a reader renders `works` and
 	 * `posts` in the order given.
 	 */
-	worksSortMode: ShelfSortMode;
-	worksSortDirection: ShelfSortDirection;
-	postsSortMode: ShelfSortMode;
-	postsSortDirection: ShelfSortDirection;
+	worksSortMode: ProjectSortMode;
+	worksSortDirection: ProjectSortDirection;
+	postsSortMode: ProjectSortMode;
+	postsSortDirection: ProjectSortDirection;
 	isPublished: boolean | null;
 	atprotoUri: string | null;
 	/**
@@ -934,10 +934,10 @@ export interface ProjectWorkSummary {
 }
 
 /**
- * A Work as it appears inside a Project. The Work entire, plus its position on the shelf.
+ * A Work as it appears inside a Project. The Work entire, plus its position in the list.
  *
  * Membership carries nothing else, and that is the model rather than an omission: a
- * Project is a shelf, so a reference that carried gates or a price would be the Project
+ * Project is a grouping, so a reference that carried gates or a price would be the Project
  * owning the Work. Access here is the Work's own, resolved for this user.
  */
 export interface ProjectWork extends Work {

@@ -154,11 +154,11 @@ staged("the user-space outbox against a staging PDS", () => {
 			),
 		).toBe(true);
 
-		const [shelf] = await db
+		const [library] = await db
 			.select()
 			.from(libraryItems)
 			.where(and(eq(libraryItems.userId, userId), eq(libraryItems.workId, workId)));
-		expect(shelf).toBeTruthy();
+		expect(library).toBeTruthy();
 	});
 
 	it("01F: a read-back the PDS answers wrongly keeps the row and the record", async () => {
@@ -212,7 +212,7 @@ staged("the user-space outbox against a staging PDS", () => {
 		expect(records.records).toHaveLength(1);
 	});
 
-	it("08: rebuilds the shelf from the space alone", async () => {
+	it("08: rebuilds the Library from the space alone", async () => {
 		await setUp();
 		await db.delete(libraryItems).where(eq(libraryItems.userId, userId));
 		const rebuilt = await rebuildLibraryProjection(userId, { resolveSession });

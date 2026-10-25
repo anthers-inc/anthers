@@ -17,7 +17,7 @@
  * release does not leave the lens.
  *
  * ⚠️ **A release is what was kept, read honestly.** In the Library, a release reached
- * through saved tracks lists only the tracks that are on the shelf; a release saved as a
+ * through saved tracks lists only the tracks that are in the Library; a release saved as a
  * Project opens whole, because the Project itself is what was kept. The `scope` prop is
  * how a future Feed lens asks the same component for every track of a Project instead.
  *
@@ -26,11 +26,11 @@
  * exposes is a fixed control we designed rather than an arbitrary filter builder. The
  * first such dial is {@link MusicLensProps.includeSpoken} — off by default, so the lens
  * is music by default, and on it widens the same view to spoken-word audio for the
- * listener who wants one shelf of everything they listen to.
+ * listener who wants one collection of everything they listen to.
  *
  * 🚨 **A dial is a lens control, and the lens invariants still hold.** Toggling it is a
  * view change, not a container change: turning include-spoken on and back off must leave
- * the shelf holding exactly what it held — the toggle re-scopes what the lens *draws on*,
+ * the Library holding exactly what it held — the toggle re-scopes what the lens *draws on*,
  * it never adds or removes anything *from* the Library.
  */
 import { profileUrl } from "@anthers/web-shared/profile";
@@ -45,7 +45,7 @@ import { isPlayable, type QueueTrack } from "../../lib/music-queue";
 import { trackFromWork, tracksFrom } from "../../lib/tracks";
 import AlbumView from "../media/AlbumView";
 
-/** The release metadata the Library shelf carries for a saved Work. */
+/** The release metadata the Library carries for a saved Work. */
 export type LensRelease = WorkRelease;
 
 export interface LensProject extends LensRelease {
@@ -67,7 +67,7 @@ export interface MusicLensProps {
 	/**
 	 * The lens's preset dial over its own filter (Parker, 2026-09-20): when on,
 	 * spoken-word `audio` Works join the record collection for the listener who wants
-	 * one shelf of everything they listen to. Off by default — the music lens is music
+	 * one collection of everything they listen to. Off by default — the music lens is music
 	 * by default, and spoken word's home is its own lens.
 	 */
 	includeSpoken: boolean;
@@ -101,14 +101,14 @@ export interface MusicRelease {
 	/** What the whole record holds, including members this corpus never saw — the count a
 	 *  feed-scoped lens advertises, because opening the release there fetches it whole. */
 	wholeCount: number;
-	/** True when the release itself is on the shelf — a saved Project or a standalone Work. */
+	/** True when the release itself is in the Library — a saved Project or a standalone Work. */
 	wholeRelease: boolean;
-	/** The saved tracks already placed under it, in shelf order; a whole saved Project fetches its own. */
+	/** The saved tracks already placed under it, in Library order; a whole saved Project fetches its own. */
 	tracks: QueueTrack[];
 }
 
 /**
- * Group the shelf into releases, in shelf order.
+ * Group the Library into releases, in Library order.
  *
  * A saved Project is a release while it holds music. A saved music Work joins every
  * published Project it belongs to and never appears as a loose row; a saved music Work
@@ -256,7 +256,7 @@ export default function MusicLens({ items, includeSpoken, scope = "library" }: M
 	const [openingKey, setOpeningKey] = useState<string | null>(null);
 	const [openError, setOpenError] = useState<string | null>(null);
 
-	// A filter or dial can remove the open release from the shelf. Return to the grid
+	// A filter or dial can remove the open release from the Library. Return to the grid
 	// rather than sitting on a detail for something no longer there.
 	useEffect(() => {
 		if (selected && !releases.some((release) => release.key === selected.key)) {
@@ -268,7 +268,7 @@ export default function MusicLens({ items, includeSpoken, scope = "library" }: M
 	/**
 	 * Fetch a Project's tracks, as the release's whole self.
 	 *
-	 * The shelf carries counts rather than members, so this is the one request a release
+	 * The Library carries counts rather than members, so this is the one request a release
 	 * needs — made when it is opened or played, never once per card on page load.
 	 */
 	const fetchProjectTracks = async (release: MusicRelease): Promise<QueueTrack[] | null> => {
@@ -506,7 +506,7 @@ function ReleaseCard({
 					</div>
 				)}
 				{/* Rises into place on hover, the way Garnet's grid does — the one piece of
-				    motion that makes a grid of covers feel like a shelf you can reach into.
+				    motion that makes a grid of covers feel like a record crate you can reach into.
 				    Absent when the release holds nothing playable, so it never appears as a
 				    control that cannot answer. */}
 				{canPlay && (

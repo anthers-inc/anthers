@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Works on a Project's shelf — an ordered list the owner arranges by dragging, and
+ * The Works on a Project page — an ordered list the owner arranges by dragging, and
  * reads through one of four sort modes.
  *
  * ⭐ **The chosen sort is the Project's, and it governs what readers see** (Parker,
@@ -8,11 +8,11 @@
  * the dropdown saves the mode on the Project row and the API serializes the members in
  * that order for every reader. Manual is the default and the stored drag order, so the
  * handles stay the way a creator arranged them until they choose otherwise; a non-manual
- * mode is a named reading order over the same shelf and never rewrites `sortOrder`.
+ * mode is a named reading order over the same list and never rewrites `sortOrder`.
  *
  * Lives on the Project's own page now (the unified-editor pass, 2026-10-17): a creator
  * visiting their project sees this as the working surface where users see the grid or
- * the album record. A Project's shelf is NOT a form-held list — the post builder used
+ * the album record. This list is NOT form-held — the post builder used
  * to hold one, and it is what this design was considered against and rejected:
  * membership here has its own endpoints and **persists immediately**, the way the builds
  * section of the Work editor does. The reason is the Project form: a creator adding
@@ -25,18 +25,18 @@
  * between modes.
  *
  * The picker it opens is multi-select: tick every Work, then one act adds them all —
- * each member arriving at the shelf's end, positions assigned by the server in turn.
+ * each member arriving at the list's end, positions assigned by the server in turn.
  *
- * A Project is a shelf: adding a Work here changes nothing about who can open it, and
+ * A Project groups its Works: adding one here changes nothing about who can open it, and
  * removing it never touches the Work — it stays in the Catalog, released, with its gates.
  */
 
 import {
-	moveShelfItem,
-	type ShelfSortDirection,
-	type ShelfSortMode,
-	sortShelf,
-} from "@anthers/shared/project-shelf-sort";
+	moveProjectItem,
+	type ProjectSortDirection,
+	type ProjectSortMode,
+	sortProjectItems,
+} from "@anthers/shared/project-sort";
 import { Bars3Icon, PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { client } from "../../lib/rpc";
@@ -46,10 +46,10 @@ import WorkPicker from "./WorkPicker";
 import { itemPreviewUrl, ProcessingBadge, TypeBadge, TypeIcon } from "./works";
 
 /**
- * The sort modes a shelf's dropdown offers, in display order. Keys read by
- * `sortShelf`; the direction pair under Manual is disabled, not hidden.
+ * The sort modes a Project's dropdown offers, in display order. Keys read by
+ * `sortProjectItems`; the direction pair under Manual is disabled, not hidden.
  */
-export const SHELF_SORT_OPTIONS: Array<{ mode: ShelfSortMode; label: string }> = [
+export const PROJECT_SORT_OPTIONS: Array<{ mode: ProjectSortMode; label: string }> = [
 	{ mode: "manual", label: "Manual" },
 	{ mode: "released", label: "Release Date" },
 	{ mode: "original", label: "Original Release Date" },
@@ -65,8 +65,8 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 	// The reading arrangement, read from the Project's saved setting and written back to
 	// it when changed. Manual is the stored drag order; everything else re-derives the
 	// view on every render — nothing below ever writes `works` from a sort.
-	const [sortMode, setSortMode] = useState<ShelfSortMode>("manual");
-	const [sortDirection, setSortDirection] = useState<ShelfSortDirection>("asc");
+	const [sortMode, setSortMode] = useState<ProjectSortMode>("manual");
+	const [sortDirection, setSortDirection] = useState<ProjectSortDirection>("asc");
 	/** Where the drag started, in the stored list's own indices; cleared on every end. */
 	const dragFrom = useRef<number | null>(null);
 
@@ -80,7 +80,7 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 				if (!live) return;
 				/*
 				 * The detail response arrives already sorted by the Project's saved setting.
-				 * The shelf's own state is the STORED order, because that is what a drag
+				 * The list's own state is the STORED order, because that is what a drag
 				 * edits and what the reorder endpoint persists — so restore it by the
 				 * membership's `sortOrder`, then let the mode render a view over it.
 				 */
@@ -101,7 +101,7 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 	 * did not save is the worst of both.
 	 */
 	const saveSort = async (
-		fields: { worksSortMode?: ShelfSortMode; worksSortDirection?: ShelfSortDirection },
+		fields: { worksSortMode?: ProjectSortMode; worksSortDirection?: ProjectSortDirection },
 		revert: () => void,
 	) => {
 		setError(null);
@@ -123,7 +123,7 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 
 	const add = async (picked: Work[]) => {
 		setPicking(false);
-		// One membership per Work; the picker excludes shelf members, but a row may have
+		// One membership per Work; the picker excludes Works already in the Project, but a row
 		// joined while the modal stood open, so the filter runs again here.
 		const fresh = picked.filter((w) => !works.some((existing) => existing.id === w.id));
 		if (fresh.length === 0) return;
@@ -173,7 +173,7 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 	};
 
 	/**
-	 * Persist one drag as the shelf's whole order.
+	 * Persist one drag as the list's whole order.
 	 *
 	 * Optimistic, and reverted on failure — the alternative is a list that visibly reorders
 	 * and then silently isn't saved, which is the worst of both. The server takes the
@@ -187,7 +187,7 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 	const move = async (from: number, to: number) => {
 		if (to === from) return;
 		const before = works;
-		const next = moveShelfItem(works, from, to).map((w, i) => ({ ...w, sortOrder: i }));
+		const next = moveProjectItem(works, from, to).map((w, i) => ({ ...w, sortOrder: i }));
 		setWorks(next);
 		setBusy(true);
 		setError(null);
@@ -217,7 +217,7 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 	}
 
 	const manual = sortMode === "manual";
-	const displayed = sortShelf(works, sortMode, sortDirection);
+	const displayed = sortProjectItems(works, sortMode, sortDirection);
 
 	return (
 		<div className="space-y-3">
@@ -227,7 +227,7 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 				</div>
 			)}
 
-			{/* The shelf's controls. Direction stays visible and disabled under Manual so the
+			{/* The list's controls. Direction stays visible and disabled under Manual so the
 			    layout holds across modes; drag is Manual's, so the handles below carry it. */}
 			<div className="flex flex-wrap items-center justify-between gap-2">
 				<div className="flex items-center gap-2">
@@ -237,13 +237,13 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 						className="select select-bordered select-sm"
 						value={sortMode}
 						onChange={(e) => {
-							const next = e.target.value as ShelfSortMode;
+							const next = e.target.value as ProjectSortMode;
 							const before = sortMode;
 							setSortMode(next);
 							void saveSort({ worksSortMode: next }, () => setSortMode(before));
 						}}
 					>
-						{SHELF_SORT_OPTIONS.map((opt) => (
+						{PROJECT_SORT_OPTIONS.map((opt) => (
 							<option key={opt.mode} value={opt.mode}>
 								{opt.label}
 							</option>
@@ -255,7 +255,7 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 						value={sortDirection}
 						disabled={manual}
 						onChange={(e) => {
-							const next = e.target.value as ShelfSortDirection;
+							const next = e.target.value as ProjectSortDirection;
 							const before = sortDirection;
 							setSortDirection(next);
 							void saveSort({ worksSortDirection: next }, () => setSortDirection(before));
@@ -277,13 +277,13 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 
 			{works.length === 0 && (
 				<p className="text-sm text-base-content/60">
-					No Works yet. A Project is a shelf — put the album's tracks, the game's builds or the
-					chapters of a book on it, and they keep whatever access you already gave them.
+					No Works yet. Add the album's tracks, the game's builds or the chapters of a book, and
+					they keep whatever access you already gave them.
 				</p>
 			)}
 
 			{/* The list names itself for the tests' role-targeting and for a screen reader
-			    over a page whose other lists (menus) are not shelves. */}
+			    over a page whose other lists (menus) are not this one. */}
 			<ul aria-label="Works on this Project" className="space-y-2">
 				{displayed.map((work, i) => {
 					const preview = itemPreviewUrl(work);
@@ -350,14 +350,14 @@ export default function ProjectWorks({ projectSlug }: { projectSlug: string }) {
 									 * label, and one no error would ever have surfaced.
 									 *
 									 * Visibility is the field this endpoint genuinely provides, and it is
-									 * also the one that matters while arranging a shelf: a private member is
+									 * also the one that matters while arranging a list: a private member is
 									 * invisible to everyone but its creator. Gates belong to the Work and
 									 * are edited in the Catalog.
 									 */}
 									{work.visibility !== "released" && (
 										<span
 											className="badge badge-sm badge-neutral"
-											title="Private — nobody but you sees this on the shelf"
+											title="Private — nobody but you sees this in the Project"
 										>
 											Private
 										</span>

@@ -119,7 +119,7 @@ afterAll(async () => {
 });
 
 describe("coming into the program", () => {
-	it("a purchase puts the Work in it, because a purchase saves itself to the shelf", async () => {
+	it("a purchase puts the Work in it, because a purchase saves itself to the Library", async () => {
 		const work = await insertWork({ creatorId, type: "game", title: "BoughtAndSaved" });
 		workIds.push(work.id);
 		expect(await preserved(work.id)).toBe(false);
@@ -138,7 +138,7 @@ describe("coming into the program", () => {
 		expect(saved.ok).toBe(true);
 		expect(await preserved(work.id)).toBe(true);
 
-		// ⭐ **The write is one-way.** A shelf entry can be removed, but a Work Anthers has
+		// ⭐ **The write is one-way.** A Library entry can be removed, but a Work Anthers has
 		// undertaken to keep is not un-kept by somebody tidying their library.
 		const [item] = await db
 			.select({ id: libraryItems.id })

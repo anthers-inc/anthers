@@ -150,16 +150,16 @@ test("saved recipes reorder, delete and join the keyboard cycle", async ({ page 
 	await page.goto(`${WEB_ORIGIN}/discovery?window=all&candidates=saved&mix=spread`);
 	await saveChip(page).click();
 	const dialog = page.getByRole("dialog");
-	await dialog.getByLabel("Name").fill("Saved shelf");
+	await dialog.getByLabel("Name").fill("Saved collection");
 	await dialog.getByRole("button", { name: "Save recipe" }).click();
-	await expect(chip(page, "Saved shelf")).toHaveAttribute("aria-pressed", "true");
+	await expect(chip(page, "Saved collection")).toHaveAttribute("aria-pressed", "true");
 
 	// Built-ins first, then the reader's own in their order.
 	await expect(chips(page)).toHaveText([
 		"My Network",
 		"Across Anthers",
 		"Inner circle",
-		"Saved shelf",
+		"Saved collection",
 	]);
 
 	// The cycle steps through both kinds, and wraps.
@@ -170,26 +170,26 @@ test("saved recipes reorder, delete and join the keyboard cycle", async ({ page 
 	await page.keyboard.press("Control+]");
 	await expect(chip(page, "Inner circle")).toHaveAttribute("aria-pressed", "true");
 	await page.keyboard.press("Control+]");
-	await expect(chip(page, "Saved shelf")).toHaveAttribute("aria-pressed", "true");
+	await expect(chip(page, "Saved collection")).toHaveAttribute("aria-pressed", "true");
 	await page.keyboard.press("Control+]");
 	await expect(chip(page, "My Network"), "the cycle wraps to the first chip").toHaveAttribute(
 		"aria-pressed",
 		"true",
 	);
 	await page.keyboard.press("Control+[");
-	await expect(chip(page, "Saved shelf"), "the previous chord wraps backward").toHaveAttribute(
+	await expect(chip(page, "Saved collection"), "the previous chord wraps backward").toHaveAttribute(
 		"aria-pressed",
 		"true",
 	);
 
 	// Reorder: earlier means the chip renders before the other saved one, not before a preset.
-	await page.getByRole("button", { name: "Edit Saved shelf" }).click();
+	await page.getByRole("button", { name: "Edit Saved collection" }).click();
 	await page.getByRole("button", { name: "Move earlier" }).click();
 	await page.getByRole("button", { name: "Save", exact: true }).click();
 	await expect(chips(page)).toHaveText([
 		"My Network",
 		"Across Anthers",
-		"Saved shelf",
+		"Saved collection",
 		"Inner circle",
 	]);
 

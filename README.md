@@ -84,7 +84,7 @@ Beyond those: `content/` is local dev object storage, `scripts/` holds the repo'
 
 **Publishing.** A creator keeps a **Catalog** of **Works** — video, audio, comics and ebooks, games, software, images and prose. A Work carries its own visibility, its own dates (uploaded, released, and the creator's own claim about when it was *made*, at whatever precision they know it), its own access gates, its own comments and reviews, and its own earnings. Uploads are transcoded server-side: HLS ladders for video, loudness-normalized audio with precomputed waveforms, page-rasterized comics. A Work can be released, gated, discussed and paid for without a post ever existing.
 
-**Posts and Projects.** A **Post** is an announcement that references Works — rich text with inline images, math and markdown. A **Project** is a shelf that groups Works and Posts around one subject. Neither confers access to anything; a Work always addresses itself.
+**Posts and Projects.** A **Post** is an announcement that references Works — rich text with inline images, math and markdown. A **Project** groups Works and Posts around one subject. Neither confers access to anything; a Work always addresses itself.
 
 **Reading, watching, playing.** Three players — video, audio, and a comic/ebook reader — on one shared transport that survives navigation, so a queued album keeps playing while you browse. A **Library** holds everything a person has kept: what they bought, permanently, plus anything free they chose to save. Follows produce a chronological feed that interleaves posts and releases, so releasing never costs a creator their reach. Reviews carry a score *and* text, because a number on its own says nothing worth moderating.
 

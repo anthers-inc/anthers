@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * FLIP for lists whose order or membership changes in place — the shelf after a card is
+ * FLIP for lists whose order or membership changes in place — the Library after a card is
  * removed, the sidebar after a row is dragged, the Dashboard after a panel is moved.
  *
  * The consumer owns the timing, because only it knows when the DOM is about to change:

@@ -3,7 +3,7 @@
  * A Project can wear one of its Works' covers, chosen from the Project's own page.
  *
  * The API suite owns the rules — the reference follow-through, the fallback, the visibility
- * gates. This walk proves the editor's half: "Choose from Work" opens the shelf, a Work
+ * gates. This walk proves the editor's half: "Choose from Work" opens the picker, a Work
  * with a cover is a choice, and the act puts that cover on the page and says where it came
  * from, without an upload in between.
  *
@@ -58,7 +58,7 @@ test("a creator chooses a Works cover for the Project from the Project page", as
 	session = await signInAsMediaFixture(context);
 
 	// The Work and its cover: a draft text Work with an uploaded image, since a text Work
-	// carries a chosen thumbnail and the shelf does not require release.
+	// carries a chosen thumbnail and the list does not require release.
 	const made = await fetch(`${API_URL}/api/content/works`, {
 		method: "POST",
 		headers: await authed(),
@@ -91,12 +91,12 @@ test("a creator chooses a Works cover for the Project from the Project page", as
 		body: JSON.stringify({ title: PROJECT_TITLE, slug: SLUG, isPublished: false }),
 	});
 	expect(project.status).toBe(201);
-	const shelf = await fetch(`${API_URL}/api/content/projects/${SLUG}/works`, {
+	const list = await fetch(`${API_URL}/api/content/projects/${SLUG}/works`, {
 		method: "POST",
 		headers: await authed(),
 		body: JSON.stringify({ workId }),
 	});
-	expect(shelf.status).toBe(201);
+	expect(list.status).toBe(201);
 
 	// The creator's handle, for the public URL the editor lives on.
 	handle = await gauntletHandle(API_URL, MEDIA_FIXTURE_USERNAME);

@@ -38,6 +38,8 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 	{
 		id: "mode-library",
 		label: "Library",
+		// `shelf` is kept deliberately as an alias: the old word still finds the Library
+		// (2026-10-25), and the row below carries no duplicate of it.
 		keywords: ["saved", "purchases", "shelf", "collection", "keep"],
 		href: "/library",
 		kind: "mode",
@@ -54,7 +56,7 @@ export const NAVIGATION_INDEX: readonly NavigationEntry[] = [
 	{
 		id: "mode-lens-none",
 		label: "No Lens",
-		keywords: ["library", "plain", "grid", "shelf"],
+		keywords: ["library", "plain", "grid"],
 		href: "/library",
 		kind: "mode",
 	},

@@ -1021,7 +1021,7 @@ const accountRoutes = new Hono()
 			const subscribedIds = subscribedRows.map((row) => row.creatorId);
 
 			// Saved posts and saved Works are separate joins because a library row names
-			// exactly one subject; the union is the creator set, not the shelf.
+			// exactly one subject; the union is the creator set, not the Library.
 			const savedPostRows = await db
 				.selectDistinct({ creatorId: posts.creatorId })
 				.from(libraryItems)
@@ -1106,7 +1106,7 @@ const accountRoutes = new Hono()
 		// - `access` is the viewer's ACCESS verdict over the deliverable: "unlocked" is
 		//   work the viewer can open (free, purchased, entitled, or their own), with a
 		//   physical Work counting once a purchase delivered it once; "locked" is the
-		//   complement — the shirt on the shelf and the album behind a higher rung. A
+		//   complement — the shirt in the store and the album behind a higher rung. A
 		//   post is accessible by construction, so it stays under "unlocked" and drops
 		//   under "locked".
 		// - `tags` is a comma list, and reads as AND: a Work or post matches when its
@@ -1285,7 +1285,7 @@ const accountRoutes = new Hono()
 
 		// The published Projects each release belongs to, so the Network's Music Player lens
 		// groups a newly released track under its record the way the Library's groups a saved
-		// one. Same metadata-only membership and the same viewer-scoped counts as the shelf;
+		// one. Same metadata-only membership and the same viewer-scoped counts as the Library;
 		// one query for the page, and nothing when the feed carried no releases.
 		const { byWork: releasesByWork } = await releasesByWorkId(
 			feedWorks.map((row) => row.work.id),
@@ -1388,7 +1388,7 @@ const accountRoutes = new Hono()
 					// supposed to show.
 					thumbnail: w.thumbnail,
 					// The published Projects this release belongs to, so the Music Player lens
-					// can group a track under its record. Metadata only, as the shelf's copy is.
+					// can group a track under its record. Metadata only, as the Library's copy is.
 					releases: releasesByWork.get(w.id) ?? [],
 					// The rating travels with the card, because the card is where a user's
 					// Blur covers the thumbnail. Without it every release here showed uncovered.

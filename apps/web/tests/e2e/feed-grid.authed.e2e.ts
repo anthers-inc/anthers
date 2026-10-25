@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The feed grid's own contract — the wide-tile shelf Parker's redesign specifies,
+ * The feed grid's own contract — the wide-tile grid Parker's redesign specifies,
  * walked on the shared walker with the fixture creator's world seeded and cleaned up.
  *
  * The tiles carry a 16:9 preview band over a card area, the same shape for every work

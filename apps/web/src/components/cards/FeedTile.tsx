@@ -22,9 +22,9 @@
 //
 // This is the widget every listing surface renders: the feed, Discovery, the
 // creator page's timeline and type tabs (2026-10-17), and — since 2026-10-24 —
-// the Library's shelf, which replaced its private card so the three tabs and a
+// the Library, which replaced its private card so the three tabs and a
 // creator's page show one shape for the same item. A Project renders here too
-// as its own entry kind, because a creator page and a Library shelf both mix
+// as its own entry kind, because a creator page and the Library both mix
 // Projects in with Works and posts; the old column ProjectCard had no reader
 // left once that landed and is gone. WorkCard and PostCard stay the column
 // cards the project and post pages render. The tile stays where it is while
@@ -100,7 +100,7 @@ type FeedWork = Work & {
 
 /**
  * A Project as a listing sends it. The public and creator-page listings join `creator`
- * as an object; the Library shelf flattens the handle and name beside the row instead
+ * as an object; the Library flattens the handle and name beside the row instead
  * (its query already joins users), so both shapes resolve through {@link projectCreator}.
  */
 type FeedProject = Project & {
@@ -113,18 +113,18 @@ type FeedProject = Project & {
 type FeedPost = PostListItem & { excerpt?: string | null };
 
 /**
- * What a surface adds to a shared tile without changing what the tile is — the Library
- * shelf's purchased and hidden chips, its withdrawn and back-in-drafts notices, and the
- * Hide/Remove controls that belong to the shelf rather than to the thing on it.
+ * What a surface adds to a shared tile without changing what the tile is — the Library's
+ * purchased and hidden chips, its withdrawn and back-in-drafts notices, and the
+ * Hide/Remove controls that belong to the Library rather than to the thing in it.
  */
 export interface FeedTileExtras {
 	/** Extra chips for the badge row, after the tile's own. */
 	badges?: ReactNode;
-	/** A line under the badge row — a state the shelf states in words rather than a chip. */
+	/** A line under the badge row — a state the surface states in words rather than a chip. */
 	note?: ReactNode;
 	/** Surface controls, rendered in a raised row under the body, above the tile's overlay. */
 	actions?: ReactNode;
-	/** Extra classes on the tile root — the shelf dims a hidden entry with `opacity-60`. */
+	/** Extra classes on the tile root — the Library dims a hidden entry with `opacity-60`. */
 	className?: string;
 }
 
@@ -344,8 +344,8 @@ function PostBand({ post }: { post: FeedPost }) {
 }
 
 /**
- * A Project's cover, or the stack poster when it has none. A Project is a shelf of
- * Works rather than a Work itself, so its poster is the stack rather than a type
+ * A Project's cover, or the stack poster when it has none. A Project groups
+ * Works rather than being a Work itself, so its poster is the stack rather than a type
  * icon: the same band shape every tile keeps, saying what kind of thing it is.
  */
 function ProjectBand({ project }: { project: FeedProject }) {
@@ -637,8 +637,8 @@ function PostTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtras 
 				<div className="flex items-center gap-1.5 mt-auto pt-1 flex-wrap">
 					{/* The kind chip every other tile carries. A post's band is its words or
 					    its linked Work's art, so without this a post reads as a Work with an
-					    odd thumbnail — on the feed where it sits beside releases and on the
-					    Library shelf where it sits beside everything kept. */}
+					    odd thumbnail — on the feed where it sits beside releases and in the
+					    Library where it sits beside everything kept. */}
 					<span className="badge badge-sm gap-1">
 						<DocumentTextIcon className="w-3 h-3" />
 						Post
@@ -669,8 +669,8 @@ function PostTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtras 
 }
 
 /**
- * The Project tile: a creator's shelf of Works, at the same shape as everything else.
- * A creator's page and the Library's shelf both list Projects beside Works and posts,
+ * The Project tile: a creator's collection of Works, at the same shape as everything else.
+ * A creator's page and the Library both list Projects beside Works and posts,
  * so a Project renders as this tile rather than as a second card family.
  */
 function ProjectTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtras }) {

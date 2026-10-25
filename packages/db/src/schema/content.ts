@@ -7,7 +7,7 @@
  * which are a *user's* records, not the creator's.
  */
 
-import type { ShelfSortDirection, ShelfSortMode } from "@anthers/shared/project-shelf-sort";
+import type { ProjectSortDirection, ProjectSortMode } from "@anthers/shared/project-sort";
 import { sql } from "drizzle-orm";
 import {
 	bigint,
@@ -264,7 +264,7 @@ export const works = pgTable(
 		 *
 		 * **The write is one-way.** A version is marked when its Work's first Library
 		 * entry lands (`services/preservation.ts`, called from every save door) and the
-		 * flag is never cleared: unsaving later, or a refund releasing a shelf entry,
+		 * flag is never cleared: unsaving later, or a refund releasing a Library entry,
 		 * does not un-preserve bytes Anthers already undertook to keep. A replacement
 		 * inherits it, because the Work is still the same Work and the new bytes are the
 		 * ones its holders now fetch.
@@ -572,23 +572,23 @@ export const projects = pgTable(
 		 * The Project's cover chosen from one of its Works, by reference rather than by copy,
 		 * so the Project follows the Work's own cover and inherits its visibility rules on
 		 * every read. The uploaded `cover_image` stays as the alternative and as the fallback
-		 * when the chosen Work is hidden, removed from the shelf, or deleted.
+		 * when the chosen Work is hidden, removed from its list, or deleted.
 		 */
 		coverWorkId: integer("cover_work_id").references(() => works.id, { onDelete: "set null" }),
 		// Custom-page layout/showcase config (built out in a later phase).
 		pageConfig: jsonb("page_config").$type<Record<string, unknown>>().default({}),
-		// How the Project's two shelves read, beside the stored drag order they never
+		// How the Project's two lists read, beside the stored drag order they never
 		// rewrite: `manual` is the drag order itself, the other modes are named reading
 		// orders the creator saved (2026-10-19). The API applies these when serializing
 		// members, so every reader gets the same order.
-		worksSortMode: text("works_sort_mode").$type<ShelfSortMode>().notNull().default("manual"),
+		worksSortMode: text("works_sort_mode").$type<ProjectSortMode>().notNull().default("manual"),
 		worksSortDirection: text("works_sort_direction")
-			.$type<ShelfSortDirection>()
+			.$type<ProjectSortDirection>()
 			.notNull()
 			.default("asc"),
-		postsSortMode: text("posts_sort_mode").$type<ShelfSortMode>().notNull().default("manual"),
+		postsSortMode: text("posts_sort_mode").$type<ProjectSortMode>().notNull().default("manual"),
 		postsSortDirection: text("posts_sort_direction")
-			.$type<ShelfSortDirection>()
+			.$type<ProjectSortDirection>()
 			.notNull()
 			.default("asc"),
 		isPublished: boolean("is_published").notNull().default(false),
@@ -1332,7 +1332,7 @@ export const workSaves = pgTable(
  * 🚨 **Authoritative and unpublished** — arrangement three of *Where the Data Is Canonical*,
  * by the page's own three-question test: a reading position is per-person consumption state,
  * so it never becomes an `org.anthers.*` record, it carries **no `atproto_uri` column, and
- * none may ever join it**. The row is the user's own state beside the shelf, read and written
+ * none may ever join it**. The row is the user's own state beside the Library, read and written
  * through `requireAuth` routes that only ever touch the caller's own rows (`services/
  * reading-positions.ts` is the one writer). It is kept deliberately OUT of the analytics
  * estate: no creator surface, no rollup, nothing derived that survives the account — and it
@@ -1447,14 +1447,14 @@ export const comments = pgTable(
  * lives in `purchases` and only there.
  *
  * The consequence, which is correct and needs a real behavior rather than a fix: **a free
- * Work you saved can later be gated by its creator.** It stays on your shelf and becomes
+ * Work you saved can later be gated by its creator.** It stays in your Library and becomes
  * unplayable, exactly as a gated track sits in a queue — see `lib/music-queue.ts`, which
  * arrived at the same rule from the other direction.
  *
  * ## Why this table exists at all
  *
  * The Library was once a purchase list — a receipt
- * list wearing a shelf's name. That worked while "yours" meant "paid for", and stopped
+ * list wearing a Library's name. That worked while "yours" meant "paid for", and stopped
  * working the moment the commons did: **most of what a user loves on Anthers is free**, so
  * it was never purchasable and therefore had nowhere to live. Bookmarks half-covered it and
  * half-covered four other things. Parker's call (2026-08-13): one place, and that place is
@@ -1463,7 +1463,7 @@ export const comments = pgTable(
  * ## Two rules that look like details and are not
  *
  * **A purchased Work is permanent.** It cannot be removed, only `hidden` — because a user
- * who tidies a purchase off their shelf and cannot work out how to get it back has
+ * who tidies a purchase out of their Library and cannot work out how to get it back has
  * effectively lost the thing they paid for. Hiding is reversible from a toggle in the same
  * view; unsaving would be a black hole with a friendly label.
  *
@@ -1471,14 +1471,14 @@ export const comments = pgTable(
  * bought": that would be a second copy of a fact `purchases` already holds, and the two
  * would disagree the first time somebody refunded. A row is permanent exactly while a
  * completed purchase for that (user, Work) exists — so a refund, which removes the
- * entitlement, also releases the shelf entry in the same instant and with no sweep.
+ * entitlement, also releases the Library entry in the same instant and with no sweep.
  *
  * Polymorphic over Work | Project | Post in the same shape the other cross-account
  * pointers use, because **people keep
  * albums, not four loose tracks**: a Project is how an album exists here, so saving one has
  * to save the record rather than scatter it.
  */
-// org — the Library is a *user's* shelf, not the creator's content. A user's
+// org — the Library is a *user's* collection, not the creator's content. A user's
 // account is org-side in the current topology (there is no user node; users are
 // org accounts), so their saved items are org records. Content records belong to the
 // creator's node, but a library item is not a content record — it is a user's pointer
@@ -1491,15 +1491,15 @@ export const libraryItems = pgTable(
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		// Exactly one of these is set; enforced at the app layer, as the save route does.
-		// Cascade is right here in a way it is NOT on `purchases.work_id`: a shelf entry
+		// Cascade is right here in a way it is NOT on `purchases.work_id`: a Library entry
 		// is a preference, not an entitlement, so it may go when its subject does.
 		workId: integer("work_id").references(() => works.id, { onDelete: "cascade" }),
 		projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
 		// A post saves like anything else (Parker, 2026-10-11): Save is the one keep action,
-		// and "bookmarked" is no longer a separate verb or store. A post is not a shelf
+		// and "bookmarked" is no longer a separate verb or store. A post is not a Library
 		// *work* — it is an announcement — but a keep is a keep, so it rides the same row.
 		postId: integer("post_id").references(() => posts.id, { onDelete: "cascade" }),
-		// Tidied off the shelf without being given up. Only ever set by the user, and the
+		// Tidied out of the Library without being given up. Only ever set by the user, and the
 		// only thing a purchased item's "remove" control is allowed to do.
 		hidden: boolean("hidden").notNull().default(false),
 		sortOrder: integer("sort_order").notNull().default(0),

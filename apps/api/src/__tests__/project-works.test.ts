@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A Project's shelf of Works: membership, ordering, and what a shelf is NOT allowed to do.
+ * A Project's list of Works: membership, ordering, and what a list is NOT allowed to do.
  *
  * `POST /projects/:slug/works/reorder` is new (2026-08-13) and had no counterpart until
  * then — `POST .../works` assigned `max(sortOrder) + 1` and nothing could change it
@@ -8,9 +8,9 @@
  * missing convenience: **track order is the artifact.**
  *
  * The other half of this file is the property that makes a Project safe to put anything
- * on: 🚨 **a Project is a shelf, not an owner.** Membership confers no access, removal
- * destroys nothing, and a gated Work stays gated on the shelf. Those are the assertions
- * that would let a shelf quietly become an access path if they ever stopped holding.
+ * on: 🚨 **a Project groups Works, not an owner.** Membership confers no access, removal
+ * destroys nothing, and a gated Work stays gated in the list. Those are the assertions
+ * that would let a list quietly become an access path if they ever stopped holding.
  *
  * Verified by sabotage before being committed, and the first round found a hole in this
  * file rather than in the code. Five breaks — dropping the reorder's `projectId`
@@ -219,7 +219,7 @@ describe("a Project's Works", () => {
 		expect(before).toEqual([`Other One ${id}`, `Other Two ${id}`]);
 
 		// Name the other Project's members REVERSED, at the front. If the UPDATE matched on
-		// `work_id` alone, "Other Two" would take position 0 and the other shelf would come
+		// `work_id` alone, "Other Two" would take position 0 and they would come
 		// back inverted. Two members are the minimum that can show this at all.
 		const res = await req(`/api/content/projects/${SLUG}/works/reorder`, {
 			method: "POST",
@@ -243,13 +243,13 @@ describe("a Project's Works", () => {
 
 	/**
 	 * The saved sort is the Project's, not the viewer's (2026-10-19): a creator's choice
-	 * orders the shelf for a signed-out reader too, and switching back to Manual returns
+	 * orders the list for a signed-out reader too, and switching back to Manual returns
 	 * the stored drag order because no sort ever rewrites `sortOrder`.
 	 *
 	 * Descending alphabetical — C, B, A against the stored C, A, B — is deliberate: the
 	 * stored order and the sorted order cannot be confused.
 	 */
-	it("a saved sort orders the shelf for every reader, and Manual gives the stored order back", async () => {
+	it("a saved sort orders the list for every reader, and Manual gives the stored order back", async () => {
 		const saved = await req(`/api/content/projects/${SLUG}`, {
 			method: "PATCH",
 			headers: auth,
@@ -276,14 +276,14 @@ describe("a Project's Works", () => {
 		expect(await orderOf(SLUG)).toEqual([`Track C ${id}`, `Track A ${id}`, `Track B ${id}`]);
 	});
 
-	// ── A shelf is not an owner ───────────────────────────────────────────────
+	// ── A list is not an owner ───────────────────────────────────────────────
 
 	/**
 	 * 🚨 The property the whole model rests on. If membership ever conferred access, a
 	 * creator could unlock their own gated work by shelving it somewhere public — and
 	 * every Project page would become a bypass rather than a listing.
 	 */
-	it("does not grant access to a gated Work put on a public shelf", async () => {
+	it("does not grant access to a gated Work put in a public list", async () => {
 		const added = await req(`/api/content/projects/${SLUG}/works`, {
 			method: "POST",
 			headers: auth,
@@ -309,7 +309,7 @@ describe("a Project's Works", () => {
 		});
 		expect(removed.status).toBe(204);
 
-		// Off the shelf…
+		// Out of the list…
 		expect(await orderOf(SLUG)).not.toContain(`Gated ${id}`);
 		// …and still in the Catalog, released, reachable at its own URL.
 		const work = await req(`/api/content/works/${gatedWorkId}`, { headers: auth });
@@ -353,7 +353,7 @@ describe("a Project's Works", () => {
 		expect(await orderOf(SLUG, strangerCookie)).not.toContain(`Draft ${id}`);
 	});
 
-	it("the owner's listing rides worksSummary in shelf order; the public listing carries none", async () => {
+	it("the owner's listing rides worksSummary in list order; the public listing carries none", async () => {
 		// The Studio's Projects table renders each project's works as a thumbnail grid
 		// beside the project block, and this is the only call it fetches them with — the
 		// owner's serialization needs no maturity hiding, but it must not leak onto the
@@ -368,9 +368,9 @@ describe("a Project's Works", () => {
 		};
 		const album = mineProjects.find((p) => p.slug === SLUG);
 		expect(album, "the owner's own listing is where the summary rides").toBeTruthy();
-		// Shelf order for the released tracks; the draft the earlier test added to this
-		// same shelf is here too — with its visibility — because the owner's grid shows
-		// the shelf as the owner holds it, private members included.
+		// List order for the released tracks; the draft the earlier test added to this
+		// same list is here too — with its visibility — because the owner's grid shows
+		// the list as the owner holds it, private members included.
 		expect(album!.worksSummary?.length).toBe(tracks.length + 1);
 		expect(album!.worksSummary?.slice(0, tracks.length).map((w) => w.id)).toEqual(
 			tracks.map((t) => t.workId),

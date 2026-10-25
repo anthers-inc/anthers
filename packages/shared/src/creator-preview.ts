@@ -8,7 +8,7 @@
  * what the page withholds. That gate belongs to the read, which resolves the handle and
  * checks the account, and this module only decides what the surviving facts say.
  *
- * A card names the person and stops. What the profile lists — the shelf, the posts, the
+ * A card names the person and stops. What the profile lists — the Library, the posts, the
  * counts — is the page's business, and a preview that tried to summarize somebody's body
  * of work would be describing it to a reader who has not met it.
  */

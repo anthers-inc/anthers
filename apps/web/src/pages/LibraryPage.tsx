@@ -2,7 +2,7 @@
 /**
  * The **Library** — everything the user has kept.
  *
- * 🚨 **A shelf, not a receipt list, and the commons is what forces the distinction.** Most
+ * 🚨 **A Library, not a receipt list, and the commons is what forces the distinction.** Most
  * of what a person loves on Anthers is free, so it was never purchasable — a list built
  * from purchases has nowhere to put it, and bookmarks half-covered that and half-covered
  * four other things, which is why both felt like half a feature.
@@ -13,11 +13,11 @@
  * Two behaviors worth knowing before changing anything here:
  *
  *   🚨 **A purchase can be hidden, never removed.** Somebody who tidies a purchase off
- *      their shelf and can't work out how to get it back has effectively lost the thing
+ *      their Library and can't work out how to get it back has effectively lost the thing
  *      they paid for. The "show hidden" toggle is what makes hiding safe, so it must stay
  *      reachable from this page — it is the only way back.
  *
- *   ⚠️ **A shelf entry may be unopenable, and that is not a bug.** Saving grants no
+ *   ⚠️ **A Library entry may be unopenable, and that is not a bug.** Saving grants no
  *      access, so a free Work whose creator later gated it stays here and stops being
  *      openable. It renders locked with the route to unlock, the same way a gated track
  *      sits in the play queue.
@@ -32,10 +32,10 @@
  *
  * The page's own shell is the user tabs' shared one — `min-h-full` around a `w-full px-6
  * py-6` column — so the header sits exactly where Network's and Discovery's do, and the
- * shelf grid gets the width the layout already gives it.
+ * the Library grid gets the width the layout already gives it.
  *
  * Every entry renders `FeedTile`, the widget Network, Discovery and a creator's page
- * already share (2026-10-24). What the shelf contributes to a tile is only what the shelf
+ * already share (2026-10-24). What the Library contributes to a tile is only what the Library
  * means — the Purchased and Hidden chips, a withdrawn or re-drafted notice, and its Hide
  * and Remove controls — so the same Work reads the same way on every surface that lists it.
  */
@@ -58,7 +58,7 @@ import { useFilterable, useViewFilter } from "../components/layout/search/filter
 import TabHeader from "../components/layout/TabHeader";
 import BookshelfLens from "../components/library/BookshelfLens";
 import ChannelGuideLens, {
-	channelGuideChannelsFromShelf,
+	channelGuideChannelsFromLibrary,
 } from "../components/library/ChannelGuideLens";
 import MusicDial from "../components/library/MusicDial";
 import MusicLens, { type LensItem, type LensProject } from "../components/library/MusicLens";
@@ -67,9 +67,9 @@ import { removeItem, setHidden } from "../lib/library";
 /*
  * The LENSES (Parker, 2026-10-11, v2): the tab-shared LENSES section carries the rows
  * — the Library's own contribution to it is the live set. **A lens is a view, never a
- * container** — the shelf stays complete and usable with no lens applied, and switching
+ * container** — the Library stays complete and usable with no lens applied, and switching
  * or removing one must never touch what is *in* the Library, which matters more here
- * than in the app this idea came from, because a shelf entry can be a thing somebody
+ * than in the app this idea came from, because an entry can be a thing somebody
  * paid for. 🚨 **A lens is a UI/UX shift, never a type filter in disguise** (the
  * retired Video lens is the cautionary example: the plain video grid is just the Video
  * type filter).
@@ -78,11 +78,11 @@ import { removeItem, setHidden } from "../lib/library";
  * (the shared section's `extras` slot) only while that lens is active.
  */
 
-/** The shelf's view of a saved Project — the album card's whole data source. */
-type ShelfProject = LensProject;
+/** The Library's view of a saved Project — the album card's whole data source. */
+type LibraryProject = LensProject;
 
-/** A saved post as the shelf's card reads it — title, opening and who wrote it. */
-interface ShelfPost {
+/** A saved post as the Library's card reads it — title, opening and who wrote it. */
+interface LibraryPost {
 	id: number;
 	publicId: number;
 	slug: string;
@@ -95,7 +95,7 @@ interface ShelfPost {
 	creator: { handle: string; displayName: string | null; avatar: string | null } | null;
 }
 
-interface ShelfItem {
+interface LibraryItem {
 	id: number;
 	kind: "work" | "project" | "post";
 	hidden: boolean;
@@ -103,18 +103,18 @@ interface ShelfItem {
 	/** Derived from a completed purchase on every read — never stored on the row. */
 	purchased: boolean;
 	work?: Work | null;
-	project?: ShelfProject | null;
-	post?: ShelfPost | null;
+	project?: LibraryProject | null;
+	post?: LibraryPost | null;
 }
 
 /**
- * The FeedTile entry a shelf item renders. The shelf wraps a Work, a Project or a post
+ * The FeedTile entry a Library item renders. The Library wraps a Work, a Project or a post
  * with the facts that are about keeping it (`hidden`, `purchased`), so this adapter
- * unwraps one arm into the tile family's entry shape — including the creator the shelf
+ * unwraps one arm into the tile family's entry shape — including the creator the Library
  * serializes as a flat handle/name/avatar triple rather than the joined object every
  * other listing sends.
  */
-function shelfEntry(item: ShelfItem): FeedEntry | null {
+function libraryEntry(item: LibraryItem): FeedEntry | null {
 	if (item.work) {
 		const work = item.work;
 		return {
@@ -145,17 +145,17 @@ function shelfEntry(item: ShelfItem): FeedEntry | null {
 }
 
 /**
- * One entry on the shelf, as the app's one tile.
+ * One entry in the Library, as the app's one tile.
  *
  * The tile is the shared widget Network, Discovery and a creator's page render; what the
- * shelf adds is only what the shelf means — the Purchased and Hidden chips, the sentence
+ * Library adds is only what the Library means — the Purchased and Hidden chips, the sentence
  * a withdrawn Work or a re-drafted post needs, and the Hide/Remove controls. Those ride
- * the tile's slots rather than a second card family, because a shelf that drew a
+ * the tile's slots rather than a second card family, because a tile that drew a
  * different card for the same Work made the Library look like a different product.
  */
-function ShelfTile({ item, onChanged }: { item: ShelfItem; onChanged: () => void }) {
+function LibraryTile({ item, onChanged }: { item: LibraryItem; onChanged: () => void }) {
 	const [busy, setBusy] = useState(false);
-	const entry = shelfEntry(item);
+	const entry = libraryEntry(item);
 	const work = item.work;
 	const post = item.post;
 
@@ -188,7 +188,7 @@ function ShelfTile({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 					<p className="text-xs text-warning">Back in drafts — the creator has unpublished it.</p>
 				) : work?.visibility === "withdrawn" ? (
 					// ⭐ **No date, because there is no deadline** (Parker, 2026-10-25).
-					// Preservation is a program: a Work on somebody's shelf is kept
+					// Preservation is a program: a Work in somebody's Library is kept
 					// indefinitely, so the card states the fact and asks nothing.
 					<p className="text-xs text-warning">
 						Withdrawn by the creator — still yours to open and download.
@@ -226,11 +226,11 @@ function ShelfTile({ item, onChanged }: { item: ShelfItem; onChanged: () => void
 }
 
 /**
- * What the topbar's Filter mode reads on a shelf item: the item's own words, its creator,
- * and its tags. The shelf is already fully in memory, so this filter is complete rather
+ * What the topbar's Filter mode reads on a Library item: the item's own words, its creator,
+ * and its tags. The Library is already fully in memory, so this filter is complete rather
  * than a filter over the loaded page.
  */
-function shelfSearchFields(item: ShelfItem): (string | null | undefined)[] {
+function librarySearchFields(item: LibraryItem): (string | null | undefined)[] {
 	const fields: (string | null | undefined)[] = [item.kind];
 	if (item.work) {
 		fields.push(
@@ -259,10 +259,10 @@ function shelfSearchFields(item: ShelfItem): (string | null | undefined)[] {
 }
 
 /**
- * The shelf items a tag filter keeps — AND semantics, the feed's comma-list read. A
+ * The Library items a tag filter keeps — AND semantics, the feed's comma-list read. A
  * Project carries no tags of its own, so it drops while any tag filter is on, the way
  * a post linking nothing drops while any type filter is on. */
-function matchesTags(item: ShelfItem, tags: string[]): boolean {
+function matchesTags(item: LibraryItem, tags: string[]): boolean {
 	if (tags.length === 0) return true;
 	const own =
 		item.kind === "work"
@@ -274,11 +274,11 @@ function matchesTags(item: ShelfItem, tags: string[]): boolean {
 }
 
 /**
- * The shelf items an Access filter keeps — the resolved verdict the card already
+ * The Library items an Access filter keeps — the resolved verdict the card already
  * renders ("unlocked" is canAccess; "locked" its complement). A Project carries no
  * access reading, so any access filter drops it; All is where an album lives.
  */
-function matchesAccess(item: ShelfItem, access: string): boolean {
+function matchesAccess(item: LibraryItem, access: string): boolean {
 	if (!access) return true;
 	// A saved post carries no access reading at all, so it drops under either side of the
 	// filter — All is where it lives, the same honesty a Project gets.
@@ -293,9 +293,9 @@ export default function LibraryPage() {
 	const { setPageContent, setSharedContent } = useSidebar();
 	const viewFilter = useViewFilter();
 	useFilterable("Library");
-	const [items, setItems] = useState<ShelfItem[]>([]);
-	// How many entries the shelf was cut to, when it was cut at all. The server leaves out the
-	// oldest past its limit, and a shelf that silently ends reads as lost saves.
+	const [items, setItems] = useState<LibraryItem[]>([]);
+	// How many entries the Library was cut to, when it was cut at all. The server leaves out the
+	// oldest past its limit, and a Library that silently ends reads as lost saves.
 	const [cutTo, setCutTo] = useState<number | null>(null);
 	const [loading, setLoading] = useState(true);
 
@@ -309,7 +309,7 @@ export default function LibraryPage() {
 	const accessParam = searchParams.get("access") ?? "";
 
 	/*
-	 * 🚨 Always fetch the WHOLE shelf, hidden included, and filter for display below.
+	 * 🚨 Always fetch the WHOLE Library, hidden included, and filter for display below.
 	 *
 	 * Fetching `hidden=1` only when the toggle is on looks equivalent and is not: the
 	 * count that decides whether the toggle *renders* would then be computed from a list
@@ -323,13 +323,13 @@ export default function LibraryPage() {
 			.$get({ query: { hidden: "1" } })
 			.then((res) => res.json())
 			.then((data) => {
-				const shelf = data as unknown as {
-					items: ShelfItem[];
+				const library = data as unknown as {
+					items: LibraryItem[];
 					truncated?: boolean;
 					limit?: number;
 				};
-				setItems(shelf.items);
-				setCutTo(shelf.truncated && shelf.limit ? shelf.limit : null);
+				setItems(library.items);
+				setCutTo(library.truncated && library.limit ? library.limit : null);
 			})
 			.catch(() => {})
 			.finally(() => setLoading(false));
@@ -349,14 +349,14 @@ export default function LibraryPage() {
 
 	// Hidden entries are filtered HERE rather than by the request — see `load`.
 	const visible = showHidden ? items : items.filter((i) => !i.hidden);
-	// The topbar's Filter mode is the broadest term filter and applies before the shelf's
+	// The topbar's Filter mode is the broadest term filter and applies before the Library's
 	// own controls, so the Access, Type and Tags sections narrow what is already matched
 	// rather than fighting it.
 	const searched = useMemo(
 		() =>
 			viewFilter.terms.length === 0
 				? visible
-				: visible.filter((item) => viewFilter.matches(shelfSearchFields(item))),
+				: visible.filter((item) => viewFilter.matches(librarySearchFields(item))),
 		[visible, viewFilter],
 	);
 	// The Access filter reads the resolved verdict the cards already carry. A Project
@@ -366,7 +366,7 @@ export default function LibraryPage() {
 		() => searched.filter((i) => matchesAccess(i, accessParam)),
 		[searched, accessParam],
 	);
-	// The tag filter reads the shelf's own tags, client-side: the Library view is a
+	// The tag filter reads the Library's own tags, client-side: the Library view is a
 	// browser over what is already fetched.
 	const selectedTags = useMemo(
 		() =>
@@ -382,7 +382,7 @@ export default function LibraryPage() {
 	);
 	// A Project has no media type of its own, so a type filter necessarily excludes
 	// albums. The All type is where they live, which is honest: an album is not "a video".
-	// A lens reorganizes the shelf's Works and Projects; a post is not a Work type, so it
+	// A lens reorganizes the Library's Works and Projects; a post is not a Work type, so it
 	// sits out every lens rather than arriving as a row a lens has no shape for.
 	const lensDraw = useMemo(() => withTags.filter((i) => i.kind !== "post"), [withTags]);
 
@@ -398,7 +398,7 @@ export default function LibraryPage() {
 	 * The Type rows the sidebar grays out (Parker, 2026-10-11): a type grayed when the
 	 * Library holds nothing of it, and — under a lens — when the lens excludes it. Posts
 	 * are a Type row like any other now that a post saves into the Library, so the row is
-	 * live exactly when the shelf holds one.
+	 * live exactly when the Library holds one.
 	 */
 	const unavailableTypes = useMemo(() => {
 		const set = new Set<string>();
@@ -419,7 +419,7 @@ export default function LibraryPage() {
 			for (const t of SHARED_FILTER_TYPES) {
 				if (t.id && !lensIncluded.includes(t.id)) set.add(t.id);
 			}
-			// A type the lens includes but the shelf has nothing of grays the same way.
+			// A type the lens includes but the Library has nothing of grays the same way.
 			for (const type of lensIncluded) {
 				if (!items.some((i) => i.kind === "work" && i.work?.type === type)) set.add(type);
 			}
@@ -525,20 +525,20 @@ export default function LibraryPage() {
 
 				{lens === "music" ? (
 					/* Same rule as before the lenses moved into the sidebar: the lens
-					   reorganizes what is on the shelf, never fetches a different corpus.
+					   reorganizes what is in the Library, never fetches a different corpus.
 					   Drawing on `withTags` is what keeps "a lens is a view" true of the whole
 					   family of them. */
 					<MusicLens items={lensDraw as LensItem[]} includeSpoken={includeSpoken} />
 				) : lens === "bookshelf" ? (
 					/* The reading shelf: book-like types as spines, alpha by title. The same
-					   drawn list as every lens — `withTags`, the shelf's own narrowing. */
+					   drawn list as every lens — `withTags`, the Library's own narrowing. */
 					<BookshelfLens items={lensDraw as LensItem[]} />
 				) : lens === "channel-guide" ? (
 					/* The TV-guide: a channel per creator with saved video, that channel's
 					   timeline of saved videos, latest first. Channels translate client-side
 					   from the same drawn list; the guide itself owns selection. */
 					<ChannelGuideLens
-						channels={channelGuideChannelsFromShelf(lensDraw as LensItem[])}
+						channels={channelGuideChannelsFromLibrary(lensDraw as LensItem[])}
 						source="library"
 					/>
 				) : filtered.length === 0 ? (
@@ -575,11 +575,11 @@ export default function LibraryPage() {
 					/>
 				) : (
 					/* The same uniform grid the Network and Discovery render: auto-fill
-					   decides the column count, so the shelf reads at the same tile size as
+					   decides the column count, so the Library reads at the same tile size as
 					   the two tabs whose items it shares rather than as a narrower card. */
 					<div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 items-stretch">
 						{filtered.map((item) => (
-							<ShelfTile key={item.id} item={item} onChanged={load} />
+							<LibraryTile key={item.id} item={item} onChanged={load} />
 						))}
 					</div>
 				)}

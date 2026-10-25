@@ -66,8 +66,8 @@ describe("the Lenses section on both tabs", () => {
 	});
 
 	it("gives each tab the corpus adapter its own surface needs", () => {
-		// The Library draws on the shelf, Discovery on its stream.
-		expect(library).toContain("channelGuideChannelsFromShelf(lensDraw");
+		// The Library draws on its own items, Discovery on its stream.
+		expect(library).toContain("channelGuideChannelsFromLibrary(lensDraw");
 		expect(discovery).toContain("feedLensItems(visibleEntries)");
 	});
 

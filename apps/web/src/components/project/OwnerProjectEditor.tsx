@@ -337,14 +337,14 @@ export default function OwnerProjectEditor({
 				/>
 			</div>
 
-			{/* The shelves — the working lists on the creator's copy of the page. A Work's
-			    member posts shelf says the same in fewer words; the works shelf's docblock
+			{/* The two lists — the working lists on the creator's copy of the page. A post's
+			    member list says the same in fewer words; the Works list's docblock
 			    carries the persist-per-act ruling. */}
 			<div className="mb-8">
 				<h2 className="font-semibold text-sm mb-1">Works</h2>
 				<p className="text-xs text-base-content/50 mb-3">
-					The Works on this Project's shelf, in order. Putting one here changes nothing about who
-					can open it.
+					The Works on this Project, in order. Putting one here changes nothing about who can open
+					it.
 				</p>
 				<ProjectWorks projectSlug={project.slug} />
 			</div>
@@ -417,8 +417,7 @@ function CoverWorkPicker({
 				</p>
 				{(works ?? []).length === 0 ? (
 					<p className="mt-4 text-sm text-base-content/60">
-						This Project holds no Works yet. Add some to its shelf and their covers will appear
-						here.
+						This Project holds no Works yet. Add some and their covers will appear here.
 					</p>
 				) : (
 					<div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">

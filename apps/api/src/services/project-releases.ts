@@ -4,12 +4,12 @@
  * well enough to draw the release card a lens groups it under — cover, artist, title and
  * how many released members it holds.
  *
- * Two listings carry these: the **Library shelf**, so a saved track groups under the
+ * Two listings carry these: the **Library**, so a saved track groups under the
  * record it came from rather than standing as a loose row, and the **Network feed**, so a
  * newly released track takes its place in that same release in the Music Player lens.
  *
  * Deliberately metadata only. The Project's member list is fetched when somebody opens
- * or plays the release, never shipped with a listing — a shelf request must not ship
+ * or plays the release, never shipped with a listing — a Library request must not ship
  * every member of every Project one saved track touches, and a feed request must not
  * either.
  *

@@ -258,7 +258,7 @@ export async function consumedSeconds(
  *
  * 🚨 **A second mechanism for something the resolver already refuses, and both are needed.**
  * `resolveAccessSync` stops a blocked Work being *opened*; this stops it being *listed*, which
- * is a different promise. A shelf full of cards a child cannot click is not a protection, it
+ * is a different promise. A grid full of cards a child cannot click is not a protection, it
  * is an advertisement — the same reasoning that makes the maturity `hide` setting a query
  * condition rather than a client-side veil.
  *

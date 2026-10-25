@@ -147,7 +147,7 @@ export function spaceWriterFor(
 			const records: SpaceRecord[] = [];
 			let cursor: string | undefined;
 			// A cap rather than a `while (true)`: a server that kept returning the same cursor
-			// would otherwise hold the worker forever, and a shelf beyond this many records is a
+			// would otherwise hold the worker forever, and a Library beyond this many records is a
 			// report to read, not a loop to keep spinning.
 			for (let page = 0; page < 100; page++) {
 				const answer = await client.listRecords({

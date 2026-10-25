@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * One card for one thing (Parker, 2026-10-24): the Library shelf renders the same
- * `FeedTile` Discovery and a creator's page render. The shelf used to draw its own
- * `ShelfCard`, so the same Work looked like a different product depending on which tab
+ * One card for one thing (Parker, 2026-10-24): the Library renders the same
+ * `FeedTile` Discovery and a creator's page render. The Library used to draw its own
+ * `LibraryCard`, so the same Work looked like a different product depending on which tab
  * happened to list it — and the creator page's Projects sat in a second card family
  * inside the one grid.
  *
@@ -51,9 +51,9 @@ describe("every listing surface renders the shared tile", () => {
 	});
 
 	it("leaves the Library no private card family", () => {
-		expect(library, "the Library grew its own card again").not.toContain("function ShelfCard");
-		// The shelf's own facts ride the tile's slots rather than a second widget.
-		expect(library).toContain("<ShelfTile");
+		expect(library, "the Library grew its own card again").not.toContain("function LibraryCard");
+		// The Library's own facts ride the tile's slots rather than a second widget.
+		expect(library).toContain("<LibraryTile");
 		expect(library).toContain("badges={");
 		expect(library).toContain("actions={");
 	});
@@ -76,7 +76,7 @@ describe("the shared tile carries all three kinds", () => {
 	});
 
 	it("never prints the missing-creator fallback", () => {
-		// A tombstoned creator is ordinary on a shelf, so the tile shows a neutral face and
+		// A tombstoned creator is ordinary in a listing, so the tile shows a neutral face and
 		// words rather than the "?" the old card family rendered wherever a join was absent.
 		expect(tile).toContain("Unknown creator");
 		expect(tile).not.toContain('{ handle: "?" }');
