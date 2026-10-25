@@ -152,6 +152,8 @@ export interface PlanSpending {
 	freeCatalog: number;
 	/** Paying rungs' bundled storage allowances, paid to the vendor at cost. */
 	payingAllowances: number;
+	/** The preservation program's saved catalog, kept indefinitely at cost. */
+	preservation: number;
 }
 
 /** Compute one phase of the plan. Pure; the tool and every generator call this. */
@@ -215,6 +217,7 @@ export function planLedger(input: PlanPhaseInput): PlanLedger {
 			headroom: adminBudget - m.overhead,
 			freeCatalog: m.freeCatalogSubsidy,
 			payingAllowances: m.payingAllowanceSubsidy,
+			preservation: m.preservationSubsidy,
 		},
 	};
 }

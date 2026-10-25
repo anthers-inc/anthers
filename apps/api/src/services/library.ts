@@ -15,6 +15,7 @@
 
 import { db, libraryItems, posts, purchases, works } from "@anthers/db";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { preserveWork } from "./preservation.js";
 
 /** Why a save was refused, when it was. */
 export type SaveRefusal = "not_found" | "not_released";
@@ -88,7 +89,13 @@ export async function saveWork(
 		.values({ userId, workId, sortOrder: await nextSortOrder(userId) })
 		.onConflictDoNothing()
 		.returning({ id: libraryItems.id });
-	if (row) return { ok: true, id: row.id };
+	if (row) {
+		// ⭐ **Saving a Work is what puts it in the preservation program** — see
+		// `services/preservation.ts`. Deliberately on the save, not on the purchase:
+		// a free Work somebody chose to keep is exactly as worth preserving.
+		await preserveWork(workId);
+		return { ok: true, id: row.id };
+	}
 
 	// Already there. Return the existing row rather than an error — and un-hide it, since
 	// pressing Save on something you had tidied away plainly means "put it back".
@@ -97,6 +104,7 @@ export async function saveWork(
 		.set({ hidden: false })
 		.where(and(eq(libraryItems.userId, userId), eq(libraryItems.workId, workId)))
 		.returning({ id: libraryItems.id });
+	if (existing) await preserveWork(workId);
 	return existing ? { ok: true, id: existing.id } : { ok: false, reason: "not_found" };
 }
 
@@ -171,6 +179,11 @@ export async function saveOnPurchase(purchase: {
 		.insert(libraryItems)
 		.values({ userId: purchase.buyerId, workId: purchase.workId })
 		.onConflictDoNothing();
+	// A purchase saves itself to the shelf, so **every sold Work is in the preservation
+	// program** without the buyer doing anything. That is what lets the promise be
+	// "a purchase outlives its creator" rather than "a purchase outlives its creator if
+	// you held a Badge and remembered to elect".
+	await preserveWork(purchase.workId);
 }
 
 /**

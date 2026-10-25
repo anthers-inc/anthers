@@ -660,9 +660,9 @@ function Notes() {
 				same ladder model the signup matrix reads, reference bitrates beside the model, and the
 				at-cost rate is the vendor's own ({STORAGE_PER_GIB_MONTH_LABEL} per GiB-month, Cloudflare
 				R2), passed through with no markup, from Root onward. What a free account carries is{" "}
-				{allowanceOf("free")} GiB combined, catalog and kept files together, and the top rung's
+				{allowanceOf("free")} GiB combined, catalog and cloud saves together, and the top rung's
 				allowance is {allowanceOf("blossom")} GiB; every byte past it bills at the same at-cost
-				rate.
+				rate. Preserved Works are the preservation program's cost, outside every allowance.
 			</p>
 			<p>
 				What an hour of attention pays in this model depends on who is paying it: a pool is a

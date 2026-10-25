@@ -664,8 +664,10 @@ const PERK_ROWS: PerkRow[] = [
 	{
 		title: "Cloud Storage",
 		// 🚨 **Built, all of it, as of 2026-10-09** — no `notBuilt` flag on this row: the
-		// meter (#409), the at-cost top-up on the renewal (#412) and the keeping election
-		// + the claim-aware sweep (#414) are all on `main`, so the figure is live. The
+		// meter (#409) and the at-cost top-up on the renewal (#412) are on `main`, so the
+		// figure is live. (The keeping election that arrived with #414 is gone: purchase
+		// preservation became a charitable program on 2026-10-25 and no longer draws this
+		// allowance at all.) The
 		// floor is COMBINED at every rung (ruled 2026-10-07): the same allowance holds a
 		// catalog and the account's own files together, on every account — there is no
 		// "catalog only" rung to render. At-cost top-up from Root onward is ruled (#412
@@ -1422,11 +1424,11 @@ function FreeInclusions() {
 		},
 		{
 			icon: ServerStackIcon,
-			// 🚨 **Built (2026-10-09, #409/#412/#414):** the combined floor is live and
+			// 🚨 **Built (2026-10-09, #409/#412):** the combined floor is live and
 			// metered — the same allowance holds a creator's catalog and the account's own
-			// files together, on every account, no Badge needed for the floor. Kept
-			// purchases draw it (the keeping election), cloud saves draw it (the sync
-			// perk), and the renewal carries an at-cost line past it from Root onward.
+			// files together, on every account, no Badge needed for the floor. Cloud saves
+			// draw it (the sync perk), and the renewal carries an at-cost line past it from
+			// Root onward. Preserved Works do not: they are the program's cost.
 			// The `6+` is DERIVED, never typed — see `FREE_VIDEO_HOURS`.
 			label: `${FREE_STORAGE_GIB} GiB of storage`,
 			sub: `Store the equivalent of ${FREE_VIDEO_HOURS}+ hours of Full HD video for free: one allowance for your catalog and everything you keep, on every account.`,

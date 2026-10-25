@@ -625,10 +625,15 @@ export function supportLineFor(anthersDollars: number): number {
  * ⚠️ **The kinds describe PURPOSE, not table.** `catalog` is every byte a Work's own
  * record names (source, thumbnail, assets, build files, HLS output) whatever the table
  * that points at it; `cloud-saves` is the players' save blobs, which belong to the
- * *player's* account rather than the creator's; `kept-files` is reserved for the
- * rescue-window sweep's retained purchases and stays zero until that surface lands.
+ * *player's* account rather than the creator's.
+ *
+ * 🚨 **There is no `kept-files` kind any more** (Parker, 2026-10-25). Purchase preservation
+ * became a charitable program rather than a draw on a buyer's allowance, so preserved bytes
+ * are the program's cost and appear in no account's meter — a per-purpose line for them
+ * would be a line that must always be zero. A Work in the program is excluded from every
+ * other kind by `jobs/storage-usage.ts`.
  */
-export const STORAGE_USE_KINDS = ["catalog", "cloud-saves", "kept-files"] as const;
+export const STORAGE_USE_KINDS = ["catalog", "cloud-saves"] as const;
 
 export type StorageUseKind = (typeof STORAGE_USE_KINDS)[number];
 
@@ -933,18 +938,6 @@ export const REFUND_AUTO_CAP = 3;
 export const MAX_BASKET_ITEMS = 20;
 /** The rolling window the cap is counted over, in months. */
 export const REFUND_CAP_WINDOW_MONTHS = 12;
-/**
- * How long a **withdrawn** Work stays downloadable for the people who bought it,
- * counted in days from the withdrawal — uniform for every buyer, not from each
- * buyer's last download (which would make the storage obligation unbounded, and is
- * backwards protectively: the inactive buyer who most needs time would get the
- * shortest window).
- *
- * Three surfaces state this number and must state the same one: Terms of Service, Creator Terms, and
- * the Library card. Import it; never retype the 90.
- */
-export const WITHDRAWN_RESCUE_DAYS = 90;
-
 /**
  * The per-save cloud blob cap, for one (player, Work) save — bytes, and the base64
  * character bound the wire carries (base64 inflates by 4/3, so the char cap is the

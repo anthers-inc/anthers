@@ -15,13 +15,15 @@
  * that provable — a test that only checked a notification exists would pass against an
  * implementation that sent three.
  *
- * ⭐ **The notice is `essential`.** Its entire value is arriving before a date, so it has
- * to reach the people who turned activity email off.
+ * ⭐ **The notice is `essential` and names no deadline** (Parker, 2026-10-25). A purchase
+ * leaving public circulation is a fact a buyer should not have to go looking for, so it
+ * reaches the people who turned activity email off. What it no longer does is name a date,
+ * because preservation became a program and nothing expires — the useful thing to say now
+ * is that nothing is required of them.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { notifications, purchases, users, works } from "@anthers/db/schema";
-import { WITHDRAWN_RESCUE_DAYS } from "@anthers/shared/constants";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
@@ -124,20 +126,17 @@ describe("Withdrawing a purchased Work tells the people who bought it", () => {
 		expect(notices).toHaveLength(1);
 		expect(notices[0].title).toContain(`Withdrawn ${RUN}`);
 		expect(notices[0].linkPath).toBe("/library");
-		// Essential, so it reaches somebody who turned activity email off. The whole
-		// value of this notice is arriving before a date.
+		// Essential, so it reaches somebody who turned activity email off.
 		expect(notices[0].category).toBe("essential");
 	});
 
-	it("⭐ names the deadline the Library card already shows, rather than saying 'at some point'", async () => {
-		// A buyer reading the card sees a date. A notice vaguer than the card would be the
-		// less useful of two statements of the same promise.
+	it("⭐ says nothing is required of them, rather than naming a deadline", async () => {
+		// 🚨 The card and the notice have to agree, and since preservation became a
+		// program neither carries a date. A notice that still promised a window would
+		// tell a buyer their copy expires when it does not.
 		const [notice] = await noticesFor(buyerId);
-		const deadline = new Date();
-		deadline.setDate(deadline.getDate() + WITHDRAWN_RESCUE_DAYS);
-		expect(notice.body).toContain(
-			deadline.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-		);
+		expect(notice.body).toContain("nothing you need to do");
+		expect(notice.body).not.toMatch(/before|until|expires/i);
 	});
 
 	it("tells both buyers of the same Work, and each of them once", async () => {

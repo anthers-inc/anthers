@@ -58,7 +58,6 @@ import {
 	SAVE_BLOB_MAX_BYTES_LABEL,
 	SAVE_BLOB_MAX_CHARS,
 	SAVE_SYNC_PERK_ERROR,
-	WITHDRAWN_RESCUE_DAYS,
 } from "@anthers/shared/constants";
 import {
 	COMMENT_MAX,
@@ -222,7 +221,6 @@ import {
 	rejectCredit,
 } from "../services/credit-acceptance.js";
 import { syncAccountRoles } from "../services/discord.js";
-import { electToKeep, KEEP_REFUSAL_COPY, releaseKeep } from "../services/keeping.js";
 import {
 	permanentWorkIds,
 	removeItem,
@@ -1828,17 +1826,12 @@ async function unpinOtherPosts(creatorId: number, keepPostId: number): Promise<v
  * arrived first — the actionable fact is identical in both, and being told twice that a
  * purchase left public circulation is noise rather than diligence.
  *
- * ⭐ **The deadline is named because the Library card already names it.** A buyer reading
- * the card sees a date; a notice that said only *"at some point"* would be the vaguer of two
- * statements of the same promise. The sweep that enforces it is still unbuilt, so today the
- * Work outlives the date it is given — which errs toward keeping a purchase alive, the
- * right way to be wrong here.
+ * ⭐ **It names no date, because there is no deadline any more** (Parker, 2026-10-25).
+ * Purchase preservation became a program: a Work anybody saved is kept indefinitely, so the
+ * useful thing to tell a buyer is that nothing is required of them. A notice that named a
+ * date would now be inventing one.
  */
-async function tellBuyersItWasWithdrawn(
-	workId: number,
-	title: string | null,
-	withdrawnAt: Date,
-): Promise<void> {
+async function tellBuyersItWasWithdrawn(workId: number, title: string | null): Promise<void> {
 	const buyers = (
 		await db
 			.select({ purchaseId: purchases.id, buyerId: purchases.buyerId })
@@ -1847,24 +1840,18 @@ async function tellBuyersItWasWithdrawn(
 	).filter((r): r is { purchaseId: number; buyerId: number } => r.buyerId != null);
 	if (buyers.length === 0) return;
 
-	const deadline = new Date(withdrawnAt);
-	deadline.setDate(deadline.getDate() + WITHDRAWN_RESCUE_DAYS);
-	const by = deadline.toLocaleDateString("en-US", {
-		year: "numeric",
-		month: "long",
-		day: "numeric",
-	});
 	const name = title?.trim() || "A Work you bought";
 
 	await notifyMany(
 		buyers.map((b) => ({
 			userId: b.buyerId,
-			// Essential, so it reaches people who turned activity email off: this is the
-			// one notice whose whole value is arriving before a date.
+			// Essential, so it reaches people who turned activity email off: a purchase
+			// leaving public circulation is the kind of fact a buyer should not have to
+			// go looking for.
 			category: "essential" as const,
 			kind: "work_withdrawn_by_creator",
 			title: `“${name}” has been withdrawn`,
-			body: `The creator has taken this out of public circulation. You still own it and it stays in your library — download a copy you keep before ${by}.`,
+			body: `The creator has taken this out of public circulation. You still own it and it stays in your library — Anthers keeps it available, so there is nothing you need to do.`,
 			linkPath: "/library",
 			// Per purchase, so two people who bought the same Work each get told and
 			// neither gets told twice.
@@ -4495,7 +4482,12 @@ const contentRoutes = new Hono()
 		if (userId !== work.creatorId) return c.json({ error: "Work not found" }, 404);
 
 		const rows = await listWorkVersions(work.id);
-		return c.json({ versions: rows.map(summarizeVersion) });
+		// The Work's preservation state rides with the list, so the tab can say that these
+		// bytes are kept indefinitely without a second request.
+		return c.json({
+			versions: rows.map((row) => summarizeVersion(row, work.preserved)),
+			preserved: work.preserved,
+		});
 	})
 
 	.get("/works/:id/versions/:versionId/download", requireAuth, requireCreator, async (c) => {
@@ -7147,19 +7139,18 @@ const contentRoutes = new Hono()
 		// buyers' access all stay. Delivery gates on `resolveAccess`, which reads
 		// purchases and never visibility, so their downloads and streams keep working.
 		//
-		// Deliberately NOT built here: the rescue window's expiry. The retention model
-		// gives buyers a notified, funded grace period and then removes the Work for
-		// real, but both its duration and the notification mechanism are open questions
-		// in the privacy-policy work. `withdrawn_at` is stamped so that sweep is a later
-		// job rather than a later migration — and until it exists, erring toward keeping
-		// a buyer's purchase alive is the right way to be wrong.
+		// ⭐ **Preserved, not just withdrawn** (Parker, 2026-10-25). The Work being bought
+		// is what put it in the preservation program, so the media stays for good rather
+		// than for a window: the sweep's only remaining job is the media of a withdrawn
+		// Work nobody saved, which by definition nobody bought. `withdrawn_at` is still
+		// stamped — the notice and the Library card state it — but nothing counts from it.
 		if (soldCount > 0) {
 			const withdrawnAt = new Date();
 			await db
 				.update(works)
 				.set({ visibility: "withdrawn", withdrawnAt, updatedAt: new Date() })
 				.where(eq(works.id, id));
-			await tellBuyersItWasWithdrawn(id, item.title, withdrawnAt);
+			await tellBuyersItWasWithdrawn(id, item.title);
 			// 🚨 The delete half, and the one this whole design is shaped around: a listing left
 			// up after a withdrawal re-publishes exactly what withdrawing was meant to undo.
 			await queueWorkListingSync(id);
@@ -9293,31 +9284,6 @@ const contentRoutes = new Hono()
 			});
 		},
 	)
-
-	// ── The keeping election ─────────────────────────────────────────────────────
-	//
-	// A buyer's claim on a withdrawn Work's bytes, past the ninety-day window. The
-	// service (`services/keeping.ts`) is the one writer of `purchases.keptAt`; both
-	// routes here are its doors. The refusal shapes name WHY so the buyer's next move
-	// differs: `not_purchased` is permanent absent a purchase, `not_withdrawn` has
-	// nothing to keep (the Work is being published — keeping is what publishing does),
-	// and `purged` means the bytes are already gone.
-	.post("/works/:id/keep", requireAuth, async (c) => {
-		const user = c.get("user");
-		const workId = Number(c.req.param("id"));
-		if (!Number.isFinite(workId)) return c.json({ error: "Not found" }, 404);
-		const result = await electToKeep(user.id, workId);
-		if (result.ok) return c.json({ kept: true as const });
-		return c.json({ error: KEEP_REFUSAL_COPY[result.reason], reason: result.reason }, 409);
-	})
-	.delete("/works/:id/keep", requireAuth, async (c) => {
-		const user = c.get("user");
-		const workId = Number(c.req.param("id"));
-		if (!Number.isFinite(workId)) return c.json({ error: "Not found" }, 404);
-		const result = await releaseKeep(user.id, workId);
-		if (result.ok) return c.json({ kept: false as const, released: result.released });
-		return c.json({ error: KEEP_REFUSAL_COPY[result.reason], reason: result.reason }, 409);
-	})
 
 	/**
 	 * Accept credit for a Work. The caller must be the credited person (any signed-in
