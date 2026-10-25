@@ -56,13 +56,13 @@ const ids: Record<string, number> = {};
 
 async function user(
 	tag: string,
-	opts: { isCreator?: boolean; identity?: "hosted" | "brought" } = {},
+	opts: { creatorMode?: boolean; identity?: "hosted" | "brought" } = {},
 ) {
 	const { user: row } = await createAccount(`${RUN}${tag}`, {
 		email: `${RUN}${tag}@example.test`,
 		emailVerified: true,
 		identity: opts.identity,
-		fields: { isCreator: opts.isCreator ?? false },
+		fields: { creatorMode: opts.creatorMode ?? false },
 	});
 	made.users.push(row.id);
 	return row;
@@ -73,7 +73,7 @@ beforeAll(async () => {
 	USER_DID = readerUser.atprotoDid;
 	// Not hosted here: an identity Anthers holds no credential for.
 	const plain = await user("plain", { identity: "brought" });
-	const creator = await user("creator", { isCreator: true });
+	const creator = await user("creator", { creatorMode: true });
 	DID = creator.atprotoDid;
 
 	const listed = await insertWork({ creatorId: creator.id, type: "game" });

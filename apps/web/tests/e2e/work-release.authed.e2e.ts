@@ -57,7 +57,7 @@ test.describe.configure({ mode: "serial" });
  * do.** It used to create its own account, and that could not work.
  *
  * `StudioAuthGate.tsx` redirects a signed-in non-creator to `/settings`, and `PATCH
- * /api/accounts/me` refuses `isCreator: true` unless `emailVerified` (routes/accounts.ts),
+ * /api/accounts/me` refuses `creatorMode: true` unless `emailVerified` (routes/accounts.ts),
  * which a spec cannot satisfy without receiving an email. So an account the spec signs up
  * is a user the Studio bounces to /settings — the Studio never renders, and every
  * assertion below fails at the first `goto("/studio/works")`. The handoff that tried it
@@ -74,7 +74,7 @@ test.describe.configure({ mode: "serial" });
  * projects, so the two never overlap there — green on every PR, red about one local
  * `make verify` in three.
  *
- * `media_fixture` is the resolution: `isCreator: true` and `emailVerified: true` (seeded
+ * `media_fixture` is the resolution: `creatorMode: true` and `emailVerified: true` (seeded
  * by `seed-media-fixture.ts`), owned by nobody else's reset, and idempotent (seeded once
  * in the `setup` project that `authed` depends on). The one assertion that names it —
  * `music-player.authed.e2e.ts:52`, `toHaveCount(MEDIA_FIXTURE_TRACKS.length)` — is scoped

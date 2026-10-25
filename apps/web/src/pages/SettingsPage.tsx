@@ -1073,7 +1073,7 @@ function ConnectedAppsCard() {
 						<p className="text-xs text-base-content/50">
 							{publishing === "granted"
 								? "Publishes your Works, posts and projects into your identity."
-								: user.isCreator
+								: user.creatorMode
 									? "Anthers has no permission to publish for you."
 									: "Publishing is asked for when creator mode is turned on."}
 						</p>
@@ -1120,7 +1120,7 @@ function ConnectedAppsCard() {
 								Disconnect Anthers
 							</button>
 						)}
-						{publishing === "ungranted" && user.isCreator && state.offered && (
+						{publishing === "ungranted" && user.creatorMode && state.offered && (
 							<button
 								type="button"
 								className="btn btn-sm btn-primary w-fit"
@@ -2677,10 +2677,10 @@ export default function SettingsPage() {
 	 * visit the moment the effect ran.
 	 */
 	const [sentFromStudio] = useState(
-		() => settingsParams.get("creator") === "1" && !user?.isCreator,
+		() => settingsParams.get("creator") === "1" && !user?.creatorMode,
 	);
 
-	const [isCreator, setIsCreator] = useState(user?.isCreator || false);
+	const [creatorMode, setIsCreator] = useState(user?.creatorMode || false);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState(false);
@@ -2710,7 +2710,7 @@ export default function SettingsPage() {
 			const res = await apiFetch("/api/accounts/me", {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ isCreator: checked }),
+				body: JSON.stringify({ creatorMode: checked }),
 			});
 
 			if (!res.ok) {
@@ -2854,7 +2854,7 @@ export default function SettingsPage() {
 									<input
 										type="checkbox"
 										className="toggle toggle-primary"
-										checked={isCreator}
+										checked={creatorMode}
 										onChange={(e) => handleCreatorToggle(e.target.checked)}
 										disabled={saving || !user?.emailVerified}
 									/>
@@ -2895,7 +2895,7 @@ export default function SettingsPage() {
 
 					{/* Creator Tools live in the Studio (payouts, connections); Badges are edited
 					    on the creator's own profile, beside the ladder supporters meet. */}
-					{isCreator && (
+					{creatorMode && (
 						<div className="card bg-base-200 mt-6">
 							<div className="card-body">
 								<h3 className="card-title text-lg">Creator Tools</h3>

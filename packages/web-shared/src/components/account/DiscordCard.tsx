@@ -83,13 +83,13 @@ export default function DiscordCard({
 	if (isDesktop()) return null;
 
 	const linked = user.isDiscordLinked;
-	const verified = user.isVerifiedCreator === true;
+	const verified = user.isCreator === true;
 	const body = linked
 		? verified
 			? "You're in the server, with the creators' channels open."
-			: "You're in the server. Releasing a Work opens the creators' channels."
+			: "You're in the server. Finishing creator setup opens the creators' channels."
 		: surface === "creator"
-			? "The creators' channels on Anthers' Discord server are for accounts that have released a Work. Connecting adds you to the server and opens them."
+			? "The creators' channels on Anthers' Discord server are for creators. Connecting adds you to the server and opens them."
 			: "Anthers has a Discord server where readers and creators talk. Connecting your account adds you to it and gives you the roles your account has earned.";
 
 	return (

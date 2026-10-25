@@ -82,7 +82,7 @@ beforeAll(async () => {
 	const { userId, handle } = await createAccount(`counts_${SUFFIX}`, {
 		email: `counts_${SUFFIX}@example.test`,
 		emailVerified: true,
-		fields: { isCreator: true },
+		fields: { creatorMode: true },
 	});
 	creatorHandle = handle;
 	creatorId = userId;

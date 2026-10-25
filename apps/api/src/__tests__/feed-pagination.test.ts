@@ -79,14 +79,17 @@ describe("The unified timeline paginates", () => {
 			await enablePayouts(creatorName);
 			await db
 				.update(users)
-				.set({ isCreator: true })
+				.set({ creatorMode: true })
 				.where(eq(users.atprotoHandle, creator.handle));
 
 			const second = await createAccount(secondName);
 			secondCookie = second.cookie;
 			secondHandle = second.handle;
 			await enablePayouts(secondName);
-			await db.update(users).set({ isCreator: true }).where(eq(users.atprotoHandle, second.handle));
+			await db
+				.update(users)
+				.set({ creatorMode: true })
+				.where(eq(users.atprotoHandle, second.handle));
 
 			// Nine timeline posts from the first creator: i minutes below the base, so i = 1
 			// is the newest; each iteration pushes onto `order`, which ends newest first.

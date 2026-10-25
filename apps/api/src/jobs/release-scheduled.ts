@@ -52,7 +52,7 @@ export interface ReleaseScheduledResult {
 export async function releaseScheduled(now: Date = new Date()): Promise<ReleaseScheduledResult> {
 	const result: ReleaseScheduledResult = { released: 0, cleared: 0, waiting: 0 };
 	const due = await db
-		.select({ work: works, isCreator: users.isCreator })
+		.select({ work: works, creatorMode: users.creatorMode })
 		.from(works)
 		.leftJoin(users, eq(works.creatorId, users.id))
 		.where(
@@ -65,7 +65,7 @@ export async function releaseScheduled(now: Date = new Date()): Promise<ReleaseS
 			),
 		);
 
-	for (const { work, isCreator } of due) {
+	for (const { work, creatorMode } of due) {
 		const scheduledFor = work.scheduledReleaseAt as Date;
 
 		if (work.creatorId === null) {
@@ -74,7 +74,7 @@ export async function releaseScheduled(now: Date = new Date()): Promise<ReleaseS
 			continue;
 		}
 
-		const refusal = await releaseRefusal(work, { id: work.creatorId, isCreator });
+		const refusal = await releaseRefusal(work, { id: work.creatorId, creatorMode });
 		if (refusal?.resolves === "waiting") {
 			result.waiting += 1;
 			continue;

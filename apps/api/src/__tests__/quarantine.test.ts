@@ -150,7 +150,7 @@ beforeAll(async () => {
 	const operator = await createAdminFixture("quar-operator");
 	operatorId = operator.id;
 	operatorCookie = operator.cookie;
-	await db.execute(sql`UPDATE users SET is_creator = true WHERE id = ${creatorId}`);
+	await db.execute(sql`UPDATE users SET creator_mode = true WHERE id = ${creatorId}`);
 }, DB_SETUP_TIMEOUT);
 
 describe("A purchaser is refused", () => {

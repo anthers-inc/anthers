@@ -366,7 +366,7 @@ const adminRoutes = new Hono<AdminEnv>()
 		const summaryRes = await db.execute(sql`
 			SELECT
 				(SELECT count(*) FROM users)::int AS users_total,
-				(SELECT count(*) FROM users WHERE is_creator)::int AS users_creators,
+				(SELECT count(*) FROM users WHERE creator_mode)::int AS users_creators,
 				(SELECT count(*) FROM users WHERE created_at >= now() - interval '24 hours')::int AS users_new_24h,
 				(SELECT count(*) FROM users WHERE created_at >= now() - interval '7 days')::int AS users_new_7d,
 				(SELECT count(*) FROM posts)::int AS posts_total,

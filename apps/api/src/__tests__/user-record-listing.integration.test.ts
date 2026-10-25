@@ -98,7 +98,7 @@ async function hostedAccount(tag: string): Promise<Account> {
 		emailVerified: true,
 	});
 	if (tag === "creator") {
-		await db.update(users).set({ isCreator: true }).where(eq(users.id, account.userId));
+		await db.update(users).set({ creatorMode: true }).where(eq(users.id, account.userId));
 	}
 	return { id: account.userId, did: account.did };
 }

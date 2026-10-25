@@ -201,7 +201,7 @@ async function ensureViewer(inst: Instance): Promise<void> {
 		fields: {
 			displayName: "Gauntlet User",
 			bio: "The harness's account for automated User Gauntlet walks.",
-			isCreator: false,
+			creatorMode: false,
 			// Terms accepted: the walk drives the app itself, whose guarded routes a
 			// terms-owing account never reaches; onboarding has its own suites.
 			termsAcceptedAt: new Date(),
@@ -259,7 +259,7 @@ async function ensureAnthersAccount(): Promise<number> {
 			fields: {
 				displayName: "Anthers (fixture)",
 				bio: "The session's stand-in for the Anthers creator account; owns the seeded Anthers Badge ladder.",
-				isCreator: false,
+				creatorMode: false,
 				termsAcceptedAt: new Date(),
 			},
 		});
@@ -307,7 +307,7 @@ async function ensureCreator(inst: Instance): Promise<number> {
 		fields: {
 			displayName: "Gauntlet Creator",
 			bio: "A fixture creator for the User Gauntlet. Every post below sits on a known rung of the ladder.",
-			isCreator: true,
+			creatorMode: true,
 			// Terms accepted, as with the user — the fixture drives the app, not onboarding.
 			termsAcceptedAt: new Date(),
 		},

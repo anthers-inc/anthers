@@ -65,7 +65,7 @@ describe("Vertical Slice", () => {
 		// Phase 2: /me now returns full profile
 		expect(data.user!.email).toBe(testEmail);
 		expect(data.user!.emailVerified).toBe(false);
-		expect(data.user!.isCreator).toBe(false);
+		expect(data.user!.creatorMode).toBe(false);
 	});
 
 	it("create project requires auth", async () => {

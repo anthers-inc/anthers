@@ -69,7 +69,7 @@ describe.skipIf(!SERVICE)("a Work's listing in a repository Anthers hosts", () =
 			email: `${RUN}creator@example.test`,
 			emailVerified: true,
 		});
-		await db.update(users).set({ isCreator: true }).where(eq(users.id, account.userId));
+		await db.update(users).set({ creatorMode: true }).where(eq(users.id, account.userId));
 		creatorId = account.userId;
 		did = account.did;
 	}, 60_000);
@@ -177,7 +177,7 @@ describe.skipIf(!SERVICE)("a Work's listing in a repository Anthers hosts", () =
 			emailVerified: true,
 			identity: "brought",
 		});
-		await db.update(users).set({ isCreator: true }).where(eq(users.id, plainAccount.userId));
+		await db.update(users).set({ creatorMode: true }).where(eq(users.id, plainAccount.userId));
 		const plain = { id: plainAccount.userId };
 		const work = await insertWork({
 			creatorId: plain.id,

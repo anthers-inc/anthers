@@ -81,7 +81,7 @@ describe("Catalog vertical slice", () => {
 			otherCookie = await signUp(otherName);
 			await enablePayouts(otherName);
 			await db.execute(
-				sql`UPDATE users SET is_creator = true WHERE email = ${`${creatorName}@example.com`}`,
+				sql`UPDATE users SET creator_mode = true WHERE email = ${`${creatorName}@example.com`}`,
 			);
 			expect(creatorCookie).toBeTruthy();
 			expect(otherCookie).toBeTruthy();
@@ -543,7 +543,7 @@ describe("The feed carries the creator's own content", () => {
 		makerId = maker.userId;
 		await enablePayouts(makerName);
 		await db.execute(
-			sql`UPDATE users SET is_creator = true WHERE email = ${`${makerName}@example.com`}`,
+			sql`UPDATE users SET creator_mode = true WHERE email = ${`${makerName}@example.com`}`,
 		);
 		fanCookie = (await createAccount(fanName)).cookie;
 

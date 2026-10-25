@@ -386,7 +386,7 @@ export async function recordPublishGrant(
 	grantedScope: string | null,
 ): Promise<PublishGrantResult> {
 	const [user] = await db
-		.select({ did: users.atprotoDid, isCreator: users.isCreator })
+		.select({ did: users.atprotoDid, creatorMode: users.creatorMode })
 		.from(users)
 		.where(eq(users.id, userId))
 		.limit(1);
@@ -399,7 +399,7 @@ export async function recordPublishGrant(
 
 	// ⚠️ **A user is asked for the user tier alone**, so that is what their answer is judged
 	// against; judging it against the creator tier would call every user's grant a decline.
-	if (user.isCreator !== true) {
+	if (user.creatorMode !== true) {
 		if (!grantCoversUserRecords(grantedScope)) return { status: "declined" };
 		const { queueAllUserRecordsFor } = await import("./user-record-listing.js");
 		return { status: "granted", queued: await queueAllUserRecordsFor(userId) };
@@ -542,32 +542,38 @@ async function publishedRecordCounts(
  * for a permission over their repository because their handle did not resolve.
  */
 /**
- * Whether this Anthers account publishes.
+ * Whether this Anthers account has creator mode on.
+ *
+ * ⚠️ **This is the question of whether to ask for the creator permission tier, not whether
+ * the person is a creator.** The tier is asked for when creator mode is turned on, because
+ * that is the moment they are heading toward publishing; a completed-setup check here would
+ * ask the wrong accounts and skip the ones still finishing setup. Creator standing is
+ * `services/creator-standing.ts`.
  *
  * ⚠️ **Asked by id rather than by identity, which is the whole point of it existing.** Linking
  * happens *before* there is a DID on the account, so the identity-shaped question has no answer
  * yet and the account-shaped one already does.
  */
-export async function isCreatorAccount(userId: number): Promise<boolean> {
+export async function hasCreatorMode(userId: number): Promise<boolean> {
 	const [row] = await db
-		.select({ isCreator: users.isCreator })
+		.select({ creatorMode: users.creatorMode })
 		.from(users)
 		.where(eq(users.id, userId))
 		.limit(1);
-	return row?.isCreator === true;
+	return row?.creatorMode === true;
 }
 
-export async function isCreatorIdentity(didOrHandle: string): Promise<boolean> {
+export async function hasCreatorModeForIdentity(didOrHandle: string): Promise<boolean> {
 	try {
 		const did = didOrHandle.startsWith("did:")
 			? didOrHandle
 			: (await resolveIdentity(didOrHandle)).did;
 		const [row] = await db
-			.select({ isCreator: users.isCreator })
+			.select({ creatorMode: users.creatorMode })
 			.from(users)
 			.where(eq(users.atprotoDid, did))
 			.limit(1);
-		return row?.isCreator === true;
+		return row?.creatorMode === true;
 	} catch {
 		return false;
 	}

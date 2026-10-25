@@ -6,7 +6,6 @@ import { userPreferences, users } from "@anthers/db/schema";
 // the names, so a rung added to the ladder is pickable the moment it exists.
 import { BADGE_ORDER, MAX_BASKET_ITEMS } from "@anthers/shared/constants";
 import { MAX_PICKED_CREATORS } from "@anthers/shared/signup";
-import { verifiedCreator } from "@anthers/shared/verified-creator";
 import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
@@ -35,7 +34,7 @@ import {
 	validateSession,
 } from "../services/auth.js";
 import { addBasketItem } from "../services/basket.js";
-import { releasedWorkCount } from "../services/creator-standing.js";
+import { isCreator } from "../services/creator-standing.js";
 import { discordConfigured } from "../services/discord.js";
 import { sendSignInCodeEmail, sendSignupCodeEmail } from "../services/email.js";
 import {
@@ -329,17 +328,19 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		.from(userPreferences)
 		.where(eq(userPreferences.userId, user.id))
 		.limit(1);
-	// Verified creator standing — `isCreator` plus a released Work. This is the shell's boot
-	// payload, so a non-creator's answer costs no second query.
-	const released = user.isCreator ? await releasedWorkCount(user.id) : 0;
+	// Creator standing — completed creator setup, asked once here because this is the shell's
+	// boot payload and every surface that claims somebody is a creator reads it rather than
+	// deriving its own answer. `creatorMode` is the separate, weaker fact: whether to offer the
+	// Studio and the setup that finishes the job.
+	const creator = await isCreator(user.id);
 	return {
 		id: user.id,
 		handle: user.atprotoHandle,
 		email: user.email,
 		displayName: user.displayName,
 		bio: user.bio,
-		isCreator: user.isCreator,
-		isVerifiedCreator: verifiedCreator({ isCreator: user.isCreator, releasedWorkCount: released }),
+		creatorMode: user.creatorMode,
+		isCreator: creator,
 		// Whether the settings card can offer the connection at all, and whether this account
 		// has taken it up. The ID itself stays server-side.
 		isDiscordAvailable: discordConfigured(),

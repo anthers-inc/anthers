@@ -48,7 +48,8 @@ describe("the HLS orphan sweep", () => {
 
 	beforeAll(async () => {
 		// A creator with a completed transcode: one referenced prefix, one dangling one.
-		referencedId = (await createAccount(`orphan_a_${RUN}`, { fields: { isCreator: true } })).userId;
+		referencedId = (await createAccount(`orphan_a_${RUN}`, { fields: { creatorMode: true } }))
+			.userId;
 		const work = await insertWork({
 			creatorId: referencedId,
 			type: "video",
@@ -68,7 +69,7 @@ describe("the HLS orphan sweep", () => {
 		// and a dangling prefix beside it that must survive the sweep anyway.
 		liveCreatorId = (
 			await createAccount(`orphan_b_${RUN}`, {
-				fields: { isCreator: true },
+				fields: { creatorMode: true },
 			})
 		).userId;
 		const liveWork = await insertWork({

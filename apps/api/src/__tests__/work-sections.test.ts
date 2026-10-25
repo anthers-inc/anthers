@@ -168,7 +168,7 @@ beforeAll(async () => {
 	] as const) {
 		const account = await createAccount(
 			name,
-			name.includes("creator") ? { fields: { isCreator: true } } : {},
+			name.includes("creator") ? { fields: { creatorMode: true } } : {},
 		);
 		set({ id: account.userId as number, cookie: account.cookie });
 	}

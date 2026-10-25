@@ -42,7 +42,7 @@ const THUMBNAIL = "https://cdn.anthers.org/creators/1/post-card-fixture.png";
 
 let creatorId: number;
 beforeAll(async () => {
-	creatorId = (await createAccount(creatorName, { fields: { isCreator: true } })).userId;
+	creatorId = (await createAccount(creatorName, { fields: { creatorMode: true } })).userId;
 }, DB_SETUP_TIMEOUT);
 
 /** The markdown a post's body carries when it embeds a Work — the shape the feed parses. */
@@ -136,7 +136,7 @@ describe("GET /posts/:slug/card", () => {
 		"hides a suspended author's post rather than describing it",
 		async () => {
 			const author = await createAccount(`post_card_susp_${run}`, {
-				fields: { isCreator: true },
+				fields: { creatorMode: true },
 			});
 			const operator = await createAdminFixture("post-card-op");
 			const post = await aPost({

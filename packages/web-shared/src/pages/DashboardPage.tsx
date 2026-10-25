@@ -100,7 +100,7 @@ export default function DashboardPage() {
 	// arranging should fill immediately rather than after a reload — these are two small
 	// listings the Studio fetches on its other tabs anyway.
 	useEffect(() => {
-		if (!user?.isCreator) return;
+		if (!user?.creatorMode) return;
 		let live = true;
 		client.api.content.projects
 			.$get({ query: { mine: "true" } })
@@ -126,7 +126,7 @@ export default function DashboardPage() {
 		return () => {
 			live = false;
 		};
-	}, [user?.isCreator]);
+	}, [user?.creatorMode]);
 
 	/**
 	 * Save a layout, optimistically.
@@ -141,7 +141,7 @@ export default function DashboardPage() {
 	};
 
 	useEffect(() => {
-		if (!user?.isCreator) return;
+		if (!user?.creatorMode) return;
 		let live = true;
 		// Both flags, matching the server's own predicate: onboarding can finish while Stripe
 		// still declines to send money, and only the second answers "can this creator be paid".
@@ -175,7 +175,7 @@ export default function DashboardPage() {
 		return () => {
 			live = false;
 		};
-	}, [user?.isCreator]);
+	}, [user?.creatorMode]);
 
 	if (loading) {
 		return (
@@ -197,7 +197,7 @@ export default function DashboardPage() {
 		<div className="mx-auto max-w-4xl py-4">
 			<div className="mb-6 flex items-center justify-between gap-2">
 				<h1 className="text-2xl font-bold">Dashboard</h1>
-				{user?.isCreator && !arranging && (
+				{user?.creatorMode && !arranging && (
 					<button type="button" className="btn btn-ghost btn-sm" onClick={() => setArranging(true)}>
 						<AdjustmentsHorizontalIcon className="h-4 w-4" />
 						Arrange
@@ -220,7 +220,7 @@ export default function DashboardPage() {
 					<p className="mt-1 text-sm text-base-content/60">
 						Everything in your Catalog is rated, reachable and released as you left it.
 					</p>
-					{user?.isCreator && (
+					{user?.creatorMode && (
 						<div className="mt-4 flex flex-wrap gap-2">
 							<Link to={studioNewWorkUrl()} className="btn btn-primary btn-sm">
 								<PlusIcon className="w-4 h-4" /> New Work
@@ -234,7 +234,7 @@ export default function DashboardPage() {
 			)}
 
 			{/* The standing panels. Every one is optional; nothing that warns is among them. */}
-			{user?.isCreator && (
+			{user?.creatorMode && (
 				<>
 					{arranging && (
 						<div className="mb-4">
@@ -266,7 +266,7 @@ export default function DashboardPage() {
 				</>
 			)}
 
-			{!user?.isCreator && (
+			{!user?.creatorMode && (
 				<p className="text-sm text-base-content/60">
 					Turn on creator mode in{" "}
 					<Link to="/settings" className="link">

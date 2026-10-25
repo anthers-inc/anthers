@@ -86,7 +86,7 @@ const ORIGIN = "http://localhost:3000";
 
 describe("replace-in-place retires the old version", () => {
 	beforeAll(async () => {
-		const account = await createAccount(creatorName, { fields: { isCreator: true } });
+		const account = await createAccount(creatorName, { fields: { creatorMode: true } });
 		creatorId = account.userId;
 		cookie = account.cookie;
 	}, DB_SETUP_TIMEOUT);

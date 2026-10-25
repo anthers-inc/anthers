@@ -62,11 +62,11 @@ function putRecord(collection: string, rkey: string, value: unknown) {
 	server.set(`at://${DID}/${collection}/${rkey}`, value);
 }
 
-async function user(tag: string, isCreator: boolean) {
+async function user(tag: string, creatorMode: boolean) {
 	const { user: row } = await createAccount(`${RUN}${tag}`, {
 		email: `${RUN}${tag}@example.test`,
 		emailVerified: true,
-		fields: { isCreator },
+		fields: { creatorMode },
 	});
 	made.users.push(row.id);
 	return row;

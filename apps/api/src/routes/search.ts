@@ -40,6 +40,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { notSuspendedAccount, notTestAccount } from "../services/account-visibility.js";
 import { notBlockedBy } from "../services/blocks.js";
 import { adultVisibility, maturityHiddenFrom } from "../services/content-preferences.js";
+import { isCreatorWhere } from "../services/creator-standing.js";
 import { parentalHiddenFrom, parentalVisibility } from "../services/parental-controls.js";
 import { matchesFields } from "../services/search-query.js";
 import { resolveThumbnailUrl } from "../services/thumbnails.js";
@@ -173,7 +174,7 @@ async function searchCreators(
 		.from(users)
 		.where(
 			and(
-				eq(users.isCreator, true),
+				isCreatorWhere(users.id),
 				matchesFields(terms, fields),
 				notBlockedBy(viewerId, users.id),
 				notSuspendedAccount(users.id),

@@ -76,7 +76,7 @@ test.beforeAll(async () => {
 		.where(eq(users.email, MEDIA_FIXTURE_EMAIL))
 		.limit(1);
 	expect(creator, "the media fixture account exists").toBeTruthy();
-	await db.update(users).set({ isCreator: true }).where(eq(users.id, creator!.id));
+	await db.update(users).set({ creatorMode: true }).where(eq(users.id, creator!.id));
 	await db
 		.insert(stripeAccounts)
 		.values({

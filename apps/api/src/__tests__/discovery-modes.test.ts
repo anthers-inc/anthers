@@ -27,6 +27,7 @@ import { eq } from "drizzle-orm";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { enablePayoutsFor } from "./payouts-fixture";
 import { insertWork, testPublicId } from "./work-fixtures";
 
 purgeAccountsCreatedHere();
@@ -72,8 +73,10 @@ async function feed(cookie: string, query = "") {
 describe("Discovery's graph and ticker routes", () => {
 	beforeAll(async () => {
 		const viewer = await createAccount(`dsc_viewer_${run}`);
-		const followed = await createAccount(`dsc_followed_${run}`, { fields: { isCreator: true } });
-		await createAccount(`dsc_unfollowed_${run}`, { fields: { isCreator: true } });
+		const followed = await createAccount(`dsc_followed_${run}`);
+		const unfollowed = await createAccount(`dsc_unfollowed_${run}`);
+		await enablePayoutsFor(followed.userId);
+		await enablePayoutsFor(unfollowed.userId);
 		viewerCookie = viewer.cookie;
 
 		const [followedRow] = await db
@@ -125,7 +128,7 @@ describe("Discovery's graph and ticker routes", () => {
 
 		// A creator the viewer blocks is absent from the global Ticker even though no
 		// creator list filtered them out first — the row filters are what have to hold.
-		const blocked = await createAccount(`dsc_blocked_${run}`, { fields: { isCreator: true } });
+		const blocked = await createAccount(`dsc_blocked_${run}`, { fields: { creatorMode: true } });
 		await insertWork({
 			creatorId: (
 				await db
@@ -145,7 +148,7 @@ describe("Discovery's graph and ticker routes", () => {
 		// candidate set has two lanes and the mix has something to spread. Inserted
 		// before the busy run, which must stay the newest thing in the whole-site stream.
 		const secondFollowed = await createAccount(`dsc_followed2_${run}`, {
-			fields: { isCreator: true },
+			fields: { creatorMode: true },
 		});
 		secondFollowedCreatorId = (
 			await db
@@ -168,7 +171,7 @@ describe("Discovery's graph and ticker routes", () => {
 		// A creator who posts a run of four, inserted last so they are the newest
 		// entries in the whole-site stream. Without the mix stage this is exactly the
 		// run that takes four of the page's first five cards.
-		await createAccount(`dsc_busy_${run}`, { fields: { isCreator: true } });
+		await createAccount(`dsc_busy_${run}`, { fields: { creatorMode: true } });
 		busyCreatorId = (
 			await db
 				.select({ id: users.id })

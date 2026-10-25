@@ -36,7 +36,7 @@ let viewer: FixtureAccount;
 
 beforeAll(async () => {
 	author = await createAccount(`feedsearch_a_${run}`, {
-		fields: { isCreator: true, displayName: "Carla Author" },
+		fields: { creatorMode: true, displayName: "Carla Author" },
 	});
 	viewer = await createAccount(`feedsearch_v_${run}`);
 	await db.insert(follows).values({ followerId: viewer.userId, creatorId: author.userId });

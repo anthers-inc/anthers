@@ -66,9 +66,9 @@ function storeMode(mode: AppMode): void {
  * The mode for the page on screen. Only a creator has a Studio to be in, so everybody else is
  * in user mode whatever was stored.
  */
-export function useAppMode(isCreator: boolean): AppMode {
+export function useAppMode(creatorMode: boolean): AppMode {
 	const { pathname } = useLocation();
-	const mode = isCreator ? modeForPath(pathname, storedMode()) : "user";
+	const mode = creatorMode ? modeForPath(pathname, storedMode()) : "user";
 	/**
 	 * ⚠️ **A layout effect, so the mode is recorded before the next route can read it.** A
 	 * mode route may redirect immediately — `/studio` is the creator's home and forwards to
@@ -78,7 +78,7 @@ export function useAppMode(isCreator: boolean): AppMode {
 	 * arrived from and leave them in the wrong sidebar (2026-10-23).
 	 */
 	useLayoutEffect(() => {
-		if (isCreator) storeMode(mode);
-	}, [isCreator, mode]);
+		if (creatorMode) storeMode(mode);
+	}, [creatorMode, mode]);
 	return mode;
 }

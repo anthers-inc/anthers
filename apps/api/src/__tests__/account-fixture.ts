@@ -117,7 +117,7 @@ export async function createAccount(
 		/** `hosted` (the default) is an identity Anthers issued; `brought` is one it holds no credential for. */
 		identity?: "hosted" | "brought";
 		/**
-		 * Anything else the suite needs on the row — `isCreator`, an admin flag, a date. The identity
+		 * Anything else the suite needs on the row — `creatorMode`, an admin flag, a date. The identity
 		 * columns are the server's to set, so a suite cannot quietly put a placeholder DID back.
 		 */
 		fields?: LocalAccountFields;

@@ -44,7 +44,7 @@ function putPerks(perks: unknown[], withCookie = cookie) {
 
 describe("badge perks", () => {
 	beforeAll(async () => {
-		const account = await createAccount(`bp_creator_${RUN}`, { fields: { isCreator: true } });
+		const account = await createAccount(`bp_creator_${RUN}`, { fields: { creatorMode: true } });
 		cookie = account.cookie;
 		userId = account.userId;
 		const res = await req("/api/subscriptions/badges", {
@@ -163,7 +163,7 @@ describe("badge perks", () => {
 	});
 
 	it("refuses another creator's rung", async () => {
-		const other = await createAccount(`bp_other_${RUN}`, { fields: { isCreator: true } });
+		const other = await createAccount(`bp_other_${RUN}`, { fields: { creatorMode: true } });
 		const res = await putPerks([{ kind: "service", label: "X" }], other.cookie);
 		expect(res.status).toBe(404);
 		const read = await req(`/api/subscriptions/badges/${badgeId}/perks`, {

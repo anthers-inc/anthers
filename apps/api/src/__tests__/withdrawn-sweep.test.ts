@@ -99,7 +99,7 @@ async function mediaExists(workId: number): Promise<boolean> {
 }
 
 beforeAll(async () => {
-	const creator = await createAccount(`kf_c_${RUN}`, { fields: { isCreator: true } });
+	const creator = await createAccount(`kf_c_${RUN}`, { fields: { creatorMode: true } });
 	creatorId = creator.userId;
 	const keeper = await createAccount(`kf_keep_${RUN}`);
 	keeperId = keeper.userId;

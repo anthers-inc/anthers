@@ -23,7 +23,7 @@ import DesktopSignIn from "./DesktopSignIn";
  */
 export default function StudioAuthGate({ children }: { children: ReactNode }) {
 	const { user, isAuthenticated, isLoading } = useAuth();
-	const isCreator = Boolean(user?.isCreator);
+	const creatorMode = Boolean(user?.creatorMode);
 	const desktop = isDesktop();
 
 	// In a browser these are ordinary in-app routes now — the Studio is a section of this
@@ -34,13 +34,13 @@ export default function StudioAuthGate({ children }: { children: ReactNode }) {
 	// right — creator mode is enabled on that page — but somebody who clicked into the Studio
 	// arrived at account settings with nothing saying why they were moved or which of the
 	// switches there was the one they wanted. The flag is what `SettingsPage` reads to say so.
-	if (!desktop && !isLoading && !isCreator) return <Navigate to="/settings?creator=1" replace />;
+	if (!desktop && !isLoading && !creatorMode) return <Navigate to="/settings?creator=1" replace />;
 
 	if (desktop && !isLoading && !isAuthenticated) {
 		return <DesktopSignIn />;
 	}
 
-	if (desktop && !isLoading && !isCreator) {
+	if (desktop && !isLoading && !creatorMode) {
 		return (
 			<div className="min-h-dvh flex items-center justify-center px-4">
 				<div className="card bg-base-200 w-full max-w-md">
@@ -66,7 +66,7 @@ export default function StudioAuthGate({ children }: { children: ReactNode }) {
 		);
 	}
 
-	if (isLoading || !isAuthenticated || !isCreator) {
+	if (isLoading || !isAuthenticated || !creatorMode) {
 		return (
 			<div className="flex justify-center items-center min-h-[60vh]">
 				<LoadingSpinner size="lg" />

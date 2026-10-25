@@ -53,7 +53,7 @@ async function makeUser(name: string, extra: Record<string, unknown> = {}): Prom
 	const { userId } = await createAccount(tag, {
 		email: `${tag}@example.test`,
 		emailVerified: true,
-		fields: { isCreator: true, ...extra },
+		fields: { creatorMode: true, ...extra },
 	});
 	created.push(userId);
 	return userId;

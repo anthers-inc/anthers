@@ -78,7 +78,7 @@ function restoreStorage() {
 
 describe("remove an unpublished Work's media", () => {
 	beforeAll(async () => {
-		const creator = await createAccount(creatorName, { fields: { isCreator: true } });
+		const creator = await createAccount(creatorName, { fields: { creatorMode: true } });
 		creatorId = creator.userId;
 		creatorCookie = creator.cookie;
 		const stranger = await createAccount(strangerName);

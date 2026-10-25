@@ -125,7 +125,7 @@ beforeAll(async () => {
 	await signUp(userAName);
 	await signUp(userBName);
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE email = ${`${creatorName}@example.com`}`,
+		sql`UPDATE users SET creator_mode = true WHERE email = ${`${creatorName}@example.com`}`,
 	);
 
 	creatorId = await idOf(creatorName);

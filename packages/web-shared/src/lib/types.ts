@@ -21,13 +21,17 @@ export interface User {
 	email?: string; // Only in /me (private)
 	displayName: string | null;
 	bio: string | null;
-	isCreator: boolean | null;
+	creatorMode: boolean | null;
 	/**
-	 * `isCreator` on and at least one released Work — the gate for creator-only surfaces.
-	 * Derived on the server (`@anthers/shared/verified-creator`) and carried by the signed-in
-	 * payloads only; a public listing does not pay for a count per row.
+	 * Whether this account is a creator — completed creator setup, answered on the server by
+	 * `services/creator-standing`. Carried by the signed-in payloads and by listings, which
+	 * compute it in the query.
+	 *
+	 * ⚠️ **Not the same claim as `creatorMode`.** Mode says the person turned the Studio on;
+	 * this says they finished setting it up. A client that shows creator standing reads this
+	 * one, and a client deciding whether to offer the Studio reads `creatorMode`.
 	 */
-	isVerifiedCreator?: boolean;
+	isCreator?: boolean;
 	/** Whether this deployment can offer the Discord link at all. Private payloads only. */
 	isDiscordAvailable?: boolean;
 	/** Whether this account has linked its Discord identity. Private payloads only. */

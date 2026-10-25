@@ -26,12 +26,15 @@ export interface User {
 	email: string;
 	displayName: string | null;
 	bio: string | null;
-	isCreator: boolean | null;
+	creatorMode: boolean | null;
 	/**
-	 * `isCreator` on and at least one released Work — the gate for creator-only surfaces.
-	 * Derived on the server (`@anthers/shared/verified-creator`), never written by a client.
+	 * Whether this account is a creator — completed creator setup, answered on the server by
+	 * `services/creator-standing` and never written by a client.
+	 *
+	 * ⚠️ **Not the same claim as `creatorMode`.** Mode says the person turned the Studio on;
+	 * this says they finished setting it up.
 	 */
-	isVerifiedCreator: boolean;
+	isCreator: boolean;
 	/** Whether this deployment can offer the Discord link at all. */
 	isDiscordAvailable: boolean;
 	/** Whether this account has linked its Discord identity. */

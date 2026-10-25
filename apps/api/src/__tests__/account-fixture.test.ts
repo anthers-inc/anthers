@@ -93,9 +93,12 @@ describe("what a suite cannot do to it", () => {
 	});
 
 	it("refuses to put a placeholder DID over the one the server issued", async () => {
-		const values: Record<string, unknown> = { isCreator: true, atprotoDid: "did:plc:placeholder" };
+		const values: Record<string, unknown> = {
+			creatorMode: true,
+			atprotoDid: "did:plc:placeholder",
+		};
 		await expect(
-			createAccount(`${RUN}override`, { fields: values as { isCreator: boolean } }),
+			createAccount(`${RUN}override`, { fields: values as { creatorMode: boolean } }),
 		).rejects.toThrow(/issued by the server/);
 	});
 });

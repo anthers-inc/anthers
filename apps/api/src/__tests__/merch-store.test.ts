@@ -55,7 +55,7 @@ beforeAll(async () => {
 		.where(eq(users.email, `${username}@example.com`));
 	creatorId = row.id;
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE email = ${`${username}@example.com`}`,
+		sql`UPDATE users SET creator_mode = true WHERE email = ${`${username}@example.com`}`,
 	);
 
 	const shirt = await insertWork({

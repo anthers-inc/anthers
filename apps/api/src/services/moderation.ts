@@ -68,6 +68,7 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { commentRoots, REPLY_SUBJECT_TYPE } from "./comment-thread.js";
+import { isCreatorWhere } from "./creator-standing.js";
 import { abuseAlertsEnabled, escapeHtml, sendAbuseAlert } from "./email.js";
 import { resumePausedRenewals } from "./invoices.js";
 import { notify } from "./notifications.js";
@@ -1436,6 +1437,8 @@ export interface PersonRow {
 	handle: string;
 	displayName: string;
 	bio: string | null;
+	creatorMode: boolean;
+	/** Completed creator setup — a creator rather than somebody who turned the Studio on. */
 	isCreator: boolean;
 	/** When moderation suspended the account, and when the suspension lifts itself. */
 	suspendedAt: string | null;
@@ -1472,7 +1475,8 @@ export async function loadPeople(input: { query?: string }): Promise<PersonRow[]
 			handle: users.atprotoHandle,
 			displayName: users.displayName,
 			bio: users.bio,
-			isCreator: users.isCreator,
+			creatorMode: users.creatorMode,
+			isCreator: isCreatorWhere(users.id),
 			suspendedAt: users.suspendedAt,
 			suspendedUntil: users.suspendedUntil,
 			openReports: sql<number>`(
@@ -1512,7 +1516,8 @@ export async function loadPeople(input: { query?: string }): Promise<PersonRow[]
 		...r,
 		// Same nullable-default reads as `loadPersonDetail`.
 		displayName: r.displayName ?? "",
-		isCreator: r.isCreator === true,
+		creatorMode: r.creatorMode === true,
+		isCreator: Boolean(r.isCreator),
 		suspendedAt: r.suspendedAt?.toISOString() ?? null,
 		suspendedUntil: r.suspendedUntil?.toISOString() ?? null,
 		reasons: (r.reasons ?? []).filter((reason) => reason !== ""),
@@ -1547,7 +1552,8 @@ export async function loadPersonDetail(userId: number): Promise<{
 			handle: users.atprotoHandle,
 			displayName: users.displayName,
 			bio: users.bio,
-			isCreator: users.isCreator,
+			creatorMode: users.creatorMode,
+			isCreator: isCreatorWhere(users.id),
 			suspendedAt: users.suspendedAt,
 			suspendedUntil: users.suspendedUntil,
 		})
@@ -1573,7 +1579,8 @@ export async function loadPersonDetail(userId: number): Promise<{
 			// `.default("")`/`.default(false)` columns read nullable through Drizzle; the
 			// defaults are real, so a null here is the column's default arriving unwritten.
 			displayName: row.displayName ?? "",
-			isCreator: row.isCreator === true,
+			creatorMode: row.creatorMode === true,
+			isCreator: Boolean(row.isCreator),
 			suspendedAt: row.suspendedAt?.toISOString() ?? null,
 			suspendedUntil: row.suspendedUntil?.toISOString() ?? null,
 			openReports: Number(reports?.open ?? 0),

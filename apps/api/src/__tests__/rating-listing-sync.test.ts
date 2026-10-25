@@ -50,7 +50,7 @@ function listingSyncs(): unknown[] {
 }
 
 beforeAll(async () => {
-	creatorId = (await createAccount(`rls_c_${run}`, { fields: { isCreator: true } })).userId;
+	creatorId = (await createAccount(`rls_c_${run}`, { fields: { creatorMode: true } })).userId;
 	operatorId = (await createAdminFixture(`rls-o-${run}`)).id;
 
 	sendSpy = spyOn(queue, "send").mockImplementation((async (name: string, data: unknown) => {

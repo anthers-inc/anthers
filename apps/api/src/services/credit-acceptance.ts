@@ -479,7 +479,7 @@ export async function creditsForUser(
 		]),
 	);
 	const userDid = userRows[0]?.atprotoDid ?? null;
-	const isCreator = userId != null && userId === work.creatorId;
+	const isWorkOwner = userId != null && userId === work.creatorId;
 
 	const visible: UserWorkCredit[] = [];
 	for (const credit of credits) {
@@ -498,7 +498,7 @@ export async function creditsForUser(
 					contributor: name,
 					contributorProfile: profileForDid.get(credit.contributor),
 				});
-			else if (isCreator || userDid === credit.contributor) visible.push(credit);
+			else if (isWorkOwner || userDid === credit.contributor) visible.push(credit);
 			continue;
 		}
 		if (userDid === credit.contributor) {
@@ -509,7 +509,7 @@ export async function creditsForUser(
 			});
 			continue;
 		}
-		if (isCreator) {
+		if (isWorkOwner) {
 			visible.push({
 				...credit,
 				awaitingContributorConfirmation: true,

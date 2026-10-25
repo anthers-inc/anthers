@@ -34,8 +34,8 @@ export default function PublishingPermissionBanner() {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	const isCreator = user?.isCreator === true;
-	const publishing = isCreator && publishingPermissionMissing(state) === true;
+	const creatorMode = user?.creatorMode === true;
+	const publishing = creatorMode && publishingPermissionMissing(state) === true;
 	const interactions = interactionPermissionMissing(state) === true;
 	if (!user || (!publishing && !interactions)) return null;
 	if (publishing && pathname.startsWith("/studio/settings")) return null;

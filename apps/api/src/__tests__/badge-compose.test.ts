@@ -137,7 +137,7 @@ describe("badge composition", () => {
 	let _creatorId = 0;
 
 	beforeAll(async () => {
-		const account = await createAccount(`bc_creator_${RUN}`, { fields: { isCreator: true } });
+		const account = await createAccount(`bc_creator_${RUN}`, { fields: { creatorMode: true } });
 		cookie = account.cookie;
 		_creatorId = account.userId;
 		const res = await req("/api/subscriptions/badges", {
@@ -219,7 +219,7 @@ describe("badge composition", () => {
 	});
 
 	it("refuses another creator's badge — ownership is the route's first check", async () => {
-		const other = await createAccount(`bc_other_${RUN}`, { fields: { isCreator: true } });
+		const other = await createAccount(`bc_other_${RUN}`, { fields: { creatorMode: true } });
 		const res = await compose({ noun: nounIcon, placement }, other.cookie);
 		expect(res.status).toBe(404);
 	});

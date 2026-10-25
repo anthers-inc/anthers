@@ -53,7 +53,7 @@ beforeAll(async () => {
 		await createAccount(`${RUN}c`, {
 			email: `${RUN}c@example.test`,
 			emailVerified: true,
-			fields: { isCreator: true },
+			fields: { creatorMode: true },
 		})
 	).userId;
 	siteCookie = (

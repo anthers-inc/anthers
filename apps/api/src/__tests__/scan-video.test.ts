@@ -160,7 +160,7 @@ describe("scanStoredVideo — object in, rows out", () => {
 		await db
 			.execute(`DELETE FROM users WHERE atproto_handle = '${creatorName}'` as unknown as never)
 			.catch(() => {});
-		creatorId = (await createAccount(creatorName, { fields: { isCreator: true } })).userId;
+		creatorId = (await createAccount(creatorName, { fields: { creatorMode: true } })).userId;
 	}, DB_SETUP_TIMEOUT);
 
 	afterAll(async () => {

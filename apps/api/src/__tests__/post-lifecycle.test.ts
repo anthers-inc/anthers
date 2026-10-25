@@ -100,7 +100,7 @@ beforeAll(async () => {
 	stranger = await signUp(strangerName);
 	await enablePayouts(strangerName);
 	await db.execute(
-		sql`UPDATE users SET is_creator = true WHERE email IN (${sql.join([sql`${`${ownerName}@example.com`}`, sql`${`${strangerName}@example.com`}`], sql`, `)})`,
+		sql`UPDATE users SET creator_mode = true WHERE email IN (${sql.join([sql`${`${ownerName}@example.com`}`, sql`${`${strangerName}@example.com`}`], sql`, `)})`,
 	);
 }, DB_SETUP_TIMEOUT);
 

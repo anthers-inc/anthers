@@ -26,7 +26,7 @@ export default function IdentityServerBanner() {
 
 	const where = state.handle ? `, @${state.handle},` : "";
 	const records =
-		user.isCreator === true
+		user.creatorMode === true
 			? "what you release, publish, comment on, review, vote on and follow"
 			: "what you comment on, review, vote on and follow";
 

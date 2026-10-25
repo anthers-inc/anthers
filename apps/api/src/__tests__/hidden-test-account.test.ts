@@ -22,6 +22,7 @@ import app from "../index";
 import { HIDDEN_TEST_ACCOUNT_HANDLE, notTestAccount } from "../services/account-visibility.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { enablePayoutsFor } from "./payouts-fixture";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork, testPublicId } from "./work-fixtures.js";
 
@@ -71,8 +72,8 @@ describe("The automated-test account — hidden from listings, nothing else", ()
 		hiddenCookie = hidden.cookie;
 		userCookie = user.cookie;
 
-		await db.update(users).set({ isCreator: true }).where(eq(users.id, hiddenId));
-		await db.update(users).set({ isCreator: true }).where(eq(users.id, otherId));
+		await db.update(users).set({ creatorMode: true }).where(eq(users.id, hiddenId));
+		await enablePayoutsFor(otherId);
 
 		// The production handle, put on the fixture's row directly — the identity columns
 		// are the server's to issue, and the fixture has to keep the identity it was given

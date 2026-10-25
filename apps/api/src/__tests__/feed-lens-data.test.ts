@@ -43,7 +43,7 @@ const workIds: number[] = [];
 const projectIds: number[] = [];
 
 beforeAll(async () => {
-	const creator = await createAccount(`feedlens_${run}`, { fields: { isCreator: true } });
+	const creator = await createAccount(`feedlens_${run}`, { fields: { creatorMode: true } });
 	cookie = creator.cookie;
 	creatorId = creator.userId;
 
