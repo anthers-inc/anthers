@@ -20,8 +20,11 @@ import {
 	badgeLabel,
 	cardFeeDisplay,
 	ILLUSTRATIVE_SALES_TAX_RATE,
+	stickerBudgetFor,
+	storageReserveFor,
+	supportLineFor,
 	thresholdForBadge,
-	timePoolFor,
+	timePoolByTimeFor,
 } from "@anthers/shared/constants";
 import { InformationCircleIcon } from "@heroicons/react/20/solid";
 import { useState } from "react";
@@ -254,12 +257,17 @@ export function SubscriptionCalculator() {
 	const [badge, setBadge] = useState<BadgeKey>("root");
 	const n = thresholdForBadge(badge);
 	const price = n;
-	const timePool = timePoolFor(n);
-	// "Supports Anthers" is the remainder — what funds the charitable programs, free
-	// access included.
-
-	const supportsAnthers = n === 0 ? 0 : price - timePool - cardFeeDisplay(price);
-	const toCreators = n === 0 ? 0 : timePool;
+	// 🚨 **The ladder's five lines, and they add up to the price** (Parker, 2026-10-25):
+	// the Time Pool paid by time, the Sticker budget the holder aims by hand, the storage
+	// allowance reserved at cost, the card fee, and Anthers Support — what is left, which
+	// funds the charitable programs, free access included.
+	const timePool = n === 0 ? 0 : timePoolByTimeFor(n);
+	const stickers = n === 0 ? 0 : stickerBudgetFor(n);
+	const storage = n === 0 ? 0 : storageReserveFor(n);
+	const supportsAnthers = n === 0 ? 0 : supportLineFor(n);
+	// What reaches creators is both channels, whichever way the holder splits the month —
+	// unspent Sticker budget is paid out by time.
+	const toCreators = n === 0 ? 0 : timePool + stickers;
 
 	// The at-cost Payments line sits INSIDE the price; sales tax is the only thing
 	// added on top. Free ($0) has neither.
@@ -270,6 +278,8 @@ export function SubscriptionCalculator() {
 
 	const barParts = [
 		{ key: "timePool", amount: timePool, cls: "bg-primary" },
+		{ key: "stickers", amount: stickers, cls: "bg-primary/50" },
+		{ key: "storage", amount: storage, cls: "bg-accent/40" },
 		{ key: "supports", amount: supportsAnthers, cls: "bg-info" },
 		{ key: "processing", amount: processing, cls: "bg-base-content/15" },
 	];
@@ -303,8 +313,20 @@ export function SubscriptionCalculator() {
 						<SplitRow
 							dot="bg-primary"
 							label="Time Pool"
-							desc="to the creators you watch, by time spent — paid out in full"
+							desc="to the creators you spend time with, by time — paid out in full"
 							amount={timePool}
+						/>
+						<SplitRow
+							dot="bg-primary/50"
+							label="Sticker Budget"
+							desc="to creators you choose yourself; anything you leave unspent is paid out by time"
+							amount={stickers}
+						/>
+						<SplitRow
+							dot="bg-accent/40"
+							label="Your Storage"
+							desc="your allowance reserved at the provider's rate, at cost; what you don't use goes to Anthers Support"
+							amount={storage}
 						/>
 						<SplitRow
 							dot="bg-info"

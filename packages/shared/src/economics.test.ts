@@ -17,6 +17,7 @@ import {
 	SELF_HOST_FEE,
 	STORAGE_LADDER_GIB,
 	STORAGE_PER_GIB_MONTH,
+	storageReserveFor,
 	supportBreakdownDisplay,
 	TIME_POOL_RATE,
 	thresholdForBadge,
@@ -33,6 +34,7 @@ import {
 	supportBreakdown,
 } from "./fees.js";
 import { BADGE_TABLE } from "./figures.js";
+import { badgeTable } from "./scenarios.js";
 
 /** Anthers' own rungs, in dollars — $3/$6/$9/$12. */
 const PAID_RUNGS = [3, 6, 9, 12];
@@ -509,5 +511,76 @@ describe("reductionFor", () => {
 
 	test("owes nothing on a line of nothing", () => {
 		expect(dollars(reductionFor(0, new Date("2026-09-20T00:00:00Z")))).toBe("0.00");
+	});
+});
+
+/**
+ * The published ladder's arithmetic: every line named, nothing overlapping, and the columns
+ * adding up to the charge.
+ *
+ * 🚨 **This is the defect the ladder was rebuilt for** (Parker, 2026-10-25). It used to publish
+ * a Time Pool figure and a Sticker figure where one contained the other, so the rows added up
+ * to more than the price and a reader's first question was *how are you giving me more than I
+ * pay for*. The two are now separate lines of the creator half, storage is a reserved line
+ * rather than an invisible expense out of the remainder, and Anthers Support is what is left.
+ */
+describe("badgeTable — the published ladder adds up", () => {
+	const rows = badgeTable();
+
+	test("every line is its own named destination, and they sum to the charge", () => {
+		for (const r of rows) {
+			const sum = new Decimal(r.timePoolByTime)
+				.plus(r.stickers)
+				.plus(r.storage)
+				.plus(r.payments)
+				.plus(r.support);
+			expect(sum.toFixed(2), `${r.badge} does not add up`).toBe(r.charge);
+		}
+	});
+
+	test("the two creator lines are the creator half, and nothing is counted twice", () => {
+		for (const r of rows) {
+			expect(new Decimal(r.timePoolByTime).plus(r.stickers).toFixed(2)).toBe(r.timePool);
+			expect(new Decimal(r.timePool).eq(new Decimal(r.monthly).mul(TIME_POOL_RATE))).toBe(true);
+		}
+	});
+
+	test("storage is a reserve: support is the floor and the remainder is the ceiling", () => {
+		for (const r of rows) {
+			expect(new Decimal(r.storage).gt(0)).toBe(true);
+			expect(new Decimal(r.support).lt(r.remainder)).toBe(true);
+			// What the reserve holds back is exactly storage — the only difference between the
+			// remainder a rung generates and the support it publishes.
+			expect(new Decimal(r.remainder).minus(r.support).toFixed(2)).toBe(r.storage);
+		}
+	});
+
+	test("no paying rung's support is negative at its allowance's full use", () => {
+		for (const r of rows)
+			expect(new Decimal(r.support).gte(0), `${r.badge} is underwater`).toBe(true);
+	});
+});
+
+/**
+ * What the bundled storage allowance costs Anthers.
+ *
+ * 🚨 **The figure the ladder had no home for**, and the one that makes the solvency ruling
+ * checkable rather than asserted: an allowance nobody uses costs nothing, but the promise the
+ * ladder makes is its ceiling, and every bundled byte is paid to the storage vendor.
+ */
+describe("storageReserveFor — the allowance at the vendor's rate", () => {
+	test("every rung is the ruled allowance at the rate, rounded once to cents", () => {
+		for (const key of BADGE_ORDER) {
+			const gib = STORAGE_LADDER_GIB[key];
+			const expected = new Decimal(gib)
+				.mul(STORAGE_PER_GIB_MONTH)
+				.toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+				.toFixed(2);
+			expect(storageReserveFor(thresholdForBadge(key))).toBe(Number(expected));
+		}
+	});
+
+	test("nothing is charged below the free floor's own rate", () => {
+		expect(storageReserveFor(0)).toBe(0.4);
 	});
 });

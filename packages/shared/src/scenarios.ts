@@ -28,6 +28,8 @@ import {
 	ILLUSTRATIVE_SALES_TAX_RATE,
 	MERCH_BADGE_DISCOUNT,
 	PUBLIC_ACCESS_PRICE,
+	stickerBudgetFor,
+	storageReserveFor,
 	thresholdForBadge,
 } from "./constants.js";
 import {
@@ -61,11 +63,20 @@ export interface BadgeRow {
 	monthly: number;
 	/** The all-in monthly charge at that level. */
 	charge: string;
+	/** The creator half — the envelope the pool and the Sticker budget both draw from. */
 	timePool: string;
+	/** The Time Pool proper: the part of that half disbursed by time. */
+	timePoolByTime: string;
+	/** The holder's own Sticker budget, its own line of the price. */
+	stickers: string;
+	/** Storage reserved at the rung's full allowance, at the vendor's rate. */
+	storage: string;
 	/** This side's share of the at-cost card fee — INSIDE the charge since 2026-08-03. */
 	payments: string;
-	/** The residual, which funds the charitable programs — free access included. */
+	/** The remainder after creators and the card fee, before the storage reserve. */
 	remainder: string;
+	/** What is left for Anthers after the reserve too — its only unreserved line. */
+	support: string;
 }
 
 /** One rung of the merch-discount table, computed from the dials in `constants.ts`. */
@@ -125,12 +136,24 @@ export function merchTable(listPrice: string = "30.00"): MerchRow[] {
 }
 
 /**
- * The per-Badge decomposition. Each row conserves: pool + payments + rem = charge.
+ * The per-Badge decomposition, as a published ladder reads it: every line named, nothing
+ * overlapping, and the whole thing adding up to the charge.
  *
- * A `bandwidth` column sat between the charge and the Time Pool until 2026-08-12,
- * driven by a reference streamer's watch-hours. Both are gone: delivery costs $0,
- * so there is nothing for time to price, and the table no longer rests on a
- * behavioral assumption at all. **Every row is now exact rather than illustrative.**
+ * 🚨 **`timePool` and `timePoolByTime` are different figures and the table uses the
+ * second** (Parker, 2026-10-25). The first is the creator half — the envelope — and the
+ * second is the part of it disbursed by time, its Sticker budget having been set aside as
+ * its own line. Publishing both on one table is what produced two rows a reader could not
+ * add up, so a table picks one: `timePoolByTime`.
+ *
+ * ⚠️ **`support` is a FLOOR, not a forecast.** The storage line is a reserve at the rung's
+ * full allowance; bytes nobody stores cost nothing, so the reserve flows into `support` at
+ * renewal. A rung's published Anthers Support is therefore its worst case, and its best is
+ * `remainder`.
+ *
+ * A `bandwidth` column sat between the charge and the Time Pool until 2026-08-12, driven by
+ * a reference streamer's watch-hours. Both are gone: delivery costs $0, so there is nothing
+ * for time to price, and the table no longer rests on a behavioral assumption at all.
+ * **Every row is now exact rather than illustrative.**
  */
 export function badgeTable(): BadgeRow[] {
 	return BADGE_ORDER.filter((b) => thresholdForBadge(b) > 0).map((badge) => {
@@ -138,13 +161,19 @@ export function badgeTable(): BadgeRow[] {
 		// Nothing directed at creators in this scenario, so the whole card fee sits here.
 		const payments = paymentsSplit(n, 0).anthers;
 		const b = anthersSupportBreakdown(n, { payments });
+		const stickers = stickerBudgetFor(n);
+		const storage = storageReserveFor(n);
 		return {
 			badge: badge.charAt(0).toUpperCase() + badge.slice(1),
 			monthly: n,
 			charge: money(b.given),
 			timePool: money(b.timePool),
+			timePoolByTime: money(b.timePool.minus(stickers)),
+			stickers: money(new Decimal(stickers)),
+			storage: money(new Decimal(storage)),
 			payments: money(b.payments),
 			remainder: money(b.foundation),
+			support: money(b.foundation.minus(storage)),
 		};
 	});
 }
@@ -157,13 +186,22 @@ export interface ReceiptScenario {
 	/** What actually reaches those creators, net of their share of the card fee. */
 	directedNet: string;
 	timePool: string;
+	/** The part of `timePool` disbursed by time, after the Sticker budget is set aside. */
+	timePoolByTime: string;
+	/** This Badge's own Sticker budget. */
+	stickers: string;
+	/** Storage reserved at the rung's full allowance. */
+	storage: string;
 	/** The WHOLE card fee on the batched charge. */
 	payments: string;
 	/** This side's share of it — what the Anthers block must show, or it double-counts. */
 	paymentsAnthers: string;
 	/** The creator side's share, already deducted from `directedNet`. */
 	paymentsCreator: string;
+	/** The remainder after creators and the card fee, before the storage reserve. */
 	remainder: string;
+	/** What is left for Anthers after the reserve too — the receipt's own worst case. */
+	support: string;
 	supportSubtotal: string;
 	salesTax: string;
 	/** All-in: the subtotal plus sales tax, and nothing else. */
@@ -192,10 +230,14 @@ export function sampleReceipt(anthersDollars = 6, creatorDollars = 6): ReceiptSc
 		directedGross: money(s.creatorDirect),
 		directedNet: money(s.creatorNet),
 		timePool: money(s.timePool),
+		timePoolByTime: money(s.timePool.minus(stickerBudgetFor(anthersDollars))),
+		stickers: money(new Decimal(stickerBudgetFor(anthersDollars))),
+		storage: money(new Decimal(storageReserveFor(anthersDollars))),
 		payments: money(split.total),
 		paymentsAnthers: money(split.anthers),
 		paymentsCreator: money(split.creator),
 		remainder: money(anthers.foundation),
+		support: money(anthers.foundation.minus(storageReserveFor(anthersDollars))),
 		supportSubtotal: money(s.supportSubtotal),
 		salesTax: money(salesTax),
 		totalBilled: money(s.supportSubtotal.plus(salesTax)),

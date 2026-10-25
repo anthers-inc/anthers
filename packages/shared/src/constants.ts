@@ -454,7 +454,15 @@ export function amountLabel(amount: string | number | null | undefined): string 
 
 // ── Derived amounts ──────────────────────────────────────────────────────────
 /**
- * Time Pool $ funded by giving Anthers `dollars` a month.
+ * The **creator half** of a monthly amount, in dollars — the envelope a Sticker budget and
+ * the Time Pool are both drawn from.
+ *
+ * 🚨 **This is the envelope, not the Time Pool row a reader sees.** A paid rung's creator
+ * half splits into two named lines: {@link timePoolByTimeFor} is disbursed by the time
+ * people spend, and {@link stickerBudgetFor} is the part its holder aims by hand, flowing
+ * into the same time distribution if it goes unspent. A surface publishing "the Time Pool"
+ * as a figure of its own wants `timePoolByTimeFor`; a surface describing where half of the
+ * money goes wants this one.
  *
  * 🚨 **Giving nothing answers 0 here — the free account's pool is not this file's
  * figure.** The Time Pool Fund is a stated share of the charitable remainder after
@@ -471,13 +479,26 @@ export function timePoolFor(anthersDollars: number): number {
 }
 
 /**
- * Share of a Badge's Time Pool a user may direct by hand, as Stickers.
+ * The Time Pool proper: the part of the creator half disbursed by time, **before** the
+ * Sticker budget's unspent remainder flows back in.
+ *
+ * ⚠️ **This is the figure a ladder publishes**, because the Sticker budget is its own line
+ * on that ladder and two rows that overlap cannot be added up. At the end of the cycle
+ * `distribute-pool.ts` distributes this plus whatever was not handed out, so the money a
+ * paid rung sends creators is the creator half either way.
+ */
+export function timePoolByTimeFor(anthersDollars: number): number {
+	return Math.max(0, timePoolFor(anthersDollars) - stickerBudgetFor(anthersDollars));
+}
+
+/**
+ * Share of a Badge's **creator half** set aside as its Sticker budget.
  *
  * 🚨 **A dial, not a fact.** A third was chosen because it makes the Root allowance reach
  * two $0.25 Stickers rather than one — the difference between a feature a person uses and
  * one they spend. Nothing depends on the specific value.
  */
-export const STICKER_SHARE_OF_POOL = 1 / 3;
+export const STICKER_SHARE_OF_CREATOR_HALF = 1 / 3;
 
 /**
  * The Sticker denominations, in dollars. The same three for every creator, because
@@ -490,35 +511,37 @@ export function isStickerDenomination(amount: unknown): boolean {
 }
 
 /**
- * The most of a Badge's Time Pool its holder may direct by hand in a cycle, in dollars.
+ * A Badge's Sticker budget for a cycle, in dollars — **its own line of the price**, set
+ * aside from the creator half and paid to creators by the giver's hand.
  *
- * ⭐ **A Sticker is an OVERRIDE of the Time Pool, never a second pool beside it** (Parker,
- * 2026-09-04). Nothing is held back and nothing is returned: a user's Time Pool is
- * distributed by time *except* for whatever they directed themselves, so a user who gives
- * no Stickers ends the cycle exactly where they would have. That framing is why there is no
- * rollback anywhere in this feature — there is nothing to roll back, and describing it as a
- * separate budget that reverts was the model Parker rejected.
+ * ⭐ **Separate line items, and unspent budget pours into the Time Pool** (Parker,
+ * 2026-10-25). The earlier framing called a Sticker an *override* of the Time Pool, which
+ * was the same money and a worse description: it published a pool figure and a Sticker
+ * figure that overlapped, and no reader could add the ladder up. The two are now named as
+ * what they are — two channels into the same creator half — and what a giver does not hand
+ * out is disbursed by time at the end of the cycle, which `distribute-pool.ts` computes as
+ * `creator half − Stickers`.
  *
- * ⚠️ **So a rung's Time Pool figure and its Sticker figure OVERLAP**, the second being part
- * of the first, and any surface showing both has to say so or the money reads as appearing
- * twice.
+ * ⚠️ **"Rolls over" describes the money, not a pot that reverts.** Nothing is held back
+ * from creators and nothing returns to Anthers: the unspent budget is paid out by time in
+ * the same cycle it was given.
  *
  * A free account may direct nothing: a third of the subsidized pot buys no Sticker at any
  * denomination, so the arithmetic settles this before policy has to.
  *
- * ⭐ **Giving one is real now**, so a surface may describe it as something a user can go
- * and do: `StickerBar` sits on a Work and a post, the batch is in `@anthers/shared/
- * stickers`, and the money routes through `distribute-pool`. This figure is still derived
- * rather than typed, so a page quoting it cannot drift from the model.
+ * ⭐ **Giving one is real**, so a surface may describe it as something a user can go and
+ * do: `StickerBar` sits on a Work and a post, the batch is in `@anthers/shared/stickers`,
+ * and the money routes through `distribute-pool`. This figure is still derived rather than
+ * typed, so a page quoting it cannot drift from the model.
  *
  * 🚨 **The cap is evaluated when a Sticker is GIVEN and never afterwards.** A user who
- * lowers their Badge mid-cycle can end up having directed more than this now returns, and
- * that is correct: the money was committed at the moment of giving and Anthers does not
+ * lowers their Badge mid-cycle can end up having directed more than this cycle's budget,
+ * and that is correct: the money was committed at the moment of giving and Anthers does not
  * claw a gift back out of a creator's hands. Never treat this as a figure a stored total
  * must stay under.
  */
 export function stickerBudgetFor(anthersDollars: number): number {
-	return anthersDollars <= 0 ? 0 : timePoolFor(anthersDollars) * STICKER_SHARE_OF_POOL;
+	return anthersDollars <= 0 ? 0 : timePoolFor(anthersDollars) * STICKER_SHARE_OF_CREATOR_HALF;
 }
 
 /**
@@ -545,6 +568,52 @@ export function stickerBudgetFor(anthersDollars: number): number {
  */
 export function storageGibFor(anthersDollars: number): number {
 	return STORAGE_LADDER_GIB[heldBadgeName(anthersDollars)];
+}
+
+/**
+ * What a rung's bundled allowance costs at the vendor's rate for a month, to the cent —
+ * the **reserved** storage line of a Badge's price.
+ *
+ * 🚨 **Reserved, not spent** (Parker, 2026-10-25). Publishing the ceiling is what lets the
+ * ladder add up and shows the worst case: bytes nobody stores cost nothing, and the unused
+ * reserve pours into Anthers Support at renewal. A free account's floor has no revenue line
+ * to reserve against, so its cost is funded by the rungs above it rather than by itself.
+ *
+ * ⚠️ **The ×100 before the round is load-bearing.** `gib × rate` is a dollar figure whose
+ * half-cent boundary cases (50 × $0.0161 = $0.805) round either way depending on where the
+ * conversion happens; going to cents first makes each rung land on the same figure
+ * `Decimal` does, and `economics.test.ts` pins the two together.
+ */
+export function storageReserveFor(anthersDollars: number): number {
+	return Math.round(storageGibFor(anthersDollars) * STORAGE_PER_GIB_MONTH * 100) / 100;
+}
+
+/**
+ * The **Anthers Support line** of a Badge's price: what is left once the two creator lines,
+ * the storage reserve and the card fee are set aside.
+ *
+ * 🚨 **The published ladder's five lines add up because this is defined as the remainder**
+ * (Parker, 2026-10-25) — {@link timePoolByTimeFor} plus {@link stickerBudgetFor} plus
+ * {@link storageReserveFor} plus the card fee plus this equals what the Badge costs. It is
+ * therefore the only **unreserved** line, and the storage reserve returning at renewal is
+ * what makes it a floor rather than a forecast.
+ *
+ * ⚠️ **This is the ladder's line, not the charitable remainder `fees.ts` computes.**
+ * `anthersSupportBreakdown` answers before the storage reserve is taken, because the
+ * distribution job never moves storage money; a surface publishing the ladder wants this one
+ * so the column adds up on the page as well as in the books.
+ */
+export function supportLineFor(anthersDollars: number): number {
+	const amount = supportAmount(anthersDollars);
+	if (amount <= 0) return 0;
+	const kept =
+		amount -
+		timePoolByTimeFor(amount) -
+		stickerBudgetFor(amount) -
+		storageReserveFor(amount) -
+		cardFeeDisplay(amount);
+	// Floating subtraction leaves 0.2999999999999998 where the answer is 30 cents.
+	return Math.round(kept * 100) / 100;
 }
 
 /**

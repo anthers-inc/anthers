@@ -103,9 +103,10 @@ import {
 	MERCH_BADGE_DISCOUNT,
 	stickerBudgetFor,
 	storageGibFor,
+	storageReserveFor,
+	supportLineFor,
 	thresholdForBadge,
-	timePoolFor,
-	WITHDRAWN_RESCUE_DAYS,
+	timePoolByTimeFor,
 } from "@anthers/shared/constants";
 import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
@@ -257,11 +258,13 @@ interface Segment {
 	amount: number;
 	label: string;
 	desc: string;
-	tone: "pool" | "mission" | "pay";
+	tone: "pool" | "sticker" | "storage" | "mission" | "pay";
 }
 
 const SEGMENT_BG: Record<Segment["tone"], string> = {
 	pool: "bg-success/70",
+	sticker: "bg-success/35",
+	storage: "bg-accent/30",
 	mission: "bg-info/40",
 	pay: "bg-base-300",
 };
@@ -387,21 +390,28 @@ function SupportBreakdown({
  *
  * ⚠️ Free's segments describe money that is real but is not the user's: the Time Pool
  * Fund funds a pool on a free account's behalf, so creators are genuinely paid for that
- * account's time. They are the SAME three lines a paid rung draws, so the two readings are
+ * account's time. They are the SAME five lines a paid rung draws, so the two readings are
  * directly comparable — and the zeroes are true, since a free account contributes nothing
- * to the remainder and has no card to process. The Fund's slice rides in as `fundSlice`:
- * the published ledger's figure for the current cycle, or null before the fetch lands,
- * where the copy names the share as published rather than showing a number it does not
- * have.
+ * to Anthers Support, has no card to process, and has its storage funded by the rungs
+ * above. The Fund's slice rides in as `fundSlice`: the published ledger's figure for the
+ * current cycle, or null before the fetch lands, where the copy names the share as
+ * published rather than showing a number it does not have.
+ *
+ * 🚨 **The five lines are the ladder's own**, and they sum to the charge exactly — the
+ * Time Pool, the Sticker budget, the storage reserved at the rung's allowance, Anthers
+ * Support and the card fee. `supportLineFor` is defined as that remainder rather than
+ * computed a second way here, so the bar, the legend, the matrix row and the wiki's table
+ * cannot disagree.
  *
  * ⚠️ **The entry price travels in as `entryPrice`** rather than being read from a constant
  * here: the note's "$3 a month lifts your monthly limit" is a claim about the seeded ladder
  * (the bottom rung is what removes the limit), so it reads the rows through the caller's
  * store — with the fallback standing until the fetch lands. The per-segment money math
- * (`timePoolFor`, `cardFeeDisplay`) stays a function of the AMOUNT, which is the chosen
- * dollars and not a quoted figure. The rest of the ladder display — the matrix columns,
- * the cards, the choice resolution — is the charge picker's own display and stays
- * constant-derived with it, by the same "one list, one total" rule.
+ * (`timePoolByTimeFor`, `stickerBudgetFor`, `storageReserveFor`, `supportLineFor`,
+ * `cardFeeDisplay`) stays a function of the AMOUNT, which is the chosen dollars and not a
+ * quoted figure. The rest of the ladder display — the matrix columns, the cards, the
+ * choice resolution — is the charge picker's own display and stays constant-derived with
+ * it, by the same "one list, one total" rule.
  */
 function anthersReading(
 	amount: number,
@@ -413,15 +423,27 @@ function anthersReading(
 			segments: [
 				{
 					tone: "pool",
-					amount: timePoolFor(amount),
+					amount: timePoolByTimeFor(amount),
 					label: "To Creators, by Time",
 					desc: "split by the share of your time each one earned",
 				},
 				{
+					tone: "sticker",
+					amount: stickerBudgetFor(amount),
+					label: "To Creators, by You",
+					desc: "Stickers you hand out yourself; whatever you leave unspent is paid out by time too",
+				},
+				{
+					tone: "storage",
+					amount: storageReserveFor(amount),
+					label: "Your Storage",
+					desc: "reserved at your allowance's full size, at cost; whatever you don't use pours into Anthers Support",
+				},
+				{
 					tone: "mission",
-					amount: amount - timePoolFor(amount) - cardFeeDisplay(amount),
-					label: "Charitable Programs",
-					desc: "funds Anthers' charitable programs (free access included), which keeps other people's accounts free",
+					amount: supportLineFor(amount),
+					label: "Anthers Support",
+					desc: "funds Anthers' charitable programs (free access included) and Anthers' own costs, with no profit taken",
 				},
 				{
 					tone: "pay",
@@ -430,7 +452,7 @@ function anthersReading(
 					desc: "card & processing, at cost, paid to the processor",
 				},
 			],
-			note: `${money(entryPrice)} a month lifts your monthly limit, and nothing above it buys more access: what climbs is what your time pays creators, and what keeps other people's accounts free. Shown at the worst case: this alone on the charge. Back a creator too and the fixed card fee spreads across both.`,
+			note: `${money(entryPrice)} a month lifts your monthly limit, and nothing above it buys more access: what climbs is what your time pays creators, what you can hand out yourself, the storage you can use, and what keeps other people's accounts free. Shown at the worst case: this alone on the charge, with your whole storage allowance used. Back a creator too and the fixed card fee spreads across both.`,
 		};
 	}
 	return {
@@ -442,9 +464,21 @@ function anthersReading(
 				desc: "split by the share of your time each one earned, funded by the Time Pool Fund, not by you",
 			},
 			{
+				tone: "sticker",
+				amount: 0,
+				label: "To Creators, by You",
+				desc: "a Sticker budget comes with a paid Badge, and a free account directs nothing",
+			},
+			{
+				tone: "storage",
+				amount: 0,
+				label: "Your Storage",
+				desc: "your floor is funded by the rungs above, like your Time Pool",
+			},
+			{
 				tone: "mission",
 				amount: 0,
-				label: "Charitable Programs",
+				label: "Anthers Support",
 				desc: "funded by the rungs above, which is what pays for your account",
 			},
 			{
@@ -543,6 +577,15 @@ interface PerkRow {
 	 * that is a list of things a supporter can use today.
 	 */
 	notBuilt?: true;
+	/**
+	 * A **matrix row only**, never one of the "what this rung adds" lines.
+	 *
+	 * ⚠️ The card fee is a line of the split rather than a perk: it moves by a few cents at
+	 * every rung, so a card comparing rungs would list it as a gain every time, beside rows
+	 * that are real reasons to climb. It belongs in the table because the column has to add
+	 * up, and nowhere else.
+	 */
+	matrixOnly?: true;
 }
 
 /** The marker beside a perk that is committed and not built. */
@@ -555,12 +598,18 @@ function NotBuiltYet() {
 }
 
 /**
- * The perk set, one row per perk — the same set the wiki's *Badges* states as the perk
- * ladder.
+ * The perk set, one row per perk — the ladder the wiki's *21.02 Anthers Badges* publishes,
+ * in the same order, so the page a reader meets first and the page they are sent to cannot
+ * describe two different ladders.
  *
- * 🚨 **Every figure is derived**: the Sticker budget and the storage floor come from
- * `stickerBudgetFor` and `storageGibFor` in `constants.ts` rather than from any table, so a
- * change to either reaches this matrix without an edit here.
+ * 🚨 **The canon is the document, not this array.** `21.02` is hand-written and reconciled
+ * by review (Parker, 2026-10-25), so a row added or removed here is a row the wiki has to
+ * agree with — the figures are derived, the *set* is not.
+ *
+ * 🚨 **Every figure is derived**: the Time Pool proper, the Sticker budget, the storage
+ * reserve and Anthers Support come from `timePoolByTimeFor`, `stickerBudgetFor`,
+ * `storageReserveFor` and `supportLineFor` in `constants.ts` rather than from any table, so
+ * a change to the model reaches this matrix without an edit here.
  *
  * ⚠️ **The Sticker denominations are deliberately not here.** They live in
  * `@anthers/shared/stickers` as `STICKER_BATCHES`, and a matrix row is the wrong place to
@@ -583,11 +632,14 @@ const PERK_ROWS: PerkRow[] = [
 		// (Parker, 2026-10-18) carries the explanation the old note printed flat.
 		// 🚨 Parker's wording of this row's description is the copy that ships (2026-10-18);
 		// keep the vocabulary's capitalization when touching it.
-		desc: "Paid to the creators whose works you enjoy, split by the share of your time spent. For free users, Anthers funds their Time Pool from the Time Pool Fund, so creators are paid even for streaming from free accounts, without serving ads.",
+		// ⚠️ The figure is the pool proper — what is paid out by time — not the whole
+		// creator half: the Sticker budget is the row below it, and two rows a reader
+		// cannot add up was the defect the ladder was rebuilt for (Parker, 2026-10-25).
+		desc: "Paid to the creators whose Public Access works you spend time with, split by the share of that time each one got. For free users, Anthers funds their Time Pool from the Time Pool Fund, so creators are still paid for time spent by free accounts, without serving ads.",
 		cell: (amount, fundSlice) => ({
 			value:
 				amount > 0
-					? columnMoney(timePoolFor(amount))
+					? columnMoney(timePoolByTimeFor(amount))
 					: fundSlice != null
 						? columnMoney(fundSlice)
 						: "Varies",
@@ -599,38 +651,14 @@ const PERK_ROWS: PerkRow[] = [
 	},
 	{
 		title: "Monthly Sticker Budget",
-		// ⭐ **An OVERRIDE of the Time Pool, never a second pot beside it** (Parker,
-		// 2026-09-04). The row above is paid out by the time you spend *except* for whatever
-		// you hand out yourself. 🚨 **Never write this as "held back" or "goes back into the
-		// pool"** — that describes a separate pot that reverts, which is one more concept than
-		// a user needs and is not what the money does.
-		// ⚠️ The two figures still OVERLAP, the second being part of the first, and the copy
-		// has to say so or the matrix reads as money appearing twice.
-		desc: "Part of the Time Pool above, which you can hand out yourself by sending a Sticker on a Work, a Post, or a Comment, instead of leaving it to be paid out by time.",
+		// ⭐ **Its own line of the same creator half** (Parker, 2026-10-25). It used to be
+		// described as an override *of* the Time Pool, which published two figures that
+		// overlapped; the two rows now add up. 🚨 **Never write this as "held back"** —
+		// the money is committed to creators either way, and what is unspent is paid out by
+		// time in the same cycle rather than reverting to Anthers.
+		desc: "A monthly amount you hand out yourself, by sending a Sticker on a Work, a Post, a Comment or a Review. Whatever you leave unspent pours into the Time Pool above and is paid out to creators by time.",
 		cell: (amount) => ({
 			value: stickerBudgetFor(amount) > 0 ? columnMoney(stickerBudgetFor(amount)) : NOT_CARRIED,
-		}),
-	},
-	{
-		title: "Anthers Support",
-		// ⭐ **The third money line completes the story the first two start** (Parker,
-		// 2026-10-18). Time Pool pays creators, Stickers route part of the pool by hand,
-		// and this is what stays with Anthers: the remainder, funding the charitable
-		// programs and Anthers' own costs, with no profit-taking on top. It sits beside
-		// the other two so the matrix reads as one split rather than two stories, which
-		// is the row Parker asked for instead of the second table its first attempt
-		// built below the matrix.
-		//
-		// ⚠️ Free's cell is `NOT_CARRIED` because there is no monthly amount to split at
-		// all — the figure in the Time Pool row beside it is money the user did not give.
-		// Figures derive from the same helpers `anthersReading` and the generated tables
-		// compose from, so this cannot drift from the model; nothing here is typed.
-		desc: "The part of your monthly amount that stays with Anthers, funding the charitable programs (free access included) and Anthers' own costs. A nonprofit takes no profit, so this is where every kept dollar goes.",
-		cell: (amount) => ({
-			value:
-				amount > 0
-					? columnMoney(Math.max(0, amount - timePoolFor(amount) - cardFeeDisplay(amount)))
-					: NOT_CARRIED,
 		}),
 	},
 	{
@@ -643,16 +671,43 @@ const PERK_ROWS: PerkRow[] = [
 		// "catalog only" rung to render. At-cost top-up from Root onward is ruled (#412
 		// ships it): past the held allowance, more bytes are charged at the provider's
 		// rate with no mark-up, on the renewal.
+		// ⚠️ The money for this row is carried by the breakdown panel's storage segment,
+		// which is the rung's full allowance at the vendor's rate: it is **reserved**, and
+		// whatever of it a month does not use pours into Anthers Support. The cell stays a
+		// size rather than a price, because the allowance is not charged to the user.
 		desc: "Free storage for your creator catalog or your user files together. From the Root Badge onwards, you can also top-up with additional storage at-cost from our provider, if you need an in-between amount or want more than Blossom provides. BYO storage is also available.",
 		cell: (amount) => ({ value: `${storageGibFor(amount)} GiB` }),
 	},
 	{
-		title: "Purchase Preservation",
-		// 🚨 **Built (#414)**: the claim-aware sweep + the keeping election are live — a
-		// purchase the creator withdraws stays servable while you keep it (keptAt), and
-		// the free account's ninety-day window is acted on, with the last-chance notice.
-		desc: "A Work you bought that its creator later withdrew stays in your library to download. After that, keeping a copy is yours to do.",
-		cell: (amount) => ({ value: amount > 0 ? "While Badged" : `${WITHDRAWN_RESCUE_DAYS} days` }),
+		title: "Anthers Support",
+		// ⭐ **The fifth line completes the split** (Parker, 2026-10-25). The Time Pool is
+		// paid by time, the Sticker budget by hand, storage is reserved at cost, the card
+		// fee goes to the processor — and this is what is left, funding the charitable
+		// programs (free access included) and Anthers' own costs with no profit on top.
+		//
+		// ⚠️ Free's cell is `NOT_CARRIED` because there is no monthly amount to split at
+		// all — the figure in the Time Pool row beside it is money the user did not give.
+		// Figures derive from the same helper the breakdown panel and the generated tables
+		// compose from, so this cannot drift from the model; nothing here is typed.
+		desc: "The part of your monthly amount that stays with Anthers, funding the charitable programs (free access included) and Anthers' own costs. A nonprofit takes no profit, so this is where every kept dollar goes — and it is a floor, since storage you don't use pours into it too.",
+		cell: (amount) => ({
+			value: amount > 0 ? columnMoney(supportLineFor(amount)) : NOT_CARRIED,
+		}),
+	},
+	{
+		title: "Card Processing",
+		// ⚠️ **A matrix row, never a "what this rung adds" row.** The fee moves at every
+		// rung by a few cents, so listing it on each card as a gain over the rung below
+		// would be noise in a list whose job is to show what a choice buys. It is here
+		// because the column has to add up rather than because it is a perk.
+		//
+		// 🚨 It is the fee on the Badge's own charge, taken out at cost — not a fee on
+		// anything a user buys from a creator, which is that purchase's own line.
+		matrixOnly: true,
+		desc: "What the card processor charges to move your monthly payment, taken out at cost and paid to the processor rather than kept. It is inside your amount rather than added on top.",
+		cell: (amount) => ({
+			value: amount > 0 ? columnMoney(cardFeeDisplay(amount)) : NOT_CARRIED,
+		}),
 	},
 	{
 		title: "Merch Discount",
@@ -666,16 +721,6 @@ const PERK_ROWS: PerkRow[] = [
 			const key = heldBadgeName(amount);
 			return key === "free" ? { value: NOT_CARRIED } : { value: `${MERCH_BADGE_DISCOUNT[key]}%` };
 		},
-	},
-	{
-		title: "Our Appreciation",
-		// ⭐ **Says the default out loud, because the default is opt-OUT** (Parker,
-		// 2026-09-04). The wiki promises a place "if you want one", and a listed-by-default
-		// page keeps that promise only if the person is told while they are deciding —
-		// otherwise the first they hear of it is seeing their own name. The control is in
-		// account settings and the sentence has to point at it.
-		desc: "A place on the Anthers supporters page, for anyone who has ever supported Anthers. You are listed by name (never by amount), and you can take yourself off at any time in your account settings.",
-		cell: (amount) => ({ value: amount > 0 ? "Yes" : NOT_CARRIED }),
 	},
 ];
 
@@ -702,6 +747,7 @@ export function marginalRows(
 	fundSlice: number | null = null,
 ): PerkRow[] {
 	return PERK_ROWS.filter((row) => {
+		if (row.matrixOnly) return false;
 		const here = row.cell(amount, fundSlice);
 		if (here.value === NOT_CARRIED) return false;
 		return previous === null || !same(here, row.cell(previous, fundSlice));
