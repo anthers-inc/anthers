@@ -1624,6 +1624,7 @@ const subscriptionRoutes = new Hono()
 			.select({
 				poolTotal: sql<string>`COALESCE(SUM(CAST(pool_amount AS numeric)), 0)`,
 				badgeTotal: sql<string>`COALESCE(SUM(CAST(badge_amount AS numeric)), 0)`,
+				stickerTotal: sql<string>`COALESCE(SUM(CAST(sticker_amount AS numeric)), 0)`,
 				subscriberCount: sql<number>`COUNT(DISTINCT subscriber_id)::int`,
 				estimateRows: sql<number>`COUNT(*) FILTER (WHERE settled_at IS NULL)::int`,
 			})
@@ -1632,7 +1633,16 @@ const subscriptionRoutes = new Hono()
 				and(eq(poolDistributions.creatorId, user.id), eq(poolDistributions.billingCycle, cycle)),
 			);
 
-		const total = (Number(earnings.poolTotal) + Number(earnings.badgeTotal)).toFixed(2);
+		// 🚨 **All three columns, or the month is short by whatever was directed by hand.**
+		// `sticker_amount` is part of the pool's own money rather than a fourth source — a
+		// Sticker overrides the Time Pool instead of sitting beside it — but it is its own
+		// column on the row, so a total that added only pool and badge omitted every Sticker
+		// a creator received and still rendered as a plausible number.
+		const total = (
+			Number(earnings.poolTotal) +
+			Number(earnings.stickerTotal) +
+			Number(earnings.badgeTotal)
+		).toFixed(2);
 
 		// The transfer split, beside the month's figures: what settlement has credited
 		// that is still held (no coverage row names it) and what has already moved into
@@ -1680,6 +1690,13 @@ const subscriptionRoutes = new Hono()
 		return c.json({
 			poolTotal: earnings.poolTotal,
 			badgeTotal: earnings.badgeTotal,
+			/**
+			 * What supporters directed at this creator by hand, from the same row's
+			 * `sticker_amount`. Part of the pool's money rather than a fourth source — the pool
+			 * distributes by time only what was not directed — and counted into `total` with the
+			 * other two, which it was not until 2026-10-25.
+			 */
+			stickerTotal: earnings.stickerTotal,
 			total,
 			subscriberCount: Number(earnings.subscriberCount),
 			cycle,

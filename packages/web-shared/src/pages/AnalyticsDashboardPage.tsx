@@ -302,10 +302,14 @@ function RevenueSection({ earnings }: { earnings: CreatorEarnings | null }) {
 		<div className="card bg-base-200 mb-8">
 			<div className="card-body p-4">
 				<h3 className="font-semibold text-sm mb-3">Revenue</h3>
-				<div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+				<div className="grid grid-cols-2 md:grid-cols-5 gap-4">
 					<div>
 						<div className="text-xs text-base-content/50">Pool Income</div>
 						<div className="text-lg font-bold text-success">${earnings.poolTotal}</div>
+					</div>
+					<div>
+						<div className="text-xs text-base-content/50">Sticker Income</div>
+						<div className="text-lg font-bold text-success">${earnings.stickerTotal}</div>
 					</div>
 					<div>
 						<div className="text-xs text-base-content/50">Badge Income</div>

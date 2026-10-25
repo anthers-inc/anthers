@@ -44,6 +44,20 @@ export default function DashboardPage() {
 	const [posts, setPosts] = useState<PostListItem[]>([]);
 	const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
 	const [storage, setStorage] = useState<StorageReading | null>(null);
+	/**
+	 * What this account directed by hand this cycle, and what it had to direct.
+	 *
+	 * ⭐ **Giving is what a reader does on this page, not only what a creator receives**, so
+	 * this is fetched for every account rather than behind creator mode. `null` means the read
+	 * has not answered; a zero allowance means there is nothing to say and the section stays
+	 * away.
+	 */
+	const [directed, setDirected] = useState<{
+		allowance: number;
+		directed: number;
+		remaining: number;
+		cycle: string | null;
+	} | null>(null);
 	/** `null` until the status request answers — see `buildWorklist` for why that matters. */
 	const [payoutsReady, setPayoutsReady] = useState<boolean | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -156,6 +170,18 @@ export default function DashboardPage() {
 				if (live) setPayoutsReady(d.payoutsEnabled === true && d.onboardingComplete === true);
 			})
 			.catch(() => {});
+		void (async () => {
+			const res = await client.api.subscriptions.stickers.allowance.$get();
+			if (!res.ok || !live) return;
+			setDirected(
+				(await res.json()) as {
+					allowance: number;
+					directed: number;
+					remaining: number;
+					cycle: string | null;
+				},
+			);
+		})();
 		client.api.subscriptions.earnings
 			.$get()
 			.then((res) => res.json())
@@ -230,6 +256,21 @@ export default function DashboardPage() {
 							</Link>
 						</div>
 					)}
+				</section>
+			)}
+
+			{/* What this account gave — its own Time Pool, directed by hand. Shown to every
+			    account because giving is a reader's act, and shown before the creator panels
+			    because it is about the month rather than about the catalog. */}
+			{directed !== null && directed.allowance > 0 && (
+				<section className="mb-8 rounded-lg border border-base-300 bg-base-100 p-4">
+					<h2 className="font-semibold">Your Stickers</h2>
+					<p className="mt-1 text-sm text-base-content/70">
+						You directed <span className="font-medium">${directed.directed.toFixed(2)}</span> of
+						your <span className="font-medium">${directed.allowance.toFixed(2)}</span> Time Pool in
+						Stickers this month, leaving{" "}
+						<span className="font-medium">${directed.remaining.toFixed(2)}</span> to direct.
+					</p>
 				</section>
 			)}
 
