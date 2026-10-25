@@ -396,8 +396,8 @@ export function UploadProgress({ upload }: { upload: WorkUpload }) {
  * placeholder itself (the dropper task, 2026-10-17): the act of filling the Work
  * happens where the Work will be, rather than down in the Manage tab's form. The
  * two states it carries are the ones a fileless page can be in — nothing yet, or
- * the upload a closed tab left failed — and an upload in flight quiets it, because
- * the page's own aside carries the progress while it runs.
+ * the upload a closed tab left failed — and an upload in flight gives way to its
+ * own progress, in the box the file is arriving into.
  *
  * Reads the upload store and the stored row, and never contributes a `sourceKey`
  * to a save — the same boundary its sibling `WorkFileSection` holds (see the
@@ -425,10 +425,10 @@ export function WorkFileDropzone({
 	const start = (file: File) => workUploads.start(work.id, file, { kind: "source", type });
 
 	if (upload && isUploading(upload)) {
-		// The page's aside carries the progress and the Manage tab's file section the
-		// cancel — this renders nothing while the same upload is climbing, rather than
-		// repeating it a third time inside the placeholder.
-		return null;
+		// The upload's own progress stands where the file will land, rather than a silent
+		// box: the page has no banner above it any more, and the media manager's Source
+		// tab is the same bar when the manager has the frame.
+		return <UploadProgress upload={upload} />;
 	}
 
 	if (upload?.status === "failed") {
