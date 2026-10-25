@@ -167,7 +167,41 @@ describe("Discovery's recipe can be cooked, not only read", () => {
 		expect(discovery).toContain("<PresetChips");
 		expect(discovery).toContain("aria-pressed={selected}");
 		// A chip sets a recipe; it is not a fourth control, so it writes every stage.
-		expect(discovery).toContain("onPreset={(next) => applyRecipe(next.recipe)}");
+		expect(discovery).toContain("onChoice={(choice) => applyRecipe(choice.recipe)}");
+	});
+
+	it("renders the reader's saved recipes beside the built-ins, built-ins first", () => {
+		// The chip list is composed in the shared module rather than in the page, so the
+		// ordering rule has one home and a server-side test can read it too.
+		expect(discovery).toContain("recipeChoices(saved)");
+		expect(discovery).toContain("savedRecipesFrom(user?.savedRecipes)");
+		expect(discovery).toContain("choiceForRecipe(choices, recipe)");
+	});
+
+	it("offers saving only for a recipe no chip names, and editing only one it saved", () => {
+		// A built-in is the site's recipe; a pencil there would promise a change the reader
+		// cannot make, and a Save chip on a named recipe would make two chips for one recipe.
+		expect(discovery).toContain(
+			"const canSave = activeChoice === null && saved.length < SAVED_RECIPE_LIMIT;",
+		);
+		expect(discovery).toContain("{activeChoice?.savedId && (");
+		expect(discovery).toContain("onEdit(activeChoice.savedId!)");
+	});
+
+	it("saves the list whole, with the opening recipe when saving makes it current", () => {
+		// The chip is the visible result of a save, so a failed write has to keep the dialog
+		// open rather than closing over a change that did not land.
+		expect(discovery).toContain("savedRecipes: next, homeRecipe");
+		expect(discovery).toContain('setRecipeError("That recipe couldn\'t be saved.")');
+		// Reordering is the same whole-list write in a different order, never a position field.
+		expect(discovery).toContain("const without = saved.filter((row) => row.id !== dialog.id)");
+	});
+
+	it("carries the recipe cycle as two rebindable page actions", () => {
+		// The default is a Ctrl chord rather than bare Tab, because Tab is focus traversal.
+		expect(discovery).toContain("matchesChord(event, shortcuts.nextRecipe, apple)");
+		expect(discovery).toContain("matchesChord(event, shortcuts.previousRecipe, apple)");
+		expect(discovery).toContain("if (dialogRef.current?.open) return;");
 	});
 
 	it("writes all three stages when the reader chooses, never only the changed one", () => {

@@ -98,15 +98,19 @@ describe("the stored map", () => {
 		search: "mod+k",
 		filter: "alt+f",
 		sidebar: "ctrl+/",
+		previousRecipe: "ctrl+[",
+		nextRecipe: "ctrl+]",
 		fullscreen: "f",
 		theater: "t",
 	};
 
-	it("accepts all five and canonicalizes them within each action's scope", () => {
+	it("accepts every action and canonicalizes it within its scope", () => {
 		expect(normalizeKeyboardShortcuts(stored)).toEqual({
 			search: "Mod+K",
 			filter: "Alt+F",
 			sidebar: "Ctrl+/",
+			previousRecipe: "Ctrl+[",
+			nextRecipe: "Ctrl+]",
 			fullscreen: "F",
 			theater: "T",
 		});
@@ -122,6 +126,7 @@ describe("the stored map", () => {
 	it("refuses a bare page action and a modified player action that collides with one", () => {
 		expect(normalizeKeyboardShortcuts({ ...stored, search: "K" })).toBeNull();
 		expect(normalizeKeyboardShortcuts({ ...stored, sidebar: "/" })).toBeNull();
+		expect(normalizeKeyboardShortcuts({ ...stored, nextRecipe: "]" })).toBeNull();
 		expect(normalizeKeyboardShortcuts({ ...stored, fullscreen: "Alt+F" })).toBeNull();
 	});
 
@@ -169,6 +174,10 @@ describe("the stored map", () => {
 			}
 		}
 		expect(DEFAULT_KEYBOARD_SHORTCUTS.sidebar).toBe("Ctrl+/");
+		// The recipe cycle is a Ctrl chord, not Mod and not a bare Tab: Tab is focus
+		// traversal, which a page action may never take.
+		expect(DEFAULT_KEYBOARD_SHORTCUTS.previousRecipe).toBe("Ctrl+[");
+		expect(DEFAULT_KEYBOARD_SHORTCUTS.nextRecipe).toBe("Ctrl+]");
 	});
 
 	it("falls back rather than disabling a broken stored chord", () => {
