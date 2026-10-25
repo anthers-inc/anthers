@@ -287,8 +287,13 @@ test("a video Work takes its file on the page and edits while the file uploads",
 	await expect(page).toHaveURL(/\/works\/[^/?]+$/, { timeout: 15_000 });
 	await expect(page.getByRole("group", { name: "View this Work as" })).toBeVisible();
 	await expect(page.locator("h1").filter({ hasText: STEM })).toBeVisible();
-	// The in-flight upload says where it is, and that the tab's life is the upload's.
-	await expect(page.getByRole("status").getByText(/Keep this tab open/)).toBeVisible();
+	// The in-flight upload says where it is — in the box the file is arriving into, since
+	// the page carries no banner above it (2026-10-25) — and that the tab's life is the
+	// upload's.
+	const climbing = page.getByRole("status").filter({ hasText: /It's uploading now/ });
+	await expect(climbing).toBeVisible();
+	await expect(climbing.getByText(/keep this tab open/)).toBeVisible();
+	await expect(climbing.locator("progress")).toBeVisible();
 	// A Work whose file has not arrived cannot be released (`media_missing`), and the
 	// control says so rather than earning the refusal.
 	await page.getByRole("button", { name: "Edit Release" }).click();
