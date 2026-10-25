@@ -163,9 +163,9 @@ export async function syncFromSourceKey(work: WorkRow, prior?: WorkRow): Promise
 	// The replaced set is archived before its rows leave: its files are the version's
 	// originals, so they stay in storage while its rows are replaced.
 	if (rows.some((row) => row.id !== 0)) {
-		await archiveSourceSet(work, rows, uploadedAt);
+		await archiveSourceSet(priorWork, rows, uploadedAt);
 	} else if (prior?.sourceKey && prior.sourceKey !== work.sourceKey) {
-		await archiveLegacySource(work, prior.sourceKey, uploadedAt);
+		await archiveLegacySource(priorWork, prior.sourceKey, uploadedAt);
 	}
 	await db.delete(workSourceFiles).where(eq(workSourceFiles.workId, work.id));
 	// An image row's stored value is the display URL the kind has always stored, and its
@@ -415,6 +415,8 @@ export async function replaceSourceSet(
 				sourceKey: isPaged(work.type) ? inputs[inputs.length - 1].file : inputs[0].file,
 				sourceOriginalKey: "",
 				versionAddedAt: new Date(),
+				// The name belonged to the set being archived; the new version starts unnamed.
+				versionLabel: "",
 			})
 			.where(eq(works.id, work.id));
 	});

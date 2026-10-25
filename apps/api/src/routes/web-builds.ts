@@ -237,7 +237,10 @@ const webBuildRoutes = new Hono()
 					})
 					.where(eq(webBuilds.id, buildId))
 					.returning();
-				await tx.update(works).set({ versionAddedAt: new Date() }).where(eq(works.id, workId));
+				await tx
+					.update(works)
+					.set({ versionAddedAt: new Date(), versionLabel: "" })
+					.where(eq(works.id, workId));
 				return [row];
 			});
 			return c.json({ build: updated }, 200);
@@ -256,7 +259,10 @@ const webBuildRoutes = new Hono()
 		// The first build to complete is the Work's media arriving, so its date is the
 		// current version's.
 		if (newVersion) {
-			await db.update(works).set({ versionAddedAt: new Date() }).where(eq(works.id, workId));
+			await db
+				.update(works)
+				.set({ versionAddedAt: new Date(), versionLabel: "" })
+				.where(eq(works.id, workId));
 		}
 		return c.json({ build: updated }, 200);
 	})

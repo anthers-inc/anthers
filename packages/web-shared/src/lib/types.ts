@@ -618,6 +618,11 @@ export interface Work {
 	 * puts the same date above the archive. Absent for a Work with no media.
 	 */
 	versionAddedAt?: string;
+	/**
+	 * The current version's name, empty when its creator left it unnamed. A reader sees it
+	 * beside the version's date when the version was added after release.
+	 */
+	versionLabel?: string;
 	createdAt?: string;
 	updatedAt?: string;
 	/**
@@ -639,6 +644,8 @@ export interface WorkMediaVersionSummary {
 	id: number;
 	/** When this media was added while it was current. */
 	uploadedAt: string;
+	/** The name the version carried while it was current; empty when left unnamed. */
+	versionLabel: string;
 	/** When the next version replaced it. */
 	archivedAt: string;
 	kind: "source" | "set" | "builds";
@@ -646,6 +653,17 @@ export interface WorkMediaVersionSummary {
 	totalBytes: number;
 	/** Filenames and sizes only — storage keys never reach the client. */
 	files: { filename: string; fileSize: number | null }[];
+}
+
+/**
+ * One version as a reader sees it: the name its creator gave it (empty when unnamed) and
+ * the date it was added. The public history read returns only versions added at or after
+ * the Work was released — the release build is the baseline — and deliberately carries no
+ * file, size or download.
+ */
+export interface WorkVersionEntry {
+	versionLabel: string;
+	addedAt: string;
 }
 
 /**
@@ -677,6 +695,8 @@ export interface WorkInput {
 	/** The alt text of the image an image Work is. Plain text — never HTML. */
 	imageAlt?: string;
 	metadata?: Record<string, unknown>;
+	/** The current media version's name, empty to leave it unnamed. */
+	versionLabel?: string;
 	/**
 	 * What a creator may SET. Deliberately narrower than `Work["visibility"]`:
 	 * `withdrawn` is what deleting a purchased Work does, never something a creator

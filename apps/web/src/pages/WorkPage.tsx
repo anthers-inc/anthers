@@ -10,8 +10,10 @@
  *
  * Three dates exist and only two are ours to assert. **Created** is what the creator says —
  * rendered at exactly the precision they claimed, so a Work back-dated to "2015" reads
- * "2015" and never "1 January 2015". **Released** is when we made it public. The upload
- * date is bookkeeping and is deliberately not shown.
+ * "2015" and never "1 January 2015". **Released** is when we made it public. The upload date
+ * is not a claim of its own; what the page states is maintenance, as the name and date of
+ * every version the Work gained after release — the release build is the baseline, and
+ * anything uploaded while the Work was still being made stays private.
  */
 
 import { consumptionModeFor, isTimePoolEligible } from "@anthers/shared/attention";
@@ -24,7 +26,12 @@ import { usePageTitle } from "@anthers/web-shared/page-title";
 import { workUrl } from "@anthers/web-shared/postUrl";
 import { useLocation, useNavigate, useParams } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import { type AccessResult, isAccessResult, type TranscodingJob } from "@anthers/web-shared/types";
+import {
+	type AccessResult,
+	isAccessResult,
+	type TranscodingJob,
+	type WorkVersionEntry,
+} from "@anthers/web-shared/types";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { usePreviewQuery } from "../components/creator/preview";
@@ -48,6 +55,7 @@ import { WorkViewAsSection } from "../components/work/ViewAs";
 import WorkInfoTabs from "../components/work/WorkInfoTabs";
 import {
 	formatOriginallyReleased,
+	formatVersionDate,
 	isGoods,
 	isWriting,
 	pageHoldsTheMeter,
@@ -68,6 +76,7 @@ import { WorkTagChips } from "../components/work/WorkTags";
 import { reportExternalActivity, useAttentionClaim } from "../lib/attention";
 import { useMeteredBudget } from "../lib/public-access";
 import { useShareToken, withShareToken } from "../lib/share-link";
+import { useWorkVersionHistory } from "../lib/version-history";
 import { RatingMatrixReadOnly } from "../studio/RatingMatrix";
 
 export default function WorkPage() {
@@ -101,6 +110,10 @@ export default function WorkPage() {
 	});
 
 	const [work, setWork] = useState<WorkDetail | null>(null);
+	// The versions a reader may see: names and dates of those added after release. Loaded
+	// beside the Work rather than inside its payload, because only this page renders them
+	// and the history is its own public read.
+	const versionHistory = useWorkVersionHistory(work?.id, work?.versionAddedAt);
 	const [loading, setLoading] = useState(true);
 	usePageTitle(work?.title ?? null);
 
@@ -451,6 +464,7 @@ export default function WorkPage() {
 			    them. The signed-in strip is unchanged. */}
 			<WorkByline
 				work={work}
+				versions={versionHistory}
 				actions={
 					isAuthenticated ? (
 						<div className="flex shrink-0 items-center gap-1">
@@ -475,6 +489,7 @@ export default function WorkPage() {
 				refetch={refetch}
 				access={access}
 				canAccess={canAccess}
+				versions={versionHistory}
 				ownerManage={isOwner ? <WorkViewAsSection /> : undefined}
 			/>
 		</WorkColumn>
@@ -494,6 +509,7 @@ function VisitorRecord({
 	refetch,
 	access,
 	canAccess,
+	versions,
 	ownerManage,
 }: {
 	work: WorkDetail;
@@ -502,6 +518,8 @@ function VisitorRecord({
 	access: AccessResult | null | undefined;
 	/** Whether this user may open the Work — the buyer files' own gate. */
 	canAccess: boolean;
+	/** Versions added after release, oldest first; the Details tab lists them all. */
+	versions: WorkVersionEntry[];
 	/**
 	 * The Manage tab's content for the owner previewing their own Work — the View As
 	 * row, on the tab it lives on in the editor — or nothing for every visitor's page.
@@ -558,6 +576,30 @@ function VisitorRecord({
 												)}
 											</div>
 										</section>
+										{versions.length > 0 && (
+											// Every version added since release, by name and date — the byline
+											// carries the newest, and this is the record. Nothing here opens a
+											// file or reaches an earlier original; those stay in the creator's
+											// media manager.
+											<section className="flex flex-col gap-2">
+												<h3 className={WORK_DETAILS_HEADING_CLASS}>Versions</h3>
+												<ol className="flex flex-col gap-1 text-sm">
+													{versions.map((version) => (
+														<li
+															key={version.addedAt}
+															className="flex flex-wrap items-baseline gap-2"
+														>
+															{version.versionLabel && (
+																<span className="font-medium">{version.versionLabel}</span>
+															)}
+															<time dateTime={version.addedAt} className="text-base-content/60">
+																{formatVersionDate(version.addedAt)}
+															</time>
+														</li>
+													))}
+												</ol>
+											</section>
+										)}
 										<section className="flex flex-col gap-2">
 											<h3 className={WORK_DETAILS_HEADING_CLASS}>Access</h3>
 											{/* The chip names this in the byline strip; the line says the terms. */}

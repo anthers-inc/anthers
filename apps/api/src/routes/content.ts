@@ -304,6 +304,7 @@ import {
 	archiveCurrentMedia,
 	findWorkVersion,
 	listWorkVersions,
+	publicWorkVersions,
 	removeWorkVersion,
 	summarizeVersion,
 	versionFiles,
@@ -1027,6 +1028,12 @@ const workBaseSchema = z
 		// beside the image itself. No sanitizer either — an img attribute, never markup.
 		imageAlt: z.string().max(1000).optional(),
 		metadata: z.record(z.unknown()).optional().default({}),
+		/**
+		 * The name of the CURRENT media version, empty to leave it unnamed. A reader sees it
+		 * beside the version's date once the version was added after the Work was released;
+		 * the archived row carries it into history when a replacement takes over.
+		 */
+		versionLabel: z.string().max(80).optional(),
 
 		// Visibility. `released` is public listing, NOT public access — the gates decide that.
 		visibility: z.enum(["private", "released"]).optional(),
@@ -1682,6 +1689,8 @@ async function serializeWork(
 		...(reviewCounts ? { reviewCounts } : {}),
 		/** When the current media version was added — the date the Work's page shows. */
 		versionAddedAt: item.versionAddedAt,
+		/** The current version's name, or empty when its creator left it unnamed. */
+		versionLabel: item.versionLabel,
 		/** The UPLOAD date. Creator-facing only — the public sees originallyReleased and releasedAt. */
 		createdAt: item.createdAt,
 		updatedAt: item.updatedAt,
@@ -2596,8 +2605,9 @@ async function serializeWorkForUser(
 		sourceUrl: work.sourceUrl,
 		viewCount: work.viewCount,
 		downloadCount: work.downloadCount,
-		/** The current media version's date, for the reader. History stays owner-only. */
+		/** The current media version's date, for the reader. Its name travels beside it. */
 		versionAddedAt: work.versionAddedAt,
+		versionLabel: work.versionLabel,
 		createdAt: work.createdAt,
 		updatedAt: work.updatedAt,
 		// `clientVariants` are an internal packaging detail (storage keys) — never expose.
@@ -4395,13 +4405,27 @@ const contentRoutes = new Hono()
 		return c.json({ url });
 	})
 
-	// ── A Work's archived media versions ─────────────────────────────────────────
+	// ── A Work's media versions ──────────────────────────────────────────────────
 	//
-	// Owner-only in every direction. A version holds the ORIGINAL bytes a replacement
-	// retired; the current media is the Work row, the source set and the build tables, and
-	// nothing here is reachable from a share link or a reader's payload. A non-owner gets
-	// the same 404 as a missing Work, because the existence of an old version is not
+	// One public read and the creator's archive. `GET …/versions/history` carries the name
+	// and date of every version added at or after the Work's first release — maintenance is
+	// a reader's fact, and nothing else about a version is. Everything below it is
+	// owner-only: a version holds the ORIGINAL bytes a replacement retired, the current media
+	// is the Work row, the source set and the build tables, and no file, size, key or
+	// download is reachable from a share link or a reader's payload. A non-owner gets the
+	// same 404 as a missing Work, because the existence of an old version's files is not
 	// something a stranger's request should confirm.
+
+	.get("/works/:id/versions/history", async (c) => {
+		const work = await findWorkRow(c.req.param("id") ?? "");
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		// The same reachability the Work page itself answers: a private Work's history is as
+		// absent as the Work, an Adult Work's is as absent as its title, and a buyer reaches
+		// the withdrawn Work they own.
+		const reach = await workReachability(c, work);
+		if ("refusal" in reach) return reach.refusal;
+		return c.json({ versions: await publicWorkVersions(work) });
+	})
 
 	.get("/works/:id/versions", requireAuth, requireCreator, async (c) => {
 		const work = await findWorkRow(c.req.param("id") ?? "");
@@ -5365,6 +5389,7 @@ const contentRoutes = new Hono()
 						? estimateReadMinutes(bodyHtml || (data.body ?? ""))
 						: null,
 				metadata: data.metadata ?? {},
+				versionLabel: data.versionLabel?.trim() ?? "",
 				visibility: "private",
 				// Declared here or left `unrated` for the editor to ask about. Either way it
 				// is the creator's own word, so the source says so — nothing here can be an
@@ -6467,6 +6492,10 @@ const contentRoutes = new Hono()
 		if (data.embedUrl !== undefined) updates.embedUrl = data.embedUrl;
 		if (data.durationSeconds !== undefined) updates.durationSeconds = data.durationSeconds;
 		if (data.metadata !== undefined) updates.metadata = data.metadata;
+		// The current version's name. Editing it is a correction to what a reader sees only
+		// when that version came after release; a version that is already archived keeps the
+		// name it carried then.
+		if (data.versionLabel !== undefined) updates.versionLabel = data.versionLabel.trim();
 		// A physical Work carries no stream/download flags — delivery is being bought
 		// (the goods-works rule), the Studio hides the switches, and any value a raw
 		// PATCH or a stale client still sends is dropped rather than stored: a shirt
@@ -6569,7 +6598,12 @@ const contentRoutes = new Hono()
 			!hasSourceSet(work.type) &&
 			!!data.sourceKey &&
 			!!(work.sourceKey || work.sourceOriginalKey);
-		if (sourceChanged) updates.versionAddedAt = new Date();
+		if (sourceChanged) {
+			updates.versionAddedAt = new Date();
+			// A new version starts unnamed: the name belonged to the version being retired,
+			// and the archive carries it from there.
+			updates.versionLabel = "";
+		}
 
 		let updated: typeof works.$inferSelect;
 		let archivedKeeps: Set<string> | null = null;
@@ -7136,7 +7170,10 @@ const contentRoutes = new Hono()
 					.insert(assets)
 					.values({ workId: id, ...data })
 					.returning();
-				await tx.update(works).set({ versionAddedAt: new Date() }).where(eq(works.id, id));
+				await tx
+					.update(works)
+					.set({ versionAddedAt: new Date(), versionLabel: "" })
+					.where(eq(works.id, id));
 				return created;
 			});
 			return c.json({ asset }, 201);
@@ -7147,7 +7184,10 @@ const contentRoutes = new Hono()
 			.values({ workId: id, ...data })
 			.returning();
 		if (firstBuild) {
-			await db.update(works).set({ versionAddedAt: new Date() }).where(eq(works.id, id));
+			await db
+				.update(works)
+				.set({ versionAddedAt: new Date(), versionLabel: "" })
+				.where(eq(works.id, id));
 		}
 		return c.json({ asset }, 201);
 	})
