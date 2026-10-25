@@ -69,7 +69,7 @@ export async function upsertPosition(
 		.limit(1);
 	if (!work) return { ok: false, reason: "not_found" };
 	// A creator may keep their own unreleased Work; nobody else can see it to read it —
-	// the same rule `saveWork` applies to the shelf.
+	// the same rule `saveWork` applies to the Library.
 	if (work.visibility === "private" && work.creatorId !== userId) {
 		return { ok: false, reason: "not_released" };
 	}
@@ -92,7 +92,7 @@ export async function upsertPosition(
 
 // The rail's membership rule — strictly past zero, strictly short of the end — is the
 // client's test over these rows, where the rail actually draws: a finished Work belongs
-// to the shelf below the rail, and an never-really-opened one does not belong on it.
+// to the Library below the rail, and an never-really-opened one does not belong on it.
 
 /** A user's position for one Work, or null. Own rows only, by construction. */
 export async function findPosition(

@@ -169,7 +169,7 @@ export default function CreatorProfilePage() {
 	 */
 	const [editingBadgeId, setEditingBadgeId] = useState<number | "new" | null>(null);
 
-	// A profile is a single-creator shelf — the Catalog and posts render as cards that
+	// A profile is a single-creator collection — the Catalog and posts render as cards that
 	// link out to WorkPage, where consumption actually happens and the Time Pool claim
 	// lives. So this records a zero-duration visit (the analytics signal that someone
 	// browsed this creator's catalog) and earns nothing, mirroring ProjectPage's pattern.

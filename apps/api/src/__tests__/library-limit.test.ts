@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A Library past the shelf limit keeps its newest entries on the shelf.
+ * A Library past its limit keeps its newest entries.
  *
- * The shelf read is capped, and the cap once kept the oldest entries — so past it, every new
- * save disappeared from the shelf the moment it was made, with nothing to say why. The newest
+ * The Library read is capped, and the cap once kept the oldest entries — so past it, every new
+ * save disappeared from the Library the moment it was made, with nothing to say why. The newest
  * save is the one somebody opens the Library to find.
  *
- * Projects stand in for the entries because a Project is the cheapest thing a shelf can hold
+ * Projects stand in for the entries because a Project is the cheapest thing the Library can hold
  * and nothing here is about what an entry is.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
@@ -14,7 +14,7 @@ import { db } from "@anthers/db/client";
 import { users } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
-import { SHELF_LIMIT } from "../services/library";
+import { LIBRARY_LIMIT } from "../services/library";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -22,12 +22,12 @@ import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 purgeAccountsCreatedHere();
 
 const id = crypto.randomUUID().slice(0, 8);
-const userName = `shelf_r_${id}`;
+const userName = `library_r_${id}`;
 
 let cookie = "";
 let userId = 0;
 
-async function shelf(): Promise<{
+async function library(): Promise<{
 	items: { sortOrder: number }[];
 	truncated: boolean;
 	limit: number;
@@ -48,41 +48,41 @@ beforeAll(async () => {
 		.where(eq(users.email, `${userName}@example.com`));
 	userId = row.id;
 
-	// One more entry than the shelf holds, saved in order 1..N.
+	// One more entry than the Library holds, saved in order 1..N.
 	await db.execute(sql`
 		INSERT INTO projects (creator_id, slug, title)
-		SELECT ${userId}, 'shelf-' || ${id} || '-' || n, 'Shelf ' || n
-		FROM generate_series(1, ${SHELF_LIMIT + 1}) AS n
+		SELECT ${userId}, 'library-' || ${id} || '-' || n, 'Library ' || n
+		FROM generate_series(1, ${LIBRARY_LIMIT + 1}) AS n
 	`);
 	await db.execute(sql`
 		INSERT INTO library_items (user_id, project_id, sort_order)
 		SELECT ${userId}, p.id, split_part(p.slug, '-', 3)::int
-		FROM projects p WHERE p.slug LIKE ${`shelf-${id}-%`}
+		FROM projects p WHERE p.slug LIKE ${`library-${id}-%`}
 	`);
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
 	await db.execute(sql`DELETE FROM library_items WHERE user_id = ${userId}`);
-	await db.execute(sql`DELETE FROM projects WHERE slug LIKE ${`shelf-${id}-%`}`);
+	await db.execute(sql`DELETE FROM projects WHERE slug LIKE ${`library-${id}-%`}`);
 });
 
-describe("a shelf past the limit", () => {
+describe("a Library past the limit", () => {
 	it("keeps the newest entries, in saved order, and says it was cut", async () => {
-		const { items, truncated, limit } = await shelf();
+		const { items, truncated, limit } = await library();
 		expect(truncated).toBe(true);
-		expect(limit).toBe(SHELF_LIMIT);
-		expect(items).toHaveLength(SHELF_LIMIT);
-		// The oldest save is the one left out; the newest is on the shelf, last.
+		expect(limit).toBe(LIBRARY_LIMIT);
+		expect(items).toHaveLength(LIBRARY_LIMIT);
+		// The oldest save is the one left out; the newest is in the Library, last.
 		expect(items[0].sortOrder).toBe(2);
-		expect(items.at(-1)?.sortOrder).toBe(SHELF_LIMIT + 1);
+		expect(items.at(-1)?.sortOrder).toBe(LIBRARY_LIMIT + 1);
 	});
 
-	it("says nothing was cut once the shelf fits", async () => {
+	it("says nothing was cut once the Library fits", async () => {
 		await db.execute(
-			sql`DELETE FROM library_items WHERE user_id = ${userId} AND sort_order = ${SHELF_LIMIT + 1}`,
+			sql`DELETE FROM library_items WHERE user_id = ${userId} AND sort_order = ${LIBRARY_LIMIT + 1}`,
 		);
-		const { items, truncated } = await shelf();
+		const { items, truncated } = await library();
 		expect(truncated).toBe(false);
-		expect(items).toHaveLength(SHELF_LIMIT);
+		expect(items).toHaveLength(LIBRARY_LIMIT);
 	});
 });

@@ -83,7 +83,7 @@ test("Tab cycles the type filter", async ({ page }) => {
 	await expect(listbox(page).getByText("Keyboard Shortcuts")).toBeVisible();
 });
 
-test("Ctrl+F on the Library filters the shelf and Escape restores it", async ({ page }) => {
+test("Ctrl+F on the Library filters it and Escape restores it", async ({ page }) => {
 	await page.goto("/library");
 	// The view declares itself filterable when it mounts, not when the header does; the
 	// page is lazy, so the heading is the signal that there is a view to filter.

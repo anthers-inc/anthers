@@ -8,7 +8,7 @@
  * from a person saving one is a difference nobody would notice until it mattered.
  *
  * 🚨 **Nothing here grants access.** `resolveAccess` does not read this table and must
- * never learn to: a shelf entry is curation, and if saving unlocked anything then "Save"
+ * never learn to: a Library entry is curation, and if saving unlocked anything then "Save"
  * would be a free unlock button. Entitlement lives in `purchases`. The full reasoning is
  * on the table itself in `packages/db/src/schema/content.ts`.
  */
@@ -21,11 +21,11 @@ import { preserveCurrentVersion } from "./preservation.js";
 export type SaveRefusal = "not_found" | "not_released";
 
 /**
- * Whether this user's shelf entry for a Work is **permanent** — i.e. they bought it.
+ * Whether this user's Library entry for a Work is **permanent** — i.e. they bought it.
  *
  * Derived from `purchases` on every call rather than stamped on the row, which is the
  * whole reason there is no `source` column. A refund flips the purchase out of
- * `completed`, and the shelf entry becomes removable in the same instant, with no sweep
+ * `completed`, and the Library entry becomes removable in the same instant, with no sweep
  * to run and no second copy of the fact to drift.
  */
 export async function isPermanent(userId: number, workId: number): Promise<boolean> {
@@ -43,7 +43,7 @@ export async function isPermanent(userId: number, workId: number): Promise<boole
 	return !!row;
 }
 
-/** Every Work id on this user's shelf that a completed purchase makes permanent. */
+/** Every Work id in this user's Library that a completed purchase makes permanent. */
 export async function permanentWorkIds(userId: number): Promise<Set<number>> {
 	const rows = await db
 		.selectDistinct({ workId: purchases.workId })
@@ -65,7 +65,7 @@ export async function permanentWorkIds(userId: number): Promise<Set<number>> {
  * kind people press again when they are not sure it worked.
  *
  * A **released** Work may be saved whether or not the user can currently open it. That is
- * deliberate: a shelf holding a gated Work is a coherent thing (it shows locked, with the
+ * deliberate: a Library holding a gated Work is a coherent thing (it shows locked, with the
  * route to unlock), and refusing would make Save mean "prove you own this" rather than
  * "keep this". A `private` Work is refused, because it is nobody else's business yet.
  */
@@ -134,7 +134,7 @@ export async function saveProject(
  * ⭐ **A keep is a keep** (Parker, 2026-10-11): Save is the one action that puts something
  * in your Library, and "bookmarked" retired as a second verb and a second store. A post is
  * an announcement rather than a Work, but a person who wants to keep one is doing exactly
- * what a shelf is for, so it rides `library_items` beside Works and Projects.
+ * what a Library is for, so it rides `library_items` beside Works and Projects.
  *
  * It grants nothing, like every other save — a post has no gate of its own to grant.
  */
@@ -161,11 +161,11 @@ export async function savePost(
 }
 
 /**
- * Called when a purchase completes: what you bought is on your shelf, permanently.
+ * Called when a purchase completes: what you bought is in your Library, permanently.
  *
  * 🚨 The insert is what makes the Library show a purchase at all — but it is **not** what
  * makes the purchase permanent. Permanence is the `purchases` row, read back by
- * `isPermanent`, so a shelf entry that somehow failed to be written here does not cost the
+ * `isPermanent`, so a Library entry that somehow failed to be written here does not cost the
  * buyer their entitlement, and one written by mistake does not grant one.
  */
 export async function saveOnPurchase(purchase: {
@@ -173,13 +173,13 @@ export async function saveOnPurchase(purchase: {
 	workId: number | null;
 	type: string;
 }): Promise<void> {
-	// A support top-up bought no Work; a deleted buyer has no shelf. Both are ordinary.
+	// A support top-up bought no Work; a deleted buyer has no Library. Both are ordinary.
 	if (purchase.type === "seeds" || purchase.buyerId == null || purchase.workId == null) return;
 	await db
 		.insert(libraryItems)
 		.values({ userId: purchase.buyerId, workId: purchase.workId })
 		.onConflictDoNothing();
-	// A purchase saves itself to the shelf, so **every sold Work is in the preservation
+	// A purchase saves itself to the Library, so **every sold Work is in the preservation
 	// program** without the buyer doing anything. That is what lets the promise be
 	// "a purchase outlives its creator" rather than "a purchase outlives its creator if
 	// you held a Badge and remembered to elect".
@@ -187,10 +187,10 @@ export async function saveOnPurchase(purchase: {
 }
 
 /**
- * Remove a shelf entry.
+ * Remove a Library entry.
  *
  * Refuses a purchased Work — Parker's call, and the reasoning is about recovery rather
- * than about ownership: somebody who tidies a purchase off their shelf and cannot work out
+ * than about ownership: somebody who tidies a purchase out of their Library and cannot work out
  * how to get it back has effectively lost the thing they paid for. Hiding is the control
  * they actually want, it is reversible from a toggle in the same view, and it cannot lose
  * anything.
@@ -224,7 +224,7 @@ export async function removeItem(
 	return { ok: true, subject };
 }
 
-/** Tidy an entry off the shelf, or bring it back. Never loses anything. */
+/** Tidy an entry out of the Library, or bring it back. Never loses anything. */
 export async function setHidden(userId: number, itemId: number, hidden: boolean): Promise<boolean> {
 	const [row] = await db
 		.update(libraryItems)
@@ -235,15 +235,15 @@ export async function setHidden(userId: number, itemId: number, hidden: boolean)
 }
 
 /**
- * The most shelf entries one read returns.
+ * The most Library entries one read returns.
  *
  * ⚠️ **Past this, the OLDEST entries are the ones left out**, because the newest save is the one
- * somebody is looking for when they open the shelf, and the response says it was cut short so
+ * somebody is looking for when they open the Library, and the response says it was cut short so
  * the page can say so. Every entry beyond it still exists and still counts as saved.
  */
-export const SHELF_LIMIT = 500;
+export const LIBRARY_LIMIT = 500;
 
-/** Next position on the shelf — newest last, matching the order things were saved. */
+/** Next position in the Library — newest last, matching the order things were saved. */
 async function nextSortOrder(userId: number): Promise<number> {
 	const [row] = await db
 		.select({ next: sql<number>`coalesce(max(${libraryItems.sortOrder}), 0) + 1` })

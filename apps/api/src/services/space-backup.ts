@@ -399,7 +399,7 @@ export async function backupById(id: number) {
  * The retention policy: thirty daily captures, then the newest of each month for a year.
  *
  * ⚠️ **The window is a product promise rather than a storage decision.** A reader's progress
- * and shelf state are theirs, and a month of daily backups is the depth a support request can
+ * and Library state are theirs, and a month of daily backups is the depth a support request can
  * reasonably reach back into; the monthly tail is what covers "I lost my Library last
  * quarter". A gated media space would want a shorter window because the bytes are large, and
  * that belongs to that space's own task.

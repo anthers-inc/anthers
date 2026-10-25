@@ -733,7 +733,7 @@ async function seedMediaFor(spec: MediaFixtureWork, creator: number): Promise<vo
 	}
 }
 
-/** Put the music Works on the album's shelf, in track order. */
+/** Put the music Works in the album's list, in track order. */
 async function ensureProject(creator: number): Promise<void> {
 	let [project] = await db
 		.select({ id: projects.id })

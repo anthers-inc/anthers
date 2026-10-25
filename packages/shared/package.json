@@ -49,7 +49,7 @@
 		"./us-states": "./src/us-states.ts",
 		"./compliance-calendar": "./src/compliance-calendar.ts",
 		"./resource-thresholds": "./src/resource-thresholds.ts",
-		"./project-shelf-sort": "./src/project-shelf-sort.ts",
+		"./project-sort": "./src/project-sort.ts",
 		"./discovery": "./src/discovery.ts",
 		"./growth": "./src/growth.ts",
 		"./time-pool-fund": "./src/time-pool-fund.ts",

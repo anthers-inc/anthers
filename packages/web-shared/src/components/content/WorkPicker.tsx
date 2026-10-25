@@ -9,13 +9,13 @@
  * removed — a post links no Work of its own.)
  *
  * The grid it replaced could pick strictly one Work per pass, with no order and no
- * dates — a creator shelving an album's twelve tracks walked the modal twelve times
+ * dates — a creator adding an album's twelve tracks walked the modal twelve times
  * (Parker, 2026-10-17). Now: rows click to toggle, the footer's button adds everything
- * ticked, and an already-shelved Work is excluded by the caller. Like its caller, a
+ * ticked, and a Work already in the Project is excluded by the caller. Like its caller, a
  * picker picks and nothing else — no create path; making a Work is `/studio/works/new`'s
- * job, and realizing mid-shelf that one does not exist is a reason to go and come back.
+ * job, and realizing mid-arrangement that one does not exist is a reason to go and come back.
  *
- * Columns follow the Studio's Works table, narrowed to what a shelf act needs:
+ * Columns follow the Studio's Works table, narrowed to what adding a member needs:
  * thumbnail · title · work type · status · the two dates in one column (the release
  * date, with the original release date above it when the Work names one).
  */
@@ -29,7 +29,7 @@ interface WorkPickerProps {
 	/** Everything selected, in the order it was ticked — the order the adds are sent in. */
 	onSelect: (works: Work[]) => void;
 	onClose: () => void;
-	/** Works already on the shelf, shown nowhere: picking one again is an error today. */
+	/** Works already in the Project, shown nowhere: picking one again is an error today. */
 	excludeIds?: number[];
 }
 
@@ -110,7 +110,7 @@ export default function WorkPicker({ onSelect, onClose, excludeIds = [] }: WorkP
 							{items.length === 0
 								? "Your Catalog is empty. Make a Work and it shows up here."
 								: catalog.length === 0
-									? "Every Work you have is already on this shelf."
+									? "Every Work you have is already in this Project."
 									: "No Works of this type. Try another filter."}
 						</p>
 					) : (
@@ -193,7 +193,7 @@ export default function WorkPicker({ onSelect, onClose, excludeIds = [] }: WorkP
 												) : (
 													<span
 														className="badge badge-sm badge-neutral"
-														title="Private — nobody but you sees this on the shelf"
+														title="Private — nobody but you sees this in the Project"
 													>
 														Private
 													</span>

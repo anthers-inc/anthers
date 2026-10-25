@@ -3,13 +3,13 @@
  * Post picker: a modal TABLE of the creator's own posts, searchable, selected a row at
  * a time and added in one act.
  *
- * The counterpart of `WorkPicker` on a Project's posts shelf — the same multi-select
+ * The counterpart of `WorkPicker` on a Project's posts list — the same multi-select
  * contract (tick rows, one footer act), narrowed to what a post is: no type, no gate,
  * no delivery, so a search box is what finds the devlog they mean and the table's other
  * columns are state (status) and time.
  *
  * ⚠️ **No "new post" affordance here, and never one.** A Work can be made in thirty
- * seconds from a file, so realizing mid-shelf that one does not exist yet is a real
+ * seconds from a file, so realizing mid-arrangement that one does not exist yet is a real
  * interruption worth absorbing. A post is prose — writing one is the task, not a step
  * inside another one — and this picker retired every create path long before the Work
  * picker agreed (see its own docblock): a picker picks, and making the thing is always
@@ -21,7 +21,7 @@ import type { PostListItem } from "../../lib/types";
 import LoadingSpinner from "../ui/LoadingSpinner";
 
 interface PostPickerProps {
-	/** Ids already on the shelf, so they are offered nowhere: a repeat add errors today. */
+	/** Ids already in the Project, so they are offered nowhere: a repeat add errors today. */
 	excludeIds: number[];
 	/** Everything selected, in the order it was ticked — the order the adds are sent in. */
 	onSelect: (posts: PostListItem[]) => void;
@@ -117,7 +117,7 @@ export default function PostPicker({ excludeIds, onSelect, onClose }: PostPicker
 							{posts.length === 0
 								? "You haven't written any posts yet."
 								: available.length === 0
-									? "Every post you have written is already on this shelf."
+									? "Every post you have written is already in this Project."
 									: "No posts match that."}
 						</p>
 					) : (

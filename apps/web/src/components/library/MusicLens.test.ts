@@ -3,7 +3,7 @@
 // The music lens's two layers in pure form: a saved Project is one release, saved tracks
 // group under the Project they came from, and a track with no Project stands as a
 // one-track release. The rule this pins is that the Library opens only what is on the
-// shelf — a release reached through saved tracks carries exactly those tracks — while a
+// Library — a release reached through saved tracks carries exactly those tracks — while a
 // saved Project carries the whole record.
 import { describe, expect, test } from "bun:test";
 import type { Work, WorkRelease } from "@anthers/web-shared/types";
@@ -97,7 +97,7 @@ describe("musicReleases", () => {
 		expect(releases[0].tracks.map((track) => track.title)).toEqual(["Track 2"]);
 	});
 
-	test("two saved tracks from the same Project share one release, in shelf order", () => {
+	test("two saved tracks from the same Project share one release, in Library order", () => {
 		const releases = musicReleases(
 			[
 				workItem(12, "music", "Track 2", [release(1, "The Record", 4)]),
@@ -165,7 +165,7 @@ describe("musicReleases", () => {
 		});
 	});
 
-	test("a Project's saved track can arrive before its own shelf entry and is upgraded", () => {
+	test("a Project's saved track can arrive before its own Library entry and is upgraded", () => {
 		const releases = musicReleases(
 			[
 				workItem(11, "music", "Track 1", [release(1, "The Record", 3)]),

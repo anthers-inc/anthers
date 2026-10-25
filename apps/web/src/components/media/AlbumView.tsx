@@ -8,7 +8,7 @@
  *
  * **The album is not a new entity.** It is a Project of ordered audio Works: `project_items`
  * already carries `sortOrder`, which is the whole artifact of an EP. So this component
- * takes tracks and a title, and the same shelf that renders here renders in the library
+ * takes tracks and a title, and the same list that renders here renders in the Library's music
  * lens — which is the point of building the two together rather than in sequence.
  *
  * ⚠️ Playing the album starts the queue from the **first playable** track, not from index

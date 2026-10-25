@@ -2841,10 +2841,10 @@ const paymentRoutes = new Hono()
 				.where(and(eq(purchases.stripePaymentIntentId, pi.id), eq(purchases.status, "pending")))
 				.returning();
 			for (const completed of completedRows) {
-				// What you bought lands on your shelf, and stays there. This is the ONLY
+				// What you bought lands in your Library, and stays there. This is the ONLY
 				// place a purchase completes, which is why the hook belongs here rather
 				// than at checkout: a card that never clears must not put anything in a
-				// Library. Note the shelf entry is a *consequence* of the purchase and
+				// Library. Note the Library entry is a *consequence* of the purchase and
 				// never the proof of it — `services/library.ts` derives permanence by
 				// reading `purchases` back, so a failure here costs a row on a page, not
 				// an entitlement.

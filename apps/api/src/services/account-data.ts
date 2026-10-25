@@ -192,7 +192,7 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 			// already visible to you as a count. Ids only — no names, no emails.
 			followers: followerRows.map((f) => ({ followerId: f.followerId, createdAt: f.createdAt })),
 			blocked: blockRows.map((b) => ({ blockedId: b.blockedId, createdAt: b.createdAt })),
-			// What the person kept — Works, Projects and posts in one shelf.
+			// What the person kept — Works, Projects and posts in one Library.
 			library: libraryRows,
 		},
 

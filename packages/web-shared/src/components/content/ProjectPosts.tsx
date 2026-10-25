@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The posts on a Project's shelf — an ordered list the owner arranges by dragging, with
- * the same sort modes and the same multi-select picker the Works shelf carries (Parker,
- * 2026-10-17: both shelves, same treatment, this pass).
+ * The posts on a Project page — an ordered list the owner arranges by dragging, with
+ * the same sort modes and the same multi-select picker the Works list carries (Parker,
+ * 2026-10-17: both lists, same treatment, this pass).
  *
  * ⚠️ The endpoints for this were implemented, owner-checked, and called from nowhere.
  * `POST /projects/:slug/posts`, its delete and its reorder all existed; the public Project
@@ -13,28 +13,28 @@
  * reads it. Membership was therefore set at birth or never, could not be removed, and could
  * not be ordered.
  *
- * Lives on the Project's own page now, beside the Works shelf, and persists each change
+ * Lives on the Project's own page now, beside the Works list, and persists each change
  * on its own endpoint rather than with any form: a creator arranging twelve devlogs
  * should not lose them to a failed save on an unrelated field.
  *
  * **A Project's saved sort governs what readers see** (Parker, 2026-10-19, replacing the
- * works shelf's 2026-10-17 "Manual is the only real order" ruling, binding here):
+ * works list's 2026-10-17 "Manual is the only real order" ruling, binding here):
  * changing a dropdown saves the mode on the Project row, and the API serializes the
  * members in that order for every reader. Manual remains the default and the stored drag
  * order; a non-manual mode never writes it. A post has no original release date, so this
- * shelf's dated key is its publish date — the field the Project serializer carries for a
+ * list's dated key is its publish date — the field the Project serializer carries for a
  * post — and the Release Date mode reads that. The picker it opens is multi-select.
  *
- * A Project is a shelf: putting a post on it changes nothing about the post, and taking
+ * A Project groups its posts: putting one here changes nothing about the post, and taking
  * it off never deletes it — it stays on the creator's profile and in their Posts tab.
  */
 
 import {
-	moveShelfItem,
-	type ShelfSortDirection,
-	type ShelfSortMode,
-	sortShelf,
-} from "@anthers/shared/project-shelf-sort";
+	moveProjectItem,
+	type ProjectSortDirection,
+	type ProjectSortMode,
+	sortProjectItems,
+} from "@anthers/shared/project-sort";
 import { Bars3Icon, PlusIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { postUrl } from "../../lib/postUrl";
@@ -44,8 +44,8 @@ import type { PostListItem, Project, ProjectPost } from "../../lib/types";
 import LoadingSpinner from "../ui/LoadingSpinner";
 import PostPicker from "./PostPicker";
 
-/** A post shelf reads no original date; its modes are the works', minus that one. */
-export const POST_SHELF_SORT_OPTIONS: Array<{ mode: ShelfSortMode; label: string }> = [
+/** A post list reads no original date; its modes are the works', minus that one. */
+export const PROJECT_POST_SORT_OPTIONS: Array<{ mode: ProjectSortMode; label: string }> = [
 	{ mode: "manual", label: "Manual" },
 	{ mode: "released", label: "Release Date" },
 	{ mode: "title", label: "Alphabetical" },
@@ -57,8 +57,8 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 	const [picking, setPicking] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [sortMode, setSortMode] = useState<ShelfSortMode>("manual");
-	const [sortDirection, setSortDirection] = useState<ShelfSortDirection>("asc");
+	const [sortMode, setSortMode] = useState<ProjectSortMode>("manual");
+	const [sortDirection, setSortDirection] = useState<ProjectSortDirection>("asc");
 	/** Where the drag started, in the stored list's own indices; cleared on every end. */
 	const dragFrom = useRef<number | null>(null);
 
@@ -70,7 +70,7 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 				if (!res.ok) return;
 				const { project } = (await res.json()) as unknown as { project: Project };
 				if (!live) return;
-				// The shelf's state is the STORED order (see the Works shelf); the detail
+				// The list's state is the STORED order (see the Works list); the detail
 				// response arrives in the Project's saved reading order.
 				setPosts([...(project.posts ?? [])].sort((a, b) => a.sortOrder - b.sortOrder));
 				setSortMode(project.postsSortMode ?? "manual");
@@ -85,7 +85,7 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 
 	/** Save one sort setting on the Project — optimistic, reverted on failure. */
 	const saveSort = async (
-		fields: { postsSortMode?: ShelfSortMode; postsSortDirection?: ShelfSortDirection },
+		fields: { postsSortMode?: ProjectSortMode; postsSortDirection?: ProjectSortDirection },
 		revert: () => void,
 	) => {
 		setError(null);
@@ -154,10 +154,10 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 	};
 
 	/**
-	 * Persist one drag as the shelf's whole order — optimistic, reverted on failure, and
-	 * sending every id, because the server takes the complete order (see the Works shelf).
+	 * Persist one drag as the list's whole order — optimistic, reverted on failure, and
+	 * sending every id, because the server takes the complete order (see the Works list).
 	 *
-	 * ⚠️ **`$patch` here, `$post` on the Works shelf.** The two reorder routes were written at
+	 * ⚠️ **`$patch` here, `$post` on the Works list.** The two reorder routes were written at
 	 * different times and disagree about the verb. Matching the route that exists rather than
 	 * changing it: the inconsistency costs one comment, and renaming a live endpoint to tidy it
 	 * would cost a deploy where one side of the app is briefly wrong.
@@ -165,7 +165,7 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 	const move = async (from: number, to: number) => {
 		if (to === from) return;
 		const before = posts;
-		const next = moveShelfItem(posts, from, to).map((p, i) => ({ ...p, sortOrder: i }));
+		const next = moveProjectItem(posts, from, to).map((p, i) => ({ ...p, sortOrder: i }));
 		setPosts(next);
 		setBusy(true);
 		setError(null);
@@ -195,7 +195,7 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 	}
 
 	const manual = sortMode === "manual";
-	const displayed = sortShelf(posts, sortMode, sortDirection);
+	const displayed = sortProjectItems(posts, sortMode, sortDirection);
 
 	return (
 		<div className="space-y-3">
@@ -213,13 +213,13 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 						className="select select-bordered select-sm"
 						value={sortMode}
 						onChange={(e) => {
-							const next = e.target.value as ShelfSortMode;
+							const next = e.target.value as ProjectSortMode;
 							const before = sortMode;
 							setSortMode(next);
 							void saveSort({ postsSortMode: next }, () => setSortMode(before));
 						}}
 					>
-						{POST_SHELF_SORT_OPTIONS.map((opt) => (
+						{PROJECT_POST_SORT_OPTIONS.map((opt) => (
 							<option key={opt.mode} value={opt.mode}>
 								{opt.label}
 							</option>
@@ -231,7 +231,7 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 						value={sortDirection}
 						disabled={manual}
 						onChange={(e) => {
-							const next = e.target.value as ShelfSortDirection;
+							const next = e.target.value as ProjectSortDirection;
 							const before = sortDirection;
 							setSortDirection(next);
 							void saveSort({ postsSortDirection: next }, () => setSortDirection(before));
@@ -329,7 +329,7 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 
 			<p className="text-xs text-base-content/50">
 				Changes here save immediately, separately from the rest of this form. Removing a post from
-				this shelf never deletes it.
+				this list never deletes it.
 			</p>
 
 			{picking && (

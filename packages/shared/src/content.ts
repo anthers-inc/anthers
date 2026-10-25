@@ -232,7 +232,7 @@ export const MAX_PREVIEW_MEDIA = 12;
  * every written Work stands on (Parker, 2026-09-20): the *reading* experience is
  * different enough for `comic` to be its own Work type, but the shelf metaphor for
  * anything you read is the same, so `text`, `ebook` and `comic` keep one lens. Anything
- * not in this list stays on the lensless shelf; a lens is a view, never a container.
+ * not in this list stays in the lensless Library; a lens is a view, never a container.
  */
 export const BOOKSHELF_WORK_TYPES = [
 	"text",

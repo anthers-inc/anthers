@@ -226,7 +226,7 @@ describe("reading positions", () => {
 		expect(gated.status).toBe(403);
 
 		// An unreleased Work is nobody else's to position but its creator's — invisible
-		// to the caller, and answered as invisible (the same 404 the shelf's save names).
+		// to the caller, and answered as invisible (the same 404 the Library's save names).
 		const priv = await put(privateWorkId, { progress: 0.5, position: {} }, aAuth);
 		expect(priv.status).toBe(404);
 	});

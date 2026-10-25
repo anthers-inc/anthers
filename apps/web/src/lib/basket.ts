@@ -140,7 +140,7 @@ interface ServerBasket {
 
 // ── The server-backed store (module-level, like `lib/library.ts`) ────────────
 //
-// A module store rather than per-component state, for the reasons the shelf uses one: a
+// A module store rather than per-component state, for the reasons the Library uses one: a
 // page can hold many subscribers (badge, page, buttons) and none should refetch; and a
 // add from one surface must move the badge on another, within one tab. Cross-TAB sync is
 // the one thing this mode does not do that scratch mode did — a second tab cannot be told
@@ -173,7 +173,7 @@ async function loadServer(): Promise<void> {
 
 /**
  * Refresh the server basket NOW, deduplicated — every caller in one tick shares the fetch,
- * the way `refreshShelf` works.
+ * the way `refreshLibrary` works.
  */
 export function refreshServerBasket(): void {
 	if (loadInFlight) return;

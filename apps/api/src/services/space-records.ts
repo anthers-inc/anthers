@@ -30,7 +30,7 @@ export const USER_SPACE_COLLECTIONS = {
 	receipt: "org.anthers.receipt",
 } as const;
 
-/** What a shelf entry points at. The one-of rule is enforced by the table's shape. */
+/** What a Library entry points at. The one-of rule is enforced by the table's shape. */
 export type LibrarySubjectKind = "work" | "project" | "post";
 
 export interface LibrarySubject {
@@ -69,10 +69,10 @@ export interface LibraryItemState {
 }
 
 /**
- * The record key for a shelf entry, derived from the subject so a re-save lands on the same
+ * The record key for a Library entry, derived from the subject so a re-save lands on the same
  * record rather than creating a second one.
  *
- * ⚠️ **The row id is deliberately not the key.** `library_items.id` changes if the shelf is
+ * ⚠️ **The row id is deliberately not the key.** `library_items.id` changes if the Library is
  * ever rebuilt from the space, which would make every rebuilt entry a new record; the subject
  * is the stable identity, and a reader keeps one entry per subject.
  */
@@ -80,7 +80,7 @@ export function libraryItemRkey(subject: Pick<LibrarySubject, "kind" | "id">): s
 	return `${subject.kind}-${subject.id}`;
 }
 
-/** Build the record for a shelf entry. */
+/** Build the record for a Library entry. */
 export function libraryItemRecord(state: LibraryItemState): LibraryItemRecord {
 	return {
 		$type: USER_SPACE_COLLECTIONS.libraryItem,
@@ -95,7 +95,7 @@ export function libraryItemRecord(state: LibraryItemState): LibraryItemRecord {
 	};
 }
 
-/** What a read-back produced, or why it could not be read as a shelf entry. */
+/** What a read-back produced, or why it could not be read as a Library entry. */
 export type ParsedLibraryItem = { item: LibraryItemState } | { problem: string };
 const SUBJECT_KINDS = new Set<LibrarySubjectKind>(["work", "project", "post"]);
 
@@ -104,7 +104,7 @@ const SUBJECT_KINDS = new Set<LibrarySubjectKind>(["work", "project", "post"]);
  *
  * 🚨 **Malformed is a result, not an exception.** A record in the space may have been written
  * by a newer build or by the reader's own app, and a projection that threw on the first one
- * would stop rebuilding the whole shelf. What it may never do is guess: an unknown subject
+ * would stop rebuilding the whole Library. What it may never do is guess: an unknown subject
  * kind, a non-integer id or a missing `savedAt` is refused by name so the report says which
  * record to look at.
  */

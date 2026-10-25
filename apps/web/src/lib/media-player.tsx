@@ -86,7 +86,7 @@ interface MediaPlayerContextValue {
 	 */
 	allowanceSpent: boolean;
 
-	/** Play a list of tracks from `startIndex` — an album, a shelf, a single track.
+	/** Play a list of tracks from `startIndex` — an album, a collection, a single track.
 	 *  `startAt` is where to open (the `?t` a clicked timestamp landed with); it wins
 	 *  over a spoken Work's remembered position and is consumed by the src effect. */
 	playTracks: (

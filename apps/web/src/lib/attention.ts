@@ -514,7 +514,7 @@ export function useAttentionClaim(params: {
 /**
  * Record a one-shot, zero-duration visit — an analytics signal that earns no
  * Time Pool minutes. This is what non-content surfaces use: a project page is a
- * shelf, not a work, so it registers the visit and earns nothing.
+ * grouping, not a work, so it registers the visit and earns nothing.
  */
 export function useReportVisit(params: { creatorId: number | null; workId?: number | null }) {
 	const { creatorId, workId = null } = params;

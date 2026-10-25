@@ -7,7 +7,7 @@
  * place.
  *
  * Flipping it is a view change: the dial re-scopes what the lens draws on and never moves
- * anything in or out of a shelf or a feed.
+ * anything in or out of the Library or a feed.
  */
 export default function MusicDial({
 	includeSpoken,

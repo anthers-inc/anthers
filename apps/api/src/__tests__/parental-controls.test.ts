@@ -9,7 +9,7 @@
  * session, skip the UI, and try to turn the lock off.
  *
  * ⚠️ **Three enforcement points, none of them redundant.** The resolver refuses a blocked
- * creator or medium; a SQL condition keeps them out of listings, because a shelf of cards a
+ * creator or medium; a SQL condition keeps them out of listings, because a grid of cards a
  * child cannot click is an advertisement rather than a protection; and a delivery gate refuses
  * once a household's time is spent. Sabotage any one and a different promise breaks.
  */
@@ -378,7 +378,7 @@ describe("Parental controls", () => {
 		expect(work.access.reason).toBe("blocked_creator");
 		expect(work.bodyHtml).toBe("");
 
-		// ...and it is not on the shelf either. Both are needed: the resolver stops it being
+		// ...and it is not in the Library either. Both are needed: the resolver stops it being
 		// opened, this stops it being advertised.
 		const catalog = await (
 			await req(`/api/content/catalog/${await handleOf(creatorName)}`, {

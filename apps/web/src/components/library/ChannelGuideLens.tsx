@@ -29,13 +29,13 @@
  * program: the node immediately toward the newer end is marked *Next* and the current one
  * *On now*, so the step is something a reader sees before they read the arrow.
  *
- * 🚨 **A lens is a view, never a container**, and nothing here mutates the shelf: no
+ * 🚨 **A lens is a view, never a container**, and nothing here mutates the Library: no
  * fetch of its own, selection is view state, and closing the player leaves the guide
  * exactly as it stood. The corpus rides the context (Parker, 2026-10-11): **from the
  * Library, a channel's programs are the creator's videos you have saved; from a stream,
  * every video the stream's page carries.** The component renders whatever channels its
  * host translates — that translation, for both corpora, is
- * {@link channelGuideChannelsFromShelf}.
+ * {@link channelGuideChannelsFromLibrary}.
  */
 
 import WorkPoster from "@anthers/web-shared/content/work-poster";
@@ -91,12 +91,12 @@ function compactDate(iso: string | null | undefined): string {
 }
 
 /**
- * The Library context's translation: the same fetched shelf list the other lenses draw
+ * The Library context's translation: the same fetched Library list the other lenses draw
  * on, grouped into channels **by their creators** — a channel exists because at least one
  * saved video names its creator, and the channel's programs are exactly the creator's
  * saved videos, recency-ranked by the model. Channels alphabetically by name.
  */
-export function channelGuideChannelsFromShelf(items: LensItem[]): GuideChannel[] {
+export function channelGuideChannelsFromLibrary(items: LensItem[]): GuideChannel[] {
 	const byCreator = new Map<string, GuideChannel>();
 	for (const item of items) {
 		if (item.kind !== "work" || item.work?.type !== "video") continue;
@@ -266,7 +266,7 @@ export default function ChannelGuideLens({
 					) : (
 						// A gated Work keeps its place in the guide — the block is the
 						// schedule's fact — and the player pane becomes the route to
-						// unlock, the same treatment a locked entry gets on the shelf.
+						// unlock, the same treatment a locked entry gets in the Library.
 						<div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-box bg-base-200">
 							{work.thumbnail ? (
 								<img
