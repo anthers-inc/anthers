@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A Work's archived media versions: the creator's list, the original download, and the
- * removal that deletes only the version's own bytes.
+ * A Work's media versions: the creator's list, the original download, the removal that
+ * deletes only the version's own bytes, and the public history of names and dates.
  *
- * 🚨 **Every route is owner-only.** A stranger gets the same 404 a missing Work gets, because
- * the existence of an old version is not something a request should confirm. The history is
- * the creator's; a reader sees only the current version's date on the Work's page.
+ * 🚨 **The archive's routes are owner-only.** A stranger gets the same 404 a missing Work
+ * gets, because the existence of an old version's files is not something a request should
+ * confirm. The one public read is `…/versions/history`, which returns only the name and
+ * date of versions added at or after release.
  */
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
@@ -19,9 +20,10 @@ import {
 	workSourceFiles,
 	works,
 } from "@anthers/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { unzipSync } from "fflate";
 import app from "../index";
+import { queue } from "../jobs/queue";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -193,7 +195,7 @@ describe("a Work's archived media versions", () => {
 		const before = new Date("2026-01-05T00:00:00.000Z");
 		await db
 			.update(works)
-			.set({ sourceKey: second, versionAddedAt: before })
+			.set({ sourceKey: second, versionAddedAt: before, versionLabel: "First printing" })
 			.where(eq(works.id, work.id));
 
 		// The append route refuses a released set; this is the one that moves it.
@@ -234,6 +236,61 @@ describe("a Work's archived media versions", () => {
 			version?.media.kind === "set" ? version.media.files.map((file) => file.filename) : [],
 		).toEqual(["one.png", "two.png"]);
 		expect(version?.uploadedAt).toEqual(before);
+		// The name belonged to the version that was current; the archive keeps it, and the
+		// new version starts unnamed.
+		expect(version?.versionLabel).toBe("First printing");
+		const [afterReplace] = await db
+			.select({ versionLabel: works.versionLabel })
+			.from(works)
+			.where(eq(works.id, work.id));
+		expect(afterReplace?.versionLabel).toBe("");
+	});
+
+	it("carries a replaced video's name into history and clears the current one", async () => {
+		const current = `creators/${ownerId}/videos/originals/named-current-${id}.mp4`;
+		const work = await insertWork({
+			type: "video",
+			title: "named version",
+			creatorId: ownerId,
+			sourceKey: current,
+			visibility: "released",
+		});
+		workIds.push(work.id);
+		const before = new Date("2026-02-01T00:00:00.000Z");
+		await db
+			.update(works)
+			.set({ versionAddedAt: before, versionLabel: "Director's cut" })
+			.where(eq(works.id, work.id));
+
+		const next = `creators/${ownerId}/videos/originals/named-next-${id}.mp4`;
+		// pg-boss is not running under the test runner; the send is what a replacement asks
+		// for, not what this test is about.
+		const send = spyOn(queue, "send").mockImplementation(async () => null);
+		try {
+			const res = await req(`/api/content/works/${work.id}`, {
+				method: "PATCH",
+				headers: {
+					cookie: ownerCookie,
+					Origin: "http://localhost:3000",
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({ sourceKey: next }),
+			});
+			expect(res.status).toBe(200);
+		} finally {
+			send.mockRestore();
+		}
+
+		const [version] = await db
+			.select()
+			.from(workMediaVersions)
+			.where(eq(workMediaVersions.workId, work.id));
+		expect(version?.versionLabel).toBe("Director's cut");
+		expect(version?.uploadedAt).toEqual(before);
+
+		const [row] = await db.select().from(works).where(eq(works.id, work.id));
+		expect(row.versionLabel).toBe("");
+		expect(row.versionAddedAt.getTime()).toBeGreaterThan(before.getTime());
 	});
 
 	it("lists the archive to its owner and hides it from a stranger", async () => {
@@ -265,13 +322,113 @@ describe("a Work's archived media versions", () => {
 		});
 		expect(other.status).toBe(404);
 
-		// The current version's date is the one fact the Work's own payload carries.
+		// The current version's date and name are the facts the Work's own payload carries.
 		const detail = await req(`/api/content/works/${work.id}`, {
 			headers: { cookie: ownerCookie },
 		});
 		expect(detail.status).toBe(200);
-		const detailBody = (await detail.json()) as { work: { versionAddedAt?: string } };
+		const detailBody = (await detail.json()) as {
+			work: { versionAddedAt?: string; versionLabel?: string };
+		};
 		expect(detailBody.work.versionAddedAt).toBeTruthy();
+		expect(detailBody.work.versionLabel).toBe("");
+	});
+
+	it("shows readers only the versions added after release, as names and dates", async () => {
+		const releasedAt = new Date("2026-05-01T12:00:00.000Z");
+		const work = await insertWork({
+			type: "video",
+			title: "maintained",
+			creatorId: ownerId,
+			visibility: "released",
+		});
+		workIds.push(work.id);
+		const current = `creators/${ownerId}/videos/originals/current-${id}.mp4`;
+		await db
+			.update(works)
+			.set({
+				sourceKey: current,
+				releasedAt,
+				versionAddedAt: new Date("2026-05-10T00:00:00.000Z"),
+				versionLabel: "1.1",
+			})
+			.where(eq(works.id, work.id));
+
+		// A version uploaded while the Work was still being made: the baseline, not history.
+		const draft = `creators/${ownerId}/videos/originals/draft-${id}.mp4`;
+		await db.insert(workMediaVersions).values({
+			workId: work.id,
+			uploadedAt: new Date("2026-04-20T00:00:00.000Z"),
+			versionLabel: "Draft cut",
+			media: {
+				kind: "source",
+				file: { file: draft, filename: "draft-cut.mp4", fileSize: 10, mimeType: "video/mp4" },
+			},
+		});
+		// A version added after release: history, by name and date only.
+		const patch = `creators/${ownerId}/videos/originals/patch-${id}.mp4`;
+		await db.insert(workMediaVersions).values({
+			workId: work.id,
+			uploadedAt: new Date("2026-05-05T00:00:00.000Z"),
+			versionLabel: "1.0.1",
+			media: {
+				kind: "source",
+				file: {
+					file: patch,
+					filename: "private-original-name.mp4",
+					fileSize: 20,
+					mimeType: "video/mp4",
+				},
+			},
+		});
+
+		// No cookie at all: this is the reader's read.
+		const res = await req(`/api/content/works/${work.id}/versions/history`);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			versions: { versionLabel: string; addedAt: string }[];
+		};
+		expect(body.versions).toEqual([
+			{ versionLabel: "1.0.1", addedAt: "2026-05-05T00:00:00.000Z" },
+			{ versionLabel: "1.1", addedAt: "2026-05-10T00:00:00.000Z" },
+		]);
+		// Names and dates only — a file, a size or a key must never ride this shape.
+		expect(Object.keys(body.versions[0]).sort()).toEqual(["addedAt", "versionLabel"]);
+		const serialized = JSON.stringify(body);
+		expect(serialized).not.toContain("private-original-name");
+		expect(serialized).not.toContain("creators/");
+
+		// Removing the post-release version takes its entry with it: a removal is an edit
+		// to the history a reader sees.
+		const [archived] = await db
+			.select()
+			.from(workMediaVersions)
+			.where(
+				and(eq(workMediaVersions.workId, work.id), eq(workMediaVersions.versionLabel, "1.0.1")),
+			);
+		const removed = await req(`/api/content/works/${work.id}/versions/${archived.id}`, {
+			method: "DELETE",
+			headers: { cookie: ownerCookie, Origin: "http://localhost:3000" },
+		});
+		expect(removed.status).toBe(200);
+		const after = await req(`/api/content/works/${work.id}/versions/history`);
+		const afterBody = (await after.json()) as { versions: { versionLabel: string }[] };
+		expect(afterBody.versions.map((version) => version.versionLabel)).toEqual(["1.1"]);
+	});
+
+	it("keeps a private Work's version history as absent as the Work", async () => {
+		const { work } = await makeVersionedWork();
+
+		const stranger = await req(`/api/content/works/${work.id}/versions/history`);
+		expect(stranger.status).toBe(404);
+
+		// The owner may read it; nothing was ever released, so nothing is in it.
+		const own = await req(`/api/content/works/${work.id}/versions/history`, {
+			headers: { cookie: ownerCookie },
+		});
+		expect(own.status).toBe(200);
+		const body = (await own.json()) as { versions: unknown[] };
+		expect(body.versions).toEqual([]);
 	});
 
 	it("downloads the archived original, and refuses a stranger", async () => {

@@ -1521,7 +1521,13 @@ export default function OwnerWorkEditor({
 		mediaManagerTabs.push({
 			key: "versions",
 			label: "Versions",
-			content: <WorkVersionsSection workId={current.id} versionAddedAt={current.versionAddedAt} />,
+			content: (
+				<WorkVersionsSection
+					workId={current.id}
+					versionAddedAt={current.versionAddedAt}
+					versionLabel={current.versionLabel}
+				/>
+			),
 		});
 	}
 

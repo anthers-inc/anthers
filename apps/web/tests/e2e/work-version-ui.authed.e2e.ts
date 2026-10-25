@@ -55,6 +55,7 @@ test("a released comic's set offers a new version and no in-place edits", async 
 test("the Versions section lists a previous version with its original", async ({
 	page,
 	context,
+	browser,
 }) => {
 	await signInAsMediaFixture(context);
 	await page.setViewportSize({ width: 1440, height: 1000 });
@@ -67,15 +68,24 @@ test("the Versions section lists a previous version with its original", async ({
 		.from(works)
 		.where(eq(works.id, draft.id));
 	// The current media and the version it replaced, written where the replacement would
-	// have written them; no encoder runs in a browser session.
+	// have written them; no encoder runs in a browser session. The Work is marked released
+	// and back-dated so the version added afterwards is public history rather than the
+	// baseline — the reader surface this walk is here to see.
 	const current = `creators/${row?.creatorId}/videos/current-walk.mp4`;
 	await db
 		.update(works)
-		.set({ sourceKey: current, versionAddedAt: new Date("2026-10-24T00:00:00.000Z") })
+		.set({
+			sourceKey: current,
+			versionAddedAt: new Date("2026-10-24T00:00:00.000Z"),
+			versionLabel: "1.1",
+			visibility: "released",
+			releasedAt: new Date("2026-01-01T00:00:00.000Z"),
+		})
 		.where(eq(works.id, draft.id));
 	await db.insert(workMediaVersions).values({
 		workId: draft.id,
 		uploadedAt: new Date("2026-01-02T03:04:05.000Z"),
+		versionLabel: "1.0.1",
 		media: {
 			kind: "source",
 			file: {
@@ -89,11 +99,11 @@ test("the Versions section lists a previous version with its original", async ({
 
 	try {
 		await page.goto(draft.url);
-		// The current version's date is public; the history is not.
-		await expect(page.getByText(/Version added/)).toBeVisible();
-
 		await page.getByRole("button", { name: "Manage This Work's Media" }).click();
 		await page.getByRole("tab", { name: "Versions" }).click();
+		// The current version carries the name its creator gave it, editable where it lives.
+		await expect(page.getByText("Current version", { exact: true })).toBeVisible();
+		await expect(page.getByLabel("Name this version")).toHaveValue("1.1");
 		// The list names the version by its date, its file count and its size; the
 		// filenames are the reader's business only on the current version.
 		await expect(page.getByText("1 file · 4.2 KB")).toBeVisible();
@@ -101,6 +111,23 @@ test("the Versions section lists a previous version with its original", async ({
 		await expect(page.getByRole("button", { name: "Remove", exact: true })).toBeVisible();
 		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${SHOTS}/17-versions-tab.png`, fullPage: true });
+
+		// The reader's page, in its own signed-out context: the creator's own view is the
+		// editor, whose byline is not the reader's. The byline states the count and the
+		// newest version, and the Details tab lists every version added after release.
+		const reader = await browser.newContext();
+		try {
+			const readerPage = await reader.newPage();
+			await readerPage.goto(draft.url);
+			await expect(
+				readerPage.getByText(/Updated 2 times since release, most recently 1\.1 on/),
+			).toBeVisible();
+			await readerPage.getByRole("tab", { name: "Details" }).click();
+			await expect(readerPage.getByRole("heading", { name: "Versions" })).toBeVisible();
+			await expect(readerPage.getByText("1.0.1")).toBeVisible();
+		} finally {
+			await reader.close();
+		}
 	} finally {
 		await fetch(`${API_URL}/api/content/works/${draft.id}?force=1`, {
 			method: "DELETE",

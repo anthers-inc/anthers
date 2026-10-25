@@ -22,7 +22,7 @@ import { FONTS } from "@anthers/web-shared/fonts";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { Link } from "@anthers/web-shared/router";
 import { apiBaseUrl } from "@anthers/web-shared/rpc";
-import type { AccessResult, Work, WorkCredit } from "@anthers/web-shared/types";
+import type { AccessResult, Work, WorkCredit, WorkVersionEntry } from "@anthers/web-shared/types";
 import {
 	BookOpenIcon,
 	CalendarIcon,
@@ -281,6 +281,19 @@ export function formatOriginallyReleased(iso: string | null | undefined): string
 }
 
 /**
+ * A version's added date, in the page's long local form — an instant, unlike
+ * `formatOriginallyReleased`'s creator-asserted calendar day, so the viewer's own clock
+ * decides what day it was.
+ */
+export function formatVersionDate(iso: string): string {
+	return new Date(iso).toLocaleDateString("en-US", {
+		month: "long",
+		day: "numeric",
+		year: "numeric",
+	});
+}
+
+/**
  * Media whose METER the page owns, rather than the component.
  *
  * `VideoPlayer` and `AudioPlayer` each subscribe to the budget and render their own
@@ -506,6 +519,12 @@ export interface WorkBylineProps {
 	actions?: ReactNode;
 	/** After the creator, the kind and any chip the page's mode knows first-hand. */
 	chips?: ReactNode;
+	/**
+	 * Versions added after release, oldest first. The newest rides the date line; the
+	 * Details tab lists every one. Empty or absent means the Work has not changed since
+	 * it went public.
+	 */
+	versions?: WorkVersionEntry[];
 }
 
 /**
@@ -524,8 +543,13 @@ export interface WorkBylineProps {
  * a viewer looks first. The listing's record link — the globe — rides that line
  * (Parker, 2026-10-19), so a reader finds the raw ATProto record where the release is
  * stated. A draft, with no release date, renders nothing.
+ *
+ * The versions added *after* release ride that line too: how many there have been, and the
+ * newest by name and date. That is the page's one-line statement that the Work has been
+ * maintained, and it exists because a single date reads as the only upload the Work ever
+ * had. Every such version is listed in the Details tab; this line is the summary.
  */
-export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
+export function WorkByline({ work, title, actions, chips, versions = [] }: WorkBylineProps) {
 	const creatorName = work.creator?.displayName || work.creator?.handle || "this creator";
 	const releasedDate = work.releasedAt
 		? new Date(work.releasedAt).toLocaleDateString("en-US", {
@@ -534,17 +558,20 @@ export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 				year: "numeric",
 			})
 		: null;
-	// The current media version's date, for everyone. A Work with no uploaded media — a
-	// piece of writing, a good, a service — has no version to name. History is the
-	// creator's, in the manager; only the current version's date is a reader's fact.
-	const versionDate =
-		work.versionAddedAt && work.type !== "text" && !isGoods(work.type)
-			? new Date(work.versionAddedAt).toLocaleDateString("en-US", {
-					month: "long",
-					day: "numeric",
-					year: "numeric",
-				})
-			: null;
+	// The newest version added after release. History before the release is the creator's
+	// and the release build is the baseline, so an empty list means nothing has changed
+	// since the Work went public. The count is stated because one date on its own reads as
+	// the only upload the Work ever had, which is the impression this line exists to correct.
+	const latestVersion = versions.at(-1) ?? null;
+	const latestDate = latestVersion ? formatVersionDate(latestVersion.addedAt) : null;
+	const latestNamed = latestVersion?.versionLabel
+		? `${latestVersion.versionLabel} on ${latestDate}`
+		: latestDate;
+	const versionSummary = latestVersion
+		? versions.length === 1
+			? `Updated once since release, ${latestNamed}`
+			: `Updated ${versions.length} times since release, most recently ${latestNamed}`
+		: null;
 	const creatorEl = work.creator && (
 		<Link to={profileUrl(work.creator.handle)} className="flex items-center gap-2 hover:underline">
 			{work.creator.avatar ? (
@@ -588,7 +615,7 @@ export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 					{actions}
 				</div>
 			</div>
-			{(releasedDate || versionDate) && (
+			{(releasedDate || versionSummary) && (
 				<div className="flex flex-col items-center gap-0.5 text-sm text-base-content/60">
 					{releasedDate && (
 						// The listing's globe rides the Released line (Parker, 2026-10-19): it is
@@ -599,7 +626,7 @@ export function WorkByline({ work, title, actions, chips }: WorkBylineProps) {
 							<RecordLinkButton recordUrl={work.recordUrl} />
 						</p>
 					)}
-					{versionDate && <p>Version added {versionDate}</p>}
+					{versionSummary && <p>{versionSummary}</p>}
 				</div>
 			)}
 		</header>
