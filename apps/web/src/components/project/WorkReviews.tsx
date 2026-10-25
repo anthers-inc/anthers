@@ -48,9 +48,10 @@ import {
 import { client } from "@anthers/web-shared/rpc";
 import type { Review, ReviewAggregate } from "@anthers/web-shared/types";
 import { FlagIcon, HandThumbDownIcon, HandThumbUpIcon } from "@heroicons/react/24/outline";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSeekPlayer } from "../../lib/work-player";
 import TimestampedText from "../media/TimestampedText";
+import StickerChooser, { givePendingSticker } from "../post/StickerChooser";
 import VoteControl from "../post/VoteControl";
 import ReportDialog from "../ui/ReportDialog";
 import { WORK_DETAILS_HEADING_CLASS } from "../work/WorkLayout";
@@ -95,15 +96,7 @@ function ReviewBody({ body }: { body: string }) {
  * two verdicts read like the two answers they are rather than like two flavors of one
  * choice.
  */
-export default function WorkReviews({
-	workId,
-	aside,
-}: {
-	workId: number;
-	/** A small control that reads with the verdict row — the Sticker give, whose design
-	 *  (2026-09-13) ties a Work's Sticker to its review; the Work page passes the bar. */
-	aside?: ReactNode;
-}) {
+export default function WorkReviews({ workId }: { workId: number }) {
 	const { isAuthenticated, user } = useAuth();
 	// A review is a record in the reviewer's own repository, refused without the permission.
 	const permissionMissing = useInteractionPermissionMissing(isAuthenticated) === true;
@@ -121,6 +114,8 @@ export default function WorkReviews({
 	const [submitting, setSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [reportingReview, setReportingReview] = useState<number | null>(null);
+	const [stickerKey, setStickerKey] = useState<string | null>(null);
+	const [stickerProblem, setStickerProblem] = useState<string | null>(null);
 
 	const fetchReviews = useCallback(
 		(w: ReviewWindow, version: VersionFilter) => {
@@ -175,6 +170,13 @@ export default function WorkReviews({
 			if (!res.ok) {
 				setError("That review couldn't be saved. Please try again.");
 				return;
+			}
+			const { review } = (await res.json()) as { review: { id: number } };
+			// The Sticker rides the review just written — the review's id is the subject, and
+			// the money goes to the Work's creator whether or not the reviewer is one.
+			if (stickerKey) {
+				setStickerProblem(await givePendingSticker("review", review.id, stickerKey));
+				setStickerKey(null);
 			}
 			setDraftVerdict(null);
 			setDraftBody("");
@@ -283,7 +285,6 @@ export default function WorkReviews({
 								Don't Recommend
 							</button>
 						</div>
-						{aside && <div className="shrink-0">{aside}</div>}
 					</div>
 					{/* The field is not gated behind a verdict: it reads with the buttons. Text is
 					    optional, so the post button enables on the verdict alone — the words are
@@ -325,12 +326,24 @@ export default function WorkReviews({
 									setDraftVerdict(null);
 									setDraftBody("");
 									setError(null);
+									setStickerKey(null);
 								}}
 								disabled={submitting}
 							>
 								Cancel
 							</button>
+							<StickerChooser
+								value={stickerKey}
+								onChange={setStickerKey}
+								label="your review"
+								recipientOf={{ subjectType: "work", subjectId: workId }}
+							/>
 						</div>
+						{stickerProblem && (
+							<p className="mt-1 text-xs text-error" role="alert">
+								Your review is posted, but the Sticker could not be given: {stickerProblem}
+							</p>
+						)}
 					</form>
 				</div>
 			)}

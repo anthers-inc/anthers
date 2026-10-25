@@ -20,7 +20,6 @@ import {
 	badgePerks,
 	badges,
 	billingAccounts,
-	comments,
 	creatorCredits,
 	creatorNettingApplications,
 	creatorNettings,
@@ -28,6 +27,7 @@ import {
 	creatorTransfers,
 	poolDistributions,
 	posts,
+	reviews,
 	stickers,
 	userBadges,
 	userPreferences,
@@ -115,6 +115,7 @@ import {
 	taxCodeForBadge,
 } from "../services/billing.js";
 import { commentAncestry, rootOfAncestry } from "../services/comment-thread.js";
+import { isCreator } from "../services/creator-standing.js";
 import { canBePaid } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { scanInlineUpload } from "../services/safety-scan.js";
@@ -176,7 +177,7 @@ const activitySummaryQuery = z.object({
 		.optional(),
 });
 
-const STICKER_SUBJECTS = ["work", "post", "comment"] as const;
+const STICKER_SUBJECTS = ["work", "post", "comment", "review"] as const;
 type StickerSubject = (typeof STICKER_SUBJECTS)[number];
 
 /**
@@ -281,15 +282,30 @@ async function publicCreatorOf(kind: "work" | "post", id: number): Promise<numbe
 /**
  * Who a Sticker on this subject pays.
  *
- * 🚨 **A Sticker pays the CREATOR of the Work or post, never the author of the comment.**
- * It rides the giver's own like or comment and is never placed on somebody else's, so a
- * Sticker on a comment pays whoever made the thing being discussed. Paying commenters would
- * have Anthers moving money between users — a different regulatory question and a different
- * product — and it is one line of code away from happening by accident.
+ * ⭐ **The money follows the nearest creator up the thread, and the decoration stays where it
+ * was put** (Parker, 2026-10-24). A Sticker on a creator's own comment pays that creator; one on
+ * a user's reply under that comment pays the creator above it; a chain of ordinary users pays
+ * whichever creator made the post at the root. Any visible comment or reply is therefore a
+ * valid subject — what its author is decides the money, never whether it may be stickered.
  *
- * 🚨 **And only a creator who can be paid right now.** Publishing takes completed payout setup,
- * but an account Stripe later holds is still the creator of everything it released, and a
- * Sticker given then would be money owed to somebody Anthers cannot pay.
+ * 🚨 **"Creator" is completed setup, not creator mode.** `isCreator` from
+ * `services/creator-standing` is the same answer discovery, search and the Discord roles use:
+ * creator mode on and payouts ready. An account that has only turned the Studio on is skipped
+ * by the walk exactly as an ordinary user is, because it is one.
+ *
+ * ⚠️ **A review is exempt from the walk.** Its only parent is the Work, and the reviewer being
+ * a creator would otherwise make a Sticker on their own review resolve to themselves — which
+ * the own-content refusal below would then reject, leaving the review placement dead for the
+ * people most likely to use it. A Sticker on a review is a supercharged recommendation to the
+ * Work's creator, which is what the placement was decided as.
+ *
+ * 🚨 **A removed or hidden ancestor is skipped**, so the recipient is the nearest creator in
+ * the thread as it is actually shown rather than in rows nobody can see.
+ *
+ * 🚨 **Money never reaches a non-creator.** That is the line the walk must not cross: paying a
+ * commenter who is not a creator would have Anthers moving money between users, which is a
+ * different regulatory question and a different product, and it is one line away from happening
+ * by accident. So the walk only ever stops on a creator, and a thread with none pays its root.
  */
 async function stickerRecipient(
 	giverId: number,
@@ -299,36 +315,55 @@ async function stickerRecipient(
 	const notFound = { error: "Nothing to sticker", code: "no_subject", status: 404 } as const;
 
 	let creatorId: number | null = null;
-	if (subjectType === "comment") {
+	if (subjectType === "review") {
+		// The Work the review is of, which is the whole of the parentage a review has.
 		const [row] = await db
-			.select({ userId: comments.userId })
-			.from(comments)
-			.where(and(eq(comments.id, subjectId), eq(comments.moderationStatus, "visible")))
+			.select({ workId: reviews.workId })
+			.from(reviews)
+			.where(and(eq(reviews.id, subjectId), eq(reviews.moderationStatus, "visible")))
 			.limit(1);
 		if (!row) return notFound;
-		if (row.userId !== giverId) {
-			return {
-				error: "A Sticker rides your own comment, not somebody else's.",
-				code: "not_yours",
-				status: 403,
-			};
-		}
+		creatorId = await publicCreatorOf("work", row.workId);
+	} else if (subjectType === "comment") {
+		const ancestry = await commentAncestry(subjectId);
+		const subject = ancestry[0];
+		// The thing being stickered has to be visible; an ancestor being gone is different, and
+		// the walk simply steps over it.
+		if (subject?.moderationStatus !== "visible") return notFound;
+
 		// ⚠️ **The ROOT of the thread, never the comment's own subject.** A reply's subject is
 		// another comment, and reading its id as a post's pays whoever wrote the post that
 		// happens to share that number.
-		const root = rootOfAncestry(await commentAncestry(subjectId));
+		const root = rootOfAncestry(ancestry);
 		if (!root || (root.subjectType !== "work" && root.subjectType !== "post")) return notFound;
-		creatorId = await publicCreatorOf(root.subjectType, root.subjectId);
+
+		for (const node of ancestry) {
+			if (node.moderationStatus !== "visible" || node.userId === null) continue;
+			if (await isCreator(node.userId)) {
+				creatorId = node.userId;
+				break;
+			}
+		}
+		// No creator in the thread: the creator of the Work or post it hangs off.
+		creatorId ??= await publicCreatorOf(root.subjectType, root.subjectId);
 	} else {
 		creatorId = await publicCreatorOf(subjectType, subjectId);
 	}
 	if (creatorId === null) return notFound;
 
 	// Paying yourself would move your own Time Pool into your own pocket, which is not a
-	// gift and would let an account cycle money back to itself.
+	// gift and would let an account cycle money back to itself. It fires on a comment or a
+	// reply under your own post as well as on the post itself, because the walk lands back
+	// on you either way.
 	if (creatorId === giverId) {
-		return { error: "You cannot sticker your own work.", code: "own_work", status: 403 };
+		return {
+			error: "You cannot sticker your own content.",
+			code: "own_work",
+			status: 403,
+		};
 	}
+	// The walk only stops on a creator, who is payable by definition; this covers the root,
+	// whose creator published before a hold could arrive.
 	if (!(await canBePaid(creatorId))) {
 		return {
 			error: "This creator can't be paid at the moment, so a Sticker can't reach them.",
@@ -2345,6 +2380,39 @@ const subscriptionRoutes = new Hono()
 			// a negative remaining would render as a debt the user does not owe.
 			remaining: Math.max(0, round2(cycle.allowance - directed)),
 			cycle: cycle.billingCycle,
+		});
+	})
+
+	/**
+	 * Who a Sticker on this subject would pay, for the picker to say before it is given.
+	 *
+	 * ⭐ **A Sticker beside somebody's words looks like a tip to them, and often is not one**
+	 * (Parker, 2026-10-24). The money follows the nearest creator up the thread, so the picker
+	 * owes the giver the name it is about to support rather than letting the placement imply a
+	 * different person. The refusal comes back the same way, so a control that would be refused
+	 * can say why instead of failing on the click.
+	 *
+	 * ⚠️ **Authenticated, and it resolves as the caller**, because the own-content refusal is a
+	 * fact about who is giving. The answer is a public name, not a figure.
+	 */
+	.get("/stickers/recipient", requireAuth, async (c) => {
+		const user = c.get("user");
+		const subjectType = c.req.query("subjectType") ?? "";
+		const subjectId = Number(c.req.query("subjectId"));
+		if (!STICKER_SUBJECTS.includes(subjectType as StickerSubject) || !Number.isInteger(subjectId)) {
+			return c.json({ error: "Bad subject" }, 400);
+		}
+		const target = await stickerRecipient(user.id, subjectType as StickerSubject, subjectId);
+		if ("error" in target) {
+			return c.json({ recipient: null, error: target.error, code: target.code });
+		}
+		const [row] = await db
+			.select({ handle: users.atprotoHandle, displayName: users.displayName })
+			.from(users)
+			.where(eq(users.id, target.creatorId))
+			.limit(1);
+		return c.json({
+			recipient: { handle: row?.handle ?? null, displayName: row?.displayName ?? null },
 		});
 	})
 

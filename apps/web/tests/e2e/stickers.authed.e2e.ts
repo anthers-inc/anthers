@@ -27,6 +27,7 @@ import { MEDIA_FIXTURE_EMAIL } from "@anthers/db/media-fixture";
 import {
 	badges,
 	billingAccounts,
+	comments,
 	posts,
 	stickers,
 	stripeAccounts,
@@ -79,9 +80,19 @@ let workId = 0;
 let cycle = "";
 let billingRowMine = false;
 
-/** The row filter naming every Sticker this suite might have left at either subject. */
+/**
+ * The row filter naming every Sticker this suite might have left.
+ *
+ * ⚠️ **The comment arm is the walker's own comments**, because since 2026-10-24 a comment is a
+ * valid subject and this suite writes one to exercise the editor's chooser. Scoped by author
+ * rather than by "any comment on the post", which would reach other suites' rows.
+ */
 function thisGiversStickers(): ReturnType<typeof sql> {
-	return sql`(giver_id = ${walkerId} AND ((subject_type = 'post' AND subject_id = ${postId}) OR (subject_type = 'work' AND subject_id = ${workId})))`;
+	return sql`(giver_id = ${walkerId} AND (
+		(subject_type = 'post' AND subject_id = ${postId})
+		OR (subject_type = 'work' AND subject_id = ${workId})
+		OR (subject_type = 'comment' AND subject_id IN (SELECT id FROM comments WHERE user_id = ${walkerId}))
+	))`;
 }
 
 /**
@@ -207,6 +218,16 @@ test.afterAll(async () => {
 	// stands.
 	await db.delete(stickers).where(thisGiversStickers());
 	if (walkerId) {
+		// The comment the editor test wrote goes with its Sticker; the post it answered stays.
+		await db
+			.delete(comments)
+			.where(
+				and(
+					eq(comments.userId, walkerId),
+					eq(comments.subjectType, "post"),
+					eq(comments.subjectId, postId),
+				),
+			);
 		if (cycle) {
 			await db
 				.delete(userBadges)
@@ -330,7 +351,33 @@ async function assertCountedRows(page: Page): Promise<void> {
 	await expect(rows.first()).toContainText(/\(\d+ left\)/, { timeout: 5_000 });
 }
 
-test("⭐ the Work's picker opens at the trigger's right edge, with the same rows", async ({
+test("⭐ a comment takes its Sticker from the editor that writes it", async ({ page, context }) => {
+	const errors = trackErrorsStrict(page);
+	await signInAsWalker(context);
+	await page.goto(POST_PATH);
+
+	// The editor's own chooser, beside Post comment. Choosing one holds it for the message
+	// rather than giving it there and then — the comment has no id until it is sent.
+	const body = `Sticker award ${crypto.randomUUID().slice(0, 8)}`;
+	await page.getByPlaceholder(/Write a comment/).fill(body);
+	await page.getByLabel("Add a Sticker to your comment").click();
+	const rows = pickerRows(page);
+	await expect(rows.first()).toBeVisible();
+	await rows.first().click();
+	await expect(page.getByLabel("Remove the Sticker from your comment")).toBeVisible();
+
+	await page.getByRole("button", { name: "Post comment" }).click();
+
+	// The comment landed and the Sticker went with it: the post carried one from the give
+	// test above, so the wall now holds two of this denomination.
+	await expect(page.getByText(body)).toBeVisible({ timeout: 10_000 });
+	await expect(page.getByRole("button", { name: "Small Butterfly 1" })).toHaveCount(2, {
+		timeout: 10_000,
+	});
+	expect(errors).toEqual([]);
+});
+
+test("⭐ the review composer carries the Work's chooser, with the same rows", async ({
 	page,
 	context,
 }) => {
@@ -340,13 +387,10 @@ test("⭐ the Work's picker opens at the trigger's right edge, with the same row
 	// Reviews is the side column's default tab; the click names it the way its role names it.
 	await page.getByRole("tab", { name: "Reviews", exact: true }).click();
 
-	// The Work mounts the same bar in its verdict row; only the alignment flips, because
-	// the trigger sits at that row's right edge.
-	const trigger = page
-		.getByRole("group", { name: /Add a Sticker to/ })
-		.or(page.getByLabel(/Add a Sticker to/));
-	await expect(trigger.first()).toBeVisible();
-	await trigger.first().click();
+	// ⭐ A Sticker for a Work rides a review (Parker, 2026-09-13), added from this editor.
+	// There is no give on the Work page itself any more.
+	await expect(page.getByLabel(/Add a Sticker to this Work/)).toHaveCount(0);
+	await page.getByLabel("Add a Sticker to your review").click();
 	await assertCountedRows(page);
 	expect(errors).toEqual([]);
 });

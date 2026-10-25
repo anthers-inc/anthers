@@ -38,7 +38,6 @@ import { usePreviewQuery } from "../components/creator/preview";
 import SaveButton from "../components/library/SaveButton";
 import { PublicAccessWall } from "../components/media/PublicAccessNotice";
 import InlineUnlock from "../components/post/InlineUnlock";
-import StickerBar from "../components/post/StickerBar";
 import ProjectDownloads from "../components/project/ProjectDownloads";
 import ProjectPricing from "../components/project/ProjectPricing";
 import WorkReviews from "../components/project/WorkReviews";
@@ -668,19 +667,7 @@ function VisitorRecord({
 								label: "Reviews",
 								// 🚨 A Work takes no votes and no comments: a review is the only feedback
 								// it accepts (Parker, 2026-09-13).
-								content: (
-									<WorkReviews
-										workId={work.id}
-										aside={
-											<StickerBar
-												subjectType="work"
-												subjectId={work.id}
-												label={work.title ?? "this Work"}
-												align="end"
-											/>
-										}
-									/>
-								),
+								content: <WorkReviews workId={work.id} />,
 							},
 							{
 								key: "showings",

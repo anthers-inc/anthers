@@ -29,6 +29,7 @@ import { BadgeMark } from "@anthers/web-shared/economics";
 import { client } from "@anthers/web-shared/rpc";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useStickerRecipient } from "../../lib/sticker-recipient";
 
 export type StickerSubject = "work" | "post" | "comment";
 
@@ -84,6 +85,9 @@ export default function StickerBar({
 	const [busy, setBusy] = useState(false);
 	const [problem, setProblem] = useState<string | null>(null);
 	const detailsRef = useRef<HTMLDetailsElement | null>(null);
+	// Who this Sticker would pay, asked when the picker opens — a Sticker beside somebody's
+	// words looks like a tip to them, and the money follows the nearest creator up the thread.
+	const recipient = useStickerRecipient(subjectType, subjectId, open);
 
 	/** Programmatic close: assigning `open` fires `toggle`, which syncs the React state. */
 	const close = useCallback(() => {
@@ -277,6 +281,12 @@ export default function StickerBar({
 							);
 						})}
 
+						{recipient?.name && (
+							<p className="text-base-content/60 px-1 pt-2 text-xs">
+								Goes to <span className="font-medium">{recipient.name}</span>
+							</p>
+						)}
+						{recipient?.error && <p className="text-error px-1 pt-2 text-xs">{recipient.error}</p>}
 						{allowance && allowance.allowance <= 0 && (
 							<p className="text-base-content/60 px-1 pt-2 text-xs">
 								A free account has no Time Pool to direct by hand.

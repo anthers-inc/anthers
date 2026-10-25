@@ -679,7 +679,7 @@ export default function PostPage() {
 				/>
 			</Modal>
 
-			<CommentThread subject={{ kind: "post", slug: post.slug }} />
+			<CommentThread subject={{ kind: "post", slug: post.slug, id: post.id }} />
 		</div>
 	);
 }
