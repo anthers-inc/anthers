@@ -18,7 +18,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, libraryItems, purchases, works } from "@anthers/db/schema";
+import { assets, libraryItems, purchases, workMediaVersions, works } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { runWithdrawnSweep } from "../jobs/withdrawn-sweep.js";
 import { placeHold } from "../services/legal-hold.js";
@@ -169,6 +169,36 @@ describe("the sweep's one question", () => {
 			.where(eq(works.id, abandoned));
 		expect(row?.visibility).toBe("withdrawn");
 		expect(row?.mediaPurgedAt).not.toBeNull();
+	});
+
+	// SABOTAGE: the sweep reading only `works.preserved` (predict: this Work's media is
+	// purged even though an archived version of it is flagged, which is the promise read
+	// one version too narrowly).
+	it("keeps a Work because an ARCHIVED version is preserved", async () => {
+		const workId = await withdrawnWork({ title: "OldVersionKept", withdrawnDaysAgo: 400 });
+		// The current version is not flagged; a retired one is — the shape a Work takes
+		// when preservation was granted before a replacement retired the version.
+		await db.insert(workMediaVersions).values({
+			workId,
+			uploadedAt: new Date(Date.now() - 500 * 86400_000),
+			versionLabel: "the one somebody saved",
+			preserved: true,
+			media: {
+				kind: "set",
+				files: [
+					{
+						filename: "old.zip",
+						file: "creators/0/old.zip",
+						fileSize: 10,
+						mimeType: "application/zip",
+					},
+				],
+			},
+		});
+
+		await runWithdrawnSweep();
+
+		expect(await mediaExists(workId)).toBe(true);
 	});
 
 	it("is idempotent — a swept Work is not re-listed, and a second run costs nothing", async () => {

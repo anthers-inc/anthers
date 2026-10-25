@@ -15,7 +15,7 @@
 
 import { db, libraryItems, posts, purchases, works } from "@anthers/db";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
-import { preserveWork } from "./preservation.js";
+import { preserveCurrentVersion } from "./preservation.js";
 
 /** Why a save was refused, when it was. */
 export type SaveRefusal = "not_found" | "not_released";
@@ -93,7 +93,7 @@ export async function saveWork(
 		// ⭐ **Saving a Work is what puts it in the preservation program** — see
 		// `services/preservation.ts`. Deliberately on the save, not on the purchase:
 		// a free Work somebody chose to keep is exactly as worth preserving.
-		await preserveWork(workId);
+		await preserveCurrentVersion(workId);
 		return { ok: true, id: row.id };
 	}
 
@@ -104,7 +104,7 @@ export async function saveWork(
 		.set({ hidden: false })
 		.where(and(eq(libraryItems.userId, userId), eq(libraryItems.workId, workId)))
 		.returning({ id: libraryItems.id });
-	if (existing) await preserveWork(workId);
+	if (existing) await preserveCurrentVersion(workId);
 	return existing ? { ok: true, id: existing.id } : { ok: false, reason: "not_found" };
 }
 
@@ -183,7 +183,7 @@ export async function saveOnPurchase(purchase: {
 	// program** without the buyer doing anything. That is what lets the promise be
 	// "a purchase outlives its creator" rather than "a purchase outlives its creator if
 	// you held a Badge and remembered to elect".
-	await preserveWork(purchase.workId);
+	await preserveCurrentVersion(purchase.workId);
 }
 
 /**
