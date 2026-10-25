@@ -113,7 +113,7 @@ export default function WorkReviews({
 	const [filter, setFilter] = useState<VerdictFilter>("all");
 	const [versionFilter, setVersionFilter] = useState<VersionFilter>("all");
 	// Which scope the payload in `agg` actually answers. Held separately from the select so a
-	// figure is never labelled with a scope the server has not returned yet: the label follows
+	// figure is never labeled with a scope the server has not returned yet: the label follows
 	// the data, not the reader's next click.
 	const [appliedVersion, setAppliedVersion] = useState<VersionFilter>("all");
 	const [draftVerdict, setDraftVerdict] = useState<string | null>(null);
