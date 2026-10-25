@@ -591,32 +591,48 @@ describe("the Stickers on a page", () => {
 		giverId = await userIdByName(`stk_show_${RUN}`);
 		creatorId = await userIdByName(`stk_showcreator_${RUN}`);
 		await enablePayoutsFor(creatorId);
-		await atSupport(giverId, SUPPORT, "2031-06-01");
+		// ⭐ A bigger allowance than the give suite's: these cases each fill a fresh Work with
+		// several denominations, and a run that ran out mid-test would fail on the cap rather
+		// than on the decoration it is here to check.
+		await atSupport(giverId, 60, "2031-06-01");
 	}, DB_SETUP_TIMEOUT);
 
 	async function listOn(
 		subjectId: number,
 		as?: string,
-	): Promise<{ artKey: string; count: number; mine: number[] }[]> {
+	): Promise<{ levels: string[]; mine: { id: number; level: string }[] }> {
 		const res = await req(`/api/subscriptions/stickers?subjectType=work&subjectId=${subjectId}`, {
 			headers: as ? { Cookie: as } : {},
 		});
 		expect(res.status).toBe(200);
-		return ((await res.json()) as { stickers: never[] }).stickers;
+		return (await res.json()) as { levels: string[]; mine: { id: number; level: string }[] };
 	}
 
-	it("⭐ groups by art rather than returning one row per Sticker", async () => {
+	it("⭐ counts distinct levels, never Stickers and never money", async () => {
 		const work = await insertWork({ creatorId, type: "text", title: `Grouped ${RUN}` });
+		// Two of one denomination and one of another: the decoration reports two levels. The
+		// counts that the old payload published would have said three Stickers, and the art
+		// grouping would have let a reader add up what they cost.
 		for (const artKey of ["butterfly-small", "butterfly-small", "butterfly-medium"]) {
 			const res = await give(cookie, { subjectType: "work", subjectId: work.id, artKey });
 			expect(res.status).toBe(201);
 		}
 		const shown = await listOn(work.id, cookie);
-		expect(shown.find((g) => g.artKey === "butterfly-small")?.count).toBe(2);
-		expect(shown.find((g) => g.artKey === "butterfly-medium")?.count).toBe(1);
+		expect(shown.levels).toEqual(["0.25", "0.50"]);
+		expect(shown).not.toHaveProperty("stickers");
 	});
 
-	it("🚨 drops a removed Sticker from the page while it stays spent", async () => {
+	it("orders the levels cheapest first, so the outline's stripes read in that order", async () => {
+		const work = await insertWork({ creatorId, type: "text", title: `Ordered ${RUN}` });
+		for (const artKey of ["butterfly-large", "butterfly-small", "butterfly-medium"]) {
+			expect((await give(cookie, { subjectType: "work", subjectId: work.id, artKey })).status).toBe(
+				201,
+			);
+		}
+		expect((await listOn(work.id, cookie)).levels).toEqual(["0.25", "0.50", "1.00"]);
+	});
+
+	it("🚨 drops a removed Sticker from the decoration while it stays spent", async () => {
 		const work = await insertWork({ creatorId, type: "text", title: `Removed ${RUN}` });
 		const res = await give(cookie, {
 			subjectType: "work",
@@ -632,12 +648,28 @@ describe("the Stickers on a page", () => {
 			headers: { Origin: ORIGIN, Cookie: cookie },
 		});
 
-		// Gone from the display...
-		expect(await listOn(work.id, cookie)).toEqual([]);
+		// Gone from the decoration...
+		expect((await listOn(work.id, cookie)).levels).toEqual([]);
 		// ...and the row is still there, still carrying its amount. Removal is display-only,
 		// which is what stops a Sticker being rented and refunded.
 		const spentAfter = await db.select().from(stickers).where(eq(stickers.giverId, giverId));
 		expect(spentAfter.length).toBe(spentBefore.length);
+	});
+
+	it("🚨 drops a voided Sticker from the decoration", async () => {
+		const work = await insertWork({ creatorId, type: "text", title: `Voided ${RUN}` });
+		const res = await give(cookie, {
+			subjectType: "work",
+			subjectId: work.id,
+			artKey: "butterfly-large",
+		});
+		expect(res.status).toBe(201);
+		const { sticker } = (await res.json()) as { sticker: { id: number } };
+
+		// Anthers removed the thing it decorates, so the money has gone back to time — and a
+		// stripe for it would be the one thing on the page claiming somebody was paid.
+		await db.update(stickers).set({ voidedAt: new Date() }).where(eq(stickers.id, sticker.id));
+		expect((await listOn(work.id, cookie)).levels).toEqual([]);
 	});
 
 	it("🚨 identifies a user's own Stickers, and nobody's to a stranger", async () => {
@@ -647,13 +679,16 @@ describe("the Stickers on a page", () => {
 				.status,
 		).toBe(201);
 
-		// The giver gets a row id back, because taking one back is theirs alone to do.
-		expect((await listOn(work.id, cookie))[0]?.mine.length).toBe(1);
+		// The giver gets a row id back, because taking one back is theirs alone to do — under
+		// the chip wall this was the chip's own handle, and the picker is where it lives now.
+		const mine = await listOn(work.id, cookie);
+		expect(mine.mine).toHaveLength(1);
+		expect(mine.mine[0]?.level).toBe("0.25");
 
-		// A signed-out user sees the Sticker and no identity attached to it.
-		const anon = (await listOn(work.id))[0];
-		expect(anon?.count).toBe(1);
-		expect(anon?.mine).toEqual([]);
+		// A signed-out user sees the level and no identity attached to it.
+		const anon = await listOn(work.id);
+		expect(anon.levels).toEqual(["0.25"]);
+		expect(anon.mine).toEqual([]);
 	});
 
 	it("refuses a subject it does not recognize", async () => {

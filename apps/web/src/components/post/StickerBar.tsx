@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Stickers on something, and the way to add one.
+ * What a Sticker left behind, and the way to add or take one back.
  *
  * ⭐ **Choosing the art is choosing the amount** (Parker, 2026-09-04). The batch runs
  * simple to elaborate, so a user can tell what a Sticker cost from how much drawing is
  * in it. There is no second control asking for money, and the server reads the amount off
  * the art rather than taking it from here — see `@anthers/shared/stickers`.
+ *
+ * ⭐ **Nothing here is a count.** What shows on the page is {@link StickerDecoration}'s
+ * outline, which counts distinct levels and states no amount (Parker, 2026-09-13); the wall
+ * of chips it replaces published a count per drawing, which let anybody work out the sum.
+ * The reader's own Stickers live in the picker instead, because that is where taking one back
+ * belongs once the chips are gone.
  *
  * ⚠️ **A Sticker is a monetary commitment that can still be removed from display**
  * (Parker, 2026-09-04). Taking one back leaves the creator paid and does not return the
@@ -23,22 +29,23 @@
  * division in their head.
  */
 
-import { CURRENT_BATCH, type StickerArt, stickerArt } from "@anthers/shared/stickers";
+import { badgeColor } from "@anthers/shared/badge-art";
+import { CURRENT_BATCH, type StickerArt, stickerLevelById } from "@anthers/shared/stickers";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BadgeMark } from "@anthers/web-shared/economics";
 import { client } from "@anthers/web-shared/rpc";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStickerRecipient } from "../../lib/sticker-recipient";
+import StickerDecoration from "./StickerDecoration";
 
-export type StickerSubject = "work" | "post" | "comment";
+export type StickerSubject = "work" | "post" | "comment" | "review";
 
-/** One art's worth of Stickers on this subject, as the server groups them. */
-interface StickerGroup {
-	artKey: string;
-	count: number;
-	/** Row ids belonging to the user — the only ones they may take back. */
-	mine: number[];
+/** One Sticker the reader gave on this subject, as the server identifies it. */
+interface Mine {
+	id: number;
+	/** The level id — the amount it was given at, never displayed as money here. */
+	level: string;
 }
 
 interface Allowance {
@@ -75,11 +82,12 @@ export default function StickerBar({
 	subjectId: number;
 	/** What the Sticker is being given to, for a screen reader. */
 	label: string;
-	/** Which side the dropdown hugs — the Work's bar sits at the right of the verdict row. */
+	/** Which side the dropdown hugs — a post's bar sits at the right of its footer. */
 	align?: "start" | "end";
 }) {
 	const { isAuthenticated } = useAuth();
-	const [groups, setGroups] = useState<StickerGroup[]>([]);
+	const [levels, setLevels] = useState<string[]>([]);
+	const [mine, setMine] = useState<Mine[]>([]);
 	const [allowance, setAllowance] = useState<Allowance | null>(null);
 	const [open, setOpen] = useState(false);
 	const [busy, setBusy] = useState(false);
@@ -100,7 +108,10 @@ export default function StickerBar({
 		const res = await client.api.subscriptions.stickers.$get({
 			query: { subjectType, subjectId: String(subjectId) },
 		});
-		if (res.ok) setGroups(((await res.json()) as { stickers: StickerGroup[] }).stickers);
+		if (!res.ok) return;
+		const data = (await res.json()) as { levels: string[]; mine: Mine[] };
+		setLevels(data.levels ?? []);
+		setMine(data.mine ?? []);
 	}, [subjectType, subjectId]);
 
 	useEffect(() => {
@@ -150,10 +161,10 @@ export default function StickerBar({
 				setProblem(body.error ?? "That did not go through.");
 				return;
 			}
-			// Both, because giving changes the wall and what is left to give. Refetched
+			// Both, because giving changes the outline and what is left to give. Refetched
 			// rather than adjusted locally: somebody else may have given one since load,
-			// and a count that drifts from its rows looks exactly like a count. The
-			// allowance is dropped entirely; the next open refetches it whole.
+			// and a decoration that drifts from its rows looks exactly like a decoration.
+			// The allowance is dropped entirely; the next open refetches it whole.
 			setAllowance(null);
 			close();
 			await loadStickers();
@@ -189,44 +200,11 @@ export default function StickerBar({
 	 */
 	const pickable = CURRENT_BATCH.art as readonly StickerArt[];
 
-	const total = groups.reduce((n, g) => n + g.count, 0);
+	const present = levels.map((id) => stickerLevelById(id)).filter((l) => l !== undefined);
 
 	return (
 		<div className="flex flex-wrap items-center gap-2">
-			{groups.map((group) => {
-				const art = stickerArt(group.artKey);
-				// ⚠️ A row whose art is not in any batch still renders, as a count without a
-				// drawing. Dropping it would silently remove a gift somebody paid for.
-				const mine = group.mine.length > 0;
-				return (
-					<button
-						key={group.artKey || "unknown"}
-						type="button"
-						disabled={!mine || busy}
-						onClick={() => mine && remove(group.mine[0] as number)}
-						title={
-							mine
-								? `You gave this. Click to take it off the page — the creator stays paid.`
-								: `${group.count} × ${art?.label ?? "Sticker"}`
-						}
-						className={`flex items-center gap-1 rounded-full border px-2 py-1 ${
-							mine ? "border-primary/40 bg-primary/5" : "border-base-300"
-						} ${mine ? "cursor-pointer" : "cursor-default"}`}
-					>
-						{art ? (
-							<BadgeMark
-								shape={art.shape}
-								color={art.color}
-								emblem={art.emblem}
-								label={art.label}
-								clipId={`sticker-${subjectType}-${subjectId}-${group.artKey}`}
-								size="h-6 w-6"
-							/>
-						) : null}
-						<span className="text-sm tabular-nums">{group.count}</span>
-					</button>
-				);
-			})}
+			<StickerDecoration levels={present} label={label} />
 
 			{isAuthenticated && (
 				<details
@@ -243,10 +221,38 @@ export default function StickerBar({
 					>
 						<PlusIcon className="size-4" aria-hidden />
 						Sticker
-						{total > 0 ? <span className="sr-only">— you gave {total}</span> : null}
 					</summary>
 
 					<div className="dropdown-content z-20 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">
+						{/* ⭐ What the reader gave, where taking it back now lives. It sits above the
+						    batch because it is about this page rather than about giving. */}
+						{mine.length > 0 && (
+							<div className="mb-1 border-b border-base-300 pb-1">
+								<p className="px-1 pt-1 text-xs text-base-content/60">What you gave</p>
+								{mine.map((row) => {
+									const level = stickerLevelById(row.level);
+									return (
+										<div key={row.id} className="flex items-center gap-2 p-1">
+											<span
+												aria-hidden="true"
+												className="size-2.5 shrink-0 rounded-full border border-base-content/20"
+												style={{ background: level ? badgeColor(level.color).fill : undefined }}
+											/>
+											<span className="flex-1 text-xs">{level?.label ?? "A Sticker"}</span>
+											<button
+												type="button"
+												className="btn btn-ghost btn-xs"
+												disabled={busy}
+												onClick={() => remove(row.id)}
+											>
+												Remove
+											</button>
+										</div>
+									);
+								})}
+							</div>
+						)}
+
 						{pickable.map((art: StickerArt) => {
 							// `null` while the allowance is still loading, so rows stay enabled
 							// and the server is the authority on what is left — the counts are

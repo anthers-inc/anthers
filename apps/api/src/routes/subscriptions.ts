@@ -69,7 +69,12 @@ import {
 import { badgeViews } from "@anthers/shared/fees";
 import type { PublicAccessBudget, ShareLinkBudget } from "@anthers/shared/public-access";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
-import { isGiveable, stickerAmount } from "@anthers/shared/stickers";
+import {
+	isGiveable,
+	STICKER_LEVELS,
+	stickerAmount,
+	stickerLevelFor,
+} from "@anthers/shared/stickers";
 import { groupSupporters } from "@anthers/shared/supporters";
 import { zValidator } from "@hono/zod-validator";
 import Decimal from "decimal.js";
@@ -2417,16 +2422,24 @@ const subscriptionRoutes = new Hono()
 	})
 
 	/**
-	 * The Stickers showing on one subject.
+	 * The decoration on one subject: which levels it has received, and what the reader gave.
 	 *
-	 * ⚠️ **Public, and it publishes art and a count rather than who gave what.** A Sticker
-	 * is a visible gesture, so the page has to show it — but pairing a name with a sum is
-	 * a statement about somebody's finances, exactly as the supporters page reasons. The
-	 * user's own Stickers come back identified, because you may take back only your own.
+	 * 🚨 **Levels, never counts and never money** (Parker, 2026-09-13). The decoration says
+	 * how many distinct denominations a thing has received, so one Sticker at each level and
+	 * fifty spread across them are indistinguishable — a reader learns the least that was
+	 * given and never the actual amount. The grouped-by-art payload this replaces published a
+	 * count per drawing, which let anyone work the sum out.
 	 *
-	 * 🚨 **Removed Stickers are excluded here and nowhere else.** Removal is display-only;
-	 * `stickersDirectedIn` still counts them against the giver's allowance and the creator
-	 * still gets paid. This endpoint is the display, so this is the one place it applies.
+	 * ⚠️ **Public, and it publishes who gave what to nobody.** A Sticker is a visible gesture,
+	 * so the page has to show it, but pairing a name with a sum is a statement about somebody's
+	 * finances, exactly as the supporters page reasons. The reader's own Stickers come back
+	 * identified — that is the only handle the picker has for taking one back now that the
+	 * chips are gone.
+	 *
+	 * 🚨 **Removed and voided Stickers are both excluded here.** A giver's removal is
+	 * display-only — `stickersDirectedIn` still counts it against the allowance and the creator
+	 * still gets paid, because the money was committed. A voided one is Anthers' own reversal,
+	 * so it keeps neither its money nor its stripe.
 	 */
 	.get("/stickers", async (c) => {
 		const subjectType = c.req.query("subjectType") ?? "";
@@ -2436,28 +2449,34 @@ const subscriptionRoutes = new Hono()
 		}
 		const userId = await getOptionalUserId(c);
 		const rows = await db
-			.select({ id: stickers.id, artKey: stickers.artKey, giverId: stickers.giverId })
+			.select({ id: stickers.id, amount: stickers.amount, giverId: stickers.giverId })
 			.from(stickers)
 			.where(
 				and(
 					eq(stickers.subjectType, subjectType),
 					eq(stickers.subjectId, subjectId),
 					isNull(stickers.removedAt),
+					isNull(stickers.voidedAt),
 				),
 			)
 			.orderBy(stickers.id);
 
-		// Grouped by art, because a wall of twenty identical butterflies says less than
-		// "twenty butterflies" and costs a page more to render.
-		const byArt = new Map<string, { artKey: string; count: number; mine: number[] }>();
+		const present = new Set<string>();
+		const mine: { id: number; level: string }[] = [];
 		for (const row of rows) {
-			const key = row.artKey ?? "";
-			const entry = byArt.get(key) ?? { artKey: key, count: 0, mine: [] };
-			entry.count++;
-			if (userId && row.giverId === userId) entry.mine.push(row.id);
-			byArt.set(key, entry);
+			// ⚠️ Read the AMOUNT, not the drawing. Batches accumulate and a stored row can
+			// name art the current batch does not, while its denomination is the thing the
+			// decoration counts.
+			const level = stickerLevelFor(row.amount);
+			if (!level) continue;
+			present.add(level.id);
+			if (userId && row.giverId === userId) mine.push({ id: row.id, level: level.id });
 		}
-		return c.json({ stickers: [...byArt.values()] });
+		// Ordered cheapest first, which is the order the outline draws its stripes in.
+		return c.json({
+			levels: STICKER_LEVELS.filter((level) => present.has(level.id)).map((level) => level.id),
+			mine,
+		});
 	})
 
 	.post("/stickers", requireAuth, zValidator("json", giveStickerSchema), async (c) => {
