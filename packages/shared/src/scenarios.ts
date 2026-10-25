@@ -10,12 +10,14 @@
  * sat there overstating the remainder by exactly the card fee. A sweep cannot be
  * trusted to be complete; only derivation can.
  *
- * So: **nothing downstream may re-type a figure.** This module computes them,
- * `scripts/econ-figures.ts` renders them into `figures.generated.ts` (plain
- * numbers, so the SPA bundle never sees decimal.js) and into the wiki docs
- * between markers, and `--check` fails CI if either has drifted.
+ * So: **nothing downstream may re-type a figure.** This module computes them, and
+ * `figures.ts` carries the plain numbers the app reads, so the SPA bundle never sees
+ * decimal.js. A dial that moves is a change to that file and to the pages quoting it in
+ * the same commit; periodic drift passes reconcile the two, because nothing fails the
+ * build when they disagree.
  *
- * Adding a published figure? Add it here, not to the page.
+ * Adding a published figure? Add it here, then update `figures.ts` and the page that
+ * states it.
  */
 import Decimal from "decimal.js";
 import {

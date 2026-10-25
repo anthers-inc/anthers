@@ -9,8 +9,8 @@
  * so did the paragraph the creator actually reads. **It was never true.** `resolvePurchase`
  * takes the amount from the stored `access.price` and `ProjectPricing` sends no body at
  * all, so no buyer has ever been able to pay a cent above list. The claim had also reached
- * two marketing pages; `econ:figures --check` now carries a `RETIRED_COPY` rule so it
- * cannot walk back.
+ * two marketing pages, and it must not come back: a Work's price is the price, charged
+ * exactly, with no tipping on top.
  *
  * ⚠️ **One table.** A Work is gated by its creator or it is Public Access; there is no
  * platform-side second table to render, and adding one would stratify the commons.

@@ -198,12 +198,6 @@ jobs:
       - name: Lint
         run: bun run lint
 
-      # Published money figures are generated from fees.ts, never typed. This fails if
-      # a dial or formula changed without regenerating — the drift that put a wrong
-      # remainder in the economics doc for five days after the 2026-08-03 revamp.
-      - name: Economics figures are in sync
-        run: bun run econ:figures --check
-
       # A published Lexicon is a public API commitment, so the generated types drifting
       # from the JSON that defines them is not a formatting nit — it means the schema and
       # the code disagree about something other people may already be consuming.

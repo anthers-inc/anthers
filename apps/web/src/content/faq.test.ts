@@ -8,11 +8,11 @@
 // stale on the four pages a visitor is most likely to read — and unlike the marketing
 // prose around it, this copy is a long way from the section that would contradict it.
 //
-// Scoped the way `about-claims.test.ts` is scoped, and for the same reason: `RETIRED_COPY`
-// in `scripts/econ-figures.ts` runs repo-wide and already covers the vocabulary (Seeds,
-// watch-time, "federated", pay-what-you-want, Anthers Gates), so nothing here repeats it.
-// What is left is the handful of rules that are **about this file's claims** rather than
-// about words, and each one below is a rule the wiki's *How Anthers Talks About Itself* states and a regex can actually check.
+// Scoped the way `about-claims.test.ts` is scoped, and for the same reason: the rendered
+// marketing copy is checked by `marketing-copy.e2e.ts`, so nothing here repeats a claim
+// that lives on a page. What is left is the handful of rules that are **about this file's
+// claims** rather than about words, and each one below is a rule the wiki's *How Anthers
+// Talks About Itself* states and a regex can actually check.
 //
 // ⚠️ The assertions read the RENDERED text, not the source, which matters for the answers
 // written as JSX: a rule checked against source would miss every claim that arrives inside

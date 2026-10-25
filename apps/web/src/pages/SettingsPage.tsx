@@ -1527,8 +1527,8 @@ function AnthersHandleCard({
  * without its identity, and swapping it for another is not built.
  *
  * ⚠️ **The copy is easy to overclaim.** It names the identity and what it is for, and says
- * nothing about what Anthers publishes into it — that is the Studio's publishing card, and
- * `RETIRED_COPY` exists because that framing has drifted onto pages it did not belong on before.
+ * nothing about what Anthers publishes into it — that is the Studio's publishing card. The
+ * framing has drifted onto pages it did not belong on before, so the copy stays here.
  */
 function BroughtIdentityCard({ handle, did }: { handle: string; did: string }) {
 	return (

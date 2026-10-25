@@ -619,8 +619,7 @@ const subscriptionRoutes = new Hono()
 	// constants (`ANTHERS_BADGES`, `PUBLIC_ACCESS_PRICE`) remain the seeding's INPUT and
 	// the billing validators' floor, but the copy surfaces — the signup matrix, the
 	// marketing pages, the FAQ, the meter notice — read the seeded value through here so
-	// a change made in the database reaches the copy the next fetch, the way
-	// `econ:figures` already delivers every other published figure from code.
+	// a change made in the database reaches the copy the next fetch.
 	//
 	// 🚨 **Refuses rather than falls back when the ladder is unseeded** (503): a placeholder
 	// constant answering in its place would publish the old values past the point they were

@@ -163,10 +163,10 @@ const SELF = "american-spelling-guard.test.ts";
  * roots list stops at the workspaces because that is where code lives; the top of the
  * repository is not a workspace and so fell through.
  *
- * ⭐ **`econ:figures` had the same gap and closed it by walking markdown from the repository
- * root**, which is why the two checks disagreeing about their corpus was the tell. Listed
- * explicitly rather than globbed from `.` so that the walk cannot wander into
- * `node_modules`, `target` or a vendored directory and cost a second on every run.
+ * ⭐ **A check that only reads the workspaces has a hole at the top of the repository**, and
+ * this list is what closes it here. Listed explicitly rather than globbed from `.` so that
+ * the walk cannot wander into `node_modules`, `target` or a vendored directory and cost a
+ * second on every run.
  */
 const ROOT_DOCS = [
 	"README.md",

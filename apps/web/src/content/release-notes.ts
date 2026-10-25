@@ -33,10 +33,9 @@
 // 3. **Past tense, plain declarative.** The page's whole subject is the past, and it is
 //    the one page where describing a shipped thing plainly is the honest mode. Nothing
 //    here announces; an entry that sells is an entry to rewrite.
-// 4. **Money figures are interpolated, never typed** — `econ:figures --check` scans
-//    this directory and a typed figure fails the build. If an entry must name a number
-//    the model generates, the scenario lives in `packages/shared/src/scenarios.ts` and
-//    the entry interpolates the constant.
+// 4. **Money figures are interpolated, never typed.** If an entry must name a number the
+//    model derives, the scenario lives in `packages/shared/src/scenarios.ts` and the entry
+//    interpolates the constant, so a dial that moves updates the note with it.
 // 5. **The voice is the vault's public voice** — `82.01 How Anthers Talks About Itself`
 //    in `wiki-anthers/80-89 Development/82 Brand/` governs claims and vocabulary
 //    (Work, Post, Library, Badge, gate, Public Access, Review, time). The pass is

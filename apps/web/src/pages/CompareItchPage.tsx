@@ -38,9 +38,9 @@ import { studioUrl } from "../lib/studio";
 const serif = { fontFamily: FONTS.fraunces };
 
 /**
- * The $10 sale both receipts are built from — derived, never typed. See
- * `scripts/econ-figures.ts`; a hand-typed $9.40 sat on this page in three places for
- * months, and survived the sweep that retired the charge it was built from.
+ * The $10 sale both receipts are built from — derived, never typed. A hand-typed $9.40
+ * sat on this page in three places for months, and survived the sweep that retired the
+ * charge it was built from.
  *
  * itch.io's column quotes the same `cardFee` on purpose: every platform pays the same
  * card cost, and the wiki's *How Anthers Talks About Itself* § Comparisons requires all-in against all-in. Only their
@@ -196,7 +196,6 @@ export default function CompareItchPage() {
 							<p className="mb-4 text-xs text-base-content/45">$10 game sale (default 10% share)</p>
 							<div className="flex flex-col gap-2 text-sm">
 								<ReceiptLine label="Sale price" amount={`$${GAME_10.price}`} />
-								{/* econ:allow — itch.io's own revenue share, not one of our figures */}
 								<ReceiptLine label="itch.io share (10%)" amount={`-$${ITCH_SHARE}`} negative />
 								<ReceiptLine label="Payment processing" amount={`-$${GAME_10.cardFee}`} negative />
 								<div className="my-1 border-t border-base-content/10" />
@@ -332,7 +331,7 @@ export default function CompareItchPage() {
 								    itch genuinely does have it, so the row stays and the ✓ moves — the wiki's *How Anthers Talks About Itself*
 								    § Comparisons requires conceding where we lose, and deleting the row
 								    would concede by omission.
-								    econ:allow — credits itch.io, not us; `patreon` is the itch column */}
+								*/}
 								<CompRow feature="Pay-what-you-want pricing" patreon />
 								<CompRow feature="Creator analytics" anthers patreon />
 								<CompRow feature="Bundles" patreon />
@@ -372,8 +371,8 @@ export default function CompareItchPage() {
 					 * 🚨 **The line that must never come back is the one about CONTENT.** A work
 					 * itself never becomes a record and no schema Anthers publishes can carry one — a
 					 * repository is a log every consumer downloads in full. The listing is a record;
-					 * the work it points at is not, and `econ-figures.ts` fails the build on the
-					 * conflation.
+					 * the work it points at is not, and saying otherwise is the conflation this
+					 * note forbids.
 					 */}
 					<Reveal delay={0}>
 						<PortabilityPoint
