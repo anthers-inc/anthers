@@ -102,7 +102,7 @@ test("the Versions section lists a previous version with its original", async ({
 		await page.getByRole("button", { name: "Manage This Work's Media" }).click();
 		await page.getByRole("tab", { name: "Versions" }).click();
 		// The current version carries the name its creator gave it, editable where it lives.
-		await expect(page.getByText("Current version")).toBeVisible();
+		await expect(page.getByText("Current version", { exact: true })).toBeVisible();
 		await expect(page.getByLabel("Name this version")).toHaveValue("1.1");
 		// The list names the version by its date, its file count and its size; the
 		// filenames are the reader's business only on the current version.
@@ -119,7 +119,9 @@ test("the Versions section lists a previous version with its original", async ({
 		try {
 			const readerPage = await reader.newPage();
 			await readerPage.goto(draft.url);
-			await expect(readerPage.getByText(/Updated once since release, 1\.1 on/)).toBeVisible();
+			await expect(
+				readerPage.getByText(/Updated 2 times since release, most recently 1\.1 on/),
+			).toBeVisible();
 			await readerPage.getByRole("tab", { name: "Details" }).click();
 			await expect(readerPage.getByRole("heading", { name: "Versions" })).toBeVisible();
 			await expect(readerPage.getByText("1.0.1")).toBeVisible();
