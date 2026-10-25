@@ -2,11 +2,15 @@
 /**
  * The Sticker picker and the give it performs, in a real browser.
  *
- * 🚨 **The failure class is the votes suite's: the bar renders nothing and reports
- * nothing.** `StickerBar` draws only its wall of chips while it has no data, so a broken
- * import, a wrong endpoint parse or a collapsed dropdown leaves a page that looks finished
- * but admits no giving at all. The API suites cannot see that failure, because the API is
- * fine in exactly that case.
+ * 🚨 **The failure class is the votes suite's: the control renders nothing and reports
+ * nothing.** `StickerBar` draws only its decoration while it has no data, so a broken import,
+ * a wrong endpoint parse or a collapsed dropdown leaves a page that looks finished but admits
+ * no giving at all. The API suites cannot see that failure, because the API is fine in exactly
+ * that case.
+ *
+ * ⭐ **What a give leaves behind is an outline, not a count** (Parker, 2026-09-13). The wall of
+ * chips this suite used to assert published how many Stickers of each drawing a thing carried,
+ * which let a reader add up the money; the mark counts distinct levels and states no amount.
  *
  * ⭐ **The overlay is the product claim** (Parker, 2026-10-16): the picker is a dropdown
  * over the page and not an inline expansion — opening it must move nothing below it. A
@@ -314,29 +318,37 @@ test("🚨 the post carries the picker; its rows run smallest at the top with co
 	expect(errors).toEqual([]);
 });
 
-test("⭐ giving a Sticker lands the chip, closes the picker, and the count moves", async ({
+test("⭐ giving a Sticker lands the outline, closes the picker, and the count moves", async ({
 	page,
 	context,
 }) => {
+	const errors = trackErrorsStrict(page);
 	await signInAsWalker(context);
 	await page.goto(POST_PATH);
 
 	const rows = await openPicker(page, "Anyone can read this");
 	await rows.first().click();
 
-	// The chip on the wall, reconciled from the refetch rather than left as an optimistic
-	// guess — a count that drifted from its rows would look exactly like a count. Its
-	// accessible name rides the art plus the count, read straight off that shape.
-	const chip = page.getByRole("button", { name: "Small Butterfly 1" });
-	await expect(chip).toBeVisible({ timeout: 5_000 });
+	// ⭐ **The outline, not a count** (Parker, 2026-09-13): one level reads as one stripe, and
+	// the page states no amount. A chip carrying "1" beside an art would be the count the
+	// decision retired, so the assertion is the mark's own attribute.
+	const mark = page.locator(`[data-sticker-decoration]`).first();
+	await expect(mark).toBeVisible({ timeout: 5_000 });
+	await expect(mark).toHaveAttribute("data-sticker-decoration", /^[1-3]$/);
+	// The wall of chips is gone, including the one this give used to land.
+	await expect(page.getByRole("button", { name: "Small Butterfly 1" })).toHaveCount(0);
 
 	// The picker closed on its own once the give went through.
 	await expect(pickerRows(page)).toHaveCount(0);
 
-	// Reopening shows the refetched allowance: one $0.25 given, so the row's count is one
-	// less than it was — the giver sees what their give moved.
+	// Reopening shows the refetched allowance and, under it, what this giver has on the page
+	// — the picker is where taking one back lives now that the chips are gone.
 	const fresh = await openPickerPlain(page, "Anyone can read this");
 	await expect(fresh.first()).toContainText(`(${leftFor(0.25) - 1} left)`, { timeout: 5_000 });
+	// ⚠️ Scoped to the open picker: a `<details>` renders its contents whether or not it is
+	// open, so every comment row's picker also holds this line in the DOM.
+	await expect(page.locator("details[open]").getByText("What you gave")).toBeVisible();
+	expect(errors).toEqual([]);
 });
 
 /**
@@ -371,10 +383,33 @@ test("⭐ a comment takes its Sticker from the editor that writes it", async ({ 
 	// The comment landed and the Sticker went with it: the post carried one from the give
 	// test above, so the wall now holds two of this denomination.
 	await expect(page.getByText(body)).toBeVisible({ timeout: 10_000 });
-	await expect(page.getByRole("button", { name: "Small Butterfly 1" })).toHaveCount(2, {
+	// The comment carries its own outline inside the thread, beside its score — the post's is
+	// outside `#comments`, so this counts only what the comment earned.
+	await expect(page.locator("#comments [data-sticker-decoration]")).toHaveCount(1, {
 		timeout: 10_000,
 	});
 	expect(errors).toEqual([]);
+});
+
+test("⭐ the picker is where a giver takes one back, now that no chip carries a Remove", async ({
+	page,
+	context,
+}) => {
+	await signInAsWalker(context);
+	await page.goto(POST_PATH);
+	await openPickerPlain(page, "Anyone can read this");
+
+	// The give above left this giver a row under "What you gave" — that section is the home
+	// removal has without chips to click. Scoped to the open picker, because a closed
+	// `<details>` still holds its contents and every other row has one of these too.
+	const open = page.locator("details[open]");
+	await expect(open.getByText("What you gave")).toBeVisible();
+	page.once("dialog", (dialog) => dialog.accept());
+	await open.getByRole("button", { name: "Remove" }).first().click();
+
+	// The row goes and the section goes with it; the money stays spent, which is the
+	// confirmation's whole point and is asserted on the API side.
+	await expect(open.getByText("What you gave")).toHaveCount(0, { timeout: 5_000 });
 });
 
 test("⭐ the review composer carries the Work's chooser, with the same rows", async ({

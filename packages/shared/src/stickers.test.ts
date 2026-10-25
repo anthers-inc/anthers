@@ -17,8 +17,12 @@ import {
 	CURRENT_BATCH,
 	isGiveable,
 	STICKER_BATCHES,
+	STICKER_LEVELS,
 	stickerAmount,
 	stickerArt,
+	stickerLevelById,
+	stickerLevelFor,
+	stickerLevelId,
 } from "./stickers";
 
 describe("the batches", () => {
@@ -77,6 +81,28 @@ describe("giving and drawing", () => {
 		// they may no longer send — the cost is a picker that grows, which the interface
 		// carries by leading with the current batch.
 		for (const art of ALL_STICKER_ART) expect(isGiveable(art.key)).toBe(true);
+	});
+
+	it("⭐ makes one level per denomination, cheapest first, whatever the batch", () => {
+		// A level is an AMOUNT rather than a drawing: batches accumulate, so two arts a year
+		// apart can be the same denomination and a stored row whose art is long gone still
+		// has to read at its level.
+		expect(STICKER_LEVELS.map((l) => l.amount)).toEqual(
+			[...STICKER_DENOMINATIONS].sort((a, b) => a - b),
+		);
+		expect(new Set(STICKER_LEVELS.map((l) => l.id)).size).toBe(STICKER_LEVELS.length);
+	});
+
+	it("maps a stored amount to its level by the amount, not by the art", () => {
+		expect(stickerLevelFor(0.25)?.id).toBe(stickerLevelId(0.25));
+		// The column is `numeric`, so it arrives as a string.
+		expect(stickerLevelFor("0.50")?.id).toBe(stickerLevelId(0.5));
+		expect(stickerLevelById(stickerLevelId(1))?.amount).toBe(1);
+		// An amount no batch ever offered draws nothing rather than inventing a level.
+		expect(stickerLevelFor(3.75)).toBeUndefined();
+		expect(stickerLevelFor(null)).toBeUndefined();
+		expect(stickerLevelFor("not a number")).toBeUndefined();
+		expect(stickerLevelById("nonsense")).toBeUndefined();
 	});
 
 	it("⚠️ draws art for every key it will ever accept", () => {

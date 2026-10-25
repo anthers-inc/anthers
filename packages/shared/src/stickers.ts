@@ -171,3 +171,70 @@ export function batchProblems(): string[] {
 }
 
 export const batchesAreWellFormed = (): boolean => batchProblems().length === 0;
+
+/**
+ * A denomination, which is what decoration counts.
+ *
+ * ⭐ **The decoration scales with how many distinct levels a thing has received, never with
+ * how many Stickers or how much money** (Parker, 2026-09-13). One Sticker at each level and
+ * fifty spread across every level look identical, so a reader can tell the least that was
+ * given and never the actual amount.
+ *
+ * ⚠️ **A level is an AMOUNT, not a drawing.** Batches accumulate — nothing is ever retired
+ * from giving — so two arts four seasons apart can be the same denomination, and a stored row
+ * whose art is long out of the current batch still has to read at its level. `stickers.amount`
+ * is what the row carries, and this is keyed off that rather than off `artKey`.
+ */
+export interface StickerLevel {
+	/** Stable id: the amount as a fixed string, so a level outlives the art that introduced it. */
+	id: string;
+	/** What giving at this level directs, in dollars. Never displayed by a decoration. */
+	amount: number;
+	/** The color its stripe is drawn in, from the batch's own palette. */
+	color: string;
+	/** What a person calls it, and what a screen reader hears for its stripe. */
+	label: string;
+}
+
+/** The id a level is keyed by — one per amount, in the batch's own denomination shape. */
+export function stickerLevelId(amount: number): string {
+	return amount.toFixed(2);
+}
+
+/**
+ * Every level any batch has offered, cheapest first.
+ *
+ * ⭐ **Ascending order is the drawing order.** The outline carries the cheapest level's color
+ * as its base and gains a stripe of the next color for each further level, so the mark reads
+ * as one line that got richer rather than as three unrelated colors.
+ */
+export const STICKER_LEVELS: readonly StickerLevel[] = (() => {
+	const byAmount = new Map<number, StickerLevel>();
+	for (const art of [...ALL_STICKER_ART].sort((a, b) => a.amount - b.amount)) {
+		if (byAmount.has(art.amount)) continue;
+		byAmount.set(art.amount, {
+			id: stickerLevelId(art.amount),
+			amount: art.amount,
+			color: art.color,
+			label: art.label,
+		});
+	}
+	return [...byAmount.values()];
+})();
+
+const LEVELS_BY_ID = new Map(STICKER_LEVELS.map((l) => [l.id, l]));
+
+/** The level with this id, or `undefined` for an id no batch ever offered. */
+export function stickerLevelById(id: string | null | undefined): StickerLevel | undefined {
+	return id ? LEVELS_BY_ID.get(id) : undefined;
+}
+
+/** The level a stored amount belongs to, or `undefined` for an amount no batch ever offered. */
+export function stickerLevelFor(
+	amount: number | string | null | undefined,
+): StickerLevel | undefined {
+	if (amount === null || amount === undefined) return undefined;
+	const n = typeof amount === "string" ? Number(amount) : amount;
+	if (!Number.isFinite(n)) return undefined;
+	return LEVELS_BY_ID.get(stickerLevelId(n));
+}
