@@ -27,7 +27,12 @@
 // The narrower `Badge` (Anthers' own four, no "free") is what `AnthersBadgeMark` keys on —
 // both types carry the name, and the disambiguation keeps the cast honest.
 import type { Badge as IssuerBadge } from "@anthers/shared/constants";
-import { timePoolFor } from "@anthers/shared/constants";
+import {
+	stickerBudgetFor,
+	storageReserveFor,
+	supportLineFor,
+	timePoolByTimeFor,
+} from "@anthers/shared/constants";
 import { FREE_PUBLIC_ACCESS_HOURS } from "@anthers/shared/public-access";
 import { AnthersBadgeMark } from "@anthers/web-shared/economics";
 import { CreatorBadgeMark } from "@anthers/web-shared/economics/CreatorBadgeMark";
@@ -447,7 +452,7 @@ export default function BadgesSection() {
 				<div className="divider text-sm text-base-content/50 mt-0 mb-4">
 					Your Badge from Anthers
 					<InfoTip
-						text={`What you give Anthers funds the Time Pool ($${timePoolFor(publicAccessPrice).toFixed(2)}, to creators by time) and Supports Anthers (the remainder, which funds the charitable programs — free access included). The card fee is inside the price. Downloads are unlimited and cost nothing, and $${publicAccessPrice} a month lifts the ${FREE_PUBLIC_ACCESS_HOURS}-hour monthly limit on Public Access.`}
+						text={`What you give Anthers is split into named lines that add up to it: the Time Pool ($${timePoolByTimeFor(publicAccessPrice).toFixed(2)}, to creators by time), your Sticker budget ($${stickerBudgetFor(publicAccessPrice).toFixed(2)}, to creators you choose yourself, and paid out by time if you leave it unspent), your storage allowance ($${storageReserveFor(publicAccessPrice).toFixed(2)}, reserved at cost and poured into Anthers Support if you don't use it), and Anthers Support ($${supportLineFor(publicAccessPrice).toFixed(2)}, which funds the charitable programs — free access included). The card fee is inside the price. Downloads are unlimited and cost nothing, and $${publicAccessPrice} a month lifts the ${FREE_PUBLIC_ACCESS_HOURS}-hour monthly limit on Public Access.`}
 					/>
 				</div>
 

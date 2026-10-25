@@ -24,8 +24,9 @@
 // and a creator would catch it. Where a rival wins (Steam below ~$1.11) or ties
 // (Bandcamp Friday), the row says so. Competitor rates checked 2026-08-03 and
 // perishable — re-check before publishing.
-//   • On streaming the creator earns their share of every user's Time Pool (half of
-//     what that user gives Anthers), the same rate for every medium (equal-time).
+//   • On streaming the creator earns their share of what every user gives creators —
+//     the Time Pool paid by time, plus the Sticker budget the user aims by hand, and
+//     unspent budget rejoins the pool — the same rate for every medium (equal-time).
 //     Anthers profits $0.
 //
 // Positioning (important): streaming is a secondary financial benefit, not the
@@ -49,7 +50,9 @@ import {
 	CARD_RATE,
 	cardFeeDisplay,
 	PUBLIC_ACCESS_PRICE,
+	stickerBudgetFor,
 	thresholdForBadge,
+	timePoolByTimeFor,
 	timePoolFor,
 } from "@anthers/shared/constants";
 import { SALE_TABLE } from "@anthers/shared/figures";
@@ -95,13 +98,15 @@ interface Platform {
 	matchups: Matchup[];
 }
 
-// What a fan gives Anthers sets the Time Pool they bring each month — half of it, so
-// Root $1.50 · Sprout $3 · Petal $4.50 · Blossom $6, and it keeps climbing past
-// Blossom. Split across everyone they watch by time, that lands roughly $0.03–0.60 per
-// view-hour depending on how much they give and how much they watch — the same rate for
-// every medium (equal-time). Anthers takes none of it.
+// What a fan gives Anthers sets what they bring creators each month — half of it, in
+// two channels, so Root $1.50 · Sprout $3 · Petal $4.50 · Blossom $6, and it keeps
+// climbing past Blossom. The by-time pool is two thirds of that and the fan's Sticker
+// budget the other third, and a fan who hands out nothing has it all paid by time. Split
+// across everyone they watch, it lands roughly $0.03–0.60 per view-hour depending on how
+// much they give and how much they watch — the same rate for every medium (equal-time).
+// Anthers takes none of it.
 const RANKS = ["root", "sprout", "petal", "blossom"] as const;
-const PAID_POOLS = RANKS.map((b) => timePoolFor(thresholdForBadge(b)));
+const PAID_TO_CREATORS = RANKS.map((b) => timePoolFor(thresholdForBadge(b)));
 /** Derived, never typed — see scripts/econ-figures.ts. */
 const SALE_10_1GIB = SALE_TABLE.find((r) => r.label === "game-10-1gib")!;
 const SALE_25_PHYSICAL = SALE_TABLE.find((r) => r.label === "merch-25-physical")!;
@@ -126,9 +131,9 @@ const money = (n: number) => `$${n.toFixed(2)}`;
  * typed — it moves with the card rate (packages/shared/src/scenarios.ts warns against
  * re-typing it, having spent $1.15 on that once). */
 const STEAM_CROSSING = money(0.3 / (0.3 - CARD_RATE));
-const POOL_RANGE = `${money(PAID_POOLS[0])}–${money(PAID_POOLS[PAID_POOLS.length - 1])}`;
+const POOL_RANGE = `${money(PAID_TO_CREATORS[0])}–${money(PAID_TO_CREATORS[PAID_TO_CREATORS.length - 1])}`;
 /** The reference streamer both this page and /for-creators quote: Sprout ($6 a month to
- *  Anthers), ~28 watch-hours a month → their Time Pool ÷ those hours. */
+ *  Anthers), ~28 watch-hours a month → their creator money ÷ those hours. */
 const REF_HOURS = 28;
 const REF_HR_PAY = money(timePoolFor(thresholdForBadge("sprout")) / REF_HOURS);
 
@@ -158,7 +163,7 @@ const SUBSTACK_SEED_NET = money(SEED_SPEND * 0.9 - cardFeeDisplay(SEED_SPEND) - 
 // to the processor.
 const A_STREAM: Side = {
 	keep: "~$0.03–0.60 / hr",
-	keepSub: `your share of the fan's monthly Time Pool; the same rate for every medium (a Sprout fan watching ~${REF_HOURS} hrs pays ~${REF_HR_PAY}/hr)`,
+	keepSub: `your share of what the fan gives creators each month — their Time Pool by time, plus the Sticker budget they aim by hand; the same rate for every medium (a Sprout fan watching ~${REF_HOURS} hrs pays ~${REF_HR_PAY}/hr)`,
 	cut: "$0",
 	cutKind: "none",
 };
@@ -198,7 +203,7 @@ const PLATFORMS: Platform[] = [
 					keepSub: "≈ $0.05–0.20/hr on Premium (a ~$16 sub pooled by watch-time); pennies on ads",
 					cut: "45%",
 				},
-				note: `What a fan gives Anthers sets a monthly Time Pool (${money(timePoolFor(PUBLIC_ACCESS_PRICE))} of every $${PUBLIC_ACCESS_PRICE}) that's split across everyone they spend time with, by time; Anthers takes none of it and profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from monthly backing and direct sales. Streaming's value is reach: your public work is available effectively at cost.`,
+				note: `What a fan gives Anthers sets what creators get (${money(timePoolFor(PUBLIC_ACCESS_PRICE))} of every $${PUBLIC_ACCESS_PRICE}): ${money(timePoolByTimeFor(PUBLIC_ACCESS_PRICE))} in a Time Pool split across everyone they spend time with by time, and ${money(stickerBudgetFor(PUBLIC_ACCESS_PRICE))} in a Sticker budget they hand out themselves, with whatever they leave unspent joining the pool. Anthers takes none of it and profits $0. Per hour that lands roughly where YouTube Premium does, but we don't lead with streaming: there are no ads and no profit-taking, and your real earnings come from monthly backing and direct sales. Streaming's value is reach: your public work is available effectively at cost.`,
 			},
 		],
 	},
@@ -352,13 +357,14 @@ export default function CreatorPayComparisonPage() {
 					<>
 						Anthers takes <b className="text-base-content">0%</b> of what reaches you: every{" "}
 						<b className="text-base-content">dollar</b> given to you and every direct sale carries
-						no platform fee at all, and the Time Pool is distributed to creators by time. What does
-						come out of a price is the at-cost card processing, paid to the processor, never a cent
-						to us, and nothing at all for delivery however large the work. The one thing that funds
-						the platform is <b className="text-base-content">the remainder</b>: what's left of what
-						is given to Anthers after the Time Pool, funding the charitable programs, free access
-						included, never subtracted from your earnings. Here's what actually reaches you,
-						platform by platform.
+						no platform fee at all, and what a fan gives creators is split into a Time Pool paid by
+						time and a Sticker budget the fan aims by hand. What does come out of a price is the
+						at-cost card processing, paid to the processor, never a cent to us, and nothing at all
+						for delivery however large the work. The one thing that funds the platform is{" "}
+						<b className="text-base-content">Anthers Support</b>: what's left of what is given to
+						Anthers after the creators, its own storage allowance at cost and the card fee, funding
+						the charitable programs, free access included, never subtracted from your earnings.
+						Here's what actually reaches you, platform by platform.
 					</>
 				}
 			/>
@@ -402,26 +408,29 @@ export default function CreatorPayComparisonPage() {
 					<b className="text-base-content/70">monthly amount</b> a fan chooses. They give it
 					straight to creators (no platform cut) and point some at{" "}
 					<b className="text-base-content/70">Anthers</b>; that half splits into a Time Pool ({" "}
-					{money(timePoolFor(ladder.publicAccessPrice))} of every ${ladder.publicAccessPrice},
-					distributed to the creators they watch by time) and{" "}
-					<b className="text-base-content/70">the remainder</b> that funds the charitable programs,
-					free access included. On a direct sale Anthers takes nothing at all; the only deduction
-					from the listed price is the at-cost card processing, paid to the processor.
+					{money(timePoolByTimeFor(ladder.publicAccessPrice))} of every ${ladder.publicAccessPrice},
+					distributed to the creators they watch by time) a Sticker budget of{" "}
+					{money(stickerBudgetFor(ladder.publicAccessPrice))} they aim by hand, their storage
+					allowance reserved at cost, and <b className="text-base-content/70">Anthers Support</b>,
+					which funds the charitable programs, free access included. On a direct sale Anthers takes
+					nothing at all; the only deduction from the listed price is the at-cost card processing,
+					paid to the processor.
 				</p>
 				<p>
-					<b className="text-base-content/70">Anthers streaming figures</b> are a fan's Time Pool ÷
-					their monthly time, the same rate for every medium (equal-time). Every $
-					{ladder.publicAccessPrice} to Anthers adds $
-					{timePoolFor(ladder.publicAccessPrice).toFixed(2)} of Time Pool (
-					{PAID_POOLS.map(
+					<b className="text-base-content/70">Anthers streaming figures</b> are what a fan gives
+					creators ÷ their monthly time, the same rate for every medium (equal-time) — both channels
+					counted, since a fan who hands out no Stickers has their whole budget paid by time. Every
+					${ladder.publicAccessPrice} to Anthers adds $
+					{timePoolFor(ladder.publicAccessPrice).toFixed(2)} to creators (
+					{PAID_TO_CREATORS.map(
 						(p, i) => `${RANKS[i][0].toUpperCase() + RANKS[i].slice(1)} ${money(p)}`,
 					).join(" · ")}
-					, and up from there), so a fan lands roughly {POOL_RANGE} of pool per month → about
-					$0.03–0.60 per view-hour, with our reference streamer (Sprout, ~{REF_HOURS} hrs) at ~
-					{REF_HR_PAY}. <b className="text-base-content/70">Competitor figures</b> are each
-					platform's published rate at the same list price, with the same card processing every
-					platform pays subtracted: all-in against all-in, streaming rows rough estimates. A
-					planning comparison, not an offer or guarantee.
+					, and up from there), so a fan lands roughly {POOL_RANGE} a month → about $0.03–0.60 per
+					view-hour, with our reference streamer (Sprout, ~{REF_HOURS} hrs) at ~{REF_HR_PAY}.{" "}
+					<b className="text-base-content/70">Competitor figures</b> are each platform's published
+					rate at the same list price, with the same card processing every platform pays subtracted:
+					all-in against all-in, streaming rows rough estimates. A planning comparison, not an offer
+					or guarantee.
 				</p>
 				<p>
 					Want to model your own audience?{" "}

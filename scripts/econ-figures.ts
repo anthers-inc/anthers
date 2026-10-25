@@ -71,8 +71,6 @@ import {
 	FREE_STORAGE_GIB,
 	ILLUSTRATIVE_SALES_TAX_RATE,
 	PUBLIC_ACCESS_PRICE,
-	stickerBudgetFor,
-	storageGibFor,
 	TIME_POOL_RATE,
 	timePoolFor,
 } from "../packages/shared/src/constants.js";
@@ -93,7 +91,6 @@ import {
 	freePotSensitivity,
 	MODELLED_PAYING_SHARE,
 	membershipComparison,
-	merchTable,
 	PAYING_BADGE_MIX,
 	payingShareSensitivity,
 	purchaseCase,
@@ -492,21 +489,31 @@ function renderReadmeModelMarkdown(): string {
 	const sales = [...new Map(saleTable().map((r) => [r.price, r])).values()];
 	const seed = directedSupportWorstCase();
 	return [
-		`**Where what you give Anthers goes.** Every row conserves exactly — creator pay plus the at-cost card line plus what is left equals what you paid. The remainder is the residual, so it absorbs any change in the other two while creator pay stays fixed.`,
+		`**Where what you give Anthers goes.** Every row conserves exactly — the two creator lines, the storage reserved at that rung's allowance, the at-cost card line, and Anthers Support equal what you paid. The Time Pool and the Sticker budget are two channels into the same creator half: what a giver does not hand out as Stickers is paid to creators by time at the end of the cycle, so a month with no Stickers sends creators the same money. Storage is reserved at the rung's full allowance at the vendor's rate, and the unused reserve pours into Anthers Support — which makes that column a floor rather than a forecast.`,
 		"",
 		plainTable(
-			["Badge", "You pay", "Time Pool → creators", "Payments\\*", "Charitable programs"],
-			[":--", "--:", "--:", "--:", "--:"],
+			[
+				"Badge",
+				"You pay",
+				"Time Pool → creators",
+				"Stickers → creators",
+				"Storage reserved",
+				"Payments\\*",
+				"Anthers Support",
+			],
+			[":--", "--:", "--:", "--:", "--:", "--:", "--:"],
 			badges.map((r) => [
 				`**${r.badge}**`,
 				`$${r.charge}`,
-				`$${r.timePool}`,
+				`$${r.timePoolByTime}`,
+				`$${r.stickers}`,
+				`$${r.storage}`,
 				`$${r.payments}`,
-				`**$${r.remainder}**`,
+				`**$${r.support}**`,
 			]),
 		),
 		"",
-		`\\* Card processing, at ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, paid to Stripe and charged once per transaction. The flat part does not scale with the amount, which is why the remainder grows faster than linearly. **No row depends on how much anyone watches** — delivery costs $0 at any volume, so these are exact figures rather than a scenario.`,
+		`\\* Card processing, at ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, paid to Stripe and charged once per transaction. The flat part does not scale with the amount, which is why Anthers Support grows faster than linearly. **No row depends on how much anyone watches** — delivery costs $0 at any volume, so these are exact figures rather than a scenario.`,
 		"",
 		`Every account watches **${FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, free forever** — no trial, no expiry. **$${PUBLIC_ACCESS_PRICE} a month to Anthers removes the limit**, and nothing above it buys any more access.`,
 		"",
@@ -542,77 +549,30 @@ function renderBadgePublicMarkdown(): string {
 	const rows = badgeTable();
 	return [
 		table(
-			["Badge", "A month to Anthers", "To the Time Pool", "Card processing", "Charitable programs"],
-			[":--", "--:", "--:", "--:", "--:"],
+			[
+				"Badge",
+				"A month to Anthers",
+				"To the Time Pool",
+				"Sticker budget",
+				"Storage reserved",
+				"Card processing",
+				"Anthers Support",
+			],
+			[":--", "--:", "--:", "--:", "--:", "--:", "--:"],
 			rows.map((r) => [
 				`**${r.badge}**`,
 				`$${r.charge}`,
-				`$${r.timePool}`,
+				`$${r.timePoolByTime}`,
+				`$${r.stickers}`,
+				`$${r.storage}`,
 				`$${r.payments}`,
-				`**$${r.remainder}**`,
+				`**$${r.support}**`,
 			]),
 		),
 		"",
-		`Every row adds up exactly: what reaches creators, plus the cost of processing the card, plus what funds the charitable programs — free access included — equals what you paid. Card processing is ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, charged once on your whole monthly payment rather than once per destination, and paid to the payment processor rather than kept.`,
+		`Every row adds up exactly: the Time Pool, the Sticker budget, the storage reserved at that rung's allowance, the cost of processing the card, and Anthers Support — free access included — come to what you paid. Card processing is ${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, charged once on your whole monthly payment rather than once per destination, and paid to the payment processor rather than kept.`,
 		"",
-		`Because that $${CARD_FLAT.toFixed(2)} is fixed per payment, it does not grow with the amount — which is why the last column grows faster than the rung does. **No row depends on how much you stream or download**, because delivery costs nothing at any volume.`,
-	].join("\n");
-}
-
-/**
- * What each rung of Anthers' own ladder carries, for a public user.
- *
- * 🚨 **Three of these columns are LIVE and the storage floor is COMMITTED AND UNBUILT**, and
- * the table says so rather than leaving it to a footnote, because a user scanning rows would
- * otherwise take the whole thing as a description of today. Free viewing, the Time Pool and
- * Stickers ship; the storage floor and purchase preservation do not.
- *
- * ⚠️ **This block exists so the unbuilt figures are DERIVED rather than typed.**
- * `stickerBudgetFor` and `storageGibFor` both carry that instruction in their own doc
- * comments — a marketing page quoting a Sticker budget must get it from the dial, not from
- * a document that was right when it was written. It is not evidence any of it ships.
- *
- * ⭐ **A Sticker is an OVERRIDE of the Time Pool, never a second pot beside it** (Parker,
- * 2026-09-04), so those two columns overlap by design and the note under the table has to
- * say so — otherwise the row reads as though a Root account sends $2.00 to creators when it
- * sends $1.50.
- *
- * 🚨 **Never write that unspent budget "rejoins" or "goes back to" the pool.** Nothing is
- * held out and nothing returns: the pool is paid out by time except for whatever the user
- * directed themselves. This prose renders into the public wiki, so the rejected model would
- * land there rather than staying in the repository.
- */
-function renderPerkLadderMarkdown(): string {
-	const rows = badgeTable();
-	return [
-		table(
-			["Rung", "A month to Anthers", "Free viewing", "To the Time Pool", "Stickers", "Storage"],
-			[":--", "--:", ":--", "--:", "--:", "--:"],
-			[
-				[
-					"*(no Badge)*",
-					"$0",
-					`${FREE_PUBLIC_ACCESS_HOURS} hrs/mo`,
-					"the Fund's published share",
-					"—",
-					`${FREE_STORAGE_GIB} GiB`,
-				],
-				...rows.map((r) => [
-					`**${r.badge}**`,
-					`$${r.monthly}`,
-					"unlimited",
-					`$${r.timePool}`,
-					`$${stickerBudgetFor(r.monthly).toFixed(2)}`,
-					`${storageGibFor(r.monthly)} GiB`,
-				]),
-			],
-		),
-		"",
-		"Free viewing, the Time Pool and Stickers are live today — and so is storage now (2026-10-09): the floor is metered, kept purchases and cloud saves draw it, and the renewal carries an at-cost line past it from Root onward.",
-		"",
-		`A free account's Time Pool is the Time Pool Fund's money — the charitable share of what supporters pay in, published monthly, divided across the accounts that use it. Its ${FREE_STORAGE_GIB} GiB of storage is combined — a creator's catalog and the account's own kept files together, on every account, no Badge needed for either purpose. Each rung bundles more, and past a held rung's allowance more bytes are available at cost from Root onward — the provider's rate, with no mark-up. Keeping a withdrawn purchase past the window and syncing a game's save are both live; each draws the same allowance, a kept Work's cost shared 1/N among its keepers.`,
-		"",
-		"**The Sticker column is part of the Time Pool column rather than an addition to it.** A Sticker is money already on its way to creators, handed by you to a particular one instead of being shared out by the time you spend. Whatever you do not hand out is shared by time as usual, so the two columns overlap on purpose and giving no Stickers costs creators nothing.",
+		`**The Time Pool and the Sticker budget are one half of the price split two ways.** Whatever Sticker budget goes unspent is paid to creators by time at the end of the cycle, so a month with no Stickers sends creators the same money. **Storage is reserved, not spent**: it is the rung's full allowance at the vendor's rate, bytes nobody stores cost nothing, and the unused reserve pours into Anthers Support — which makes that column a floor rather than a forecast. Because the $${CARD_FLAT.toFixed(2)} is fixed per payment, it does not grow with the amount, which is why Anthers Support grows faster than the rung does. **No row depends on how much you stream or download**, because delivery costs nothing at any volume.`,
 	].join("\n");
 }
 
@@ -637,9 +597,11 @@ function renderReceiptMarkdown(): string {
 		// clock. Naming the video one makes it the default unit of a thing it is a quarter
 		// of. This is a GENERATED block, so editing the wiki by hand is worse than useless —
 		// the next `econ:figures` run puts the old wording straight back.
-		pad("  Time Pool → creators you spent time with (by time)", `$${r.timePool}`),
+		pad("  Time Pool → creators you spent time with (by time)", `$${r.timePoolByTime}`),
+		pad("  Sticker budget → creators you choose yourself", `$${r.stickers}`),
+		pad("  Storage → your allowance, reserved at cost", `$${r.storage}`),
 		pad("  Payments → this side's share of the card fee (at cost)", `$${r.paymentsAnthers}`),
-		pad("  Charitable programs (the remainder)", `$${r.remainder}`),
+		pad("  Anthers Support → programs and Anthers' costs", `$${r.support}`),
 		"─".repeat(66),
 		pad("Support subtotal (all-in)", `$${r.supportSubtotal}`),
 		// The rate a buyer actually pays is resolved by Stripe Tax from their billing
@@ -654,7 +616,7 @@ function renderReceiptMarkdown(): string {
 		`${" ".repeat(56)}──────`,
 		pad("Total billed (prepaid, monthly)", `$${r.totalBilled}`),
 		"",
-		`To creators this month: $${r.toCreators}  ·  Charitable programs: $${r.remainder}  ·  Anthers keeps: $0.00`,
+		`To creators this month: $${r.toCreators}  ·  Storage reserved: $${r.storage}  ·  Charitable programs: $${r.support}  ·  Anthers keeps: $0.00`,
 		"```",
 	].join("\n");
 }
@@ -692,34 +654,6 @@ function renderSalePublicMarkdown(): string {
 		`Monthly support has the same shape: of $${seed.gross} a month pointed at one creator, $${seed.cardFee} is card processing and **$${seed.net}** reaches them. Everything given in a month rides on one payment, so the $${CARD_FLAT.toFixed(2)} flat portion is paid once across every destination rather than once each — which is why supporting several creators together pays each of them more than supporting them separately would.`,
 		"",
 		`**File size does not appear here, because it changes nothing.** Delivery costs nothing at any volume, so every download of a purchased Work is included, forever, on as many devices as the buyer likes.`,
-	].join("\n");
-}
-
-/**
- * The merch discount, as a Badge holder reads it on *Badges* — the fourth public renderer.
- *
- * ⚠️ **Built and live** (2026-10-18) — the shop it applies to is in production (deployed 2026-10-09 from `release`), the discount applies at checkout, and `purchases.merch_discount_badge` records the rung that priced a purchase, so the table's figures carry the live ladder and the prose around this block reads in the present tense.
- *
- * 🚨 **The print cost is never a figure here.** The table's arithmetic reads the card fee and the discounted price, both ours to compute; the print cost is Printful's and reprices, so the prose says "about $20 to print" and no generated row asserts an exact Printful figure. The transparency framing is "after printing and card costs, the rest funds Anthers' programs" — check any new sentence against that shape before it lands in copy.
- */
-function renderMerchDiscountMarkdown(): string {
-	const rows = merchTable();
-	return [
-		table(
-			["Badge held", "Discount", "Shirt at $30 list", "Card processing (eaten)", "The line's net"],
-			[":--", "--:", "--:", "--:", "--:"],
-			rows.map((r) => [
-				r.badge === "list" ? "— no Badge" : r.badge,
-				r.discountPercent === "0" ? "—" : `${r.discountPercent}%`,
-				`$${r.goodsPrice}`,
-				`$${r.cardFee}`,
-				`$${r.keptBeforeFeeVariance}`,
-			]),
-		),
-		"",
-		`Anthers' own shirts are printed on demand by Printful — the list price is what Anthers sets in its own Printful store, Printful's shipping rate is added at checkout and charged per order, and sales tax is calculated from the delivery address. A Badge's discount applies to the shirt's price and never to shipping or tax: shipping is Printful's charge, and Anthers does not discount what it does not set.`,
-		"",
-		`**About $20 of every shirt goes to Printful for printing it, Printful's shipping rate covers getting it to you, and the rest — after card processing — funds Anthers' programs.** The discounts above come out of what Anthers keeps, and the largest one leaves the least expensive sizes with pennies and the largest sizes slightly below card-cost: a Blossom supporter is already giving $12 a month, so a near-at-cost shirt is the point rather than a problem. If Printful's costs change, the prices follow on the Printful side and the table regenerates.`,
 	].join("\n");
 }
 
@@ -1213,21 +1147,6 @@ const REPO_BLOCKS: Block[] = [
  * it fails is a guard nobody can tell apart from a broken one.
  */
 const PUBLIC_WIKI_BLOCKS: Block[] = [
-	{
-		file: "20-29 Using Anthers/21 Supporting Creators/21.02 Anthers Badges.md",
-		key: "badge-table",
-		render: renderBadgePublicMarkdown,
-	},
-	{
-		file: "20-29 Using Anthers/21 Supporting Creators/21.02 Anthers Badges.md",
-		key: "perk-ladder",
-		render: renderPerkLadderMarkdown,
-	},
-	{
-		file: "20-29 Using Anthers/21 Supporting Creators/21.02 Anthers Badges.md",
-		key: "merch-discount",
-		render: renderMerchDiscountMarkdown,
-	},
 	{
 		file: "40-49 Where the Money Goes/40 The Support Model/40.00 The Support Model.md",
 		key: "badge-table",

@@ -33,6 +33,7 @@
  * in the JSX (it owns the page's only form) and sits left (`lg:order-1`).
  */
 
+import { CARD_FLAT, CARD_RATE } from "@anthers/shared/constants";
 import { withNextPath } from "@anthers/shared/next-path";
 import { useAuth } from "@anthers/web-shared/auth";
 import { creatorWorkUrl, profileUrl } from "@anthers/web-shared/profile";
@@ -317,7 +318,7 @@ export default function BasketPage() {
 							<span className="flex w-6 shrink-0 items-center justify-center">
 								<InfoTip
 									align="right"
-									text={`Each price is all-in: card processing (2.9% + $0.30, at cost) is taken out of it, not added on top. This basket's one fee is split pro-rata by item value; Anthers keeps none of it.`}
+									text={`Each price is all-in: card processing (${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)}, at cost) is taken out of it, not added on top. This basket's one fee is split pro-rata by item value; Anthers keeps none of it.`}
 								/>
 							</span>
 						</div>

@@ -94,7 +94,13 @@ export function supporterRow(g: SupporterGroup): GroupRow {
 	const you = Math.min(g.hoursYou, safeTotal);
 	const share = you / safeTotal;
 	const breakdown = supportBreakdownDisplay(amountFor(g.badge), g.directed);
-	const pool = breakdown.timePool; // half of the Badge amount; the Anthers-side fee share never touches it
+	// The creator half of the Badge amount; the Anthers-side fee share never touches it.
+	// ⚠️ **This is the by-time pool at its best case**, because it counts the supporter's
+	// whole Sticker budget as rolling into time distribution — true for a supporter who
+	// hands out no Stickers, which is most of them, and an overcount for one who does.
+	// Stickers reach creators by the giver's hand, so no split by time can attribute them;
+	// the dashboard estimates the time channel and cannot claim the directed one.
+	const pool = breakdown.timePool;
 	const tpEarn = cent(share * pool);
 	const directedNet = breakdown.directedNet;
 	const perSupporter = cent(tpEarn + directedNet);

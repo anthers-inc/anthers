@@ -7,8 +7,8 @@
 //
 // Copy tracks the SUPPORT MODEL: one primitive, a monthly amount, pointed either at a
 // creator (no platform cut, clearing that creator's gates at whatever amounts they set) or
-// at Anthers (half into the Time Pool and a remainder funding the charitable
-// programs, free access included). A fan's Badge IS the amount they give Anthers (Root → Blossom =
+// at Anthers (half to creators in two channels, then the fan's storage reserve and the
+// card fee at cost, and a remainder funding the charitable programs, free access included). A fan's Badge IS the amount they give Anthers (Root → Blossom =
 // $3 → $12, "+" beyond). ⚠️ **Never write a level as a count of anything** — there is no
 // unit and no granularity floor — and there is no delivery line to write either, since
 // delivery costs $0 at any volume and downloads are unlimited and free on both sides.
@@ -16,14 +16,15 @@
 // 🚨 **There is one gate primitive and it points only at you.** Your work is behind one of
 // YOUR gates or it is Public Access, with no Badge threshold in between, and a fan's
 // Anthers Badge opens nothing. What support for Anthers does is lift that fan's monthly
-// Public Access limit (at the Public Access price) and grow their Time Pool (at every
-// level). The free tier is bounded — FREE_PUBLIC_ACCESS_HOURS a month — so never write
+// Public Access limit (at the Public Access price) and grow what their month sends
+// creators (at every level), in both channels. The free tier is bounded — FREE_PUBLIC_ACCESS_HOURS a month — so never write
 // streaming as unlimited for everyone.
 //
 // The creator-side through-line, and why the page is sequenced the way it is:
 // ① direct support (what fans give you + direct sales) carries no platform cut — the
 // wedge, and where the 0%-cut claim is unconditionally true; ② the commons (the
-// Time Pool, by time) pays for the work Anthers distributes for you. The
+// Time Pool by time, plus the fan's Sticker budget) pays for the work Anthers
+// distributes for you. The
 // distributor-pays rule ties them together: whoever distributes a piece of work is
 // who pays for it. Streaming is deliberately NOT pitched as out-earning YouTube or
 // Spotify per hour — its value is at-cost reach.
@@ -50,7 +51,9 @@ import {
 	FREE_STORAGE_GIB,
 	PUBLIC_ACCESS_PRICE,
 	STORAGE_PER_GIB_MONTH_LABEL,
+	stickerBudgetFor,
 	thresholdForBadge,
+	timePoolByTimeFor,
 	timePoolFor,
 } from "@anthers/shared/constants";
 import { SALE_TABLE } from "@anthers/shared/figures";
@@ -283,8 +286,8 @@ export default function ForCreatorsPage() {
 								the {FREE_STORAGE_GIB} GiB free floor upward, each rung bundles more, and past it
 								more bytes are {STORAGE_PER_GIB_MONTH_LABEL} per GiB-month, our provider's rate,
 								with no mark-up. Free access and the charitable programs are funded by what's left
-								of a fan's monthly support to Anthers after the Time Pool and the card cost, and by
-								lean operations; Anthers itself never profits.
+								of a fan's monthly support to Anthers after the creators, the storage reserve and
+								the card cost, and by lean operations; Anthers itself never profits.
 							</PricePoint>
 						</div>
 					</Reveal>
@@ -512,16 +515,23 @@ export default function ForCreatorsPage() {
 						</SignpostCard>
 					</Reveal>
 					<Reveal delay={110} className="h-full">
-						<SignpostCard step="2" title="The Anthers Commons — the Time Pool" tone="anthers">
+						<SignpostCard
+							step="2"
+							title="The Anthers Commons — what creators are paid"
+							tone="anthers"
+						>
 							Fans also point a monthly amount at{" "}
 							<strong className="font-semibold text-base-content/85">the platform itself</strong>.
 							Here's what that does:
 							<ul>
 								<li>
 									puts {fmtMoney(timePoolFor(publicAccessPrice))} of every{" "}
-									{fmtMoney(publicAccessPrice)} into that fan's{" "}
+									{fmtMoney(publicAccessPrice)} into creators on that fan's behalf, in two channels:{" "}
+									{fmtMoney(timePoolByTimeFor(publicAccessPrice))} in their{" "}
 									<strong className="font-semibold text-base-content/85">Time Pool</strong>, split
-									across the creators they spend time with, by time
+									across the creators they spend time with by time, and{" "}
+									{fmtMoney(stickerBudgetFor(publicAccessPrice))} in a Sticker budget they hand out
+									themselves; whatever they leave unspent joins the by-time split
 								</li>
 								<li>
 									counts every medium equally; an hour of reading, listening, playing, or watching
@@ -557,13 +567,13 @@ export default function ForCreatorsPage() {
 					</Card>
 				</Reveal>
 
-				{/* What a fan brings to the Time Pool at each Badge (derived from constants) */}
+				{/* What a fan brings to creators at each Badge (derived from constants) */}
 				<Reveal className="mx-auto mt-12 block max-w-2xl">
 					<Card className="overflow-x-auto">
 						<table className="table">
 							<thead>
 								<tr className="border-base-content/10">
-									{["Badge", "A month to Anthers", "They pay", "Their Time Pool"].map((h, i) => (
+									{["Badge", "A month to Anthers", "They pay", "To Creators"].map((h, i) => (
 										<th
 											key={h}
 											style={serif}
@@ -610,14 +620,16 @@ export default function ForCreatorsPage() {
 				<Reveal>
 					<p className="mx-auto mt-5 max-w-2xl text-xs leading-relaxed text-base-content/45">
 						A fan's Badge is what they're giving Anthers right now (a point-in-time choice, not a
-						rolling total of past spend), and it keeps scaling past Blossom. Their Time Pool is
-						split across every creator they spend time with, so what reaches you is your share of
-						their month, not the whole figure. What they give you directly is separate, and carries
-						no platform cut. *A free account pays nothing; Anthers funds its small Time Pool out of
-						free access, so the creators a free user spends time with are paid just the same, up to{" "}
-						{FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a month, which supporting Anthers
-						lifts. Delivery costs nothing on either side (no per-GiB charge, however much anyone
-						streams or downloads), and you get {FREE_STORAGE_GIB} GiB of free storage.
+						rolling total of past spend), and it keeps scaling past Blossom. That money reaches
+						creators two ways: by time through their Time Pool, and by their own hand through their
+						Sticker budget, with whatever they leave unspent joining the by-time split. So what
+						reaches you is your share of their month, not the whole figure. What they give you
+						directly is separate, and carries no platform cut. *A free account pays nothing; Anthers
+						funds its small Time Pool out of free access, so the creators a free user spends time
+						with are paid just the same, up to {FREE_PUBLIC_ACCESS_HOURS} hours of Public Access a
+						month, which supporting Anthers lifts. Delivery costs nothing on either side (no per-GiB
+						charge, however much anyone streams or downloads), and you get {FREE_STORAGE_GIB} GiB of
+						free storage.
 					</p>
 				</Reveal>
 			</Section>
@@ -906,13 +918,19 @@ const SALE_10_2GIB = SALE_TABLE.find((r) => r.label === "game-10-2gib")!;
 const SALE_25_PHYSICAL = SALE_TABLE.find((r) => r.label === "merch-25-physical")!;
 
 // A representative engaged fan for the streaming comparison: the Sprout Badge — $6 a
-// month to Anthers, $3.00 of it Time Pool — who streams ~28 hrs/month, the same
+// month to Anthers, $3.00 of it to creators (a $2.00 Time Pool paid by time and a $1.00
+// Sticker budget the fan aims by hand) — who streams ~28 hrs/month, the same
 // reference streamer the economics doc uses. Everything below is derived, never
-// typed: the creator earns the fan's Time Pool ÷ their hours, per hour — the SAME for
+// typed: the creator earns the fan's creator money ÷ their hours, per hour — the SAME for
 // every medium (equal-time), and independent of resolution (pay is by time, not bytes).
-// The rest of that $6 is the at-cost card fee (inside the price since 2026-08-03) and the
-// remainder that funds the charitable programs, free access included. Note the per-hour figures fall as they watch more only because the same
-// fixed monthly money is spread over more hours — nothing costs more per hour.
+// ⚠️ The per-hour figure counts BOTH creator channels, because a fan who hands out no
+// Stickers has their whole budget paid out by time and one who does still sends that
+// money to creators — so it is what creators receive from the fan's month, whichever way
+// the fan splits it. The rest of that $6 is the at-cost card fee (inside the price since
+// 2026-08-03), the fan's storage reserve at cost, and what is left for the charitable
+// programs, free access included. Note the per-hour figures fall as they watch more only
+// because the same fixed monthly money is spread over more hours — nothing costs more per
+// hour.
 const STREAM_FAN_SUPPORT = thresholdForBadge("sprout");
 const STREAM_FAN_HOURS = 28;
 const STREAM_FAN_SPEND = STREAM_FAN_SUPPORT;
@@ -991,18 +1009,18 @@ const anthers = (creator: string, platform: string, platformNote: string): Deal 
 
 // The itemized Anthers side, shown as a mini-receipt under each comparison. The
 // closing line makes the honest point the comparison table can't: Anthers profit is
-// always $0 — the remainder funds the charitable programs, and the
-// card fee goes to the processor. Streaming isn't
-// where Anthers competes on pay; the Time Pool share is small and variable, and the
-// real support comes from monthly backing and sales.
+// always $0 — what is left funds the charitable programs and the fan's own storage
+// reserve, and the card fee goes to the processor. Streaming isn't where Anthers
+// competes on pay; the by-time share is small and variable, and the real support
+// comes from monthly backing and sales.
 const streamReceipt: Line[] = [
-	{ label: "To you — your share of the fan's Time Pool, by time", amount: STREAM_HR_PAY },
+	{ label: "To You — Your Share of What the Fan Gives Creators", amount: STREAM_HR_PAY },
 	{
 		label: "Card Processing — Their Share of the At-Cost Card Fee, to the Processor",
 		amount: STREAM_HR_CARD,
 	},
 	{
-		label: "Charitable Programs — what's left of their support for Anthers, across the month",
+		label: "Their Storage Reserve & Anthers Support — What's Left of Their Support",
 		amount: STREAM_HR_FOUNDATION,
 	},
 	{ label: "Anthers Profit", amount: "$0.00" },
@@ -1428,10 +1446,10 @@ function SolutionExplorer() {
 				Anthers never profits. On a sale, the only deduction from your listed price is the at-cost
 				card processing, paid to Stripe, never a cent to Anthers, and delivery costs nothing however
 				large the work or however often it is downloaded. On a stream, what's left of the fan's
-				support for Anthers after the Time Pool and the at-cost card fee funds the charitable
-				programs, free access included. What a fan gives you is a pure passthrough. Scenario figures
-				are illustrative; competitor rates are rough public estimates, all-in take-home at the same
-				list price.
+				support for Anthers after the creators, the storage reserve and the at-cost card fee funds
+				the charitable programs, free access included. What a fan gives you is a pure passthrough.
+				Scenario figures are illustrative; competitor rates are rough public estimates, all-in
+				take-home at the same list price.
 			</p>
 		</Card>
 	);

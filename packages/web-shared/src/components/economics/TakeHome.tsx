@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { CARD_RATE, cardFeeDisplay, STRIPE_MIN_CHARGE } from "@anthers/shared/constants";
+import { CARD_FLAT, CARD_RATE, cardFeeDisplay, STRIPE_MIN_CHARGE } from "@anthers/shared/constants";
 import { RIVAL_STOREFRONTS } from "@anthers/shared/figures";
 
 /**
@@ -160,9 +160,9 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 				<p className="mt-1 text-xs text-warning" data-testid="take-home-low">
 					{/* Explanation, not a warning to act on: the brief settled "inform, never
 					    restrict", so this states a fact and offers no remedy and no confirm step. */}
-					At this price <strong>{flatShare.toFixed(0)}%</strong> of that is Stripe's fixed $0.30,
-					which does not shrink with the price — so small amounts keep a smaller share. That is one
-					third-party fee, not a cut of ours.
+					At this price <strong>{flatShare.toFixed(0)}%</strong> of that is Stripe's fixed $
+					{CARD_FLAT.toFixed(2)}, which does not shrink with the price — so small amounts keep a
+					smaller share. That is one third-party fee, not a cut of ours.
 				</p>
 			)}
 

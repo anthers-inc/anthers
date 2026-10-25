@@ -29,8 +29,11 @@ import {
 	BADGE_ORDER,
 	cardFeeDisplay,
 	PUBLIC_ACCESS_PRICE,
+	stickerBudgetFor,
+	storageReserveFor,
+	supportLineFor,
 	thresholdForBadge,
-	timePoolFor,
+	timePoolByTimeFor,
 } from "@anthers/shared/constants";
 import { supportTotal } from "@anthers/shared/signup";
 import { anthersDollarsOf, marginalRows, RUNG_AMOUNTS } from "./SignupPage";
@@ -203,19 +206,44 @@ describe("what a rung adds over the one below it", () => {
 		}
 	});
 
-	test("Anthers Support is the remainder after creators and the card fee, derived and never the whole amount", () => {
+	test("Anthers Support is what is left after the two creator lines, the storage reserve and the card fee", () => {
 		// The row Parker asked for in the matrix instead of the second table its first
-		// attempt built below it: the kept dollar, the same figure the breakdown panel's
-		// Charitable Programs segment carries. It derives
-		// from the same helpers those compose from, so this pins the derivation rather
-		// than a typed figure, and the Free cell carries nothing because Free gives none.
+		// attempt built below it: the unreserved line of the price, the same figure the
+		// breakdown panel carries. ⚠️ It is derived from the same helpers the panel and the
+		// wiki's table compose from, so this pins the derivation rather than a typed
+		// figure, and the Free cell carries nothing because Free gives none.
 		const row = marginalRows(root, free).find((candidate) => candidate.title === "Anthers Support");
 		expect(row).toBeDefined();
 		for (const amount of RUNG_AMOUNTS.filter((a) => a > 0)) {
 			const cell = row?.cell(amount);
-			const kept = Math.max(0, amount - timePoolFor(amount) - cardFeeDisplay(amount));
-			expect(cell?.value).toBe(`$${kept.toFixed(2)}`);
-			expect(kept).toBeLessThan(amount);
+			expect(cell?.value).toBe(`$${supportLineFor(amount).toFixed(2)}`);
+			expect(supportLineFor(amount)).toBeLessThan(amount);
+		}
+	});
+
+	/**
+	 * 🚨 **The five lines add up to the price, and that is the whole point of the split**
+	 * (Parker, 2026-10-25). The ladder used to publish a Time Pool figure and a Sticker
+	 * figure where one contained the other, so a reader adding the rows got more than they
+	 * paid; storage sat invisibly inside the remainder. Each line is now its own named
+	 * destination and the column comes to the charge exactly.
+	 */
+	test("the five money lines sum to the rung's price, at every rung", () => {
+		for (const amount of RUNG_AMOUNTS.filter((a) => a > 0)) {
+			const sum =
+				timePoolByTimeFor(amount) +
+				stickerBudgetFor(amount) +
+				storageReserveFor(amount) +
+				supportLineFor(amount) +
+				cardFeeDisplay(amount);
+			expect(sum, `$${amount} does not add up`).toBeCloseTo(amount, 10);
+		}
+	});
+
+	test("the two creator lines are the creator half, and neither contains the other", () => {
+		for (const amount of RUNG_AMOUNTS.filter((a) => a > 0)) {
+			expect(timePoolByTimeFor(amount) + stickerBudgetFor(amount)).toBeCloseTo(amount / 2);
+			expect(timePoolByTimeFor(amount)).toBeGreaterThan(stickerBudgetFor(amount));
 		}
 	});
 });

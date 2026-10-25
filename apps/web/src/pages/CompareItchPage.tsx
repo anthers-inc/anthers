@@ -11,6 +11,7 @@
 // are read from the model now, and the buyer's first download is no longer a
 // deduction anywhere (retired 2026-08-12 with the per-GiB charge).
 
+import { CARD_FLAT, CARD_RATE } from "@anthers/shared/constants";
 import { SALE_TABLE } from "@anthers/shared/figures";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
@@ -219,7 +220,7 @@ export default function CompareItchPage() {
 								<ReceiptLine label="Sale price" amount={`$${GAME_10.price}`} />
 								<ReceiptLine label="Anthers share" amount="-$0.00" />
 								<ReceiptLine
-									label="Payment processing (2.9% + $0.30)"
+									label={`Payment processing (${(CARD_RATE * 100).toFixed(1)}% + $${CARD_FLAT.toFixed(2)})`}
 									amount={`-$${GAME_10.cardFee}`}
 									negative
 								/>
