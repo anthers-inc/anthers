@@ -44,7 +44,6 @@
 		"media:waveforms": "bun run apps/api/src/scripts/backfill-audio-waveforms.ts",
 		"db:gauntlet:state": "bun run packages/db/src/gauntlet-state.ts",
 		"db:gate-badges": "bun run apps/api/src/scripts/backfill-gate-badges.ts",
-		"econ:figures": "bun run scripts/econ-figures.ts",
 		"brand:build": "bun run --filter @anthers/brand build",
 		"brand:search": "bun run scripts/brand-search.ts",
 		"brand:add": "bun run scripts/brand-add.ts",

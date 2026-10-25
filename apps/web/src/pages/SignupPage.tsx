@@ -555,12 +555,12 @@ function NotBuiltYet() {
 }
 
 /**
- * The perk set, one row per perk — the same set `scripts/econ-figures.ts` renders into the
- * wiki's *Badges* as the perk ladder.
+ * The perk set, one row per perk — the same set the wiki's *Badges* states as the perk
+ * ladder.
  *
  * 🚨 **Every figure is derived**: the Sticker budget and the storage floor come from
- * `stickerBudgetFor` and `storageGibFor` in `constants.ts` rather than from any table, and
- * `econ:figures` fails the build on a figure typed into a page.
+ * `stickerBudgetFor` and `storageGibFor` in `constants.ts` rather than from any table, so a
+ * change to either reaches this matrix without an edit here.
  *
  * ⚠️ **The Sticker denominations are deliberately not here.** They live in
  * `@anthers/shared/stickers` as `STICKER_BATCHES`, and a matrix row is the wrong place to

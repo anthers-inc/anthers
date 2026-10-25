@@ -22,17 +22,16 @@
 // the row **in the same commit as the milestone** — deliberately, because the
 // organization changed. Never delete one to make a red test green, and never soften a
 // phrase to slip past it: the phrase is a proxy for the claim, and a guard covers a
-// phrasing rather than a claim (the lesson `RETIRED_COPY` paid for when its ATProto
+// phrasing rather than a claim (the lesson a retired-copy scan paid for when its ATProto
 // rule sailed straight past *"an open, distributed network"*). If this fails on wording
 // you believe is honest, the question to ask is what a user would conclude, not
 // whether the regex was fair.
 //
 // Scoped to specific pages on purpose. /about and /resources/how-money-moves are
 // the two pages whose subject is the organization's own money; everything else is
-// the wrong tool: RETIRED_COPY in `scripts/econ-figures.ts` runs repo-wide, and the
-// wiki roadmap lists the first Form 990 as a **future milestone in its filings
-// checklist**, which is exactly correct there. A repo-wide rule would need an
-// `econ:allow` on honest copy, which is how a guard becomes noise people route around.
+// the wrong tool, and the wiki roadmap lists the first Form 990 as a **future milestone
+// in its filings checklist**, which is exactly correct there. A repo-wide rule would have
+// to exempt honest copy, which is how a guard becomes noise people route around.
 // A page whose subject is the organization's own money joins this scan the day it
 // ships — the /resources/revenue drawing was the second such page until 2026-10-15,
 // when the mechanism page replaced it.
@@ -46,8 +45,8 @@ import { TIME_POOL_RATE } from "@anthers/shared/constants";
 
 const SOURCE = readFileSync(join(import.meta.dir, "AboutPage.tsx"), "utf8");
 
-// Comments are blanked before matching, the same way `econ-figures.ts` blanks them for
-// RETIRED_COPY — and here it is load-bearing rather than a courtesy. The header
+// Comments are blanked before matching, and here it is load-bearing rather than a
+// courtesy. The header
 // docblock on AboutPage.tsx **names several of the phrases below**, to record what the
 // page may not say and why, so a scan that read comments would fail on its own
 // documentation and teach the next person to delete the explanation instead of the
@@ -77,8 +76,8 @@ const HOW_COPY = HOW_SOURCE.replace(/\/\*[\s\S]*?\*\//g, " ")
  * A claim the page may not make yet, and the day it becomes sayable.
  *
  * `phrases` are lowercase substrings. They are the wordings that actually appeared on
- * the page, not the ones we would have predicted — same rule the wiki's *How Anthers Talks About Itself* records for
- * `RETIRED_COPY`, for the same reason.
+ * the page, not the ones we would have predicted — the same rule the wiki's *How Anthers
+ * Talks About Itself* records for retired copy, and for the same reason.
  */
 const PREMATURE: { claim: string; phrases: string[]; sayableWhen: string }[] = [
 	{
@@ -211,11 +210,10 @@ describe("/about describes the organization as it is", () => {
 		}
 	});
 
-	// The one money figure this page states in words rather than deriving. `econ:figures`
-	// cannot see it — its marker blocks generate tables and its typed-figure scan looks for
-	// numerals — so the word gets pinned to the rate it describes here instead. Change
-	// TIME_POOL_RATE and this turns red, which is the point: a prose fraction that has
-	// quietly stopped being true is exactly the failure the generator exists to prevent.
+	// The one money figure this page states in words rather than deriving. No scan can see
+	// a prose fraction, so the word gets pinned to the rate it describes here instead.
+	// Change TIME_POOL_RATE and this turns red, which is the point: a prose fraction that
+	// has quietly stopped being true is the drift this assertion exists to prevent.
 	// (2026-10-02: the page's mission section now describes where the money goes in
 	// purpose terms — "supporting creators, providing free access, and expanding our other
 	// charitable services and programs" — rather than the Time Pool fraction. The fraction

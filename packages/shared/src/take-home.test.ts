@@ -17,7 +17,7 @@ import { describe, expect, test } from "bun:test";
 import Decimal from "decimal.js";
 import { ANTHERS_BADGES, CARD_FLAT, CARD_RATE, cardFeeDisplay } from "./constants.js";
 import { calculateFees } from "./fees.js";
-import { RIVAL_STOREFRONTS } from "./figures.generated.js";
+import { RIVAL_STOREFRONTS } from "./figures.js";
 import { batchingComparison, membershipComparison } from "./scenarios.js";
 
 /** What the component renders as "You receive". */

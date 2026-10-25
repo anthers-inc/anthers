@@ -2,13 +2,13 @@
 //
 // The marketing pages, checked at the RENDERED level for claims that are no longer true.
 //
-// 🚨 Why this exists, and why it is not redundant with `econ:figures --check`. Four
-// marketing pages once sold a mechanism that had been deleted, and promised unlimited
-// streaming to a free account whose Public Access is capped monthly. Every one of them
-// carried a *correct* money figure, so the figure scan was silent — **a retired mechanism
-// carries no wrong number**, and that is exactly its blind spot. The source-level `RETIRED_COPY` rules now catch the phrasings we know about;
-// this file catches the claim wherever it is *assembled*, including from a constant or a
-// prop the source scan reads as an identifier rather than a sentence.
+// 🚨 Why this exists. Four marketing pages once sold a mechanism that had been deleted,
+// and promised unlimited streaming to a free account whose Public Access is capped
+// monthly. Every one of them carried a *correct* money figure, so a figure check was
+// silent — **a retired mechanism carries no wrong number**, which is exactly the blind
+// spot this file exists to cover. It catches the claim wherever it is *assembled*,
+// including from a constant or a prop that a source scan reads as an identifier rather
+// than a sentence.
 //
 // The rule for adding a case: assert the shape of a claim the model can no longer
 // support, not the wording of a sentence someone may legitimately rewrite.

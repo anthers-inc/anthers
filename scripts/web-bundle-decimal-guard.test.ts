@@ -16,8 +16,8 @@
  * and `reductionFor` out of `constants.ts` / `billing-cycle.ts` into `fees.ts`, both of which
  * are ordinary modules the web app's pages reach for (`SettingsPage`, `every page importing a
  * constant`), so one decimal import beside shared constants rode the whole library into the
- * public bundle. This test is the standing check that prescribes in `scripts/econ-figures.ts`'s
- * docblock — the `toFraction` grep there is the built-bundle spot check; this is the graph.
+ * public bundle. This test is the standing check on the import graph; a grep for a
+ * decimal.js-only method name against a built bundle is the manual spot check beside it.
  *
  * ⚠️ **The walk must target the WEB app only.** The API, the worker and the tests use
  * decimal.js legitimately — a repo-wide grep is the check that reports a clean board and a
@@ -226,7 +226,7 @@ describe("decimal.js out of the web SPA bundle", () => {
 			graph.hits
 				.filter((h) => DECIMAL_SPECIFIERS.includes(h.specifier))
 				.map((h) => `${h.importer}: ${h.specifier}`),
-			"decimal.js rides the SPA bundle through this import. Exact money arithmetic belongs in @anthers/shared/fees, which the web app's bundle graph never reaches; see the task notes and scripts/econ-figures.ts's docblock",
+			"decimal.js rides the SPA bundle through this import. Exact money arithmetic belongs in @anthers/shared/fees, which the web app's bundle graph never reaches; see `packages/shared/src/figures.ts`'s docblock",
 		).toEqual([]);
 	});
 
@@ -236,7 +236,7 @@ describe("decimal.js out of the web SPA bundle", () => {
 			graph.hits
 				.filter((h) => !DECIMAL_SPECIFIERS.includes(h.specifier))
 				.map((h) => `${h.importer}: ${h.specifier}`),
-			"@anthers/shared/fees is the only home of decimal.js, so reaching it from the web graph is the leak one step removed. Read the constant you need from figures.generated.ts instead, or move the arithmetic API-side",
+			"@anthers/shared/fees is the only home of decimal.js, so reaching it from the web graph is the leak one step removed. Read the constant you need from figures.ts instead, or move the arithmetic API-side",
 		).toEqual([]);
 	});
 });

@@ -91,7 +91,7 @@ const SECRETS_ONLY = Bun.argv.includes("--secrets-only");
  * A check with no way to say "yes, on purpose" gets switched off wholesale the first time
  * it is inconvenient, so the escape hatch exists — but every entry is PRINTED on every run,
  * in both the clean and dirty paths, so an exemption cannot go quiet the way the thing it
- * exempts did. Same rule as `econ:allow-file`.
+ * exempts did.
  */
 const EXPECTED_EMPTY: Record<string, string> = {};
 

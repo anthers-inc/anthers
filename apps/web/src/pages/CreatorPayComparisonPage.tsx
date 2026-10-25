@@ -102,7 +102,7 @@ interface Platform {
 // every medium (equal-time). Anthers takes none of it.
 const RANKS = ["root", "sprout", "petal", "blossom"] as const;
 const PAID_POOLS = RANKS.map((b) => timePoolFor(thresholdForBadge(b)));
-/** Derived, never typed — see scripts/econ-figures.ts. */
+/** Derived, never typed — read from the published `SALE_TABLE`. */
 const SALE_10_1GIB = SALE_TABLE.find((r) => r.label === "game-10-1gib")!;
 const SALE_25_PHYSICAL = SALE_TABLE.find((r) => r.label === "merch-25-physical")!;
 /**
@@ -117,7 +117,6 @@ const SALE_25_PHYSICAL = SALE_TABLE.find((r) => r.label === "merch-25-physical")
 const rivalSaleNet = (sale: { price: string; cardFee: string }, share: number) =>
 	(Number(sale.price) * (1 - share) - Number(sale.cardFee)).toFixed(2);
 const BANDCAMP_DIGITAL = rivalSaleNet(SALE_10_1GIB, 0.15);
-/** econ:allow — Valve's own 30% of a $10 sale. Held once so the two places that name it agree. */
 const STEAM_CUT = "$3.00";
 
 const money = (n: number) => `$${n.toFixed(2)}`;
@@ -191,8 +190,8 @@ const PLATFORMS: Platform[] = [
 				anthers: A_STREAM,
 				rival: {
 					keep: "55% of the revenue",
-					// econ:allow — YouTube Premium really is pooled by watch-time; that is THEIR
-					// mechanism and their word for it. The wiki's *How Anthers Talks About Itself* bans it for OURS, and § Comparisons
+					// YouTube Premium really is pooled by watch-time; that is THEIR mechanism and
+					// their word for it. The wiki's *How Anthers Talks About Itself* bans it for OURS, and § Comparisons
 					// binds us to describing a rival accurately — renaming their metric to suit our
 					// vocabulary would misdescribe them, which is the worse failure.
 					keepSub: "≈ $0.05–0.20/hr on Premium (a ~$16 sub pooled by watch-time); pennies on ads",
