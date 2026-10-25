@@ -643,7 +643,7 @@ const PERK_ROWS: PerkRow[] = [
 		// "catalog only" rung to render. At-cost top-up from Root onward is ruled (#412
 		// ships it): past the held allowance, more bytes are charged at the provider's
 		// rate with no mark-up, on the renewal.
-		desc: "Free storage for your catalog and your own files together, on every account. Each rung bundles more; past your Badge's allowance, more bytes are available at cost from Root onward.",
+		desc: "Free storage for your creator catalog or your user files together. From the Root Badge onwards, you can also top-up with additional storage at-cost from our provider, if you need an in-between amount or want more than Blossom provides. BYO storage is also available.",
 		cell: (amount) => ({ value: `${storageGibFor(amount)} GiB` }),
 	},
 	{
