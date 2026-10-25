@@ -3,10 +3,11 @@
  * The withdrawn-Work sweep — which media Anthers is *not* keeping.
  *
  * 🚨 **Since preservation became a program (Parker, 2026-10-25), this job's whole question
- * is `works.preserved`.** A Work anybody has saved to their Library is kept indefinitely:
- * its media is never removed, whatever its creator does, and nothing expires. A Work
- * nobody saved has no buyer to protect — a purchase saves itself to the Library, so
- * "nobody saved it" means "nobody bought it" — and its bytes go when it is withdrawn.
+ * is whether the Work has a preserved version.** A Work anybody has saved to their Library
+ * is kept indefinitely: its media is never removed, whatever its creator does, and nothing
+ * expires. A Work nobody saved has no buyer to protect — a purchase saves itself to the
+ * Library, so "nobody saved it" means "nobody bought it" — and its bytes go when it is
+ * withdrawn.
  *
  * That replaced three ordered claims (still published / a keeper / ninety days). The
  * keeping election, the last-chance warning and the whole clock are gone: there is no
@@ -31,8 +32,8 @@
  */
 
 import { db } from "@anthers/db/client";
-import { assets, transcodingJobs, works } from "@anthers/db/schema";
-import { and, eq, isNotNull, isNull, or } from "drizzle-orm";
+import { assets, transcodingJobs, workMediaVersions, works } from "@anthers/db/schema";
+import { and, eq, isNotNull, isNull, notExists, or } from "drizzle-orm";
 import { isUnderHold } from "../services/legal-hold.js";
 import { purgeWorkMedia } from "../services/media-purge.js";
 
@@ -50,6 +51,25 @@ const OVERRIDES = or(
 	eq(works.quarantineStatus, "quarantined"),
 );
 
+/**
+ * **The Work has no preserved version** — the derivation the sweep runs on.
+ *
+ * ⭐ Preservation marks a version (`works.preserved` while it is current,
+ * `work_media_versions.preserved` once a replace retires it), so "is this Work kept" is a
+ * question about its versions rather than about the row: the current version's flag, or
+ * any archived one's. In practice a replacement inherits the flag and the answer is the
+ * current version alone, but the sweep asks the definition rather than the shortcut.
+ */
+const NO_PRESERVED_VERSION = and(
+	eq(works.preserved, false),
+	notExists(
+		db
+			.select({ id: workMediaVersions.id })
+			.from(workMediaVersions)
+			.where(and(eq(workMediaVersions.workId, works.id), eq(workMediaVersions.preserved, true))),
+	),
+);
+
 export async function runWithdrawnSweep(now = new Date()): Promise<SweepResult> {
 	// The candidate set: withdrawn, stamped, bytes still present, and not held by the
 	// program — or held but overridden. Written as one predicate so the common case (a
@@ -62,7 +82,7 @@ export async function runWithdrawnSweep(now = new Date()): Promise<SweepResult> 
 				eq(works.visibility, "withdrawn"),
 				isNotNull(works.withdrawnAt),
 				isNull(works.mediaPurgedAt),
-				or(eq(works.preserved, false), OVERRIDES),
+				or(NO_PRESERVED_VERSION, OVERRIDES),
 			),
 		);
 	if (due.length === 0) return { sweptCount: 0, keptCount: 0 };
