@@ -55,6 +55,7 @@ test("a released comic's set offers a new version and no in-place edits", async 
 test("the Versions section lists a previous version with its original", async ({
 	page,
 	context,
+	browser,
 }) => {
 	await signInAsMediaFixture(context);
 	await page.setViewportSize({ width: 1440, height: 1000 });
@@ -98,13 +99,6 @@ test("the Versions section lists a previous version with its original", async ({
 
 	try {
 		await page.goto(draft.url);
-		// The byline carries the newest version added after release, by name and date; the
-		// Details tab lists every one.
-		await expect(page.getByText(/Updated once since release, 1\.1 on/)).toBeVisible();
-		await page.getByRole("tab", { name: "Details" }).first().click();
-		await expect(page.getByRole("heading", { name: "Versions" })).toBeVisible();
-		await expect(page.getByText("1.0.1")).toBeVisible();
-
 		await page.getByRole("button", { name: "Manage This Work's Media" }).click();
 		await page.getByRole("tab", { name: "Versions" }).click();
 		// The current version carries the name its creator gave it, editable where it lives.
@@ -117,6 +111,21 @@ test("the Versions section lists a previous version with its original", async ({
 		await expect(page.getByRole("button", { name: "Remove", exact: true })).toBeVisible();
 		await page.waitForTimeout(300);
 		await page.screenshot({ path: `${SHOTS}/17-versions-tab.png`, fullPage: true });
+
+		// The reader's page, in its own signed-out context: the creator's own view is the
+		// editor, whose byline is not the reader's. The byline states the count and the
+		// newest version, and the Details tab lists every version added after release.
+		const reader = await browser.newContext();
+		try {
+			const readerPage = await reader.newPage();
+			await readerPage.goto(draft.url);
+			await expect(readerPage.getByText(/Updated once since release, 1\.1 on/)).toBeVisible();
+			await readerPage.getByRole("tab", { name: "Details" }).click();
+			await expect(readerPage.getByRole("heading", { name: "Versions" })).toBeVisible();
+			await expect(readerPage.getByText("1.0.1")).toBeVisible();
+		} finally {
+			await reader.close();
+		}
 	} finally {
 		await fetch(`${API_URL}/api/content/works/${draft.id}?force=1`, {
 			method: "DELETE",
