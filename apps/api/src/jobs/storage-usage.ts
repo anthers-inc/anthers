@@ -37,10 +37,11 @@
  * - **Cloud saves** — `work_saves.byte_size`, attributed to the *player's* account: the
  *   blob charges the player's floor like anything else they keep.
  *
- * 🚨 **A Work in the preservation program is counted for nobody.** Those bytes are the
- * program's cost (`services/preservation.ts`), so every per-Work query here carries
- * `works.preserved = false`: a saved Work's media does not draw its creator's allowance,
- * and no buyer draws a share of it either. Two figures cannot be attributed per Work —
+ * 🚨 **Preserved bytes are counted for nobody.** They are the program's cost
+ * (`services/preservation.ts`), so each query reads the flag on the version it counts:
+ * the current version's on `works.preserved`, an archived one's on
+ * `work_media_versions.preserved`. A saved Work's media does not draw its creator's
+ * allowance, and no buyer draws a share of it either. Two figures cannot be attributed per Work —
  * the creator-level inline-image prefix, which is post body content with no Work link,
  * and a Work's preview objects, whose keys carry no Work id — so previews are subtracted
  * one preserved row at a time and inline images stay where they are. Both are display and
@@ -278,7 +279,9 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		.select({ creatorId: works.creatorId, media: workMediaVersions.media })
 		.from(workMediaVersions)
 		.innerJoin(works, eq(workMediaVersions.workId, works.id))
-		.where(and(isNotNull(works.creatorId), eq(works.preserved, false)));
+		// ⭐ Each archived version carries its own flag, so the exclusion reads the
+		// version rather than the Work: the bytes preserved are that version's bytes.
+		.where(and(isNotNull(works.creatorId), eq(workMediaVersions.preserved, false)));
 	for (const row of versionRows) {
 		if (row.creatorId == null) continue;
 		for (const key of keysInMedia(row.media)) {

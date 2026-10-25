@@ -16,7 +16,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, storageUsage, workSaves, works } from "@anthers/db/schema";
+import { assets, storageUsage, workMediaVersions, workSaves, works } from "@anthers/db/schema";
 import { STORAGE_LADDER_GIB, STORAGE_USE_KINDS } from "@anthers/shared/constants";
 import { and, eq, inArray } from "drizzle-orm";
 import app from "../index";
@@ -47,6 +47,16 @@ async function store(key: string, bytes: number): Promise<string> {
 	await storageUpload(key, bytes);
 	storedKeys.push(key);
 	return key;
+}
+
+/** The creator's catalog line in the latest snapshot, zero before the first one. */
+async function catalogFor(userId: number): Promise<number> {
+	const [row] = await db
+		.select({ purposes: storageUsage.purposes })
+		.from(storageUsage)
+		.where(eq(storageUsage.userId, userId))
+		.limit(1);
+	return ((row?.purposes as Record<string, number> | undefined)?.catalog ?? 0) as number;
 }
 
 async function storageUpload(key: string, bytes: number): Promise<void> {
@@ -162,6 +172,60 @@ describe("the storage meter", () => {
 			.where(eq(storageUsage.userId, creatorId))
 			.limit(1);
 		expect((after!.purposes as Record<string, number>).catalog).toBe(catalogBefore - 5000);
+	});
+
+	// SABOTAGE: the archived-version filter reading `works.preserved` instead of the row's
+	// own flag (predict: a preserved version is counted, or an unpreserved one is excused,
+	// depending on which way the Work happens to point).
+	it("counts an archived version by that version's flag, not the Work's", async () => {
+		const work = await insertWork({ creatorId, type: "game" });
+		workIds.push(work.id);
+		const keptKey = await store(`creators/${creatorId}/versions/${work.id}/kept.zip`, 700);
+		const countedKey = await store(`creators/${creatorId}/versions/${work.id}/owned.zip`, 1300);
+		await db.insert(workMediaVersions).values([
+			{
+				workId: work.id,
+				uploadedAt: new Date(),
+				versionLabel: "kept",
+				preserved: true,
+				media: {
+					kind: "source" as const,
+					file: {
+						filename: "kept.zip",
+						file: keptKey,
+						fileSize: 700,
+						mimeType: "application/zip",
+					},
+				},
+			},
+			{
+				workId: work.id,
+				uploadedAt: new Date(),
+				versionLabel: "the creator's own",
+				preserved: false,
+				media: {
+					kind: "source" as const,
+					file: {
+						filename: "owned.zip",
+						file: countedKey,
+						fileSize: 1300,
+						mimeType: "application/zip",
+					},
+				},
+			},
+		]);
+
+		const before = await catalogFor(creatorId);
+		await runStorageUsageSweep();
+		const after = await catalogFor(creatorId);
+
+		expect(after - before).toBe(1300);
+
+		// Take the archive back out, so the absolute figures the later tests assert are the
+		// ones those tests set up rather than this one's leftovers.
+		await db.delete(workMediaVersions).where(eq(workMediaVersions.workId, work.id));
+		await storageDelete(keptKey).catch(() => {});
+		await storageDelete(countedKey).catch(() => {});
 	});
 
 	it("is idempotent per cycle — a second sweep rewrites, never duplicates", async () => {

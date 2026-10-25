@@ -239,8 +239,16 @@ export const works = pgTable(
 		 */
 		mediaPurgedAt: timestamp("media_purged_at", { withTimezone: true }),
 		/**
-		 * **In the preservation program** — somebody has saved this Work to their
-		 * Library, so Anthers keeps its media indefinitely rather than for a window.
+		 * **The media version this Work currently serves is preserved.** Somebody has
+		 * saved the Work to their Library, so Anthers keeps the bytes it hands readers
+		 * indefinitely rather than for a window.
+		 *
+		 * ⭐ **The row is the version's own record for as long as it is the current one.**
+		 * The current version's media lives on this row and in the asset/build tables —
+		 * there is no version row for it — so its flag lives here, and it moves to
+		 * `work_media_versions.preserved` when a replace retires it. That is what "we
+		 * mark the version we preserved" means in a schema where a version is either
+		 * current or archived.
 		 *
 		 * ⭐ **A property of the WORK, not of a buyer or an account** (Parker,
 		 * 2026-10-25). Preservation is a cultural benefit whether or not any individual
@@ -254,12 +262,12 @@ export const works = pgTable(
 		 * already carries that. The Studio shows a `Preserved` tag on the version
 		 * record for exactly that reason.
 		 *
-		 * **The write is one-way.** A Work enters when its first Library entry lands
-		 * (`services/preservation.ts`, called from every save door) and never leaves:
-		 * unsaving later, or a refund releasing a shelf entry, does not un-preserve
-		 * something Anthers already promised to keep. The sweep reads this column and
-		 * nothing else, which is what replaced the keeper election and the ninety-day
-		 * clock.
+		 * **The write is one-way.** A version is marked when its Work's first Library
+		 * entry lands (`services/preservation.ts`, called from every save door) and the
+		 * flag is never cleared: unsaving later, or a refund releasing a shelf entry,
+		 * does not un-preserve bytes Anthers already undertook to keep. A replacement
+		 * inherits it, because the Work is still the same Work and the new bytes are the
+		 * ones its holders now fetch.
 		 */
 		preserved: boolean("preserved").notNull().default(false),
 
@@ -958,6 +966,21 @@ export const workMediaVersions = pgTable(
 		versionLabel: text("version_label").notNull().default(""),
 		/** When the next version replaced it. */
 		archivedAt: timestamp("archived_at", { withTimezone: true }).defaultNow().notNull(),
+		/**
+		 * **This version is preserved** — the program undertook to keep these bytes.
+		 *
+		 * ⭐ **Preservation marks a VERSION, because a version is what Anthers actually
+		 * keeps** (Parker, 2026-10-25). A Work is kept only because some version of it
+		 * is; marking the Work said more than the record could support, since a Work's
+		 * bytes are its versions' bytes. So the same flag lives twice, once per place a
+		 * version can be: here, for a version a replace retired, and `works.preserved`
+		 * for the one the Work currently serves.
+		 *
+		 * ⚠️ **It is stamped at archive time from the outgoing current version's flag**,
+		 * so a version carries the state it held while it was the one being served and
+		 * never changes afterwards.
+		 */
+		preserved: boolean("preserved").notNull().default(false),
 		media: jsonb("media").$type<WorkVersionMedia>().notNull(),
 	},
 	(table) => [index("idx_work_media_versions_work").on(table.workId, table.uploadedAt)],

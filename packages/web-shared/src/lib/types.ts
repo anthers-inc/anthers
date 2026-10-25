@@ -657,7 +657,7 @@ export interface WorkMediaVersionSummary {
 	totalBytes: number;
 	/** Filenames and sizes only — storage keys never reach the client. */
 	files: { filename: string; fileSize: number | null }[];
-	/** The Work is in the preservation program: Anthers keeps these bytes indefinitely. */
+	/** These bytes are preserved: Anthers keeps this version indefinitely. */
 	preserved: boolean;
 }
 

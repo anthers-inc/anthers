@@ -4482,10 +4482,10 @@ const contentRoutes = new Hono()
 		if (userId !== work.creatorId) return c.json({ error: "Work not found" }, 404);
 
 		const rows = await listWorkVersions(work.id);
-		// The Work's preservation state rides with the list, so the tab can say that these
-		// bytes are kept indefinitely without a second request.
+		// Each archived version carries its own flag; the Work's current version carries
+		// the one on the Work row, and the tab states it beside "Current version".
 		return c.json({
-			versions: rows.map((row) => summarizeVersion(row, work.preserved)),
+			versions: rows.map(summarizeVersion),
 			preserved: work.preserved,
 		});
 	})

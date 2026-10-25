@@ -57,11 +57,11 @@ export interface WorkVersionSummary {
 	totalBytes: number;
 	files: { filename: string; fileSize: number | null }[];
 	/**
-	 * The Work is in the preservation program, so these bytes are kept indefinitely.
+	 * These bytes are preserved: Anthers keeps this version indefinitely.
 	 *
-	 * ⚠️ **Derived from the Work, not stored per version.** Preservation is a property of
-	 * the Work ("anybody saved it"), and every version's bytes are kept with it — a
-	 * per-version flag could describe a half-preserved Work, which is not a state.
+	 * ⭐ **The version's own flag, not the Work's.** Preservation is granted to the bytes
+	 * Anthers actually holds, and a Work's bytes are its versions' — so the record names
+	 * the version, and the flag moves with it when a replace retires it.
 	 */
 	preserved: boolean;
 }
@@ -228,6 +228,10 @@ export async function archiveCurrentMedia(
 			uploadedAt: work.versionAddedAt ?? work.createdAt,
 			// The name it carried while it was current, so a reader's history keeps it.
 			versionLabel: work.versionLabel,
+			// ⭐ **The flag moves with the version.** Whatever this media held while it
+			// was the one being served, it keeps — preservation marks the bytes Anthers
+			// undertook to keep, and those bytes are these.
+			preserved: work.preserved,
 			media,
 		})
 		.returning();
@@ -255,6 +259,7 @@ export async function archiveSourceSet(
 			workId: work.id,
 			uploadedAt,
 			versionLabel: work.versionLabel,
+			preserved: work.preserved,
 			media: { kind: "set", files },
 		})
 		.returning();
@@ -280,6 +285,7 @@ export async function archiveLegacySource(
 			workId: work.id,
 			uploadedAt,
 			versionLabel: work.versionLabel,
+			preserved: work.preserved,
 			media: { kind: "set", files: [file] },
 		})
 		.returning();
@@ -347,7 +353,7 @@ export async function publicWorkVersions(work: WorkRow): Promise<PublicWorkVersi
 }
 
 /** The list shape the Versions tab reads. */
-export function summarizeVersion(row: WorkMediaVersionRow, preserved: boolean): WorkVersionSummary {
+export function summarizeVersion(row: WorkMediaVersionRow): WorkVersionSummary {
 	const media = row.media;
 	const files =
 		media.kind === "source"
@@ -375,7 +381,7 @@ export function summarizeVersion(row: WorkMediaVersionRow, preserved: boolean): 
 		fileCount: files.length,
 		totalBytes: files.reduce((sum, file) => sum + (file.fileSize ?? 0), 0),
 		files,
-		preserved,
+		preserved: row.preserved,
 	};
 }
 

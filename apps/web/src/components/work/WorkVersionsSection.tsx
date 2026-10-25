@@ -13,11 +13,11 @@
  * changes; the upload store's landing already re-reads the Work, so the new row appears
  * without a second polling timer.
  *
- * ⭐ **A `Preserved` tag says the bytes are kept indefinitely** (Parker, 2026-10-25). It
- * rides the Work rather than the version: the program is entered when anybody saves the
- * Work, and every version's bytes are kept with it. The date beside the tag is the
- * version's own upload date, which is what a reader wants to know — when the bytes they can
- * still fetch were made — rather than when the preservation decision was taken.
+ * ⭐ **A `Preserved` tag says these bytes are kept indefinitely** (Parker, 2026-10-25).
+ * The tag belongs to the version, because a version is what Anthers actually keeps: the
+ * current version carries the Work's own flag, and each archived row carries the flag it
+ * held while it was current. The date beside the tag is that version's upload date — when
+ * the bytes were made — rather than when the preservation decision was taken.
  */
 
 import { client } from "@anthers/web-shared/rpc";
