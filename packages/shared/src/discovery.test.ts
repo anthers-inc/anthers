@@ -12,22 +12,34 @@
 import { describe, expect, test } from "bun:test";
 import {
 	asRecipeCandidates,
+	asRecipeColor,
 	asRecipeMix,
 	asRecipeWindow,
+	choiceForRecipe,
 	DEFAULT_RECIPE,
 	type DiscoveryReason,
 	graphRecipe,
 	interleaveByAuthor,
 	isDiscoveryReason,
+	nextRecipeColor,
 	presetFor,
 	RECIPE_CANDIDATE_LABELS,
 	RECIPE_CANDIDATES,
+	RECIPE_COLOR_VALUES,
+	RECIPE_COLORS,
 	RECIPE_PRESETS,
 	reasonForSource,
+	recipeChoices,
 	recipeFrom,
 	recipePath,
 	recipeQuery,
+	SAVED_RECIPE_LABEL_MAX,
+	SAVED_RECIPE_LIMIT,
+	type SavedRecipe,
+	sameRecipe,
+	savedRecipesFrom,
 	streamRecipe,
+	suggestedRecipeName,
 } from "./discovery";
 
 type Entry = { id: number; creatorId: number | null };
@@ -328,5 +340,156 @@ describe("a stored recipe", () => {
 		expect(recipePath({ window: "all", candidates: "network", mix: "straight" })).toBe(
 			"/discovery?window=all&candidates=network&mix=straight",
 		);
+	});
+});
+
+describe("a reader's saved recipes", () => {
+	const mine: SavedRecipe = {
+		id: "seed-1",
+		label: "Close friends",
+		color: "rose",
+		recipe: { window: "all", candidates: "following", mix: "straight" },
+	};
+
+	test("gives every color a label and a value, and defaults an unknown one", () => {
+		for (const color of RECIPE_COLORS) {
+			expect(RECIPE_COLOR_VALUES[color].label.length).toBeGreaterThan(0);
+			expect(RECIPE_COLOR_VALUES[color].hex).toMatch(/^#[0-9a-f]{6}$/);
+		}
+		// One accent per token: a second value would make the stored token ambiguous.
+		expect(new Set(RECIPE_COLORS.map((color) => RECIPE_COLOR_VALUES[color].hex)).size).toBe(
+			RECIPE_COLORS.length,
+		);
+		expect(asRecipeColor("chartreuse")).toBe("moss");
+		expect(asRecipeColor(undefined)).toBe("moss");
+	});
+
+	test("offers a color the account is not already using", () => {
+		expect(nextRecipeColor([])).toBe(RECIPE_COLORS[0]);
+		// The first unused token, so a second chip is visibly a second thing.
+		const second = nextRecipeColor([mine]);
+		expect(second).not.toBe("rose");
+		expect(RECIPE_COLORS).toContain(second);
+		// A full palette cycles rather than handing back a duplicate forever.
+		const all = RECIPE_COLORS.map((color, index) => ({ ...mine, id: `row-${index}`, color }));
+		expect(RECIPE_COLORS).toContain(nextRecipeColor(all));
+	});
+
+	test("suggests a name from the candidate stage", () => {
+		expect(suggestedRecipeName({ window: "all", candidates: "following", mix: "spread" })).toBe(
+			"Creators I follow",
+		);
+		expect(suggestedRecipeName({ window: "week", candidates: "everyone", mix: "spread" })).toBe(
+			"Everyone on Anthers",
+		);
+	});
+
+	test("compares recipes by all three stages, not by identity", () => {
+		expect(sameRecipe(mine.recipe, { ...mine.recipe })).toBe(true);
+		expect(sameRecipe(mine.recipe, { ...mine.recipe, window: "week" })).toBe(false);
+	});
+
+	test("renders the site's presets first and the reader's own after, in their order", () => {
+		const second: SavedRecipe = { ...mine, id: "seed-2", label: "Wide net", color: "sky" };
+		const choices = recipeChoices([mine, second]);
+		expect(choices.map((choice) => choice.label)).toEqual([
+			...RECIPE_PRESETS.map((preset) => preset.label),
+			"Close friends",
+			"Wide net",
+		]);
+		expect(choices[0].savedId).toBeNull();
+		expect(choices[choices.length - 1].savedId).toBe("seed-2");
+		// A saved chip's blurb is its own sentence, so the title describes the recipe even
+		// after the reader renames it.
+		expect(choices[choices.length - 1].blurb).toBe(streamRecipe(second.recipe).sentence);
+	});
+
+	test("names the chip a recipe is, and nothing for a combination no chip names", () => {
+		const choices = recipeChoices([mine]);
+		expect(choiceForRecipe(choices, mine.recipe)?.savedId).toBe("seed-1");
+		expect(choiceForRecipe(choices, RECIPE_PRESETS[0].recipe)?.savedId).toBeNull();
+		// One stage away is no chip: a chip that lit here would lie about what a click does.
+		expect(choiceForRecipe(choices, { ...mine.recipe, window: "day" })).toBeNull();
+	});
+});
+
+describe("reading saved recipes from the payload", () => {
+	test("parses each row, keeping the stored order", () => {
+		const rows = savedRecipesFrom([
+			{
+				id: "a",
+				label: "One",
+				color: "teal",
+				recipe: { window: "day", candidates: "saved", mix: "spread" },
+			},
+			{
+				id: "b",
+				label: "Two",
+				color: "clay",
+				recipe: { window: "all", candidates: "network", mix: "straight" },
+			},
+		]);
+		expect(rows.map((row) => row.id)).toEqual(["a", "b"]);
+		expect(rows[0].recipe).toEqual({ window: "day", candidates: "saved", mix: "spread" });
+	});
+
+	test("drops a row this build cannot render rather than drawing a half-chip", () => {
+		const rows = savedRecipesFrom([
+			{ id: "", label: "No id", color: "moss", recipe: null },
+			{ id: "b", label: "   ", color: "moss", recipe: null },
+			// A duplicate id is one chip React cannot tell from the other, so the first wins.
+			{
+				id: "a",
+				label: "One",
+				color: "teal",
+				recipe: { window: "day", candidates: "following", mix: "straight" },
+			},
+			{
+				id: "a",
+				label: "Again",
+				color: "teal",
+				recipe: { window: "week", candidates: "saved", mix: "spread" },
+			},
+		]);
+		expect(rows.map((row) => row.label)).toEqual(["One"]);
+	});
+
+	test("degrades an unknown stage or color instead of dropping the recipe", () => {
+		const [row] = savedRecipesFrom([
+			{
+				id: "a",
+				label: "From a later build",
+				color: "ultraviolet",
+				recipe: { window: "fortnight", candidates: "friends", mix: "chaos" },
+			},
+		]);
+		expect(row.color).toBe("moss");
+		expect(row.recipe).toEqual({ window: "all", candidates: "everyone", mix: "spread" });
+	});
+
+	test("caps the label and the list", () => {
+		const [row] = savedRecipesFrom([
+			{
+				id: "a",
+				label: "x".repeat(SAVED_RECIPE_LABEL_MAX + 20),
+				color: "moss",
+				recipe: { window: "all", candidates: "saved", mix: "spread" },
+			},
+		]);
+		expect(row.label.length).toBe(SAVED_RECIPE_LABEL_MAX);
+
+		const many = Array.from({ length: SAVED_RECIPE_LIMIT + 5 }, (_, index) => ({
+			id: `row-${index}`,
+			label: `Recipe ${index}`,
+			color: "moss",
+			recipe: { window: "all", candidates: "saved", mix: "spread" },
+		}));
+		expect(savedRecipesFrom(many)).toHaveLength(SAVED_RECIPE_LIMIT);
+	});
+
+	test("reads null and undefined as no saved recipes", () => {
+		expect(savedRecipesFrom(null)).toEqual([]);
+		expect(savedRecipesFrom(undefined)).toEqual([]);
+		expect(savedRecipesFrom([])).toEqual([]);
 	});
 });

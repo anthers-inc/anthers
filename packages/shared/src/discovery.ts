@@ -168,14 +168,202 @@ export function recipeQuery(
 	return { scope: "network", network_source: candidates, mix };
 }
 
+/**
+ * The colors a recipe chip may carry.
+ *
+ * ⭐ **A token rather than a hex value in the row.** The stored value names a choice; the
+ * hex lives here, so a palette that has to change for contrast or for the brand does not
+ * rewrite every saved recipe. The client renders the chip from this record, and the route
+ * validates against the same list, which is why it sits in the shared module rather than
+ * in the page.
+ *
+ * ⚠️ **Color is an accent, never the only signal.** Two chips can share a color, and a
+ * reader who cannot distinguish them still has the label and the pressed state; the
+ * swatch picker marks its selection with a check as well as a ring.
+ */
+export const RECIPE_COLORS = [
+	"moss",
+	"sky",
+	"violet",
+	"rose",
+	"amber",
+	"teal",
+	"clay",
+	"slate",
+] as const;
+export type RecipeColor = (typeof RECIPE_COLORS)[number];
+
+export const RECIPE_COLOR_VALUES: Record<RecipeColor, { label: string; hex: string }> = {
+	moss: { label: "Moss", hex: "#3f7d58" },
+	sky: { label: "Sky", hex: "#2f6fae" },
+	violet: { label: "Violet", hex: "#7a5db5" },
+	rose: { label: "Rose", hex: "#b5486b" },
+	amber: { label: "Amber", hex: "#a97612" },
+	teal: { label: "Teal", hex: "#1f7f7f" },
+	clay: { label: "Clay", hex: "#a5543a" },
+	slate: { label: "Slate", hex: "#5b6b7a" },
+};
+
+export function asRecipeColor(value: string | null | undefined): RecipeColor {
+	return (RECIPE_COLORS as readonly string[]).includes(value ?? "")
+		? (value as RecipeColor)
+		: "moss";
+}
+
 /** One named recipe a reader can select in a click. */
 export interface RecipePreset {
-	/** Stable identity, for the chips and for a future saved-recipe store. */
+	/** Stable identity, for the chip's key. Saved recipes carry their own ids. */
 	id: string;
 	label: string;
 	/** What the preset draws, for the chip's title. */
 	blurb: string;
+	color: RecipeColor;
 	recipe: Recipe;
+}
+
+/**
+ * One recipe a reader saved, as the account stores it.
+ *
+ * ⭐ **The recipe is stored whole rather than as a preset id**, the same rule
+ * `homeRecipe` follows: a saved chip is a name and a color over three values, so it keeps
+ * working when a built-in preset is renamed or retired, and a combination no preset would
+ * ever name can be saved at all.
+ */
+export interface SavedRecipe {
+	/** Client-generated and stable for the row's life; the chips key on it. */
+	id: string;
+	label: string;
+	color: RecipeColor;
+	recipe: Recipe;
+}
+
+/** How many recipes one account may hold. A line of chips is the surface; this keeps it. */
+export const SAVED_RECIPE_LIMIT = 24;
+
+/** The longest name a chip renders without crowding every other chip. */
+export const SAVED_RECIPE_LABEL_MAX = 40;
+
+/**
+ * The color a newly saved recipe opens with: the first one this account has not used, so
+ * a second chip is visibly a second thing, and a reader who has used the whole palette
+ * cycles rather than getting a duplicate everywhere.
+ */
+export function nextRecipeColor(saved: readonly SavedRecipe[]): RecipeColor {
+	const used = new Set(saved.map((recipe) => recipe.color));
+	return (
+		RECIPE_COLORS.find((color) => !used.has(color)) ??
+		RECIPE_COLORS[saved.length % RECIPE_COLORS.length]
+	);
+}
+
+/**
+ * What a newly saved recipe is called before the reader renames it.
+ *
+ * The candidate stage is the part that makes one recipe different from another at a
+ * glance, so the suggestion names that rather than the whole sentence. It is a
+ * suggestion: the name field opens with it selected, and every chip is renameable.
+ */
+export function suggestedRecipeName(recipe: Recipe): string {
+	const names: Record<RecipeCandidates, string> = {
+		everyone: "Everyone on Anthers",
+		network: "My network",
+		following: "Creators I follow",
+		subscribed: "Creators I support",
+		saved: "Creators I saved",
+	};
+	return names[recipe.candidates];
+}
+
+/** Whether two recipes name the same three stages. */
+export function sameRecipe(a: Recipe, b: Recipe): boolean {
+	return a.window === b.window && a.candidates === b.candidates && a.mix === b.mix;
+}
+
+/** One chip in the row: a built-in preset, or a recipe this reader saved. */
+export interface RecipeChoice extends RecipePreset {
+	/** The saved recipe this choice is, or null for a built-in. */
+	savedId: string | null;
+}
+
+/**
+ * The chips, in the order they render: the site's presets first, then the reader's own in
+ * the order they arranged them.
+ *
+ * Built-ins ahead of saved recipes is the one ordering the reader cannot change, because
+ * they are different kinds of thing — the site's named recipes come first and stay put.
+ * The saved ones are moveable among themselves, which is what "which of them renders
+ * first" means.
+ */
+export function recipeChoices(saved: readonly SavedRecipe[]): RecipeChoice[] {
+	return [
+		...RECIPE_PRESETS.map((preset) => ({ ...preset, savedId: null })),
+		...saved.map((recipe) => ({
+			id: `saved:${recipe.id}`,
+			label: recipe.label,
+			blurb: streamRecipe(recipe.recipe).sentence,
+			color: recipe.color,
+			recipe: recipe.recipe,
+			savedId: recipe.id,
+		})),
+	];
+}
+
+/**
+ * The choice a recipe is, or null for a combination no chip names.
+ *
+ * Exact rather than nearest, for `presetFor`'s reason: a chip that lit up for a recipe it
+ * would not reproduce is a chip that lies about what a click does.
+ */
+export function choiceForRecipe(
+	choices: readonly RecipeChoice[],
+	recipe: Recipe,
+): RecipeChoice | null {
+	return choices.find((choice) => sameRecipe(choice.recipe, recipe)) ?? null;
+}
+
+/**
+ * Saved recipes as the account payload delivers them, parsed row by row.
+ *
+ * The payload is untrusted at the type boundary and may predate this build. A row missing
+ * an id, a name or a recipe is left out rather than rendered as a half-chip; a stage or a
+ * color this build does not recognize degrades to its default instead, so a row written by
+ * a later build still opens the reader's own name and recipe rather than vanishing.
+ * Duplicate ids keep the first: two chips with one key are one chip React cannot tell from
+ * the other.
+ */
+export function savedRecipesFrom(
+	raw:
+		| ReadonlyArray<{
+				id?: unknown;
+				label?: unknown;
+				color?: unknown;
+				recipe?: { window?: unknown; candidates?: unknown; mix?: unknown } | null;
+		  }>
+		| null
+		| undefined,
+): SavedRecipe[] {
+	if (!raw) return [];
+	const seen = new Set<string>();
+	const out: SavedRecipe[] = [];
+	for (const row of raw) {
+		if (out.length >= SAVED_RECIPE_LIMIT) break;
+		if (typeof row?.id !== "string" || row.id === "" || seen.has(row.id)) continue;
+		if (typeof row.label !== "string" || row.label.trim() === "") continue;
+		if (typeof row.recipe !== "object" || row.recipe === null) continue;
+		const parsed = recipeFrom({
+			window: typeof row.recipe?.window === "string" ? row.recipe.window : null,
+			candidates: typeof row.recipe?.candidates === "string" ? row.recipe.candidates : null,
+			mix: typeof row.recipe?.mix === "string" ? row.recipe.mix : null,
+		});
+		seen.add(row.id);
+		out.push({
+			id: row.id,
+			label: row.label.slice(0, SAVED_RECIPE_LABEL_MAX),
+			color: asRecipeColor(typeof row.color === "string" ? row.color : null),
+			recipe: parsed,
+		});
+	}
+	return out;
 }
 
 /**
@@ -190,21 +378,24 @@ export interface RecipePreset {
  * rather than first: the whole site's newest entries are what a reader goes looking for,
  * and the feed is what they come back for.
  *
- * Saving, renaming, recoloring and sharing presets are a later task, so this list is
- * code rather than rows. A preset carries a `recipe` and nothing else, which is what
- * makes that migration a data move rather than a shape change.
+ * ⭐ **These are the site's own recipes, and they stay code.** A reader's saved recipes are
+ * rows on their account (`savedRecipes`), rendered after these; a built-in is not
+ * renameable, deletable or reorderable because it is not the reader's to change. Both
+ * kinds reach the chips through `recipeChoices`, so the row does not care which is which.
  */
 export const RECIPE_PRESETS: readonly RecipePreset[] = [
 	{
 		id: "my-network",
 		label: "My Network",
 		blurb: "Works and Posts from you and the creators you follow, support or have saved.",
+		color: "moss",
 		recipe: { window: "all", candidates: "network", mix: "straight" },
 	},
 	{
 		id: "across-anthers",
 		label: "Across Anthers",
 		blurb: "The newest Works and Posts from every creator on Anthers.",
+		color: "sky",
 		recipe: { window: "all", candidates: "everyone", mix: "spread" },
 	},
 ];

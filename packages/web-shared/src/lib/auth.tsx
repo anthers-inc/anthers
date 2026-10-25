@@ -60,6 +60,17 @@ export interface User {
 	 */
 	homeRecipe: { window: string; candidates: string; mix: string } | null;
 	/**
+	 * The Discovery recipes this account saved, in chip order. Each row is parsed through
+	 * `@anthers/shared/discovery`'s `savedRecipesFrom`, which drops a row this build
+	 * cannot render rather than showing a half-chip. Null and `[]` both mean none saved.
+	 */
+	savedRecipes: Array<{
+		id: string;
+		label: string;
+		color: string;
+		recipe: { window: string; candidates: string; mix: string };
+	}> | null;
+	/**
 	 * Whether audio playback rides the persistent footer bar rather than a Work page's
 	 * own player. Null = never answered, and the reader treats that as **on** — the
 	 * column never bakes the default in, so a later default change would not have to

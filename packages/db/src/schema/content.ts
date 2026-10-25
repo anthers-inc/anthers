@@ -387,6 +387,13 @@ export const works = pgTable(
 		 * Historical versions carry the value it held when they were current.
 		 */
 		versionAddedAt: timestamp("version_added_at", { withTimezone: true }).defaultNow().notNull(),
+		/**
+		 * The name the creator gave the CURRENT media version, or an empty string when they
+		 * left it unnamed. Beside `versionAddedAt` because the two travel together: the
+		 * name is what a reader sees next to that date, and a replacement clears it as it
+		 * moves the date. {@link workMediaVersions.versionLabel} carries it into history.
+		 */
+		versionLabel: text("version_label").notNull().default(""),
 	},
 	(table) => [
 		index("idx_works_creator").on(table.creatorId),
@@ -888,19 +895,29 @@ export type WorkVersionMedia =
 	| { kind: "builds"; assets: WorkVersionAsset[]; webBuilds: WorkVersionWebBuild[] };
 
 /**
- * A Work's archived media versions — the originals a replace retired, creator-only.
+ * A Work's archived media versions — the originals a replace retired, with the name and
+ * date each carried.
  *
  * ⭐ **The current media does not live here.** It stays in `works.source_key`, the source
  * set and the build tables, because every reader, pipeline and listing already reads it
  * there; a row in this table is always historical. That is what makes "only the current
  * version has transcodes" true without a second set of joins.
  *
+ * ⭐ **A version's name and date are public once the version was added after release.** The
+ * Work page lists every such version as a name and a date, so maintenance is visible rather
+ * than inferred. `uploadedAt >= works.releasedAt` is the test, and the release build is the
+ * baseline rather than the first entry because it was uploaded while the Work was still
+ * being made. Everything else about a version — its files, sizes, storage keys, and any
+ * version uploaded before release — stays creator-only.
+ *
  * 🚨 **The archived files are still storage-usage and purge material.** Their keys are
  * enumerated from `media` by `media-purge.ts` and the storage-usage job, so a Work delete,
  * an account delete and a creator's storage total all see them. Removing a version is the
- * one path that deletes these originals while the Work remains.
+ * one path that deletes these originals while the Work remains, and once a version is
+ * public its removal is also an edit to the history a reader sees.
  */
-// node — a Work's archived original media. Node-side, creator-only, cascades with the Work.
+// node — a Work's archived original media. Node-side, cascades with the Work. Its name and
+// date are public after release; its files never are.
 export const workMediaVersions = pgTable(
 	"work_media_versions",
 	{
@@ -910,6 +927,8 @@ export const workMediaVersions = pgTable(
 			.references(() => works.id, { onDelete: "cascade" }),
 		/** When this media was added while it was current — the creator-facing date. */
 		uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull(),
+		/** The name the version carried while it was current; empty when it was left unnamed. */
+		versionLabel: text("version_label").notNull().default(""),
 		/** When the next version replaced it. */
 		archivedAt: timestamp("archived_at", { withTimezone: true }).defaultNow().notNull(),
 		media: jsonb("media").$type<WorkVersionMedia>().notNull(),

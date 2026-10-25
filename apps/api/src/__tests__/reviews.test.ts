@@ -20,10 +20,10 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { reviews, users, votes } from "@anthers/db/schema";
+import { reviews, users, votes, works } from "@anthers/db/schema";
 import { REVIEW_MAX } from "@anthers/shared/content";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
 import { REVIEW_COLLECTION } from "../services/atproto-record-plan.js";
 import { createAccount } from "./account-fixture";
@@ -59,6 +59,7 @@ interface ReviewList {
 	recommendedPercent: number | null;
 	recommended: number;
 	count: number;
+	versionSince: string | null;
 	recent: {
 		window: string;
 		recommendedPercent: number | null;
@@ -72,6 +73,7 @@ interface ReviewList {
 		verdict: string;
 		body: string;
 		handle: string;
+		createdAt: string;
 		score: number;
 		userVote: "up" | "down" | null;
 		recordUrl?: string | null;
@@ -520,5 +522,110 @@ describe("the owner's Works listing", () => {
 			recommended: Number(expected.recommended),
 			notRecommended: Number(expected.not_recommended),
 		});
+	});
+});
+
+describe("Narrowing the reviews to the current media version", () => {
+	// A Work can carry more than one media version and a review names none of them, so the
+	// cutoff is the only date a review carries: `createdAt >= versionAddedAt`. Both leaks in
+	// that proxy are documented where the route computes it; these cases pin the read side —
+	// which set each figure describes, and when the control is offered at all.
+	const DAY = 24 * 60 * 60 * 1000;
+	const daysAgo = (n: number) => new Date(Date.now() - n * DAY);
+
+	const readAs = async (query: string, cookie?: string): Promise<ReviewList> => {
+		const res = await req(`/api/content/works/${workId}/reviews?${query}`, {
+			headers: cookie ? { Cookie: cookie } : undefined,
+		});
+		expect(res.status).toBe(200);
+		return (await res.json()) as ReviewList;
+	};
+
+	it("scopes the list and both shares to the reviews written since the version", async () => {
+		const [original] = await db
+			.select({ releasedAt: works.releasedAt, versionAddedAt: works.versionAddedAt })
+			.from(works)
+			.where(eq(works.id, workId));
+
+		// Released sixty days ago, with the current build added twenty days ago: a second
+		// version, which is the shape the filter exists for.
+		await db
+			.update(works)
+			.set({ releasedAt: daysAgo(60), versionAddedAt: daysAgo(20) })
+			.where(eq(works.id, workId));
+		const [stamped] = await db
+			.select({ versionAddedAt: works.versionAddedAt })
+			.from(works)
+			.where(eq(works.id, workId));
+
+		// One visible written review belongs to the old build, and the reader's own review
+		// (hidden earlier in this suite) does too. Both are given the first version's date;
+		// everything else on this Work was written this run and is the current build's.
+		const oldBuildBodies = ["worth the hour", "actually I have changed my mind again"];
+		const moved: number[] = [];
+		for (const body of oldBuildBodies) {
+			const [row] = await db
+				.select({ id: reviews.id })
+				.from(reviews)
+				.where(and(eq(reviews.workId, workId), eq(reviews.body, body)));
+			moved.push(row.id);
+			await db
+				.update(reviews)
+				.set({ createdAt: daysAgo(30) })
+				.where(eq(reviews.id, row.id));
+		}
+
+		try {
+			const all = await readAs("window=year");
+			expect(all.versionSince).toBe(stamped.versionAddedAt!.toISOString());
+			expect(all.count).toBe(4);
+			expect(all.recommendedPercent).toBe(75);
+			expect(all.reviews).toHaveLength(3);
+			// A year holds every row, including the two backdated ones.
+			expect(all.recent.count).toBe(4);
+
+			const current = await readAs("version=current&window=year");
+			// The list drops the old build's words; the shares drop its verdict with them.
+			expect(current.reviews).toHaveLength(2);
+			expect(current.reviews.map((r) => r.body)).not.toContain("worth the hour");
+			for (const review of current.reviews) {
+				expect(Date.parse(review.createdAt)).toBeGreaterThanOrEqual(
+					Date.parse(current.versionSince!),
+				);
+			}
+			expect(current.count).toBe(3);
+			expect(current.recommended).toBe(2);
+			expect(current.recommendedPercent).toBe(67);
+			// The Recent share counts the same narrowed set — this is the half that would stay
+			// unscoped if the filter had been written client-side.
+			expect(current.recent.count).toBe(3);
+			expect(current.recent.recommendedPercent).toBe(67);
+
+			// The reader's own verdict and words are not narrowed with the rest: the composer
+			// opens on what they said whatever date it carries.
+			const asAuthor = await readAs("version=current", userA);
+			expect(asAuthor.userVerdict).toBe("recommended");
+			expect(asAuthor.userReview).toBe("actually I have changed my mind again");
+
+			// With no version added after the release there is nothing to offer: the field is
+			// null and `current` is the whole history, exactly as `all` is.
+			await db
+				.update(works)
+				.set({ releasedAt: daysAgo(60), versionAddedAt: daysAgo(90) })
+				.where(eq(works.id, workId));
+			const single = await readAs("version=current&window=year");
+			expect(single.versionSince).toBeNull();
+			expect(single.count).toBe(4);
+			expect(single.reviews).toHaveLength(3);
+
+			// An unknown scope is a bad request rather than a silent guess.
+			expect((await req(`/api/content/works/${workId}/reviews?version=sideways`)).status).toBe(400);
+		} finally {
+			await db
+				.update(works)
+				.set({ releasedAt: original.releasedAt, versionAddedAt: original.versionAddedAt })
+				.where(eq(works.id, workId));
+			await db.update(reviews).set({ createdAt: new Date() }).where(inArray(reviews.id, moved));
+		}
 	});
 });

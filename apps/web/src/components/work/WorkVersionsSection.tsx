@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A Work's media versions, for its creator — the current version's date and the archived
- * originals a replacement retired.
+ * A Work's media versions, for its creator — the current version's name and date, and the
+ * archived originals a replacement retired.
  *
- * ⭐ **The current version is the page's fact; the archive is the creator's.** A reader sees
- * only `versionAddedAt` in the byline. This list, every download and every removal are
- * owner-only routes, and a version holds only original bytes: no ladder, no MP3, no rendered
- * page, no reflow section. Removing one deletes its own originals and nothing else.
+ * ⭐ **A version's name and date are public once it was added after release.** The current
+ * version's name is set here and carried into its archived row when a replacement takes
+ * over; readers see the pair in the byline and the Details tab. Files, sizes, downloads and
+ * every version uploaded before release stay owner-only. Removing a version therefore
+ * removes its entry from that public history as well as its originals.
  *
  * ⚠️ **The list reloads when the Work's `versionAddedAt` moves**, which is what a replace
  * changes; the upload store's landing already re-reads the Work, so the new row appears
@@ -16,7 +17,7 @@
 import { client } from "@anthers/web-shared/rpc";
 import type { WorkMediaVersionSummary } from "@anthers/web-shared/types";
 import { ArrowDownTrayIcon, TrashIcon } from "@heroicons/react/24/outline";
-import { useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 function dateTime(iso: string): string {
 	return new Date(iso).toLocaleString("en-US", {
@@ -39,17 +40,30 @@ function bytes(value: number): string {
 export default function WorkVersionsSection({
 	workId,
 	versionAddedAt,
+	versionLabel,
 }: {
 	workId: number;
 	/** The current version's date; changing it reloads the archive. */
 	versionAddedAt?: string | null;
+	/** The current version's name, carried into its archived row when it is replaced. */
+	versionLabel?: string | null;
 }) {
 	const [versions, setVersions] = useState<WorkMediaVersionSummary[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [busyId, setBusyId] = useState<number | null>(null);
 	const [removeTarget, setRemoveTarget] = useState<WorkMediaVersionSummary | null>(null);
+	const [label, setLabel] = useState(versionLabel ?? "");
+	const [labelSaving, setLabelSaving] = useState(false);
+	const [labelSaved, setLabelSaved] = useState(false);
 	const dialog = useRef<HTMLDialogElement>(null);
+
+	// A replacement arrives as a new prop; the field follows the Work rather than keeping
+	// the name of the version it has already retired.
+	useEffect(() => {
+		setLabel(versionLabel ?? "");
+		setLabelSaved(false);
+	}, [versionLabel]);
 
 	const load = async () => {
 		setError(null);
@@ -101,6 +115,29 @@ export default function WorkVersionsSection({
 		window.location.assign(`/api/content/works/${workId}/versions/${version.id}/download`);
 	};
 
+	const saveLabel = async (event: FormEvent) => {
+		event.preventDefault();
+		if (labelSaving) return;
+		setLabelSaving(true);
+		setError(null);
+		try {
+			const res = await client.api.content.works[":id"].$patch({
+				param: { id: String(workId) },
+				json: { versionLabel: label.trim() },
+			});
+			if (!res.ok) {
+				setError("Couldn't save that version's name.");
+				return;
+			}
+			setLabel(label.trim());
+			setLabelSaved(true);
+		} catch {
+			setError("Couldn't save that version's name.");
+		} finally {
+			setLabelSaving(false);
+		}
+	};
+
 	const confirmRemove = async () => {
 		if (!removeTarget) return;
 		const target = removeTarget;
@@ -131,6 +168,31 @@ export default function WorkVersionsSection({
 				<p className="text-xs text-base-content/60">
 					{versionAddedAt ? `Added ${dateTime(versionAddedAt)}` : "No media version yet"}
 				</p>
+				{versionAddedAt && (
+					<form onSubmit={saveLabel} className="mt-2 flex flex-wrap items-end gap-2">
+						<label className="min-w-40 flex-1">
+							<span className="text-xs text-base-content/60">Name this version</span>
+							<input
+								className="input input-sm input-bordered mt-0.5 w-full"
+								maxLength={80}
+								value={label}
+								placeholder="Optional"
+								onChange={(event) => {
+									setLabel(event.target.value);
+									setLabelSaved(false);
+								}}
+							/>
+						</label>
+						<button type="submit" className="btn btn-sm" disabled={labelSaving || labelSaved}>
+							{labelSaving ? "Saving…" : labelSaved ? "Saved" : "Save"}
+						</button>
+					</form>
+				)}
+				{versionAddedAt && (
+					<p className="mt-1 text-xs text-base-content/50">
+						Readers see this name beside the date only for versions added after release.
+					</p>
+				)}
 			</div>
 
 			{error && (
@@ -151,7 +213,11 @@ export default function WorkVersionsSection({
 							className="flex flex-wrap items-center gap-3 rounded-lg border border-base-300 p-3"
 						>
 							<div className="min-w-0 flex-1">
-								<p className="text-sm">{dateTime(version.uploadedAt)}</p>
+								<p className="text-sm">
+									{version.versionLabel
+										? `${version.versionLabel} · ${dateTime(version.uploadedAt)}`
+										: dateTime(version.uploadedAt)}
+								</p>
 								<p className="text-xs text-base-content/50">
 									{[
 										`${version.fileCount} file${version.fileCount === 1 ? "" : "s"}`,
@@ -192,10 +258,14 @@ export default function WorkVersionsSection({
 					<h3 className="text-lg font-semibold">Remove this version?</h3>
 					<p className="mt-1 text-sm text-base-content/70">
 						This deletes the original files this version holds. The current version, and anything
-						anyone has already downloaded, are untouched.
+						anyone has already downloaded, are untouched. If the version was added after the Work
+						was released, its entry also leaves the version history readers see.
 					</p>
 					{removeTarget && (
-						<p className="mt-2 text-xs text-base-content/50">{dateTime(removeTarget.uploadedAt)}</p>
+						<p className="mt-2 text-xs text-base-content/50">
+							{removeTarget.versionLabel ? `${removeTarget.versionLabel} · ` : ""}
+							{dateTime(removeTarget.uploadedAt)}
+						</p>
 					)}
 					<div className="modal-action">
 						<button

@@ -13,9 +13,11 @@
  * passes those keys as `keep`, or it deletes the very original it just archived. That is why
  * the function returns a `Set` rather than a row alone.
  *
- * ⚠️ **Only the current version is served.** Every read here is owner-scoped by its route;
- * no serialization for a reader carries a version row or a version list. The Work page gets
- * `versionAddedAt`, which is the current version's date and nothing more.
+ * ⚠️ **A version's name and date are public; nothing else is.** The release build is the
+ * baseline rather than the first entry, because it was uploaded while the Work was still
+ * being made. `publicWorkVersions` returns every version added at or after the Work's first
+ * release, as a name and a date — never a file, a size, a storage key or a download. Every
+ * other read here is owner-scoped by its route.
  */
 
 import {
@@ -30,7 +32,7 @@ import {
 	type works,
 } from "@anthers/db";
 import { hasSourceSet } from "@anthers/shared/content";
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, gte, ne } from "drizzle-orm";
 import { storage } from "./storage/index.js";
 import { isKeyUnder, urlToKey } from "./storage/keys.js";
 
@@ -48,11 +50,24 @@ type Executor = Pick<typeof db, "insert" | "select">;
 export interface WorkVersionSummary {
 	id: number;
 	uploadedAt: string;
+	versionLabel: string;
 	archivedAt: string;
 	kind: WorkVersionMedia["kind"];
 	fileCount: number;
 	totalBytes: number;
 	files: { filename: string; fileSize: number | null }[];
+}
+
+/**
+ * One version as a reader sees it — its name and the date it was added, and no more.
+ *
+ * The release build is deliberately absent from the list this type describes: it is the
+ * baseline the reader is already looking at, and it was uploaded while the Work was being
+ * made rather than after the Work was released.
+ */
+export interface PublicWorkVersion {
+	versionLabel: string;
+	addedAt: string;
 }
 
 /** A version's stored original, as a download has to name it. */
@@ -203,6 +218,8 @@ export async function archiveCurrentMedia(
 			// The date this media carried as current; the Work's own creation is the
 			// fallback for a row that predates the column's backfill.
 			uploadedAt: work.versionAddedAt ?? work.createdAt,
+			// The name it carried while it was current, so a reader's history keeps it.
+			versionLabel: work.versionLabel,
 			media,
 		})
 		.returning();
@@ -229,6 +246,7 @@ export async function archiveSourceSet(
 		.values({
 			workId: work.id,
 			uploadedAt,
+			versionLabel: work.versionLabel,
 			media: { kind: "set", files },
 		})
 		.returning();
@@ -253,6 +271,7 @@ export async function archiveLegacySource(
 		.values({
 			workId: work.id,
 			uploadedAt,
+			versionLabel: work.versionLabel,
 			media: { kind: "set", files: [file] },
 		})
 		.returning();
@@ -279,6 +298,46 @@ export async function listWorkVersions(workId: number): Promise<WorkMediaVersion
 		.orderBy(desc(workMediaVersions.uploadedAt), desc(workMediaVersions.id));
 }
 
+/**
+ * Every version a reader may see — the ones added at or after the Work was released.
+ *
+ * The current version is a row on `works`, not in the archive, so it is assembled here
+ * beside the archived rows. Both halves are filtered by `releasedAt`: a version uploaded
+ * while the Work was still being made is the baseline, not an entry. `releasedAt` is
+ * stamped on the first release and never moved, so withdrawing and releasing the Work
+ * again does not retroactively hide what it gained during its first public life.
+ *
+ * ⚠️ **Names and dates only.** No file list, size or download rides this shape; the
+ * archive's originals stay behind the owner-only routes.
+ */
+export async function publicWorkVersions(work: WorkRow): Promise<PublicWorkVersion[]> {
+	if (!work.releasedAt) return [];
+	const releasedAt = work.releasedAt.getTime();
+	const rows = await db
+		.select({
+			uploadedAt: workMediaVersions.uploadedAt,
+			versionLabel: workMediaVersions.versionLabel,
+		})
+		.from(workMediaVersions)
+		.where(
+			and(
+				eq(workMediaVersions.workId, work.id),
+				gte(workMediaVersions.uploadedAt, work.releasedAt),
+			),
+		);
+	const entries: PublicWorkVersion[] = rows.map((row) => ({
+		versionLabel: row.versionLabel,
+		addedAt: row.uploadedAt.toISOString(),
+	}));
+	if (work.versionAddedAt.getTime() >= releasedAt) {
+		entries.push({
+			versionLabel: work.versionLabel,
+			addedAt: work.versionAddedAt.toISOString(),
+		});
+	}
+	return entries.sort((a, b) => a.addedAt.localeCompare(b.addedAt));
+}
+
 /** The list shape the Versions tab reads. */
 export function summarizeVersion(row: WorkMediaVersionRow): WorkVersionSummary {
 	const media = row.media;
@@ -302,6 +361,7 @@ export function summarizeVersion(row: WorkMediaVersionRow): WorkVersionSummary {
 	return {
 		id: row.id,
 		uploadedAt: row.uploadedAt.toISOString(),
+		versionLabel: row.versionLabel,
 		archivedAt: row.archivedAt.toISOString(),
 		kind: media.kind,
 		fileCount: files.length,
@@ -366,6 +426,10 @@ async function keysInUse(work: WorkRow, exceptVersionId: number): Promise<Set<st
 /**
  * Remove one archived version and its originals. The current media is never touched, and a
  * key another version or the live Work still references is kept rather than deleted.
+ *
+ * ⚠️ **A removal edits the public history when the version was added after release**, because
+ * the Work page lists that version by name and date. The originals are the creator's and go
+ * with the row; the entry on the page goes with it too.
  */
 export async function removeWorkVersion(work: WorkRow, versionId: number): Promise<boolean> {
 	const [version] = await db

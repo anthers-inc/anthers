@@ -118,6 +118,7 @@ import {
 	countDistinct,
 	desc,
 	eq,
+	gte,
 	inArray,
 	isNotNull,
 	like,
@@ -304,6 +305,7 @@ import {
 	archiveCurrentMedia,
 	findWorkVersion,
 	listWorkVersions,
+	publicWorkVersions,
 	removeWorkVersion,
 	summarizeVersion,
 	versionFiles,
@@ -1027,6 +1029,12 @@ const workBaseSchema = z
 		// beside the image itself. No sanitizer either — an img attribute, never markup.
 		imageAlt: z.string().max(1000).optional(),
 		metadata: z.record(z.unknown()).optional().default({}),
+		/**
+		 * The name of the CURRENT media version, empty to leave it unnamed. A reader sees it
+		 * beside the version's date once the version was added after the Work was released;
+		 * the archived row carries it into history when a replacement takes over.
+		 */
+		versionLabel: z.string().max(80).optional(),
 
 		// Visibility. `released` is public listing, NOT public access — the gates decide that.
 		visibility: z.enum(["private", "released"]).optional(),
@@ -1682,6 +1690,8 @@ async function serializeWork(
 		...(reviewCounts ? { reviewCounts } : {}),
 		/** When the current media version was added — the date the Work's page shows. */
 		versionAddedAt: item.versionAddedAt,
+		/** The current version's name, or empty when its creator left it unnamed. */
+		versionLabel: item.versionLabel,
 		/** The UPLOAD date. Creator-facing only — the public sees originallyReleased and releasedAt. */
 		createdAt: item.createdAt,
 		updatedAt: item.updatedAt,
@@ -2596,8 +2606,9 @@ async function serializeWorkForUser(
 		sourceUrl: work.sourceUrl,
 		viewCount: work.viewCount,
 		downloadCount: work.downloadCount,
-		/** The current media version's date, for the reader. History stays owner-only. */
+		/** The current media version's date, for the reader. Its name travels beside it. */
 		versionAddedAt: work.versionAddedAt,
+		versionLabel: work.versionLabel,
 		createdAt: work.createdAt,
 		updatedAt: work.updatedAt,
 		// `clientVariants` are an internal packaging detail (storage keys) — never expose.
@@ -3995,7 +4006,17 @@ const contentRoutes = new Hono()
 	// rule, not a schema rule, exactly like the Seed vocabulary changes.
 	.get(
 		"/works/:id/reviews",
-		zValidator("query", z.object({ window: z.enum(REVIEW_WINDOWS).optional() })),
+		zValidator(
+			"query",
+			z.object({
+				window: z.enum(REVIEW_WINDOWS).optional(),
+				/**
+				 * Whether to read the reviews of the current media version only. `all` is the
+				 * default and the shape every existing caller already gets.
+				 */
+				version: z.enum(["all", "current"]).optional(),
+			}),
+		),
 		async (c) => {
 			const work = await findWorkRow(c.req.param("id"));
 			if (!work) return c.json({ error: "Work not found" }, 404);
@@ -4009,6 +4030,40 @@ const contentRoutes = new Hono()
 			const currentUserId = await getOptionalUserId(c);
 			const window = c.req.valid("query").window ?? "month";
 
+			// ── The current media version as a cutoff for reviews ──
+			//
+			// A Work can carry more than one media version, and a review left on the first
+			// release reads beside one left on the build in front of the reader today. So a
+			// reader may ask for the reviews written since the current version arrived, and
+			// the cutoff is `reviews.createdAt >= works.versionAddedAt`.
+			//
+			// ⚠️ **That is a proxy, and it leaks in both directions.** A review written after
+			// the new version can still be about the old build — a reader who played the 2019
+			// cut and posts in 2026 is counted as reviewing the current one. And an edited
+			// review keeps its original `createdAt`: the POST route's conflict branch rewrites
+			// `verdict` and `body` only, so somebody who replayed the current build and edited
+			// words they first wrote against the old one stays outside the cutoff for good.
+			// Recording the version on the review at write time would close both leaks with a
+			// column and an optional published Lexicon field; the trade was taken deliberately
+			// (2026-10-24) because the question the filter exists to answer — what has the
+			// build in front of me earned? — is answered well enough by when the words were
+			// written, and a schema commitment is not read-side work.
+			//
+			// The cutoff is only offered when a version arrived AFTER the release. A Work's
+			// first upload is earlier than its release date, so `versionAddedAt < releasedAt`
+			// means there has never been a second version: the whole review history is the
+			// current one's, and the client has no control to offer.
+			const versionSince =
+				work.versionAddedAt && work.releasedAt && work.versionAddedAt > work.releasedAt
+					? work.versionAddedAt
+					: null;
+			// Reading `current` on a Work with no post-release version is not an error — it is
+			// the whole history either way, which is exactly what `all` returns.
+			const afterCurrentVersion =
+				c.req.valid("query").version === "current" && versionSince
+					? gte(reviews.createdAt, versionSince)
+					: undefined;
+
 			// The aggregate is deliberately NOT filtered by blocks, unlike the review list
 			// below. A score is a fact about the Work, not about who is reading it: making it
 			// user-dependent would mean two people see different reviews for the same thing,
@@ -4016,6 +4071,13 @@ const contentRoutes = new Hono()
 			// reviewer. The small honest cost is that a blocker can see "90% recommended from 10"
 			// over nine listed reviews — which is already true of a hidden review, and is the right
 			// side of the trade.
+			//
+			// ⭐ **The version scope DOES apply here, and that is the point of taking the filter
+			// to the server.** A block is about who is reading; a version is about what was
+			// reviewed, so the share and the list it summarizes must describe one set. Narrowing
+			// only the list would leave "80% recommended" over a list that showed 100%.
+			// `afterCurrentVersion` also scopes both FILTER clauses below, since the Recent share
+			// counts the rows this WHERE clause already narrowed.
 			// 🚨 **A proportion, not an average.** Reviews carry a verdict rather than a score,
 			// so the public figure is the share who recommended it — "94% recommended" — which
 			// is an honest statistic where a mean of stars was arithmetic performed on guesses.
@@ -4050,6 +4112,7 @@ const contentRoutes = new Hono()
 						// The automated-test account's review is counted away with it.
 						notTestAccount(reviews.userId),
 						notSuspendedAccount(reviews.userId),
+						afterCurrentVersion,
 					),
 				);
 
@@ -4088,6 +4151,7 @@ const contentRoutes = new Hono()
 						// the same listing rule.
 						notSuspendedAccount(reviews.userId),
 						notTestAccount(reviews.userId),
+						afterCurrentVersion,
 					),
 				);
 
@@ -4115,6 +4179,13 @@ const contentRoutes = new Hono()
 				recommendedPercent: recommendedPercent(agg.recommended, Number(agg.count)),
 				recommended: agg.recommended,
 				count: Number(agg.count),
+				/**
+				 * The current media version's date when a version arrived after the release —
+				 * the cutoff `version=current` measures against, and what tells the client
+				 * whether there is a version to offer at all. Null means every review is of
+				 * the current build because there has only ever been one.
+				 */
+				versionSince: versionSince?.toISOString() ?? null,
 				recent: {
 					window,
 					recommendedPercent: recommendedPercent(agg.recentRecommended, agg.recentCount),
@@ -4395,13 +4466,27 @@ const contentRoutes = new Hono()
 		return c.json({ url });
 	})
 
-	// ── A Work's archived media versions ─────────────────────────────────────────
+	// ── A Work's media versions ──────────────────────────────────────────────────
 	//
-	// Owner-only in every direction. A version holds the ORIGINAL bytes a replacement
-	// retired; the current media is the Work row, the source set and the build tables, and
-	// nothing here is reachable from a share link or a reader's payload. A non-owner gets
-	// the same 404 as a missing Work, because the existence of an old version is not
+	// One public read and the creator's archive. `GET …/versions/history` carries the name
+	// and date of every version added at or after the Work's first release — maintenance is
+	// a reader's fact, and nothing else about a version is. Everything below it is
+	// owner-only: a version holds the ORIGINAL bytes a replacement retired, the current media
+	// is the Work row, the source set and the build tables, and no file, size, key or
+	// download is reachable from a share link or a reader's payload. A non-owner gets the
+	// same 404 as a missing Work, because the existence of an old version's files is not
 	// something a stranger's request should confirm.
+
+	.get("/works/:id/versions/history", async (c) => {
+		const work = await findWorkRow(c.req.param("id") ?? "");
+		if (!work) return c.json({ error: "Work not found" }, 404);
+		// The same reachability the Work page itself answers: a private Work's history is as
+		// absent as the Work, an Adult Work's is as absent as its title, and a buyer reaches
+		// the withdrawn Work they own.
+		const reach = await workReachability(c, work);
+		if ("refusal" in reach) return reach.refusal;
+		return c.json({ versions: await publicWorkVersions(work) });
+	})
 
 	.get("/works/:id/versions", requireAuth, requireCreator, async (c) => {
 		const work = await findWorkRow(c.req.param("id") ?? "");
@@ -5365,6 +5450,7 @@ const contentRoutes = new Hono()
 						? estimateReadMinutes(bodyHtml || (data.body ?? ""))
 						: null,
 				metadata: data.metadata ?? {},
+				versionLabel: data.versionLabel?.trim() ?? "",
 				visibility: "private",
 				// Declared here or left `unrated` for the editor to ask about. Either way it
 				// is the creator's own word, so the source says so — nothing here can be an
@@ -6467,6 +6553,10 @@ const contentRoutes = new Hono()
 		if (data.embedUrl !== undefined) updates.embedUrl = data.embedUrl;
 		if (data.durationSeconds !== undefined) updates.durationSeconds = data.durationSeconds;
 		if (data.metadata !== undefined) updates.metadata = data.metadata;
+		// The current version's name. Editing it is a correction to what a reader sees only
+		// when that version came after release; a version that is already archived keeps the
+		// name it carried then.
+		if (data.versionLabel !== undefined) updates.versionLabel = data.versionLabel.trim();
 		// A physical Work carries no stream/download flags — delivery is being bought
 		// (the goods-works rule), the Studio hides the switches, and any value a raw
 		// PATCH or a stale client still sends is dropped rather than stored: a shirt
@@ -6569,7 +6659,12 @@ const contentRoutes = new Hono()
 			!hasSourceSet(work.type) &&
 			!!data.sourceKey &&
 			!!(work.sourceKey || work.sourceOriginalKey);
-		if (sourceChanged) updates.versionAddedAt = new Date();
+		if (sourceChanged) {
+			updates.versionAddedAt = new Date();
+			// A new version starts unnamed: the name belonged to the version being retired,
+			// and the archive carries it from there.
+			updates.versionLabel = "";
+		}
 
 		let updated: typeof works.$inferSelect;
 		let archivedKeeps: Set<string> | null = null;
@@ -7136,7 +7231,10 @@ const contentRoutes = new Hono()
 					.insert(assets)
 					.values({ workId: id, ...data })
 					.returning();
-				await tx.update(works).set({ versionAddedAt: new Date() }).where(eq(works.id, id));
+				await tx
+					.update(works)
+					.set({ versionAddedAt: new Date(), versionLabel: "" })
+					.where(eq(works.id, id));
 				return created;
 			});
 			return c.json({ asset }, 201);
@@ -7147,7 +7245,10 @@ const contentRoutes = new Hono()
 			.values({ workId: id, ...data })
 			.returning();
 		if (firstBuild) {
-			await db.update(works).set({ versionAddedAt: new Date() }).where(eq(works.id, id));
+			await db
+				.update(works)
+				.set({ versionAddedAt: new Date(), versionLabel: "" })
+				.where(eq(works.id, id));
 		}
 		return c.json({ asset }, 201);
 	})

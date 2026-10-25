@@ -1,5 +1,5 @@
 {
-  "id": "cbd9d83f-730b-4f19-a410-9951cc7c88ec",
+  "id": "7108c629-6293-4812-9d52-2d5d28dab37a",
   "prevId": "df58163d-e94c-41e4-8b4f-79ee18ce9202",
   "version": "7",
   "dialect": "postgresql",
@@ -6175,8 +6175,8 @@
           "notNull": false,
           "default": "''"
         },
-        "creator_mode": {
-          "name": "creator_mode",
+        "is_creator": {
+          "name": "is_creator",
           "type": "boolean",
           "primaryKey": false,
           "notNull": false,
@@ -8835,6 +8835,12 @@
         },
         "home_recipe": {
           "name": "home_recipe",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "saved_recipes": {
+          "name": "saved_recipes",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

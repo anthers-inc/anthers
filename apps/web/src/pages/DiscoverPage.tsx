@@ -21,6 +21,13 @@
  * silently rewriting what a reader opens on — and it is why selecting a chip writes the
  * whole triple rather than leaning on the built-in defaults.
  *
+ * ⭐ **A reader's own recipes live beside the site's two.** Saving the recipe on screen
+ * names it, colors it and adds a chip; the pencil beside the controls renames, recolors,
+ * reorders and removes it. The list is stored whole on the account (`savedRecipes`) for
+ * the same reason the opening recipe is stored as values: a name is a preference, not a
+ * pointer into a preset table, so a saved recipe survives any change to the built-ins.
+ * `Ctrl+[` and `Ctrl+]` step through the whole row, saved chips included.
+ *
  * The graph's shared-follow ranking is a route (`GET /api/accounts/me/graph`) and a
  * recipe builder with no page drawing them: a network of follows ranks nearly everyone a
  * reader can already see until the platform holds enough content for the edges to say
@@ -37,28 +44,45 @@ import {
 	asRecipeCandidates,
 	asRecipeMix,
 	asRecipeWindow,
+	choiceForRecipe,
 	DISCOVERY_STAGE_LABELS,
 	type DiscoveryReason,
-	presetFor,
+	nextRecipeColor,
 	RECIPE_CANDIDATE_LABELS,
 	RECIPE_CANDIDATES,
+	RECIPE_COLOR_VALUES,
+	RECIPE_COLORS,
 	RECIPE_PRESETS,
 	type Recipe,
 	type RecipeCandidates,
+	type RecipeChoice,
+	type RecipeColor,
 	type RecipeMix,
-	type RecipePreset,
 	type RecipeWindow,
+	recipeChoices,
 	recipeFrom,
 	recipeQuery,
+	SAVED_RECIPE_LABEL_MAX,
+	SAVED_RECIPE_LIMIT,
+	type SavedRecipe,
+	savedRecipesFrom,
 	streamRecipe,
+	suggestedRecipeName,
 } from "@anthers/shared/discovery";
+import { matchesChord } from "@anthers/shared/keybindings";
 import { useAuth } from "@anthers/web-shared/auth";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import { useSidebar } from "@anthers/web-shared/sidebar";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
-import { ArrowPathIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+	ArrowPathIcon,
+	CheckIcon,
+	MagnifyingGlassIcon,
+	PencilSquareIcon,
+	PlusIcon,
+} from "@heroicons/react/24/outline";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import FeedTile from "../components/cards/FeedTile";
 import SharedFilterSections, {
@@ -74,6 +98,8 @@ import ChannelGuideLens, {
 import MusicDial from "../components/library/MusicDial";
 import MusicLens from "../components/library/MusicLens";
 import { feedLensItems } from "../lib/feed-lenses";
+import { useKeyboardShortcuts } from "../lib/keyboard-shortcuts";
+import { isApplePlatform } from "../lib/platform";
 
 /** One entry of the feed's stream, as `?scope=global` sends it. */
 type FeedEntry = {
@@ -117,45 +143,79 @@ const MIX_OPTIONS: ReadonlyArray<{ value: RecipeMix; label: string }> = [
  */
 const ACROSS_ANTHERS = RECIPE_PRESETS.find((preset) => preset.id === "across-anthers") ?? null;
 
+/** Which recipe dialog is open: saving the recipe on screen, or editing a saved one. */
+type RecipeDialogState = { mode: "create" } | { mode: "edit"; id: string };
+
 /**
- * The presets as one scrollable line of chips, above the recipe's own controls.
+ * The chips: the site's presets, the reader's saved recipes, and — when the recipe on
+ * screen is neither — a way to save it.
  *
  * A chip sets the whole recipe, so it is a named starting point rather than a fourth
  * control; a reader who then narrows one stage lands on no chip at all, and the row says
- * so by lighting nothing. That is the honest state: `presetFor` matches exactly, because
- * a chip that lit up for a recipe it would not reproduce would lie about what a click
- * does.
+ * so by lighting nothing. That is the honest state: matching is exact, because a chip that
+ * lit up for a recipe it would not reproduce would lie about what a click does.
  *
- * ⭐ **A line rather than a dropdown.** The set is meant to grow (saved recipes, more
- * built-ins) and a line is what makes switching one click instead of two, which is what
- * makes the keyboard cycle worth having.
+ * ⭐ **A line rather than a dropdown.** The set grows with the reader's own recipes, and a
+ * line is what makes switching one click instead of two — which is what makes the keyboard
+ * cycle worth having.
+ *
+ * ⚠️ **The color is a dot, and the pressed state is the tint plus the weight.** A reader
+ * who cannot tell the colors apart still has the label, the bold name and `aria-pressed`;
+ * color is an accent rather than the signal, per the task that added it.
  */
 function PresetChips({
-	active,
+	choices,
+	activeId,
 	onSelect,
+	onSave,
+	canSave,
 }: {
-	active: RecipePreset | null;
-	onSelect: (preset: RecipePreset) => void;
+	choices: readonly RecipeChoice[];
+	activeId: string | null;
+	onSelect: (choice: RecipeChoice) => void;
+	onSave: () => void;
+	canSave: boolean;
 }) {
 	return (
 		<fieldset className="mb-3 min-w-0">
-			<legend className="sr-only">Recipe</legend>
+			<legend className="sr-only">Recipes</legend>
 			<div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-				{RECIPE_PRESETS.map((preset) => {
-					const selected = active?.id === preset.id;
+				{choices.map((choice) => {
+					const selected = activeId === choice.id;
+					const color = RECIPE_COLOR_VALUES[choice.color];
 					return (
 						<button
-							key={preset.id}
+							key={choice.id}
 							type="button"
 							aria-pressed={selected}
-							title={preset.blurb}
-							onClick={() => onSelect(preset)}
-							className={`btn btn-sm shrink-0 ${selected ? "btn-primary" : "btn-ghost border border-base-300"}`}
+							title={choice.blurb}
+							onClick={() => onSelect(choice)}
+							style={
+								selected ? { borderColor: color.hex, backgroundColor: `${color.hex}1f` } : undefined
+							}
+							className={`btn btn-ghost btn-sm shrink-0 gap-2 border ${
+								selected ? "font-semibold text-base-content" : "border-base-300"
+							}`}
 						>
-							{preset.label}
+							<span
+								aria-hidden="true"
+								className="h-2 w-2 shrink-0 rounded-full"
+								style={{ background: color.hex }}
+							/>
+							{choice.label}
 						</button>
 					);
 				})}
+				{canSave && (
+					<button
+						type="button"
+						className="btn btn-ghost btn-sm shrink-0 gap-1.5 border border-dashed border-base-300 text-base-content/70"
+						onClick={onSave}
+					>
+						<PlusIcon className="h-4 w-4" aria-hidden="true" />
+						Save recipe
+					</button>
+				)}
 			</div>
 		</fieldset>
 	);
@@ -167,24 +227,43 @@ function PresetChips({
  * reader never has to guess why a card is on screen. The stages come from the same
  * module the route ranks with, so the bar cannot describe a pipeline the server did not
  * run.
+ *
+ * ⭐ **Edit belongs to a saved recipe only.** The two built-ins are the site's named
+ * recipes; offering a rename there would promise a change the reader cannot make. When a
+ * saved recipe is active, the same row offers the pencil that renames, recolors, reorders
+ * or deletes it.
  */
 function RecipeBar({
 	recipe,
-	preset,
-	onPreset,
+	choices,
+	activeChoice,
+	onChoice,
 	onRecipe,
+	onSave,
+	onEdit,
+	canSave,
 	onRefresh,
 }: {
 	recipe: Recipe;
-	preset: RecipePreset | null;
-	onPreset: (preset: RecipePreset) => void;
+	choices: readonly RecipeChoice[];
+	activeChoice: RecipeChoice | null;
+	onChoice: (choice: RecipeChoice) => void;
 	onRecipe: (next: Recipe) => void;
+	onSave: () => void;
+	onEdit: (savedId: string) => void;
+	canSave: boolean;
 	onRefresh?: () => void;
 }) {
 	const drawn = streamRecipe(recipe);
 	return (
 		<div className="mb-6 rounded-box border border-base-300 bg-base-200/40 p-4">
-			<PresetChips active={preset} onSelect={onPreset} />
+			<PresetChips
+				choices={choices}
+				activeId={activeChoice?.id ?? null}
+				onSelect={onChoice}
+				onSave={onSave}
+				canSave={canSave}
+			/>
 			<div className="flex flex-wrap items-start justify-between gap-3">
 				<div className="min-w-0">
 					<p className="text-[11px] font-semibold uppercase tracking-wider text-base-content/40">
@@ -249,6 +328,18 @@ function RecipeBar({
 							))}
 						</select>
 					</label>
+					{activeChoice?.savedId && (
+						<button
+							type="button"
+							className="btn btn-ghost btn-sm gap-1.5"
+							onClick={() => onEdit(activeChoice.savedId!)}
+							aria-label={`Edit ${activeChoice.label}`}
+							title="Rename, recolor, reorder or remove this recipe"
+						>
+							<PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
+							Edit
+						</button>
+					)}
 					{onRefresh && (
 						<button
 							type="button"
@@ -310,7 +401,30 @@ export default function DiscoverPage() {
 		};
 	}, [accountRecipe, searchParams]);
 
-	const preset = useMemo(() => presetFor(recipe), [recipe]);
+	/**
+	 * The reader's own recipes, parsed row by row: a stored row this build cannot render is
+	 * dropped rather than drawn as a half-chip, and the order stored is the order the chips
+	 * render in.
+	 */
+	const saved = useMemo(() => savedRecipesFrom(user?.savedRecipes), [user?.savedRecipes]);
+
+	/** Every chip: the site's presets, then the reader's, in that fixed two-part order. */
+	const choices = useMemo(() => recipeChoices(saved), [saved]);
+
+	/** The chip this recipe is, or null for a combination no chip names. */
+	const activeChoice = useMemo(() => choiceForRecipe(choices, recipe), [choices, recipe]);
+
+	/** Saving is offered only for a recipe no chip already names. */
+	const canSave = activeChoice === null && saved.length < SAVED_RECIPE_LIMIT;
+
+	const [dialog, setDialog] = useState<RecipeDialogState | null>(null);
+	const [draftName, setDraftName] = useState("");
+	const [draftColor, setDraftColor] = useState<RecipeColor>("moss");
+	const [draftIndex, setDraftIndex] = useState(0);
+	const [savingRecipe, setSavingRecipe] = useState(false);
+	const [recipeError, setRecipeError] = useState<string | null>(null);
+	const [confirmDelete, setConfirmDelete] = useState(false);
+	const dialogRef = useRef<HTMLDialogElement>(null);
 
 	/**
 	 * The Type selection rides the request as the stream's server-side condition —
@@ -395,6 +509,184 @@ export default function DiscoverPage() {
 		},
 		[setSearchParams, refreshUser, user],
 	);
+
+	/**
+	 * Write the saved list, and — when a save also makes a recipe the reader's current one
+	 * — the opening recipe in the same request.
+	 *
+	 * ⭐ **Awaiting is the difference from `applyRecipe`.** A control that changed what is
+	 * on screen can fail quietly: the stream is already showing what was asked for. Naming
+	 * a recipe cannot, because the chip is the visible result, so the dialog stays open and
+	 * says so instead of closing on a write that did not land.
+	 */
+	const writeSaved = useCallback(
+		async (next: SavedRecipe[], homeRecipe?: Recipe) => {
+			try {
+				const res = await apiFetch("/api/accounts/me", {
+					method: "PATCH",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(
+						homeRecipe ? { savedRecipes: next, homeRecipe } : { savedRecipes: next },
+					),
+				});
+				if (!res.ok) return false;
+				await refreshUser();
+				return true;
+			} catch {
+				return false;
+			}
+		},
+		[refreshUser],
+	);
+
+	const closeDialog = useCallback(() => {
+		dialogRef.current?.close();
+	}, []);
+
+	const openSave = useCallback(() => {
+		setDraftName(suggestedRecipeName(recipe));
+		setDraftColor(nextRecipeColor(saved));
+		setRecipeError(null);
+		setConfirmDelete(false);
+		setDialog({ mode: "create" });
+		dialogRef.current?.showModal();
+	}, [recipe, saved]);
+
+	const openEdit = useCallback(
+		(savedId: string) => {
+			const index = saved.findIndex((row) => row.id === savedId);
+			const row = saved[index];
+			if (!row) return;
+			setDraftName(row.label);
+			setDraftColor(row.color);
+			setDraftIndex(index);
+			setRecipeError(null);
+			setConfirmDelete(false);
+			setDialog({ mode: "edit", id: savedId });
+			dialogRef.current?.showModal();
+		},
+		[saved],
+	);
+
+	/**
+	 * Save the dialog: a new recipe appended, or an existing one renamed, recolored and
+	 * moved to the position the arrows chose.
+	 *
+	 * A new recipe also becomes what a bare `/discovery` opens on, because saving one is a
+	 * change the reader made on the page — the same rule every other control here follows.
+	 * A rename does not touch the opening recipe: it changed the chip's words, not what the
+	 * reader is reading.
+	 */
+	const submitDialog = useCallback(async () => {
+		if (!dialog) return;
+		const label = draftName.trim();
+		if (!label) return;
+		setSavingRecipe(true);
+		setRecipeError(null);
+
+		let next: SavedRecipe[];
+		let homeRecipe: Recipe | undefined;
+		if (dialog.mode === "create") {
+			next = [...saved, { id: crypto.randomUUID(), label, color: draftColor, recipe }];
+			homeRecipe = recipe;
+		} else {
+			const current = saved.find((row) => row.id === dialog.id);
+			if (!current) {
+				setSavingRecipe(false);
+				closeDialog();
+				return;
+			}
+			const without = saved.filter((row) => row.id !== dialog.id);
+			const at = Math.min(Math.max(draftIndex, 0), without.length);
+			next = [
+				...without.slice(0, at),
+				{ ...current, label, color: draftColor },
+				...without.slice(at),
+			];
+		}
+
+		const ok = await writeSaved(next, homeRecipe);
+		setSavingRecipe(false);
+		if (!ok) {
+			setRecipeError("That recipe couldn't be saved.");
+			return;
+		}
+		closeDialog();
+	}, [dialog, draftName, draftColor, draftIndex, recipe, saved, writeSaved, closeDialog]);
+
+	/**
+	 * Remove a saved recipe. The two-step label is the undo the list does not have: a
+	 * preference has no trash, and a name and color somebody chose is worth one more click.
+	 * The recipe itself stays on screen as a hand-built combination, which is what makes
+	 * deleting a name harmless.
+	 */
+	const deleteSaved = useCallback(async () => {
+		if (dialog?.mode !== "edit") return;
+		if (!confirmDelete) {
+			setConfirmDelete(true);
+			return;
+		}
+		setSavingRecipe(true);
+		setRecipeError(null);
+		const ok = await writeSaved(saved.filter((row) => row.id !== dialog.id));
+		setSavingRecipe(false);
+		if (!ok) {
+			setRecipeError("That recipe couldn't be removed.");
+			return;
+		}
+		closeDialog();
+	}, [dialog, confirmDelete, saved, writeSaved, closeDialog]);
+
+	/**
+	 * Step through the chips, wrapping at either end.
+	 *
+	 * From a recipe no chip names, forward starts at the first chip and backward starts at
+	 * the last — so the keystroke always lands on a named recipe rather than doing nothing
+	 * because the reader had narrowed one stage.
+	 */
+	const cycleRecipe = useCallback(
+		(delta: 1 | -1) => {
+			if (choices.length === 0) return;
+			const index = activeChoice
+				? choices.findIndex((choice) => choice.id === activeChoice.id)
+				: -1;
+			const next =
+				index === -1
+					? delta === 1
+						? choices[0]
+						: choices[choices.length - 1]
+					: choices[(index + delta + choices.length) % choices.length];
+			applyRecipe(next.recipe);
+		},
+		[choices, activeChoice, applyRecipe],
+	);
+
+	/**
+	 * The recipe cycle, bound from the account's map (`Ctrl+[` / `Ctrl+]` by default).
+	 *
+	 * It fires with a text field focused for the sidebar's reason: a `Ctrl` chord is not an
+	 * editing command, and a reader halfway through a filter term should be able to change
+	 * the recipe without clicking out first. The one exception is the recipe dialog itself,
+	 * where changing the stream behind a modal would be a change nobody asked for.
+	 */
+	const shortcuts = useKeyboardShortcuts();
+	const apple = isApplePlatform();
+	useEffect(() => {
+		const handler = (event: globalThis.KeyboardEvent) => {
+			if (dialogRef.current?.open) return;
+			if (matchesChord(event, shortcuts.nextRecipe, apple)) {
+				event.preventDefault();
+				cycleRecipe(1);
+				return;
+			}
+			if (matchesChord(event, shortcuts.previousRecipe, apple)) {
+				event.preventDefault();
+				cycleRecipe(-1);
+			}
+		};
+		document.addEventListener("keydown", handler);
+		return () => document.removeEventListener("keydown", handler);
+	}, [shortcuts.nextRecipe, shortcuts.previousRecipe, apple, cycleRecipe]);
 
 	// The stream: the feed's own, over the candidate set the recipe names. `recipeQuery`
 	// is the one place the candidate stage turns into the route's `scope` and
@@ -515,9 +807,13 @@ export default function DiscoverPage() {
 
 				<RecipeBar
 					recipe={recipe}
-					preset={preset}
-					onPreset={(next) => applyRecipe(next.recipe)}
+					choices={choices}
+					activeChoice={activeChoice}
+					onChoice={(choice) => applyRecipe(choice.recipe)}
 					onRecipe={applyRecipe}
+					onSave={openSave}
+					onEdit={openEdit}
+					canSave={canSave}
 					onRefresh={() => setRefreshKey((key) => key + 1)}
 				/>
 
@@ -547,7 +843,7 @@ export default function DiscoverPage() {
 					/>
 				) : visibleEntries.length === 0 ? (
 					<EmptyState
-						title={preset ? "Nothing here yet" : "Nothing matches this recipe"}
+						title={activeChoice ? "Nothing here yet" : "Nothing matches this recipe"}
 						description={
 							drawsEveryone
 								? filtered
@@ -580,6 +876,145 @@ export default function DiscoverPage() {
 					</div>
 				)}
 			</div>
+
+			{/*
+			 * The recipe dialog, for both saving and editing. Native `<dialog>` for the
+			 * same reason the Work editor uses it: focus trapping, Escape, the backdrop
+			 * and the inert background come from the platform rather than from a
+			 * hand-rolled modal that gets one of them wrong.
+			 */}
+			<dialog
+				ref={dialogRef}
+				className="modal"
+				aria-labelledby="recipe-dialog-title"
+				onClose={() => {
+					setDialog(null);
+					setRecipeError(null);
+					setConfirmDelete(false);
+				}}
+			>
+				<div className="modal-box max-w-md">
+					<h3 id="recipe-dialog-title" className="text-lg font-semibold">
+						{dialog?.mode === "edit" ? "Edit recipe" : "Save this recipe"}
+					</h3>
+					<p className="mt-1 text-sm leading-relaxed text-base-content/70">
+						{streamRecipe(recipe).sentence}
+					</p>
+
+					<form
+						onSubmit={(event) => {
+							event.preventDefault();
+							void submitDialog();
+						}}
+					>
+						<label htmlFor="recipe-name" className="mt-4 block text-sm font-medium">
+							Name
+						</label>
+						<input
+							id="recipe-name"
+							className="input input-bordered mt-1 w-full"
+							value={draftName}
+							maxLength={SAVED_RECIPE_LABEL_MAX}
+							onChange={(event) => setDraftName(event.target.value)}
+							autoFocus
+						/>
+
+						<fieldset className="mt-4">
+							<legend className="text-sm font-medium">Color</legend>
+							<div className="mt-2 flex flex-wrap gap-2">
+								{RECIPE_COLORS.map((color) => {
+									const value = RECIPE_COLOR_VALUES[color];
+									const selected = draftColor === color;
+									return (
+										<label key={color} className="cursor-pointer" title={value.label}>
+											<input
+												type="radio"
+												name="recipe-color"
+												value={color}
+												checked={selected}
+												onChange={() => setDraftColor(color)}
+												className="sr-only"
+											/>
+											<span
+												style={{ background: value.hex }}
+												className={`flex h-8 w-8 items-center justify-center rounded-full ${
+													selected
+														? "ring-2 ring-base-content/60 ring-offset-2 ring-offset-base-100"
+														: ""
+												}`}
+											>
+												{selected && (
+													<CheckIcon className="h-4 w-4 text-white" aria-hidden="true" />
+												)}
+												<span className="sr-only">{value.label}</span>
+											</span>
+										</label>
+									);
+								})}
+							</div>
+						</fieldset>
+
+						{dialog?.mode === "edit" && (
+							<div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+								<span className="text-base-content/60">Order</span>
+								<button
+									type="button"
+									className="btn btn-ghost btn-xs"
+									onClick={() => setDraftIndex((index) => Math.max(0, index - 1))}
+									disabled={draftIndex <= 0 || savingRecipe}
+								>
+									Move earlier
+								</button>
+								<button
+									type="button"
+									className="btn btn-ghost btn-xs"
+									onClick={() => setDraftIndex((index) => Math.min(saved.length - 1, index + 1))}
+									disabled={draftIndex >= saved.length - 1 || savingRecipe}
+								>
+									Move later
+								</button>
+							</div>
+						)}
+
+						{recipeError && (
+							<p role="alert" className="mt-3 text-sm text-error">
+								{recipeError}
+							</p>
+						)}
+
+						<div className="modal-action">
+							{dialog?.mode === "edit" && (
+								<button
+									type="button"
+									className="btn btn-ghost mr-auto text-error"
+									onClick={() => void deleteSaved()}
+									disabled={savingRecipe}
+								>
+									{confirmDelete ? "Delete for good?" : "Delete"}
+								</button>
+							)}
+							<button
+								type="button"
+								className="btn btn-ghost"
+								onClick={closeDialog}
+								disabled={savingRecipe}
+							>
+								Cancel
+							</button>
+							<button
+								type="submit"
+								className="btn btn-primary"
+								disabled={savingRecipe || draftName.trim() === ""}
+							>
+								{savingRecipe ? "Saving…" : dialog?.mode === "edit" ? "Save" : "Save recipe"}
+							</button>
+						</div>
+					</form>
+				</div>
+				<form method="dialog" className="modal-backdrop">
+					<button type="submit">close</button>
+				</form>
+			</dialog>
 		</div>
 	);
 }
