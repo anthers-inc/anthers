@@ -185,6 +185,13 @@ export default function App() {
 				logged-in users. Authenticated users hitting / get redirected to their own home tab.
 				Shares the PublicShell component with the shared-content group below so
 				the botanical decor never remounts as you navigate between them.
+
+				⭐ **The group is the whole public face, not just the pages with a pitch on
+				them.** A signed-in reader following a footer link to the FAQ, the terms or the
+				release notes is reading the site as a site, and the signed-in chrome — a
+				sidebar of Discovery, Library and Settings above a page about how we compute a
+				fee — is the wrong frame for that. The shared group below carries the
+				complementary rule, which is what keeps the two from drifting back together.
 			*/}
 				<Route element={<PublicShell forceMarketing />}>
 					{/* The For Users page is the homepage (RootRedirect renders it for logged-out
@@ -209,7 +216,81 @@ export default function App() {
 						    actually need". */}
 						<Route path="/about" element={<AboutPage />} />
 						<Route path="/supporters" element={<SupportersPage />} />
+						{/* The resources landing gets the botanical decor; the calculators below
+						stay outside it so nothing crowds their dense controls/tables. */}
+						<Route path="/resources" element={<ResourcesPage />} />
 					</Route>
+					{/* Resource tools / calculators — public, and work logged-in or out. They are
+					marketing pages rather than app surfaces: a reader arrives here from
+					/resources, the marketing footer or a link somebody sent, and what they are
+					reading has nothing to do with the account they happen to hold. */}
+					<Route path="/resources/pay-comparison" element={<CreatorPayComparisonPage />} />
+					{/* `/resources/revenue` was deleted on 2026-10-15. It drew the financial
+					    plan's projections, and projections this early and in this flux make
+					    a public page muddier rather than more transparent. The mechanism
+					    page replaces it: how a monthly subscription's money splits and how
+					    a purchase passes through, drawn in percentages — no plan phases, no
+					    account mix. The projections stay in the admin console's plan tool.
+					    See the vault's "Revisit the public-facing Resources as a whole, a
+					    larger revamp". */}
+					<Route path="/resources/how-money-moves" element={<HowMoneyMovesPage />} />
+					<Route path="/resources/media-month" element={<MediaMonthCalculatorPage />} />
+					{/* /resources/media-month and /resources/how-money-moves sit above here
+					in their own blocks; the absorbed calculators follow, with their old
+					URLs kept alive as redirects — the pages are live in production and
+					linked from elsewhere, so a retired URL resolves to its successor
+					rather than a 404. */}
+					<Route
+						path="/resources/creator-monetization"
+						element={<Navigate to="/resources/creator-financials" replace />}
+					/>
+					<Route
+						path="/resources/video-storage"
+						element={<Navigate to="/resources/creator-financials" replace />}
+					/>
+					<Route path="/resources/creator-financials" element={<CreatorFinancialsPage />} />
+
+					{/* ── The public reference surface ──────────────────────────────────────
+					    Everything a reader consults rather than uses: the FAQ, the policies,
+					    the pages a parent or a reporter arrives on, the release notes and the
+					    status page. All of them are linked from the marketing footer, so a
+					    signed-in reader who follows one is reading the site's public face —
+					    and the signed-in sidebar has nothing to offer a policy or a changelog.
+					    They belong in this shell for the same reason the marketing pages do.
+					*/}
+					<Route path="/faq" element={<FAQPage />} />
+					{/* Published PENDING — no effective date, and a banner saying so. See
+				    pages/LegalPage.tsx: the date is what turns a draft into a
+				    representation, and it is a deliberate act rather than a tidy-up. */}
+					<Route path="/privacy" element={<LegalPage slug="privacy" />} />
+					<Route path="/terms" element={<LegalPage slug="terms" />} />
+					<Route path="/creator-terms" element={<LegalPage slug="creator-terms" />} />
+					<Route path="/copyright" element={<CopyrightPage />} />
+					<Route path="/parents" element={<ParentsPage />} />
+					<Route path="/abuse" element={<AbusePage />} />
+					{/* `/abuse` is canonical because `abuse@anthers.org` is the address on the
+					    NCMEC registration — the URL matches the mailbox a provider or
+					    researcher already has, and the idiomatic name across platforms
+					    (Parker, 2026-10-02). `/safety` redirects here so the subject-family
+					    guess still lands somewhere rather than on a 404. */}
+					<Route path="/safety" element={<Navigate to="/abuse" replace />} />
+					{/* The one-click unsubscribe landing from an activity email. The click
+					    carries a token, not a session, and that is the feature. The page
+					    itself performs no write (the API redirect preceded it); see the
+					    file's note. */}
+					<Route path="/unsubscribe" element={<UnsubscribePage />} />
+					<Route path="/release-notes" element={<ReleaseNotesPage />} />
+					{/* /changelog is kept as a redirect because the URL is in circulation —
+					    it was linked during the page's first week, and the fragment carries
+					    across so a deep link to a version still scrolls to it. */}
+					<Route path="/changelog" element={<RedirectReleaseNotes />} />
+					<Route path="/status" element={<StatusPage />} />
+					{/* Defect reports about the site itself — separate intake from /abuse above,
+					    which is statutory notice-and-action. Both links live in the footer's
+					    Development column, and neither page names the other's process except to
+					    hand the reporter across where it clearly belongs there. */}
+					<Route path="/issues" element={<IssueReportsPage />} />
+
 					{/* Logging in to an account that already exists. Signing UP is /signup —
 					    one door, one ceremony (email → code → /welcome to land). The four-field Create Account card was deleted 2026-08-17; see
 					    pages/LoginPage.tsx. /subscribe is kept as a redirect because the old URL is
@@ -339,6 +420,15 @@ export default function App() {
 				accessible to everyone. Same component as the marketing group above
 				(there with `forceMarketing`), so the logged-out shell + decor stay
 				mounted when navigating across the whole public surface.
+
+				⚠️ **This group is content and the account's own flows, and nothing else.**
+				A Work, a post and a creator's page are things a signed-in reader acts on
+				(save, comment, follow), so the app's sidebar belongs beside them. Everything
+				public that a reader merely consults — the FAQ, the policies, the resources,
+				the release notes, the status page — lives in the marketing group above,
+				because a sidebar of app destinations is no use beside a policy document. A
+				page added here gets the signed-in chrome for signed-in readers; if that is
+				not what it wants, it is in the wrong group.
 			*/}
 				<Route element={<PublicShell />}>
 					<Route path="/discovery/:slug" element={<ProjectRedirect />} />
@@ -350,70 +440,6 @@ export default function App() {
 					    nothing the recipient could not otherwise have opened. */}
 					<Route path="/s/:token" element={<SharedWorkPage />} />
 					<Route path="/signup" element={<SignupPage />} />
-					<Route path="/faq" element={<FAQPage />} />
-					{/* Published PENDING — no effective date, and a banner saying so. See
-				    pages/LegalPage.tsx: the date is what turns a draft into a
-				    representation, and it is a deliberate act rather than a tidy-up. */}
-					<Route path="/privacy" element={<LegalPage slug="privacy" />} />
-					<Route path="/terms" element={<LegalPage slug="terms" />} />
-					<Route path="/creator-terms" element={<LegalPage slug="creator-terms" />} />
-					<Route path="/copyright" element={<CopyrightPage />} />
-					<Route path="/parents" element={<ParentsPage />} />
-					<Route path="/abuse" element={<AbusePage />} />
-					{/* `/abuse` is canonical because `abuse@anthers.org` is the address on the
-					    NCMEC registration — the URL matches the mailbox a provider or
-					    researcher already has, and the idiomatic name across platforms
-					    (Parker, 2026-10-02). `/safety` redirects here so the subject-family
-					    guess still lands somewhere rather than on a 404. */}
-					<Route path="/safety" element={<Navigate to="/abuse" replace />} />
-					{/* The one-click unsubscribe landing from an activity email. Not a
-					    ProtectedRoute — the click carries a token, not a session, and that is
-					    the feature. The page itself performs no write (the API redirect
-					    preceded it); see the file's note. */}
-					<Route path="/unsubscribe" element={<UnsubscribePage />} />
-					<Route path="/release-notes" element={<ReleaseNotesPage />} />
-					{/* /changelog is kept as a redirect because the URL is in circulation —
-					    it was linked during the page's first week, and the fragment carries
-					    across so a deep link to a version still scrolls to it. */}
-					<Route path="/changelog" element={<RedirectReleaseNotes />} />
-					<Route path="/status" element={<StatusPage />} />
-					{/* Defect reports about the site itself — separate intake from /abuse above,
-					    which is statutory notice-and-action. Both links live in the footer's
-					    Development column, and neither page names the other's process except to
-					    hand the reporter across where it clearly belongs there. */}
-					<Route path="/issues" element={<IssueReportsPage />} />
-
-					{/* Resource tools / calculators — public, work logged-in or out. */}
-					<Route element={<MeadowDecorLayout />}>
-						{/* The resources landing gets the botanical decor; the calculators and the
-						pay-comparison stay plain so nothing crowds their dense controls/tables. */}
-						<Route path="/resources" element={<ResourcesPage />} />
-					</Route>
-					<Route path="/resources/pay-comparison" element={<CreatorPayComparisonPage />} />
-					{/* `/resources/revenue` was deleted on 2026-10-15. It drew the financial
-					    plan's projections, and projections this early and this in flux make
-					    a public page muddier rather than more transparent. The mechanism
-					    page replaces it: how a monthly subscription's money splits and how
-					    a purchase passes through, drawn in percentages — no plan phases, no
-					    account mix. The projections stay in the admin console's plan tool.
-					    See the vault's "Revisit the public-facing Resources as a whole, a
-					    larger revamp". */}
-					<Route path="/resources/how-money-moves" element={<HowMoneyMovesPage />} />
-					<Route path="/resources/media-month" element={<MediaMonthCalculatorPage />} />
-					{/* /resources/media-month and /resources/how-money-moves sit above here
-					in their own blocks; the absorbed calculators follow, with their old
-					URLs kept alive as redirects — the pages are live in production and
-					linked from elsewhere, so a retired URL resolves to its successor
-					rather than a 404. */}
-					<Route
-						path="/resources/creator-monetization"
-						element={<Navigate to="/resources/creator-financials" replace />}
-					/>
-					<Route
-						path="/resources/video-storage"
-						element={<Navigate to="/resources/creator-financials" replace />}
-					/>
-					<Route path="/resources/creator-financials" element={<CreatorFinancialsPage />} />
 
 					{/* The Studio. Registration order is a readability choice rather than a
 					correctness one — React Router ranks matches by specificity rather than by
