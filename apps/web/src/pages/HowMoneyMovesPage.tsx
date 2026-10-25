@@ -30,6 +30,15 @@
 // and buys the lifted limit and a standing. This page's copy says subscription, and
 // the verb *give* only where it earns its place.
 //
+// 🚨 **An Anthers subscription leaves in five named lines, and they add up** (Parker,
+// 2026-10-25; the canon is the wiki's *Anthers Badges* page): the Time Pool, disbursed by
+// the time people spend; the Sticker budget, which the supporter aims by hand and which
+// pours into the Time Pool when unspent; the storage reserved at the rung's full
+// allowance; the card fee at cost; and Anthers Support, the only unreserved line. The two
+// creator lines are the half, in two channels rather than two halves. `MONEY_FLOWS`
+// computes all five from the ladder's own helpers, so a model change reaches this drawing
+// without a hand-edited table here.
+//
 // Diagram mechanics carried from the retired revenue drawing (which adapted the
 // admin console's plan screen): `align="left"` keeps terminal obligations in their
 // own column instead of justify's pull to the last one, and `sort={false}` makes the
@@ -75,7 +84,9 @@ const C = {
 	purchase: "#0284c7",
 	card: "#64748b",
 	timePool: "#d97706",
-	remainder: "#312e81",
+	stickers: "#db2777",
+	storage: "#0e7490",
+	support: "#312e81",
 	creatorPay: "#b45309",
 	processor: "#475569",
 	programs: "#065f46",
@@ -84,7 +95,11 @@ const C = {
 const F = MONEY_FLOWS;
 
 const cardTotal = F.anthersSub.card + F.creatorSub.at.card + F.purchase.at.card;
-const creatorsTotal = F.anthersSub.timePool + F.creatorSub.at.creator + F.purchase.at.creator;
+const creatorsTotal =
+	F.anthersSub.timePoolByTime +
+	F.anthersSub.stickers +
+	F.creatorSub.at.creator +
+	F.purchase.at.creator;
 
 /** Declared in drawing order within each column; recharts renders the array as-is. */
 const NODE_DEFS: FlowNode[] = [
@@ -123,15 +138,29 @@ const NODE_DEFS: FlowNode[] = [
 		name: "timePool",
 		fill: C.timePool,
 		group: "timePool",
-		label: `The Time Pool · ${usd(F.anthersSub.timePool)}/mo`,
-		value: F.anthersSub.timePool,
+		label: `The Time Pool · ${usd(F.anthersSub.timePoolByTime)}/mo`,
+		value: F.anthersSub.timePoolByTime,
 	},
 	{
-		name: "remainder",
-		fill: C.remainder,
-		group: "remainder",
-		label: `The Remainder · ${usd(F.anthersSub.remainder)}/mo`,
-		value: F.anthersSub.remainder,
+		name: "stickers",
+		fill: C.stickers,
+		group: "stickers",
+		label: `Your Sticker Budget · ${usd(F.anthersSub.stickers)}/mo`,
+		value: F.anthersSub.stickers,
+	},
+	{
+		name: "storage",
+		fill: C.storage,
+		group: "storage",
+		label: `Cloud Storage, Reserved · ${usd(F.anthersSub.storage)}/mo`,
+		value: F.anthersSub.storage,
+	},
+	{
+		name: "support",
+		fill: C.support,
+		group: "support",
+		label: `Anthers Support · ${usd(F.anthersSub.support)}/mo`,
+		value: F.anthersSub.support,
 	},
 	{
 		name: "creators",
@@ -178,18 +207,34 @@ const LINK_DEFS: LinkDef[] = [
 	{
 		from: "sA",
 		to: "timePool",
-		value: F.anthersSub.timePool,
+		value: F.anthersSub.timePoolByTime,
 		group: "timePool",
 		stroke: C.timePool,
-		pct: F.anthersSub.timePoolPct,
+		pct: F.anthersSub.timePoolByTimePct,
 	},
 	{
 		from: "sA",
-		to: "remainder",
-		value: F.anthersSub.remainder,
-		group: "remainder",
-		stroke: C.remainder,
-		pct: F.anthersSub.remainderPct,
+		to: "stickers",
+		value: F.anthersSub.stickers,
+		group: "stickers",
+		stroke: C.stickers,
+		pct: F.anthersSub.stickersPct,
+	},
+	{
+		from: "sA",
+		to: "storage",
+		value: F.anthersSub.storage,
+		group: "storage",
+		stroke: C.storage,
+		pct: F.anthersSub.storagePct,
+	},
+	{
+		from: "sA",
+		to: "support",
+		value: F.anthersSub.support,
+		group: "support",
+		stroke: C.support,
+		pct: F.anthersSub.supportPct,
 	},
 	{
 		from: "sD",
@@ -226,24 +271,41 @@ const LINK_DEFS: LinkDef[] = [
 	{
 		from: "timePool",
 		to: "creators",
-		value: F.anthersSub.timePool,
+		value: F.anthersSub.timePoolByTime,
 		group: "timePool",
 		stroke: C.timePool,
 	},
 	{
-		from: "remainder",
+		from: "stickers",
+		to: "creators",
+		value: F.anthersSub.stickers,
+		group: "stickers",
+		stroke: C.stickers,
+	},
+	{
+		from: "storage",
 		to: "programs",
-		value: F.anthersSub.remainder,
-		group: "programs",
-		stroke: C.programs,
+		value: F.anthersSub.storage,
+		group: "storage",
+		stroke: C.storage,
+	},
+	{
+		from: "support",
+		to: "programs",
+		value: F.anthersSub.support,
+		group: "support",
+		stroke: C.support,
 	},
 	{ from: "card", to: "processor", value: cardTotal, group: "card", stroke: C.card },
 ];
 
 // Columns draw in narrative order, streams kept whole: the Anthers subscription
-// first (the hero strand — the only one feeding a pool), then the two pass-through
-// charges; the subscription's ways out and the terminals sort widest-first.
-// `sort={false}` makes the array the order.
+// first (the hero strand — the only one feeding anything but a creator and the
+// processor), then the two pass-through charges. The subscription's five ways out
+// draw in the ladder's own order — the two creator channels, the storage reserve,
+// Anthers Support — with the card line above them, because it is the one way out
+// all three charges share. Terminals sort widest-first. `sort={false}` makes the
+// array the order.
 const inColumn = (names: string[], bySize: boolean) =>
 	bySize
 		? NODE_DEFS.filter((n) => names.includes(n.name)).sort((a, b) => b.value - a.value)
@@ -251,7 +313,8 @@ const inColumn = (names: string[], bySize: boolean) =>
 
 const NODE_ORDER = [
 	...inColumn(["sA", "sD", "sP"], false),
-	...inColumn(["card", "timePool", "remainder"], true),
+	...inColumn(["card"], false),
+	...inColumn(["timePool", "stickers", "storage", "support"], false),
 	...inColumn(["creators", "processor", "programs"], true),
 ];
 
@@ -273,9 +336,11 @@ const data = {
  * everything under it, plus each ancestor's own node back to the source.
  */
 const DOWN: Record<string, readonly string[]> = {
-	anthers: ["anthersCard", "timePool", "remainder"],
+	anthers: ["anthersCard", "timePool", "stickers", "storage", "support"],
 	timePool: ["creators"],
-	remainder: ["programs"],
+	stickers: ["creators"],
+	storage: ["programs"],
+	support: ["programs"],
 	creatorSub: ["creatorCard", "creators"],
 	purchase: ["purchaseCard", "creators"],
 	card: ["processor"],
@@ -284,11 +349,13 @@ const DOWN: Record<string, readonly string[]> = {
 const UP: Record<string, readonly string[]> = {
 	anthersCard: ["anthers"],
 	timePool: ["anthers"],
-	remainder: ["anthers"],
-	programs: ["remainder", "anthers"],
+	stickers: ["anthers"],
+	storage: ["anthers"],
+	support: ["anthers"],
+	programs: ["storage", "support"],
 	creatorCard: ["creatorSub"],
 	purchaseCard: ["purchase"],
-	creators: ["creatorSub", "purchase", "timePool"],
+	creators: ["creatorSub", "purchase", "timePool", "stickers"],
 	processor: ["card"],
 };
 
@@ -325,7 +392,7 @@ function FlowDiagram() {
 					sort={false}
 					margin={{ top: 8, right: 220, bottom: 8, left: 8 }}
 					role="img"
-					aria-label="How the Money Moves: three ways money arrives — a Root subscription to Anthers, a subscription pointed at a creator, and a purchase. Card processing leaves every one at cost, paid to the processor. Half of an Anthers subscription goes to the Time Pool, paid to creators by time spent; its remainder merges into one pool funding the charitable programs. A creator subscription and a purchase pass through to their creator in full, minus the card line."
+					aria-label="How the Money Moves: three ways money arrives — a Root subscription to Anthers, a subscription pointed at a creator, and a purchase. Card processing leaves every one at cost, paid to the processor. A Root subscription splits five ways: the Time Pool, paid to creators by the time spent with their work; a Sticker budget the supporter hands out by hand; cloud storage reserved at that rung's full allowance; Anthers Support, the only unreserved line; and the card fee. The first two join the money that reaches creators, and the storage reserve and Anthers Support both fund the charitable programs. A subscription pointed at a creator, and a purchase, pass through to their creator in full, minus the card line."
 					node={(props) => <FlowNodeCapsule {...props} dim={dim} />}
 					link={(props) => <FlowRibbon {...props} dim={dim} />}
 					onMouseEnter={(item, type) => {
@@ -428,16 +495,16 @@ export default function HowMoneyMovesPage() {
 						Anthers, a monthly subscription pointed at a creator, or a purchase — and this page
 						draws where each one goes, all the way out, exactly as the platform works today. The
 						percentages are the mechanism: the same every month, at any scale, and every one of them
-						is generated from the same math the checkout runs. Hold it to the arithmetic.
+						is computed from the same math the checkout runs. Hold it to the arithmetic.
 					</>
 				}
 			/>
 
 			<div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
 				<StatCard
-					label="Of an Anthers subscription, to the Time Pool"
+					label="Of an Anthers subscription, to creators"
 					value={pct(F.anthersSub.timePoolPct)}
-					sub="Paid to creators by the time spent with their work, on every rung"
+					sub="In two channels: the Time Pool, paid by the time spent, and the Sticker budget the supporter hands out. Half by construction, on every rung"
 					tone="time"
 				/>
 				<StatCard
@@ -458,31 +525,36 @@ export default function HowMoneyMovesPage() {
 				<h2>Reading the Drawing</h2>
 				<p>
 					Read it obligations-first. Card processing leaves every charge at cost, paid to the
-					processor at their published rate, with nothing added. An Anthers subscription splits into
-					three: the card line, half its monthly amount into the Time Pool — paid to creators by the
-					time spent with their work, a minute for a minute across every medium — and the remainder,
-					which merges into one pool that funds the charitable programs. A subscription pointed at a
-					creator, and a purchase, pass straight through to their creator in full: those two ribbons
-					never touch a pool, because Anthers takes no cut of creator money.
+					processor at their published rate, with nothing added. An Anthers subscription splits five
+					ways, and the five add up to the price: the Time Pool, paid to creators by the time spent
+					with their work — a minute for a minute across every medium; a Sticker budget the
+					supporter hands out by hand, which pours into the Time Pool if it goes unspent; cloud
+					storage reserved at the rung&rsquo;s full allowance and paid to the provider at cost;
+					Anthers Support, the only unreserved line, which funds the charitable programs; and the
+					card fee. The two creator lines together are half of what was given, and they are two
+					channels into the same half rather than two halves. A subscription pointed at a creator,
+					and a purchase, pass straight through to their creator in full: those two ribbons never
+					touch a pool or a reserve, because Anthers takes no cut of creator money.
 				</p>
 				<h2>One Pool, Not Buckets</h2>
 				<p>
-					The remainder strands all merge before anything is spent, and no revenue line is reserved
-					against a purpose. What Anthers commits to is the outflow side: the programs are budgeted
-					in advance, published, and changed openly. The drawing shows the pool funding the programs
-					as one strand, because the split between them is a budget decision made on what has
-					arrived — not a property of the money coming in. Free access sits inside the programs:
-					every account&rsquo;s ten free hours a month, and the pools that pay the creators whose
-					work is watched and played for free, are what that strand pays for.
+					Two strands arrive on the charitable side — the storage reserve and Anthers Support — and
+					they merge before anything is spent, with no strand inside that pool tied to a particular
+					outcome. What Anthers commits to is the outflow side: the programs are budgeted in
+					advance, published, and changed openly. The reserve is held at the rung&rsquo;s full
+					allowance and returns to Anthers Support for whatever the month does not store, which is
+					why the drawing&rsquo;s Anthers Support is a floor rather than a forecast. Free access
+					sits inside the programs: every account&rsquo;s ten free hours a month, and the pools that
+					pay the creators whose work is watched and played for free, are what that strand pays for.
 				</p>
 				<h2>What the Drawing Leaves Out</h2>
 				<p>
-					Storage top-ups pass through at cost: every byte past a held rung&rsquo;s allowance is
-					charged at the provider&rsquo;s own rate with no mark-up, so those dollars fund nothing
-					and there is no strand for them to honestly occupy. The donation channel is not built yet;
-					when it exists, a donation draws as what it is — one line bypassing the pool entirely,
-					going only where the giver directed it, because a real charitable contribution&rsquo;s
-					restriction binds in a way nothing budgeted here does.
+					Storage top-ups past a held rung&rsquo;s allowance pass through at cost: every byte beyond
+					the reserve is charged at the provider&rsquo;s own rate with no mark-up, so those dollars
+					fund nothing and there is no strand for them to honestly occupy. The donation channel is
+					not built yet; when it exists, a donation draws as what it is — one line bypassing the
+					programs entirely, going only where the giver directed it, because a real charitable
+					contribution&rsquo;s restriction binds in a way nothing budgeted here does.
 				</p>
 				<h2>Right Now — and Nothing Else</h2>
 				<p>
@@ -495,8 +567,10 @@ export default function HowMoneyMovesPage() {
 
 				<h2>The Receipts</h2>
 				<p>
-					The same routes as numbers, per charge. Everything below is generated from the
-					platform&rsquo;s own code, and the build fails if a figure and its source ever disagree.
+					The same routes as numbers, per charge. Every figure below is computed from the
+					platform&rsquo;s own primitives, which are the ones the checkout runs, so this table
+					cannot disagree with the ladder at <code>/signup</code> or with The Support Model in the
+					wiki.
 				</p>
 
 				<table>
@@ -504,8 +578,10 @@ export default function HowMoneyMovesPage() {
 						<tr>
 							<th>An Anthers subscription</th>
 							<th>To the Time Pool</th>
+							<th>Sticker budget</th>
+							<th>Storage, reserved</th>
 							<th>Card, at cost</th>
-							<th>The remainder &rarr; the programs</th>
+							<th>Anthers Support</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -515,20 +591,27 @@ export default function HowMoneyMovesPage() {
 									{r.badge} — {usd(r.monthly)}/mo
 								</td>
 								<td>
-									{usd(r.timePool)} ({pct(r.timePoolPct)})
+									{usd(r.timePoolByTime)} ({pct(r.timePoolByTimePct)})
+								</td>
+								<td>
+									{usd(r.stickers)} ({pct(r.stickersPct)})
+								</td>
+								<td>
+									{usd(r.storage)} ({pct(r.storagePct)})
 								</td>
 								<td>
 									{usd(r.card)} ({pct(r.cardPct)})
 								</td>
 								<td>
-									{usd(r.remainder)} ({pct(r.remainderPct)})
+									{usd(r.support)} ({pct(r.supportPct)})
 								</td>
 							</tr>
 						))}
 						<tr>
 							<td>+ any amount beyond the top</td>
-							<td colSpan={3}>
-								— half to the Time Pool, the card line at cost, and the rest funds the programs
+							<td colSpan={5}>
+								— half to creators in the two channels, the storage reserve at the top rung&rsquo;s
+								allowance, the card line at cost, and the rest to Anthers Support
 							</td>
 						</tr>
 					</tbody>
@@ -536,8 +619,10 @@ export default function HowMoneyMovesPage() {
 				<p>
 					The card line&rsquo;s share shrinks as the charge grows, and that is the fixed fee&rsquo;s
 					arithmetic, visible left to right: a Root charge carries a {pct(F.anthersSub.cardPct)}{" "}
-					card line, a Blossom charge {pct(F.ladder[3].cardPct)}. The half to the Time Pool does not
-					move — it is half by construction, on every rung.
+					card line, a Blossom charge {pct(F.ladder[3].cardPct)}. The two creator columns together
+					do not move — they are half by construction, on every rung — and it is the storage reserve
+					stepping up with each allowance that makes Anthers Support grow faster than the price
+					does.
 				</p>
 
 				<table>
@@ -619,12 +704,12 @@ export default function HowMoneyMovesPage() {
 
 			<CalcNotes>
 				<p>
-					Every figure on this page is generated from the platform&rsquo;s own code — the same
-					primitives the checkout and the payouts run on — and the generated figures file carries
-					the whole route, with the arithmetic asserted at build time. A Badge is a subscription
-					purchase: it buys the lifted Public Access limit and the standing of the rung held, and
-					this page draws what each charge pays for. What it does not draw is a forecast of any
-					kind; nothing here should be read as a report of money that has moved.
+					Every figure on this page is computed from the platform&rsquo;s own primitives — the same
+					ones the checkout and the payouts run on, so a subscription&rsquo;s five lines are the
+					ladder&rsquo;s own functions rather than a table typed beside them. A Badge is a
+					subscription purchase: it buys the lifted Public Access limit and the standing of the rung
+					held, and this page draws what each charge pays for. What it does not draw is a forecast
+					of any kind; nothing here should be read as a report of money that has moved.
 				</p>
 			</CalcNotes>
 		</div>

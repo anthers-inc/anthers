@@ -576,8 +576,14 @@ export function storageGibFor(anthersDollars: number): number {
  *
  * 🚨 **Reserved, not spent** (Parker, 2026-10-25). Publishing the ceiling is what lets the
  * ladder add up and shows the worst case: bytes nobody stores cost nothing, and the unused
- * reserve pours into Anthers Support at renewal. A free account's floor has no revenue line
- * to reserve against, so its cost is funded by the rungs above it rather than by itself.
+ * reserve pours into Anthers Support at renewal.
+ *
+ * 🚨 **A free or unbaded amount reserves nothing** — it answers 0, and that is not the same
+ * question as what the free floor costs. Every account gets `FREE_STORAGE_GIB` whether it
+ * pays anything or not, and a free account's floor has no revenue line to reserve against:
+ * it is funded by the rungs above it. `storageGibFor` still answers 25 GiB there, because
+ * that is the allowance; a *charge* below Root buys no storage, so reserving $0.40 out of a
+ * $1 gift would charge somebody for space they were already given.
  *
  * ⚠️ **The ×100 before the round is load-bearing.** `gib × rate` is a dollar figure whose
  * half-cent boundary cases (50 × $0.0161 = $0.805) round either way depending on where the
@@ -585,6 +591,7 @@ export function storageGibFor(anthersDollars: number): number {
  * `Decimal` does, and `economics.test.ts` pins the two together.
  */
 export function storageReserveFor(anthersDollars: number): number {
+	if (heldBadgeName(anthersDollars) === "free") return 0;
 	return Math.round(storageGibFor(anthersDollars) * STORAGE_PER_GIB_MONTH * 100) / 100;
 }
 
@@ -602,8 +609,17 @@ export function storageReserveFor(anthersDollars: number): number {
  * `anthersSupportBreakdown` answers before the storage reserve is taken, because the
  * distribution job never moves storage money; a surface publishing the ladder wants this one
  * so the column adds up on the page as well as in the books.
+ *
+ * ⚠️ **`cardThisSide` is for a BATCHED charge**, where the one card fee is split pro-rata
+ * between what goes to Anthers and what goes to creators: the ladder's figure charges the
+ * whole fee to this side, and a charge carrying directed money must charge it only this
+ * side's share or the line double-counts the fee. `supportBreakdownDisplay` passes the split
+ * in; everything else takes the default.
  */
-export function supportLineFor(anthersDollars: number): number {
+export function supportLineFor(
+	anthersDollars: number,
+	cardThisSide: number = cardFeeDisplay(supportAmount(anthersDollars)),
+): number {
 	const amount = supportAmount(anthersDollars);
 	if (amount <= 0) return 0;
 	const kept =
@@ -611,7 +627,7 @@ export function supportLineFor(anthersDollars: number): number {
 		timePoolByTimeFor(amount) -
 		stickerBudgetFor(amount) -
 		storageReserveFor(amount) -
-		cardFeeDisplay(amount);
+		cardThisSide;
 	// Floating subtraction leaves 0.2999999999999998 where the answer is 30 cents.
 	return Math.round(kept * 100) / 100;
 }
@@ -836,6 +852,18 @@ export function withTaxDisplay(amount: number): number {
  * reader does not pay for — the calculator must not silently fold that into a
  * reader-financed flow.
  *
+ * 🚨 **The Anthers side is published as the ladder's five lines, and they are exposed here
+ * rather than derived by each page** (Parker, 2026-10-25): {@link timePoolByTimeFor},
+ * {@link stickerBudgetFor}, {@link storageReserveFor}, this side's share of the card fee and
+ * {@link supportLineFor}. Two surfaces publish them — the spend calculator and the signup
+ * panel — and a page that recomputed one could disagree with the other and with the ladder.
+ * They sum to `anthers` exactly, so a page may render them as a column and let the reader
+ * check the addition.
+ *
+ * ⚠️ **A zero Anthers side has no storage reserve**, because there is no charge for a
+ * free-account floor to be reserved against — it is funded by the rungs above, and
+ * `storageReserveFor` answers 0 there for the same reason.
+ *
  * Never compute what anyone is actually paid from this.
  */
 export function supportBreakdownDisplay(
@@ -850,9 +878,17 @@ export function supportBreakdownDisplay(
 	card: number;
 	cardOnAnthers: number;
 	cardOnDirected: number;
-	/** Half of what goes to Anthers, on every amount — paid to creators by time spent. */
+	/** The creator half of what goes to Anthers — the envelope both creator lines draw from. */
 	timePool: number;
-	/** What is left of the Anthers side, funding the charitable programs. */
+	/** The part of that half disbursed by time — the ladder's Time Pool row. */
+	timePoolByTime: number;
+	/** The part of that half the giver aims by hand — the ladder's Sticker budget row. */
+	stickers: number;
+	/** Storage reserved at the held rung's full allowance, at the vendor's rate. */
+	storage: number;
+	/** What is left of the Anthers side once every reserved line is set aside — the charitable floor. */
+	support: number;
+	/** What is left before the storage reserve is taken — the charitable ceiling. */
 	remainder: number;
 	/** What the directed money reaches its creators for, after its pro-rata slice of the card fee. */
 	directedNet: number;
@@ -878,10 +914,19 @@ export function supportBreakdownDisplay(
 		charge > 0 ? Math.round(((card * directed) / charge) * 100 + 1e-6) / 100 : 0;
 	const cardOnAnthers = Math.round((card - cardOnDirected) * 100) / 100;
 	const timePool = timePoolFor(anthers);
+	// The creator half becomes two named lines, and the reserve is what turns the
+	// ceiling into a floor. All four come from the ladder's own helpers, so a page
+	// publishing them cannot disagree with a rung's table.
+	const timePoolByTime = timePoolByTimeFor(anthers);
+	const stickers = stickerBudgetFor(anthers);
+	const storage = storageReserveFor(anthers);
 	// Mirrors the money version's explicit zero: with nothing given to Anthers the
 	// charge is subsidized — foundation is 0, not the negative that `0 − pool − 0`
 	// would produce.
 	const remainder = anthers === 0 ? 0 : anthers - timePool - cardOnAnthers;
+	// This side's share of the one fee, not the whole fee: the charge may carry
+	// directed money whose own share is taken on its own row.
+	const support = supportLineFor(anthers, cardOnAnthers);
 	const directedNet = directed - cardOnDirected;
 	const chargedWithTax = withTaxDisplay(charge);
 	return {
@@ -892,6 +937,10 @@ export function supportBreakdownDisplay(
 		cardOnAnthers,
 		cardOnDirected,
 		timePool,
+		timePoolByTime,
+		stickers,
+		storage,
+		support,
 		remainder,
 		directedNet,
 		toCreators: directedNet + timePool,

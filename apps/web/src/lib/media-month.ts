@@ -20,8 +20,6 @@
 
 import {
 	ANTHERS_BADGES,
-	CARD_FLAT,
-	CARD_RATE,
 	cardFeeDisplay,
 	supportBreakdownDisplay,
 	withTaxDisplay,
@@ -77,9 +75,25 @@ export const RUNGS: { label: string; amount: number }[] = ANTHERS_BADGES.map((b)
 	amount: b.threshold,
 }));
 
-/** The card fee's floor, computed from the dials — below this monthly charge there is nothing left over. Moves with the card rate; that is the point. */
-export function cardFloor(): number {
-	return Math.round((CARD_FLAT / (1 - 0.5 - CARD_RATE)) * 100) / 100;
+/**
+ * The smallest monthly amount whose five lines all come out non-negative.
+ *
+ * Below it the charge cannot cover its own card fee, so Anthers Support comes out below
+ * zero — the reader is being subsidized rather than supporting anything, and the page
+ * states that gap instead of rendering a negative line as money moving.
+ *
+ * ⚠️ **Walked in cents rather than closed-form, because the storage reserve is a step
+ * function of the rung.** Today the first crossing is the card fee's own floor, because
+ * every rung's allowance clears its remainder; a ladder whose allowances outgrew their
+ * remainders would move the answer, and this should report that rather than restate a
+ * formula it no longer follows.
+ */
+export function supportFloor(): number {
+	for (let cents = 1; cents <= 10_000; cents++) {
+		const amount = cents / 100;
+		if (supportBreakdownDisplay(amount, 0).support >= 0) return amount;
+	}
+	return 0;
 }
 
 // ─── Rounders ──────────────────────────────────────────────────────────────────
@@ -170,10 +184,10 @@ export interface MediaMonth {
 		paid: number | null;
 		/** What reaches creators in total — exact. */
 		reachCreators: number | null;
-		/** Of which by name (directed + purchases) and by time (the pool). */
+		/** Of which by name (directed + purchases) and by the Badge (the creator half). */
 		byName: number | null;
 		byPool: number;
-		/** True when the Anthers-side charge sits below the card fee's floor. */
+		/** True when the charge cannot cover its own card fee, so Anthers Support is negative. */
 		floorless: boolean;
 	};
 }
@@ -343,7 +357,7 @@ export function computeMonth(lines: Record<LineKey, SpendLine>, rePoint: RePoint
 			reachCreators,
 			byName,
 			byPool,
-			floorless: breakdown.remainder < 0,
+			floorless: breakdown.support < 0,
 		},
 	};
 }
