@@ -1295,8 +1295,19 @@ export interface PoolDistribution {
 }
 
 export interface CreatorEarnings {
+	/** The Time Pool split by attention — Public Access time, not directed money. */
 	poolTotal: string;
+	/** Directed support: what supporters' held Badges pointed at this creator. */
 	badgeTotal: string;
+	/**
+	 * What supporters directed by hand as Stickers, from the same distribution row.
+	 *
+	 * ⚠️ **Part of the pool's own money, never a fourth source** — a Sticker overrides the
+	 * Time Pool, so the pool distributes by time only what was not directed. It is counted
+	 * into `total` beside the other two, which it was not until 2026-10-25: the read summed
+	 * only pool and badge, so every Sticker a creator received was missing from the total.
+	 */
+	stickerTotal: string;
 	total: string;
 	subscriberCount: number;
 	cycle: string;

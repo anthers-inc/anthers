@@ -156,8 +156,9 @@ export function StudioPanelBody({ panel, data }: { panel: StudioPanel; data: Pan
 				<Panel title="Earnings">
 					{data.earnings && parseFloat(data.earnings.total) > 0 ? (
 						<>
-							<div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+							<div className="grid grid-cols-2 gap-4 md:grid-cols-5">
 								<Stat label="Pool Income" value={`$${data.earnings.poolTotal}`} />
+								<Stat label="Sticker Income" value={`$${data.earnings.stickerTotal}`} />
 								<Stat label="Badge Income" value={`$${data.earnings.badgeTotal}`} />
 								<Stat label="Total" value={`$${data.earnings.total}`} />
 								<Stat label="Supporters" value={data.earnings.subscriberCount} />
