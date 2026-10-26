@@ -33,6 +33,7 @@ import { poolDistributions, purchases, sessions, users, works } from "@anthers/d
 import { eq, inArray, lt } from "drizzle-orm";
 import { eraseAccount } from "../services/account-deletion.js";
 import { deleteExpiredSessions } from "../services/auth.js";
+import { saveOnPurchase } from "../services/library.js";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -149,8 +150,12 @@ describe("account deletion sweeps object storage", () => {
 			});
 			expect(alsoUnbought.id).toBeGreaterThan(0);
 
-			// A completed purchase is enough — `purchasedAmong` only asks whether one exists.
+			// A completed purchase, and the Library save it writes at checkout — that save is
+			// what sets the preservation flag `keptAmong` asks. A fixture that set only the
+			// purchase row would be testing a state production cannot reach.
+			const buyerId = await makeUser("keepbuyer");
 			await db.insert(purchases).values({
+				buyerId,
 				workId: paid.id,
 				type: "digital",
 				amount: "5.00",
@@ -160,6 +165,7 @@ describe("account deletion sweeps object storage", () => {
 				status: "completed",
 				workTitle: "Bought",
 			});
+			await saveOnPurchase({ buyerId, workId: paid.id, type: "digital" });
 
 			const deleted: string[] = [];
 			const delSpy = spyOn(storage, "delete").mockImplementation(async (key: string) => {

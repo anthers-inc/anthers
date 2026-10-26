@@ -1,6 +1,6 @@
 {
-  "id": "296adbcb-d6ba-4acb-a1c5-b9c9940fabf5",
-  "prevId": "0abd5b82-b488-4cd3-8c95-08af9904a299",
+  "id": "952d78e4-a5a3-4815-8811-7efa440ab6fc",
+  "prevId": "9266bbd8-b402-4bec-b526-7b83bf6134ff",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2751,66 +2751,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "shipping_name": {
-          "name": "shipping_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipping_address_line1": {
-          "name": "shipping_address_line1",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipping_address_line2": {
-          "name": "shipping_address_line2",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipping_city": {
-          "name": "shipping_city",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipping_state": {
-          "name": "shipping_state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipping_postal_code": {
-          "name": "shipping_postal_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shipping_country": {
-          "name": "shipping_country",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "printful_costs": {
-          "name": "printful_costs",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "merch_size": {
-          "name": "merch_size",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "merch_discount_badge": {
-          "name": "merch_discount_badge",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3160,292 +3100,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.merch_fulfillments": {
-      "name": "merch_fulfillments",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "purchase_id": {
-          "name": "purchase_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "printful_order_id": {
-          "name": "printful_order_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "printful_status": {
-          "name": "printful_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "placed_at": {
-          "name": "placed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "placement_error": {
-          "name": "placement_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "placement_attempts": {
-          "name": "placement_attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "events": {
-          "name": "events",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "tracking_url": {
-          "name": "tracking_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "uq_merch_fulfillments_purchase": {
-          "name": "uq_merch_fulfillments_purchase",
-          "columns": [
-            {
-              "expression": "purchase_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_merch_fulfillments_order": {
-          "name": "idx_merch_fulfillments_order",
-          "columns": [
-            {
-              "expression": "printful_order_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "merch_fulfillments_purchase_id_purchases_id_fk": {
-          "name": "merch_fulfillments_purchase_id_purchases_id_fk",
-          "tableFrom": "merch_fulfillments",
-          "tableTo": "purchases",
-          "columnsFrom": [
-            "purchase_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.merch_variants": {
-      "name": "merch_variants",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "work_id": {
-          "name": "work_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "color": {
-          "name": "color",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "size": {
-          "name": "size",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "catalog_variant_id": {
-          "name": "catalog_variant_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "catalog_variant_name": {
-          "name": "catalog_variant_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "mockup_url": {
-          "name": "mockup_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sync_variant_id": {
-          "name": "sync_variant_id",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "catalog_price": {
-          "name": "catalog_price",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "list_price": {
-          "name": "list_price",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "print_file_url": {
-          "name": "print_file_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "synced": {
-          "name": "synced",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "uq_merch_variants_work_color_size": {
-          "name": "uq_merch_variants_work_color_size",
-          "columns": [
-            {
-              "expression": "work_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "color",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "size",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_merch_variants_work": {
-          "name": "idx_merch_variants_work",
-          "columns": [
-            {
-              "expression": "work_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "merch_variants_work_id_works_id_fk": {
-          "name": "merch_variants_work_id_works_id_fk",
-          "tableFrom": "merch_variants",
-          "tableTo": "works",
-          "columnsFrom": [
-            "work_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -6070,38 +5724,12 @@
           "notNull": false,
           "default": "''"
         },
-        "banner_image": {
-          "name": "banner_image",
+        "header_image": {
+          "name": "header_image",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "default": "''"
-        },
-        "avatar_source": {
-          "name": "avatar_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "banner_image_source": {
-          "name": "banner_image_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "avatar_crop": {
-          "name": "avatar_crop",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "banner_image_crop": {
-          "name": "banner_image_crop",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         },
         "website_url": {
           "name": "website_url",
@@ -11353,28 +10981,15 @@
           "notNull": false,
           "default": "''"
         },
-        "thumbnail": {
-          "name": "thumbnail",
+        "cover_image": {
+          "name": "cover_image",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "default": "''"
         },
-        "thumbnail_source": {
-          "name": "thumbnail_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "thumbnail_crop": {
-          "name": "thumbnail_crop",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "thumbnail_work_id": {
-          "name": "thumbnail_work_id",
+        "cover_work_id": {
+          "name": "cover_work_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
@@ -11473,12 +11088,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "projects_thumbnail_work_id_works_id_fk": {
-          "name": "projects_thumbnail_work_id_works_id_fk",
+        "projects_cover_work_id_works_id_fk": {
+          "name": "projects_cover_work_id_works_id_fk",
           "tableFrom": "projects",
           "tableTo": "works",
           "columnsFrom": [
-            "thumbnail_work_id"
+            "cover_work_id"
           ],
           "columnsTo": [
             "id"
@@ -14174,19 +13789,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": "''"
-        },
-        "thumbnail_source": {
-          "name": "thumbnail_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "thumbnail_crop": {
-          "name": "thumbnail_crop",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         },
         "source_key": {
           "name": "source_key",

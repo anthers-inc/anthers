@@ -33,8 +33,8 @@
  * | profile, sessions, ATProto link, follows, saved items, blocks, attention rows | **destroyed** (FK cascade) | purely this person's |
  * | comments, posts | **tombstoned** — author nulled, content stays | a thread full of holes is worse for everyone still in it, and deleting a post takes third parties' comments with it |
  * | reviews | **destroyed** — verdict and text | a review is this person's written opinion, and an anonymous one nobody wrote any more is not honest to keep counting (Parker, 2026-09-13) |
- * | Works nobody bought | **destroyed** | nothing depends on them |
- * | Works someone bought | **withdrawn** | a purchase outlives the Work — buyers keep what they paid for |
+ * | Works nobody kept | **destroyed** | nothing depends on them |
+ * | Works somebody kept — saved, or bought (a purchase saves itself) | **withdrawn** | a save or a purchase outlives the Work |
  * | purchases | **buyer detached, row kept** | sales-tax remittance records; settled 2026-08-10 |
  * | moderation reports & actions | **kept, actor nulled** | after a `DELETE`, "why was my comment removed?" has no honest answer |
  * | a handle Anthers issued | **emptied on the node** | the records and the address are Anthers'; the DID is in a public directory nothing deletes from |
@@ -79,6 +79,7 @@ import { hostedHandlesFor, isHostedIdentity, releaseHostedIdentities } from "./h
 import { isUnderHold } from "./legal-hold.js";
 import { addUserImages, collectWorkMedia, sweepCollected } from "./media-purge.js";
 import { notifyMany } from "./notifications.js";
+import { hasPreservedVersion } from "./preservation.js";
 import { queueWorkListingSync, takeDownCreatorRecords } from "./work-listing.js";
 
 /**
@@ -119,7 +120,7 @@ export interface DeletionPreview {
 	/** Kept, with the author removed. */
 	comments: number;
 	posts: number;
-	/** Works split by whether anyone bought them. */
+	/** Works split by whether anybody kept them — saved to a Library, or bought. */
 	worksDeleted: number;
 	worksWithdrawn: number;
 	/** Kept with the buyer detached, for tax records. */
@@ -152,7 +153,7 @@ export interface DeletionPreview {
  *
  * The point of consent being *informed* is that the numbers are theirs. "Your content
  * will be deleted" is a sentence people click past; "3 Works deleted, 1 withdrawn
- * because someone bought it, 14 comments tombstoned" is a decision.
+ * because somebody saved it, 14 comments tombstoned" is a decision.
  */
 export async function deletionPreview(userId: number): Promise<DeletionPreview> {
 	/** One scalar count. Raw SQL because these are nine one-line counts over nine tables. */
@@ -168,7 +169,7 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 		await db.select({ id: works.id }).from(works).where(eq(works.creatorId, userId))
 	).map((w) => w.id);
 
-	const purchasedWorkIds = await purchasedAmong(workIds);
+	const keptWorkIds = await keptAmong(workIds);
 
 	const [
 		follows_,
@@ -213,8 +214,8 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 		comments: comments_,
 		reviews: reviews_,
 		posts: posts_,
-		worksDeleted: workIds.length - purchasedWorkIds.length,
-		worksWithdrawn: purchasedWorkIds.length,
+		worksDeleted: workIds.length - keptWorkIds.length,
+		worksWithdrawn: keptWorkIds.length,
 		purchases: purchases_,
 		hostedHandles: handles,
 		spaces: spaces_,
@@ -224,19 +225,25 @@ export async function deletionPreview(userId: number): Promise<DeletionPreview> 
 }
 
 /**
- * Which of these Works somebody has actually completed a purchase of.
+ * Which of these Works Anthers keeps — the ones with a preserved version.
  *
- * Shared by the preview and the erase so the confirmation screen cannot promise one
- * outcome and the job deliver another — "3 deleted, 1 withdrawn" has to be the same
- * classification that runs a week later.
+ * 🚨 **The question is preservation, not the purchase count** (Parker, 2026-10-25). A purchase
+ * saves itself to the Library and a save is what sets the flag, so every sold Work is in
+ * here; so is a free Work somebody saved, which this path used to destroy. The derivation is
+ * `hasPreservedVersion` in `services/preservation.ts`, shared with the withdrawn-Work sweep,
+ * so account deletion cannot keep a Work the sweep would purge or purge one the sweep keeps.
+ *
+ * Shared by the preview and the erase so the confirmation screen cannot promise one outcome
+ * and the job deliver another — "3 deleted, 1 withdrawn" has to be the same classification
+ * that runs a week later.
  */
-async function purchasedAmong(workIds: number[]): Promise<number[]> {
+async function keptAmong(workIds: number[]): Promise<number[]> {
 	if (workIds.length === 0) return [];
 	const rows = await db
-		.selectDistinct({ id: purchases.workId })
-		.from(purchases)
-		.where(and(inArray(purchases.workId, workIds), eq(purchases.status, "completed")));
-	return rows.map((r) => r.id).filter((v): v is number => v != null);
+		.select({ id: works.id })
+		.from(works)
+		.where(and(inArray(works.id, workIds), hasPreservedVersion));
+	return rows.map((r) => r.id);
 }
 
 export type DeletionRequestResult =
@@ -459,8 +466,8 @@ export async function eraseAccount(
 		await db.select({ id: works.id }).from(works).where(eq(works.creatorId, userId))
 	).map((w) => w.id);
 
-	const purchasedWorkIds = await purchasedAmong(workIds);
-	const unpurchased = workIds.filter((id) => !purchasedWorkIds.includes(id));
+	const keptWorkIds = await keptAmong(workIds);
+	const unkept = workIds.filter((id) => !keptWorkIds.includes(id));
 
 	// Enumerated BEFORE the wipe, for the same reason the buyer list is: this reads
 	// `works`, `assets` and `transcoding_jobs`, and the transaction is about to delete
@@ -469,17 +476,19 @@ export async function eraseAccount(
 	// object-storage calls at all, so a deleted profile's avatar stayed publicly
 	// downloadable forever).
 	//
-	// 🚨 ONLY the unpurchased Works. A purchased one is *withdrawn*, not destroyed —
-	// the buyer still downloads it, and `resolveAccess` reads purchases rather than
-	// visibility, so sweeping its media would break an entitlement we promise survives
-	// the creator leaving.
-	const mediaToSweep = addUserImages(await collectWorkMedia(unpurchased), user);
+	// 🚨 ONLY the unkept Works. A kept one is *withdrawn*, not destroyed — a buyer still
+	// downloads it and a saver still opens it, and `resolveAccess` reads purchases rather
+	// than visibility, so sweeping its media would break an entitlement we promise
+	// survives the creator leaving.
+	const mediaToSweep = addUserImages(await collectWorkMedia(unkept), user);
 
 	// Collected BEFORE the wipe: `purchases.buyer_id` survives, but the Work rows and
 	// the join back to them are about to change under us, and a buyer we failed to
-	// enumerate is a buyer who never learns their purchase was withdrawn.
+	// enumerate is a buyer who never learns their purchase was withdrawn. A Work kept
+	// only by savers contributes nothing here — there is no purchase to find and nobody
+	// to tell.
 	const buyersToTell =
-		purchasedWorkIds.length > 0
+		keptWorkIds.length > 0
 			? (
 					await db
 						.select({
@@ -488,9 +497,7 @@ export async function eraseAccount(
 							workTitle: purchases.workTitle,
 						})
 						.from(purchases)
-						.where(
-							and(inArray(purchases.workId, purchasedWorkIds), eq(purchases.status, "completed")),
-						)
+						.where(and(inArray(purchases.workId, keptWorkIds), eq(purchases.status, "completed")))
 				).filter(
 					(r): r is { purchaseId: number; buyerId: number; workTitle: string } =>
 						// A buyer who deleted their own account first has nobody to notify.
@@ -499,30 +506,30 @@ export async function eraseAccount(
 			: [];
 
 	await db.transaction(async (tx) => {
-		// Purchased Works are WITHDRAWN, never destroyed — a buyer owns what they bought
-		// regardless of what the creator does later, and `resolveAccess` reads purchases
-		// rather than visibility, so their downloads keep working untouched.
-		if (purchasedWorkIds.length > 0) {
+		// Kept Works are WITHDRAWN, never destroyed — a Work somebody saved or bought
+		// outlives its creator, and `resolveAccess` reads purchases rather than
+		// visibility, so a buyer's downloads keep working untouched.
+		if (keptWorkIds.length > 0) {
 			await tx
 				.update(works)
 				.set({ visibility: "withdrawn", withdrawnAt: new Date() })
-				.where(inArray(works.id, purchasedWorkIds));
+				.where(inArray(works.id, keptWorkIds));
 			// ⚠️ **Enqueued while the credential still exists**, which is the whole reason it is
 			// here rather than left to the sweep. `releaseHostedIdentities` has already run by
 			// the time this transaction commits, so the repository these listings live in is
 			// about to become unreachable — the sync has to happen now or the records stay up
 			// with nothing able to remove them.
-			for (const workId of purchasedWorkIds) void queueWorkListingSync(workId);
+			for (const workId of keptWorkIds) void queueWorkListingSync(workId);
 		}
 
-		// Everything nobody bought goes. Its comments are polymorphic with no FK, so
+		// Everything nobody kept goes. Its comments are polymorphic with no FK, so
 		// they are removed explicitly — the same explicit cleanup `DELETE /works/:id`
 		// already does.
-		if (unpurchased.length > 0) {
+		if (unkept.length > 0) {
 			await tx
 				.delete(comments)
-				.where(and(eq(comments.subjectType, "work"), inArray(comments.subjectId, unpurchased)));
-			await tx.delete(works).where(inArray(works.id, unpurchased));
+				.where(and(eq(comments.subjectType, "work"), inArray(comments.subjectId, unkept)));
+			await tx.delete(works).where(inArray(works.id, unkept));
 		}
 
 		// Tombstone the posts and comments, delete the reviews. Done explicitly rather than

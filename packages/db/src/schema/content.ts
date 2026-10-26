@@ -214,10 +214,11 @@ export const works = pgTable(
 		// released = publicly listed in the Catalog, which is NOT the same as freely
 		// accessible: what it costs and who can reach it is the job of the gates below.
 		// withdrawn = taken out of public circulation but STILL SERVED to people who
-		// bought it (`0017`). It exists because deleting a purchased Work was the only
-		// way to remove one, and that stranded its buyers — "if a user purchases
-		// something, they own it, regardless of what the creator does down the line."
-		// A creator cannot set this directly; it is what deleting a purchased Work does.
+		// bought it (`0017`) and still open to people who saved it. It exists because
+		// deleting a purchased Work was the only way to remove one, and that stranded
+		// its buyers — "if a user purchases something, they own it, regardless of what
+		// the creator does down the line." A creator cannot set this directly; it is
+		// what deleting a preserved Work does.
 		// A fourth value `unlisted` is anticipated and deliberately not built yet.
 		visibility: text("visibility").notNull().default("private"), // private | released | withdrawn
 		releasedAt: timestamp("released_at", { withTimezone: true }),
@@ -250,9 +251,14 @@ export const works = pgTable(
 		 */
 		mediaPurgedAt: timestamp("media_purged_at", { withTimezone: true }),
 		/**
-		 * **The media version this Work currently serves is preserved.** Somebody has
-		 * saved the Work to their Library, so Anthers keeps the bytes it hands readers
-		 * indefinitely rather than for a window.
+		 * **The media version this Work currently serves is preserved.** Somebody other
+		 * than its creator has saved the Work to their Library, so Anthers keeps the bytes
+		 * it hands readers indefinitely rather than for a window.
+		 *
+		 * 🚨 **The creator's own save does not set it.** `saveWork` lets a creator keep
+		 * their own unreleased Work, and a flag set by that save would make a draft
+		 * undeletable; `services/preservation.ts` carries the keeper and refuses it, so a
+		 * set flag always means somebody else kept the Work.
 		 *
 		 * ⭐ **The row is the version's own record for as long as it is the current one.**
 		 * The current version's media lives on this row and in the asset/build tables —

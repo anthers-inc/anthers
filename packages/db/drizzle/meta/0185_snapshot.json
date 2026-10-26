@@ -1,5 +1,5 @@
 {
-  "id": "0abd5b82-b488-4cd3-8c95-08af9904a299",
+  "id": "9266bbd8-b402-4bec-b526-7b83bf6134ff",
   "prevId": "e398067a-b3fd-4ee8-9def-8ac7fe1a7781",
   "version": "7",
   "dialect": "postgresql",
@@ -6077,32 +6077,6 @@
           "notNull": false,
           "default": "''"
         },
-        "avatar_source": {
-          "name": "avatar_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "header_image_source": {
-          "name": "header_image_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "avatar_crop": {
-          "name": "avatar_crop",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "header_image_crop": {
-          "name": "header_image_crop",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "website_url": {
           "name": "website_url",
           "type": "text",
@@ -11360,19 +11334,6 @@
           "notNull": false,
           "default": "''"
         },
-        "cover_source": {
-          "name": "cover_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "cover_crop": {
-          "name": "cover_crop",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "cover_work_id": {
           "name": "cover_work_id",
           "type": "integer",
@@ -14174,19 +14135,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": "''"
-        },
-        "thumbnail_source": {
-          "name": "thumbnail_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "thumbnail_crop": {
-          "name": "thumbnail_crop",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         },
         "source_key": {
           "name": "source_key",

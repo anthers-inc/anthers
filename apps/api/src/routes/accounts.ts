@@ -133,7 +133,6 @@ import {
 import { isCreator, isCreatorWhere } from "../services/creator-standing.js";
 import { discordConfigured, syncAccountRoles } from "../services/discord.js";
 import { ensureFollow } from "../services/follows.js";
-import { merchStoreFactsByWork } from "../services/merch-store.js";
 import {
 	DELIVERY_GROUPS,
 	type DeliveryGroup,
@@ -1304,14 +1303,6 @@ const accountRoutes = new Hono()
 			};
 		};
 
-		// The goods releases' store facts — what the tile shows in place of a lock
-		// chip, since the purchase gates RECEIVING the thing, never seeing it (the
-		// resolver's goods branch — `services/access.ts`, Parker 2026-10-09). The
-		// rule and its bounds are the store-facts service's; batch-loaded here.
-		const merchMap = await merchStoreFactsByWork(
-			feedWorks.filter((r) => r.work.type === "physical").map((r) => r.work.id),
-		);
-
 		// The published Projects each release belongs to, so the Network's Music Player lens
 		// groups a newly released track under its record the way the Library's groups a saved
 		// one. Same metadata-only membership and the same viewer-scoped counts as the Library;
@@ -1432,10 +1423,6 @@ const accountRoutes = new Hono()
 					// duration the way a locked book reports its page count.
 					durationSeconds: w.durationSeconds,
 					estimatedReadMinutes: w.estimatedReadMinutes,
-					// The goods release's store art and from-price — what a tile shows in
-					// place of the lock chip a digital Work would earn. Present only on a
-					// physical Work, and only with the facts the store has.
-					merch: w.type === "physical" ? (merchMap.get(w.id) ?? null) : undefined,
 					// The user's own verdict — what a locked cover and a price badge
 					// need. The feed resolves no deliverable either way; this only
 					// describes the gate.

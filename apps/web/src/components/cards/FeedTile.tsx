@@ -91,11 +91,6 @@ export type FeedEntry = { kind: "post" | "release" | "project"; id: number } & R
 /** A feed Work as the API sends it: the Work plus the creator the listing joins on. */
 type FeedWork = Work & {
 	creator?: { handle: string; displayName?: string | null; avatar?: string | null };
-	/**
-	 * A goods release's store facts — the artwork its first merch variant carries and the
-	 * cheapest variant's list price. Present on a physical Work when the store has either.
-	 */
-	merch?: { mockupUrl: string | null; fromPrice: string | null } | null;
 };
 
 /**
@@ -262,9 +257,7 @@ function ReleaseBand({
 	// answers everywhere but `payment_required`), exactly like a digital Work's.
 	const access = isAccessResult(work.access) ? work.access : null;
 	const isGoods = work.type === "physical";
-	// A goods release's artwork: the creator's thumbnail, or the store's first mockup.
-	// The mockup is public the same way the store panel is — a visitor may look at a shirt.
-	const artwork = work.thumbnail || (isGoods ? (work.merch?.mockupUrl ?? null) : null);
+	const artwork = work.thumbnail;
 	const locked = presentsAsLocked(access) && !(isGoods && access?.reason === "payment_required");
 
 	if (locked) {
@@ -560,9 +553,6 @@ function ReleaseTile({ entry, extras }: { entry: FeedEntry; extras: FeedTileExtr
 					    stands: the purchase gates receiving the thing, not seeing it, so the
 					    badge says buy rather than lock. The store's list prices are the source;
 					    the tile shows only the cheapest, since no color is picked here. */}
-					{work.type === "physical" && work.merch?.fromPrice && (
-						<span className="badge badge-sm badge-secondary">from ${work.merch.fromPrice}</span>
-					)}
 					{work.type === "text" && work.estimatedReadMinutes ? (
 						<span className="text-xs text-base-content/40">
 							{work.estimatedReadMinutes} min read
