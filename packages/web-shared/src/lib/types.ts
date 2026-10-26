@@ -1566,18 +1566,3 @@ export interface CreatorTrafficResponse {
 	sources: Array<{ source: string; views: number }>;
 	period: number;
 }
-
-// ─── Hosting-subsidy Types ───
-
-export interface CrfSubsidy {
-	id: number;
-	creatorId: number;
-	billingCycle: string;
-	estimatedHostingCost: string;
-	creatorEarnings: string;
-	subsidyAmount: string;
-	storageBytes: number | null;
-	projectCount: number | null;
-	postCount: number | null;
-	createdAt: string;
-}
