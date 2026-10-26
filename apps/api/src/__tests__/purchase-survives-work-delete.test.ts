@@ -14,8 +14,8 @@
  *      served to the people who bought it, which is the actual ruling: *if a user
  *      purchases something, they own it, regardless of what the creator does*; and
  *   3. the purchase row survives regardless, carrying its own snapshot of what was
- *      bought and who was paid — so it still reads once the Work row does go, which it
- *      eventually will when the rescue window expires.
+ *      bought and who was paid — so it still reads once the Work row does go, which
+ *      nothing now does, but the receipt has to outlive it if anything ever does.
  *
  * The snapshot is the part worth testing hardest. `purchases` never had a `creator_id` —
  * the seller was reachable only by joining `works` — so a deleted Work used to take the
@@ -27,6 +27,7 @@ import { db } from "@anthers/db/client";
 import { purchases, works } from "@anthers/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
+import { saveOnPurchase } from "../services/library.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { handleOf, userIdByName } from "./handles";
@@ -88,6 +89,10 @@ describe("A purchase survives the Work being deleted", () => {
 				status: "completed",
 			})
 			.returning();
+		// The checkout path's own save, so the fixture stands where production does: a
+		// completed purchase saves itself to the buyer's Library, and that save is what
+		// puts the Work in the preservation program.
+		await saveOnPurchase({ buyerId, workId: work.id, type: "digital" });
 		return { work, purchase };
 	}
 
@@ -196,9 +201,9 @@ describe("A purchase survives the Work being deleted", () => {
 
 	it("still lists the purchase in the buyer's history once the Work row is genuinely gone", async () => {
 		const { work, purchase } = await soldWork(`Vanishing Game ${id}`);
-		// The route no longer destroys a purchased Work, so this deletes the row directly
-		// to stand in for the one thing that eventually will: the rescue window expiring.
-		// That sweep isn't built, but the receipt has to outlive it when it is.
+		// The route no longer destroys a purchased Work, so this deletes the row directly:
+		// nothing in the product does any more, and the receipt still has to survive it if
+		// anything ever does.
 		await db.delete(works).where(eq(works.id, work.id));
 
 		const res = await req("/api/payments/purchases", { headers: { Cookie: buyerCookie } });
@@ -297,8 +302,8 @@ describe("A purchase survives the Work being deleted", () => {
 			work: { publicId: number; visibility: string };
 		};
 
-		// Still openable — that is the whole point of withdrawal — but the buyer is owed
-		// the fact that it left circulation, since the rescue window will eventually end.
+		// Still openable, which is the whole point of withdrawal, but the buyer is owed
+		// the fact that it left circulation.
 		expect(row.work.publicId).toBe(work.publicId);
 		expect(row.work.visibility).toBe("withdrawn");
 	});

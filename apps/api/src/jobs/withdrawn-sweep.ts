@@ -32,10 +32,11 @@
  */
 
 import { db } from "@anthers/db/client";
-import { assets, transcodingJobs, workMediaVersions, works } from "@anthers/db/schema";
-import { and, eq, isNotNull, isNull, notExists, or } from "drizzle-orm";
+import { assets, transcodingJobs, works } from "@anthers/db/schema";
+import { and, eq, isNotNull, isNull, not, or } from "drizzle-orm";
 import { isUnderHold } from "../services/legal-hold.js";
 import { purgeWorkMedia } from "../services/media-purge.js";
+import { hasPreservedVersion } from "../services/preservation.js";
 
 /** What one sweep run did, so the worker logs a true figure. */
 export interface SweepResult {
@@ -52,7 +53,9 @@ const OVERRIDES = or(
 );
 
 /**
- * **The Work has no preserved version** — the derivation the sweep runs on.
+ * **The Work has no preserved version** — the negation of the one definition in
+ * `services/preservation.ts`, shared with account deletion so the two paths cannot
+ * disagree about which Works Anthers keeps.
  *
  * ⭐ Preservation marks a version (`works.preserved` while it is current,
  * `work_media_versions.preserved` once a replace retires it), so "is this Work kept" is a
@@ -60,15 +63,7 @@ const OVERRIDES = or(
  * any archived one's. In practice a replacement inherits the flag and the answer is the
  * current version alone, but the sweep asks the definition rather than the shortcut.
  */
-const NO_PRESERVED_VERSION = and(
-	eq(works.preserved, false),
-	notExists(
-		db
-			.select({ id: workMediaVersions.id })
-			.from(workMediaVersions)
-			.where(and(eq(workMediaVersions.workId, works.id), eq(workMediaVersions.preserved, true))),
-	),
-);
+const NO_PRESERVED_VERSION = not(hasPreservedVersion);
 
 export async function runWithdrawnSweep(now = new Date()): Promise<SweepResult> {
 	// The candidate set: withdrawn, stamped, bytes still present, and not held by the

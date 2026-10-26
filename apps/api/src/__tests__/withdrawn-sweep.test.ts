@@ -23,6 +23,7 @@ import { eq, inArray } from "drizzle-orm";
 import { runWithdrawnSweep } from "../jobs/withdrawn-sweep.js";
 import { placeHold } from "../services/legal-hold.js";
 import { removeItem, saveOnPurchase, saveWork } from "../services/library.js";
+import { projectLibraryItem } from "../services/space-projection.js";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -129,6 +130,52 @@ describe("coming into the program", () => {
 		expect(await preserved(work.id)).toBe(true);
 	});
 
+	// SABOTAGE: the keeper dropped from `preserveCurrentVersion` (predict: the creator's own
+	// draft is flagged, both disposal doors withdraw it, and the draft can never be deleted).
+	it("a creator keeping their own Work does not put it in it", async () => {
+		const draft = await insertWork({
+			creatorId,
+			type: "game",
+			title: "DraftTheirOwn",
+			visibility: "private",
+		});
+		workIds.push(draft.id);
+		expect(await preserved(draft.id)).toBe(false);
+
+		// `saveWork` admits this deliberately: a creator may keep their own unreleased Work.
+		const saved = await saveWork(creatorId, draft.id);
+		expect(saved.ok).toBe(true);
+
+		// ⭐ **Somebody else is what the program keeps.** The flag has to mean the Work was
+		// released and kept by a person other than its maker, or "preserved" would describe
+		// every draft its author pressed Save on.
+		expect(await preserved(draft.id)).toBe(false);
+	});
+
+	it("a space projecting a Library applies the same keeper rule as a save", async () => {
+		// The third door into the Library. A rebuild from a reader's space is still somebody
+		// keeping a Work, and the creator projecting their own entry is still not.
+		const own = await insertWork({ creatorId, type: "game", title: "ProjectedOwn" });
+		workIds.push(own.id);
+		await projectLibraryItem(creatorId, {
+			subject: { kind: "work", id: own.id, uri: null },
+			hidden: false,
+			sortOrder: 0,
+			savedAt: new Date(),
+		});
+		expect(await preserved(own.id)).toBe(false);
+
+		const theirs = await insertWork({ creatorId, type: "game", title: "ProjectedTheirs" });
+		workIds.push(theirs.id);
+		await projectLibraryItem(otherBuyerId, {
+			subject: { kind: "work", id: theirs.id, uri: null },
+			hidden: false,
+			sortOrder: 0,
+			savedAt: new Date(),
+		});
+		expect(await preserved(theirs.id)).toBe(true);
+	});
+
 	it("a manual save puts the Work in it, and unsaving does not take it out", async () => {
 		const work = await insertWork({ creatorId, type: "game", title: "SavedByHand" });
 		workIds.push(work.id);
@@ -205,6 +252,22 @@ describe("the sweep's one question", () => {
 		const second = await runWithdrawnSweep();
 		expect(second.sweptCount).toBe(0);
 		expect(second.keptCount).toBe(0);
+	});
+
+	// SABOTAGE: the sweep keying on "nobody bought it" instead of the flag (predict: a saved
+	// free Work is purged, which is the whole case the program was extended to cover).
+	it("keeps a Work nobody bought because somebody saved it", async () => {
+		const saved = await withdrawnWork({ title: "SavedNotSold", withdrawnDaysAgo: 400 });
+		expect(await saveWork(otherBuyerId, saved)).toMatchObject({ ok: true });
+
+		await runWithdrawnSweep();
+
+		expect(await mediaExists(saved)).toBe(true);
+		const [row] = await db
+			.select({ mediaPurgedAt: works.mediaPurgedAt })
+			.from(works)
+			.where(eq(works.id, saved));
+		expect(row?.mediaPurgedAt).toBeNull();
 	});
 
 	// SABOTAGE: the override dropped from the candidate query (predict: the preserved Work
