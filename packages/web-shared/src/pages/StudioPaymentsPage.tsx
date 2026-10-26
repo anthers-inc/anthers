@@ -340,8 +340,9 @@ export default function PaymentsPage() {
 								</div>
 							</div>
 							<p className="text-xs text-base-content/50">
-								Held is settled money waiting out its 14-day hold, which moves into your Stripe
-								balance when the hold ends. Transferred has already moved.
+								Held is money that has been earned and not yet released: support waits out its
+								14-day hold, and a good waits until its parcel is delivered and the buyer's problem
+								window closes. Transferred has already moved into your Stripe balance.
 							</p>
 						</div>
 					</div>
