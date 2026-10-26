@@ -9,12 +9,9 @@
  * under-collected tax is owed from Anthers' own funds, and over-collected tax has to be
  * remitted or refunded.
  *
- * 🚨 **`service` Works are refused at checkout rather than given a code**, and a
- * `physical` Work is sold only through the merch path (`services/printful.ts`), which
- * maps it in its own constant rather than here — the generic checkout path's refusal
- * stands for everything that has no fulfillment mechanism behind it. `purchaseTaxCode`
- * returns `null` for both, which the generic checkout paths read as a refusal; the merch
- * path is the exception that carries the code beside its own reader.
+ * 🚨 **`physical` and `service` Works are refused at checkout rather than given a code**,
+ * because nothing has a fulfillment mechanism behind it: `purchaseTaxCode` returns `null`
+ * for both, and the generic checkout paths read that as a refusal.
  *
  * `game` and `software` share `txcd_10201000` (downloaded software). The posture table also
  * names `txcd_10202000` for an embedded game, and the Work model does not carry the

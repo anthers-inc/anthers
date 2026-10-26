@@ -43,22 +43,15 @@ import {
 	works,
 } from "@anthers/db/schema";
 import { currentCycleKey, cycleEnd, cycleStart } from "@anthers/shared/billing-cycle";
-import {
-	CLOTHING_TAX_CODE,
-	isChargeableAmount,
-	MAX_BASKET_ITEMS,
-	REFUND_AUTO_CAP,
-} from "@anthers/shared/constants";
+import { isChargeableAmount, MAX_BASKET_ITEMS, REFUND_AUTO_CAP } from "@anthers/shared/constants";
 import { calculateFees } from "@anthers/shared/fees";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import type { WorkType } from "@anthers/shared/tax-codes";
-import { purchaseTaxCode, SHIPPING_TAX_CODE } from "@anthers/shared/tax-codes";
-import { zValidator } from "@hono/zod-validator";
+import { purchaseTaxCode } from "@anthers/shared/tax-codes";
 import Decimal from "decimal.js";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type Stripe from "stripe";
-import { z } from "zod";
 import {
 	createAccountLoginLink,
 	createAccountOnboardingLink,
@@ -74,8 +67,7 @@ import {
 	retrieveSubscription,
 	verifyWebhookSignature,
 } from "../lib/processor.js";
-import { getOptionalUserId, requireAuth, requireVerified } from "../middleware/auth.js";
-import { invalidBody } from "../middleware/validate.js";
+import { requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 import { oweAccessReceipt } from "../services/access-receipts.js";
 import { anthersUserId } from "../services/anthers-badges.js";
@@ -94,24 +86,14 @@ import {
 	ensureBadgeProduct,
 	ensureCreatorProduct,
 	linkCheckoutCustomer,
-	savedBillingAddress,
 	stripeCustomerIdFor,
 	syncSubscriptionToAccount,
 } from "../services/billing.js";
 import { recordDisputeClosed, recordDisputeCreated } from "../services/disputes.js";
 import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoices.js";
 import { saveOnPurchase } from "../services/library.js";
-import {
-	type MerchPricedPick,
-	MerchQuoteError,
-	merchBadgeDiscount,
-	merchGoodsPrice,
-	priceMerchPick,
-	quoteMerchTax,
-} from "../services/merch-quote.js";
 import { recordNettingForDispute, reverseNettingForWonDispute } from "../services/netting.js";
 import { stripeFlagPatchFromAccount } from "../services/payouts.js";
-import { printfulConfigured } from "../services/printful.js";
 import { splitChargeToCreators } from "../services/purchase-split.js";
 import {
 	sendPurchaseReceipts,
@@ -155,18 +137,12 @@ async function resolvePurchase(slug: string, userId: number) {
 			error: "You already have access to this work",
 		};
 
-	// 🚨 **A physical or service Work is refused on the generic paths, because nothing
-	// generic fulfills it — and the goods-works rule prices them here as null (the
-	// store prices the goods), so this refusal has to come BEFORE the priced-row
-	// checks or a merch Work's generic refusal would read as a data error rather
-	// than the posture's sentence.** There is no shipping lane behind
-	// `resolvePurchase` and no fulfillment mechanism for a service one — a merch
-	// Work (a physical Work owned by the official account with merch variants
-	// mapped) is sold by the *merch* routes (`/merch/:slug/variants` and
-	// `/merch/checkout/:slug` below), which call this for everything except this
-	// refusal. This is the posture's refusal rather than a judgment about the
-	// types: selling them arrives when the fulfillment behind them arrives, and
-	// until then checkout is the one door that has to say no.
+	// 🚨 **A physical or service Work is refused at checkout, because nothing fulfills
+	// it — and the goods-works rule prices them here as null, so this refusal has to
+	// come BEFORE the priced-row checks.** There is no shipping lane and no
+	// fulfillment mechanism behind either type. This is the posture's refusal rather
+	// than a judgment about the kinds: selling them arrives when the fulfillment
+	// behind them arrives, and until then checkout is the one door that has to say no.
 	if (work.type === "physical" || work.type === "service")
 		return {
 			ok: false as const,
@@ -996,95 +972,6 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 			);
 		}
 	}
-
-	// ── Merch fulfillment, after the money has moved ──────────────────────────
-	// A merch charge carries exactly one completed row (one goods line + a shipping line
-	// priced into the same charge), so a `physical` row here means the whole session was
-	// merch. The order is placed against the session's SHIPPING address — the delivery
-	// destination, which is also the address tax resolved from on this session — and a
-	// failure never undoes the buyer's completed purchase: it is recorded on the
-	// fulfillment row for the placement sweep to retry. See `services/printful.ts`.
-	// (This Stripe version moved the session's collected address under
-	// `collected_information`; the billing read above still reads `customer_details`.)
-	const shipping = session.collected_information?.shipping_details ?? null;
-	const merchRows = stamped.filter(({ row }) => row.type === "physical").map(({ row }) => row);
-	if (shipping && merchRows.length > 0) {
-		const addr = shipping.address;
-		// The checkout's metadata — where the placement facts were resolved and stashed
-		// (see `resolveMerchCheckout`): merchandise goods price, shipping method, and
-		// Printful's Sync Variant id.
-		const meta = pi.metadata ?? {};
-		for (const row of merchRows) {
-			if (!row.workId) continue;
-			// The purchase recorded the size at checkout; the fulfillment is placed from
-			// the metadata's resolved facts and the session's shipping address.
-			const fulfillment = await resolveMerchCheckout(row, meta as Record<string, string>, {
-				name: shipping.name ?? "",
-				address1: addr.line1 ?? "",
-				address2: addr.line2 ?? undefined,
-				city: addr.city ?? "",
-				state_code: addr.state ?? "",
-				country_code: addr.country ?? "US",
-				zip: addr.postal_code ?? "",
-			});
-			// `placedAt` null means the placement failed and the sweep owns the retry —
-			// logged here so a broken token or a refused order is visible in the logs
-			// rather than only in a table.
-			if (!fulfillment?.placedAt) {
-				console.error(
-					`merch placement for purchase ${row.id} not placed: ${fulfillment?.placementError ?? "no fulfillment row"}`,
-				);
-			}
-		}
-	}
-}
-
-/**
- * The merch half of a completed purchase, resolved from the database (the size chosen at
- * checkout, the Printful variant that size maps to) — then the order placed through
- * `services/printful.ts`. Null when the row is not a fulfillable merch purchase.
- */
-async function resolveMerchCheckout(
-	row: typeof purchases.$inferSelect,
-	metadata: Record<string, string>,
-	recipient: NonNullable<
-		Awaited<ReturnType<typeof import("../services/printful.js").placeOrder>>
-	> extends never
-		? never
-		: {
-				name: string;
-				address1: string;
-				address2?: string;
-				city: string;
-				state_code: string;
-				country_code: string;
-				zip: string;
-			},
-) {
-	// Imported inside to keep the route's top imports Stripe-shaped; this whole block
-	// moves to its own route module when the merch checkout splits out of payments.ts.
-	const { placeMerchOrder, printfulConfigured } = await import("../services/printful.js");
-	if (!printfulConfigured()) return null;
-	if (!row.merchSize) return null;
-	// The placement facts were resolved at checkout and ride the PaymentIntent's
-	// metadata: the shipping method the session actually charged, the discounted goods
-	// figure for the packing slip, and Printful's Sync Variant id the order names.
-	// Re-deriving any of them here could disagree with the charge (the 2026-10-09
-	// probe showed Printful returning two shipping rates — a re-quote's first entry
-	// is not guaranteed to be the one the buyer accepted).
-	const goodsPrice = metadata.merchGoodsPrice;
-	const syncVariantId = Number(metadata.merchSyncVariantId);
-	const shippingMethod = metadata.shippingMethod;
-	if (!goodsPrice || !Number.isFinite(syncVariantId) || syncVariantId <= 0 || !shippingMethod)
-		return null;
-	return placeMerchOrder({
-		purchaseId: row.id,
-		syncVariantId,
-		quantity: 1,
-		retailPrice: goodsPrice,
-		shippingMethod,
-		recipient,
-	});
 }
 
 // ─── Basket storage: the shared read the storage routes answer with ─────────
@@ -1276,96 +1163,6 @@ async function resumeBasketSession(
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
-
-/**
- * The merch-flavored purchase resolution: everything `resolvePurchase` checks except the
- * physical-type refusal (this IS the fulfillment path) and the price read (a merch Work's
- * price is derived, not stored — `access.price` is ignored). Returns the Work alone.
- */
-/**
- * The merch door, shared by the checkout (buying) and the variants read (the picker).
- *
- * `userId` is null for a signed-out visitor reading the picker — page viewing needs no
- * account (the goods-works rule in `resolveAccessSync`), so the read stands. Buying still
- * requires one upstream (`requireAuth` on the checkout route), so null never reaches a
- * purchase here.
- *
- * `opts.read` is the variants route's mode: the one `canAccess` refusal below is a
- * CHECKOUT's refusal ("you already have access", which a buyer's repeat purchase would
- * otherwise need), and a reading call — the only way a `canAccess: true` verdict arrives
- * here is the WORK OWNER checking their own store — must see the panel, not that refusal.
- */
-async function resolveMerchPurchase(
-	slug: string,
-	userId: number | null,
-	opts?: { read?: boolean },
-) {
-	const [work] = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
-	if (!work) return { ok: false as const, status: 404 as const, error: "Work not found" };
-	if (work.visibility !== "released" && work.creatorId !== userId)
-		return { ok: false as const, status: 404 as const, error: "Work not found" };
-	const access = await resolveAccess(work, userId);
-	if (access.canAccess && !(opts?.read && access.reason === "owner"))
-		return {
-			ok: false as const,
-			status: 400 as const,
-			error: "You already have access to this work",
-		};
-	if (!access.requiresPurchase)
-		return {
-			ok: false as const,
-			status: 400 as const,
-			error: "This work is not available for direct purchase",
-		};
-	// 🚨 A merch Work is the official account's, and the official account has no
-	// connected Stripe account to require — the merch sale pays nobody's transfer. A
-	// physical Work that is NOT the official account's stays refused: no fulfillment
-	// exists behind a creator's own physical good yet (the Future/ task), and this
-	// resolution is the merch path's front door.
-	const { anthersUserId } = await import("../services/anthers-badges.js");
-	let isMerch = false;
-	try {
-		isMerch = work.type === "physical" && work.creatorId === (await anthersUserId());
-	} catch {
-		isMerch = false; // unseeded database — no official account, so no merch exists
-	}
-	if (!isMerch)
-		return {
-			ok: false as const,
-			status: 400 as const,
-			error: "This kind of work can't be bought yet — there's nothing to deliver it.",
-		};
-	return { ok: true as const, work };
-}
-
-/**
- * How a merch surface refuses a pick that failed to price — the shared map from
- * `MerchQuoteError`'s kinds to each refusal sentence and status, so the quote route and
- * the checkout say the same thing for the same failure. An error that is not the quote
- * module's own is the store being unavailable.
- */
-function merchQuoteRefusal(e: unknown): { error: string; status: 400 | 503 } {
-	if (e instanceof MerchQuoteError) {
-		switch (e.kind) {
-			case "noPick":
-				return { error: "Choose a color and size first.", status: 400 };
-			case "ambiguousPick":
-			case "unseededLadder":
-				return { error: "Merch isn't available right now.", status: 503 };
-			case "noRate":
-				return { error: "Shipping is not available right now.", status: 503 };
-		}
-	}
-	// An error that is not the quote module's own is logged: a silent 503 hides a bug.
-	console.error("merch quote: unmapped error", e);
-	return { error: "Merch isn't available right now.", status: 503 };
-}
-
-/** The body a merch checkout names: the size label, and nothing else. */
-const merchCheckoutSchema = z.object({
-	color: z.string().trim().min(1).max(40),
-	size: z.string().trim().min(1).max(10),
-});
 
 const paymentRoutes = new Hono()
 	// ── Public config ────────────────────────────────────────────────────────
@@ -1593,384 +1390,6 @@ const paymentRoutes = new Hono()
 			buyerTotal: fees.buyerTotal.toFixed(2),
 		});
 	})
-
-	// ── Merch: the sellable sizes of one merch Work ──────────────────────────
-	// Read by the Work page's size picker. A Work without merch rows is a physical
-	// Work the setup script has not pointed at a Printful product yet — it is not
-	// buyable, and the picker's absence is the honest answer (the checkout below
-	// refuses it with the same sentence the generic physical refusal gave).
-	//
-	// ⚠️ **The picker answers the buyer's OWN prices** — the list price each size
-	// carries, and, when this buyer holds a Badge, the discounted figure beside it.
-	// Never the print cost: that is the transparency prose's basis (never an exact
-	// published figure — Printful reprices), and the picker is a buyer surface.
-	//
-	// Optional auth, deliberately: a signed-out visitor reads the page and the
-	// picker like any account (the goods-works rule in `resolveAccessSync`) — the
-	// list price is theirs to see. A Badge discount needs an account by
-	// construction (the Badge is held BY an account), so signed out every row
-	// prices undiscounted, and the panel's buy door asks for the account.
-	.get("/merch/:slug/variants", async (c) => {
-		const userId = await getOptionalUserId(c);
-		const q = await resolveMerchPurchase(c.req.param("slug") ?? "", userId, { read: true });
-		if (!q.ok) return c.json({ error: q.error }, q.status);
-		const { work } = q;
-		const { merchVariants } = await import("@anthers/db/schema");
-		const rows = await db
-			.select()
-			.from(merchVariants)
-			.where(eq(merchVariants.workId, work.id))
-			.orderBy(merchVariants.id);
-		// The Badge resolves once — for a signed-in buyer only; every row prices
-		// against it (the shared Badge read in `services/merch-quote.ts`).
-		// `free` holds no discount — only Badge keys index the ladder.
-		let held: Awaited<ReturnType<typeof merchBadgeDiscount>> = null;
-		if (userId != null) {
-			try {
-				held = await merchBadgeDiscount(userId);
-			} catch {
-				held = null; // unseeded ladder — prices answer undiscounted
-			}
-		}
-		const price = (v: typeof merchVariants.$inferSelect) => {
-			const list = new Decimal(v.listPrice);
-			const amount = merchGoodsPrice(list, held?.rate ?? "0");
-			return {
-				listPrice: list.toFixed(2),
-				amount: amount.toFixed(2),
-				// The whole percent for copy ("25"), rendered "25% off" client-side.
-				discount: held?.percent ?? null,
-				inStock: true, // stock state is Printful's; the order creation reports it
-			};
-		};
-		// Group the (color, size) rows into the picker's shape: one row per color,
-		// its sizes in setup order. Sizes repeat across colors with no shared state —
-		// a 3XL can sell out in one color while another keeps selling — so each row
-		// carries its own priced list rather than a Work-wide one. The color's mockup
-		// rides the first row carrying one (the dashboard stamps the same URL on every
-		// size of a color; a row that stamps none is cosmetic, not a gap in the row).
-		const colorGroups = [...new Set(rows.map((r) => r.color))].map((color) => ({
-			color,
-			mockupUrl: rows.find((r) => r.color === color && r.mockupUrl != null)?.mockupUrl ?? null,
-			sizes: rows.filter((r) => r.color === color).map((r) => ({ size: r.size, ...price(r) })),
-		}));
-		return c.json({
-			// Color is a dimension, not a label: the store's shirts each carry two —
-			// grouped for the picker as `{ color, sizes[] }` rows (Parker, 2026-10-09:
-			// one Work per shirt, a color picker beside the size picker).
-			colors: colorGroups,
-			merchConfigured: printfulConfigured(),
-		});
-	})
-
-	// ── Merch quote ──────────────────────────────────────────────────────────
-	/**
-	 * The store panel's live quote for one pick, against the buyer's saved billing zip —
-	 * the merch box's "better form" (the 2026-10-10 stopgap's retirement): the
-	 * Badge-discounted goods figure, Printful's live shipping rate priced from the
-	 * buyer's own saved state, and — when the buyer has the opt-in saved billing address
-	 * (`savedBillingAddress`, PR #465) — the real Stripe Tax figure that address
-	 * resolves, and the tax-inclusive total.
-	 *
-	 * 🚨 **Nothing is charged and no session or purchase is created here** — the quote is
-	 * the panel's estimate, and the checkout is its own authority (the session's tax
-	 * resolves from the address the buyer delivers to, which billing stands in for). An
-	 * unconfigured processor or store, a failed rate or a failed pick refuse with the
-	 * sentences the checkout uses; a *failed tax estimate* is not a refusal — it answers
-	 * `tax: null` and the panel shows "calculated at checkout", the shape a buyer with
-	 * no saved address sees anyway.
-	 *
-	 * Authenticated without `requireVerified` deliberately: the quote is a display, not
-	 * a charge, and the checkout keeps its verified-email gate.
-	 */
-	.get(
-		"/merch/quote/:slug",
-		requireAuth,
-		zValidator("query", merchCheckoutSchema, invalidBody),
-		async (c) => {
-			const user = c.get("user");
-			const q = await resolveMerchPurchase(c.req.param("slug") ?? "", user.id);
-			if (!q.ok) return c.json({ error: q.error }, q.status);
-
-			if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
-			if (!printfulConfigured()) return c.json({ error: "Merch isn't available right now." }, 503);
-
-			// The saved address, read once: its state is the rate quote's exact input, its
-			// full shape is the tax quote's stand-in delivery address, and nothing-saved
-			// makes both fall back to the checkout's own authority.
-			const saved = await savedBillingAddress(user.id);
-			const { color, size } = c.req.valid("query");
-			let priced: MerchPricedPick;
-			try {
-				priced = await priceMerchPick(user.id, q.work.id, color, size, {
-					// Printful's US rates are flat per category, but the exact state is
-					// what the figure claims to quote from — pass it when there is one.
-					...(saved ? { stateCode: saved.state } : {}),
-				});
-			} catch (e) {
-				const refusal = merchQuoteRefusal(e);
-				return c.json({ error: refusal.error }, refusal.status);
-			}
-			const { tax, quotedTo, addressSaved } = saved
-				? await quoteMerchTax(saved, {
-						goodsPrice: priced.goodsPrice,
-						shippingPrice: priced.shippingPrice,
-					})
-				: { tax: null, quotedTo: null, addressSaved: false };
-
-			return c.json({
-				color,
-				size,
-				listPrice: priced.listPrice.toFixed(2),
-				goodsPrice: priced.goodsPrice.toFixed(2),
-				discount: priced.discount,
-				shipping: priced.shippingPrice.toFixed(2),
-				shippingName: priced.rate.name,
-				tax,
-				buyerTotal:
-					tax == null ? null : priced.goodsPrice.plus(priced.shippingPrice).plus(tax).toFixed(2),
-				addressSaved,
-				quotedTo,
-			});
-		},
-	)
-
-	// ── Merch checkout ───────────────────────────────────────────────────────
-	/**
-	 * Buy one merch Work in one size, on one charge: a goods line (print cost + margin,
-	 * `txcd_30011000`) and a shipping line (Printful's live rate, `txcd_92010001`).
-	 *
-	 * The session differs from a digital purchase session in exactly three ways, all of
-	 * them consequences of the goods being physical:
-	 * - `shipping_address_collection` is set (US only) — the delivery address is what
-	 *   tax resolves from and what Printful ships to.
-	 * - No `transfer_data` — there is no creator destination; Anthers sells its own
-	 *   goods and keeps the margin on the platform side by construction.
-	 * - The buyer records the size at checkout (`merchSize`), and the fulfillment row
-	 *   exists from completion onward — placed from the session's own shipping details.
-	 *
-	 * 🚨 **The size and the Printful variant are resolved HERE, never trusted from the
-	 * client.** The body names a `size` label only; the pricing (`priceMerchPick`,
-	 * shared with the picker and the quote route) re-reads the variant row that maps it
-	 * to a Printful catalog id, so a tampered size buys nothing that does not exist, and
-	 * the list price — Printful's own stamped retail price — is read fresh, so a Printful
-	 * price change is reflected before a buyer is charged rather than discovered by them.
-	 */
-	.post(
-		"/merch/checkout/:slug",
-		requireAuth,
-		requireVerified,
-		zValidator("json", merchCheckoutSchema, invalidBody),
-		async (c) => {
-			const user = c.get("user");
-			const q = await resolveMerchPurchase(c.req.param("slug") ?? "", user.id);
-			if (!q.ok) return c.json({ error: q.error }, q.status);
-			const { work } = q;
-
-			if (!paymentsConfigured()) return c.json({ error: "Payments are not configured." }, 503);
-			if (!printfulConfigured()) return c.json({ error: "Merch isn't available right now." }, 503);
-
-			// The buyer's Customer on file, for the session's reuse-or-as-needed posture.
-			const customerId = await stripeCustomerIdFor(user.id);
-
-			// The body names only the color and size labels — never a price, never a
-			// variant id. The (color, size) pair must name exactly one row, and the
-			// pricing is the shared derivation (`services/merch-quote.ts`) — the same
-			// code the picker and the quote route read, so no merch surface prices
-			// alone and a tampered size buys nothing that does not exist.
-			const { color, size } = c.req.valid("json");
-
-			let priced: MerchPricedPick;
-			try {
-				priced = await priceMerchPick(user.id, work.id, color, size);
-			} catch (e) {
-				const refusal = merchQuoteRefusal(e);
-				return c.json({ error: refusal.error }, refusal.status);
-			}
-			const {
-				variant,
-				listPrice,
-				goodsPrice,
-				discount: held,
-				shippingPrice,
-				amountBeforeTax,
-			} = priced;
-			const rate = priced.rate;
-
-			// The buyer's visible figure before tax: discounted goods + Printful's shipping.
-			const shipping = shippingPrice;
-			const amount = amountBeforeTax; // tax on top at the session
-
-			// The same sub-floor guard the generic checkout keeps, on the whole charge.
-			if (!isChargeableAmount(amount.toNumber())) {
-				return c.json(
-					{
-						error:
-							"This item is priced below what a card payment can process, so it can't be bought right now.",
-					},
-					409,
-				);
-			}
-
-			// The goods line's tax code is `CLOTHING_TAX_CODE`, set inline below where the
-			// line is built, and the shipping option carries `SHIPPING_TAX_CODE` the same
-			// way — the delivery line of a tangible-goods sale, separately stated (the
-			// Tax and Compliance Plan's Colorado rule). The quote route's tax calculation
-			// carries the same pair, so the panel's estimate and the session resolve the
-			// shipping line identically.
-
-			const session = await createCheckoutSession({
-				mode: "payment",
-				ui_mode: "elements",
-				// 🚨 Customer and customer_email are either-or (Stripe refuses the pair —
-				// found live 2026-10-15); with a Customer named, the session takes its
-				// email from the Customer, which the doors that create one always carry.
-				...(customerId
-					? {
-							// And the named Customer needs the session's permission to take
-							// the shipping address back ("Automatic tax calculation uses
-							// fields saved on the Customer", found live the same day): the
-							// delivery address the buyer types is exactly the fact this
-							// flow wants on their Customer, so `auto` it is. Stripe-side
-							// record only — Anthers stores no addresses.
-							customer_update: { shipping: "auto" as const },
-						}
-					: { customer_email: user.email }),
-				billing_address_collection: "required",
-				// The 2026-10-11 customer posture, same as every purchase surface: a buyer
-				// with a Customer on file pays on it; no Customer, no created one unless
-				// `if_required` requires it and the webhook links it. The suppression pair
-				// rides WITH the customer (`saved_payment_method_options` is refused on a
-				// customerless session — the badge probe's finding, 2026-10-15); a
-				// customerless session has no save UI to suppress.
-				...(customerId
-					? {
-							customer: customerId,
-							saved_payment_method_options: {
-								payment_method_save: "disabled",
-								payment_method_remove: "disabled",
-							},
-						}
-					: { customer_creation: "if_required" as const }),
-				line_items: [
-					{
-						price_data: {
-							currency: "usd",
-							tax_behavior: "exclusive",
-							unit_amount: Math.round(goodsPrice.toNumber() * 100),
-							product_data: {
-								name: work.title || `Work #${work.id}`,
-								tax_code: CLOTHING_TAX_CODE,
-							},
-						},
-						quantity: 1,
-					},
-				],
-				// US only — the merch flow ships domestically at launch, matching the
-				// billing posture.
-				shipping_address_collection: { allowed_countries: ["US"] },
-				// Printful's rate as the only shipping option, priced before the buyer sees
-				// the total.
-				shipping_options: [
-					{
-						shipping_rate_data: {
-							type: "fixed_amount",
-							fixed_amount: {
-								amount: Math.round(shippingPrice.toNumber() * 100),
-								currency: "usd",
-							},
-							display_name: rate.name,
-							// The delivery line's tax posture carried explicitly — the
-							// dahlia API version carries `tax_code` on `shipping_rate_data`
-							// (the comment above records the pair), so the session does not
-							// depend on the account's default shipping tax code to match
-							// the quote.
-							tax_code: SHIPPING_TAX_CODE,
-							...(!Number.isNaN(Number(rate.minDeliveryDays)) &&
-							Number.isFinite(rate.minDeliveryDays)
-								? {
-										delivery_estimate: {
-											minimum: { unit: "business_day", value: rate.minDeliveryDays },
-											maximum: { unit: "business_day", value: rate.maxDeliveryDays },
-										},
-									}
-								: {}),
-						},
-					},
-				],
-				automatic_tax: { enabled: true },
-				payment_intent_data: {
-					metadata: {
-						kind: "merch_purchase",
-						workId: String(work.id),
-						buyerId: String(user.id),
-						merchVariantId: String(variant.id),
-						// The placement facts ride the metadata rather than being re-derived
-						// at completion: the session's own shipping option id is what the
-						// buyer was charged (re-quoting can diverge — Printful returned two
-						// rates in the 2026-10-09 probe), the discounted goods figure is
-						// what the packing slip's retail price names, and the Sync Variant
-						// id is what the Printful order's item must reference (`sync_variant_id`
-						// is Printful's id, not our row's — 2026-10-09's probe caught the
-						// mismatch before a real order could).
-						shippingMethod: rate.id,
-						merchGoodsPrice: goodsPrice.toFixed(2),
-						merchSyncVariantId: String(variant.syncVariantId),
-						// The offsetting posture (Parker, 2026-10-09: "always do the co2
-						// offset") is enforced at quote time below; no metadata for it.
-					},
-				},
-				// Where a redirect-based payment method sends the buyer back; cards don't
-				// use it, but the session requires it when one is enabled.
-				return_url: `${process.env.PUBLIC_WEB_URL?.trim() || "http://localhost:3000"}${STRIPE_RETURN_PATHS.checkoutReturn}`,
-			});
-			if (!session?.client_secret) return c.json({ error: "Payments are not configured." }, 503);
-
-			// Record the purchase pending, exactly as a digital one — completed by the
-			// webhook, which places the Printful order from the session's shipping details.
-			// The goods line's money is what the buyer was shown: the discounted price.
-			// Printful's costs are NOT known figures yet — stamped at completion from the
-			// order's own costs object.
-			//
-			// 🚨 **The earnings-shaped column carries the discount-adjusted margin** — the
-			// seller's share on a platform-side sale, charged on the goods line. The buyer
-			// sees the discount; the books record what Anthers actually kept, and Printful's
-			// stamped costs at completion are what the realized figure is computed from.
-			await db.insert(purchases).values({
-				buyerId: user.id,
-				workId: work.id,
-				// Anthers sells its own goods: the creator columns are Anthers' own account.
-				creatorId: null,
-				workTitle: work.title,
-				workType: work.type,
-				workPublicId: work.publicId,
-				type: "physical",
-				amount: amount.toFixed(2),
-				processingFee: calculateFees(amount, { type: "physical" }).processingFee.toFixed(2),
-				salesTax: "0.00",
-				// The margin on the goods line: discounted price less Printful's wholesale
-				// cost snapshot. The order's own costs object refines this at completion.
-				creatorEarnings: goodsPrice.minus(variant.catalogPrice).toFixed(2),
-				stripePaymentIntentId: session.id,
-				status: "pending",
-				merchSize: size,
-				// The Badge the discount resolved from — the receipt's discount line names it.
-				...(held ? { merchDiscountBadge: held.badge } : {}),
-			});
-
-			return c.json({
-				amount: amount.toFixed(2),
-				listPrice: listPrice.toFixed(2),
-				goodsPrice: goodsPrice.toFixed(2),
-				discount: held,
-				shipping: shipping.toFixed(2),
-				size,
-				salesTax: null,
-				buyerTotal: null,
-				clientSecret: session.client_secret,
-			});
-		},
-	)
 
 	// ── Checkout ─────────────────────────────────────────────────────────────
 	.post("/checkout/:slug", requireAuth, requireVerified, async (c) => {

@@ -62,7 +62,6 @@ import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { createTransferReversal, issueRefund, paymentsConfigured } from "../lib/processor.js";
 import { oweAccessReceipt } from "./access-receipts.js";
 import { recordNettingForRefund } from "./netting.js";
-import { unwindMerchOrder } from "./printful.js";
 
 type Purchase = typeof purchases.$inferSelect;
 
@@ -388,13 +387,6 @@ export async function settleRefundedPurchase(
 		return { ok: true, purchase, shortfall: new Decimal(0), alreadyRefunded: true };
 	}
 	await oweAccessReceipt(updated.id, "refund");
-
-	// A merch purchase unwinds its Printful side with the money: cancellation where
-	// Printful's status still allows it (draft/pending), and the record either way —
-	// a fulfillment begun is the B-stock posture's problem, never the refund's.
-	if (updated.type === "physical") {
-		await unwindMerchOrder(updated.id);
-	}
 
 	// The creator's share did not come back at Stripe — recover it from later earnings
 	// instead. The refund id is the netting row's own identity, so a replayed or

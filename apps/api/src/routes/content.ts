@@ -236,7 +236,6 @@ import {
 	purgeWorkMedia,
 	sweepCollected,
 } from "../services/media-purge.js";
-import { merchStoreFactsByWork } from "../services/merch-store.js";
 import { notifyMany } from "../services/notifications.js";
 import {
 	consumedSeconds,
@@ -6150,13 +6149,6 @@ const contentRoutes = new Hono()
 			allowanceSpent(userId),
 		]);
 		await Promise.all(rows.map(resolveWorkThumbnail));
-		// The goods Works' store facts — what a card shows of a buyable goods Work in
-		// place of a lock chip (the purchase gates receiving, never seeing). The rule
-		// and its bounds are the store-facts service's; batch-loaded with the page.
-		const merchMap = await merchStoreFactsByWork(
-			rows.filter((w) => w.type === "physical").map((w) => w.id),
-		);
-
 		return c.json({
 			creator,
 			works: await Promise.all(
@@ -6174,10 +6166,6 @@ const contentRoutes = new Hono()
 						(buildsByWork.get(w.id) ?? []).some((b) => b.isPrimary),
 						(buildsByWork.get(w.id) ?? []).find((b) => b.isPrimary)?.requiresIsolation ?? false,
 					)),
-					// Attached here rather than inside the serializer: the serializer's own
-					// call sites mostly list digital work, and the facts are a goods Work's
-					// store, not a Work field. `undefined`-shaped on everything non-physical.
-					...(merchMap.has(w.id) ? { merch: merchMap.get(w.id) } : {}),
 				})),
 			),
 		});
