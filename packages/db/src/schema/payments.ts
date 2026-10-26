@@ -71,8 +71,8 @@ export const purchases = pgTable(
 		workId: integer("work_id").references(() => works.id, { onDelete: "set null" }),
 		// Who was paid. Denormalised deliberately, because it used to be reachable ONLY by
 		// joining `works` — so a deleted Work took the seller's identity with it and the
-		// sale silently left that creator's own earnings maths (`calculate-crf` joined
-		// through `works` to get here). Null for charges with no creator side (a support top-up).
+		// sale silently left that creator's own earnings. Null for charges with no creator
+		// side (a support top-up).
 		creatorId: integer("creator_id").references(() => users.id, { onDelete: "set null" }),
 		// A snapshot of what was bought, as it was at the time of sale. These are NOT a
 		// cache of the Work — they are what the row still says after the Work is gone, and
@@ -215,7 +215,7 @@ export const purchases = pgTable(
 	(table) => [
 		index("idx_purchases_buyer").on(table.buyerId),
 		index("idx_purchases_work").on(table.workId),
-		// creator_id arrives already indexed: it is what calculate-crf now sums by, and
+		// creator_id arrives already indexed: earnings and refund sums read by it, and
 		// an unindexed FK is the exact debt `0015` was written to clear.
 		index("idx_purchases_creator").on(table.creatorId),
 		// Replaces the UNIQUE constraint the column carried until `0033`. The lookup is
@@ -608,30 +608,6 @@ export const crfLedger = pgTable(
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [index("idx_crf_ledger_purchase").on(table.purchaseId)],
-);
-
-// org — per-cycle CRF subsidy calculation. Org money record; the `isSelfHosting` flag
-// it reads was closed to a 503 (PR #48) because the feature it prices does not exist.
-export const crfSubsidies = pgTable(
-	"crf_subsidies",
-	{
-		id: serial("id").primaryKey(),
-		creatorId: integer("creator_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
-		billingCycle: text("billing_cycle").notNull(),
-		estimatedHostingCost: numeric("estimated_hosting_cost").notNull(),
-		creatorEarnings: numeric("creator_earnings").notNull(),
-		subsidyAmount: numeric("subsidy_amount").notNull(),
-		// Byte counts can exceed 2^31 — bigint, not integer.
-		storageBytes: bigint("storage_bytes", { mode: "number" }).default(0),
-		projectCount: integer("project_count").default(0),
-		postCount: integer("post_count").default(0),
-		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-	},
-	(table) => [
-		uniqueIndex("uq_crf_subsidies_creator_cycle").on(table.creatorId, table.billingCycle),
-	],
 );
 
 /**

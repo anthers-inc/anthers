@@ -1,0 +1,1 @@
+DROP TABLE "crf_subsidies" CASCADE;

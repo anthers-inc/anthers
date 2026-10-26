@@ -1086,12 +1086,8 @@ const subscriptionRoutes = new Hono()
 	 * code path bills a creator for storage at all, `SELF_HOST_FEE` has been `0` since
 	 * 2026-08-12, and no UI anywhere calls this endpoint.
 	 *
-	 * ⚠️ And its one live effect is **inverted** — it costs the claimant money rather than
-	 * saving it. `calculate-crf` reads the flag, gets a zeroed hosting cost from
-	 * `estimateStorageCost`, and its `earnings.gte(hostingCost)` test then passes for
-	 * everyone (earnings are never negative), so it records a zero subsidy and moves on.
-	 * Setting this flag today makes a creator permanently ineligible for the hosting
-	 * subsidy. A 503 removes a footgun; it does not withhold a feature.
+	 * ⚠️ **Nothing reads the flag.** Setting it today changes no figure anywhere, which is
+	 * what makes the 503 a removal of a footgun rather than the withholding of a feature.
 	 *
 	 * **The eventual shape is not a better-guarded setter.** The flag should be DERIVED
 	 * from origin registration — a creator is self-hosting if and only if the hub knows a

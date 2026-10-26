@@ -228,7 +228,6 @@ export const QUEUES = {
 	// Move settled, held credits into each creator's connected-account balance, 14 days
 	// after each credit's own settlement. See transfer-held-credits.ts.
 	TRANSFER_HELD_CREDITS: "transfer-held-credits",
-	CALCULATE_CRF: "calculate-crf", // Legacy name; calculates hosting subsidy allocations
 	// The storage ladder's meter — snapshot what each account holds against its allowance.
 	// See storage-usage.ts for the DB-first counting rule and the per-purpose split.
 	STORAGE_USAGE: "storage-usage",
@@ -513,10 +512,6 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 2,
 		expireInMinutes: 30,
 	},
-	[QUEUES.CALCULATE_CRF]: {
-		retryLimit: 1,
-		expireInMinutes: 30,
-	},
 	[QUEUES.STORAGE_USAGE]: {
 		// Idempotent upsert per cycle — a retry rewrites the same row, never duplicates.
 		retryLimit: 1,
@@ -595,6 +590,13 @@ export const RETIRED_QUEUES: readonly string[] = [
 	// the EPUB era's "ebook" ingest is a different job on a different table, so the old
 	// name would have said the opposite of what the handler does.
 	"rasterize-ebook",
+	// The hosting-subsidy calculation, removed 2026-10-25 with the metered storage model
+	// it priced: storage is a hard cap, so there is no overflow to compare against a
+	// creator's earnings. Deliberately NOT on `RESCHEDULE_ON_RETIRE` — retiring deletes
+	// queued jobs with the queue, and that loses at most one night because the job was
+	// idempotent per cycle and the next run would have picked up everyone still lacking
+	// a row.
+	"calculate-crf",
 	// The single-file media lane, retired on 2026-10-18 after one day of measurement: a
 	// real audio pair put the worker at 24% CPU — single-file was the right call for video
 	// (an encode saturates both vCPUs) and the wrong call for audio (the lane idled three
@@ -651,14 +653,8 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// nothing to do with holding money, and a few hours' latency on a 14-day hold is
 	// invisible. The slot was picked per the brief (4 AM UTC, stated here).
 	[QUEUES.TRANSFER_HELD_CREDITS, "0 4 * * *"],
-	// hosting subsidy calculation (legacy queue name: calculate-crf)
-	[QUEUES.CALCULATE_CRF, "0 1 * * *"], // 1 AM daily (idempotent per month)
-	// 1:30 AM daily, after the subsidy job reads the same tables and before the night's
-	// other sweeps. The one cron whose ordering rule is about *readers*: calculate-crf's
-	// snapshot of `assets.file_size` at 1 AM and this meter's at 1:30 could in principle
-	// straddle an upload landing — acceptable, because both figures are dated snapshots of
-	// a moving stock, not a transaction. The meter must precede nothing; it must only run
-	// daily so the in-flight month's estimate stays fresh.
+	// 1:30 AM daily. Its only requirement is that it runs daily, so the in-flight month's
+	// estimate stays fresh; the hour keeps it clear of the midnight and 2 AM money jobs.
 	[QUEUES.STORAGE_USAGE, "30 1 * * *"], // 1:30 AM daily (idempotent upsert per cycle)
 	// 2:30 AM daily, after the meter's 1:30: a Work this sweep purges changes the stock
 	// the meter measures, so the meter's reading of the ending month should already

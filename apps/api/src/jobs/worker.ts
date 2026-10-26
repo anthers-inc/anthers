@@ -40,7 +40,6 @@ import { sweepSignupChallenges } from "../services/signup-challenges.js";
 import { deleteExpiredSignupCodes } from "../services/signup-codes.js";
 import { publishFundLedger } from "../services/time-pool-fund.js";
 import { type AccessReceiptsJobData, accessReceiptsJob } from "./access-receipts.js";
-import { calculateCrfSubsidies } from "./calculate-crf.js";
 import { runConnectionCensus } from "./connection-census.js";
 import { runDeadlineReminderSweep } from "./deadline-reminders.js";
 import { type DistributePoolData, distributePool } from "./distribute-pool.js";
@@ -258,14 +257,6 @@ async function start() {
 				console.log(
 					`[transfer-held-credits] job ${job.id}: moved money for ${creators} creator(s)`,
 				);
-		}
-	});
-
-	// hosting subsidy calculation (legacy queue name: calculate-crf)
-	await queue.work(QUEUES.CALCULATE_CRF, async (jobs) => {
-		for (const job of jobs) {
-			console.log(`[calculate-crf] Processing job ${job.id}`);
-			await calculateCrfSubsidies();
 		}
 	});
 

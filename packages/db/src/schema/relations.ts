@@ -21,7 +21,7 @@ import {
 	workSaves,
 	works,
 } from "./content.js";
-import { crfLedger, crfSubsidies, purchases, stripeAccounts } from "./payments.js";
+import { crfLedger, purchases, stripeAccounts } from "./payments.js";
 import {
 	accountCycles,
 	attentionEvents,
@@ -63,7 +63,6 @@ export const usersRelations = relations(users, ({ one, many }) => ({
 	// Payments
 	stripeAccount: one(stripeAccounts),
 	purchases: many(purchases),
-	crfSubsidies: many(crfSubsidies),
 
 	// Accounts & economics
 	billingAccount: one(billingAccounts),
@@ -217,10 +216,6 @@ export const purchasesRelations = relations(purchases, ({ one, many }) => ({
 
 export const crfLedgerRelations = relations(crfLedger, ({ one }) => ({
 	purchase: one(purchases, { fields: [crfLedger.purchaseId], references: [purchases.id] }),
-}));
-
-export const crfSubsidiesRelations = relations(crfSubsidies, ({ one }) => ({
-	creator: one(users, { fields: [crfSubsidies.creatorId], references: [users.id] }),
 }));
 
 // ─── Subscriptions ───────────────────────────────────────────────────────────

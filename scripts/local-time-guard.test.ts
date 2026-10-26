@@ -39,7 +39,6 @@ import { stripComments } from "./node-env-guard.test.js";
 const CYCLE_FILES = [
 	"apps/api/src/jobs/distribute-pool.ts",
 	"apps/api/src/jobs/settle-cycle.ts",
-	"apps/api/src/jobs/calculate-crf.ts",
 	"apps/api/src/routes/subscriptions.ts",
 	"apps/api/src/routes/payments.ts",
 	"apps/api/src/services/billing.ts",

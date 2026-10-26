@@ -25,7 +25,6 @@ import type {
 	ContentAnalyticsItem,
 	CreatorEarnings,
 	CreatorTrafficResponse,
-	CrfSubsidy,
 	TimeseriesEntry,
 } from "../lib/types";
 
@@ -346,66 +345,6 @@ function RevenueSection({ earnings }: { earnings: CreatorEarnings | null }) {
 	);
 }
 
-// ─── Hosting Subsidy ───
-
-function FoundationSubsidySection({
-	crfStatus,
-}: {
-	crfStatus: { balance: string; subsidies: CrfSubsidy[] } | null;
-}) {
-	if (!crfStatus || crfStatus.subsidies.length === 0) return null;
-
-	const latest = crfStatus.subsidies[0];
-	const hasSubsidy = parseFloat(latest.subsidyAmount) > 0;
-
-	function formatBytes(bytes: number): string {
-		if (bytes < 1024) return `${bytes} B`;
-		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-		if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-		return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-	}
-
-	return (
-		<div className="card bg-base-200 mb-8">
-			<div className="card-body p-4">
-				<h3 className="font-semibold text-sm mb-3">Hosting Costs &amp; Subsidy</h3>
-				<div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
-					<div>
-						<div className="text-xs text-base-content/50">Hosting Cost</div>
-						<div className="text-lg font-bold">${latest.estimatedHostingCost}</div>
-					</div>
-					<div>
-						<div className="text-xs text-base-content/50">Your Earnings</div>
-						<div className="text-lg font-bold">${latest.creatorEarnings}</div>
-					</div>
-					<div>
-						<div className="text-xs text-base-content/50">Subsidy</div>
-						<div className={`text-lg font-bold ${hasSubsidy ? "text-success" : ""}`}>
-							${latest.subsidyAmount}
-						</div>
-					</div>
-					<div>
-						<div className="text-xs text-base-content/50">Storage Used</div>
-						<div className="text-lg font-bold">{formatBytes(latest.storageBytes ?? 0)}</div>
-					</div>
-				</div>
-				<p className="text-xs text-base-content/40">
-					{hasSubsidy
-						? "Anthers is covering part of your hosting costs. As your audience grows, the subsidy decreases."
-						: "Your earnings cover your hosting costs. Thank you for being part of the community!"}
-				</p>
-				<p className="text-xs text-base-content/40 mt-1">
-					{latest.projectCount} projects, {latest.postCount} posts —{" "}
-					{new Date(latest.billingCycle).toLocaleDateString("en-US", {
-						month: "long",
-						year: "numeric",
-					})}
-				</p>
-			</div>
-		</div>
-	);
-}
-
 // ─── Traffic (first-party, identity-free) ───
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -526,10 +465,6 @@ export default function AnalyticsDashboardPage() {
 	const [content, setContent] = useState<ContentAnalyticsItem[]>([]);
 	const [timeseries, setTimeseries] = useState<TimeseriesEntry[]>([]);
 	const [earnings, setEarnings] = useState<CreatorEarnings | null>(null);
-	const [crfStatus, setCrfStatus] = useState<{
-		balance: string;
-		subsidies: CrfSubsidy[];
-	} | null>(null);
 	const [loading, setLoading] = useState(true);
 
 	useEffect(() => {
@@ -549,17 +484,11 @@ export default function AnalyticsDashboardPage() {
 			.catch(() => {})
 			.finally(() => setLoading(false));
 
-		// Fetch earnings and subsidy status (non-blocking, independent of period)
+		// Fetch earnings (non-blocking, independent of period)
 		client.api.subscriptions.earnings
 			.$get()
 			.then((res) => res.json())
 			.then((data) => setEarnings(data as CreatorEarnings))
-			.catch(() => {});
-
-		client.api.payments.crf.status
-			.$get()
-			.then((res) => res.json())
-			.then((data) => setCrfStatus(data as { balance: string; subsidies: CrfSubsidy[] }))
 			.catch(() => {});
 	}, [period]);
 
@@ -600,7 +529,6 @@ export default function AnalyticsDashboardPage() {
 					<ContentPerformanceTable content={content} />
 					<TrafficSection period={period} />
 					<RevenueSection earnings={earnings} />
-					<FoundationSubsidySection crfStatus={crfStatus} />
 				</>
 			)}
 		</div>

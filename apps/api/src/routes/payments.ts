@@ -34,8 +34,6 @@ import {
 	badgeCharges,
 	badges,
 	billingAccounts,
-	crfLedger,
-	crfSubsidies,
 	disputes,
 	invoices,
 	purchases,
@@ -2745,29 +2743,6 @@ const paymentRoutes = new Hono()
 				0,
 				REFUND_AUTO_CAP - (await refundsAfterDownloadInWindow(user.id)),
 			),
-		});
-	})
-
-	// ── Subsidy Status ────────────────────────────────────────────────────
-	.get("/crf/status", requireAuth, async (c) => {
-		const user = c.get("user");
-
-		// Total charitable balance
-		const [balance] = await db
-			.select({ total: sql<string>`COALESCE(SUM(amount), '0.00')` })
-			.from(crfLedger);
-
-		// User's subsidies (last 6)
-		const subsidies = await db
-			.select()
-			.from(crfSubsidies)
-			.where(eq(crfSubsidies.creatorId, user.id))
-			.orderBy(desc(crfSubsidies.billingCycle))
-			.limit(6);
-
-		return c.json({
-			balance: balance.total,
-			subsidies,
 		});
 	})
 

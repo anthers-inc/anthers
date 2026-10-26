@@ -61,7 +61,6 @@ describe("what the creator is shown they receive", () => {
 	test("Anthers keeps nothing — the deduction IS the card fee", () => {
 		for (const price of [1, 5, 25]) {
 			const r = calculateFees(new Decimal(price), { type: "digital" });
-			expect(r.crfFee.toNumber()).toBe(0);
 			expect(r.deliveryFee.toNumber()).toBe(0);
 			expect(price - r.creatorEarnings.toNumber()).toBeCloseTo(r.processingFee.toNumber(), 10);
 		}

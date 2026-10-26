@@ -2297,7 +2297,8 @@ describe("Checkout — session construction under automatic tax", () => {
 		// The list price is what the buyer was shown; the creator receives it less the
 		// at-cost card processing. Anthers retains none of it. The retired fee fields
 		// (`crfFee`, `deliveryFee`) left the quote when their columns left the purchase
-		// row — asserting their absence is the regression test for that.
+		// row, and `crfFee` was deleted outright with the fund it named — asserting their
+		// absence is the regression test for both.
 		expect(body.amount).toBe(PRICE);
 		expect(body.crfFee).toBeUndefined();
 		expect(body.deliveryFee).toBeUndefined();
