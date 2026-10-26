@@ -29,11 +29,6 @@ function cardCreatorName(work: WorkCardItem): string {
 /** A Work as the Catalog lists it, plus the creator the listing joins on. */
 type WorkCardItem = Work & {
 	creator?: { handle: string; displayName?: string | null; avatar?: string | null };
-	/**
-	 * A goods release's store facts — the art its first merch variant carries and the
-	 * cheapest variant's list price. Present on a physical Work when the store has either.
-	 */
-	merch?: { mockupUrl: string | null; fromPrice: string | null } | null;
 };
 
 /**
@@ -76,15 +71,11 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 	// presentation* while it is simply buyable — the purchase gates RECEIVING the
 	// shirt, never SEEING it, so the lock chip never stands in for a store. The
 	// type-poster band and the price badge carry what a lock would have; a
-	// merch-configured Work's mockup is exactly what the store panel opens on.
+	// goods Work carries a type poster instead of a photograph.
 	const isGoods = post.type === "physical" || post.type === "service";
 	const locked = presentsAsLocked(access) && !(isGoods && access?.reason === "payment_required");
-	/* The goods band's artwork: the creator's thumbnail, or the store's first mockup
-	   (physical only — a service carries no merch rows). The mockup is public the same
-	   way the store panel is, so the band shows what the variants route shows. */
-	const goodsArtwork = post.type === "physical" ? (post.merch?.mockupUrl ?? null) : null;
-	/* Whatever the creator gave this Work to show: its thumbnail, or the store's mockup. */
-	const coverArt = post.thumbnail || goodsArtwork;
+	/* Whatever the creator gave this Work to show. */
+	const coverArt = post.thumbnail;
 
 	// What this user asked to meet at this rung, and for each kind of content in it. **A veil is
 	// not a lock**: a veiled Work is listed, reachable and earning, and the user can uncover it
@@ -189,9 +180,6 @@ export default function WorkCard({ work: post }: { work: WorkCardItem }) {
 						    it, so the badge says buy rather than lock. The store's list prices
 						    are the source; the tile shows only the cheapest, since no color
 						    is picked here. */}
-						{post.type === "physical" && post.merch?.fromPrice && (
-							<span className="badge badge-sm badge-secondary">from ${post.merch.fromPrice}</span>
-						)}
 						{post.estimatedReadMinutes && post.type === "text" && (
 							<span className="text-xs text-base-content/40">
 								{post.estimatedReadMinutes} min read
