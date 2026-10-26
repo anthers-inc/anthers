@@ -473,10 +473,15 @@ export type SignupIdentity =
 
 /** Why a signup could not be finished yet. The message is shown to the person, so it is a sentence. */
 export interface SignupRefusal {
-	reason: "no_identity" | "identity_taken" | "handle_unavailable" | "identity_unavailable";
+	reason:
+		| "no_identity"
+		| "identity_taken"
+		| "handle_unavailable"
+		| "identity_unavailable"
+		| "password";
 	message: string;
-	/** A person can act on 409s; a 503 is Anthers' problem and says to try again. */
-	status: 409 | 503;
+	/** A person can act on 400s and 409s; a 503 is Anthers' problem and says to try again. */
+	status: 400 | 409 | 503;
 }
 
 /**
@@ -495,10 +500,16 @@ export interface SignupRefusal {
  *
  * Called only once the address has been proved, which is what makes creating an identity here
  * safe: an identity issued from a typed address would be bound to whoever typed it.
+ *
+ * ⭐ **For a hosted identity, `password` is the person's own, chosen on the finishing page.** It
+ * is used in the one request that creates the account and never written down — the node answers
+ * with a session, which is the credential the row keeps. A missing or unusable password is the
+ * person's to fix, so it is the one refusal here that leaves the handle held and creates nothing.
  */
 export async function establishSignupIdentity(
 	row: PendingSignup,
 	email: string,
+	password?: string,
 ): Promise<{ identity: SignupIdentity } | { refusal: SignupRefusal }> {
 	if (row.atprotoDid) {
 		const [holder] = await db
@@ -530,8 +541,10 @@ export async function establishSignupIdentity(
 	}
 
 	if (row.hostedHandle) {
-		const { createHostedAccount, HostedAccountError, hostedIdentityOffered, hostedPdsUrl } =
-			await import("./hosted-accounts.js");
+		const { createHostedAccount, HostedAccountError, hostedIdentityOffered } = await import(
+			"./hosted-accounts.js"
+		);
+		const { hostedPdsUrl } = await import("./hosted-node.js");
 		if (!(await hostedIdentityOffered())) {
 			return {
 				refusal: {
@@ -542,7 +555,11 @@ export async function establishSignupIdentity(
 			};
 		}
 		try {
-			const account = await createHostedAccount({ handleName: row.hostedHandle, email });
+			const account = await createHostedAccount({
+				handleName: row.hostedHandle,
+				email,
+				password: password ?? "",
+			});
 			return { identity: { kind: "hosted", account, pdsUrl: hostedPdsUrl() } };
 		} catch (err) {
 			if (err instanceof HostedAccountError && err.fault === "name") {
@@ -551,6 +568,12 @@ export async function establishSignupIdentity(
 					.set({ hostedHandle: null })
 					.where(eq(pendingSignups.token, row.token));
 				return { refusal: { reason: "handle_unavailable", message: err.message, status: 409 } };
+			}
+			// A password the node (or Anthers' own rule) refused is the person's to fix without
+			// losing the handle they are holding, so it is a 400 that leaves the pending signup
+			// where it was.
+			if (err instanceof HostedAccountError && err.fault === "password") {
+				return { refusal: { reason: "password", message: err.message, status: 400 } };
 			}
 			// Nobody's fault and invisible from outside, so it is the one that has to be logged.
 			console.error("[pending-signups] could not create the identity:", err);
@@ -625,12 +648,13 @@ export async function completePendingSignup(
 export async function createAccountFromSignup(
 	row: PendingSignup,
 	email: string,
+	password?: string,
 ): Promise<
 	| { refusal: SignupRefusal }
 	| { user: typeof users.$inferSelect; spent: { picks: SignupPicks; next: string } | null }
 > {
 	await markAddressProved(row.token, email);
-	const settled = await establishSignupIdentity(row, email);
+	const settled = await establishSignupIdentity(row, email, password);
 	if ("refusal" in settled) return settled;
 
 	const { identity } = settled;

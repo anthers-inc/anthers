@@ -22,16 +22,18 @@
  * connection string appearing on a command line:
  *   make prod-db CMD="bun run hosted:record --user 39"
  *
- * 🚨 **The password is checked before it is sealed, because a sealed wrong password is the
- * failure nobody can undo from outside.** The check is a real `createSession` against the node
- * with the DID and that password: only the PDS that actually holds the account will accept it,
- * so one call proves both that the account is here and that the credential is right. The value
- * arrives in the environment, never as an argument, and is never printed.
+ * 🚨 **The password is checked before its session is sealed, because a sealed session nobody can
+ * renew is the failure nobody can undo from outside.** The check is a real `createSession`
+ * against the node with the DID and that password: only the PDS that actually holds the account
+ * will accept it, so one call proves both that the account is here and that the credential is
+ * right. The password arrives in the environment, never as an argument, and is never printed or
+ * stored — the session it returns is what the row keeps.
  */
 import { db } from "@anthers/db";
 import { hostedAccounts, users } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
-import { hostedPdsUrl, recordHostedIdentity } from "../services/hosted-accounts.js";
+import { recordHostedIdentity } from "../services/hosted-accounts.js";
+import { hostedPdsUrl } from "../services/hosted-node.js";
 
 interface Args {
 	userId: number | null;
@@ -113,10 +115,23 @@ async function main(): Promise<void> {
 		process.exitCode = 1;
 		return;
 	}
-	// The session is only a probe; nothing keeps it.
-	await response.body?.cancel();
+	// The session is the credential the row keeps; the password is only how this run proved and
+	// obtained it.
+	const answered = (await response.json().catch(() => ({}))) as {
+		accessJwt?: string;
+		refreshJwt?: string;
+	};
+	if (!answered.accessJwt || !answered.refreshJwt) {
+		console.log(JSON.stringify({ did, handle, recorded: false, reason: "session_unanswered" }));
+		process.exitCode = 1;
+		return;
+	}
 
-	await recordHostedIdentity(userId, { did, handle, password });
+	await recordHostedIdentity(userId, {
+		did,
+		handle,
+		session: { accessJwt: answered.accessJwt, refreshJwt: answered.refreshJwt },
+	});
 
 	// The account's own row still describes the host it came from: `atproto_pds_url` pointed at
 	// the old PDS after the move. Writing it here keeps the row true, and nothing depends on it

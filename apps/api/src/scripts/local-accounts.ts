@@ -147,7 +147,13 @@ export async function createLocalAccount(opts: LocalAccountOptions): Promise<Use
 	const pending = await readPendingSignup(pendingToken);
 	if (!pending) throw new Error(`the pending signup for ${opts.email} vanished before it was used`);
 
-	const created = await createAccountFromSignup(pending, opts.email);
+	const created = await createAccountFromSignup(
+		pending,
+		opts.email,
+		// A fixture password, generated per account and never printed. A real signup's password is
+		// the person's; this only has to satisfy the same rule and never be stored.
+		`fixture-${crypto.randomUUID()}`,
+	);
 	if ("refusal" in created) {
 		throw new Error(
 			`the account for ${opts.email} was refused: ${created.refusal.message} (${created.refusal.reason}). ` +

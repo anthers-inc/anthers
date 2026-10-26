@@ -32,8 +32,10 @@ import { hostedAccounts, hostedIdentities } from "@anthers/db/schema";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { eq } from "drizzle-orm";
 import { base58Decode } from "../lib/base58.js";
-import { nodeCall, recordRecoveryKey } from "./hosted-accounts.js";
+import { recordRecoveryKey } from "./hosted-accounts.js";
 import { readIdentityHead } from "./hosted-identity.js";
+import { nodeCall } from "./hosted-node.js";
+import { sessionForHostedAccount } from "./hosted-session-store.js";
 import { open } from "./secret-box.js";
 
 /**
@@ -82,7 +84,8 @@ type SeatRefusal = Extract<RecoveryKeySeatResult, { status: "refused" }>;
 /** The hosted identity this account holds, opened and ready to act on. */
 interface OpenedAccount {
 	did: string;
-	password: string;
+	/** The legacy fallback, when the row still carries one; null on a session-only account. */
+	password: string | null;
 }
 
 /**
@@ -106,21 +109,19 @@ async function openAccountFor(userId: number): Promise<OpenedAccount | SeatRefus
 			message: "This account doesn't hold an identity Anthers issued.",
 		};
 	}
-	// `open` THROWS on a value this deployment's key cannot open — it does not return empty —
-	// which is the same handling `purgeHostedIdentity` uses for the same reason.
-	let password: string;
-	try {
-		password = open(row.sealedPassword);
-	} catch {
-		console.error(
-			`[recovery-key] cannot open the credential for ${row.did} — only the node's admin ` +
-				`password can reach that account now`,
-		);
-		return {
-			status: "refused",
-			fault: "operational",
-			message: "Anthers can't reach that identity right now. Nothing has changed.",
-		};
+	// `open` THROWS on a value this deployment's key cannot open — it does not return empty.
+	// That is only fatal when there is no session to use instead, which the caller finds out
+	// when the store comes back with nothing.
+	let password: string | null = null;
+	if (row.sealedPassword) {
+		try {
+			password = open(row.sealedPassword);
+		} catch {
+			console.error(
+				`[recovery-key] cannot open the legacy credential for ${row.did}; ` +
+					`using its session if there is one`,
+			);
+		}
 	}
 	return { did: row.did, password };
 }
@@ -129,28 +130,24 @@ function isRefusal(v: OpenedAccount | SeatRefusal): v is SeatRefusal {
 	return "status" in v;
 }
 
-/** Sign in to the node as the account. Returns the access token or a refusal. */
-async function sessionFor(account: OpenedAccount, call: NodeCall): Promise<string | SeatRefusal> {
-	const session = await call("/xrpc/com.atproto.server.createSession", {
-		method: "POST",
-		body: JSON.stringify({ identifier: account.did, password: account.password }),
+/** A session for the account, or a refusal that says which kind of failure it is. */
+async function sessionFor(
+	account: OpenedAccount,
+	doFetch: typeof fetch,
+): Promise<string | SeatRefusal> {
+	const session = await sessionForHostedAccount(account.did, account.password, {
+		fetchImpl: doFetch,
 	});
-	if (!session.ok) {
+	if (session.token === null) {
 		return {
 			status: "refused",
 			fault: "operational",
-			message: "Anthers couldn't reach the identity server. Try again in a little while.",
+			message: session.authorizationLost
+				? "That identity needs to authorize Anthers again before a key can be seated."
+				: "Anthers couldn't reach the identity server. Try again in a little while.",
 		};
 	}
-	const token = session.body.accessJwt as string | undefined;
-	if (!token) {
-		return {
-			status: "refused",
-			fault: "operational",
-			message: "The identity server answered without a session.",
-		};
-	}
-	return token;
+	return session.token;
 }
 
 type NodeCall = (
@@ -189,7 +186,7 @@ export async function requestRecoveryKeyToken(
 		return { status: "refused", message: opened.message, fault: refusalFault(opened) };
 	}
 
-	const token = await sessionFor(opened, nodeCall);
+	const token = await sessionFor(opened, opts.fetchImpl ?? fetch);
 	if (typeof token !== "string") {
 		return { status: "refused", message: token.message, fault: refusalFault(token) };
 	}
@@ -260,7 +257,7 @@ export async function seatRecoveryKey(
 		return { status: "already-held", didKey: input.didKey };
 	}
 
-	const token = await sessionFor(opened, nodeCall);
+	const token = await sessionFor(opened, opts.fetchImpl ?? fetch);
 	if (typeof token !== "string") return token;
 
 	const signed = await nodeCall("/xrpc/com.atproto.identity.signPlcOperation", {

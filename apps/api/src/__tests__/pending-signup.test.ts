@@ -323,6 +323,7 @@ describe("resuming it in another browser", () => {
 
 		const res = await app.request("/api/auth/signup/complete", {
 			method: "POST",
+			body: JSON.stringify({}),
 			headers: { ...JSON_HEADERS, Cookie: `signup_pending=${token}` },
 		});
 		expect(res.status).toBe(201);
@@ -337,6 +338,7 @@ describe("resuming it in another browser", () => {
 		// Spent. A back button cannot mint a second account from the same stamp.
 		const again = await app.request("/api/auth/signup/complete", {
 			method: "POST",
+			body: JSON.stringify({}),
 			headers: { ...JSON_HEADERS, Cookie: `signup_pending=${token}` },
 		});
 		expect(again.status).toBe(404);
@@ -349,6 +351,7 @@ describe("resuming it in another browser", () => {
 		const { token } = await begin({ email: addr("unproved") });
 		const res = await app.request("/api/auth/signup/complete", {
 			method: "POST",
+			body: JSON.stringify({}),
 			headers: { ...JSON_HEADERS, Cookie: `signup_pending=${token}` },
 		});
 		expect(res.status).toBe(404);
@@ -539,6 +542,7 @@ describe("what an address-resumed signup carries across, and what it proves agai
 		// 🚨 A hint cannot finish a signup. Without an identity proved here, nothing is created.
 		const finished = await app.request("/api/auth/signup/complete", {
 			method: "POST",
+			body: JSON.stringify({}),
 			headers: { ...JSON_HEADERS, Cookie: `signup_pending=${rebound}` },
 		});
 		expect(finished.status).toBe(409);

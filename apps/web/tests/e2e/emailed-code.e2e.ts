@@ -42,6 +42,10 @@ test("an emailed code finishes a signup, and the account holds the handle it ask
 		.getByRole("button", { name: /send|continue|confirm|code/i })
 		.first()
 		.click();
+	// The handle was chosen at `/signup`, so the password gate is on the code face before the
+	// boxes appear. That password is the identity's own and is what the account is created with.
+	await page.getByLabel("Choose a password").fill("e2e a long enough password");
+	await page.getByRole("button", { name: "Continue", exact: true }).click();
 	await typeCode(page, await emailedCode(address));
 
 	// A new account owes the terms (the onboarding claim step is gone — the handle arrives

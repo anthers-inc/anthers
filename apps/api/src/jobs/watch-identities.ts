@@ -26,7 +26,6 @@ import { hostedIdentities } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { plcDirectoryUrl } from "../lib/atproto-network.js";
 import { escapeHtml, sendOperationalAlert } from "../services/email.js";
-import { hostedPdsUrl } from "../services/hosted-accounts.js";
 import {
 	assessIdentity,
 	type IdentityFinding,
@@ -34,6 +33,7 @@ import {
 	listHostedRepos,
 	readIdentityHead,
 } from "../services/hosted-identity.js";
+import { hostedPdsUrl } from "../services/hosted-node.js";
 
 export interface WatchResult {
 	checked: number;

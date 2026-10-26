@@ -254,6 +254,7 @@ describe("an account is created only with its identity", () => {
 		const finished = await app.request("/api/auth/signup/complete", {
 			method: "POST",
 			headers: { ...JSON_HEADERS, Cookie: `signup_pending=${token}` },
+			body: JSON.stringify({ password: "a long enough password" }),
 		});
 		expect(finished.status).toBe(201);
 
@@ -280,7 +281,8 @@ describe("an account is created only with its identity", () => {
 			.from(hostedAccounts)
 			.where(eq(hostedAccounts.did, did("made")));
 		expect(credential?.userId).toBe(user.id);
-		expect(credential?.sealedPassword).toBeTruthy();
+		expect(credential?.sealedSession).toBeTruthy();
+		expect(credential?.sealedPassword, "the password is dropped once the session lands").toBe("");
 
 		expect(await readPendingSignup(token), "the signup is spent").toBeUndefined();
 		expect(await rowsHolding(name("made"))).toHaveLength(0);
