@@ -59,6 +59,11 @@ export function BadgeMark({
 	emoji,
 	emblem,
 	imageSrc,
+	maskSrc,
+	maskColor,
+	maskScale,
+	maskOffsetX,
+	maskOffsetY,
 	onImageError,
 	clipId,
 	dim = false,
@@ -76,6 +81,16 @@ export function BadgeMark({
 	emblem?: string | null;
 	/** A creator with their own art puts that on it, cropped to the shape. */
 	imageSrc?: string | null;
+	/**
+	 * A black-on-transparent foreground masked over `maskColor` — the picker's preview of a
+	 * vendor icon before composition, which is why it takes a scale and offsets the same way
+	 * `BadgeComposeParams` does. Never persisted; the saved asset is always `imageSrc`.
+	 */
+	maskSrc?: string | null;
+	maskColor?: string;
+	maskScale?: number;
+	maskOffsetX?: number;
+	maskOffsetY?: number;
 	onImageError?: () => void;
 	/** Must be unique on the page — an SVG clip path is referenced by id. */
 	clipId: string;
@@ -88,10 +103,13 @@ export function BadgeMark({
 
 	// One foreground, and an upload wins because it is the creator's own art. The emblem is
 	// the fallback the ladder editor always supplies, so testing it last is what keeps a
-	// creator's upload from being drawn under their default.
+	// creator's upload from being drawn under their default. The mask sits between them:
+	// it is a chosen vendor icon, so it beats the fallback, but it is still a preview
+	// rather than a stored asset.
 	const showImage = Boolean(imageSrc);
 	const showEmoji = !showImage && Boolean(emoji);
-	const showEmblem = !showImage && !showEmoji && Boolean(emblem);
+	const showMask = !showImage && !showEmoji && Boolean(maskSrc);
+	const showEmblem = !showImage && !showEmoji && !showMask && Boolean(emblem);
 
 	return (
 		<span
@@ -160,6 +178,29 @@ export function BadgeMark({
 					onError={onImageError}
 					className="absolute object-cover"
 					style={{ ...badgeBoxStyle(s.artBox), clipPath: `url(#${clipId})` }}
+				/>
+			) : showMask ? (
+				// The same masked-glyph treatment `NounEmblemPicker` uses for a search result,
+				// placed in the shape's `emblemBox` so the preview sits where the composed
+				// Badge will put it. The offsets are percentages of the box, matching
+				// `BadgeComposeParams`.
+				<span
+					aria-hidden="true"
+					className="absolute inline-block"
+					style={{
+						...badgeBoxStyle(s.emblemBox),
+						backgroundColor: maskColor ?? c.on,
+						maskImage: `url(${maskSrc})`,
+						maskSize: "contain",
+						maskRepeat: "no-repeat",
+						maskPosition: "center",
+						WebkitMaskImage: `url(${maskSrc})`,
+						WebkitMaskSize: "contain",
+						WebkitMaskRepeat: "no-repeat",
+						WebkitMaskPosition: "center",
+						transform: `translate(${(maskOffsetX ?? 0) * 100}%, ${(maskOffsetY ?? 0) * 100}%) scale(${maskScale ?? 1})`,
+						transformOrigin: "center",
+					}}
 				/>
 			) : showEmblem ? (
 				// `.brand-glyph` masks at `mask-size: contain`, so the emblem fits itself into

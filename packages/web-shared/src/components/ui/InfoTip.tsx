@@ -12,15 +12,20 @@
  * span, so the tip opens on focus as well as on hover and reads as `aria-describedby`
  * rather than vanishing on a keyboard pass.
  *
+ * `text` is the one-line case; `children` carries rich content (the Badge Maker's perk
+ * types, where four explanations have to line up together) and `wide` gives that content
+ * the room to do so.
+ *
  * 🚨 In a surface that CLIPS — the signed-in sidebar hides its overflow around a
  * 16rem column — the absolute overlay falls off the panel's edge and gets cut, from
  * every anchor a narrow column offers. Pass `unclipped` there: the overlay then measures
  * the (i) and renders at fixed viewport coordinates instead, where no ancestor's
  * overflow clip can reach it.
  */
-import { useId, useRef, useState } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
 
 const TIP_WIDTH = 224; // w-56 — kept in sync with the overlay card below.
+const WIDE_TIP_WIDTH = 288; // w-72
 
 /** The absolutely-positioned anchors: centered on the (i), or hard right for an (i)
  *  on a card's right edge. */
@@ -31,19 +36,27 @@ const ALIGN_CLASS = {
 
 export default function InfoTip({
 	text,
+	children,
 	align = "center",
 	unclipped = false,
+	wide = false,
 }: {
-	text: string;
+	/** Plain-text content. Ignored when `children` is given. */
+	text?: string;
+	/** Rich content — a list, a small table, a heading plus lines. */
+	children?: ReactNode;
 	/** Where the overlay sits relative to the (i): centered (default) or hard right — for an (i) on a card's right edge. */
 	align?: "center" | "right";
 	/** Render at fixed viewport coordinates so an ancestor's overflow clipping cannot cut the tip (narrow sidebars). */
 	unclipped?: boolean;
+	/** A wider card, for content that needs to line up rather than wrap every few words. */
+	wide?: boolean;
 }) {
 	const [show, setShow] = useState(false);
 	const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 	const triggerRef = useRef<HTMLButtonElement>(null);
 	const tipId = useId();
+	const width = wide ? WIDE_TIP_WIDTH : TIP_WIDTH;
 
 	const open = () => {
 		if (unclipped && triggerRef.current) {
@@ -51,7 +64,7 @@ export default function InfoTip({
 			// Anchor near the (i), clamped so the card never leaves either viewport edge.
 			setPos({
 				top: r.bottom + 6,
-				left: Math.max(8, Math.min(r.left, (window.innerWidth ?? 0) - TIP_WIDTH - 8)),
+				left: Math.max(8, Math.min(r.left, (window.innerWidth ?? 0) - width - 8)),
 			});
 		}
 		setShow(true);
@@ -85,8 +98,10 @@ export default function InfoTip({
 				}`}
 				style={unclipped ? { top: pos?.top, left: pos?.left } : undefined}
 			>
-				<span className="block w-56 rounded-lg border border-base-content/10 bg-base-300 px-3 py-2 text-left text-xs font-normal leading-relaxed normal-case tracking-normal text-base-content/70 shadow-lg">
-					{text}
+				<span
+					className={`block ${wide ? "w-72" : "w-56"} whitespace-normal rounded-lg border border-base-content/10 bg-base-300 px-3 py-2 text-left text-xs font-normal leading-relaxed normal-case tracking-normal text-base-content/70 shadow-lg`}
+				>
+					{children ?? text}
 				</span>
 			</span>
 		</button>

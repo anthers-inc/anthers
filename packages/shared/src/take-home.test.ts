@@ -15,7 +15,13 @@
 // file adds is the *comparison* arithmetic and the low-price claims the UI makes in words.
 import { describe, expect, test } from "bun:test";
 import Decimal from "decimal.js";
-import { ANTHERS_BADGES, CARD_FLAT, CARD_RATE, cardFeeDisplay } from "./constants.js";
+import {
+	ANTHERS_BADGES,
+	CARD_FLAT,
+	CARD_RATE,
+	cardFeeDisplay,
+	STRIPE_TAX_FEE_RATE,
+} from "./constants.js";
 import { calculateFees } from "./fees.js";
 import { RIVAL_STOREFRONTS } from "./figures.js";
 import { batchingComparison, membershipComparison } from "./scenarios.js";
@@ -202,6 +208,33 @@ describe("the named-alternative comparison", () => {
 			expect(r.share).toBeGreaterThan(0);
 			expect(r.share).toBeLessThan(1);
 		}
+	});
+});
+
+describe("the range the price panel shows is only what leaves the creator's side", () => {
+	const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+	const range = (amount: number) => {
+		const fee = cardFeeDisplay(amount);
+		// The component rounds the fee to cents before subtracting it, because the table
+		// shows cents and the total must be the sum of its rows.
+		const taxServiceFeeMax = round(amount * STRIPE_TAX_FEE_RATE);
+		return { best: round(amount - fee), worst: round(amount - fee - taxServiceFeeMax) };
+	};
+
+	test("the ends are the sale with no tax service and the sale with it", () => {
+		for (const price of [0.5, 1, 3, 5, 20, 100]) {
+			const { best, worst } = range(price);
+			expect(worst, `$${price}`).toBeLessThanOrEqual(best);
+			expect(best).toBeCloseTo(price - cardFeeDisplay(price), 2);
+		}
+	});
+
+	test("a $3 Badge varies only by the cents the tax service can take", () => {
+		// Sales tax is the buyer's and is never in this figure. Stripe's 0.5% tax-service fee
+		// is the one conditional deduction, which is why the range is narrow.
+		const { best, worst } = range(3);
+		expect(best).toBeCloseTo(2.61, 2);
+		expect(worst).toBeCloseTo(2.59, 2);
 	});
 });
 

@@ -32,6 +32,7 @@ import app from "../index";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
+import { artwork, stubShield } from "./scan-fixtures.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -222,6 +223,42 @@ describe("badge composition", () => {
 		const other = await createAccount(`bc_other_${RUN}`, { fields: { creatorMode: true } });
 		const res = await compose({ noun: nounIcon, placement }, other.cookie);
 		expect(res.status).toBe(404);
+	});
+
+	it("🚨 an upload replacing a composition clears the composition's fingerprint and credit", async () => {
+		// The new Emblem tab makes switching from a Noun emblem to an upload one toggle, so
+		// the stored rows have to follow: a surviving fingerprint tells the client the
+		// upload is a finished whole badge and draws it full-size, and a surviving
+		// provenance row credits an artist whose emblem is gone.
+		const stub = stubShield("no-known-match");
+		try {
+			const body = new FormData();
+			body.append("file", new File([await artwork()], "replacement.png", { type: "image/png" }));
+			const res = await req(`/api/subscriptions/badges/${badgeId}/art`, {
+				method: "POST",
+				headers: { Origin: ORIGIN, Cookie: cookie },
+				body,
+			});
+			expect(res.status).toBe(201);
+		} finally {
+			stub.restore();
+		}
+
+		const [stored] = await db.select().from(badges).where(eq(badges.id, badgeId)).limit(1);
+		expect(stored.artKey).toBeTruthy();
+		expect(stored.artFingerprint).toBeNull();
+		expect(stored.artEmblemScale).toBeNull();
+
+		const provenance = await db
+			.select()
+			.from(badgeArtProvenance)
+			.where(eq(badgeArtProvenance.badgeId, badgeId));
+		expect(provenance).toEqual([]);
+
+		// The client's own shape signal must agree: no `hasComposedArt` after the upload.
+		const list = await req("/api/subscriptions/badges", { headers: { Cookie: cookie } });
+		const body = (await list.json()) as { badges: { hasComposedArt?: boolean }[] };
+		expect(body.badges[0]?.hasComposedArt).toBeUndefined();
 	});
 
 	it("🚨 offers no emblem-by-itself endpoint — the badge is the only artifact", () => {
