@@ -92,7 +92,7 @@ export interface MusicRelease {
 	projectId: number | null;
 	slug: string;
 	title: string;
-	coverImage: string | null;
+	thumbnail: string | null;
 	creatorId: number | null;
 	creatorHandle: string | null;
 	creatorDisplayName: string | null;
@@ -141,7 +141,7 @@ export function musicReleases(items: LensItem[], includeSpoken: boolean): MusicR
 				projectId: project.id,
 				slug: project.slug,
 				title: project.title,
-				coverImage: project.coverImage,
+				thumbnail: project.thumbnail,
 				creatorId: project.creatorId,
 				creatorHandle: project.creatorHandle,
 				creatorDisplayName: project.creatorDisplayName,
@@ -155,7 +155,7 @@ export function musicReleases(items: LensItem[], includeSpoken: boolean): MusicR
 			release.wholeRelease = true;
 			release.trackCount = trackCount;
 			release.wholeCount = trackCount;
-			if (project.coverImage) release.coverImage = project.coverImage;
+			if (project.thumbnail) release.thumbnail = project.thumbnail;
 			continue;
 		}
 
@@ -179,7 +179,7 @@ export function musicReleases(items: LensItem[], includeSpoken: boolean): MusicR
 				projectId: null,
 				slug: work.slug ?? "",
 				title: work.title || "Untitled",
-				coverImage: work.thumbnail || null,
+				thumbnail: work.thumbnail || null,
 				creatorId: work.creatorId ?? null,
 				creatorHandle: work.creatorHandle ?? null,
 				creatorDisplayName: work.creatorDisplayName ?? null,
@@ -199,7 +199,7 @@ export function musicReleases(items: LensItem[], includeSpoken: boolean): MusicR
 				projectId: membership.id,
 				slug: membership.slug,
 				title: membership.title,
-				coverImage: membership.coverImage,
+				thumbnail: membership.thumbnail,
 				creatorId: membership.creatorId,
 				creatorHandle: membership.creatorHandle,
 				creatorDisplayName: membership.creatorDisplayName,
@@ -209,7 +209,7 @@ export function musicReleases(items: LensItem[], includeSpoken: boolean): MusicR
 				tracks: [],
 			});
 			if (!release.tracks.some((t) => t.workId === track.workId)) release.tracks.push(track);
-			if (!release.coverImage) release.coverImage = track.thumbnail;
+			if (!release.thumbnail) release.thumbnail = track.thumbnail;
 		}
 	}
 
@@ -413,7 +413,7 @@ export default function MusicLens({ items, includeSpoken, scope = "library" }: M
 			<AlbumView
 				title={selected.title}
 				cover={
-					selected.coverImage || detailTracks.find((track) => track.thumbnail)?.thumbnail || null
+					selected.thumbnail || detailTracks.find((track) => track.thumbnail)?.thumbnail || null
 				}
 				creator={creator}
 				tracks={detailTracks}
@@ -488,9 +488,9 @@ function ReleaseCard({
 					className="block w-full"
 					aria-label={`Open ${release.title}`}
 				>
-					{release.coverImage ? (
+					{release.thumbnail ? (
 						<img
-							src={release.coverImage}
+							src={release.thumbnail}
 							alt=""
 							className="aspect-square w-full rounded-lg object-cover shadow-sm transition-shadow group-hover:shadow-lg"
 						/>

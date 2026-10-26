@@ -91,6 +91,8 @@ export interface WorkFixture {
 	 * with none, and the listing surfaces draw the kind's poster in its place.
 	 */
 	thumbnail?: string;
+	/** The full upload the thumbnail was framed from. */
+	thumbnailSource?: string;
 	/**
 	 * The content rating. Defaults to a creator-declared `general`, because a fixture Work
 	 * stands for one that was properly released and release is refused while a Work is
@@ -153,6 +155,7 @@ export async function insertWork(fixture: WorkFixture) {
 			sourceKey: fixture.sourceKey ?? "",
 			sourceOriginalKey: fixture.sourceOriginalKey ?? "",
 			thumbnail: fixture.thumbnail ?? "",
+			thumbnailSource: fixture.thumbnailSource ?? "",
 			maturity: fixture.maturity ?? "general",
 			maturityNotes: fixture.maturityNotes ?? [],
 			maturityRows:

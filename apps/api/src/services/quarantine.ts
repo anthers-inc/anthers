@@ -78,6 +78,8 @@ export type WorkObjectKind = "source" | "thumbnail" | "asset" | "audio" | "hls";
  */
 export type ChromeObjectKind =
 	| "avatar"
+	/** A profile's 3:1 image; `header` is the retired word, still read on old rows. */
+	| "banner"
 	| "header"
 	| "cover"
 	| "gallery"

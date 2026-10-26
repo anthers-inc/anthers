@@ -24,9 +24,13 @@ import type { QuarantineObjectKind } from "../quarantine.js";
  */
 export const PUBLIC_MEDIA_TYPES: ReadonlySet<string> = new Set([
 	"avatar",
+	// `banner` is the current word for a profile's 3:1 image; `header` is the retired one,
+	// kept accepted so a tab opened across the rename cannot store its upload private.
+	"banner",
 	"header",
-	"cover",
+	// `thumbnail` covers a Work's and a Project's poster; `cover` is the retired Project word.
 	"thumbnail",
+	"cover",
 	"gallery",
 	"image",
 	"screenshot",
@@ -80,8 +84,14 @@ export function scannedObjectKind(
 		case "preview-caption":
 			return null;
 		case "avatar":
+			return "avatar";
+		case "banner":
+		// The retired words, mapped to the object they name now: a `header` upload is a
+		// banner and a `cover` upload is a thumbnail, so an operator reads the new noun.
 		case "header":
+			return "banner";
 		case "cover":
+			return "thumbnail";
 		case "thumbnail":
 		case "inline-image":
 			return mediaType;
@@ -119,9 +129,10 @@ export function scannedObjectKind(
  */
 export const PUBLIC_KEY_PREFIXES: readonly string[] = [
 	"avatars/",
+	"banners/",
 	"headers/",
-	"covers/",
 	"thumbnails/",
+	"covers/",
 	"gallery/",
 	"inline-images/",
 ];
