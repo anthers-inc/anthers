@@ -42,6 +42,13 @@ export interface BasketWorkRow {
 	thumbnail: string | null;
 	creatorId: number;
 	creatorHandle: string | null;
+	/**
+	 * How many of a physical good this line means to buy, and the values chosen from its
+	 * listing. Both are intent the quote and checkout re-validate: the table holds what
+	 * the buyer asked for, never what it costs or whether it is still there.
+	 */
+	quantity: number;
+	options: Array<{ name: string; label: string }> | null;
 	addedAt: Date;
 	/** Internal ordering only — not part of the answered shape's meaning. */
 	rowId: number;
@@ -81,6 +88,8 @@ export async function listBasket(userId: number): Promise<BasketRow[]> {
 			thumbnail: works.thumbnail,
 			creatorId: works.creatorId,
 			creatorHandle: users.atprotoHandle,
+			quantity: basketItems.quantity,
+			options: basketItems.options,
 			addedAt: basketItems.addedAt,
 			rowId: basketItems.id,
 		})
@@ -143,6 +152,7 @@ export type BasketAddBadgeRefusal = BasketAddRefusal | "own_ladder";
 export async function addBasketItem(
 	userId: number,
 	workId: number,
+	pick?: { quantity?: number; options?: Array<{ name: string; label: string }> | null },
 ): Promise<{ ok: true } | { ok: false; reason: BasketAddRefusal }> {
 	const [work] = await db
 		.select({ id: works.id, creatorId: works.creatorId })
@@ -157,15 +167,60 @@ export async function addBasketItem(
 	const current = await listBasket(userId);
 
 	// Already in — adding twice is a no-op, because the button is the kind people press
-	// again when they are not sure it worked.
-	if (current.some((row) => row.kind === "work" && row.workId === workId)) return { ok: true };
+	// again when they are not sure it worked. A re-add that names a pick REPLACES the
+	// one in the basket rather than being ignored: a buyer who opens the picker again
+	// and chooses a different size means the new choice, exactly as pressing the button
+	// twice means "yes, that one".
+	if (current.some((row) => row.kind === "work" && row.workId === workId)) {
+		if (pick) {
+			await db
+				.update(basketItems)
+				.set({
+					...(pick.quantity != null ? { quantity: pick.quantity } : {}),
+					...(pick.options !== undefined ? { options: pick.options } : {}),
+				})
+				.where(and(eq(basketItems.userId, userId), eq(basketItems.workId, workId)));
+		}
+		return { ok: true };
+	}
 
 	// 🚨 The item cap, from the same constant `resolveBasket` enforces — the add is where a
 	// buyer learns the basket is full rather than at checkout, the same moment-rule the
 	// creatorless refusal above keeps.
 	if (current.length >= MAX_BASKET_ITEMS) return { ok: false, reason: "at_capacity" };
 
-	await db.insert(basketItems).values({ userId, workId });
+	await db.insert(basketItems).values({
+		userId,
+		workId,
+		...(pick?.quantity != null ? { quantity: pick.quantity } : {}),
+		...(pick?.options !== undefined ? { options: pick.options } : {}),
+	});
+	return { ok: true };
+}
+
+/**
+ * Change what a Work line in the basket asks for — the basket page's own quantity stepper
+ * and picker.
+ *
+ * Refuses a Work that is not in this buyer's basket rather than creating a line: this is
+ * the edit door, and "not in your basket" is a real answer to it. What the buyer may ask
+ * for is still the checkout's question, not this one's.
+ */
+export async function updateBasketItem(
+	userId: number,
+	workId: number,
+	pick: { quantity?: number; options?: Array<{ name: string; label: string }> | null },
+): Promise<{ ok: true } | { ok: false; reason: "not_found" }> {
+	const current = await listBasket(userId);
+	if (!current.some((row) => row.kind === "work" && row.workId === workId))
+		return { ok: false, reason: "not_found" };
+	await db
+		.update(basketItems)
+		.set({
+			...(pick.quantity != null ? { quantity: pick.quantity } : {}),
+			...(pick.options !== undefined ? { options: pick.options } : {}),
+		})
+		.where(and(eq(basketItems.userId, userId), eq(basketItems.workId, workId)));
 	return { ok: true };
 }
 
