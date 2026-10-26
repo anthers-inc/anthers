@@ -58,6 +58,8 @@
 		"space:move": "bun run apps/api/src/scripts/space-move.ts",
 		"space:migrate-reader": "bun run apps/api/src/scripts/space-migrate-reader.ts",
 		"hosted:record": "bun run apps/api/src/scripts/hosted-record.ts",
+		"hosted:identities": "bun run apps/api/src/scripts/hosted-identities.ts",
+		"account:erase": "bun run apps/api/src/scripts/erase-account.ts",
 		"repo:resign": "bun run apps/api/src/scripts/repo-resign.ts"
 	},
 	"devDependencies": {

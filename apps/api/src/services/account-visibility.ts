@@ -25,23 +25,25 @@ import { users } from "@anthers/db/schema";
 import { eq, type SQL, sql } from "drizzle-orm";
 
 /**
- * The handle of the production automated-test account — the account the live-site test
- * suite signs in as and exercises the real routes through, kept rather than spun down
- * because automated testing needs a standing account to be. It is hidden from every
- * public listing by handle rather than by a row flag, so nothing about the account
- * itself has to change to hide it; scope decided with Parker 2026-10-02 — this one
+ * The handle of Anthers' canonical test account — `anthersinc-test.bsky.social`, a real Bluesky
+ * account used only for testing (Parker, 2026-10-26). It replaced a hosted account on the node,
+ * because the AT Protocol wants a real identity rather than a fabricated one, and an account that
+ * lives on Bluesky needs nothing from this server to exist.
+ *
+ * It is hidden from every public listing by handle rather than by a row flag, so nothing about the
+ * account itself has to change to hide it; scope decided with Parker 2026-10-02 — this one
  * account, not a general mechanism.
  */
-export const HIDDEN_TEST_ACCOUNT_HANDLE = "anthers-test.anthers.social";
+export const HIDDEN_TEST_ACCOUNT_HANDLE = "anthersinc-test.bsky.social";
 
 /**
  * A SQL predicate excluding rows whose `userColumn` names the automated-test account —
  * the listing half only. Its Works, posts and profile stay reachable by direct link,
- * because direct links are the point of keeping the account: the test suite drives real
- * routes at it, and a user who follows a link somewhere still arrives at a page that
- * answers. What it drops out of is every listing — the feed, Discover, the commons, the
- * follow and project lists — beside `notSuspendedAccount` so the account reads as absent
- * rather than as a state somebody could name.
+ * because direct links are the point of keeping the account: somebody following a link
+ * still arrives at a page that answers. What it drops out of is every listing — the
+ * feed, Discover, the commons, the follow and project lists — beside
+ * `notSuspendedAccount` so the account reads as absent rather than as a state somebody
+ * could name.
  *
  * Matches on the handle alone: a handle no row holds matches nothing, so dev sessions
  * (where no account carries this handle) run unchanged without any configuration.
