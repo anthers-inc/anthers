@@ -138,6 +138,7 @@ import WorkReviews from "../project/WorkReviews";
 import { InlineField } from "./Editing";
 import { LyricsBody } from "./LyricsPanel";
 import MediaStatusCard from "./MediaStatusCard";
+import PhysicalListingSection from "./PhysicalListingSection";
 import PreviewMediaSection from "./PreviewMediaSection";
 import ShareLinkButton from "./ShareLinkButton";
 import { WorkViewAsSection } from "./ViewAs";
@@ -1640,6 +1641,12 @@ export default function OwnerWorkEditor({
 					{isGoods(current.type) && (
 						// Same doubling rule: the InlineField names itself "Details".
 						<section className="flex flex-col gap-2">{detailsNoteField}</section>
+					)}
+					{current.type === "physical" && (
+						// What a good needs beyond its Work to be sellable: shipping, handling,
+						// tax and the buyer's choices. A service has the note above and nothing
+						// here, because there is no parcel to send.
+						<PhysicalListingSection workId={current.id} />
 					)}
 					{writing && (
 						<section className="flex flex-col gap-2">
