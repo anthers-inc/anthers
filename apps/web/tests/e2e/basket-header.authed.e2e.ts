@@ -25,18 +25,12 @@
  * actually signed-in buyer's browser renders.
  */
 import { fileURLToPath } from "node:url";
+import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { type BrowserContext, expect, expect as fixtureExpect, type Page } from "@playwright/test";
 import { purgeAccountIds } from "../../../api/src/__tests__/purge";
-import {
-	API_URL,
-	emailedCode,
-	leashedExecFileSync,
-	signInAsMediaFixture,
-	test,
-	WEB_ORIGIN,
-} from "./fixtures";
+import { API_URL, leashedExecFileSync, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 const TITLE_PREFIX = "Basket header walk ";
@@ -107,17 +101,10 @@ function makeBuyer(name: string): { id: number; email: string } {
 }
 
 async function signInBuyer(email: string): Promise<string> {
-	const startedAt = Date.now();
-	await fetch(`${API_URL}/api/auth/signin/start`, {
+	const res = await fetch(`${API_URL}/api/auth/login`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-		body: JSON.stringify({ email }),
-	});
-	const code = await emailedCode(email, 15_000, startedAt);
-	const res = await fetch(`${API_URL}/api/auth/signin/verify`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-		body: JSON.stringify({ email, code }),
+		body: JSON.stringify({ identifier: email, password: LOCAL_ACCOUNT_PASSWORD }),
 	});
 	fixtureExpect(
 		res.ok,

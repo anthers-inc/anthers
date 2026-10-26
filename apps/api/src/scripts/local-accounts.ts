@@ -19,6 +19,7 @@
 
 import { db } from "@anthers/db/client";
 import { assertDevCheckout } from "@anthers/db/dev-only";
+import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import type { AtprotoIdentity } from "../services/atproto.js";
@@ -157,9 +158,9 @@ export async function createLocalAccount(opts: LocalAccountOptions): Promise<Use
 	const created = await createAccountFromSignup(
 		pending,
 		opts.email,
-		// A fixture password, generated per account and never printed. A real signup's password is
-		// the person's; this only has to satisfy the same rule and never be stored.
-		opts.password ?? `fixture-${crypto.randomUUID()}`,
+		// The shared local fixture password, so a spec or a developer can sign in as the account.
+		// A real signup's password is the person's; this is a disposable test credential.
+		opts.password ?? LOCAL_ACCOUNT_PASSWORD,
 	);
 	if ("refusal" in created) {
 		throw new Error(

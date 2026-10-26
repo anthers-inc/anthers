@@ -195,8 +195,7 @@ async function ensureViewer(inst: Instance): Promise<void> {
 		email: inst.userEmail,
 		handleName: inst.walkerUsername,
 		// Pre-verified: checkout and support carry requireVerified, and there is no email loop to
-		// click through in a headless run. Signing in is the emailed code, read from the
-		// session's mail catcher by the spec's own setup.
+		// click through in a headless run. The setup signs in with the shared fixture password.
 		emailVerified: true,
 		fields: {
 			displayName: "Gauntlet User",

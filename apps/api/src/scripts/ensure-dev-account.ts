@@ -91,7 +91,8 @@ async function main() {
 		fields: { displayName: username, creatorMode },
 	});
 	console.log(
-		`${TAG} created "${username}" (${email}) as @${user.atprotoHandle} — creator=${creatorMode}.`,
+		`${TAG} created "${username}" (${email}) as @${user.atprotoHandle} — creator=${creatorMode}. ` +
+			"Sign in with the local fixture password in packages/db/src/local-fixtures.ts.",
 	);
 
 	// Anthers' own Badge ladder, seeded as real rows this session — owned by the session's

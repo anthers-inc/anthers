@@ -17,9 +17,10 @@
  * content: the lens rows, the dial, and the graying.
  */
 import { fileURLToPath } from "node:url";
+import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { MEDIA_FIXTURE_PROJECT, mediaFixtureWork } from "@anthers/db/media-fixture";
 import type { Page } from "@playwright/test";
-import { API_URL, emailedCode, expect, leashedExecFileSync, test, WEB_ORIGIN } from "./fixtures";
+import { API_URL, expect, leashedExecFileSync, test } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
@@ -467,9 +468,8 @@ async function purgeRailAccount(id: number): Promise<void> {
 async function signInThroughUi(page: Page, email: string): Promise<void> {
 	await page.goto("/login");
 	await page.locator('input[autocomplete="username"]').fill(email);
-	await page.getByRole("button", { name: /^continue$/i }).click();
-	await expect(page.locator('input[aria-label="Code character 1 of 6"]')).toBeFocused();
-	await page.keyboard.type(await emailedCode(email));
+	await page.locator('input[autocomplete="current-password"]').fill(LOCAL_ACCOUNT_PASSWORD);
+	await page.getByRole("button", { name: /^sign in$/i }).click();
 	await expect
 		.poll(() => page.url(), { message: `sign-in as ${email} never landed`, timeout: 15_000 })
 		.not.toContain("/login");

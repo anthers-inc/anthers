@@ -25,14 +25,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WALK_WALKER_EMAIL } from "@anthers/db/gauntlet-walk";
+import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { expect, test as setup } from "@playwright/test";
-import {
-	API_URL,
-	emailedCode,
-	leashedExecFileSync,
-	WALK_AUTH_STATE_PATH,
-	WEB_ORIGIN,
-} from "./fixtures";
+import { API_URL, leashedExecFileSync, WALK_AUTH_STATE_PATH, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
@@ -56,18 +51,14 @@ setup("reset the walk's gauntlet fixture and sign its user in", async () => {
 	// time would buy nothing: the walk's media is its own gauntlet media, attached by
 	// `db:gauntlet:media --instance walk` in the walk's `beforeAll`.
 
-	// Sign in by the emailed code, because that is the only way in: ask the signin pair
-	// for one, read it out of the session's mail catcher, spend it for the Set-Cookie.
-	await fetch(`${API_URL}/api/auth/signin/start`, {
+	// Sign in with the walker's own password, through the same route a person uses.
+	const res = await fetch(`${API_URL}/api/auth/login`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
-		body: JSON.stringify({ email: WALK_WALKER_EMAIL }),
-	});
-	const code = await emailedCode(WALK_WALKER_EMAIL);
-	const res = await fetch(`${API_URL}/api/auth/signin/verify`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-		body: JSON.stringify({ email: WALK_WALKER_EMAIL, code }),
+		body: JSON.stringify({
+			identifier: WALK_WALKER_EMAIL,
+			password: LOCAL_ACCOUNT_PASSWORD,
+		}),
 	});
 	expect(res.ok, `sign-in failed: ${res.status} ${await res.text().catch(() => "")}`).toBe(true);
 
