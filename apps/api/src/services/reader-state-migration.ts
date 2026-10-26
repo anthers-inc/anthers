@@ -39,7 +39,7 @@ import {
 	workSaveRecord,
 	workSaveRkey,
 } from "./space-records.js";
-import { registeredSpace } from "./space-registry.js";
+import { ensureUserSpace, registeredSpace } from "./space-registry.js";
 import type { ResolveSpaceSession } from "./space-writer.js";
 
 export interface ReaderStateReport {
@@ -81,8 +81,17 @@ export async function migrateReaderState(
 	userId: number,
 	opts: ReaderStateOptions = {},
 ): Promise<ReaderStateMigration> {
-	const space = await registeredSpace(userId);
-	if (!space) return { ok: false, reason: "no_space" };
+	let space = await registeredSpace(userId);
+	if (!space) {
+		// ⭐ **The cutover is what creates the Library space for an account that has never
+		// written one.** Every other caller reaches `ensureUserSpace` after a write has been
+		// queued; this is the first operation on a fresh account, so waiting for a row would
+		// leave the operator's one command unable to start. A genuine failure to create still
+		// reports the registry's own reason rather than a bare `no_space`.
+		const ensured = await ensureUserSpace(userId, opts);
+		if (!ensured.space) return { ok: false, reason: ensured.reason ?? "no_space" };
+		space = ensured.space;
+	}
 
 	const [library, positions, saves] = await Promise.all([
 		db.select().from(libraryItems).where(eq(libraryItems.userId, userId)),
