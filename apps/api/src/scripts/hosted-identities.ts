@@ -54,6 +54,7 @@ async function list(holdings: boolean): Promise<void> {
 			firstSeenAt: hostedIdentities.firstSeenAt,
 			lastCheckedAt: hostedIdentities.lastCheckedAt,
 			lastListedAt: hostedIdentities.lastListedAt,
+			alertedAt: hostedIdentities.alertedAt,
 			credentialDid: hostedAccounts.did,
 			userId: users.id,
 			userEmail: users.email,
@@ -80,6 +81,7 @@ async function list(holdings: boolean): Promise<void> {
 				`last listed ${format(row.lastListedAt)}`,
 			].join("  "),
 		);
+		if (row.alertedAt) console.log(`    last alert ${format(row.alertedAt)}`);
 		if (holdings) {
 			console.log(
 				row.credentialDid
