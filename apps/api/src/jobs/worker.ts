@@ -68,6 +68,7 @@ import { rescanOwed } from "./rescan-owed.js";
 import { markBenignInterrupted, resumeOrphanedTranscodes } from "./resume-orphans.js";
 import { type ScanMediaData, scanMedia } from "./scan-media.js";
 import { type SettleCycleData, settleCycle } from "./settle-cycle.js";
+import { runShipmentClock } from "./shipment-clock.js";
 import { type SpaceBackupJobData, spaceBackupJob } from "./space-backup.js";
 import { type SpaceOutboxJobData, spaceOutboxJob } from "./space-outbox.js";
 import { statusSample } from "./status-sample.js";
@@ -257,6 +258,16 @@ async function start() {
 				console.log(
 					`[transfer-held-credits] job ${job.id}: moved money for ${creators} creator(s)`,
 				);
+		}
+	});
+
+	// The shipment clock: closes the wait on parcels nothing reported delivered. Quiet on
+	// a clean sweep, like the other dated jobs.
+	await queue.work(QUEUES.SHIPMENT_CLOCK, async (jobs) => {
+		for (const job of jobs) {
+			const { closed } = await runShipmentClock();
+			if (closed > 0)
+				console.log(`[shipment-clock] job ${job.id}: ${closed} parcel(s) closed by fallback`);
 		}
 	});
 

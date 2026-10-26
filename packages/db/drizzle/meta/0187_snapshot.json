@@ -1,5 +1,5 @@
 {
-  "id": "f900e82d-e92a-46aa-9f13-1c34736fdb26",
+  "id": "ed117867-4d73-4049-80d6-ed2fdaec05de",
   "prevId": "952d78e4-a5a3-4815-8811-7efa440ab6fc",
   "version": "7",
   "dialect": "postgresql",
@@ -3104,6 +3104,163 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.shipments": {
+      "name": "shipments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "purchase_id": {
+          "name": "purchase_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "carrier": {
+          "name": "carrier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "carrier_name": {
+          "name": "carrier_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tracking_number": {
+          "name": "tracking_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tracking_url": {
+          "name": "tracking_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "handling_business_days": {
+          "name": "handling_business_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ship_by_at": {
+          "name": "ship_by_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "shipped_at": {
+          "name": "shipped_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivered_at": {
+          "name": "delivered_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivery_source": {
+          "name": "delivery_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "complaint_window_ends_at": {
+          "name": "complaint_window_ends_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "events": {
+          "name": "events",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "uq_shipments_purchase": {
+          "name": "uq_shipments_purchase",
+          "columns": [
+            {
+              "expression": "purchase_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_shipments_pending_delivery": {
+          "name": "idx_shipments_pending_delivery",
+          "columns": [
+            {
+              "expression": "delivered_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "shipped_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "shipments_purchase_id_purchases_id_fk": {
+          "name": "shipments_purchase_id_purchases_id_fk",
+          "tableFrom": "shipments",
+          "tableTo": "purchases",
+          "columnsFrom": [
+            "purchase_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.financial_plan_phases": {
       "name": "financial_plan_phases",
       "schema": "",
@@ -5724,38 +5881,12 @@
           "notNull": false,
           "default": "''"
         },
-        "banner_image": {
-          "name": "banner_image",
+        "header_image": {
+          "name": "header_image",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "default": "''"
-        },
-        "avatar_source": {
-          "name": "avatar_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "banner_image_source": {
-          "name": "banner_image_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "avatar_crop": {
-          "name": "avatar_crop",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "banner_image_crop": {
-          "name": "banner_image_crop",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         },
         "website_url": {
           "name": "website_url",
@@ -11007,28 +11138,15 @@
           "notNull": false,
           "default": "''"
         },
-        "thumbnail": {
-          "name": "thumbnail",
+        "cover_image": {
+          "name": "cover_image",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "default": "''"
         },
-        "thumbnail_source": {
-          "name": "thumbnail_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "thumbnail_crop": {
-          "name": "thumbnail_crop",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "thumbnail_work_id": {
-          "name": "thumbnail_work_id",
+        "cover_work_id": {
+          "name": "cover_work_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
@@ -11127,12 +11245,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "projects_thumbnail_work_id_works_id_fk": {
-          "name": "projects_thumbnail_work_id_works_id_fk",
+        "projects_cover_work_id_works_id_fk": {
+          "name": "projects_cover_work_id_works_id_fk",
           "tableFrom": "projects",
           "tableTo": "works",
           "columnsFrom": [
-            "thumbnail_work_id"
+            "cover_work_id"
           ],
           "columnsTo": [
             "id"
@@ -13828,19 +13946,6 @@
           "primaryKey": false,
           "notNull": false,
           "default": "''"
-        },
-        "thumbnail_source": {
-          "name": "thumbnail_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "''"
-        },
-        "thumbnail_crop": {
-          "name": "thumbnail_crop",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         },
         "source_key": {
           "name": "source_key",

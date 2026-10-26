@@ -1163,3 +1163,39 @@ export const DISPUTE_VAMP_COUNT = 5;
  * audit; a person who needs the network's own monthly figure reads it from the network.
  */
 export const DISPUTE_WINDOW_DAYS = 30;
+
+/**
+ * How long a creator has to get a physical good out of the door, in business days.
+ *
+ * The default is what an order carries when a Work has not said otherwise, and the
+ * bounds are what a creator may choose between — a range rather than free text, because
+ * a ship-by date is the evidence a buyer's refund request rests on and a number nobody
+ * can read is not evidence. Weekends are skipped; postal holidays are not, because a
+ * holiday calendar is a third-party feed and this clock must be computable from a date
+ * alone.
+ */
+export const SHIPMENT_HANDLING_DAYS_DEFAULT = 3;
+export const SHIPMENT_HANDLING_DAYS_MIN = 1;
+export const SHIPMENT_HANDLING_DAYS_MAX = 10;
+
+/**
+ * How long a buyer has to report a problem after a parcel lands, in days.
+ *
+ * Measured from **delivery**, never from the ship date — the clock starts when the buyer
+ * could first have known something was wrong. Seven days is the window the closest
+ * comparable marketplace runs, and it is the same for a damaged good and a missing one:
+ * the buyer's evidence differs, but the question they are answering ("did this arrive
+ * as described?") is one question.
+ */
+export const SHIPMENT_COMPLAINT_WINDOW_DAYS = 7;
+
+/**
+ * How long after shipment a parcel is treated as delivered when nothing reports it.
+ *
+ * Without a tracking integration, some parcels never produce a delivery signal — a
+ * carrier whose data we do not read, a label bought elsewhere, a package handed over
+ * locally. A creator must not be paid late because a carrier was quiet, so the clock
+ * closes the window itself. Fourteen days is deliberately generous: the fallback exists
+ * to bound the wait, not to guess optimistically about a slow parcel.
+ */
+export const SHIPMENT_DELIVERY_FALLBACK_DAYS = 14;
