@@ -837,8 +837,26 @@ export const hostedAccounts = pgTable("hosted_accounts", {
 	userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
 	/** The full handle as issued, for a person reading this row. */
 	handle: text("handle").notNull(),
-	/** The account's password at the node, sealed by `services/secret-box.ts`. */
-	sealedPassword: text("sealed_password").notNull(),
+	/**
+	 * The account's password at the node, sealed by `services/secret-box.ts` — and **only ever a
+	 * fallback**, not the credential the platform runs on. 🚨 **An empty string means the row
+	 * holds no password**, which is the normal state.
+	 *
+	 * 🚨 **A stored password is a copy of a secret the owner can change from outside, and this
+	 * column is retired for exactly that reason.** The server holds only a hash, so a credential
+	 * the hub can present is a second copy; a reset replaces the server's hash and leaves this
+	 * one stale, and the failure looks like an unreachable node. An account carries a sealed
+	 * SESSION instead (`sealed_session`), obtained once at creation and renewed without a login.
+	 * This column is written at creation only so that a node failure cannot strand the identity
+	 * with no credential at all; it is emptied as soon as the first session is sealed, and
+	 * `hosted:sessions convert` empties the rows that predate the change.
+	 *
+	 * ⚠️ **The empty string stands in for NULL because the migration generator is blocked right
+	 * now** (a duplicate snapshot on `main`), so the column keeps its constraint and a sentinel
+	 * marks the absence. Dropping the column is the follow-up; until then every reader tests for
+	 * a non-empty value rather than for null.
+	 */
+	sealedPassword: text("sealed_password").notNull().default(""),
 	/**
 	 * The live PDS session for this account, sealed by `services/secret-box.ts` — a JSON string
 	 * holding `accessJwt`, `refreshJwt` and `expiresAt`, null until the writer has opened one.

@@ -21,7 +21,7 @@
 import { isDeepStrictEqual } from "node:util";
 import type { SpaceBytes, SpaceCommit, SpaceRecord, SpaceRepoOp } from "./atproto-space.js";
 import { SpaceClient, SpaceRequestError } from "./atproto-space.js";
-import { hostedPdsUrl } from "./hosted-accounts.js";
+import { hostedPdsUrl } from "./hosted-node.js";
 import { hostedTokenFor, type NoWriterReason } from "./hosted-repo-writer.js";
 
 /** Why an account's space cannot be written right now. All of these are ordinary. */

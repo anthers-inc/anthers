@@ -530,8 +530,10 @@ export async function establishSignupIdentity(
 	}
 
 	if (row.hostedHandle) {
-		const { createHostedAccount, HostedAccountError, hostedIdentityOffered, hostedPdsUrl } =
-			await import("./hosted-accounts.js");
+		const { createHostedAccount, HostedAccountError, hostedIdentityOffered } = await import(
+			"./hosted-accounts.js"
+		);
+		const { hostedPdsUrl } = await import("./hosted-node.js");
 		if (!(await hostedIdentityOffered())) {
 			return {
 				refusal: {

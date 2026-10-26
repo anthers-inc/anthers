@@ -151,6 +151,17 @@ export function stubNetwork(): NetworkStub {
 					stub.existing.add(create.handle);
 					return answer({ did: create.did, handle: create.handle });
 				}
+				// Recording a hosted identity now opens one session with the password it just
+				// generated, and keeps that instead of the password. The token need not be a
+				// parseable JWT here; the store falls back to a short lifetime when it is not.
+				if (url.startsWith(`${NODE_URL}/xrpc/com.atproto.server.createSession`)) {
+					const created = stub.create.kind === "ok" ? stub.create : null;
+					return answer({
+						did: created?.did ?? "did:plc:node.invalid",
+						accessJwt: "EXAMPLE-access-token",
+						refreshJwt: "EXAMPLE-refresh-token",
+					});
+				}
 				if (url.startsWith(`${NODE_URL}/xrpc/com.atproto.identity.resolveHandle`)) {
 					const handle = new URL(url).searchParams.get("handle") ?? "";
 					return stub.existing.has(handle)

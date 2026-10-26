@@ -37,27 +37,9 @@ import { atprotoWriteRefusal, warnRefusalOnce } from "../lib/atproto-network.js"
 import { holdFormerHandle } from "./atproto.js";
 import { PDS_RESERVED_HANDLE_NAMES } from "./hosted-handle-reserved.js";
 import { readIdentityHead } from "./hosted-identity.js";
+import { nodeCall, pdsUrl } from "./hosted-node.js";
+import { sessionForHostedAccount } from "./hosted-session-store.js";
 import { open, seal, secretBoxConfigured } from "./secret-box.js";
-
-/**
- * Where the Anthers-run Personal Data Server answers, or the empty string when unset.
- *
- * 🛑 **Also the empty string when this process may not write there** — a server on the real
- * network, named from a machine that is not a public deployment. Everything below already treats
- * an unset server as a closed door, so refusing here closes every door at once: no account is
- * created, no record written, no handle changed and no directory operation requested. See
- * `lib/atproto-network.ts`.
- */
-function pdsUrl(): string {
-	const url = process.env.HOSTED_PDS_URL?.trim() ?? "";
-	if (!url) return "";
-	const refusal = atprotoWriteRefusal(url);
-	if (refusal) {
-		warnRefusalOnce(refusal);
-		return "";
-	}
-	return url;
-}
 
 /**
  * The invite code the node requires of anybody creating an account on it.
@@ -430,11 +412,6 @@ function refusalOf(error: string | undefined, message: string | undefined): Host
 
 // ─── Writing down an identity that has just been created ────────────────────
 
-/** Where the node answers, for recording on the account an identity was created for. */
-export function hostedPdsUrl(): string {
-	return pdsUrl();
-}
-
 /**
  * Record everything about an identity the node has just created for a new account.
  *
@@ -468,6 +445,24 @@ export async function recordHostedIdentity(userId: number, account: HostedAccoun
 				`generated for it was NOT stored and cannot be recovered`,
 		);
 	}
+
+	// 🚨 **The session is the credential; the password is only how the first one is obtained.**
+	// One `createSession` here replaces the long-lived copy of the password: the store keeps the
+	// rotating refresh pair, and this row stops holding a value the owner can change from
+	// outside. The password is written first and removed only after the node answered, because
+	// a row with neither is an identity nothing can reach.
+	const session = await sessionForHostedAccount(account.did, account.password);
+	if (session.token === null) {
+		console.error(
+			`[hosted-accounts] ${account.did}: no session could be established, so its password ` +
+				`stays sealed as the fallback (${session.error})`,
+		);
+		return;
+	}
+	await db
+		.update(hostedAccounts)
+		.set({ sealedPassword: "" })
+		.where(eq(hostedAccounts.did, account.did));
 
 	// ⭐ **Watched from the first minute rather than from the next sweep.** `watch-identities`
 	// would find this within the hour on its own, and would then record whatever it found as
@@ -595,40 +590,33 @@ export async function swapHostedHandle(
 		};
 	}
 
-	let password: string;
-	try {
-		password = open(row.sealedPassword);
-	} catch {
-		console.error(
-			`[hosted-accounts] cannot open the credential for ${row.did} to change its handle`,
-		);
-		return {
-			status: "refused",
-			fault: "operational",
-			message: "Anthers can't reach that identity right now. Nothing has changed.",
-		};
+	let password: string | null = null;
+	if (row.sealedPassword) {
+		try {
+			password = open(row.sealedPassword);
+		} catch {
+			console.error(
+				`[hosted-accounts] cannot open the credential for ${row.did} to change its handle`,
+			);
+			return {
+				status: "refused",
+				fault: "operational",
+				message: "Anthers can't reach that identity right now. Nothing has changed.",
+			};
+		}
 	}
 
-	const session = await nodeCall(
-		"/xrpc/com.atproto.server.createSession",
-		{ method: "POST", body: JSON.stringify({ identifier: row.did, password }) },
-		doFetch,
-	);
-	if (!session.ok) {
+	const session = await sessionForHostedAccount(row.did, password, { fetchImpl: doFetch });
+	if (session.token === null) {
 		return {
 			status: "refused",
 			fault: "operational",
-			message: "Anthers couldn't reach the identity server. Try again in a little while.",
+			message: session.authorizationLost
+				? "That identity needs to authorize Anthers again before its name can change."
+				: "Anthers couldn't reach the identity server. Try again in a little while.",
 		};
 	}
-	const token = session.body.accessJwt as string | undefined;
-	if (!token) {
-		return {
-			status: "refused",
-			fault: "operational",
-			message: "The identity server answered without a session.",
-		};
-	}
+	const token = session.token;
 
 	const changed = await nodeCall(
 		"/xrpc/com.atproto.identity.updateHandle",
@@ -770,58 +758,6 @@ export type HostedPurgeOutcome =
 	 */
 	| { status: "unusable"; reason: string };
 
-/**
- * One call to the node, with the two failure kinds kept apart.
- *
- * Exported for `hosted-recovery-key.ts`, which talks to the same server about the same
- * accounts and should not grow a second opinion about what a retryable failure is.
- */
-export async function nodeCall(
-	path: string,
-	init: RequestInit & { token?: string },
-	doFetch: typeof fetch,
-): Promise<
-	| { ok: true; body: Record<string, unknown> }
-	| { ok: false; retryable: boolean; error: string; message?: string }
-> {
-	// Not retryable: nothing but a change of configuration will make a server appear, and a
-	// relative path handed to `fetch` would fail in a way that reads as the node being down.
-	const base = pdsUrl();
-	if (!base) {
-		return { ok: false, retryable: false, error: "NoNode", message: "no usable HOSTED_PDS_URL" };
-	}
-	const { token, ...rest } = init;
-	const headers: Record<string, string> = { "Content-Type": "application/json" };
-	if (token) headers.Authorization = `Bearer ${token}`;
-	let res: Response;
-	try {
-		res = await doFetch(`${base}${path}`, {
-			...rest,
-			headers: { ...headers, ...(rest.headers as Record<string, string> | undefined) },
-			signal: AbortSignal.timeout(30_000),
-		});
-	} catch (err) {
-		return { ok: false, retryable: true, error: err instanceof Error ? err.message : "no answer" };
-	}
-	if (res.ok) {
-		const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-		return { ok: true, body };
-	}
-	const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
-	// A 5xx is the node having a bad day; a 4xx is the node's considered answer. Retrying the
-	// first is the whole point, and retrying the second is a loop.
-	return {
-		ok: false,
-		retryable: res.status >= 500 || res.status === 429,
-		error: body.error || body.message || `HTTP ${res.status}`,
-		// ⚠️ **Kept apart from `error`, because `error` is the CODE when the node sends one** and
-		// the prose is the only place some refusals say what actually happened. Callers should
-		// still branch on the code — the prose is upstream's wording and moves between versions
-		// — but a log line with only `InvalidRequest` in it has thrown away the whole clue.
-		message: body.message,
-	};
-}
-
 /** A name that says only that something was here. Same token in both, so one row reads as one account. */
 function purgeToken(): string {
 	return Buffer.from(crypto.getRandomValues(new Uint8Array(4))).toString("hex");
@@ -836,20 +772,24 @@ function purgeToken(): string {
  */
 export async function purgeHostedIdentity(
 	did: string,
-	sealedPassword: string,
+	sealedPassword: string | null,
 	opts: { fetchImpl?: typeof fetch } = {},
 ): Promise<HostedPurgeOutcome> {
 	if (!pdsUrl()) return { status: "unusable", reason: "no HOSTED_PDS_URL is configured" };
 	const doFetch = opts.fetchImpl ?? fetch;
 
-	let password: string;
-	try {
-		password = open(sealedPassword);
-	} catch (err) {
-		return {
-			status: "unusable",
-			reason: `the sealed password could not be opened (${err instanceof Error ? err.message : "unknown"})`,
-		};
+	// A password on file is the legacy fallback; the session is the credential an account
+	// normally carries, and it is what this asks the store for first.
+	let password: string | null = null;
+	if (sealedPassword) {
+		try {
+			password = open(sealedPassword);
+		} catch (err) {
+			return {
+				status: "unusable",
+				reason: `the sealed password could not be opened (${err instanceof Error ? err.message : "unknown"})`,
+			};
+		}
 	}
 
 	// Asked first because it is also how the collections are enumerated, so it costs nothing
@@ -876,18 +816,15 @@ export async function purgeHostedIdentity(
 		return { status: "unusable", reason: `describeRepo: ${described.error}` };
 	}
 
-	const session = await nodeCall(
-		"/xrpc/com.atproto.server.createSession",
-		{ method: "POST", body: JSON.stringify({ identifier: did, password }) },
-		doFetch,
-	);
-	if (!session.ok) {
-		if (session.retryable)
-			return { status: "unreachable", reason: `createSession: ${session.error}` };
-		return { status: "unusable", reason: `createSession: ${session.error}` };
+	const opened = await sessionForHostedAccount(did, password, { fetchImpl: doFetch });
+	if (opened.token === null) {
+		// An authorization lost is the account's answer and not the node's weather: retrying
+		// tomorrow will produce the same one, so it is reported as unusable rather than
+		// unreachable.
+		if (opened.authorizationLost) return { status: "unusable", reason: opened.error };
+		return { status: "unreachable", reason: opened.error };
 	}
-	const token = session.body.accessJwt as string | undefined;
-	if (!token) return { status: "unusable", reason: "createSession answered with no token" };
+	const token = opened.token;
 
 	if (!alreadyDeactivated) {
 		const emptied = await deleteEveryRecord(did, collections, token, doFetch);

@@ -31,7 +31,8 @@
 import { db } from "@anthers/db";
 import { hostedAccounts, users } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
-import { hostedPdsUrl, recordHostedIdentity } from "../services/hosted-accounts.js";
+import { hostedPdsUrl } from "../services/hosted-node.js";
+import { recordHostedIdentity } from "../services/hosted-accounts.js";
 
 interface Args {
 	userId: number | null;

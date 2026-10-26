@@ -35,8 +35,8 @@ import {
 	createHostedAccount,
 	HostedAccountError,
 	hostedIdentityOffered,
-	nodeCall,
 } from "../services/hosted-accounts.js";
+import { nodeCall } from "../services/hosted-node.js";
 import { writerForAccount } from "../services/repo-writer.js";
 import { seal } from "../services/secret-box.js";
 import { createAccount } from "./account-fixture";

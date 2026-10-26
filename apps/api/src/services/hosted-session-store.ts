@@ -25,7 +25,7 @@
 import { db } from "@anthers/db";
 import { hostedAccounts } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { nodeCall } from "./hosted-accounts.js";
+import { nodeCall } from "./hosted-node.js";
 import { open, seal } from "./secret-box.js";
 
 /**
@@ -44,7 +44,16 @@ interface StoredSession {
 	expiresAt: number;
 }
 
-export type HostedSessionResult = { token: string } | { token: null; error: string };
+export type HostedSessionResult =
+	| { token: string }
+	/**
+	 * `authorizationLost` is the difference between "the node is down" and "the node said this
+	 * account's session is gone". The second happens when the owner resets their password, which
+	 * revokes every password-derived refresh token, and with no password on file there is no
+	 * login left to attempt. A caller must report it as an authorization problem rather than as
+	 * an outage, or the failure reads as a retry that never succeeds.
+	 */
+	| { token: null; error: string; authorizationLost?: true };
 
 /**
  * The opens currently in flight, by DID, so concurrent callers share one login.
@@ -69,7 +78,7 @@ const opensInFlight = new Map<string, Promise<HostedSessionResult>>();
  */
 export async function sessionForHostedAccount(
 	did: string,
-	password: string,
+	password: string | null,
 	opts: { fetchImpl?: typeof fetch } = {},
 ): Promise<HostedSessionResult> {
 	const running = opensInFlight.get(did);
@@ -91,7 +100,7 @@ export async function clearHostedSession(did: string): Promise<void> {
 /** The body of one open; runs under the per-DID mutex above. */
 async function obtainSession(
 	did: string,
-	password: string,
+	password: string | null,
 	doFetch: typeof fetch,
 ): Promise<HostedSessionResult> {
 	const stored = await readStored(did);
@@ -121,7 +130,14 @@ async function obtainSession(
 		await clearHostedSession(did).catch(() => {});
 	}
 
-	// 3. No session on file, or a dead one: the single login this design exists to spend.
+	// 3. A password is a legacy fallback, and only a fallback: a session on file is the
+	// credential, and once one exists the password is not kept. With none on file there is
+	// nothing left to present, which is the state a password reset creates.
+	if (password === null) {
+		return { token: null, error: "authorization_lost", authorizationLost: true };
+	}
+
+	// 4. No session on file, or a dead one, and a password still on file: the one login left.
 	const session = await nodeCall(
 		"/xrpc/com.atproto.server.createSession",
 		{ method: "POST", body: JSON.stringify({ identifier: did, password }) },
