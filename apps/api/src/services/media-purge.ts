@@ -245,6 +245,9 @@ function collectRawKeysForWork(
 	// deletes without a second hand-written key list, the shape this module exists to end.
 	if (item.sourceOriginalKey) keys.add(urlToKey(item.sourceOriginalKey));
 	if (item.thumbnail) keys.add(urlToKey(item.thumbnail));
+	// The full upload the thumbnail was framed from — unreferenced by any render, and so
+	// only this enumeration can name it for deletion.
+	if (item.thumbnailSource) keys.add(urlToKey(item.thumbnailSource));
 	// A paged Work's source set — every file's original, not only the one the legacy
 	// column names. A removed source file's row is already gone when a delete runs, so
 	// the sweep cannot see it here by design: the remove path asks the sweep directly
@@ -417,9 +420,15 @@ export async function collectWorkMedia(workIds: number[]): Promise<CollectedMedi
  */
 export function addUserImages(
 	collected: CollectedMedia,
-	user: { id: number; avatar?: string | null; headerImage?: string | null },
+	user: {
+		id: number;
+		avatar?: string | null;
+		headerImage?: string | null;
+		avatarSource?: string | null;
+		headerImageSource?: string | null;
+	},
 ): CollectedMedia {
-	for (const ref of [user.avatar, user.headerImage]) {
+	for (const ref of [user.avatar, user.headerImage, user.avatarSource, user.headerImageSource]) {
 		if (!ref) continue;
 		const key = urlToKey(ref);
 		if (isKeyUnder(key, user.id)) collected.keys.add(key);

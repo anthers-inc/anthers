@@ -78,6 +78,7 @@ import {
 	SAVED_RECIPE_LIMIT,
 	sameRecipe,
 } from "@anthers/shared/discovery";
+import { imageCropSchema } from "@anthers/shared/image-frame";
 import { normalizeKeyboardShortcuts } from "@anthers/shared/keybindings";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
@@ -259,6 +260,12 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		isDiscordLinked: user.discordId !== null,
 		avatar: user.avatar,
 		headerImage: user.headerImage,
+		// Owner-facing only, and this shape reaches nobody else: the uncropped uploads a
+		// reposition needs. `serializePublicUser` carries neither.
+		avatarSource: user.avatarSource,
+		headerImageSource: user.headerImageSource,
+		avatarCrop: user.avatarCrop,
+		headerImageCrop: user.headerImageCrop,
 		websiteUrl: user.websiteUrl,
 		location: user.location,
 		emailVerified: user.emailVerified,
@@ -504,6 +511,12 @@ const updateProfileSchema = z.object({
 	creatorMode: z.boolean().optional(),
 	avatar: z.string().max(500).optional(),
 	headerImage: z.string().max(500).optional(),
+	/** The full uploads the avatar and header are framed from — owner-only, never published. */
+	avatarSource: z.string().max(500).optional(),
+	headerImageSource: z.string().max(500).optional(),
+	/** The windows those images were framed at, so a reposition reopens where it was left. */
+	avatarCrop: imageCropSchema.nullable().optional(),
+	headerImageCrop: imageCropSchema.nullable().optional(),
 	websiteUrl: z.string().max(500).optional(),
 	location: z.string().max(100).optional(),
 	themePreference: z.enum(["light", "dark"]).optional(),
@@ -606,15 +619,27 @@ const accountRoutes = new Hono()
 		// about, as with a Work's file references, so a request repeating the stored value is
 		// never refused for a row written before this check. `storage/keys.ts` carries the
 		// reasons.
-		if (data.avatar !== undefined || data.headerImage !== undefined) {
+		if (
+			data.avatar !== undefined ||
+			data.headerImage !== undefined ||
+			data.avatarSource !== undefined ||
+			data.headerImageSource !== undefined
+		) {
 			const [stored] = await db
-				.select({ avatar: users.avatar, headerImage: users.headerImage })
+				.select({
+					avatar: users.avatar,
+					headerImage: users.headerImage,
+					avatarSource: users.avatarSource,
+					headerImageSource: users.headerImageSource,
+				})
 				.from(users)
 				.where(eq(users.id, sessionUser.id))
 				.limit(1);
 			for (const [sent, current] of [
 				[data.avatar, stored?.avatar],
 				[data.headerImage, stored?.headerImage],
+				[data.avatarSource, stored?.avatarSource],
+				[data.headerImageSource, stored?.headerImageSource],
 			] as const) {
 				if (
 					sent !== undefined &&
@@ -716,6 +741,10 @@ const accountRoutes = new Hono()
 		if (data.creatorMode !== undefined) updates.creatorMode = data.creatorMode;
 		if (data.avatar !== undefined) updates.avatar = data.avatar;
 		if (data.headerImage !== undefined) updates.headerImage = data.headerImage;
+		if (data.avatarSource !== undefined) updates.avatarSource = data.avatarSource;
+		if (data.headerImageSource !== undefined) updates.headerImageSource = data.headerImageSource;
+		if (data.avatarCrop !== undefined) updates.avatarCrop = data.avatarCrop;
+		if (data.headerImageCrop !== undefined) updates.headerImageCrop = data.headerImageCrop;
 		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
 		if (data.location !== undefined) updates.location = data.location;
 

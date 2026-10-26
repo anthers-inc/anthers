@@ -41,6 +41,12 @@ export interface User {
 	isDiscordLinked: boolean;
 	avatar: string | null;
 	headerImage: string | null;
+	/** The full uploads the images were framed from; the owner's own reposition starts here. */
+	avatarSource?: string | null;
+	headerImageSource?: string | null;
+	/** The windows they were last framed at, so a reposition reopens where it was left. */
+	avatarCrop?: import("@anthers/shared/image-frame").ImageCrop | null;
+	headerImageCrop?: import("@anthers/shared/image-frame").ImageCrop | null;
 	websiteUrl: string | null;
 	location: string | null;
 	emailVerified: boolean | null;

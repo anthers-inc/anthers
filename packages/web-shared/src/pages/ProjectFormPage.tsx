@@ -12,17 +12,20 @@
  */
 
 import { THUMBNAIL_RULE } from "@anthers/shared/content";
+import type { ImageCrop } from "@anthers/shared/image-frame";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { frameImageFile, uploadImageFile } from "../components/post/mediaUpload";
 import FileUpload from "../components/ui/FileUpload";
 import FormField from "../components/ui/FormField";
+import ImageFrameModal from "../components/ui/ImageFrameModal";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../lib/auth";
 import { usePayoutsReady } from "../lib/payouts";
 import { creatorProjectUrl } from "../lib/profile";
 import { usePublishingPermissionMissing } from "../lib/publishing";
 import { Link } from "../lib/router";
-import { apiFetch, client } from "../lib/rpc";
+import { client } from "../lib/rpc";
 import { studioUrl } from "../lib/studio";
 import type { Project } from "../lib/types";
 
@@ -31,20 +34,6 @@ function slugify(text: string): string {
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, "-")
 		.replace(/^-|-$/g, "");
-}
-
-/** Upload a cover image via the direct endpoint; returns its public URL. */
-async function uploadImage(file: File): Promise<string> {
-	const formData = new FormData();
-	formData.append("file", file);
-	formData.append("mediaType", "cover");
-	const res = await apiFetch("/api/content/media-upload/direct", {
-		method: "POST",
-		body: formData,
-	});
-	if (!res.ok) throw new Error("Image upload failed");
-	const data = (await res.json()) as { key: string; url: string };
-	return data.url;
 }
 
 /** Best-effort extraction of an { error } message from a non-ok JSON response. */
@@ -116,6 +105,10 @@ export default function ProjectFormPage() {
 	const [slugManual, setSlugManual] = useState(false);
 	const [description, setDescription] = useState("");
 	const [coverImage, setCoverImage] = useState("");
+	/** The full upload the image was framed from, so the Project page can reposition it later. */
+	const [coverSource, setCoverSource] = useState("");
+	/** The window it was framed at, so a later reposition reopens there. */
+	const [coverCrop, setCoverCrop] = useState<ImageCrop | null>(null);
 	const [coverPreview, setCoverPreview] = useState<string | null>(null);
 	const [isPublished, setIsPublished] = useState(false);
 	const payoutsReady = usePayoutsReady();
@@ -131,16 +124,34 @@ export default function ProjectFormPage() {
 		if (!slugManual) setProjectSlug(slugify(title));
 	}, [title, slugManual]);
 
-	const handleCoverSelect = async (file: File) => {
-		setCoverPreview(URL.createObjectURL(file));
+	// A chosen file is framed before it is stored: the dialog's save uploads the full source,
+	// asks the server for the 2:1 derivative and keeps both.
+	const [framing, setFraming] = useState<{ preview: string; file: File } | null>(null);
+
+	const handleCoverSelect = (file: File) => {
+		setError(null);
+		setFraming({ preview: URL.createObjectURL(file), file });
+	};
+
+	const closeFraming = () => {
+		if (framing) URL.revokeObjectURL(framing.preview);
+		setFraming(null);
+	};
+
+	const saveFramedCover = async (crop: { x: number; y: number; width: number; height: number }) => {
+		if (!framing) return;
 		setUploading(true);
 		setError(null);
 		try {
-			const url = await uploadImage(file);
-			setCoverImage(url);
-			setCoverPreview(url);
-		} catch {
-			setError("The thumbnail didn't upload. Try it again.");
+			const source = (await uploadImageFile(framing.file, "cover")).url;
+			const framed = await frameImageFile(source, "cover", crop);
+			setCoverImage(framed.url);
+			setCoverSource(source);
+			setCoverCrop(crop);
+			setCoverPreview(framed.url);
+			closeFraming();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "The thumbnail didn't upload. Try it again.");
 		} finally {
 			setUploading(false);
 		}
@@ -157,6 +168,8 @@ export default function ProjectFormPage() {
 					slug: projectSlug,
 					description,
 					coverImage,
+					coverSource,
+					coverCrop,
 					isPublished,
 				},
 			});
@@ -297,6 +310,16 @@ export default function ProjectFormPage() {
 					</button>
 				</div>
 			</form>
+
+			<ImageFrameModal
+				open={framing !== null}
+				src={framing?.preview ?? null}
+				mediaType="cover"
+				busy={uploading}
+				error={error}
+				onCancel={closeFraming}
+				onSave={(crop) => void saveFramedCover(crop)}
+			/>
 		</div>
 	);
 }

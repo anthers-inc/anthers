@@ -22,6 +22,7 @@ import { db } from "@anthers/db/client";
 import { projects, users, works } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, inArray, sql } from "drizzle-orm";
+import sharp from "sharp";
 import app from "../index";
 import { queue } from "../jobs/queue";
 import { addUserImages, collectWorkMedia } from "../services/media-purge.js";
@@ -130,6 +131,12 @@ describe("the write routes refuse another account's file", () => {
 		expect(
 			await refusal(await createWork(attacker.cookie, { type: "game", thumbnail: victimThumb })),
 		).toBe("foreign_file");
+		// The framing source is read by the frame route, so it is the same door.
+		expect(
+			await refusal(
+				await createWork(attacker.cookie, { type: "game", thumbnailSource: victimThumb }),
+			),
+		).toBe("foreign_file");
 	});
 
 	it("accepts the account's own file", async () => {
@@ -194,6 +201,16 @@ describe("the write routes refuse another account's file", () => {
 				await call("PATCH", "/api/accounts/me", attacker.cookie, { headerImage: foreign }),
 			),
 		).toBe("foreign_file");
+		expect(
+			await refusal(
+				await call("PATCH", "/api/accounts/me", attacker.cookie, { avatarSource: foreign }),
+			),
+		).toBe("foreign_file");
+		expect(
+			await refusal(
+				await call("PATCH", "/api/accounts/me", attacker.cookie, { headerImageSource: foreign }),
+			),
+		).toBe("foreign_file");
 		const own = await storage.getUrl(keyFor(attacker.id, "avatars/face.png"));
 		expect((await call("PATCH", "/api/accounts/me", attacker.cookie, { avatar: own })).status).toBe(
 			200,
@@ -212,11 +229,122 @@ describe("the write routes refuse another account's file", () => {
 		const create = (coverImage: string) =>
 			call("POST", "/api/content/projects", attacker.cookie, { title: "ffr", slug, coverImage });
 		expect(await refusal(await create(foreign))).toBe("foreign_file");
+		expect(
+			await refusal(
+				await call("POST", "/api/content/projects", attacker.cookie, {
+					title: "ffr",
+					slug: `${slug}-source`,
+					coverSource: foreign,
+				}),
+			),
+		).toBe("foreign_file");
 		expect((await create("")).status).toBe(201);
 		const edit = await call("PATCH", `/api/content/projects/${slug}`, attacker.cookie, {
 			coverImage: foreign,
 		});
 		expect(await refusal(edit)).toBe("foreign_file");
+		const editSource = await call("PATCH", `/api/content/projects/${slug}`, attacker.cookie, {
+			coverSource: foreign,
+		});
+		expect(await refusal(editSource)).toBe("foreign_file");
+	});
+
+	it("refuses it as a framing source, which the frame route would read", async () => {
+		const foreign = await storage.getUrl(keyFor(victim.id, "thumbnails/source.png"));
+		const res = await call("POST", "/api/content/media-upload/frame", attacker.cookie, {
+			source: foreign,
+			mediaType: "thumbnail",
+			crop: { x: 0, y: 0, width: 1, height: 1 },
+		});
+		expect(res.status).toBe(403);
+		expect(((await res.json()) as { code?: string }).code).toBe("foreign_file");
+	});
+});
+
+describe("framing an image", () => {
+	async function uploadSource(width: number, height: number) {
+		const png = await sharp({
+			create: { width, height, channels: 3, background: "#336699" },
+		})
+			.png()
+			.toBuffer();
+		const form = new FormData();
+		form.append(
+			"file",
+			new File([new Uint8Array(png)], `source-${run}.png`, { type: "image/png" }),
+		);
+		form.append("mediaType", "thumbnail");
+		const res = await app.fetch(
+			new Request("http://localhost/api/content/media-upload/direct", {
+				method: "POST",
+				headers: { Origin: ORIGIN, Cookie: attacker.cookie },
+				body: form,
+			}),
+		);
+		expect(res.status).toBe(201);
+		const body = (await res.json()) as { key: string; url: string };
+		storedKeys.push(body.key);
+		return body;
+	}
+
+	it("writes a derivative at the surface's shape from the account's own source", async () => {
+		const source = await uploadSource(640, 360);
+		const res = await call("POST", "/api/content/media-upload/frame", attacker.cookie, {
+			source: source.url,
+			mediaType: "thumbnail",
+			crop: { x: 0, y: 0, width: 1, height: 1 },
+		});
+		expect(res.status).toBe(201);
+		const framed = (await res.json()) as { key: string; url: string };
+		storedKeys.push(framed.key);
+		const bytes = await storage.read(framed.key);
+		expect(bytes).not.toBeNull();
+		const meta = await sharp(bytes as Uint8Array).metadata();
+		expect([meta.width, meta.height]).toEqual([1280, 720]);
+		expect(framed.url).not.toBe(source.url);
+	});
+
+	it("refuses a crop that does not name a window on the image", async () => {
+		const source = await uploadSource(320, 180);
+		for (const crop of [
+			{ x: 0.8, y: 0, width: 0.5, height: 1 },
+			{ x: 0, y: 0, width: 0, height: 1 },
+			{ x: 0, y: 0 },
+		]) {
+			const res = await call("POST", "/api/content/media-upload/frame", attacker.cookie, {
+				source: source.url,
+				mediaType: "thumbnail",
+				crop,
+			});
+			expect(res.status).toBe(400);
+		}
+	});
+
+	it("keeps the framing source out of a public Project response", async () => {
+		const own = await storage.getUrl(keyFor(attacker.id, "covers/source.png"));
+		const slug = `ffr-source-${run}`;
+		projectSlugs.push(slug);
+		const created = await call("POST", "/api/content/projects", attacker.cookie, {
+			title: "ffr source",
+			slug,
+			coverImage: own,
+			coverSource: own,
+			coverCrop: { x: 0.1, y: 0.1, width: 0.8, height: 0.4 },
+		});
+		expect(created.status).toBe(201);
+		// Published directly, because this assertion is about the serializer rather than the
+		// publish gate the account may not have cleared.
+		await db.update(projects).set({ isPublished: true }).where(eq(projects.slug, slug));
+		const publicRead = await app.fetch(
+			new Request(`http://localhost/api/content/projects/${slug}`, {
+				headers: { Origin: ORIGIN },
+			}),
+		);
+		expect(publicRead.status).toBe(200);
+		const { project } = (await publicRead.json()) as { project: Record<string, unknown> };
+		expect(project.coverImage).toBe(own);
+		expect(Object.hasOwn(project, "coverSource")).toBe(false);
+		expect(Object.hasOwn(project, "coverCrop")).toBe(false);
 	});
 });
 
@@ -255,8 +383,26 @@ describe("deletion never reaches another account's file", () => {
 				id: attacker.id,
 				avatar: keyFor(victim.id, "avatars/face.png"),
 				headerImage: keyFor(attacker.id, "headers/own.png"),
+				avatarSource: keyFor(attacker.id, "avatars/source.png"),
+				headerImageSource: keyFor(victim.id, "headers/foreign-source.png"),
 			},
 		);
-		expect([...collected.keys]).toEqual([keyFor(attacker.id, "headers/own.png")]);
+		expect([...collected.keys]).toEqual([
+			keyFor(attacker.id, "headers/own.png"),
+			keyFor(attacker.id, "avatars/source.png"),
+		]);
+	});
+
+	it("collects a Work's own framing source and never a foreign one", async () => {
+		const ownSource = keyFor(attacker.id, "thumbnails/source-own.png");
+		const bait = await insertWork({
+			creatorId: attacker.id,
+			type: "video",
+			visibility: "private",
+			thumbnailSource: await storage.getUrl(ownSource),
+		});
+		workIds.push(bait.id);
+		const collected = await collectWorkMedia([bait.id]);
+		expect([...collected.keys]).toEqual([ownSource]);
 	});
 });

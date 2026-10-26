@@ -86,7 +86,11 @@ import AccessTables, {
 	buildAccessRows,
 	serializeAccessRows,
 } from "@anthers/web-shared/post/AccessTables";
-import { keyToPreview, uploadImageFile } from "@anthers/web-shared/post/mediaUpload";
+import {
+	frameImageFile,
+	keyToPreview,
+	uploadImageFile,
+} from "@anthers/web-shared/post/mediaUpload";
 import { profileUrl } from "@anthers/web-shared/profile";
 import { publishingPermissionMissing, usePublishingState } from "@anthers/web-shared/publishing";
 import {
@@ -105,6 +109,8 @@ import {
 	type WorkInput,
 } from "@anthers/web-shared/types";
 import FileUpload from "@anthers/web-shared/ui/FileUpload";
+import ImageEditMenu from "@anthers/web-shared/ui/ImageEditMenu";
+import ImageFrameModal from "@anthers/web-shared/ui/ImageFrameModal";
 import InfoTip from "@anthers/web-shared/ui/InfoTip";
 import { uploadMediaFile } from "@anthers/web-shared/upload";
 import { useWebBuildUploads } from "@anthers/web-shared/web-build-uploads";
@@ -320,8 +326,20 @@ export default function OwnerWorkEditor({
 	const [mediaManaging, setMediaManaging] = useState(false);
 	/** The management tab the card opens on; the manager falls back if a type lacks it. */
 	const [mediaTab, setMediaTab] = useState("delivery");
-	/** Which of the two thumbnail pickers is open — the frame's or the upload's. */
-	const [thumbPicker, setThumbPicker] = useState<"none" | "frame" | "upload">("none");
+	/** Whether the frame picker (a video's paused moment) is open. */
+	const [thumbPicker, setThumbPicker] = useState<"none" | "frame">("none");
+	/**
+	 * The framing dialog: a file the creator just chose, or the full source behind the
+	 * stored thumbnail. `source` is null while a new file is still local.
+	 */
+	const [thumbFrame, setThumbFrame] = useState<{
+		preview: string;
+		file: File | null;
+		source: string | null;
+	} | null>(null);
+	const thumbInput = useRef<HTMLInputElement>(null);
+	/** A render-visible twin of `thumbnailInFlight`, which is a ref for the timer reads. */
+	const [thumbSaving, setThumbSaving] = useState(false);
 	/** Whether the upload failed, said beside the thumbnail and inside the upload modal. */
 	const [thumbError, setThumbError] = useState<string | null>(null);
 	/** Which Info tab is open — lifted, because the header's *Change* rating link opens Rating. */
@@ -473,23 +491,51 @@ export default function OwnerWorkEditor({
 
 	// ── The thumbnail itself ──
 	/**
-	 * Upload an image and treat the settled result as the edit: the act saves the field
-	 * itself once the stored URL is in hand, the way the frame act always has. The
-	 * settled-value guard (`thumbnailInFlight`) blocks the row save until the upload
-	 * answers — the same race the batch editor lost (work 23's lost thumbnail).
+	 * A chosen file or a repositioned stored image both arrive as a crop window; the act
+	 * uploads the source when it is new, lets the server frame it at 16:9, and saves the
+	 * derivative beside its full source. The settled-value guard (`thumbnailInFlight`)
+	 * blocks the row save until that answers — the same race the batch editor lost
+	 * (work 23's lost thumbnail).
 	 */
-	const handleThumbnail = async (file: File) => {
+	const closeThumbFrame = () => {
+		if (thumbFrame?.file) URL.revokeObjectURL(thumbFrame.preview);
+		setThumbFrame(null);
+	};
+
+	const thumbPicked = (file: File) => {
+		setThumbError(null);
+		setThumbFrame({ preview: URL.createObjectURL(file), file, source: null });
+	};
+
+	const startThumbReposition = () => {
+		const source = keyToPreview(current.thumbnailSource || thumbnailUrl);
+		if (!source) return;
+		setThumbError(null);
+		setThumbFrame({ preview: source, file: null, source });
+	};
+
+	const saveFramedThumbnail = async (crop: {
+		x: number;
+		y: number;
+		width: number;
+		height: number;
+	}) => {
+		if (!thumbFrame) return;
 		thumbnailTouched.current = true;
 		thumbnailInFlight.current += 1;
+		setThumbSaving(true);
 		setThumbError(null);
-		setThumbnailPreview(URL.createObjectURL(file));
 		try {
-			const { url } = await uploadImageFile(file, "thumbnail");
+			const source = thumbFrame.file
+				? (await uploadImageFile(thumbFrame.file, "thumbnail")).url
+				: thumbFrame.source;
+			if (!source) throw new Error("That image isn't available any more. Upload it again.");
+			const { url } = await frameImageFile(source, "thumbnail", crop);
 			setThumbnailUrl(url);
 			setThumbnailPreview(url);
-			await saveFields({ thumbnail: url });
+			await saveFields({ thumbnail: url, thumbnailSource: source, thumbnailCrop: crop });
 			thumbnailTouched.current = false;
-			setThumbPicker("none");
+			closeThumbFrame();
 		} catch (err) {
 			setThumbnailPreview(thumbnailUrl ? keyToPreview(thumbnailUrl) : null);
 			if (!thumbnailUrl) thumbnailTouched.current = false;
@@ -500,6 +546,7 @@ export default function OwnerWorkEditor({
 			);
 		} finally {
 			thumbnailInFlight.current -= 1;
+			setThumbSaving(false);
 		}
 	};
 
@@ -711,7 +758,7 @@ export default function OwnerWorkEditor({
 				<img
 					src={thumbnailPreview}
 					alt="The Work's thumbnail"
-					className="w-40 rounded-lg object-cover"
+					className="w-40 aspect-video rounded-lg object-cover"
 				/>
 			) : (
 				/* The blank frame the thumbnail fills: a picker's answer or an upload lands
@@ -727,28 +774,39 @@ export default function OwnerWorkEditor({
 				</div>
 			)}
 			<div className="flex flex-col gap-2">
-				{frameChoosable && (
-					<button
-						type="button"
-						className="btn btn-outline btn-sm"
-						onClick={() => {
-							setFrameError(null);
-							setThumbPicker("frame");
-						}}
-					>
-						Choose from Work
-					</button>
-				)}
-				<button
-					type="button"
-					className="btn btn-outline btn-sm"
-					onClick={() => {
-						setThumbError(null);
-						setThumbPicker("upload");
+				<input
+					ref={thumbInput}
+					type="file"
+					accept="image/*"
+					className="hidden"
+					onChange={(e) => {
+						const file = e.target.files?.[0];
+						e.target.value = "";
+						if (file) thumbPicked(file);
 					}}
-				>
-					Upload an Image
-				</button>
+				/>
+				<ImageEditMenu
+					label="thumbnail"
+					triggerLabel="Edit Thumbnail"
+					hasImage={Boolean(thumbnailPreview)}
+					busy={thumbSaving}
+					onUpload={() => {
+						setThumbError(null);
+						thumbInput.current?.click();
+					}}
+					onReposition={startThumbReposition}
+					extra={
+						frameChoosable
+							? {
+									label: "Choose from Work",
+									onSelect: () => {
+										setFrameError(null);
+										setThumbPicker("frame");
+									},
+								}
+							: undefined
+					}
+				/>
 			</div>
 			{thumbError && <p className="w-full text-xs text-error">{thumbError}</p>}
 		</div>
@@ -1780,8 +1838,8 @@ export default function OwnerWorkEditor({
 
 			{error && <p className="text-sm text-error">{error}</p>}
 
-			{/* The thumbnail's two pickers. Each is an overlay, so opening one changes
-			    nothing about the page's height — the scroll-keeper's concern is the
+			{/* The frame picker and the framing dialog. Each is an overlay, so opening one
+			    changes nothing about the page's height — the scroll-keeper's concern is the
 			    section's buttons and the tabs, not these. */}
 			{thumbPicker === "frame" && frameChoosable && (
 				<ThumbFramePicker
@@ -1798,14 +1856,16 @@ export default function OwnerWorkEditor({
 					onClose={() => setThumbPicker("none")}
 				/>
 			)}
-			{thumbPicker === "upload" && (
-				<ThumbUploadModal
-					inFlight={thumbnailInFlight.current > 0}
-					error={thumbError}
-					onFile={handleThumbnail}
-					onClose={() => setThumbPicker("none")}
-				/>
-			)}
+			<ImageFrameModal
+				open={thumbFrame !== null}
+				src={thumbFrame?.preview ?? null}
+				mediaType="thumbnail"
+				busy={thumbSaving}
+				error={thumbError}
+				initialCrop={current.thumbnailCrop ?? null}
+				onCancel={closeThumbFrame}
+				onSave={(crop) => void saveFramedThumbnail(crop)}
+			/>
 		</WorkColumn>
 	);
 }
@@ -1895,61 +1955,6 @@ function ThumbFramePicker({
 					</button>
 				</div>
 				{error && <p className="mt-2 text-xs text-warning">{error}</p>}
-			</div>
-		</div>
-	);
-}
-
-/**
- * The thumbnail's **upload modal** — the file picker, in a modal rather than in the
- * section: the section keeps its read shape while the image makes its way to storage,
- * and the modal closes when the upload and its save both settle. A failure stays open
- * and says so; the creator can press again or leave with the field as it was.
- */
-function ThumbUploadModal({
-	inFlight,
-	error,
-	onFile,
-	onClose,
-}: {
-	inFlight: boolean;
-	error: string | null;
-	onFile: (file: File) => void;
-	onClose: () => void;
-}) {
-	// Escape closes, for the keyboard half of the door (the pattern ReportDialog set).
-	useEffect(() => {
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") onClose();
-		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, [onClose]);
-
-	return (
-		<div className="modal modal-open" role="dialog" aria-label="Upload a thumbnail image">
-			<div className="modal-box">
-				<button
-					type="button"
-					className="btn btn-ghost btn-sm btn-circle absolute right-2 top-2"
-					aria-label="Close"
-					onClick={onClose}
-				>
-					<XMarkIcon className="h-4 w-4" />
-				</button>
-				<h3 className="text-lg font-semibold">Upload an Image</h3>
-				<p className="mt-1 mb-3 text-xs text-base-content/60">
-					JPEG, PNG or WebP up to 10 MB. The upload saves itself as the thumbnail once it lands.
-				</p>
-				<FileUpload
-					accept="image/*"
-					maxSize={10 * 1024 * 1024}
-					label="Choose an image for the thumbnail"
-					preview={null}
-					onFileSelect={onFile}
-				/>
-				{inFlight && <p className="mt-3 text-xs text-base-content/60">The image is uploading…</p>}
-				{error && <p className="mt-3 text-xs text-error">{error}</p>}
 			</div>
 		</div>
 	);

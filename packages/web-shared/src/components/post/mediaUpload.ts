@@ -6,10 +6,18 @@
  * (used only for in-form preview; an inline image inserts it).
  */
 
+import type { ImageCrop, ImageFrameType } from "@anthers/shared/image-frame";
 import { apiBaseUrl, apiFetch } from "../../lib/rpc";
 
 /** mediaType values the direct endpoint accepts for display images. */
-export type ImageMediaType = "image" | "thumbnail" | "cover" | "inline-image" | "preview-image";
+export type ImageMediaType =
+	| "image"
+	| "thumbnail"
+	| "cover"
+	| "inline-image"
+	| "preview-image"
+	| "avatar"
+	| "header";
 
 /** Upload a display image via the direct endpoint. Returns the storage key + preview URL. */
 export async function uploadImageFile(
@@ -31,6 +39,38 @@ export async function uploadImageFile(
 			typeof data?.error === "string" && data.error
 				? data.error
 				: "The image didn't upload. Check your connection and try again.",
+		);
+	}
+	return (await res.json()) as { key: string; url: string };
+}
+
+/**
+ * Frame a stored source at its surface's display shape, server-side.
+ *
+ * ⭐ **The source stays whole; this returns a derivative of the window the creator chose.**
+ * The caller saves the derivative in the display column and the source in the `*_source`
+ * column, which is what lets a later reposition zoom back out. The crop arithmetic is shared
+ * with the dialog (`@anthers/shared/image-frame`), so the four numbers mean the same thing on
+ * both sides.
+ */
+export async function frameImageFile(
+	source: string,
+	mediaType: ImageFrameType,
+	crop: ImageCrop,
+	signal?: AbortSignal,
+): Promise<{ key: string; url: string }> {
+	const res = await apiFetch("/api/content/media-upload/frame", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ source, mediaType, crop }),
+		signal,
+	});
+	if (!res.ok) {
+		const data = (await res.json().catch(() => null)) as { error?: string } | null;
+		throw new Error(
+			typeof data?.error === "string" && data.error
+				? data.error
+				: "That image couldn't be framed. Try it again.",
 		);
 	}
 	return (await res.json()) as { key: string; url: string };

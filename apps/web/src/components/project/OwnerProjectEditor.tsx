@@ -21,18 +21,25 @@
  * the creator's own storage prefix, as every stored file reference is.
  */
 
+import type { ImageCrop } from "@anthers/shared/image-frame";
 import ProjectPosts from "@anthers/web-shared/content/ProjectPosts";
 import ProjectWorks from "@anthers/web-shared/content/ProjectWorks";
 import { RecordLinkButton } from "@anthers/web-shared/content/RecordLink";
 import { usePayoutsReady } from "@anthers/web-shared/payouts";
-import { uploadImageFile } from "@anthers/web-shared/post/mediaUpload";
+import {
+	frameImageFile,
+	keyToPreview,
+	uploadImageFile,
+} from "@anthers/web-shared/post/mediaUpload";
 import { publishingPermissionMissing, usePublishingState } from "@anthers/web-shared/publishing";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
 import { studioUrl } from "@anthers/web-shared/studio";
 import type { Project } from "@anthers/web-shared/types";
+import ImageEditMenu from "@anthers/web-shared/ui/ImageEditMenu";
+import ImageFrameModal from "@anthers/web-shared/ui/ImageFrameModal";
 import { PhotoIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { InlineField } from "../work/Editing";
@@ -50,10 +57,20 @@ export default function OwnerProjectEditor({
 	// remove act write. `coverWorkId` names the Work when the cover is one of the
 	// Project's own; the server has already resolved `coverImage` to that Work's cover.
 	const [coverImage, setCoverImage] = useState(project.coverImage ?? "");
+	/** The full upload the image was framed from, kept so a reposition can zoom back out. */
+	const [coverSource, setCoverSource] = useState(project.coverSource ?? "");
+	/** The window it was last framed at, so the dialog reopens there. */
+	const [coverCrop, setCoverCrop] = useState(project.coverCrop ?? null);
 	const [coverWorkId, setCoverWorkId] = useState<number | null>(project.coverWorkId ?? null);
 	const [coverError, setCoverError] = useState<string | null>(null);
 	const [coverBusy, setCoverBusy] = useState(false);
 	const [coverPickerOpen, setCoverPickerOpen] = useState(false);
+	const [framing, setFraming] = useState<{
+		preview: string;
+		file: File | null;
+		source: string | null;
+	} | null>(null);
+	const coverInput = useRef<HTMLInputElement>(null);
 
 	const payoutsReady = usePayoutsReady();
 	const publishing = usePublishingState();
@@ -65,6 +82,8 @@ export default function OwnerProjectEditor({
 		title?: string;
 		description?: string;
 		coverImage?: string;
+		coverSource?: string;
+		coverCrop?: ImageCrop | null;
 		coverWorkId?: number | null;
 		isPublished?: boolean;
 	}): Promise<ProjectRow> => {
@@ -85,24 +104,56 @@ export default function OwnerProjectEditor({
 		title?: string;
 		description?: string;
 		coverImage?: string;
+		coverSource?: string;
 		isPublished?: boolean;
 	}): Promise<void> => {
 		await patchFields(fields);
 	};
 
-	// The cover acts on its read state: upload settles into a save, remove saves empty.
-	const uploadCover = async (file: File) => {
+	// The image acts on its read state: a framed save is the edit, and remove saves empty.
+	const closeFraming = () => {
+		if (framing?.file) URL.revokeObjectURL(framing.preview);
+		setFraming(null);
+	};
+
+	const pickedCover = (file: File) => {
+		setCoverError(null);
+		setFraming({ preview: URL.createObjectURL(file), file, source: null });
+	};
+
+	const startReposition = () => {
+		// A row written before the source column falls back to the image already stored.
+		const source = keyToPreview(coverSource || coverImage);
+		if (!source) return;
+		setCoverError(null);
+		setFraming({ preview: source, file: null, source });
+	};
+
+	const saveFramedCover = async (crop: { x: number; y: number; width: number; height: number }) => {
+		if (!framing) return;
 		setCoverError(null);
 		setCoverBusy(true);
 		try {
-			const { url } = await uploadImageFile(file, "cover");
-			// An uploaded image is the other way to choose a cover, so it retires any Work
+			const source = framing.file
+				? (await uploadImageFile(framing.file, "cover")).url
+				: framing.source;
+			if (!source) throw new Error("That image isn't available any more. Upload it again.");
+			const framed = await frameImageFile(source, "cover", crop);
+			// A framed upload is the other way to choose an image, so it retires any Work
 			// reference in the same act.
-			const updated = await patchFields({ coverImage: url, coverWorkId: null });
+			const updated = await patchFields({
+				coverImage: framed.url,
+				coverSource: source,
+				coverCrop: crop,
+				coverWorkId: null,
+			});
 			setCoverImage(updated.coverImage ?? "");
+			setCoverSource(updated.coverSource ?? "");
+			setCoverCrop(updated.coverCrop ?? null);
 			setCoverWorkId(updated.coverWorkId ?? null);
+			closeFraming();
 		} catch (err) {
-			setCoverError(err instanceof Error ? err.message : "The image didn't upload. Try it again.");
+			setCoverError(err instanceof Error ? err.message : "The image didn't save. Try it again.");
 		} finally {
 			setCoverBusy(false);
 		}
@@ -116,6 +167,8 @@ export default function OwnerProjectEditor({
 		try {
 			const updated = await patchFields({ coverWorkId: workId });
 			setCoverImage(updated.coverImage ?? "");
+			setCoverSource(updated.coverSource ?? "");
+			setCoverCrop(updated.coverCrop ?? null);
 			setCoverWorkId(updated.coverWorkId ?? null);
 			setCoverPickerOpen(false);
 		} catch (err) {
@@ -138,8 +191,15 @@ export default function OwnerProjectEditor({
 		try {
 			// Removing the cover clears both choices: the uploaded image and any Work it
 			// was borrowing from.
-			const updated = await patchFields({ coverImage: "", coverWorkId: null });
+			const updated = await patchFields({
+				coverImage: "",
+				coverSource: "",
+				coverCrop: null,
+				coverWorkId: null,
+			});
 			setCoverImage(updated.coverImage ?? "");
+			setCoverSource(updated.coverSource ?? "");
+			setCoverCrop(updated.coverCrop ?? null);
 			setCoverWorkId(updated.coverWorkId ?? null);
 		} catch (err) {
 			setCoverError(err instanceof Error ? err.message : "Couldn't remove the cover just now.");
@@ -177,31 +237,38 @@ export default function OwnerProjectEditor({
 			)}
 			<div className="mb-6 flex flex-col gap-2">
 				<div className="flex flex-wrap items-center gap-2">
-					<label className={`btn btn-outline btn-sm ${coverBusy ? "btn-disabled" : ""}`}>
-						Upload an Image
-						<input
-							type="file"
-							accept="image/*"
-							className="hidden"
-							disabled={coverBusy}
-							onChange={(e) => {
-								const file = e.target.files?.[0];
-								e.target.value = "";
-								if (file) void uploadCover(file);
-							}}
-						/>
-					</label>
-					<button
-						type="button"
-						className="btn btn-outline btn-sm"
-						disabled={coverBusy}
-						onClick={() => {
-							setCoverError(null);
-							setCoverPickerOpen(true);
+					<input
+						ref={coverInput}
+						type="file"
+						accept="image/*"
+						className="hidden"
+						onChange={(e) => {
+							const file = e.target.files?.[0];
+							e.target.value = "";
+							if (file) pickedCover(file);
 						}}
-					>
-						Choose from Work
-					</button>
+					/>
+					<ImageEditMenu
+						label="Project image"
+						triggerLabel="Edit Image"
+						hasImage={Boolean(coverImage) && coverWorkId == null}
+						busy={coverBusy}
+						onUpload={() => {
+							setCoverError(null);
+							coverInput.current?.click();
+						}}
+						onReposition={startReposition}
+						repositionDisabledReason={
+							coverWorkId != null ? "Reposition it on the Work it comes from." : undefined
+						}
+						extra={{
+							label: "Choose from Work",
+							onSelect: () => {
+								setCoverError(null);
+								setCoverPickerOpen(true);
+							},
+						}}
+					/>
 					{(coverImage || coverWorkId != null) && (
 						<button
 							type="button"
@@ -356,6 +423,17 @@ export default function OwnerProjectEditor({
 				</p>
 				<ProjectPosts projectSlug={project.slug} />
 			</div>
+
+			<ImageFrameModal
+				open={framing !== null}
+				src={framing?.preview ?? null}
+				mediaType="cover"
+				busy={coverBusy}
+				error={coverError}
+				initialCrop={coverCrop}
+				onCancel={closeFraming}
+				onSave={(crop) => void saveFramedCover(crop)}
+			/>
 
 			{coverPickerOpen && (
 				<CoverWorkPicker

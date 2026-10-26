@@ -16,6 +16,8 @@
  * 🚨 `schema-role-tags.test.ts` requires a tag on every table, because this began as a
  * one-time pass with nothing behind it and had decayed to 43 of 51 by 2026-09-01.
  */
+
+import type { ImageCrop } from "@anthers/shared/image-frame";
 import {
 	boolean,
 	index,
@@ -59,6 +61,16 @@ export const users = pgTable("users", {
 	creatorMode: boolean("creator_mode").default(false),
 	avatar: text("avatar").default(""),
 	headerImage: text("header_image").default(""),
+	/**
+	 * The full uploads the avatar and header are framed from, kept so a reposition can zoom
+	 * back out. 🚨 Owner-facing only: these are the uncropped files, and the public profiles
+	 * never carry them.
+	 */
+	avatarSource: text("avatar_source").default(""),
+	headerImageSource: text("header_image_source").default(""),
+	/** The windows the owner last framed each image at; null before framing existed. */
+	avatarCrop: jsonb("avatar_crop").$type<ImageCrop | null>(),
+	headerImageCrop: jsonb("header_image_crop").$type<ImageCrop | null>(),
 	websiteUrl: text("website_url").default(""),
 	location: text("location").default(""),
 	emailVerified: boolean("email_verified").default(false),

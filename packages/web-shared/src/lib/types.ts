@@ -11,6 +11,7 @@
 
 import type { WorkType } from "@anthers/shared/content";
 import type { ContentNote, MaturityRating, MaturityRows } from "@anthers/shared/content-rating";
+import type { ImageCrop } from "@anthers/shared/image-frame";
 import type { ProjectSortDirection, ProjectSortMode } from "@anthers/shared/project-sort";
 
 // ─── User Types ───
@@ -38,6 +39,16 @@ export interface User {
 	isDiscordLinked?: boolean;
 	avatar: string | null;
 	headerImage: string | null;
+	/**
+	 * The full uploads the avatar and header were framed from, so the owner can reposition
+	 * them. 🚨 Owner-only: the private `/me` shape carries these and the public profile does
+	 * not, because they are the uncropped files.
+	 */
+	avatarSource?: string | null;
+	headerImageSource?: string | null;
+	/** The windows those images were last framed at; the editor reopens there. */
+	avatarCrop?: ImageCrop | null;
+	headerImageCrop?: ImageCrop | null;
 	websiteUrl: string | null;
 	location: string | null;
 	emailVerified?: boolean | null; // Only in /me (private)
@@ -454,6 +465,10 @@ export interface Work {
 	title: string | null;
 	description?: string | null;
 	thumbnail: string | null;
+	/** Owner-facing only: the full upload the thumbnail was framed from. */
+	thumbnailSource?: string | null;
+	/** Owner-facing: the window the framing dialog reopens at. */
+	thumbnailCrop?: ImageCrop | null;
 
 	// Media payload — blanked (empty) by the API when the user lacks access.
 	sourceKey: string | null;
@@ -691,6 +706,10 @@ export interface WorkInput {
 	slug?: string;
 	description?: string;
 	thumbnail?: string;
+	/** The full upload the thumbnail was framed from; the editor saves it beside the crop. */
+	thumbnailSource?: string;
+	/** The window the framing dialog reopens at. */
+	thumbnailCrop?: ImageCrop | null;
 	sourceKey?: string;
 	embedUrl?: string;
 	durationSeconds?: number;
@@ -868,6 +887,10 @@ export interface Project {
 	description: string | null;
 	/** The cover this Project shows — an uploaded image, or the chosen Work's cover. */
 	coverImage: string | null;
+	/** Owner-facing only: the full upload the image was framed from. */
+	coverSource?: string | null;
+	/** Owner-facing: the window the framing dialog reopens at. */
+	coverCrop?: ImageCrop | null;
 	/**
 	 * The Work whose cover this Project wears, by reference; null when the cover is an
 	 * uploaded image or there is none. The response's `coverImage` already resolves it,

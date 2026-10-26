@@ -87,6 +87,7 @@ import {
 	releaseRatingRefusal,
 	requiresAdultVerification,
 } from "@anthers/shared/content-rating";
+import { imageCropSchema, isImageFrameType, normalizeCrop } from "@anthers/shared/image-frame";
 import { dailyCapFor, type LimitWindow, spentWindow } from "@anthers/shared/parental-controls";
 import { POST_PREVIEW_EXCERPT_LIMIT, postPreviewFor } from "@anthers/shared/post-preview";
 import { visiblePostTitle } from "@anthers/shared/post-title";
@@ -221,6 +222,7 @@ import {
 	rejectCredit,
 } from "../services/credit-acceptance.js";
 import { syncAccountRoles } from "../services/discord.js";
+import { framedImageKey, frameImage, ImageFrameRefusal } from "../services/image-framing.js";
 import {
 	LIBRARY_LIMIT,
 	permanentWorkIds,
@@ -1006,6 +1008,13 @@ const workBaseSchema = z
 			.optional(),
 		description: z.string().max(50000).optional().default(""),
 		thumbnail: z.string().max(500).optional().default(""),
+		/**
+		 * The full upload the thumbnail is framed from. Stored beside it so a reposition can
+		 * zoom back out; kept out of every public serializer, because it is the uncropped file.
+		 */
+		thumbnailSource: z.string().max(500).optional().default(""),
+		/** The window the thumbnail was framed at, so a reposition reopens where it was left. */
+		thumbnailCrop: imageCropSchema.nullable().optional(),
 		sourceKey: z.string().max(500).optional().default(""),
 		embedUrl: z
 			.string()
@@ -1230,6 +1239,13 @@ const createProjectSchema = z.object({
 		.regex(/^[a-z0-9-]+$/, "Slug: lowercase letters, numbers, hyphens"),
 	description: z.string().max(50000).optional().default(""),
 	coverImage: z.string().max(500).optional().default(""),
+	/**
+	 * The full upload the Project image was framed from, kept for repositioning. Owner-facing
+	 * only; the detail route withholds it from anyone but the creator.
+	 */
+	coverSource: z.string().max(500).optional().default(""),
+	/** The window the Project image was framed at, so a reposition reopens where it was left. */
+	coverCrop: imageCropSchema.nullable().optional(),
 	pageConfig: z.record(z.unknown()).optional(),
 	// The Project's two sort settings (2026-10-19). A creator saves these from the sort
 	// dropdown on the Project page; the detail route applies them when it serializes
@@ -1635,6 +1651,10 @@ async function serializeWork(
 		title: item.title,
 		description: item.description,
 		thumbnail: item.thumbnail,
+		/** Owner-facing only: the whole upload the thumbnail was framed from. Never public. */
+		thumbnailSource: item.thumbnailSource,
+		/** Owner-facing: the window the dialog reopens at. */
+		thumbnailCrop: item.thumbnailCrop,
 		scheduledReleaseAt: item.scheduledReleaseAt,
 		sourceKey: item.sourceKey,
 		// The owner's own original, at the access-checked route, for the same ruling the
@@ -4669,6 +4689,8 @@ const contentRoutes = new Hono()
 					sourceKey: "",
 					sourceOriginalKey: "",
 					thumbnail: "",
+					thumbnailSource: "",
+					thumbnailCrop: null,
 					durationSeconds: null,
 					scheduledReleaseAt: null,
 					updatedAt: new Date(),
@@ -5385,7 +5407,7 @@ const contentRoutes = new Hono()
 
 		// Refused before anything is written. See `storage/keys.ts` for what naming another
 		// account's object would let a Work do.
-		for (const ref of [data.sourceKey, data.thumbnail]) {
+		for (const ref of [data.sourceKey, data.thumbnail, data.thumbnailSource]) {
 			if (!(await isOwnStorageRef(ref ?? "", user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
 		}
 
@@ -5431,6 +5453,8 @@ const contentRoutes = new Hono()
 				description: data.description,
 				// An image is its own thumbnail (`isOwnThumbnail`).
 				thumbnail: isOwnThumbnail(data.type) ? (data.sourceKey ?? "") : data.thumbnail,
+				thumbnailSource: isOwnThumbnail(data.type) ? (data.sourceKey ?? "") : data.thumbnailSource,
+				thumbnailCrop: data.thumbnailCrop ?? null,
 				sourceKey: data.sourceKey,
 				embedUrl: data.embedUrl,
 				durationSeconds: data.durationSeconds ?? null,
@@ -6351,6 +6375,7 @@ const contentRoutes = new Hono()
 		for (const [sent, stored] of [
 			[data.sourceKey, work.sourceKey],
 			[data.thumbnail, work.thumbnail],
+			[data.thumbnailSource, work.thumbnailSource],
 		] as const) {
 			if (
 				sent !== undefined &&
@@ -6542,6 +6567,8 @@ const contentRoutes = new Hono()
 		if (data.title !== undefined) updates.title = data.title;
 		if (data.description !== undefined) updates.description = data.description;
 		if (data.thumbnail !== undefined) updates.thumbnail = data.thumbnail;
+		if (data.thumbnailSource !== undefined) updates.thumbnailSource = data.thumbnailSource;
+		if (data.thumbnailCrop !== undefined) updates.thumbnailCrop = data.thumbnailCrop;
 		if (data.embedUrl !== undefined) updates.embedUrl = data.embedUrl;
 		if (data.durationSeconds !== undefined) updates.durationSeconds = data.durationSeconds;
 		if (data.metadata !== undefined) updates.metadata = data.metadata;
@@ -6640,7 +6667,11 @@ const contentRoutes = new Hono()
 		// An image is its own thumbnail, and follows its file when the file arrives or is replaced
 		// (Parker, 2026-09-18). Decided here rather than by the client, because the file arrives
 		// while the creator may be editing the same Work on its page.
-		if (sourceChanged && isOwnThumbnail(work.type)) updates.thumbnail = data.sourceKey ?? "";
+		if (sourceChanged && isOwnThumbnail(work.type)) {
+			updates.thumbnail = data.sourceKey ?? "";
+			updates.thumbnailSource = data.sourceKey ?? "";
+			updates.thumbnailCrop = null;
+		}
 
 		// A new source is a new version. The prior original is archived before the write, so
 		// the sweep below can retire its renditions without touching the bytes the version
@@ -6929,9 +6960,11 @@ const contentRoutes = new Hono()
 				const key = `creators/${user.id}/thumbnails/${id}/${uuid}.jpg`;
 				await storage.upload(key, Buffer.from(jpeg), "image/jpeg", "public");
 
+				const url = await storage.getUrl(key);
 				const [updated] = await db
 					.update(works)
-					.set({ thumbnail: await storage.getUrl(key), updatedAt: new Date() })
+					// The extracted frame is a full image, so it is its own framing source.
+					.set({ thumbnail: url, thumbnailSource: url, thumbnailCrop: null, updatedAt: new Date() })
 					.where(eq(works.id, id))
 					.returning();
 				await queueScansForWork(updated);
@@ -7783,6 +7816,9 @@ const contentRoutes = new Hono()
 		if (!(await isOwnStorageRef(data.coverImage ?? "", user.id))) {
 			return c.json(FOREIGN_FILE_REFUSAL, 400);
 		}
+		if (!(await isOwnStorageRef(data.coverSource ?? "", user.id))) {
+			return c.json(FOREIGN_FILE_REFUSAL, 400);
+		}
 
 		const [existing] = await db
 			.select({ id: projects.id })
@@ -7799,6 +7835,8 @@ const contentRoutes = new Hono()
 				slug: data.slug,
 				description: data.description,
 				coverImage: data.coverImage,
+				coverSource: data.coverSource,
+				coverCrop: data.coverCrop ?? null,
 				pageConfig: data.pageConfig ?? {},
 				...(data.worksSortMode ? { worksSortMode: data.worksSortMode } : {}),
 				...(data.worksSortDirection ? { worksSortDirection: data.worksSortDirection } : {}),
@@ -7960,9 +7998,15 @@ const contentRoutes = new Hono()
 			}),
 		}));
 
+		// 🚨 The full source is the uncropped upload and never leaves the owner's session: a
+		// creator may have framed something out of view, so the public shape carries no
+		// `coverSource` key at all rather than an empty one.
+		const { coverSource, coverCrop, ...publicProject } = row.project;
+
 		return c.json({
 			project: {
-				...row.project,
+				...publicProject,
+				...(userId === row.project.creatorId ? { coverSource, coverCrop } : {}),
 				coverImage: coverWork?.thumbnail || row.project.coverImage,
 				/**
 				 * The project's public record link, beside the thing it is (the widening task,
@@ -8000,6 +8044,7 @@ const contentRoutes = new Hono()
 				creatorId: projects.creatorId,
 				isPublished: projects.isPublished,
 				coverImage: projects.coverImage,
+				coverSource: projects.coverSource,
 			})
 			.from(projects)
 			.where(eq(projects.slug, slug))
@@ -8008,12 +8053,17 @@ const contentRoutes = new Hono()
 		if (existing.creatorId !== user.id) return c.json({ error: "Not found" }, 404);
 
 		// Checked on a change only, like a Work's file references; see `storage/keys.ts`.
-		if (
-			data.coverImage !== undefined &&
-			data.coverImage !== (existing.coverImage ?? "") &&
-			!(await isOwnStorageRef(data.coverImage, user.id))
-		) {
-			return c.json(FOREIGN_FILE_REFUSAL, 400);
+		for (const [sent, stored] of [
+			[data.coverImage, existing.coverImage],
+			[data.coverSource, existing.coverSource],
+		] as const) {
+			if (
+				sent !== undefined &&
+				sent !== (stored ?? "") &&
+				!(await isOwnStorageRef(sent, user.id))
+			) {
+				return c.json(FOREIGN_FILE_REFUSAL, 400);
+			}
 		}
 
 		// A cover chosen from a Work must be this creator's Work **and in this Project's
@@ -8042,6 +8092,9 @@ const contentRoutes = new Hono()
 		// chosen Work alone: the two choices fall back to each other only in one direction.
 		const patch: typeof data & { updatedAt: Date } = { ...data, updatedAt: new Date() };
 		if (data.coverImage && data.coverWorkId === undefined) patch.coverWorkId = null;
+		// Choosing a Work's image is not the Project's own upload, so the owner's framing of
+		// its own image no longer describes what is shown.
+		if (data.coverWorkId != null) patch.coverCrop = null;
 
 		// Asked only on the transition into published, because the editor sends `isPublished`
 		// with every save and an already-published project must stay editable.
@@ -8504,6 +8557,77 @@ const contentRoutes = new Hono()
 
 		return c.json({ key, url }, 201);
 	})
+
+	/**
+	 * Frame a stored display image at the surface's display aspect, nondestructively.
+	 *
+	 * ⭐ **The body names the full source and a window on it, never a new file.** The route reads
+	 * the object the creator already uploaded, crops that window with sharp, and writes a
+	 * derivative beside it; the surface saves the derivative in its display column and keeps the
+	 * source in its `*_source` column. A later reposition therefore starts from the whole picture
+	 * again rather than from the last crop, which is what makes zooming back out work.
+	 *
+	 * 🚨 **The source is validated as the creator's own upload.** It is a client-supplied
+	 * reference that the route reads bytes from, so a foreign one would let a creator frame
+	 * somebody else's file into their own public surface — the same door `isOwnStorageRef`
+	 * closes on every other stored-reference write.
+	 *
+	 * The derivative takes the same inline scan the direct upload does, because it is display
+	 * chrome visible the moment the row points at it.
+	 */
+	.post(
+		"/media-upload/frame",
+		requireAuth,
+		zValidator(
+			"json",
+			z.object({
+				source: z.string().min(1).max(500),
+				mediaType: z.string(),
+				crop: z.unknown(),
+			}),
+		),
+		async (c) => {
+			const user = c.get("user");
+			const { source, mediaType, crop: rawCrop } = c.req.valid("json");
+			if (!isImageFrameType(mediaType)) {
+				return c.json({ error: "That image surface can't be framed.", code: "frame_type" }, 400);
+			}
+			const crop = normalizeCrop(rawCrop);
+			if (!crop) {
+				return c.json({ error: "That frame isn't a valid window.", code: "frame_crop" }, 400);
+			}
+			if (!(await isOwnStorageRef(source, user.id))) {
+				return c.json(FOREIGN_FILE_REFUSAL, 403);
+			}
+			const sourceKey = urlToKey(source);
+			const bytes = await storage.read(sourceKey);
+			if (!bytes) {
+				return c.json(
+					{ error: "That image isn't there any more. Upload it again.", code: "frame_source" },
+					404,
+				);
+			}
+			let framed: Buffer;
+			try {
+				framed = await frameImage(Buffer.from(bytes), mediaType, crop);
+			} catch (err) {
+				if (err instanceof ImageFrameRefusal) {
+					return c.json({ error: err.message, code: "frame_failed" }, 400);
+				}
+				throw err;
+			}
+			const key = framedImageKey(user.id, mediaType);
+			await storage.upload(key, framed, "image/webp", "public");
+			const objectKind = scannedObjectKind(mediaType);
+			if (objectKind) {
+				const outcome = await scanInlineUpload(key, { uploaderId: user.id, objectKind }, framed);
+				if (outcome.quarantine) {
+					return c.json({ error: "That image cannot be used.", code: "refused" }, 422);
+				}
+			}
+			return c.json({ key, url: await storage.getUrl(key) }, 201);
+		},
+	)
 
 	// ── Caption tracks — the WebVTT a creator authors onto their video Works ─────────
 	// See `services/captions.ts` for the invariants: parse is the ingest gate, serving is
