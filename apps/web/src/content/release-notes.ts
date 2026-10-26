@@ -71,6 +71,33 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.32",
+		date: "2026-10-25",
+		lede: "A Work anybody saves is kept indefinitely now, Discovery absorbed Network into one stream, and a Sticker can ride any comment or review.",
+		entries: [
+			"A Work anybody has saved to a Library is kept indefinitely now, and the cost is Anthers'. Nothing expires, no user elects anything, and no storage allowance is charged for it; a creator can withdraw a Work or close an account without starting a countdown. A copyright takedown, a child-safety quarantine, and a legal hold still take the bytes anyway.",
+			"The Preserved mark sits on a media version now, which is what Anthers actually keeps: it follows a version into the archive, a replacement's new bytes inherit it, and the Versions tab dates it by the version's own upload. The storage meter reads that mark, so an archived version of an unpreserved Work still bills its creator and a preserved one does not.",
+			"Discovery is one tab now, and Network became its My Network preset: the recipe's candidate stage picks from everybody, the people a user follows, the creators it supports, or what it has saved. The signed-in nav is Library and Discovery, a stored starting tab of Network lands on the merged tab, and /network redirects there.",
+			"A user can save Discovery's recipe under a name, give it one of eight colors, and order the saved ones, and the chips row carries them after the two built-ins. Ctrl+[ and Ctrl+] step through the whole row, and both chords are rebindable in Settings.",
+			"A Sticker rides any visible comment, reply, or Review now, and it pays the nearest creator up the thread: a creator's own comment pays them, an ordinary reply beneath it pays them too, and a chain of ordinary users pays the post's creator. A Review always pays the Work's creator, and every picker names who the money reaches.",
+			"A Sticker's mark counts the levels a thing has received rather than how many it got: an outline gains a stripe for each distinct amount, cheapest outermost, so one Sticker at each level and fifty spread across them look identical. A giver's own Stickers are listed in the picker, which is where one is taken back now.",
+			"A creator's earnings count Sticker income beside the Time Pool and Badges now. The report had left it out while settlement always booked it, so a month supported by Stickers read short by exactly what was directed. Any account's dashboard also shows what it directed this cycle.",
+			"A Work's media versions carry names now, set where a version is added and kept in its archived row, and a signed-out page lists every version added since the first release as a name and a date. The byline says how many times the Work has been updated and names the newest, and files, sizes, and earlier originals stay creator-only.",
+			"A Work's reviews narrow to its current media version now, from that version's date forward, and the aggregate narrows with the list; the section reads Since this version while it is narrowed and keeps a way back. A Work whose first upload came before its release never had a second version, so it offers no control.",
+			"A paid Badge's price reads as five lines that add up to it now: the Time Pool paid by time, the Sticker budget, the storage allowance reserved at the vendor's rate, the card fee, and Anthers Support. The signup ladder, the money diagram, and the subscription calculator publish the same five lines, so the split a user is shown and the split the payout job pays cannot disagree.",
+			"The signup page's Cloud Storage row names both purposes one allowance covers, a creator catalog or the account's own files, says that at-cost top-up starts at Root rather than everywhere, and mentions bring-your-own storage.",
+			"Being listed as a creator means setup is finished now rather than creator mode being on: discovery, creator search, the Discord roles, and the Sticker recipient rule all ask the new question, and releasing a Work has nothing to do with it. An account that has only opened the Studio reads as an ordinary user.",
+			"Every kind of Work draws its own placeholder poster when it carries no thumbnail, from a waveform for music to a barcode for a physical good, and the feed tile, the Library, the Studio's list, and the Channel Guide share it. A video no longer needs a chosen thumbnail to be released, so a creator can publish one without Anthers choosing a frame from it.",
+			"The pages a user consults rather than acts on keep the public shell while signed in now: the resources and their calculators, the FAQ, the policies, the parent and copyright pages, release notes, status, and the issue form. A signed-in user following one from the footer reads what a stranger reads, with no sidebar over it.",
+			"The Library finished its rename in the places the old word survived: a Project's Works and Posts are its lists rather than its shelves, and the copy on the Studio, the pickers, the feed tile, and the published legal pages follows. The Bookshelf lens keeps its name, and shelf still finds the Library in search.",
+			"The Library and a creator page draw a Work with the feed's own tile now, so a saved Work no longer looks like a different product depending on which page lists it, and Projects join Works and Posts in one grid. A saved post carries the kind chip its neighbors had, and a missing creator reads Unknown creator rather than a question mark.",
+			"The Channel Guide reads in either orientation now: Columns keeps creators left to right, and Rows puts them top to bottom with each creator's programs running older to newer, the ruler, the tuned rail, and the play controls following the axis. The choice is remembered on the device and carries across all three lenses.",
+			"The Work page's upload banner is gone, and the progress it repeated renders in the placeholder where the file lands, for the kinds that hold one file.",
+			"The hosting-subsidy card is gone from a creator's payments page. It said Anthers covered part of a creator's hosting costs, and nothing charges a creator for hosting, so it described a cost nobody pays.",
+			"Signing in by handle asks Anthers whether it hosts the identity instead of reading the handle's suffix, so an identity that arrived by migration keeps the handle it brought and reaches Anthers' own sign-in rather than the Bluesky door.",
+		],
+	},
+	{
 		version: "2026.10.31",
 		date: "2026-10-24",
 		lede: "An account can export its identity and carry it to another server, a Work's media became something with versions, and Discovery's recipe became three choices a user makes.",
