@@ -15,10 +15,10 @@
  * unlinked handle is refused rather than signed up, and a destination that leaves the
  * origin is dropped at both ends.
  *
- * ⚠️ **The hosted-handle half of the routing is asserted elsewhere**: `signup-ceremony.test.ts`
- * pins the server's resolution, and `emailed-code.e2e.ts` walks a hosted handle to a real
- * signed-in session. What is pinned here is that a handle typed at this page goes OUT to
- * the identity's own server — and never that a hosted one stays in.
+ * ⚠️ **The hosted-handle half is asserted elsewhere, now that it takes the same door**:
+ * `emailed-code.e2e.ts` pins that an Anthers handle hands off to its own server and that the
+ * emailed code remains the way in for an account with no password yet. What is pinned here is
+ * the foreign handle, which has no fallback at all.
  */
 import { API_URL, expect, test } from "./fixtures";
 
