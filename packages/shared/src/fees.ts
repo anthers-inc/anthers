@@ -340,10 +340,11 @@ export type PurchaseType = "digital" | "physical" | "service";
  * and now so does delivery: **every download is included, forever, on every
  * device.** There is no first-download-versus-redownload distinction any more.
  *
- * `deliveryFee` and `crfFee` keep their legacy key names and are **always zero** —
- * the purchase fee went 2026-08-03, the delivery charge 2026-08-12. The schema columns
- * behind them were dropped with the accounts split's pass (2026-10-03); these keys stay
- * because callers destructure them and the keys document the fee's shape, not a column.
+ * `deliveryFee` keeps its legacy key name and is **always zero** — the purchase fee went
+ * 2026-08-03, the delivery charge 2026-08-12, and `crfFee` was deleted outright on
+ * 2026-10-25 with the fund it named. The schema columns behind the rest were dropped with
+ * the accounts split's pass (2026-10-03); the key stays because callers destructure it and
+ * it documents the fee's shape, not a column.
  * 🚨 **None of them may ever be charged again** — the guard on reintroduction is
  * `scripts/illustrative-tax-guard.test.ts` for tax and this file's constants for the fees.
  *
@@ -375,7 +376,6 @@ export function calculateFees(amount: Decimal, opts: { type?: PurchaseType } = {
 		processingFee,
 		deliveryFee: new Decimal(0),
 		salesTax,
-		crfFee: new Decimal(0),
 		creatorEarnings,
 		buyerTotal,
 	};

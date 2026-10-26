@@ -20,7 +20,7 @@
  * The snapshot is the part worth testing hardest. `purchases` never had a `creator_id` —
  * the seller was reachable only by joining `works` — so a deleted Work used to take the
  * seller's identity with it, and the sale quietly dropped out of that creator's own
- * earnings maths in `calculate-crf`.
+ * earnings.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
@@ -236,8 +236,9 @@ describe("A purchase survives the Work being deleted", () => {
 			.from(purchases)
 			.where(and(eq(purchases.creatorId, creatorId), eq(purchases.status, "completed")));
 
-		// This is the sum calculate-crf now takes. Joining through `works` for the
-		// creator, as it used to, this total would have fallen by 4.53.
+		// This is how a creator's earnings are summed — by `purchases.creator_id`.
+		// Joining through `works` for the creator, as it used to, this total would have
+		// fallen by 4.53.
 		expect(after[0].total).toBe(before[0].total);
 	});
 

@@ -140,7 +140,10 @@ describe("saleTable", () => {
 
 	test("Anthers keeps nothing on any of them", () => {
 		for (const r of saleTable()) {
-			expect(calculateFees(D(r.price), { type: "digital" }).crfFee.toNumber()).toBe(0);
+			const f = calculateFees(D(r.price), { type: "digital" });
+			expect(f.creatorEarnings.plus(f.processingFee).toFixed(2), `$${r.price}`).toBe(
+				new Decimal(r.price).toFixed(2),
+			);
 		}
 	});
 });

@@ -379,10 +379,17 @@ describe("calculateFees — direct purchase, all-in list price, zero platform cu
 		expect(f.salesTax.toFixed(2)).toBe("0.00");
 	});
 
-	test("Anthers takes $0 — the purchase fee was removed 2026-08-03", () => {
-		expect(calculateFees(new Decimal("30.00"), { type: "physical" }).crfFee.toNumber()).toBe(0);
-		expect(calculateFees(new Decimal("10.00"), { type: "service" }).crfFee.toNumber()).toBe(0);
-		expect(calculateFees(new Decimal("20.00"), { type: "digital" }).crfFee.toNumber()).toBe(0);
+	test("Anthers takes $0 — nothing is deducted but card processing", () => {
+		for (const [price, type] of [
+			["30.00", "physical"],
+			["10.00", "service"],
+			["20.00", "digital"],
+		] as const) {
+			const f = calculateFees(new Decimal(price), { type });
+			expect(f.creatorEarnings.plus(f.processingFee).toFixed(2), `$${price}`).toBe(
+				new Decimal(price).toFixed(2),
+			);
+		}
 	});
 
 	test("card processing comes out of the list price, so the creator nets less than list", () => {
@@ -457,12 +464,12 @@ describe("estimateStorageCost — and the self-hosting branch that inverted unno
 		expect(huge.total.equals(tiny.total)).toBe(true);
 	});
 
-	test("SELF_HOST_FEE is 0, and that is what makes the flag cost its holder the subsidy", () => {
-		// Not a restatement of the constant — it is the premise `calculate-crf` rests on.
-		// With a zero hosting cost, its `earnings.gte(hostingCost)` test passes for every
-		// creator (earnings are never negative), so it books a zero subsidy and moves on.
-		// If this ever goes non-zero again, that inversion changes and the endpoint closed
-		// in `routes/subscriptions.ts` needs revisiting rather than silently re-opening.
+	test("SELF_HOST_FEE is 0, so a self-hosting holder is billed nothing for storage", () => {
+		// Not a restatement of the constant — it is what makes the self-hosting branch of
+		// `estimateStorageCost` answer zero at any catalog size. The flag itself changes no
+		// figure anywhere else; the endpoint that set it is closed in
+		// `routes/subscriptions.ts`, and re-opening it needs revisiting rather than a
+		// silent un-503.
 		expect(SELF_HOST_FEE).toBe(0);
 		// The comparison that means something now: a self-hosting Root holder stores
 		// nothing here, so their overflow bill is 0 — while a hosted Root holder with the
