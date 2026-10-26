@@ -67,7 +67,9 @@ if (!user) fail(`no user ${userId}`);
 
 console.log(
 	`user ${user.id}: ${user.email}  ${user.handle}  ${user.did}` +
-		(user.deletionRequestedAt ? `  (deletion requested ${user.deletionRequestedAt.toISOString()})` : ""),
+		(user.deletionRequestedAt
+			? `  (deletion requested ${user.deletionRequestedAt.toISOString()})`
+			: ""),
 );
 
 const preview = await deletionPreview(userId);
