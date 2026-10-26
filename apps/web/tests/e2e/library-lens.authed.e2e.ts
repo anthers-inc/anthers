@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { MEDIA_FIXTURE_PROJECT, mediaFixtureWork } from "@anthers/db/media-fixture";
 import type { Page } from "@playwright/test";
-import { API_URL, expect, leashedExecFileSync, test } from "./fixtures";
+import { API_URL, expect, leashedExecFileSync, test, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
