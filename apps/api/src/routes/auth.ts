@@ -928,6 +928,19 @@ const authRoutes = new Hono()
 		return c.json({ success: true });
 	})
 
+	// Whether a handle is hosted here, so the form can pick its door from the answer rather
+	// than from the handle's shape. A domain handle does not end in the suffix the node
+	// issues, so the shape test sent a moved account down the OAuth path and told the person
+	// Bluesky was about to confirm them.
+	//
+	// ⚠️ It answers a boolean and never the mailbox behind it. Handles are public, so the
+	// existence of a hosted account under a name is not a secret the way its address is.
+	.get("/hosted-handle", async (c) => {
+		const handle = c.req.query("handle") ?? "";
+		const address = handle ? await signinAddressForHostedHandle(handle) : null;
+		return c.json({ hosted: address !== null });
+	})
+
 	// Step 2 — spend the code and sign in. Creates nothing, ever.
 	//   The same per-IP guess limit as /signup/verify, for the same reason: the code
 	//   service caps one code's guesses, this caps one guesser's pace across codes.

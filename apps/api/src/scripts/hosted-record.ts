@@ -117,7 +117,17 @@ async function main(): Promise<void> {
 	await response.body?.cancel();
 
 	await recordHostedIdentity(userId, { did, handle, password });
-	console.log(JSON.stringify({ did, handle, recorded: true }));
+
+	// The account's own row still describes the host it came from: `atproto_pds_url` pointed at
+	// the old PDS after the move. Writing it here keeps the row true, and nothing depends on it
+	// for choosing a writer (that reads `hosted_accounts`) — which is exactly why it went stale
+	// unnoticed.
+	await db
+		.update(users)
+		.set({ atprotoPdsUrl: nodeUrl, atprotoHandle: handle })
+		.where(eq(users.id, userId));
+
+	console.log(JSON.stringify({ did, handle, recorded: true, atprotoPdsUrl: nodeUrl }));
 }
 
 await main();
