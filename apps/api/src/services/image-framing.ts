@@ -77,7 +77,7 @@ export async function frameImage(
 		return await sharp(source, { failOn: "none" })
 			.rotate()
 			.extract(region)
-			.resize(spec.width, spec.height, { fit: "cover", position: "centre" })
+			.resize(spec.width, spec.height, { fit: "cover", position: "center" })
 			.webp({ quality: 90 })
 			.toBuffer();
 	} catch {

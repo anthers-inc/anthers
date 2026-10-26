@@ -58,10 +58,10 @@ describe("frameImage", () => {
 			height: 1,
 		});
 		const { data, info } = await sharp(framed).raw().toBuffer({ resolveWithObject: true });
-		const centre =
+		const center =
 			(info.height / 2) * info.width * info.channels + (info.width / 2) * info.channels;
-		expect(data[centre]).toBeLessThan(20); // red
-		expect(data[centre + 2]).toBeGreaterThan(235); // blue
+		expect(data[center]).toBeLessThan(20); // red
+		expect(data[center + 2]).toBeGreaterThan(235); // blue
 	});
 
 	it("refuses bytes that are not an image", async () => {
