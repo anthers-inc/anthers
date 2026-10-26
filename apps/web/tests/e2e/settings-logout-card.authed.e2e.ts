@@ -2,12 +2,13 @@
 /**
  * Log out lives on both settings pages, in one card that names the account first.
  *
- * 🚨 **This spec exists because the header's account menu was the only door out of a
- * session.** Removing that item without a replacement would strand every signed-in person
- * with no way to sign out, and each settings page is reachable without the other — a reader
- * who never visits the Studio still needs the card on the user side, and a creator working
- * only in the Studio needs it on theirs. Two pages, one shared component, so this walks
- * both rather than trusting the import.
+ * 🚨 **This spec exists because the header's account menu used to be the only door out of a
+ * session.** Removing that item without a replacement would have stranded every signed-in
+ * person with no way to sign out, and each settings page is reachable without the other — a
+ * reader who never visits the Studio still needs the card on the user side, and a creator
+ * working only in the Studio needs it on theirs. (The menu itself came out on 2026-10-26,
+ * which leaves these two cards as the only doors.) Two pages, one shared component, so this
+ * walks both rather than trusting the import.
  *
  * The click itself is exercised by `basket-account-scoping.authed.e2e.ts`, whose sign-out
  * walk now goes through this card. This spec asserts the card renders on both pages, names

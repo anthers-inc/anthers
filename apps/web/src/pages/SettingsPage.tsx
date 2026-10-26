@@ -43,6 +43,7 @@ import { usePublishingState } from "@anthers/web-shared/publishing";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import type { NotificationDeliveryMode } from "@anthers/web-shared/types";
+import ThemeCard from "@anthers/web-shared/ui/ThemeCard";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -3018,11 +3019,17 @@ export default function SettingsPage() {
 			{visitedTabs.has("account") && (
 				<div hidden={activeTab !== "account"}>
 					{/* Who this browser is signed in as, and the button that ends it. The header
-					    menu no longer carries Log Out; both settings pages do. */}
+					    no longer carries an account menu; the sidebar is the door to Settings and
+					    both settings pages carry the end of the session. */}
 					<SignedInAccountCard className="mb-6" />
 
-					{/* The Discord connection, directly under the card that says who this is —
-					    the two answer "who am I here" and "where else am I known". */}
+					{/* The account's color theme — moved off the signed-in header on 2026-10-26,
+					    because a preference that belongs to the account belongs with the rest of
+					    them rather than in the corner of every page. */}
+					<ThemeCard className="mb-6" />
+
+					{/* The Discord connection, under the card that says who this is — the two
+					    answer "who am I here" and "where else am I known". */}
 					<DiscordCard surface="account" className="mb-6" />
 
 					{/* Creator mode toggle */}

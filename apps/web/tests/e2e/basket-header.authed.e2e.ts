@@ -248,7 +248,6 @@ test.describe.configure({ mode: "serial" });
 
 // Scope to the header — the sidebar also carries a Basket entry when non-empty, so an
 // unscoped `getByRole("link", { name: /Basket/ })` matches two and fails strict mode.
-// This mirrors `header-account-menu.authed.e2e.ts`'s scoping for the same reason.
 const header = (page: Page) => page.getByRole("banner");
 
 test("the header shows a basket link with a count when the basket has items", async ({

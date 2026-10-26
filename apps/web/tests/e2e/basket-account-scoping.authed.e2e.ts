@@ -86,7 +86,7 @@ async function signInThroughUi(page: Page, email: string): Promise<void> {
 }
 
 async function signOutThroughUi(page: Page): Promise<void> {
-	// Log out lives on the settings pages now, not in the header's account menu.
+	// Log out lives on the settings pages, not in the header.
 	await page.goto("/settings");
 	const card = page.locator("[data-signed-in-account]");
 	await card.getByRole("button", { name: "Log Out" }).click();

@@ -9,7 +9,7 @@
  * ⭐ **The signed-in account card at the top is the one account control this page does
  * carry**, because ending the session belongs wherever a person is working: it is the
  * same shared card as the user settings page's Account tab, and the only way to log out
- * now that the header menu no longer offers it.
+ * now that the header carries no account menu at all.
  *
  * ⚠️ **Payout setup is not here.** Its surface is the Studio's Payments tab
  * (`/studio/payments`), which is also where Connect's return legs land and where Stripe's
