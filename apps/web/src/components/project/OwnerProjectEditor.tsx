@@ -441,7 +441,7 @@ export default function OwnerProjectEditor({
 				mediaType="thumbnail"
 				busy={thumbnailBusy}
 				error={thumbnailError}
-				initialCrop={thumbnailCrop}
+				initialCrop={framing?.file ? null : thumbnailCrop}
 				onCancel={closeFraming}
 				onSave={(crop) => void saveFramedThumbnail(crop)}
 			/>

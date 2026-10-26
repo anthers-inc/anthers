@@ -1862,7 +1862,7 @@ export default function OwnerWorkEditor({
 				mediaType="thumbnail"
 				busy={thumbSaving}
 				error={thumbError}
-				initialCrop={current.thumbnailCrop ?? null}
+				initialCrop={thumbFrame?.file ? null : (current.thumbnailCrop ?? null)}
 				onCancel={closeThumbFrame}
 				onSave={(crop) => void saveFramedThumbnail(crop)}
 			/>

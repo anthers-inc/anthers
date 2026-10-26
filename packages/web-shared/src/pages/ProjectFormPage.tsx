@@ -260,6 +260,8 @@ export default function ProjectFormPage() {
 						onFileSelect={handleThumbnailSelect}
 						onClear={() => {
 							setThumbnail("");
+							setThumbnailSource("");
+							setThumbnailCrop(null);
 							setThumbnailPreview(null);
 						}}
 					/>
