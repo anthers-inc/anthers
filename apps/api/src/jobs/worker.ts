@@ -265,9 +265,13 @@ async function start() {
 	// a clean sweep, like the other dated jobs.
 	await queue.work(QUEUES.SHIPMENT_CLOCK, async (jobs) => {
 		for (const job of jobs) {
-			const { closed } = await runShipmentClock();
+			const { closed, released } = await runShipmentClock();
 			if (closed > 0)
 				console.log(`[shipment-clock] job ${job.id}: ${closed} parcel(s) closed by fallback`);
+			if (released > 0)
+				console.log(
+					`[shipment-clock] job ${job.id}: ${released} abandoned order(s) returned stock`,
+				);
 		}
 	});
 

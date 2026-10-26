@@ -1209,3 +1209,13 @@ export const SHIPMENT_COMPLAINT_WINDOW_DAYS = 7;
  * to bound the wait, not to guess optimistically about a slow parcel.
  */
 export const SHIPMENT_DELIVERY_FALLBACK_DAYS = 14;
+
+/**
+ * How many of one physical good a single order may carry.
+ *
+ * A cap rather than free text, because the number is the creator's packing work and a
+ * typo in a quantity field is a parcel somebody cannot send. Ten is comfortably past an
+ * ordinary personal order and nowhere near a wholesale one, which is not what a creator
+ * selling a hand-thrown mug is set up for.
+ */
+export const MAX_GOODS_PER_ORDER = 10;

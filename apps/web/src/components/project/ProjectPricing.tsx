@@ -19,6 +19,7 @@ import type { AccessResult } from "@anthers/web-shared/types";
 import { useEffect, useState } from "react";
 import AddToBasket from "../basket/AddToBasket";
 import BuyNow from "../basket/BuyNow";
+import PhysicalStorePanel from "../work/PhysicalStorePanel";
 
 interface ProjectPricingProps {
 	workId: number;
@@ -33,7 +34,7 @@ interface ProjectPricingProps {
 	creatorHandle: string;
 	thumbnail?: string | null;
 	creatorHasStripe?: boolean;
-	/** The Work's type — `physical` renders no pricing panel at all, since nothing sells it yet. */
+	/** The Work's type — `physical` renders the store panel instead of an unlock price. */
 	workType?: string;
 }
 
@@ -93,10 +94,21 @@ export default function ProjectPricing({
 		};
 	}, [slug, workType]);
 
-	// A goods Work has no pricing panel until it has a store behind it: checkout
-	// refuses a physical Work, and a digital price box would claim a price nothing can
-	// charge. The page still opens; the panel is simply absent.
-	if (workType === "physical") return null;
+	// A physical good renders its own panel — the pickers, the count and the shipping —
+	// rather than the unlock-price card below. The goods rule still holds: the page reads
+	// signed out, and the panel is where the buying happens.
+	if (workType === "physical") {
+		return (
+			<PhysicalStorePanel
+				slug={slug}
+				workId={workId}
+				title={title}
+				creatorHandle={creatorHandle}
+				thumbnail={thumbnail}
+				creatorHasStripe={creatorHasStripe}
+			/>
+		);
+	}
 
 	// Free posts have nothing to sell.
 	if (access?.isFree) return null;

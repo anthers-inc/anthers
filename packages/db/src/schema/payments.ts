@@ -165,14 +165,57 @@ export const purchases = pgTable(
 		// download_count` is a Work-wide counter and cannot answer "did *this*
 		// buyer download it", which is the question the cap needs.
 		downloadedAt: timestamp("downloaded_at", { withTimezone: true }),
-		refundedAt: timestamp("refunded_at", { withTimezone: true }),
-		// Who caused the refund, and it is NOT decoration: a platform-initiated
+		refundedAt: timestamp("refunded_at", { withTimezone: true }), // Who caused the refund, and it is NOT decoration: a platform-initiated
 		// refund (a takedown, a defect, a charge the buyer never made) refunds
 		// someone who may well have downloaded, and must not consume their cap.
 		// Only `buyer` rows are counted. buyer | platform
 		refundInitiator: text("refund_initiator"),
 		refundReason: text("refund_reason"),
 		stripeRefundId: text("stripe_refund_id"),
+		// ── What a physical good's order carries (2026-10-26) ────────────────────
+		/**
+		 * How many of the good this row buys. One for everything else, because a digital
+		 * Work is owned once and a service has no count.
+		 *
+		 * 🚨 **The goods price is `amount`, the count is here, and neither is derived from
+		 * the other.** `amount` is what the buyer paid for the goods on this row already
+		 * multiplied out, so every existing reader — earnings, refunds, the tax
+		 * apportionment — keeps working without knowing a count exists. The count is what
+		 * the creator reads when packing, and what a stock release puts back.
+		 */
+		quantity: integer("quantity").notNull().default(1),
+		/**
+		 * The option values the buyer chose, as `[{ name, label }]`, snapshotted at sale.
+		 *
+		 * A snapshot rather than a join to the listing for the same reason `workTitle` is:
+		 * a creator who renames a value or drops it next month must not rewrite what
+		 * somebody already bought, and the creator packing the parcel needs to know what
+		 * came out of the picker at the moment the money moved.
+		 */
+		options: jsonb("options").$type<Array<{ name: string; label: string }>>(),
+		/**
+		 * What this row's shipping charge was, already multiplied into
+		 * `creatorEarnings` — the creator pays the carrier, so the shipping is theirs to
+		 * receive, and the platform only carries it through the charge.
+		 *
+		 * Zero for everything else, and zero on a good that ships free. Kept apart from
+		 * `amount` because the tax remittance record has to show goods and delivery as the
+		 * two lines the session charged.
+		 */
+		shippingAmount: numeric("shipping_amount").notNull().default("0.00"),
+		/**
+		 * The handling time the Work carried when this order was placed, in business days.
+		 * The shipment row snapshots it again at completion (`shipments.handling_business_days`);
+		 * this copy is what lets the shipment be opened after the listing changed or went
+		 * away, without reading a row nobody owns any more.
+		 */
+		handlingBusinessDays: integer("handling_business_days"),
+		/**
+		 * When an abandoned order's reserved stock went back on the shelf. Null until the
+		 * sweep or the sale itself settles it — see `releaseAbandonedStock` in
+		 * `services/physical-stock.ts`. The stamp is what makes the release idempotent.
+		 */
+		stockReleasedAt: timestamp("stock_released_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
@@ -455,6 +498,23 @@ export const basketItems = pgTable(
 		// Insertion order is the basket's display order — the client's old array order —
 		// and no column reorders it: newest item at the end, like a physical basket.
 		addedAt: timestamp("added_at", { withTimezone: true }).defaultNow().notNull(),
+		/**
+		 * How many of a physical good this line means to buy. Absent for everything else —
+		 * a digital Work is owned once, and a Badge rung is one holding — so the column
+		 * defaults to one and the resolution refuses a count on a kind that cannot carry
+		 * one. Quantity lives on the LINE, not on the Work: two buyers wanting different
+		 * counts is the ordinary case, and the listing says what may be bought, never how
+		 * much of it.
+		 */
+		quantity: integer("quantity").notNull().default(1),
+		/**
+		 * The option values the buyer chose, as `[{ name, label }]` — the listing's names
+		 * against the buyer's labels. Stored as the buyer's intent and re-validated
+		 * against the listing at quote and checkout, exactly like every other field here:
+		 * a price change or a sold-out value is caught at the door, not trusted from the
+		 * row.
+		 */
+		options: jsonb("options").$type<Array<{ name: string; label: string }>>(),
 	},
 	(table) => [
 		// Exactly one item kind per row — a basket line names a Work or a Badge, never

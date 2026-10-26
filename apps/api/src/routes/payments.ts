@@ -47,11 +47,13 @@ import { isChargeableAmount, MAX_BASKET_ITEMS, REFUND_AUTO_CAP } from "@anthers/
 import { calculateFees } from "@anthers/shared/fees";
 import { STRIPE_RETURN_PATHS } from "@anthers/shared/redirect-paths";
 import type { WorkType } from "@anthers/shared/tax-codes";
-import { purchaseTaxCode } from "@anthers/shared/tax-codes";
+import { purchaseTaxCode, SHIPPING_TAX_CODE } from "@anthers/shared/tax-codes";
+import { zValidator } from "@hono/zod-validator";
 import Decimal from "decimal.js";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type Stripe from "stripe";
+import { z } from "zod";
 import {
 	createAccountLoginLink,
 	createAccountOnboardingLink,
@@ -79,6 +81,7 @@ import {
 	listBasket,
 	removeBasketBadge,
 	removeBasketItem,
+	updateBasketItem,
 } from "../services/basket.js";
 import {
 	applyBadgeRecurrence,
@@ -86,6 +89,7 @@ import {
 	ensureBadgeProduct,
 	ensureCreatorProduct,
 	linkCheckoutCustomer,
+	savedBillingAddress,
 	stripeCustomerIdFor,
 	syncSubscriptionToAccount,
 } from "../services/billing.js";
@@ -94,6 +98,13 @@ import { markInvoiceMoneyReturned, recordPaidInvoice } from "../services/invoice
 import { saveOnPurchase } from "../services/library.js";
 import { recordNettingForDispute, reverseNettingForWonDispute } from "../services/netting.js";
 import { stripeFlagPatchFromAccount } from "../services/payouts.js";
+import {
+	type BuyerListing,
+	physicalStorefront,
+	quotePhysicalTax,
+	resolvePhysicalSale,
+} from "../services/physical-sales.js";
+import { releaseStock, reserveStock } from "../services/physical-stock.js";
 import { splitChargeToCreators } from "../services/purchase-split.js";
 import {
 	sendPurchaseReceipts,
@@ -106,7 +117,7 @@ import {
 	reverseCreatorShare,
 	settleRefundedPurchase,
 } from "../services/refunds.js";
-import { createShipmentForPurchase } from "../services/shipments.js";
+import { clampHandlingDays, createShipmentForPurchase } from "../services/shipments.js";
 import { addTopUpToInvoice } from "../services/storage-topup.js";
 import { applyReductionsToInvoice, recordReductions } from "../services/support-reductions.js";
 
@@ -311,9 +322,26 @@ type ResolvedLine =
 			kind: "work";
 			/** The full Work row, as the single-purchase path resolves it. */
 			work: typeof works.$inferSelect;
+			/** The goods money on this line — the unit price already multiplied out. */
 			amount: Decimal;
 			/** This line's share of the charge's ONE card fee — pro-rata, last line absorbs. */
 			lineFee: Decimal;
+			/**
+			 * A physical good's pick and its shipping. Absent for every digital Work,
+			 * which is why the type carries it rather than every line growing four null
+			 * columns: only a good has a count, choices and a parcel.
+			 */
+			physical?: {
+				listing: BuyerListing;
+				picks: Array<{ name: string; label: string }>;
+				quantity: number;
+				/** The listing's flat shipping. Charged once per creator — see `shippingFor`. */
+				shipping: Decimal;
+				/** What this line was charged for shipping; zero unless it carries the creator's. */
+				shippingOnLine: Decimal;
+				taxCategory: string;
+				handlingBusinessDays: number;
+			};
 	  }
 	| {
 			kind: "badge";
@@ -359,7 +387,14 @@ type ResolvedLine =
  */
 /** One stored basket line, as the buyer built it — a Work or a Badge rung. */
 export type StoredBasketRow =
-	| { kind: "work"; workId: number; slug: string }
+	| {
+			kind: "work";
+			workId: number;
+			slug: string;
+			/** A physical line's count and chosen values; absent for every digital Work. */
+			quantity?: number;
+			options?: Array<{ name: string; label: string }> | null;
+	  }
 	| { kind: "badge"; badgeId: number };
 
 async function resolveStoredBasket(
@@ -401,6 +436,41 @@ async function resolveStoredBasket(
 	const items: ResolvedLine[] = [];
 	for (const row of deduped) {
 		if (row.kind === "work") {
+			// 🚨 **A physical good resolves on its own path, and it is the only line whose
+			// money is not the access row alone.** Its goods price is the Work's baseline
+			// offer, its count and choices are the buyer's, and its shipping is the
+			// listing's flat charge — none of which `resolvePurchase` knows, because that
+			// resolver refuses a good outright. The refusal it gives is kept for every
+			// other `physical` reach (a single-purchase URL), which is the product's own
+			// rule: the basket is the one buy door.
+			const [maybeWork] = await db
+				.select({ type: works.type })
+				.from(works)
+				.where(eq(works.slug, row.slug))
+				.limit(1);
+			if (maybeWork?.type === "physical") {
+				const sale = await resolvePhysicalSale(row.slug, userId, {
+					quantity: row.quantity,
+					options: row.options ?? [],
+				});
+				if (!sale.ok) return { ...sale, itemId: row.workId };
+				items.push({
+					kind: "work",
+					work: sale.work,
+					amount: sale.goodsPrice,
+					lineFee: new Decimal(0),
+					physical: {
+						listing: sale.listing,
+						picks: sale.picks,
+						quantity: sale.quantity,
+						shipping: sale.shippingPrice,
+						shippingOnLine: new Decimal(0),
+						taxCategory: sale.taxCategory,
+						handlingBusinessDays: sale.handlingBusinessDays,
+					},
+				});
+				continue;
+			}
 			const one = await resolvePurchase(row.slug, userId);
 			if (!one.ok) return { ...one, itemId: row.workId };
 			items.push({ kind: "work", work: one.work, amount: one.amount, lineFee: new Decimal(0) });
@@ -425,12 +495,59 @@ async function resolveStoredBasket(
 		}
 	}
 
+	/**
+	 * 🚨 **Shipping is charged once per creator, and the charge lands on that creator's
+	 * last line.** A creator ships their own parcels, so a basket holding two of their
+	 * goods is still one shipping charge; holding goods from two creators is two, because
+	 * two people post two boxes. The figure is the **highest** of that creator's lines'
+	 * shipping prices — the least surprising single number when a creator prices a mug
+	 * differently from a print, and the direction that never underpays them for a parcel.
+	 *
+	 * It is allocated to their last line rather than spread, the same "last absorbs"
+	 * shape the fee split keeps: one line carries the money, and the row's `shippingAmount`
+	 * is what the tax record and the creator's earnings read.
+	 */
+	const shippingForCreator = new Map<number, Decimal>();
+	for (const item of items) {
+		if (item.kind !== "work" || !item.physical || item.work.creatorId == null) continue;
+		const cid = item.work.creatorId;
+		const previous = shippingForCreator.get(cid);
+		if (!previous || item.physical.shipping.gt(previous)) {
+			shippingForCreator.set(cid, item.physical.shipping);
+		}
+	}
+	const shippingByCreator = new Map<number, Decimal>();
+	const carriers = new Map<number, Extract<ResolvedLine, { kind: "work" }>>();
+	for (const item of items) {
+		if (item.kind !== "work" || !item.physical || item.work.creatorId == null) continue;
+		carriers.set(item.work.creatorId, item);
+	}
+	for (const [cid, shipping] of shippingForCreator) {
+		const carrier = carriers.get(cid);
+		if (!carrier?.physical) continue;
+		carrier.physical.shippingOnLine = shipping;
+		shippingByCreator.set(cid, shipping);
+	}
+	const shippingTotal = [...shippingByCreator.values()].reduce(
+		(acc, value) => acc.plus(value),
+		new Decimal(0),
+	);
+
 	// 🚨 Fees on the SUM, once — computing per item and adding would charge the flat
 	// $0.30 per item and defeat the entire point of the basket (Works and Badges amortize
 	// it identically; the Badge's money follows the settlement rail, the fee's share is
-	// pinned on the row either way).
-	const subtotal = items.reduce((acc, i) => acc.plus(i.amount), new Decimal(0));
+	// pinned on the row either way). The sum is everything the charge collects: goods,
+	// Badges and the shipping the buyer is paying, because the card fee is levied on what
+	// is charged rather than on what is merchandise.
+	const subtotal = items.reduce((acc, i) => acc.plus(i.amount), shippingTotal);
 	const fees = calculateFees(subtotal, { type: "digital" });
+
+	// The value each line contributes to the apportionment — goods plus the shipping it
+	// carries, so a line that costs the buyer more also carries more of the fee.
+	const chargeValue = (item: ResolvedLine): Decimal =>
+		item.kind === "work" && item.physical
+			? item.amount.plus(item.physical.shippingOnLine)
+			: item.amount;
 
 	// 🚨 The per-line fee shares are APPORTIONED, not recomputed — pro-rata by item value
 	// with the last line absorbing the rounding remainder, so the parts always reconstruct
@@ -441,7 +558,7 @@ async function resolveStoredBasket(
 		items[idx].lineFee =
 			idx === items.length - 1
 				? fees.processingFee.minus(allocatedFee)
-				: fees.processingFee.times(items[idx].amount).dividedBy(subtotal).toDecimalPlaces(2);
+				: fees.processingFee.times(chargeValue(items[idx])).dividedBy(subtotal).toDecimalPlaces(2);
 		if (idx < items.length - 1) allocatedFee = allocatedFee.plus(items[idx].lineFee);
 	}
 
@@ -526,11 +643,23 @@ function purchaseSession(params: {
 	 * the alternative is a SetupIntent ride-along at completion, and the probe decides.
 	 */
 	saveCard?: boolean;
+	/**
+	 * `"us"` when the charge carries a physical good, so Checkout collects the address the
+	 * creator ships to. Absent for every digital charge, which asks for nothing beyond the
+	 * billing address that resolves tax.
+	 */
+	shippingAddress?: "us";
 	metadata: Record<string, string>;
 }): Stripe.Checkout.SessionCreateParams {
 	return {
 		mode: "payment",
 		ui_mode: "elements",
+		// A good has to be sent somewhere, and this is how Checkout asks. The address is
+		// stamped onto the purchase rows at completion, which is where the creator's order
+		// list reads it; a digital charge collects nothing here.
+		...(params.shippingAddress === "us"
+			? { shipping_address_collection: { allowed_countries: ["US" as const] } }
+			: {}),
 		// 🚨 **The email is what confirms the session.** Stripe requires a valid customer
 		// email before a session may be confirmed — `canConfirm` stays false without one —
 		// and none of the purchase surfaces collect one: no Contact Details Element, no
@@ -650,20 +779,51 @@ function workLineItem(
 	work: { id: number; title: string | null; type: string },
 	amountCents: number,
 	taxCode: string,
+	opts?: { quantity?: number; variant?: string[] },
 ): Stripe.Checkout.SessionCreateParams.LineItem {
+	const variant = (opts?.variant ?? []).filter(Boolean);
 	return {
 		price_data: {
 			currency: "usd",
 			// US prices are tax-exclusive: the buyer's total varies with their location,
 			// which is the point of automatic tax.
 			tax_behavior: "exclusive",
-			unit_amount: amountCents,
+			// `amountCents` is the line's goods total; a quantity above one divides back to
+			// the unit price, so the receipt reads "2 × $12.00" rather than one $24 line.
+			unit_amount: Math.round(amountCents / Math.max(1, opts?.quantity ?? 1)),
 			product_data: {
 				// A Work's title is nullable in the database; the Work's slug-anchored page
 				// is what names it publicly, but a receipt line needs something, and a
 				// fallback reads better on a card statement than an empty string.
 				name: work.title || `Work #${work.id}`,
+				...(variant.length > 0 ? { description: variant.join(" · ") } : {}),
 				tax_code: taxCode,
+			},
+		},
+		quantity: Math.max(1, opts?.quantity ?? 1),
+	};
+}
+
+/**
+ * The delivery line a physical order carries — one per creator, taxed as shipping.
+ *
+ * `txcd_92010001` is Stripe's "shipping in conjunction with the sale of physical goods",
+ * and it is a separate code from the goods because a jurisdiction may treat the two
+ * differently. A zero figure is no line at all, which the caller decides (`shippingLineItem`
+ * is only called for a creator whose shipping is above zero).
+ */
+function shippingLineItem(
+	creatorHandle: string,
+	amountCents: number,
+): Stripe.Checkout.SessionCreateParams.LineItem {
+	return {
+		price_data: {
+			currency: "usd",
+			tax_behavior: "exclusive",
+			unit_amount: amountCents,
+			product_data: {
+				name: `Shipping${creatorHandle ? ` from @${creatorHandle}` : ""}`,
+				tax_code: SHIPPING_TAX_CODE,
 			},
 		},
 		quantity: 1,
@@ -757,7 +917,14 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 	// The buyer's address as Checkout resolved it. Null on a session that never asked for
 	// one, which ours always do — a null here means the session shape changed and the
 	// posture's record is incomplete, so it fails toward refusing the completion.
-	const address = session.customer_details?.address ?? null;
+	//
+	// 🚨 **A charge carrying goods has two addresses, and the delivery one is what gets
+	// stamped.** Checkout collects the shipping address only when the session asked for one
+	// (`shipping_address_collection`), and a creator ships to where the buyer said the parcel
+	// goes — not to where the card is billed. Every other charge falls back to billing,
+	// which is the same address it always recorded.
+	const shippingAddress = session.collected_information?.shipping_details?.address ?? null;
+	const address = shippingAddress ?? session.customer_details?.address ?? null;
 	if (address?.country !== "US") {
 		console.error(
 			`purchase completion refused: session ${session.id} billed outside the US (${address?.country ?? "no address"}) — refund by hand`,
@@ -796,8 +963,16 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 	// the union absorbing the rounding remainder, so the rows of both tables sum to what
 	// Stripe collected exactly. (Purchases first, Badges after: the historical order —
 	// a no-Badge charge apportions over its purchase rows exactly as before.)
+	// ⚠️ A purchase's share is weighed by **everything the charge collected on it**: the
+	// goods AND the shipping, which Stripe taxed with its own code. Weighing by `amount`
+	// alone would leave the tax on shipping unallocated and the rows summing short of what
+	// the return needs to remit.
 	const union = [
-		...rows.map((row) => ({ kind: "purchase" as const, row, amount: row.amount })),
+		...rows.map((row) => ({
+			kind: "purchase" as const,
+			row,
+			amount: new Decimal(row.amount).plus(row.shippingAmount ?? 0).toFixed(2),
+		})),
 		...badgesPending.map((row) => ({ kind: "badge" as const, row, amount: row.chargedAmount })),
 	];
 	const subtotal = union.reduce((acc, e) => acc.plus(new Decimal(e.amount)), new Decimal(0));
@@ -903,7 +1078,13 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 	// purchase, so a redelivered event is a no-op — one purchase owes one shipment.
 	for (const { row } of stamped) {
 		if (row.type !== "physical") continue;
-		await createShipmentForPurchase({ purchaseId: row.id });
+		// The handling time the buyer was quoted at checkout, not the listing's current
+		// one: a creator who shortened it since must not move a deadline somebody has.
+		await createShipmentForPurchase({
+			purchaseId: row.id,
+			handlingBusinessDays:
+				row.handlingBusinessDays == null ? undefined : clampHandlingDays(row.handlingBusinessDays),
+		});
 	}
 
 	// ── The Badge half — the support side of a completed first transaction ────
@@ -1014,6 +1195,22 @@ export interface ResolvedBasketItem {
 	recurring: string | null;
 	creatorHandle: string;
 	thumbnail: string | null;
+	/** How many of a physical good this line means to buy. One for everything else. */
+	quantity: number;
+	/** A physical line's chosen values, and the flat shipping the line carries. */
+	options?: Array<{ name: string; label: string }> | null;
+	shipping?: string;
+	/**
+	 * Why this line cannot be bought as it stands — a count past the shelf, a value that
+	 * sold out. Present only on a physical line that failed to resolve.
+	 *
+	 * 🚨 **A physical line answers by being visible, not by vanishing.** A digital row that
+	 * stops being buyable is dropped from the answer silently, because there is nothing the
+	 * buyer could change about it; a good's count is theirs to change, so hiding the line
+	 * would hide both the problem and the fix. The quote and the checkout refuse while one
+	 * of these stands, in this sentence.
+	 */
+	error?: string;
 }
 
 async function resolvedBasketItems(userId: number): Promise<ResolvedBasketItem[]> {
@@ -1033,10 +1230,54 @@ async function resolvedBasketItems(userId: number): Promise<ResolvedBasketItem[]
 				recurring: b.threshold.toFixed(2),
 				creatorHandle: row.issuerHandle ?? "",
 				thumbnail: null,
+				quantity: 1,
 			});
 			continue;
 		}
 		if (!row.slug || !row.creatorHandle) continue;
+		// A physical good has no access price to resolve — its money is the listing's and
+		// the pick's — so the line is priced the same way the checkout will price it.
+		const [maybeWork] = await db
+			.select({ type: works.type })
+			.from(works)
+			.where(eq(works.slug, row.slug))
+			.limit(1);
+		if (maybeWork?.type === "physical") {
+			const sale = await resolvePhysicalSale(row.slug, userId, {
+				quantity: row.quantity,
+				options: row.options ?? [],
+			});
+			if (!sale.ok) {
+				items.push({
+					kind: "work",
+					workId: row.workId,
+					slug: row.slug,
+					title: row.title,
+					price: "0.00",
+					recurring: null,
+					creatorHandle: row.creatorHandle,
+					thumbnail: row.thumbnail,
+					quantity: row.quantity,
+					options: row.options ?? null,
+					error: sale.error,
+				});
+				continue;
+			}
+			items.push({
+				kind: "work",
+				workId: row.workId,
+				slug: row.slug,
+				title: row.title,
+				price: sale.goodsPrice.toFixed(2),
+				recurring: null,
+				creatorHandle: row.creatorHandle,
+				thumbnail: row.thumbnail,
+				quantity: sale.quantity,
+				options: sale.picks,
+				shipping: sale.shippingPrice.toFixed(2),
+			});
+			continue;
+		}
 		const q = await resolvePurchase(row.slug, userId);
 		if (!q.ok) continue;
 		items.push({
@@ -1048,25 +1289,35 @@ async function resolvedBasketItems(userId: number): Promise<ResolvedBasketItem[]
 			recurring: null,
 			creatorHandle: row.creatorHandle,
 			thumbnail: row.thumbnail,
+			quantity: 1,
 		});
 	}
 	return items;
 }
 
 /**
- * The basket's CONTENT identity, kind-tagged and sorted — the same string the client's
- * `basketContentKey` computes for its checkout's re-mount guard.
+ * The content identity of a resolved basket — every line's id, plus a physical line's count
+ * and chosen values.
  *
- * It exists server-side to answer one question: *is the open Checkout Session an
- * abandoned visit left behind the very session this basket needs?* If it is, the client
- * secret is handed back rather than a second session and a second set of pending rows
- * being built for the same intent.
+ * 🚨 **The picks are part of the identity, not a detail of the line.** A buyer who opens the
+ * checkout as a medium and then switches to a large has a different basket, and handing
+ * back the session built for the medium would charge them for the wrong shirt. The count
+ * rides for the same reason: two mugs are not one mug.
  */
-function basketContentKey(items: Array<{ kind: "work" | "badge"; id: number }>): string {
-	return items
-		.map((i) => (i.kind === "badge" ? `b${i.id}` : `w${i.id}`))
-		.sort()
-		.join(",");
+function basketPicksKey(
+	workLines: Array<Extract<ResolvedLine, { kind: "work" }>>,
+	badgeLines: Array<Extract<ResolvedLine, { kind: "badge" }>>,
+): string {
+	const workKeys = workLines.map((line) => {
+		const picks = (line.physical?.picks ?? [])
+			.map((pick) => `${pick.name}=${pick.label}`)
+			.sort()
+			.join("&");
+		const quantity = line.physical?.quantity ?? 1;
+		return quantity === 1 && !picks ? `w${line.work.id}` : `w${line.work.id}q${quantity}[${picks}]`;
+	});
+	const badgeKeys = badgeLines.map((line) => `b${line.badge.id}`);
+	return [...workKeys, ...badgeKeys].sort().join(",");
 }
 
 /** The content identity a basket Checkout Session was built for, read off its metadata. */
@@ -1089,10 +1340,35 @@ function sessionBasketContentKey(metadata: Stripe.Metadata | null): string {
  * which may simply not have landed yet.
  */
 async function failPendingBasketRows(sessionId: string): Promise<void> {
-	await db
+	const failed = await db
 		.update(purchases)
 		.set({ status: "failed", updatedAt: new Date() })
-		.where(and(eq(purchases.stripePaymentIntentId, sessionId), eq(purchases.status, "pending")));
+		.where(and(eq(purchases.stripePaymentIntentId, sessionId), eq(purchases.status, "pending")))
+		.returning();
+	// A session that will never be paid gives its goods back to the shelf now rather than
+	// at the sweep's horizon — the buyer is not going to pay for them, and somebody else
+	// may want the last one this afternoon.
+	const physical = failed.filter(
+		(row) => row.type === "physical" && row.workId != null && !row.stockReleasedAt,
+	);
+	if (physical.length > 0) {
+		await releaseStock(
+			physical.map((row) => ({
+				workId: row.workId as number,
+				picks: row.options ?? [],
+				quantity: row.quantity ?? 1,
+			})),
+		);
+		await db
+			.update(purchases)
+			.set({ stockReleasedAt: new Date() })
+			.where(
+				inArray(
+					purchases.id,
+					physical.map((row) => row.id),
+				),
+			);
+	}
 	await db
 		.update(badgeCharges)
 		.set({ status: "failed", updatedAt: new Date() })
@@ -1153,7 +1429,11 @@ async function resumeBasketSession(
 		// leaves its own pending rows, and its session is not this basket's even when the
 		// ids happen to coincide.
 		if (session.metadata?.kind !== "direct_purchase_basket") continue;
-		const sameBasket = sessionBasketContentKey(session.metadata) === contentKey;
+		// A session built since goods could be bought carries the whole pick as its key;
+		// an older (or digital-only) one is recomputed from the ids it named. Both shapes
+		// answer the same question: is this session the basket the buyer is looking at?
+		const sameBasket =
+			(session.metadata?.contentKey ?? sessionBasketContentKey(session.metadata)) === contentKey;
 		if (session.status === "open") {
 			if (sameBasket) return { state: "resume", session };
 			// The basket changed under it: nobody may pay this one any more, and its
@@ -1383,6 +1663,71 @@ const paymentRoutes = new Hono()
 	})
 
 	// ── Quote (accurate fee preview, no charge) ──────────────────────────────
+	/**
+	 * The store panel's two reads: what a good offers, and what a pick costs.
+	 *
+	 * 🚨 **The listing is public and the quote is signed in.** The goods rule is that a
+	 * physical Work's page and its panel read without an account — a visitor may look at the
+	 * shirt exactly as an account may — and creating an account is required only to buy.
+	 * The quote needs a session because its tax estimate is resolved from the buyer's saved
+	 * billing address, which is a fact about a person.
+	 */
+	.get("/physical/:slug", async (c) => {
+		const found = await physicalStorefront(c.req.param("slug"));
+		if (!found.ok) return c.json({ error: found.error }, found.status);
+		return c.json({
+			work: found.work,
+			listing: found.listing,
+			unitPrice: found.unitPrice.toFixed(2),
+		});
+	})
+
+	.post(
+		"/physical/:slug/quote",
+		requireAuth,
+		zValidator(
+			"json",
+			z.object({
+				quantity: z.number().optional(),
+				options: z.array(z.object({ name: z.string(), label: z.string() })).optional(),
+			}),
+		),
+		async (c) => {
+			const user = c.get("user");
+			const body = c.req.valid("json");
+			const sale = await resolvePhysicalSale(c.req.param("slug"), user.id, {
+				quantity: body.quantity,
+				options: body.options,
+			});
+			if (!sale.ok) {
+				return c.json(
+					{ error: sale.error, ...("problems" in sale ? { problems: sale.problems } : {}) },
+					sale.status,
+				);
+			}
+			const saved = await savedBillingAddress(user.id);
+			const { tax, quotedTo } = await quotePhysicalTax(saved, {
+				goodsPrice: sale.goodsPrice,
+				shippingPrice: sale.shippingPrice,
+				taxCategory: sale.taxCategory,
+			});
+			const total = sale.goodsPrice.plus(sale.shippingPrice).plus(tax ? new Decimal(tax) : 0);
+			return c.json({
+				quantity: sale.quantity,
+				unitPrice: sale.unitPrice.toFixed(2),
+				goods: sale.goodsPrice.toFixed(2),
+				shipping: sale.shippingPrice.toFixed(2),
+				// Null when no saved address exists, or the estimate failed — the panel reads
+				// that as "calculated at checkout" rather than inventing a figure.
+				salesTax: tax,
+				total: tax == null ? null : total.toFixed(2),
+				quotedTo,
+				picks: sale.picks,
+				handlingBusinessDays: sale.handlingBusinessDays,
+			});
+		},
+	)
+
 	.get("/quote/:slug", requireAuth, async (c) => {
 		const user = c.get("user");
 		const q = await resolvePurchase(c.req.param("slug"), user.id);
@@ -1552,7 +1897,28 @@ const paymentRoutes = new Hono()
 				return c.json({ error: "Badge not found", code: result.reason }, 404);
 			}
 		} else {
-			const result = await addBasketItem(user.id, workId);
+			// A physical line carries what the buyer chose and how many — the same body a
+			// second press of Add sends, so a buyer who opens the picker again replaces the
+			// line rather than being told it is already there.
+			const quantity = Number(body?.quantity);
+			const options = Array.isArray(body?.options)
+				? (body.options as Array<{ name?: unknown; label?: unknown }>)
+						.map((entry) => ({
+							name: String(entry?.name ?? ""),
+							label: String(entry?.label ?? ""),
+						}))
+						.filter((entry) => entry.name && entry.label)
+				: null;
+			const result = await addBasketItem(
+				user.id,
+				workId,
+				options || Number.isInteger(quantity)
+					? {
+							quantity: Number.isInteger(quantity) && quantity > 0 ? quantity : undefined,
+							options,
+						}
+					: undefined,
+			);
 			if (!result.ok) {
 				// 404 names the Work (gone before it could be held); 409 names the basket (full).
 				// Both are refusals the buyer can act on at the moment of the click, which is
@@ -1569,6 +1935,46 @@ const paymentRoutes = new Hono()
 		const items = await resolvedBasketItems(user.id);
 		return c.json({ items });
 	})
+
+	/**
+	 * Change what a basket line asks for — the basket page's quantity stepper and picker.
+	 *
+	 * The same validation the checkout runs is NOT repeated here: the line is intent, and
+	 * a count somebody may no longer have is the quote's refusal to give, in its own words,
+	 * where the money is. This route only refuses a Work that is not in the basket.
+	 */
+	.put(
+		"/basket/items/:workId",
+		requireAuth,
+		zValidator(
+			"json",
+			z.object({
+				quantity: z.number().optional(),
+				options: z.array(z.object({ name: z.string(), label: z.string() })).optional(),
+			}),
+		),
+		async (c) => {
+			const user = c.get("user");
+			const workId = Number(c.req.param("workId"));
+			if (!Number.isInteger(workId) || workId <= 0) return c.json({ error: "Work not found" }, 404);
+			const body = c.req.valid("json");
+			const quantity = Number(body?.quantity);
+			const options = Array.isArray(body?.options)
+				? (body.options as Array<{ name?: unknown; label?: unknown }>)
+						.map((entry) => ({
+							name: String(entry?.name ?? ""),
+							label: String(entry?.label ?? ""),
+						}))
+						.filter((entry) => entry.name && entry.label)
+				: undefined;
+			const result = await updateBasketItem(user.id, workId, {
+				...(Number.isInteger(quantity) && quantity > 0 ? { quantity } : {}),
+				...(options !== undefined ? { options } : {}),
+			});
+			if (!result.ok) return c.json({ error: "That Work isn't in your basket." }, 404);
+			return c.json({ items: await resolvedBasketItems(user.id) });
+		},
+	)
 
 	.delete("/basket/items/:workId", requireAuth, async (c) => {
 		const user = c.get("user");
@@ -1611,8 +2017,20 @@ const paymentRoutes = new Hono()
 			(item): StoredBasketRow =>
 				item.kind === "badge"
 					? { kind: "badge", badgeId: item.badgeId as number }
-					: { kind: "work", workId: item.workId as number, slug: item.slug as string },
+					: {
+							kind: "work",
+							workId: item.workId as number,
+							slug: item.slug as string,
+							quantity: item.quantity,
+							options: item.options ?? null,
+						},
 		);
+		// A line the buyer can fix (a count past the shelf) is refused here, in its own
+		// words, rather than priced around: a basket total that quietly omits what the page
+		// is showing is the one number a buyer must never be given.
+		const blocked = stored.find((item) => item.error);
+		if (blocked?.error) return c.json({ error: blocked.error }, 400);
+
 		const q = await resolveStoredBasket(rows, user.id, { needsProduct: false });
 		if (!q.ok) return c.json({ error: q.error, code: "code" in q ? q.code : undefined }, q.status);
 
@@ -1638,7 +2056,10 @@ const paymentRoutes = new Hono()
 		q.items.forEach((i) => {
 			const cid = i.kind === "work" ? (i.work.creatorId as number) : i.issuer.id;
 			const group = byCreator.get(cid) ?? { receives: new Decimal(0), itemCount: 0 };
-			group.receives = group.receives.plus(i.amount).minus(i.lineFee);
+			// The creator pays the carrier, so the shipping on their line is theirs — it
+			// rides their receives figure and their row's earnings, never Anthers'.
+			const shipping = i.kind === "work" && i.physical ? i.physical.shippingOnLine : new Decimal(0);
+			group.receives = group.receives.plus(i.amount).plus(shipping).minus(i.lineFee);
 			group.itemCount += 1;
 			byCreator.set(cid, group);
 		});
@@ -1667,6 +2088,11 @@ const paymentRoutes = new Hono()
 							processingFee: i.lineFee.toFixed(2),
 							price: i.amount.toFixed(2),
 							recurring: null,
+							// A physical line's count and the shipping charged on it — the
+							// basket page's quantity control and its shipping row read these.
+							quantity: i.physical?.quantity ?? 1,
+							options: i.physical?.picks ?? null,
+							shipping: (i.physical?.shippingOnLine ?? new Decimal(0)).toFixed(2),
 						}
 					: {
 							kind: "badge" as const,
@@ -1679,6 +2105,7 @@ const paymentRoutes = new Hono()
 							// the first transaction's price, so an upgrade line reads as the
 							// upgrade it is rather than a discount.
 							recurring: i.threshold.toFixed(2),
+							quantity: 1,
 						},
 			),
 			// One entry per creator the charge covers, in the order the basket named them.
@@ -1720,8 +2147,17 @@ const paymentRoutes = new Hono()
 			(item): StoredBasketRow =>
 				item.kind === "badge"
 					? { kind: "badge", badgeId: item.badgeId as number }
-					: { kind: "work", workId: item.workId as number, slug: item.slug as string },
+					: {
+							kind: "work",
+							workId: item.workId as number,
+							slug: item.slug as string,
+							quantity: item.quantity,
+							options: item.options ?? null,
+						},
 		);
+		const blocked = stored.find((item) => item.error);
+		if (blocked?.error) return c.json({ error: blocked.error }, 400);
+
 		// The resolution runs BEFORE the processor guard — the refusals are the database's
 		// business and must fire without Stripe — and the rung's Product, the one
 		// processor-dependent piece, is priced only when a session could be built at all.
@@ -1768,14 +2204,15 @@ const paymentRoutes = new Hono()
 		// what the buyer had chosen. Now a revisit with the same basket gets the same open
 		// session back; a session built for a basket that has since changed is expired, its
 		// pending rows failed, and a fresh one is built below.
+		const workLinesForSession = q.items.filter(
+			(i): i is Extract<typeof i, { kind: "work" }> => i.kind === "work",
+		);
+		const badgeLinesForSession = q.items.filter(
+			(i): i is Extract<typeof i, { kind: "badge" }> => i.kind === "badge",
+		);
 		const known = await resumeBasketSession(
 			user.id,
-			basketContentKey(
-				q.items.map((i) => ({
-					kind: i.kind,
-					id: i.kind === "work" ? i.work.id : i.badge.id,
-				})),
-			),
+			basketPicksKey(workLinesForSession, badgeLinesForSession),
 		);
 		if (known?.state === "confirming") {
 			// The payment for this basket already went through and its webhook has not
@@ -1797,6 +2234,41 @@ const paymentRoutes = new Hono()
 			});
 		}
 
+		/**
+		 * 🚨 **A physical good's count comes off the shelf before the session is built.** A
+		 * reservation made after the charge would let two buyers win the last one; one made
+		 * at session build is the only moment early enough to refuse the second buyer in
+		 * their own checkout. The reservation is released if anything below fails, and a
+		 * session the buyer walks away from has its count returned by the sweep
+		 * (`releaseAbandonedStock`) once it expires.
+		 */
+		const physicalLines = q.items.filter(
+			(i): i is Extract<typeof i, { kind: "work" }> => i.kind === "work" && Boolean(i.physical),
+		);
+		const reserve = physicalLines.map((line) => ({
+			workId: line.work.id,
+			picks: line.physical?.picks ?? [],
+			quantity: line.physical?.quantity ?? 1,
+		}));
+		const reserved = await reserveStock(reserve);
+		if (!reserved.ok) {
+			return c.json(
+				{
+					error: reserved.problems[0]?.message ?? "That choice sold out while you were looking.",
+					problems: reserved.problems,
+				},
+				409,
+			);
+		}
+		/** Return every reservation this route made — the one undo for the whole block. */
+		const undoReservation = async () => {
+			await releaseStock(reserve).catch((err) => {
+				// A failed release leaves stock held for the sweep, which is the safe
+				// direction; it must not mask the checkout's own refusal.
+				console.error("physical stock release failed after a refused checkout", err);
+			});
+		};
+
 		// One line per Work, each with its own tax code — a basket can span media, and a
 		// video and an image are not taxed as the same thing in every jurisdiction. A
 		// Badge line names its rung's own Product, whose tax code the rung's own kinds
@@ -1808,9 +2280,19 @@ const paymentRoutes = new Hono()
 				const taxCode = purchaseTaxCode(work.type as WorkType);
 				// `resolvePurchase` already refused the types with no code, so this is the
 				// belt on a door the single-purchase path refuses at.
-				if (!taxCode)
+				if (!taxCode) {
+					await undoReservation();
 					return c.json({ error: "This work can't be taxed yet, so it can't be sold." }, 400);
-				lineItems.push(workLineItem(work, Math.round(amount.toNumber() * 100), taxCode));
+				}
+				lineItems.push(
+					workLineItem(work, Math.round(amount.toNumber() * 100), taxCode, {
+						// The count on the receipt is the count the creator packs.
+						quantity: item.physical?.quantity ?? 1,
+						// The choices read on the receipt line, because "T-shirt" alone does
+						// not tell a creator which shirt to pick off the shelf.
+						variant: item.physical?.picks.map((pick) => `${pick.name}: ${pick.label}`),
+					}),
+				);
 			} else {
 				// The product was priced when the processor was configured (the guard above
 				// runs before the resolution, with `needsProduct` on its answer); the belt
@@ -1818,6 +2300,32 @@ const paymentRoutes = new Hono()
 				if (!item.product) return c.json({ error: "Payments are not configured." }, 503);
 				lineItems.push(badgeLineItem(item.product, Math.round(item.amount.toNumber() * 100)));
 			}
+		}
+
+		/**
+		 * One shipping line per creator, charged once for their parcel(s).
+		 *
+		 * ⚠️ **A line item, not the session's `shipping_cost`.** Checkout carries exactly one
+		 * `shipping_cost`, and a basket can hold goods from several creators who each post a
+		 * box; naming the charge as its own line is what lets each one be taxed with
+		 * `SHIPPING_TAX_CODE` and appear on the receipt as the delivery it is.
+		 */
+		const shippingByCreator = new Map<number, { handle: string; cents: number }>();
+		for (const line of physicalLines) {
+			const shipping = line.physical?.shippingOnLine ?? new Decimal(0);
+			if (shipping.lte(0) || line.work.creatorId == null) continue;
+			const [creator] = await db
+				.select({ handle: users.atprotoHandle })
+				.from(users)
+				.where(eq(users.id, line.work.creatorId))
+				.limit(1);
+			shippingByCreator.set(line.work.creatorId, {
+				handle: creator?.handle ?? "the creator",
+				cents: Math.round(shipping.toNumber() * 100),
+			});
+		}
+		for (const shipping of shippingByCreator.values()) {
+			lineItems.push(shippingLineItem(shipping.handle, shipping.cents));
 		}
 
 		// 🚨 **The card rides only when a Badge's recurrence needs it.** A charge that carries
@@ -1831,12 +2339,8 @@ const paymentRoutes = new Hono()
 		const saveCard =
 			q.items.some((i) => i.kind === "badge") && !(await hasActiveSupportSubscription(user.id));
 
-		const workLines = q.items.filter(
-			(i): i is Extract<typeof i, { kind: "work" }> => i.kind === "work",
-		);
-		const badgeLines = q.items.filter(
-			(i): i is Extract<typeof i, { kind: "badge" }> => i.kind === "badge",
-		);
+		const workLines = workLinesForSession;
+		const badgeLines = badgeLinesForSession;
 
 		const session = await createCheckoutSession(
 			purchaseSession({
@@ -1846,15 +2350,27 @@ const paymentRoutes = new Hono()
 				customerId: await stripeCustomerIdFor(user.id),
 				customerEmail: user.email,
 				saveCard,
+				// A charge carrying goods needs somewhere to send them, and the address the
+				// buyer confirms is what the creator ships to. Checkout collects it in its own
+				// step; the completion stamps it onto the purchase rows, which is where the
+				// creator's order list reads it from.
+				shippingAddress: physicalLines.length > 0 ? "us" : undefined,
 				metadata: {
 					kind: "direct_purchase_basket",
 					workIds: workLines.map((i) => i.work.id).join(","),
 					badgeIds: badgeLines.map((i) => i.badge.id).join(","),
 					buyerId: String(user.id),
+					// What the buyer asked for, not merely which Works: a count or a size
+					// changed between two visits is a different basket, and a session built
+					// for the old one must not be handed back (see `resumeBasketSession`).
+					contentKey: basketPicksKey(workLines, badgeLines),
 				},
 			}),
 		);
-		if (!session?.client_secret) return c.json({ error: "Payments are not configured." }, 503);
+		if (!session?.client_secret) {
+			await undoReservation();
+			return c.json({ error: "Payments are not configured." }, 503);
+		}
 
 		/**
 		 * One row per Work, all sharing the PaymentIntent — because access, refunds and
@@ -1868,11 +2384,16 @@ const paymentRoutes = new Hono()
 		 * value across every line of the charge** (Works and Badges alike), with the last
 		 * row absorbing the rounding remainder so the parts sum to the whole exactly.
 		 */
-		const purchaseRows = workLines.map(({ work, amount, lineFee }) => {
+		const purchaseRows = workLines.map(({ work, amount, lineFee, physical }) => {
 			// The session's tax is stamped per charge at completion and apportioned across
 			// the rows then; at checkout every row is zero, because Anthers' arithmetic
 			// knows no buyer location. The apportioning still runs so the shape of the
 			// row building is unchanged, and a zero total apportions to zero exactly.
+			//
+			// A good's row carries three things no digital row does — the count, the
+			// choices, and the shipping the creator receives — and its earnings include
+			// that shipping, because the creator is the one paying the carrier.
+			const shipping = physical?.shippingOnLine ?? new Decimal(0);
 			return {
 				buyerId: user.id,
 				workId: work.id,
@@ -1880,11 +2401,15 @@ const paymentRoutes = new Hono()
 				workTitle: work.title,
 				workType: work.type,
 				workPublicId: work.publicId,
-				type: "digital" as const,
+				type: (physical ? "physical" : "digital") as "physical" | "digital",
 				amount: amount.toFixed(2),
 				processingFee: lineFee.toFixed(2),
 				salesTax: "0.00",
-				creatorEarnings: amount.minus(lineFee).toFixed(2),
+				creatorEarnings: amount.plus(shipping).minus(lineFee).toFixed(2),
+				quantity: physical?.quantity ?? 1,
+				options: physical?.picks ?? null,
+				shippingAmount: shipping.toFixed(2),
+				handlingBusinessDays: physical?.handlingBusinessDays ?? null,
 				// The session id, as on the single-purchase path — the PaymentIntent is
 				// resolved from the session at completion and the rows re-keyed to it.
 				stripePaymentIntentId: session.id,

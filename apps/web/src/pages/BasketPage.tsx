@@ -81,6 +81,10 @@ interface Quote {
 				processingFee: string;
 				price: string;
 				recurring: null;
+				/** A physical line's count, chosen values and the shipping charged on it. */
+				quantity?: number;
+				options?: Array<{ name: string; label: string }> | null;
+				shipping?: string;
 		  }
 		| {
 				kind: "badge";
@@ -125,7 +129,8 @@ interface SessionTotals {
 
 export default function BasketPage() {
 	const { user } = useAuth();
-	const { items, remove, clear, count } = useBasket();
+	const { items, remove, update, clear, count } = useBasket();
+	const [lineError, setLineError] = useState<string | null>(null);
 	const [quote, setQuote] = useState<Quote | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
@@ -295,6 +300,12 @@ export default function BasketPage() {
 			<h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-base-content/60">
 				Basket
 			</h2>
+			{/* A refused count stays visible where it was attempted, in the server's words. */}
+			{lineError && (
+				<div className="alert alert-warning mb-2 text-sm">
+					<span>{lineError}</span>
+				</div>
+			)}
 			<div className="flex flex-col gap-3">
 				{groups.map((group) => (
 					<div key={group.handle} className="rounded-lg bg-base-200/50 px-3 py-1">
@@ -365,8 +376,61 @@ export default function BasketPage() {
 												className="min-w-0 flex-1 truncate text-sm text-base-content/80 link-hover"
 											>
 												<span className="block truncate">{item.title ?? "Untitled"}</span>
+												{((item.options?.length ?? 0) > 0 || (item.quantity ?? 1) > 1) && (
+													<span className="block truncate text-xs text-base-content/50">
+														{(item.options ?? [])
+															.map((option) => `${option.name}: ${option.label}`)
+															.join(" · ")}
+														{(item.options?.length ?? 0) > 0 && (item.quantity ?? 1) > 1
+															? " · "
+															: ""}
+														{(item.quantity ?? 1) > 1 ? `× ${item.quantity}` : ""}
+													</span>
+												)}
 											</Link>
 										)}
+										{/* A good's count is editable here, where the buyer is looking at
+										    what they are about to buy — the same count the creator will
+										    pack. A digital line has no count to change. */}
+										{!isBadge && item.type === "physical" ? (
+											<span className="join shrink-0">
+												<button
+													type="button"
+													className="btn btn-xs join-item"
+													aria-label={`One fewer ${item.title ?? "item"}`}
+													disabled={(item.quantity ?? 1) <= 1}
+													onClick={() =>
+														void Promise.resolve(
+															update({ workId: item.workId, quantity: (item.quantity ?? 1) - 1 }),
+														).then((result) => {
+															if (result && !result.ok) setLineError(result.error);
+															else setLineError(null);
+														})
+													}
+												>
+													−
+												</button>
+												<span className="btn btn-xs join-item pointer-events-none tabular-nums">
+													{item.quantity ?? 1}
+												</span>
+												<button
+													type="button"
+													className="btn btn-xs join-item"
+													aria-label={`One more ${item.title ?? "item"}`}
+													disabled={(item.quantity ?? 1) >= 10}
+													onClick={() =>
+														void Promise.resolve(
+															update({ workId: item.workId, quantity: (item.quantity ?? 1) + 1 }),
+														).then((result) => {
+															if (result && !result.ok) setLineError(result.error);
+															else setLineError(null);
+														})
+													}
+												>
+													+
+												</button>
+											</span>
+										) : null}
 										<span className="shrink-0 text-sm tabular-nums text-base-content/80">
 											${item.price}
 										</span>
