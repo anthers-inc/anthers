@@ -246,6 +246,7 @@ import {
 	parentalVisibility,
 } from "../services/parental-controls.js";
 import { canBePaid } from "../services/payouts.js";
+import { physicalListingFor, savePhysicalListing } from "../services/physical-listings.js";
 import {
 	normalizeStoredMarkdown,
 	POST_BODY_LIMIT,
@@ -1164,6 +1165,33 @@ const sourceFilesSchema = z.union([
 
 /** A whole-set arrangement: the ids in the order the creator is showing. No partial orders. */
 const sourceOrderSchema = z.object({ order: z.array(z.number().int()) });
+
+/**
+ * A physical listing as a client sends it.
+ *
+ * Loose on purpose at this layer: the shape is validated once in
+ * `services/physical-listings.ts`, which is the module a quote, a checkout and an order
+ * all read, and a second stricter copy here would be the copy that drifts. What this
+ * guarantees is only that the body carries the four fields and not something else.
+ */
+const physicalListingSchema = z.object({
+	shippingPrice: z.union([z.string(), z.number()]).optional(),
+	handlingBusinessDays: z.union([z.string(), z.number()]).optional(),
+	taxCategory: z.string().optional(),
+	options: z
+		.array(
+			z.object({
+				name: z.string(),
+				values: z.array(
+					z.object({
+						label: z.string(),
+						stock: z.union([z.number(), z.string(), z.null()]).optional(),
+					}),
+				),
+			}),
+		)
+		.optional(),
+});
 
 /** One caption track to attach: the uploaded .vtt's key, its language tag, and its menu label. */
 const captionAttachSchema = z.object({
@@ -7448,6 +7476,57 @@ const contentRoutes = new Hono()
 		const job = await removeSourceFile(item, Number(c.req.param("fileId")));
 		if (!job) return c.json({ error: "Not found" }, 404);
 		return c.json({ transcoding: job });
+	})
+
+	// ── A physical Work's listing — the four answers a good needs ────────────
+	// What shipping costs, how long the good takes to leave, what it is for tax,
+	// and what choices the buyer makes. Everything else about selling a good —
+	// its price, its art, its description — is the Work's own and is edited by
+	// the fields that already edit it; this is only the part a digital Work has
+	// no equivalent of. See `services/physical-listings.ts`.
+	//
+	// Both routes are owner-only and 404 a stranger's Work rather than 403: a
+	// listing is a selling surface, and confirming that a private Work exists
+	// would be answering a question a stranger cannot ask.
+	.get("/works/:id/physical", requireAuth, async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (item.type !== "physical") {
+			return c.json(
+				{ error: "Only a physical good carries a shipping listing.", code: "not_physical" },
+				400,
+			);
+		}
+		return c.json({ listing: await physicalListingFor(id) });
+	})
+
+	.put("/works/:id/physical", requireAuth, zValidator("json", physicalListingSchema), async (c) => {
+		const user = c.get("user");
+		const id = Number(c.req.param("id"));
+		const [item] = await db.select().from(works).where(eq(works.id, id)).limit(1);
+		if (!item || item.creatorId !== user.id) return c.json({ error: "Work not found" }, 404);
+		if (item.type !== "physical") {
+			return c.json(
+				{ error: "Only a physical good carries a shipping listing.", code: "not_physical" },
+				400,
+			);
+		}
+		// The service collects every problem rather than throwing on the first, so a
+		// form reports the whole set; the first message is the response's `error`
+		// because that is what a caller renders without walking the list.
+		const saved = await savePhysicalListing(id, c.req.valid("json"));
+		if (!saved.ok) {
+			return c.json(
+				{
+					error: saved.problems[0]?.message ?? "That listing didn't save.",
+					problems: saved.problems,
+				},
+				400,
+			);
+		}
+		return c.json({ listing: saved.listing });
 	})
 
 	// ══════════════════════════════════════════════════════════════════════════

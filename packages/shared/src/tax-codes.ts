@@ -74,6 +74,38 @@ export function purchaseTaxCode(type: WorkType): string | null {
 export const SHIPPING_TAX_CODE = "txcd_92010001";
 
 /**
+ * What a creator's physical good is, for tax — the category they choose and the Stripe
+ * code it carries.
+ *
+ * 🚨 **A creator's good cannot inherit the clothing code the Anthers shirts used.** A
+ * hand-thrown mug taxed as clothing is a wrong return filed without anybody noticing, and
+ * the goods that will sell first are exactly the ones no built-in category anticipated.
+ * The list is deliberately short and only carries codes verified against Stripe's
+ * published table: a category whose code nobody has checked is a category that files a
+ * wrong return, and adding one is a research pass rather than a line in a map.
+ */
+export const PHYSICAL_TAX_CATEGORIES = {
+	general: {
+		code: "txcd_99999999",
+		label: "A general physical good",
+		detail: "A print, a mug, a figure, anything that ships and is not clothing.",
+	},
+	clothing: {
+		code: "txcd_30011000",
+		label: "Clothing or footwear",
+		detail: "A shirt, a hat, a hand-knitted garment.",
+	},
+} as const;
+
+/** The categories a physical listing may name. */
+export type PhysicalTaxCategory = keyof typeof PHYSICAL_TAX_CATEGORIES;
+
+/** Whether a value names a category we can price. */
+export function isPhysicalTaxCategory(value: string): value is PhysicalTaxCategory {
+	return Object.hasOwn(PHYSICAL_TAX_CATEGORIES, value);
+}
+
+/**
  * The code for support that buys nothing: a cash donation, `txcd_90000001`.
  *
  * Support that opens gated Works or carries a tagged perk is coded from what it buys
