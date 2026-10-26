@@ -47,7 +47,6 @@ import {
 	badges,
 	billingAccounts,
 	comments,
-	crfSubsidies,
 	follows,
 	libraryItems,
 	moderationReports,
@@ -67,7 +66,7 @@ import {
 import { eq } from "drizzle-orm";
 
 /** Bump when the shape changes in a way a consumer would notice. */
-export const EXPORT_FORMAT_VERSION = 1;
+export const EXPORT_FORMAT_VERSION = 2;
 
 export interface AccountExport {
 	format: string;
@@ -110,7 +109,6 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 		distributionRows,
 		ladderRows,
 		reportRows,
-		subsidyRows,
 		stripeRow,
 	] = await Promise.all([
 		db.select().from(sessions).where(eq(sessions.userId, userId)),
@@ -132,7 +130,6 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 		db.select().from(poolDistributions).where(eq(poolDistributions.subscriberId, userId)),
 		db.select().from(badges).where(eq(badges.creatorId, userId)),
 		db.select().from(moderationReports).where(eq(moderationReports.reporterId, userId)),
-		db.select().from(crfSubsidies).where(eq(crfSubsidies.creatorId, userId)),
 		db.select().from(stripeAccounts).where(eq(stripeAccounts.userId, userId)),
 	]);
 
@@ -214,12 +211,11 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 			userBadges: badgeRows,
 			poolDistributions: distributionRows,
 			badges: ladderRows,
-			// This account's own hosting-subsidy calculations, per cycle. Note `crf_ledger`
-			// is deliberately NOT here: it is a platform-level ledger keyed on a purchase
-			// with no user reference at all, so it is not personal data about anyone — the
-			// purchase row it points at is what belongs to a person, and that is exported
-			// above.
-			hostingSubsidies: subsidyRows,
+			// Note `crf_ledger` is deliberately NOT here: it is a platform-level ledger
+			// keyed on a purchase with no user reference at all, so it is not personal data
+			// about anyone — the purchase row it points at is what belongs to a person, and
+			// that is exported above.
+
 			// Connect account id and capability flags. The KYC documents behind them live
 			// at Stripe and were never ours to hold — see the Privacy Policy on learning the predicate
 			// rather than the data.
