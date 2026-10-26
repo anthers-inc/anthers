@@ -17,7 +17,7 @@
  * through rather than part of what the good is worth.
  *
  * 🚨 **`options` is a shape, not a schema.** A creator's choices are a short ordered list
- * of names with values — size, colour, scent — and a table per level would be three joins
+ * of names with values — size, color, scent — and a table per level would be three joins
  * to render one picker. It is validated on write (`services/physical-listings.ts`) and
  * read as a whole, and a null `stock` means "as many as I can make" rather than zero.
  */
