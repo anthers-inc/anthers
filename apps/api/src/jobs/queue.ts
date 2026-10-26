@@ -228,6 +228,9 @@ export const QUEUES = {
 	// Move settled, held credits into each creator's connected-account balance, 14 days
 	// after each credit's own settlement. See transfer-held-credits.ts.
 	TRANSFER_HELD_CREDITS: "transfer-held-credits",
+	// Close the wait on shipped parcels nothing reported delivered, so a creator is not
+	// left unpaid because a carrier was quiet. See shipment-clock.ts.
+	SHIPMENT_CLOCK: "shipment-clock",
 	// The storage ladder's meter — snapshot what each account holds against its allowance.
 	// See storage-usage.ts for the DB-first counting rule and the per-purpose split.
 	STORAGE_USAGE: "storage-usage",
@@ -495,6 +498,12 @@ export const JOB_OPTIONS: Record<string, SendOptions> = {
 		retryLimit: 1,
 		expireInMinutes: 30,
 	},
+	[QUEUES.SHIPMENT_CLOCK]: {
+		// Safe to retry twice over: the sweep re-selects only shipments still undelivered,
+		// and a delivery already stamped is never overwritten.
+		retryLimit: 2,
+		expireInMinutes: 15,
+	},
 	[QUEUES.RUN_DELETIONS]: {
 		// Each account is its own transaction, so a retry re-selects only what is still
 		// pending and cannot half-erase anyone.
@@ -653,6 +662,10 @@ export const CRON_SCHEDULES: ReadonlyArray<
 	// nothing to do with holding money, and a few hours' latency on a 14-day hold is
 	// invisible. The slot was picked per the brief (4 AM UTC, stated here).
 	[QUEUES.TRANSFER_HELD_CREDITS, "0 4 * * *"],
+	// 5 AM daily, after the money jobs. A fallback delivery is a fourteen-day judgment,
+	// so whether it lands at 5 AM or 9 AM changes nothing a person can see — it only has
+	// to run daily so the window opens the day after its deadline rather than a week later.
+	[QUEUES.SHIPMENT_CLOCK, "0 5 * * *"],
 	// 1:30 AM daily. Its only requirement is that it runs daily, so the in-flight month's
 	// estimate stays fresh; the hour keeps it clear of the midnight and 2 AM money jobs.
 	[QUEUES.STORAGE_USAGE, "30 1 * * *"], // 1:30 AM daily (idempotent upsert per cycle)
