@@ -34,7 +34,10 @@ import { resolveStorageConfig } from "../services/storage/config";
  */
 const KEY_FOR: Record<string, string> = {
 	avatar: "creators/7/avatars/abc123.png",
-	header: "creators/7/headers/abc123.jpg",
+	banner: "creators/7/banners/abc123.jpg",
+	// The retired words, accepted as aliases: `header` now lands in banners/, while `cover`
+	// still lands in the old covers/ prefix so a tab opened across the rename works.
+	header: "creators/7/banners/abc123.jpg",
 	cover: "creators/7/covers/42/abc123.jpg",
 	thumbnail: "creators/7/thumbnails/42/abc123.jpg",
 	gallery: "creators/7/gallery/42/abc123.png",

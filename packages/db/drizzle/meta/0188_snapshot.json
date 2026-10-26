@@ -1,5 +1,5 @@
 {
-  "id": "5e8dc078-e729-48d3-9c3f-91674b69ac42",
+  "id": "fd1e60d4-403e-4fc9-9348-7c4f48bcca23",
   "prevId": "ed117867-4d73-4049-80d6-ed2fdaec05de",
   "version": "7",
   "dialect": "postgresql",
@@ -3398,95 +3398,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.physical_listings": {
-      "name": "physical_listings",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "work_id": {
-          "name": "work_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "shipping_price": {
-          "name": "shipping_price",
-          "type": "numeric",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0.00'"
-        },
-        "handling_business_days": {
-          "name": "handling_business_days",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 3
-        },
-        "tax_category": {
-          "name": "tax_category",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'general'"
-        },
-        "options": {
-          "name": "options",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "physical_listings_work_id_works_id_fk": {
-          "name": "physical_listings_work_id_works_id_fk",
-          "tableFrom": "physical_listings",
-          "tableTo": "works",
-          "columnsFrom": [
-            "work_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "physical_listings_work_id_unique": {
-          "name": "physical_listings_work_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "work_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.space_backups": {
       "name": "space_backups",
       "schema": "",
@@ -5970,12 +5881,38 @@
           "notNull": false,
           "default": "''"
         },
-        "header_image": {
-          "name": "header_image",
+        "banner_image": {
+          "name": "banner_image",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "default": "''"
+        },
+        "avatar_source": {
+          "name": "avatar_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "banner_image_source": {
+          "name": "banner_image_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "avatar_crop": {
+          "name": "avatar_crop",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "banner_image_crop": {
+          "name": "banner_image_crop",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "website_url": {
           "name": "website_url",
@@ -11227,15 +11164,28 @@
           "notNull": false,
           "default": "''"
         },
-        "cover_image": {
-          "name": "cover_image",
+        "thumbnail": {
+          "name": "thumbnail",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "default": "''"
         },
-        "cover_work_id": {
-          "name": "cover_work_id",
+        "thumbnail_source": {
+          "name": "thumbnail_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "thumbnail_crop": {
+          "name": "thumbnail_crop",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "thumbnail_work_id": {
+          "name": "thumbnail_work_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
@@ -11334,12 +11284,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "projects_cover_work_id_works_id_fk": {
-          "name": "projects_cover_work_id_works_id_fk",
+        "projects_thumbnail_work_id_works_id_fk": {
+          "name": "projects_thumbnail_work_id_works_id_fk",
           "tableFrom": "projects",
           "tableTo": "works",
           "columnsFrom": [
-            "cover_work_id"
+            "thumbnail_work_id"
           ],
           "columnsTo": [
             "id"
@@ -14035,6 +13985,19 @@
           "primaryKey": false,
           "notNull": false,
           "default": "''"
+        },
+        "thumbnail_source": {
+          "name": "thumbnail_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "''"
+        },
+        "thumbnail_crop": {
+          "name": "thumbnail_crop",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "source_key": {
           "name": "source_key",

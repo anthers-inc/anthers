@@ -26,6 +26,7 @@ describe("upload ACL allowlist", () => {
 		// of quietly shrinking both sides of the assertion.
 		for (const type of [
 			"avatar",
+			"banner",
 			"header",
 			"cover",
 			"thumbnail",

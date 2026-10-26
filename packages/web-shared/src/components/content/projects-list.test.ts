@@ -29,7 +29,7 @@ function project(id: number, over: Partial<Project> = {}): Project {
 		creatorId: 1,
 		slug: `project-${id}`,
 		title: `Project ${id}`,
-		coverImage: null,
+		thumbnail: null,
 		pageConfig: null,
 		isPublished: false,
 		atprotoUri: null,

@@ -2077,7 +2077,7 @@ const paymentRoutes = new Hono()
 				// destroyed. The Library counts the rescue window from it, and the
 				// buyer's card is the only surface that can tell them the clock exists.
 				workWithdrawnAt: works.withdrawnAt,
-				workCoverImage: works.thumbnail,
+				workThumbnail: works.thumbnail,
 				creatorHandle: users.atprotoHandle,
 				creatorDisplayName: users.displayName,
 				creatorAvatar: users.avatar,
@@ -2094,7 +2094,7 @@ const paymentRoutes = new Hono()
 				work: {
 					// Title and type come from the stored snapshot, not the join, so they
 					// still read correctly for a Work that no longer exists. Slug, publicId,
-					// visibility and cover deliberately do NOT: they only exist to link and
+					// visibility and thumbnail deliberately do NOT: they only exist to link and
 					// illustrate, and a deleted Work has no page to link to — null is the
 					// honest answer.
 					title: r.purchase.workTitle,
@@ -2105,7 +2105,7 @@ const paymentRoutes = new Hono()
 					// and their Library is the only place that can tell them so.
 					visibility: r.workVisibility,
 					withdrawnAt: r.workWithdrawnAt,
-					coverImage: r.workCoverImage,
+					thumbnail: r.workThumbnail,
 					type: r.purchase.workType,
 				},
 				creator: {

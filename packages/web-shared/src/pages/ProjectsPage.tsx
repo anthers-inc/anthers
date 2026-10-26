@@ -9,7 +9,7 @@
  * not a grid: the substance lives on the Works it holds.
  *
  * The listing is a **table of tall rows** (Parker, 2026-10-11), the Works table's treatment
- * with room for a different row: the project's header image and its title down the left,
+ * with room for a different row: the project's thumbnail and its title down the left,
  * the description as its own column beside the title (2026-10-16), and a grid of the works
  * it holds on the right — a project described by what it contains. The rows sort by header
  * and filter from the left sidebar below the Studio nav, the Works page's mechanism; the
@@ -271,7 +271,7 @@ export default function ProjectsPage() {
 }
 
 /**
- * One Project as a tall row: the header image and the title on the left, the description as
+ * One Project as a tall row: the thumbnail and the title on the left, the description as
  * its own column beside the title, the works it holds as a thumbnail grid on the right
  * (Parker's sketch, 2026-10-11; the description column, 2026-10-16).
  */
@@ -293,7 +293,7 @@ function ProjectRow({
 
 	return (
 		<tr className="border-b border-base-300/50 hover:bg-base-200/40 align-top">
-			{/* PROJECT — the header image above the name, the row's left zone.
+			{/* PROJECT — the thumbnail above the name, the row's left zone.
 			    The image carries the same link the title does, the Works table's pattern, and sits
 			    out of the accessibility tree because the title already names the same place. */}
 			<td className="py-3 pr-4">
@@ -302,13 +302,13 @@ function ProjectRow({
 						to={projectUrl}
 						tabIndex={-1}
 						aria-hidden="true"
-						className="block w-full aspect-[2/1] rounded"
+						className="block w-full aspect-video rounded"
 					>
-						{project.coverImage ? (
+						{project.thumbnail ? (
 							<img
-								src={project.coverImage}
+								src={project.thumbnail}
 								alt=""
-								className="w-full h-full aspect-[2/1] object-cover rounded"
+								className="w-full h-full aspect-video object-cover rounded"
 							/>
 						) : (
 							<div className="w-full h-full rounded bg-base-300/50 flex items-center justify-center">
@@ -325,7 +325,7 @@ function ProjectRow({
 			</td>
 
 			{/* DESCRIPTION — its own column beside the title (Parker, 2026-10-16), the Works
-			    table's same treatment; the tall row leaves the room beside the header image. */}
+			    table's same treatment; the tall row leaves the room beside the thumbnail. */}
 			<td className="py-3 pr-4">
 				<p className="text-xs text-base-content/60 line-clamp-3 break-words max-w-lg">
 					{project.description || "No description"}
