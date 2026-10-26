@@ -119,6 +119,7 @@ const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const UnsubscribePage = lazy(() => import("./pages/UnsubscribePage"));
 const SupportersPage = lazy(() => import("./pages/SupportersPage"));
 const FinishSignupPage = lazy(() => import("./pages/FinishSignupPage"));
+const ResumeSignupPage = lazy(() => import("./pages/ResumeSignupPage"));
 const SignupPage = lazy(() => import("./pages/SignupPage"));
 const WelcomePage = lazy(() => import("./pages/WelcomePage"));
 const WorkPage = lazy(() => import("./pages/WorkPage"));
@@ -307,6 +308,7 @@ export default function App() {
 					    guard is what stops this becoming a second signup door: with no pending
 					    record it sends you to `/signup`, and there is no way to start one
 					    from here. */}
+					<Route path="/finish/resume" element={<ResumeSignupPage />} />
 					<Route path="/finish" element={<FinishSignupPage />} />
 				</Route>
 

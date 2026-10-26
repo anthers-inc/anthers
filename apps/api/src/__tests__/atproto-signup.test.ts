@@ -256,7 +256,11 @@ describe("the scope a signup asks for", () => {
 				string,
 				unknown
 			>;
-			expect(Object.keys(config).sort()).toEqual(["hostedHandleSuffix", "hostedIdentityOffered"]);
+			expect(Object.keys(config).sort()).toEqual([
+				"hostedAccountUrl",
+				"hostedHandleSuffix",
+				"hostedIdentityOffered",
+			]);
 
 			const { url } = await runCallback({ did: did("noswitch") });
 			expect(url.searchParams.get("success")).toBe("needs_email");

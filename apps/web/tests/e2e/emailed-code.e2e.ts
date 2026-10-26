@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A signup and a sign-in finished with the code that was actually emailed.
+ * A signup finished with the code that was actually emailed.
  *
  * 🚨 **Everything else in this suite stops at the code field**, because until the session had a
- * mail catcher the code existed only hashed in the database. These two walk the far side: the code
- * read out of the session's inbox, typed into the six boxes, and an account on the other end — for
- * signup, one that holds the handle it asked for as a real identity on the session's network.
+ * mail catcher the code existed only hashed in the database. This walks the far side: the code read
+ * out of the session's inbox, typed into the six boxes, and an account on the other end that holds
+ * the handle it asked for as a real identity on the session's network.
+ *
+ * ⚠️ **The code proves the address; it does not sign anybody in.** Sign-in is the identity's own
+ * password (`login-password.e2e.ts`) or OAuth (`login-bluesky.e2e.ts`). This is the signup
+ * ceremony's verification step, and it is the only place an emailed code still appears.
  */
-import { fileURLToPath } from "node:url";
 import { profileUrl } from "@anthers/web-shared/profile";
 import type { Page } from "@playwright/test";
-import { API_URL, emailedCode, expect, leashedExecFileSync, test } from "./fixtures";
+import { API_URL, emailedCode, expect, test } from "./fixtures";
 
-const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 const topSignup = (page: Page) => page.locator('[data-signup="top"]');
 
 const stamp = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -90,119 +92,4 @@ test("an emailed code finishes a signup, and the account holds the handle it ask
 	);
 	expect(repo.status).toBe(200);
 	expect(((await repo.json()) as { handle: string }).handle).toBe(me.user?.handle);
-});
-
-test("an emailed code signs an existing account in from /login", async ({ page }) => {
-	const name = `e2e-login-${stamp()}`.slice(0, 18);
-	const address = `${name}@example.com`;
-	const made = JSON.parse(
-		leashedExecFileSync("bun", ["run", "db:local-account", "--name", name, "--email", address], {
-			cwd: REPO_ROOT,
-			encoding: "utf8",
-		})
-			.trim()
-			.split("\n")
-			.at(-1) as string,
-	) as { handle: string };
-
-	await page.goto("/login");
-	await page.locator('input[autocomplete="username"]').fill(address);
-	await page.getByRole("button", { name: /^continue$/i }).click();
-	await typeCode(page, await emailedCode(address));
-
-	await expect
-		.poll(async () => {
-			const me = (await (await page.request.get(`${API_URL}/api/auth/me`)).json()) as {
-				user: { handle: string } | null;
-			};
-			return me.user?.handle ?? null;
-		})
-		.toBe(made.handle);
-});
-
-/**
- * An Anthers handle is an identity, and an identity signs in at its own server.
- *
- * 🚨 **The handoff is the assertion, not the round trip.** Completing OAuth would mean typing a
- * real password into `anthers.social`'s consent page, which this suite must not do. What can be
- * pinned is that the page leaves for the OAuth door rather than mailing a code, and that the code
- * stays available underneath as the way in for an account whose holder has no password yet.
- */
-test("an Anthers handle hands the browser to its own server", async ({ page }) => {
-	const name = `e2e-han-${stamp()}`.slice(0, 18);
-	const address = `e2e-handle-${stamp()}@example.com`;
-	const made = JSON.parse(
-		leashedExecFileSync("bun", ["run", "db:local-account", "--name", name, "--email", address], {
-			cwd: REPO_ROOT,
-			encoding: "utf8",
-		})
-			.trim()
-			.split("\n")
-			.at(-1) as string,
-	) as { handle: string };
-
-	await page.goto("/login");
-
-	let payload: unknown = null;
-	await page.route("**/api/atproto/auth", async (route) => {
-		payload = route.request().postDataJSON();
-		// A same-origin URL, so the browser goes somewhere harmless instead of to a real
-		// consent screen. Nothing after the handoff is this spec's subject.
-		await route.fulfill({
-			status: 200,
-			contentType: "application/json",
-			body: JSON.stringify({ authorization_url: "/login?handed-off=1" }),
-		});
-	});
-
-	// Typed with the leading `@`, and in the case somebody's profile shows it. The page
-	// normalizes both before the flow sees it.
-	await page.locator('input[autocomplete="username"]').fill(`@${made.handle.toUpperCase()}`);
-	await page.getByRole("button", { name: /^continue$/i }).click();
-
-	await expect.poll(() => payload).not.toBeNull();
-	expect(payload).toMatchObject({ handle: made.handle, intent: "login" });
-
-	// And no code was asked for: the emailed code is the fallback, not the door.
-	await expect(page.getByRole("heading", { name: /check your email/i })).toHaveCount(0);
-});
-
-test("an Anthers handle with no password still gets in by an emailed code", async ({ page }) => {
-	const name = `e2e-code-${stamp()}`.slice(0, 18);
-	const address = `e2e-code-${stamp()}@example.com`;
-	const made = JSON.parse(
-		leashedExecFileSync("bun", ["run", "db:local-account", "--name", name, "--email", address], {
-			cwd: REPO_ROOT,
-			encoding: "utf8",
-		})
-			.trim()
-			.split("\n")
-			.at(-1) as string,
-	) as { handle: string };
-
-	await page.goto("/login");
-	await page.locator('input[autocomplete="username"]').fill(`@${made.handle}`);
-
-	// The fallback is a link under the button, and only for a handle the page has recognized
-	// as one this node hosts. Its presence is the transition: an account that has not set its
-	// password still has a way in.
-	await page.getByRole("button", { name: /use an emailed code instead/i }).click();
-
-	// The code modal opens IN PLACE — and tells the person it is their handle it asked for,
-	// never the address the server put the code in.
-	await expect(page.getByRole("heading", { name: /check your email/i })).toBeVisible();
-	await expect(
-		page.getByText(new RegExp(`anthers account for.*@${made.handle}`, "i")),
-	).toBeVisible();
-
-	await typeCode(page, await emailedCode(address));
-
-	await expect
-		.poll(async () => {
-			const me = (await (await page.request.get(`${API_URL}/api/auth/me`)).json()) as {
-				user: { handle: string } | null;
-			};
-			return me.user?.handle ?? null;
-		})
-		.toBe(made.handle);
 });

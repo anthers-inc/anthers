@@ -9,16 +9,16 @@
  * through its own authorization server like any other. This module is the one place that knows
  * both exist, so everything above it goes on talking to a single {@link RepoWriter}.
  *
- * 🚨 **The person's grant is tried first, and once recorded it is the authority.** A hosted
- * identity that has signed in through OAuth holds the same kind of grant a brought identity does,
- * and from that moment its grant decides what Anthers may write. A narrowed or revoked grant is
- * NOT routed around by the hub's own session, because that would make the withdrawal cosmetic —
- * the person would see a permission they had taken back keep working.
+ * 🚨 **A recorded grant is tried first, and once recorded it is the authority.** An identity on
+ * another server is written through the grant its holder gave; a hosted identity can also hold a
+ * grant if it authorized through OAuth, and that grant outranks the session. A narrowed or revoked
+ * grant is NOT routed around by the hub's own session, because that would make the withdrawal
+ * cosmetic — the person would see a permission they had taken back keep working.
  *
- * ⏳ **The hub's session is the transition credential for a hosted identity that has never
- * authorized Anthers through OAuth.** It keeps a brand-new account writable between signup and
- * its first sign-in, and it kept existing accounts writable through the change. Once every hosted
- * account holds a grant, the session route and this fallback go.
+ * ⭐ **The hub's session is the first-party client's credential.** Anthers hosts the identity, so
+ * it is the client of its own PDS, and the session it opened when it created the account (or the
+ * one a login replaced) is what every writer uses. That is the shape the official Bluesky client
+ * has, not a transition state, and the session route is not going away.
  *
  * ⚠️ **Some reasons an account gets no writer are a job's business and some are not.**
  * {@link isOrdinary} separates them, for what a sync job logs and retries rather than for what a
@@ -85,8 +85,8 @@ export async function writerForAccount(
 	// person's grant talking, and the hub's session must not talk over it.
 	if (await hasRecordedGrant(userId)) return oauth;
 
-	// Never authorized through OAuth: a hosted identity still holds the session Anthers opened
-	// when it created the account. That is the transition credential.
+	// No recorded grant: a hosted identity holds the session Anthers opened when it created the
+	// account, which is the first-party client's credential.
 	const hosted = await hostedWriterFor(userId, { fetchImpl: opts.fetchImpl });
 	if (hosted.writer) return hosted;
 	if (hosted.reason !== "not_hosted") return { writer: null, reason: hosted.reason };

@@ -44,6 +44,7 @@ import {
 	normalizeHandleName,
 	signinAddressForHostedHandle,
 } from "../services/hosted-accounts.js";
+import { loginHostedAccount } from "../services/hosted-login.js";
 import {
 	chooseHostedHandle,
 	clearPendingSignup,
@@ -73,13 +74,26 @@ import {
 
 /**
  * The emailed-code shapes `/signup/*` takes — an address, because signup's business is
- * creating the account an address proves. `/signin/*` takes its own schemas below, which
- * add the one thing signup may never accept: a hosted handle. A handle that resolved
- * through the signup pair would mail a *create* code to an existing account's mailbox —
- * the second signup door this file exists to keep closed.
+ * creating the account an address proves. The desktop's in-app email routes take their own
+ * schemas below, and they add the one thing signup may never accept: a hosted handle. A handle
+ * that resolved through the signup pair would mail a *create* code to an existing account's
+ * mailbox — the second signup door this file exists to keep closed.
  */
 const emailCodeStartSchema = z.object({
 	email: z.string().email().max(254),
+});
+
+/**
+ * The first-party password door: the identifier and the identity's own password.
+ *
+ * The identifier is a handle or the address on the account, because the node accepts either.
+ * `authFactorToken` is the emailed code the node asks for when an account has two-factor on; it is
+ * absent on the first attempt and sent back with the same password on the second.
+ */
+const passwordLoginSchema = z.object({
+	identifier: z.string().trim().min(1).max(253),
+	password: z.string().min(1).max(256),
+	authFactorToken: z.string().trim().min(1).max(64).optional(),
 });
 
 /**
@@ -222,28 +236,20 @@ const emailCodeVerifySchema = z.object({
 });
 
 /**
- * What `/signin/*` accepts that `/signup/*` must not: a **hosted handle** instead of an
- * address. The route resolves it to the account's own mailbox before the code service
- * runs, so the code keys, throttles and hashes exactly as an address-driven one does —
- * the only difference is who supplied the address.
+ * The address on an unfinished signup, and the code that proves it.
  *
- * ⚠️ **Why the browser supplies the handle raw and the API resolves it.** Whether a handle
- * ends in the hosted suffix is the node's answer (`hostedHandleSuffix`), not copy the
- * front end can hard-code — the suffix is `.anthers.social` in production and `.test` on a
- * local network, and a second copy of that decision is how a wrong guess starts mailing
- * people. The route is the ruling check; the front end only routes the *typing*.
+ * ⚠️ **Address only, no handle.** Resumption is about handing a pending row to this browser,
+ * and the row holds the address already; resolving a handle would be a second way to name the
+ * same mailbox, which the sign-in pair used to need and this does not.
  */
-const signInStartSchema = z
-	.object({ email: z.string().email().max(254) })
-	.or(z.object({ handle: z.string().trim().min(1).max(253) }));
-
-const signInVerifySchema = z
-	.object({ email: z.string().email().max(254), code: sixCharacterCode })
-	.or(z.object({ handle: z.string().trim().min(1).max(253), code: sixCharacterCode }));
+const resumeVerifySchema = z.object({
+	email: z.string().email().max(254),
+	code: sixCharacterCode,
+});
 
 /**
  * The one failure response every spender of an emailed code returns, wherever the
- * code is spent — signup, sign-in and the desktop app's in-app verify alike.
+ * code is spent — signup, a signup resumed elsewhere, and the desktop app's in-app verify alike.
  * Distinguishing "no code for this address" from "wrong code" would confirm
  * registration to anyone who asked, which is the leak `/signup/start` is careful to
  * avoid; closing it there and reopening it anywhere else would be worse than never
@@ -301,9 +307,10 @@ const desktopExchangeSchema = z.object({
 /**
  * The desktop app's in-app emailed-code sign-in: the person types the code their
  * mailbox received straight into the app, and no browser round trip happens. The
- * contact shape is `/signin/start`'s exactly — typed address, or a hosted handle the
- * route resolves to the account's own mailbox — because this desktop door is the same
- * ceremony on the same tables; only who calls it and what success means differ.
+ * contact shape is the same address-or-hosted-handle shape the sign-in pair used to take —
+ * typed address, or a handle the route resolves to the account's own mailbox — because this
+ * desktop door is the same ceremony on the same tables; only who calls it and what success
+ * means differ.
  */
 const desktopEmailStartSchema = z
 	.object({ challenge: hexToken, email: z.string().email().max(254) })
@@ -484,8 +491,8 @@ async function handleRefusal(
  * browser is carrying.
  *
  * Both routes that can create an account call this rather than repeating it. The two of them
- * differ only in what proved the address — a code spent here, or a code spent at `/signin/verify`
- * on a signup being resumed in another browser — and that difference must not turn into two
+ * differ only in what proved the address — a code spent here, or a code that resumed the signup
+ * at `/signup/resume/verify` in another browser — and that difference must not turn into two
  * descriptions of what a new account looks like. The account itself is made by
  * `createAccountFromSignup`, which settles its identity before writing the row; this adds what
  * only a browser has, the session cookie.
@@ -573,6 +580,68 @@ async function mintFromProvedAddress(
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 const authRoutes = new Hono()
+	// ── Signing in with the identity's own password ───────────────────────────
+	//
+	// ⭐ **This is the first-party door, and it is the shape Bluesky's own client uses.** The
+	// person types the password they chose for an identity Anthers hosts; it goes to the node's
+	// `createSession` in one request, and the session that answers is kept for the account. The
+	// app never stores the password, and there is no second host or consent screen for a
+	// relationship that is already first-party.
+	//
+	// ⚠️ **An identity on somebody else's server signs in through OAuth**, at
+	// `/api/atproto/auth`, because Anthers is a third-party client of that server and should not
+	// be handling its holder's password.
+	.post("/login", zValidator("json", passwordLoginSchema, invalidBody), async (c) => {
+		const { identifier, password, authFactorToken } = c.req.valid("json");
+		const limited = await checkRate(
+			"auth-password-login",
+			clientIp(c.req.raw.headers),
+			10,
+			15 * 60,
+		);
+		if (!limited.ok) return limitResponse(limited);
+		// A second budget on the identifier, so spreading guesses across addresses does not
+		// spend only per-IP attempts.
+		const targeted = await checkRate(
+			"auth-password-login-id",
+			identifier.toLowerCase(),
+			10,
+			15 * 60,
+		);
+		if (!targeted.ok) return limitResponse(targeted);
+
+		const result = await loginHostedAccount(identifier, password, { authFactorToken });
+		if (result.status === "two-factor") {
+			return c.json({ twoFactor: true, error: "Enter the code sent to your email." }, 401);
+		}
+		if (result.status === "refused") {
+			if (result.reason === "suspended") {
+				return c.json(
+					{
+						error: result.message,
+						reason: "account_suspended",
+						suspendedUntil: result.suspendedUntil?.toISOString() ?? null,
+					},
+					403,
+				);
+			}
+			const status =
+				result.reason === "unreachable" ? 503 : result.reason === "no_account" ? 404 : 401;
+			return c.json({ error: result.message, reason: result.reason }, status);
+		}
+
+		const token = await createSession(
+			result.user.id,
+			c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP"),
+			c.req.header("User-Agent"),
+		);
+		setSessionCookie(c, token);
+		return c.json({
+			user: await serializeUser(result.user),
+			needsOnboarding: result.user.termsAcceptedAt === null,
+		});
+	})
+
 	// ── Signup ceremony: ask, prove the address, then build the account ──────
 	//
 	// The order is the feature. `/signup` is where a visitor makes their choices;
@@ -895,72 +964,14 @@ const authRoutes = new Hono()
 		},
 	)
 
-	// ── Sign In ───────────────────────────────────────────────────────────────
+	// ── Resuming a signup in another browser ─────────────────────────────────
 	//
-	// 🚨 **An emailed code is the one and only way in.** There is no password sign-in —
-	// no route, no field, and no account holding a password — by Parker's decision
-	// (2026-09-13). What follows is the narrower half of the ceremony below, the one that
-	// can never mint an account.
-	//
-	// The same proof of address the signup ceremony uses, narrowed so that it can only ever
-	// sign someone in. `/login` asks for an email address or a hosted handle and lands here.
-	//
-	// 🚨 **Why this is not just `/signup/start` called from a second page.** That pair
-	// *creates an account* when the address is unknown, which is the one thing the login
-	// page must never do — `/signup` is the single signup door precisely so that terms
-	// acceptance, onboarding and where a new account lands have one description rather than
-	// two that drift. A page that mints accounts as a side effect of a mistyped address is
-	// that second door, however little it looks like one.
-	//
-	// Step 1 — issue a code, but only to an address that already has an account. ALWAYS 200.
-	// The address comes two ways since 2026-10-09: typed directly, or as a hosted handle the
-	// route resolves to the account's own mailbox (`signinAddressForHostedHandle`) before
-	// anything else runs. Resolving *before* the issuer is what keeps every rule the code
-	// service holds — no row for an unknown account, the per-address resend throttle, the
-	// burn-on-miss — true by construction rather than restated here.
-	//
-	// ⚠️ **A handle that resolves to nothing answers inside this try with burned work and
-	// the same body**, so a refusal costs a refusal's worth of hashing and says nothing else.
-	// The unresolved set includes handles Anthers issued to nobody AND handles Anthers never
-	// issued at all — a foreign handle reaching here means the client's routing believed (or
-	// lied) that it was hosted, and the answer is still silence.
-	//
-	// The same per-IP send limit as /signup/start — the doors hand the same mail to the
-	// same sender, so one budget for one address*er*, keyed under the send door it shares.
-	.post("/signin/start", zValidator("json", signInStartSchema, invalidBody), async (c) => {
-		const typed = c.req.valid("json");
-
-		const limited = await checkRate("auth-code-send", clientIp(c.req.raw.headers), 10, 3600);
-		if (!limited.ok) return limitResponse(limited);
-
-		try {
-			// A hosted handle becomes its account's address here, in one place; an
-			// unresolved handle burns below. `issueSignInCode` remains the half that
-			// decides — see its note for why an unknown address gets no row (and not
-			// merely no email), and for the timing question.
-			const email =
-				"handle" in typed ? await signinAddressForHostedHandle(typed.handle) : typed.email;
-			if (email === null) {
-				await burnCodeWork();
-			} else {
-				const issued = await issueSignInCode(email);
-				if (issued.code) {
-					// Off the response path on purpose: awaiting a network call here would make
-					// "this address has an account" measurable in milliseconds, which is the
-					// question the identical body exists to refuse.
-					void sendSignInCodeEmail(email, issued.code).catch((err) => {
-						console.error("[signin/start] failed to send the code:", err);
-					});
-				}
-			}
-		} catch (err) {
-			console.error("[signin/start] failed to issue a code:", err);
-		}
-
-		// Says nothing about what was sent, or whether anything was. Byte-identical to the
-		// unknown-address answer, and a test pins that.
-		return c.json({ success: true });
-	})
+	// 🚨 **The emailed code is not a way to sign in any more.** Sign-in is the identity's own
+	// password (`/login`) for an identity Anthers hosts, or OAuth (`/api/atproto/auth`) for one
+	// it does not. What survives here is the one job the code still does on this side: proving
+	// the address on an unfinished signup so its row can be handed to this browser, where
+	// `/signup/complete` finishes it. This route never signs an existing account in, and it
+	// never creates one.
 
 	// Whether a handle is hosted here, so the form can pick its door from the answer rather
 	// than from the handle's shape. A domain handle does not end in the suffix the node
@@ -975,97 +986,32 @@ const authRoutes = new Hono()
 		return c.json({ hosted: address !== null });
 	})
 
-	// Step 2 — spend the code and sign in. Creates nothing, ever.
-	//   The same per-IP guess limit as /signup/verify, for the same reason: the code
-	//   service caps one code's guesses, this caps one guesser's pace across codes.
-	.post("/signin/verify", zValidator("json", signInVerifySchema, invalidBody), async (c) => {
-		const typed = c.req.valid("json");
-		const { code } = typed;
+	.post("/signup/resume/verify", zValidator("json", resumeVerifySchema, invalidBody), async (c) => {
+		const { email, code } = c.req.valid("json");
 
 		const limited = await checkRate("auth-code-verify", clientIp(c.req.raw.headers), 20, 3600);
 		if (!limited.ok) return limitResponse(limited);
 
-		// The resolution repeats deliberately: the browser never learns the mailbox a
-		// handle-driven code is keyed on (it is the account's private address), so this
-		// route re-resolves the same way the start route did. A handle resolving to
-		// nothing here can only mean one that was never resolved a code for, which is the
-		// `no_code` answer below — truthful, and told in the verify pair's one voice.
-		const email =
-			"handle" in typed ? await signinAddressForHostedHandle(typed.handle) : typed.email;
-		if (email === null) {
-			return c.json(
-				{
-					error: "That code didn't work. Check it, or ask for a new one.",
-					reason: "no_code",
-				},
-				400,
-			);
-		}
-
 		const result = await checkSignupCode(email, code);
 		if (!result.ok) return emailedCodeRefusal(c, result);
 
-		const [user] = await db.select().from(users).where(eq(users.email, result.email)).limit(1);
-		if (user?.suspendedAt) {
-			// The holder proved the mailbox and is told the truth rather than a generic
-			// failure: the account is suspended, with whatever end the suspension carries.
-			// The full reason and the appeal path live on the interstitial the client sends
-			// them to; creating no session is the whole of the refusal.
+		// 🚨 **The only thing this route can hand back is a pending signup.** A code for an
+		// address with an account proves the mailbox and still signs nobody in; the answer
+		// sends them to the ordinary login. A code with neither an account nor a pending row
+		// is a code that was minted somewhere else and is refused.
+		const resumed = await resumeByProvedAddress(result.email);
+		if (!resumed) {
 			return c.json(
 				{
-					error: "This account is suspended.",
-					reason: "account_suspended",
-					suspendedUntil: user.suspendedUntil?.toISOString() ?? null,
-					user: null,
-					resume: false,
+					error:
+						"There's no unfinished signup for that address. Sign in, or start at the signup page.",
+					reason: "no_signup",
 				},
-				403,
-			);
-		}
-		if (!user) {
-			// 🚨 **An unfinished signup resumes here, and this route still creates nothing.**
-			// Somebody who pressed *Create My Account* in another browser has a pending signup
-			// and no account; they have just proved the address on it, which is the only thing
-			// resumption may ever be gated on. So the row is handed to *this* browser and the
-			// browser is sent to the page that finishes it — where `POST /signup/complete` is
-			// what actually mints the account, on the signup pair where minting belongs.
-			//
-			// ⚠️ **A Bluesky identity on that row does not come with it**, because an address was
-			// proved and an identity was not; the finishing page asks for it to be proved again.
-			// A requested handle does come, and is shown for confirmation. See
-			// `resumeByProvedAddress` for the takeover that distinction closes.
-			const resumed = await resumeByProvedAddress(result.email);
-			if (resumed) {
-				setPendingSignupCookie(c, resumed.token);
-				return c.json({ user: null, resume: true });
-			}
-
-			// Reachable only by someone holding a live code for an address with no account and
-			// no pending signup — which `/signin/start` never issues, so it means a code minted
-			// at `/signup` was typed in here instead. Naming that plainly costs nothing:
-			// reaching this line already requires reading the mailbox, so there is no
-			// enumeration left to protect. What it must not do is quietly create the account.
-			return c.json(
-				{ error: "There's no Anthers account for that address yet — sign up to create one." },
 				404,
 			);
 		}
-
-		const token = await createSession(
-			user.id,
-			c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP"),
-			c.req.header("User-Agent"),
-		);
-		setSessionCookie(c, token);
-
-		// One shape for both outcomes. Two `c.json` calls returning different objects give the
-		// RPC client a union type that every caller then has to narrow by hand. `needsOnboarding`
-		// is the terms gate: a signed-in account that never accepted them is sent to `/welcome`.
-		return c.json({
-			user: await serializeUser(user),
-			resume: false,
-			needsOnboarding: user.termsAcceptedAt === null,
-		});
+		setPendingSignupCookie(c, resumed.token);
+		return c.json({ resume: true });
 	})
 
 	// ── Sign Out ──────────────────────────────────────────────────────────────
@@ -1220,8 +1166,8 @@ const authRoutes = new Hono()
 	)
 
 	// Steps 3, in-app — the emailed-code method, added 2026-10-16 (Parker): sign in
-	// without leaving the app. Each route below is `/signin/*`'s own ceremony wearing a
-	// third caller: the same resolution (`signinAddressForHostedHandle`) before the
+	// without leaving the app. Each route below is the emailed-code ceremony wearing another
+	// caller: the same resolution (`signinAddressForHostedHandle`) before the
 	// issuer runs, the same code tables and throttle doors, and the same silence about
 	// whether an address has an account. Only what success means differs — the code
 	// authorizes the pending PKCE challenge instead of setting a cookie — and success
@@ -1232,8 +1178,8 @@ const authRoutes = new Hono()
 	// into a window whose enrollment row has expired, and the only honest next step is
 	// to restart sign-in. `getPendingDesktopAuth`'s answer says nothing about any
 	// address, so the "is this person on Anthers?" silence below is unaffected — it
-	// governs what a LIVE request does, and there it holds exactly as `/signin/start`
-	// holds it.
+	// governs what a LIVE request does, and there it holds exactly as the browser send door
+	// held it.
 	.post(
 		"/desktop/email/start",
 		zValidator("json", desktopEmailStartSchema, invalidBody),
@@ -1249,7 +1195,7 @@ const authRoutes = new Hono()
 				return c.json({ error: "CSRF validation failed" }, 403);
 			}
 
-			// The same send door `/signin/start` uses: one budget for one address-sender,
+			// The same send budget `/signup/start` uses: one budget for one address-sender,
 			// and the desktop app is only a third trigger of the same mail.
 			const limited = await checkRate("auth-code-send", clientIp(c.req.raw.headers), 10, 3600);
 			if (!limited.ok) return limitResponse(limited);
@@ -1266,7 +1212,7 @@ const authRoutes = new Hono()
 					const issued = await issueSignInCode(email);
 					if (issued.code) {
 						// Off the response path for the same measurability reason
-						// `/signin/start` states: the answer must not time the account query.
+						// `/signup/start` states: the answer must not time the account query.
 						void sendSignInCodeEmail(email, issued.code).catch((err) => {
 							console.error("[desktop/email/start] failed to send the code:", err);
 						});
@@ -1283,7 +1229,7 @@ const authRoutes = new Hono()
 	)
 
 	// Step 3's confirmation — spend the emailed code against the pending challenge.
-	// The failure voices are /signin/verify's: one message for every wrong or missing
+	// The failure voices are the emailed code's everywhere: one message for every wrong or missing
 	// code, suspension answered truthfully with no session minted, and a code for an
 	// address with no account creating nothing.
 	.post(
@@ -1301,12 +1247,12 @@ const authRoutes = new Hono()
 				return c.json({ error: "CSRF validation failed" }, 403);
 			}
 
-			// The same guess door /signin/verify uses: the code service caps one code's
+			// The same guess door /signup/verify uses: the code service caps one code's
 			// guesses, this caps one guesser's pace across them.
 			const limited = await checkRate("auth-code-verify", clientIp(c.req.raw.headers), 20, 3600);
 			if (!limited.ok) return limitResponse(limited);
 
-			// The resolution repeats deliberately, as /signin/verify records: the client
+			// The resolution repeats deliberately, as the handle-driven start step records: the client
 			// never learns the mailbox a handle-driven code is keyed on, so this route
 			// re-resolves the same way its send step did.
 			const email =
@@ -1327,7 +1273,7 @@ const authRoutes = new Hono()
 			const [user] = await db.select().from(users).where(eq(users.email, result.email)).limit(1);
 			if (user?.suspendedAt) {
 				// The holder proved the mailbox, so the suspension is told truthfully and
-				// no session is created — the same refusal /signin/verify gives.
+				// no session is created — the same refusal the desktop verify gives.
 				return c.json(
 					{
 						error: "This account is suspended.",
@@ -1341,7 +1287,7 @@ const authRoutes = new Hono()
 			}
 			if (!user) {
 				// 🚨 Creates nothing, ever. No resumption handshake here either:
-				// /signin/verify hands a pending-signup row to *that browser* through a
+				// the signup-resume route hands a pending-signup row to *that browser* through a
 				// pending-signup cookie, a mechanism the desktop app has no equivalent of
 				// and must not invent. The bundled signup flow is a first-class in-app
 				// surface already, so the message's direction points somewhere real.

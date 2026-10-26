@@ -8,10 +8,9 @@ import { client } from "@anthers/web-shared/rpc";
 import FormField from "@anthers/web-shared/ui/FormField";
 import Logo from "@anthers/web-shared/ui/Logo";
 import { AtSymbolIcon, EnvelopeIcon } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import BlueskyMark from "../components/auth/BlueskyMark";
-import EmailCodeModal from "../components/auth/EmailCodeModal";
 import { mergeIntoServerBasket } from "../lib/basket";
 
 /**
@@ -52,32 +51,28 @@ const LOOKS_LIKE_HANDLE = /^@?[a-z0-9.-]+\.[a-z0-9-]+$/i;
  * So: **do not add a signup form here.** If this page needs a way onward for someone
  * without an account, it is a link to `/signup`.
  *
- * 🚨 **A handle signs in at its own identity server; the emailed code is the fallback for an
- * account that has not set its password yet (Parker, 2026-09-13; routing revised 2026-10-26).**
- * There is no password field on this page and no route it could post to: the password is typed
- * at the authorization server of the identity it belongs to, never at Anthers. The one form
- * asks for an identifier and routes on what it is:
- * - An **email address** posts to **`/auth/signin/start`, never `/auth/signup/*`**, keyed on the
- *   address. The difference is the whole point: the signup pair *creates an account* for an
- *   address it doesn't know, which would make a mistyped address at the login page mint an
- *   account that never saw the terms. The signin pair refuses.
- * - **Any handle**, an Anthers one included, takes the OAuth door. For an identity Anthers hosts
- *   that means `anthers.social`'s authorization server, where the person uses the password they
- *   chose at signup; for a handle elsewhere it is that server's own door.
- * - An **Anthers handle also offers an emailed code**, under the button, as the way in for an
- *   account created before its holder had a password, or one who has not set it yet. That route
- *   resolves the handle to the mailbox the holder gave at signup and mails the same six-character
- *   code the address path uses. The resolution is server-side, and the browser never learns the
- *   address; it spends the code keyed on the handle, and `/signin/verify` re-resolves the same
- *   way.
+ * 🚨 **Sign-in is the identity's own credential: the password for an identity Anthers hosts, and
+ * OAuth for one it does not (Parker, 2026-09-13; shape corrected 2026-10-26).** The split is the
+ * hosting relationship, not the handle. Anthers is the first-party client of its own PDS, so a
+ * hosted person types the password they chose here, it goes to `anthers.social` in one request,
+ * and the session that answers is kept; there is no second host and no consent screen for a
+ * relationship that is already first-party. A person whose identity lives somewhere else signs in
+ * at that server through OAuth, because Anthers is a third-party client there and should not ask
+ * for their password. The one form asks for an identifier and routes on what it is:
+ * - An **email address or an Anthers handle** asks for the password and posts to
+ *   **`/api/auth/login`**, never `/auth/signup/*`. The difference is the whole point: the signup
+ *   pair *creates an account* for an address it doesn't know, which would make a mistyped address
+ *   at the login page mint an account that never saw the terms.
+ * - **A handle elsewhere** takes the OAuth door: the browser goes to that identity's own
+ *   authorization server, which asks for whatever credential it holds and returns a grant.
+ * - An email that belongs to a Bluesky identity fails on the password path, by design. The app
+ *   cannot know which server holds an address without asking, and asking before a password is
+ *   offered would turn this form into a directory; the refusal says to use the handle.
  *
- * The old objection to resolving handles to mailboxes still shapes the fallback: a public handle
- * is never turned into an address by Anthers' machinery, because guessing one to trigger mail at
- * its holder is a door this page should not make quiet. What the hosted case deliberately accepts
- * is that handles are public, a typist can trigger one throttle-limited email to a hosted account
- * without knowing its mailbox, and the per-IP send limit plus the per-address resend throttle are
- * what bound that. The start route answers byte-identically either way, so there is nothing to
- * enumerate in the response.
+ * 🚨 **The emailed code is recovery, not a login.** A person who cannot remember the password
+ * resets it at the server that holds the identity: `anthers.social`'s own account page for a
+ * hosted account, and Bluesky's for a Bluesky one. The link under the password field is that page,
+ * and the URL is learned from `/api/atproto/config` rather than written here a second time.
  *
  * 🚨 **OAuth is a way IN and not a way to sign up** (2026-08-22). It signs in any account whose
  * identity resolves, resumes an unfinished signup started with that identity, and answers
@@ -131,6 +126,8 @@ export default function LoginPage() {
 	 * where every handle went before this page knew about suffixes at all.
 	 */
 	const [hostedSuffix, setHostedSuffix] = useState<string | null>(null);
+	/** The identity server's own reset page, learned from the same answer. */
+	const [hostedAccountUrl, setHostedAccountUrl] = useState("");
 
 	useEffect(() => {
 		let live = true;
@@ -138,7 +135,10 @@ export default function LoginPage() {
 			.$get()
 			.then((res) => res.json())
 			.then((body) => {
-				if (live) setHostedSuffix(body.hostedHandleSuffix ?? "");
+				if (live) {
+					setHostedSuffix(body.hostedHandleSuffix ?? "");
+					setHostedAccountUrl(body.hostedAccountUrl ?? "");
+				}
 			})
 			.catch(() => {
 				if (live) setHostedSuffix("");
@@ -216,8 +216,9 @@ export default function LoginPage() {
 		const bare = trimmed.replace(/^@/, "").toLocaleLowerCase();
 		if (isHostedHandle(bare)) return "anthers";
 		if (LOOKS_LIKE_HANDLE.test(trimmed)) return "bluesky";
-		if (trimmed.startsWith("@")) return "handle";
-		return "email";
+		// A bare word is neither an address nor a handle; "handle" is the drawing and hint that
+		// says to finish it, and the submit refuses it in the page's own words.
+		return "handle";
 	})();
 
 	const SIGNIN_DRAWING = {
@@ -229,79 +230,106 @@ export default function LoginPage() {
 	} as const;
 
 	const SIGNIN_HINT: Record<typeof signinMode, string> = {
-		idle: "A handle signs in at its own identity server; an email address gets a code.",
-		email: "A six-character sign-in code goes to this address.",
-		handle: "A handle signs in through its own identity server.",
-		anthers:
-			"Your identity server asks for the password you chose. No password yet? Use an emailed code.",
+		idle: "An Anthers handle or email signs in with its password; a Bluesky handle signs in through Bluesky.",
+		email:
+			"The password for this Anthers identity. A Bluesky identity signs in with its handle instead.",
+		handle: "Keep typing the whole handle.",
+		anthers: "Your identity's password, chosen when you signed up.",
 		bluesky: "Your identity server confirms it's you, then brings you back.",
 	};
 
-	/** Where a code was just sent and how the browser will spend it, or null when none is in flight. */
-	const [sentCode, setSentCode] = useState<{
-		/** What the modal shows: the address typed, or the handle the code was asked for. */
-		shown: string;
-		/** The keys the verify route spends it by — the handle for a hosted-handle sign-in. */
-		verify: { email: string } | { handle: string };
-	} | null>(null);
+	const [password, setPassword] = useState("");
+	/** The emailed code, only when the node has asked for one. */
+	const [authFactorToken, setAuthFactorToken] = useState("");
+	const [twoFactor, setTwoFactor] = useState(false);
 
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const [loading, setLoading] = useState(false);
 
 	/**
-	 * The suspension interstitial, set when the code verifies but the account is
-	 * suspended. The holder has just proved the mailbox — the strongest telling
-	 * available — so the card itself becomes the notice rather than a generic failure.
-	 * State rather than a route: a suspended account is never signed in, so nothing
+	 * The suspension interstitial, set when the identity signs in but the Anthers account is
+	 * suspended. The password was right, so the card becomes the notice rather than a generic
+	 * failure. State rather than a route: a suspended account is never signed in, so nothing
 	 * protects a `/suspended` page, and the thing being told is bound to this attempt.
 	 */
 	const [suspended, setSuspended] = useState<{ until: string | null } | null>(null);
 
-	/** Ask for a code, keyed on an address or on the handle the route resolves. Answers the same whatever it found. */
-	const sendCode = useCallback(async (target: { email: string } | { handle: string }) => {
-		const res = await client.api.auth.signin.start.$post({ json: target });
-		if (!res.ok) throw new Error("That doesn't look like an address or handle we can reach.");
-	}, []);
-
 	/**
-	 * Route the typed identifier — an address to the emailed code, a handle to its own server.
+	 * Sign in, or hand the browser to the identity's own server.
 	 *
-	 * An address gets the code keyed on the address, because an address is what an account
-	 * recovers by. Any handle goes to OAuth: an Anthers handle to `anthers.social`, a Bluesky
-	 * handle to `bsky.social`, and the person types their password at whichever server holds the
-	 * identity rather than here. The OAuth call sets `window.location` and the page is already
-	 * leaving when it succeeds; a refusal is the page's own words in the field below.
+	 * 🚨 **An Anthers handle or an email is a password sign-in; a handle elsewhere is OAuth.**
+	 * The split is the hosting relationship. Anthers is the first-party client of its own PDS, so
+	 * the password goes to `anthers.social` in one request and the session that answers is kept,
+	 * exactly as Bluesky's own client does it. For an identity on somebody else's server Anthers
+	 * is a third-party client, so it must not ask for the password; the browser goes to that
+	 * server's authorization page.
 	 *
-	 * ⚠️ **The hosted check no longer changes the route.** It decides which hint and drawing the
-	 * field shows, and whether the emailed-code fallback is offered beneath the button, but an
-	 * Anthers handle and a Bluesky handle both leave for their own authorization server. That is
-	 * the canonical shape: the app is a client of the identity, not a special door into it.
+	 * ⚠️ **An email that belongs to a Bluesky identity fails on the password path**, by design.
+	 * The app cannot know which server holds an address without asking, and asking before a
+	 * password is offered would turn this form into a directory. The message says so and points at
+	 * the handle.
 	 */
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setErrors({});
 		const typed = identifier.trim();
 
-		if (LOOKS_LIKE_EMAIL.test(typed)) {
+		if (signinMode === "email" || signinMode === "anthers") {
+			if (!password) {
+				setErrors({ general: "Enter your password." });
+				return;
+			}
 			setLoading(true);
 			try {
-				await sendCode({ email: typed });
-				setSentCode({ shown: typed, verify: { email: typed } });
-			} catch (err) {
-				setErrors({
-					general: err instanceof Error ? err.message : "Couldn't send the code. Please try again.",
+				const res = await client.api.auth.login.$post({
+					json: {
+						identifier: typed,
+						password,
+						...(twoFactor && authFactorToken.trim()
+							? { authFactorToken: authFactorToken.trim() }
+							: {}),
+					},
 				});
-			} finally {
+				if (!res.ok) {
+					const body = (await res.json().catch(() => ({}))) as {
+						error?: string;
+						reason?: string;
+						twoFactor?: boolean;
+						suspendedUntil?: string | null;
+					};
+					if (body.twoFactor) {
+						setTwoFactor(true);
+						setErrors({ general: body.error ?? "Enter the code sent to your email." });
+						setLoading(false);
+						return;
+					}
+					if (body.reason === "account_suspended") {
+						setSuspended({ until: body.suspendedUntil ?? null });
+						setLoading(false);
+						return;
+					}
+					setErrors({ general: body.error ?? "That handle or password didn't work." });
+					setLoading(false);
+					return;
+				}
+				const body = (await res.json()) as { needsOnboarding: boolean };
+
+				// 🚨 The basket fold and the context refresh are LAST, because the refresh
+				// unmounts this page. Nothing may be queued after it.
+				await mergeIntoServerBasket().catch(() => {});
+				await refreshUser();
+				navigate(body.needsOnboarding ? withNextPath("/welcome", nextParam || from) : redirectTo, {
+					replace: true,
+				});
+			} catch {
+				setErrors({ general: "Couldn't reach Anthers. Please try again." });
 				setLoading(false);
 			}
 			return;
 		}
 
-		// A handle, however it was written — the leading `@` is how people write one, not
-		// part of it, and handles are case-insensitive, so it goes on lowercase.
-		const handle = typed.replace(/^@/, "").toLocaleLowerCase();
-
-		if (LOOKS_LIKE_HANDLE.test(typed)) {
+		if (signinMode === "bluesky" && LOOKS_LIKE_HANDLE.test(typed)) {
+			const handle = typed.replace(/^@/, "").toLocaleLowerCase();
 			setLoading(true);
 			try {
 				await signInWithBluesky(handle, redirectTo);
@@ -321,103 +349,6 @@ export default function LoginPage() {
 			general: "Sign in with the email address or the handle on your account.",
 		});
 	};
-
-	/**
-	 * The emailed code, for a hosted account whose holder has no password yet.
-	 *
-	 * 🚨 **This is the transition door, not a second way to sign in.** Every hosted account made
-	 * before the password became the person's was handed one nobody could type, so until its
-	 * holder sets their own through the identity card, the mailbox is the only way in. The route
-	 * resolves the handle to the account's address server-side and keeps the browser ignorant of
-	 * it, exactly as it did when this was the only door.
-	 */
-	const sendHostedCode = useCallback(async () => {
-		const handle = identifier.trim().replace(/^@/, "").toLocaleLowerCase();
-		if (!handle) return;
-		setLoading(true);
-		setErrors({});
-		try {
-			await sendCode({ handle });
-			setSentCode({ shown: `@${handle}`, verify: { handle } });
-		} catch (err) {
-			setErrors({
-				general: err instanceof Error ? err.message : "Couldn't send the code. Please try again.",
-			});
-		} finally {
-			setLoading(false);
-		}
-	}, [identifier, sendCode]);
-
-	/**
-	 * Spend the code.
-	 *
-	 * Throws on refusal — `EmailCodeModal` shows the message in the field and clears the
-	 * boxes. On success the session cookie is already set, so the only thing left is to
-	 * tell the auth context and go.
-	 *
-	 * ⚠️ **Refreshing the context is the LAST thing, because it unmounts this page.**
-	 * `/login` renders inside `PublicShell`, which returns `LoggedOutLayout` or
-	 * `LoggedInLayout` by auth state — different component types, so React tears the
-	 * subtree down the moment `refreshUser()` resolves. That cost a real bug on
-	 * `/signup`, where work queued after the refresh landed on an unmounted component
-	 * and simply never happened. Nothing may follow the `navigate` below.
-	 */
-	const verifyCode = useCallback(
-		async (code: string) => {
-			if (!sentCode) return;
-			const res = await client.api.auth.signin.verify.$post({
-				json: { ...sentCode.verify, code },
-			});
-			if (!res.ok) {
-				const body = (await res.json().catch(() => ({}))) as {
-					error?: string;
-					reason?: string;
-					suspendedUntil?: string | null;
-				};
-				// The code proved the mailbox and the account is suspended: the answer is
-				// the truth, told here, rather than a failure thrown back into the code field.
-				if (body.reason === "account_suspended") {
-					setSentCode(null);
-					setSuspended({ until: body.suspendedUntil ?? null });
-					return;
-				}
-				throw new Error(body.error ?? "That code didn't work. Check it, or ask for a new one.");
-			}
-			const body = (await res.json()) as { resume: boolean; needsOnboarding?: boolean };
-
-			setSentCode(null);
-
-			// 🚨 **A signup somebody started elsewhere and never finished, and this door still
-			// created nothing.** The code proved the mailbox, which is the only thing
-			// resumption may ever be gated on, so the server handed the pending signup to this
-			// browser — and `/finish` is where it becomes an account, on the signup pair where
-			// minting belongs. Deliberately no `refreshUser()`: nobody is signed in yet, and
-			// there is nothing new for the context to learn.
-			if (body.resume) {
-				navigate("/finish", { replace: true });
-				return;
-			}
-
-			// The anonymous scratch basket folds into the account's server-side basket now
-			// — before the context refresh tears this subtree down (see the warning below:
-			// NOTHING may be queued after `refreshUser()`). A failed merge keeps the scratch
-			// for a later attempt; the buyer's filled basket is never dropped to a blip.
-			await mergeIntoServerBasket().catch(() => {});
-
-			await refreshUser();
-			// An account that never finished onboarding still owes the terms, so this door
-			// has to be able to land there. Where they were heading rides along, exactly as
-			// it does through the signup ceremony.
-			navigate(body.needsOnboarding ? withNextPath("/welcome", nextParam || from) : redirectTo, {
-				replace: true,
-			});
-		},
-		[sentCode, from, navigate, nextParam, redirectTo, refreshUser],
-	);
-
-	const resendCode = useCallback(async () => {
-		if (sentCode) await sendCode(sentCode.verify);
-	}, [sendCode, sentCode]);
 
 	return (
 		// Center the card in the main content area. flex-1 fills <main> (which is a
@@ -564,52 +495,81 @@ export default function LoginPage() {
 											required
 										/>
 									</FormField>
-									{/* ⚠️ `mt-5` over the form's own `gap-2`: the extra air above the
-								    Continue button is deliberate (Parker, 2026-10-10) — the button is
-								    the card's move, and it reads crowded at the field's usual spacing
-								    with the hint's line right above it. The card's centered slack
-								    pays for it, so the card's height is untouched. */}
-									<button type="submit" className="btn btn-primary w-full mt-5" disabled={loading}>
-										{loading ? <span className="loading loading-spinner loading-sm" /> : "Continue"}
-									</button>
-									{/* The one fallback, and it only exists while hosted accounts are still
-									    being claimed. It is a link rather than a second button because the
-									    server's password page is the door, and this is the way in for an
-									    account that has not set one. */}
-									{signinMode === "anthers" && (
-										<button
-											type="button"
-											className="link self-center text-xs text-base-content/55"
-											disabled={loading}
-											onClick={() => void sendHostedCode()}
-										>
-											Use an emailed code instead
-										</button>
+									{(signinMode === "email" || signinMode === "anthers") && (
+										<>
+											<label className="label px-0 pb-1" htmlFor="login-password">
+												<span className="text-sm font-semibold">Password</span>
+											</label>
+											<input
+												id="login-password"
+												type="password"
+												autoComplete="current-password"
+												className="input input-bordered w-full"
+												value={password}
+												onChange={(e) => {
+													setPassword(e.target.value);
+													setErrors({});
+												}}
+												required
+											/>
+											{twoFactor && (
+												<>
+													<label className="label px-0 pb-1" htmlFor="login-factor">
+														<span className="text-sm font-semibold">Email code</span>
+													</label>
+													<input
+														id="login-factor"
+														type="text"
+														inputMode="numeric"
+														autoComplete="one-time-code"
+														className="input input-bordered w-full"
+														value={authFactorToken}
+														onChange={(e) => {
+															setAuthFactorToken(e.target.value);
+															setErrors({});
+														}}
+													/>
+												</>
+											)}
+											{/* The reset belongs to the server that holds the identity. The URL is the
+											    node's answer, not a second copy of the host written here. */}
+											{hostedAccountUrl && (
+												<a
+													className="link self-end text-xs text-base-content/55"
+													href={`${hostedAccountUrl}/reset-password`}
+													target="_blank"
+													rel="noreferrer"
+												>
+													Forgot your password?
+												</a>
+											)}
+										</>
 									)}
+									{/* ⚠️ `mt-5` over the form's own `gap-2`: the extra air above the
+								    Continue button is deliberate (Parker, 2026-10-10). */}
+									<button type="submit" className="btn btn-primary w-full mt-5" disabled={loading}>
+										{loading ? (
+											<span className="loading loading-spinner loading-sm" />
+										) : signinMode === "bluesky" ? (
+											"Continue with your identity server"
+										) : (
+											"Sign in"
+										)}
+									</button>
 								</form>
+								{/* The one thing an emailed code still does: move an unfinished signup to
+								    this browser. It is a link to the signup ceremony, never a second way
+								    to sign in. */}
+								<div className="text-center text-xs text-base-content/55">
+									<Link to="/finish/resume" className="link">
+										Finishing a signup from another device?
+									</Link>
+								</div>
 							</>
 						)}
 					</div>
 				</div>
 			</div>
-
-			{sentCode && (
-				<EmailCodeModal
-					stepLabel="Sign in with an emailed code"
-					lede={
-						<>
-							If there's an Anthers account for{" "}
-							<strong className="break-all">{sentCode.shown}</strong>, a six-character code is on
-							its way. Enter it and you're in.
-						</>
-					}
-					cta="Sign me in"
-					busyLabel="Checking…"
-					onSubmit={verifyCode}
-					onResend={resendCode}
-					onClose={() => setSentCode(null)}
-				/>
-			)}
 		</div>
 	);
 }
