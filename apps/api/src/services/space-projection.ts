@@ -69,9 +69,10 @@ export async function projectLibraryItem(
 	}
 
 	// The third door into the Library, and the same rule as the other two: a Work on
-	// somebody's Library is a Work in the preservation program. Called before the
-	// insert/update branch so a record the projection leaves unchanged still counts.
-	if (item.subject.kind === "work") await preserveCurrentVersion(item.subject.id);
+	// somebody's Library is a Work in the preservation program, unless the somebody is the
+	// Work's own creator. Called before the insert/update branch so a record the projection
+	// leaves unchanged still counts.
+	if (item.subject.kind === "work") await preserveCurrentVersion(item.subject.id, userId);
 
 	const [existing] = await db
 		.select({ id: libraryItems.id, hidden: libraryItems.hidden, sortOrder: libraryItems.sortOrder })

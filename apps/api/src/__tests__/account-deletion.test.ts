@@ -37,6 +37,7 @@ import {
 	runDueDeletions,
 } from "../services/account-deletion.js";
 import { createSession } from "../services/auth.js";
+import { saveOnPurchase, saveWork } from "../services/library.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { handleOf } from "./handles.js";
@@ -94,6 +95,7 @@ let stayerCommentId: number;
 let ratingId: number;
 let soldWorkId: number;
 let unsoldWorkId: number;
+let savedWorkId: number;
 let purchaseId: number;
 
 beforeAll(async () => {
@@ -108,11 +110,19 @@ beforeAll(async () => {
 	leaverId = (await idOf(leaverName))!;
 	buyerId = (await idOf(buyerName))!;
 
-	// Two Works: one someone buys, one nobody does.
+	// Three Works: one someone buys, one somebody saves without buying, and one nobody keeps.
 	const sold = await insertWork({ creatorId: leaverId, type: "game", title: `Sold ${id}` });
 	const unsold = await insertWork({ creatorId: leaverId, type: "game", title: `Unsold ${id}` });
+	const saved = await insertWork({ creatorId: leaverId, type: "game", title: `Saved ${id}` });
 	soldWorkId = sold.id;
 	unsoldWorkId = unsold.id;
+	savedWorkId = saved.id;
+
+	// The save is somebody else's, which is what puts the Work in the preservation program.
+	// Without it this Work is the shape the old rule destroyed, and the confirmation screen
+	// would still be promising that it will be deleted.
+	const kept = await saveWork(buyerId, savedWorkId);
+	expect(kept.ok).toBe(true);
 
 	const [purchase] = await db
 		.insert(purchases)
@@ -133,10 +143,13 @@ beforeAll(async () => {
 		})
 		.returning();
 	purchaseId = purchase.id;
-	// Fixture integrity: the whole purchased-vs-unpurchased split keys off this, and a
-	// null here would silently reclassify the sold Work as unsold and delete it.
+	// Fixture integrity: the whole kept-vs-unkept split keys off this, and a null here
+	// would silently reclassify the sold Work as unkept and delete it.
 	expect(purchase.workId).toBe(soldWorkId);
 	expect(purchase.status).toBe("completed");
+	// The checkout's own Library save, which is what sets the preservation flag. Doing it
+	// here keeps the fixture on the same path production takes rather than setting a flag.
+	await saveOnPurchase({ buyerId, workId: soldWorkId, type: "digital" });
 
 	const postRes = await post("/api/content/posts", leaver, {
 		title: `Leaver post ${id}`,
@@ -182,13 +195,15 @@ describe("the request is scheduled, informed, and reversible", () => {
 	it("previews what would happen using this account's real numbers", async () => {
 		const preview = await deletionPreview(leaverId);
 		// Consent that isn't informed isn't consent — the confirmation screen renders
-		// these, and "3 Works deleted, 1 withdrawn because somebody bought it" is a
+		// these, and "3 Works deleted, 1 withdrawn because somebody kept it" is a
 		// decision where "your content will be deleted" is a sentence people click past.
+		// 🚨 The saved Work is one of the withdrawn ones: a preview that counted it as
+		// deleted would be telling the creator their readers' copy is about to be destroyed.
 		expect(preview.posts).toBe(1);
 		expect(preview.comments).toBe(1);
 		expect(preview.reviews).toBe(1);
 		expect(preview.worksDeleted).toBe(1);
-		expect(preview.worksWithdrawn).toBe(1);
+		expect(preview.worksWithdrawn).toBe(2);
 		expect(preview.purchases).toBe(0); // the leaver bought nothing
 	});
 
@@ -322,9 +337,20 @@ describe("what 'deleted' means, table by table", () => {
 		expect(work).toBeDefined();
 	});
 
-	it("DESTROYS a Work nobody bought", async () => {
+	it("DESTROYS a Work nobody kept", async () => {
 		const rows = await db.select().from(works).where(eq(works.id, unsoldWorkId));
 		expect(rows).toEqual([]);
+	});
+
+	it("WITHDRAWS a Work somebody saved, though nobody bought it", async () => {
+		// The case the old rule destroyed: released, never sold, on one person's Library.
+		const [row] = await db.select().from(works).where(eq(works.id, savedWorkId));
+		expect(row).toBeDefined();
+		expect(row.visibility).toBe("withdrawn");
+		expect(row.withdrawnAt).not.toBeNull();
+		expect(row.preserved).toBe(true);
+		// The creator is gone and the Work is not.
+		expect(row.creatorId).toBeNull();
 	});
 
 	it("WITHDRAWS a Work somebody bought, so the buyer keeps what they paid for", async () => {

@@ -26,6 +26,7 @@ import { db } from "@anthers/db/client";
 import { notifications, purchases, users, works } from "@anthers/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
+import { saveOnPurchase } from "../services/library.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
@@ -72,6 +73,9 @@ async function soldWork(title: string, buyers: number[]) {
 			stripePaymentIntentId: `pi_wwn_${crypto.randomUUID().slice(0, 12)}`,
 			status: "completed",
 		});
+		// The checkout path's own save: a purchase saves itself to the buyer's Library,
+		// which is what sets the preservation flag the delete route asks.
+		await saveOnPurchase({ buyerId: b, workId: work.id, type: "digital" });
 	}
 	return work;
 }

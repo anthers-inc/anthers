@@ -1816,9 +1816,13 @@ async function unpinOtherPosts(creatorId: number, keepPostId: number): Promise<v
  *
  * 🚨 **This closes an asymmetry rather than adding a feature.** `services/account-deletion.ts`
  * has notified buyers since 2026-08-10 when a departing creator's Works are withdrawn.
- * The ordinary withdrawal — a creator deleting a purchased Work from the Studio — reached
+ * The ordinary withdrawal — a creator deleting a preserved Work from the Studio — reached
  * the same outcome for the same buyer and told them **nothing**. One path told them and
  * the other did not, and which one you got depended on why the creator did it.
+ *
+ * ⚠️ **A Work saved by readers and bought by nobody has no buyers, so this sends nothing.**
+ * Preservation is not a purchase, and the people who saved a withdrawn Work can still open
+ * it — there is no lost thing to tell them about.
  *
  * ⚠️ **The dedupe key is deliberately the same namespace `account-deletion.ts` uses**, so a
  * creator who withdraws a Work and later closes their account does not mail the buyer twice
@@ -7098,8 +7102,9 @@ const contentRoutes = new Hono()
 			return c.json({ error: "Work not found" }, 404);
 		}
 
-		// Read once: it decides both whether to stop and ask, and — below — whether this
-		// is a deletion at all or a withdrawal.
+		// Read once: it decides whether to stop and ask before a Work with buyers is taken
+		// out of public circulation. It does not decide *how* the Work goes — preservation
+		// does that, below.
 		const [{ count: soldCount } = { count: 0 }] = await db
 			.select({ count: countDistinct(purchases.id) })
 			.from(purchases)
@@ -7126,30 +7131,34 @@ const contentRoutes = new Hono()
 			}
 		}
 
-		// ── Purchased: withdraw, never destroy ──────────────────────────────────────
+		// ── Kept by somebody: withdraw, never destroy ───────────────────────────────
 		//
-		// The ruling this implements: *if a user purchases something, they own it,
-		// regardless of what the creator does down the line.* Hard-deleting a purchased
+		// The rulings this implements: *if a user purchases something, they own it,
+		// regardless of what the creator does down the line* (2026-08-10), and *a Work
+		// anybody saved stays available* (Parker, 2026-10-25). Hard-deleting a purchased
 		// Work took the thing away from everyone who had paid for it — the `0016` work
-		// kept their *receipt*, which is not the same as keeping what they bought.
+		// kept their *receipt*, which is not the same as keeping what they bought — and
+		// hard-deleting a saved one takes it away from everyone who chose to keep it.
 		//
-		// So a forced delete on a purchased Work is a WITHDRAWAL: out of the Catalog, out
+		// So a forced delete on a preserved Work is a WITHDRAWAL: out of the Catalog, out
 		// of the feeds, unpurchasable — every public listing filters *for* `released`, so
 		// they exclude it with no change of their own — while the row, the media and the
-		// buyers' access all stay. Delivery gates on `resolveAccess`, which reads
-		// purchases and never visibility, so their downloads and streams keep working.
+		// holders' access all stay. Delivery gates on `resolveAccess`, which reads
+		// purchases and never visibility, so a buyer's downloads and streams keep working.
 		//
-		// ⭐ **Preserved, not just withdrawn** (Parker, 2026-10-25). The Work being bought
-		// is what put it in the preservation program, so the media stays for good rather
-		// than for a window: the sweep's only remaining job is the media of a withdrawn
-		// Work nobody saved, which by definition nobody bought. `withdrawn_at` is still
-		// stamped — the notice and the Library card state it — but nothing counts from it.
-		if (soldCount > 0) {
+		// 🚨 **`works.preserved`, not the purchase count, is the question** (Parker,
+		// 2026-10-25). A purchase saves itself to the Library and a save is what sets the
+		// flag (`services/preservation.ts`), so every sold Work carries it — and so does a
+		// free Work somebody saved, which is the case this door used to destroy. `withdrawn_at`
+		// is stamped because the notice and the Library card state it; nothing counts from it.
+		if (item.preserved) {
 			const withdrawnAt = new Date();
 			await db
 				.update(works)
 				.set({ visibility: "withdrawn", withdrawnAt, updatedAt: new Date() })
 				.where(eq(works.id, id));
+			// Sends nothing for a saved Work nobody bought: there is no buyer to tell, and
+			// the savers are not emailed about a Work they can still open.
 			await tellBuyersItWasWithdrawn(id, item.title);
 			// 🚨 The delete half, and the one this whole design is shaped around: a listing left
 			// up after a withdrawal re-publishes exactly what withdrawing was meant to undo.
@@ -7164,7 +7173,7 @@ const contentRoutes = new Hono()
 		await purgeWorkMedia(item, workAssets, jobRows);
 
 		// The creator's own records go before the row that names them. A gated space for a Work
-		// nobody bought has no audience left, so it is deleted with the Work; a studio space
+		// nobody kept has no audience left, so it is deleted with the Work; a studio space
 		// belongs to the creator and survives, because it may hold other drafts. Best effort:
 		// the creator asked for the Work to go, and being unable to reach a second server is not
 		// a reason to refuse. Whatever is left is recorded under the account-deletion and backup

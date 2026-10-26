@@ -2497,9 +2497,9 @@ function DataSection() {
 											<strong>Your Works:</strong> {p.worksDeleted} deleted
 											{p.worksWithdrawn > 0 ? (
 												<>
-													, and {p.worksWithdrawn} withdrawn rather than destroyed because someone
-													bought {p.worksWithdrawn === 1 ? "it" : "them"} — a purchase outlives the
-													account that sold it
+													, and {p.worksWithdrawn} withdrawn rather than destroyed because somebody
+													has {p.worksWithdrawn === 1 ? "it" : "them"} in their Library; a saved
+													Work outlives the account that made it
 												</>
 											) : null}
 											.

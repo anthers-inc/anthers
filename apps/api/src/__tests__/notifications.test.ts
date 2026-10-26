@@ -25,6 +25,7 @@ import { notifications, purchases, userPreferences, users } from "@anthers/db/sc
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { eraseAccount } from "../services/account-deletion.js";
+import { saveOnPurchase } from "../services/library.js";
 import {
 	listNotifications,
 	markRead,
@@ -104,6 +105,10 @@ beforeAll(async () => {
 		})
 		.returning();
 	purchaseId = purchase.id;
+	// The checkout path's own save, which is what puts the Work in the preservation
+	// program. Without it the creator's erasure destroys the Work instead of withdrawing
+	// it, and there is no withdrawal to tell the buyer about.
+	await saveOnPurchase({ buyerId, workId: soldWorkId, type: "digital" });
 }, DB_SETUP_TIMEOUT);
 
 describe("one fact, one notification", () => {

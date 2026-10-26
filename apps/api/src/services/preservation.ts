@@ -8,6 +8,13 @@
  * absolute: if the creator withdraws the Work or closes their account, Anthers keeps its
  * media rather than removing it, and nothing expires.
  *
+ * 🚨 **"Anybody" means somebody other than the creator.** A creator may keep their own
+ * unreleased Work (`saveWork` allows it), and a flag set by that save would make the draft
+ * permanently undeletable — the program exists to keep what somebody else has. So
+ * `preserveCurrentVersion` carries the keeper and refuses the creator's own save, which is
+ * what makes a set flag mean *this Work was released and is being kept*, and what lets both
+ * disposal doors ask the flag alone.
+ *
  * ⭐ **The flag marks a VERSION, because a version is what Anthers actually keeps**
  * (Parker, 2026-10-25). Two columns hold it, one for each place a version can be: the one
  * the Work currently serves carries it on `works.preserved`, and a version a replace
@@ -38,25 +45,56 @@
 
 import { assets, db, webBuildFiles, webBuilds, workMediaVersions, works } from "@anthers/db";
 import type { WorkVersionMedia } from "@anthers/db/schema";
-import { and, eq, exists, or, sql } from "drizzle-orm";
+import { and, eq, exists, isNull, ne, or, type SQL, sql } from "drizzle-orm";
 
 /**
- * Mark the media version this Work currently serves as preserved, if it is not already.
+ * Mark the media version this Work currently serves as preserved, if somebody other than
+ * its creator is keeping it.
  *
  * Idempotent and cheap enough to call on every save: the `preserved = false` predicate makes
  * a repeat a no-op the database answers without a row version changing.
+ *
+ * 🚨 **The keeper is carried into the predicate, and the creator's own save is refused.**
+ * `saveWork` lets a creator keep their own unreleased Work, and a flag set by that save
+ * would make a draft permanently undeletable — preservation is what *somebody else* keeping
+ * a Work earns. A Work whose creator has already gone (`creatorId` null) has no creator left
+ * to be the keeper, so a later save still counts.
  *
  * ⚠️ **Called from every door that writes a Library entry for a Work** — a person pressing
  * Save, a purchase completing, and a reader's space projecting its Library. A fourth door that
  * forgets this call creates a Work whose current version a buyer can lose, so the door
  * belongs beside the save it follows rather than anywhere else.
  */
-export async function preserveCurrentVersion(workId: number): Promise<void> {
+export async function preserveCurrentVersion(workId: number, keeperId: number): Promise<void> {
 	await db
 		.update(works)
 		.set({ preserved: true })
-		.where(and(eq(works.id, workId), eq(works.preserved, false)));
+		.where(
+			and(
+				eq(works.id, workId),
+				eq(works.preserved, false),
+				or(isNull(works.creatorId), ne(works.creatorId, keeperId)),
+			),
+		);
 }
+
+/**
+ * **This Work has a preserved version** — the current one, or one a replacement retired.
+ *
+ * The one definition of "Anthers keeps this Work", shared by the two things that ask:
+ * the withdrawn-Work sweep (which must not purge it) and account deletion (which must
+ * withdraw rather than destroy it). Writing it twice is how the two answers drift, and
+ * the drift is a Work kept by one path and destroyed by the other.
+ */
+export const hasPreservedVersion: SQL<unknown> = or(
+	eq(works.preserved, true),
+	exists(
+		db
+			.select({ id: workMediaVersions.id })
+			.from(workMediaVersions)
+			.where(and(eq(workMediaVersions.workId, works.id), eq(workMediaVersions.preserved, true))),
+	),
+) as SQL<unknown>;
 
 /**
  * What the program holds: how many Works, and how many bytes Anthers is carrying for them.

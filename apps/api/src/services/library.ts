@@ -92,8 +92,10 @@ export async function saveWork(
 	if (row) {
 		// ⭐ **Saving a Work is what puts it in the preservation program** — see
 		// `services/preservation.ts`. Deliberately on the save, not on the purchase:
-		// a free Work somebody chose to keep is exactly as worth preserving.
-		await preserveCurrentVersion(workId);
+		// a free Work somebody chose to keep is exactly as worth preserving. The
+		// keeper goes with the call, because a creator saving their own draft is not
+		// somebody else keeping it.
+		await preserveCurrentVersion(workId, userId);
 		return { ok: true, id: row.id };
 	}
 
@@ -104,7 +106,7 @@ export async function saveWork(
 		.set({ hidden: false })
 		.where(and(eq(libraryItems.userId, userId), eq(libraryItems.workId, workId)))
 		.returning({ id: libraryItems.id });
-	if (existing) await preserveCurrentVersion(workId);
+	if (existing) await preserveCurrentVersion(workId, userId);
 	return existing ? { ok: true, id: existing.id } : { ok: false, reason: "not_found" };
 }
 
@@ -183,7 +185,7 @@ export async function saveOnPurchase(purchase: {
 	// program** without the buyer doing anything. That is what lets the promise be
 	// "a purchase outlives its creator" rather than "a purchase outlives its creator if
 	// you held a Badge and remembered to elect".
-	await preserveCurrentVersion(purchase.workId);
+	await preserveCurrentVersion(purchase.workId, purchase.buyerId);
 }
 
 /**
