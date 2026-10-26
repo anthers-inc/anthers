@@ -40,7 +40,7 @@ export interface ReleaseMembership {
 	id: number;
 	slug: string;
 	title: string;
-	coverImage: string | null;
+	thumbnail: string | null;
 	creatorId: number | null;
 	creatorHandle: string | null;
 	creatorDisplayName: string | null;
@@ -109,7 +109,7 @@ export async function releasesByWorkId(
 			projectId: projects.id,
 			slug: projects.slug,
 			title: projects.title,
-			coverImage: projects.coverImage,
+			thumbnail: projects.thumbnail,
 			creatorId: projects.creatorId,
 			creatorHandle: users.atprotoHandle,
 			creatorDisplayName: users.displayName,
@@ -138,7 +138,7 @@ export async function releasesByWorkId(
 			id: row.projectId,
 			slug: row.slug,
 			title: row.title,
-			coverImage: row.coverImage,
+			thumbnail: row.thumbnail,
 			creatorId: row.creatorId,
 			creatorHandle: row.creatorHandle,
 			creatorDisplayName: row.creatorDisplayName,

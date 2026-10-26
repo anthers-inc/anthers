@@ -363,7 +363,13 @@ async function serializeUser(user: typeof users.$inferSelect) {
 		isDiscordAvailable: discordConfigured(),
 		isDiscordLinked: user.discordId !== null,
 		avatar: user.avatar,
-		headerImage: user.headerImage,
+		bannerImage: user.bannerImage,
+		// Owner-facing boot payload: the full uploads the images were framed from, so the
+		// profile's own page can reposition them.
+		avatarSource: user.avatarSource,
+		bannerImageSource: user.bannerImageSource,
+		avatarCrop: user.avatarCrop,
+		bannerImageCrop: user.bannerImageCrop,
 		websiteUrl: user.websiteUrl,
 		location: user.location,
 		emailVerified: user.emailVerified,

@@ -42,8 +42,8 @@ test("a video's thumbnail can be the frame its creator paused on", async ({ page
 	await page.getByRole("button", { name: "Manage This Work's Media" }).click();
 	await page.getByRole("tab", { name: "Thumbnail" }).click();
 
-	// The section's shape: the (i) carries the terms beside the heading, and the two
-	// buttons stand beside the thumbnail's place.
+	// The section's shape: the (i) carries the terms beside the heading, and the edit menu
+	// stands beside the thumbnail's place.
 	await expect(
 		page.getByText("shows a placeholder drawn for its kind", { exact: false }).first(),
 	).toBeAttached();
@@ -51,6 +51,7 @@ test("a video's thumbnail can be the frame its creator paused on", async ({ page
 	// Open the picker, wait for its player to report a real picture, then take a moment
 	// in. The extraction is the SERVER's doing — the route saves the field itself, so
 	// the answered request IS the save.
+	await page.getByRole("button", { name: "Edit Thumbnail" }).click();
 	await page.getByRole("button", { name: "Choose from Work" }).click();
 	const picker = page.getByRole("dialog", { name: "Thumbnail from this Work" });
 	await expect

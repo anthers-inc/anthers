@@ -126,12 +126,12 @@ export default function ProjectPage() {
 
 			{/* Hero — stood down for an album, which brings its own. */}
 			<div className={asAlbum ? "mb-4 flex justify-end" : "mb-8"}>
-				{!asAlbum && project.coverImage && (
-					<div className="w-full h-56 md:h-72 overflow-hidden rounded-lg mb-6">
+				{!asAlbum && project.thumbnail && (
+					<div className="mx-auto w-full max-w-3xl aspect-video overflow-hidden rounded-lg mb-6">
 						<img
-							src={project.coverImage}
+							src={project.thumbnail}
 							alt={project.title}
-							className="w-full h-full object-cover"
+							className="h-full w-full object-cover"
 						/>
 					</div>
 				)}
@@ -189,7 +189,7 @@ export default function ProjectPage() {
 					<div className="mb-10 space-y-4">
 						<AlbumView
 							title={project.title}
-							cover={project.coverImage || works.find((w) => w.thumbnail)?.thumbnail || null}
+							cover={project.thumbnail || works.find((w) => w.thumbnail)?.thumbnail || null}
 							creator={
 								project.creator && (
 									<Link

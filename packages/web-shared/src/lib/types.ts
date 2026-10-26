@@ -11,6 +11,7 @@
 
 import type { WorkType } from "@anthers/shared/content";
 import type { ContentNote, MaturityRating, MaturityRows } from "@anthers/shared/content-rating";
+import type { ImageCrop } from "@anthers/shared/image-frame";
 import type { ProjectSortDirection, ProjectSortMode } from "@anthers/shared/project-sort";
 
 // ─── User Types ───
@@ -37,7 +38,17 @@ export interface User {
 	/** Whether this account has linked its Discord identity. Private payloads only. */
 	isDiscordLinked?: boolean;
 	avatar: string | null;
-	headerImage: string | null;
+	bannerImage: string | null;
+	/**
+	 * The full uploads the avatar and header were framed from, so the owner can reposition
+	 * them. 🚨 Owner-only: the private `/me` shape carries these and the public profile does
+	 * not, because they are the uncropped files.
+	 */
+	avatarSource?: string | null;
+	bannerImageSource?: string | null;
+	/** The windows those images were last framed at; the editor reopens there. */
+	avatarCrop?: ImageCrop | null;
+	bannerImageCrop?: ImageCrop | null;
 	websiteUrl: string | null;
 	location: string | null;
 	emailVerified?: boolean | null; // Only in /me (private)
@@ -406,7 +417,7 @@ export interface WorkRelease {
 	id: number;
 	slug: string;
 	title: string;
-	coverImage: string | null;
+	thumbnail: string | null;
 	creatorId: number | null;
 	creatorHandle: string | null;
 	creatorDisplayName: string | null;
@@ -454,6 +465,10 @@ export interface Work {
 	title: string | null;
 	description?: string | null;
 	thumbnail: string | null;
+	/** Owner-facing only: the full upload the thumbnail was framed from. */
+	thumbnailSource?: string | null;
+	/** Owner-facing: the window the framing dialog reopens at. */
+	thumbnailCrop?: ImageCrop | null;
 
 	// Media payload — blanked (empty) by the API when the user lacks access.
 	sourceKey: string | null;
@@ -691,6 +706,10 @@ export interface WorkInput {
 	slug?: string;
 	description?: string;
 	thumbnail?: string;
+	/** The full upload the thumbnail was framed from; the editor saves it beside the crop. */
+	thumbnailSource?: string;
+	/** The window the framing dialog reopens at. */
+	thumbnailCrop?: ImageCrop | null;
 	sourceKey?: string;
 	embedUrl?: string;
 	durationSeconds?: number;
@@ -866,14 +885,18 @@ export interface Project {
 	slug: string;
 	title: string;
 	description: string | null;
-	/** The cover this Project shows — an uploaded image, or the chosen Work's cover. */
-	coverImage: string | null;
+	/** The thumbnail this Project shows — an uploaded image, or the chosen Work's thumbnail. */
+	thumbnail: string | null;
+	/** Owner-facing only: the full upload the image was framed from. */
+	thumbnailSource?: string | null;
+	/** Owner-facing: the window the framing dialog reopens at. */
+	thumbnailCrop?: ImageCrop | null;
 	/**
-	 * The Work whose cover this Project wears, by reference; null when the cover is an
-	 * uploaded image or there is none. The response's `coverImage` already resolves it,
-	 * so a reader renders the cover and the editor only needs this to name the choice.
+	 * The Work whose thumbnail this Project wears, by reference; null when the thumbnail is
+	 * an uploaded image or there is none. The response's `thumbnail` already resolves it,
+	 * so a reader renders the thumbnail and the editor only needs this to name the choice.
 	 */
-	coverWorkId?: number | null;
+	thumbnailWorkId?: number | null;
 	pageConfig: Record<string, unknown> | null;
 	/**
 	 * How the Project's shelves read, saved from the sort dropdown on its page
@@ -1193,7 +1216,7 @@ export interface Purchase {
 	updatedAt: string;
 	/**
 	 * What was bought. `title`/`type` are the snapshot taken at the sale and survive the
-	 * Work's removal; `slug`/`publicId`/`visibility`/`coverImage` come from the live row
+	 * Work's removal; `slug`/`publicId`/`visibility`/`thumbnail` come from the live row
 	 * and go null with it. **A link may only be built when `publicId` is present** — that
 	 * is the field that says a page still exists. All of them are null for a support top-up.
 	 */
@@ -1204,7 +1227,7 @@ export interface Purchase {
 		visibility: "private" | "released" | "withdrawn" | null;
 		/** When the creator pulled it. Nothing counts from it: a saved Work is kept. */
 		withdrawnAt: string | null;
-		coverImage: string | null;
+		thumbnail: string | null;
 		type: string | null;
 	};
 	creator?: Creator;

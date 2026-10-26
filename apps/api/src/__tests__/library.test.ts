@@ -171,7 +171,7 @@ async function library(opts: { hidden?: boolean } = {}) {
 				id: number;
 				slug: string;
 				title: string;
-				coverImage: string | null;
+				thumbnail: string | null;
 				musicCount: number;
 				audioCount: number;
 			}>;
@@ -180,7 +180,7 @@ async function library(opts: { hidden?: boolean } = {}) {
 			id: number;
 			slug: string;
 			title: string;
-			coverImage: string | null;
+			thumbnail: string | null;
 			trackCount: number;
 			musicCount: number;
 			audioCount: number;

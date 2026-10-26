@@ -117,7 +117,7 @@ function subtitleFor(name: string | null, handle: string | null): string | null 
 const workTypeLabel = (type: string) => type.charAt(0).toUpperCase() + type.slice(1);
 
 /**
- * The Project's own title and cover may describe what its Works contain, so a Project
+ * The Project's own title and thumbnail may describe what its Works contain, so a Project
  * holding only Works this viewer cannot see is absent. This is the condition the public
  * Projects listing carries, reproduced here against the same aliases.
  */
@@ -287,7 +287,7 @@ async function searchProjects(
 			id: projects.id,
 			slug: projects.slug,
 			title: projects.title,
-			coverImage: projects.coverImage,
+			thumbnail: projects.thumbnail,
 			creatorId: projects.creatorId,
 			handle: users.atprotoHandle,
 			displayName: users.displayName,
@@ -317,7 +317,7 @@ async function searchProjects(
 			id: row.id,
 			title: row.title,
 			subtitle: subtitleFor(row.displayName, row.handle),
-			thumbnail: await resolveThumbnailUrl(row.coverImage),
+			thumbnail: await resolveThumbnailUrl(row.thumbnail),
 			handle: row.handle,
 			slug: row.slug,
 			publicId: null,
