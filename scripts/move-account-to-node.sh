@@ -49,14 +49,20 @@ export HOSTED_PDS_URL="$NODE_URL"
 # FRONTEND_URL is what that detection reads.
 export FRONTEND_URL="$SITE_URL"
 
-echo "-> signing in to ${HANDLE}'s current PDS"
-goat account login
+# A session goat stored earlier is reused when GOAT_SKIP_LOGIN is set: logging in again is a
+# second createSession against the old PDS, and one that failed with a 401 while the stored
+# session and a direct call with the same password both worked.
+if [ -z "${GOAT_SKIP_LOGIN:-}" ]; then
+	echo "-> signing in to ${HANDLE}'s current PDS"
+	goat account login
+fi
 
-echo "-> asking that PDS to email a PLC signature token"
-goat account plc request-token
-
-read -r -s -p "PLC token from the email: " PLC_SIGN_TOKEN
-echo
+if [ -z "${PLC_SIGN_TOKEN:-}" ]; then
+	echo "-> asking that PDS to email a PLC signature token"
+	goat account plc request-token
+	read -r -s -p "PLC token from the email: " PLC_SIGN_TOKEN
+	echo
+fi
 export PLC_SIGN_TOKEN
 
 # ⚠️ **This is the node's credential for the account, not a way to sign in to Anthers.** Anthers
@@ -67,8 +73,11 @@ export PLC_SIGN_TOKEN
 NEW_ACCOUNT_PASSWORD="$(openssl rand -base64 24)"
 export NEW_ACCOUNT_PASSWORD
 
+# ⚠️ **The invite code is the one value goat takes only as an argument.** The node requires one
+# to create an account, and the tool offers no environment source; a single-use code minted for
+# this call is the smallest exposure available. Set INVITE_CODE to supply it.
 echo "-> moving the account to ${NODE_URL}"
-goat account migrate --new-email "$GOAT_EMAIL"
+goat account migrate --new-email "$GOAT_EMAIL" ${INVITE_CODE:+--invite-code "$INVITE_CODE"}
 
 echo "-> what the network now resolves"
 goat resolve "$HANDLE"
