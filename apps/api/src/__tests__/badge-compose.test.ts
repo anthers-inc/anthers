@@ -29,6 +29,7 @@ import { badgeArtProvenance, badges } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import sharp from "sharp";
 import app from "../index";
+import { DAILY_ICON_BUDGET, recordSpend, spendToday } from "../services/noun-budget.js";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -134,6 +135,53 @@ function compose(body: unknown, withCookie = cookie) {
 	});
 }
 
+function recompose(body: unknown, withCookie = cookie) {
+	return req(`/api/subscriptions/badges/${badgeId}/recompose`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: withCookie },
+		body: JSON.stringify(body),
+	});
+}
+
+/**
+ * The vendor AND Shield, because a compose makes both calls in one request.
+ *
+ * `stubShield` answers every request, so wrapping a compose in it alone would turn the
+ * vendor download into a scan answer and fail with a decode error instead of quarantining
+ * the composed PNG — a refusal test that proves nothing. This routes the vendor first and
+ * hands everything else to the Shield stub.
+ */
+function stubVendorWithShield(classification: string) {
+	const shield = stubShield(classification);
+	const shieldFetch = globalThis.fetch;
+	globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const url = String(input);
+		if (url.includes("api.thenounproject.com")) {
+			if (url.includes("/download")) {
+				vendorIconCalls++;
+				return new Response(JSON.stringify(VENDORDOWNLOAD), { status: 200 });
+			}
+			return new Response(JSON.stringify({ icons: [] }), { status: 200 });
+		}
+		return shieldFetch(input, init);
+	}) as typeof fetch;
+	return shield;
+}
+
+async function storedBadge(id = badgeId) {
+	const [row] = await db.select().from(badges).where(eq(badges.id, id)).limit(1);
+	return row;
+}
+
+async function storedProvenance(id = badgeId) {
+	const [row] = await db
+		.select()
+		.from(badgeArtProvenance)
+		.where(eq(badgeArtProvenance.badgeId, id))
+		.limit(1);
+	return row;
+}
+
 describe("badge composition", () => {
 	let _creatorId = 0;
 
@@ -166,6 +214,8 @@ describe("badge composition", () => {
 		const [stored] = await db.select().from(badges).where(eq(badges.id, badgeId)).limit(1);
 		expect(stored.artKey).toBeTruthy();
 		expect(stored.artFingerprint).toBeTruthy();
+		// The color is stored, because a recompose cannot recover it from the fingerprint.
+		expect(stored.artEmblemColor).toBe("#ffffff");
 
 		// The provenance row was written from the ride-along search fields, and no
 		// metadata fetch was spent getting it.
@@ -211,6 +261,118 @@ describe("badge composition", () => {
 		expect(vendorIconCalls).toBe(callsBefore + 1);
 	});
 
+	it("answers an unchanged recompose without spending a vendor call", async () => {
+		const callsBefore = vendorIconCalls;
+		const res = await recompose({ shape: "circle", fieldColor: "moss" });
+		expect(res.status).toBe(200);
+		expect(((await res.json()) as { unchanged?: boolean }).unchanged).toBe(true);
+		expect(vendorIconCalls).toBe(callsBefore);
+	});
+
+	it("🚨 recomposes onto a new shape and field, keeping the same emblem and credit", async () => {
+		const before = await storedBadge();
+		const beforeProv = await storedProvenance();
+		const callsBefore = vendorIconCalls;
+		const spendBefore = await spendToday(before.creatorId);
+
+		const res = await recompose({ shape: "hexagon", fieldColor: "sun" });
+		expect(res.status).toBe(200);
+		expect(((await res.json()) as { unchanged?: boolean }).unchanged).toBeFalsy();
+
+		// One icon call — the vector is fetched again because no SVG is cached anywhere.
+		expect(vendorIconCalls).toBe(callsBefore + 1);
+		// ... and it is counted against the creator, exactly as a first composition is.
+		expect((await spendToday(before.creatorId)).iconCalls).toBe(spendBefore.iconCalls + 1);
+
+		const after = await storedBadge();
+		expect(after.artKey).toBeTruthy();
+		expect(after.artKey).not.toBe(before.artKey);
+		expect(after.artShape).toBe("hexagon");
+		expect(after.artColor).toBe("sun");
+		// The emblem color and placement are the ones the first composition stored.
+		expect(after.artEmblemColor).toBe("#000000");
+		expect(after.artEmblemScale).toBe(before.artEmblemScale);
+		expect(after.artEmblemOffsetX).toBe(before.artEmblemOffsetX);
+		expect(after.artEmblemOffsetY).toBe(before.artEmblemOffsetY);
+
+		// Same icon, same artist, same license — the credit follows the emblem, not a search.
+		const afterProv = await storedProvenance();
+		expect(afterProv.nounIconId).toBe(beforeProv.nounIconId);
+		expect(afterProv.artistName).toBe(beforeProv.artistName);
+		expect(afterProv.artistPermalink).toBe(beforeProv.artistPermalink);
+		expect(afterProv.attribution).toBe(beforeProv.attribution);
+		expect(afterProv.licenseDescription).toBe(beforeProv.licenseDescription);
+
+		// The new object is a real PNG at the compose resolution, like any composition.
+		const meta = await sharp((await storage.read(String(after.artKey)))!).metadata();
+		expect(meta.format).toBe("png");
+		expect(meta.width).toBe(1024);
+	});
+
+	it("🚨 a failed recompose leaves the previous art untouched", async () => {
+		// The scan refuses the composed PNG, which is the failure this module's rule exists
+		// for: the vendor call is spent, the object is held, and the Badge still shows what
+		// the creator had before they pressed Save.
+		const before = await storedBadge();
+		const beforeProv = await storedProvenance();
+		const stub = stubVendorWithShield("harmful-abusive-material");
+		try {
+			const res = await recompose({ shape: "triangle", fieldColor: "dusk" });
+			expect(res.status).toBe(422);
+			expect(((await res.json()) as { code?: string }).code).toBe("refused");
+		} finally {
+			stub.restore();
+		}
+
+		const after = await storedBadge();
+		expect(after.artKey).toBe(before.artKey);
+		expect(after.artShape).toBe(before.artShape);
+		expect(after.artColor).toBe(before.artColor);
+		expect(after.artFingerprint).toBe(before.artFingerprint);
+		expect(after.artEmblemColor).toBe(before.artEmblemColor);
+		expect(await storedProvenance()).toEqual(beforeProv);
+	});
+
+	it("refuses another creator's recompose", async () => {
+		const other = await createAccount(`bc_recompose_other_${RUN}`, {
+			fields: { creatorMode: true },
+		});
+		const res = await recompose({ shape: "hexagon", fieldColor: "sun" }, other.cookie);
+		expect(res.status).toBe(404);
+	});
+
+	it("refuses a recompose with a shape the library does not carry", async () => {
+		const callsBefore = vendorIconCalls;
+		const res = await recompose({ shape: "star", fieldColor: "sun" });
+		expect(res.status).toBe(400);
+		expect(vendorIconCalls).toBe(callsBefore);
+	});
+
+	it("🚨 keeps the old refusal when the emblem color cannot be recovered", async () => {
+		// A row the backfill could not match, modeled by clearing the stored color. The
+		// editor must not offer a recompose here, and the route must not invent a foreground
+		// the creator never chose.
+		const before = await storedBadge();
+		await db.update(badges).set({ artEmblemColor: null }).where(eq(badges.id, badgeId));
+		try {
+			const list = await req("/api/subscriptions/badges", { headers: { Cookie: cookie } });
+			const body = (await list.json()) as {
+				badges: { id: number; canRecompose?: boolean }[];
+			};
+			expect(body.badges.find((b) => b.id === badgeId)?.canRecompose).toBeUndefined();
+
+			const res = await recompose({ shape: "hexagon", fieldColor: "sun" });
+			expect(res.status).toBe(409);
+			expect(((await res.json()) as { code?: string }).code).toBe("needs_new_emblem");
+			expect((await storedBadge()).artKey).toBe(before.artKey);
+		} finally {
+			await db
+				.update(badges)
+				.set({ artEmblemColor: before.artEmblemColor })
+				.where(eq(badges.id, badgeId));
+		}
+	});
+
 	it("refuses a placement the bounds reject, without touching the vendor", async () => {
 		const callsBefore = vendorIconCalls;
 		const res = await compose({ noun: nounIcon, placement: { ...placement, scale: 99 } });
@@ -247,6 +409,7 @@ describe("badge composition", () => {
 		const [stored] = await db.select().from(badges).where(eq(badges.id, badgeId)).limit(1);
 		expect(stored.artKey).toBeTruthy();
 		expect(stored.artFingerprint).toBeNull();
+		expect(stored.artEmblemColor).toBeNull();
 		expect(stored.artEmblemScale).toBeNull();
 
 		const provenance = await db
@@ -268,5 +431,75 @@ describe("badge composition", () => {
 		// exercise: this rule is about what must never exist.
 		const routes = readFileSync(join(import.meta.dir, "../routes/subscriptions.ts"), "utf8");
 		expect(routes.includes("/emblem")).toBe(false);
+	});
+});
+
+describe("the compose budget", () => {
+	let budgetCookie = "";
+	let budgetBadgeId = 0;
+	let budgetCreatorId = 0;
+	let priorCap: string | undefined;
+
+	beforeAll(async () => {
+		// The key-wide breaker is inert without a cap, so this suite exercises the
+		// per-creator daily budget rather than whichever cap the environment happens to set.
+		priorCap = process.env.NOUN_PROJECT_MONTHLY_CAP_USD;
+		delete process.env.NOUN_PROJECT_MONTHLY_CAP_USD;
+
+		const account = await createAccount(`bc_budget_${RUN}`, { fields: { creatorMode: true } });
+		budgetCookie = account.cookie;
+		budgetCreatorId = account.userId;
+		const res = await req("/api/subscriptions/badges", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: budgetCookie },
+			body: JSON.stringify({ threshold: "7.00", label: "Budgeted" }),
+		});
+		const badge = (await res.json()) as { badge?: { id?: number } };
+		budgetBadgeId = badge.badge?.id ?? 0;
+		expect(budgetBadgeId).toBeGreaterThan(0);
+		const composed = await req(`/api/subscriptions/badges/${budgetBadgeId}/compose`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: budgetCookie },
+			body: JSON.stringify({ noun: nounIcon, placement }),
+		});
+		expect(composed.status).toBe(200);
+	}, DB_SETUP_TIMEOUT);
+
+	afterAll(() => {
+		if (priorCap !== undefined) process.env.NOUN_PROJECT_MONTHLY_CAP_USD = priorCap;
+		else delete process.env.NOUN_PROJECT_MONTHLY_CAP_USD;
+	});
+
+	function budgetRecompose(body: unknown) {
+		return req(`/api/subscriptions/badges/${budgetBadgeId}/recompose`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: budgetCookie },
+			body: JSON.stringify(body),
+		});
+	}
+
+	it("🚨 refuses a recompose once the day's icon budget is spent, and spends no call", async () => {
+		const before = await storedBadge(budgetBadgeId);
+		const spend = await spendToday(budgetCreatorId);
+		for (let i = spend.iconCalls; i < DAILY_ICON_BUDGET; i++) {
+			await recordSpend(budgetCreatorId, "icon");
+		}
+		const callsBefore = vendorIconCalls;
+
+		const res = await budgetRecompose({ shape: "hexagon", fieldColor: "sun" });
+		expect(res.status).toBe(429);
+		expect(((await res.json()) as { code?: string }).code).toBe("budget_exhausted");
+		expect(vendorIconCalls).toBe(callsBefore);
+
+		const after = await storedBadge(budgetBadgeId);
+		expect(after.artKey).toBe(before.artKey);
+		expect(after.artShape).toBe(before.artShape);
+		expect(after.artColor).toBe(before.artColor);
+	});
+
+	it("still answers an unchanged save for free while the budget is spent", async () => {
+		const res = await budgetRecompose({ shape: "circle", fieldColor: "moss" });
+		expect(res.status).toBe(200);
+		expect(((await res.json()) as { unchanged?: boolean }).unchanged).toBe(true);
 	});
 });
