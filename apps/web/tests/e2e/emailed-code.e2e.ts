@@ -42,6 +42,10 @@ test("an emailed code finishes a signup, and the account holds the handle it ask
 		.getByRole("button", { name: /send|continue|confirm|code/i })
 		.first()
 		.click();
+	// The handle was chosen at `/signup`, so the password gate is on the code face before the
+	// boxes appear. That password is the identity's own and is what the account is created with.
+	await page.getByLabel("Choose a password").fill("e2e a long enough password");
+	await page.getByRole("button", { name: "Continue", exact: true }).click();
 	await typeCode(page, await emailedCode(address));
 
 	// A new account owes the terms (the onboarding claim step is gone — the handle arrives
@@ -116,7 +120,15 @@ test("an emailed code signs an existing account in from /login", async ({ page }
 		.toBe(made.handle);
 });
 
-test("an Anthers handle signs in from /login, keyed on the handle alone", async ({ page }) => {
+/**
+ * An Anthers handle is an identity, and an identity signs in at its own server.
+ *
+ * 🚨 **The handoff is the assertion, not the round trip.** Completing OAuth would mean typing a
+ * real password into `anthers.social`'s consent page, which this suite must not do. What can be
+ * pinned is that the page leaves for the OAuth door rather than mailing a code, and that the code
+ * stays available underneath as the way in for an account whose holder has no password yet.
+ */
+test("an Anthers handle hands the browser to its own server", async ({ page }) => {
 	const name = `e2e-han-${stamp()}`.slice(0, 18);
 	const address = `e2e-handle-${stamp()}@example.com`;
 	const made = JSON.parse(
@@ -131,20 +143,50 @@ test("an Anthers handle signs in from /login, keyed on the handle alone", async 
 
 	await page.goto("/login");
 
-	// 🚨 **The browser never receives the handle's mailbox, and it must never ask for it.**
-	// A hosted handle is resolved into the code's address on the server, so a handoff to
-	// the OAuth door — where `signInWithBluesky` sends the typed handle — is precisely what
-	// must NOT fire. Recorded rather than blocked, so the routing still routes and the
-	// assertion reads the wire after the fact.
-	let handedOff = false;
-	await page.route("**/api/atproto/auth", () => {
-		handedOff = true;
+	let payload: unknown = null;
+	await page.route("**/api/atproto/auth", async (route) => {
+		payload = route.request().postDataJSON();
+		// A same-origin URL, so the browser goes somewhere harmless instead of to a real
+		// consent screen. Nothing after the handoff is this spec's subject.
+		await route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ authorization_url: "/login?handed-off=1" }),
+		});
 	});
 
-	// Typed with the leading `@`, and in the case somebody's profile shows it — the page
-	// strips and lowercases both before the API ever sees them.
+	// Typed with the leading `@`, and in the case somebody's profile shows it. The page
+	// normalizes both before the flow sees it.
 	await page.locator('input[autocomplete="username"]').fill(`@${made.handle.toUpperCase()}`);
 	await page.getByRole("button", { name: /^continue$/i }).click();
+
+	await expect.poll(() => payload).not.toBeNull();
+	expect(payload).toMatchObject({ handle: made.handle, intent: "login" });
+
+	// And no code was asked for: the emailed code is the fallback, not the door.
+	await expect(page.getByRole("heading", { name: /check your email/i })).toHaveCount(0);
+});
+
+test("an Anthers handle with no password still gets in by an emailed code", async ({ page }) => {
+	const name = `e2e-code-${stamp()}`.slice(0, 18);
+	const address = `e2e-code-${stamp()}@example.com`;
+	const made = JSON.parse(
+		leashedExecFileSync("bun", ["run", "db:local-account", "--name", name, "--email", address], {
+			cwd: REPO_ROOT,
+			encoding: "utf8",
+		})
+			.trim()
+			.split("\n")
+			.at(-1) as string,
+	) as { handle: string };
+
+	await page.goto("/login");
+	await page.locator('input[autocomplete="username"]').fill(`@${made.handle}`);
+
+	// The fallback is a link under the button, and only for a handle the page has recognized
+	// as one this node hosts. Its presence is the transition: an account that has not set its
+	// password still has a way in.
+	await page.getByRole("button", { name: /use an emailed code instead/i }).click();
 
 	// The code modal opens IN PLACE — and tells the person it is their handle it asked for,
 	// never the address the server put the code in.
@@ -163,6 +205,4 @@ test("an Anthers handle signs in from /login, keyed on the handle alone", async 
 			return me.user?.handle ?? null;
 		})
 		.toBe(made.handle);
-
-	expect(handedOff, "a hosted handle stays on the emailed-code door").toBe(false);
 });

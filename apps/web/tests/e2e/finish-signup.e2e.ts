@@ -86,8 +86,10 @@ test.describe("it cannot be an entry point", () => {
 		// fields on a page that has one. The rail is the cheapest tell that the swap is done.
 		await expect(page.getByRole("list", { name: "Signup Progress" })).toBeVisible();
 
-		// The same structural tell the one-door spec uses: this page asks for no password at
-		// all, and a Create Account card growing back here would be invisible otherwise.
+		// The same structural tell the one-door spec uses: no Create Account card has grown
+		// back here. This face asks for an address only — the identity's own password is asked
+		// for on the code face, where it is the credential the account is created with rather
+		// than a second signup form.
 		expect(await page.locator('input[type="password"]').count()).toBe(0);
 		// One address field, the one it is confirming — not a form that could mint a second.
 		expect(await page.locator('input[type="email"]').count()).toBeLessThanOrEqual(1);

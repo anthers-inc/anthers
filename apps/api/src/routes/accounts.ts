@@ -78,6 +78,7 @@ import {
 	SAVED_RECIPE_LIMIT,
 	sameRecipe,
 } from "@anthers/shared/discovery";
+import { imageCropSchema } from "@anthers/shared/image-frame";
 import { normalizeKeyboardShortcuts } from "@anthers/shared/keybindings";
 import { NO_PARENTAL_CONTROLS } from "@anthers/shared/parental-controls";
 import {
@@ -210,7 +211,7 @@ function serializePublicUser(
 		creatorMode: user.creatorMode,
 		isCreator: extra.isCreator,
 		avatar: user.avatar,
-		headerImage: user.headerImage,
+		bannerImage: user.bannerImage,
 		websiteUrl: user.websiteUrl,
 		location: user.location,
 		atprotoDid: user.atprotoDid,
@@ -257,7 +258,13 @@ async function serializePrivateUser(user: typeof users.$inferSelect) {
 		isDiscordAvailable: discordConfigured(),
 		isDiscordLinked: user.discordId !== null,
 		avatar: user.avatar,
-		headerImage: user.headerImage,
+		bannerImage: user.bannerImage,
+		// Owner-facing only, and this shape reaches nobody else: the uncropped uploads a
+		// reposition needs. `serializePublicUser` carries neither.
+		avatarSource: user.avatarSource,
+		bannerImageSource: user.bannerImageSource,
+		avatarCrop: user.avatarCrop,
+		bannerImageCrop: user.bannerImageCrop,
 		websiteUrl: user.websiteUrl,
 		location: user.location,
 		emailVerified: user.emailVerified,
@@ -502,7 +509,13 @@ const updateProfileSchema = z.object({
 	bio: z.string().max(5000).optional(),
 	creatorMode: z.boolean().optional(),
 	avatar: z.string().max(500).optional(),
-	headerImage: z.string().max(500).optional(),
+	bannerImage: z.string().max(500).optional(),
+	/** The full uploads the avatar and header are framed from — owner-only, never published. */
+	avatarSource: z.string().max(500).optional(),
+	bannerImageSource: z.string().max(500).optional(),
+	/** The windows those images were framed at, so a reposition reopens where it was left. */
+	avatarCrop: imageCropSchema.nullable().optional(),
+	bannerImageCrop: imageCropSchema.nullable().optional(),
 	websiteUrl: z.string().max(500).optional(),
 	location: z.string().max(100).optional(),
 	themePreference: z.enum(["light", "dark"]).optional(),
@@ -605,15 +618,27 @@ const accountRoutes = new Hono()
 		// about, as with a Work's file references, so a request repeating the stored value is
 		// never refused for a row written before this check. `storage/keys.ts` carries the
 		// reasons.
-		if (data.avatar !== undefined || data.headerImage !== undefined) {
+		if (
+			data.avatar !== undefined ||
+			data.bannerImage !== undefined ||
+			data.avatarSource !== undefined ||
+			data.bannerImageSource !== undefined
+		) {
 			const [stored] = await db
-				.select({ avatar: users.avatar, headerImage: users.headerImage })
+				.select({
+					avatar: users.avatar,
+					bannerImage: users.bannerImage,
+					avatarSource: users.avatarSource,
+					bannerImageSource: users.bannerImageSource,
+				})
 				.from(users)
 				.where(eq(users.id, sessionUser.id))
 				.limit(1);
 			for (const [sent, current] of [
 				[data.avatar, stored?.avatar],
-				[data.headerImage, stored?.headerImage],
+				[data.bannerImage, stored?.bannerImage],
+				[data.avatarSource, stored?.avatarSource],
+				[data.bannerImageSource, stored?.bannerImageSource],
 			] as const) {
 				if (
 					sent !== undefined &&
@@ -714,7 +739,11 @@ const accountRoutes = new Hono()
 		if (data.bio !== undefined) updates.bio = data.bio;
 		if (data.creatorMode !== undefined) updates.creatorMode = data.creatorMode;
 		if (data.avatar !== undefined) updates.avatar = data.avatar;
-		if (data.headerImage !== undefined) updates.headerImage = data.headerImage;
+		if (data.bannerImage !== undefined) updates.bannerImage = data.bannerImage;
+		if (data.avatarSource !== undefined) updates.avatarSource = data.avatarSource;
+		if (data.bannerImageSource !== undefined) updates.bannerImageSource = data.bannerImageSource;
+		if (data.avatarCrop !== undefined) updates.avatarCrop = data.avatarCrop;
+		if (data.bannerImageCrop !== undefined) updates.bannerImageCrop = data.bannerImageCrop;
 		if (data.websiteUrl !== undefined) updates.websiteUrl = data.websiteUrl;
 		if (data.location !== undefined) updates.location = data.location;
 

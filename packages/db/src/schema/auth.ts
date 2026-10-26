@@ -16,6 +16,8 @@
  * 🚨 `schema-role-tags.test.ts` requires a tag on every table, because this began as a
  * one-time pass with nothing behind it and had decayed to 43 of 51 by 2026-09-01.
  */
+
+import type { ImageCrop } from "@anthers/shared/image-frame";
 import {
 	boolean,
 	index,
@@ -58,7 +60,17 @@ export const users = pgTable("users", {
 	 */
 	creatorMode: boolean("creator_mode").default(false),
 	avatar: text("avatar").default(""),
-	headerImage: text("header_image").default(""),
+	bannerImage: text("banner_image").default(""),
+	/**
+	 * The full uploads the avatar and banner are framed from, kept so a reposition can zoom
+	 * back out. 🚨 Owner-facing only: these are the uncropped files, and the public profiles
+	 * never carry them.
+	 */
+	avatarSource: text("avatar_source").default(""),
+	bannerImageSource: text("banner_image_source").default(""),
+	/** The windows the owner last framed each image at; null before framing existed. */
+	avatarCrop: jsonb("avatar_crop").$type<ImageCrop | null>(),
+	bannerImageCrop: jsonb("banner_image_crop").$type<ImageCrop | null>(),
 	websiteUrl: text("website_url").default(""),
 	location: text("location").default(""),
 	emailVerified: boolean("email_verified").default(false),
@@ -837,8 +849,26 @@ export const hostedAccounts = pgTable("hosted_accounts", {
 	userId: integer("user_id").references(() => users.id, { onDelete: "set null" }),
 	/** The full handle as issued, for a person reading this row. */
 	handle: text("handle").notNull(),
-	/** The account's password at the node, sealed by `services/secret-box.ts`. */
-	sealedPassword: text("sealed_password").notNull(),
+	/**
+	 * The account's password at the node, sealed by `services/secret-box.ts` — and **only ever a
+	 * fallback**, not the credential the platform runs on. 🚨 **An empty string means the row
+	 * holds no password**, which is the normal state.
+	 *
+	 * 🚨 **A stored password is a copy of a secret the owner can change from outside, and this
+	 * column is retired for exactly that reason.** The server holds only a hash, so a credential
+	 * the hub can present is a second copy; a reset replaces the server's hash and leaves this
+	 * one stale, and the failure looks like an unreachable node. An account carries a sealed
+	 * SESSION instead (`sealed_session`), obtained once at creation and renewed without a login.
+	 * This column is written at creation only so that a node failure cannot strand the identity
+	 * with no credential at all; it is emptied as soon as the first session is sealed, and
+	 * `hosted:sessions convert` empties the rows that predate the change.
+	 *
+	 * ⚠️ **The empty string stands in for NULL because the migration generator is blocked right
+	 * now** (a duplicate snapshot on `main`), so the column keeps its constraint and a sentinel
+	 * marks the absence. Dropping the column is the follow-up; until then every reader tests for
+	 * a non-empty value rather than for null.
+	 */
+	sealedPassword: text("sealed_password").notNull().default(""),
 	/**
 	 * The live PDS session for this account, sealed by `services/secret-box.ts` — a JSON string
 	 * holding `accessJwt`, `refreshJwt` and `expiresAt`, null until the writer has opened one.

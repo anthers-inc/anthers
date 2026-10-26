@@ -47,9 +47,7 @@ test.describe("signing in with an emailed code", () => {
 		const field = page.locator('input[autocomplete="username"]');
 		const drawing = page.locator("[data-form-icon]");
 		await expect(drawing).toHaveAttribute("data-form-icon", "idle");
-		await expect(
-			page.getByText(/an email or anthers handle gets a sign-in code by mail/i),
-		).toBeVisible();
+		await expect(page.getByText(/a handle signs in at its own identity server/i)).toBeVisible();
 		await expect(page.getByRole("button", { name: /^continue$/i })).toBeVisible();
 
 		// An address, typed: the envelope confirms the reading, the hint commits to it.
@@ -73,16 +71,19 @@ test.describe("signing in with an emailed code", () => {
 		await field.fill("@ja");
 		await expect(drawing).toHaveAttribute("data-form-icon", "handle");
 
-		// Complete it as an Anthers handle: the `@` turns ours, the hint commits.
+		// Complete it as an Anthers handle: the `@` turns ours, and the hint names the door
+		// the identity's own server will ask at.
 		await field.fill(`@jane.${suffix}`);
 		await expect(drawing).toHaveAttribute("data-form-icon", "anthers");
-		await expect(page.getByText(/goes to this account's email address/i)).toBeVisible();
+		await expect(
+			page.getByText(/your identity server asks for the password you chose/i),
+		).toBeVisible();
 
 		// A foreign handle under the same `@`: the butterfly, only when the whole thing
 		// is there — never mid-word.
 		await field.fill("@alice.bsky.social");
 		await expect(drawing).toHaveAttribute("data-form-icon", "bluesky");
-		await expect(page.getByText(/bluesky confirms it's you/i)).toBeVisible();
+		await expect(page.getByText(/your identity server confirms it's you/i)).toBeVisible();
 
 		// And the keyboard answer rides along: the moment an `@` leads, the keyboard is
 		// the handle's, not the email's.

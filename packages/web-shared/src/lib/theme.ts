@@ -10,9 +10,10 @@
 //      (no flash). That snippet can't import from the bundle, so it hard-codes THEME_KEY
 //      and the default — keep it in sync with the constants here.
 //   2. This module reads/writes that device choice (localStorage) and reflects it onto
-//      the document; <ThemeSelect> and useTheme() ride it at runtime.
+//      the document; <ThemeSelect>, <ThemeCard> and useTheme() ride it at runtime.
 //   3. When signed in, the account's saved preference overrides the device choice —
-//      AuthProvider applies it on load and the picker persists changes back (see below).
+//      AuthProvider applies it on load and the picker or the settings card persists
+//      changes back (see below).
 
 import { useSyncExternalStore } from "react";
 import { client } from "./rpc";

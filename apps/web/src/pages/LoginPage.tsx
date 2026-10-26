@@ -52,36 +52,37 @@ const LOOKS_LIKE_HANDLE = /^@?[a-z0-9.-]+\.[a-z0-9-]+$/i;
  * So: **do not add a signup form here.** If this page needs a way onward for someone
  * without an account, it is a link to `/signup`.
  *
- * 🚨 **Sign-in is the emailed code, or the account's own identity brought back through
- * OAuth — nothing else (Parker, 2026-09-13; handle routing Parker, 2026-10-09).** No
- * account holds a password, so there is no password field on this page and no route it
- * could post to. The one form asks for an identifier and routes on what it is:
- * - An **email address** posts to **`/auth/signin/start`, never `/auth/signup/*`**, keyed
- *   on the address. The difference is the whole point: the signup pair *creates an
- *   account* for an address it doesn't know, which would make a mistyped address at the
- *   login page mint an account that never saw the terms. The signin pair refuses.
- * - An **Anthers handle** — one ending in the suffix Anthers' own node reports, like
- *   `janedoe.anthers.social` — posts the same start route keyed on the handle, and the
- *   route resolves it to the mailbox the holder gave at signup: the code lands in their
- *   inbox with every throttle the address path already has. The resolution is
- *   server-side, and the browser never learns the address — it spends the code keyed on
- *   the handle, and `/signin/verify` re-resolves the same way.
- * - Any **other handle** — a Bluesky handle most of all — takes the OAuth door.
+ * 🚨 **A handle signs in at its own identity server; the emailed code is the fallback for an
+ * account that has not set its password yet (Parker, 2026-09-13; routing revised 2026-10-26).**
+ * There is no password field on this page and no route it could post to: the password is typed
+ * at the authorization server of the identity it belongs to, never at Anthers. The one form
+ * asks for an identifier and routes on what it is:
+ * - An **email address** posts to **`/auth/signin/start`, never `/auth/signup/*`**, keyed on the
+ *   address. The difference is the whole point: the signup pair *creates an account* for an
+ *   address it doesn't know, which would make a mistyped address at the login page mint an
+ *   account that never saw the terms. The signin pair refuses.
+ * - **Any handle**, an Anthers one included, takes the OAuth door. For an identity Anthers hosts
+ *   that means `anthers.social`'s authorization server, where the person uses the password they
+ *   chose at signup; for a handle elsewhere it is that server's own door.
+ * - An **Anthers handle also offers an emailed code**, under the button, as the way in for an
+ *   account created before its holder had a password, or one who has not set it yet. That route
+ *   resolves the handle to the mailbox the holder gave at signup and mails the same six-character
+ *   code the address path uses. The resolution is server-side, and the browser never learns the
+ *   address; it spends the code keyed on the handle, and `/signin/verify` re-resolves the same
+ *   way.
  *
- * The old objection to resolving handles to mailboxes stands for every handle Anthers
- * did not issue: a public handle is never turned into an address by Anthers' machinery,
- * because guessing one to trigger mail at its holder is a door this page should not make
- * quiet. What the hosted case deliberately accepts is that handles are public — a typist
- * can trigger one throttle-limited email to a hosted account without knowing its
- * mailbox — and the per-IP send limit plus the per-address resend throttle are what
- * bound that. The start route answers byte-identically either way, so there is nothing
- * to enumerate in the response.
+ * The old objection to resolving handles to mailboxes still shapes the fallback: a public handle
+ * is never turned into an address by Anthers' machinery, because guessing one to trigger mail at
+ * its holder is a door this page should not make quiet. What the hosted case deliberately accepts
+ * is that handles are public, a typist can trigger one throttle-limited email to a hosted account
+ * without knowing its mailbox, and the per-IP send limit plus the per-address resend throttle are
+ * what bound that. The start route answers byte-identically either way, so there is nothing to
+ * enumerate in the response.
  *
- * 🚨 **Bluesky OAuth is a way IN and not a way to sign up** (2026-08-22). It signs in an
- * account whose identity is a Bluesky one, resumes an unfinished signup started with that
- * identity, and answers `signup_disabled` for a handle no account holds rather than
- * minting anything. That refusal is the whole reason the affordance can live on this page
- * at all: the only people it works for are people who signed up with Bluesky.
+ * 🚨 **OAuth is a way IN and not a way to sign up** (2026-08-22). It signs in any account whose
+ * identity resolves, resumes an unfinished signup started with that identity, and answers
+ * `signup_disabled` for a handle no account holds rather than minting anything. That refusal is
+ * the whole reason the affordance can live on this page at all.
  *
  * ⚠️ **One field decides all three routes, so there is no second button** (2026-10-09). The
  * separate "Log in with Bluesky" button and its modal are gone — a person who thinks of this
@@ -228,12 +229,12 @@ export default function LoginPage() {
 	} as const;
 
 	const SIGNIN_HINT: Record<typeof signinMode, string> = {
-		idle: "An email or Anthers handle gets a sign-in code by mail; a Bluesky handle signs in through Bluesky.",
+		idle: "A handle signs in at its own identity server; an email address gets a code.",
 		email: "A six-character sign-in code goes to this address.",
-		handle:
-			"An Anthers handle gets a sign-in code by mail; a Bluesky handle signs in through Bluesky.",
-		anthers: "A sign-in code goes to this account's email address.",
-		bluesky: "Bluesky confirms it's you, then brings you back.",
+		handle: "A handle signs in through its own identity server.",
+		anthers:
+			"Your identity server asks for the password you chose. No password yet? Use an emailed code.",
+		bluesky: "Your identity server confirms it's you, then brings you back.",
 	};
 
 	/** Where a code was just sent and how the browser will spend it, or null when none is in flight. */
@@ -263,20 +264,18 @@ export default function LoginPage() {
 	}, []);
 
 	/**
-	 * Route the typed identifier — one field, three ways in.
+	 * Route the typed identifier — an address to the emailed code, a handle to its own server.
 	 *
-	 * An address gets the emailed code keyed on the address; a handle ending in the
-	 * hosted suffix gets the same emailed code, keyed on the handle for the route to
-	 * resolve; any other handle is handed to Bluesky OAuth, which never resolves in any
-	 * useful sense since it sets `window.location` and the page is already leaving when
-	 * it succeeds. Anything shaped like neither is asked for here, in the page's own
-	 * words rather than the browser's — the same reason the input is `type="text"`.
+	 * An address gets the code keyed on the address, because an address is what an account
+	 * recovers by. Any handle goes to OAuth: an Anthers handle to `anthers.social`, a Bluesky
+	 * handle to `bsky.social`, and the person types their password at whichever server holds the
+	 * identity rather than here. The OAuth call sets `window.location` and the page is already
+	 * leaving when it succeeds; a refusal is the page's own words in the field below.
 	 *
-	 * ⚠️ **The hosted-suffix check runs before the shape check**, because an Anthers
-	 * handle is domain-shaped too and would otherwise take the Bluesky door. The suffix
-	 * may be unknown (config not loaded) or empty (the node is down), and then every
-	 * handle falls through to OAuth — which is where all handles went before this page
-	 * routed on the suffix, and a wrong guess there is refused in the flow's own words.
+	 * ⚠️ **The hosted check no longer changes the route.** It decides which hint and drawing the
+	 * field shows, and whether the emailed-code fallback is offered beneath the button, but an
+	 * Anthers handle and a Bluesky handle both leave for their own authorization server. That is
+	 * the canonical shape: the app is a client of the identity, not a special door into it.
 	 */
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -299,33 +298,19 @@ export default function LoginPage() {
 		}
 
 		// A handle, however it was written — the leading `@` is how people write one, not
-		// part of it.
-		const handle = typed.replace(/^@/, "");
-
-		if (isHostedHandle(handle.toLocaleLowerCase())) {
-			setLoading(true);
-			try {
-				await sendCode({ handle });
-				setSentCode({ shown: `@${handle}`, verify: { handle } });
-			} catch (err) {
-				setErrors({
-					general: err instanceof Error ? err.message : "Couldn't send the code. Please try again.",
-				});
-			} finally {
-				setLoading(false);
-			}
-			return;
-		}
+		// part of it, and handles are case-insensitive, so it goes on lowercase.
+		const handle = typed.replace(/^@/, "").toLocaleLowerCase();
 
 		if (LOOKS_LIKE_HANDLE.test(typed)) {
-			// The OAuth flow. Its refusals (`signInWithBluesky` throws its message into
-			// the field below) are the page's own words for a handle that leads nowhere.
 			setLoading(true);
 			try {
 				await signInWithBluesky(handle, redirectTo);
 			} catch (err) {
 				setErrors({
-					general: err instanceof Error ? err.message : "Couldn't reach Bluesky. Please try again.",
+					general:
+						err instanceof Error
+							? err.message
+							: "Couldn't reach your identity server. Please try again.",
 				});
 				setLoading(false);
 			}
@@ -336,6 +321,32 @@ export default function LoginPage() {
 			general: "Sign in with the email address or the handle on your account.",
 		});
 	};
+
+	/**
+	 * The emailed code, for a hosted account whose holder has no password yet.
+	 *
+	 * 🚨 **This is the transition door, not a second way to sign in.** Every hosted account made
+	 * before the password became the person's was handed one nobody could type, so until its
+	 * holder sets their own through the identity card, the mailbox is the only way in. The route
+	 * resolves the handle to the account's address server-side and keeps the browser ignorant of
+	 * it, exactly as it did when this was the only door.
+	 */
+	const sendHostedCode = useCallback(async () => {
+		const handle = identifier.trim().replace(/^@/, "").toLocaleLowerCase();
+		if (!handle) return;
+		setLoading(true);
+		setErrors({});
+		try {
+			await sendCode({ handle });
+			setSentCode({ shown: `@${handle}`, verify: { handle } });
+		} catch (err) {
+			setErrors({
+				general: err instanceof Error ? err.message : "Couldn't send the code. Please try again.",
+			});
+		} finally {
+			setLoading(false);
+		}
+	}, [identifier, sendCode]);
 
 	/**
 	 * Spend the code.
@@ -561,6 +572,20 @@ export default function LoginPage() {
 									<button type="submit" className="btn btn-primary w-full mt-5" disabled={loading}>
 										{loading ? <span className="loading loading-spinner loading-sm" /> : "Continue"}
 									</button>
+									{/* The one fallback, and it only exists while hosted accounts are still
+									    being claimed. It is a link rather than a second button because the
+									    server's password page is the door, and this is the way in for an
+									    account that has not set one. */}
+									{signinMode === "anthers" && (
+										<button
+											type="button"
+											className="link self-center text-xs text-base-content/55"
+											disabled={loading}
+											onClick={() => void sendHostedCode()}
+										>
+											Use an emailed code instead
+										</button>
+									)}
 								</form>
 							</>
 						)}

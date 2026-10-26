@@ -120,9 +120,12 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	await expect(header.getByPlaceholder("Search...")).toHaveCount(0);
 
 	// A profile belongs to neither mode, so arriving on one from the Studio stays in the Studio.
-	await header.getByRole("button", { name: "Your account" }).click();
-	await header.getByRole("link", { name: "Profile" }).click();
+	// The profile row leads the Studio nav, and it is the creator's door to that page now that
+	// the header carries no account menu (2026-10-26).
+	await studioNav(page).getByRole("link").first().click();
 	await expect(page).toHaveURL(/\/@[^/]+$/);
+	// Keep the address for the user-mode leg below, where no profile row exists to click.
+	const profileHref = page.url();
 	// ⚠️ **Wait for the Dashboard to be gone before asking about the sidebar.** The URL changes
 	// before React renders the new page, so asking straight away read the Studio's sidebar off
 	// the page being left, and passed with the mode broken. Its heading leaving is the proof the
@@ -143,9 +146,9 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	await expect(studioSidebar).toHaveCount(0);
 	await expect(header.getByPlaceholder("Search...")).toBeVisible();
 
-	await header.getByRole("button", { name: "Your account" }).click();
-	await header.getByRole("link", { name: "Profile" }).click();
-	await expect(page).toHaveURL(/\/@[^/]+$/);
+	// A full load rather than a click, because the user sidebar carries no profile row: the
+	// stored mode survives one, so this reads the stickiness rather than a transition.
+	await page.goto(profileHref);
 	await expect(userSidebar).toBeVisible();
 	await expect(studioSidebar).toHaveCount(0);
 
@@ -154,6 +157,31 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	await modeSwitch.getByRole("link", { name: "Creator", exact: true }).click();
 	await expect(page).toHaveURL(/\/@[^/?]+\?tab=dashboard$/);
 	await expect(studioSidebar).toBeVisible();
+});
+
+/**
+ * From either settings page, the switch stays on Settings.
+ *
+ * ⭐ **The switch names a half of the app, not a destination** (Parker, 2026-10-26): somebody
+ * managing their account who flips to the other half wants the same job there, so the two
+ * settings pages point at each other. Everywhere else each side goes to its mode's home.
+ * Before this, flipping to User from Creator Settings landed on Discovery and flipping to
+ * Creator from User Settings landed on the Studio root — in both cases, out of the settings
+ * the person was working in.
+ */
+test("the mode switch lands on the other settings page", async ({ page, context }) => {
+	await signInAsCreator(context);
+	const modeSwitch = page.getByRole("navigation", { name: "User or Creator" });
+
+	await page.goto("/studio/settings");
+	await expect(page.getByRole("heading", { name: "Creator Settings" })).toBeVisible();
+	await modeSwitch.getByRole("link", { name: "User", exact: true }).click();
+	await expect(page).toHaveURL(/\/settings$/);
+	await expect(page.getByRole("tab", { name: "Account" })).toHaveAttribute("aria-selected", "true");
+
+	await modeSwitch.getByRole("link", { name: "Creator", exact: true }).click();
+	await expect(page).toHaveURL(/\/studio\/settings$/);
+	await expect(page.getByRole("heading", { name: "Creator Settings" })).toBeVisible();
 });
 
 test("an account without creator mode has no Studio to switch to", async ({ page }) => {

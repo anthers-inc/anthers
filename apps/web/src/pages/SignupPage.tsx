@@ -1873,8 +1873,9 @@ function SignupForm({
 
 			<div className="p-6">
 				{/* The ONE field this page collects: the identity, which is also the account's
-				    handle and its address here — there is no separate username to ask for at
-				    onboarding, and no password anywhere to move. The terms wait for /welcome. */}
+				    handle. Its password is chosen at `/finish` with that identity, because it is
+				    the credential the account is created with, not a form field here. The terms
+				    wait for /welcome. */}
 				{/* ⚠️ **This card no longer has a "finishing a Bluesky signup" state**, because
 				    nobody comes back to this page to finish one. Coming back from bsky.social to
 				    a marketing page with a prefilled email box is exactly what Parker's

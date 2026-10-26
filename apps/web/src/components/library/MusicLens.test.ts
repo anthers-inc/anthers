@@ -14,7 +14,7 @@ function release(id: number, title: string, musicCount: number, audioCount = 0):
 		id,
 		slug: `project-${id}`,
 		title,
-		coverImage: `cover-${id}.jpg`,
+		thumbnail: `cover-${id}.jpg`,
 		creatorId: 10,
 		creatorHandle: "maker",
 		creatorDisplayName: "The Maker",

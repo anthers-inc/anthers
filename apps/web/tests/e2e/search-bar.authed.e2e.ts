@@ -26,7 +26,7 @@ const listbox = (page: Page) => header(page).getByRole("listbox", { name: "Searc
 
 test("Ctrl+K opens global search and finds a creator", async ({ page }) => {
 	await page.goto("/discovery");
-	await expect(header(page).getByRole("button", { name: "Your account" })).toBeVisible();
+	await expect(page.getByRole("navigation", { name: "Anthers", exact: true })).toBeVisible();
 
 	await page.keyboard.press("Control+k");
 	await expect(input(page), "Ctrl+K did not focus the search bar").toBeFocused();

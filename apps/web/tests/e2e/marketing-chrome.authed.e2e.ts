@@ -44,7 +44,7 @@ const header = (page: Page) => page.getByRole("banner");
 test("this suite's session is signed in", async ({ page }) => {
 	await page.goto("/discovery");
 	await expect(
-		header(page).getByRole("button", { name: "Your account" }),
+		header(page).getByRole("combobox"),
 		"the authed project's session is not signed in, so every other test in this file would pass vacuously",
 	).toBeVisible();
 });
@@ -53,8 +53,8 @@ for (const path of PUBLIC_ROUTES) {
 	test(`${path} wears the marketing chrome while signed in`, async ({ page }) => {
 		await page.goto(path);
 
-		// The marketing header's primary door. The signed-in header carries the account menu
-		// in that corner instead, so this one link tells the two shells apart.
+		// The marketing header's primary door. The signed-in header carries the search box
+		// in that space instead, so this one link tells the two shells apart.
 		await expect(header(page).getByRole("link", { name: "Sign Up Free" })).toBeVisible();
 
 		// The signed-in sidebar, named for what it navigates. `getByRole` sees only the

@@ -27,6 +27,7 @@ import {
 	PLAYER_SHORTCUT_ACTIONS,
 	resolveKeyboardShortcuts,
 } from "@anthers/shared/keybindings";
+import { MIN_PASSWORD_LENGTH, passwordProblem } from "@anthers/shared/passwords";
 import DiscordCard from "@anthers/web-shared/account/DiscordCard";
 import SignedInAccountCard from "@anthers/web-shared/account/SignedInAccountCard";
 import { useAuth } from "@anthers/web-shared/auth";
@@ -42,6 +43,7 @@ import { usePublishingState } from "@anthers/web-shared/publishing";
 import { Link, useSearchParams } from "@anthers/web-shared/router";
 import { apiFetch, client } from "@anthers/web-shared/rpc";
 import type { NotificationDeliveryMode } from "@anthers/web-shared/types";
+import ThemeCard from "@anthers/web-shared/ui/ThemeCard";
 import { CardElement, Elements, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -931,11 +933,12 @@ function IdentitySection() {
  * PDS's account page made possible: a person manages their identity where it lives instead of in
  * whichever app they happen to use, or in the Bluesky app that used to be the only alternative.
  *
- * 🚨 **A hosted identity gets no link, and the copy says why.** The password on an account
- * Anthers issues is generated for the hub and never given out (`hosted-accounts.ts`), so the page
- * has no way in for the person holding the identity, and changing that password through it would
- * leave the hub's sealed credential stale and stop their records publishing. Anthers' own
- * controls are on this tab.
+ * 🚨 **A hosted identity gets the password door here rather than a link to the server's page.**
+ * The credential is the person's, but every hosted account created before that changed was handed
+ * a password nobody could type — so the person needs a way to set one before they can use their
+ * identity anywhere else. The node's own emailed reset is that way, and Anthers drives it from this
+ * card so the person does not have to know the server has a page at all. Anthers keeps a session,
+ * never a copy of the password.
  *
  * ⚠️ **The link appears only when the server answers that the page exists.** `pds-health.ts`
  * asks `/account` and remembers the answer per origin, because a link is a claim that there is
@@ -961,11 +964,12 @@ function IdentityServerCard({ hosted }: { hosted: boolean }) {
 				<h3 className="card-title text-lg">Your Identity Server</h3>
 
 				{hosted ? (
-					<p className="text-sm text-base-content/60">
-						Your identity lives on {host}, the server Anthers runs. The password on your account was
-						generated for Anthers and never given out, so there is no password for you to change,
-						and a change would stop the records Anthers writes for you from reaching the network.
-					</p>
+					<>
+						<p className="text-sm text-base-content/60">
+							Your identity lives on {host}, the server Anthers runs.
+						</p>
+						<HostedPasswordForm handle={user?.handle ?? ""} />
+					</>
 				) : (
 					<>
 						<p className="text-sm text-base-content/60">
@@ -982,6 +986,184 @@ function IdentityServerCard({ hosted }: { hosted: boolean }) {
 								</a>
 							</>
 						)}
+					</>
+				)}
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Setting, or changing, the password on an identity Anthers hosts.
+ *
+ * 🚨 **The node's reset is the only honest way to do this**, because Anthers does not have the
+ * credential to change: `updateAccountPassword` needs a session Anthers may not have and the
+ * server has no authenticated "set a new one" for a third party. The emailed token is proof that
+ * the person controls the address on the account, which is exactly the proof a reset should need.
+ *
+ * ⭐ **The password never reaches Anthers' database.** It arrives in one request, is validated by
+ * the shared rule, and is used for two calls to the node: the reset, and the session that lets
+ * Anthers keep writing the person's records. What the row keeps is that session.
+ */
+function HostedPasswordForm({ handle }: { handle: string }) {
+	const [phase, setPhase] = useState<"idle" | "sent" | "done">("idle");
+	const [token, setToken] = useState("");
+	const [password, setPassword] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [notice, setNotice] = useState<string | null>(null);
+
+	const askForCode = useCallback(async () => {
+		setBusy(true);
+		setError(null);
+		setNotice(null);
+		try {
+			const res = await client.api.atproto.password.reset.request.$post();
+			if (!res.ok) {
+				const body = (await res.json().catch(() => ({}))) as { error?: string };
+				setError(body.error ?? "Couldn't send a code. Please try again.");
+				return;
+			}
+			setPhase("sent");
+			setNotice("A code is on its way to the address on your identity.");
+		} catch {
+			setError("Couldn't reach Anthers. Please try again.");
+		} finally {
+			setBusy(false);
+		}
+	}, []);
+
+	const save = useCallback(async () => {
+		const problem = passwordProblem(password, { handle });
+		if (problem) {
+			setError(problem);
+			return;
+		}
+		if (!token.trim()) {
+			setError("Enter the code from the email.");
+			return;
+		}
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await client.api.atproto.password.reset.complete.$post({
+				json: { token: token.trim(), password },
+			});
+			if (!res.ok) {
+				const body = (await res.json().catch(() => ({}))) as { error?: string };
+				setError(body.error ?? "That code didn't work. Ask for a new one.");
+				return;
+			}
+			setToken("");
+			setPassword("");
+			setPhase("done");
+			setNotice(null);
+		} catch {
+			setError("Couldn't reach Anthers. Please try again.");
+		} finally {
+			setBusy(false);
+		}
+	}, [handle, password, token]);
+
+	if (phase === "done") {
+		return (
+			<div className="mt-3">
+				<p className="text-sm text-base-content/60">
+					Your password is set. Sign in to Bluesky with{" "}
+					<strong className="break-all">@{handle}</strong> and this password — Anthers keeps a
+					session for your records, not a copy of the password.
+				</p>
+				<button
+					type="button"
+					className="btn btn-sm mt-3 w-fit"
+					onClick={() => {
+						setPhase("idle");
+						setNotice(null);
+					}}
+				>
+					Change it again
+				</button>
+			</div>
+		);
+	}
+
+	return (
+		<div className="mt-3">
+			<p className="text-sm text-base-content/60">
+				{phase === "idle"
+					? `Set or change the password for @${handle}. It works in Bluesky and anywhere else this identity signs in — Anthers keeps a session, not a copy. We'll email a code to the address on the identity first.`
+					: "Enter the code from the email, and choose a password."}
+			</p>
+
+			{phase === "sent" && (
+				<div className="mt-3 space-y-3">
+					<label className="label px-0 pb-1" htmlFor="identity-reset-token">
+						<span className="text-sm font-semibold">The code from the email</span>
+					</label>
+					<input
+						id="identity-reset-token"
+						type="text"
+						autoComplete="one-time-code"
+						spellCheck={false}
+						className="input input-bordered w-full"
+						value={token}
+						onChange={(e) => {
+							setToken(e.target.value);
+							setError(null);
+						}}
+					/>
+					<label className="label px-0 pb-1" htmlFor="identity-reset-password">
+						<span className="text-sm font-semibold">New password</span>
+					</label>
+					<input
+						id="identity-reset-password"
+						type="password"
+						autoComplete="new-password"
+						minLength={MIN_PASSWORD_LENGTH}
+						className="input input-bordered w-full"
+						value={password}
+						onChange={(e) => {
+							setPassword(e.target.value);
+							setError(null);
+						}}
+					/>
+					<p className="text-xs leading-tight text-base-content/50">
+						At least {MIN_PASSWORD_LENGTH} characters.
+					</p>
+				</div>
+			)}
+
+			{error && <p className="mt-3 text-sm text-error">{error}</p>}
+			{notice && <p className="mt-3 text-sm text-base-content/60">{notice}</p>}
+
+			<div className="mt-3 flex items-center gap-2">
+				{phase === "idle" ? (
+					<button
+						type="button"
+						className={`btn btn-sm w-fit ${busy ? "btn-disabled" : ""}`}
+						onClick={() => void askForCode()}
+						disabled={busy}
+					>
+						{busy ? "Sending…" : "Email me a code"}
+					</button>
+				) : (
+					<>
+						<button
+							type="button"
+							className={`btn btn-primary btn-sm w-fit ${busy ? "btn-disabled" : ""}`}
+							onClick={() => void save()}
+							disabled={busy}
+						>
+							{busy ? "Setting…" : "Set my password"}
+						</button>
+						<button
+							type="button"
+							className="btn btn-ghost btn-sm w-fit"
+							onClick={() => void askForCode()}
+							disabled={busy}
+						>
+							Send a new code
+						</button>
 					</>
 				)}
 			</div>
@@ -2837,11 +3019,17 @@ export default function SettingsPage() {
 			{visitedTabs.has("account") && (
 				<div hidden={activeTab !== "account"}>
 					{/* Who this browser is signed in as, and the button that ends it. The header
-					    menu no longer carries Log Out; both settings pages do. */}
+					    no longer carries an account menu; the sidebar is the door to Settings and
+					    both settings pages carry the end of the session. */}
 					<SignedInAccountCard className="mb-6" />
 
-					{/* The Discord connection, directly under the card that says who this is —
-					    the two answer "who am I here" and "where else am I known". */}
+					{/* The account's color theme — moved off the signed-in header on 2026-10-26,
+					    because a preference that belongs to the account belongs with the rest of
+					    them rather than in the corner of every page. */}
+					<ThemeCard className="mb-6" />
+
+					{/* The Discord connection, under the card that says who this is — the two
+					    answer "who am I here" and "where else am I known". */}
 					<DiscordCard surface="account" className="mb-6" />
 
 					{/* Creator mode toggle */}
