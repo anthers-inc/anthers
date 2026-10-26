@@ -106,6 +106,7 @@ import {
 	reverseCreatorShare,
 	settleRefundedPurchase,
 } from "../services/refunds.js";
+import { createShipmentForPurchase } from "../services/shipments.js";
 import { addTopUpToInvoice } from "../services/storage-topup.js";
 import { applyReductionsToInvoice, recordReductions } from "../services/support-reductions.js";
 
@@ -894,6 +895,15 @@ async function completeSessionPurchases(pi: Stripe.PaymentIntent): Promise<void>
 			.map(({ row }) => row.badgeId)
 			.filter((id): id is number => id != null);
 		await clearPurchasedBasketItems(buyerUserId, boughtWorkIds, boughtBadgeIds);
+	}
+
+	// ── A physical purchase opens a shipment ─────────────────────────────────
+	// The delivery half of a paid good: the clock that says whether it should have left
+	// the creator's hands yet, and the state every later step reads. Idempotent on the
+	// purchase, so a redelivered event is a no-op — one purchase owes one shipment.
+	for (const { row } of stamped) {
+		if (row.type !== "physical") continue;
+		await createShipmentForPurchase({ purchaseId: row.id });
 	}
 
 	// ── The Badge half — the support side of a completed first transaction ────
