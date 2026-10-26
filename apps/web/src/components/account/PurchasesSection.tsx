@@ -153,6 +153,14 @@ function PurchaseRow({ purchase: p }: { purchase: Purchase }) {
 						<div className="text-xs text-base-content/40">
 							{new Date(p.createdAt).toLocaleDateString()}
 						</div>
+						{/* A physical purchase has something still happening: a parcel. The receipt
+						    is the record, and the order is where the buyer follows it, confirms it
+						    arrived, or reports a problem. */}
+						{p.type === "physical" && (
+							<Link to={`/orders/${p.id}`} className="link text-xs">
+								Track this order
+							</Link>
+						)}
 					</div>
 				</div>
 			</div>
