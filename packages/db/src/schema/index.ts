@@ -8,6 +8,7 @@ export * from "./financial-plan.js";
 export * from "./moderation.js";
 export * from "./operations.js";
 export * from "./payments.js";
+export * from "./physical.js";
 export * from "./relations.js";
 export * from "./shipments.js";
 export * from "./spaces.js";
