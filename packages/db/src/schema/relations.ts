@@ -126,7 +126,7 @@ export const postsRelations = relations(posts, ({ one, many }) => ({
 // builds and soundtrack (Works) alongside its devlogs and patch notes (Posts).
 export const projectsRelations = relations(projects, ({ one, many }) => ({
 	creator: one(users, { fields: [projects.creatorId], references: [users.id] }),
-	coverWork: one(works, { fields: [projects.coverWorkId], references: [works.id] }),
+	thumbnailWork: one(works, { fields: [projects.thumbnailWorkId], references: [works.id] }),
 	projectPosts: many(projectPosts),
 	projectItems: many(projectItems),
 }));

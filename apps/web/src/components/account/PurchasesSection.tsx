@@ -110,11 +110,11 @@ function PurchaseRow({ purchase: p }: { purchase: Purchase }) {
 			<div className="card-body p-4">
 				<div className="flex items-start justify-between gap-3">
 					<div className="flex items-center gap-3 min-w-0">
-						{/* Cover image */}
-						{p.work?.coverImage && to ? (
+						{/* The Work's thumbnail */}
+						{p.work?.thumbnail && to ? (
 							<Link to={to}>
 								<img
-									src={p.work.coverImage}
+									src={p.work.thumbnail}
 									alt=""
 									className="w-12 h-12 rounded object-cover flex-shrink-0"
 								/>

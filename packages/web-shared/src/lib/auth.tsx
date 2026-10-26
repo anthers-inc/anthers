@@ -40,7 +40,13 @@ export interface User {
 	/** Whether this account has linked its Discord identity. */
 	isDiscordLinked: boolean;
 	avatar: string | null;
-	headerImage: string | null;
+	bannerImage: string | null;
+	/** The full uploads the images were framed from; the owner's own reposition starts here. */
+	avatarSource?: string | null;
+	bannerImageSource?: string | null;
+	/** The windows they were last framed at, so a reposition reopens where it was left. */
+	avatarCrop?: import("@anthers/shared/image-frame").ImageCrop | null;
+	bannerImageCrop?: import("@anthers/shared/image-frame").ImageCrop | null;
 	websiteUrl: string | null;
 	location: string | null;
 	emailVerified: boolean | null;

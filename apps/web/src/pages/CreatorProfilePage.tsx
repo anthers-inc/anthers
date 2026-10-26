@@ -2,10 +2,16 @@
 
 import { amountLabel } from "@anthers/shared/constants";
 import { isListened } from "@anthers/shared/content";
+import type { ImageCrop } from "@anthers/shared/image-frame";
 import { useAuth } from "@anthers/web-shared/auth";
 import DashboardPage from "@anthers/web-shared/DashboardPage";
 import { usePageTitle } from "@anthers/web-shared/page-title";
 import BadgeMaker from "@anthers/web-shared/post/BadgeMaker";
+import {
+	frameImageFile,
+	keyToPreview,
+	uploadImageFile,
+} from "@anthers/web-shared/post/mediaUpload";
 import { displayHandle, handleFromParam } from "@anthers/web-shared/profile";
 import {
 	INTERACTION_PERMISSION_HINT,
@@ -22,6 +28,8 @@ import type {
 	Work,
 } from "@anthers/web-shared/types";
 import EmptyState from "@anthers/web-shared/ui/EmptyState";
+import ImageEditMenu from "@anthers/web-shared/ui/ImageEditMenu";
+import ImageFrameModal from "@anthers/web-shared/ui/ImageFrameModal";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import Modal from "@anthers/web-shared/ui/Modal";
 import {
@@ -30,9 +38,8 @@ import {
 	LinkIcon,
 	MapPinIcon,
 	NoSymbolIcon,
-	PencilSquareIcon,
 } from "@heroicons/react/24/outline";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import FeedTile from "../components/cards/FeedTile";
 import BadgesTab from "../components/creator/BadgesTab";
@@ -182,7 +189,19 @@ export default function CreatorProfilePage() {
 	 */
 	const saveProfileField = async (
 		patch: Partial<
-			Pick<PublicUser, "displayName" | "bio" | "websiteUrl" | "location" | "avatar" | "headerImage">
+			Pick<
+				PublicUser,
+				| "displayName"
+				| "bio"
+				| "websiteUrl"
+				| "location"
+				| "avatar"
+				| "bannerImage"
+				| "avatarSource"
+				| "bannerImageSource"
+				| "avatarCrop"
+				| "bannerImageCrop"
+			>
 		>,
 	) => {
 		const res = await apiFetch("/api/accounts/me", {
@@ -204,31 +223,70 @@ export default function CreatorProfilePage() {
 	};
 
 	/**
-	 * An image is the one field with no draft: choosing a file uploads it and saves the
-	 * URL in the same act, the way a Work's thumbnail and a Project's cover behave.
+	 * An image is the one field with no draft: the framing dialog's save uploads and stores
+	 * the result in one act, the way a Work's thumbnail and a Project's image behave.
 	 */
-	const [imageBusy, setImageBusy] = useState<"avatar" | "header" | null>(null);
+	const [imageBusy, setImageBusy] = useState<"avatar" | "banner" | null>(null);
 	const [imageError, setImageError] = useState<string | null>(null);
+	const [framing, setFraming] = useState<{
+		kind: "avatar" | "banner";
+		/** What the stage shows: a local object URL for a new file, or the stored source. */
+		preview: string;
+		/** The file to upload as the source, or null when repositioning a stored image. */
+		file: File | null;
+		/** The stored source a reposition edits; null while a new file is still local. */
+		source: string | null;
+	} | null>(null);
+	const avatarInput = useRef<HTMLInputElement>(null);
+	const bannerInput = useRef<HTMLInputElement>(null);
 
-	const changeImage = async (kind: "avatar" | "header", file: File) => {
+	/** The full upload behind the image currently stored, falling back for rows written before it. */
+	const storedSource = (kind: "avatar" | "banner"): string => {
+		const current = kind === "avatar" ? creator?.avatar : creator?.bannerImage;
+		const source = kind === "avatar" ? currentUser?.avatarSource : currentUser?.bannerImageSource;
+		return keyToPreview(source || current || "");
+	};
+
+	const closeFraming = () => {
+		if (framing?.file) URL.revokeObjectURL(framing.preview);
+		setFraming(null);
+	};
+
+	const startUpload = (kind: "avatar" | "banner") => {
+		setImageError(null);
+		(kind === "avatar" ? avatarInput : bannerInput).current?.click();
+	};
+
+	const pickedFile = (kind: "avatar" | "banner", file: File) => {
+		setImageError(null);
+		setFraming({ kind, preview: URL.createObjectURL(file), file, source: null });
+	};
+
+	const startReposition = (kind: "avatar" | "banner") => {
+		const source = storedSource(kind);
+		if (!source) return;
+		setImageError(null);
+		setFraming({ kind, preview: source, file: null, source });
+	};
+
+	const saveFramed = async (crop: ImageCrop) => {
+		if (!framing) return;
+		const { kind, file } = framing;
 		setImageBusy(kind);
 		setImageError(null);
 		try {
-			const form = new FormData();
-			form.append("file", file);
-			form.append("mediaType", kind);
-			const upload = await apiFetch("/api/content/media-upload/direct", {
-				method: "POST",
-				body: form,
-			});
-			if (!upload.ok) {
-				const body = (await upload.json().catch(() => null)) as { error?: string } | null;
-				throw new Error(body?.error ?? "That image didn't upload. Try it again.");
-			}
-			const { url } = (await upload.json()) as { url: string };
-			await saveProfileField(kind === "avatar" ? { avatar: url } : { headerImage: url });
+			// A new file becomes the source first; a reposition already has the stored one.
+			const source = file ? (await uploadImageFile(file, kind)).url : framing.source;
+			if (!source) throw new Error("That image isn't available any more. Upload it again.");
+			const framed = await frameImageFile(source, kind, crop);
+			await saveProfileField(
+				kind === "avatar"
+					? { avatar: framed.url, avatarSource: source, avatarCrop: crop }
+					: { bannerImage: framed.url, bannerImageSource: source, bannerImageCrop: crop },
+			);
+			closeFraming();
 		} catch (err) {
-			setImageError(err instanceof Error ? err.message : "That image didn't upload. Try it again.");
+			setImageError(err instanceof Error ? err.message : "That image didn't save. Try it again.");
 		} finally {
 			setImageBusy(null);
 		}
@@ -465,40 +523,42 @@ export default function CreatorProfilePage() {
 	return (
 		// `relative z-30` lifts the whole page above the logged-out shell's decorative
 		// layer (the side vines and their bee swarm sit at z-20 — see LoggedOutLayout) so
-		// the bees read as a background, hidden behind the header image and the cards
+		// the bees read as a background, hidden behind the banner and the cards
 		// rather than painted across them. The logged-in layout has no decorative layer.
 		<div className="relative z-30">
-			{/* Header banner. 🚨 Inside the container's width, at a 3:1 ratio — that is
+			{/* Banner. 🚨 Inside the container's width, at a 3:1 ratio — that is
 			    the banner-size convention (Bluesky: 3:1, recommended 1500×500; YouTube
 			    similar), and full-bleed read as a second, wider site than the one the
 			    rest of this page belongs to. The pencil is the only edit affordance:
 			    a creator and a visitor meet the same banner. */}
 			<div className="container mx-auto px-4">
 				<div className="relative w-full aspect-[3/1] bg-base-300">
-					{creator.headerImage && (
-						<img src={creator.headerImage} alt="Header" className="w-full h-full object-cover" />
+					{creator.bannerImage && (
+						<img src={creator.bannerImage} alt="Banner" className="w-full h-full object-cover" />
 					)}
 					{isAuthenticated && isOwnProfile && (
-						<label
-							className={`btn btn-sm absolute right-2 top-2 bg-base-100/80 backdrop-blur ${
-								imageBusy === "header" ? "btn-disabled" : ""
-							}`}
-							title="Change header image"
-						>
-							<PencilSquareIcon className="w-4 h-4" />
-							<span className="sr-only">Change header image</span>
+						<>
 							<input
+								ref={bannerInput}
 								type="file"
 								accept="image/*"
 								className="hidden"
-								disabled={imageBusy !== null}
 								onChange={(e) => {
 									const file = e.target.files?.[0];
 									e.target.value = "";
-									if (file) void changeImage("header", file);
+									if (file) pickedFile("banner", file);
 								}}
 							/>
-						</label>
+							<ImageEditMenu
+								label="banner"
+								hasImage={Boolean(creator.bannerImage)}
+								busy={imageBusy !== null}
+								buttonClassName="btn btn-sm btn-circle bg-base-100/80 backdrop-blur"
+								rootClassName="absolute right-2 top-2"
+								onUpload={() => startUpload("banner")}
+								onReposition={() => startReposition("banner")}
+							/>
+						</>
 					)}
 				</div>
 			</div>
@@ -521,26 +581,28 @@ export default function CreatorProfilePage() {
 							</div>
 						)}
 						{isAuthenticated && isOwnProfile && (
-							<label
-								className={`btn btn-xs btn-circle absolute bottom-0 right-0 ${
-									imageBusy === "avatar" ? "btn-disabled" : ""
-								}`}
-								title="Change profile picture"
-							>
-								<PencilSquareIcon className="w-3.5 h-3.5" />
-								<span className="sr-only">Change profile picture</span>
+							<>
 								<input
+									ref={avatarInput}
 									type="file"
 									accept="image/*"
 									className="hidden"
-									disabled={imageBusy !== null}
 									onChange={(e) => {
 										const file = e.target.files?.[0];
 										e.target.value = "";
-										if (file) void changeImage("avatar", file);
+										if (file) pickedFile("avatar", file);
 									}}
 								/>
-							</label>
+								<ImageEditMenu
+									label="avatar"
+									hasImage={Boolean(creator.avatar)}
+									busy={imageBusy !== null}
+									buttonClassName="btn btn-xs btn-circle"
+									rootClassName="absolute bottom-0 right-0"
+									onUpload={() => startUpload("avatar")}
+									onReposition={() => startReposition("avatar")}
+								/>
+							</>
 						)}
 					</div>
 					<div className="flex-1 pt-4 sm:pt-14">
@@ -997,6 +1059,23 @@ export default function CreatorProfilePage() {
 					</Modal>,
 					document.body,
 				)}
+
+			{/* The framing dialog — where a chosen file becomes the stored image, and where an
+			    existing image can be repositioned. It starts from the full source both ways. */}
+			<ImageFrameModal
+				open={framing !== null}
+				src={framing?.preview ?? null}
+				mediaType={framing?.kind ?? "banner"}
+				busy={imageBusy !== null}
+				error={imageError}
+				initialCrop={
+					framing?.kind === "avatar"
+						? (currentUser?.avatarCrop ?? null)
+						: (currentUser?.bannerImageCrop ?? null)
+				}
+				onCancel={closeFraming}
+				onSave={(crop) => void saveFramed(crop)}
+			/>
 
 			{reporting && (
 				<ReportDialog

@@ -7,6 +7,7 @@
  * which are a *user's* records, not the creator's.
  */
 
+import type { ImageCrop } from "@anthers/shared/image-frame";
 import type { ProjectSortDirection, ProjectSortMode } from "@anthers/shared/project-sort";
 import { sql } from "drizzle-orm";
 import {
@@ -142,6 +143,16 @@ export const works = pgTable(
 		title: text("title").default(""),
 		description: text("description").default(""),
 		thumbnail: text("thumbnail").default(""), // poster/cover key or URL
+		// The full image the thumbnail was framed from, kept so a reposition can zoom back out
+		// to pixels the current frame cut away. 🚨 Owner-facing only: it is the uncropped file,
+		// and a creator may have framed something out of it. The public serializers never send it.
+		thumbnailSource: text("thumbnail_source").default(""),
+		/**
+		 * The window on `thumbnailSource` the creator last framed — what the dialog reopens at,
+		 * so a reposition adjusts the current composition instead of starting over. Null for a
+		 * row written before framing existed; the dialog opens centered.
+		 */
+		thumbnailCrop: jsonb("thumbnail_crop").$type<ImageCrop | null>(),
 
 		// ── Source media (only the fields relevant to `type` are populated) ──
 		sourceKey: text("source_key").default(""), // uploaded video/audio/image source key
@@ -573,14 +584,23 @@ export const projects = pgTable(
 		slug: text("slug").notNull().unique(),
 		title: text("title").notNull(),
 		description: text("description").default(""),
-		coverImage: text("cover_image").default(""),
+		thumbnail: text("thumbnail").default(""),
 		/**
-		 * The Project's cover chosen from one of its Works, by reference rather than by copy,
-		 * so the Project follows the Work's own cover and inherits its visibility rules on
-		 * every read. The uploaded `cover_image` stays as the alternative and as the fallback
+		 * The full image the thumbnail was framed from, kept so a reposition can zoom back out.
+		 * 🚨 Owner-facing only, as `works.thumbnail_source` is: it is the uncropped upload.
+		 */
+		thumbnailSource: text("thumbnail_source").default(""),
+		/** The window on `thumbnailSource` the creator last framed; null before framing existed. */
+		thumbnailCrop: jsonb("thumbnail_crop").$type<ImageCrop | null>(),
+		/**
+		 * The Project's thumbnail chosen from one of its Works, by reference rather than by copy,
+		 * so the Project follows the Work's own thumbnail and inherits its visibility rules on
+		 * every read. The uploaded `thumbnail` stays as the alternative and as the fallback
 		 * when the chosen Work is hidden, removed from its list, or deleted.
 		 */
-		coverWorkId: integer("cover_work_id").references(() => works.id, { onDelete: "set null" }),
+		thumbnailWorkId: integer("thumbnail_work_id").references(() => works.id, {
+			onDelete: "set null",
+		}),
 		// Custom-page layout/showcase config (built out in a later phase).
 		pageConfig: jsonb("page_config").$type<Record<string, unknown>>().default({}),
 		// How the Project's two lists read, beside the stored drag order they never
