@@ -26,6 +26,7 @@ import { managingAppRoutes } from "./routes/managing-app.js";
 import { mediaUploadSessionRoutes } from "./routes/media-upload-sessions.js";
 import { moderationRoutes } from "./routes/moderation.js";
 import { nounRoutes } from "./routes/noun.js";
+import { orderRoutes } from "./routes/orders.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { createPlayPageRoutes } from "./routes/play-page.js";
 import { searchRoutes } from "./routes/search.js";
@@ -129,6 +130,7 @@ const app = new Hono()
 	.route("/api/content/media-upload", mediaUploadSessionRoutes)
 	.route("/api/noun", nounRoutes)
 	.route("/api/payments", paymentRoutes)
+	.route("/api/orders", orderRoutes)
 	.route("/api/subscriptions", subscriptionRoutes)
 	.route("/api/integrations", integrationRoutes)
 	.route("/api/moderation", moderationRoutes)

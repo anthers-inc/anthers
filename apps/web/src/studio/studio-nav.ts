@@ -28,6 +28,7 @@ import {
 	PencilSquareIcon,
 	RectangleStackIcon,
 	Square3Stack3DIcon,
+	TruckIcon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType } from "react";
 
@@ -81,6 +82,14 @@ export const STUDIO_NAV: readonly StudioNavItem[] = [
 		label: "Payments",
 		icon: CreditCardIcon,
 		owns: [studioUrl("/payments")],
+	},
+	// Orders is the fulfillment surface, not the money one: a creator packs a parcel here
+	// and records what the carrier gave them. Payments stays the place where money moves.
+	{
+		to: studioUrl("/orders"),
+		label: "Orders",
+		icon: TruckIcon,
+		owns: [studioUrl("/orders")],
 	},
 	// Import is hidden: the itch.io import endpoints return "not yet implemented". Restore an
 	// entry here (and the route and lazy import in App.tsx) when that lane ships.
