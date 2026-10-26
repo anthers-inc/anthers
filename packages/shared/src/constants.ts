@@ -795,30 +795,12 @@ export const CARD_FLAT = 0.3;
 export const ILLUSTRATIVE_SALES_TAX_RATE = 0.065;
 
 /**
- * The range a U.S. buyer's combined state-and-local sales-tax rate can fall in — **display
- * only**, for the take-home range the Badge Maker and the Access table show beside a price.
- *
- * ⚠️ **Neither end is charged or recorded.** Stripe Tax computes the real rate from the
- * buyer's billing address and product tax code at checkout, and `calculateFees` returns a
- * zero `salesTax` for exactly that reason. This range exists because a single illustrative
- * average hid the two ends a creator actually cares about: a buyer in a no-tax state pays
- * the list price, while a buyer in the highest combined jurisdiction pays well above it.
- *
- * 0% covers the five states with no statewide sales tax (and digital goods a state does not
- * tax); 13% is the highest combined rate recorded in the U.S. as of October 2026 (Calera,
- * Alabama), which also leaves room for a physical-good perk. Sources: Tax Foundation's
- * midyear 2026 state-and-local table and Avalara's 2026 total-rate ranges. Revisit the top
- * end when that table moves; the range is a statement about the country, not about us.
- */
-export const BUYER_TAX_RATE_MIN = 0;
-export const BUYER_TAX_RATE_MAX = 0.13;
-
-/**
  * Stripe Tax's own fee where it calculates tax: **0.5% of the charge**, paid at cost.
  *
- * ⚠️ It is a share of the whole charge, tax included, which is why the take-home range's low
- * end grows with the buyer's rate rather than staying at a flat 0.5% of the list price.
- * Stripe's published Tax pricing carries the rate; this is the one figure the display needs.
+ * ⚠️ **The buyer pays the tax; the creator pays this fee.** Sales tax is added to the
+ * buyer's total and is not part of the creator's money, but Stripe's 0.5% charge for
+ * working out and collecting it comes off the sale. The take-home range's low end is the
+ * sale where that service runs; the high end is a sale where it does not.
  */
 export const STRIPE_TAX_FEE_RATE = 0.005;
 

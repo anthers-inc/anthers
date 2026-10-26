@@ -17,8 +17,6 @@ import { describe, expect, test } from "bun:test";
 import Decimal from "decimal.js";
 import {
 	ANTHERS_BADGES,
-	BUYER_TAX_RATE_MAX,
-	BUYER_TAX_RATE_MIN,
 	CARD_FLAT,
 	CARD_RATE,
 	cardFeeDisplay,
@@ -213,18 +211,17 @@ describe("the named-alternative comparison", () => {
 	});
 });
 
-describe("the tax range the price panel shows", () => {
+describe("the range the price panel shows is only what leaves the creator's side", () => {
 	const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 	const range = (amount: number) => {
 		const fee = cardFeeDisplay(amount);
-		const taxMax = amount * BUYER_TAX_RATE_MAX;
-		const taxFeeMax = (amount + taxMax) * STRIPE_TAX_FEE_RATE;
-		return { best: round(amount - fee), worst: round(amount - fee - taxFeeMax) };
+		// The component rounds the fee to cents before subtracting it, because the table
+		// shows cents and the total must be the sum of its rows.
+		const taxServiceFeeMax = round(amount * STRIPE_TAX_FEE_RATE);
+		return { best: round(amount - fee), worst: round(amount - fee - taxServiceFeeMax) };
 	};
 
-	test("the ends are the no-tax sale and the highest-rate sale, in that order", () => {
-		expect(BUYER_TAX_RATE_MIN).toBe(0);
-		expect(BUYER_TAX_RATE_MAX).toBeGreaterThan(0);
+	test("the ends are the sale with no tax service and the sale with it", () => {
 		for (const price of [0.5, 1, 3, 5, 20, 100]) {
 			const { best, worst } = range(price);
 			expect(worst, `$${price}`).toBeLessThanOrEqual(best);
@@ -232,20 +229,12 @@ describe("the tax range the price panel shows", () => {
 		}
 	});
 
-	test("a $3 Badge varies by the cents the tax fee can take, not by the whole tax", () => {
-		// The tax itself is added on top and is not the creator's money; only Stripe's 0.5%
-		// collection fee comes out of the charge, which is why the range is narrow.
+	test("a $3 Badge varies only by the cents the tax service can take", () => {
+		// Sales tax is the buyer's and is never in this figure. Stripe's 0.5% tax-service fee
+		// is the one conditional deduction, which is why the range is narrow.
 		const { best, worst } = range(3);
 		expect(best).toBeCloseTo(2.61, 2);
 		expect(worst).toBeCloseTo(2.59, 2);
-	});
-
-	test("the buyer's range is the list price through the top combined rate", () => {
-		const amount = 3;
-		const buyerMin = round(amount * (1 + BUYER_TAX_RATE_MIN));
-		const buyerMax = round(amount * (1 + BUYER_TAX_RATE_MAX));
-		expect(buyerMin).toBe(3);
-		expect(buyerMax).toBe(3.39);
 	});
 });
 

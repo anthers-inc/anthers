@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 import {
-	BUYER_TAX_RATE_MAX,
-	BUYER_TAX_RATE_MIN,
 	CARD_FLAT,
 	CARD_RATE,
 	cardFeeDisplay,
@@ -19,12 +17,12 @@ import { RIVAL_STOREFRONTS } from "@anthers/shared/figures";
  * here. So the take-home is the headline, the deduction is shown as a table rather than
  * buried in a sentence, and the comparison is to named alternatives.
  *
- * ⭐ **The figure is a range, because the buyer's tax rate is not one number** (Parker,
- * 2026-10-26). A no-tax jurisdiction pays the list price; the highest combined U.S.
- * jurisdiction pays well above it, and Stripe's 0.5% tax-collection fee is a share of that
- * larger charge. The range's ends come from `BUYER_TAX_RATE_MIN`/`MAX` and
- * `STRIPE_TAX_FEE_RATE`, so a creator sees both what the buyer may pay and what they may
- * receive instead of a single average that hides both ends.
+ * ⭐ **The figure is a range, and every end is money that leaves the creator's side**
+ * (Parker, 2026-10-26). **Sales tax is the buyer's**: it is added to their total and never
+ * comes out of the creator's cut, so the panel does not show a tax rate or a buyer total at
+ * all. The one conditional deduction is Stripe's 0.5% charge for calculating and collecting
+ * that tax, which is paid at cost; the range is the sale where that service runs against the
+ * sale where it does not.
  *
  * **Inform, never restrict** (Parker, 2026-08-13). No minimum of ours, no confirmation
  * step, no nagging. A floor would ban prices we are genuinely competitive at and sit
@@ -106,15 +104,14 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 	// A display that hides the one case a creator most needs to see is worse than no
 	// display, and this component's entire justification is informing rather than
 	// restricting.
-	const taxRateMinPct = Math.round(BUYER_TAX_RATE_MIN * 100);
-	const taxRateMaxPct = Math.round(BUYER_TAX_RATE_MAX * 100);
-	const taxMax = amount * BUYER_TAX_RATE_MAX;
-	// Stripe Tax's fee is a share of the whole charge, tax included. The low end of the
-	// take-home range is therefore the sale where the buyer is in the highest-rate
-	// jurisdiction and the tax was calculated; the high end is a sale with no tax at all.
-	const taxFeeMax = (amount + taxMax) * STRIPE_TAX_FEE_RATE;
+	//
+	// The tax-service fee is 0.5% of the charge. The buyer's tax is added on top and is not
+	// this component's figure, so the display uses the list price as its base: a high-tax
+	// jurisdiction can add a cent or two to the real fee, which is the same rounding at
+	// ordinary prices and the only honest estimate available without the buyer's address.
+	const taxServiceFeeMax = roundCents(amount * STRIPE_TAX_FEE_RATE);
 	const netBest = roundCents(amount - fee);
-	const netWorst = roundCents(amount - fee - taxFeeMax);
+	const netWorst = roundCents(amount - fee - taxServiceFeeMax);
 	const underwater = netBest < 0;
 	const keptPctBest = (netBest / amount) * 100;
 	const keptPctWorst = (netWorst / amount) * 100;
@@ -153,20 +150,15 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 				</span>
 			</div>
 
-			{/* The breakdown is a table rather than a paragraph: a creator comparing what they
-			    keep needs the rows to line up, and the prose version buried the tax range in a
-			    sentence. Every figure is derived from the dials in `@anthers/shared/constants`. */}
+			{/* The breakdown is a table rather than a paragraph, and every row is a deduction
+			    from the CREATOR's side. Sales tax is the buyer's, added to their total, so it
+			    has no row here. Every figure is derived from `@anthers/shared/constants`. */}
 			<table className="mt-2 w-full border-collapse text-xs" data-testid="take-home-breakdown">
 				<tbody>
 					<tr className="border-t border-base-content/10">
-						<td className="py-1 pr-2 text-base-content/60">Buyer pays</td>
-						<td className="py-1 text-right tabular-nums">
-							{usd(amount)}
-							{`–${usd(amount + taxMax)}`}
-						</td>
-						<td className="py-1 pl-2 text-base-content/50">
-							Price plus sales tax ({taxRateMinPct}–{taxRateMaxPct}%)
-						</td>
+						<td className="py-1 pr-2 text-base-content/60">Sale price</td>
+						<td className="py-1 text-right tabular-nums">{usd(amount)}</td>
+						<td className="py-1 pl-2 text-base-content/50">Your list price</td>
 					</tr>
 					<tr className="border-t border-base-content/10">
 						<td className="py-1 pr-2 text-base-content/60">Card processing</td>
@@ -174,9 +166,9 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 						<td className="py-1 pl-2 text-base-content/50">Stripe · 2.9% + $0.30</td>
 					</tr>
 					<tr className="border-t border-base-content/10">
-						<td className="py-1 pr-2 text-base-content/60">Tax collection</td>
-						<td className="py-1 text-right tabular-nums">{`${usd(0)}–${usd(taxFeeMax)}`}</td>
-						<td className="py-1 pl-2 text-base-content/50">Stripe · 0.5% when tax applies</td>
+						<td className="py-1 pr-2 text-base-content/60">Stripe tax service</td>
+						<td className="py-1 text-right tabular-nums">{`${usd(0)}–${usd(taxServiceFeeMax)}`}</td>
+						<td className="py-1 pl-2 text-base-content/50">0.5% where it calculates tax</td>
 					</tr>
 					<tr className="border-t border-base-content/10">
 						<td className="py-1 pr-2 text-base-content/60">Anthers</td>

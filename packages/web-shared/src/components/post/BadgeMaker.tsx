@@ -270,6 +270,10 @@ function PerkEditor({
 										<span className="mt-1 block text-base-content/50">
 											A Badge carrying more than one type is taxed at its most-taxable type.
 										</span>
+										<span className="mt-1 block text-base-content/50">
+											Sales tax is added to the buyer's total. It is not taken from what you
+											receive.
+										</span>
 									</InfoTip>
 								</span>
 							</th>
