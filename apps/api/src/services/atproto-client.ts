@@ -183,6 +183,28 @@ export async function grantedScopeFor(did: string): Promise<string | null> {
 }
 
 /**
+ * Whether this account has ever completed an OAuth authorization, whatever it granted.
+ *
+ * 🚨 **The distinction from {@link grantedScopeFor} is what makes revocation real for a hosted
+ * identity.** A missing scope and a withdrawn grant both read as null, but one means "this person
+ * has never authorized Anthers through their server" and the other means "they did, and have now
+ * taken it back". The writer may fall back to the hub's own session only in the first case;
+ * falling back in the second would make the withdrawal cosmetic.
+ *
+ * ⚠️ **Keyed on `userId`, not on the DID alone.** A session written by the OAuth callback before
+ * an account exists has a null `userId`; that is a pending signup, not a grant belonging to
+ * anybody, and it must not count.
+ */
+export async function hasRecordedGrant(userId: number): Promise<boolean> {
+	const [row] = await db
+		.select({ id: atprotoSessions.id })
+		.from(atprotoSessions)
+		.where(eq(atprotoSessions.userId, userId))
+		.limit(1);
+	return row !== undefined;
+}
+
+/**
  * The API's own public origin, which is what an authorization server will fetch client
  * metadata from and redirect back to.
  *
