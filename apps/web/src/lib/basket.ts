@@ -50,6 +50,13 @@ export interface BasketWorkItem {
 	price: string;
 	creatorHandle: string;
 	thumbnail?: string | null;
+	/**
+	 * How many of a physical good this line means to buy, and the values chosen from its
+	 * listing. A digital Work carries neither: it is owned once, and the server refuses a
+	 * count on a kind that cannot carry one.
+	 */
+	quantity?: number;
+	options?: Array<{ name: string; label: string }> | null;
 }
 
 /**
@@ -70,10 +77,29 @@ export interface BasketBadgeItem {
 
 export type BasketItem = BasketWorkItem | BasketBadgeItem;
 
-/** The basket's CONTENT identity — every line's id, kind-tagged, sorted. */
+/**
+ * The basket's CONTENT identity — every line's id, kind-tagged, sorted, plus a physical
+ * line's count and chosen values.
+ *
+ * 🚨 **The picks are part of the identity.** This string decides when the embedded checkout
+ * re-posts for a session (`BasketCheckout`'s remount guard). A buyer who switches a size
+ * or raises a count has a different basket and must get a session built for it, not the
+ * one built for what they chose a minute ago. The **server** keeps its own copy of this
+ * question (`basketPicksKey` in `routes/payments.ts`, compared against the session's
+ * metadata) and the two deliberately do not share a format — each only has to be stable
+ * for its own side.
+ */
 export function basketContentKey(items: BasketItem[]): string {
 	return items
-		.map((i) => (i.kind === "badge" ? `b${i.badgeId}` : `w${i.workId}`))
+		.map((i) => {
+			if (i.kind === "badge") return `b${i.badgeId}`;
+			const quantity = i.quantity ?? 1;
+			const picks = (i.options ?? [])
+				.map((option) => `${option.name}=${option.label}`)
+				.sort()
+				.join("&");
+			return quantity === 1 && !picks ? `w${i.workId}` : `w${i.workId}q${quantity}[${picks}]`;
+		})
 		.sort()
 		.join(",");
 }
@@ -125,6 +151,9 @@ type ServerItem =
 			price: string;
 			creatorHandle: string;
 			thumbnail: string | null;
+			quantity?: number;
+			options?: Array<{ name: string; label: string }> | null;
+			shipping?: string;
 	  }
 	| {
 			kind: "badge";
@@ -297,6 +326,8 @@ export function useBasket(): BasketApi {
 						price: i.price,
 						creatorHandle: i.creatorHandle,
 						thumbnail: i.thumbnail,
+						quantity: i.quantity ?? 1,
+						options: i.options ?? null,
 					},
 		);
 		return {
@@ -304,6 +335,7 @@ export function useBasket(): BasketApi {
 			count: items.length,
 			add: SERVER_API.add,
 			remove: SERVER_API.remove,
+			update: SERVER_API.update,
 			clear: SERVER_API.clear,
 			has: (workId: number) => items.some((i) => i.kind === "work" && i.workId === workId),
 			hasBadge: (badgeId: number) => items.some((i) => i.kind === "badge" && i.badgeId === badgeId),
@@ -348,12 +380,18 @@ const SERVER_API = {
 					price: item.price,
 					creatorHandle: item.creatorHandle,
 					thumbnail: item.thumbnail ?? null,
+					quantity: item.quantity ?? 1,
+					options: item.options ?? null,
 				},
 			],
 		});
 		try {
 			const res = await client.api.payments.basket.items.$post({
-				json: { workId: item.workId },
+				json: {
+					workId: item.workId,
+					...(item.quantity != null ? { quantity: item.quantity } : {}),
+					...(item.options ? { options: item.options } : {}),
+				},
 			});
 			if (!res.ok) {
 				// Refused — put the cache back and say so.
@@ -367,6 +405,48 @@ const SERVER_API = {
 		} catch {
 			publishServer(prev);
 			return { ok: false as const, error: "Couldn't add to your basket." };
+		}
+	},
+	async update(item: {
+		workId: number;
+		quantity?: number;
+		options?: Array<{ name: string; label: string }>;
+	}) {
+		const prev = serverCurrent;
+		// Optimistic, like the add: the stepper moves at once and the server's answer
+		// replaces the cache. A refusal (a count past the shelf) rolls back and says why,
+		// because a quantity that quietly springs back is worse than one that explains.
+		if (prev)
+			publishServer({
+				items: prev.items.map((i) =>
+					i.kind === "work" && i.workId === item.workId
+						? {
+								...i,
+								...(item.quantity != null ? { quantity: item.quantity } : {}),
+								...(item.options !== undefined ? { options: item.options } : {}),
+							}
+						: i,
+				),
+			});
+		try {
+			const res = await client.api.payments.basket.items[":workId"].$put({
+				param: { workId: String(item.workId) },
+				json: {
+					...(item.quantity != null ? { quantity: item.quantity } : {}),
+					...(item.options !== undefined ? { options: item.options } : {}),
+				},
+			});
+			if (!res.ok) {
+				publishServer(prev);
+				const body = (await res.json().catch(() => null)) as { error?: string } | null;
+				return { ok: false as const, error: body?.error ?? "Couldn't change that." };
+			}
+			const body = (await res.json()) as unknown as { items: ServerItem[] };
+			publishServer({ items: body.items });
+			return { ok: true as const };
+		} catch {
+			publishServer(prev);
+			return { ok: false as const, error: "Couldn't change that." };
 		}
 	},
 	async remove(id: { kind: "work"; workId: number } | { kind: "badge"; badgeId: number }) {
@@ -424,6 +504,21 @@ function scratchApi(scratchItems: BasketWorkItem[]): BasketApi {
 			write([...current, work]);
 			return { ok: true as const };
 		},
+		update: (item) => {
+			const current = read();
+			write(
+				current.map((i) =>
+					i.workId === item.workId
+						? {
+								...i,
+								...(item.quantity != null ? { quantity: item.quantity } : {}),
+								...(item.options !== undefined ? { options: item.options } : {}),
+							}
+						: i,
+				),
+			);
+			return { ok: true as const };
+		},
 		remove: (id) => {
 			// The scratchpad is works-only (a Badge remove names nothing that was ever
 			// scratchable — the anonymous flow detours before anything is held).
@@ -448,6 +543,15 @@ export interface BasketApi {
 	remove: (
 		id: { kind: "work"; workId: number } | { kind: "badge"; badgeId: number },
 	) => void | Promise<void>;
+	/** Change a Work line's count or chosen values — the basket page's own controls. */
+	update: (item: {
+		workId: number;
+		quantity?: number;
+		options?: Array<{ name: string; label: string }>;
+	}) =>
+		| { ok: true }
+		| { ok: false; error: string }
+		| Promise<{ ok: true } | { ok: false; error: string }>;
 	clear: () => void | Promise<void>;
 	has: (workId: number) => boolean;
 	/** Whether the rung is already in the basket — signed-in mode only; false while anonymous. */

@@ -19,14 +19,27 @@
  * rows that have earned it, and it is quiet when it finds none — the same posture every
  * other sweep's worker logs with.
  */
+import { releaseAbandonedStock } from "../services/physical-stock.js";
 import { advanceFallbackDeliveries } from "../services/shipments.js";
 
 export interface ShipmentClockResult {
 	/** How many shipments the fallback closed on this pass. */
 	closed: number;
+	/** How many abandoned orders gave their reserved stock back. */
+	released: number;
 }
 
+/**
+ * The daily physical-goods sweep: close the delivery clock, and put abandoned orders'
+ * stock back on the shelf.
+ *
+ * ⚠️ **The two belong to one job rather than two**, because both are "the day after" work
+ * over the same rows and neither is urgent to the minute — a fallback delivery is a
+ * fourteen-day judgment and a stock reservation is returned a day after it was made.
+ * Splitting them would buy a second cron entry and no correctness.
+ */
 export async function runShipmentClock(now: Date = new Date()): Promise<ShipmentClockResult> {
+	const released = await releaseAbandonedStock(now);
 	const closed = await advanceFallbackDeliveries(now);
-	return { closed };
+	return { closed, released };
 }
