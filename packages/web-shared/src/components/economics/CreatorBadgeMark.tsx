@@ -60,6 +60,14 @@ export interface BadgeArtChoice {
 	artEmblem?: string | null;
 	/** Whether the creator has their own art. False draws the emblem without a request. */
 	hasArt?: boolean;
+	/**
+	 * Whether that art is a composed Noun emblem rather than an uploaded interior.
+	 *
+	 * 🚨 **A composed Badge is a finished image of the whole badge**, field and edging
+	 * included, so it renders as itself rather than going through `BadgeMark`'s background
+	 * and `artBox`. An upload is an interior and keeps the two-layer treatment.
+	 */
+	hasComposedArt?: boolean;
 }
 
 export function CreatorBadgeMark({
@@ -83,6 +91,27 @@ export function CreatorBadgeMark({
 	const [failed, setFailed] = useState(false);
 	const showUpload = Boolean(art.hasArt) && !failed;
 	const fallback = fallbackBadgeDesign(index);
+	const imageSrc = showUpload ? `${apiBaseUrl()}/api/subscriptions/badges/${badgeId}/art` : null;
+
+	// A composed Badge already carries the field and the edging, so drawing it inside
+	// another `BadgeMark` produced a badge inside a badge. It is shown whole instead.
+	if (showUpload && art.hasComposedArt && imageSrc) {
+		return (
+			<span
+				className={`relative flex ${size} shrink-0 items-center justify-center ${dim ? "opacity-45" : ""}`}
+				role="img"
+				aria-label={label}
+			>
+				<img
+					src={imageSrc}
+					alt=""
+					aria-hidden="true"
+					onError={() => setFailed(true)}
+					className="h-full w-full object-contain"
+				/>
+			</span>
+		);
+	}
 
 	return (
 		<BadgeMark
@@ -90,12 +119,12 @@ export function CreatorBadgeMark({
 			color={art.artColor ?? fallback.color}
 			label={label}
 			emblem={art.artEmblem ?? fallback.emblem}
-			// 🚨 Rooted on `apiBaseUrl()` rather than written as `/api/...`. The web app and
-			// the API are not always the same origin — the Studio subdomain, the desktop
-			// shell, and the e2e preview all separate them — and a root-relative src asks the
-			// page's own host, gets HTML or a 404, and silently falls back to the emblem.
-			// Found in the browser; nothing else could have.
-			imageSrc={showUpload ? `${apiBaseUrl()}/api/subscriptions/badges/${badgeId}/art` : null}
+			// 🚨 `imageSrc` is rooted on `apiBaseUrl()` rather than written as `/api/...`. The
+			// web app and the API are not always the same origin — the Studio subdomain, the
+			// desktop shell, and the e2e preview all separate them — and a root-relative src
+			// asks the page's own host, gets HTML or a 404, and silently falls back to the
+			// emblem. Found in the browser; nothing else could have.
+			imageSrc={imageSrc}
 			onImageError={() => setFailed(true)}
 			clipId={`badge-mark-${badgeId}`}
 			dim={dim}

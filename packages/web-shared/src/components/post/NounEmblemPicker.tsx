@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The **Noun emblem picker** — the search-and-place surface inside the Badge Maker.
+ * The **Noun emblem picker** — the search-and-place surface inside the Badge Maker's
+ * Emblem tab.
  *
  * 🚨 **PREVIEW FROM THE SEARCH THUMBNAIL; THE VENDOR'S DOWNLOAD IS TOUCHED ONLY ON SAVE.**
  * Noun Project thumbnails are black-on-transparent, so the picker recolors one client-side
@@ -19,13 +20,18 @@
  * ⭐ **The artist credit rides beside every emblem image** — name and link, small subtext,
  * because naming the artist is the decent thing to do and because the credit keeps a
  * creator's Badge usable under CC BY 3.0 independently of Anthers' own license.
+ *
+ * ⚠️ **Selection is a draft, not a save.** Choosing an emblem here hands the placement to
+ * the Badge Maker, which stages it until the dialog's own Save. The picker has no Save or
+ * Cancel of its own: pressing the dialog's Cancel must leave the stored Badge untouched,
+ * and a server write from inside this component is exactly what broke that promise.
  */
 
-import { BADGE_EMBLEM_COLORS, BADGE_PLACEMENT_LIMITS } from "@anthers/shared/badge-art";
+import { BADGE_PLACEMENT_LIMITS } from "@anthers/shared/badge-art";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "../../lib/rpc";
 
-/** What the search proxyhands back about one icon. */
+/** What the search proxy hands back about one icon. */
 export interface NounSearchIcon {
 	id: string;
 	term: string;
@@ -42,10 +48,9 @@ interface SearchResponse {
 	refused?: boolean;
 }
 
+/** A picked icon and where it sits on the Badge; the emblem color is the parent's. */
 export interface EmblemPlacement {
 	nounIcon: NounSearchIcon;
-	/** The emblem's injected color, as hex — from the swatch palette. */
-	emblemColor: string;
 	/** The emblem's size as a fraction of the shape's emblemBox. */
 	scale: number;
 	/** Offsets as a fraction of the emblem box. */
@@ -58,6 +63,10 @@ const SEARCH_DEBOUNCE_MS = 450;
 /**
  * Render a search thumbnail recolored to `color`, black-on-transparent masked over the
  * color — the technique the whole cost model rests on.
+ *
+ * `color` is passed as `currentColor` for an unselected result, so the button's own text
+ * token decides the contrast and an icon is visible the moment it arrives. The old
+ * hard-coded white drew white-on-white in the light theme.
  */
 function Thumb({
 	icon,
@@ -109,15 +118,16 @@ function Byline({ icon }: { icon: NounSearchIcon }) {
 }
 
 export function NounEmblemPicker({
-	initial,
-	onSave,
-	onCancel,
+	emblemColor,
+	selection,
+	onSelectionChange,
 	busy,
 }: {
-	/** The placement already on this rung, when it is being re-edited. */
-	initial?: EmblemPlacement | null;
-	onSave: (placement: EmblemPlacement) => void;
-	onCancel: () => void;
+	/** The color the chosen icon will be composed in — owned by the Emblem tab's swatches. */
+	emblemColor: string;
+	/** The staging draft, or null before an icon is picked. */
+	selection: EmblemPlacement | null;
+	onSelectionChange: (selection: EmblemPlacement | null) => void;
 	busy: boolean;
 }) {
 	const [query, setQuery] = useState("");
@@ -125,9 +135,6 @@ export function NounEmblemPicker({
 	const [page, setPage] = useState<string | null>(null);
 	const [searching, setSearching] = useState(false);
 	const [notice, setNotice] = useState<string | null>(null);
-	const [held, setHeld] = useState<EmblemPlacement | null>(initial ?? null);
-	const holdRef = useRef(held);
-	holdRef.current = held;
 
 	/**
 	 * The debounced live search. 🚨 Fired on a pause, never per keystroke — typing
@@ -212,43 +219,37 @@ export function NounEmblemPicker({
 	const within = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
 	const nudge = (dx: number, dy: number) => {
-		setHeld((h) =>
-			h
-				? {
-						...h,
-						offsetX: within(
-							h.offsetX + dx,
-							-BADGE_PLACEMENT_LIMITS.offsetMax,
-							BADGE_PLACEMENT_LIMITS.offsetMax,
-						),
-						offsetY: within(
-							h.offsetY + dy,
-							-BADGE_PLACEMENT_LIMITS.offsetMax,
-							BADGE_PLACEMENT_LIMITS.offsetMax,
-						),
-					}
-				: h,
-		);
+		if (!selection) return;
+		onSelectionChange({
+			...selection,
+			offsetX: within(
+				selection.offsetX + dx,
+				-BADGE_PLACEMENT_LIMITS.offsetMax,
+				BADGE_PLACEMENT_LIMITS.offsetMax,
+			),
+			offsetY: within(
+				selection.offsetY + dy,
+				-BADGE_PLACEMENT_LIMITS.offsetMax,
+				BADGE_PLACEMENT_LIMITS.offsetMax,
+			),
+		});
 	};
 
 	const zoom = (factor: number) => {
-		setHeld((h) =>
-			h
-				? {
-						...h,
-						scale: within(
-							h.scale * factor,
-							BADGE_PLACEMENT_LIMITS.scaleMin,
-							BADGE_PLACEMENT_LIMITS.scaleMax,
-						),
-					}
-				: h,
-		);
+		if (!selection) return;
+		onSelectionChange({
+			...selection,
+			scale: within(
+				selection.scale * factor,
+				BADGE_PLACEMENT_LIMITS.scaleMin,
+				BADGE_PLACEMENT_LIMITS.scaleMax,
+			),
+		});
 	};
 
 	return (
-		<div className="rounded-lg border border-base-300 bg-base-100 p-3">
-			<div className="flex gap-2 items-center">
+		<div className="flex h-full flex-col">
+			<div className="flex items-center gap-2">
 				<input
 					type="search"
 					className="input input-bordered input-sm flex-1"
@@ -262,156 +263,162 @@ export function NounEmblemPicker({
 
 			{notice && <p className="mt-2 text-xs text-base-content/70">{notice}</p>}
 
-			{results && results.length > 0 && (
-				<div className="mt-2 max-h-64 overflow-y-auto">
+			{/* 🚨 The results box is present from the start and never grows with a search.
+			    It is the thing that keeps the dialog from resizing as a creator moves between
+			    the Emblem toggle's two modes or types a query. */}
+			<div
+				className="mt-2 min-h-0 flex-1 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-2"
+				data-testid="noun-results"
+			>
+				{results === null && !searching ? (
+					<p className="flex h-full items-center justify-center px-4 text-center text-xs text-base-content/50">
+						Search the Noun Project for an emblem. Every icon is by a named artist.
+					</p>
+				) : searching && (!results || results.length === 0) ? (
+					<p className="flex h-full items-center justify-center text-xs text-base-content/50">
+						Searching…
+					</p>
+				) : results && results.length > 0 ? (
 					<div className="grid grid-cols-6 gap-2">
-						{results.map((icon) => (
-							<div key={icon.id} className="flex flex-col items-center gap-0.5">
+						{results.map((icon) => {
+							const selected = selection?.nounIcon.id === icon.id;
+							return (
+								<div key={icon.id} className="flex flex-col items-center gap-0.5">
+									<button
+										type="button"
+										className={`btn btn-sm btn-square ${selected ? "btn-primary" : "btn-ghost"}`}
+										title={`${icon.term} by ${icon.artistName}`}
+										aria-label={`${icon.term} by ${icon.artistName}`}
+										aria-pressed={selected}
+										onClick={() =>
+											onSelectionChange(
+												selected
+													? null
+													: {
+															nounIcon: icon,
+															scale: 1,
+															offsetX: 0,
+															offsetY: 0,
+														},
+											)
+										}
+										disabled={busy}
+									>
+										<Thumb
+											icon={icon}
+											color={selected ? emblemColor : "currentColor"}
+											className={`h-6 w-6 ${selected ? "" : "text-base-content/70"}`}
+										/>
+									</button>
+									<button
+										type="button"
+										className="text-[9px] text-base-content/40 hover:text-base-content/70"
+										title="Find emblems drawn like this one"
+										onClick={() => void moreLikeThis(icon)}
+										disabled={busy || searching}
+									>
+										like this
+									</button>
+								</div>
+							);
+						})}
+					</div>
+				) : notice ? null : (
+					<p className="flex h-full items-center justify-center text-xs text-base-content/50">
+						Nothing found for that search.
+					</p>
+				)}
+				{page && results && results.length > 0 && (
+					<button
+						type="button"
+						className="btn btn-ghost btn-xs mt-2"
+						onClick={() => void runSearch(query, page)}
+						disabled={busy || searching}
+					>
+						More like this search
+					</button>
+				)}
+			</div>
+
+			{/* A fixed footer for size and position, so selecting an emblem does not move the
+			    search box or the panel's edge. */}
+			<div className="mt-2 min-h-16 border-t border-base-300 pt-2">
+				{selection ? (
+					<>
+						<div className="mb-2 flex flex-wrap items-center gap-2">
+							<div className="text-xs font-medium text-base-content/60">Size and position</div>
+							<div className="flex items-center gap-1">
 								<button
 									type="button"
-									className={`btn btn-sm btn-square ${held?.nounIcon.id === icon.id ? "btn-primary" : "btn-ghost"}`}
-									title={`${icon.term} by ${icon.artistName}`}
-									onClick={() =>
-										setHeld({
-											nounIcon: icon,
-											emblemColor: held?.emblemColor ?? "#ffffff",
-											scale: 1,
-											offsetX: 0,
-											offsetY: 0,
-										})
-									}
+									className="btn btn-xs"
+									onClick={() => zoom(0.9)}
 									disabled={busy}
 								>
-									<Thumb icon={icon} color="#ffffff" className="h-6 w-6" />
+									Smaller
 								</button>
 								<button
 									type="button"
-									className="text-[9px] text-base-content/40 hover:text-base-content/70"
-									title={`Find emblems drawn like this one`}
-									onClick={() => void moreLikeThis(icon)}
-									disabled={busy || searching}
+									className="btn btn-xs"
+									onClick={() => zoom(1.1)}
+									disabled={busy}
 								>
-									like this
+									Larger
+								</button>
+								<button
+									type="button"
+									className="btn btn-xs btn-square"
+									onClick={() => nudge(-0.05, 0)}
+									disabled={busy}
+									aria-label="Move left"
+								>
+									←
+								</button>
+								<button
+									type="button"
+									className="btn btn-xs btn-square"
+									onClick={() => nudge(0.05, 0)}
+									disabled={busy}
+									aria-label="Move right"
+								>
+									→
+								</button>
+								<button
+									type="button"
+									className="btn btn-xs btn-square"
+									onClick={() => nudge(0, -0.05)}
+									disabled={busy}
+									aria-label="Move up"
+								>
+									↑
+								</button>
+								<button
+									type="button"
+									className="btn btn-xs btn-square"
+									onClick={() => nudge(0, 0.05)}
+									disabled={busy}
+									aria-label="Move down"
+								>
+									↓
+								</button>
+								<button
+									type="button"
+									className="btn btn-ghost btn-xs"
+									onClick={() => onSelectionChange(null)}
+									disabled={busy}
+								>
+									Clear
 								</button>
 							</div>
-						))}
-					</div>
-					{page && (
-						<button
-							type="button"
-							className="btn btn-ghost btn-xs mt-2"
-							onClick={() => void runSearch(query, page)}
-							disabled={busy || searching}
-						>
-							More like this search
-						</button>
-					)}
-				</div>
-			)}
-			{results && results.length === 0 && !searching && !notice && (
-				<p className="mt-2 text-xs text-base-content/50">Nothing found for that search.</p>
-			)}
-
-			{held && (
-				<div className="mt-3 border-t border-base-300 pt-3">
-					<div className="mb-2">
-						<div className="mb-1 text-xs font-medium text-base-content/60">Emblem color</div>
-						<div className="flex flex-wrap items-center gap-1">
-							{BADGE_EMBLEM_COLORS.map((c) => (
-								<button
-									key={c}
-									type="button"
-									aria-label={`Emblem color ${c}`}
-									aria-pressed={held.emblemColor === c}
-									className={`h-5 w-5 rounded-full border ${held.emblemColor === c ? "border-primary" : "border-base-300"}`}
-									style={{ backgroundColor: c }}
-									onClick={() => setHeld({ ...held, emblemColor: c })}
-									disabled={busy}
-								/>
-							))}
 						</div>
-					</div>
-					<div className="mb-2 flex items-center gap-2">
-						<div className="text-xs font-medium text-base-content/60">Size and position</div>
-						<div className="flex items-center gap-1">
-							<button
-								type="button"
-								className="btn btn-xs"
-								onClick={() => zoom(0.9)}
-								disabled={busy}
-							>
-								Smaller
-							</button>
-							<button
-								type="button"
-								className="btn btn-xs"
-								onClick={() => zoom(1.1)}
-								disabled={busy}
-							>
-								Larger
-							</button>
-							<button
-								type="button"
-								className="btn btn-xs btn-square"
-								onClick={() => nudge(-0.05, 0)}
-								disabled={busy}
-								aria-label="Move left"
-							>
-								←
-							</button>
-							<button
-								type="button"
-								className="btn btn-xs btn-square"
-								onClick={() => nudge(0.05, 0)}
-								disabled={busy}
-								aria-label="Move right"
-							>
-								→
-							</button>
-							<button
-								type="button"
-								className="btn btn-xs btn-square"
-								onClick={() => nudge(0, -0.05)}
-								disabled={busy}
-								aria-label="Move up"
-							>
-								↑
-							</button>
-							<button
-								type="button"
-								className="btn btn-xs btn-square"
-								onClick={() => nudge(0, 0.05)}
-								disabled={busy}
-								aria-label="Move down"
-							>
-								↓
-							</button>
-						</div>
-					</div>
-					<Byline icon={held.nounIcon} />
-					<div className="mt-2 flex gap-2">
-						<button
-							type="button"
-							className="btn btn-primary btn-xs"
-							onClick={() => onSave(held)}
-							disabled={busy}
-						>
-							Use this emblem
-						</button>
-						<button
-							type="button"
-							className="btn btn-ghost btn-xs"
-							onClick={onCancel}
-							disabled={busy}
-						>
-							Cancel
-						</button>
-					</div>
-					<p className="mt-1 text-[11px] text-base-content/50">
-						Your emblem is drawn onto your Badge — the icon file itself is never downloadable here.
+						<Byline icon={selection.nounIcon} />
+					</>
+				) : (
+					<p className="text-xs text-base-content/50">
+						Pick an emblem to size and position it. Your emblem is drawn onto your Badge — the icon
+						file itself is never downloadable here.
 					</p>
-				</div>
-			)}
+				)}
+			</div>
 		</div>
 	);
 }

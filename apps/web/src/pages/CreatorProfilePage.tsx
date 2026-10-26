@@ -972,12 +972,13 @@ export default function CreatorProfilePage() {
 			)}
 
 			{/* The Badge Maker, opened from a card's pencil or the Add card. The Badge is
-			    derived from the ladder above, so an art save's refetch updates the mark
-			    inside the dialog without remounting its fields. */}
+			    derived from the ladder above, so a save's refetch updates the card behind the
+			    dialog. The box is wider and has no padding of its own: the editor now owns a
+			    header, three tabs and a fixed footer, and the tab panel is the only scroll. */}
 			{isOwnProfile &&
 				createPortal(
 					<Modal open={editorOpen} label="Badge Maker">
-						<div className="modal-box max-w-xl">
+						<div className="modal-box max-w-3xl p-0">
 							{editorOpen && (
 								<BadgeMaker
 									key={String(editingBadgeId)}

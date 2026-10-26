@@ -26,6 +26,7 @@
 import { db } from "@anthers/db/client";
 import {
 	assets,
+	badges,
 	comments,
 	inlineImages,
 	libraryItems,
@@ -5630,6 +5631,108 @@ const contentRoutes = new Hono()
 				),
 			),
 		});
+	})
+
+	/**
+	 * The Works a Badge opens — the Badge Maker's Perks tab reads this to show the other
+	 * half of "access is added automatically".
+	 *
+	 * ⭐ **Access is authored on the Work, never on the Badge** (Parker, 2026-10-26): a Work
+	 * names a rung in its Access table, and the Badge's own editor only lists the Works that
+	 * already do. The list is the answer to the sentence that used to leave a creator
+	 * asking where to go.
+	 *
+	 * "Opened" means the rung's row allows the Work at $0 **and** the Everyone row does not
+	 * already make it Public Access. A row with a price is a purchase door at that rung, not
+	 * a gate the Badge clears, so it is excluded; a free baseline makes every rung redundant
+	 * and is excluded for the same reason.
+	 */
+	.get("/badge-gates/:badgeId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const badgeId = Number(c.req.param("badgeId"));
+
+		const [badge] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
+			.limit(1);
+		if (!badge) return c.json({ error: "Badge not found" }, 404);
+
+		const rows = await db
+			.select()
+			.from(works)
+			.where(eq(works.creatorId, user.id))
+			.orderBy(desc(works.updatedAt));
+
+		const gated = rows.filter((work) => {
+			const access = work.access ?? [];
+			const publicAccess = access.some(
+				(row) => row.threshold === 0 && row.allow && Number(row.price) === 0,
+			);
+			return (
+				!publicAccess &&
+				access.some((row) => row.badgeId === badgeId && row.allow && Number(row.price) === 0)
+			);
+		});
+
+		return c.json({
+			works: gated.map((work) => ({
+				id: work.id,
+				publicId: work.publicId,
+				title: work.title,
+				type: work.type,
+				visibility: work.visibility,
+			})),
+		});
+	})
+
+	/**
+	 * Stop a Badge opening one Work — the inline control in the Badge Maker's Perks tab.
+	 *
+	 * ⚠️ **The row stays and `allow` becomes false**, rather than the row being deleted: the
+	 * Access table is one row per rung, and the Studio's editor re-materializes every rung on
+	 * its next save. A deleted row would come back as the same row with the same false flag,
+	 * so the stored shape is the one every reader already understands.
+	 *
+	 * The rewrite goes through `normalizeAccessRows` — the one place the Badge-or-price rule
+	 * is enforced — rather than writing `works.access` directly.
+	 */
+	.delete("/badge-gates/:badgeId/:workId", requireAuth, async (c) => {
+		const user = c.get("user");
+		const badgeId = Number(c.req.param("badgeId"));
+		const workId = Number(c.req.param("workId"));
+
+		const [badge] = await db
+			.select({ id: badges.id })
+			.from(badges)
+			.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
+			.limit(1);
+		if (!badge) return c.json({ error: "Badge not found" }, 404);
+
+		const [work] = await db
+			.select()
+			.from(works)
+			.where(and(eq(works.id, workId), eq(works.creatorId, user.id)))
+			.limit(1);
+		if (!work) return c.json({ error: "Work not found" }, 404);
+
+		const access = work.access ?? [];
+		if (!access.some((row) => row.badgeId === badgeId)) {
+			return c.json({ error: "That Badge does not gate this Work." }, 404);
+		}
+
+		const next = access.map((row) =>
+			row.badgeId === badgeId ? { ...row, allow: false, price: "0" } : row,
+		);
+		const normalized = await normalizeAccessRows(user.id, next);
+		if ("error" in normalized) return c.json({ error: normalized.error }, 400);
+
+		await db
+			.update(works)
+			.set({ access: normalized.rows, updatedAt: new Date() })
+			.where(eq(works.id, workId));
+
+		return c.body(null, 204);
 	})
 
 	/**

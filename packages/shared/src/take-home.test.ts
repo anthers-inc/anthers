@@ -15,7 +15,15 @@
 // file adds is the *comparison* arithmetic and the low-price claims the UI makes in words.
 import { describe, expect, test } from "bun:test";
 import Decimal from "decimal.js";
-import { ANTHERS_BADGES, CARD_FLAT, CARD_RATE, cardFeeDisplay } from "./constants.js";
+import {
+	ANTHERS_BADGES,
+	BUYER_TAX_RATE_MAX,
+	BUYER_TAX_RATE_MIN,
+	CARD_FLAT,
+	CARD_RATE,
+	cardFeeDisplay,
+	STRIPE_TAX_FEE_RATE,
+} from "./constants.js";
 import { calculateFees } from "./fees.js";
 import { RIVAL_STOREFRONTS } from "./figures.js";
 import { batchingComparison, membershipComparison } from "./scenarios.js";
@@ -202,6 +210,42 @@ describe("the named-alternative comparison", () => {
 			expect(r.share).toBeGreaterThan(0);
 			expect(r.share).toBeLessThan(1);
 		}
+	});
+});
+
+describe("the tax range the price panel shows", () => {
+	const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+	const range = (amount: number) => {
+		const fee = cardFeeDisplay(amount);
+		const taxMax = amount * BUYER_TAX_RATE_MAX;
+		const taxFeeMax = (amount + taxMax) * STRIPE_TAX_FEE_RATE;
+		return { best: round(amount - fee), worst: round(amount - fee - taxFeeMax) };
+	};
+
+	test("the ends are the no-tax sale and the highest-rate sale, in that order", () => {
+		expect(BUYER_TAX_RATE_MIN).toBe(0);
+		expect(BUYER_TAX_RATE_MAX).toBeGreaterThan(0);
+		for (const price of [0.5, 1, 3, 5, 20, 100]) {
+			const { best, worst } = range(price);
+			expect(worst, `$${price}`).toBeLessThanOrEqual(best);
+			expect(best).toBeCloseTo(price - cardFeeDisplay(price), 2);
+		}
+	});
+
+	test("a $3 Badge varies by the cents the tax fee can take, not by the whole tax", () => {
+		// The tax itself is added on top and is not the creator's money; only Stripe's 0.5%
+		// collection fee comes out of the charge, which is why the range is narrow.
+		const { best, worst } = range(3);
+		expect(best).toBeCloseTo(2.61, 2);
+		expect(worst).toBeCloseTo(2.59, 2);
+	});
+
+	test("the buyer's range is the list price through the top combined rate", () => {
+		const amount = 3;
+		const buyerMin = round(amount * (1 + BUYER_TAX_RATE_MIN));
+		const buyerMax = round(amount * (1 + BUYER_TAX_RATE_MAX));
+		expect(buyerMin).toBe(3);
+		expect(buyerMax).toBe(3.39);
 	});
 });
 

@@ -149,8 +149,10 @@ function BadgeCard({
 					{onEdit ? (
 						!rung.hasArt && (
 							// The fallback is a start, not a design to settle for — said where the
-							// creator is scanning their own ladder.
-							<p className="text-xs text-base-content/40">Give it your own emblem</p>
+							// creator is scanning their own ladder. ⚠️ Name whose design it is: the
+							// card already draws an emblem, and a bare "give it your own" read as
+							// though the rung had none.
+							<p className="text-xs text-base-content/40">Anthers' design — make it yours</p>
 						)
 					) : state === "included" ? (
 						<p className="inline-flex items-center gap-1 text-sm text-base-content/50">

@@ -1760,6 +1760,9 @@ const subscriptionRoutes = new Hono()
 				artShape: r.badge.artShape,
 				artColor: r.badge.artColor,
 				hasArt: Boolean(r.badge.artKey),
+				// A composed Badge is a finished whole image, so a holding's mark needs the
+				// same distinction the creator's own ladder carries.
+				hasComposedArt: r.badge.artFingerprint !== null,
 				billingCycle: r.holding.billingCycle,
 				createdAt: r.holding.createdAt,
 				creator: {
@@ -2068,8 +2071,20 @@ const subscriptionRoutes = new Hono()
 		const previous = badge.artKey;
 		await db
 			.update(badges)
-			.set({ artKey: key, updatedAt: new Date() })
+			.set({
+				artKey: key,
+				// An upload is an interior, not a composition. Clear the fingerprint and the
+				// placement so the client stops treating this Badge as a composed whole — a
+				// stale fingerprint draws an uploaded interior full-size.
+				artFingerprint: null,
+				artEmblemScale: null,
+				artEmblemOffsetX: null,
+				artEmblemOffsetY: null,
+				updatedAt: new Date(),
+			})
 			.where(eq(badges.id, badgeId));
+		// The credit described the composed art this upload replaced, so it goes with it.
+		await db.delete(badgeArtProvenance).where(eq(badgeArtProvenance.badgeId, badgeId));
 		// Only after the row points somewhere else, so a failure here strands an object
 		// rather than blanking a badge.
 		if (previous) await storage.delete(previous).catch(() => {});
@@ -2082,10 +2097,19 @@ const subscriptionRoutes = new Hono()
 		const badgeId = Number(c.req.param("id"));
 		const [updated] = await db
 			.update(badges)
-			.set({ artKey: null, updatedAt: new Date() })
+			.set({
+				artKey: null,
+				artFingerprint: null,
+				artEmblemScale: null,
+				artEmblemOffsetX: null,
+				artEmblemOffsetY: null,
+				updatedAt: new Date(),
+			})
 			.where(and(eq(badges.id, badgeId), eq(badges.creatorId, user.id)))
 			.returning({ artKey: badges.artKey });
 		if (!updated) return c.json({ error: "Badge not found" }, 404);
+		// The credit outlives neither the art nor the composition it described.
+		await db.delete(badgeArtProvenance).where(eq(badgeArtProvenance.badgeId, badgeId));
 		return c.body(null, 204);
 	})
 

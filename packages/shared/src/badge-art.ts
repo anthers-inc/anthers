@@ -342,6 +342,27 @@ export function isBadgeEmblemColor(value: unknown): boolean {
 	return typeof value === "string" && BADGE_EMBLEM_COLORS.includes(value);
 }
 
+/**
+ * The emblem color a field color starts on, so a picked emblem is visible before the creator
+ * has touched the swatches.
+ *
+ * ⚠️ **`#ffffff` as a universal default was invisible on the light fields** — meadow, sun,
+ * amber and cream are lighter than white's contrast partner, and the picker showed nothing
+ * until somebody hovered an icon. This picks the nearest end of the same swatch list for
+ * each field, which is also the `on` value the palette already names for it.
+ */
+export function defaultEmblemColor(fieldColorId: string): string {
+	switch (fieldColorId) {
+		case "meadow":
+		case "sun":
+		case "amber":
+		case "cream":
+			return "#1d1d1d";
+		default:
+			return "#ffffff";
+	}
+}
+
 /** The picker's bounds on placement, so art cannot be pushed under the stitching. */
 export const BADGE_PLACEMENT_LIMITS = { scaleMin: 0.4, scaleMax: 1.4, offsetMax: 0.35 };
 

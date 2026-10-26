@@ -109,6 +109,33 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	const errors = trackErrorsStrict(page);
 	token = await signInAsCreator(context);
 
+	// The vendor is not in a test session, so the search gets one known result whose
+	// thumbnail is a data URL. That is enough to see the thing the picker got wrong: an
+	// unselected icon must be a contrasting mark on the page, not white on white.
+	const thumb = `data:image/svg+xml;utf8,${encodeURIComponent(
+		'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#000"/></svg>',
+	)}`;
+	await page.route("**/api/noun/search**", (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({
+				icons: [
+					{
+						id: "e2e-bee",
+						term: "bee",
+						thumbnailUrl: thumb,
+						artistName: "Test Artist",
+						artistPermalink: null,
+						licenseDescription: "public-domain",
+						attribution: "bee by Test Artist",
+					},
+				],
+				nextPage: null,
+			}),
+		}),
+	);
+
 	// A rung of our own, so the walk never depends on what the gauntlet fixture happens
 	// to have and never edits a rung another spec is asserting on.
 	const created = await fetch(`${API_URL}/api/subscriptions/badges`, {
@@ -134,33 +161,46 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	await editButton.click();
 	const dialog = page.getByRole("dialog");
 	await expect(dialog.getByRole("heading", { name: "Edit Badge" })).toBeVisible();
+	await dialog.screenshot({ path: `.screenshots/badge-maker-basics-${RUN}.png` });
 
-	// ⚠️ Scoped by the art control's own test id rather than by a div containing the label.
+	// The three tabs are the editor's whole shape, and the Perks one carries both the table
+	// and the Works list. Screenshot it before the art walk changes the draft.
+	await dialog.getByRole("tab", { name: "Perks" }).click();
+	await dialog.screenshot({ path: `.screenshots/badge-maker-perks-${RUN}.png` });
+
+	// One Add button creates a row with every field on it, and the one (i) beside the Type
+	// column explains all four kinds together rather than each on selection.
+	await dialog.getByRole("button", { name: "Add a perk" }).click();
+	await expect(dialog.getByLabel("Perk type").first()).toBeVisible();
+	await expect(dialog.getByLabel("Perk name").first()).toBeVisible();
+	await expect(dialog.getByLabel("Perk description").first()).toBeVisible();
+	await dialog.getByRole("button", { name: "More Information" }).hover();
+	await expect(dialog.getByRole("tooltip")).toContainText("A Physical Good");
+	await expect(dialog.getByRole("tooltip")).toContainText("A Service");
+	await expect(dialog.getByRole("tooltip")).toContainText("Community Access");
+	await expect(dialog.getByRole("tooltip")).toContainText("Recognition");
+	await expect(dialog.getByText("No Works are gated at this Badge yet.")).toBeVisible();
+	await dialog.screenshot({ path: `.screenshots/badge-maker-perk-row-${RUN}.png` });
+
+	// ⚠️ Scoped by the art panel's own test id rather than by a div containing the label.
 	// `locator("div")` filtered on text and taken `.last()` returns the innermost matching
 	// div, which here is the one wrapping the label alone — it never contains the mark, and
 	// the failure reads as "the feature is missing" when the feature is fine.
+	await dialog.getByRole("tab", { name: "Emblem" }).click();
 	const control = page.getByTestId("badge-art-control");
-	const markButton = control.getByRole("button", { name: `${LABEL} badge` });
-	await expect(markButton).toBeVisible();
 
 	// The default first: a rung with no art of its own is still a badge, not a hole.
-	await expect(control.getByRole("img", { name: `${LABEL} badge` })).toBeVisible();
-
+	await expect(
+		page.getByTestId("badge-maker-preview").getByRole("img", { name: `${LABEL} badge` }),
+	).toBeVisible();
 	await dialog.screenshot({ path: `.screenshots/badge-maker-default-${RUN}.png` });
 
 	// The library first — three choices, no file picker. This is the path a creator who
 	// does not draw actually takes, so it is the one worth walking.
-	await markButton.click();
-
-	// ⚠️ One choice at a time, waiting for each to land. Saving refetches the ladder, which
-	// re-renders the card behind the dialog — clicking the next swatch straight away fails
-	// with "element was detached", which reads like a broken picker and is a test that did
-	// not wait.
 	for (const choice of ["Hexagon", "Amber"]) {
 		await control.getByRole("button", { name: choice }).click();
-		// 🚨 The picker must still be open for the NEXT choice. Saving refetches the ladder,
-		// and while that refetch blanked the list for "Loading…" every rung unmounted and
-		// the picker closed — so mixing and matching meant reopening it three times.
+		// ⚠️ Staged now, not saved: the choice stays pressed in the dialog's own draft until
+		// Save. That is the behavior the Cancel case protects, so the walk reads it here.
 		await expect(control.getByRole("button", { name: choice })).toHaveAttribute(
 			"aria-pressed",
 			"true",
@@ -168,26 +208,67 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	}
 	await dialog.screenshot({ path: `.screenshots/badge-maker-library-${RUN}.png` });
 
-	// Then the creator's own art, through the file input the picker opens.
+	// The Find mode is present and empty from the start: color swatches, a search box, and
+	// a results box with a hint — not a panel that grows once a query lands.
+	await control.getByRole("button", { name: "Find an Emblem" }).click();
+	await expect(control.getByTestId("noun-results")).toBeVisible();
+	const search = control.getByPlaceholder(/Search nearly ten million icons/);
+	await expect(search).toBeVisible();
+	await dialog.screenshot({ path: `.screenshots/badge-maker-find-${RUN}.png` });
+
+	await search.fill("bee");
+	const result = control.getByRole("button", { name: "bee by Test Artist" });
+	await expect(result).toBeVisible({ timeout: 10_000 });
+	// 🚨 The bug this asserts: the thumb used to be hard-coded white, which is invisible on
+	// the light surface. `currentColor` from the text token makes it a contrasting mark.
+	const thumbColor = await result
+		.locator("span")
+		.first()
+		.evaluate((el) => getComputedStyle(el).backgroundColor);
+	expect(thumbColor).not.toBe("rgb(255, 255, 255)");
+	await result.click();
+	await expect(result).toHaveAttribute("aria-pressed", "true");
+	await dialog.screenshot({ path: `.screenshots/badge-maker-find-result-${RUN}.png` });
+
+	// Then the creator's own art, through the file input the panel keeps mounted.
 	await control.locator('input[type="file"]').setInputFiles({
 		name: "badge.png",
 		mimeType: "image/png",
 		buffer: artwork(),
 	});
 
-	// The mark becomes an <img> pointed at the access-checked route — which is the whole
-	// visible difference, and the only way to see that the upload round-tripped.
+	// The staged preview is the object URL the browser holds; the saved badge is the
+	// access-checked route. Seeing the blob first proves the dropzone took the file.
+	await expect(control.locator('img[src^="blob:"]')).toBeVisible();
+	await dialog.screenshot({ path: `.screenshots/badge-maker-art-${RUN}.png` });
+
+	// Save is what applies the draft. Closing without it is the Cancel case, which must not
+	// write the emblem.
+	await dialog.getByRole("button", { name: "Save" }).click();
+	await expect(dialog).toBeHidden();
+
+	// The grid card wears the art it just saved: the two views are one rendering, so a
+	// card that still drew the fallback would be the bug.
 	const art = `img[src$="/api/subscriptions/badges/${badgeId}/art"]`;
-	await expect(control.locator(art)).toBeVisible({
+	await expect(page.locator(art)).toBeVisible({
 		timeout: 15_000,
 	});
 
-	await dialog.screenshot({ path: `.screenshots/badge-maker-art-${RUN}.png` });
+	// 🚨 **Cancel must not save the art draft.** The retired editor wrote shape, color and
+	// the composition on click, so a creator who changed their mind still got the emblem
+	// they had just rejected. Change both choices here, cancel, and read the stored row.
+	await editButton.click();
+	await dialog.getByRole("tab", { name: "Emblem" }).click();
+	await control.getByRole("button", { name: "Circle" }).click();
+	await control.getByRole("button", { name: "Moss" }).click();
+	await dialog.getByRole("button", { name: "Cancel" }).click();
 
-	// Closing the dialog must leave the grid card wearing the art it just saved: the two
-	// views are one rendering, so a card that still drew the fallback would be the bug.
-	await dialog.getByRole("button", { name: "Close the Badge editor" }).click();
-	await expect(page.locator(art)).toBeVisible();
+	const [stored] = await db
+		.select({ artShape: badges.artShape, artColor: badges.artColor })
+		.from(badges)
+		.where(eq(badges.id, badgeId));
+	expect(stored?.artShape).toBe("hexagon");
+	expect(stored?.artColor).toBe("amber");
 
 	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
 });
