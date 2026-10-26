@@ -18,8 +18,11 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { GAUNTLET_WALKER_EMAIL } from "@anthers/db/gauntlet";
+import { db } from "@anthers/db/client";
+import { GAUNTLET_CREATOR_EMAIL, GAUNTLET_WALKER_EMAIL } from "@anthers/db/gauntlet";
+import { stripeAccounts, users } from "@anthers/db/schema";
 import { expect, test as setup } from "@playwright/test";
+import { eq } from "drizzle-orm";
 import { API_URL, AUTH_STATE_PATH, emailedCode, leashedExecFileSync, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
@@ -31,6 +34,43 @@ setup("reset the gauntlet fixture and sign the user in", async () => {
 		cwd: REPO_ROOT,
 		stdio: "inherit",
 	});
+
+	// 🚨 **The fixture creator is given completed payout setup here, once.**
+	//
+	// A creator is creator mode plus completed setup (`services/creator-standing`), and the
+	// seed leaves the creator at mode only when `GAUNTLET_STRIPE_ACCOUNT` is unset, which is
+	// every CI run and every fresh clone. Creator search and Discovery's creator listing read
+	// standing, so without this row those specs pass only when some other spec's `beforeAll`
+	// connected Stripe first — a race under `fullyParallel`, and the reason
+	// `search-bar.authed.e2e.ts` and `feed-grid.authed.e2e.ts` failed in rotating sets
+	// locally while CI's retries absorbed them.
+	//
+	// The shared fixture's state has one owner, and it is this project — the same reasoning
+	// the media fixture above carries. The walk owns instance B and keeps its connect-less
+	// posture, because this writes instance A's creator only.
+	const [fixtureCreator] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, GAUNTLET_CREATOR_EMAIL))
+		.limit(1);
+	expect(fixtureCreator, "the gauntlet fixture creator exists").toBeTruthy();
+	await db
+		.insert(stripeAccounts)
+		.values({
+			userId: fixtureCreator!.id,
+			// A local run with a real test-mode account keeps using it; everywhere else a
+			// test-shaped id, which is what every authed spec that needs standing writes.
+			stripeAccountId:
+				process.env.GAUNTLET_STRIPE_ACCOUNT?.trim() ||
+				`acct_test_${fixtureCreator!.id}_${crypto.randomUUID().slice(0, 8)}`,
+			onboardingComplete: true,
+			payoutsEnabled: true,
+			chargesEnabled: true,
+		})
+		.onConflictDoUpdate({
+			target: stripeAccounts.userId,
+			set: { onboardingComplete: true, payoutsEnabled: true, chargesEnabled: true },
+		});
 	// The GAUNTLET's media is deliberately NOT seeded here. The walk's own `beforeAll`
 	// resets the fixture again — which deletes the content items, and with them any media
 	// attached now — and then re-attaches it. Generating it here meant running ffmpeg twice
