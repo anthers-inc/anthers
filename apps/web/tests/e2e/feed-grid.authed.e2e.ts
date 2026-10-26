@@ -25,7 +25,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { merchVariants, users, works } from "@anthers/db/schema";
+import { users, works } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import type { BrowserContext, Locator } from "@playwright/test";
 import { expect, test } from "@playwright/test";
@@ -105,7 +105,9 @@ test.beforeAll(async ({ browser }) => {
 			slug: `feed-grid-shirt-${publicId}`,
 			type: "physical",
 			title: "Feed grid shirt",
-			thumbnail: "",
+			// The portrait artwork rides the Work itself now that no store stands behind
+			// it: the band must still read 16:9 whatever the artwork's shape.
+			thumbnail: PORTRAIT_MOCKUP,
 			maturity: "general",
 			maturityRows: rowsRatedAs("general"),
 			maturitySource: "creator",
@@ -117,18 +119,6 @@ test.beforeAll(async ({ browser }) => {
 		})
 		.returning();
 	shirtWorkId = shirt.id;
-	await db.insert(merchVariants).values({
-		workId: shirt.id,
-		color: "Red",
-		size: "M",
-		catalogVariantId: publicId,
-		syncVariantId: publicId,
-		catalogVariantName: "Red / M",
-		catalogPrice: "9.50",
-		listPrice: "30.00",
-		printFileUrl: "data:text/plain,none",
-		mockupUrl: PORTRAIT_MOCKUP,
-	});
 	await context.close();
 });
 
@@ -137,7 +127,6 @@ test.afterAll(async ({ browser }) => {
 	// walker's follow. A failed delete leaves litter; the fixture reset is the
 	// next run's backstop.
 	if (shirtWorkId) {
-		await db.delete(merchVariants).where(eq(merchVariants.workId, shirtWorkId));
 		await db.delete(works).where(eq(works.id, shirtWorkId));
 	}
 	const context = await browser.newContext();

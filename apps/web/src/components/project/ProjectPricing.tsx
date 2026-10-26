@@ -19,7 +19,6 @@ import type { AccessResult } from "@anthers/web-shared/types";
 import { useEffect, useState } from "react";
 import AddToBasket from "../basket/AddToBasket";
 import BuyNow from "../basket/BuyNow";
-import MerchBuyPanel from "../merch/MerchBuyPanel";
 
 interface ProjectPricingProps {
 	workId: number;
@@ -34,7 +33,7 @@ interface ProjectPricingProps {
 	creatorHandle: string;
 	thumbnail?: string | null;
 	creatorHasStripe?: boolean;
-	/** The Work's type — `physical` renders the merch panel rather than the basket doors. */
+	/** The Work's type — `physical` renders no pricing panel at all, since nothing sells it yet. */
 	workType?: string;
 }
 
@@ -64,11 +63,10 @@ export default function ProjectPricing({
 	// this sat where it is used. The fetch is wasted on those branches; it was wasted
 	// the same way for the session POST this rewrite retired, and that POST is gone.
 	//
-	// ⚠️ Except for a merch Work, where the fetch isn't just wasted, it's noise: the
-	// store panel derives its price from `merch_variants`, the generic quote's
-	// verdicts are meaningless on a physical Work (the resolver's goods verdict
-	// prices it `null`), and a signed-out visitor got a console 401 on every view.
-	// The guard lives INSIDE the effect so the hook order never depends on it.
+	// ⚠️ Except on a goods Work, where the fetch is noise: the resolver prices a
+	// physical Work `null`, checkout refuses it, and a signed-out visitor got a console
+	// 401 on every view. The guard lives INSIDE the effect so the hook order never
+	// depends on it.
 	useEffect(() => {
 		if (workType === "physical") return;
 		let canceled = false;
@@ -95,20 +93,10 @@ export default function ProjectPricing({
 		};
 	}, [slug, workType]);
 
-	// A merch Work's pricing panel is the merch panel — the size picker and the
-	// derived price replace the creator doors entirely (a merch sale has no connected
-	// creator and no transfer; `creatorHasStripe` is meaningless on it).
-	//
-	// 🚨 Before the free check, deliberately: a goods Work is never free by its
-	// access row. The row only opens the page; the store's own prices are the
-	// price (Parker, 2026-10-09 — one price source, and it is not the access
-	// table), so the isFree posture the resolver carries on digital work must
-	// never be able to erase the store. The panel also mounts for the owner and a
-	// revisiting buyer, whose verdicts are `canAccess` — a goods store is where
-	// buying happens again, not a gate that opened once.
-	if (workType === "physical") {
-		return <MerchBuyPanel workId={workId} slug={slug} title={title} />;
-	}
+	// A goods Work has no pricing panel until it has a store behind it: checkout
+	// refuses a physical Work, and a digital price box would claim a price nothing can
+	// charge. The page still opens; the panel is simply absent.
+	if (workType === "physical") return null;
 
 	// Free posts have nothing to sell.
 	if (access?.isFree) return null;

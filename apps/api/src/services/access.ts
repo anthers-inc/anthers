@@ -421,9 +421,8 @@ export function unlockRoute(
  * wiki's *What Is Free, and What Is Gated*) and the Library (a Library entry is curation, and
  * `resolveAccess` must never learn to read `library_items`).
  * The reader-facing statement of this branch's rule is the wiki's
- * *What Is Free, and What Is Gated* § Goods Are Never Locked; the verdicts are
- * pinned in `goods-works-access.test.ts` and the store facts a card may show
- * instead of a lock chip are `services/merch-store.ts`'s.
+ * *What Is Free, and What Is Gated* § Goods Are Never Locked, and the verdicts are
+ * pinned in `goods-works-access.test.ts`.
  */
 export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): AccessResult {
 	const base = {
@@ -508,15 +507,12 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 	//   same hard gate as any digital Work (a creator may badge-gate a shirt, and
 	//   that is the gate, not a price).
 	// - A qualifying viewer sees a page the store sits on, and the goods are
-	//   BOUGHT, never "unlocked" — the price is the store's own (Printful's
-	//   retail, stamped at setup), which is why `price` is null here: the row's
-	//   price field means nothing on a physical Work, and the store panel reads
-	//   `merch_variants`.
+	//   BOUGHT, never "unlocked" — the price is the store's own, which is why
+	//   `price` is null here: the row's price field means nothing on a physical
+	//   Work, and a store behind it will price the goods.
 	// - `requiresPurchase` stays true for every qualifying non-owner, signed in or
-	//   out — which is what mounts the store panel (`ProjectPricing` →
-	//   `MerchBuyPanel`) in the deliverable's place, without the signed-out
-	//   login wall: a visitor may look at the shirt exactly as an account may,
-	//   and creating an account is required only to buy.
+	//   out, without the signed-out login wall: a visitor may look at the shirt
+	//   exactly as an account may, and creating an account is required only to buy.
 	// 🚨 Checked BEFORE the purchase branch, and the purchase branch below skips
 	// this type: a past purchase grants a shipment, not an access verdict — a
 	// buyer who wants a second shirt must be able to buy again, which a

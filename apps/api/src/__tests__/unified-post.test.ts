@@ -14,7 +14,7 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { merchVariants, posts, users, works } from "@anthers/db/schema";
+import { posts, users, works } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
@@ -429,46 +429,16 @@ describe("Catalog vertical slice", () => {
 		}
 	});
 
-	it("gives a goods release its store facts in the feed — the purchase gates receiving, not seeing", async () => {
-		// The resolver's goods branch (Parker, 2026-10-09) keeps a buyable physical
-		// Work off the locked presentation: the tile shows the store's art and the
-		// store's ask. The serialization has to carry the facts that are public on
-		// any goods page — the first color's mockup, the cheapest list price — and
-		// the verdict the tile needs to tell "buyable" from "gated".
-		const shirt = await insertWork({
+	it("keeps a goods release off the locked presentation in the feed — the purchase gates receiving, not seeing", async () => {
+		// The resolver's goods branch (Parker, 2026-10-09) keeps a physical Work off the
+		// locked presentation: its tile reads as buyable rather than gated, and the
+		// verdict says payment is required without a lock chip standing in for a store.
+		const _shirt = await insertWork({
 			creatorId,
 			type: "physical",
 			title: `Shirt ${id}`,
 			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
-		// Two colors in variant-id order; the Oat color stamps no mockup (a row that
-		// carries none is cosmetic and binds, so the lookup must skip past it).
-		await db.insert(merchVariants).values([
-			{
-				workId: shirt.id,
-				color: "Oat",
-				size: "M",
-				catalogVariantId: 4101,
-				syncVariantId: 4101,
-				catalogVariantName: "Oat / M",
-				catalogPrice: "9.50",
-				listPrice: "24.99",
-				printFileUrl: "https://files.example/oat.png",
-				mockupUrl: null,
-			},
-			{
-				workId: shirt.id,
-				color: "Black",
-				size: "M",
-				catalogVariantId: 4102,
-				syncVariantId: 4102,
-				catalogVariantName: "Black / M",
-				catalogPrice: "9.50",
-				listPrice: "12.00",
-				printFileUrl: "https://files.example/black.png",
-				mockupUrl: "https://cdn.printful.example/black-mockup.png",
-			},
-		]);
 
 		const feed = await req("/api/accounts/me/feed", { headers: { Cookie: otherCookie } });
 		expect(feed.status).toBe(200);
@@ -478,21 +448,7 @@ describe("Catalog vertical slice", () => {
 		);
 		expect(shirtEntry).toBeTruthy();
 		expect(shirtEntry.access).toMatchObject({ reason: "payment_required", requiresPurchase: true });
-		expect(shirtEntry.access.canAccess).toBe(false); // the store's page, not a verdict of access
-		expect(shirtEntry.merch).toEqual({
-			// First mockup in variant order across colors — and the Oat color's
-			// missing one must not blank the entry the Black color completes.
-			mockupUrl: "https://cdn.printful.example/black-mockup.png",
-			// The cheapest variant's stamped list price, "from" what the tile shows.
-			fromPrice: "12.00",
-		});
-		// The digital Works in the same batch carry no merch block at all — a goods
-		// fact is a goods Work's, not a null-shaped field elsewhere.
-		for (const e of entries.filter(
-			(x: { kind: string; merch?: unknown }) => x.kind === "release",
-		)) {
-			if (e.title !== `Shirt ${id}`) expect(e.merch).toBeUndefined();
-		}
+		expect(shirtEntry.access.canAccess).toBe(false); // the page is readable, the good is not owned
 
 		// And a post entry reads as text: the card's excerpt is the body's plain form.
 		const post = entries.find((e: { kind: string }) => e.kind === "post");
