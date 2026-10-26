@@ -1796,8 +1796,8 @@ export const creditRejections = pgTable(
  *
  * 🚨 **Bytes come from the database, not from listing the bucket.** `assets.file_size`,
  * `web_build_files.file_size`, `work_saves.byte_size` and the works table's own media columns
- * — the same authority `calculate-crf` already reads, deliberately, so the subsidy job and
- * this meter cannot disagree about a creator's catalog. A bucket walk under `creators/{id}/`
+ * — the same authority the top-up line prices from, so the invoice and this meter cannot
+ * disagree about a creator's catalog. A bucket walk under `creators/{id}/`
  * would sweep avatars, headers and display chrome the ladder never prices, and would cost one
  * paginated `ListObjectsV2` per account per night — a nightly API cost paid to measure a
  * figure one grouped query answers. Where a column can disagree with its object, the column is

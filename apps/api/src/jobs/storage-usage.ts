@@ -11,15 +11,15 @@
  *
  * 🚨 **Bytes are counted from the database rows, never from walking the bucket's
  * `creators/{id}/` prefix.** The schema doc on `storage_usage` carries the full
- * reasoning: the DB is the same authority `calculate-crf` reads, a bucket walk would
+ * reasoning: the DB is the authority billing reads, a bucket walk would
  * sweep avatars and display chrome the ladder never prices, and a paginated
  * `ListObjectsV2` per account per night is an API bill paid to measure figures grouped
  * queries answer. The surfaces and how each is reached:
  *
  * - **Assets and build files carry their own sizes** — `assets.file_size` and
  *   `web_build_files.file_size`, summed per account in grouped queries; the same
- *   authority `calculate-crf` reads for the first of them, so the subsidy job and this
- *   meter cannot disagree about a creator's catalog.
+ *   authority the top-up line prices from, so the invoice and this meter cannot
+ *   disagree about a creator's catalog.
  * - **The Work record's own media** — `works.source_key`, `works.source_original_key`
  *   and `works.thumbnail` — are the columns whose size is carried nowhere in the
  *   database, so they are this job's one per-row `size()` cost: up to three heads per
@@ -157,7 +157,7 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 	};
 
 	// ── Assets, by the Work's creator ────────────────────────────────────────────
-	// The same figure `calculate-crf` reads. A null-creator Work's rows cannot be
+	// The figure the storage top-up prices from. A null-creator Work's rows cannot be
 	// attributed and are skipped by the join condition rather than summed into nobody.
 	const assetRows = await db
 		.select({
