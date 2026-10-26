@@ -1,44 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// The topbar theme picker, shared by the consumer site and the Studio. A daisyUI
-// dropdown in the same shape as the account menu in LoggedInLayout — the CSS-only
-// focus pattern, whose reasoning lives beside that menu — rather than a form select:
-// an icon-only circle trigger (the corner toggle's own shape; the theme names live
-// in the menu, not on the topbar) over a menu that lists THEMES from lib/theme under
+// The marketing shell's corner theme picker. A daisyUI dropdown rather than a form
+// select: an icon-only circle trigger (the corner utilities' own shape; the theme names
+// live in the menu, not on the topbar) over a menu that lists THEMES from lib/theme under
 // Light and Dark headings, the active one marked menu-active.
 //
-// Picking keeps the contract the toggle this replaced had: the choice applies
-// immediately and persists always to the device, and when signed in additionally to
-// the account, so it follows the user across devices (see AuthProvider, which applies
-// the account preference on load). The catalog itself — every available theme, its
-// label and its group — lives in the THEMES table, so a new theme never edits this
-// component.
+// ⚠️ **The signed-in site does not use this.** Its theme choice moved into the account
+// settings page's card (Parker, 2026-10-26) — a preference that belongs to the account
+// belongs with the account's other preferences, and the signed-in header's corner is for
+// things that act on the page in front of you. This picker is the signed-out visitor's
+// alone, and the two surfaces share `useThemeChoice` so the pick behaves identically.
 
 import { SwatchIcon } from "@heroicons/react/24/outline";
 import { Fragment } from "react";
-import { useAuth } from "../../lib/auth";
-import {
-	applyTheme,
-	persistThemeToAccount,
-	storeTheme,
-	THEMES,
-	type Theme,
-	type ThemeGroup,
-	useTheme,
-} from "../../lib/theme";
+import { THEMES, type ThemeGroup } from "../../lib/theme";
+import { useThemeChoice } from "../../lib/theme-choice";
 
 /** Group order as the picker shows it — the default (light) family's group first. */
 const THEME_GROUPS: readonly ThemeGroup[] = ["Light", "Dark"];
 
 export default function ThemeSelect({ className = "" }: { className?: string }) {
-	const theme = useTheme();
-	const { isAuthenticated } = useAuth();
-
-	function apply(next: Theme) {
-		applyTheme(next);
-		storeTheme(next);
-		if (isAuthenticated) persistThemeToAccount(next);
-	}
+	const { theme, choose } = useThemeChoice();
 
 	return (
 		// dropdown-end so the menu grows leftward from the trigger on both surfaces that
@@ -78,7 +60,7 @@ export default function ThemeSelect({ className = "" }: { className?: string }) 
 									<button
 										type="button"
 										onClick={(e) => {
-											apply(option.value);
+											choose(option.value);
 											e.currentTarget.blur();
 										}}
 									>
