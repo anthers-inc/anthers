@@ -181,20 +181,21 @@ export async function hostedHandleFor(
  * either. The leading `@` and the case somebody typed in are stripped, matching how
  * handles are written everywhere else on the page.
  */
-export async function signinAddressForHostedHandle(
-	rawHandle: string,
-	opts: { fetchImpl?: typeof fetch } = {},
-): Promise<string | null> {
-	const suffix = await hostedHandleSuffix(opts);
-	if (!suffix) return null;
+export async function signinAddressForHostedHandle(rawHandle: string): Promise<string | null> {
 	const handle = rawHandle.trim().toLowerCase().replace(/^@/, "");
-	if (!handle.endsWith(`.${suffix}`)) return null;
-	const [user] = await db
+	if (!handle) return null;
+	// 🚨 **The table decides, not the handle's shape.** A hosted identity keeps whatever handle
+	// it brought, and a domain handle does not end in the suffix the node issues — so a suffix
+	// test answered "not ours" for exactly the accounts that had moved here on their own name.
+	// `hosted_accounts` holds only identities this node hosts, which is the question being
+	// asked, and it needs no network call to answer it.
+	const [row] = await db
 		.select({ email: users.email })
-		.from(users)
-		.where(eq(users.atprotoHandle, handle))
+		.from(hostedAccounts)
+		.innerJoin(users, eq(users.id, hostedAccounts.userId))
+		.where(eq(hostedAccounts.handle, handle))
 		.limit(1);
-	return user?.email ?? null;
+	return row?.email ?? null;
 }
 
 /**

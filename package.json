@@ -56,7 +56,9 @@
 		"space:backup": "bun run apps/api/src/scripts/space-backup.ts",
 		"space:restore": "bun run apps/api/src/scripts/space-restore.ts",
 		"space:move": "bun run apps/api/src/scripts/space-move.ts",
-		"space:migrate-reader": "bun run apps/api/src/scripts/space-migrate-reader.ts"
+		"space:migrate-reader": "bun run apps/api/src/scripts/space-migrate-reader.ts",
+		"hosted:record": "bun run apps/api/src/scripts/hosted-record.ts",
+		"repo:resign": "bun run apps/api/src/scripts/repo-resign.ts"
 	},
 	"devDependencies": {
 		"@atproto/api": "0.20.42",

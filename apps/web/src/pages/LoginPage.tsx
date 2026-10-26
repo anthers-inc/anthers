@@ -164,12 +164,56 @@ export default function LoginPage() {
 	 * empty (the node is down), and then every handle reads bluesky-or-partial, which is
 	 * where all handles were headed before this page knew about suffixes anyway.
 	 */
+	/**
+	 * Whether the handle typed is one this node hosts, asked rather than inferred.
+	 *
+	 * 🚨 **A suffix test is not the question.** A hosted identity keeps the handle it brought,
+	 * and a domain handle does not end in the suffix the node issues — so `anthers.org`, moved
+	 * here from Bluesky, was sent down the OAuth door and told Bluesky was about to confirm it.
+	 * The suffix still answers instantly for the handles this node issued; everything else asks
+	 * the API, on a debounce, and only the answer decides.
+	 */
+	const [hostedLookup, setHostedLookup] = useState<{ handle: string; hosted: boolean } | null>(
+		null,
+	);
+
+	useEffect(() => {
+		const typed = identifier.trim();
+		if (!typed || LOOKS_LIKE_EMAIL.test(typed)) return;
+		if (!LOOKS_LIKE_HANDLE.test(typed)) return;
+		const bare = typed.replace(/^@/, "").toLocaleLowerCase();
+		if (hostedSuffix && bare.endsWith(`.${hostedSuffix}`)) return;
+
+		let live = true;
+		const timer = setTimeout(() => {
+			client.api.auth["hosted-handle"]
+				.$get({ query: { handle: bare } })
+				.then((res) => res.json())
+				.then((body) => {
+					if (live) setHostedLookup({ handle: bare, hosted: body.hosted });
+				})
+				.catch(() => {
+					if (live) setHostedLookup({ handle: bare, hosted: false });
+				});
+		}, 250);
+
+		return () => {
+			live = false;
+			clearTimeout(timer);
+		};
+	}, [identifier, hostedSuffix]);
+
+	/** The one answer both the drawing and the submit branch on. */
+	const isHostedHandle = (bare: string): boolean =>
+		Boolean(hostedSuffix && bare.endsWith(`.${hostedSuffix}`)) ||
+		(hostedLookup?.handle === bare && hostedLookup.hosted);
+
 	const trimmed = identifier.trim();
 	const signinMode: "idle" | "email" | "handle" | "anthers" | "bluesky" = (() => {
 		if (!trimmed) return "idle";
 		if (LOOKS_LIKE_EMAIL.test(trimmed)) return "email";
 		const bare = trimmed.replace(/^@/, "").toLocaleLowerCase();
-		if (hostedSuffix && bare.endsWith(`.${hostedSuffix}`)) return "anthers";
+		if (isHostedHandle(bare)) return "anthers";
 		if (LOOKS_LIKE_HANDLE.test(trimmed)) return "bluesky";
 		if (trimmed.startsWith("@")) return "handle";
 		return "email";
@@ -258,7 +302,7 @@ export default function LoginPage() {
 		// part of it.
 		const handle = typed.replace(/^@/, "");
 
-		if (hostedSuffix && handle.toLocaleLowerCase().endsWith(`.${hostedSuffix}`)) {
+		if (isHostedHandle(handle.toLocaleLowerCase())) {
 			setLoading(true);
 			try {
 				await sendCode({ handle });

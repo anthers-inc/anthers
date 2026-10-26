@@ -20,7 +20,7 @@
 // that absence needs a test).
 import { afterAll, describe, expect, test } from "bun:test";
 import { db } from "@anthers/db/client";
-import { pendingSignups, signupCodes, users } from "@anthers/db/schema";
+import { hostedAccounts, pendingSignups, signupCodes, users } from "@anthers/db/schema";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
 import {
@@ -59,6 +59,50 @@ function post(path: string, body: unknown, headers: Record<string, string> = {})
 		body: JSON.stringify(body),
 	});
 }
+
+describe("a hosted account keeps the handle it brought", () => {
+	/**
+	 * A hosted fixture moved onto a handle that is not under the node's suffix, which is what a
+	 * migration leaves: the account is hosted here and its handle is its own domain's.
+	 */
+	async function accountOnDomain(tag: string) {
+		const acct = await createAccount(`cer${tag}`, { email: addr(tag) });
+		const domain = `moved-${RUN.slice(-6)}-${tag}.example`;
+		await db
+			.update(hostedAccounts)
+			.set({ handle: domain })
+			.where(eq(hostedAccounts.userId, acct.userId));
+		await db
+			.update(users)
+			.set({ atprotoHandle: domain, atprotoPdsUrl: "https://node.example" })
+			.where(eq(users.id, acct.userId));
+		return { acct, domain };
+	}
+
+	test("the sign-in door finds it by handle and mints its code", async () => {
+		const { acct, domain } = await accountOnDomain("mvd");
+		const res = await post("/api/auth/signin/start", { handle: domain });
+		expect(res.status).toBe(200);
+
+		const [row] = await db.select().from(signupCodes).where(eq(signupCodes.email, acct.email));
+		expect(row, "a domain handle reaches the account's own address").toBeTruthy();
+	});
+
+	test("the form is told it is hosted, so it never offers the Bluesky door", async () => {
+		const { domain } = await accountOnDomain("mvl");
+
+		const hosted = await app.request(
+			`/api/auth/hosted-handle?handle=${encodeURIComponent(domain)}`,
+		);
+		expect(hosted.status).toBe(200);
+		expect(await hosted.json()).toEqual({ hosted: true });
+
+		const foreign = await app.request(
+			`/api/auth/hosted-handle?handle=nobody-${RUN.slice(-6)}.example`,
+		);
+		expect(await foreign.json()).toEqual({ hosted: false });
+	});
+});
 
 afterAll(async () => {
 	// The unit suites share the dev database, so clean up after ourselves — see the
