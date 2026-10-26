@@ -70,6 +70,16 @@ export PLC_SIGN_TOKEN
 # accounts with identifier and password, so one is minted here for the node and sealed under
 # HOSTED_ACCOUNT_KEY. Nobody is shown it; the app uses it only to act for the account. Losing
 # it is recoverable with the node's admin password, by hand, one account at a time.
+#
+# 🚨 **Which leaves the owner without a credential for their own identity in a standard client.**
+# An ordinary creator never notices, because they use Anthers and sign in with an emailed code;
+# the node's password is only ever the machine's. An identity that is also somebody's public
+# account on Bluesky does notice, because a client asks the PDS for a session with an identifier
+# and a password, and nobody has this one. Until a move can hand the owner a password of their
+# own, or the node supports OAuth, the way back in is an emailed reset against the node: the
+# account's address has to be set, the node's mail has to be working, and the reset replaces the
+# password this script sealed. Reseal in the same sitting (`hosted:record` with the new value),
+# or the platform can no longer open a session for the account.
 NEW_ACCOUNT_PASSWORD="$(openssl rand -base64 24)"
 export NEW_ACCOUNT_PASSWORD
 
@@ -97,4 +107,6 @@ cat <<EOF
 Moved and recorded. What remains is the node's own bookkeeping:
   - restart the PDS so the boot backfill publishes the new host's #atproto_kem key
   - run: bun run space:migrate-reader --user ${USER_ID}
+  - give the owner a way in if the identity is also their public Bluesky account: see the
+    credential note above, and remember that a reset makes the sealed copy stale
 EOF
