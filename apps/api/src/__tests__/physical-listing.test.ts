@@ -71,7 +71,13 @@ describe("options", () => {
 
 	it("keeps a well-formed choice in the creator's order", () => {
 		const r = withOptions([
-			{ name: "Size", values: [{ label: "M", stock: 4 }, { label: "L", stock: null }] },
+			{
+				name: "Size",
+				values: [
+					{ label: "M", stock: 4 },
+					{ label: "L", stock: null },
+				],
+			},
 		]);
 		expect(r.ok).toBe(true);
 		if (r.ok) {
@@ -98,9 +104,9 @@ describe("options", () => {
 				{ name: "size", values: [{ label: "L" }] },
 			]).ok,
 		).toBe(false);
-		expect(
-			withOptions([{ name: "Size", values: [{ label: "M" }, { label: "m" }] }]).ok,
-		).toBe(false);
+		expect(withOptions([{ name: "Size", values: [{ label: "M" }, { label: "m" }] }]).ok).toBe(
+			false,
+		);
 	});
 
 	it("refuses a stock that is not a whole count", () => {

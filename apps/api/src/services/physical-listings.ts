@@ -21,8 +21,8 @@
 import { db } from "@anthers/db/client";
 import { type PhysicalOption, physicalListings } from "@anthers/db/schema";
 import { isPhysicalTaxCategory, type PhysicalTaxCategory } from "@anthers/shared/tax-codes";
-import { eq } from "drizzle-orm";
 import Decimal from "decimal.js";
+import { eq } from "drizzle-orm";
 import { clampHandlingDays } from "./shipments.js";
 
 /** What one listing may carry. Small bounds, deliberately: a picker is not a catalog. */
@@ -78,16 +78,25 @@ export function validateListing(input: {
 	const rawPrice = String(input.shippingPrice ?? "").trim();
 	let shippingPrice = "0.00";
 	if (!SHIPPING_SHAPE.test(rawPrice)) {
-		problems.push({ field: "shippingPrice", message: "Enter a shipping price like 4.95, or 0 for free." });
+		problems.push({
+			field: "shippingPrice",
+			message: "Enter a shipping price like 4.95, or 0 for free.",
+		});
 	} else if (new Decimal(rawPrice).gt(new Decimal(LISTING_LIMITS.maxShippingDollars))) {
-		problems.push({ field: "shippingPrice", message: "That shipping price is higher than we can charge." });
+		problems.push({
+			field: "shippingPrice",
+			message: "That shipping price is higher than we can charge.",
+		});
 	} else {
 		shippingPrice = new Decimal(rawPrice).toFixed(2);
 	}
 
 	const handling = Number(input.handlingBusinessDays);
 	if (!Number.isFinite(handling)) {
-		problems.push({ field: "handlingBusinessDays", message: "Say how many business days it takes to send." });
+		problems.push({
+			field: "handlingBusinessDays",
+			message: "Say how many business days it takes to send.",
+		});
 	}
 	const handlingBusinessDays = clampHandlingDays(handling);
 
