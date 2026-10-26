@@ -795,6 +795,16 @@ export const CARD_FLAT = 0.3;
 export const ILLUSTRATIVE_SALES_TAX_RATE = 0.065;
 
 /**
+ * Stripe Tax's own fee where it calculates tax: **0.5% of the charge**, paid at cost.
+ *
+ * ⚠️ **The buyer pays the tax; the creator pays this fee.** Sales tax is added to the
+ * buyer's total and is not part of the creator's money, but Stripe's 0.5% charge for
+ * working out and collecting it comes off the sale. The take-home range's low end is the
+ * sale where that service runs; the high end is a sale where it does not.
+ */
+export const STRIPE_TAX_FEE_RATE = 0.005;
+
+/**
  * The card fee, in floats, for **display only** — marketing pages and calculators.
  *
  * `cardFee()` in `fees.ts` is the money version and the source of truth, but it is

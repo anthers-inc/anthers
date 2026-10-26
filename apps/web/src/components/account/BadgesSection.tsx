@@ -316,6 +316,7 @@ export default function BadgesSection() {
 				label: h.label,
 				description: h.description,
 				hasArt: h.hasArt,
+				hasComposedArt: h.hasComposedArt,
 				artShape: h.artShape,
 				artColor: h.artColor,
 				sortOrder: 0,
@@ -783,6 +784,7 @@ function CreatorBadgeCard({ row }: { row: CreatorRow }) {
 							artShape: held.artShape,
 							artColor: held.artColor,
 							hasArt: held.hasArt,
+							hasComposedArt: held.hasComposedArt,
 						}}
 						size="h-12 w-12"
 					/>

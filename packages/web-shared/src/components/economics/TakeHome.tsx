@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-import { CARD_FLAT, CARD_RATE, cardFeeDisplay, STRIPE_MIN_CHARGE } from "@anthers/shared/constants";
+import {
+	CARD_FLAT,
+	CARD_RATE,
+	cardFeeDisplay,
+	STRIPE_MIN_CHARGE,
+	STRIPE_TAX_FEE_RATE,
+} from "@anthers/shared/constants";
 import { RIVAL_STOREFRONTS } from "@anthers/shared/figures";
 
 /**
@@ -8,8 +14,15 @@ import { RIVAL_STOREFRONTS } from "@anthers/shared/figures";
  * 🚨 **A percentage is the wrong headline and would cost us creators.** A $1.00 track nets
  * $0.67 — read as "33%" against a 15% they think they understand, a creator leaves. Read as
  * **$0.67 beside itch's $0.57 and Bandcamp's $0.52**, the same number says they earn more
- * here. So the take-home is the headline, the deduction is explained rather than
- * summarized, and the comparison is to named alternatives.
+ * here. So the take-home is the headline, the deduction is shown as a table rather than
+ * buried in a sentence, and the comparison is to named alternatives.
+ *
+ * ⭐ **The figure is a range, and every end is money that leaves the creator's side**
+ * (Parker, 2026-10-26). **Sales tax is the buyer's**: it is added to their total and never
+ * comes out of the creator's cut, so the panel does not show a tax rate or a buyer total at
+ * all. The one conditional deduction is Stripe's 0.5% charge for calculating and collecting
+ * that tax, which is paid at cost; the range is the sale where that service runs against the
+ * sale where it does not.
  *
  * **Inform, never restrict** (Parker, 2026-08-13). No minimum of ours, no confirmation
  * step, no nagging. A floor would ban prices we are genuinely competitive at and sit
@@ -42,6 +55,12 @@ import { RIVAL_STOREFRONTS } from "@anthers/shared/figures";
 const EXPLAIN_BELOW = 1;
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
+
+/** A signed display figure — the typographic minus the headline and table both use. */
+const signedUsd = (n: number) => (n < 0 ? `−${usd(-n)}` : usd(n));
+
+/** A signed percentage, same convention: the sign lives outside the absolute value. */
+const signedPct = (n: number) => `${n < 0 ? "−" : ""}${Math.abs(n).toFixed(0)}%`;
 
 /**
  * The lowest price at which a sale returns the creator anything at all.
@@ -78,15 +97,24 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 	if (!(amount > 0)) return null;
 
 	const fee = cardFeeDisplay(amount);
+
 	// 🚨 NOT clamped at zero, and the first cut of this was. Below ~$0.32 the fixed fee
 	// exceeds the whole price, so the creator receives **less than nothing** — clamping
 	// renders that as "$0.00", which reads as "free" rather than "this costs you money".
 	// A display that hides the one case a creator most needs to see is worse than no
 	// display, and this component's entire justification is informing rather than
 	// restricting.
-	const net = amount - fee;
-	const underwater = net < 0;
-	const keptPct = (net / amount) * 100;
+	//
+	// The tax-service fee is 0.5% of the charge. The buyer's tax is added on top and is not
+	// this component's figure, so the display uses the list price as its base: a high-tax
+	// jurisdiction can add a cent or two to the real fee, which is the same rounding at
+	// ordinary prices and the only honest estimate available without the buyer's address.
+	const taxServiceFeeMax = roundCents(amount * STRIPE_TAX_FEE_RATE);
+	const netBest = roundCents(amount - fee);
+	const netWorst = roundCents(amount - fee - taxServiceFeeMax);
+	const underwater = netBest < 0;
+	const keptPctBest = (netBest / amount) * 100;
+	const keptPctWorst = (netWorst / amount) * 100;
 	// The share of the deduction that is the FIXED part. At $1.00 it is 91%, which is the
 	// whole point: the cost is one third-party flat fee, not a rate we are taking.
 	const flatShare = fee > 0 ? ((fee - amount * CARD_RATE) / fee) * 100 : 0;
@@ -101,7 +129,7 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 	// Computed, not marked by hand: Steam beats us below about $1.15, because their 30% of
 	// a small sale is less than the flat fee they absorb. The wiki's *How Anthers Talks About Itself* § Comparisons requires we
 	// concede that, and generating it means we cannot quietly stop.
-	const best = Math.max(net, ...rivals.map((r) => r.net ?? 0));
+	const best = Math.max(netBest, ...rivals.map((r) => r.net ?? 0));
 
 	return (
 		<div className="rounded-box bg-base-200/60 px-3 py-2 text-sm" data-testid="take-home">
@@ -111,23 +139,52 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 					className={`font-semibold tabular-nums ${underwater ? "text-error" : ""}`}
 					data-testid="take-home-net"
 				>
-					{net < 0 ? `−${usd(-net)}` : usd(net)}
+					{signedUsd(netWorst)}
+					{netWorst !== netBest && `–${signedUsd(netBest)}`}
 					<span className="ml-1 text-xs font-normal text-base-content/50">
 						{/* `toFixed` yields an ASCII hyphen, which sat a character away from the
 						    typographic minus on the headline and read as a rendering bug. */}
-						of {usd(amount)} ({keptPct < 0 ? "−" : ""}
-						{Math.abs(keptPct).toFixed(0)}%)
+						of {usd(amount)} ({signedPct(keptPctWorst)}
+						{keptPctWorst !== keptPctBest && `–${signedPct(keptPctBest)}`})
 					</span>
 				</span>
 			</div>
 
-			<p className="mt-1 text-xs text-base-content/60">
-				{/* Never "our fee" and never a percentage on its own — Anthers keeps $0 here, and
-				    saying so plainly is the claim that survives (the wiki's *How Anthers Talks About Itself* § Claims). */}
-				Anthers takes <strong>nothing</strong>. The {usd(fee)} is card processing, paid to Stripe —
-				and on sales where Stripe calculates tax, its 0.5% tax fee comes out of the price too, at
-				cost, so you receive up to 0.5% less than shown.
-			</p>
+			{/* The breakdown is a table rather than a paragraph, and every row is a deduction
+			    from the CREATOR's side. Sales tax is the buyer's, added to their total, so it
+			    has no row here. Every figure is derived from `@anthers/shared/constants`. */}
+			<table className="mt-2 w-full border-collapse text-xs" data-testid="take-home-breakdown">
+				<tbody>
+					<tr className="border-t border-base-content/10">
+						<td className="py-1 pr-2 text-base-content/60">Sale price</td>
+						<td className="py-1 text-right tabular-nums">{usd(amount)}</td>
+						<td className="py-1 pl-2 text-base-content/50">Your list price</td>
+					</tr>
+					<tr className="border-t border-base-content/10">
+						<td className="py-1 pr-2 text-base-content/60">Card processing</td>
+						<td className="py-1 text-right tabular-nums">{`−${usd(fee)}`}</td>
+						<td className="py-1 pl-2 text-base-content/50">Stripe · 2.9% + $0.30</td>
+					</tr>
+					<tr className="border-t border-base-content/10">
+						<td className="py-1 pr-2 text-base-content/60">Stripe tax service</td>
+						<td className="py-1 text-right tabular-nums">{`${usd(0)}–${usd(taxServiceFeeMax)}`}</td>
+						<td className="py-1 pl-2 text-base-content/50">0.5% where it calculates tax</td>
+					</tr>
+					<tr className="border-t border-base-content/10">
+						<td className="py-1 pr-2 text-base-content/60">Anthers</td>
+						<td className="py-1 text-right tabular-nums">{usd(0)}</td>
+						<td className="py-1 pl-2 text-base-content/50">No platform cut</td>
+					</tr>
+					<tr className="border-t border-base-content/10 font-medium">
+						<td className="py-1 pr-2">You receive</td>
+						<td className="py-1 text-right tabular-nums">
+							{signedUsd(netWorst)}
+							{netWorst !== netBest && `–${signedUsd(netBest)}`}
+						</td>
+						<td className="py-1 pl-2 text-base-content/50">After the deductions above</td>
+					</tr>
+				</tbody>
+			</table>
 
 			{underwater && (
 				<p className="mt-1 text-xs text-error" data-testid="take-home-underwater">
@@ -135,8 +192,7 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 					    consequence, still with no remedy imposed — a creator may have a reason,
 					    and the settled rule is inform, never restrict. */}
 					At this price the {usd(fee)} card fee is <strong>more than the price</strong>, so a sale
-					costs you {usd(-net)}. Card processing is a fixed cost per transaction, so anything under{" "}
-					{usd(breakEvenPrice())} is underwater.
+					costs you {usd(-netBest)}. Anything under {usd(breakEvenPrice())} is underwater.
 				</p>
 			)}
 
@@ -159,38 +215,41 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 				<p className="mt-1 text-xs text-warning" data-testid="take-home-low">
 					{/* Explanation, not a warning to act on: the brief settled "inform, never
 					    restrict", so this states a fact and offers no remedy and no confirm step. */}
-					At this price <strong>{flatShare.toFixed(0)}%</strong> of that is Stripe's fixed $
-					{CARD_FLAT.toFixed(2)}, which does not shrink with the price — so small amounts keep a
-					smaller share. That is one third-party fee, not a cut of ours.
+					<strong>{flatShare.toFixed(0)}%</strong> of the deduction is Stripe's fixed $
+					{CARD_FLAT.toFixed(2)}, which does not shrink with the price.
 				</p>
 			)}
 
-			<dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-				<div className="flex gap-1">
-					<dt className="text-base-content/50">Anthers</dt>
-					<dd className={net >= best ? "font-semibold" : ""}>
-						{net < 0 ? `−${usd(-net)}` : usd(net)}
-					</dd>
-				</div>
+			<div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs">
+				<span className="text-base-content/50">Elsewhere at this price</span>
+				<span className="flex gap-1">
+					<span className="text-base-content/50">Anthers</span>
+					<span className={netBest >= best ? "font-semibold" : ""}>{usd(netBest)}</span>
+				</span>
 				{rivals.map((r) => (
-					<div className="flex gap-1" key={r.name}>
-						<dt className="text-base-content/50">{r.name}</dt>
-						<dd className={r.net !== null && r.net >= best ? "font-semibold" : ""}>
+					<span className="flex gap-1" key={r.name}>
+						<span className="text-base-content/50">{r.name}</span>
+						<span className={r.net !== null && r.net >= best ? "font-semibold" : ""}>
 							{r.net === null ? "—" : r.net < 0 ? `−${usd(-r.net)}` : usd(r.net)}
-						</dd>
-					</div>
+						</span>
+					</span>
 				))}
-			</dl>
+			</div>
 
 			{kind === "badge" && (
 				<p className="mt-2 text-xs text-base-content/50">
 					{/* The Badge worst case, stated rather than buried. A supporter giving you and
 					    nothing else pays the whole flat fee on this one line; one who also supports
 					    Anthers or another creator amortizes it, and you receive more. */}
-					Shown for a supporter with nothing else on their month. Anyone who also supports Anthers
-					or another creator splits the {usd(fee)} across it, and you receive more.
+					Shown for a supporter with nothing else on their month. Anything else they give shares the{" "}
+					{usd(fee)} card fee.
 				</p>
 			)}
 		</div>
 	);
+}
+
+/** Round a display figure to cents without letting float noise move the last digit. */
+function roundCents(n: number): number {
+	return Math.round((n + Number.EPSILON) * 100) / 100;
 }

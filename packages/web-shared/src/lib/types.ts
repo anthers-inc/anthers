@@ -1398,6 +1398,8 @@ export interface BadgeHolding {
 	artColor: string | null;
 	artEmblem: string | null;
 	hasArt: boolean;
+	/** Whether the art is a composed Noun emblem rather than an uploaded interior. */
+	hasComposedArt?: boolean;
 	billingCycle: string;
 	createdAt: string;
 	creator: {
