@@ -8,10 +8,11 @@
 // Somebody who read the button as "turn off publishing" would lose their listings and their
 // ability to comment in one press, with nothing failing and no test going red.
 //
-// ⚠️ **The hosted paragraph is the other half, and it is honesty rather than safety.** An
-// identity Anthers issues has a generated password its holder was never given, so the account
-// page on the node is not a door they can open; the card that declines to link it has to say why,
-// or the absence reads as an oversight.
+// ⚠️ **The hosted paragraph is the other half, and it is honesty rather than safety.** The
+// password on an identity Anthers hosts is the holder's, and the card is where they set it. What
+// the copy has to make clear is the custody split: the password works in Bluesky and anywhere
+// else the identity signs in, and Anthers keeps a session for its own writes rather than a copy
+// of the password.
 //
 // ⚠️ **This is the same shape as `recovery-key-copy.test.ts`**, with the same caveat: a phrase
 // here is a proxy for a meaning. If this fails on wording that is honestly better, change the
@@ -34,11 +35,12 @@ const COPY = SOURCE.replace(/\/\*[\s\S]*?\*\//g, " ")
 /** Something the cards must tell somebody before they can act, and why it matters. */
 const MUST_SAY: { about: string; phrases: string[]; because: string }[] = [
 	{
-		about: "a hosted identity has no password its holder can use",
-		phrases: ["never given out"],
+		about: "a hosted identity's password is the person's, and Anthers keeps a session not a copy",
+		phrases: ["keeps a session, not a copy"],
 		because:
-			"Without it, somebody whose identity Anthers hosts concludes the missing account-page " +
-			"link is an omission rather than the custody arrangement.",
+			"Without it, the password door reads as another Anthers password rather than the " +
+			"credential that makes the identity usable outside Anthers, and the session the hub " +
+			"holds would be mistaken for a stored password.",
 	},
 	{
 		about: "disconnecting takes the published records down",

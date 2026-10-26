@@ -3,9 +3,14 @@
  * A {@link RepoWriter} over an identity Anthers hosts.
  *
  * ⭐ **This is the route that needs nobody's permission.** A record belongs in the creator's
- * own repository, and for an account that took a handle here the credential is in
- * `hosted_accounts`, sealed, and the hub can open it — so there is nothing to ask for and
- * nothing that can be taken back.
+ * own repository, and for an account that took a handle here the session is in
+ * `hosted_accounts`, sealed, and the hub can open it — so there is nothing to ask for.
+ *
+ * ⚠️ **A session is revocable, and that is the improvement rather than a defect.** The hub used
+ * to keep a copy of the account's password; now it keeps the session the person's own credential
+ * opened. A reset at the node revokes it, which surfaces as `authorization_lost` rather than as a
+ * node that did not answer, and the person repairing it through the identity card restores the
+ * hub's access. That is the shape a credential the holder controls is supposed to have.
  *
  * ⚠️ **It is one of two routes, and `not_hosted` is no longer the end of the story.**
  * `oauth-repo-writer.ts` covers a creator whose identity lives elsewhere and who has granted
@@ -35,7 +40,7 @@ import { db } from "@anthers/db";
 import { hostedAccounts } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import type { RecordRef, RepoWriter } from "./atproto-repo.js";
-import { hostedPdsUrl, nodeCall } from "./hosted-accounts.js";
+import { hostedPdsUrl, nodeCall } from "./hosted-node.js";
 import { clearHostedSession, sessionForHostedAccount } from "./hosted-session-store.js";
 import { open } from "./secret-box.js";
 
@@ -45,6 +50,12 @@ export type NoWriterReason =
 	| "not_hosted"
 	/** The credential exists and this deployment's key cannot open it. */
 	| "credential_unopenable"
+	/**
+	 * The session was revoked and there is no password on file to log in again with. This is
+	 * what an owner's password reset produces, and it is NOT an outage: it needs the account to
+	 * authorize Anthers again, and it must not be reported as a node that did not answer.
+	 */
+	| "authorization_lost"
 	/** The node did not answer, or refused the session. Worth retrying. */
 	| "node_unreachable"
 	/**
@@ -114,19 +125,28 @@ export async function hostedTokenFor(
 
 	// `open` throws on a value this deployment's key cannot open, which is a real state — see
 	// `signup-probe.anthers.social` in the runbook. Retrying never opens it.
-	let password: string;
-	try {
-		password = open(row.sealedPassword);
-	} catch {
-		console.error(`[repo-writer] cannot open the credential for ${row.did}`);
-		return { ok: false, reason: "credential_unopenable" };
+	// A password on file is the legacy fallback, not the design: it is only there because a
+	// session could not be established when the identity was recorded.
+	let password: string | null = null;
+	if (row.sealedPassword) {
+		try {
+			password = open(row.sealedPassword);
+		} catch {
+			console.error(`[repo-writer] cannot open the credential for ${row.did}`);
+			return { ok: false, reason: "credential_unopenable" };
+		}
 	}
 
 	// ⭐ **One login per account, not one per write.** The store reuses the session already on
 	// file and renews it with `refreshSession`; `createSession` — the call the node limits —
 	// happens only when there is no session or the node refused the refresh.
 	const session = await sessionForHostedAccount(row.did, password, { fetchImpl: doFetch });
-	if (!session.token) return { ok: false, reason: "node_unreachable" };
+	if (session.token === null) {
+		return {
+			ok: false,
+			reason: session.authorizationLost ? "authorization_lost" : "node_unreachable",
+		};
+	}
 
 	return { ok: true, did: row.did, token: session.token };
 }

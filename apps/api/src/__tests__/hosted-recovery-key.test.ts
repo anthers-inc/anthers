@@ -153,9 +153,15 @@ async function makeAccount(tag: string, opts: { openable?: boolean } = {}) {
 	});
 	await db.delete(hostedIdentities).where(eq(hostedIdentities.did, account.did));
 	if (opts.openable === false) {
+		// No way in at all: the legacy password is sealed under another key, and the session the
+		// fixture normally holds is gone too. That is the state a deployment change can leave
+		// behind, and the one this flow must refuse rather than retry.
 		await db
 			.update(hostedAccounts)
-			.set({ sealedPassword: "v1.YWFhYWFhYWFhYWFh.YmJiYmJiYmJiYmJiYmJiYg.Y2Nj" })
+			.set({
+				sealedPassword: "v1.YWFhYWFhYWFhYWFhYmJiYmJiYmJiYmJiYmJiYg.Y2Nj",
+				sealedSession: null,
+			})
 			.where(eq(hostedAccounts.did, account.did));
 	}
 	return { userId: account.userId, did: account.did };
@@ -179,9 +185,10 @@ describe("asking for a key when the account has none to put one on", () => {
 		expect(called).toBe(false);
 	});
 
-	// ⚠️ Retrying never opens a credential this deployment's key cannot open, so this is
-	// reported as Anthers' problem rather than as something to try again.
-	it("refuses a credential it cannot open, before any network call", async () => {
+	// ⚠️ Retrying never opens a credential this deployment's key cannot open, and with no
+	// session either there is no login left to attempt, so this is reported as Anthers'
+	// problem rather than as something to try again.
+	it("refuses an account it holds no way into, before any network call", async () => {
 		const { userId } = await makeAccount("shut", { openable: false });
 		let called = false;
 		const result = await requestRecoveryKeyToken(userId, {

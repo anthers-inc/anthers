@@ -8,13 +8,7 @@ import { displayHandle, profileUrl } from "@anthers/web-shared/profile";
 import { Link, NavLink, Outlet, useLocation } from "@anthers/web-shared/router";
 import { SidebarProvider, useSidebar } from "@anthers/web-shared/sidebar";
 import Logo from "@anthers/web-shared/ui/Logo";
-import ThemeSelect from "@anthers/web-shared/ui/ThemeSelect";
-import {
-	ChevronLeftIcon,
-	Cog6ToothIcon,
-	ShoppingBagIcon,
-	UserCircleIcon,
-} from "@heroicons/react/24/outline";
+import { ChevronLeftIcon, Cog6ToothIcon, ShoppingBagIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo } from "react";
 import { useBasket } from "../../lib/basket";
 import { useMediaPlayer } from "../../lib/media-player";
@@ -33,8 +27,8 @@ import { ViewFilterProvider } from "./search/filter-context";
 
 /**
  * Where the signed-in site-map footer renders: the account page. Every other
- * signed-in page ends at its own content, since the sidebar and the header's account
- * menu already carry the reader's navigation. Studio mode omits the footer separately.
+ * signed-in page ends at its own content, since the sidebar already carries the reader's
+ * navigation. Studio mode omits the footer separately.
  *
  * Badges & Purchases is a tab on Settings since 2026-10-23, so the address that carries
  * the account's own pages is one path again.
@@ -73,19 +67,36 @@ const navItemClass = (active: boolean, rail: boolean, dense = false) =>
  * toggle read as one button that changed color at some arbitrary point. The join carries a
  * hairline border and a soft shadow, and the inactive side sits on `base-100` — the surface
  * the page uses — so both halves read as controls against either the header or the sidebar.
+ *
+ * ⭐ **From either settings page, each side lands on the OTHER settings page** (Parker,
+ * 2026-10-26). The switch names which half of the app the person is in, so somebody already
+ * managing their account expects the same job in the other half rather than that half's
+ * home; the old behavior sent a flip to User from Creator Settings to Discovery, and a flip
+ * to Creator from User Settings to the Studio's root. Every other page still sends each
+ * side to its mode's home.
  */
 function ModeSwitch({
 	mode,
 	userHome,
 	creatorHome,
+	pathname,
 }: {
 	mode: AppMode;
 	userHome: string;
 	creatorHome: string;
+	pathname: string;
 }) {
+	const here = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+	const onUserSettings = here === "/settings";
+	const onCreatorSettings = here === "/studio/settings";
+
 	const sides = [
-		{ to: userHome, label: "User", on: mode === "user" },
-		{ to: creatorHome, label: "Creator", on: mode === "studio" },
+		{ to: onCreatorSettings ? "/settings" : userHome, label: "User", on: mode === "user" },
+		{
+			to: onUserSettings ? studioUrl("/settings") : creatorHome,
+			label: "Creator",
+			on: mode === "studio",
+		},
 	];
 	return (
 		<nav
@@ -234,9 +245,12 @@ function LoggedInLayoutInner() {
 	return (
 		<ViewFilterProvider>
 			<div className="h-screen flex flex-col overflow-hidden">
-				{/* Top bar: brand on the left, account on the right. It is the one header in both modes;
-		    studio mode leaves out search and the basket, which belong to user mode. The sidebar's
-		    own toggle used to live here too and moved onto the sidebar's edge (2026-10-16). */}
+				{/* Top bar: brand and the mode switch on the left, search in the middle, the
+		    reader's notifications on the right. It is the one header in both modes; studio
+		    mode leaves out search and the basket, which belong to user mode. The sidebar's
+		    own toggle used to live here too and moved onto the sidebar's edge (2026-10-16),
+		    and the account menu left on 2026-10-26 — the sidebar is the door to Settings and
+		    Badges & Purchases lives in the account pages' footer. */}
 				<header className="navbar nav-edge bg-base-200/50 backdrop-blur-md px-4 sticky top-0 z-40 h-14 min-h-0">
 					<div className="navbar-start gap-3">
 						{/* A plain flex link rather than a `btn`, for the same reason as the brand link in
@@ -252,7 +266,12 @@ function LoggedInLayoutInner() {
 						    the two halves of the whole app, so it belongs to the one header both halves share,
 						    and the sidebar's first row is free for where the creator actually is. */}
 						{creatorMode && !chromeHidden && (
-							<ModeSwitch mode={mode} userHome={userHome} creatorHome={creatorHome} />
+							<ModeSwitch
+								mode={mode}
+								userHome={userHome}
+								creatorHome={creatorHome}
+								pathname={pathname}
+							/>
 						)}
 					</div>
 
@@ -281,54 +300,6 @@ function LoggedInLayoutInner() {
 					    count riding the shared store so one poll serves every surface. Studio mode
 					    leaves it out with search and the basket: creator chrome, not reader chrome. */}
 						{!studio && <NotificationBell />}
-						<ThemeSelect />
-						<div className="dropdown dropdown-end">
-							{/* daisyUI's dropdown is CSS-only: `.dropdown-content` stays `display:none`
-						    until the enclosing `.dropdown` matches `:focus-within`, so the trigger
-						    has to be focusable or the menu can never open at all. This was a bare
-						    `<label>` with no `tabIndex` and no control to label, which is focusable
-						    by nothing — clicking the avatar did nothing from the day it shipped.
-						    `tabIndex` carries a second job beyond making the button focusable:
-						    daisyUI suppresses pointer events on `[tabindex]:first-child` while the
-						    menu is open, and that literal attribute selector is what lets a second
-						    click land on the page and dismiss it. A `<button>` would focus without
-						    it and then never close. */}
-							<button
-								type="button"
-								tabIndex={0}
-								className="btn btn-ghost btn-circle"
-								aria-label="Your account"
-							>
-								{user?.avatar ? (
-									/* The button names itself above, so the image is decorative — an alt
-								   here would be a second name for the same control. */
-									<img src={user.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
-								) : (
-									<UserCircleIcon className="w-8 h-8" />
-								)}
-							</button>
-							{/* No `tabIndex` here, deliberately. The older dropdowns in this app carry one
-						    on the `<ul>`, which biome flags as `noNoninteractiveTabindex` — a list is
-						    not a control and putting it in the tab order just adds a stop that does
-						    nothing. It is unnecessary as well as unwanted: every item below is a link,
-						    so tabbing off the trigger lands on one of them and the `.dropdown` keeps
-						    matching `:focus-within` on its own. */}
-							<ul className="menu menu-sm dropdown-content mt-3 z-50 p-2 shadow bg-base-200 rounded-box w-52">
-								<li className="menu-title px-4 py-1">
-									<span className="text-xs text-base-content/50">
-										{user ? displayHandle(user.handle) : ""}
-									</span>
-								</li>
-								<div className="divider my-0 px-2" />
-								<li>
-									<Link to="/settings?tab=purchases">Badges &amp; Purchases</Link>
-								</li>
-								<li>{user && <Link to={profileUrl(user.handle)}>Profile</Link>}</li>
-								<li>
-									<Link to="/settings">Settings</Link>
-								</li>
-							</ul>
-						</div>
 					</div>
 				</header>
 

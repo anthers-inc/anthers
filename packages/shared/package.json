@@ -34,6 +34,7 @@
 		"./work-preview": "./src/work-preview.ts",
 		"./accepted-formats": "./src/accepted-formats.ts",
 		"./next-path": "./src/next-path.ts",
+		"./passwords": "./src/passwords.ts",
 		"./search": "./src/search.ts",
 		"./keybindings": "./src/keybindings.ts",
 		"./redirect-paths": "./src/redirect-paths.ts",

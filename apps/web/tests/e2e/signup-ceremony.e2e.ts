@@ -76,6 +76,11 @@ async function giveAddress(page: Page) {
 		.getByRole("button", { name: /send|continue|confirm|code/i })
 		.first()
 		.click();
+	// ⭐ **A handle Anthers issues now chooses its password before the code boxes appear.** The
+	// account is created with that password, so the same person holds the credential that works in
+	// Bluesky; the gate is on this face because the handle was chosen back at `/signup`.
+	await page.getByLabel("Choose a password").fill("e2e a long enough password");
+	await page.getByRole("button", { name: "Continue", exact: true }).click();
 	return address;
 }
 

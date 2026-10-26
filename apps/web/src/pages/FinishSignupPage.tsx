@@ -44,6 +44,7 @@ import {
 	thresholdForBadge,
 } from "@anthers/shared/constants";
 import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
+import { MIN_PASSWORD_LENGTH, passwordProblem } from "@anthers/shared/passwords";
 import {
 	directedAmountFor,
 	EMPTY_PICKS,
@@ -169,6 +170,28 @@ export default function FinishSignupPage() {
 	const [hostedRefusal, setHostedRefusal] = useState<string | null>(null);
 	const [hostedOpen, setHostedOpen] = useState(false);
 	const [hostedSuffix, setHostedSuffix] = useState("");
+	/**
+	 * The password for the identity Anthers is about to create.
+	 *
+	 * 🚨 **Held in this tab and nowhere else.** It is not part of the pending signup, not sent
+	 * when the handle is reserved, and never stored by Anthers — it travels once with the request
+	 * that creates the account, and the node answers that request with the session the row keeps.
+	 * A reload or another browser loses it, which is why the code step asks again when it is
+	 * missing rather than assuming it was chosen here.
+	 */
+	const [password, setPassword] = useState("");
+	const [passwordRefusal, setPasswordRefusal] = useState<string | null>(null);
+	/**
+	 * The gate's own field, separate from `password` so typing does not satisfy the gate.
+	 *
+	 * 🚨 **The gate is conditioned on this rather than on `password` itself.** It first read
+	 * `!password`, and the input is controlled, so the first character typed replaced the gate
+	 * with the code boxes and took the Continue button out from under the click. The password is
+	 * copied across only when the gate is actually submitted.
+	 */
+	const [gatePassword, setGatePassword] = useState("");
+	/** Set when the password gate on the code step has been satisfied this visit. */
+	const [passwordReady, setPasswordReady] = useState(false);
 	const [blueskyHandle, setBlueskyHandle] = useState("");
 	const [blueskyRefusal, setBlueskyRefusal] = useState<string | null>(null);
 	const hostedStatus = useHandleAvailability(hostedName, {
@@ -446,7 +469,21 @@ export default function FinishSignupPage() {
 	const verifyCode = useCallback(
 		async (code: string) => {
 			const address = pending?.email ?? email.trim();
-			const res = await client.api.auth.signup.verify.$post({ json: { email: address, code } });
+			// A backstop: the code step does not show the boxes until a usable password is here.
+			if (pending?.hostedHandle) {
+				const problem = passwordProblem(password, {
+					handle: pending.hostedHandle,
+					email: address,
+				});
+				if (problem) throw new Error(problem);
+			}
+			const res = await client.api.auth.signup.verify.$post({
+				json: {
+					email: address,
+					code,
+					password: pending?.hostedHandle ? password : undefined,
+				},
+			});
 			if (!res.ok) {
 				const body = (await res.json().catch(() => ({}))) as Refusal;
 				// A refusal that carries the signup back is about the identity, not the code.
@@ -458,14 +495,27 @@ export default function FinishSignupPage() {
 			}
 			await accountMade((await res.json()) as Parameters<typeof accountMade>[0]);
 		},
-		[accountMade, email, pending?.email, refused],
+		[accountMade, email, pending, password, refused],
 	);
 
 	const finishResumed = async () => {
 		setBusy(true);
 		setError(null);
+		if (pending?.hostedHandle) {
+			const problem = passwordProblem(password, {
+				handle: pending.hostedHandle,
+				email: pending.email,
+			});
+			if (problem) {
+				setPasswordRefusal(problem);
+				setBusy(false);
+				return;
+			}
+		}
 		try {
-			const res = await client.api.auth.signup.complete.$post();
+			const res = await client.api.auth.signup.complete.$post({
+				json: { password: pending?.hostedHandle ? password : undefined },
+			});
 			if (!res.ok) {
 				const body = (await res.json().catch(() => ({}))) as Partial<Refusal>;
 				refused({
@@ -490,8 +540,18 @@ export default function FinishSignupPage() {
 	const chooseHostedHandle = async () => {
 		const name = hostedName.trim().replace(/^@/, "");
 		if (!name) return;
+		// The password is chosen with the identity, not after it: the account is created with it,
+		// and this is the only moment the person has the handle in front of them to compare it to.
+		const problem = passwordProblem(password, {
+			handle: `${name}.${hostedSuffix || "anthers.social"}`,
+		});
+		if (problem) {
+			setPasswordRefusal(problem);
+			return;
+		}
 		setBusy(true);
 		setHostedRefusal(null);
+		setPasswordRefusal(null);
 		setError(null);
 		try {
 			const res = await client.api.auth.signup.identity.$post({ json: { hostedHandle: name } });
@@ -624,10 +684,20 @@ export default function FinishSignupPage() {
 								onNameChange={(value) => {
 									setHostedName(value);
 									setHostedRefusal(null);
+									setPasswordRefusal(null);
 								}}
 								status={hostedStatus}
 								suffix={hostedSuffix}
 								refusal={hostedRefusal}
+							/>
+							<IdentityPasswordField
+								id="finish-password"
+								value={password}
+								onChange={(value) => {
+									setPassword(value);
+									setPasswordRefusal(null);
+								}}
+								refusal={passwordRefusal}
 							/>
 							<button
 								type="submit"
@@ -724,19 +794,58 @@ export default function FinishSignupPage() {
 				<div className="mt-6">
 					<p className="mb-5 text-base leading-relaxed text-base-content/65">
 						We sent a six-character code to <strong className="break-all">{pending.email}</strong>.
-						Enter it and your account is made.
+						{pending.hostedHandle && !password && !passwordReady
+							? " Choose a password for your identity, then enter it."
+							: " Enter it and your account is made."}
 					</p>
-					<EmailCodeForm
-						cta="Confirm my email"
-						busyLabel="Checking…"
-						onSubmit={verifyCode}
-						onResend={async () => {
-							await client.api.auth.signup.start.$post({
-								json: { email: pending.email as string },
-							});
-						}}
-						secondary={{ label: "Use a different address", onClick: () => setFace("address") }}
-					/>
+					{/* ⚠️ **The gate exists for the paths that never saw an identity step**: a handle
+					    chosen at `/signup`, and a page reload that emptied this tab's state. The
+					    password is still only in this browser, and the code boxes wait behind it so a
+					    correct code is never spent on a request missing its credential. */}
+					{pending.hostedHandle && !password && !passwordReady ? (
+						<form
+							className="text-left"
+							onSubmit={(e) => {
+								e.preventDefault();
+								const problem = passwordProblem(gatePassword, {
+									handle: pending.hostedHandle as string,
+									email: pending.email,
+								});
+								if (problem) {
+									setPasswordRefusal(problem);
+									return;
+								}
+								setPasswordRefusal(null);
+								setPassword(gatePassword);
+								setPasswordReady(true);
+							}}
+						>
+							<IdentityPasswordField
+								id="finish-password-gate"
+								value={gatePassword}
+								onChange={(value) => {
+									setGatePassword(value);
+									setPasswordRefusal(null);
+								}}
+								refusal={passwordRefusal}
+							/>
+							<button type="submit" className={`btn btn-primary ${FIELD_BUTTON_GAP} w-full`}>
+								Continue
+							</button>
+						</form>
+					) : (
+						<EmailCodeForm
+							cta="Confirm my email"
+							busyLabel="Checking…"
+							onSubmit={verifyCode}
+							onResend={async () => {
+								await client.api.auth.signup.start.$post({
+									json: { email: pending.email as string },
+								});
+							}}
+							secondary={{ label: "Use a different address", onClick: () => setFace("address") }}
+						/>
+					)}
 				</div>
 			)}
 
@@ -751,6 +860,19 @@ export default function FinishSignupPage() {
 						as{" "}
 						<strong className="break-all">@{pending.atprotoHandle ?? pending.hostedHandle}</strong>.
 					</p>
+					{pending.hostedHandle && (
+						<div className="mt-5 text-left">
+							<IdentityPasswordField
+								id="finish-password-resumed"
+								value={password}
+								onChange={(value) => {
+									setPassword(value);
+									setPasswordRefusal(null);
+								}}
+								refusal={passwordRefusal}
+							/>
+						</div>
+					)}
 					<button
 						type="button"
 						className={`btn btn-primary btn-lg mt-5 w-full ${busy ? "btn-disabled" : ""}`}
@@ -889,6 +1011,59 @@ function ChosenSummary({
 /** The day a held handle is released, said the way a person would say it. */
 function heldUntil(iso: string): string {
 	return new Date(iso).toLocaleDateString(undefined, { month: "long", day: "numeric" });
+}
+
+/**
+ * The password for an identity Anthers is creating.
+ *
+ * ⭐ **This is the person's credential at their server, and the sentence under it is the reason
+ * the field exists at all.** Anthers has no password of its own: the identity is the account, and
+ * this password is what signs it in at the node, in Bluesky, and anywhere else it is used. The
+ * note that Anthers keeps a session rather than a copy is not reassurance — it is the difference
+ * between a credential the person holds and one a provider holds for them.
+ *
+ * ⚠️ **The refusal line is reserved on both doors**, like the handle field's, so the button does
+ * not move when a message appears.
+ */
+function IdentityPasswordField({
+	id,
+	value,
+	onChange,
+	refusal,
+	label = "Choose a password",
+}: {
+	id: string;
+	value: string;
+	onChange: (value: string) => void;
+	refusal?: string | null;
+	label?: string;
+}) {
+	return (
+		<>
+			<label className="label px-0 pb-1" htmlFor={id}>
+				<span className="text-sm font-semibold">{label}</span>
+			</label>
+			<input
+				id={id}
+				type="password"
+				autoComplete="new-password"
+				minLength={MIN_PASSWORD_LENGTH}
+				className="input input-bordered w-full"
+				value={value}
+				onChange={(e) => onChange(e.target.value)}
+				aria-describedby={`${id}-hint`}
+			/>
+			<p
+				id={`${id}-hint`}
+				className={`mt-1 min-h-[2lh] text-xs leading-tight ${
+					refusal ? "text-error" : "text-base-content/50"
+				}`}
+			>
+				{refusal ??
+					`At least ${MIN_PASSWORD_LENGTH} characters. You'll use it to sign in to Bluesky and anywhere else this identity works — Anthers keeps a session, not a copy.`}
+			</p>
+		</>
+	);
 }
 
 /**

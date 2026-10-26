@@ -42,18 +42,26 @@ describe("a hosted fixture account", () => {
 		expect(account.user.atprotoPdsUrl).toBe(SERVER);
 	});
 
-	it("keeps a credential that really opens a session on the server", async () => {
+	it("keeps a session that really opens on the server, and no password", async () => {
 		const account = await createAccount(`${RUN}opens`);
 		const [row] = await db
-			.select({ sealed: hostedAccounts.sealedPassword })
+			.select({
+				sealedSession: hostedAccounts.sealedSession,
+				sealedPassword: hostedAccounts.sealedPassword,
+			})
 			.from(hostedAccounts)
 			.where(eq(hostedAccounts.did, account.did));
-		expect(row).toBeDefined();
+		expect(row?.sealedSession).toBeTruthy();
+		// 🚨 The password is written at creation only so a failed first login cannot strand the
+		// identity, and it is cleared the moment a session lands. A fixture row still carrying
+		// one means the session step did not run.
+		expect(row?.sealedPassword).toBe("");
 
-		const session = await realFetch(`${SERVER}/xrpc/com.atproto.server.createSession`, {
+		const { refreshJwt } = JSON.parse(open(row?.sealedSession ?? "")) as { refreshJwt: string };
+		// No body: `refreshSession` is a procedure with no input, and the node refuses one.
+		const session = await realFetch(`${SERVER}/xrpc/com.atproto.server.refreshSession`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ identifier: account.did, password: open(row.sealed) }),
+			headers: { Authorization: `Bearer ${refreshJwt}` },
 		});
 		expect(session.status).toBe(200);
 	});

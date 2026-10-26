@@ -253,43 +253,66 @@ describe("checkHandleAvailability", () => {
 });
 
 describe("createHostedAccount", () => {
+	const PASSWORD = "a long enough password";
+	const SESSION = { accessJwt: "EXAMPLE-access-token", refreshJwt: "EXAMPLE-refresh-token" };
+
 	beforeAll(() => {
 		process.env.HOSTED_PDS_INVITE_CODE = "anthers.test-testcode";
 	});
 
-	it("sends the full handle, the address and the invite, and no recovery key", async () => {
+	it("sends the person's password once, and keeps the session the node answers with", async () => {
 		const { impl, calls } = fakeFetch(() => ({
-			body: { did: "did:plc:new", handle: "alice.anthers.test" },
+			body: {
+				did: "did:plc:new",
+				handle: "alice.anthers.test",
+				accessJwt: SESSION.accessJwt,
+				refreshJwt: SESSION.refreshJwt,
+			},
 		}));
 		const account = await createHostedAccount(
-			{ handleName: "alice", email: "alice@example.com" },
+			{ handleName: "alice", email: "alice@example.com", password: PASSWORD },
 			{ fetchImpl: impl },
 		);
 
 		expect(account.did).toBe("did:plc:new");
 		expect(account.handle).toBe("alice.anthers.test");
-		expect(account.password.length).toBeGreaterThan(20);
+		expect(account.session).toEqual(SESSION);
+		// 🚨 The returned value holds no password: the person's went to the node in this one
+		// request, and the session is what the hub keeps.
+		expect(account).not.toHaveProperty("password");
 
 		const sent = JSON.parse(String(calls[0].init?.body));
 		expect(sent.handle).toBe("alice.anthers.test");
 		expect(sent.email).toBe("alice@example.com");
+		expect(sent.password).toBe(PASSWORD);
 		expect(sent.inviteCode).toBe("anthers.test-testcode");
 		// 🚨 The custody decision, pinned. Passing a `recoveryKey` here would hand somebody a
 		// key at the moment they are least able to keep it — see the module note.
 		expect(sent).not.toHaveProperty("recoveryKey");
 	});
 
-	it("gives a different password every time", async () => {
-		const { impl } = fakeFetch(() => ({ body: { did: "did:plc:x", handle: "x.anthers.test" } }));
-		const a = await createHostedAccount(
-			{ handleName: "aaa", email: "a@x.com" },
-			{ fetchImpl: impl },
-		);
-		const b = await createHostedAccount(
-			{ handleName: "bbb", email: "b@x.com" },
-			{ fetchImpl: impl },
-		);
-		expect(a.password).not.toBe(b.password);
+	it("refuses an answer with no session, because the session is the only credential left", async () => {
+		const { impl } = fakeFetch(() => ({
+			body: { did: "did:plc:x", handle: "x.anthers.test" },
+		}));
+		await expect(
+			createHostedAccount(
+				{ handleName: "aaa", email: "a@x.com", password: PASSWORD },
+				{ fetchImpl: impl },
+			),
+		).rejects.toMatchObject({ fault: "operational" });
+	});
+
+	it("refuses a password the rule rejects before creating anything", async () => {
+		const { impl, calls } = fakeFetch(() => ({ body: {} }));
+		await expect(
+			createHostedAccount(
+				{ handleName: "alice", email: "alice@example.com", password: "short" },
+				{ fetchImpl: impl },
+			),
+		).rejects.toMatchObject({ fault: "password" });
+		// The length rule needs nothing from the node, so it costs no round trip.
+		expect(calls).toHaveLength(0);
 	});
 
 	// ⭐ **The fault matters more than the message.** A spent invite code is not something the
@@ -297,12 +320,18 @@ describe("createHostedAccount", () => {
 	it("blames the name for a taken handle and Anthers for a spent invite", async () => {
 		const taken = fakeFetch(() => ({ status: 400, body: { error: "HandleNotAvailable" } }));
 		await expect(
-			createHostedAccount({ handleName: "alice", email: "a@x.com" }, { fetchImpl: taken.impl }),
+			createHostedAccount(
+				{ handleName: "alice", email: "a@x.com", password: PASSWORD },
+				{ fetchImpl: taken.impl },
+			),
 		).rejects.toMatchObject({ fault: "name" });
 
 		const spent = fakeFetch(() => ({ status: 400, body: { error: "InvalidInviteCode" } }));
 		await expect(
-			createHostedAccount({ handleName: "alice", email: "a@x.com" }, { fetchImpl: spent.impl }),
+			createHostedAccount(
+				{ handleName: "alice", email: "a@x.com", password: PASSWORD },
+				{ fetchImpl: spent.impl },
+			),
 		).rejects.toMatchObject({ fault: "operational" });
 	});
 
@@ -311,7 +340,10 @@ describe("createHostedAccount", () => {
 			throw new Error("ECONNREFUSED");
 		}) as unknown as typeof fetch;
 		await expect(
-			createHostedAccount({ handleName: "alice", email: "a@x.com" }, { fetchImpl: impl }),
+			createHostedAccount(
+				{ handleName: "alice", email: "a@x.com", password: PASSWORD },
+				{ fetchImpl: impl },
+			),
 		).rejects.toMatchObject({ fault: "operational" });
 	});
 
@@ -320,14 +352,20 @@ describe("createHostedAccount", () => {
 	it("refuses an answer with no identity in it", async () => {
 		const { impl } = fakeFetch(() => ({ body: { handle: "alice.anthers.test" } }));
 		await expect(
-			createHostedAccount({ handleName: "alice", email: "a@x.com" }, { fetchImpl: impl }),
+			createHostedAccount(
+				{ handleName: "alice", email: "a@x.com", password: PASSWORD },
+				{ fetchImpl: impl },
+			),
 		).rejects.toBeInstanceOf(HostedAccountError);
 	});
 
 	it("refuses a bad name before creating anything", async () => {
 		const { impl, calls } = fakeFetch(() => ({ body: {} }));
 		await expect(
-			createHostedAccount({ handleName: "admin", email: "a@x.com" }, { fetchImpl: impl }),
+			createHostedAccount(
+				{ handleName: "admin", email: "a@x.com", password: PASSWORD },
+				{ fetchImpl: impl },
+			),
 		).rejects.toMatchObject({ fault: "name" });
 		expect(calls).toHaveLength(0);
 	});
