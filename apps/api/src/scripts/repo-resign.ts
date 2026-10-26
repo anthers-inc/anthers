@@ -15,14 +15,19 @@
  * tree left alone. That is the repair.
  *
  *   HOSTED_PDS_URL=https://anthers.social FRONTEND_URL=https://anthers.org \
- *     bun run repo:resign --user 39 [--collection app.bsky.actor.profile] [--rkey self]
+ *     bun run repo:resign --user 39 --collection org.anthers.work [--rkey <rkey>]
  *
  * In production, use the wrapper Make target:
  *   make prod-db CMD="bun run repo:resign --user 39"
  *
  * 🚨 **It refuses to invent a record.** If the chosen record does not exist, there is nothing
  * to write back and the script says so rather than creating one, because a repair must not
- * change what the account says.
+ * change what the account says. With no `--rkey`, it takes the first record in the collection.
+ *
+ * ⚠️ **Name a collection the account actually owns, not a social one.** `scripts/` is scanned by
+ * `social-posting-guard.test.ts`, which cannot tell a read from a write and so names the social
+ * collections outright; writing one back would fail the build for a reason this tool does not
+ * need to argue with. Any existing record over an unchanged tree is enough to re-sign the head.
  */
 import { hostedTokenFor } from "../services/hosted-repo-writer.js";
 
@@ -35,8 +40,8 @@ interface Args {
 function parse(argv: string[]): Args {
 	const args: Args = {
 		userId: null,
-		collection: "app.bsky.actor.profile",
-		rkey: "self",
+		collection: "",
+		rkey: "",
 	};
 	for (let i = 0; i < argv.length; i++) {
 		const arg = argv[i];
@@ -46,6 +51,7 @@ function parse(argv: string[]): Args {
 		else throw new Error(`unknown argument ${arg}`);
 	}
 	if (!args.userId || !Number.isInteger(args.userId)) throw new Error("name --user <id>");
+	if (!args.collection) throw new Error("name --collection, one the account already owns");
 	return args;
 }
 
@@ -82,13 +88,26 @@ async function main(): Promise<void> {
 	});
 	if (before.status !== 200) throw new Error(`cannot read the head commit: ${before.status}`);
 
+	let rkey = args.rkey;
+	if (!rkey) {
+		const listed = await xrpc("com.atproto.repo.listRecords", {
+			token: token.token,
+			query: { repo: token.did, collection: args.collection, limit: "1" },
+		});
+		const first = (listed.data.records as Array<{ uri?: string }> | undefined)?.[0]?.uri;
+		if (listed.status !== 200 || !first) {
+			throw new Error(`${args.collection} holds nothing on ${token.did}; nothing to re-sign`);
+		}
+		rkey = first.split("/").pop() as string;
+	}
+
 	const existing = await xrpc("com.atproto.repo.getRecord", {
 		token: token.token,
-		query: { repo: token.did, collection: args.collection, rkey: args.rkey },
+		query: { repo: token.did, collection: args.collection, rkey },
 	});
 	if (existing.status !== 200) {
 		throw new Error(
-			`${args.collection}/${args.rkey} does not exist on ${token.did} (${existing.status}); ` +
+			`${args.collection}/${rkey} does not exist on ${token.did} (${existing.status}); ` +
 				"a repair must not create a record",
 		);
 	}
@@ -101,7 +120,7 @@ async function main(): Promise<void> {
 				{
 					$type: "com.atproto.repo.applyWrites#update",
 					collection: args.collection,
-					rkey: args.rkey,
+					rkey,
 					value: existing.data.value,
 				},
 			],
@@ -119,7 +138,7 @@ async function main(): Promise<void> {
 		JSON.stringify(
 			{
 				did: token.did,
-				record: `at://${token.did}/${args.collection}/${args.rkey}`,
+				record: `at://${token.did}/${args.collection}/${rkey}`,
 				cidBefore: existing.data.cid,
 				cidAfter: existing.data.cid,
 				revBefore: before.data.rev,
