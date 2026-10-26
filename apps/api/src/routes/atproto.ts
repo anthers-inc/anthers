@@ -11,6 +11,8 @@
  *   GET  /recovery-key         — Has this account taken one, and which key
  *   POST /recovery-key/request — Ask the node to mail the holder a PLC operation token
  *   POST /recovery-key/confirm — Seat the holder's key above Anthers' own
+ *   POST /password/reset/request — Mail the holder a password-reset token
+ *   POST /password/reset/complete — Set the holder's password with that token
  *   GET  /publishing           — How this account's records reach the network, or why they cannot
  *   POST /publishing/stop      — Take the listings down and hand the permission back
  *
@@ -71,6 +73,7 @@ import {
 	normalizeHandleName,
 	swapHostedHandle,
 } from "../services/hosted-accounts.js";
+import { requestHostedPasswordReset, setHostedPassword } from "../services/hosted-password.js";
 import {
 	recoveryKeyState,
 	requestRecoveryKeyToken,
@@ -108,6 +111,17 @@ const domainSwapSchema = z.object({ handle: z.string().min(1).max(253) });
 const recoveryKeySchema = z.object({
 	token: z.string().min(1).max(200),
 	didKey: z.string().min(1).max(200),
+});
+
+/**
+ * Setting a password through the node's mailed reset.
+ *
+ * The token is the node's, so its length is bounded rather than shaped. The password's real rule
+ * is `passwordProblem`'s, shared with the signup form; the ceiling here is the node's own.
+ */
+const passwordResetSchema = z.object({
+	token: z.string().min(1).max(200),
+	password: z.string().max(256),
 });
 
 const authInitSchema = z.object({
@@ -626,6 +640,43 @@ const atprotoRoutes = new Hono()
 					: 503;
 		return c.json({ error: result.message }, status);
 	})
+
+	// ── The password on an identity Anthers hosts ────────────────────────────
+	//
+	// 🚨 **This is a migration door, and it is the node's reset rather than a password Anthers
+	// sets.** Every hosted account created before the password became the person's was handed one
+	// nobody could type, which is why the hub kept a copy. Here the person proves control of the
+	// address on the account through the node's own emailed token, chooses a password they know,
+	// and from then on holds the credential. Anthers keeps the session that reset lets it open.
+	//
+	// ⚠️ **The request route answers the same whether or not the address is on an account**, the
+	// same silence the node itself keeps. Opening the token field is all it does.
+	.post("/password/reset/request", requireAuth, async (c) => {
+		const user = c.get("user");
+		const result = await requestHostedPasswordReset(user.id);
+		if (result.status === "sent") return c.json({ sent: true });
+		return c.json({ error: result.message }, result.fault === "account" ? 409 : 503);
+	})
+
+	.post(
+		"/password/reset/complete",
+		requireAuth,
+		zValidator("json", passwordResetSchema),
+		async (c) => {
+			const user = c.get("user");
+			const result = await setHostedPassword(user.id, c.req.valid("json"));
+			if (result.status === "set") {
+				return c.json({ set: true, sessionOpened: result.sessionOpened });
+			}
+			const status =
+				result.fault === "token" || result.fault === "password"
+					? 400
+					: result.fault === "account"
+						? 409
+						: 503;
+			return c.json({ error: result.message }, status);
+		},
+	)
 
 	// ── A signup waiting on an address ───────────────────────────────────────
 	//

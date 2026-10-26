@@ -254,6 +254,7 @@ describe("an account is created only with its identity", () => {
 		const finished = await app.request("/api/auth/signup/complete", {
 			method: "POST",
 			headers: { ...JSON_HEADERS, Cookie: `signup_pending=${token}` },
+			body: JSON.stringify({ password: "a long enough password" }),
 		});
 		expect(finished.status).toBe(201);
 

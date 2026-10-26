@@ -3,8 +3,13 @@
  * Issuing an identity on the Personal Data Server Anthers runs.
  *
  * `hosted-identity.ts` watches identities that already exist; this module is the other half
- * and creates them. It is the only place an account is created on the node, and the only
- * place the credentials for one are written down.
+ * and creates them. It is the only place an account is created on the node, and the only place
+ * the session Anthers writes with is recorded.
+ *
+ * 🚨 **The password is the person's, and it is never kept here.** Signup asks for it, this module
+ * sends it to the node in the one request that creates the account, and what is written down is
+ * the session that answer carries. A holder whose account predates that gets a password they know
+ * through the reset door in `hosted-password.ts`; the hub keeps the session that reset opens.
  *
  * ⭐ **Why Anthers issues identities at all.** Every account is an ATProto identity, and most
  * people arriving do not already hold one — so issuing one at signup is what lets nobody be
@@ -32,14 +37,18 @@ import {
 	handleSyntaxProblem,
 	normalizeHandleName as sharedNormalize,
 } from "@anthers/shared/handles";
+import { passwordProblem } from "@anthers/shared/passwords";
 import { eq } from "drizzle-orm";
-import { atprotoWriteRefusal, warnRefusalOnce } from "../lib/atproto-network.js";
 import { holdFormerHandle } from "./atproto.js";
 import { PDS_RESERVED_HANDLE_NAMES } from "./hosted-handle-reserved.js";
 import { readIdentityHead } from "./hosted-identity.js";
 import { nodeCall, pdsUrl } from "./hosted-node.js";
-import { sessionForHostedAccount } from "./hosted-session-store.js";
-import { open, seal, secretBoxConfigured } from "./secret-box.js";
+import {
+	type HostedSessionPair,
+	sealedSessionValue,
+	sessionForHostedAccount,
+} from "./hosted-session-store.js";
+import { open, secretBoxConfigured } from "./secret-box.js";
 
 /**
  * The invite code the node requires of anybody creating an account on it.
@@ -281,41 +290,38 @@ export async function checkHandleAvailability(
 	}
 }
 
-/** An identity the node has just created. */
+/** An identity the node has just created, with the session the creation itself answered with. */
 export interface HostedAccount {
 	did: string;
 	handle: string;
-	/** The account's password at the node, in the clear. The caller seals it and forgets it. */
-	password: string;
+	/**
+	 * The live session `createAccount` returned.
+	 *
+	 * ⭐ **The first credential, and the only one Anthers ever holds.** The password the person
+	 * chose went to the node in the request that created the account and was never written down;
+	 * the node answers with this pair, which the row seals. There is no second login at signup and
+	 * no copy of the password anywhere.
+	 */
+	session: HostedSessionPair;
 }
 
 /**
  * Why creating an account failed, and whose problem it is.
  *
  * ⚠️ **The distinction is what decides who gets told.** `name` means the person can fix it by
- * choosing again; `operational` means they cannot fix it at all and somebody at Anthers has to
- * — a spent invite code, a node that is down. Reporting the second as though it were the first
- * would leave somebody retyping a name that was never the problem.
+ * choosing again; `password` means the password they chose does not meet the rule, which is also
+ * theirs to fix and leaves the handle held; `operational` means they cannot fix it at all and
+ * somebody at Anthers has to — a spent invite code, a node that is down. Reporting either of the
+ * first two as the third would leave somebody retyping a value that was never the problem.
  */
 export class HostedAccountError extends Error {
 	constructor(
 		message: string,
-		readonly fault: "name" | "operational",
+		readonly fault: "name" | "password" | "operational",
 	) {
 		super(message);
 		this.name = "HostedAccountError";
 	}
-}
-
-/**
- * A password nobody will ever type.
- *
- * 24 bytes of randomness, which is far past anything a password policy asks for, because this
- * one is generated and stored rather than remembered. It is base64url so that it survives
- * being pasted anywhere without escaping.
- */
-function generatePassword(): string {
-	return Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
 }
 
 /**
@@ -327,10 +333,16 @@ function generatePassword(): string {
  * machine, so this hands nothing to a third party — but it does mean an address already used
  * by an account on the node is refused, which is why that case has its own message.
  *
+ * 🚨 **The password is the person's, and it is not written down.** It arrives in the signup
+ * request, is validated by the same rule the form uses, travels to the node in exactly one
+ * request, and is then dropped — the row keeps the session the node answered with instead. A
+ * generated password was the inversion this replaces: nobody could type it, so the hub had to
+ * keep a copy, and a reset at the node left that copy stale.
+ *
  * 🚨 **`recoveryKey` is deliberately not passed** — see the module note.
  */
 export async function createHostedAccount(
-	input: { handleName: string; email: string; bypassReserved?: boolean },
+	input: { handleName: string; email: string; password: string; bypassReserved?: boolean },
 	opts: { fetchImpl?: typeof fetch } = {},
 ): Promise<HostedAccount> {
 	const url = pdsUrl();
@@ -342,7 +354,12 @@ export async function createHostedAccount(
 	const problem = handleNameProblem(input.handleName);
 	if (problem) throw new HostedAccountError(problem, "name");
 
-	const password = generatePassword();
+	// The length and address rules need nothing from the node, so they are checked first: a
+	// request that could never create anything should not spend a round trip learning the
+	// handle suffix.
+	const earlyProblem = passwordProblem(input.password, { email: input.email });
+	if (earlyProblem) throw new HostedAccountError(earlyProblem, "password");
+
 	const doFetch = opts.fetchImpl ?? fetch;
 	// A node that will not say which domain it issues under is not issuing, whatever it would
 	// answer to `createAccount` — and a handle built on an empty suffix would come back as the
@@ -351,6 +368,14 @@ export async function createHostedAccount(
 	if (!suffix) {
 		throw new HostedAccountError("Anthers isn't issuing handles right now.", "operational");
 	}
+	// Validated against the handle the node will actually issue, so the person cannot choose
+	// their own full name as the whole secret.
+	const passwordProblemHere = passwordProblem(input.password, {
+		handle: `${input.handleName}.${suffix}`,
+		email: input.email,
+	});
+	if (passwordProblemHere) throw new HostedAccountError(passwordProblemHere, "password");
+
 	let res: Response;
 	try {
 		res = await doFetch(`${url}/xrpc/com.atproto.server.createAccount`, {
@@ -359,7 +384,7 @@ export async function createHostedAccount(
 			body: JSON.stringify({
 				handle: `${input.handleName}.${suffix}`,
 				email: input.email,
-				password,
+				password: input.password,
 				inviteCode: code,
 			}),
 			signal: AbortSignal.timeout(30_000),
@@ -373,11 +398,28 @@ export async function createHostedAccount(
 		throw refusalOf(body.error, body.message);
 	}
 
-	const body = (await res.json()) as { did?: string; handle?: string };
+	const body = (await res.json()) as {
+		did?: string;
+		handle?: string;
+		accessJwt?: string;
+		refreshJwt?: string;
+	};
 	if (!body.did || !body.handle) {
 		throw new HostedAccountError("The handle server answered with no identity.", "operational");
 	}
-	return { did: body.did, handle: body.handle, password };
+	// The session is the account's only credential from here, so an answer without one is a
+	// failure rather than an account worth recording.
+	if (!body.accessJwt || !body.refreshJwt) {
+		throw new HostedAccountError(
+			"The handle server created the identity but returned no session.",
+			"operational",
+		);
+	}
+	return {
+		did: body.did,
+		handle: body.handle,
+		session: { accessJwt: body.accessJwt, refreshJwt: body.refreshJwt },
+	};
 }
 
 /**
@@ -420,49 +462,36 @@ function refusalOf(error: string | undefined, message: string | undefined): Host
  * — so there is no link step here and no moment at which the account exists without its
  * identity.
  *
- * ⚠️ **The credential goes down first**, because an identity whose password was never stored is
- * the one failure nobody can undo from outside. The watch row follows.
+ * ⚠️ **The row is written with the session the creation answered with, and with no password.**
+ * That is the whole custody rule in one insert: there is no window in which the hub holds the
+ * person's password, and no second login to open the first credential. The watch row follows.
  */
 export async function recordHostedIdentity(userId: number, account: HostedAccount): Promise<void> {
 	// ⚠️ **The conflict clause is defensive and the log under it is the point.** The DID was
 	// minted a moment ago, so a row cannot already exist — but `onConflictDoNothing` would
-	// swallow it if one somehow did, and what it would be swallowing is the only copy of a
-	// password nobody has ever seen. A silent no-op here produces an identity only the node's
-	// admin password can ever open, so it says so instead.
+	// swallow it if one somehow did, and what it would be swallowing is the only session the
+	// account will ever be handed without a login. A silent no-op here produces an identity only
+	// the node's admin password can open, so it says so instead.
 	const stored = await db
 		.insert(hostedAccounts)
 		.values({
 			did: account.did,
 			userId,
 			handle: account.handle,
-			sealedPassword: seal(account.password),
+			// 🚨 **Empty means the row holds no password, which is the normal state.** The
+			// person's password went to the node and was never written here; the session below
+			// is what Anthers keeps. See `sealed_password`'s own note in the schema.
+			sealedPassword: "",
+			sealedSession: sealedSessionValue(account.session),
 		})
 		.onConflictDoNothing()
 		.returning({ did: hostedAccounts.did });
 	if (stored.length === 0) {
 		console.error(
-			`[hosted-accounts] ${account.did} already had a credential row — the password just ` +
-				`generated for it was NOT stored and cannot be recovered`,
+			`[hosted-accounts] ${account.did} already had a credential row — the session just ` +
+				`returned for it was NOT stored, so it can only be reached by logging in`,
 		);
 	}
-
-	// 🚨 **The session is the credential; the password is only how the first one is obtained.**
-	// One `createSession` here replaces the long-lived copy of the password: the store keeps the
-	// rotating refresh pair, and this row stops holding a value the owner can change from
-	// outside. The password is written first and removed only after the node answered, because
-	// a row with neither is an identity nothing can reach.
-	const session = await sessionForHostedAccount(account.did, account.password);
-	if (session.token === null) {
-		console.error(
-			`[hosted-accounts] ${account.did}: no session could be established, so its password ` +
-				`stays sealed as the fallback (${session.error})`,
-		);
-		return;
-	}
-	await db
-		.update(hostedAccounts)
-		.set({ sealedPassword: "" })
-		.where(eq(hostedAccounts.did, account.did));
 
 	// ⭐ **Watched from the first minute rather than from the next sweep.** `watch-identities`
 	// would find this within the hour on its own, and would then record whatever it found as

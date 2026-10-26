@@ -158,7 +158,7 @@ describe("the identity server Anthers hosts", () => {
 
 		expect(await hostedIdentityOffered()).toBe(false);
 		const attempt = createHostedAccount(
-			{ handleName: `${RUN}a`, email: `${RUN}a@example.test` },
+			{ handleName: `${RUN}a`, email: `${RUN}a@example.test`, password: "a long enough password" },
 			{ fetchImpl: spy.fetch },
 		);
 		await expect(attempt).rejects.toBeInstanceOf(HostedAccountError);
@@ -179,7 +179,11 @@ describe("the identity server Anthers hosts", () => {
 		expect(await hostedIdentityOffered()).toBe(true);
 		await expect(
 			createHostedAccount(
-				{ handleName: `${RUN}b`, email: `${RUN}b@example.test` },
+				{
+					handleName: `${RUN}b`,
+					email: `${RUN}b@example.test`,
+					password: "a long enough password",
+				},
 				{ fetchImpl: spy.fetch },
 			),
 		).rejects.toBeInstanceOf(HostedAccountError);
@@ -209,11 +213,12 @@ describe("the identity server Anthers hosts", () => {
 				.from(users)
 				.where(eq(users.id, account.userId));
 			dids.push(user.did);
-			// The fixture's own credential, resealed under the key this suite set, so the writer can
-			// open it and the refusal under test is about the server rather than the seal.
+			// The legacy shape: a password on file and no session, which is the state that makes the
+			// writer ask the node for one. The password is resealed under this suite's key, so the
+			// refusal under test is about the server rather than the seal.
 			await db
 				.update(hostedAccounts)
-				.set({ sealedPassword: seal("EXAMPLE-not-a-real-password") })
+				.set({ sealedPassword: seal("EXAMPLE-not-a-real-password"), sealedSession: null })
 				.where(eq(hostedAccounts.did, user.did));
 			return account.userId;
 		}

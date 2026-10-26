@@ -58,10 +58,10 @@ describe("a hosted fixture account", () => {
 		expect(row?.sealedPassword).toBe("");
 
 		const { refreshJwt } = JSON.parse(open(row?.sealedSession ?? "")) as { refreshJwt: string };
+		// No body: `refreshSession` is a procedure with no input, and the node refuses one.
 		const session = await realFetch(`${SERVER}/xrpc/com.atproto.server.refreshSession`, {
 			method: "POST",
-			headers: { Authorization: `Bearer ${refreshJwt}`, "Content-Type": "application/json" },
-			body: "{}",
+			headers: { Authorization: `Bearer ${refreshJwt}` },
 		});
 		expect(session.status).toBe(200);
 	});

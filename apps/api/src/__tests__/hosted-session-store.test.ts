@@ -92,6 +92,20 @@ function nodeFetch(routes: Record<string, Route>) {
 		const method = url.pathname.replace("/xrpc/", "");
 		const headers = (init?.headers ?? {}) as Record<string, string>;
 		const auth = headers.Authorization?.replace(/^Bearer /, "") ?? null;
+		// 🚨 **The node refuses a body on `refreshSession`, and the fake has to as well.** It is a
+		// procedure with no input; the real PDS answers "A request body was provided when none was
+		// expected" as a 400, which the store would read as a revoked session — a bug this suite
+		// missed while the fake accepted anything. Pinned here so it cannot come back.
+		if (method === "com.atproto.server.refreshSession" && init?.body) {
+			return {
+				ok: false,
+				status: 400,
+				json: async () => ({
+					error: "InvalidRequest",
+					message: "A request body was provided when none was expected",
+				}),
+			} as unknown as Response;
+		}
 		const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {};
 		calls.push({ method, auth, body });
 		const route = routes[method];

@@ -32,10 +32,10 @@ import { hostedAccounts, hostedIdentities } from "@anthers/db/schema";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { eq } from "drizzle-orm";
 import { base58Decode } from "../lib/base58.js";
-import { nodeCall } from "./hosted-node.js";
-import { sessionForHostedAccount } from "./hosted-session-store.js";
 import { recordRecoveryKey } from "./hosted-accounts.js";
 import { readIdentityHead } from "./hosted-identity.js";
+import { nodeCall } from "./hosted-node.js";
+import { sessionForHostedAccount } from "./hosted-session-store.js";
 import { open } from "./secret-box.js";
 
 /**

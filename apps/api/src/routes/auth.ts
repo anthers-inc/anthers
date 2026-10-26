@@ -199,9 +199,26 @@ const signupIdentitySchema = z.object({
  */
 const sixCharacterCode = z.string().trim().length(6);
 
+/**
+ * The one field the resumed path adds to `/signup/verify`'s shape.
+ *
+ * A signup proved in another browser has no cookie and no code left to spend, so the finishing
+ * page asks for the password there and sends it with the completion. Nothing else is accepted:
+ * the row, not the body, is what says whose signup this is.
+ */
+const signupCompleteSchema = z.object({
+	password: z.string().max(256).optional(),
+});
+
 const emailCodeVerifySchema = z.object({
 	email: z.string().email().max(254),
 	code: sixCharacterCode,
+	/**
+	 * The password for an identity Anthers is about to create, and required only when the
+	 * pending signup holds an Anthers handle. It never leaves this request: the node hashes it,
+	 * and the hub stores the session the node answers with.
+	 */
+	password: z.string().max(256).optional(),
 });
 
 /**
@@ -472,7 +489,12 @@ async function handleRefusal(
  * already holds its identity. A created account gets no verification mail, because the code just
  * typed IS the verification.
  */
-async function mintFromProvedAddress(c: Context, email: string, pendingToken: string | undefined) {
+async function mintFromProvedAddress(
+	c: Context,
+	email: string,
+	pendingToken: string | undefined,
+	password?: string,
+) {
 	const signIn = async (userId: number) => {
 		const token = await createSession(
 			userId,
@@ -511,7 +533,7 @@ async function mintFromProvedAddress(c: Context, email: string, pendingToken: st
 		};
 	}
 
-	const created = await createAccountFromSignup(row, email);
+	const created = await createAccountFromSignup(row, email, password);
 	if ("refusal" in created) {
 		return {
 			status: created.refusal.status,
@@ -795,7 +817,7 @@ const authRoutes = new Hono()
 	// if the card is declined. A declined card leaves a perfectly good free account,
 	// which is the correct outcome and takes no code to arrange.
 	.post("/signup/verify", zValidator("json", emailCodeVerifySchema, invalidBody), async (c) => {
-		const { email, code } = c.req.valid("json");
+		const { email, code, password } = c.req.valid("json");
 
 		// The code service caps five wrong guesses per code; this caps guesses per address
 		// *per IP*, so spending one code's budget and moving to the next is also slow.
@@ -809,6 +831,7 @@ const authRoutes = new Hono()
 			c,
 			result.email,
 			getCookie(c, PENDING_SIGNUP_COOKIE),
+			password,
 		);
 		return c.json(minted.body, minted.status);
 	})
@@ -828,14 +851,19 @@ const authRoutes = new Hono()
 	// carry the stamp. Neither can be produced by asking: the row only exists because
 	// somebody pressed *Create My Account* at `/signup`, and the stamp only exists
 	// because somebody read a code out of the mailbox on it.
-	.post("/signup/complete", async (c) => {
+	.post("/signup/complete", zValidator("json", signupCompleteSchema, invalidBody), async (c) => {
 		const pendingToken = getCookie(c, PENDING_SIGNUP_COOKIE);
 		const row = await readPendingSignup(pendingToken);
 		if (!row?.email || !row.emailProvedAt) {
 			return c.json({ error: "There's nothing to finish here — start at /signup." }, 404);
 		}
 
-		const minted = await mintFromProvedAddress(c, row.email, pendingToken);
+		const minted = await mintFromProvedAddress(
+			c,
+			row.email,
+			pendingToken,
+			c.req.valid("json").password,
+		);
 		return c.json(minted.body, minted.status);
 	})
 

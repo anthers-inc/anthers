@@ -3,9 +3,14 @@
  * A {@link RepoWriter} over an identity Anthers hosts.
  *
  * ⭐ **This is the route that needs nobody's permission.** A record belongs in the creator's
- * own repository, and for an account that took a handle here the credential is in
- * `hosted_accounts`, sealed, and the hub can open it — so there is nothing to ask for and
- * nothing that can be taken back.
+ * own repository, and for an account that took a handle here the session is in
+ * `hosted_accounts`, sealed, and the hub can open it — so there is nothing to ask for.
+ *
+ * ⚠️ **A session is revocable, and that is the improvement rather than a defect.** The hub used
+ * to keep a copy of the account's password; now it keeps the session the person's own credential
+ * opened. A reset at the node revokes it, which surfaces as `authorization_lost` rather than as a
+ * node that did not answer, and the person repairing it through the identity card restores the
+ * hub's access. That is the shape a credential the holder controls is supposed to have.
  *
  * ⚠️ **It is one of two routes, and `not_hosted` is no longer the end of the story.**
  * `oauth-repo-writer.ts` covers a creator whose identity lives elsewhere and who has granted

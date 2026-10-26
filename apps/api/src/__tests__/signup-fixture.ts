@@ -74,7 +74,9 @@ export async function spendCode(path: string, email: string, token?: string): Pr
 	return app.request(path, {
 		method: "POST",
 		headers: { ...JSON_HEADERS, ...(token ? { Cookie: `signup_pending=${token}` } : {}) },
-		body: JSON.stringify({ email, code: issued.code }),
+		// Every hosted signup now chooses a password, and the field is ignored on the paths that
+		// create no identity. It satisfies the same rule the form does.
+		body: JSON.stringify({ email, code: issued.code, password: "a long enough password" }),
 	});
 }
 
@@ -149,15 +151,12 @@ export function stubNetwork(): NetworkStub {
 					if (create.kind === "down") throw new Error("node.invalid does not resolve");
 					if (create.kind === "refuse") return answer({ error: create.error }, 400);
 					stub.existing.add(create.handle);
-					return answer({ did: create.did, handle: create.handle });
-				}
-				// Recording a hosted identity now opens one session with the password it just
-				// generated, and keeps that instead of the password. The token need not be a
-				// parseable JWT here; the store falls back to a short lifetime when it is not.
-				if (url.startsWith(`${NODE_URL}/xrpc/com.atproto.server.createSession`)) {
-					const created = stub.create.kind === "ok" ? stub.create : null;
+					// The node answers a creation with a session, and that pair is the only
+					// credential signup records. The token need not be a parseable JWT here; the
+					// store falls back to a short lifetime when it is not.
 					return answer({
-						did: created?.did ?? "did:plc:node.invalid",
+						did: create.did,
+						handle: create.handle,
 						accessJwt: "EXAMPLE-access-token",
 						refreshJwt: "EXAMPLE-refresh-token",
 					});

@@ -11,11 +11,14 @@
  * `com.atproto.server.refreshSession`, which is likewise unlimited. A fresh `createSession`
  * now happens only when there is no session on file or the node has refused the refresh.
  *
- * 🚨 **This module is the ONLY writer of `hosted_accounts.sealed_session`.** The one-writer
- * rule (`hosted-accounts.ts` owns the rest of the row) is what keeps a second opinion about
- * the column from drifting — and it is a *store*, not a protocol client: it talks to the node
- * through `nodeCall` exactly like every other node conversation, so the failure shapes the
- * writer already maps (`node_unreachable` & friends) are the ones this hands back.
+ * 🚨 **This module owns every value `hosted_accounts.sealed_session` holds after creation.** The
+ * one write that does not pass through the store's own persist path is the insert in
+ * `recordHostedIdentity`, which seals the session `createAccount` already answered with — and even
+ * that uses `sealedSessionValue` here, so the value has one definition. The one-writer rule
+ * (`hosted-accounts.ts` owns the rest of the row) is what keeps a second opinion about the column
+ * from drifting — and this is a *store*, not a protocol client: it talks to the node through
+ * `nodeCall` exactly like every other node conversation, so the failure shapes the writer already
+ * maps (`node_unreachable` & friends) are the ones this hands back.
  *
  * ⚠️ **The refresh pair is ROTATED on every refresh — the stored refresh token is replaced by
  * the one the answer carries, never kept.** The node typically invalidates the refresh token
@@ -44,14 +47,39 @@ interface StoredSession {
 	expiresAt: number;
 }
 
+/** The pair a node answers with when it opens a session, or creates an account. */
+export interface HostedSessionPair {
+	accessJwt: string;
+	refreshJwt: string;
+}
+
+/**
+ * Seal a session pair for `hosted_accounts.sealed_session`.
+ *
+ * ⭐ **Exported so account creation can write the first value without a second round trip.**
+ * `com.atproto.server.createAccount` answers with the session it just made, so the row can be
+ * inserted holding it — no login, no password, and no window in which the identity exists with
+ * no credential. The shape of the sealed value still lives here, which is what keeps the store
+ * the authority on how the column is read.
+ */
+export function sealedSessionValue(pair: HostedSessionPair): string {
+	const session: StoredSession = {
+		accessJwt: pair.accessJwt,
+		refreshJwt: pair.refreshJwt,
+		expiresAt: expiryOf(pair.accessJwt) ?? Date.now() + DEFAULT_LIFETIME_MS,
+	};
+	return seal(JSON.stringify(session));
+}
+
 export type HostedSessionResult =
 	| { token: string }
 	/**
 	 * `authorizationLost` is the difference between "the node is down" and "the node said this
-	 * account's session is gone". The second happens when the owner resets their password, which
-	 * revokes every password-derived refresh token, and with no password on file there is no
-	 * login left to attempt. A caller must report it as an authorization problem rather than as
-	 * an outage, or the failure reads as a retry that never succeeds.
+	 * account cannot be reached with what we have". The second happens when the owner resets their
+	 * password (which revokes every password-derived refresh token), when there is no session on
+	 * file and no password behind it, or when the node refuses the login itself. A caller must
+	 * report it as an authorization problem rather than as an outage, or the failure reads as a
+	 * retry that never succeeds.
 	 */
 	| { token: null; error: string; authorizationLost?: true };
 
@@ -114,7 +142,11 @@ async function obtainSession(
 	if (stored?.refreshJwt) {
 		const refreshed = await nodeCall(
 			"/xrpc/com.atproto.server.refreshSession",
-			{ method: "POST", token: stored.refreshJwt, body: "{}" },
+			// 🚨 **No body: `refreshSession` is a procedure with no input, and the node refuses a
+			// request that carries one** ("A request body was provided when none was expected"),
+			// as a 4xx — which the code below would read as a revoked session. That made every
+			// refresh look like a dead session and every write spend a login.
+			{ method: "POST", token: stored.refreshJwt },
 			doFetch,
 		);
 		if (refreshed.ok) {
@@ -143,7 +175,17 @@ async function obtainSession(
 		{ method: "POST", body: JSON.stringify({ identifier: did, password }) },
 		doFetch,
 	);
-	if (!session.ok) return { token: null, error: `createSession: ${session.error}` };
+	if (!session.ok) {
+		// A 4xx is the node's considered answer about this credential: the password is wrong,
+		// the account is deactivated, or it is gone. That is `authorizationLost` rather than an
+		// outage, and callers must not invite a retry that will produce the same answer. A 5xx
+		// or a 429 is the node having a bad day and stays an ordinary failure.
+		return {
+			token: null,
+			error: `createSession: ${session.error}`,
+			...(session.retryable ? {} : { authorizationLost: true as const }),
+		};
+	}
 	const persisted = await persist(did, session.body);
 	if (persisted) return persisted;
 	return { token: null, error: "createSession answered with no access token" };
@@ -186,14 +228,9 @@ async function persist(
 	const accessJwt = typeof body.accessJwt === "string" ? body.accessJwt : null;
 	if (!accessJwt) return null;
 	const refreshJwt = typeof body.refreshJwt === "string" ? body.refreshJwt : "";
-	const session: StoredSession = {
-		accessJwt,
-		refreshJwt,
-		expiresAt: expiryOf(accessJwt) ?? Date.now() + DEFAULT_LIFETIME_MS,
-	};
 	await db
 		.update(hostedAccounts)
-		.set({ sealedSession: seal(JSON.stringify(session)) })
+		.set({ sealedSession: sealedSessionValue({ accessJwt, refreshJwt }) })
 		.where(eq(hostedAccounts.did, did));
 	return { token: accessJwt };
 }
