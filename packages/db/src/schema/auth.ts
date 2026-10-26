@@ -60,17 +60,17 @@ export const users = pgTable("users", {
 	 */
 	creatorMode: boolean("creator_mode").default(false),
 	avatar: text("avatar").default(""),
-	headerImage: text("header_image").default(""),
+	bannerImage: text("banner_image").default(""),
 	/**
-	 * The full uploads the avatar and header are framed from, kept so a reposition can zoom
+	 * The full uploads the avatar and banner are framed from, kept so a reposition can zoom
 	 * back out. 🚨 Owner-facing only: these are the uncropped files, and the public profiles
 	 * never carry them.
 	 */
 	avatarSource: text("avatar_source").default(""),
-	headerImageSource: text("header_image_source").default(""),
+	bannerImageSource: text("banner_image_source").default(""),
 	/** The windows the owner last framed each image at; null before framing existed. */
 	avatarCrop: jsonb("avatar_crop").$type<ImageCrop | null>(),
-	headerImageCrop: jsonb("header_image_crop").$type<ImageCrop | null>(),
+	bannerImageCrop: jsonb("banner_image_crop").$type<ImageCrop | null>(),
 	websiteUrl: text("website_url").default(""),
 	location: text("location").default(""),
 	emailVerified: boolean("email_verified").default(false),

@@ -344,15 +344,15 @@ function PostBand({ post }: { post: FeedPost }) {
 }
 
 /**
- * A Project's cover, or the stack poster when it has none. A Project groups
+ * A Project's thumbnail, or the stack poster when it has none. A Project groups
  * Works rather than being a Work itself, so its poster is the stack rather than a type
  * icon: the same band shape every tile keeps, saying what kind of thing it is.
  */
 function ProjectBand({ project }: { project: FeedProject }) {
-	if (project.coverImage) {
+	if (project.thumbnail) {
 		return (
 			<div className="relative aspect-video bg-base-300">
-				<img src={project.coverImage} alt="" className="w-full h-full object-cover" />
+				<img src={project.thumbnail} alt="" className="w-full h-full object-cover" />
 			</div>
 		);
 	}

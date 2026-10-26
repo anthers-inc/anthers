@@ -12,12 +12,12 @@
  *
  * Every editable thing is an `InlineField` — pencil opens it, X cancels, checkmark saves
  * the field alone; there is no page-wide Save. The one deliberate exception is the
- * cover, which acts on its read state (upload and remove are the acts a Work page's
+ * thumbnail, which acts on its read state (upload and remove are the acts a Work page's
  * thumbnail field carries; there is no pencil and no separate edit state to save).
  *
  * ⚠️ **Saves are narrow, one field per request, and adopt the response.** The server's
  * own rules answer in their own words — the publish refusal most of all — and a field's
- * error shows where the field lives. The cover's change is checked server-side against
+ * error shows where the field lives. The thumbnail's change is checked server-side against
  * the creator's own storage prefix, as every stored file reference is.
  */
 
@@ -53,24 +53,26 @@ export default function OwnerProjectEditor({
 	/** A field save's answer is the row the page now shows; the page merges it in. */
 	onAdopt: (row: Omit<Project, "works" | "posts" | "creator">) => void;
 }) {
-	// The cover, as the row holds it — the read state the upload, the Work choice and the
-	// remove act write. `coverWorkId` names the Work when the cover is one of the
-	// Project's own; the server has already resolved `coverImage` to that Work's cover.
-	const [coverImage, setCoverImage] = useState(project.coverImage ?? "");
+	// The thumbnail, as the row holds it — the read state the upload, the Work choice and the
+	// remove act write. `thumbnailWorkId` names the Work when the thumbnail is one of the
+	// Project's own; the server has already resolved `thumbnail` to that Work's thumbnail.
+	const [thumbnail, setThumbnail] = useState(project.thumbnail ?? "");
 	/** The full upload the image was framed from, kept so a reposition can zoom back out. */
-	const [coverSource, setCoverSource] = useState(project.coverSource ?? "");
+	const [thumbnailSource, setThumbnailSource] = useState(project.thumbnailSource ?? "");
 	/** The window it was last framed at, so the dialog reopens there. */
-	const [coverCrop, setCoverCrop] = useState(project.coverCrop ?? null);
-	const [coverWorkId, setCoverWorkId] = useState<number | null>(project.coverWorkId ?? null);
-	const [coverError, setCoverError] = useState<string | null>(null);
-	const [coverBusy, setCoverBusy] = useState(false);
-	const [coverPickerOpen, setCoverPickerOpen] = useState(false);
+	const [thumbnailCrop, setThumbnailCrop] = useState(project.thumbnailCrop ?? null);
+	const [thumbnailWorkId, setThumbnailWorkId] = useState<number | null>(
+		project.thumbnailWorkId ?? null,
+	);
+	const [thumbnailError, setThumbnailError] = useState<string | null>(null);
+	const [thumbnailBusy, setThumbnailBusy] = useState(false);
+	const [thumbnailPickerOpen, setThumbnailPickerOpen] = useState(false);
 	const [framing, setFraming] = useState<{
 		preview: string;
 		file: File | null;
 		source: string | null;
 	} | null>(null);
-	const coverInput = useRef<HTMLInputElement>(null);
+	const thumbnailInput = useRef<HTMLInputElement>(null);
 
 	const payoutsReady = usePayoutsReady();
 	const publishing = usePublishingState();
@@ -81,10 +83,10 @@ export default function OwnerProjectEditor({
 	const patchFields = async (fields: {
 		title?: string;
 		description?: string;
-		coverImage?: string;
-		coverSource?: string;
-		coverCrop?: ImageCrop | null;
-		coverWorkId?: number | null;
+		thumbnail?: string;
+		thumbnailSource?: string;
+		thumbnailCrop?: ImageCrop | null;
+		thumbnailWorkId?: number | null;
 		isPublished?: boolean;
 	}): Promise<ProjectRow> => {
 		const res = await client.api.content.projects[":slug"].$patch({
@@ -103,8 +105,8 @@ export default function OwnerProjectEditor({
 	const saveFields = async (fields: {
 		title?: string;
 		description?: string;
-		coverImage?: string;
-		coverSource?: string;
+		thumbnail?: string;
+		thumbnailSource?: string;
 		isPublished?: boolean;
 	}): Promise<void> => {
 		await patchFields(fields);
@@ -116,67 +118,74 @@ export default function OwnerProjectEditor({
 		setFraming(null);
 	};
 
-	const pickedCover = (file: File) => {
-		setCoverError(null);
+	const pickedThumbnail = (file: File) => {
+		setThumbnailError(null);
 		setFraming({ preview: URL.createObjectURL(file), file, source: null });
 	};
 
 	const startReposition = () => {
 		// A row written before the source column falls back to the image already stored.
-		const source = keyToPreview(coverSource || coverImage);
+		const source = keyToPreview(thumbnailSource || thumbnail);
 		if (!source) return;
-		setCoverError(null);
+		setThumbnailError(null);
 		setFraming({ preview: source, file: null, source });
 	};
 
-	const saveFramedCover = async (crop: { x: number; y: number; width: number; height: number }) => {
+	const saveFramedThumbnail = async (crop: {
+		x: number;
+		y: number;
+		width: number;
+		height: number;
+	}) => {
 		if (!framing) return;
-		setCoverError(null);
-		setCoverBusy(true);
+		setThumbnailError(null);
+		setThumbnailBusy(true);
 		try {
 			const source = framing.file
-				? (await uploadImageFile(framing.file, "cover")).url
+				? (await uploadImageFile(framing.file, "thumbnail")).url
 				: framing.source;
 			if (!source) throw new Error("That image isn't available any more. Upload it again.");
-			const framed = await frameImageFile(source, "cover", crop);
+			const framed = await frameImageFile(source, "thumbnail", crop);
 			// A framed upload is the other way to choose an image, so it retires any Work
 			// reference in the same act.
 			const updated = await patchFields({
-				coverImage: framed.url,
-				coverSource: source,
-				coverCrop: crop,
-				coverWorkId: null,
+				thumbnail: framed.url,
+				thumbnailSource: source,
+				thumbnailCrop: crop,
+				thumbnailWorkId: null,
 			});
-			setCoverImage(updated.coverImage ?? "");
-			setCoverSource(updated.coverSource ?? "");
-			setCoverCrop(updated.coverCrop ?? null);
-			setCoverWorkId(updated.coverWorkId ?? null);
+			setThumbnail(updated.thumbnail ?? "");
+			setThumbnailSource(updated.thumbnailSource ?? "");
+			setThumbnailCrop(updated.thumbnailCrop ?? null);
+			setThumbnailWorkId(updated.thumbnailWorkId ?? null);
 			closeFraming();
 		} catch (err) {
-			setCoverError(err instanceof Error ? err.message : "The image didn't save. Try it again.");
+			setThumbnailError(
+				err instanceof Error ? err.message : "The image didn't save. Try it again.",
+			);
 		} finally {
-			setCoverBusy(false);
+			setThumbnailBusy(false);
 		}
 	};
 
-	// Choosing one of the Project's Works asks the server for that Work's own cover; the
+	// Choosing one of the Project's Works asks the server for that Work's own thumbnail; the
 	// answer is the row the page now shows, so the preview follows in the same act.
-	const chooseCoverWork = async (workId: number) => {
-		setCoverError(null);
-		setCoverBusy(true);
+	const chooseThumbnailWork = async (workId: number) => {
+		setThumbnailError(null);
+		setThumbnailBusy(true);
 		try {
-			const updated = await patchFields({ coverWorkId: workId });
-			setCoverImage(updated.coverImage ?? "");
-			setCoverSource(updated.coverSource ?? "");
-			setCoverCrop(updated.coverCrop ?? null);
-			setCoverWorkId(updated.coverWorkId ?? null);
-			setCoverPickerOpen(false);
+			const updated = await patchFields({ thumbnailWorkId: workId });
+			setThumbnail(updated.thumbnail ?? "");
+			setThumbnailSource(updated.thumbnailSource ?? "");
+			setThumbnailCrop(updated.thumbnailCrop ?? null);
+			setThumbnailWorkId(updated.thumbnailWorkId ?? null);
+			setThumbnailPickerOpen(false);
 		} catch (err) {
-			setCoverError(
-				err instanceof Error ? err.message : "That Work's cover didn't save. Try again.",
+			setThumbnailError(
+				err instanceof Error ? err.message : "That Work's thumbnail didn't save. Try again.",
 			);
 		} finally {
-			setCoverBusy(false);
+			setThumbnailBusy(false);
 		}
 	};
 
@@ -185,30 +194,32 @@ export default function OwnerProjectEditor({
 	const isPublished = project.isPublished === true;
 	const publishBlocked = !isPublished && (payoutsReady === false || permissionMissing === true);
 
-	const removeCover = async () => {
-		setCoverError(null);
-		setCoverBusy(true);
+	const removeThumbnail = async () => {
+		setThumbnailError(null);
+		setThumbnailBusy(true);
 		try {
-			// Removing the cover clears both choices: the uploaded image and any Work it
+			// Removing the thumbnail clears both choices: the uploaded image and any Work it
 			// was borrowing from.
 			const updated = await patchFields({
-				coverImage: "",
-				coverSource: "",
-				coverCrop: null,
-				coverWorkId: null,
+				thumbnail: "",
+				thumbnailSource: "",
+				thumbnailCrop: null,
+				thumbnailWorkId: null,
 			});
-			setCoverImage(updated.coverImage ?? "");
-			setCoverSource(updated.coverSource ?? "");
-			setCoverCrop(updated.coverCrop ?? null);
-			setCoverWorkId(updated.coverWorkId ?? null);
+			setThumbnail(updated.thumbnail ?? "");
+			setThumbnailSource(updated.thumbnailSource ?? "");
+			setThumbnailCrop(updated.thumbnailCrop ?? null);
+			setThumbnailWorkId(updated.thumbnailWorkId ?? null);
 		} catch (err) {
-			setCoverError(err instanceof Error ? err.message : "Couldn't remove the cover just now.");
+			setThumbnailError(
+				err instanceof Error ? err.message : "Couldn't remove the thumbnail just now.",
+			);
 		} finally {
-			setCoverBusy(false);
+			setThumbnailBusy(false);
 		}
 	};
 
-	const coverWork = (project.works ?? []).find((work) => work.id === coverWorkId);
+	const thumbnailWork = (project.works ?? []).find((work) => work.id === thumbnailWorkId);
 
 	return (
 		<div className="container mx-auto px-4 py-8 max-w-5xl">
@@ -221,16 +232,16 @@ export default function OwnerProjectEditor({
 				<WorkViewAsRow subject="Project" />
 			</div>
 
-			{/* The cover — the user's hero, with the acts on it. The blank frame holds the
-			    page's shape while no cover exists, as the Work page's thumbnail does. */}
-			{coverImage ? (
-				<div className="w-full h-56 md:h-72 overflow-hidden rounded-lg mb-6">
-					<img src={coverImage} alt={project.title} className="w-full h-full object-cover" />
+			{/* The thumbnail — the user's hero, with the acts on it. The blank frame holds the
+			    page's shape while no thumbnail exists, as the Work page's own does. */}
+			{thumbnail ? (
+				<div className="mx-auto w-full max-w-3xl aspect-video overflow-hidden rounded-lg mb-6">
+					<img src={thumbnail} alt={project.title} className="w-full h-full object-cover" />
 				</div>
 			) : (
 				<div
 					aria-hidden="true"
-					className="mb-6 flex h-56 md:h-72 items-center justify-center rounded-lg border border-dashed border-base-content/25 bg-base-200/30 text-base-content/25"
+					className="mx-auto mb-6 flex aspect-video w-full max-w-3xl items-center justify-center rounded-lg border border-dashed border-base-content/25 bg-base-200/30 text-base-content/25"
 				>
 					<PhotoIcon className="h-8 w-8" />
 				</div>
@@ -238,54 +249,54 @@ export default function OwnerProjectEditor({
 			<div className="mb-6 flex flex-col gap-2">
 				<div className="flex flex-wrap items-center gap-2">
 					<input
-						ref={coverInput}
+						ref={thumbnailInput}
 						type="file"
 						accept="image/*"
 						className="hidden"
 						onChange={(e) => {
 							const file = e.target.files?.[0];
 							e.target.value = "";
-							if (file) pickedCover(file);
+							if (file) pickedThumbnail(file);
 						}}
 					/>
 					<ImageEditMenu
-						label="Project image"
-						triggerLabel="Edit Image"
-						hasImage={Boolean(coverImage) && coverWorkId == null}
-						busy={coverBusy}
+						label="thumbnail"
+						triggerLabel="Edit Thumbnail"
+						hasImage={Boolean(thumbnail) && thumbnailWorkId == null}
+						busy={thumbnailBusy}
 						onUpload={() => {
-							setCoverError(null);
-							coverInput.current?.click();
+							setThumbnailError(null);
+							thumbnailInput.current?.click();
 						}}
 						onReposition={startReposition}
 						repositionDisabledReason={
-							coverWorkId != null ? "Reposition it on the Work it comes from." : undefined
+							thumbnailWorkId != null ? "Reposition it on the Work it comes from." : undefined
 						}
 						extra={{
 							label: "Choose from Work",
 							onSelect: () => {
-								setCoverError(null);
-								setCoverPickerOpen(true);
+								setThumbnailError(null);
+								setThumbnailPickerOpen(true);
 							},
 						}}
 					/>
-					{(coverImage || coverWorkId != null) && (
+					{(thumbnail || thumbnailWorkId != null) && (
 						<button
 							type="button"
 							className="btn btn-ghost btn-sm text-error"
-							disabled={coverBusy}
-							onClick={() => void removeCover()}
+							disabled={thumbnailBusy}
+							onClick={() => void removeThumbnail()}
 						>
 							Remove
 						</button>
 					)}
 				</div>
-				{coverWork && (
+				{thumbnailWork && (
 					<p className="text-xs text-base-content/60">
-						Using the cover from <span className="font-medium">{coverWork.title}</span>.
+						Using the thumbnail from <span className="font-medium">{thumbnailWork.title}</span>.
 					</p>
 				)}
-				{coverError && <p className="text-xs text-error">{coverError}</p>}
+				{thumbnailError && <p className="text-xs text-error">{thumbnailError}</p>}
 			</div>
 
 			{/* Title — centered read like the public page's h1, pencil beside it. */}
@@ -427,21 +438,21 @@ export default function OwnerProjectEditor({
 			<ImageFrameModal
 				open={framing !== null}
 				src={framing?.preview ?? null}
-				mediaType="cover"
-				busy={coverBusy}
-				error={coverError}
-				initialCrop={coverCrop}
+				mediaType="thumbnail"
+				busy={thumbnailBusy}
+				error={thumbnailError}
+				initialCrop={thumbnailCrop}
 				onCancel={closeFraming}
-				onSave={(crop) => void saveFramedCover(crop)}
+				onSave={(crop) => void saveFramedThumbnail(crop)}
 			/>
 
-			{coverPickerOpen && (
-				<CoverWorkPicker
+			{thumbnailPickerOpen && (
+				<ThumbnailWorkPicker
 					works={project.works ?? []}
-					selectedId={coverWorkId}
-					busy={coverBusy}
-					onChoose={(workId) => void chooseCoverWork(workId)}
-					onClose={() => setCoverPickerOpen(false)}
+					selectedId={thumbnailWorkId}
+					busy={thumbnailBusy}
+					onChoose={(workId) => void chooseThumbnailWork(workId)}
+					onClose={() => setThumbnailPickerOpen(false)}
 				/>
 			)}
 		</div>
@@ -449,14 +460,14 @@ export default function OwnerProjectEditor({
 }
 
 /**
- * The Project's cover, chosen from one of its Works.
+ * The Project's thumbnail, chosen from one of its Works.
  *
  * ⭐ **The choice is the Work, not a copy of its picture** — the Project wears whatever
- * cover that Work has, now and after the creator changes it. So the tile shows the
- * Work's current cover, and a Work without one cannot dress the Project yet: its tile
+ * thumbnail that Work has, now and after the creator changes it. So the tile shows the
+ * Work's current thumbnail, and a Work without one cannot dress the Project yet: its tile
  * says so rather than standing in as a blank choice.
  */
-function CoverWorkPicker({
+function ThumbnailWorkPicker({
 	works,
 	selectedId,
 	busy,
@@ -478,7 +489,7 @@ function CoverWorkPicker({
 	}, [onClose]);
 
 	return (
-		<div className="modal modal-open" role="dialog" aria-label="Cover from a Work">
+		<div className="modal modal-open" role="dialog" aria-label="Thumbnail from a Work">
 			<div className="modal-box max-w-2xl">
 				<button
 					type="button"
@@ -488,25 +499,25 @@ function CoverWorkPicker({
 				>
 					<XMarkIcon className="h-4 w-4" />
 				</button>
-				<h3 className="text-lg font-semibold">Cover from a Work</h3>
+				<h3 className="text-lg font-semibold">Thumbnail from a Work</h3>
 				<p className="mt-1 text-xs text-base-content/60">
-					The Project shows this Work's cover, so changing the Work's cover later changes the
-					Project's too.
+					The Project shows this Work's thumbnail, so changing the Work's thumbnail later changes
+					the Project's too.
 				</p>
 				{(works ?? []).length === 0 ? (
 					<p className="mt-4 text-sm text-base-content/60">
-						This Project holds no Works yet. Add some and their covers will appear here.
+						This Project holds no Works yet. Add some and their thumbnails will appear here.
 					</p>
 				) : (
 					<div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
 						{(works ?? []).map((work) => {
 							const selected = work.id === selectedId;
-							const hasCover = Boolean(work.thumbnail);
+							const hasThumbnail = Boolean(work.thumbnail);
 							return (
 								<button
 									key={work.id}
 									type="button"
-									disabled={busy || !hasCover}
+									disabled={busy || !hasThumbnail}
 									aria-label={work.title ?? "Untitled Work"}
 									aria-pressed={selected}
 									onClick={() => onChoose(work.id)}
@@ -516,7 +527,7 @@ function CoverWorkPicker({
 											: "border-base-300 hover:shadow-md disabled:opacity-60"
 									}`}
 								>
-									{hasCover ? (
+									{hasThumbnail ? (
 										<img
 											src={work.thumbnail ?? ""}
 											alt=""
@@ -524,7 +535,7 @@ function CoverWorkPicker({
 										/>
 									) : (
 										<span className="flex aspect-video w-full items-center justify-center bg-base-200/50 text-xs text-base-content/40">
-											No cover yet
+											No thumbnail yet
 										</span>
 									)}
 									<span className="line-clamp-2 block p-2 text-xs font-medium">
@@ -535,7 +546,7 @@ function CoverWorkPicker({
 						})}
 					</div>
 				)}
-				{busy && <p className="mt-4 text-xs text-base-content/60">Saving the cover…</p>}
+				{busy && <p className="mt-4 text-xs text-base-content/60">Saving the thumbnail…</p>}
 			</div>
 		</div>
 	);

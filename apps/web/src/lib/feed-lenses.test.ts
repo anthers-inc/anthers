@@ -34,7 +34,7 @@ function release(id: number, musicCount = 4): WorkRelease {
 		id: id + 100,
 		slug: `record-${id}`,
 		title: `Record ${id}`,
-		coverImage: null,
+		thumbnail: null,
 		creatorId: 10,
 		creatorHandle: "maker",
 		creatorDisplayName: "The Maker",

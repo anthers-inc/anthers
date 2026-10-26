@@ -414,7 +414,7 @@ export default function ForCreatorsPage() {
 						<Feature
 							icon={<UserGroupIcon className="h-6 w-6" />}
 							title="Creator Profiles"
-							description="Your own anther on Anthers: header image, bio, links, and all your work in one place. Audiences follow you, not individual projects. Like a Patreon page and an itch.io profile combined."
+							description="Your own anther on Anthers: banner, avatar, bio, links, and all your work in one place. Audiences follow you, not individual projects. Like a Patreon page and an itch.io profile combined."
 						/>
 					</Reveal>
 					<Reveal delay={560}>

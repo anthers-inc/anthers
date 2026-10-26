@@ -84,7 +84,7 @@ describe("account deletion sweeps object storage", () => {
 				.update(users)
 				.set({
 					avatar: `https://cdn.anthers.org/creators/${userId}/avatars/avatar.png`,
-					headerImage: `https://cdn.anthers.org/creators/${userId}/headers/header.png`,
+					bannerImage: `https://cdn.anthers.org/creators/${userId}/banners/header.png`,
 				})
 				.where(eq(users.id, userId));
 			const unbought = await insertWork({
@@ -116,7 +116,7 @@ describe("account deletion sweeps object storage", () => {
 			// The avatar is the one that mattered: it lives in the PUBLIC bucket behind
 			// cdn.anthers.org, so leaving it is a deleted person's face still on the internet.
 			expect(deleted).toContain(`creators/${userId}/avatars/avatar.png`);
-			expect(deleted).toContain(`creators/${userId}/headers/header.png`);
+			expect(deleted).toContain(`creators/${userId}/banners/header.png`);
 			expect(deleted).toContain(`creators/${userId}/videos/source.mp4`);
 			expect(deleted).toContain(`creators/${userId}/gallery/thumb.jpg`);
 		},

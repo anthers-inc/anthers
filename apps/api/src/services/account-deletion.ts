@@ -335,7 +335,7 @@ export async function eraseAccount(
 		.select({
 			id: users.id,
 			avatar: users.avatar,
-			headerImage: users.headerImage,
+			bannerImage: users.bannerImage,
 			// Read here because it is about to cascade away, and a DID we no longer hold is a
 			// grant we can never find to revoke.
 			atprotoDid: users.atprotoDid,

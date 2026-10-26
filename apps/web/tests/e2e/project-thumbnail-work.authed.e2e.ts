@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * A Project can wear one of its Works' covers, chosen from the Project's own page.
+ * A Project can wear one of its Works' thumbnails, chosen from the Project's own page.
  *
  * The API suite owns the rules — the reference follow-through, the fallback, the visibility
  * gates. This walk proves the editor's half: "Choose from Work" opens the picker, a Work
- * with a cover is a choice, and the act puts that cover on the page and says where it came
+ * with a thumbnail is a choice, and the act puts that thumbnail on the page and says where it came
  * from, without an upload in between.
  *
  * Runs on `media_fixture`, which carries payout setup and a shared catalog; everything this
@@ -18,8 +18,8 @@ import { API_URL, expect, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtu
 
 const run = Date.now();
 const SLUG = `pc-work-${run}`;
-const WORK_TITLE = `Project cover walk ${run}`;
-const PROJECT_TITLE = `Project cover walk project ${run}`;
+const WORK_TITLE = `Project thumbnail walk ${run}`;
+const PROJECT_TITLE = `Project thumbnail walk project ${run}`;
 
 /** A 1×1 PNG, so the direct-upload door sees a real image. */
 const PNG = Buffer.from(
@@ -51,37 +51,37 @@ test.afterAll(async () => {
 	}
 });
 
-test("a creator chooses a Works cover for the Project from the Project page", async ({
+test("a creator chooses a Works thumbnail for the Project from the Project page", async ({
 	page,
 	context,
 }) => {
 	session = await signInAsMediaFixture(context);
 
-	// The Work and its cover: a draft text Work with an uploaded image, since a text Work
+	// The Work and its thumbnail: a draft text Work with an uploaded image, since a text Work
 	// carries a chosen thumbnail and the list does not require release.
 	const made = await fetch(`${API_URL}/api/content/works`, {
 		method: "POST",
 		headers: await authed(),
-		body: JSON.stringify({ type: "text", title: WORK_TITLE, bodyHtml: "<p>cover walk</p>" }),
+		body: JSON.stringify({ type: "text", title: WORK_TITLE, bodyHtml: "<p>thumbnail walk</p>" }),
 	});
 	expect(made.status).toBe(201);
 	workId = ((await made.json()) as { work: { id: number } }).work.id;
 
 	const upload = new FormData();
-	upload.append("file", new Blob([PNG], { type: "image/png" }), "cover.png");
-	upload.append("mediaType", "cover");
+	upload.append("file", new Blob([PNG], { type: "image/png" }), "thumbnail.png");
+	upload.append("mediaType", "thumbnail");
 	const uploaded = await fetch(`${API_URL}/api/content/media-upload/direct`, {
 		method: "POST",
 		headers: { Origin: WEB_ORIGIN, Cookie: `session=${session}` },
 		body: upload,
 	});
 	expect(uploaded.status, await uploaded.clone().text()).toBe(201);
-	const { url: coverUrl } = (await uploaded.json()) as { url: string };
+	const { url: thumbUrl } = (await uploaded.json()) as { url: string };
 
 	const thumbed = await fetch(`${API_URL}/api/content/works/${workId}`, {
 		method: "PATCH",
 		headers: await authed(),
-		body: JSON.stringify({ thumbnail: coverUrl }),
+		body: JSON.stringify({ thumbnail: thumbUrl }),
 	});
 	expect(thumbed.ok, await thumbed.clone().text()).toBe(true);
 
@@ -102,28 +102,27 @@ test("a creator chooses a Works cover for the Project from the Project page", as
 	handle = await gauntletHandle(API_URL, MEDIA_FIXTURE_USERNAME);
 
 	await page.goto(`/@${handle}/${SLUG}`);
-	await expect(page.getByRole("button", { name: "Choose from Work" })).toBeVisible();
-
+	await page.getByRole("button", { name: "Edit Thumbnail" }).click();
 	await page.getByRole("button", { name: "Choose from Work" }).click();
-	const picker = page.getByRole("dialog", { name: "Cover from a Work" });
+	const picker = page.getByRole("dialog", { name: "Thumbnail from a Work" });
 	await expect(picker).toBeVisible();
 	const tile = picker.getByRole("button", { name: WORK_TITLE });
 	await expect(tile).toBeVisible();
 
 	// The tile is the Work, and choosing it is the save.
 	await tile.click();
-	await expect(page.getByRole("dialog", { name: "Cover from a Work" })).toHaveCount(0);
-	await expect(page.getByText(`Using the cover from ${WORK_TITLE}.`)).toBeVisible();
-	await expect(page.locator(`img[alt="${PROJECT_TITLE}"]`)).toHaveAttribute("src", coverUrl);
+	await expect(page.getByRole("dialog", { name: "Thumbnail from a Work" })).toHaveCount(0);
+	await expect(page.getByText(`Using the thumbnail from ${WORK_TITLE}.`)).toBeVisible();
+	await expect(page.locator(`img[alt="${PROJECT_TITLE}"]`)).toHaveAttribute("src", thumbUrl);
 
-	// The row says the same: a reference to this Work, and the resolved cover.
+	// The row says the same: a reference to this Work, and the resolved thumbnail.
 	const row = await fetch(`${API_URL}/api/content/projects/${SLUG}`, {
 		headers: { Cookie: `session=${session}` },
 	});
 	expect(row.status).toBe(200);
 	const { project: saved } = (await row.json()) as {
-		project: { coverWorkId: number | null; coverImage: string | null };
+		project: { thumbnailWorkId: number | null; thumbnail: string | null };
 	};
-	expect(saved.coverWorkId).toBe(workId);
-	expect(saved.coverImage).toBe(coverUrl);
+	expect(saved.thumbnailWorkId).toBe(workId);
+	expect(saved.thumbnail).toBe(thumbUrl);
 });

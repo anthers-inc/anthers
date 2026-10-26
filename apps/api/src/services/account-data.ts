@@ -153,7 +153,7 @@ export async function buildAccountExport(userId: number): Promise<AccountExport 
 			displayName: user.displayName,
 			bio: user.bio,
 			avatar: user.avatar,
-			headerImage: user.headerImage,
+			bannerImage: user.bannerImage,
 			websiteUrl: user.websiteUrl,
 			location: user.location,
 			creatorMode: user.creatorMode,

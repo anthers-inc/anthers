@@ -3,7 +3,7 @@
  * An account cannot point anything it owns at a file another account uploaded.
  *
  * Every column this suite writes — a Work's source and thumbnail, an asset's file, a Project's
- * cover, an account's avatar and header — is read by something that acts on the object it
+ * thumbnail, an account's avatar and banner — is read by something that acts on the object it
  * names. Delivery signs it for the owner, release lists it under the owner's name, and deletion
  * destroys it, so until 2026-09-16 naming another creator's original and then deleting your own
  * Work destroyed theirs. `services/storage/keys.ts` carries the reasoning.
@@ -127,7 +127,7 @@ describe("the write routes refuse another account's file", () => {
 				await createWork(attacker.cookie, { type: "video", sourceKey: victimSource() }),
 			),
 		).toBe("foreign_file");
-		const victimThumb = await storage.getUrl(keyFor(victim.id, "thumbnails/cover.png"));
+		const victimThumb = await storage.getUrl(keyFor(victim.id, "thumbnails/project.png"));
 		expect(
 			await refusal(await createWork(attacker.cookie, { type: "game", thumbnail: victimThumb })),
 		).toBe("foreign_file");
@@ -191,14 +191,14 @@ describe("the write routes refuse another account's file", () => {
 		expect((await asset(keyFor(attacker.id, "assets/own-build.zip"))).status).toBe(201);
 	});
 
-	it("refuses it as an avatar or a header", async () => {
+	it("refuses it as an avatar or a banner", async () => {
 		const foreign = await storage.getUrl(keyFor(victim.id, "avatars/face.png"));
 		expect(
 			await refusal(await call("PATCH", "/api/accounts/me", attacker.cookie, { avatar: foreign })),
 		).toBe("foreign_file");
 		expect(
 			await refusal(
-				await call("PATCH", "/api/accounts/me", attacker.cookie, { headerImage: foreign }),
+				await call("PATCH", "/api/accounts/me", attacker.cookie, { bannerImage: foreign }),
 			),
 		).toBe("foreign_file");
 		expect(
@@ -208,7 +208,7 @@ describe("the write routes refuse another account's file", () => {
 		).toBe("foreign_file");
 		expect(
 			await refusal(
-				await call("PATCH", "/api/accounts/me", attacker.cookie, { headerImageSource: foreign }),
+				await call("PATCH", "/api/accounts/me", attacker.cookie, { bannerImageSource: foreign }),
 			),
 		).toBe("foreign_file");
 		const own = await storage.getUrl(keyFor(attacker.id, "avatars/face.png"));
@@ -222,29 +222,29 @@ describe("the write routes refuse another account's file", () => {
 		expect(row.avatar).toBe(own);
 	});
 
-	it("refuses it as a Project's cover, on create and on edit", async () => {
-		const foreign = await storage.getUrl(keyFor(victim.id, "covers/album.png"));
+	it("refuses it as a Project's thumbnail, on create and on edit", async () => {
+		const foreign = await storage.getUrl(keyFor(victim.id, "thumbnails/album.png"));
 		const slug = `ffr-${run}`;
 		projectSlugs.push(slug);
-		const create = (coverImage: string) =>
-			call("POST", "/api/content/projects", attacker.cookie, { title: "ffr", slug, coverImage });
+		const create = (thumbnail: string) =>
+			call("POST", "/api/content/projects", attacker.cookie, { title: "ffr", slug, thumbnail });
 		expect(await refusal(await create(foreign))).toBe("foreign_file");
 		expect(
 			await refusal(
 				await call("POST", "/api/content/projects", attacker.cookie, {
 					title: "ffr",
 					slug: `${slug}-source`,
-					coverSource: foreign,
+					thumbnailSource: foreign,
 				}),
 			),
 		).toBe("foreign_file");
 		expect((await create("")).status).toBe(201);
 		const edit = await call("PATCH", `/api/content/projects/${slug}`, attacker.cookie, {
-			coverImage: foreign,
+			thumbnail: foreign,
 		});
 		expect(await refusal(edit)).toBe("foreign_file");
 		const editSource = await call("PATCH", `/api/content/projects/${slug}`, attacker.cookie, {
-			coverSource: foreign,
+			thumbnailSource: foreign,
 		});
 		expect(await refusal(editSource)).toBe("foreign_file");
 	});
@@ -321,15 +321,15 @@ describe("framing an image", () => {
 	});
 
 	it("keeps the framing source out of a public Project response", async () => {
-		const own = await storage.getUrl(keyFor(attacker.id, "covers/source.png"));
+		const own = await storage.getUrl(keyFor(attacker.id, "thumbnails/source.png"));
 		const slug = `ffr-source-${run}`;
 		projectSlugs.push(slug);
 		const created = await call("POST", "/api/content/projects", attacker.cookie, {
 			title: "ffr source",
 			slug,
-			coverImage: own,
-			coverSource: own,
-			coverCrop: { x: 0.1, y: 0.1, width: 0.8, height: 0.4 },
+			thumbnail: own,
+			thumbnailSource: own,
+			thumbnailCrop: { x: 0.1, y: 0.1, width: 0.8, height: 0.4 },
 		});
 		expect(created.status).toBe(201);
 		// Published directly, because this assertion is about the serializer rather than the
@@ -342,9 +342,9 @@ describe("framing an image", () => {
 		);
 		expect(publicRead.status).toBe(200);
 		const { project } = (await publicRead.json()) as { project: Record<string, unknown> };
-		expect(project.coverImage).toBe(own);
-		expect(Object.hasOwn(project, "coverSource")).toBe(false);
-		expect(Object.hasOwn(project, "coverCrop")).toBe(false);
+		expect(project.thumbnail).toBe(own);
+		expect(Object.hasOwn(project, "thumbnailSource")).toBe(false);
+		expect(Object.hasOwn(project, "thumbnailCrop")).toBe(false);
 	});
 });
 
@@ -382,13 +382,13 @@ describe("deletion never reaches another account's file", () => {
 			{
 				id: attacker.id,
 				avatar: keyFor(victim.id, "avatars/face.png"),
-				headerImage: keyFor(attacker.id, "headers/own.png"),
+				bannerImage: keyFor(attacker.id, "banners/own.png"),
 				avatarSource: keyFor(attacker.id, "avatars/source.png"),
-				headerImageSource: keyFor(victim.id, "headers/foreign-source.png"),
+				bannerImageSource: keyFor(victim.id, "banners/foreign-source.png"),
 			},
 		);
 		expect([...collected.keys]).toEqual([
-			keyFor(attacker.id, "headers/own.png"),
+			keyFor(attacker.id, "banners/own.png"),
 			keyFor(attacker.id, "avatars/source.png"),
 		]);
 	});

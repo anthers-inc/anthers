@@ -423,12 +423,12 @@ export function addUserImages(
 	user: {
 		id: number;
 		avatar?: string | null;
-		headerImage?: string | null;
+		bannerImage?: string | null;
 		avatarSource?: string | null;
-		headerImageSource?: string | null;
+		bannerImageSource?: string | null;
 	},
 ): CollectedMedia {
-	for (const ref of [user.avatar, user.headerImage, user.avatarSource, user.headerImageSource]) {
+	for (const ref of [user.avatar, user.bannerImage, user.avatarSource, user.bannerImageSource]) {
 		if (!ref) continue;
 		const key = urlToKey(ref);
 		if (isKeyUnder(key, user.id)) collected.keys.add(key);

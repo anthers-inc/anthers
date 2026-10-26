@@ -37,14 +37,12 @@ export const imageCropSchema = z.custom<ImageCrop>((value) => normalizeCrop(valu
  * them, and every `<img>` keeps its own `object-cover`.
  */
 export const IMAGE_FRAME_SPECS = {
-	/** A Work's poster in the feed, a listing and a card — 16:9 everywhere. */
+	/** A Work's or a Project's poster — 16:9 everywhere, from the feed to a Project's page. */
 	thumbnail: { width: 1280, height: 720, noun: "thumbnail" },
-	/** A Project's image — the 2:1 band the Projects table and the feed show. */
-	cover: { width: 1400, height: 700, noun: "Project image" },
-	/** A profile header — the 3:1 banner, Bluesky's own convention. */
-	header: { width: 1500, height: 500, noun: "header image" },
-	/** A profile picture, shown as a circle. */
-	avatar: { width: 512, height: 512, noun: "profile picture" },
+	/** A profile banner — the 3:1 band above a profile, Bluesky's own convention. */
+	banner: { width: 1500, height: 500, noun: "banner" },
+	/** A profile avatar, shown as a circle. */
+	avatar: { width: 512, height: 512, noun: "avatar" },
 } as const satisfies Record<string, { width: number; height: number; noun: string }>;
 
 /** The surfaces {@link IMAGE_FRAME_SPECS} describes. */

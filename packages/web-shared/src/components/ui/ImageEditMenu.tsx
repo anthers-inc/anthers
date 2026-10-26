@@ -26,7 +26,7 @@ export default function ImageEditMenu({
 	extra,
 	repositionDisabledReason,
 }: {
-	/** What is being edited, for the trigger's accessible name — "thumbnail", "header image". */
+	/** What is being edited, for the trigger's accessible name — "thumbnail", "banner", "avatar". */
 	label: string;
 	/** Visible text on the trigger, when the surface has room for it. Omit for an icon button. */
 	triggerLabel?: string;
@@ -37,7 +37,7 @@ export default function ImageEditMenu({
 	rootClassName?: string;
 	onUpload: () => void;
 	onReposition: () => void;
-	/** A surface's third act, e.g. a Work thumbnail's frame picker or a Project's cover Work. */
+	/** A surface's third act, e.g. a Work thumbnail's frame picker or a Project's thumbnail Work. */
 	extra?: { label: string; onSelect: () => void };
 	/** Why Reposition is unavailable when an image exists but is not this surface's own. */
 	repositionDisabledReason?: string;

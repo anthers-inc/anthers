@@ -35,8 +35,7 @@ describe("the frame specs", () => {
 
 	it("derives each aspect from the pixel size it describes", () => {
 		expect(frameAspect("thumbnail")).toBeCloseTo(16 / 9);
-		expect(frameAspect("cover")).toBe(2);
-		expect(frameAspect("header")).toBe(3);
+		expect(frameAspect("banner")).toBe(3);
 		expect(frameAspect("avatar")).toBe(1);
 	});
 });

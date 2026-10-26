@@ -1238,14 +1238,14 @@ const createProjectSchema = z.object({
 		.max(255)
 		.regex(/^[a-z0-9-]+$/, "Slug: lowercase letters, numbers, hyphens"),
 	description: z.string().max(50000).optional().default(""),
-	coverImage: z.string().max(500).optional().default(""),
+	thumbnail: z.string().max(500).optional().default(""),
 	/**
 	 * The full upload the Project image was framed from, kept for repositioning. Owner-facing
 	 * only; the detail route withholds it from anyone but the creator.
 	 */
-	coverSource: z.string().max(500).optional().default(""),
+	thumbnailSource: z.string().max(500).optional().default(""),
 	/** The window the Project image was framed at, so a reposition reopens where it was left. */
-	coverCrop: imageCropSchema.nullable().optional(),
+	thumbnailCrop: imageCropSchema.nullable().optional(),
 	pageConfig: z.record(z.unknown()).optional(),
 	// The Project's two sort settings (2026-10-19). A creator saves these from the sort
 	// dropdown on the Project page; the detail route applies them when it serializes
@@ -1260,10 +1260,10 @@ const createProjectSchema = z.object({
 
 const updateProjectSchema = createProjectSchema.partial().extend({
 	/**
-	 * A cover chosen from one of the Project's Works, by reference. Null clears the choice
-	 * and returns the Project to its uploaded `coverImage`, which this never clears.
+	 * A thumbnail chosen from one of the Project's Works, by reference. Null clears the
+	 * choice and returns the Project to its uploaded `thumbnail`, which this never clears.
 	 */
-	coverWorkId: z.number().int().positive().nullable().optional(),
+	thumbnailWorkId: z.number().int().positive().nullable().optional(),
 });
 
 /**
@@ -1454,31 +1454,31 @@ async function resolveWorkThumbnail(item: WorkRow): Promise<void> {
 }
 
 /**
- * Resolve the Projects whose cover is one of their Works.
+ * Resolve the Projects whose thumbnail is one of their Works.
  *
- * ⭐ **A Project's cover-by-Work is a reference, not a copy** (`projects.cover_work_id`): the
- * Project follows the Work's own cover, and the Work's visibility and rating decide whether
- * that cover is shown here. A Work hidden from this viewer — private or withdrawn to a
- * stranger, Adult-rated to somebody who has not opted in, blocked by a guardian — contributes
- * no cover at all, so the Project falls back to its uploaded `coverImage` rather than leaking
- * the thing the viewer may not see.
+ * ⭐ **A Project's thumbnail-by-Work is a reference, not a copy** (`projects.thumbnail_work_id`):
+ * the Project follows the Work's own thumbnail, and the Work's visibility and rating decide
+ * whether that thumbnail is shown here. A Work hidden from this viewer — private or withdrawn
+ * to a stranger, Adult-rated to somebody who has not opted in, blocked by a guardian —
+ * contributes no thumbnail at all, so the Project falls back to its uploaded `thumbnail`
+ * rather than leaking the thing the viewer may not see.
  *
  * ⚠️ **Membership is part of the query, not an assumption about the write path.** A Project's
- * cover Work must be in its list; joining through `project_items` means a row left behind by
- * a removal or a bug can never dress the Project in a Work it does not hold.
+ * thumbnail Work must be in its list; joining through `project_items` means a row left behind
+ * by a removal or a bug can never dress the Project in a Work it does not hold.
  *
  * `seeAll` is the owner's own read: their drafts and every rung are theirs to edit, the same
  * exception every other owner-facing listing makes.
  */
-async function resolveProjectCovers(
-	rows: { id: number; coverWorkId: number | null; coverImage: string | null }[],
+async function resolveProjectThumbnails(
+	rows: { id: number; thumbnailWorkId: number | null; thumbnail: string | null }[],
 	options: { userId: number | null; seeAll: boolean },
 ): Promise<Map<number, string>> {
-	const covers = new Map<number, string>();
-	if (rows.length === 0) return covers;
+	const thumbnails = new Map<number, string>();
+	if (rows.length === 0) return thumbnails;
 
-	const wanted = rows.filter((row) => row.coverWorkId != null);
-	if (wanted.length === 0) return covers;
+	const wanted = rows.filter((row) => row.thumbnailWorkId != null);
+	if (wanted.length === 0) return thumbnails;
 
 	const conditions: SQL[] = [
 		inArray(
@@ -1510,23 +1510,23 @@ async function resolveProjectCovers(
 		);
 	}
 
-	const coverRows = await db
+	const thumbnailRows = await db
 		.select({ projectId: projectItems.projectId, workId: works.id, thumbnail: works.thumbnail })
 		.from(projectItems)
 		.innerJoin(works, eq(projectItems.workId, works.id))
 		.where(and(...conditions));
 
 	// The list may hold several Works; only the chosen one dresses the Project.
-	const chosenByProject = new Map(wanted.map((row) => [row.id, row.coverWorkId] as const));
+	const chosenByProject = new Map(wanted.map((row) => [row.id, row.thumbnailWorkId] as const));
 	await Promise.all(
-		coverRows
+		thumbnailRows
 			.filter((row) => chosenByProject.get(row.projectId) === row.workId)
 			.map(async (row) => {
 				const url = await resolveThumbnailUrl(row.thumbnail);
-				if (url) covers.set(row.projectId, url);
+				if (url) thumbnails.set(row.projectId, url);
 			}),
 	);
-	return covers;
+	return thumbnails;
 }
 
 /**
@@ -1569,7 +1569,7 @@ async function publicWorkCard(param: string) {
  * unfurl is not one.
  *
  * The image is the first Work the post embeds, resolved through `mentionableWorks` rather
- * than read off `works` directly: an Adult Work's cover is part of the existence the rung
+ * than read off `works` directly: an Adult Work's thumbnail is part of the existence the rung
  * withholds, and a post that links one must not hand it to an unverified stranger. The
  * title is resolved the same way, so a mention shows the Work's current name.
  */
@@ -1585,7 +1585,7 @@ async function publicPostCard(param: string) {
 	if (embedded.length > 0) {
 		// `mentionableWorks` is the allow-list a title's mention already resolves through, so
 		// asking it which embedded Works this reader may see keeps the image and the name on
-		// one rule: a Work it filters out contributes no cover either.
+		// one rule: a Work it filters out contributes no thumbnail either.
 		const mentionable = await mentionableWorks(embedded, null);
 		const first = embedded.find((publicId) => mentionable.has(publicId));
 		if (first !== undefined) {
@@ -3368,7 +3368,7 @@ const contentRoutes = new Hono()
 		// post's readability has nothing to do with whether the Works it embeds are open.
 		// The Works each post embeds, resolved for this reader through the same allow-list a
 		// title's mention uses: a tile's image reaches whoever the listing reaches, so an
-		// Adult Work's cover must not arrive here by a query that never asked whether this
+		// Adult Work's thumbnail must not arrive here by a query that never asked whether this
 		// reader may see the Work at all.
 		const allPublicIds = [...new Set(result.flatMap((r) => workPublicIdsFromBody(r.post.body)))];
 		const mentionable = await mentionableWorks(allPublicIds, viewerId);
@@ -7527,7 +7527,7 @@ const contentRoutes = new Hono()
 		}
 
 		// 🚨 **A project whose released Works are all ones the user may not see is absent too.**
-		// A project carries no rating of its own, but its title and cover describe what is in
+		// A project carries no rating of its own, but its title and thumbnail describe what is in
 		// it, so a project holding only Adult work would otherwise announce that work's existence
 		// to somebody who has not opted in — the thing the rung withholds. A project with no
 		// released Works at all is still listed, since there is nothing in it to disclose.
@@ -7777,11 +7777,11 @@ const contentRoutes = new Hono()
 		}
 
 		/**
-		 * A Project whose cover is one of its Works reads that Work's cover here too,
+		 * A Project whose thumbnail is one of its Works reads that Work's thumbnail here too,
 		 * filtered by what this reader may see — the owner's `mine` listing sees every
 		 * Work of theirs, a public listing only the ones it could open.
 		 */
-		const projectCovers = await resolveProjectCovers(
+		const projectThumbnails = await resolveProjectThumbnails(
 			result.map((r) => r.project),
 			{ userId: listingUserId, seeAll: mine === "true" },
 		);
@@ -7789,7 +7789,7 @@ const contentRoutes = new Hono()
 		return c.json({
 			projects: result.map((r) => ({
 				...r.project,
-				coverImage: projectCovers.get(r.project.id) ?? r.project.coverImage,
+				thumbnail: projectThumbnails.get(r.project.id) ?? r.project.thumbnail,
 				postCount: Number(r.postCount),
 				// Only the Studio's listing carries it; the public shape never does.
 				...(worksByProject ? { worksSummary: worksByProject.get(r.project.id) ?? [] } : {}),
@@ -7813,10 +7813,10 @@ const contentRoutes = new Hono()
 			if (refusal) return c.json(refusal.body, refusal.status);
 		}
 
-		if (!(await isOwnStorageRef(data.coverImage ?? "", user.id))) {
+		if (!(await isOwnStorageRef(data.thumbnail ?? "", user.id))) {
 			return c.json(FOREIGN_FILE_REFUSAL, 400);
 		}
-		if (!(await isOwnStorageRef(data.coverSource ?? "", user.id))) {
+		if (!(await isOwnStorageRef(data.thumbnailSource ?? "", user.id))) {
 			return c.json(FOREIGN_FILE_REFUSAL, 400);
 		}
 
@@ -7834,9 +7834,9 @@ const contentRoutes = new Hono()
 				title: data.title,
 				slug: data.slug,
 				description: data.description,
-				coverImage: data.coverImage,
-				coverSource: data.coverSource,
-				coverCrop: data.coverCrop ?? null,
+				thumbnail: data.thumbnail,
+				thumbnailSource: data.thumbnailSource,
+				thumbnailCrop: data.thumbnailCrop ?? null,
 				pageConfig: data.pageConfig ?? {},
 				...(data.worksSortMode ? { worksSortMode: data.worksSortMode } : {}),
 				...(data.worksSortDirection ? { worksSortDirection: data.worksSortDirection } : {}),
@@ -7944,9 +7944,9 @@ const contentRoutes = new Hono()
 		]);
 		await Promise.all(itemRows.map((r) => resolveWorkThumbnail(r.work)));
 
-		// The cover chosen from a Work is resolved from the list this reader already sees:
+		// The thumbnail chosen from a Work is resolved from the list this reader already sees:
 		// a Work hidden from them contributes nothing and the uploaded image stands in.
-		const coverWork = itemRows.find((m) => m.work.id === row.project.coverWorkId)?.work;
+		const thumbnailWork = itemRows.find((m) => m.work.id === row.project.thumbnailWorkId)?.work;
 		/*
 		 * The Project's saved sort settings order both shelves (2026-10-19). `sortProjectItems`
 		 * copies, so each member keeps the `sortOrder` its membership carries — the drag
@@ -8000,14 +8000,14 @@ const contentRoutes = new Hono()
 
 		// 🚨 The full source is the uncropped upload and never leaves the owner's session: a
 		// creator may have framed something out of view, so the public shape carries no
-		// `coverSource` key at all rather than an empty one.
-		const { coverSource, coverCrop, ...publicProject } = row.project;
+		// `thumbnailSource` key at all rather than an empty one.
+		const { thumbnailSource, thumbnailCrop, ...publicProject } = row.project;
 
 		return c.json({
 			project: {
 				...publicProject,
-				...(userId === row.project.creatorId ? { coverSource, coverCrop } : {}),
-				coverImage: coverWork?.thumbnail || row.project.coverImage,
+				...(userId === row.project.creatorId ? { thumbnailSource, thumbnailCrop } : {}),
+				thumbnail: thumbnailWork?.thumbnail || row.project.thumbnail,
 				/**
 				 * The project's public record link, beside the thing it is (the widening task,
 				 * 2026-10-10) — same link a Work's and a post's page carry. Null while there is
@@ -8043,8 +8043,8 @@ const contentRoutes = new Hono()
 				id: projects.id,
 				creatorId: projects.creatorId,
 				isPublished: projects.isPublished,
-				coverImage: projects.coverImage,
-				coverSource: projects.coverSource,
+				thumbnail: projects.thumbnail,
+				thumbnailSource: projects.thumbnailSource,
 			})
 			.from(projects)
 			.where(eq(projects.slug, slug))
@@ -8054,8 +8054,8 @@ const contentRoutes = new Hono()
 
 		// Checked on a change only, like a Work's file references; see `storage/keys.ts`.
 		for (const [sent, stored] of [
-			[data.coverImage, existing.coverImage],
-			[data.coverSource, existing.coverSource],
+			[data.thumbnail, existing.thumbnail],
+			[data.thumbnailSource, existing.thumbnailSource],
 		] as const) {
 			if (
 				sent !== undefined &&
@@ -8066,10 +8066,10 @@ const contentRoutes = new Hono()
 			}
 		}
 
-		// A cover chosen from a Work must be this creator's Work **and in this Project's
+		// A thumbnail chosen from a Work must be this creator's Work **and in this Project's
 		// list** — the reference is what the read resolves, so a Work from another Project
 		// would dress this one in something it does not hold.
-		if (data.coverWorkId != null) {
+		if (data.thumbnailWorkId != null) {
 			const [onProject] = await db
 				.select({ id: works.id })
 				.from(projectItems)
@@ -8077,7 +8077,7 @@ const contentRoutes = new Hono()
 				.where(
 					and(
 						eq(projectItems.projectId, existing.id),
-						eq(works.id, data.coverWorkId),
+						eq(works.id, data.thumbnailWorkId),
 						eq(works.creatorId, user.id),
 					),
 				)
@@ -8087,14 +8087,14 @@ const contentRoutes = new Hono()
 			}
 		}
 
-		// Uploading a new image is the other way to choose a cover, so it retires the Work
+		// Uploading a new image is the other way to choose a thumbnail, so it retires the Work
 		// reference unless the same request names one. Removing the uploaded image leaves a
 		// chosen Work alone: the two choices fall back to each other only in one direction.
 		const patch: typeof data & { updatedAt: Date } = { ...data, updatedAt: new Date() };
-		if (data.coverImage && data.coverWorkId === undefined) patch.coverWorkId = null;
+		if (data.thumbnail && data.thumbnailWorkId === undefined) patch.thumbnailWorkId = null;
 		// Choosing a Work's image is not the Project's own upload, so the owner's framing of
 		// its own image no longer describes what is shown.
-		if (data.coverWorkId != null) patch.coverCrop = null;
+		if (data.thumbnailWorkId != null) patch.thumbnailCrop = null;
 
 		// Asked only on the transition into published, because the editor sends `isPublished`
 		// with every save and an already-published project must stay editable.
@@ -8122,11 +8122,14 @@ const contentRoutes = new Hono()
 		// is a reason to rewrite it — and unpublishing is what takes it down.
 		void queueRecordSync("project", updated.id);
 
-		// The answer is the page's row, so its cover is whatever the Project now shows —
-		// the Work's own cover when one is chosen and this owner may see it.
-		const covers = await resolveProjectCovers([updated], { userId: user.id, seeAll: true });
+		// The answer is the page's row, so its thumbnail is whatever the Project now shows —
+		// the Work's own thumbnail when one is chosen and this owner may see it.
+		const thumbnails = await resolveProjectThumbnails([updated], {
+			userId: user.id,
+			seeAll: true,
+		});
 		return c.json({
-			project: { ...updated, coverImage: covers.get(updated.id) ?? updated.coverImage },
+			project: { ...updated, thumbnail: thumbnails.get(updated.id) ?? updated.thumbnail },
 		});
 	})
 
@@ -8221,16 +8224,16 @@ const contentRoutes = new Hono()
 		// Catalog, released, with its gates — a Project groups Works, not an owner.
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 
-		// A cover chosen from the Work being taken out of the list returns to the uploaded
+		// A thumbnail chosen from the Work being taken out of the list returns to the uploaded
 		// image, since the Work no longer dresses this Project.
 		await db
 			.update(projects)
-			.set({ coverWorkId: null })
+			.set({ thumbnailWorkId: null })
 			.where(
 				and(
 					eq(projects.slug, slug),
 					eq(projects.creatorId, user.id),
-					eq(projects.coverWorkId, Number(workId)),
+					eq(projects.thumbnailWorkId, Number(workId)),
 				),
 			);
 
@@ -8439,7 +8442,7 @@ const contentRoutes = new Hono()
 	)
 
 	/**
-	 * Direct multipart upload — local dev, and small files (avatars, covers, images)
+	 * Direct multipart upload — local dev, and small files (avatars, banners, thumbnails)
 	 * in all modes.
 	 */
 	.post("/media-upload/direct", requireAuth, async (c) => {
@@ -8502,8 +8505,12 @@ const contentRoutes = new Hono()
 			case "avatar":
 				key = `${prefix}/avatars/${uuid}.${ext}`;
 				break;
+			// ⚠️ `header` and `cover` are the retired words, kept as accepted aliases for a tab
+			// opened before the rename: the media-type allowlist fails closed, so dropping one
+			// would store that tab's upload private. New requests send `banner` and `thumbnail`.
+			case "banner":
 			case "header":
-				key = `${prefix}/headers/${uuid}.${ext}`;
+				key = `${prefix}/banners/${uuid}.${ext}`;
 				break;
 			case "cover":
 				key = `${prefix}/covers/${entityId ?? "unknown"}/${uuid}.${ext}`;
@@ -9016,8 +9023,8 @@ const contentRoutes = new Hono()
 						id: projects.id,
 						slug: projects.slug,
 						title: projects.title,
-						coverImage: projects.coverImage,
-						coverWorkId: projects.coverWorkId,
+						thumbnail: projects.thumbnail,
+						thumbnailWorkId: projects.thumbnailWorkId,
 						creatorId: projects.creatorId,
 						creatorHandle: users.atprotoHandle,
 						creatorDisplayName: users.displayName,
@@ -9084,9 +9091,9 @@ const contentRoutes = new Hono()
 		const workById = new Map(workRows.map((w) => [w.id, w]));
 		const projectById = new Map(projectRows.map((p) => [p.id, p]));
 		const postById = new Map(postRows.map((p) => [p.id, p]));
-		// A saved Project whose cover is one of its Works reads that cover here too — as the
+		// A saved Project whose thumbnail is one of its Works reads that thumbnail here too — as the
 		// Library's reader may see it, not as its owner can.
-		const projectCovers = await resolveProjectCovers(projectRows, {
+		const projectThumbnails = await resolveProjectThumbnails(projectRows, {
 			userId: user.id,
 			seeAll: false,
 		});
@@ -9207,7 +9214,7 @@ const contentRoutes = new Hono()
 							purchased: false,
 							project: {
 								...p,
-								coverImage: projectCovers.get(p.id) ?? p.coverImage,
+								thumbnail: projectThumbnails.get(p.id) ?? p.thumbnail,
 								trackCount: counts?.workCount ?? 0,
 								// How many of those members are music. The music lens draws a
 								// release card from this rather than from `trackCount`: a saved

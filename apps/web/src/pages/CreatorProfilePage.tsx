@@ -196,11 +196,11 @@ export default function CreatorProfilePage() {
 				| "websiteUrl"
 				| "location"
 				| "avatar"
-				| "headerImage"
+				| "bannerImage"
 				| "avatarSource"
-				| "headerImageSource"
+				| "bannerImageSource"
 				| "avatarCrop"
-				| "headerImageCrop"
+				| "bannerImageCrop"
 			>
 		>,
 	) => {
@@ -226,10 +226,10 @@ export default function CreatorProfilePage() {
 	 * An image is the one field with no draft: the framing dialog's save uploads and stores
 	 * the result in one act, the way a Work's thumbnail and a Project's image behave.
 	 */
-	const [imageBusy, setImageBusy] = useState<"avatar" | "header" | null>(null);
+	const [imageBusy, setImageBusy] = useState<"avatar" | "banner" | null>(null);
 	const [imageError, setImageError] = useState<string | null>(null);
 	const [framing, setFraming] = useState<{
-		kind: "avatar" | "header";
+		kind: "avatar" | "banner";
 		/** What the stage shows: a local object URL for a new file, or the stored source. */
 		preview: string;
 		/** The file to upload as the source, or null when repositioning a stored image. */
@@ -238,12 +238,12 @@ export default function CreatorProfilePage() {
 		source: string | null;
 	} | null>(null);
 	const avatarInput = useRef<HTMLInputElement>(null);
-	const headerInput = useRef<HTMLInputElement>(null);
+	const bannerInput = useRef<HTMLInputElement>(null);
 
 	/** The full upload behind the image currently stored, falling back for rows written before it. */
-	const storedSource = (kind: "avatar" | "header"): string => {
-		const current = kind === "avatar" ? creator?.avatar : creator?.headerImage;
-		const source = kind === "avatar" ? currentUser?.avatarSource : currentUser?.headerImageSource;
+	const storedSource = (kind: "avatar" | "banner"): string => {
+		const current = kind === "avatar" ? creator?.avatar : creator?.bannerImage;
+		const source = kind === "avatar" ? currentUser?.avatarSource : currentUser?.bannerImageSource;
 		return keyToPreview(source || current || "");
 	};
 
@@ -252,17 +252,17 @@ export default function CreatorProfilePage() {
 		setFraming(null);
 	};
 
-	const startUpload = (kind: "avatar" | "header") => {
+	const startUpload = (kind: "avatar" | "banner") => {
 		setImageError(null);
-		(kind === "avatar" ? avatarInput : headerInput).current?.click();
+		(kind === "avatar" ? avatarInput : bannerInput).current?.click();
 	};
 
-	const pickedFile = (kind: "avatar" | "header", file: File) => {
+	const pickedFile = (kind: "avatar" | "banner", file: File) => {
 		setImageError(null);
 		setFraming({ kind, preview: URL.createObjectURL(file), file, source: null });
 	};
 
-	const startReposition = (kind: "avatar" | "header") => {
+	const startReposition = (kind: "avatar" | "banner") => {
 		const source = storedSource(kind);
 		if (!source) return;
 		setImageError(null);
@@ -282,7 +282,7 @@ export default function CreatorProfilePage() {
 			await saveProfileField(
 				kind === "avatar"
 					? { avatar: framed.url, avatarSource: source, avatarCrop: crop }
-					: { headerImage: framed.url, headerImageSource: source, headerImageCrop: crop },
+					: { bannerImage: framed.url, bannerImageSource: source, bannerImageCrop: crop },
 			);
 			closeFraming();
 		} catch (err) {
@@ -523,40 +523,40 @@ export default function CreatorProfilePage() {
 	return (
 		// `relative z-30` lifts the whole page above the logged-out shell's decorative
 		// layer (the side vines and their bee swarm sit at z-20 — see LoggedOutLayout) so
-		// the bees read as a background, hidden behind the header image and the cards
+		// the bees read as a background, hidden behind the banner and the cards
 		// rather than painted across them. The logged-in layout has no decorative layer.
 		<div className="relative z-30">
-			{/* Header banner. 🚨 Inside the container's width, at a 3:1 ratio — that is
+			{/* Banner. 🚨 Inside the container's width, at a 3:1 ratio — that is
 			    the banner-size convention (Bluesky: 3:1, recommended 1500×500; YouTube
 			    similar), and full-bleed read as a second, wider site than the one the
 			    rest of this page belongs to. The pencil is the only edit affordance:
 			    a creator and a visitor meet the same banner. */}
 			<div className="container mx-auto px-4">
 				<div className="relative w-full aspect-[3/1] bg-base-300">
-					{creator.headerImage && (
-						<img src={creator.headerImage} alt="Header" className="w-full h-full object-cover" />
+					{creator.bannerImage && (
+						<img src={creator.bannerImage} alt="Banner" className="w-full h-full object-cover" />
 					)}
 					{isAuthenticated && isOwnProfile && (
 						<>
 							<input
-								ref={headerInput}
+								ref={bannerInput}
 								type="file"
 								accept="image/*"
 								className="hidden"
 								onChange={(e) => {
 									const file = e.target.files?.[0];
 									e.target.value = "";
-									if (file) pickedFile("header", file);
+									if (file) pickedFile("banner", file);
 								}}
 							/>
 							<ImageEditMenu
-								label="header image"
-								hasImage={Boolean(creator.headerImage)}
+								label="banner"
+								hasImage={Boolean(creator.bannerImage)}
 								busy={imageBusy !== null}
 								buttonClassName="btn btn-sm btn-circle bg-base-100/80 backdrop-blur"
 								rootClassName="absolute right-2 top-2"
-								onUpload={() => startUpload("header")}
-								onReposition={() => startReposition("header")}
+								onUpload={() => startUpload("banner")}
+								onReposition={() => startReposition("banner")}
 							/>
 						</>
 					)}
@@ -594,7 +594,7 @@ export default function CreatorProfilePage() {
 									}}
 								/>
 								<ImageEditMenu
-									label="profile picture"
+									label="avatar"
 									hasImage={Boolean(creator.avatar)}
 									busy={imageBusy !== null}
 									buttonClassName="btn btn-xs btn-circle"
@@ -1065,13 +1065,13 @@ export default function CreatorProfilePage() {
 			<ImageFrameModal
 				open={framing !== null}
 				src={framing?.preview ?? null}
-				mediaType={framing?.kind ?? "header"}
+				mediaType={framing?.kind ?? "banner"}
 				busy={imageBusy !== null}
 				error={imageError}
 				initialCrop={
 					framing?.kind === "avatar"
 						? (currentUser?.avatarCrop ?? null)
-						: (currentUser?.headerImageCrop ?? null)
+						: (currentUser?.bannerImageCrop ?? null)
 				}
 				onCancel={closeFraming}
 				onSave={(crop) => void saveFramed(crop)}

@@ -29,8 +29,7 @@ export class ImageFrameRefusal extends Error {}
 /** Where a framed derivative is stored: the surface's own prefix, under a named subfolder. */
 const FRAMED_PREFIX: Record<ImageFrameType, string> = {
 	thumbnail: "thumbnails",
-	cover: "covers",
-	header: "headers",
+	banner: "banners",
 	avatar: "avatars",
 };
 

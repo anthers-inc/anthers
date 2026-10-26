@@ -376,6 +376,10 @@ describe("The direct-upload door", () => {
 		expect(scannedObjectKind("preview-video")).toBeNull();
 		expect(scannedObjectKind("preview-caption")).toBeNull();
 		expect(scannedObjectKind("preview-image")).toBe("gallery");
+		expect(scannedObjectKind("banner")).toBe("banner");
+		// The retired words name the object they are now: a header is a banner, a cover a thumbnail.
+		expect(scannedObjectKind("header")).toBe("banner");
+		expect(scannedObjectKind("cover")).toBe("thumbnail");
 		// ⭐ And an unrecognized media type IS scanned, which is the opposite direction from
 		// the ACL allowlist next door — failing closed means "withhold" for an ACL and
 		// "look" for detection.

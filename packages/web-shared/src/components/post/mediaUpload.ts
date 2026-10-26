@@ -13,10 +13,12 @@ import { apiBaseUrl, apiFetch } from "../../lib/rpc";
 export type ImageMediaType =
 	| "image"
 	| "thumbnail"
-	| "cover"
+	| "banner"
 	| "inline-image"
 	| "preview-image"
 	| "avatar"
+	/** Retired words, still accepted by the upload route's aliases for a stale tab. */
+	| "cover"
 	| "header";
 
 /** Upload a display image via the direct endpoint. Returns the storage key + preview URL. */
