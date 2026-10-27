@@ -94,6 +94,7 @@ import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { deleteCookie } from "hono/cookie";
 import { z } from "zod";
+import { deploymentOrigin } from "../lib/deployment.js";
 import { accountByHandle, embedCreator, resolveHandle } from "../lib/handles.js";
 import { displayPostTitles, mentionableWorks } from "../lib/post-title-mentions.js";
 import { PG_WORK_URL_PATTERN, workPublicIdsFromBody } from "../lib/post-work-links.js";
@@ -130,6 +131,7 @@ import {
 	enableAdultAccess,
 	setMaturityDisplay,
 } from "../services/content-preferences.js";
+import { composeCreatorCard } from "../services/creator-card.js";
 import { isCreator, isCreatorWhere } from "../services/creator-standing.js";
 import { discordConfigured, syncAccountRoles } from "../services/discord.js";
 import { ensureFollow } from "../services/follows.js";
@@ -157,7 +159,8 @@ import { postContentExcerpt } from "../services/post-markdown.js";
 import { releasesByWorkId } from "../services/project-releases.js";
 import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 import { matchesFields } from "../services/search-query.js";
-import { FOREIGN_FILE_REFUSAL, isOwnStorageRef } from "../services/storage/keys.js";
+import { storage } from "../services/storage/index.js";
+import { FOREIGN_FILE_REFUSAL, isOwnStorageRef, urlToKey } from "../services/storage/keys.js";
 import { storageReadingFor } from "../services/storage-reading.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -584,6 +587,46 @@ const updateProfileSchema = z.object({
 	 */
 	persistentMiniplayer: z.boolean().optional(),
 });
+
+// ─── Profile cards ───────────────────────────────────────────────────────────
+
+/**
+ * The account a profile card describes, or undefined where there is none to describe.
+ *
+ * A handle that moved resolves to the account it moved to, and a suspended account is
+ * undefined rather than described — the two rules the profile read owns beside it, restated
+ * here because both card routes answer them before anything is rendered.
+ */
+async function cardSubject(handle: string) {
+	const resolution = await resolveHandle(handle);
+	const account =
+		resolution.account ??
+		(resolution.redirectToHandle ? await accountByHandle(resolution.redirectToHandle) : undefined);
+	if (!account || (await isSuspendedAccount(account.id))) return undefined;
+	return account;
+}
+
+/**
+ * The address a profile's card image is served at, absolute because a crawler will not
+ * resolve a relative `og:image`.
+ *
+ * The deployment's configured origin wins; the request's own origin is the fallback, so a
+ * checkout with no `FRONTEND_URL` still names an address the caller can reach. Only a
+ * request with no origin at all falls back to the portrait, which is what the card served
+ * before the composed card existed.
+ */
+function cardImageUrl(requestUrl: string, handle: string, avatar: string | null): string | null {
+	let origin: string | null = deploymentOrigin();
+	if (!origin) {
+		try {
+			origin = new URL(requestUrl).origin;
+		} catch {
+			origin = null;
+		}
+	}
+	if (!origin) return avatar;
+	return `${origin}/api/accounts/users/${encodeURIComponent(handle)}/card.png`;
+}
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
@@ -1722,10 +1765,8 @@ const accountRoutes = new Hono()
 	/**
 	 * The card a shared profile is unfurled with, for a reader who holds no session.
 	 *
-	 * Beside the profile read because the two answer the same questions: a handle that moved
-	 * resolves to the account it moved to, and a suspended account answers not-found rather
-	 * than being described. Nothing here writes — the profile read counts a view, and an
-	 * unfurl is not one.
+	 * Beside the profile read because the two answer the same questions. Nothing here
+	 * writes — the profile read counts a view, and an unfurl is not one.
 	 *
 	 * The portrait is the card's image and the bio is its line; both are the creator's own
 	 * public facts. The profile's lists stay out of it, since a preview describes a person
@@ -1733,23 +1774,66 @@ const accountRoutes = new Hono()
 	 */
 	.get("/users/:handle/card", async (c) => {
 		const handle = c.req.param("handle");
-		const resolution = await resolveHandle(handle);
-		const account =
-			resolution.account ??
-			(resolution.redirectToHandle
-				? await accountByHandle(resolution.redirectToHandle)
-				: undefined);
-		if (!account || (await isSuspendedAccount(account.id))) {
-			return c.json({ error: "User not found" }, 404);
-		}
-		return c.json({
-			preview: creatorPreviewFor({
-				displayName: account.displayName,
-				handle: account.atprotoHandle ?? handle,
-				bio: account.bio,
-				image: account.avatar,
-			}),
+		const account = await cardSubject(handle);
+		if (!account) return c.json({ error: "User not found" }, 404);
+		const currentHandle = account.atprotoHandle ?? handle;
+		const preview = creatorPreviewFor({
+			displayName: account.displayName,
+			handle: currentHandle,
+			bio: account.bio,
+			// A creator with neither picture has nothing for a composed card to show that the
+			// site's own card does not, so the neutral card stays the honest answer.
+			image:
+				account.avatar || account.bannerImage
+					? cardImageUrl(c.req.url, currentHandle, account.avatar || null)
+					: null,
 		});
+		return c.json({
+			preview: {
+				...preview,
+				// The composed card is not a thumbnail of anything, so the default alt would
+				// describe it as one. This names the picture the unfurler is showing.
+				...(preview.image ? { imageAlt: `The profile card for ${preview.title} on Anthers.` } : {}),
+			},
+		});
+	})
+
+	/**
+	 * The image that card names: the profile's own banner and portrait, composed.
+	 *
+	 * 🚨 **Composed on demand rather than stored.** A creator changes their portrait, banner
+	 * or name without telling anything, so an artifact written at save time would need
+	 * invalidating on every one of those edits and a backfill for every account that predates
+	 * the feature. The render is two image reads and one composite, and the card's own URL is
+	 * cached by every unfurler that has seen it.
+	 *
+	 * A failure to render falls back to the site card with a redirect rather than a 500: a
+	 * preview must never be the reason a shared link looks broken.
+	 */
+	.get("/users/:handle/card.png", async (c) => {
+		const handle = c.req.param("handle");
+		const account = await cardSubject(handle);
+		if (!account) return c.json({ error: "User not found" }, 404);
+
+		const read = async (url: string | null): Promise<Uint8Array | null> =>
+			url ? await storage.read(urlToKey(url)) : null;
+
+		try {
+			const bytes = await composeCreatorCard({
+				banner: await read(account.bannerImage || null),
+				portrait: await read(account.avatar || null),
+			});
+			return c.body(new Uint8Array(bytes), 200, {
+				"Content-Type": "image/png",
+				// An hour, not the avatar route's day: this URL is stable across edits, so a
+				// changed portrait has to become visible within the same afternoon.
+				"Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+			});
+		} catch {
+			// A render that throws is the one case with nothing to show, and the site card is
+			// still a good answer rather than a broken image.
+			return c.redirect(`${deploymentOrigin() ?? ""}/brand/og-card.png`);
+		}
 	})
 
 	// ── Follow ───────────────────────────────────────────────────────────────

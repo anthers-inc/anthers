@@ -25,7 +25,11 @@ export interface PreviewableCreator {
 	handle: string;
 	/** Their own words about themselves. */
 	bio: string | null;
-	/** An absolute URL, or null when they have uploaded no portrait. */
+	/**
+	 * The absolute URL of the image the card serves, or null where the creator has set no
+	 * picture at all and the site card stands. A profile's image is the composed card the web
+	 * origin renders from the portrait and banner, not the portrait itself.
+	 */
 	image: string | null;
 }
 

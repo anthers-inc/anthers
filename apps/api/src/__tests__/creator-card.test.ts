@@ -17,8 +17,11 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { handleHistory, users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
+import sharp from "sharp";
 import app from "../index";
+import { CREATOR_CARD_HEIGHT, CREATOR_CARD_WIDTH } from "../services/creator-card";
 import { suspendAccount } from "../services/moderation";
+import { storage } from "../services/storage/index";
 import { createAccount } from "./account-fixture";
 import { createAdminFixture } from "./admin-fixture";
 import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
@@ -35,8 +38,10 @@ function req(path: string, options?: RequestInit) {
 const run = crypto.randomUUID().slice(0, 8);
 const PORTRAIT = "https://cdn.anthers.org/creators/1/portrait-fixture.webp";
 
-let account: { handle: string };
-let bare: { handle: string };
+let account: { handle: string; userId: number };
+let bare: { handle: string; userId: number };
+/** The upload the composed-card walk renders from, removed by this suite below. */
+let portraitKey: string;
 /** The handle this account used to answer at, cleaned up below rather than by the purge. */
 const OLD_HANDLE = `creator_card_old_${run}`;
 
@@ -53,6 +58,23 @@ beforeAll(async () => {
 		fields: { creatorMode: true, displayName: null, bio: null, avatar: null },
 	});
 
+	// A real upload for the card walk to compose from: the field above is a URL shape the
+	// fixture names, and storage has no object behind it. The URL is what the route decodes,
+	// so the host is only there to look like the one production persists.
+	portraitKey = `creators/${account.userId}/avatars/card-fixture.png`;
+	await storage.upload(
+		portraitKey,
+		await sharp({ create: { width: 400, height: 400, channels: 3, background: "#f9c370" } })
+			.png()
+			.toBuffer(),
+		"image/png",
+		"public",
+	);
+	await db
+		.update(users)
+		.set({ avatar: `https://cdn.anthers.org/${portraitKey}` })
+		.where(eq(users.id, account.userId));
+
 	const [row] = await db
 		.select({ did: users.atprotoDid })
 		.from(users)
@@ -66,6 +88,7 @@ beforeAll(async () => {
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
+	await storage.delete(portraitKey);
 	// `handle_history` keys on the DID rather than a row id, so it does not cascade with the
 	// account the shared purge removes — this suite owns its row and takes it away itself.
 	await db.delete(handleHistory).where(eq(handleHistory.oldHandle, OLD_HANDLE));
@@ -73,7 +96,7 @@ afterAll(async () => {
 
 describe("GET /accounts/users/:handle/card", () => {
 	it(
-		"serves the creator's name, words and portrait",
+		"serves the creator's name, words and composed card",
 		async () => {
 			const res = await req(`/api/accounts/users/${account.handle}/card`);
 			expect(res.status).toBe(200);
@@ -81,7 +104,10 @@ describe("GET /accounts/users/:handle/card", () => {
 				preview: {
 					title: "A Card Fixture",
 					description: "Composing, drawing and building a garden.",
-					image: PORTRAIT,
+					// The image is the composed card's own address, not the portrait it is
+					// composed from: the unfurler has to fetch the card.
+					image: `http://localhost/api/accounts/users/${account.handle}/card.png`,
+					imageAlt: "The profile card for A Card Fixture on Anthers.",
 				},
 			});
 		},
@@ -139,9 +165,58 @@ describe("GET /accounts/users/:handle/card", () => {
 				preview: {
 					title: `@${bare.handle}`,
 					description: "A profile on Anthers, a nonprofit creative garden for everyone.",
+					// No portrait and no banner: nothing to compose, so the site card stands.
 					image: null,
 				},
 			});
+		},
+		DB_SETUP_TIMEOUT,
+	);
+});
+
+describe("GET /accounts/users/:handle/card.png", () => {
+	it(
+		"renders the card at the size every unfurler crops to",
+		async () => {
+			const res = await req(`/api/accounts/users/${account.handle}/card.png`);
+			expect(res.status).toBe(200);
+			expect(res.headers.get("content-type")).toBe("image/png");
+			const meta = await sharp(new Uint8Array(await res.arrayBuffer())).metadata();
+			expect(meta.width).toBe(CREATOR_CARD_WIDTH);
+			expect(meta.height).toBe(CREATOR_CARD_HEIGHT);
+		},
+		DB_SETUP_TIMEOUT,
+	);
+
+	it(
+		"still renders a card for a creator with no pictures, which the read does not name",
+		async () => {
+			const res = await req(`/api/accounts/users/${bare.handle}/card.png`);
+			expect(res.status).toBe(200);
+			expect(res.headers.get("content-type")).toBe("image/png");
+		},
+		DB_SETUP_TIMEOUT,
+	);
+
+	it(
+		"answers an account it does not have, and a suspended one, with the profile's 404",
+		async () => {
+			expect((await req("/api/accounts/users/no_such_handle_here/card.png")).status).toBe(404);
+
+			const author = await createAccount(`creator_card_png_susp_${run}`, {
+				fields: { creatorMode: true, displayName: "Suspended Fixture" },
+			});
+			const operator = await createAdminFixture("creator-card-png-op");
+			await suspendAccount({
+				userId: author.userId,
+				adminId: operator.id,
+				reason: "spam",
+				note: "fixture",
+			});
+			expect((await req(`/api/accounts/users/${author.handle}/card.png`)).status).toBe(404);
+
+			// Unsuspend so the purge is the only cleanup this fixture needs.
+			await db.update(users).set({ suspendedAt: null }).where(eq(users.id, author.userId));
 		},
 		DB_SETUP_TIMEOUT,
 	);
