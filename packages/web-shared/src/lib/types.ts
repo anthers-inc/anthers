@@ -1400,6 +1400,8 @@ export interface BadgeHolding {
 	hasArt: boolean;
 	/** Whether the art is a composed Noun emblem rather than an uploaded interior. */
 	hasComposedArt?: boolean;
+	/** The Badge's last update, which versions its art URL for the browser's cache. */
+	updatedAt: string;
 	billingCycle: string;
 	createdAt: string;
 	creator: {
@@ -1446,6 +1448,16 @@ export interface CreatorBadge {
 	hasArt: boolean;
 	/** Whether the art is a composed Noun Project emblem (drives the artist credit). */
 	hasComposedArt?: boolean;
+	/**
+	 * Whether that composition can be rebuilt onto a new shape or field color, because the
+	 * emblem color it was recolored with is on the row.
+	 *
+	 * 🚨 **Absent means the editor keeps its old refusal** — a Badge composed before the
+	 * color was stored, and whose fingerprint the migration could not match. The editor asks
+	 * rather than inferring from `hasComposedArt`, because recomposing such a row would have
+	 * to invent a foreground color the creator never chose.
+	 */
+	canRecompose?: boolean;
 	/**
 	 * Who drew the emblem or art this rung wears, when a credit is recorded for it — the
 	 * "flip the Badge over" line on the detail view. Present on the public ladder read;

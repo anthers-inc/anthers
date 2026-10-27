@@ -58,6 +58,15 @@ export interface BadgeArtChoice {
 	artColor?: string | null;
 	/** A library emblem for the foreground; ignored when the creator uploaded art. */
 	artEmblem?: string | null;
+	/**
+	 * The row's update time, used to version the art URL.
+	 *
+	 * ⚠️ **The art route answers with a day-long cache**, so replacing an emblem or
+	 * recomposing a Badge would otherwise keep showing the old PNG from the browser's cache
+	 * until it expired. The row's update time changes with the art, which makes the URL the
+	 * cache key the route's own comment claims it has.
+	 */
+	updatedAt?: string;
 	/** Whether the creator has their own art. False draws the emblem without a request. */
 	hasArt?: boolean;
 	/**
@@ -91,7 +100,12 @@ export function CreatorBadgeMark({
 	const [failed, setFailed] = useState(false);
 	const showUpload = Boolean(art.hasArt) && !failed;
 	const fallback = fallbackBadgeDesign(index);
-	const imageSrc = showUpload ? `${apiBaseUrl()}/api/subscriptions/badges/${badgeId}/art` : null;
+	// The row's update time versions the URL, so a replaced or recomposed image is fetched
+	// instead of served from the day-long cache the art route sets.
+	const version = art.updatedAt ? `?v=${encodeURIComponent(art.updatedAt)}` : "";
+	const imageSrc = showUpload
+		? `${apiBaseUrl()}/api/subscriptions/badges/${badgeId}/art${version}`
+		: null;
 
 	// A composed Badge already carries the field and the edging, so drawing it inside
 	// another `BadgeMark` produced a badge inside a badge. It is shown whole instead.

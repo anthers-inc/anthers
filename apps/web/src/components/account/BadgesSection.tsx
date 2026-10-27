@@ -321,7 +321,7 @@ export default function BadgesSection() {
 				artColor: h.artColor,
 				sortOrder: 0,
 				createdAt: h.createdAt,
-				updatedAt: h.createdAt,
+				updatedAt: h.updatedAt ?? h.createdAt,
 			};
 			if (existing) {
 				existing.committedBadge = committed;
@@ -785,6 +785,7 @@ function CreatorBadgeCard({ row }: { row: CreatorRow }) {
 							artColor: held.artColor,
 							hasArt: held.hasArt,
 							hasComposedArt: held.hasComposedArt,
+							updatedAt: held.updatedAt,
 						}}
 						size="h-12 w-12"
 					/>

@@ -30,7 +30,10 @@
  *
  * ⭐ **Composition happens at save, and an unchanged save is free** — the server dedupes
  * on the composition fingerprint before it spends anything, so a creator pressing save
- * repeatedly costs the platform nothing.
+ * repeatedly costs the platform nothing. **A shape or background change on a composed
+ * Badge is a recomposition**: the server fetches the same icon again and rebuilds the PNG
+ * from the stored placement and emblem color, which is why the preview stays on the saved
+ * art until Save lands.
  */
 
 import {
@@ -523,13 +526,20 @@ export default function BadgeMaker({
 
 	const fileInput = useRef<HTMLInputElement>(null);
 
-	// A composed Badge is a finished image of the whole badge, shape and field included. A
-	// new shape or background can only take effect through a new composition, because the
-	// stored PNG already carries the old ones and the emblem color is not recoverable.
+	// A composed Badge is a finished image of the whole badge, shape and field included, so a
+	// new shape or background only reaches the art through a recomposition. The server can
+	// rebuild it from the stored icon and emblem color when it still has that color; a row it
+	// cannot rebuild keeps the old refusal instead of writing a shape the PNG does not carry.
 	const composedArt = Boolean(badge?.hasComposedArt);
 	const artChoiceChanged = shape !== initialShape || color !== initialColor;
+	const canRecomposeArt = composedArt && Boolean(badge?.canRecompose);
 	const needsNewEmblemForChoice =
-		composedArt && artChoiceChanged && !selection && !upload && !removed;
+		composedArt && artChoiceChanged && !canRecomposeArt && !selection && !upload && !removed;
+	// The save that changes nothing but the background and keeps the emblem: the server
+	// fetches the vector again and rebuilds the PNG, so the preview stays on the saved art
+	// until the save lands.
+	const willRecompose =
+		composedArt && artChoiceChanged && canRecomposeArt && !selection && !upload && !removed;
 	// A row with no name is a blank the creator has not filled in yet, not a perk.
 	const namedPerkCount = perks.filter((p) => p.label.trim()).length;
 
@@ -721,9 +731,10 @@ export default function BadgeMaker({
 	/**
 	 * Apply the staged art, in the order the routes expect.
 	 *
-	 * 🚨 **Compose writes shape and color itself**, so it runs alone. Upload and removal do
-	 * not, so the shape/color choice is patched first and the file (or the removal) follows.
-	 * A compose that fails leaves the previous art untouched, which is the server's own rule.
+	 * 🚨 **Compose and recompose write shape and color themselves**, so each runs alone.
+	 * Upload and removal do not, so the shape/color choice is patched first and the file (or
+	 * the removal) follows. A compose that fails leaves the previous art untouched, which is
+	 * the server's own rule.
 	 */
 	const saveArt = async (stored: CreatorBadge) => {
 		if (needsNewEmblemForChoice) {
@@ -732,6 +743,16 @@ export default function BadgeMaker({
 			);
 		}
 		const choiceChanged = artChoiceChanged;
+
+		if (willRecompose) {
+			const res = await apiFetch(`/api/subscriptions/badges/${stored.id}/recompose`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ shape, fieldColor: color }),
+			});
+			if (!res.ok) throw new Error(await responseError(res, "Couldn't rebuild that emblem."));
+			return;
+		}
 
 		if (selection) {
 			const res = await apiFetch(`/api/subscriptions/badges/${stored.id}/compose`, {
@@ -898,6 +919,11 @@ export default function BadgeMaker({
 				<p className="rounded-box bg-warning/10 px-3 py-2 text-xs text-warning-content">
 					This Badge's emblem is a finished image. A new shape or background needs a new emblem —
 					find or upload one below.
+				</p>
+			)}
+			{willRecompose && (
+				<p className="rounded-box bg-base-200 px-3 py-2 text-xs text-base-content/70">
+					Saving rebuilds this emblem on the new shape and background.
 				</p>
 			)}
 

@@ -107,7 +107,7 @@ import {
 } from "../services/access.js";
 import { anthersUserId, loadAnthersLadder } from "../services/anthers-badges.js";
 import { creditedSeconds, creditedSecondsByDayAndCreator } from "../services/attention-ranges.js";
-import { composeBadgeArt } from "../services/badge-art-compose.js";
+import { composeBadgeArt, recomposeBadgeArt } from "../services/badge-art-compose.js";
 import {
 	ensureAnthersProduct,
 	ensureCreatorProduct,
@@ -121,6 +121,7 @@ import {
 } from "../services/billing.js";
 import { commentAncestry, rootOfAncestry } from "../services/comment-thread.js";
 import { isCreator } from "../services/creator-standing.js";
+import { budgetRefusal } from "../services/noun-budget.js";
 import { canBePaid } from "../services/payouts.js";
 import { loadPublicAccessBudget, loadShareLinkBudget } from "../services/public-access.js";
 import { scanInlineUpload } from "../services/safety-scan.js";
@@ -398,19 +399,31 @@ function badgeViewFor(anthersSupport: number) {
  * default, so that is the whole of what it gets.
  */
 type BadgeRow = typeof badges.$inferSelect;
-function publicBadge({ artKey, artFingerprint, ...badge }: BadgeRow) {
+function publicBadge({
+	artKey,
+	artFingerprint,
+	artEmblemColor,
+	artEmblemScale,
+	artEmblemOffsetX,
+	artEmblemOffsetY,
+	...badge
+}: BadgeRow) {
 	return {
 		...badge,
 		hasArt: Boolean(artKey),
 		// Whether a rung's art is a composed Noun emblem is the one thing the detail view's
 		// artist credit wants to know; the parameters it was composed from do not travel.
 		...(artFingerprint !== null ? { hasComposedArt: true } : {}),
+		// The editor asks this rather than inferring it: a composed row whose emblem color
+		// the backfill could not recover still cannot take a new shape or background.
+		...(artFingerprint !== null && artEmblemColor !== null ? { canRecompose: true } : {}),
 	};
 }
 
 // ⭐ `artShape` and `artColor` DO reach the client, and only the storage key and the
 // composition parameters do not. They are ids into a library the browser already has, so
-// there is nothing to protect — what must not travel is the path to a private object.
+// there is nothing to protect — what must not travel is the path to a private object, the
+// fingerprint, and the stored emblem color and placement a recompose reads.
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1763,6 +1776,9 @@ const subscriptionRoutes = new Hono()
 				// A composed Badge is a finished whole image, so a holding's mark needs the
 				// same distinction the creator's own ladder carries.
 				hasComposedArt: r.badge.artFingerprint !== null,
+				// The creator may recompose or replace the art, so the row's update time is
+				// what versions the art URL a supporter's browser caches.
+				updatedAt: r.badge.updatedAt,
 				billingCycle: r.holding.billingCycle,
 				createdAt: r.holding.createdAt,
 				creator: {
@@ -2077,6 +2093,7 @@ const subscriptionRoutes = new Hono()
 				// placement so the client stops treating this Badge as a composed whole — a
 				// stale fingerprint draws an uploaded interior full-size.
 				artFingerprint: null,
+				artEmblemColor: null,
 				artEmblemScale: null,
 				artEmblemOffsetX: null,
 				artEmblemOffsetY: null,
@@ -2100,6 +2117,7 @@ const subscriptionRoutes = new Hono()
 			.set({
 				artKey: null,
 				artFingerprint: null,
+				artEmblemColor: null,
 				artEmblemScale: null,
 				artEmblemOffsetX: null,
 				artEmblemOffsetY: null,
@@ -2154,14 +2172,21 @@ const subscriptionRoutes = new Hono()
 			placement,
 		});
 		if (!outcome.ok) {
-			if (outcome.error === "Badge not found") {
+			if (outcome.code === "not_found") {
 				// Same answer the sibling routes give a non-owner: indistinguishable from a
 				// missing badge, because confirming somebody else's badge exists is itself
 				// an disclosure the ownership check exists to prevent.
 				return c.json({ error: "Badge not found" }, 404);
 			}
-			if (outcome.error?.includes("held")) {
+			if (outcome.code === "quarantined") {
 				return c.json({ error: outcome.error, code: "refused" }, 422);
+			}
+			if (outcome.code === "budget_exhausted" || outcome.code === "breaker_open") {
+				// The same structured refusal the Noun search and style-match routes answer,
+				// so the picker treats an exhausted budget identically wherever it is met.
+				if (outcome.budget) {
+					return c.json(budgetRefusal(outcome.budget, outcome.code === "breaker_open"), 429);
+				}
 			}
 			return c.json({ error: outcome.error ?? "Composition failed." }, 400);
 		}
@@ -2173,6 +2198,73 @@ const subscriptionRoutes = new Hono()
 			200,
 		);
 	})
+
+	/**
+	 * Rebuild a composed Badge's art onto a new shape or field color.
+	 *
+	 * ⭐ **The shape and field are the only inputs**, because everything else the composition
+	 * reads is on the stored row — the icon and the artist credit in `badge_art_provenance`,
+	 * the placement and the emblem color on the Badge. It answers the same shape as the
+	 * compose route so the client reads one response; an unchanged pair of values dedupes
+	 * inside `composeBadgeArt` and spends nothing.
+	 *
+	 * 🚨 **The cost is real and unchanged from a first composition**: one vendor icon
+	 * download, a rasterize, a scan and an upload, under the same per-creator daily budget
+	 * and key-wide spend cap. That is why the editor offers this only for a composed Badge
+	 * the server says it can rebuild, and why it stays a save-time action rather than
+	 * following every click on the shape row.
+	 */
+	.post(
+		"/badges/:id/recompose",
+		requireAuth,
+		zValidator(
+			"json",
+			z
+				.object({
+					shape: z.string().refine(isBadgeShape),
+					fieldColor: z.string().refine(isBadgeColor),
+				})
+				.strict(),
+		),
+		async (c) => {
+			const user = c.get("user");
+			const badgeId = Number(c.req.param("id"));
+			const { shape, fieldColor } = c.req.valid("json");
+
+			const outcome = await recomposeBadgeArt({
+				creatorId: user.id,
+				badgeId,
+				shape,
+				fieldColor,
+			});
+			if (!outcome.ok) {
+				if (outcome.code === "not_found") {
+					return c.json({ error: "Badge not found" }, 404);
+				}
+				if (outcome.code === "not_recomposable") {
+					// A row whose emblem color could not be recovered is the Badge Maker's old
+					// refusal, stated as a conflict with the stored art rather than a bad request.
+					return c.json({ error: outcome.error, code: "needs_new_emblem" }, 409);
+				}
+				if (outcome.code === "quarantined") {
+					return c.json({ error: outcome.error, code: "refused" }, 422);
+				}
+				if (outcome.code === "budget_exhausted" || outcome.code === "breaker_open") {
+					if (outcome.budget) {
+						return c.json(budgetRefusal(outcome.budget, outcome.code === "breaker_open"), 429);
+					}
+				}
+				return c.json({ error: outcome.error ?? "Composition failed." }, 400);
+			}
+			return c.json(
+				{
+					unchanged: Boolean(outcome.unchanged),
+					artPath: `/api/subscriptions/badges/${badgeId}/art`,
+				},
+				200,
+			);
+		},
+	)
 
 	/**
 	 * The perks a rung carries, whole-list replace.
@@ -2312,8 +2404,9 @@ const subscriptionRoutes = new Hono()
 
 		return c.body(new Uint8Array(bytes), 200, {
 			"Content-Type": "image/png",
-			// Keyed by a uuid that changes on every upload, so a long cache is safe and a
-			// replacement is visible immediately.
+			// The bytes change on every upload or recompose, and the client versions this URL
+			// with the row's `updatedAt` — so a long cache is safe and a replacement is
+			// visible immediately. A caller that omits the version still gets the day.
 			"Cache-Control": "public, max-age=86400",
 		});
 	})
