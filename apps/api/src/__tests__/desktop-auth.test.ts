@@ -420,7 +420,7 @@ describe("Desktop auth — the emailed-code method (in-app sign-in)", () => {
 		// The route issues its own code (the mail itself is refused under the test
 		// runner), and the code service throttles per-address resends, so the spend is
 		// driven with a directly-issued code — exactly how the sign-in ceremony's
-		// suite drives `/signin/verify`. The send semantics have their own test below.
+		// suite drives `/desktop/email/verify`. The send semantics have their own test below.
 		const issued = await issuedCodeFor(email);
 		const verified = await verifyEmailCode(email, challenge, issued);
 		expect(verified.status).toBe(200);
@@ -458,7 +458,7 @@ describe("Desktop auth — the emailed-code method (in-app sign-in)", () => {
 		expect(res.status).toBe(404);
 	});
 
-	it("speaks /signin/verify's refusal — one message for wrong and missing codes", async () => {
+	it("speaks the emailed code's refusal — one message for wrong and missing codes", async () => {
 		const email = `${MAIL_PREFIX}-refusal@example.com`;
 		await createAccount(`${MAIL_PREFIX}-refusal`, { email });
 
@@ -481,7 +481,7 @@ describe("Desktop auth — the emailed-code method (in-app sign-in)", () => {
 
 	it("creates nothing for an address with no account, and says where signup lives", async () => {
 		// A code minted at /signup typed into the sign-in door — the same shape
-		// `/signin/verify` refuses, so the desktop door refusing it the same way is
+		// the browser verify refuses, so the desktop door refusing it the same way is
 		// the property, not an implementation detail.
 		const email = `${MAIL_PREFIX}-nomint@example.com`;
 		const issued = await issueSignupCode(email);

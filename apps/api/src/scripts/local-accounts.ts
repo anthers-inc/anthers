@@ -19,6 +19,7 @@
 
 import { db } from "@anthers/db/client";
 import { assertDevCheckout } from "@anthers/db/dev-only";
+import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import type { AtprotoIdentity } from "../services/atproto.js";
@@ -60,6 +61,13 @@ export interface LocalAccountOptions {
 	bypassReserved?: boolean;
 	emailVerified?: boolean;
 	fields?: LocalAccountFields;
+	/**
+	 * The identity's password. A fixture generates one unless a suite needs to type it.
+	 *
+	 * ⚠️ **Local sessions only.** This is the password the PDS stores for a test account; it is
+	 * never a production credential and never printed unless the caller asks for it.
+	 */
+	password?: string;
 }
 
 /** A handle name nobody else in the session holds. */
@@ -150,9 +158,9 @@ export async function createLocalAccount(opts: LocalAccountOptions): Promise<Use
 	const created = await createAccountFromSignup(
 		pending,
 		opts.email,
-		// A fixture password, generated per account and never printed. A real signup's password is
-		// the person's; this only has to satisfy the same rule and never be stored.
-		`fixture-${crypto.randomUUID()}`,
+		// The shared local fixture password, so a spec or a developer can sign in as the account.
+		// A real signup's password is the person's; this is a disposable test credential.
+		opts.password ?? LOCAL_ACCOUNT_PASSWORD,
 	);
 	if ("refusal" in created) {
 		throw new Error(
@@ -190,6 +198,10 @@ async function main(): Promise<void> {
 		fields: {
 			creatorMode: process.argv.includes("--creator"),
 		},
+		// ⚠️ In the environment, never on argv: a password named on a command line is recorded
+		// verbatim in the session transcript. A browser spec that has to type the password sets
+		// this for the child process.
+		password: process.env.LOCAL_ACCOUNT_PASSWORD?.trim() || undefined,
 	});
 	const session = process.argv.includes("--session") ? await createSession(user.id) : undefined;
 	console.log(

@@ -127,6 +127,8 @@ export async function createAccount(
 		 * is reserved precisely because the account is official.
 		 */
 		bypassReserved?: boolean;
+		/** The password the identity is created with, when a suite needs to type it. */
+		password?: string;
 	} = {},
 ): Promise<FixtureAccount> {
 	const email = opts.email ?? `${name}@example.com`;
@@ -138,6 +140,7 @@ export async function createAccount(
 			bypassReserved: opts.bypassReserved,
 			emailVerified: opts.emailVerified ?? false,
 			fields: opts.fields,
+			password: opts.password,
 		}),
 	);
 	const token = await createSession(user.id);

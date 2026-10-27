@@ -7,10 +7,10 @@ import {
 } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { GAUNTLET_CREATOR_EMAIL, GAUNTLET_WALKER_EMAIL } from "@anthers/db/gauntlet";
+import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { MEDIA_FIXTURE_EMAIL } from "@anthers/db/media-fixture";
 import { defaultDelivery } from "@anthers/shared/content";
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
-import { withSignInLock } from "./signin-lock";
 
 /**
  * The static preview the browser loads (playwright.config.ts webServer #1), on the port the
@@ -79,90 +79,50 @@ export function trackErrorsStrict(page: Page, allow: RegExp[] = []): string[] {
 }
 
 /**
- * One emailed-code sign-in per address at a time, across every worker the run is using.
- *
- * The API keeps **one live code per address** and a re-request replaces it — a security
- * property, not something a test may widen; the reasoning, the two abandoned-lock
- * reaps and the staleness-vs-deadline lesson live in `./signin-lock`, which holds the
- * mechanism and its unit test (also under `bun test`, in `src/signin-lock.test.ts`).
- */
-
-/**
  * Sign an account in and put the session on `context`.
  *
- * By the emailed code, because that is the only way anybody signs in: the fixture's address
- * is posted to `/auth/signin/start`, the code is read back out of the session's mail catcher
- * (where a person would read it), and `/auth/signin/verify` answers with the same
- * Set-Cookie a real sign-in returns. Plain `fetch` plus an explicit cookie, exactly as
- * `gauntlet.setup.ts` does it, and deliberately not `page.request.post`: that threw an
- * opaque `"/api/auth/sign-in" cannot be parsed as a URL` even when handed an absolute one,
- * and the setup file's approach is the one already proven against this API.
+ * By the password every local fixture account is created with (`LOCAL_ACCOUNT_PASSWORD`), because
+ * that is the first-party door now: the fixture's address is posted to `/api/auth/login`, and the
+ * API answers with the same Set-Cookie a person's sign-in does. Plain `fetch` plus an explicit
+ * cookie, deliberately not `page.request.post`, whose Playwright cookie parser throws on this
+ * route's Set-Cookie under Bun.
  *
- * Returns the raw token so a test can call the API as that account — cleanup, mostly — without
+ * Returns the raw token so a test can call the API as that account (cleanup, mostly) without
  * driving the browser.
  */
 async function signInAs(context: BrowserContext, email: string): Promise<string> {
-	return withSignInLock(email, async () => {
-		const startedAt = Date.now();
-		const start = await fetch(`${API_URL}/api/auth/signin/start`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
-			body: JSON.stringify({ email }),
-		});
-		expect(start.ok, `asking for a sign-in code for ${email} failed: ${start.status}`).toBe(true);
-
-		/*
-		 * A throttled `start` sends nothing: the API keeps one live code per address and
-		 * re-issues it no often than once a minute, answering 200 either way so the timing
-		 * cannot be told apart. Between two sign-ins that lands the second caller reading
-		 * the FIRST caller's still-warm email — which is a code that verify spends and
-		 * burns, and the read arrives too late. When nothing new shows up quickly, the
-		 * honest wait is the throttle window and another start, so the code being read is
-		 * always one *this* sign-in minted.
-		 */
-		const code = await emailedCode(email, 3_000, startedAt).catch(async () => {
-			await new Promise((resolve) => setTimeout(resolve, 61_000));
-			const againStartedAt = Date.now();
-			const again = await fetch(`${API_URL}/api/auth/signin/start`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-				body: JSON.stringify({ email }),
-			});
-			expect(again.ok, `re-asking for a sign-in code for ${email} failed: ${again.status}`).toBe(
-				true,
-			);
-			return emailedCode(email, 15_000, againStartedAt);
-		});
-		const res = await fetch(`${API_URL}/api/auth/signin/verify`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-			body: JSON.stringify({ email, code }),
-		});
-		expect(
-			res.ok,
-			`sign-in as ${email} failed (${res.status}): ${await res
-				.clone()
-				.text()
-				.catch(() => "")} — code tried: ${code}`,
-		).toBe(true);
-
-		const token = /(?:^|\s)session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
-		expect(token, "no session cookie returned").toBeTruthy();
-		await context.addCookies([
-			{
-				name: "session",
-				value: token as string,
-				domain: "localhost",
-				path: "/",
-				expires: Math.floor(Date.now() / 1000) + 3600,
-				httpOnly: true,
-				secure: false,
-				sameSite: "Lax" as const,
-			},
-		]);
-		return token as string;
+	const res = await fetch(`${API_URL}/api/auth/login`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
+		body: JSON.stringify({ identifier: email, password: LOCAL_ACCOUNT_PASSWORD }),
 	});
+	expect(
+		res.ok,
+		`sign-in as ${email} failed (${res.status}): ${await res
+			.clone()
+			.text()
+			.catch(() => "")}`,
+	).toBe(true);
+
+	const token = /(?:^|\s)session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
+	expect(token, "no session cookie returned").toBeTruthy();
+	await context.addCookies([
+		{
+			name: "session",
+			value: token as string,
+			domain: "localhost",
+			path: "/",
+			expires: Math.floor(Date.now() / 1000) + 3600,
+			httpOnly: true,
+			secure: false,
+			sameSite: "Lax" as const,
+		},
+	]);
+	return token as string;
 }
+
+/**
+ * Sign in as the gauntlet WALKER}
 
 /**
  * Sign in as the gauntlet WALKER — the ordinary audience account the harness owns, neither

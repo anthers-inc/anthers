@@ -12,7 +12,8 @@
 		"./gauntlet": "./src/gauntlet.ts",
 		"./gauntlet-walk": "./src/gauntlet-walk.ts",
 		"./media-fixture": "./src/media-fixture.ts",
-		"./schema": "./src/schema/index.ts"
+		"./schema": "./src/schema/index.ts",
+		"./local-fixtures": "./src/local-fixtures.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

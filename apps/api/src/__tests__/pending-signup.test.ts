@@ -283,22 +283,23 @@ describe("resuming it in another browser", () => {
 			.update(pendingSignups)
 			.set({ expiresAt: new Date(Date.now() - 1000) })
 			.where(eq(pendingSignups.token, token));
-		// The throttle would answer `null` for this address too — see `clearThrottle`.
-		await clearThrottle(addr("stale"));
 
-		expect((await issueSignInCode(addr("stale"))).code).toBeNull();
+		// A code can still be minted for the address; the expiration is enforced where the row
+		// would be handed over, which is the only place it matters.
+		const res = await spendCode("/api/auth/signup/resume/verify", addr("stale"), "");
+		expect(res.status).toBe(404);
 	});
 
 	it("hands the signup to this browser and creates absolutely nothing", async () => {
 		await begin({ email: addr("carry"), picks: { badge: "sprout", follow: ["dee"], badges: [] } });
 
-		const res = await spendCode("/api/auth/signin/verify", addr("carry"), "");
+		const res = await spendCode("/api/auth/signup/resume/verify", addr("carry"), "");
 		expect(res.status).toBe(200);
-		const body = (await res.json()) as { user: unknown; resume: boolean };
+		const body = (await res.json()) as { resume: boolean };
 		expect(body.resume).toBe(true);
-		// 🚨 The load-bearing assertion. `/signin/*` exists as a separate pair from `/signup/*`
-		// for exactly one reason, and this is it.
-		expect(body.user, "the sign-in door hands back no session and no account").toBeNull();
+		// 🚨 The load-bearing assertion. The resume door hands back a pending signup and never an
+		// account, which is the one job an emailed code still does.
+		expect(body).not.toHaveProperty("user");
 		const made = await db
 			.select()
 			.from(users)
@@ -315,7 +316,7 @@ describe("resuming it in another browser", () => {
 
 	it("finishes from the proved stamp without asking for a second code", async () => {
 		await begin({ email: addr("proved") });
-		const signin = await spendCode("/api/auth/signin/verify", addr("proved"), "");
+		const signin = await spendCode("/api/auth/signup/resume/verify", addr("proved"), "");
 		const token = (signin.headers.get("set-cookie") ?? "").match(/signup_pending=([^;]+)/)?.[1];
 		// The identity is proved in THIS browser, as a Bluesky round trip from the finishing page
 		// would bind it.
@@ -366,9 +367,9 @@ describe("resuming it in another browser", () => {
 	});
 
 	it("still refuses an address with neither an account nor a signup", async () => {
-		// Reachable only by somebody holding a live code for an address `/signin/start` would
-		// never have mailed — which means a code minted at `/signup` was typed in here.
-		const res = await spendCode("/api/auth/signin/verify", addr("orphancode"), "");
+		// Reachable only by somebody holding a live code for an address with no signup in
+		// progress — which means a code minted at `/signup` was typed in here.
+		const res = await spendCode("/api/auth/signup/resume/verify", addr("orphancode"), "");
 		expect(res.status).toBe(404);
 		expect(
 			(
@@ -510,7 +511,7 @@ describe("what an address-resumed signup carries across, and what it proves agai
 			.values({ did: did("squatter"), session: {}, userId: null })
 			.onConflictDoNothing();
 
-		const signin = await spendCode("/api/auth/signin/verify", addr("victim"), "");
+		const signin = await spendCode("/api/auth/signup/resume/verify", addr("victim"), "");
 		const rebound = (signin.headers.get("set-cookie") ?? "").match(/signup_pending=([^;]+)/)?.[1];
 
 		const row = await readPendingSignup(rebound);
@@ -569,7 +570,7 @@ describe("what an address-resumed signup carries across, and what it proves agai
 			picks: { badge: "root", follow: ["erin"], badges: [] },
 		});
 
-		const signin = await spendCode("/api/auth/signin/verify", addr("named"), "");
+		const signin = await spendCode("/api/auth/signup/resume/verify", addr("named"), "");
 		const rebound = (signin.headers.get("set-cookie") ?? "").match(/signup_pending=([^;]+)/)?.[1];
 
 		const row = await readPendingSignup(rebound);
