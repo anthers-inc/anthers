@@ -47,6 +47,20 @@ async function shownPages(page: Page): Promise<number[]> {
 	);
 }
 
+/**
+ * Put the reader on page one before a test measures a turn.
+ *
+ * 🚨 **The reading position is stored per account and Work, and the walker is one account**
+ * shared with the panel-mode walk, which turns pages while this file runs. The reset before
+ * `openReader` holds only until that sibling writes past it, so a test that assumes a starting
+ * page establishes one itself, after the navigation, where nothing else can move it.
+ */
+async function startAtPageOne(page: Page) {
+	await page.locator(READER).focus();
+	await page.keyboard.press("Home");
+	await expect.poll(() => shownPages(page)).toEqual([1]);
+}
+
 test.describe.configure({ mode: "serial" });
 
 test("🚨 the source PDF is never fetched — pages are, one at a time", async ({ page }) => {
@@ -75,6 +89,7 @@ test("🚨 the source PDF is never fetched — pages are, one at a time", async 
 test("pages turn, and the reader knows where it is", async ({ page }) => {
 	await resetReadingPosition(page, COMIC);
 	await openReader(page);
+	await startAtPageOne(page);
 	expect(await shownPages(page)).toEqual([1]);
 	// "1 / 4" — the count comes from the serialized Work, which is what made the
 	// Work-detail endpoint's own page count worth counting separately.
@@ -95,6 +110,7 @@ test("pages turn, and the reader knows where it is", async ({ page }) => {
 test("arrow keys turn pages once the reader has focus", async ({ page }) => {
 	await resetReadingPosition(page, COMIC);
 	await openReader(page);
+	await startAtPageOne(page);
 	await page.locator(READER).focus();
 
 	await page.keyboard.press("ArrowRight");
@@ -112,6 +128,7 @@ test("arrow keys turn pages once the reader has focus", async ({ page }) => {
 test("the spread view shows two pages at once", async ({ page }) => {
 	await resetReadingPosition(page, COMIC);
 	await openReader(page);
+	await startAtPageOne(page);
 	await page.locator(READER).getByRole("button", { name: "Two-page spread" }).click();
 	await expect.poll(() => shownPages(page)).toEqual([1, 2]);
 

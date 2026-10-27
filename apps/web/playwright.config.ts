@@ -136,6 +136,52 @@ export default defineConfig({
 			testIgnore: ["**/user-gauntlet.e2e.ts", "**/*.authed.e2e.ts"],
 			metadata: { needsMedia: false },
 		},
+		// ── The account-preference writers, one project each, in a fixed order ──────
+		//
+		// 🚨 **Three specs write the shared walker's own account preferences** (`homeRecipe`
+		// and `savedRecipes`, the starting tab, the keyboard shortcut map) and every other
+		// authed spec reads that account. Run beside the readers, a writer's mid-test state
+		// is what a reader sees: a chip walk left "what you saved" selected and a feed spec
+		// drew an empty stream, and a shortcut walk's rebound chord was read by a header spec
+		// as the stored map. Each file restores what it touches, so the ordering is what makes
+		// the restore the last word rather than a race with a sibling.
+		//
+		// ⚠️ **One project per file, chained by `dependencies`, rather than one project with
+		// three `testMatch`es.** Playwright schedules files in different workers even inside a
+		// single project, so a shared project would put these writers beside each other; a
+		// dependency chain is the only thing that makes "finished" mean finished. The chain
+		// ends with `authed` depending on the last of them, so readers start after every
+		// restore, and a new preference-writer joins by extending the chain.
+		{
+			name: "prefs-recipes",
+			use: {
+				...devices["Desktop Chrome"],
+				storageState: "tests/e2e/.auth/gauntlet-walker.json",
+			},
+			testMatch: "**/discovery-recipes.authed.e2e.ts",
+			dependencies: ["setup"],
+			metadata: { needsMedia: true },
+		},
+		{
+			name: "prefs-nav",
+			use: {
+				...devices["Desktop Chrome"],
+				storageState: "tests/e2e/.auth/gauntlet-walker.json",
+			},
+			testMatch: "**/sidebar-nav.authed.e2e.ts",
+			dependencies: ["setup", "prefs-recipes"],
+			metadata: { needsMedia: true },
+		},
+		{
+			name: "prefs-shortcuts",
+			use: {
+				...devices["Desktop Chrome"],
+				storageState: "tests/e2e/.auth/gauntlet-walker.json",
+			},
+			testMatch: "**/search-bar.authed.e2e.ts",
+			dependencies: ["setup", "prefs-nav"],
+			metadata: { needsMedia: true },
+		},
 		// Authenticated specs that are NOT the gauntlet: independent, parallel-safe, and
 		// signed in as the fixture user. Separate from `gauntlet` on purpose — that one is
 		// a single stateful staircase where order is the point, and dropping unrelated tests
@@ -152,7 +198,13 @@ export default defineConfig({
 				storageState: "tests/e2e/.auth/gauntlet-walker.json",
 			},
 			testMatch: "**/*.authed.e2e.ts",
-			dependencies: ["setup"],
+			// The three preference writers run in their own projects above, before this one.
+			testIgnore: [
+				"**/discovery-recipes.authed.e2e.ts",
+				"**/sidebar-nav.authed.e2e.ts",
+				"**/search-bar.authed.e2e.ts",
+			],
+			dependencies: ["setup", "prefs-shortcuts"],
 			metadata: { needsMedia: true },
 		},
 		// The User Gauntlet walk: authenticated (storageState from setup-walk), strictly serial —

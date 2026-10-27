@@ -66,6 +66,19 @@ async function libraryCount(page: Page): Promise<number> {
 	return page.locator("[data-testid='feed-tile']").count();
 }
 
+/**
+ * The Library kept every item it held before a lens, a dial or a filter touched it.
+ *
+ * 🚨 **A floor rather than equality, deliberately.** The walker is one account, and sibling
+ * specs save their own fixture Works into it while this file runs, so a count taken twice can
+ * rise for a reason this spec did not cause. Equality would read that as a failure, and the
+ * property this file actually pins is the one its docblock states: a view change never drops
+ * something a person paid for. An addition is not a view change; a drop is.
+ */
+function expectNothingLost(before: number, after: number, message: string) {
+	expect(after, message).toBeGreaterThanOrEqual(before);
+}
+
 /** The sidebar lens rows, by label. */
 function lensRow(page: Page, label: string) {
 	return page.getByRole("button", { name: label, exact: true });
@@ -89,7 +102,7 @@ test("a lens is a view, not a container — the Library survives switching", asy
 	await lensRow(page, "No Lens").click();
 	await expect(page).toHaveURL(/^(?!.*lens=music).*$/);
 
-	expect(await libraryCount(page), "the lens changed what is IN the Library").toBe(before);
+	expectNothingLost(before, await libraryCount(page), "the lens changed what is IN the Library");
 });
 
 test("the Library's sidebar reads Lenses, Access, Type, Tags", async ({ page }) => {
@@ -253,10 +266,18 @@ test("the music lens's spoken-word dial re-scopes the view without touching the 
 	// user lands on is the labeled row, which is what the assertion is about.
 	await page.getByText("Include spoken word", { exact: true }).click();
 	await expect(page).toHaveURL(/spoken=1/);
+	// 🚨 **Wait for the control to reflect the click before clicking it again.** The URL
+	// updates with the navigation, but the checkbox is controlled by the rendered state,
+	// and a second click that lands in the gap between the two arrives while the box still
+	// reads unchecked: the label toggles it back ON, the URL never drops the parameter, and
+	// the assertion below reads a lost click that no user could have made. Asserting the
+	// state closes the window instead of widening the timeout around it.
+	await expect(dial).toBeChecked();
 	await page.getByText("Include spoken word", { exact: true }).click();
 	await expect(page).toHaveURL(/^(?!.*spoken=1).*$/);
+	await expect(dial).not.toBeChecked();
 
-	expect(await libraryCount(page), "the dial changed what is IN the Library").toBe(before);
+	expectNothingLost(before, await libraryCount(page), "the dial changed what is IN the Library");
 });
 
 test("the dial's widening ungrays the audio Type row", async ({ page }) => {
@@ -343,7 +364,13 @@ test("a tag filter narrows the Library and its removal restores it", async ({ pa
 	).toHaveCount(0);
 	await page.getByRole("button", { name: "Remove tag zzz-library-has-nothing" }).click();
 	await expect(page).toHaveURL(/^(?!.*tags=).*$/);
-	await expect(page.locator("[data-testid='feed-tile']")).toHaveCount(before);
+	// Polled rather than read once: the URL changes before the grid re-renders, and the
+	// retry is the difference between a slow paint and a lost item.
+	await expect
+		.poll(() => page.locator("[data-testid='feed-tile']").count(), {
+			message: "removing the tag restored less than the Library held",
+		})
+		.toBeGreaterThanOrEqual(before);
 });
 
 // ── The 2026-10-11 lens pair — Bookshelf and Channel Guide ──────────────────
@@ -607,7 +634,9 @@ test("the new lenses are views, not containers — switching through them leaves
 	await page.getByRole("button", { name: "No Lens", exact: true }).click();
 	await expect(page).toHaveURL(/^(?!.*lens=).*$/);
 
-	expect(await libraryCount(page), "walking every lens changed what is IN the Library").toBe(
+	expectNothingLost(
 		before,
+		await libraryCount(page),
+		"walking every lens changed what is IN the Library",
 	);
 });

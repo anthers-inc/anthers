@@ -46,6 +46,15 @@ const saveChip = (page: import("@playwright/test").Page) =>
 
 test.describe.configure({ mode: "serial" });
 
+test.afterEach(async ({ page }) => {
+	// 🚨 **Every write this page makes is fire-and-forget.** A chip click PATCHes
+	// `homeRecipe` and does not await the answer, so a write from one test can land while
+	// the next one reads the chips row, and a write from the last test can land after this
+	// file restores the account. Settling the page's network here is what makes the serial
+	// order (and the restore below) real rather than hoped for.
+	await page.waitForLoadState("networkidle");
+});
+
 test("a chosen recipe is remembered, and a link is only an override", async ({ page }) => {
 	test.setTimeout(90_000);
 	// Start from the preset rather than from whatever a previous run left behind.
@@ -204,11 +213,12 @@ test("saved recipes reorder, delete and join the keyboard cycle", async ({ page 
 
 test.afterAll(async ({ browser }) => {
 	// The restore above runs only if the test reaches its end; this is the same write on
-	// the failure path. The context carries the walker's own session cookie.
+	// the failure path. The context carries the walker's own session cookie. Both answers
+	// are checked, because a restore that silently failed is the same defect as none.
 	const context = await browser.newContext({
 		storageState: "tests/e2e/.auth/gauntlet-walker.json",
 	});
-	await setRecipe(context.request, MY_NETWORK);
-	await setSaved(context.request, []);
+	expect((await setRecipe(context.request, MY_NETWORK)).status()).toBe(200);
+	expect((await setSaved(context.request, [])).status()).toBe(200);
 	await context.close();
 });
