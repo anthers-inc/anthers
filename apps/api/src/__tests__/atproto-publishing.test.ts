@@ -17,7 +17,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { atprotoSessions, users, works } from "@anthers/db/schema";
+import { atprotoSessions, hostedAccounts, users, works } from "@anthers/db/schema";
 import { OAuthCallbackError } from "@atproto/oauth-client";
 import { eq, like } from "drizzle-orm";
 import app from "../index.js";
@@ -444,6 +444,27 @@ describe("coming back from the consent screen", () => {
 		});
 		expect(url.searchParams.get("error")).toBe("wrong_identity");
 		expect((await publishingStateFor(user.id)).route).toBe("ungranted");
+	});
+
+	// 🚨 **The state nothing used to name.** A hosted account with no session and no password
+	// cannot be written to at all, so every publish and listing fails at the write and retries,
+	// and the only symptom is content that never reaches the network. The Studio and the identity
+	// card read this to say so before anybody tries; it is a database read, never a node call.
+	it("says when a hosted identity has no credential at all, and only then", async () => {
+		const user = await makeUser("cred", { identity: "hosted" });
+
+		// A fresh hosted account holds the session signup sealed, so there is something to write with.
+		expect((await publishingStateFor(user.id)).hostedCredential).toBe("on_file");
+
+		await db
+			.update(hostedAccounts)
+			.set({ sealedSession: null, sealedPassword: "" })
+			.where(eq(hostedAccounts.did, did("cred")));
+		expect((await publishingStateFor(user.id)).hostedCredential).toBe("missing");
+
+		// A brought identity is not hosted at all, so the question does not apply to it.
+		const brought = await makeUser("cred2");
+		expect((await publishingStateFor(brought.id)).hostedCredential).toBeNull();
 	});
 
 	it("refuses an account whose identity Anthers hosts", async () => {

@@ -53,6 +53,12 @@ export interface PublishingState {
 		/** Whether that server answers `/account`, the reference PDS's own account page. */
 		accountPage: boolean;
 	} | null;
+	/**
+	 * Whether Anthers holds a credential for an identity it hosts, or null when it does not host
+	 * this one. `"missing"` means nothing can be written to it at all until its holder sets the
+	 * password; `"on_file"` only means a credential is there, not that the node still honors it.
+	 */
+	hostedCredential: "on_file" | "missing" | null;
 }
 
 /** How often a page left open asks again, which matches how often the API will recheck. */
