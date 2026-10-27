@@ -73,7 +73,6 @@ import {
 	normalizeHandleName,
 	swapHostedHandle,
 } from "../services/hosted-accounts.js";
-import { hostedPdsUrl } from "../services/hosted-node.js";
 import { requestHostedPasswordReset, setHostedPassword } from "../services/hosted-password.js";
 import {
 	recoveryKeyState,
@@ -556,16 +555,12 @@ const atprotoRoutes = new Hono()
 	// and shows only the Bluesky door when hosting is off. The suffix travels with the answer so
 	// the browser can show a handle in full without a second copy of `anthers.social` living in
 	// the front end.
-	.get("/config", async (c) => {
-		const pds = hostedPdsUrl();
-		return c.json({
+	.get("/config", async (c) =>
+		c.json({
 			hostedIdentityOffered: await hostedIdentityOffered(),
 			hostedHandleSuffix: await hostedHandleSuffix(),
-			// The server's own account page, where a password reset lives. Empty when this
-			// process has no node, so the browser can hide the link rather than point at nothing.
-			hostedAccountUrl: pds ? `${pds}/account` : "",
-		});
-	})
+		}),
+	)
 
 	// ── Is this handle free? ─────────────────────────────────────────────────
 	//
