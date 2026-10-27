@@ -2302,7 +2302,6 @@ const subscriptionRoutes = new Hono()
 				id: p.id,
 				kind: p.kind,
 				label: p.label,
-				description: p.description,
 			})),
 		});
 	})
@@ -2318,7 +2317,6 @@ const subscriptionRoutes = new Hono()
 						z.object({
 							kind: z.string().refine((k) => badgePerkKind(k) !== null),
 							label: z.string().min(1).max(100),
-							description: z.string().max(500).optional(),
 						}),
 					)
 					.max(10),
@@ -2344,7 +2342,6 @@ const subscriptionRoutes = new Hono()
 							badgeId,
 							kind: p.kind,
 							label: p.label.trim(),
-							description: p.description?.trim() ?? "",
 							sortOrder: i,
 						})),
 					);
@@ -2375,7 +2372,6 @@ const subscriptionRoutes = new Hono()
 					id: p.id,
 					kind: p.kind,
 					label: p.label,
-					description: p.description,
 				})),
 			});
 		},

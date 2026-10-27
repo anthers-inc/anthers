@@ -215,41 +215,72 @@ export const BADGE_COLORS: BadgeColor[] = [
 
 /**
  * The perk categories a creator Badge can carry, and how they reach the sales-tax
- * posture. **Access to gated Works is NOT here** — it is read automatically from the
- * gates a Badge clears, which is data the maker cannot misstate. Everything else is
- * what the creator tags: a service (feedback on a track), a physical good (a print),
- * community access (a private chat), or recognition (a name in credits).
+ * posture. **Access to gated Works is NOT here**: it is read automatically from the
+ * gates a Badge clears, which is data the maker cannot misstate. Everything else is what
+ * the creator tags, and the list is Patreon's benefit taxonomy adapted to what Anthers
+ * sells: a physical good (a print), digital goods (a download, a bonus episode), a private
+ * community, a service (feedback on a track), a discount (a coupon code), a credit, or
+ * support with nothing extra attached.
  *
  * 🚨 **Sales tax follows what a supporter receives, and a Badge carrying more than one
- * kind is taxed at its MOST-TAXABLE kind** — the ordering of this list is that ordering,
- * and the codes beside each are the Stripe tax codes the posture task settled. The
- * friendly explanations are for creators, not tax authorities; the maker shows them and
- * points the unsure at support@anthers.org.
+ * kind is taxed at its MOST-TAXABLE kind**, so the order of this list is a billing fact
+ * rather than a display order. It follows Patreon's published taxability: physical goods
+ * in every state where either platform collects, community access and digital or streamed
+ * content in roughly half, professional services exempt in the vast majority, and support
+ * exempt in most. Discount, Recognition and Support share a Stripe code and deliver
+ * nothing at the moment of sale, so their relative order changes no line.
+ *
+ * ⚠️ **Digital takes `txcd_10402200`, the streamed-subscription code the posture already
+ * gives gated Works**, because one dropdown cannot name the medium and Stripe's download
+ * codes are per medium. It is also the choice that collects rather than leaving a
+ * shortfall on Anthers.
+ *
+ * The codes are the Stripe tax codes the posture task settled. The examples are for
+ * creators, not tax authorities; the maker shows them and points the unsure at
+ * support@anthers.org. A Badge is a subscription purchase and never a donation, so
+ * nothing here is labeled one.
  */
 export const BADGE_PERK_KINDS = [
 	{
 		id: "physical_good",
-		label: "A Physical Good",
-		friendly: "Something you ship to supporters — a print, a zine, a sticker sheet.",
+		label: "Physical",
+		examples: "Merch, prints, stickers.",
 		taxCode: "txcd_99999999",
 	},
 	{
-		id: "service",
-		label: "A Service",
-		friendly: "Something you do for supporters — feedback on a track, a lesson, a commission slot.",
-		taxCode: "txcd_20030000",
+		id: "digital_good",
+		label: "Digital",
+		examples: "Downloads, bonus episodes, early access.",
+		taxCode: "txcd_10402200",
 	},
 	{
 		id: "community",
 		label: "Community Access",
-		friendly: "A private community — a Discord server, a members' chat, a community-only stream.",
+		examples: "Discord, members-only chat, polls.",
 		taxCode: "txcd_20030000",
+	},
+	{
+		id: "service",
+		label: "Service",
+		examples: "Feedback, lessons, commissions.",
+		taxCode: "txcd_20030000",
+	},
+	{
+		id: "discount",
+		label: "Discount",
+		examples: "Coupon codes, store credit.",
+		taxCode: "txcd_90000001",
 	},
 	{
 		id: "recognition",
 		label: "Recognition",
-		friendly:
-			"Their name somewhere only supporters' names go — a video's credits, a thank-you page.",
+		examples: "Credits, thank-you pages.",
+		taxCode: "txcd_90000001",
+	},
+	{
+		id: "support",
+		label: "Support",
+		examples: "No extras, just backing the work.",
 		taxCode: "txcd_90000001",
 	},
 ] as const;
@@ -263,13 +294,13 @@ export function badgePerkKind(
 }
 
 /**
- * The most-taxable kind across a Badge's perks — the tax classification a rung's
- * subscription line carries.
+ * The most-taxable kind across a Badge's kinds, in the list's own order.
  *
- * ⚠️ **Order matters and is the posture's ordering**, most-taxable first: a physical
- * good outranks a service, a service outranks recognition, and recognition (not a
- * taxable sale of anything in Colorado, per the posture) outranks nothing at all. A rung
- * with no tagged perk and no gate codes as a donation, which is what `null` means here.
+ * ⚠️ **Order matters and is the posture's ordering**, most-taxable first: a physical good
+ * outranks digital goods, community access outranks a service, and the three kinds that
+ * deliver nothing at the moment of sale (Discount, Recognition, Support) sit at the tail.
+ * `null` means the rung named no kind at all, which the maker now refuses to save and the
+ * tax code reads as support for any row that predates that rule.
  */
 export function mostTaxablePerkKind(kinds: string[]): (typeof BADGE_PERK_KINDS)[number] | null {
 	for (const kind of BADGE_PERK_KINDS) {

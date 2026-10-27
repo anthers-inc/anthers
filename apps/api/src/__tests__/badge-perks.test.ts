@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import { badgePerks, works } from "@anthers/db/schema";
 import { BADGE_PERK_KINDS, mostTaxablePerkKind } from "@anthers/shared/badge-art";
-import { DONATION_TAX_CODE, STREAMED_SUBSCRIPTION_TAX_CODE } from "@anthers/shared/tax-codes";
+import { STREAMED_SUBSCRIPTION_TAX_CODE, SUPPORT_TAX_CODE } from "@anthers/shared/tax-codes";
 import { eq } from "drizzle-orm";
 import app from "../index";
 import { taxCodeForBadge } from "../services/billing";
@@ -62,20 +62,28 @@ describe("badge perks", () => {
 		await db.delete(badgePerks).where(eq(badgePerks.badgeId, badgeId));
 	});
 
-	it("carries the fixed category list with a friendly line each", () => {
-		expect(BADGE_PERK_KINDS.length).toBeGreaterThanOrEqual(4);
+	it("carries the fixed category list with short examples for each", () => {
+		expect(BADGE_PERK_KINDS.length).toBe(7);
 		for (const k of BADGE_PERK_KINDS) {
-			expect(k.friendly.length).toBeGreaterThan(20);
+			expect(k.examples.length).toBeGreaterThan(10);
 			expect(k.taxCode).toMatch(/^txcd_/);
 		}
+		// The two kinds the first list lacked, and the floor a rung that sells nothing names.
+		expect(BADGE_PERK_KINDS.map((k) => k.id)).toContain("digital_good");
+		expect(BADGE_PERK_KINDS.map((k) => k.id)).toContain("discount");
+		expect(BADGE_PERK_KINDS.at(-1)?.id).toBe("support");
 	});
 
 	it("orders the kinds most-taxable first", () => {
-		// The ordering IS the posture: a physical good outranks a service, which outranks
-		// recognition. One assertion over every prefix combination would be exhaustive;
-		// the binding cases are pinned.
+		// The ordering IS the posture: physical goods outrank digital and community, which
+		// outrank a service, and the three kinds that share the support code sit at the tail.
+		// One assertion over every prefix combination would be exhaustive; the binding cases
+		// are pinned.
 		expect(mostTaxablePerkKind(["recognition", "physical_good"])?.id).toBe("physical_good");
+		expect(mostTaxablePerkKind(["service", "digital_good"])?.id).toBe("digital_good");
+		expect(mostTaxablePerkKind(["service", "community"])?.id).toBe("community");
 		expect(mostTaxablePerkKind(["recognition", "service"])?.id).toBe("service");
+		expect(mostTaxablePerkKind(["support", "discount"])?.id).toBe("discount");
 		expect(mostTaxablePerkKind(["recognition"])?.id).toBe("recognition");
 		expect(mostTaxablePerkKind(["community", "service", "physical_good"])?.id).toBe(
 			"physical_good",
@@ -128,6 +136,22 @@ describe("badge perks", () => {
 		expect(await taxCodeForBadge(badgeId)).toBe("txcd_99999999");
 		await putPerks([{ kind: "service", label: "Feedback" }]);
 		expect(await taxCodeForBadge(badgeId)).toBe("txcd_20030000");
+		await putPerks([{ kind: "community", label: "Discord" }]);
+		expect(await taxCodeForBadge(badgeId)).toBe("txcd_20030000");
+	});
+
+	it("🚨 codes a Digital perk at the streamed-subscription code", async () => {
+		// One dropdown cannot name the medium, so digital goods take the same code gated
+		// Works do rather than a per-medium download code the kind cannot choose.
+		await putPerks([{ kind: "digital_good", label: "PDF songbook" }]);
+		expect(await taxCodeForBadge(badgeId)).toBe(STREAMED_SUBSCRIPTION_TAX_CODE);
+	});
+
+	it("codes a Discount or a Support rung at the support code", async () => {
+		await putPerks([{ kind: "discount", label: "20% off the shop" }]);
+		expect(await taxCodeForBadge(badgeId)).toBe(SUPPORT_TAX_CODE);
+		await putPerks([{ kind: "support", label: "Just backing the work" }]);
+		expect(await taxCodeForBadge(badgeId)).toBe(SUPPORT_TAX_CODE);
 	});
 
 	it("🚨 codes a gate-clearing rung as the streamed subscription — access outranks a gratuity tag", async () => {
@@ -157,9 +181,11 @@ describe("badge perks", () => {
 		}
 	});
 
-	it("codes a rung with neither gate nor perk as a donation", async () => {
+	it("codes a rung with neither gate nor perk as support", async () => {
+		// The editor refuses to save a rung in this state; the fallback stays for rows that
+		// predate the rule, and it must land on the same code an explicit Support row does.
 		await putPerks([]);
-		expect(await taxCodeForBadge(badgeId)).toBe(DONATION_TAX_CODE);
+		expect(await taxCodeForBadge(badgeId)).toBe(SUPPORT_TAX_CODE);
 	});
 
 	it("refuses another creator's rung", async () => {

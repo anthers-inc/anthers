@@ -106,13 +106,15 @@ export function isPhysicalTaxCategory(value: string): value is PhysicalTaxCatego
 }
 
 /**
- * The code for support that buys nothing: a cash donation, `txcd_90000001`.
+ * The code for a rung that buys nothing: `txcd_90000001`.
  *
- * Support that opens gated Works or carries a tagged perk is coded from what it buys
- * instead, at subscription build; this is the line that buys nothing at all, which the
- * posture holds is probably not a taxable sale in Colorado (PLR 22-005's shape).
+ * ⚠️ **Stripe's own label for this code is "Cash Donation", and that is Stripe's word,
+ * not ours.** A Badge is a subscription purchase and never a donation; the noun is
+ * reserved for the charitable giving channel, which is not built. A rung that names
+ * Support buys the standing of supporting its creator and nothing else, so this is the
+ * code it carries.
  */
-export const DONATION_TAX_CODE = "txcd_90000001";
+export const SUPPORT_TAX_CODE = "txcd_90000001";
 
 /**
  * The code for a streamed-audiovisual subscription line — an Anthers Badge, or a creator

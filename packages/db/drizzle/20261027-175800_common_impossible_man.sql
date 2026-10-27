@@ -1,0 +1,1 @@
+ALTER TABLE "badge_perks" DROP COLUMN "description";

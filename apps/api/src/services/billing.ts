@@ -39,7 +39,7 @@ import {
 	nextCycleKey,
 } from "@anthers/shared/billing-cycle";
 import { anthersSupportBreakdown } from "@anthers/shared/fees";
-import { DONATION_TAX_CODE, STREAMED_SUBSCRIPTION_TAX_CODE } from "@anthers/shared/tax-codes";
+import { STREAMED_SUBSCRIPTION_TAX_CODE, SUPPORT_TAX_CODE } from "@anthers/shared/tax-codes";
 import Decimal from "decimal.js";
 import { and, eq, ne, sql } from "drizzle-orm";
 import type Stripe from "stripe";
@@ -311,9 +311,9 @@ export async function ensureCreatorProduct(creatorId: number, handle: string): P
  * line's `price_data` names, so `ensureCreatorProduct` stamps it and this recomputes it
  * when a creator's gates change. A creator whose gate ladder exists is one whose support
  * opens gated Works — a streamed/downloaded subscription, `txcd_10402200` on the whole
- * line. A creator with no gates sells support that buys nothing at all, the cash-donation
- * code `txcd_90000001`, which Stripe Tax treats as a gratuity outside Colorado (PLR
- * 22-005's shape). The Anthers line's Product buys unlimited Public Access — also
+ * line. A creator with no gates sells support that buys nothing at all, the support code
+ * `txcd_90000001`, which Stripe Tax treats as a gratuity outside Colorado (PLR 22-005's
+ * shape). The Anthers line's Product buys unlimited Public Access — also
  * `txcd_10402200`, stamped where that Product is provisioned.
  *
  * ⭐ **Perk-tagging is live (the Badge Maker, 2026-10-07), and it discriminates PER RUNG
@@ -328,7 +328,7 @@ export async function creatorProductTaxCode(creatorId: number): Promise<string> 
 		.from(badges)
 		.where(eq(badges.creatorId, creatorId))
 		.limit(1);
-	return badge ? STREAMED_SUBSCRIPTION_TAX_CODE : DONATION_TAX_CODE;
+	return badge ? STREAMED_SUBSCRIPTION_TAX_CODE : SUPPORT_TAX_CODE;
 }
 
 /**
@@ -341,11 +341,12 @@ export async function creatorProductTaxCode(creatorId: number): Promise<string> 
  * rather than a tag, so the rung cannot be talked out of it by mis-tagging, and a
  * "recognition" tag can never put a gratuity code on a line whose supporters genuinely
  * receive gated access (that was the understatement the tags-first draft allowed). The
- * ordering across the pool: a physical good, service or community tag outranks access;
- * access outranks recognition; and a rung with no gate and no tag is a donation. The gate
- * read is over `works.access` rows (a row with `allow: true` whose threshold the rung's
- * dollar amount meets is a gate it opens), which is the comparison `resolveAccessSync`
- * itself makes, read in TypeScript rather than re-derived as a jsonb predicate.
+ * ordering across the pool: a physical good, digital good, service or community tag
+ * outranks access; access outranks the three kinds that share the support code; and a
+ * rung with no gate and no tag codes as support. The gate read is over `works.access`
+ * rows (a row with `allow: true` whose threshold the rung's dollar amount meets is a gate
+ * it opens), which is the comparison `resolveAccessSync` itself makes, read in TypeScript
+ * rather than re-derived as a jsonb predicate.
  */
 export async function taxCodeForBadge(badgeId: number): Promise<string> {
 	const [badge] = await db
@@ -353,7 +354,7 @@ export async function taxCodeForBadge(badgeId: number): Promise<string> {
 		.from(badges)
 		.where(eq(badges.id, badgeId))
 		.limit(1);
-	if (!badge) return DONATION_TAX_CODE;
+	if (!badge) return SUPPORT_TAX_CODE;
 	const perkRows = await db
 		.select({ kind: badgePerks.kind })
 		.from(badgePerks)
@@ -373,15 +374,15 @@ export async function taxCodeForBadge(badgeId: number): Promise<string> {
 	);
 
 	// 🚨 Access sits IN the most-taxable comparison, not beneath it (Parker, 2026-10-07,
-	// who will exercise this on a real creator account): a goods or service tag outranks
-	// the access beside it, but a GRATUITY tag does not — access is a real taxable
-	// delivery, and a "recognition" tag must never understate a line whose supporters
-	// genuinely receive gated access.
+	// who will exercise this on a real creator account): a tag that names a real delivery
+	// outranks the access beside it, but a GRATUITY tag does not — access is a real
+	// taxable delivery, and the three kinds that share the support code must never
+	// understate a line whose supporters genuinely receive gated access.
 	if (opensAGate) {
-		if (tagged && tagged.id !== "recognition") return tagged.taxCode;
+		if (tagged && tagged.taxCode !== SUPPORT_TAX_CODE) return tagged.taxCode;
 		return STREAMED_SUBSCRIPTION_TAX_CODE;
 	}
-	return tagged ? tagged.taxCode : DONATION_TAX_CODE;
+	return tagged ? tagged.taxCode : SUPPORT_TAX_CODE;
 }
 
 /**
