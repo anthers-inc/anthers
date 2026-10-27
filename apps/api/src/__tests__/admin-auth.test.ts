@@ -260,9 +260,9 @@ describe("nothing that opens an Anthers account opens the admin app", () => {
 		expect(res.status).toBe(401);
 	});
 
-	test("an admin code does not sign the same mailbox into Anthers", async () => {
+	test("an admin code does not reach the site's emailed-code door", async () => {
 		const { code } = await issueAdminSignInCode(email);
-		const res = await app.request("/api/auth/signin/verify", {
+		const res = await app.request("/api/auth/signup/resume/verify", {
 			method: "POST",
 			headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
 			body: JSON.stringify({ email, code }),

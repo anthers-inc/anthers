@@ -15,10 +15,10 @@
  * unlinked handle is refused rather than signed up, and a destination that leaves the
  * origin is dropped at both ends.
  *
- * ⚠️ **The hosted-handle half is asserted elsewhere, now that it takes the same door**:
- * `emailed-code.e2e.ts` pins that an Anthers handle hands off to its own server and that the
- * emailed code remains the way in for an account with no password yet. What is pinned here is
- * the foreign handle, which has no fallback at all.
+ * ⚠️ **The hosted-handle half is the other door**: `login-password.e2e.ts` pins that an Anthers
+ * handle asks for its own password here and never hands the browser to OAuth. What is pinned in
+ * this file is the foreign handle, which goes to its own authorization server and has no password
+ * field on this page at all.
  */
 import { API_URL, expect, test } from "./fixtures";
 
@@ -62,7 +62,7 @@ test.describe("a Bluesky handle signs in through OAuth, from the one field", () 
 		// Typed WITH the leading `@`, because that is how people write a handle and it is
 		// not part of one — stripping it is a real behavior the flow downstream depends on.
 		await page.locator('input[autocomplete="username"]').fill("@alice.bsky.social");
-		await page.getByRole("button", { name: /^continue$/i }).click();
+		await page.getByRole("button", { name: /continue with your identity server/i }).click();
 
 		await expect.poll(() => payload).not.toBeNull();
 		expect(payload).toMatchObject({ handle: "alice.bsky.social", intent: "login" });
@@ -77,7 +77,7 @@ test.describe("a Bluesky handle signs in through OAuth, from the one field", () 
 		// hands it to the OAuth door like any other foreign handle, and the refusal comes
 		// back to the card's own error line, where the modal used to put it.
 		await page.locator('input[autocomplete="username"]').fill("nobody.example.invalid");
-		await page.getByRole("button", { name: /^continue$/i }).click();
+		await page.getByRole("button", { name: /continue with your identity server/i }).click();
 
 		// ⚠️ The 20s timeout is the fix for the "deterministically fails on main" version of
 		// this spec, and the number is the point, not sloppiness. The refusal is produced by

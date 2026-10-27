@@ -26,13 +26,14 @@
  */
 import { fileURLToPath } from "node:url";
 import { db } from "@anthers/db/client";
+import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { basketItems } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import type { Page } from "@playwright/test";
 import { inArray } from "drizzle-orm";
 import { enablePayoutsFor } from "../../../api/src/__tests__/payouts-fixture";
 import { purgeAccountIds, purgeWorkIds } from "../../../api/src/__tests__/purge";
-import { API_URL, emailedCode, expect, leashedExecFileSync, test, WEB_ORIGIN } from "./fixtures";
+import { API_URL, expect, leashedExecFileSync, test, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 const TITLE_PREFIX = "Basket account scoping ";
@@ -72,9 +73,8 @@ function makeAccount(name: string, creator = false): { handle: string; email: st
 async function signInThroughUi(page: Page, email: string): Promise<void> {
 	await page.goto("/login");
 	await page.locator('input[autocomplete="username"]').fill(email);
-	await page.getByRole("button", { name: /^continue$/i }).click();
-	await expect(page.locator('input[aria-label="Code character 1 of 6"]')).toBeFocused();
-	await page.keyboard.type(await emailedCode(email));
+	await page.locator('input[autocomplete="current-password"]').fill(LOCAL_ACCOUNT_PASSWORD);
+	await page.getByRole("button", { name: /^sign in$/i }).click();
 	// The verify lands a session, `refreshUser` tells the shell, and /login navigates —
 	// off the login page is the walk's own signal that the sign-in completed. Polling
 	// `/auth/me` from here instead would race the redirect AND read a different cookie
@@ -108,17 +108,10 @@ async function serverBasket(cookie: string): Promise<{ count: number; workIds: n
 
 /** Sign the account in by API (fixtures' own fetch path) and return the session cookie. */
 async function apiSession(email: string): Promise<string> {
-	const startedAt = Date.now();
-	await fetch(`${API_URL}/api/auth/signin/start`, {
+	const res = await fetch(`${API_URL}/api/auth/login`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-		body: JSON.stringify({ email }),
-	});
-	const code = await emailedCode(email, 15_000, startedAt);
-	const res = await fetch(`${API_URL}/api/auth/signin/verify`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-		body: JSON.stringify({ email, code }),
+		body: JSON.stringify({ identifier: email, password: LOCAL_ACCOUNT_PASSWORD }),
 	});
 	const token = /(?:^|\s)session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
 	expect(token, "no session cookie in the verify answer").toBeTruthy();
