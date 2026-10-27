@@ -48,7 +48,7 @@ import {
 	sealedSessionValue,
 	sessionForHostedAccount,
 } from "./hosted-session-store.js";
-import { open, secretBoxConfigured } from "./secret-box.js";
+import { secretBoxConfigured } from "./secret-box.js";
 
 /**
  * The invite code the node requires of anybody creating an account on it.
@@ -606,7 +606,6 @@ export async function swapHostedHandle(
 		.select({
 			did: hostedAccounts.did,
 			handle: hostedAccounts.handle,
-			sealedPassword: hostedAccounts.sealedPassword,
 		})
 		.from(hostedAccounts)
 		.where(eq(hostedAccounts.userId, userId))
@@ -619,30 +618,15 @@ export async function swapHostedHandle(
 		};
 	}
 
-	let password: string | null = null;
-	if (row.sealedPassword) {
-		try {
-			password = open(row.sealedPassword);
-		} catch {
-			console.error(
-				`[hosted-accounts] cannot open the credential for ${row.did} to change its handle`,
-			);
-			return {
-				status: "refused",
-				fault: "operational",
-				message: "Anthers can't reach that identity right now. Nothing has changed.",
-			};
-		}
-	}
-
-	const session = await sessionForHostedAccount(row.did, password, { fetchImpl: doFetch });
+	const session = await sessionForHostedAccount(row.did, { fetchImpl: doFetch });
 	if (session.token === null) {
 		return {
 			status: "refused",
 			fault: "operational",
-			message: session.authorizationLost
-				? "That identity needs to authorize Anthers again before its name can change."
-				: "Anthers couldn't reach the identity server. Try again in a little while.",
+			message:
+				session.authorizationLost || session.credentialUnopenable
+					? "That identity needs to authorize Anthers again before its name can change."
+					: "Anthers couldn't reach the identity server. Try again in a little while.",
 		};
 	}
 	const token = session.token;
@@ -793,7 +777,17 @@ function purgeToken(): string {
 }
 
 /**
- * Empty one account on the node, using its own password.
+ * Empty one account on the node, using the session the hub already holds as its client.
+ *
+ * ⭐ **No password goes through here, and that is the lifecycle rule this encodes.** An identity
+ * Anthers hosts has a first-party session from the moment it is created or logged in to, and that
+ * session is what permits the writes and the deactivation below. A password belongs to the person
+ * who chose it; the hub keeps none, so this cannot reach for one.
+ *
+ * ⚠️ **Nothing calls this on its own initiative.** It runs from `releaseHostedIdentities`, which
+ * runs from `eraseAccount`, which is reached two ways and only two: the person asked to delete
+ * their Anthers account, or an operator ran the erasure script. There is no path where the hub
+ * decides to erase an identity because it seemed idle.
  *
  * Every step is idempotent, because a run that fails partway is retried tomorrow: the records
  * are re-listed rather than remembered, and replacing an already-replaced handle or address
@@ -801,25 +795,10 @@ function purgeToken(): string {
  */
 export async function purgeHostedIdentity(
 	did: string,
-	sealedPassword: string | null,
 	opts: { fetchImpl?: typeof fetch } = {},
 ): Promise<HostedPurgeOutcome> {
 	if (!pdsUrl()) return { status: "unusable", reason: "no HOSTED_PDS_URL is configured" };
 	const doFetch = opts.fetchImpl ?? fetch;
-
-	// A password on file is the legacy fallback; the session is the credential an account
-	// normally carries, and it is what this asks the store for first.
-	let password: string | null = null;
-	if (sealedPassword) {
-		try {
-			password = open(sealedPassword);
-		} catch (err) {
-			return {
-				status: "unusable",
-				reason: `the sealed password could not be opened (${err instanceof Error ? err.message : "unknown"})`,
-			};
-		}
-	}
 
 	// Asked first because it is also how the collections are enumerated, so it costs nothing
 	// beyond what the record deletion needs anyway.
@@ -845,12 +824,14 @@ export async function purgeHostedIdentity(
 		return { status: "unusable", reason: `describeRepo: ${described.error}` };
 	}
 
-	const opened = await sessionForHostedAccount(did, password, { fetchImpl: doFetch });
+	const opened = await sessionForHostedAccount(did, { fetchImpl: doFetch });
 	if (opened.token === null) {
-		// An authorization lost is the account's answer and not the node's weather: retrying
-		// tomorrow will produce the same one, so it is reported as unusable rather than
-		// unreachable.
-		if (opened.authorizationLost) return { status: "unusable", reason: opened.error };
+		// A lost authorization, or a credential this deployment cannot open, is the account's
+		// answer and not the node's weather: retrying tomorrow will produce the same one, so it
+		// is reported as unusable rather than unreachable.
+		if (opened.authorizationLost || opened.credentialUnopenable) {
+			return { status: "unusable", reason: opened.error };
+		}
 		return { status: "unreachable", reason: opened.error };
 	}
 	const token = opened.token;
@@ -979,17 +960,16 @@ export type HostedRelease =
  * identities were this person's. Same ordering hazard the Works classification has, for the
  * same reason.
  *
- * 🚨 **And the rows go only once the node has actually let go.** The sealed password is the one
- * copy; dropping it while the identity still holds somebody's records would leave an account
- * only the node's admin password can ever open, which is the state the runbook describes for
- * `signup-probe` and does not want repeated on purpose.
+ * 🚨 **And the rows go only once the node has actually let go.** The session is the one copy of
+ * the credential; dropping it while the identity still holds somebody's records would leave an
+ * account only the node's admin password can ever open, which is the state the runbook describes
+ * for `signup-probe` and does not want repeated on purpose.
  */
 export async function releaseHostedIdentities(userId: number): Promise<HostedRelease> {
 	const rows = await db
 		.select({
 			did: hostedAccounts.did,
 			handle: hostedAccounts.handle,
-			sealedPassword: hostedAccounts.sealedPassword,
 		})
 		.from(hostedAccounts)
 		.where(eq(hostedAccounts.userId, userId));
@@ -998,7 +978,7 @@ export async function releaseHostedIdentities(userId: number): Promise<HostedRel
 	const released: string[] = [];
 	const stranded: string[] = [];
 	for (const row of rows) {
-		const outcome = await purgeHostedIdentity(row.did, row.sealedPassword);
+		const outcome = await purgeHostedIdentity(row.did);
 		if (outcome.status === "unreachable") {
 			return { status: "deferred", reason: `${row.did}: ${outcome.reason}` };
 		}

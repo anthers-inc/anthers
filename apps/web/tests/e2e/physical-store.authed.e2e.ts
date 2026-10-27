@@ -113,7 +113,9 @@ test("the store panel prices the good, offers its choices and refuses the sold-o
 		timeout: 15_000,
 	});
 
-	await expect(page.getByText("$18.00")).toBeVisible();
+	// The panel's own headline, not the price chip a card elsewhere on the page now carries:
+	// a physical Work resolves a price like any other, so "$18.00" appears twice on the page.
+	await expect(page.getByRole("paragraph").filter({ hasText: "$18.00" })).toBeVisible();
 	await expect(page.getByText(/plus \$6\.50 shipping/)).toBeVisible();
 	await expect(page.getByRole("button", { name: "Large" })).toBeVisible();
 	await expect(page.getByRole("button", { name: /Bare — sold out/ })).toBeDisabled();
@@ -150,7 +152,7 @@ test("a physical line in the basket shows its count and choices, and the count i
 	await expect(page.getByText(/Size: Large · Glaze: Blue · × 2/)).toBeVisible({
 		timeout: 15_000,
 	});
-	await expect(page.getByText("$36.00")).toBeVisible();
+	await expect(page.getByText("$36.00").first()).toBeVisible();
 
 	// The stepper is the basket's own — the buyer fixes a count where they read it.
 	await page.getByRole("button", { name: /One more/ }).click();

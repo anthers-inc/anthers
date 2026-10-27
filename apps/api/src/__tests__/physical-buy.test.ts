@@ -18,7 +18,8 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { physicalListings, purchases, works } from "@anthers/db/schema";
+import { badges, physicalListings, purchases, userBadges, works } from "@anthers/db/schema";
+import { cycleKeyFor } from "@anthers/shared/billing-cycle";
 import { eq } from "drizzle-orm";
 import app from "../index";
 import {
@@ -384,6 +385,77 @@ describe("the shelf", () => {
 			.from(physicalListings)
 			.where(eq(physicalListings.workId, physicalWork));
 		expect(after[0].options).toEqual(before[0].options);
+	});
+
+	it("prices a good at the cheapest Badge row the buyer qualifies for", async () => {
+		// The Access table prices a good exactly as it prices anything else: Everyone at $18,
+		// and a supporter who gives the creator $6 a month at $14.
+		const [tiered] = await db
+			.insert(works)
+			.values({
+				creatorId: creator.userId,
+				publicId: Math.floor(Math.random() * 1_000_000) + 900_000,
+				slug: `rung-priced-${crypto.randomUUID().slice(0, 8)}`,
+				type: "physical",
+				title: "A rung-priced mug",
+				access: [
+					{ threshold: 0, allow: true, price: "18.00" },
+					{ threshold: 6, allow: true, price: "14.00" },
+				],
+				visibility: "released",
+				releasedAt: new Date(),
+			})
+			.returning();
+		workIds.push(tiered.id);
+		await db.insert(physicalListings).values({
+			workId: tiered.id,
+			shippingPrice: "0.00",
+			handlingBusinessDays: 3,
+			taxCategory: "general",
+			options: [],
+		});
+
+		const [rung] = await db
+			.insert(badges)
+			.values({ creatorId: creator.userId, threshold: "6.00", label: "Supporter" })
+			.returning();
+
+		// Before holding anything, the buyer pays the Everyone price.
+		const before = await call("GET", `/api/payments/physical/${tiered.slug}`);
+		expect(before.status).toBe(200);
+		expect(((await before.json()) as { unitPrice: string }).unitPrice).toBe("18.00");
+
+		await db.insert(userBadges).values({
+			userId: buyer.userId,
+			badgeId: rung.id,
+			billingCycle: cycleKeyFor(new Date()),
+		});
+
+		// Holding the rung, the same signed-in quote prices the good at $14 — the Access
+		// modal's promise, on a good rather than a track.
+		const quote = await call("POST", `/api/payments/physical/${tiered.slug}/quote`, buyer.cookie, {
+			quantity: 1,
+			options: [],
+		});
+		expect(quote.status).toBe(200);
+		const priced = (await quote.json()) as { unitPrice: string; goods: string };
+		expect(priced.unitPrice).toBe("14.00");
+		expect(priced.goods).toBe("14.00");
+
+		// And the basket charges the same figure, which is the one that matters.
+		const add = await call("POST", "/api/payments/basket/items", buyer.cookie, {
+			workId: tiered.id,
+			quantity: 1,
+		});
+		expect(add.status).toBe(200);
+		const line = (
+			(await add.json()) as { items: Array<{ workId: number; price: string }> }
+		).items.find((i) => i.workId === tiered.id);
+		expect(line?.price).toBe("14.00");
+
+		await call("DELETE", `/api/payments/basket/items/${tiered.id}`, buyer.cookie);
+		await db.delete(userBadges).where(eq(userBadges.badgeId, rung.id));
+		await db.delete(badges).where(eq(badges.id, rung.id));
 	});
 
 	it("keeps the Work itself untouched by a listing's stock", async () => {

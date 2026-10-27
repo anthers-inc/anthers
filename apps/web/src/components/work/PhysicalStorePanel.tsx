@@ -164,6 +164,9 @@ export default function PhysicalStorePanel({
 	}
 
 	const { listing, unitPrice } = storefront;
+	// The public read already prices at the viewer's own Access row, so this only covers the
+	// window where the quote has resolved and the read has not kept up.
+	const shownPrice = quote?.unitPrice ?? unitPrice;
 	const soldOutPick = listing.options.some((option) => {
 		const chosen = option.values.find((value) => value.label === picks[option.name]);
 		return !chosen || chosen.stock === 0;
@@ -207,7 +210,7 @@ export default function PhysicalStorePanel({
 					<h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1">
 						Price
 					</h2>
-					<p className="text-3xl font-bold leading-none tabular-nums">{money(unitPrice)}</p>
+					<p className="text-3xl font-bold leading-none tabular-nums">{money(shownPrice)}</p>
 					{Number(listing.shippingPrice) > 0 ? (
 						<p className="text-sm text-base-content/60 mt-1">
 							plus {money(listing.shippingPrice)} shipping

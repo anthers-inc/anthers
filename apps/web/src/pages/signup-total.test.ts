@@ -184,15 +184,9 @@ describe("what a rung adds over the one below it", () => {
 	test("a middle rung adds only what actually moves", () => {
 		// A perk identical at Root and Sprout — Public Access, preservation, recognition —
 		// would be padding a comparison. What remains all moves with the rung: the money
-		// lines, the storage allowance, and the merch discount's percent.
+		// lines and the storage allowance.
 		expect(titles(sprout, root).sort()).toEqual(
-			[
-				"Anthers Support",
-				"Cloud Storage",
-				"Merch Discount",
-				"Monthly Sticker Budget",
-				"Monthly Time Pool",
-			].sort(),
+			["Anthers Support", "Cloud Storage", "Monthly Sticker Budget", "Monthly Time Pool"].sort(),
 		);
 	});
 

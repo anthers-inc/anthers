@@ -36,7 +36,6 @@ import { recordRecoveryKey } from "./hosted-accounts.js";
 import { readIdentityHead } from "./hosted-identity.js";
 import { nodeCall } from "./hosted-node.js";
 import { sessionForHostedAccount } from "./hosted-session-store.js";
-import { open } from "./secret-box.js";
 
 /**
  * Whether this is really a secp256k1 public key, decoded rather than pattern-matched.
@@ -81,24 +80,23 @@ export type RecoveryKeySeatResult =
 /** Every refusal shape, so a helper that can only refuse says so in its type. */
 type SeatRefusal = Extract<RecoveryKeySeatResult, { status: "refused" }>;
 
-/** The hosted identity this account holds, opened and ready to act on. */
+/** The hosted identity this account holds. */
 interface OpenedAccount {
 	did: string;
-	/** The legacy fallback, when the row still carries one; null on a session-only account. */
-	password: string | null;
 }
 
 /**
- * Find the account's hosted identity and open its credential.
+ * Find the account's hosted identity.
  *
  * ⚠️ **An unopenable credential is an operational failure rather than the person's**, and it
  * is a real state: `signup-probe.anthers.social` is sealed under a key production does not
  * have. Retrying never opens it, so the message says somebody at Anthers has to act rather
- * than inviting the person to try again.
+ * than inviting the person to try again. Which rows that is stays the session store's business
+ * — this reports what the store says when it asks for a token.
  */
 async function openAccountFor(userId: number): Promise<OpenedAccount | SeatRefusal> {
 	const [row] = await db
-		.select({ did: hostedAccounts.did, sealedPassword: hostedAccounts.sealedPassword })
+		.select({ did: hostedAccounts.did })
 		.from(hostedAccounts)
 		.where(eq(hostedAccounts.userId, userId))
 		.limit(1);
@@ -109,21 +107,7 @@ async function openAccountFor(userId: number): Promise<OpenedAccount | SeatRefus
 			message: "This account doesn't hold an identity Anthers issued.",
 		};
 	}
-	// `open` THROWS on a value this deployment's key cannot open — it does not return empty.
-	// That is only fatal when there is no session to use instead, which the caller finds out
-	// when the store comes back with nothing.
-	let password: string | null = null;
-	if (row.sealedPassword) {
-		try {
-			password = open(row.sealedPassword);
-		} catch {
-			console.error(
-				`[recovery-key] cannot open the legacy credential for ${row.did}; ` +
-					`using its session if there is one`,
-			);
-		}
-	}
-	return { did: row.did, password };
+	return { did: row.did };
 }
 
 function isRefusal(v: OpenedAccount | SeatRefusal): v is SeatRefusal {
@@ -135,16 +119,15 @@ async function sessionFor(
 	account: OpenedAccount,
 	doFetch: typeof fetch,
 ): Promise<string | SeatRefusal> {
-	const session = await sessionForHostedAccount(account.did, account.password, {
-		fetchImpl: doFetch,
-	});
+	const session = await sessionForHostedAccount(account.did, { fetchImpl: doFetch });
 	if (session.token === null) {
 		return {
 			status: "refused",
 			fault: "operational",
-			message: session.authorizationLost
-				? "That identity needs to authorize Anthers again before a key can be seated."
-				: "Anthers couldn't reach the identity server. Try again in a little while.",
+			message:
+				session.authorizationLost || session.credentialUnopenable
+					? "That identity needs to authorize Anthers again before a key can be seated."
+					: "Anthers couldn't reach the identity server. Try again in a little while.",
 		};
 	}
 	return session.token;
