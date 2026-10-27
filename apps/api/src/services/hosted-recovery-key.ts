@@ -124,10 +124,9 @@ async function sessionFor(
 		return {
 			status: "refused",
 			fault: "operational",
-			message:
-				session.authorizationLost || session.credentialUnopenable
-					? "That identity needs to authorize Anthers again before a key can be seated."
-					: "Anthers couldn't reach the identity server. Try again in a little while.",
+			message: session.authorizationLost
+				? "That identity needs to authorize Anthers again before a key can be seated."
+				: "Anthers couldn't reach the identity server. Try again in a little while.",
 		};
 	}
 	return session.token;

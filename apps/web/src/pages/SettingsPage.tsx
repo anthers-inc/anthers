@@ -927,6 +927,19 @@ function IdentitySection() {
 }
 
 /**
+ * Whether this identity's server is Bluesky's.
+ *
+ * ⚠️ **A hostname test, and the only thing it decides is which settings page to link.** A Bluesky
+ * identity's PDS is `bsky.social` or a shard under `bsky.network`, and Bluesky keeps the credential,
+ * the handle and the app list in `bsky.app`'s settings rather than on a page the server serves. A
+ * self-hosted server gets no link at all: its settings path is the operator's to choose, and a
+ * guess that 404s reads as a broken product.
+ */
+function isBlueskyHost(host: string): boolean {
+	return host === "bsky.social" || host.endsWith(".bsky.network");
+}
+
+/**
  * The server holding this identity, and the account page it keeps for its holder.
  *
  * ⭐ **The page belongs to the server, not to Anthers**, and pointing at it is what the reference
@@ -1000,7 +1013,14 @@ function IdentityServerCard({
 						<p className="text-sm text-base-content/60">
 							Your identity lives on {host}, which Anthers doesn't run.
 						</p>
-						{state?.server?.accountPage && (
+						{/* 🚨 **Three rungs, and the middle one is only honest for Bluesky.** The
+						    identity's own server is the authority on the credential, so a link to its
+						    account page is the best answer when it publishes one. Bluesky has no such
+						    page but does keep the password, the handle and the signed-in apps in its
+						    settings, which is where a Bluesky identity is managed. Anybody else's
+						    server is left as a name and a sentence, because guessing at a settings
+						    path we have never seen is worse than saying where the identity lives. */}
+						{state?.server?.accountPage ? (
 							<>
 								<p className="text-sm text-base-content/60">
 									That server keeps an account page of its own, where you change the password on the
@@ -1010,6 +1030,26 @@ function IdentityServerCard({
 									Open {host}/account
 								</a>
 							</>
+						) : isBlueskyHost(host) ? (
+							<>
+								<p className="text-sm text-base-content/60">
+									Bluesky's settings are where the password, the handle and the apps signed in to
+									the identity are managed.
+								</p>
+								<a
+									className="btn btn-sm w-fit"
+									href="https://bsky.app/settings"
+									target="_blank"
+									rel="noreferrer"
+								>
+									Open Bluesky settings
+								</a>
+							</>
+						) : (
+							<p className="text-sm text-base-content/60">
+								Manage it at that server: the credential, the handle and everything stored in the
+								identity belong to it rather than to Anthers.
+							</p>
 						)}
 					</>
 				)}

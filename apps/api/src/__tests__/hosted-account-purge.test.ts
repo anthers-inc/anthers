@@ -60,38 +60,12 @@ const { hostedAccounts } = await import("@anthers/db/schema");
 const { eq } = await import("drizzle-orm");
 
 const DID = "did:plc:examplehostedidentity";
-const PASSWORD = "hunter2";
-
-/**
- * Put a credential on the DID's row, which is the only place the purge can find one.
- *
- * The default is a legacy sealed password, because that is the shape every hosted row had until
- * sessions became the credential — so exercising it here is exercising the migration case as well
- * as the ordinary one.
- */
-async function seedSession(): Promise<void> {
-	await db
-		.update(hostedAccounts)
-		.set({
-			sealedSession: seal(
-				JSON.stringify({
-					accessJwt: "EXAMPLE-live-access-token",
-					refreshJwt: "EXAMPLE-live-refresh-token",
-					expiresAt: Date.now() + 3_600_000,
-				}),
-			),
-		})
-		.where(eq(hostedAccounts.did, DID));
-}
-
-async function seedCredential(sealedPassword: string = seal(PASSWORD)): Promise<void> {
+/** A row holding whatever session the caller wants the purge to find. */
+async function seedRow(sealedSession: string | null): Promise<void> {
 	await db
 		.insert(hostedAccounts)
-		.values({ did: DID, handle: "alice.anthers.test", sealedPassword, sealedSession: null })
-		.onConflictDoUpdate({
-			target: hostedAccounts.did,
-			set: { sealedPassword, sealedSession: null },
-		});
+		.values({ did: DID, handle: "alice.anthers.test", sealedSession })
+		.onConflictDoUpdate({ target: hostedAccounts.did, set: { sealedSession } });
 }
 
 /** What one endpoint should answer. A missing entry is an endpoint the test expects unused. */
@@ -125,9 +99,19 @@ function nodeFetch(routes: Record<string, Route>) {
 	return { impl, calls };
 }
 
-// Every case starts from a row holding the credential it is about; the cases that need a
-// different one put it back themselves.
-beforeEach(seedCredential);
+// Every case starts from a row holding a live session — the only credential there is — and the
+// cases about a dead one replace it themselves.
+beforeEach(async () => {
+	await seedRow(
+		seal(
+			JSON.stringify({
+				accessJwt: "EXAMPLE-live-access-token",
+				refreshJwt: "EXAMPLE-live-refresh-token",
+				expiresAt: Date.now() + 3_600_000,
+			}),
+		),
+	);
+});
 
 /**
  * The endpoints a clean purge touches, with one record in one collection.
@@ -188,9 +172,8 @@ describe("purgeHostedIdentity", () => {
 	// with a password would still pass every assertion above; what it would also do is spend one
 	// of the account's limited `createSession` calls and prove the hub was still keeping a
 	// credential of its own rather than using the client session it already holds.
-	it("uses the session already on file, and logs in for nothing", async () => {
+	it("uses the session already on file, and spends no login", async () => {
 		const { impl, calls } = healthyNode();
-		await seedSession();
 		const outcome = await purgeHostedIdentity(DID, { fetchImpl: impl });
 
 		expect(outcome).toEqual({ status: "purged" });
@@ -306,19 +289,34 @@ describe("purgeHostedIdentity, when it cannot finish", () => {
 	// 🚨 And this is the one the caller must NOT defer on: retrying never opens a credential
 	// this deployment's key cannot open, and blocking an erasure forever is worse than
 	// finishing it and saying loudly that a shell was left behind.
-	it("reports a password the node rejects as unusable, not as unreachable", async () => {
-		const { impl } = healthyNode({
-			"com.atproto.server.createSession": () => ({
+	it("reports a session the node refuses as unusable, not as unreachable", async () => {
+		// An expired pair, and a node that refuses the refresh: the pair is dead and there is no
+		// second credential behind it, so a retry tomorrow produces the same answer.
+		await seedRow(
+			seal(
+				JSON.stringify({
+					accessJwt: "EXAMPLE-expired-access-token",
+					refreshJwt: "EXAMPLE-expired-refresh-token",
+					expiresAt: Date.now() - 60_000,
+				}),
+			),
+		);
+		const { impl, calls } = healthyNode({
+			"com.atproto.server.refreshSession": () => ({
 				status: 401,
-				body: { error: "AuthenticationRequired" },
+				body: { error: "ExpiredToken" },
 			}),
 		});
 		expect((await purgeHostedIdentity(DID, { fetchImpl: impl })).status).toBe("unusable");
+
+		// 🚨 No login was spent trying, and none could have worked: the fallback is gone with the
+		// password column, which is the whole reason a refused refresh is now final.
+		expect(calls.map((c) => c.method)).not.toContain("com.atproto.server.createSession");
 	});
 
-	it("reports a credential this key cannot open as unusable, and asks the node nothing", async () => {
+	it("reports a value this key cannot open as unusable, and writes nothing", async () => {
+		await seedRow("v1.aaaa.bbbb.cccc");
 		const { impl, calls } = healthyNode();
-		await seedCredential("v1.aaaa.bbbb.cccc");
 		const outcome = await purgeHostedIdentity(DID, { fetchImpl: impl });
 
 		expect(outcome.status).toBe("unusable");

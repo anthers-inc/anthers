@@ -91,16 +91,12 @@ beforeAll(async () => {
 	strandId = strand.userId;
 	strandDid = strand.did;
 
-	// 🚨 Resealed under a key this process does not have — BOTH halves, because a live session
-	// would otherwise be the credential the purge uses, and the scenario is a row nothing here can
-	// open at all. That is the state the runbook describes for `signup-probe`, and the one that
-	// must not block somebody's erasure.
+	// 🚨 The row keeps nothing that opens it: signup sealed a session, and clearing it is the
+	// state a reset at the node produces. That is the one the purge must NOT defer on, and the one
+	// the runbook describes for `signup-probe`.
 	await db
 		.update(hostedAccounts)
-		.set({
-			sealedPassword: "v1.YWFhYWFhYWFhYWFh.YmJiYmJiYmJiYmJiYmJiYg.Y2Nj",
-			sealedSession: null,
-		})
+		.set({ sealedSession: null })
 		.where(eq(hostedAccounts.did, strandDid));
 }, DB_SETUP_TIMEOUT);
 

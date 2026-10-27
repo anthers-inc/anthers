@@ -1,0 +1,1 @@
+ALTER TABLE "hosted_accounts" DROP COLUMN "sealed_password";

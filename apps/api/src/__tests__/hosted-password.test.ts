@@ -75,7 +75,6 @@ async function hosted(tag: string): Promise<FixtureAccount> {
 async function credentialOf(did: string) {
 	const [row] = await db
 		.select({
-			sealedPassword: hostedAccounts.sealedPassword,
 			sealedSession: hostedAccounts.sealedSession,
 		})
 		.from(hostedAccounts)
@@ -162,7 +161,6 @@ describe("setting the password", () => {
 		expect(node.calls[1].body).toEqual({ identifier: account.did, password: chosen });
 
 		const row = await credentialOf(account.did);
-		expect(row?.sealedPassword).toBe("");
 		const session = JSON.parse(open(row?.sealedSession ?? "")) as { accessJwt: string };
 		expect(session.accessJwt).toBe("EXAMPLE-access-token");
 	});
@@ -207,7 +205,6 @@ describe("setting the password", () => {
 		// The old refresh pair died with the reset, so an empty row is the honest state: the next
 		// write says authorization was lost rather than retrying a dead token.
 		const row = await credentialOf(account.did);
-		expect(row?.sealedPassword).toBe("");
 		expect(row?.sealedSession).toBeNull();
 	});
 });

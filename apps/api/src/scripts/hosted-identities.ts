@@ -17,10 +17,9 @@
  * no `--all`, deliberately: a row's absence is a claim that nobody is watching that identity any
  * more, and that claim should cost a person reading the handle first.
  *
- * ⚠️ **`--credential` also drops the hub's sealed credential for the same DID**, and is only for
- * an identity that no longer exists on the node. On a live one that session is how Anthers writes
- * to the account at all. Rows that still hold a pre-session password are retired by
- * `hosted:credentials convert`, not by hand.
+ * ⚠️ **`--credential` also drops the hub's sealed session for the same DID**, and is only for an
+ * identity that no longer exists on the node. On a live one that session is how Anthers writes to
+ * the account at all.
  *
  *   bun run hosted:identities list
  *   bun run hosted:identities forget --did did:plc:… --yes

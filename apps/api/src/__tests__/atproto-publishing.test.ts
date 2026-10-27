@@ -458,7 +458,7 @@ describe("coming back from the consent screen", () => {
 
 		await db
 			.update(hostedAccounts)
-			.set({ sealedSession: null, sealedPassword: "" })
+			.set({ sealedSession: null })
 			.where(eq(hostedAccounts.did, did("cred")));
 		expect((await publishingStateFor(user.id)).hostedCredential).toBe("missing");
 

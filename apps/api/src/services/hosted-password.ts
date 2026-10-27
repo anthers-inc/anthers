@@ -149,10 +149,10 @@ export async function setHostedPassword(
 
 	// `resetPassword` revoked the old refresh tokens, so the stored session is dead a moment
 	// before the replacement exists. Empty it first: a row claiming a session it no longer has
-	// produces a retry that never succeeds, where an empty row produces a login.
+	// produces a retry that never succeeds, where an empty row reports what it is.
 	await db
 		.update(hostedAccounts)
-		.set({ sealedPassword: "", sealedSession: null })
+		.set({ sealedSession: null })
 		.where(eq(hostedAccounts.did, account.did));
 
 	// Open the session the hub writes with. The person's password is in this request only; the

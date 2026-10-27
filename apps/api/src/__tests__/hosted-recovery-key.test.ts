@@ -153,15 +153,12 @@ async function makeAccount(tag: string, opts: { openable?: boolean } = {}) {
 	});
 	await db.delete(hostedIdentities).where(eq(hostedIdentities.did, account.did));
 	if (opts.openable === false) {
-		// No way in at all: the legacy password is sealed under another key, and the session the
-		// fixture normally holds is gone too. That is the state a deployment change can leave
-		// behind, and the one this flow must refuse rather than retry.
+		// No way in at all: the sealed session is a value no key here opens, which reads as no
+		// session. That is the state a deployment change can leave behind, and the one this flow
+		// must refuse rather than retry.
 		await db
 			.update(hostedAccounts)
-			.set({
-				sealedPassword: "v1.YWFhYWFhYWFhYWFhYmJiYmJiYmJiYmJiYmJiYg.Y2Nj",
-				sealedSession: null,
-			})
+			.set({ sealedSession: "v1.YWFhYWFhYWFhYWFhYmJiYmJiYmJiYmJiYmJiYg.Y2Nj" })
 			.where(eq(hostedAccounts.did, account.did));
 	}
 	return { userId: account.userId, did: account.did };
