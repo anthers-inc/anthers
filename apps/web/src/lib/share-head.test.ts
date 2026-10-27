@@ -54,6 +54,15 @@ describe("renderShareHead", () => {
 		expect(html).toContain('content="The thumbnail for A Quiet Year."');
 	});
 
+	it("takes the image's own description where the read supplies one", () => {
+		const html = renderShareHead(
+			{ ...preview, imageAlt: "The profile card for A Quiet Year on Anthers." },
+			"https://anthers.org/@a-quiet-year",
+		);
+		expect(html).toContain('content="The profile card for A Quiet Year on Anthers."');
+		expect(html).not.toContain("The thumbnail for");
+	});
+
 	it("serves the site card, with its dimensions, when the Work has no thumbnail", () => {
 		const html = renderShareHead({ ...preview, image: null }, "https://anthers.org/works/x-1");
 		expect(html).toContain(`<meta property="og:image" content="${SITE_CARD_URL}" />`);

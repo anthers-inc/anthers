@@ -27,10 +27,22 @@ import { pageTitle } from "@anthers/web-shared/page-title";
  * know which document it is describing, and the two server reads that produce these facts
  * own their own rules. `WorkPreview` and `PostPreview` both satisfy this structurally.
  */
+/**
+ * The facts a link card carries.
+ *
+ * A Work's card and a post's card are the same shape on purpose: this renderer should not
+ * know which document it is describing, and the two server reads that produce these facts
+ * own their own rules. `WorkPreview` and `PostPreview` both satisfy this structurally.
+ *
+ * `imageAlt` is the image's own description, and only a read that knows the image is not a
+ * thumbnail sets it — a profile's composed card being the case that made it necessary.
+ */
 export interface LinkCard {
 	title: string;
 	description: string;
 	image: string | null;
+	/** What the image shows, when the default would describe it wrongly. */
+	imageAlt?: string | null;
 }
 
 /** The markers `index.html` carries around its site-level share tags. */
@@ -86,7 +98,7 @@ export function renderShareHead(preview: LinkCard, canonicalUrl: string): string
 	];
 	if (preview.image) {
 		lines.push(
-			`<meta property="og:image:alt" content="${escapeAttribute(`The thumbnail for ${preview.title}.`)}" />`,
+			`<meta property="og:image:alt" content="${escapeAttribute(preview.imageAlt ?? `The thumbnail for ${preview.title}.`)}" />`,
 		);
 	} else {
 		lines.push(
