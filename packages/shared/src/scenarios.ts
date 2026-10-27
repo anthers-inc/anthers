@@ -26,7 +26,6 @@ import {
 	CARD_FLAT,
 	CARD_RATE,
 	ILLUSTRATIVE_SALES_TAX_RATE,
-	MERCH_BADGE_DISCOUNT,
 	PUBLIC_ACCESS_PRICE,
 	stickerBudgetFor,
 	storageReserveFor,
@@ -77,62 +76,6 @@ export interface BadgeRow {
 	remainder: string;
 	/** What is left for Anthers after the reserve too — its only unreserved line. */
 	support: string;
-}
-
-/** One rung of the merch-discount table, computed from the dials in `constants.ts`. */
-export interface MerchRow {
-	/** The Badge the row is priced under, or "list" for the undiscounted figure. */
-	badge: string;
-	/** The whole-percent discount this rung carries ("0", "10", … "25"). */
-	discountPercent: string;
-	/** What the buyer pays for the goods, before shipping and tax. */
-	goodsPrice: string;
-	/** The card fee Anthers eats on that goods line (illustrative at this price point). */
-	cardFee: string;
-	/** What the line keeps before the fee's flat component variance — see the docblock. */
-	keptBeforeFeeVariance: string;
-}
-
-/**
- * The merch discount table — per Badge rung, at the $30 list.
- *
- * 🚨 **Computed, never typed: the dials are `MERCH_BADGE_DISCOUNT` and the list price in
- * the wiki's copy is this table's input.** Every buyer-visible merch figure reads a row
- * of the generated `MERCH_TABLE`; the per-run columns exist so a page can show a
- * supporter what their rung discounts without re-deriving anything client-side.
- *
- * ⚠️ **The card fee is shown because it is the number the margin math turns on** —
- * Anthers eats the whole charge's processing (the seller), so the transparent framing
- * is "the shirt's price funds the programs after printing and card costs." The print
- * cost itself is never published (Printful reprices); the wiki's prose carries the
- * approximate figure and this table carries the arithmetic around it.
- *
- * The list price is a **parameter, not a constant**: the store's list is Printful's own
- * `retail_price` (stamped per variant at setup), which can differ per size — so a page
- * rendering merch economics passes the list it is illustrating and this function keeps
- * the *shape* of the arithmetic generated. The $30 representative run is what the wiki's
- * prose quotes.
- */
-export function merchTable(listPrice: string = "30.00"): MerchRow[] {
-	const list = new Decimal(listPrice);
-	const rows: MerchRow[] = [];
-	for (const badge of BADGE_ORDER) {
-		// `free` is the undiscounted list row — the absence answer, not a rung with 0%.
-		const percent =
-			badge === "free"
-				? "0"
-				: (MERCH_BADGE_DISCOUNT[badge as keyof typeof MERCH_BADGE_DISCOUNT] ?? "0");
-		const goods = list.minus(list.times(new Decimal(percent).dividedBy(100))).toDecimalPlaces(2);
-		const fee = calculateFees(goods, { type: "physical" }).processingFee;
-		rows.push({
-			badge: badge === "free" ? "list" : badge.charAt(0).toUpperCase() + badge.slice(1),
-			discountPercent: percent,
-			goodsPrice: money(goods),
-			cardFee: money(fee),
-			keptBeforeFeeVariance: money(goods.minus(fee)),
-		});
-	}
-	return rows;
 }
 
 /**

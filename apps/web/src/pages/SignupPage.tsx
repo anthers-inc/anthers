@@ -99,8 +99,6 @@ import {
 	cardFeeDisplay,
 	FREE_STORAGE_GIB,
 	heldBadgeLabel,
-	heldBadgeName,
-	MERCH_BADGE_DISCOUNT,
 	stickerBudgetFor,
 	storageGibFor,
 	storageReserveFor,
@@ -710,19 +708,6 @@ const PERK_ROWS: PerkRow[] = [
 		cell: (amount) => ({
 			value: amount > 0 ? columnMoney(cardFeeDisplay(amount)) : NOT_CARRIED,
 		}),
-	},
-	{
-		title: "Merch Discount",
-		// 🚨 **Built — the ladder was decided 2026-10-08** (root 10 / sprout 15 / petal 20 /
-		// blossom 25, goods line only; shipping and tax are never discounted) and applies
-		// at checkout, with `purchases.merch_discount_badge` recording the rung that priced
-		// a purchase. No `notBuilt` flag, and the cell reads the same constant the wiki's
-		// generated merch-discount table renders, so the matrix cannot drift from it.
-		desc: "A discount on merch anyone can buy from the Anthers shop, where the net revenue funds Anthers' charitable programs.",
-		cell: (amount) => {
-			const key = heldBadgeName(amount);
-			return key === "free" ? { value: NOT_CARRIED } : { value: `${MERCH_BADGE_DISCOUNT[key]}%` };
-		},
 	},
 ];
 

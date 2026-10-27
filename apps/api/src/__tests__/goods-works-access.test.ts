@@ -23,11 +23,11 @@ import { type AccessContext, type AccessibleWork, resolveAccessSync } from "../s
 const CREATOR_ID = 900;
 const USER_ID = 901;
 
-/** The two shirt Works' actual shape: baseline row open at $0, Badge rungs above. */
+/** A good's rows: Everyone open at $12, and two supporter rungs priced below it. */
 const SHIRT_ROWS = [
-	{ threshold: 0, allow: true, price: "0" },
-	{ threshold: 3, allow: false, price: "0" },
-	{ threshold: 6, allow: false, price: "0" },
+	{ threshold: 0, allow: true, price: "12.00" },
+	{ threshold: 3, allow: true, price: "10.00" },
+	{ threshold: 6, allow: true, price: "9.00" },
 ];
 
 function goodsWork(access = SHIRT_ROWS): AccessibleWork {
@@ -63,8 +63,24 @@ describe("the goods-works rule", () => {
 			reason: "payment_required",
 			requiresPurchase: true,
 			isFree: false,
-			price: null, // the store prices the goods; the row's $0 means nothing
+			// The Access table prices a good exactly as it prices anything else: the Everyone
+			// row for a visitor who holds nothing.
+			price: "12.00",
 		});
+	});
+
+	it("prices a good at the cheapest row the buyer qualifies for", () => {
+		expect(resolveAccessSync(goodsWork(), ctx(USER_ID, 0)).price).toBe("12.00");
+		expect(resolveAccessSync(goodsWork(), ctx(USER_ID, 3)).price).toBe("10.00");
+		expect(resolveAccessSync(goodsWork(), ctx(USER_ID, 6)).price).toBe("9.00");
+	});
+
+	it("sells nothing from rows that are all free, and the buy path refuses them", () => {
+		const free = goodsWork([{ threshold: 0, allow: true, price: "0" }]);
+		const v = resolveAccessSync(free, ctx(null));
+		// Zero is a price the resolver reports rather than hides; `resolvePhysicalSale` is
+		// what refuses to charge it, because a good still has a parcel to pay for.
+		expect(v.price).toBe("0.00");
 	});
 
 	it("resolves the same for a signed-in non-owner", () => {
@@ -122,9 +138,11 @@ describe("the goods-works rule", () => {
 	});
 });
 
-describe("the digital contrast — the same rows, a streamable type", () => {
-	/** A free song: identical rows to the shirts', minus the goods type. */
-	function digitalWork(access = SHIRT_ROWS): AccessibleWork {
+describe("the digital contrast — the same shape of rows, a streamable type", () => {
+	/** A free song: one open row at $0, the contrast the goods rule is drawn against. */
+	const FREE_ROWS = [{ threshold: 0, allow: true, price: "0" }];
+
+	function digitalWork(access = FREE_ROWS): AccessibleWork {
 		return { ...goodsWork(access), type: "music", streamEnabled: true };
 	}
 

@@ -503,16 +503,21 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 	// relevant for Works that are streamable").
 	//
 	// What replaces it, for a physical Work:
-	// - The access table still governs the PAGE: no qualifying allowed row is the
-	//   same hard gate as any digital Work (a creator may badge-gate a shirt, and
-	//   that is the gate, not a price).
-	// - A qualifying viewer sees a page the store sits on, and the goods are
-	//   BOUGHT, never "unlocked" — the price is the store's own, which is why
-	//   `price` is null here: the row's price field means nothing on a physical
-	//   Work, and a store behind it will price the goods.
-	// - `requiresPurchase` stays true for every qualifying non-owner, signed in or
-	//   out, without the signed-out login wall: a visitor may look at the shirt
-	//   exactly as an account may, and creating an account is required only to buy.
+	// - The access table governs the PAGE and the PRICE, exactly as it does for
+	//   every other Work. No qualifying allowed row is the same hard gate a digital
+	//   Work gets; a qualifying viewer pays the cheapest row they qualify for.
+	// - 🚨 **A rung's price means the same thing on a good as it does on a track.**
+	//   The modal's promise — a positive price is what a buyer is charged, exactly —
+	//   holds for a shirt, so a creator can price Blossom at $9 and Everyone at $12
+	//   and be paid accordingly. This branch returned `price: null` while the store
+	//   was a vendor's catalog; now that the listing is the store, a second price
+	//   rule beside the resolver is what let a supporter be charged the full price.
+	//   Anthers' own goods are ordinary physical Works on its own creator page, so a
+	//   supporter price on them is a per-rung price like anyone else's.
+	// - The goods themselves are BOUGHT, never "unlocked": `requiresPurchase` stays
+	//   true for every qualifying non-owner, signed in or out, without the
+	//   signed-out login wall. A visitor may look at the shirt exactly as an account
+	//   may, and creating an account is required only to buy.
 	// 🚨 Checked BEFORE the purchase branch, and the purchase branch below skips
 	// this type: a past purchase grants a shipment, not an access verdict — a
 	// buyer who wants a second shirt must be able to buy again, which a
@@ -529,12 +534,17 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 				unlock: { creator: unlockRoute(work.access ?? [], goodsGiven, []) },
 			};
 		}
+		// The same rule as the purchasable branch below: the cheapest qualifying row
+		// prices it, so a supporter price is a rung price and nothing else. A row
+		// priced at zero leaves `price` at zero and the buy path refuses it — a good
+		// still has a parcel to pay for, and "free" is not a thing this lane sells.
+		const goodsPrice = Math.min(...goodsOffers.map((o) => o.price));
 		return {
 			...base,
 			canAccess: false,
 			reason: "payment_required",
 			requiresPurchase: true,
-			price: null,
+			price: money(goodsPrice),
 			isEntitled: goodsOffers.some((o) => !o.baseline),
 		};
 	}
@@ -629,6 +639,29 @@ export function resolveAccessSync(work: AccessibleWork, ctx: AccessContext): Acc
 		price: money(min),
 		isEntitled,
 	};
+}
+
+/**
+ * The cheapest allowed price in a Work's table for this viewer — the number a purchase
+ * charges, whoever is looking.
+ *
+ * ⚠️ **Deliberately independent of the access verdict**, because a price and a permission
+ * are two questions and the owner check answers only the second. A physical good is priced
+ * by this table for everyone the buy path serves — including its creator, whose own page
+ * shows the store rather than a lock — and the listing behind it never prices anything.
+ * The resolver's own purchasable branch computes the same minimum inline; this is the same
+ * `offersFor` and the same rule, exposed for the goods path that resolves before any
+ * verdict exists.
+ */
+export async function purchasePriceFor(
+	work: { id: number; creatorId: number | null; access: unknown },
+	userId: number | null,
+): Promise<string | null> {
+	const ctx = await buildAccessContext(userId, { workIds: [work.id] });
+	const given = work.creatorId == null ? 0 : (ctx.supportByCreator.get(work.creatorId) ?? 0);
+	const offers = offersFor((work.access ?? []) as AccessRow[], given);
+	if (offers.length === 0) return null;
+	return money(Math.min(...offers.map((o) => o.price)));
 }
 
 /**
