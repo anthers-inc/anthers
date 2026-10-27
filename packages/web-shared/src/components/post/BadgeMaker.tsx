@@ -10,11 +10,18 @@
  * and the editor is the only thing the pencil reveals, rather than a second list of the
  * same rungs standing above the first.
  *
- * ⭐ **Three tabs, because the four jobs outgrew one view** (Parker, 2026-10-26): Basics
- * (name, monthly amount, description), Emblem (shape, background, and the emblem itself),
- * and Perks (the perks table plus the Works this Badge opens). The art editor used to sit
- * above the fields as one long column, which made the dialog scroll for reasons a creator
- * could not see and put the perks table below the fold.
+ * ⭐ **Four tabs, because the jobs outgrew one view** (Parker, 2026-10-26, and a fourth on
+ * 2026-10-27): Basics (name, short description, monthly amount), Emblem (shape, background,
+ * and the emblem itself), Perks (what a supporter gets), and Unlocks (the Works this Badge
+ * opens). The art editor used to sit above the fields as one long column, which made the
+ * dialog scroll for reasons a creator could not see and put the perks table below the fold;
+ * the Works list then sat under the perks table, where it was the one thing on the tab that
+ * the creator did not type.
+ *
+ * 🚨 **A rung must name a perk kind or open a Work before Save.** An empty perks table means
+ * the creator has not finished, not that the rung is a support payment: Support is a kind
+ * they choose, and the guard reads both tabs. A failed read of either list never counts as
+ * an empty one.
  *
  * 🚨 **Every art change is a draft until Save.** The first cut wrote shape, color, uploads
  * and compositions to the server the moment they were clicked, so Cancel still saved the
@@ -46,7 +53,7 @@ import {
 	defaultEmblemColor,
 } from "@anthers/shared/badge-art";
 import { BADGE_ART_MAX_BYTES, STRIPE_MIN_CHARGE, supportAmount } from "@anthers/shared/constants";
-import { ArrowUpTrayIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { ArrowUpTrayIcon, Bars2Icon, TrashIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch, client } from "../../lib/rpc";
 import { studioUrl } from "../../lib/studio";
@@ -66,11 +73,12 @@ function rungAmount(v: string): string {
 	return (n > 0 ? n : 1).toFixed(2);
 }
 
-/** The dialog's own order: the things a creator usually edits first, then the art, then perks. */
+/** The dialog's own order: the things a creator usually edits first, then the art, then what the Badge carries. */
 const TABS = [
 	{ id: "basics", label: "Basics" },
 	{ id: "emblem", label: "Emblem" },
 	{ id: "perks", label: "Perks" },
+	{ id: "unlocks", label: "Unlocks" },
 ] as const;
 
 type Tab = (typeof TABS)[number]["id"];
@@ -194,11 +202,18 @@ function PickerRow({ label, children }: { label: string; children: React.ReactNo
 /**
  * The perks table for one Badge — a whole-list editor over the fixed category list.
  *
- * ⭐ **One Add button creates a row with every field on it** (Parker, 2026-10-26). The
- * retired control made a creator pick a type before a row existed, which hid the label and
- * description fields and made the type look like the only decision. The four explanations
- * now live in one (i) beside the Type column, so comparing them does not mean selecting
- * each in turn.
+ * ⭐ **One Add button creates a row with both fields on it** (Parker, 2026-10-26). The
+ * retired control made a creator pick a type before a row existed, which hid the label
+ * and made the type look like the only decision. Every kind's examples live in one (i)
+ * beside the Type column, so comparing them does not mean selecting each in turn.
+ *
+ * ⭐ **A row is a type and a description, and nothing else** (Parker, 2026-10-27). The
+ * description it used to autofill repeated the type's own explanation, which told the
+ * creator nothing they had not just chosen; Patreon's benefit carries the same two fields.
+ *
+ * ⭐ **Rows reorder by hand** (Parker, 2026-10-27): the grip drags with a pointer and takes
+ * the up and down arrows for anyone without one, and the written order is the order a
+ * supporter reads.
  */
 function PerkEditor({
 	perks,
@@ -207,30 +222,26 @@ function PerkEditor({
 	perks: PerkDraft[];
 	onChange: (perks: PerkDraft[]) => void;
 }) {
+	const [dragIndex, setDragIndex] = useState<number | null>(null);
+	const [overIndex, setOverIndex] = useState<number | null>(null);
+
 	const update = (i: number, patch: Partial<PerkDraft>) => {
 		onChange(perks.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 	};
 
-	const changeKind = (i: number, kind: string) => {
-		const current = perks[i];
-		const oldFriendly = BADGE_PERK_KINDS.find((k) => k.id === String(current.kind))?.friendly ?? "";
-		const nextFriendly = BADGE_PERK_KINDS.find((k) => k.id === kind)?.friendly ?? "";
-		update(i, {
-			kind,
-			// Keep a description the creator wrote; only replace the placeholder the previous
-			// type supplied, which is the one string that is not their words.
-			description:
-				!current.description || current.description === oldFriendly
-					? nextFriendly
-					: current.description,
-		});
+	const move = (from: number, to: number) => {
+		if (from === to || to < 0 || to >= perks.length) return;
+		const next = [...perks];
+		const [row] = next.splice(from, 1);
+		next.splice(to, 0, row);
+		onChange(next);
 	};
 
 	const remove = (i: number) => onChange(perks.filter((_, j) => j !== i));
 	const add = () => {
 		// The type starts unchosen, and the row shows it as a required field. A default would
 		// silently classify a new perk — and the type is what decides the sales-tax code.
-		onChange([...perks, { key: crypto.randomUUID(), kind: "", label: "", description: "" }]);
+		onChange([...perks, { key: crypto.randomUUID(), kind: "", label: "" }]);
 	};
 
 	return (
@@ -239,8 +250,7 @@ function PerkEditor({
 				<div className="min-w-0">
 					<div className="text-sm font-medium">Perks</div>
 					<p className="text-xs text-base-content/50">
-						What a supporter gets beside access. Access is set on the Work, not here — the Works
-						below are the ones this Badge opens.
+						What a supporter gets beside access. Access is set on the Work.
 					</p>
 				</div>
 				<button
@@ -257,19 +267,27 @@ function PerkEditor({
 				<table className="table table-sm">
 					<thead>
 						<tr>
+							<th className="w-6" aria-label="Reorder" />
 							<th className="w-44">
 								<span className="inline-flex items-center gap-1">
 									Type
 									<InfoTip wide unclipped>
 										<span className="block font-medium text-base-content">Perk types</span>
-										<ul className="mt-1 space-y-1">
-											{BADGE_PERK_KINDS.map((k) => (
-												<li key={k.id}>
-													<strong className="font-medium text-base-content/80">{k.label}</strong> —{" "}
-													{k.friendly}
-												</li>
-											))}
-										</ul>
+										<table className="mt-1 w-full border-collapse text-left">
+											<tbody>
+												{BADGE_PERK_KINDS.map((k) => (
+													<tr key={k.id} className="align-top">
+														<th
+															scope="row"
+															className="whitespace-nowrap py-0.5 pr-3 font-medium text-base-content/80"
+														>
+															{k.label}
+														</th>
+														<td className="py-0.5 text-base-content/60">{k.examples}</td>
+													</tr>
+												))}
+											</tbody>
+										</table>
 										<span className="mt-1 block text-base-content/50">
 											A Badge carrying more than one type is taxed at its most-taxable type.
 										</span>
@@ -280,7 +298,6 @@ function PerkEditor({
 									</InfoTip>
 								</span>
 							</th>
-							<th>What supporters get</th>
 							<th>Description</th>
 							<th className="w-10" />
 						</tr>
@@ -289,17 +306,66 @@ function PerkEditor({
 						{perks.length === 0 ? (
 							<tr>
 								<td colSpan={4} className="py-6 text-center text-xs text-base-content/50">
-									No perks yet. Add one to show supporters what else this Badge carries.
+									No perks yet. Add one, or choose Support if this Badge offers nothing extra.
 								</td>
 							</tr>
 						) : (
 							perks.map((perk, i) => (
-								<tr key={perk.key}>
+								<tr
+									key={perk.key}
+									onDragOver={(e) => {
+										if (dragIndex === null) return;
+										e.preventDefault();
+										setOverIndex(i);
+									}}
+									onDragLeave={() => setOverIndex((n) => (n === i ? null : n))}
+									onDrop={(e) => {
+										e.preventDefault();
+										if (dragIndex !== null) move(dragIndex, i);
+										setDragIndex(null);
+										setOverIndex(null);
+									}}
+									className={
+										overIndex === i && dragIndex !== null && dragIndex !== i
+											? "bg-base-200/60"
+											: undefined
+									}
+								>
+									<td className="w-6 pr-0">
+										<button
+											type="button"
+											draggable
+											className="cursor-grab rounded p-0.5 text-base-content/50 hover:text-base-content/80 active:cursor-grabbing"
+											aria-label={`Reorder ${perk.label.trim() || "this perk"}`}
+											title="Drag to reorder, or press the up and down arrows"
+											onDragStart={(e) => {
+												setDragIndex(i);
+												e.dataTransfer.effectAllowed = "move";
+												e.dataTransfer.setData("text/plain", String(i));
+											}}
+											onDragEnd={() => {
+												setDragIndex(null);
+												setOverIndex(null);
+											}}
+											onKeyDown={(e) => {
+												if (e.key === "ArrowUp") {
+													e.preventDefault();
+													move(i, i - 1);
+												}
+												if (e.key === "ArrowDown") {
+													e.preventDefault();
+													move(i, i + 1);
+												}
+											}}
+										>
+											<Bars2Icon className="h-4 w-4" />
+										</button>
+									</td>
 									<td>
 										<select
 											className="select select-bordered select-xs w-40"
 											value={String(perk.kind)}
-											onChange={(e) => changeKind(i, e.target.value)}
+											onChange={(e) => update(i, { kind: e.target.value })}
 											aria-label="Perk type"
 										>
 											<option value="" disabled>
@@ -318,17 +384,7 @@ function PerkEditor({
 											className="input input-bordered input-xs w-full min-w-36"
 											value={perk.label}
 											onChange={(e) => update(i, { label: e.target.value })}
-											placeholder="What supporters get, in your words"
-											aria-label="Perk name"
-										/>
-									</td>
-									<td>
-										<input
-											type="text"
-											className="input input-bordered input-xs w-full min-w-36"
-											value={perk.description ?? ""}
-											onChange={(e) => update(i, { description: e.target.value })}
-											placeholder="A line of detail (optional)"
+											placeholder="What's included in this perk"
 											aria-label="Perk description"
 										/>
 									</td>
@@ -363,7 +419,6 @@ type PerkDraft = {
 	/** Stable within the editor session, for React keys on draft rows. */ key: string;
 	kind: BadgePerkKind | string;
 	label: string;
-	description?: string;
 };
 
 /** The Works this Badge opens, read from the Works' own Access tables. */
@@ -375,56 +430,88 @@ interface GatedWork {
 	visibility: string;
 }
 
-function GatedWorks({ badgeId }: { badgeId: number }) {
-	const [works, setWorks] = useState<GatedWork[] | null>(null);
-	const [error, setError] = useState<string | null>(null);
-	const [busyId, setBusyId] = useState<number | null>(null);
+/**
+ * The Works one Badge opens, as a list the dialog can also read.
+ *
+ * ⚠️ **The load lives in `BadgeMaker`, not here**, because Save refuses a rung that names
+ * no kind and opens no Work: the guard has to know whether the list is empty, and a failed
+ * read must not look like one. This component renders whatever the dialog hands it.
+ */
+function GatedWorks({
+	works,
+	error,
+	busyId,
+	onRetry,
+	onUngate,
+}: {
+	works: GatedWork[] | null;
+	error: string | null;
+	busyId: number | null;
+	onRetry: () => void;
+	onUngate: (work: GatedWork) => void;
+}) {
+	const failure = (
+		<div className="px-3 py-4">
+			<p className="text-xs text-base-content/60">
+				Couldn't load the Works this Badge opens, so nothing here has been changed.
+			</p>
+			<button type="button" className="btn btn-outline btn-xs mt-2" onClick={onRetry}>
+				Try again
+			</button>
+		</div>
+	);
 
-	useEffect(() => {
-		let live = true;
-		apiFetch(`/api/content/badge-gates/${badgeId}`)
-			.then(async (res) => {
-				if (!live) return;
-				if (!res.ok) {
-					setError("Couldn't load the Works this Badge opens.");
-					setWorks([]);
-					return;
-				}
-				const body = (await res.json()) as { works: GatedWork[] };
-				setWorks(body.works ?? []);
-			})
-			.catch(() => {
-				if (live) {
-					setError("Couldn't load the Works this Badge opens.");
-					setWorks([]);
-				}
-			});
-		return () => {
-			live = false;
-		};
-	}, [badgeId]);
-
-	const ungate = async (work: GatedWork) => {
-		setBusyId(work.id);
-		setError(null);
-		try {
-			const res = await apiFetch(`/api/content/badge-gates/${badgeId}/${work.id}`, {
-				method: "DELETE",
-			});
-			if (!res.ok) {
-				setError(await responseError(res, "Couldn't stop this Badge opening that Work."));
-				return;
-			}
-			setWorks((prev) => (prev ?? []).filter((w) => w.id !== work.id));
-		} catch {
-			setError("Couldn't stop this Badge opening that Work.");
-		} finally {
-			setBusyId(null);
-		}
-	};
+	let body: React.ReactNode;
+	if (works === null) {
+		body = error ? (
+			failure
+		) : (
+			<p className="px-3 py-4 text-xs text-base-content/50">Loading Works…</p>
+		);
+	} else if (works.length === 0) {
+		body = error ? (
+			failure
+		) : (
+			<p className="px-3 py-4 text-xs text-base-content/50">
+				No Works are gated at this Badge yet. Open a Work's editor and tick this level in its Access
+				table.
+			</p>
+		);
+	} else {
+		body = (
+			<ul className="divide-y divide-base-300">
+				{works.map((work) => (
+					<li key={work.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
+						<div className="min-w-0 flex-1">
+							<div className="truncate text-sm font-medium">{work.title}</div>
+							<div className="text-[11px] text-base-content/50">
+								{work.type} · {work.visibility === "released" ? "Released" : "Not released"}
+							</div>
+						</div>
+						<a
+							href={studioUrl(`/works/${work.publicId}/edit`)}
+							className="btn btn-ghost btn-xs"
+							target="_blank"
+							rel="noreferrer"
+						>
+							Open in Studio
+						</a>
+						<button
+							type="button"
+							className="btn btn-ghost btn-xs text-error"
+							onClick={() => onUngate(work)}
+							disabled={busyId === work.id}
+						>
+							{busyId === work.id ? "Stopping…" : "Stop opening"}
+						</button>
+					</li>
+				))}
+			</ul>
+		);
+	}
 
 	return (
-		<div className="mt-3 rounded-lg border border-base-300">
+		<div className="rounded-lg border border-base-300">
 			<div className="border-b border-base-300 px-3 py-2">
 				<div className="text-sm font-medium">Works this Badge opens</div>
 				<p className="text-xs text-base-content/50">
@@ -433,45 +520,13 @@ function GatedWorks({ badgeId }: { badgeId: number }) {
 				</p>
 			</div>
 
-			{works === null ? (
-				<p className="px-3 py-4 text-xs text-base-content/50">Loading Works…</p>
-			) : works.length === 0 && !error ? (
-				<p className="px-3 py-4 text-xs text-base-content/50">
-					No Works are gated at this Badge yet. Open a Work's editor and tick this level in its
-					Access table.
-				</p>
-			) : works.length === 0 ? null : (
-				<ul className="divide-y divide-base-300">
-					{works.map((work) => (
-						<li key={work.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
-							<div className="min-w-0 flex-1">
-								<div className="truncate text-sm font-medium">{work.title}</div>
-								<div className="text-[11px] text-base-content/50">
-									{work.type} · {work.visibility === "released" ? "Released" : "Not released"}
-								</div>
-							</div>
-							<a
-								href={studioUrl(`/works/${work.publicId}/edit`)}
-								className="btn btn-ghost btn-xs"
-								target="_blank"
-								rel="noreferrer"
-							>
-								Open in Studio
-							</a>
-							<button
-								type="button"
-								className="btn btn-ghost btn-xs text-error"
-								onClick={() => void ungate(work)}
-								disabled={busyId === work.id}
-							>
-								{busyId === work.id ? "Stopping…" : "Stop opening"}
-							</button>
-						</li>
-					))}
-				</ul>
-			)}
+			{body}
 
-			{error && <p className="border-t border-base-300 px-3 py-2 text-xs text-error">{error}</p>}
+			{/* An ungate that failed keeps the list and says so beneath it; a failed load is the
+			    failure box above, because an empty list there would read as "nothing is gated". */}
+			{error && works !== null && works.length > 0 && (
+				<p className="border-t border-base-300 px-3 py-2 text-xs text-error">{error}</p>
+			)}
 		</div>
 	);
 }
@@ -504,6 +559,13 @@ export default function BadgeMaker({
 	const [loadingPerks, setLoadingPerks] = useState(!creating);
 	const [perksError, setPerksError] = useState(false);
 	const [perksReload, setPerksReload] = useState(0);
+
+	// The Works this Badge opens, loaded here because Save reads the list as well as
+	// rendering it: a rung that names no kind and opens no Work is unfinished.
+	const [gatedWorks, setGatedWorks] = useState<GatedWork[] | null>(null);
+	const [gatedError, setGatedError] = useState<string | null>(null);
+	const [gatedBusyId, setGatedBusyId] = useState<number | null>(null);
+	const [gatedReload, setGatedReload] = useState(0);
 
 	// The art draft. Shape and color start from what the rung stored, and from the fallback
 	// design's own color when the rung has never chosen one — otherwise the preview would
@@ -578,6 +640,52 @@ export default function BadgeMaker({
 		if (!upload) return;
 		return () => URL.revokeObjectURL(upload.previewUrl);
 	}, [upload]);
+
+	// The Works list, read once per Badge and after a retry. A failure leaves `null` behind
+	// an error rather than an empty list, so the save guard below can tell the two apart.
+	useEffect(() => {
+		if (badgeId === null) return;
+		void gatedReload;
+		let live = true;
+		setGatedWorks(null);
+		setGatedError(null);
+		apiFetch(`/api/content/badge-gates/${badgeId}`)
+			.then(async (res) => {
+				if (!live) return;
+				if (!res.ok) {
+					setGatedError("Couldn't load the Works this Badge opens.");
+					return;
+				}
+				const body = (await res.json()) as { works: GatedWork[] };
+				setGatedWorks(body.works ?? []);
+			})
+			.catch(() => {
+				if (live) setGatedError("Couldn't load the Works this Badge opens.");
+			});
+		return () => {
+			live = false;
+		};
+	}, [badgeId, gatedReload]);
+
+	const ungateWork = async (work: GatedWork) => {
+		if (badgeId === null) return;
+		setGatedBusyId(work.id);
+		setGatedError(null);
+		try {
+			const res = await apiFetch(`/api/content/badge-gates/${badgeId}/${work.id}`, {
+				method: "DELETE",
+			});
+			if (!res.ok) {
+				setGatedError(await responseError(res, "Couldn't stop this Badge opening that Work."));
+				return;
+			}
+			setGatedWorks((prev) => (prev ?? []).filter((w) => w.id !== work.id));
+		} catch {
+			setGatedError("Couldn't stop this Badge opening that Work.");
+		} finally {
+			setGatedBusyId(null);
+		}
+	};
 
 	// Follow the background color until the creator picks an emblem color of their own, so
 	// a light field never starts with a white icon on it.
@@ -673,6 +781,18 @@ export default function BadgeMaker({
 			if (!creating && perksLoaded && perks.some((p) => p.label.trim() && !p.kind)) {
 				throw new Error("Choose a type for each perk that has a name.");
 			}
+			// 🚨 **A rung that names no kind and opens no Work is unfinished, not a support
+			// payment.** Support is a kind a creator chooses. Only a successful read of both
+			// lists can prove the rung carries nothing, so a failed load skips the guard.
+			if (
+				!creating &&
+				perksLoaded &&
+				gatedWorks !== null &&
+				gatedWorks.length === 0 &&
+				!perks.some((p) => p.kind && p.label.trim())
+			) {
+				throw new Error("Add a perk, or open at least one Work.");
+			}
 
 			if (creating) {
 				const res = await client.api.subscriptions.badges.$post({
@@ -712,7 +832,6 @@ export default function BadgeMaker({
 							.map((p) => ({
 								kind: p.kind,
 								label: p.label.trim(),
-								description: p.description ?? "",
 							})),
 					}),
 				});
@@ -840,14 +959,27 @@ export default function BadgeMaker({
 				/>
 			</label>
 
+			<label className="form-control">
+				<span className="label-text mb-1 text-xs font-medium text-base-content/60">
+					Short Description
+				</span>
+				<textarea
+					className="textarea textarea-bordered textarea-sm w-full"
+					rows={3}
+					value={description}
+					onChange={(e) => setDescription(e.target.value)}
+					placeholder="What this level gives, in a sentence or two (optional)"
+				/>
+			</label>
+
 			<div className="flex flex-wrap items-start gap-3">
 				<label className="form-control w-36 shrink-0">
 					<span className="label-text mb-1 text-xs font-medium text-base-content/60">
-						Monthly amount
+						Monthly Amount
 					</span>
 					<input
 						type="number"
-						aria-label="Monthly amount"
+						aria-label="Monthly Amount"
 						className="input input-bordered input-sm w-full"
 						value={threshold}
 						onChange={(e) => setThreshold(e.target.value)}
@@ -860,60 +992,51 @@ export default function BadgeMaker({
 					<TakeHome amount={Number(threshold) || 0} kind="badge" />
 				</div>
 			</div>
-
-			<label className="form-control">
-				<span className="label-text mb-1 text-xs font-medium text-base-content/60">
-					Short description
-				</span>
-				<textarea
-					className="textarea textarea-bordered textarea-sm w-full"
-					rows={3}
-					value={description}
-					onChange={(e) => setDescription(e.target.value)}
-					placeholder="What this level gives, in a sentence or two (optional)"
-				/>
-			</label>
 		</div>
 	);
 
 	const emblemPanel = (
 		<div className="flex h-full flex-col gap-3" data-testid="badge-art-control">
-			<PickerRow label="Badge Shape">
-				{BADGE_SHAPES.map((s) => (
-					<button
-						key={s.id}
-						type="button"
-						aria-label={s.label}
-						aria-pressed={shape === s.id}
-						className={`btn btn-xs btn-square ${shape === s.id ? "btn-primary" : "btn-ghost"}`}
-						onClick={() => setShape(s.id)}
-						disabled={saving}
-					>
-						<svg viewBox="0 0 100 100" className="h-4 w-4" aria-hidden="true">
-							<path d={s.path} fill="currentColor" />
-						</svg>
-					</button>
-				))}
-			</PickerRow>
+			{/* ⭐ Shape and background share one line (Parker, 2026-10-27). Each is a short row of
+			    swatches, so stacking them left most of the dialog's width empty. */}
+			<div className="flex flex-wrap items-start gap-x-8 gap-y-1">
+				<PickerRow label="Badge Shape">
+					{BADGE_SHAPES.map((s) => (
+						<button
+							key={s.id}
+							type="button"
+							aria-label={s.label}
+							aria-pressed={shape === s.id}
+							className={`btn btn-xs btn-square ${shape === s.id ? "btn-primary" : "btn-ghost"}`}
+							onClick={() => setShape(s.id)}
+							disabled={saving}
+						>
+							<svg viewBox="0 0 100 100" className="h-4 w-4" aria-hidden="true">
+								<path d={s.path} fill="currentColor" />
+							</svg>
+						</button>
+					))}
+				</PickerRow>
 
-			<PickerRow label="Background Color">
-				{BADGE_COLORS.map((col) => (
-					<button
-						key={col.id}
-						type="button"
-						aria-label={col.label}
-						aria-pressed={color === col.id}
-						className={`h-5 w-5 rounded-full border-2 ${
-							color === col.id
-								? "border-primary ring-2 ring-primary/40 ring-offset-2 ring-offset-base-100"
-								: "border-base-300"
-						}`}
-						style={{ backgroundColor: col.fill }}
-						onClick={() => setColor(col.id)}
-						disabled={saving}
-					/>
-				))}
-			</PickerRow>
+				<PickerRow label="Background Color">
+					{BADGE_COLORS.map((col) => (
+						<button
+							key={col.id}
+							type="button"
+							aria-label={col.label}
+							aria-pressed={color === col.id}
+							className={`h-5 w-5 rounded-full border-2 ${
+								color === col.id
+									? "border-primary ring-2 ring-primary/40 ring-offset-2 ring-offset-base-100"
+									: "border-base-300"
+							}`}
+							style={{ backgroundColor: col.fill }}
+							onClick={() => setColor(col.id)}
+							disabled={saving}
+						/>
+					))}
+				</PickerRow>
+			</div>
 
 			{needsNewEmblemForChoice && (
 				<p className="rounded-box bg-warning/10 px-3 py-2 text-xs text-warning-content">
@@ -1063,9 +1186,22 @@ export default function BadgeMaker({
 			) : (
 				<PerkEditor perks={perks} onChange={setPerks} />
 			)}
-			{badgeId !== null && <GatedWorks badgeId={badgeId} />}
 		</div>
 	);
+
+	// The Works list moved off Perks onto its own tab (Parker, 2026-10-27): it is the one
+	// thing on the tab a creator did not type, and it is where an access question is
+	// answered rather than where a perk is described.
+	const unlocksPanel =
+		badgeId === null ? null : (
+			<GatedWorks
+				works={gatedWorks}
+				error={gatedError}
+				busyId={gatedBusyId}
+				onRetry={() => setGatedReload((n) => n + 1)}
+				onUngate={(work) => void ungateWork(work)}
+			/>
+		);
 
 	return (
 		<form onSubmit={handleSave} className="flex h-[min(85vh,760px)] flex-col">
@@ -1137,6 +1273,9 @@ export default function BadgeMaker({
 						>
 							{t.label}
 							{t.id === "perks" && perksLoaded && namedPerkCount > 0 ? ` (${namedPerkCount})` : ""}
+							{t.id === "unlocks" && gatedWorks && gatedWorks.length > 0
+								? ` (${gatedWorks.length})`
+								: ""}
 						</button>
 					))}
 				</div>
@@ -1171,6 +1310,14 @@ export default function BadgeMaker({
 							hidden={tab !== "perks"}
 						>
 							{perksPanel}
+						</div>
+						<div
+							role="tabpanel"
+							id="badge-panel-unlocks"
+							aria-labelledby="badge-tab-unlocks"
+							hidden={tab !== "unlocks"}
+						>
+							{unlocksPanel}
 						</div>
 					</>
 				)}

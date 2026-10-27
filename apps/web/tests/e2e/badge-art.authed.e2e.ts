@@ -152,6 +152,20 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	expect(created.status, "could not create the fixture rung").toBe(201);
 	badgeId = ((await created.json()) as { badge: { id: number } }).badge.id;
 
+	// 🚨 **A rung must name a perk kind or open a Work before the editor will save it**, so
+	// this fixture names Support. Without it the art save below is refused for a reason that
+	// has nothing to do with art, and the failure would read as the save being broken.
+	const perkSeed = await fetch(`${API_URL}/api/subscriptions/badges/${badgeId}/perks`, {
+		method: "PUT",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${token}`,
+		},
+		body: JSON.stringify({ perks: [{ kind: "support", label: "Just backing the work" }] }),
+	});
+	expect(perkSeed.status, "could not seed the fixture perk").toBe(200);
+
 	// The creator meets the same grid a supporter does, with a pencil on each card. The
 	// maker is what that pencil opens — one Badge at a time, in a dialog.
 	const handle = await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME);
@@ -165,26 +179,36 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	await expect(dialog.getByRole("heading", { name: "Edit Badge" })).toBeVisible();
 	await dialog.screenshot({ path: `.screenshots/badge-maker-basics-${RUN}.png` });
 
-	// The three tabs are the editor's whole shape, and the Perks one carries both the table
-	// and the Works list. Screenshot it before the art walk changes the draft.
+	// The four tabs are the editor's whole shape: Basics, Emblem, Perks and Unlocks. The Works
+	// list lives on Unlocks now, so it is read there rather than under the perks table.
 	await dialog.getByRole("tab", { name: "Perks" }).click();
 	await dialog.screenshot({ path: `.screenshots/badge-maker-perks-${RUN}.png` });
 
-	// One Add button creates a row with every field on it, and the one (i) beside the Type
-	// column explains all four kinds together rather than each on selection.
+	// One Add button creates a row with both fields on it, and the one (i) beside the Type
+	// column explains every kind together rather than each on selection.
+	await expect(dialog.getByLabel("Perk description").first()).toHaveValue("Just backing the work");
 	await dialog.getByRole("button", { name: "Add a perk" }).click();
-	await expect(dialog.getByLabel("Perk type").first()).toBeVisible();
-	await expect(dialog.getByLabel("Perk name").first()).toBeVisible();
-	await expect(dialog.getByLabel("Perk description").first()).toBeVisible();
+	await expect(dialog.getByLabel("Perk type").nth(1)).toBeVisible();
+	await expect(dialog.getByLabel("Perk description").nth(1)).toBeVisible();
 	await dialog.getByRole("button", { name: "More Information" }).hover();
 	// The tip is portalled to the body as a top-layer popover, so it is no longer a
 	// descendant of the dialog even though it belongs to a control inside it.
-	await expect(page.getByRole("tooltip")).toContainText("A Physical Good");
-	await expect(page.getByRole("tooltip")).toContainText("A Service");
-	await expect(page.getByRole("tooltip")).toContainText("Community Access");
-	await expect(page.getByRole("tooltip")).toContainText("Recognition");
-	await expect(dialog.getByText("No Works are gated at this Badge yet.")).toBeVisible();
+	await expect(page.getByRole("tooltip")).toContainText("Physical");
+	await expect(page.getByRole("tooltip")).toContainText("Digital");
+	await expect(page.getByRole("tooltip")).toContainText("Discount");
+	await expect(page.getByRole("tooltip")).toContainText("Support");
+
+	// ⭐ Rows reorder by hand. Fill the new row, then move it above the seeded one with the
+	// grip's own ArrowUp, which is the keyboard path rather than the drag the pointer takes.
+	await dialog.getByLabel("Perk type").nth(1).selectOption("recognition");
+	await dialog.getByLabel("Perk description").nth(1).fill("Name in the credits");
+	await dialog.getByRole("button", { name: "Reorder Name in the credits" }).press("ArrowUp");
+	await expect(dialog.getByLabel("Perk description").first()).toHaveValue("Name in the credits");
 	await dialog.screenshot({ path: `.screenshots/badge-maker-perk-row-${RUN}.png` });
+
+	await dialog.getByRole("tab", { name: "Unlocks" }).click();
+	await expect(dialog.getByText("No Works are gated at this Badge yet.")).toBeVisible();
+	await dialog.screenshot({ path: `.screenshots/badge-maker-unlocks-${RUN}.png` });
 
 	// ⚠️ Scoped by the art panel's own test id rather than by a div containing the label.
 	// `locator("div")` filtered on text and taken `.last()` returns the innermost matching
@@ -262,6 +286,19 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	// the composition on click, so a creator who changed their mind still got the emblem
 	// they had just rejected. Change both choices here, cancel, and read the stored row.
 	await editButton.click();
+
+	// 🚨 **An empty rung cannot be saved.** Empty means unfinished, not "support": remove
+	// every perk, press Save, and the dialog refuses before any write. Support is a kind the
+	// creator chooses, and this refusal is what keeps the absence from meaning anything.
+	await dialog.getByRole("tab", { name: "Perks" }).click();
+	await expect(dialog.getByLabel("Perk type").first()).toBeVisible();
+	const removePerk = dialog.getByRole("button", { name: "Remove perk" });
+	const perkRows = await removePerk.count();
+	for (let i = 0; i < perkRows; i++) await removePerk.first().click();
+	await dialog.getByRole("button", { name: "Save" }).click();
+	await expect(dialog.getByText("Add a perk, or open at least one Work.")).toBeVisible();
+	await expect(dialog).toBeVisible();
+
 	await dialog.getByRole("tab", { name: "Emblem" }).click();
 	await control.getByRole("button", { name: "Circle" }).click();
 	await control.getByRole("button", { name: "Moss" }).click();
@@ -309,6 +346,19 @@ test("a composed Badge saves a shape and background change by recomposing", asyn
 	});
 	expect(created.status, "could not create the composed fixture rung").toBe(201);
 	recomposeBadgeId = ((await created.json()) as { badge: { id: number } }).badge.id;
+
+	// The same completeness rule the art walk seeds for: a rung that names nothing cannot
+	// save, and this walk is about the recompose call rather than that refusal.
+	const perkSeed = await fetch(`${API_URL}/api/subscriptions/badges/${recomposeBadgeId}/perks`, {
+		method: "PUT",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${creatorToken}`,
+		},
+		body: JSON.stringify({ perks: [{ kind: "support", label: "Just backing the work" }] }),
+	});
+	expect(perkSeed.status, "could not seed the composed fixture perk").toBe(200);
 
 	// The row a composition leaves behind: a stored PNG, the fingerprint that marks it a
 	// composed whole, and the emblem color the recomposition reads.

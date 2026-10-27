@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "bun:test";
 import { WORK_TYPES } from "./content.js";
-import { DONATION_TAX_CODE, purchaseTaxCode, STREAMED_SUBSCRIPTION_TAX_CODE } from "./tax-codes.js";
+import { purchaseTaxCode, STREAMED_SUBSCRIPTION_TAX_CODE, SUPPORT_TAX_CODE } from "./tax-codes.js";
 
 describe("purchaseTaxCode — the What Gets Taxed table", () => {
 	it("maps every Work type the model has, so a new type cannot slip past unmapped", () => {
@@ -45,7 +45,7 @@ describe("purchaseTaxCode — the What Gets Taxed table", () => {
 	});
 
 	it("names the subscription-side codes the posture settled", () => {
-		expect(DONATION_TAX_CODE).toBe("txcd_90000001");
+		expect(SUPPORT_TAX_CODE).toBe("txcd_90000001");
 		expect(STREAMED_SUBSCRIPTION_TAX_CODE).toBe("txcd_10402200");
 	});
 });

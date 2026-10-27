@@ -1356,15 +1356,18 @@ export const nounBlocklist = pgTable(
  * A perk one creator Badge carries, as its creator tagged it in the Badge Maker.
  *
  * 🚨 **Sales tax follows what a supporter receives, so the tag is the billing fact** —
- * `creatorProductTaxCode` reads a rung's kinds through the most-taxable ordering in
- * `@anthers/shared/badge-art` (`mostTaxablePerkKind`), and a rung carrying nothing tags
- * nothing, which is how a perk-free, gate-free rung stays a donation. Access to gated
- * Works is deliberately NOT a row here: it is read from the gates themselves, which the
- * creator cannot misstate.
+ * `taxCodeForBadge` reads a rung's kinds through the most-taxable ordering in
+ * `@anthers/shared/badge-art` (`mostTaxablePerkKind`). Access to gated Works is
+ * deliberately NOT a row here: it is read from the gates themselves, which the creator
+ * cannot misstate. A rung must name a kind or open a Work before the editor saves it, so
+ * a missing row means the rung is unfinished rather than that it sells nothing; Support
+ * is a kind a creator chooses, and only a row that predates that rule falls back to it.
  *
- * ⚠️ **The label is display text, not the kind**: a creator might call their Discord
- * "The Back Room" — the kind column is what the machinery reads, and it is one of the
- * fixed list.
+ * ⚠️ **`label` is the creator's own description of what the perk includes**, which is
+ * what the public ladder's chips read; the kind column is what the machinery reads. There
+ * is no second text column: Patreon's benefit is a title plus a category, and a
+ * description beside a label duplicated the category's own explanation and was read by
+ * nothing.
  */
 // node — the perks of a creator's own Badge rung are their pricing promises, node-owned
 // content like the rung itself.
@@ -1379,7 +1382,6 @@ export const badgePerks = pgTable(
 		kind: text("kind").notNull(),
 		/** What the supporter gets, in the creator's own words. */
 		label: text("label").notNull(),
-		description: text("description").default(""),
 		sortOrder: integer("sort_order").notNull().default(0),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
