@@ -20,7 +20,6 @@ import {
 import { requireAuth } from "../middleware/auth.js";
 import { bearerToken } from "../middleware/bearer.js";
 import { invalidBody } from "../middleware/validate.js";
-import { allowedOrigins } from "../origins.js";
 import {
 	authorizeDesktopAuth,
 	cleanupDesktopAuthRequests,
@@ -62,21 +61,16 @@ import {
 import { checkRate, clientIp, limitResponse } from "../services/rate-limit.js";
 import { issueSignupChallenge, spendSignupChallenge } from "../services/signup-challenges.js";
 import type { CodeFailure } from "../services/signup-codes.js";
-import {
-	burnCodeWork,
-	checkSignupCode,
-	issueSignInCode,
-	issueSignupCode,
-} from "../services/signup-codes.js";
+import { checkSignupCode, issueSignupCode } from "../services/signup-codes.js";
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
 /**
- * The emailed-code shapes `/signup/*` takes — an address, because signup's business is
- * creating the account an address proves. The desktop's in-app email routes take their own
- * schemas below, and they add the one thing signup may never accept: a hosted handle. A handle
- * that resolved through the signup pair would mail a *create* code to an existing account's
- * mailbox — the second signup door this file exists to keep closed.
+ * The emailed-code shape `/signup/*` takes — an address, because signup's business is
+ * creating the account an address proves. The sign-in pair takes a hosted handle as well, and
+ * that difference is the point: a handle resolved through the signup pair would mail a
+ * *create* code to an existing account's mailbox, the second signup door this file exists to
+ * keep closed.
  */
 const emailCodeStartSchema = z.object({
 	email: z.string().email().max(254),
@@ -289,32 +283,6 @@ const desktopExchangeSchema = z.object({
 	code: hexToken,
 	verifier: hexToken,
 });
-
-/**
- * The desktop app's in-app emailed-code sign-in: the person types the code their
- * mailbox received straight into the app, and no browser round trip happens. The
- * contact shape is the same address-or-hosted-handle shape the sign-in pair used to take —
- * typed address, or a handle the route resolves to the account's own mailbox — because this
- * desktop door is the same ceremony on the same tables; only who calls it and what success
- * means differ.
- */
-const desktopEmailStartSchema = z
-	.object({ challenge: hexToken, email: z.string().email().max(254) })
-	.or(z.object({ challenge: hexToken, handle: z.string().trim().min(1).max(253) }));
-
-const desktopEmailVerifySchema = z
-	.object({
-		challenge: hexToken,
-		email: z.string().email().max(254),
-		code: sixCharacterCode,
-	})
-	.or(
-		z.object({
-			challenge: hexToken,
-			handle: z.string().trim().min(1).max(253),
-			code: sixCharacterCode,
-		}),
-	);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1087,151 +1055,6 @@ const authRoutes = new Hono()
 
 			const code = await authorizeDesktopAuth(
 				challenge,
-				user.id,
-				c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP") ?? null,
-				c.req.header("User-Agent") ?? null,
-			);
-			if (!code) return c.json({ error: "This sign-in request has expired" }, 404);
-
-			return c.json({ code });
-		},
-	)
-
-	// Steps 3, in-app — the emailed-code method, added 2026-10-16 (Parker): sign in
-	// without leaving the app. Each route below is the emailed-code ceremony wearing another
-	// caller: the same resolution (`signinAddressForHostedHandle`) before the
-	// issuer runs, the same code tables and throttle doors, and the same silence about
-	// whether an address has an account. Only what success means differs — the code
-	// authorizes the pending PKCE challenge instead of setting a cookie — and success
-	// calls the SAME `authorizeDesktopAuth` the browser confirm uses, so steps 1 and 4
-	// and everything downstream of the minted session are shared.
-	//
-	// Why the send route answers 404 for a stale challenge: the person typed the code
-	// into a window whose enrollment row has expired, and the only honest next step is
-	// to restart sign-in. `getPendingDesktopAuth`'s answer says nothing about any
-	// address, so the "is this person on Anthers?" silence below is unaffected — it
-	// governs what a LIVE request does, and there it holds exactly as the browser send door
-	// held it.
-	.post(
-		"/desktop/email/start",
-		zValidator("json", desktopEmailStartSchema, invalidBody),
-		async (c) => {
-			const typed = c.req.valid("json");
-
-			// Origin: present-but-foreign refused, absent admitted — this route is CSRF-
-			// exempt by list, and this check is what replaces the blanket ruling. The
-			// packaged app sends no Origin at all; a cross-site forgery through a
-			// victim's browser always does. See middleware/csrf.ts's bullet above.
-			const origin = c.req.header("Origin");
-			if (origin && !allowedOrigins().includes(origin)) {
-				return c.json({ error: "CSRF validation failed" }, 403);
-			}
-
-			// The same send budget `/signup/start` uses: one budget for one address-sender,
-			// and the desktop app is only a third trigger of the same mail.
-			const limited = await checkRate("auth-code-send", clientIp(c.req.raw.headers), 10, 3600);
-			if (!limited.ok) return limitResponse(limited);
-
-			const pending = await getPendingDesktopAuth(typed.challenge);
-			if (!pending) return c.json({ error: "This sign-in request has expired" }, 404);
-
-			try {
-				const email =
-					"handle" in typed ? await signinAddressForHostedHandle(typed.handle) : typed.email;
-				if (email === null) {
-					await burnCodeWork();
-				} else {
-					const issued = await issueSignInCode(email);
-					if (issued.code) {
-						// Off the response path for the same measurability reason
-						// `/signup/start` states: the answer must not time the account query.
-						void sendSignInCodeEmail(email, issued.code).catch((err) => {
-							console.error("[desktop/email/start] failed to send the code:", err);
-						});
-					}
-				}
-			} catch (err) {
-				console.error("[desktop/email/start] failed to issue a code:", err);
-			}
-
-			// The identical-body rule, intact: unknown address, throttled resend, mail
-			// outage — all answer this same body.
-			return c.json({ success: true });
-		},
-	)
-
-	// Step 3's confirmation — spend the emailed code against the pending challenge.
-	// The failure voices are the emailed code's everywhere: one message for every wrong or missing
-	// code, suspension answered truthfully with no session minted, and a code for an
-	// address with no account creating nothing.
-	.post(
-		"/desktop/email/verify",
-		zValidator("json", desktopEmailVerifySchema, invalidBody),
-		async (c) => {
-			const typed = c.req.valid("json");
-
-			// Origin: absent admitted, present-but-foreign refused — the same shape the
-			// send half states; this route is exempt by list and this replaces the
-			// blanket ruling. The proof beyond it is possession of the emailed code,
-			// which the browser forger cannot contribute.
-			const origin = c.req.header("Origin");
-			if (origin && !allowedOrigins().includes(origin)) {
-				return c.json({ error: "CSRF validation failed" }, 403);
-			}
-
-			// The same guess door /signup/verify uses: the code service caps one code's
-			// guesses, this caps one guesser's pace across them.
-			const limited = await checkRate("auth-code-verify", clientIp(c.req.raw.headers), 20, 3600);
-			if (!limited.ok) return limitResponse(limited);
-
-			// The resolution repeats deliberately, as the handle-driven start step records: the client
-			// never learns the mailbox a handle-driven code is keyed on, so this route
-			// re-resolves the same way its send step did.
-			const email =
-				"handle" in typed ? await signinAddressForHostedHandle(typed.handle) : typed.email;
-			if (email === null) {
-				return c.json(
-					{
-						error: "That code didn't work. Check it, or ask for a new one.",
-						reason: "no_code",
-					},
-					400,
-				);
-			}
-
-			const result = await checkSignupCode(email, typed.code);
-			if (!result.ok) return emailedCodeRefusal(c, result);
-
-			const [user] = await db.select().from(users).where(eq(users.email, result.email)).limit(1);
-			if (user?.suspendedAt) {
-				// The holder proved the mailbox, so the suspension is told truthfully and
-				// no session is created — the same refusal the desktop verify gives.
-				return c.json(
-					{
-						error: "This account is suspended.",
-						reason: "account_suspended",
-						suspendedUntil: user.suspendedUntil?.toISOString() ?? null,
-						user: null,
-						resume: false,
-					},
-					403,
-				);
-			}
-			if (!user) {
-				// 🚨 Creates nothing, ever. No resumption handshake here either:
-				// the signup-resume route hands a pending-signup row to *that browser* through a
-				// pending-signup cookie, a mechanism the desktop app has no equivalent of
-				// and must not invent. The bundled signup flow is a first-class in-app
-				// surface already, so the message's direction points somewhere real.
-				return c.json(
-					{ error: "There's no Anthers account for that address yet — sign up to create one." },
-					404,
-				);
-			}
-
-			// Success is the browser confirm's function, verbatim.
-			const code = await authorizeDesktopAuth(
-				typed.challenge,
 				user.id,
 				c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP") ?? null,
 				c.req.header("User-Agent") ?? null,

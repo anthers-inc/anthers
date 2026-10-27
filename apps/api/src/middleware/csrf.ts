@@ -21,22 +21,14 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  *   the entire point of the exchange. None is CSRF-forgeable through a browser to any
  *   effect: `/start` only records a pending challenge the caller invented and touches
  *   no user state, and `/exchange` demands a code AND the PKCE verifier, possession of
- *   which IS the proof. The emailed-code pair (`/desktop/email/start`,
- *   `/desktop/email/verify`) follows the same ruling with a route-level Origin re-check of
- *   the beacon's shape — absent-Origin admitted, present-but-foreign refused — because the
- *   send half is an unauthenticated mail trigger: a forgery through a victim's browser would
- *   spend the victim's per-IP send budget for the attacker, which the route-level check
- *   prevents while the packaged app's Origin-less calls pass, and the verify half's proof is
- *   possession of the emailed code. `/desktop/authorize` is deliberately NOT exempt — that
- *   one runs under the browser's cookie session and needs the check.
+ *   which IS the proof. `/desktop/authorize` is deliberately NOT exempt — that one runs
+ *   under the browser's cookie session and needs the check.
  */
 const CSRF_EXEMPT_PATHS = new Set([
 	"/api/payments/stripe/webhook",
 	"/api/webhooks/resend",
 	"/api/auth/desktop/start",
 	"/api/auth/desktop/exchange",
-	"/api/auth/desktop/email/start",
-	"/api/auth/desktop/email/verify",
 	// The droplet's heartbeat ingest (routes/status.ts): a machine on another failure
 	// domain authenticating by its own bearer secret, not by an Origin any browser would
 	// send. The route verifies the secret itself (timing-safe), so the exemption removes
