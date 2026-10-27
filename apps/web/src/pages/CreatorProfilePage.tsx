@@ -904,7 +904,7 @@ export default function CreatorProfilePage() {
 						) : (
 							<EmptyState
 								title="No games yet"
-								description={`${creator.displayName || creator.handle} hasn't published any games.`}
+								description={`${creator.displayName || creator.handle} hasn't released any games.`}
 							/>
 						))}
 
@@ -918,7 +918,7 @@ export default function CreatorProfilePage() {
 						) : (
 							<EmptyState
 								title="No videos yet"
-								description={`${creator.displayName || creator.handle} hasn't published any videos.`}
+								description={`${creator.displayName || creator.handle} hasn't released any videos.`}
 							/>
 						))}
 
@@ -932,7 +932,7 @@ export default function CreatorProfilePage() {
 						) : (
 							<EmptyState
 								title="No audio yet"
-								description={`${creator.displayName || creator.handle} hasn't published any audio.`}
+								description={`${creator.displayName || creator.handle} hasn't released any audio.`}
 							/>
 						))}
 
@@ -946,7 +946,7 @@ export default function CreatorProfilePage() {
 						) : (
 							<EmptyState
 								title="No writing yet"
-								description={`${creator.displayName || creator.handle} hasn't published any articles.`}
+								description={`${creator.displayName || creator.handle} hasn't released any articles.`}
 							/>
 						))}
 

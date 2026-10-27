@@ -57,7 +57,7 @@ export default function WorkRow({
 }: {
 	item: Work;
 	onDelete: (item: Work) => void;
-	/** One release act — publish now, schedule, clear, unrelease — from the row. */
+	/** One release act — release now, schedule, clear, unrelease — from the row. */
 	onRelease: (item: Work, fields: WorkReleaseFields) => Promise<boolean>;
 	/** True while this row's own release act is in flight. */
 	busy?: boolean;
