@@ -69,7 +69,7 @@ import {
 	retrieveSubscription,
 	verifyWebhookSignature,
 } from "../lib/processor.js";
-import { requireAuth, requireVerified } from "../middleware/auth.js";
+import { getOptionalUserId, requireAuth, requireVerified } from "../middleware/auth.js";
 import { resolveAccess } from "../services/access.js";
 import { oweAccessReceipt } from "../services/access-receipts.js";
 import { anthersUserId } from "../services/anthers-badges.js";
@@ -1673,7 +1673,7 @@ const paymentRoutes = new Hono()
 	 * billing address, which is a fact about a person.
 	 */
 	.get("/physical/:slug", async (c) => {
-		const found = await physicalStorefront(c.req.param("slug"));
+		const found = await physicalStorefront(c.req.param("slug"), await getOptionalUserId(c));
 		if (!found.ok) return c.json({ error: found.error }, found.status);
 		return c.json({
 			work: found.work,
