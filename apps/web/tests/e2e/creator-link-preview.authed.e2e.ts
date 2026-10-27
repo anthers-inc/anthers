@@ -21,7 +21,7 @@ import { db } from "@anthers/db/client";
 import { MEDIA_FIXTURE_EMAIL } from "@anthers/db/media-fixture";
 import { users } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
-import { API_URL, expect, test, WEB_ORIGIN } from "./fixtures";
+import { expect, test, WEB_ORIGIN } from "./fixtures";
 
 const DISPLAY_NAME = "Media Fixture";
 const BIO = "Nine works of every kind, written for the preview walk.";
@@ -50,9 +50,12 @@ test("a profile's preview names the creator and serves their composed card", asy
 	expect(html).toContain(`<title>${DISPLAY_NAME} — Anthers</title>`);
 	expect(html).toContain(`<meta property="og:title" content="${DISPLAY_NAME}" />`);
 	expect(html).toContain(`<meta property="og:description" content="${BIO}" />`);
-	// The card's own address, which is what the crawler fetches — not the portrait.
-	const card = `${API_URL}/api/accounts/users/${handle}/card.png`;
-	expect(html).toContain(`<meta property="og:image" content="${card}" />`);
+	// The card's own address, which is what the crawler fetches — not the portrait. The
+	// origin is the deployment's (`BASE_URL`/`FRONTEND_URL` at the API, whose host differs
+	// between a browser session and CI), so the assertion is on the path and the fetch uses
+	// exactly what the document named.
+	const card = /<meta property="og:image" content="([^"]+)" \/>/.exec(html)?.[1];
+	expect(card?.endsWith(`/api/accounts/users/${handle}/card.png`)).toBe(true);
 	expect(html).toContain(
 		`<meta property="og:image:alt" content="The profile card for ${DISPLAY_NAME} on Anthers." />`,
 	);
@@ -62,7 +65,7 @@ test("a profile's preview names the creator and serves their composed card", asy
 	// And the address answers with the image the card promised. The fixture's portrait is a
 	// URL with no upload behind it, so the composition finds nothing to draw and renders the
 	// card's empty ground — the fallback that keeps a preview from ever being a broken image.
-	const image = await page.request.get(card);
+	const image = await page.request.get(card!);
 	expect(image.status()).toBe(200);
 	expect(image.headers()["content-type"]).toBe("image/png");
 });
