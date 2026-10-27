@@ -407,7 +407,7 @@ export default function ForCreatorsPage() {
 						<Feature
 							icon={<ChartBarIcon className="h-6 w-6" />}
 							title="Creator Dashboard"
-							description="See your projects, posts, follower count, and content at a glance. Manage drafts and published work from one place. Create and edit projects with rich forms, upload builds, and manage screenshots."
+							description="See your projects, posts, follower count, and content at a glance. Manage drafts and released work from one place. Create and edit projects with rich forms, upload builds, and manage screenshots."
 						/>
 					</Reveal>
 					<Reveal delay={480}>
