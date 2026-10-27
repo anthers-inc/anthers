@@ -7,6 +7,7 @@ import {
 	STRIPE_TAX_FEE_RATE,
 } from "@anthers/shared/constants";
 import { RIVAL_STOREFRONTS } from "@anthers/shared/figures";
+import InfoTip from "../ui/InfoTip";
 
 /**
  * What a creator actually receives, shown beside the field where they set the number.
@@ -93,9 +94,22 @@ export interface TakeHomeProps {
 	kind: "purchase" | "badge";
 }
 
-export function TakeHome({ amount, kind }: TakeHomeProps) {
-	if (!(amount > 0)) return null;
+/** Every figure the take-home display shows, derived once so the panel and the one-line
+ *  form cannot disagree about the same price. */
+interface TakeHomeFigures {
+	fee: number;
+	taxServiceFeeMax: number;
+	netBest: number;
+	netWorst: number;
+	underwater: boolean;
+	keptPctBest: number;
+	keptPctWorst: number;
+	flatShare: number;
+	rivals: { name: string; net: number | null }[];
+	best: number;
+}
 
+function takeHomeFigures(amount: number): TakeHomeFigures {
 	const fee = cardFeeDisplay(amount);
 
 	// 🚨 NOT clamped at zero, and the first cut of this was. Below ~$0.32 the fixed fee
@@ -130,6 +144,36 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 	// a small sale is less than the flat fee they absorb. The wiki's *How Anthers Talks About Itself* § Comparisons requires we
 	// concede that, and generating it means we cannot quietly stop.
 	const best = Math.max(netBest, ...rivals.map((r) => r.net ?? 0));
+
+	return {
+		fee,
+		taxServiceFeeMax,
+		netBest,
+		netWorst,
+		underwater,
+		keptPctBest,
+		keptPctWorst,
+		flatShare,
+		rivals,
+		best,
+	};
+}
+
+export function TakeHome({ amount, kind }: TakeHomeProps) {
+	if (!(amount > 0)) return null;
+
+	const {
+		fee,
+		taxServiceFeeMax,
+		netBest,
+		netWorst,
+		underwater,
+		keptPctBest,
+		keptPctWorst,
+		flatShare,
+		rivals,
+		best,
+	} = takeHomeFigures(amount);
 
 	return (
 		<div className="rounded-box bg-base-200/60 px-3 py-2 text-sm" data-testid="take-home">
@@ -252,4 +296,126 @@ export function TakeHome({ amount, kind }: TakeHomeProps) {
 /** Round a display figure to cents without letting float noise move the last digit. */
 function roundCents(n: number): number {
 	return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * The same figures as one line, for a table that repeats them down every row.
+ *
+ * The access table is where a creator prices several levels at once, and a full panel
+ * beside every row read as a wall rather than as a set of fields (Parker, 2026-10-26).
+ * What a creator actually chooses by is the one number, so that number stays on the row
+ * and the arithmetic — including the comparison to the storefronts — moves behind the
+ * (i) beside it, which is where a creator looks when the number surprises them.
+ */
+export function TakeHomeInline({ amount }: { amount: number }) {
+	if (!(amount > 0)) return null;
+
+	const figures = takeHomeFigures(amount);
+	const { netBest, netWorst, underwater } = figures;
+	// Both states that lose the creator money or cannot be charged color the line, so a
+	// bad price does not look like a good one until the pointer happens to find the (i).
+	const bad = underwater || amount < STRIPE_MIN_CHARGE;
+
+	return (
+		<span
+			className="inline-flex items-baseline whitespace-nowrap text-sm tabular-nums"
+			data-testid="take-home"
+		>
+			<span className={bad ? "font-medium text-error" : "font-medium"} data-testid="take-home-net">
+				{signedUsd(netWorst)}
+				{netWorst !== netBest && `–${signedUsd(netBest)}`}
+			</span>
+			<span className="ml-1 text-base-content/50">of {usd(amount)}</span>
+			<InfoTip wide unclipped label={`How the ${usd(amount)} price breaks down`}>
+				<TakeHomeBreakdown amount={amount} figures={figures} />
+			</InfoTip>
+		</span>
+	);
+}
+
+/** The overlay's body: the deduction rows, the states that need saying, and the rivals. */
+function TakeHomeBreakdown({ amount, figures }: { amount: number; figures: TakeHomeFigures }) {
+	const { fee, taxServiceFeeMax, netBest, netWorst, underwater, flatShare, rivals, best } = figures;
+
+	return (
+		<span className="flex flex-col gap-1" data-testid="take-home-breakdown">
+			{/* Every row is a deduction from the CREATOR's side. Sales tax is the buyer's and
+			    is added to their total, so it has no row here — only the processor's 0.5% for
+			    calculating it does. Every figure derives from `@anthers/shared/constants`. */}
+			<span className="flex flex-col text-[11px]">
+				<span className="flex items-baseline justify-between gap-3 py-0.5">
+					<span className="text-base-content/60">Sale price</span>
+					<span className="tabular-nums">{usd(amount)}</span>
+				</span>
+				<span className="flex items-baseline justify-between gap-3 border-t border-base-content/10 py-0.5">
+					<span className="text-base-content/60">Card processing</span>
+					<span className="tabular-nums">{`−${usd(fee)}`}</span>
+				</span>
+				<span className="flex items-baseline justify-between gap-3 border-t border-base-content/10 py-0.5">
+					<span className="text-base-content/60">Stripe tax service</span>
+					<span className="tabular-nums">
+						{usd(0)}–{usd(taxServiceFeeMax)}
+					</span>
+				</span>
+				<span className="flex items-baseline justify-between gap-3 border-t border-base-content/10 py-0.5">
+					<span className="text-base-content/60">
+						Anthers <span className="text-[10px] text-base-content/40">· no platform cut</span>
+					</span>
+					<span className="tabular-nums">{usd(0)}</span>
+				</span>
+				<span className="flex items-baseline justify-between gap-3 border-t border-base-content/10 py-0.5 font-medium">
+					<span>You receive</span>
+					<span className="tabular-nums">
+						{signedUsd(netWorst)}
+						{netWorst !== netBest && `–${signedUsd(netBest)}`}
+					</span>
+				</span>
+			</span>
+
+			{underwater && (
+				<span className="block text-[11px] text-error" data-testid="take-home-underwater">
+					{/* The one state that is not merely unflattering but loss-making. Stated as a
+					    consequence, still with no remedy imposed — a creator may have a reason,
+					    and the settled rule is inform, never restrict. */}
+					At this price the {usd(fee)} card fee is <strong>more than the price</strong>, so a sale
+					costs you {usd(-netBest)}. Anything under {usd(breakEvenPrice())} is underwater.
+				</span>
+			)}
+
+			{amount > 0 && amount < STRIPE_MIN_CHARGE && (
+				<span className="block text-[11px] text-error" data-testid="take-home-min-charge">
+					{/* 🚨 The one amount that is refused rather than explained, and the copy has to
+					    say so — a tip telling a creator their price merely "cannot be sold on its
+					    own" while the save button refuses it would be describing a different
+					    product. The reason is the rail's rather than ours, so it leads. */}
+					Card networks will not take a charge under {usd(STRIPE_MIN_CHARGE)}, so this amount can't
+					be saved. Make it {usd(STRIPE_MIN_CHARGE)} or more, or free.
+				</span>
+			)}
+
+			{!underwater && amount < EXPLAIN_BELOW && (
+				<span className="block text-[11px] text-warning" data-testid="take-home-low">
+					{/* Explanation, not a warning to act on: the brief settled "inform, never
+					    restrict", so this states a fact and offers no remedy and no confirm step. */}
+					<strong>{flatShare.toFixed(0)}%</strong> of the deduction is Stripe's fixed $
+					{CARD_FLAT.toFixed(2)}, which does not shrink with the price.
+				</span>
+			)}
+
+			<span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-base-content/10 pt-1 text-[11px]">
+				<span className="w-full text-base-content/50">Elsewhere at this price</span>
+				<span>
+					Anthers <span className={netBest >= best ? "font-semibold" : ""}>{usd(netBest)}</span>
+				</span>
+				{rivals.map((r) => (
+					<span key={r.name}>
+						{r.name}{" "}
+						<span className={r.net !== null && r.net >= best ? "font-semibold" : ""}>
+							{r.net === null ? "—" : r.net < 0 ? `−${usd(-r.net)}` : usd(r.net)}
+						</span>
+					</span>
+				))}
+			</span>
+		</span>
+	);
 }
