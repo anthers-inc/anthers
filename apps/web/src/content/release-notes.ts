@@ -81,7 +81,7 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 			"A shared creator profile unfurls with a card of its own now, composed from the banner and the portrait its creator set and laid out the way the profile page is, rather than the square picture cropped into a wide box.",
 			"A creator page's tabs are grouped by what they show: the creator's Dashboard alone, the profile's own Badges and Credits, and then everything the creator has put out, with a view per released Work type. The creator lands on their Dashboard and a visitor lands on All Content, and the address bar names a tab only where one was chosen.",
 			"A Badge's perks name seven kinds now, Digital and Discount among them, and a rung has to name a kind or open a Work before it can be saved; an empty row means unfinished rather than a support payment.",
-			"A perk row is a type and a description, the Works a Badge opens have a tab of their own in the Badge Maker, and the rows reorder by their grip or with the arrow keys.",
+			"A perk row is a type and a description, the Works list sits on its own Unlocks tab in the Badge Maker, and the rows reorder by their grip or with the arrow keys.",
 		],
 	},
 	{
