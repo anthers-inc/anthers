@@ -261,7 +261,7 @@ describe("the hosted session store", () => {
 			}),
 			"com.atproto.server.createSession": () => ({ body: { ...fresh } }),
 		});
-		const result = await sessionForHostedAccount(did, PASSWORD, { fetchImpl: node.impl });
+		const result = await sessionForHostedAccount(did, { fetchImpl: node.impl });
 		expect(result).toEqual({ token: fresh.accessJwt });
 		expect(sessionCalls(node.calls)).toEqual([
 			expect.objectContaining({ method: "com.atproto.server.refreshSession" }),
@@ -280,7 +280,7 @@ describe("the hosted session store", () => {
 			},
 			// No createSession route: if the store silently logged in, this throws.
 		});
-		const result = await sessionForHostedAccount(did, PASSWORD, { fetchImpl: node.impl });
+		const result = await sessionForHostedAccount(did, { fetchImpl: node.impl });
 		expect(result.token).toBeNull();
 		expect(result.token === null && result.error).toContain("refreshSession");
 		expect(sessionCalls(node.calls)).toEqual([
@@ -301,8 +301,8 @@ describe("the hosted session store", () => {
 				});
 			},
 		});
-		const first = sessionForHostedAccount(did, PASSWORD, { fetchImpl: node.impl });
-		const second = sessionForHostedAccount(did, PASSWORD, { fetchImpl: node.impl });
+		const first = sessionForHostedAccount(did, { fetchImpl: node.impl });
+		const second = sessionForHostedAccount(did, { fetchImpl: node.impl });
 		// Let both callers reach the store before the node answers.
 		await new Promise((r) => setTimeout(r, 50));
 		loginResolver!();
@@ -359,7 +359,7 @@ describe("the hosted session store", () => {
 				body: { error: "InternalServerError" },
 			}),
 		});
-		const result = await sessionForHostedAccount(did, PASSWORD, { fetchImpl: node.impl });
+		const result = await sessionForHostedAccount(did, { fetchImpl: node.impl });
 		expect(result.token).toBeNull();
 		expect(result.token === null && result.error).toContain("createSession");
 

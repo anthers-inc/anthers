@@ -42,7 +42,6 @@ import { eq } from "drizzle-orm";
 import type { RecordRef, RepoWriter } from "./atproto-repo.js";
 import { hostedPdsUrl, nodeCall } from "./hosted-node.js";
 import { clearHostedSession, sessionForHostedAccount } from "./hosted-session-store.js";
-import { open } from "./secret-box.js";
 
 /** Why no writer could be made. Every one of these is ordinary rather than an error. */
 export type NoWriterReason =
@@ -114,7 +113,7 @@ export async function hostedTokenFor(
 	const doFetch = opts.fetchImpl ?? fetch;
 
 	const [row] = await db
-		.select({ did: hostedAccounts.did, sealedPassword: hostedAccounts.sealedPassword })
+		.select({ did: hostedAccounts.did })
 		.from(hostedAccounts)
 		.where(eq(hostedAccounts.userId, userId))
 		.limit(1);
@@ -123,25 +122,15 @@ export async function hostedTokenFor(
 	// rather than as a node that did not answer.
 	if (!hostedPdsUrl()) return { ok: false, reason: "no_node" };
 
-	// `open` throws on a value this deployment's key cannot open, which is a real state — see
-	// `signup-probe.anthers.social` in the runbook. Retrying never opens it.
-	// A password on file is the legacy fallback, not the design: it is only there because a
-	// session could not be established when the identity was recorded.
-	let password: string | null = null;
-	if (row.sealedPassword) {
-		try {
-			password = open(row.sealedPassword);
-		} catch {
-			console.error(`[repo-writer] cannot open the credential for ${row.did}`);
-			return { ok: false, reason: "credential_unopenable" };
-		}
-	}
-
 	// ⭐ **One login per account, not one per write.** The store reuses the session already on
 	// file and renews it with `refreshSession`; `createSession` — the call the node limits —
 	// happens only when there is no session or the node refused the refresh.
-	const session = await sessionForHostedAccount(row.did, password, { fetchImpl: doFetch });
+	const session = await sessionForHostedAccount(row.did, { fetchImpl: doFetch });
 	if (session.token === null) {
+		if (session.credentialUnopenable) {
+			console.error(`[repo-writer] cannot open the credential for ${row.did}`);
+			return { ok: false, reason: "credential_unopenable" };
+		}
 		return {
 			ok: false,
 			reason: session.authorizationLost ? "authorization_lost" : "node_unreachable",

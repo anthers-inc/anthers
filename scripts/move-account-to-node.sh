@@ -6,9 +6,10 @@
 # goat is Bluesky's own migration tool and carries the three documented categories: the
 # repository CAR, the private preferences, and the public blobs, then the identity. What it
 # cannot do is tell Anthers that the identity now lives here — the app resolves every space
-# write through a `hosted_accounts` row with a sealed password, and signup is the only other
-# thing that writes one. `hosted:record` closes that gap, and it runs here with the same
-# password goat just set, so the secret exists only inside this process.
+# write through a `hosted_accounts` row holding a sealed session, and signup is the only other
+# thing that writes one. `hosted:record` closes that gap, and it runs here with the password
+# this script asked the mover to choose, so the plaintext never leaves this process and the
+# row keeps only the session it opens.
 #
 #   GOAT_EMAIL=you@example.com ./scripts/move-account-to-node.sh <user-id> <handle>
 #
@@ -65,12 +66,31 @@ if [ -z "${PLC_SIGN_TOKEN:-}" ]; then
 fi
 export PLC_SIGN_TOKEN
 
-# ⚠️ **This is the node's credential for the account, not a way to sign in to Anthers.** Anthers
-# accounts have no passwords at all: sign-in is an emailed code. A repo host authenticates its
-# accounts with identifier and password, so one is minted here for the node and sealed under
-# HOSTED_ACCOUNT_KEY. Nobody is shown it; the app uses it only to act for the account. Losing
-# it is recoverable with the node's admin password, by hand, one account at a time.
-NEW_ACCOUNT_PASSWORD="$(openssl rand -base64 24)"
+# ⚠️ **The account's password on this node is the mover's, not Anthers'.** This used to mint one
+# nobody ever saw, which is what left a moved-in person unable to sign into Bluesky on the
+# identity they had just brought: the identity worked everywhere except in their own hands. A
+# repo host authenticates its accounts with identifier and password, so the person chooses that
+# password here, at the moment of the move, and holds it from then on. Anthers keeps only the
+# session the move opens.
+#
+# 🚨 **Read with `-s` and never echoed.** The value goes into goat through the environment, and
+# the confirmation loop exists because a typo in a silent prompt is unrecoverable — the reset
+# path would mean mailing a code to an address the identity does not carry yet.
+while :; do
+	read -r -s -p "Choose a password for ${HANDLE} on ${NODE_URL}: " NEW_ACCOUNT_PASSWORD
+	echo
+	if [ "${#NEW_ACCOUNT_PASSWORD}" -lt 12 ]; then
+		echo "  at least 12 characters, please — this is the password that signs into Bluesky." >&2
+		continue
+	fi
+	read -r -s -p "Type it again: " CONFIRM
+	echo
+	if [ "$NEW_ACCOUNT_PASSWORD" != "$CONFIRM" ]; then
+		echo "  those did not match." >&2
+		continue
+	fi
+	break
+done
 export NEW_ACCOUNT_PASSWORD
 
 # ⚠️ **The invite code is the one value goat takes only as an argument.** The node requires one

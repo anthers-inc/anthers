@@ -13,8 +13,13 @@
  * ⭐ **Order is a behavior here rather than an implementation detail.** A deactivated
  * repository refuses writes, so records have to go before deactivation; if that inverts, the
  * purge silently stops emptying anything and still reports success.
+ *
+ * ⭐ **And the credential is read from the row, never handed in.** A lifecycle act presents the
+ * session the hub already holds as the account's first-party client; there is no parameter a
+ * caller could pass a password through, which is the shape that keeps a password out of the
+ * erasure path entirely.
  */
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 const PDS_URL = "https://anthers.test";
 
@@ -36,7 +41,8 @@ beforeAll(async () => {
 	);
 });
 
-afterAll(() => {
+afterAll(async () => {
+	await db.delete(hostedAccounts).where(eq(hostedAccounts.did, DID));
 	restore("HOSTED_PDS_URL", before.url);
 	restore("HOSTED_ACCOUNT_KEY", before.key);
 });
@@ -49,8 +55,44 @@ function restore(key: string, value: string | undefined) {
 const { purgeHostedIdentity } = await import("../services/hosted-accounts.js");
 const { seal } = await import("../services/secret-box.js");
 const { learnHandleDomain } = await import("./node-fixture.js");
+const { db } = await import("@anthers/db");
+const { hostedAccounts } = await import("@anthers/db/schema");
+const { eq } = await import("drizzle-orm");
 
 const DID = "did:plc:examplehostedidentity";
+const PASSWORD = "hunter2";
+
+/**
+ * Put a credential on the DID's row, which is the only place the purge can find one.
+ *
+ * The default is a legacy sealed password, because that is the shape every hosted row had until
+ * sessions became the credential — so exercising it here is exercising the migration case as well
+ * as the ordinary one.
+ */
+async function seedSession(): Promise<void> {
+	await db
+		.update(hostedAccounts)
+		.set({
+			sealedSession: seal(
+				JSON.stringify({
+					accessJwt: "EXAMPLE-live-access-token",
+					refreshJwt: "EXAMPLE-live-refresh-token",
+					expiresAt: Date.now() + 3_600_000,
+				}),
+			),
+		})
+		.where(eq(hostedAccounts.did, DID));
+}
+
+async function seedCredential(sealedPassword: string = seal(PASSWORD)): Promise<void> {
+	await db
+		.insert(hostedAccounts)
+		.values({ did: DID, handle: "alice.anthers.test", sealedPassword, sealedSession: null })
+		.onConflictDoUpdate({
+			target: hostedAccounts.did,
+			set: { sealedPassword, sealedSession: null },
+		});
+}
 
 /** What one endpoint should answer. A missing entry is an endpoint the test expects unused. */
 type Route = (body: Record<string, unknown>) => { status?: number; body?: unknown };
@@ -82,6 +124,10 @@ function nodeFetch(routes: Record<string, Route>) {
 	}) as unknown as typeof fetch;
 	return { impl, calls };
 }
+
+// Every case starts from a row holding the credential it is about; the cases that need a
+// different one put it back themselves.
+beforeEach(seedCredential);
 
 /**
  * The endpoints a clean purge touches, with one record in one collection.
@@ -115,7 +161,7 @@ function healthyNode(overrides: Record<string, Route> = {}) {
 describe("purgeHostedIdentity", () => {
 	it("empties the repository, then renames, readdresses and deactivates", async () => {
 		const { impl, calls } = healthyNode();
-		const outcome = await purgeHostedIdentity(DID, seal("hunter2"), { fetchImpl: impl });
+		const outcome = await purgeHostedIdentity(DID, { fetchImpl: impl });
 
 		expect(outcome).toEqual({ status: "purged" });
 
@@ -138,11 +184,24 @@ describe("purgeHostedIdentity", () => {
 		]);
 	});
 
+	// ⭐ **The session is the credential, so the erasure spends no login.** A purge that logged in
+	// with a password would still pass every assertion above; what it would also do is spend one
+	// of the account's limited `createSession` calls and prove the hub was still keeping a
+	// credential of its own rather than using the client session it already holds.
+	it("uses the session already on file, and logs in for nothing", async () => {
+		const { impl, calls } = healthyNode();
+		await seedSession();
+		const outcome = await purgeHostedIdentity(DID, { fetchImpl: impl });
+
+		expect(outcome).toEqual({ status: "purged" });
+		expect(calls.map((c) => c.method)).not.toContain("com.atproto.server.createSession");
+	});
+
 	// ⭐ The name and the address are the two identifying strings in the account row, and the
 	// point of replacing them is that neither carries anything of the person's afterwards.
 	it("leaves nothing of the old name in either the handle or the address", async () => {
 		const { impl, calls } = healthyNode();
-		await purgeHostedIdentity(DID, seal("hunter2"), { fetchImpl: impl });
+		await purgeHostedIdentity(DID, { fetchImpl: impl });
 
 		const handle = calls.find((c) => c.method === "com.atproto.identity.updateHandle")?.body
 			.handle as string;
@@ -172,7 +231,7 @@ describe("purgeHostedIdentity", () => {
 				};
 			},
 		});
-		const outcome = await purgeHostedIdentity(DID, seal("hunter2"), { fetchImpl: impl });
+		const outcome = await purgeHostedIdentity(DID, { fetchImpl: impl });
 
 		expect(outcome).toEqual({ status: "purged" });
 		const applied = calls.filter((c) => c.method === "com.atproto.repo.applyWrites");
@@ -186,7 +245,7 @@ describe("purgeHostedIdentity", () => {
 		const { impl, calls } = nodeFetch({
 			"com.atproto.repo.describeRepo": () => ({ status: 400, body: { error: "RepoNotFound" } }),
 		});
-		const outcome = await purgeHostedIdentity(DID, seal("hunter2"), { fetchImpl: impl });
+		const outcome = await purgeHostedIdentity(DID, { fetchImpl: impl });
 
 		expect(outcome).toEqual({ status: "absent" });
 		expect(calls.map((c) => c.method)).toEqual(["com.atproto.repo.describeRepo"]);
@@ -201,7 +260,7 @@ describe("purgeHostedIdentity", () => {
 				body: { error: "RepoDeactivated" },
 			}),
 		});
-		const outcome = await purgeHostedIdentity(DID, seal("hunter2"), { fetchImpl: impl });
+		const outcome = await purgeHostedIdentity(DID, { fetchImpl: impl });
 
 		expect(outcome).toEqual({ status: "purged" });
 		const order = calls.map((c) => c.method);
@@ -219,7 +278,7 @@ describe("purgeHostedIdentity, when it cannot finish", () => {
 		const impl = (async () => {
 			throw new Error("connect ECONNREFUSED");
 		}) as unknown as typeof fetch;
-		const outcome = await purgeHostedIdentity(DID, seal("hunter2"), { fetchImpl: impl });
+		const outcome = await purgeHostedIdentity(DID, { fetchImpl: impl });
 
 		expect(outcome.status).toBe("unreachable");
 	});
@@ -228,9 +287,7 @@ describe("purgeHostedIdentity, when it cannot finish", () => {
 		const { impl } = nodeFetch({
 			"com.atproto.repo.describeRepo": () => ({ status: 500, body: { error: "InternalError" } }),
 		});
-		expect((await purgeHostedIdentity(DID, seal("x"), { fetchImpl: impl })).status).toBe(
-			"unreachable",
-		);
+		expect((await purgeHostedIdentity(DID, { fetchImpl: impl })).status).toBe("unreachable");
 	});
 
 	// 🚨 The address is the personal data in that row, so a purge that could not replace it has
@@ -243,9 +300,7 @@ describe("purgeHostedIdentity, when it cannot finish", () => {
 				body: { error: "InvalidRequest", message: "nope" },
 			}),
 		});
-		expect((await purgeHostedIdentity(DID, seal("x"), { fetchImpl: impl })).status).toBe(
-			"unreachable",
-		);
+		expect((await purgeHostedIdentity(DID, { fetchImpl: impl })).status).toBe("unreachable");
 	});
 
 	// 🚨 And this is the one the caller must NOT defer on: retrying never opens a credential
@@ -258,16 +313,17 @@ describe("purgeHostedIdentity, when it cannot finish", () => {
 				body: { error: "AuthenticationRequired" },
 			}),
 		});
-		expect((await purgeHostedIdentity(DID, seal("x"), { fetchImpl: impl })).status).toBe(
-			"unusable",
-		);
+		expect((await purgeHostedIdentity(DID, { fetchImpl: impl })).status).toBe("unusable");
 	});
 
 	it("reports a credential this key cannot open as unusable, and asks the node nothing", async () => {
 		const { impl, calls } = healthyNode();
-		const outcome = await purgeHostedIdentity(DID, "v1.aaaa.bbbb.cccc", { fetchImpl: impl });
+		await seedCredential("v1.aaaa.bbbb.cccc");
+		const outcome = await purgeHostedIdentity(DID, { fetchImpl: impl });
 
 		expect(outcome.status).toBe("unusable");
-		expect(calls).toHaveLength(0);
+		// Nothing is destroyed or rewritten on the node. `describeRepo` runs first because it is
+		// also how the collections are enumerated, and it costs nothing to ask.
+		expect(calls.map((c) => c.method)).toEqual(["com.atproto.repo.describeRepo"]);
 	});
 });
