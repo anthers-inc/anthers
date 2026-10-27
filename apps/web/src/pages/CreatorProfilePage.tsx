@@ -108,17 +108,17 @@ function hostLabel(url: string): string {
 
 const TABS: Tab[] = [
 	"dashboard",
+	"badges",
+	"credits",
 	"all",
 	"posts",
 	"games",
 	"videos",
 	"audio",
 	"writing",
-	"badges",
-	"credits",
 ];
 
-/** The separator between the tab row's groups — the timeline, the Work types, and the profile's metadata views. */
+/** The separator between the tab row's groups — the creator's Dashboard, the profile's own surfaces, and the content. */
 function TabDivider() {
 	return <span aria-hidden="true" className="mx-1 h-5 w-px self-center bg-base-content/20" />;
 }
@@ -144,19 +144,23 @@ export default function CreatorProfilePage() {
 	// user here to act, and dropping them on the default tab loses the intent they arrived with.
 	// ?badge= beside it is the pick carried back across a sign-in detour from the same tab.
 	//
-	// ⭐ **`?tab=dashboard` leads the row for the creator alone** (Parker, 2026-10-23), because it
-	// holds the worklist and the arrangeable panels — the Studio's Dashboard, moved here from
-	// the Studio's own root. A visitor asking for it gets the profile's default tab: the tab is
-	// absent from their row, and a query parameter is not a door around that.
+	// ⭐ **The default tab is the viewer's, not the page's** (Parker, 2026-10-27): the creator
+	// lands on their own Dashboard — the worklist and the arrangeable panels, moved here from
+	// the Studio's root on 2026-10-23 — while a visitor lands on everything the creator has put
+	// out. A visitor asking for the Dashboard gets the visitor's default: the tab is absent
+	// from their row, and a query parameter is not a door around that.
 	const tabParam = searchParams.get("tab") as Tab | null;
-	const asked = tabParam && TABS.includes(tabParam) ? tabParam : "all";
+	const defaultTab: Tab = isOwnProfile ? "dashboard" : "all";
+	const asked = tabParam && TABS.includes(tabParam) ? tabParam : defaultTab;
 	const tab: Tab = asked === "dashboard" && !isOwnProfile ? "all" : asked;
 	const badgeParam = Number.isFinite(Number(searchParams.get("badge")))
 		? searchParams.get("badge")
 		: null;
+	// The default tab is the one with no parameter, so the address bar names a choice only
+	// where the viewer has made one.
 	const setTab = (next: Tab) => {
 		const params = new URLSearchParams(searchParams);
-		if (next === "all") params.delete("tab");
+		if (next === defaultTab) params.delete("tab");
 		else params.set("tab", next);
 		setSearchParams(params, { replace: true });
 	};
@@ -772,11 +776,14 @@ export default function CreatorProfilePage() {
 					)}
 				</div>
 
-				{/* Tabs. One flat row, but grouped: the creator's own Dashboard first (owner only),
-				    then the timeline views (All Content, Posts), then the Work-type views — only the
-				    types the creator has actually released, so a profile with no audio shows no Audio
-				    tab rather than "Audio (0)" — then Badges, then Credits. The dividers sit between
-				    the groups, and collapse to a single divider when the middle group is empty. */}
+				{/* Tabs in three groups, divided by the bare rules between them (Parker, 2026-10-27).
+				    The first group is the creator's own Dashboard, alone and owner-only; the second
+				    is the profile's own surfaces (Badges and Credits); the third is everything the
+				    creator has put out — the timeline (All Content, Posts) and then a view per Work
+				    type the creator has actually released, so a profile with no audio shows no Audio
+				    tab rather than "Audio (0)". The dividers are visual only: nothing about the
+				    grouping changes how a tab behaves. A group that is absent takes its divider with
+				    it, so a visitor's row opens on Badges rather than on a leading rule. */}
 				<div className="tabs tabs-bordered mb-6 overflow-x-auto">
 					{isOwnProfile && (
 						<>
@@ -792,6 +799,21 @@ export default function CreatorProfilePage() {
 					)}
 					<button
 						type="button"
+						className={`tab whitespace-nowrap ${tab === "badges" ? "tab-active" : ""}`}
+						onClick={() => setTab("badges")}
+					>
+						Badges
+					</button>
+					<button
+						type="button"
+						className={`tab whitespace-nowrap ${tab === "credits" ? "tab-active" : ""}`}
+						onClick={() => setTab("credits")}
+					>
+						Credits
+					</button>
+					<TabDivider />
+					<button
+						type="button"
 						className={`tab whitespace-nowrap ${tab === "all" ? "tab-active" : ""}`}
 						onClick={() => setTab("all")}
 					>
@@ -804,37 +826,16 @@ export default function CreatorProfilePage() {
 					>
 						Posts
 					</button>
-					{typeTabs.length > 0 && (
-						<>
-							<TabDivider />
-							{typeTabs.map(([key, label]) => (
-								<button
-									type="button"
-									key={key}
-									className={`tab whitespace-nowrap ${tab === key ? "tab-active" : ""}`}
-									onClick={() => setTab(key)}
-								>
-									{label}
-								</button>
-							))}
-							<TabDivider />
-						</>
-					)}
-					<button
-						type="button"
-						className={`tab whitespace-nowrap ${tab === "badges" ? "tab-active" : ""}`}
-						onClick={() => setTab("badges")}
-					>
-						Badges
-					</button>
-					<TabDivider />
-					<button
-						type="button"
-						className={`tab whitespace-nowrap ${tab === "credits" ? "tab-active" : ""}`}
-						onClick={() => setTab("credits")}
-					>
-						Credits
-					</button>
+					{typeTabs.map(([key, label]) => (
+						<button
+							type="button"
+							key={key}
+							className={`tab whitespace-nowrap ${tab === key ? "tab-active" : ""}`}
+							onClick={() => setTab(key)}
+						>
+							{label}
+						</button>
+					))}
 				</div>
 
 				{/* Tab content */}
