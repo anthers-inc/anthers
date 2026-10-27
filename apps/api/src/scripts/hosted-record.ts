@@ -3,7 +3,7 @@
  * Record an identity that already lives on the node as one Anthers hosts.
  *
  * Every space write and every verified repo write resolves a session through
- * `hosted_accounts`: a row with the DID and a sealed password. Signup creates that row as part
+ * `hosted_accounts`: a row with the DID and a sealed session. Signup creates that row as part
  * of establishing the identity, so an account made here has one by construction. An account
  * that arrived another way does not — most often because it was moved onto the node with a
  * public tool (`goat account migrate`), which knows the protocol and nothing about Anthers'

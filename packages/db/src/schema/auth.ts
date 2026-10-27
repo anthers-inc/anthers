@@ -833,12 +833,9 @@ export const hostedIdentities = pgTable("hosted_identities", {
 // key is the ability to sign as everybody Anthers hosts. See `services/secret-box.ts` for
 // exactly what that buys and what it does not.
 //
-// ⚠️ **It exists because there is no other way back into one of these accounts.** The node
-// has no mail configured, so its own password reset cannot run, and the account was created
-// with a password nobody has ever seen. Forgetting it would leave an identity only the node's
-// admin password could open — recoverable by hand, and by nothing the person could do
-// themselves. Holding it is also what makes writing a record into the repository possible,
-// which is the reason hosting exists at all.
+// ⚠️ **The row exists because hosting does.** It records the identity Anthers issued, and the
+// session that lets Anthers write into its repository — which is the reason hosting exists at
+// all. The password half of that is retired; the session is the credential.
 export const hostedAccounts = pgTable("hosted_accounts", {
 	// The DID is the key for the same reason it is on `hosted_identities`: the handle beside
 	// it is a label that can move, and the account it opens does not change when it does.
@@ -850,23 +847,20 @@ export const hostedAccounts = pgTable("hosted_accounts", {
 	/** The full handle as issued, for a person reading this row. */
 	handle: text("handle").notNull(),
 	/**
-	 * The account's password at the node, sealed by `services/secret-box.ts` — and **only ever a
-	 * fallback**, not the credential the platform runs on. 🚨 **An empty string means the row
-	 * holds no password**, which is the normal state.
+	 * The account's password at the node, sealed by `services/secret-box.ts` — and **only a
+	 * migration artifact**, never a credential the platform runs on.
 	 *
-	 * 🚨 **A stored password is a copy of a secret the owner can change from outside, and this
-	 * column is retired for exactly that reason.** The server holds only a hash, so a credential
-	 * the hub can present is a second copy; a reset replaces the server's hash and leaves this
-	 * one stale, and the failure looks like an unreachable node. An account carries a sealed
-	 * SESSION instead (`sealed_session`), obtained once at creation and renewed without a login.
-	 * This column is written at creation only so that a node failure cannot strand the identity
-	 * with no credential at all; it is emptied as soon as the first session is sealed, and
-	 * `hosted:sessions convert` empties the rows that predate the change.
+	 * 🚨 **Nothing writes this any more, and an empty string means the row holds nothing**, which
+	 * is the normal state. A password is the person's: signup takes the one they chose, the node
+	 * stores the hash, and Anthers keeps the session that answers. A stored password would be a
+	 * copy of a secret its owner can change from outside — the server holds only a hash, so a
+	 * reset leaves this one stale and the failure looks like an unreachable node.
 	 *
-	 * ⚠️ **The empty string stands in for NULL because the migration generator is blocked right
-	 * now** (a duplicate snapshot on `main`), so the column keeps its constraint and a sentinel
-	 * marks the absence. Dropping the column is the follow-up; until then every reader tests for
-	 * a non-empty value rather than for null.
+	 * ⚠️ **Rows created before that change still carry one, and it is read in exactly one place**:
+	 * `services/hosted-session-store.ts`, as the fallback that opens a session when there is none
+	 * on file. No caller receives the plaintext. A sign-in or a reset empties the column, so it
+	 * disappears as each holder takes their credential back; dropping the column is the follow-up
+	 * once no row holds one.
 	 */
 	sealedPassword: text("sealed_password").notNull().default(""),
 	/**

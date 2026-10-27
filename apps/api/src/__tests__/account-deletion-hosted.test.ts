@@ -14,9 +14,12 @@
  * sweep tries again — and a credential nobody can open must NOT, because retrying never opens
  * it and a person blocked from leaving forever is worse than a shell left on a server.
  *
- * ⚠️ **Nothing here reaches the real node.** The identities are real ones on the test session's own
- * server; the unreachable case then points the hub at a `.invalid` host, which RFC 2606 guarantees
- * can never resolve, and the unusable case is refused before any request is made.
+ * ⚠️ **Neither case reaches a node Anthers does not run.** The identities are real ones on the
+ * test session's own server. The unreachable case points the hub at a `.invalid` host, which RFC
+ * 2606 guarantees can never resolve; the unusable case talks to the session's own server and is
+ * refused for its credential after `describeRepo` answers, because whether anything is on the
+ * node at all is a question the node has to answer first — an identity that migrated away owes
+ * nothing and is not a shell left behind.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
@@ -34,6 +37,15 @@ const before = {
 	url: process.env.HOSTED_PDS_URL,
 	key: process.env.HOSTED_ACCOUNT_KEY,
 };
+
+/**
+ * The session's own identity server, before the suite points the hub elsewhere.
+ *
+ * The stranded case needs a node that ANSWERS: `describeRepo` is what tells the purge whether
+ * anything is there, so a `.invalid` host makes every case look like an outage and the two
+ * failure directions stop being distinguishable.
+ */
+const sessionNode = process.env.HOSTED_PDS_URL ?? "";
 
 beforeAll(() => {
 	// RFC 2606 reserves `.invalid`, so this can never become a real request to anything.
@@ -79,11 +91,16 @@ beforeAll(async () => {
 	strandId = strand.userId;
 	strandDid = strand.did;
 
-	// 🚨 Resealed under a key this process does not have. `open` refuses it, which is the state
-	// the runbook describes for `signup-probe` and the one that must not block somebody's erasure.
+	// 🚨 Resealed under a key this process does not have — BOTH halves, because a live session
+	// would otherwise be the credential the purge uses, and the scenario is a row nothing here can
+	// open at all. That is the state the runbook describes for `signup-probe`, and the one that
+	// must not block somebody's erasure.
 	await db
 		.update(hostedAccounts)
-		.set({ sealedPassword: "v1.YWFhYWFhYWFhYWFh.YmJiYmJiYmJiYmJiYmJiYg.Y2Nj" })
+		.set({
+			sealedPassword: "v1.YWFhYWFhYWFhYWFh.YmJiYmJiYmJiYmJiYmJiYg.Y2Nj",
+			sealedSession: null,
+		})
 		.where(eq(hostedAccounts.did, strandDid));
 }, DB_SETUP_TIMEOUT);
 
@@ -124,7 +141,10 @@ describe("an account holding a handle Anthers issued", () => {
 	// open, so deferring here would block somebody's erasure permanently on an operational
 	// problem that is not theirs.
 	it("finishes the erasure when the credential cannot be opened, and keeps the row as the record", async () => {
+		// A node that answers, so the refusal is the credential's rather than the network's.
+		process.env.HOSTED_PDS_URL = sessionNode;
 		const result = await eraseAccount(strandId);
+		process.env.HOSTED_PDS_URL = "https://node.invalid";
 		expect(result).toEqual({ erased: true, strandedRecords: 0 });
 
 		const [gone] = await db.select({ id: users.id }).from(users).where(eq(users.id, strandId));

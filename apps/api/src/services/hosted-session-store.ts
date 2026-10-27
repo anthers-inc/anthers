@@ -80,8 +80,14 @@ export type HostedSessionResult =
 	 * file and no password behind it, or when the node refuses the login itself. A caller must
 	 * report it as an authorization problem rather than as an outage, or the failure reads as a
 	 * retry that never succeeds.
+	 *
+	 * ⚠️ **`credentialUnopenable` is its own answer, because retrying never fixes it.** A sealed
+	 * value this deployment's key cannot open is a real state — `signup-probe.anthers.social` was
+	 * sealed under a key production did not have — and the answer is a person rather than a retry
+	 * or a re-login. A caller reports it as something for an operator to look at, never as "try
+	 * again later".
 	 */
-	| { token: null; error: string; authorizationLost?: true };
+	| { token: null; error: string; authorizationLost?: true; credentialUnopenable?: true };
 
 /**
  * The opens currently in flight, by DID, so concurrent callers share one login.
@@ -97,6 +103,12 @@ const opensInFlight = new Map<string, Promise<HostedSessionResult>>();
 /**
  * A usable access token for a hosted identity, spending no login unless one is owed.
  *
+ * ⭐ **This is the only place in the hub that opens a hosted account's stored credential, and it
+ * never hands one back.** A caller asks for a token and gets one or a reason; the sealed session,
+ * and the legacy sealed password a row may still carry, stay inside this module. Before this, four
+ * callers each selected `sealed_password`, decoded it themselves and passed the plaintext in —
+ * which meant four places where a password existed in memory for no reason a writer needed.
+ *
  * Order of preference: the stored access token while it has life left (zero calls to the
  * node), then a refresh (zero logins), then one `createSession`. A refresh the node REFUSED —
  * its considered 4xx — falls through to the login, because the stored pair is dead and a
@@ -106,12 +118,11 @@ const opensInFlight = new Map<string, Promise<HostedSessionResult>>();
  */
 export async function sessionForHostedAccount(
 	did: string,
-	password: string | null,
 	opts: { fetchImpl?: typeof fetch } = {},
 ): Promise<HostedSessionResult> {
 	const running = opensInFlight.get(did);
 	if (running) return running;
-	const opening = obtainSession(did, password, opts.fetchImpl ?? fetch);
+	const opening = obtainSession(did, opts.fetchImpl ?? fetch);
 	opensInFlight.set(did, opening);
 	try {
 		return await opening;
@@ -125,13 +136,71 @@ export async function clearHostedSession(did: string): Promise<void> {
 	await db.update(hostedAccounts).set({ sealedSession: null }).where(eq(hostedAccounts.did, did));
 }
 
+/** What one row holds: a session that may still work, and the legacy password behind it. */
+interface StoredCredential {
+	stored: StoredSession | null;
+	/** The plaintext of a legacy sealed password, when the row carries one this key can open. */
+	password: string | null;
+	/** The row carries a sealed password this deployment's key cannot open. */
+	passwordUnopenable: boolean;
+}
+
+/**
+ * Read the row's credential once and open what is sealed in it.
+ *
+ * One query rather than two, because a row's session and its legacy password are read together
+ * and neither is useful without the other: a session with life left wins, and the password is
+ * only consulted when there is none.
+ *
+ * ⚠️ **An unopenable session and an unopenable password are different.** A session sealed under
+ * another key is treated as absent, because the login below replaces it and one bad value costs
+ * exactly one login. A password sealed under another key is the thing that cannot be recovered
+ * at all, so it is reported rather than swallowed.
+ */
+async function readCredential(did: string): Promise<StoredCredential> {
+	const [row] = await db
+		.select({
+			sealedSession: hostedAccounts.sealedSession,
+			sealedPassword: hostedAccounts.sealedPassword,
+		})
+		.from(hostedAccounts)
+		.where(eq(hostedAccounts.did, did))
+		.limit(1);
+
+	let stored: StoredSession | null = null;
+	if (row?.sealedSession) {
+		try {
+			const parsed = JSON.parse(open(row.sealedSession)) as Partial<StoredSession>;
+			if (typeof parsed.accessJwt === "string") {
+				stored = {
+					accessJwt: parsed.accessJwt,
+					refreshJwt: typeof parsed.refreshJwt === "string" ? parsed.refreshJwt : "",
+					expiresAt: typeof parsed.expiresAt === "number" ? parsed.expiresAt : 0,
+				};
+			}
+		} catch {
+			// Sealed under another key, or a value this module never wrote — treat as absent. The
+			// login below replaces it, so one bad value costs exactly one login.
+		}
+	}
+
+	let password: string | null = null;
+	let passwordUnopenable = false;
+	if (row?.sealedPassword) {
+		try {
+			password = open(row.sealedPassword);
+		} catch {
+			passwordUnopenable = true;
+		}
+	}
+
+	return { stored, password, passwordUnopenable };
+}
+
 /** The body of one open; runs under the per-DID mutex above. */
-async function obtainSession(
-	did: string,
-	password: string | null,
-	doFetch: typeof fetch,
-): Promise<HostedSessionResult> {
-	const stored = await readStored(did);
+async function obtainSession(did: string, doFetch: typeof fetch): Promise<HostedSessionResult> {
+	const credential = await readCredential(did);
+	const stored = credential.stored;
 
 	// 1. A live access token costs nothing at all.
 	if (stored?.accessJwt && stored.expiresAt - Date.now() > REUSE_MARGIN_MS) {
@@ -162,10 +231,19 @@ async function obtainSession(
 		await clearHostedSession(did).catch(() => {});
 	}
 
-	// 3. A password is a legacy fallback, and only a fallback: a session on file is the
-	// credential, and once one exists the password is not kept. With none on file there is
-	// nothing left to present, which is the state a password reset creates.
+	// 3. A password on file is a legacy fallback, and only a fallback: the session is the
+	// credential, and nothing has written a password since signup started taking the person's
+	// own. With none on file there is nothing left to present, which is the state a password
+	// reset creates — and the state a person ends by signing in again.
+	const password = credential.password;
 	if (password === null) {
+		if (credential.passwordUnopenable) {
+			return {
+				token: null,
+				error: "the sealed credential cannot be opened by this deployment",
+				credentialUnopenable: true,
+			};
+		}
 		return { token: null, error: "authorization_lost", authorizationLost: true };
 	}
 
@@ -189,29 +267,6 @@ async function obtainSession(
 	const persisted = await persist(did, session.body);
 	if (persisted) return persisted;
 	return { token: null, error: "createSession answered with no access token" };
-}
-
-/** Read and open the stored session. Anything that will not open reads as no session. */
-async function readStored(did: string): Promise<StoredSession | null> {
-	const [row] = await db
-		.select({ sealedSession: hostedAccounts.sealedSession })
-		.from(hostedAccounts)
-		.where(eq(hostedAccounts.did, did))
-		.limit(1);
-	if (!row?.sealedSession) return null;
-	try {
-		const parsed = JSON.parse(open(row.sealedSession)) as Partial<StoredSession>;
-		if (typeof parsed.accessJwt !== "string") return null;
-		return {
-			accessJwt: parsed.accessJwt,
-			refreshJwt: typeof parsed.refreshJwt === "string" ? parsed.refreshJwt : "",
-			expiresAt: typeof parsed.expiresAt === "number" ? parsed.expiresAt : 0,
-		};
-	} catch {
-		// Sealed under another key, or a value this module never wrote — treat as absent. The
-		// login below replaces it, so one bad value costs exactly one login.
-		return null;
-	}
 }
 
 /**
