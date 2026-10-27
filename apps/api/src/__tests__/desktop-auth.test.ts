@@ -11,6 +11,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
+import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { signupCodes, users } from "@anthers/db/schema";
 import { eq, like, sql } from "drizzle-orm";
 import app from "../index";
@@ -510,6 +511,111 @@ describe("Desktop auth — the emailed-code method (in-app sign-in)", () => {
 		const { challenge } = await startEnrollment();
 		const issued = await issuedCodeFor(email);
 		const res = await verifyEmailCode(email, challenge, issued);
+
+		expect(res.status).toBe(403);
+		const body = (await res.json()) as { reason: string; suspendedUntil: string | null };
+		expect(body.reason).toBe("account_suspended");
+		expect(body.suspendedUntil).not.toBeNull();
+	});
+});
+
+describe("Desktop auth — the password method (in-app sign-in)", () => {
+	const PREFIX = `deskpw_${id}`;
+
+	async function startEnrollment() {
+		const verifier = hex();
+		const challenge = await pkceChallenge(verifier);
+		const res = await req("/api/auth/desktop/start", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ challenge, label: "password-device" }),
+		});
+		expect(res.status).toBe(201);
+		return { verifier, challenge };
+	}
+
+	function passwordSignIn(challenge: string, identifier: string, password: string) {
+		// NO Origin header, exactly like the handoff and the emailed pair: the packaged app
+		// cannot send an allowed one, so a rule that needed one could never work.
+		return req("/api/auth/desktop/password", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ challenge, identifier, password }),
+		});
+	}
+
+	it("signs in from inside the app with the identity's password and mints the same credential", async () => {
+		const account = await createAccount(`${PREFIX}_ok`, { password: LOCAL_ACCOUNT_PASSWORD });
+		const { verifier, challenge } = await startEnrollment();
+
+		const answered = await passwordSignIn(challenge, account.handle, LOCAL_ACCOUNT_PASSWORD);
+		expect(answered.status).toBe(200);
+		const { code } = (await answered.json()) as { code: string };
+
+		const exchange = await req("/api/auth/desktop/exchange", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ code, verifier }),
+		});
+		expect(exchange.status).toBe(200);
+		const { token } = (await exchange.json()) as { token: string };
+		expect(token).toMatch(/^[0-9a-f]{64}$/);
+
+		// The same substance the browser confirm mints: a bearer session the app can hold.
+		const me = await desktopReq("/api/auth/me", token);
+		expect(me.status).toBe(200);
+	});
+
+	// 🚨 One voice for a wrong password and for an identifier nobody holds, which is the node's
+	// own silence. Telling them apart would turn this door into a directory.
+	it("refuses a wrong password the same way it refuses an unknown identifier", async () => {
+		const account = await createAccount(`${PREFIX}_wrong`, { password: LOCAL_ACCOUNT_PASSWORD });
+		const { challenge } = await startEnrollment();
+
+		const wrong = await passwordSignIn(challenge, account.handle, "not the password");
+		expect(wrong.status).toBe(401);
+		expect(((await wrong.json()) as { reason: string }).reason).toBe("credentials");
+
+		const unknown = await passwordSignIn(challenge, `${PREFIX}_nobody.example`, "a password");
+		expect(unknown.status).toBe(401);
+		expect(((await unknown.json()) as { reason: string }).reason).toBe("credentials");
+	});
+
+	it("refuses a foreign Origin, so a cross-site post cannot authorize an enrollment", async () => {
+		const account = await createAccount(`${PREFIX}_origin`, { password: LOCAL_ACCOUNT_PASSWORD });
+		const { challenge } = await startEnrollment();
+
+		const res = await req("/api/auth/desktop/password", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Origin: "https://evil.example" },
+			body: JSON.stringify({
+				challenge,
+				identifier: account.handle,
+				password: LOCAL_ACCOUNT_PASSWORD,
+			}),
+		});
+		expect(res.status).toBe(403);
+	});
+
+	// An enrollment the app did not mint this minute is worth restarting rather than logging in
+	// for, so the challenge is checked before the credential is spent.
+	it("answers 404 for an enrollment that has expired, without signing anything in", async () => {
+		const account = await createAccount(`${PREFIX}_stale`, { password: LOCAL_ACCOUNT_PASSWORD });
+		const res = await passwordSignIn(hex(), account.handle, LOCAL_ACCOUNT_PASSWORD);
+		expect(res.status).toBe(404);
+	});
+
+	it("tells a suspended account truthfully and mints no session", async () => {
+		const account = await createAccount(`${PREFIX}_suspended`, {
+			password: LOCAL_ACCOUNT_PASSWORD,
+		});
+		await db
+			.update(users)
+			.set({ suspendedAt: new Date(), suspendedUntil: new Date(Date.now() + 86_400_000) })
+			.where(eq(users.id, account.userId));
+
+		const { challenge } = await startEnrollment();
+		const res = await passwordSignIn(challenge, account.handle, LOCAL_ACCOUNT_PASSWORD);
 
 		expect(res.status).toBe(403);
 		const body = (await res.json()) as { reason: string; suspendedUntil: string | null };
