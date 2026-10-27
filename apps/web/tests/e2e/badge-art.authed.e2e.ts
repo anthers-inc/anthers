@@ -177,10 +177,12 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 	await expect(dialog.getByLabel("Perk name").first()).toBeVisible();
 	await expect(dialog.getByLabel("Perk description").first()).toBeVisible();
 	await dialog.getByRole("button", { name: "More Information" }).hover();
-	await expect(dialog.getByRole("tooltip")).toContainText("A Physical Good");
-	await expect(dialog.getByRole("tooltip")).toContainText("A Service");
-	await expect(dialog.getByRole("tooltip")).toContainText("Community Access");
-	await expect(dialog.getByRole("tooltip")).toContainText("Recognition");
+	// The tip is portalled to the body as a top-layer popover, so it is no longer a
+	// descendant of the dialog even though it belongs to a control inside it.
+	await expect(page.getByRole("tooltip")).toContainText("A Physical Good");
+	await expect(page.getByRole("tooltip")).toContainText("A Service");
+	await expect(page.getByRole("tooltip")).toContainText("Community Access");
+	await expect(page.getByRole("tooltip")).toContainText("Recognition");
 	await expect(dialog.getByText("No Works are gated at this Badge yet.")).toBeVisible();
 	await dialog.screenshot({ path: `.screenshots/badge-maker-perk-row-${RUN}.png` });
 

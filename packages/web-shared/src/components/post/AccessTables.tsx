@@ -17,7 +17,7 @@
  */
 import { amountLabel } from "@anthers/shared/constants";
 import type { AccessRow, CreatorBadge } from "../../lib/types";
-import { TakeHome } from "../economics/TakeHome";
+import { TakeHomeInline } from "../economics/TakeHome";
 
 // ─── Row drafts ───
 
@@ -121,16 +121,10 @@ export default function AccessTables({ rows, onRowsChange }: AccessTablesProps) 
 
 	return (
 		<div className="flex flex-col gap-6">
-			<p className="text-xs text-base-content/60">
-				A price of $0 with Allow checked is free at that level; a positive price is what a buyer is
-				charged, exactly. Leaving <strong>Everyone</strong> allowed at $0 on a streaming Work is
-				what makes it <strong>Public Access</strong>: free to all, with nothing to clear.
-			</p>
-
 			{/* Access table. No heading of its own: the page that renders this supplies the
 			    section's heading, and this component's own `h3 "Access"` under it read as the
-			    same heading twice (the widening task's record). Only the Studio's Edit page
-			    renders this component. */}
+			    same heading twice (the widening task's record). The prose that explained the
+			    rows lives in the dialog now, once, rather than here as well. */}
 			<div>
 				<div className="overflow-x-auto">
 					<table className="table table-sm">
@@ -140,12 +134,13 @@ export default function AccessTables({ rows, onRowsChange }: AccessTablesProps) 
 								    across all of them proportionally rather than pooling it in Level —
 								    the previous sizing left Level an auto column that took the whole
 								    remainder (the widening task's record), and the controls sat pinned
-								    right beside a nearly empty stretch of cells. The receipt box needs
-								    a TakeHome's width; at $0 it renders nothing and the space stays. */}
+								    right beside a nearly empty stretch of cells. The take-home line and
+								    its (i) need room for one number; the breakdown they open is the
+								    (i)'s own overlay, so this cell no longer reserves a panel's width. */}
 								<th className="w-56">Level</th>
 								<th className="w-16 text-center">Allow</th>
 								<th className="w-40">Price ($)</th>
-								<th className="w-[36rem]">You receive</th>
+								<th className="w-52">After Processing</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -171,29 +166,39 @@ export default function AccessTables({ rows, onRowsChange }: AccessTablesProps) 
 											onChange={(e) => patchRow(i, { allow: e.target.checked })}
 										/>
 									</td>
-									<td>
+									<td title={row.allow ? undefined : "Check Allow to set a price."}>
 										{/* ⚠️ `min="0"` and not the floor, because the rule is "$0 or at least
 										    $0.50, and nothing in between" — and an HTML `min` cannot say that.
 										    Raising it to 0.50 would make every FREE Work invalid in the
 										    browser, which is exactly the way to get this wrong that looks
-										    right. `TakeHome` beside the field says what the gap costs, and
-										    `accessRowSchema` is what actually refuses it. */}
+										    right. The take-home line beside the field says what the gap
+										    costs, and `accessRowSchema` is what actually refuses it.
+
+										    A row that admits nobody cannot charge anybody, so its price is
+										    irrelevant and the field is greyed out (Parker, 2026-10-26).
+										    The typed value stays on the row: dimming is a display state,
+										    not a reset, and unticking Allow loses nothing a creator
+										    meant to keep. The hint sits on the cell because a disabled
+										    input receives no hover events to raise a title of its own. */}
 										<input
 											type="number"
-											className="input input-bordered input-sm w-full"
+											className="input input-bordered input-sm w-full disabled:border-base-content/10 disabled:bg-base-200 disabled:text-base-content/40"
 											value={row.price}
 											min="0"
 											step="0.01"
+											disabled={!row.allow}
+											aria-label={`Price for ${row.label}`}
 											onChange={(e) => patchRow(i, { price: e.target.value })}
 										/>
 									</td>
 									<td>
-										{/* 🚨 Beside the field, not behind a link. The whole point of this task
-										    is that a creator sees what they receive AT the moment they choose
-										    the number — a page they have to go and find is the same as not
-										    having it. Renders nothing at $0, where "free" is the answer and a
-										    take-home breakdown would be noise. */}
-										<TakeHome amount={Number(row.price) || 0} kind="purchase" />
+										{/* 🚨 Beside the field, not behind a link. The whole point is that a
+										    creator sees what they receive AT the moment they choose the
+										    number — a page they have to go and find is the same as not
+										    having it. One line, with the arithmetic behind the (i) beside
+										    it; renders nothing at $0, where "free" is the answer, and
+										    nothing on a row that allows nobody, where no sale happens. */}
+										{row.allow && <TakeHomeInline amount={Number(row.price) || 0} />}
 									</td>
 								</tr>
 							))}

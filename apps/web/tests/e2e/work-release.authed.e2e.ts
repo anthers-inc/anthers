@@ -329,6 +329,9 @@ test("a creator creates, releases and re-gates a Work from the Studio", async ({
 	await page.getByRole("button", { name: /public access/i }).click();
 	await page.getByRole("dialog").locator("table").getByRole("checkbox").first().uncheck();
 	await expect(page.getByText(/nobody can open this yet/i)).toBeVisible();
+	// A row that admits nobody cannot charge anybody, so the price field goes with it. The
+	// typed value stays in the form, so the field is disabled rather than cleared.
+	await expect(page.getByRole("dialog").getByLabel("Price for Everyone")).toBeDisabled();
 
 	await page.getByRole("button", { name: "Save Access" }).click();
 	await page.goto("/studio/works");
