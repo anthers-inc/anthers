@@ -71,6 +71,20 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.34",
+		date: "2026-10-27",
+		lede: "Signing in leaves Anthers for the server that holds the identity, a shared creator profile unfurls with a card of its own, and the creator page's tabs are grouped by what they show.",
+		entries: [
+			"Signing in asks for a handle and nothing else now, and the browser leaves for whichever server holds that identity: an Anthers handle goes to anthers.social, a Bluesky one goes to its own server, and the grant that comes back becomes the session Anthers keeps. The password is typed where its hash already lives, beside the reset, the second factor, and the consent screen.",
+			"An email address no longer signs in, because it cannot start that handoff, and the password form, its reset link, and the desktop app's in-app sign-in went with it; the desktop hands off to the system browser, which is the one shape that keeps a webview from asking for a password.",
+			"The Privacy Policy says where signing in happens: the person types a handle, the server that holds it asks for the password, and it confirms who the person is before Anthers is allowed in.",
+			"A shared creator profile unfurls with a card of its own now, composed from the banner and the portrait its creator set and laid out the way the profile page is, rather than the square picture cropped into a wide box.",
+			"A creator page's tabs are grouped by what they show: the creator's Dashboard alone, the profile's own Badges and Credits, and then everything the creator has put out, with a view per released Work type. The creator lands on their Dashboard and a visitor lands on All Content, and the address bar names a tab only where one was chosen.",
+			"A Badge's perks name seven kinds now, Digital and Discount among them, and a rung has to name a kind or open a Work before it can be saved; an empty row means unfinished rather than a support payment.",
+			"A perk row is a type and a description, the Works a Badge opens have a tab of their own in the Badge Maker, and the rows reorder by their grip or with the arrow keys.",
+		],
+	},
+	{
 		version: "2026.10.33",
 		date: "2026-10-26",
 		lede: "Signing in takes the password an identity's holder chose, a physical good is listed, bought, and shipped by its creator, and the Badge Maker is three tabs.",
