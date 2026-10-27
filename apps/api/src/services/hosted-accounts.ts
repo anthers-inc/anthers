@@ -533,6 +533,34 @@ export async function isHostedIdentity(did: string): Promise<boolean> {
 // ─── Changing the name on one ────────────────────────────────────────────────
 
 /**
+ * Whether Anthers holds any credential at all for a hosted identity.
+ *
+ * 🚨 **This answers a question the database can answer on its own, and nothing else may be read
+ * into it.** `false` is unambiguous: with no session and no password there is no way into the
+ * account, so a write will fail and a listing will never appear. `true` means a credential is on
+ * file, not that the node will still accept it — a session the owner's own password reset revoked
+ * looks exactly like a live one until the node answers.
+ *
+ * ⭐ **Why it is worth a function: the person-facing surfaces had no way to tell.** Every publish
+ * and every listing that failed this way failed at the write, logged `authorization_lost`, and
+ * retried, so the only symptom was content that never reached the network. A row with nothing on
+ * it is the one case that can be named before anybody tries.
+ */
+export async function hostedCredentialOnFile(did: string): Promise<boolean> {
+	const [row] = await db
+		.select({
+			sealedSession: hostedAccounts.sealedSession,
+			sealedPassword: hostedAccounts.sealedPassword,
+		})
+		.from(hostedAccounts)
+		.where(eq(hostedAccounts.did, did))
+		.limit(1);
+	// No row at all is not a hosted identity — the caller has already asked that separately.
+	if (!row) return false;
+	return row.sealedSession !== null || row.sealedPassword !== "";
+}
+
+/**
  * Record a recovery key against the identity it was seated on.
  *
  * ⚠️ **Here rather than in `hosted-recovery-key.ts`, because this module is the only writer of

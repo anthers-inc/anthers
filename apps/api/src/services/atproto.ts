@@ -191,6 +191,20 @@ export interface PublishingState {
 	 * was not asked — a hosted identity, or a read that did not ask. Informs and never refuses.
 	 */
 	server: PdsHealth | null;
+	/**
+	 * Whether Anthers holds a credential for an identity it hosts, or null when it does not host
+	 * this one.
+	 *
+	 * 🚨 **`"missing"` is the one state that can be named before anybody tries to write**, and it
+	 * is the state nothing used to name: a hosted account with no session and no password cannot
+	 * be written to at all, so every publish and every listing failed at the write, logged
+	 * `authorization_lost` and retried, and the person saw content that never reached the network.
+	 *
+	 * ⚠️ **`"on_file"` is not a promise.** A session the owner's password reset revoked, or one
+	 * the node has stopped honoring, reads the same until the node answers. What this can say
+	 * honestly is only the absence.
+	 */
+	hostedCredential: "on_file" | "missing" | null;
 }
 
 /** One record type's public footprint, in the order the Settings card lists them. */
@@ -276,12 +290,21 @@ export async function publishingStateFor(
 		opts.recheck && found.route !== "hosted" && found.route !== "none" && pdsUrl
 			? await pdsHealth(pdsUrl)
 			: null;
+	// A database read, never a network call: whether a credential is on file is knowable now, and
+	// whether the node will still honor it is not. Imported for the same cycle reason as
+	// `isHostedIdentity` above.
+	let hostedCredential: PublishingState["hostedCredential"] = null;
+	if (found.route === "hosted" && found.did) {
+		const { hostedCredentialOnFile } = await import("./hosted-accounts.js");
+		hostedCredential = (await hostedCredentialOnFile(found.did)) ? "on_file" : "missing";
+	}
 	return {
 		...rest,
 		offered: atprotoPublishEnabled(),
 		listed: await countListedWorks(userId),
 		records: await publishedRecordCounts(userId, found.did),
 		server,
+		hostedCredential,
 	};
 }
 

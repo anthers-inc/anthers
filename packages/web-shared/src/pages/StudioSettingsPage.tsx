@@ -345,10 +345,25 @@ function AtmospherePublishingSection() {
 						)}
 					</div>
 				) : hosted ? (
-					<p className="text-xs text-base-content/50">
-						Anthers hosts this identity and holds its keys, so there is no separate permission to
-						revoke. Closing your account is what removes it.
-					</p>
+					state.hostedCredential === "missing" ? (
+						<div className="rounded-box border border-warning/40 p-3">
+							<p className="text-sm">
+								Anthers has no way into your identity right now, so nothing you publish, post or
+								save reaches the network until it does. Everything already there is untouched.
+							</p>
+							<p className="text-sm mt-2">
+								<a href="/settings" className="link link-hover">
+									Set your identity's password
+								</a>{" "}
+								and Anthers is back in touch with it.
+							</p>
+						</div>
+					) : (
+						<p className="text-xs text-base-content/50">
+							Anthers hosts this identity and holds a session for it, so there is no separate
+							permission to revoke. Closing your account is what removes it.
+						</p>
+					)
 				) : (
 					<p className="text-xs text-base-content/50">
 						If you're having an issue with the ATProto connection or need to shut it off for any

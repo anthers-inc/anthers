@@ -908,7 +908,7 @@ function IdentitySection() {
 		return (
 			<>
 				<BroughtIdentityCard handle={handle} did={user.atprotoDid} />
-				<IdentityServerCard hosted={false} />
+				<IdentityServerCard hosted={false} credentialMissing={false} />
 				<ConnectedAppsCard />
 			</>
 		);
@@ -921,7 +921,7 @@ function IdentitySection() {
 			    the page loading and the API answering. */}
 			{recovery && <RecoveryKeyCard state={recovery} onSeated={setRecovery} />}
 			<DomainHandleCard handle={handle} did={user.atprotoDid} />
-			<IdentityServerCard hosted />
+			<IdentityServerCard hosted credentialMissing={publishing?.hostedCredential === "missing"} />
 		</>
 	);
 }
@@ -944,7 +944,24 @@ function IdentitySection() {
  * asks `/account` and remembers the answer per origin, because a link is a claim that there is
  * a page, and a server still on an older release has none.
  */
-function IdentityServerCard({ hosted }: { hosted: boolean }) {
+function IdentityServerCard({
+	hosted,
+	credentialMissing,
+}: {
+	hosted: boolean;
+	/**
+	 * Anthers holds nothing that opens this identity: no session and no password.
+	 *
+	 * 🚨 **The one state the card can name before anybody tries to write**, and the reason it
+	 * exists is that nothing used to name it. A hosted account in it cannot be written to at all,
+	 * so every publish, post and listing failed at the write and retried, and the only symptom was
+	 * content that never reached the network.
+	 *
+	 * ⚠️ **`false` is not a promise.** A session the holder's own password reset revoked reads as
+	 * present until the node answers; the absence is all this can honestly report.
+	 */
+	credentialMissing: boolean;
+}) {
 	const { user } = useAuth();
 	const state = usePublishingState({ enabled: !hosted && user != null });
 
@@ -968,6 +985,14 @@ function IdentityServerCard({ hosted }: { hosted: boolean }) {
 						<p className="text-sm text-base-content/60">
 							Your identity lives on {host}, the server Anthers runs.
 						</p>
+						{credentialMissing && (
+							<div className="rounded-box border border-warning/40 p-3">
+								<p className="text-sm">
+									Anthers has no way into this identity right now, so nothing you publish, post or
+									save reaches the network until it does. Everything already there is untouched.
+								</p>
+							</div>
+						)}
 						<HostedPasswordForm handle={user?.handle ?? ""} />
 					</>
 				) : (
