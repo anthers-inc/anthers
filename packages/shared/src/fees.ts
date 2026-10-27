@@ -9,7 +9,6 @@ import {
 	CARD_FLAT,
 	CARD_RATE,
 	FOUNDATION_SPLIT,
-	MERCH_BADGE_DISCOUNT,
 	SELF_HOST_FEE,
 	STORAGE_LADDER_GIB,
 	STORAGE_PER_GIB_MONTH,
@@ -104,29 +103,6 @@ export function creatorFeeShare(
 	}
 	return paymentsSplit(anthersDollars, creatorDollars).creator;
 }
-
-// ── Merch ────────────────────────────────────────────────────────────────────
-/**
- * The Badge discount's multipliers, **as the checkout's Decimal arithmetic reads
- * them** — 10% → "0.10", derived from the percent dial `MERCH_BADGE_DISCOUNT`,
- * never retyped beside it.
- *
- * Lives here rather than beside its dial in `constants.ts` because the derivation
- * is decimal arithmetic and **decimal.js may only be imported by this module** —
- * `constants.ts` is reachable from the web SPA's bundle graph (every page imports a
- * constant from it), so a decimal import there pulls the whole library into the
- * bundle (2026-10-15, the decimal-bundle-break task). The SPA never reads this
- * constant — a buyer-visible discount figure renders from the generated
- * `MERCH_TABLE`, not from here — and the standing walk of the web import graph
- * (`scripts/web-bundle-decimal-guard.test.ts`) fails the build the day something
- * reaches for it anyway.
- */
-export const MERCH_BADGE_DISCOUNT_RATE: Record<Badge, string> = Object.fromEntries(
-	Object.entries(MERCH_BADGE_DISCOUNT).map(([badge, percent]) => [
-		badge,
-		new Decimal(percent).dividedBy(100).toFixed(2),
-	]),
-) as Record<Badge, string>;
 
 // ── Billing-cycle reduction (moved here 2026-10-15 with the decimal break) ───
 /**

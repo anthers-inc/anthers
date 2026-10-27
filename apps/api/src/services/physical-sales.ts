@@ -30,6 +30,7 @@ import {
 import Decimal from "decimal.js";
 import { eq } from "drizzle-orm";
 import { createTaxCalculation } from "../lib/processor.js";
+import { purchasePriceFor } from "./access.js";
 import type { SavedBillingAddress } from "./billing.js";
 import { type PhysicalPick, validatePhysicalPick } from "./physical-stock.js";
 import { clampHandlingDays } from "./shipments.js";
@@ -99,23 +100,6 @@ export type PhysicalSale =
 	| PhysicalSaleRefusal;
 
 /**
- * The price a physical good sells for: its baseline (no-threshold) allowed offer.
- *
- * Returns null when the good has no such row — which is the same shape as a gated Work,
- * where the gate is the whole story and there is nothing to sell to this viewer.
- */
-function baselinePrice(access: unknown): Decimal | null {
-	if (!Array.isArray(access)) return null;
-	for (const row of access as Array<{ allow?: unknown; threshold?: unknown; price?: unknown }>) {
-		if (!row?.allow) continue;
-		if (Number(row.threshold ?? 0) > 0) continue;
-		const price = new Decimal(String(row.price ?? "0"));
-		if (price.isFinite()) return price;
-	}
-	return null;
-}
-
-/**
  * Resolve a buyer's pick on a physical Work into money, or refuse it in words.
  *
  * The work is looked up by slug because every buy surface addresses a Work that way, and
@@ -133,7 +117,12 @@ export async function resolvePhysicalSale(
 	if (work.creatorId == null)
 		return { ok: false, status: 409, error: "This work is no longer for sale." };
 
-	const unitPrice = baselinePrice(work.access);
+	// 🚨 **The price is the Access table's, read through the resolver every other Work
+	// uses** — the cheapest row this buyer qualifies for, which is what the Access modal
+	// promises and what a supporter price on a good means. Reading the Everyone row
+	// directly here is how a Blossom supporter was charged the full price on 2026-10-26.
+	const priced = await purchasePriceFor(work, userId);
+	const unitPrice = priced ? new Decimal(priced) : null;
 	if (!unitPrice || unitPrice.lte(0)) {
 		return {
 			ok: false,
@@ -236,7 +225,11 @@ function taxCodeFor(category: PhysicalTaxCategory): string {
  * Signed-out visitors get this too — the goods rule is that the page and its store panel
  * read without an account, and creating one is required only to buy.
  */
-export async function physicalStorefront(slug: string): Promise<
+export async function physicalStorefront(
+	slug: string,
+	/** The viewer, when there is one: a supporter reads their own rung's price here. */
+	userId: number | null = null,
+): Promise<
 	| { ok: false; status: 404 | 400; error: string }
 	| {
 			ok: true;
@@ -245,21 +238,14 @@ export async function physicalStorefront(slug: string): Promise<
 			listing: BuyerListing;
 	  }
 > {
-	const [row] = await db
-		.select({
-			id: works.id,
-			title: works.title,
-			slug: works.slug,
-			type: works.type,
-			access: works.access,
-			visibility: works.visibility,
-		})
-		.from(works)
-		.where(eq(works.slug, slug))
-		.limit(1);
+	const [row] = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
 	if (row?.type !== "physical" || row.visibility !== "released")
 		return { ok: false, status: 404, error: "Work not found" };
-	const unitPrice = baselinePrice(row.access);
+	// The same resolver every Work uses, at the viewer's own standing: a signed-out visitor
+	// qualifies for the Everyone row and a supporter for whichever rung they hold, so the
+	// headline and the quote cannot disagree about what this person pays.
+	const priced = await purchasePriceFor(row, userId);
+	const unitPrice = priced ? new Decimal(priced) : null;
 	if (!unitPrice || unitPrice.lte(0))
 		return { ok: false, status: 400, error: "This good isn't priced for sale yet." };
 	return {

@@ -124,55 +124,6 @@ export const PLATFORM_HANDLE = "anthers.org";
 export const CLOTHING_TAX_CODE = "txcd_30011000";
 
 /**
- * **Anthers keeps a fixed dollar margin on its own merch, per item** — historically the
- * quantity the list price was derived from (print cost + margin), and retained as the
- * **transparency figure's arithmetic basis** after the pricing source moved to Printful's
- * own `retail_price` (Parker, 2026-10-08: "I want our store to use what we set in Printful…
- * so we don't have two sources of truth").
- *
- * The list price is no longer computed here: the checkout reads the retail price the
- * Printful store carries for the variant, restamped onto `merch_variants.list_price` by
- * the setup script. What a fixed margin continues to govern is the transparency prose —
- * "shirts cost about $20 to print plus Printful's shipping; the rest funds Anthers'
- * programs" — no exact print cost is ever published (Printful reprices; a published
- * exact figure is a lie on their next update), and the approximate figure's shape is
- * this constant beside the generator's scenarios.
- *
- * ⚠️ **Copy-adjacent, never published as an exact figure** — pages rendering merch
- * economics read the generated `MERCH_TABLE` scenarios, never this constant directly.
- */
-export const MERCH_MARGIN_DOLLARS = "10.00";
-
-/**
- * **The Badge discount on Anthers' own merch, by rung** (Parker, 2026-10-08, committing
- * the 10/15/20/25 ladder he proposed): Root 10% through Blossom 25%, goods line only.
- *
- * The rules the ladder carries with it, all Parker's the same day:
- * - **The discount applies to the goods line and never to shipping** — shipping is
- *   Printful's charge, which Anthers does not control and does not subsidize ("the
- *   Badge discount applies only to the price of the product itself, since that's all
- *   we control").
- * - **The buyer sees one discounted figure** ("25% off $30") — the discount is what the
- *   purchase price is computed from, and the card fee Anthers eats behind it is not a
- *   buyer-visible fact.
- * - **A sub-fee margin on the worst size is accepted, watched, not engineered around**
- *   (Parker, same day): at 25% off on 3XL the goods line keeps $0.19 gross before the
- *   card fee — Anthers eats the order-level loss on that combination, and if it becomes
- *   a problem the remedy is pulling 3XL, not repricing the discount.
- * - **Free holds no discount** — the ladder keys by Badge held, and holding nothing is
- *   the absence answer (the 2026-10-03 reversal).
- *
- * ⚠️ **Fractions as the decimal the checkout multiplies by**, whole percents in copy —
- * a page saying "10% off" reads the generated `MERCH_TABLE`, which derives from these.
- */
-export const MERCH_BADGE_DISCOUNT: Record<Badge, string> = {
-	root: "10",
-	sprout: "15",
-	petal: "20",
-	blossom: "25",
-};
-
-/**
  * **Free is the absence of a Badge, not a Badge at $0** (Parker, 2026-10-03, reversing the
  * Free-row artifact): a creator's ungated Work requires no "Free" Badge for exactly the
  * reason Anthers' commons does not — the Badges are overrides on a default, and the default
