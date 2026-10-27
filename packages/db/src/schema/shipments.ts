@@ -19,6 +19,7 @@
  * and stamped — so a later change to the policy cannot move a deadline somebody already
  * has.
  */
+import { sql } from "drizzle-orm";
 import {
 	index,
 	integer,
@@ -29,6 +30,7 @@ import {
 	timestamp,
 	uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { users } from "./auth.js";
 import { purchases } from "./payments.js";
 
 // org — a shipment is the platform's operational record of an order it brokered; the
@@ -85,5 +87,48 @@ export const shipments = pgTable(
 		uniqueIndex("uq_shipments_purchase").on(table.purchaseId),
 		// The clock sweep's lookup: shipments that have shipped and not yet landed.
 		index("idx_shipments_pending_delivery").on(table.deliveredAt, table.shippedAt),
+	],
+);
+
+/**
+ * A buyer saying something went wrong with an order — the record the release rule reads.
+ *
+ * 🚨 **A complaint is the only thing that can stop a creator being paid after delivery**, so
+ * it is its own row rather than a flag on the shipment: the shipment records what happened
+ * to the parcel, and this records what the buyer says about it, who has to answer, and
+ * whether they have. A settled complaint leaves the row (with `status` and `resolvedAt`)
+ * rather than deleting it, because a refund that followed one needs to be explainable
+ * months later.
+ *
+ * ⚠️ **The window is checked when the complaint is opened, not by this table.** The buyer's
+ * deadline was stamped on the shipment at delivery (`complaintWindowEndsAt`), and a
+ * complaint arrives only while that stamp is in the future — the row itself has no window
+ * of its own, so it cannot disagree with the shipment's.
+ */
+// org — a complaint gates a payout and is answered by support, so the record stays with the
+// organization rather than following a creator to a machine they run.
+export const shipmentComplaints = pgTable(
+	"shipment_complaints",
+	{
+		id: serial("id").primaryKey(),
+		purchaseId: integer("purchase_id").references(() => purchases.id, { onDelete: "set null" }),
+		/** Who reported it. Nullable and set-null, like every record that outlives an account. */
+		buyerId: integer("buyer_id").references(() => users.id, { onDelete: "set null" }),
+		/** `not_as_described`, `damaged`, `never_arrived`, `other`. */
+		reason: text("reason").notNull(),
+		/** The buyer's own words. The reason above is the category; this is what they wrote. */
+		details: text("details").notNull().default(""),
+		/** `open` until a person settles it; `resolved` or `dismissed` after. */
+		status: text("status").notNull().default("open"),
+		resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// One open complaint per order: a buyer pressing the button twice is one problem,
+		// and two open rows would make "is this frozen" a question with two answers.
+		uniqueIndex("uq_shipment_complaints_open")
+			.on(table.purchaseId)
+			.where(sql`${table.status} = 'open'`),
+		index("idx_shipment_complaints_purchase").on(table.purchaseId),
 	],
 );

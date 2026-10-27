@@ -28,6 +28,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { users } from "./auth.js";
 import { works } from "./content.js";
+import { purchases } from "./payments.js";
 
 /**
  * The Stripe machinery behind one user's subscription — one row per user, lazily created
@@ -659,7 +660,15 @@ export const creatorCredits = pgTable(
 		subscriberId: integer("subscriber_id").references(() => users.id, { onDelete: "set null" }),
 		/** The month the money is for, `YYYY-MM-01`. */
 		billingCycle: text("billing_cycle").notNull(),
-		/** `support` · `time_pool` · `sticker`. */
+		/**
+		 * `support` · `time_pool` · `sticker` · `sale`.
+		 *
+		 * 🚨 **`sale` is a physical purchase's creator share, and its hold is not a number of
+		 * days.** Support settles on a cycle and is held fourteen days from `settledAt`; a
+		 * good's share is held until the parcel lands and the buyer's complaint window
+		 * closes, so its eligibility is read off the shipment at transfer time rather than
+		 * off a date on this row (see `purchaseId` below and `jobs/transfer-held-credits.ts`).
+		 */
 		kind: text("kind").notNull(),
 		/** `supporter` for money a supporter paid, `anthers` for a free account's Time Pool. */
 		fundedBy: text("funded_by").notNull(),
@@ -667,6 +676,13 @@ export const creatorCredits = pgTable(
 		amount: numeric("amount").notNull(),
 		/** The settlement run that wrote it, which is when its hold starts. */
 		settledAt: timestamp("settled_at", { withTimezone: true }).notNull(),
+		/**
+		 * The purchase a `sale` credit is for — the row whose shipment decides when this
+		 * money may move, and the row a refund looks up to take the credit back.
+		 *
+		 * Null for every support credit, which has no purchase behind it.
+		 */
+		purchaseId: integer("purchase_id").references(() => purchases.id, { onDelete: "set null" }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(table) => [
@@ -674,6 +690,13 @@ export const creatorCredits = pgTable(
 		index("idx_creator_credits_creator_settled").on(table.creatorId, table.settledAt),
 		// Settlement's own read: what a supporter's month has already credited.
 		index("idx_creator_credits_subscriber_cycle").on(table.subscriberId, table.billingCycle),
+		// A refund's read: the credit a physical sale left behind, by the purchase it is for.
+		index("idx_creator_credits_purchase").on(table.purchaseId),
+		// One credit per sale. Completion can be redelivered, and a second credit for the same
+		// order would pay the creator twice for one parcel.
+		uniqueIndex("uq_creator_credits_purchase")
+			.on(table.purchaseId)
+			.where(sql`${table.purchaseId} IS NOT NULL`),
 	],
 );
 
