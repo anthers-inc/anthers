@@ -29,7 +29,7 @@ import { db } from "@anthers/db";
 import { hostedAccounts } from "@anthers/db/schema";
 import { eq, ne } from "drizzle-orm";
 import { sessionForHostedAccount } from "./hosted-session-store.js";
-import { open } from "./secret-box.js";
+import { open, secretBoxConfigured } from "./secret-box.js";
 
 /** One row that still holds a password, as an operator needs to see it. */
 export interface SealedPasswordRow {
@@ -42,8 +42,13 @@ export interface SealedPasswordRow {
 	 *
 	 * `open` throws rather than returning empty on a value sealed elsewhere, so this is a fact
 	 * worth reporting: an unopenable row is one nothing here can act on.
+	 *
+	 * ⚠️ **`null` is not "unopenable" — it is "cannot tell", and the difference matters.** Run
+	 * without `HOSTED_ACCOUNT_KEY` (which `make prod-db` does not inject) every row would read as
+	 * unopenable, which is the same answer a wrong key gives and would send an operator hunting a
+	 * seal that is fine. The key's absence is reported once, by the caller.
 	 */
-	openable: boolean;
+	openable: boolean | null;
 }
 
 /** What a convert run did with one row. */
@@ -54,7 +59,8 @@ export interface ConvertOutcome extends SealedPasswordRow {
 	refused?: string;
 }
 
-function openable(sealedPassword: string): boolean {
+function openable(sealedPassword: string): boolean | null {
+	if (!secretBoxConfigured()) return null;
 	try {
 		open(sealedPassword);
 		return true;
@@ -98,6 +104,16 @@ export async function sealedPasswordRows(): Promise<SealedPasswordRow[]> {
 export async function convertSealedPasswords(
 	opts: { dryRun?: boolean; fetchImpl?: typeof fetch } = {},
 ): Promise<ConvertOutcome[]> {
+	// 🚨 **Refused outright rather than attempted per row.** Without the key nothing can be
+	// opened, so every row would fail with "the sealed credential cannot be opened" — an answer
+	// that reads as a broken seal on every identity at once rather than as a missing environment
+	// variable. Nothing is written, which is the safe direction, but the report should say why.
+	if (!opts.dryRun && !secretBoxConfigured()) {
+		throw new Error(
+			"HOSTED_ACCOUNT_KEY is not set, so no sealed credential can be opened. " +
+				"Nothing has been changed.",
+		);
+	}
 	const rows = await sealedPasswordRows();
 	const outcomes: ConvertOutcome[] = [];
 

@@ -14,6 +14,7 @@
  */
 import { client } from "@anthers/db/client";
 import { convertSealedPasswords, sealedPasswordRows } from "../services/hosted-credentials.js";
+import { secretBoxConfigured } from "../services/secret-box.js";
 
 const TAG = "[hosted-credentials]";
 
@@ -27,9 +28,16 @@ async function report(): Promise<void> {
 		console.log(`${TAG} no hosted account holds a password. Nothing to convert.`);
 		return;
 	}
+	if (!secretBoxConfigured()) {
+		console.log(
+			`${TAG} ⚠️ HOSTED_ACCOUNT_KEY is not set here, so this cannot say whether a sealed ` +
+				`value opens. Run it with the deployment's key before reading "UNOPENABLE" as a verdict.`,
+		);
+	}
 	console.log(`${TAG} ${rows.length} hosted account(s) still hold a password:`);
 	for (const row of rows) {
-		const sealed = row.openable ? "openable" : "UNOPENABLE";
+		const sealed =
+			row.openable === null ? "seal unknown" : row.openable ? "openable" : "UNOPENABLE";
 		const session = row.hasSession ? "session on file" : "no session";
 		console.log(`  ${row.handle} (${row.did}) — ${sealed}, ${session}`);
 	}

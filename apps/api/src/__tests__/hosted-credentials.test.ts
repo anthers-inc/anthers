@@ -146,6 +146,25 @@ describe("retiring the sealed password", () => {
 		expect(await passwordOn(did)).not.toBe("");
 	});
 
+	// 🚨 **"Cannot tell" is not "unopenable", and getting that wrong sends an operator hunting a
+	// seal that is fine.** `make prod-db` injects the connection string and nothing else, so the
+	// first run against production has no key unless one is exported — and every row reading
+	// UNOPENABLE in that state is an answer about the environment, not about the value.
+	it("says it cannot tell without a key, and converts nothing without writing", async () => {
+		const did = await legacyRow("nokey");
+		const savedKey = process.env.HOSTED_ACCOUNT_KEY;
+		delete process.env.HOSTED_ACCOUNT_KEY;
+		try {
+			const rows = await sealedPasswordRows();
+			expect(rows.find((r) => r.did === did)?.openable).toBeNull();
+
+			await expect(convertSealedPasswords()).rejects.toThrow(/HOSTED_ACCOUNT_KEY/);
+			expect(await passwordOn(did), "a refused convert must not drop anything").not.toBe("");
+		} finally {
+			if (savedKey !== undefined) process.env.HOSTED_ACCOUNT_KEY = savedKey;
+		}
+	});
+
 	it("writes nothing at all in a dry run", async () => {
 		const did = await legacyRow("dry");
 		const node = loginNode({}, [did]);
