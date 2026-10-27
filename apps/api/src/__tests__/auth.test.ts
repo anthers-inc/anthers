@@ -66,11 +66,11 @@ describe("Auth System", () => {
 	// ── Sign In ──────────────────────────────────────────────────────────────
 
 	describe("sign-in", () => {
-		// ⚠️ **The legacy password FORM is not the password DOOR.** `/api/auth/sign-in` took a
-		// `login` and a password and was retired when the emailed code became the only way in;
-		// signing in is now the identity's own password at `/api/auth/login`, which takes an
-		// identifier and has its own suite (`login.test.ts`, `hosted-login.test.ts`). What this
-		// pins is that the retired route has not come back.
+		// ⚠️ **There is no password route of any kind now.** `/api/auth/sign-in` took a `login`
+		// and a password and was retired when the emailed code became the only way in; the
+		// password door that replaced it (`/api/auth/login`) went when signing in became OAuth at
+		// `/api/atproto/auth` for every identity. What this pins is that no form-shaped sign-in
+		// route has come back.
 		it("has no legacy password sign-in route", async () => {
 			for (const body of [
 				{ login: name, password: "securepass123" },

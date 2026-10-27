@@ -44,7 +44,6 @@ import {
 	normalizeHandleName,
 	signinAddressForHostedHandle,
 } from "../services/hosted-accounts.js";
-import { type HostedLoginResult, loginHostedAccount } from "../services/hosted-login.js";
 import {
 	chooseHostedHandle,
 	clearPendingSignup,
@@ -81,19 +80,6 @@ import {
  */
 const emailCodeStartSchema = z.object({
 	email: z.string().email().max(254),
-});
-
-/**
- * The first-party password door: the identifier and the identity's own password.
- *
- * The identifier is a handle or the address on the account, because the node accepts either.
- * `authFactorToken` is the emailed code the node asks for when an account has two-factor on; it is
- * absent on the first attempt and sent back with the same password on the second.
- */
-const passwordLoginSchema = z.object({
-	identifier: z.string().trim().min(1).max(253),
-	password: z.string().min(1).max(256),
-	authFactorToken: z.string().trim().min(1).max(64).optional(),
 });
 
 /**
@@ -297,19 +283,6 @@ const desktopStartSchema = z.object({
 
 const desktopAuthorizeSchema = z.object({
 	challenge: hexToken,
-});
-
-/**
- * The desktop app's in-app password sign-in: an enrollment plus the identity's own credential.
- *
- * Same shape as `/login`'s, with `challenge` in place of the cookie the browser gets: this caller
- * is not a browser and has no cookie jar, so success answers a PKCE code it redeems itself.
- */
-const desktopPasswordSchema = z.object({
-	challenge: hexToken,
-	identifier: z.string().trim().min(1).max(253),
-	password: z.string().min(1).max(256),
-	authFactorToken: z.string().trim().min(1).max(64).optional(),
 });
 
 const desktopExchangeSchema = z.object({
@@ -591,98 +564,16 @@ async function mintFromProvedAddress(
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
-
-/**
- * The one refusal shape the password door answers, wherever it is asked from.
- *
- * 🚨 **One voice for a wrong password, an unknown identifier and a deactivated account**, which
- * is the node's own silence: telling them apart would turn the form into a directory of who has
- * an account. The three answers that differ are the three the caller can act on — a suspended
- * account is told truthfully, an unreachable node is worth retrying, and an identity with no
- * Anthers account is sent to sign up.
- *
- * ⚠️ **`two-factor` is not a failure**: the password was right and the node wants the emailed
- * code as well. It answers 401 because nothing is signed in yet, with `twoFactor` so the caller
- * shows a code field rather than a generic error.
- */
-function passwordLoginRefusal(
-	c: Context,
-	result: Exclude<HostedLoginResult, { status: "ok" }>,
-): Response {
-	if (result.status === "two-factor") {
-		return c.json({ twoFactor: true, error: "Enter the code sent to your email." }, 401);
-	}
-	if (result.reason === "suspended") {
-		return c.json(
-			{
-				error: result.message,
-				reason: "account_suspended",
-				suspendedUntil: result.suspendedUntil?.toISOString() ?? null,
-			},
-			403,
-		);
-	}
-	const status = result.reason === "unreachable" ? 503 : result.reason === "no_account" ? 404 : 401;
-	return c.json({ error: result.message, reason: result.reason }, status);
-}
+//
+// 🚨 **There is no password door here, and that is the point.** Signing in is OAuth at
+// `/api/atproto/auth` for every identity, whether Anthers issued it or somebody else did: the
+// person is sent to the server that holds the credential, authenticates there, and comes back
+// with a grant. A form on this page collecting a password would be a second host asking for a
+// credential it is not the authority on, and an Anthers-hosted identity's server is a real
+// authorization server with a real consent screen. `/desktop/password` went with it — the
+// packaged app signs in through the system browser, whose handoff is the same OAuth flow.
 
 const authRoutes = new Hono()
-	// ── Signing in with the identity's own password ───────────────────────────
-	//
-	// ⭐ **This is the first-party door, and it is the shape Bluesky's own client uses.** The
-	// person types the password they chose for an identity Anthers hosts; it goes to the node's
-	// `createSession` in one request, and the session that answers is kept for the account. The
-	// app never stores the password, and there is no second host or consent screen for a
-	// relationship that is already first-party.
-	//
-	// ⚠️ **An identity on somebody else's server signs in through OAuth**, at
-	// `/api/atproto/auth`, because Anthers is a third-party client of that server and should not
-	// be handling its holder's password.
-	.post("/login", zValidator("json", passwordLoginSchema, invalidBody), async (c) => {
-		const { identifier, password, authFactorToken } = c.req.valid("json");
-
-		// 🚨 **A present-but-foreign Origin is refused, the same rule the desktop routes use.**
-		// A cookie-setting login with no origin check is a login-CSRF: an attacker posts their own
-		// credentials from a page the victim is visiting and the victim's browser ends up signed in
-		// to the attacker's account, so their next actions land there. A request with no Origin at
-		// all is a server or the packaged app, and the password is the proof for those.
-		const origin = c.req.header("Origin");
-		if (origin && !allowedOrigins().includes(origin)) {
-			return c.json({ error: "CSRF validation failed" }, 403);
-		}
-
-		const limited = await checkRate(
-			"auth-password-login",
-			clientIp(c.req.raw.headers),
-			10,
-			15 * 60,
-		);
-		if (!limited.ok) return limitResponse(limited);
-		// A second budget on the identifier, so spreading guesses across addresses does not
-		// spend only per-IP attempts.
-		const targeted = await checkRate(
-			"auth-password-login-id",
-			identifier.toLowerCase(),
-			10,
-			15 * 60,
-		);
-		if (!targeted.ok) return limitResponse(targeted);
-
-		const result = await loginHostedAccount(identifier, password, { authFactorToken });
-		if (result.status !== "ok") return passwordLoginRefusal(c, result);
-
-		const token = await createSession(
-			result.user.id,
-			c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP"),
-			c.req.header("User-Agent"),
-		);
-		setSessionCookie(c, token);
-		return c.json({
-			user: await serializeUser(result.user),
-			needsOnboarding: result.user.termsAcceptedAt === null,
-		});
-	})
-
 	// ── Signup ceremony: ask, prove the address, then build the account ──────
 	//
 	// The order is the feature. `/signup` is where a visitor makes their choices;
@@ -1205,65 +1096,6 @@ const authRoutes = new Hono()
 			return c.json({ code });
 		},
 	)
-
-	// Step 3, in-app — the password method. The packaged app sends no Origin and has no cookie
-	// jar, so this is `/login`'s credential expressed as an enrollment: the person types the
-	// password they chose for an identity Anthers hosts, the server sends it to the node in one
-	// request, and the session that answers becomes the challenge's authorization. Success is the
-	// browser confirm's own function, so steps 1 and 4 and everything downstream are shared.
-	//
-	// ⚠️ **A handle on another server does not come through here.** That identity signs in
-	// through the SYSTEM browser (`/desktop/authorize`), because Anthers is a third-party client
-	// of that server and should not be holding its holder's password.
-	//
-	// 🚨 **The same two budgets as `/login`.** A password door with no guess limit is a password
-	// door with no password: per-IP and per-identifier, because spreading guesses across
-	// addresses should not spend only one of them.
-	.post("/desktop/password", zValidator("json", desktopPasswordSchema, invalidBody), async (c) => {
-		const typed = c.req.valid("json");
-
-		// Origin: present-but-foreign refused, absent admitted. The packaged app sends none,
-		// and a cross-site forgery through a victim's browser always does.
-		const origin = c.req.header("Origin");
-		if (origin && !allowedOrigins().includes(origin)) {
-			return c.json({ error: "CSRF validation failed" }, 403);
-		}
-
-		const limited = await checkRate(
-			"auth-password-login",
-			clientIp(c.req.raw.headers),
-			10,
-			15 * 60,
-		);
-		if (!limited.ok) return limitResponse(limited);
-		const targeted = await checkRate(
-			"auth-password-login-id",
-			typed.identifier.toLowerCase(),
-			10,
-			15 * 60,
-		);
-		if (!targeted.ok) return limitResponse(targeted);
-
-		// Checked before the credential is spent: an enrollment the app did not mint this minute
-		// is worth restarting rather than logging in for.
-		const pending = await getPendingDesktopAuth(typed.challenge);
-		if (!pending) return c.json({ error: "This sign-in request has expired" }, 404);
-
-		const result = await loginHostedAccount(typed.identifier, typed.password, {
-			authFactorToken: typed.authFactorToken,
-		});
-		if (result.status !== "ok") return passwordLoginRefusal(c, result);
-
-		const code = await authorizeDesktopAuth(
-			typed.challenge,
-			result.user.id,
-			c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP") ?? null,
-			c.req.header("User-Agent") ?? null,
-		);
-		if (!code) return c.json({ error: "This sign-in request has expired" }, 404);
-
-		return c.json({ code });
-	})
 
 	// Steps 3, in-app — the emailed-code method, added 2026-10-16 (Parker): sign in
 	// without leaving the app. Each route below is the emailed-code ceremony wearing another

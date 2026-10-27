@@ -111,51 +111,6 @@ export function takePendingCode(): Promise<string | null> {
 	return invoke<string | null>("take_pending_code");
 }
 
-/**
- * The identity's own credential, typed in the app.
- *
- * `identifier` is whatever the person typed — a handle or the address on the account — because
- * the identity server is the authority on both. `authFactorToken` is the emailed code the server
- * asks for when the account has two-factor on: absent on the first attempt, sent back with the
- * same password on the second.
- */
-export interface PasswordSignIn {
-	identifier: string;
-	password: string;
-	authFactorToken?: string;
-}
-
-/** What a sign-in attempt answered. */
-export type PasswordSignInOutcome =
-	/** A session is in the keychain — or in memory only, which the shell reports honestly. */
-	| { status: "session"; token: string; persistence: Persistence }
-	/** The password was right and the server wants the emailed code as well. */
-	| { status: "two-factor" };
-
-/**
- * Open the in-app password sign-in: register the PKCE challenge with the API and remember
- * its verifier in the shell. No browser opens — the flow continues with
- * `passwordSignIn()` in this window.
- */
-export function startPasswordSignIn(label: string): Promise<void> {
-	return invoke<void>("start_password_sign_in", { label });
-}
-
-/**
- * Sign in with the identity's password. The shell sends it to the API in one request, redeems
- * the resulting code itself, and parks the session in the keychain — exactly what the browser
- * handoff's redemption does. The password is not stored anywhere.
- */
-export async function passwordSignIn(credentials: PasswordSignIn): Promise<PasswordSignInOutcome> {
-	const result = await invoke<PasswordSignInOutcome>("password_sign_in", {
-		identifier: credentials.identifier,
-		password: credentials.password,
-		authFactorToken: credentials.authFactorToken ?? null,
-	});
-	if (result.status === "session") bridge()?.setToken(result.token);
-	return result;
-}
-
 /** Drop the local credential. Safe to call even if the server-side sign-out failed. */
 export async function desktopSignOut(): Promise<void> {
 	await invoke<void>("sign_out");

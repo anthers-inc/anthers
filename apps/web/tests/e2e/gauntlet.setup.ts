@@ -20,11 +20,11 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { db } from "@anthers/db/client";
 import { GAUNTLET_CREATOR_EMAIL, GAUNTLET_WALKER_EMAIL } from "@anthers/db/gauntlet";
-import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { stripeAccounts, users } from "@anthers/db/schema";
 import { expect, test as setup } from "@playwright/test";
 import { eq } from "drizzle-orm";
-import { API_URL, AUTH_STATE_PATH, leashedExecFileSync, WEB_ORIGIN } from "./fixtures";
+import { createSession } from "../../../api/src/services/auth";
+import { AUTH_STATE_PATH, leashedExecFileSync } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
@@ -89,22 +89,16 @@ setup("reset the gauntlet fixture and sign the user in", async () => {
 	// wants one owner, and the setup project is it.
 	leashedExecFileSync("bun", ["run", "db:media-fixture"], { cwd: REPO_ROOT, stdio: "inherit" });
 
-	// Sign in with the walker's own password, through the same route a person uses. The
-	// fixture sets it, so the setup does not have to mint a session by hand and can test the
-	// door it depends on.
-	const res = await fetch(`${API_URL}/api/auth/login`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
-		body: JSON.stringify({
-			identifier: GAUNTLET_WALKER_EMAIL,
-			password: LOCAL_ACCOUNT_PASSWORD,
-		}),
-	});
-	expect(res.ok, `sign-in failed: ${res.status} ${await res.text().catch(() => "")}`).toBe(true);
-
-	const setCookie = res.headers.get("set-cookie") ?? "";
-	const token = /(?:^|\s)session=([^;]+)/.exec(setCookie)?.[1];
-	expect(token, `no session cookie in Set-Cookie: "${setCookie}"`).toBeTruthy();
+	// Sign-in is OAuth at the identity's server, so there is no route to post credentials to.
+	// The harness mints the session the OAuth callback would mint, and the walk starts from the
+	// same cookie a person would hold.
+	const [walker] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, GAUNTLET_WALKER_EMAIL))
+		.limit(1);
+	expect(walker?.id, "the walker was not seeded").toBeTruthy();
+	const token = await createSession(walker!.id, null, "anthers e2e gauntlet");
 
 	// The storage state, by hand (see the gotcha above): the session cookie for the API
 	// host, which is the whole of the user's state now that the pre-launch gate is gone.

@@ -25,12 +25,18 @@
  * actually signed-in buyer's browser renders.
  */
 import { fileURLToPath } from "node:url";
-import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { MEDIA_FIXTURE_USERNAME } from "@anthers/db/media-fixture";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { type BrowserContext, expect, expect as fixtureExpect, type Page } from "@playwright/test";
 import { purgeAccountIds } from "../../../api/src/__tests__/purge";
-import { API_URL, leashedExecFileSync, signInAsMediaFixture, test, WEB_ORIGIN } from "./fixtures";
+import {
+	API_URL,
+	leashedExecFileSync,
+	mintSession,
+	signInAsMediaFixture,
+	test,
+	WEB_ORIGIN,
+} from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 const TITLE_PREFIX = "Basket header walk ";
@@ -100,19 +106,16 @@ function makeBuyer(name: string): { id: number; email: string } {
 	return { id: out.userId, email };
 }
 
-async function signInBuyer(email: string): Promise<string> {
-	const res = await fetch(`${API_URL}/api/auth/login`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-		body: JSON.stringify({ identifier: email, password: LOCAL_ACCOUNT_PASSWORD }),
-	});
-	fixtureExpect(
-		res.ok,
-		`sign-in as ${email} failed (${res.status}): ${await res.text().catch(() => "")}`,
-	).toBe(true);
-	const token = /(?:^|\s)session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
-	fixtureExpect(token, "no session cookie in the verify answer").toBeTruthy();
-	return token as string;
+/**
+ * The buyer's session.
+ *
+ * Minted rather than posted: sign-in is OAuth at the identity's server, so there is no route a
+ * spec can hand a password to, and a basket spec has no business driving a consent screen.
+ */
+async function signInBuyer(userId: number): Promise<string> {
+	const token = await mintSession(userId, "anthers e2e basket");
+	fixtureExpect(token, "no session was minted").toBeTruthy();
+	return token;
 }
 
 /** A context whose ONLY state is the buyer's session cookie — no localStorage residue. */
@@ -220,7 +223,7 @@ test.beforeAll(async ({ browser }) => {
 
 	const buyer = makeBuyer(`bsk-header-${Date.now().toString(36)}`);
 	buyerId = buyer.id;
-	buyerSessionToken = await signInBuyer(buyer.email);
+	buyerSessionToken = await signInBuyer(buyer.id);
 });
 
 test.afterAll(async () => {

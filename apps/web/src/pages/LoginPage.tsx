@@ -1,37 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { sanitizeNextPath, withNextPath } from "@anthers/shared/next-path";
+import { sanitizeNextPath } from "@anthers/shared/next-path";
 import { useAuth } from "@anthers/web-shared/auth";
 import { BrandGlyph } from "@anthers/web-shared/decor/BrandGlyph";
 import { usePageTitle } from "@anthers/web-shared/page-title";
-import { client } from "@anthers/web-shared/rpc";
 import FormField from "@anthers/web-shared/ui/FormField";
 import Logo from "@anthers/web-shared/ui/Logo";
-import { AtSymbolIcon, EnvelopeIcon } from "@heroicons/react/24/outline";
-import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import BlueskyMark from "../components/auth/BlueskyMark";
-import { mergeIntoServerBasket } from "../lib/basket";
+import { AtSymbolIcon } from "@heroicons/react/24/outline";
+import { useState } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 /**
- * The shape of an address, loosely — enough to tell "alice" from "alice@example.com".
+ * Whether what was typed is shaped like a handle at all.
  *
- * Deliberately not a validating regex: the server's `z.string().email()` is the ruling
- * check and this only has to answer *"is the person trying to give us an email at all?"*,
- * because the email and handle branches below need different things from them. Anything
- * that gets past this and fails at the API comes back as an ordinary refusal.
- */
-const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/**
- * Whether what was typed reads as a handle rather than an address.
- *
- * The same loose philosophy as `LOOKS_LIKE_EMAIL`: this is a routing question — *which
- * door does the typed thing belong to?* — not a validation one. It is reached only with
- * something that is not an Anthers handle (the hosted-suffix check in `handleSubmit` runs
- * first), so the only thing this has to recognize is a domain-shaped string
- * (`alice.bsky.social`, `example.com`). A handle that doesn't resolve is refused by the
- * ATProto flow itself, in its own words.
+ * The same loose philosophy the page has always used: this is a routing question — *is there
+ * something to send to an identity server?* — not a validation one. The server that holds the
+ * handle is the authority on whether it exists, and its refusal comes back in its own words.
  */
 const LOOKS_LIKE_HANDLE = /^@?[a-z0-9.-]+\.[a-z0-9-]+$/i;
 
@@ -42,47 +26,41 @@ const LOOKS_LIKE_HANDLE = /^@?[a-z0-9.-]+\.[a-z0-9-]+$/i;
  * Create Account form, and the form is GONE (2026-08-17).** There is one signup door now
  * and it is `/signup` — an identity (an Anthers handle or Bluesky), then an email address
  * and a code at `/finish`, then `/welcome` for the first-run. `/subscribe` redirects there —
- * it is the same page's old URL, kept resolving because links already sent out name it. The old card asked for a username + email +
- * password + confirm before an account existed at all, which is the cost this platform
- * decided not to charge at the moment of decision; keeping it alive as a second door
- * meant two flows that had to agree about terms acceptance, onboarding and where a new
- * account lands, and they had already drifted.
+ * it is the same page's old URL, kept resolving because links already sent out name it. The old
+ * card asked for a username + email + password + confirm before an account existed at all, which
+ * is the cost this platform decided not to charge at the moment of decision; keeping it alive as
+ * a second door meant two flows that had to agree about terms acceptance, onboarding and where a
+ * new account lands, and they had already drifted.
  *
  * So: **do not add a signup form here.** If this page needs a way onward for someone
  * without an account, it is a link to `/signup`.
  *
- * 🚨 **Sign-in is the identity's own credential: the password for an identity Anthers hosts, and
- * OAuth for one it does not (Parker, 2026-09-13; shape corrected 2026-10-26).** The split is the
- * hosting relationship, not the handle. Anthers is the first-party client of its own PDS, so a
- * hosted person types the password they chose here, it goes to `anthers.social` in one request,
- * and the session that answers is kept; there is no second host and no consent screen for a
- * relationship that is already first-party. A person whose identity lives somewhere else signs in
- * at that server through OAuth, because Anthers is a third-party client there and should not ask
- * for their password. The one form asks for an identifier and routes on what it is:
- * - An **email address or an Anthers handle** asks for the password and posts to
- *   **`/api/auth/login`**, never `/auth/signup/*`. The difference is the whole point: the signup
- *   pair *creates an account* for an address it doesn't know, which would make a mistyped address
- *   at the login page mint an account that never saw the terms.
- * - **A handle elsewhere** takes the OAuth door: the browser goes to that identity's own
- *   authorization server, which asks for whatever credential it holds and returns a grant.
- * - An email that belongs to a Bluesky identity fails on the password path, by design. The app
- *   cannot know which server holds an address without asking, and asking before a password is
- *   offered would turn this form into a directory; the refusal says to use the handle.
+ * 🚨 **Every sign-in is OAuth at the identity's own server, Anthers' included (Parker,
+ * 2026-10-27).** This page asks for a handle and nothing else, and the browser goes to whichever
+ * server holds that identity: `anthers.social` for one Anthers issued, Bluesky or anybody else
+ * for a handle that lives elsewhere. The person authenticates there, sees the permission being
+ * granted in the server's own words, and comes back with a grant the app turns into its session.
  *
- * 🚨 **The emailed code is recovery, not a login.** A person who cannot remember the password
- * resets it at the server that holds the identity: `anthers.social`'s own account page for a
- * hosted account, and Bluesky's for a Bluesky one. The link under the password field is that page,
- * and the URL is learned from `/api/atproto/config` rather than written here a second time.
+ * ⭐ **Why Anthers' own accounts are not an exception.** Anthers hosts a real authorization
+ * server, so a password field here would be a second host asking for a credential it is not the
+ * authority on — and the credential belongs at the server that stores its hash, where a reset,
+ * a second factor and the consent screen all already live. One door for every identity also
+ * means one flow to keep right instead of two that must agree.
  *
- * 🚨 **OAuth is a way IN and not a way to sign up** (2026-08-22). It signs in any account whose
- * identity resolves, resumes an unfinished signup started with that identity, and answers
- * `signup_disabled` for a handle no account holds rather than minting anything. That refusal is
- * the whole reason the affordance can live on this page at all.
+ * ⚠️ **There is no email sign-in, and that is a consequence rather than an omission.** An
+ * address cannot start an OAuth flow: resolving it to a handle would mean asking Anthers "does
+ * this address have an account?" before the person proved anything, which is the enumeration the
+ * emailed-code design spent its whole shape refusing. A handle is public, so asking where it
+ * lives gives nothing away.
  *
- * ⚠️ **One field decides all three routes, so there is no second button** (2026-10-09). The
- * separate "Log in with Bluesky" button and its modal are gone — a person who thinks of this
- * page as "where I type my identifier" and a person who scans for a button are one person
- * again, and what they type is the only thing the page had ever routed on anyway.
+ * 🚨 **The emailed code is recovery and signup, not a login.** A person who cannot remember their
+ * password resets it at the server that holds the identity, and the sign-in page there is where
+ * that happens; `/finish/resume` is the one other thing a code still does, moving an unfinished
+ * signup to another browser.
+ *
+ * ⚠️ **One field, so there is no second button** (2026-10-09). The separate "Log in with Bluesky"
+ * button and its modal are gone — a person who thinks of this page as "where I type my handle"
+ * and a person who scans for a button are one person again.
  *
  * 🚨 **The card's height is decoration, and it is load-bearing decoration.** The botanical
  * flourishes are positioned against the card box and each spray reaches roughly seven rems
@@ -94,9 +72,9 @@ const LOOKS_LIKE_HANDLE = /^@?[a-z0-9.-]+\.[a-z0-9-]+$/i;
  */
 export default function LoginPage() {
 	usePageTitle("Log In");
-	const { signInWithBluesky, refreshUser } = useAuth();
-	const navigate = useNavigate();
+	const { signInWithIdentity } = useAuth();
 	const location = useLocation();
+	const [searchParams] = useSearchParams();
 
 	// Where to land after auth: an explicit ?next=, else the route that bounced us
 	// here (ProtectedRoute stashes it in location.state.from), else the default order's
@@ -112,242 +90,55 @@ export default function LoginPage() {
 	);
 	const redirectTo = nextParam || from || "/library";
 
-	/** Whatever was typed — an address or a handle; the routing below decides which. */
+	/**
+	 * The suspension notice, carried back from the OAuth callback.
+	 *
+	 * 🚨 **The callback refuses a suspended account rather than signing it in**, because its
+	 * sessions authenticate nothing — `validateSession` refuses them — so minting one would
+	 * bounce the person here with no explanation. The identity server has just proved who they
+	 * are, which is the moment worth telling them, and the card becomes the notice.
+	 */
+	const suspended = searchParams.get("suspended") === "1";
+	const suspendedUntil = searchParams.get("until");
+
+	/** What was typed — a handle, with or without the leading `@`. */
 	const [identifier, setIdentifier] = useState("");
-
-	/**
-	 * The suffix a hosted handle hangs under, as the session's node reports it.
-	 *
-	 * Learned from `/api/atproto/config` and never hard-coded: it is `anthers.social` in
-	 * production and `.test` on a local network, and a second copy of that answer is how
-	 * an Anthers handle starts getting handed to the wrong door. Null means "not asked
-	 * yet" and "" means "the node did not answer" — either way the hosted-suffix check
-	 * below matches nothing and every handle falls through to the OAuth door, which is
-	 * where every handle went before this page knew about suffixes at all.
-	 */
-	const [hostedSuffix, setHostedSuffix] = useState<string | null>(null);
-	/** The identity server's own reset page, learned from the same answer. */
-	const [hostedAccountUrl, setHostedAccountUrl] = useState("");
-
-	useEffect(() => {
-		let live = true;
-		client.api.atproto.config
-			.$get()
-			.then((res) => res.json())
-			.then((body) => {
-				if (live) {
-					setHostedSuffix(body.hostedHandleSuffix ?? "");
-					setHostedAccountUrl(body.hostedAccountUrl ?? "");
-				}
-			})
-			.catch(() => {
-				if (live) setHostedSuffix("");
-			});
-		return () => {
-			live = false;
-		};
-	}, []);
-
-	/**
-	 * What the person is typing, decided as they type it — this page's answer to Bluesky's
-	 * auto-detect field.
-	 *
-	 * ⚠️ **Detection commits late, and that is the affordance.** A complete shape gets its
-	 * own drawing — an envelope for an address, the butterfly for a Bluesky handle, a
-	 * primary `@` for an Anthers handle — and anything still under construction leans email
-	 * unless an `@` leads it, which is the half-formed state a handle-typist passes through
-	 * and an address-typist never does. The butterfly is shown only for a *complete*
-	 * foreign handle, never mid-word, so it never promises Bluesky to somebody who is only
-	 * getting started on an Anthers one.
-	 *
-	 * ⚠️ **This is the same routing `handleSubmit` runs, derived rather than separated** — one
-	 * order of checks, not two that could drift. The suffix may still be loading (null) or
-	 * empty (the node is down), and then every handle reads bluesky-or-partial, which is
-	 * where all handles were headed before this page knew about suffixes anyway.
-	 */
-	/**
-	 * Whether the handle typed is one this node hosts, asked rather than inferred.
-	 *
-	 * 🚨 **A suffix test is not the question.** A hosted identity keeps the handle it brought,
-	 * and a domain handle does not end in the suffix the node issues — so `anthers.org`, moved
-	 * here from Bluesky, was sent down the OAuth door and told Bluesky was about to confirm it.
-	 * The suffix still answers instantly for the handles this node issued; everything else asks
-	 * the API, on a debounce, and only the answer decides.
-	 */
-	const [hostedLookup, setHostedLookup] = useState<{ handle: string; hosted: boolean } | null>(
-		null,
-	);
-
-	useEffect(() => {
-		const typed = identifier.trim();
-		if (!typed || LOOKS_LIKE_EMAIL.test(typed)) return;
-		if (!LOOKS_LIKE_HANDLE.test(typed)) return;
-		const bare = typed.replace(/^@/, "").toLocaleLowerCase();
-		if (hostedSuffix && bare.endsWith(`.${hostedSuffix}`)) return;
-
-		let live = true;
-		const timer = setTimeout(() => {
-			client.api.auth["hosted-handle"]
-				.$get({ query: { handle: bare } })
-				.then((res) => res.json())
-				.then((body) => {
-					if (live) setHostedLookup({ handle: bare, hosted: body.hosted });
-				})
-				.catch(() => {
-					if (live) setHostedLookup({ handle: bare, hosted: false });
-				});
-		}, 250);
-
-		return () => {
-			live = false;
-			clearTimeout(timer);
-		};
-	}, [identifier, hostedSuffix]);
-
-	/** The one answer both the drawing and the submit branch on. */
-	const isHostedHandle = (bare: string): boolean =>
-		Boolean(hostedSuffix && bare.endsWith(`.${hostedSuffix}`)) ||
-		(hostedLookup?.handle === bare && hostedLookup.hosted);
-
-	const trimmed = identifier.trim();
-	const signinMode: "idle" | "email" | "handle" | "anthers" | "bluesky" = (() => {
-		if (!trimmed) return "idle";
-		if (LOOKS_LIKE_EMAIL.test(trimmed)) return "email";
-		const bare = trimmed.replace(/^@/, "").toLocaleLowerCase();
-		if (isHostedHandle(bare)) return "anthers";
-		if (LOOKS_LIKE_HANDLE.test(trimmed)) return "bluesky";
-		// A bare word is neither an address nor a handle; "handle" is the drawing and hint that
-		// says to finish it, and the submit refuses it in the page's own words.
-		return "handle";
-	})();
-
-	const SIGNIN_DRAWING = {
-		idle: <EnvelopeIcon className="h-5 w-5" />,
-		email: <EnvelopeIcon className="h-5 w-5" />,
-		handle: <AtSymbolIcon className="h-5 w-5" />,
-		anthers: <AtSymbolIcon className="h-5 w-5 text-primary" />,
-		bluesky: <BlueskyMark className="h-4.5 w-4.5" />,
-	} as const;
-
-	const SIGNIN_HINT: Record<typeof signinMode, string> = {
-		idle: "An Anthers handle or email signs in with its password; a Bluesky handle signs in through Bluesky.",
-		email:
-			"The password for this Anthers identity. A Bluesky identity signs in with its handle instead.",
-		handle: "Keep typing the whole handle.",
-		anthers: "Your identity's password, chosen when you signed up.",
-		bluesky: "Your identity server confirms it's you, then brings you back.",
-	};
-
-	const [password, setPassword] = useState("");
-	/** The emailed code, only when the node has asked for one. */
-	const [authFactorToken, setAuthFactorToken] = useState("");
-	const [twoFactor, setTwoFactor] = useState(false);
-
-	const [errors, setErrors] = useState<Record<string, string>>({});
+	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 
 	/**
-	 * The suspension interstitial, set when the identity signs in but the Anthers account is
-	 * suspended. The password was right, so the card becomes the notice rather than a generic
-	 * failure. State rather than a route: a suspended account is never signed in, so nothing
-	 * protects a `/suspended` page, and the thing being told is bound to this attempt.
-	 */
-	const [suspended, setSuspended] = useState<{ until: string | null } | null>(null);
-
-	/**
-	 * Sign in, or hand the browser to the identity's own server.
+	 * Hand the browser to the identity's own server.
 	 *
-	 * 🚨 **An Anthers handle or an email is a password sign-in; a handle elsewhere is OAuth.**
-	 * The split is the hosting relationship. Anthers is the first-party client of its own PDS, so
-	 * the password goes to `anthers.social` in one request and the session that answers is kept,
-	 * exactly as Bluesky's own client does it. For an identity on somebody else's server Anthers
-	 * is a third-party client, so it must not ask for the password; the browser goes to that
-	 * server's authorization page.
-	 *
-	 * ⚠️ **An email that belongs to a Bluesky identity fails on the password path**, by design.
-	 * The app cannot know which server holds an address without asking, and asking before a
-	 * password is offered would turn this form into a directory. The message says so and points at
-	 * the handle.
+	 * ⚠️ **The only failure this can report is failing to start**, and that is deliberate: once
+	 * the browser leaves for the identity server, whether the sign-in succeeds is that server's
+	 * answer, and it brings the person back with either a grant or its own refusal.
 	 */
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		setErrors({});
+		setError(null);
 		const typed = identifier.trim();
+		const bare = typed.replace(/^@/, "").toLocaleLowerCase();
 
-		if (signinMode === "email" || signinMode === "anthers") {
-			if (!password) {
-				setErrors({ general: "Enter your password." });
-				return;
-			}
-			setLoading(true);
-			try {
-				const res = await client.api.auth.login.$post({
-					json: {
-						identifier: typed,
-						password,
-						...(twoFactor && authFactorToken.trim()
-							? { authFactorToken: authFactorToken.trim() }
-							: {}),
-					},
-				});
-				if (!res.ok) {
-					const body = (await res.json().catch(() => ({}))) as {
-						error?: string;
-						reason?: string;
-						twoFactor?: boolean;
-						suspendedUntil?: string | null;
-					};
-					if (body.twoFactor) {
-						setTwoFactor(true);
-						setErrors({ general: body.error ?? "Enter the code sent to your email." });
-						setLoading(false);
-						return;
-					}
-					if (body.reason === "account_suspended") {
-						setSuspended({ until: body.suspendedUntil ?? null });
-						setLoading(false);
-						return;
-					}
-					setErrors({ general: body.error ?? "That handle or password didn't work." });
-					setLoading(false);
-					return;
-				}
-				const body = (await res.json()) as { needsOnboarding: boolean };
-
-				// 🚨 The basket fold and the context refresh are LAST, because the refresh
-				// unmounts this page. Nothing may be queued after it.
-				await mergeIntoServerBasket().catch(() => {});
-				await refreshUser();
-				navigate(body.needsOnboarding ? withNextPath("/welcome", nextParam || from) : redirectTo, {
-					replace: true,
-				});
-			} catch {
-				setErrors({ general: "Couldn't reach Anthers. Please try again." });
-				setLoading(false);
-			}
+		if (!LOOKS_LIKE_HANDLE.test(typed)) {
+			setError(
+				typed.includes("@") && typed.includes(".")
+					? "Sign in with your handle rather than your email address."
+					: "Type your whole handle, like alice.anthers.social.",
+			);
 			return;
 		}
 
-		if (signinMode === "bluesky" && LOOKS_LIKE_HANDLE.test(typed)) {
-			const handle = typed.replace(/^@/, "").toLocaleLowerCase();
-			setLoading(true);
-			try {
-				await signInWithBluesky(handle, redirectTo);
-			} catch (err) {
-				setErrors({
-					general:
-						err instanceof Error
-							? err.message
-							: "Couldn't reach your identity server. Please try again.",
-				});
-				setLoading(false);
-			}
-			return;
+		setLoading(true);
+		try {
+			await signInWithIdentity(bare, redirectTo);
+		} catch (err) {
+			setError(
+				err instanceof Error
+					? err.message
+					: "Couldn't reach your identity server. Please try again.",
+			);
+			setLoading(false);
 		}
-
-		setErrors({
-			general: "Sign in with the email address or the handle on your account.",
-		});
 	};
 
 	return (
@@ -393,18 +184,18 @@ export default function LoginPage() {
 				>
 					<div className="card-body justify-center gap-3">
 						{suspended ? (
-							/* The suspension interstitial. The code just proved the mailbox, so this
-							   is the strongest telling there is — the card becomes the notice.
-							   What it deliberately does not do is word a suspension as anything
-							   the account did itself (the 51.02 wording rule), and it names the
-							   appeal the moderation email already pointed at. */
+							/* The suspension interstitial. The identity server just proved who this
+							   is, so this is the strongest telling there is — the card becomes the
+							   notice. What it deliberately does not do is word a suspension as
+							   anything the account did itself (the 51.02 wording rule), and it
+							   names the appeal the moderation email already pointed at. */
 							<>
 								<h1 className="card-title justify-center text-2xl">Account Suspended</h1>
 								<div className="text-center text-sm text-base-content/80 space-y-3">
 									<p>
 										Anthers has suspended this account
-										{suspended.until
-											? ` until ${new Date(suspended.until).toLocaleDateString(undefined, { dateStyle: "long" })}`
+										{suspendedUntil
+											? ` until ${new Date(suspendedUntil).toLocaleDateString(undefined, { dateStyle: "long" })}`
 											: ""}
 										. While suspended you can't sign in, and your presence and works aren't shown
 										publicly.
@@ -436,24 +227,25 @@ export default function LoginPage() {
 						    somebody without an account is most likely to arrive at by mistake — they
 						    came to log in and cannot — so it is the second-best place after the
 						    navbar to say that joining costs nothing. The destination page states the
-						    monthly Public Access limit in the same breath, per the wiki's *How Anthers Talks About Itself*. */}
+						    monthly Public Access limit in the same breath, per the wiki's *How Anthers
+						    Talks About Itself*. */}
 								<div className="text-center text-sm text-base-content/70">
 									New to Anthers?{" "}
 									<Link to="/signup" className="link link-primary">
 										Sign up free
 									</Link>
 								</div>
-								{errors.general && (
+								{error && (
 									<div className="alert alert-error text-sm mt-2">
-										<span>{errors.general}</span>
+										<span>{error}</span>
 									</div>
 								)}
 								<form onSubmit={handleSubmit} className="mt-3 flex flex-col gap-2" noValidate>
 									<FormField
 										spaced
-										label="Email or handle"
-										icon={SIGNIN_DRAWING[signinMode]}
-										iconName={signinMode === "email" ? "email" : signinMode}
+										label="Your handle"
+										icon={<AtSymbolIcon className="h-5 w-5" />}
+										iconName="handle"
 										/* 🚨 The hint's space is reserved at its TALLEST reading, and that is
 									    load-bearing (Parker, 2026-10-10): the idle hint wraps to two lines
 									    (2 × 22.75px, the hint's own `leading-relaxed` line at the card's
@@ -463,19 +255,20 @@ export default function LoginPage() {
 									    holds the tallest height in every state, so the text is free to
 									    change and the space it occupies is not. If the copy grows a third
 									    line, this is the number that moves with it. */
-										hint={<span className="block min-h-[2.875rem]">{SIGNIN_HINT[signinMode]}</span>}
+										hint={
+											<span className="block min-h-[2.875rem]">
+												Your identity server confirms it's you, then brings you back here.
+											</span>
+										}
 									>
 										{/* 🚨 `type="text"`, and that is load-bearing: the browser's built-in
 								    email validation would fire *before* React sees the submit and say
 								    "please include an '@' in the email address", which is a message about
-								    syntax on a page whose real answer is about what signing in *is*. The
-								    loose shape checks in `handleSubmit` are the ones whose sentences show.
+								    syntax on a page whose real answer is about what signing in *is*.
 
 								    ⚠️ `inputMode` follows the `@` (2026-10-09): the moment the value starts
 								    with one, the person is typing a handle, and the keyboard suits it —
-								    dots and letters instead of the email address's autocompletions. It is
-								    a keyboard answer, not a routing one: what was typed still routes on
-								    submit, exactly as it always did. */}
+								    dots and letters instead of the email address's autocompletions. */}
 										<input
 											type="text"
 											inputMode={identifier.startsWith("@") ? "url" : "email"}
@@ -491,69 +284,20 @@ export default function LoginPage() {
 											className="input w-full pl-10 border-transparent! focus:border-primary/70! focus:outline-none! shadow-[0_3px_12px_color-mix(in_oklch,var(--color-base-content)_30%,transparent)]! focus:shadow-[0_3px_12px_color-mix(in_oklch,var(--color-base-content)_30%,transparent)]!"
 											autoComplete="username"
 											value={identifier}
-											onChange={(e) => setIdentifier(e.target.value)}
+											onChange={(e) => {
+												setIdentifier(e.target.value);
+												setError(null);
+											}}
 											required
 										/>
 									</FormField>
-									{(signinMode === "email" || signinMode === "anthers") && (
-										<>
-											<label className="label px-0 pb-1" htmlFor="login-password">
-												<span className="text-sm font-semibold">Password</span>
-											</label>
-											<input
-												id="login-password"
-												type="password"
-												autoComplete="current-password"
-												className="input input-bordered w-full"
-												value={password}
-												onChange={(e) => {
-													setPassword(e.target.value);
-													setErrors({});
-												}}
-												required
-											/>
-											{twoFactor && (
-												<>
-													<label className="label px-0 pb-1" htmlFor="login-factor">
-														<span className="text-sm font-semibold">Email code</span>
-													</label>
-													<input
-														id="login-factor"
-														type="text"
-														inputMode="numeric"
-														autoComplete="one-time-code"
-														className="input input-bordered w-full"
-														value={authFactorToken}
-														onChange={(e) => {
-															setAuthFactorToken(e.target.value);
-															setErrors({});
-														}}
-													/>
-												</>
-											)}
-											{/* The reset belongs to the server that holds the identity. The URL is the
-											    node's answer, not a second copy of the host written here. */}
-											{hostedAccountUrl && (
-												<a
-													className="link self-end text-xs text-base-content/55"
-													href={`${hostedAccountUrl}/reset-password`}
-													target="_blank"
-													rel="noreferrer"
-												>
-													Forgot your password?
-												</a>
-											)}
-										</>
-									)}
 									{/* ⚠️ `mt-5` over the form's own `gap-2`: the extra air above the
 								    Continue button is deliberate (Parker, 2026-10-10). */}
 									<button type="submit" className="btn btn-primary w-full mt-5" disabled={loading}>
 										{loading ? (
 											<span className="loading loading-spinner loading-sm" />
-										) : signinMode === "bluesky" ? (
-											"Continue with your identity server"
 										) : (
-											"Sign in"
+											"Continue with your identity server"
 										)}
 									</button>
 								</form>

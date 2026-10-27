@@ -80,6 +80,7 @@ import {
 	requestRecoveryKeyToken,
 	seatRecoveryKey,
 } from "../services/hosted-recovery-key.js";
+import { isAccountSuspended } from "../services/moderation.js";
 import {
 	bindIdentityToPending,
 	findPendingByDid,
@@ -502,6 +503,19 @@ const atprotoRoutes = new Hono()
 						`rowEmail=${parked?.email ? "yes" : "no"} codeSent=${parked?.codeSentAt ? "yes" : "no"}`,
 				);
 				return back({ success: "needs_email", next });
+			}
+
+			// 🚨 **A suspended account is refused HERE rather than signed in and locked out.**
+			// `validateSession` refuses a suspended user's sessions, so minting one would bounce
+			// them back to `/login` with nothing said, which is how a moderation decision turns
+			// into "the site is broken". The identity server has just proved who this is, which
+			// is the moment worth answering, so the card at `/login` becomes the notice.
+			if (isAccountSuspended(user)) {
+				return back({
+					suspended: "1",
+					until: user.suspendedUntil?.toISOString() ?? undefined,
+					next,
+				});
 			}
 
 			await attachSessionToUser(identity.did, user.id);
