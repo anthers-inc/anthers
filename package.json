@@ -60,7 +60,7 @@
 		"hosted:record": "bun run apps/api/src/scripts/hosted-record.ts",
 		"hosted:identities": "bun run apps/api/src/scripts/hosted-identities.ts",
 		"hosted:credentials": "bun run apps/api/src/scripts/hosted-credentials.ts",
-		"db:pds-url": "bun run apps/api/src/scripts/pds-url.ts",
+		"hosted:pds-url": "bun run apps/api/src/scripts/pds-url.ts",
 		"account:erase": "bun run apps/api/src/scripts/erase-account.ts",
 		"repo:resign": "bun run apps/api/src/scripts/repo-resign.ts"
 	},

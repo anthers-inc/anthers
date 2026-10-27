@@ -12,11 +12,11 @@
  * where an identity lives, and a tool that took the new address as an argument would let an
  * operator paste the same wrong value it is meant to fix. One account at a time, by id.
  *
- *   bun run db:pds-url 39            # show what the row says and what the directory says
- *   bun run db:pds-url 39 --yes     # write the directory's answer
+ *   bun run hosted:pds-url 39         # show what the row says and what the directory says
+ *   bun run hosted:pds-url 39 --yes   # write the directory's answer
  *
  * In production, use the wrapper Make target:
- *   make prod-db CMD="bun run db:pds-url 39 --yes"
+ *   make prod-db CMD="bun run hosted:pds-url 39 --yes"
  */
 import { db } from "@anthers/db";
 import { users } from "@anthers/db/schema";
@@ -25,7 +25,7 @@ import { eq } from "drizzle-orm";
 const TAG = "[pds-url]";
 
 const USAGE = `usage:
-  bun run db:pds-url <user-id> [--yes]`;
+  bun run hosted:pds-url <user-id> [--yes]`;
 
 function fail(message: string): never {
 	console.error(`${TAG} ${message}`);
