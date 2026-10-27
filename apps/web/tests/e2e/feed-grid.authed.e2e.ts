@@ -19,9 +19,9 @@
  * regressions shipped.** Pins instead of screenshots: structure, ratios, counts.
  *
  * ⚠️ **The world this spec seeds is its own and leaves with it**: a follow of the
- * fixture creator by the walker, one announcement post, and one physical Work with a
- * seeded merch variant — all deleted in `afterAll`, because the walker and the fixture
- * creator are accounts other specs in this project read.
+ * fixture creator by the walker, one announcement post, and one physical Work with the
+ * portrait mockup on its own thumbnail — all deleted in `afterAll`, because the walker and
+ * the fixture creator are accounts other specs in this project read.
  */
 
 import { db } from "@anthers/db/client";
@@ -52,6 +52,17 @@ const tileRoot = (overlay: Locator): Locator => overlay.locator("xpath=..");
 const PORTRAIT_MOCKUP = `data:image/svg+xml,${encodeURIComponent(
 	"<svg xmlns='http://www.w3.org/2000/svg' width='200' height='700'><rect width='200' height='700' fill='#c0392b'/><text x='100' y='360' fill='white' font-size='40' text-anchor='middle'>MOCKUP</text></svg>",
 )}`;
+
+/**
+ * Discovery under My Network, named in the URL rather than inherited.
+ *
+ * 🚨 **A bare `/discovery` opens on the account's last-chosen recipe**, and the walker is one
+ * account shared with every authed spec — including the one that walks the recipe chips. A
+ * run where that spec had just left "what you saved" selected drew an empty stream here and
+ * this file's tiles never rendered, which reads as a broken grid and is not one. The URL is
+ * the documented override layer, so this file states the recipe it draws on.
+ */
+const DISCOVERY = `${WEB_ORIGIN}/discovery?window=all&candidates=network&mix=straight`;
 
 let creatorToken: string | null = null;
 let creatorHandle = "";
@@ -151,7 +162,7 @@ test("no creator suggestions ride the feed, and the post reads one excerpt in it
 }) => {
 	test.setTimeout(60_000);
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/discovery`);
+	await page.goto(DISCOVERY);
 
 	// No creator suggestions: the section is the recommendation the feed doesn't make.
 	expect(await page.evaluate(() => document.body.textContent ?? "")).not.toContain(
@@ -190,7 +201,7 @@ test("the creator name inside a tile links to the creator's page, not the tile's
 }) => {
 	test.setTimeout(60_000);
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/discovery`);
+	await page.goto(DISCOVERY);
 	await expect(page.getByRole("link", { name: /Feed grid walk post/ })).toBeVisible();
 
 	// The tile's surface still opens its own target: the stretched overlay takes a
@@ -222,7 +233,7 @@ test("the goods and video tiles keep their band shapes and their hover truths", 
 }) => {
 	test.setTimeout(60_000);
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/discovery`);
+	await page.goto(DISCOVERY);
 
 	const shirtTile = page.getByRole("link", { name: /Feed grid shirt/ });
 	await expect(shirtTile).toBeVisible();
@@ -292,7 +303,7 @@ test("the preview stop keeps a held hover a poster, and the default still plays"
 		localStorage.setItem("anthers_tile_previews", "0");
 	});
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/discovery`);
+	await page.goto(DISCOVERY);
 	const stoppedTile = page.getByRole("link", { name: videoName });
 	await expect(stoppedTile).toBeVisible();
 	await stoppedTile.hover();
@@ -310,7 +321,7 @@ test("the preview stop keeps a held hover a poster, and the default still plays"
 	await page.addInitScript(() => {
 		localStorage.removeItem("anthers_tile_previews");
 	});
-	await page.goto(`${WEB_ORIGIN}/discovery`);
+	await page.goto(DISCOVERY);
 	const playingTile = page.getByRole("link", { name: videoName });
 	await expect(playingTile).toBeVisible();
 	await playingTile.hover();
@@ -327,7 +338,7 @@ test("the preview's speaker button turns hover audio on, and that answer persist
 	const videoName = /A short film that really plays/;
 
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/discovery`);
+	await page.goto(DISCOVERY);
 	const tile = page.getByRole("link", { name: videoName });
 	await expect(tile).toBeVisible();
 	await tile.hover();
@@ -357,7 +368,7 @@ test("the preview's speaker button turns hover audio on, and that answer persist
 	// A later visit reads the remembered answer: the fresh document has had no
 	// gesture of its own, so the audibility of the element is the browser's call —
 	// what persists is the setting, and the button state carries it.
-	await page.goto(`${WEB_ORIGIN}/discovery`);
+	await page.goto(DISCOVERY);
 	const nextTile = page.getByRole("link", { name: videoName });
 	await expect(nextTile).toBeVisible();
 	await nextTile.hover();
@@ -375,7 +386,7 @@ test("an audio preview carries the same speaker button and the same remembered a
 	const audioName = /Track 1/;
 
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/discovery`);
+	await page.goto(DISCOVERY);
 	const tile = page.getByRole("link", { name: audioName });
 	await expect(tile).toBeVisible();
 	await tile.hover();
@@ -405,7 +416,7 @@ test("an audio preview carries the same speaker button and the same remembered a
 test("the grid fills the content area and flexes as the window narrows", async ({ page }) => {
 	test.setTimeout(60_000);
 	await page.setViewportSize({ width: 2000, height: 1100 });
-	await page.goto(`${WEB_ORIGIN}/discovery`);
+	await page.goto(DISCOVERY);
 	await expect(page.getByRole("link", { name: /Feed grid walk post/ })).toBeVisible();
 
 	const colsAt = () =>

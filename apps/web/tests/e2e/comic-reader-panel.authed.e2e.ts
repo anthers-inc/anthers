@@ -118,8 +118,13 @@ test("a comic with guided view off offers no panel mode and still reads as pages
 		// The detector's rows exist in the database and every page is off, so there is
 		// nothing to guide with and the reader stays a page reader.
 		await expect(page.getByRole("button", { name: "Panel mode" })).toHaveCount(0);
+		// 🚨 **Any page, not page one.** A reading position is stored per account and Work,
+		// and the walker is one account shared with the other comic walk, which turns pages
+		// while this runs. What this assertion owns is that a page image is drawn at all —
+		// panel mode is the thing that could have replaced it, and the reset above only
+		// holds until a sibling writes past it.
 		await expect(
-			page.getByRole("img", { name: /A comic that really turns, page 1/ }),
+			page.getByRole("img", { name: /A comic that really turns, page \d+/ }),
 		).toBeVisible();
 	} finally {
 		await setGuidedView(true);

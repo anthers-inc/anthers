@@ -14,6 +14,17 @@
 import { expect, test } from "@playwright/test";
 import { WEB_ORIGIN } from "./fixtures";
 
+/**
+ * Discovery under My Network, named in the URL rather than inherited.
+ *
+ * 🚨 **A bare `/discovery` opens on the account's last-chosen recipe**, and the walker is one
+ * account shared with every authed spec, including the one that walks the recipe chips. A run
+ * where that spec had left another recipe selected drew a stream this page had to render
+ * around, and the structure this file pins belongs to the tab, not to the recipe. Naming the
+ * recipe keeps the sidebar's shape the subject.
+ */
+const DISCOVERY = `${WEB_ORIGIN}/discovery?window=all&candidates=network&mix=straight`;
+
 test.describe.configure({ mode: "serial" });
 
 /** The sidebar's landmarks — the nav, every divider (deep: the second structural
@@ -40,7 +51,7 @@ const typeSectionRows = (page: import("@playwright/test").Page) =>
 
 test("the sidebar reads tabs, divider, lenses, divider, shared filters", async ({ page }) => {
 	test.setTimeout(60_000);
-	await page.goto(`${WEB_ORIGIN}/discovery`);
+	await page.goto(DISCOVERY);
 	await expect(
 		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Discovery" }),
 	).toBeVisible();
@@ -107,7 +118,7 @@ test("the sidebar reads tabs, divider, lenses, divider, shared filters", async (
 
 test("the shared Type list is the unified vocabulary, grayed rows included", async ({ page }) => {
 	test.setTimeout(60_000);
-	await page.goto(`${WEB_ORIGIN}/discovery`);
+	await page.goto(DISCOVERY);
 	await expect(
 		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Discovery" }),
 	).toBeVisible();
@@ -135,7 +146,7 @@ test("the shared Type list is the unified vocabulary, grayed rows included", asy
 
 test("a Type selection filters the feed through the page's own adapter", async ({ page }) => {
 	test.setTimeout(60_000);
-	await page.goto(`${WEB_ORIGIN}/discovery`);
+	await page.goto(DISCOVERY);
 	await expect(
 		page.getByRole("navigation", { name: "Anthers" }).getByRole("link", { name: "Discovery" }),
 	).toBeVisible();
