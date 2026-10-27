@@ -1187,6 +1187,22 @@ export const badges = pgTable(
 		 */
 		artFingerprint: text("art_fingerprint"),
 		/**
+		 * The emblem color the current composition was recolored with — the hex swatch the
+		 * picker offered, kept so the same emblem can be composed onto a new shape or field.
+		 *
+		 * 🚨 **The fingerprint cannot answer this and the provenance row does not carry it.**
+		 * A SHA-256 is one-way, and `badge_art_provenance` names the artist, the license and
+		 * the term but never the color the creator picked. Without this column a composed
+		 * Badge is frozen to the shape and field baked into its PNG, because recomposing it
+		 * would have to guess a foreground color that is part of the art.
+		 *
+		 * ⚠️ **Nullable, because rows composed before this column existed have no recorded
+		 * color.** A migration recovers one from the stored fingerprint by trying the ten
+		 * `BADGE_EMBLEM_COLORS` swatches; a row the palette has moved under stays null and
+		 * keeps the old refusal rather than having a wrong color invented for it.
+		 */
+		artEmblemColor: text("art_emblem_color"),
+		/**
 		 * Where the emblem sits and how big it is, as the creator set them — the same
 		 * 0-100 viewBox units `@anthers/shared/badge-art` uses, and a fraction of the
 		 * `emblemBox` at 1.0. Stated rather than re-derived so recomposing a Badge

@@ -31,6 +31,7 @@ const RUN = Date.now().toString(36);
 const LABEL = `E2E rung ${RUN}`;
 let badgeId = 0;
 let pickBadgeId = 0;
+let recomposeBadgeId = 0;
 let token = "";
 
 /**
@@ -100,6 +101,7 @@ function artwork(): Buffer {
 test.afterAll(async () => {
 	if (badgeId) await db.delete(badges).where(eq(badges.id, badgeId));
 	if (pickBadgeId) await db.delete(badges).where(eq(badges.id, pickBadgeId));
+	if (recomposeBadgeId) await db.delete(badges).where(eq(badges.id, recomposeBadgeId));
 });
 
 test("a creator gives a rung its own art, and a rung without one still shows a badge", async ({
@@ -249,7 +251,7 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 
 	// The grid card wears the art it just saved: the two views are one rendering, so a
 	// card that still drew the fallback would be the bug.
-	const art = `img[src$="/api/subscriptions/badges/${badgeId}/art"]`;
+	const art = `img[src*="/api/subscriptions/badges/${badgeId}/art"]`;
 	await expect(page.locator(art)).toBeVisible({
 		timeout: 15_000,
 	});
@@ -269,6 +271,89 @@ test("a creator gives a rung its own art, and a rung without one still shows a b
 		.where(eq(badges.id, badgeId));
 	expect(stored?.artShape).toBe("hexagon");
 	expect(stored?.artColor).toBe("amber");
+
+	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
+});
+
+/**
+ * A composed Badge takes a new shape and background by being rebuilt on the server.
+ *
+ * ⭐ **The refusal this replaces was the honest fallback, not the end state.** A composed
+ * PNG bakes in its shape and field, so the editor used to demand a new emblem before it
+ * would save either choice. The row now stores the emblem color a recomposition needs, and
+ * this walk proves the editor stops refusing and sends the rebuild instead — with the
+ * preview still on the saved art until Save, because the browser never has the vector.
+ *
+ * ⚠️ **The vendor is not reachable from a test session**, so the recompose call itself is
+ * intercepted here. The API suite proves the composition and what it persists; this only
+ * proves the editor's own path and payload.
+ */
+test("a composed Badge saves a shape and background change by recomposing", async ({
+	page,
+	context,
+}) => {
+	const errors = trackErrorsStrict(page);
+	const label = `E2E composed ${RUN}`;
+	const creatorToken = await signInAsCreator(context);
+
+	const created = await fetch(`${API_URL}/api/subscriptions/badges`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Origin: WEB_ORIGIN,
+			Cookie: `session=${creatorToken}`,
+		},
+		body: JSON.stringify({ threshold: "4.25", label }),
+	});
+	expect(created.status, "could not create the composed fixture rung").toBe(201);
+	recomposeBadgeId = ((await created.json()) as { badge: { id: number } }).badge.id;
+
+	// The row a composition leaves behind: a stored PNG, the fingerprint that marks it a
+	// composed whole, and the emblem color the recomposition reads.
+	await db
+		.update(badges)
+		.set({
+			artKey: `creators/0/badges/${recomposeBadgeId}/e2e.png`,
+			artShape: "circle",
+			artColor: "moss",
+			artFingerprint: "e".repeat(64),
+			artEmblemColor: "#ffffff",
+			artEmblemScale: "1",
+			artEmblemOffsetX: "0",
+			artEmblemOffsetY: "0",
+		})
+		.where(eq(badges.id, recomposeBadgeId));
+
+	await page.route("**/api/subscriptions/badges/*/art*", (route) =>
+		route.fulfill({ status: 200, contentType: "image/png", body: artwork() }),
+	);
+	let recomposeBody: unknown = null;
+	await page.route("**/api/subscriptions/badges/*/recompose", async (route) => {
+		recomposeBody = route.request().postDataJSON();
+		await route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ unchanged: false, artPath: "" }),
+		});
+	});
+
+	const handle = await gauntletHandle(API_URL, GAUNTLET_CREATOR_USERNAME);
+	await page.goto(`${WEB_ORIGIN}${profileUrl(handle)}?tab=badges`);
+	await page.getByRole("button", { name: `Edit ${label}` }).click();
+	const dialog = page.getByRole("dialog");
+	await dialog.getByRole("tab", { name: "Emblem" }).click();
+	const control = page.getByTestId("badge-art-control");
+
+	await control.getByRole("button", { name: "Hexagon" }).click();
+	await control.getByRole("button", { name: "Amber" }).click();
+	await expect(
+		dialog.getByText("Saving rebuilds this emblem on the new shape and background."),
+	).toBeVisible();
+	await dialog.screenshot({ path: `.screenshots/badge-maker-recompose-${RUN}.png` });
+
+	await dialog.getByRole("button", { name: "Save" }).click();
+	await expect(dialog).toBeHidden();
+	expect(recomposeBody).toEqual({ shape: "hexagon", fieldColor: "amber" });
 
 	expect(errors, `console errors: ${errors.join("\n")}`).toEqual([]);
 });
