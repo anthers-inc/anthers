@@ -593,6 +593,17 @@ const authRoutes = new Hono()
 	// be handling its holder's password.
 	.post("/login", zValidator("json", passwordLoginSchema, invalidBody), async (c) => {
 		const { identifier, password, authFactorToken } = c.req.valid("json");
+
+		// 🚨 **A present-but-foreign Origin is refused, the same rule the desktop routes use.**
+		// A cookie-setting login with no origin check is a login-CSRF: an attacker posts their own
+		// credentials from a page the victim is visiting and the victim's browser ends up signed in
+		// to the attacker's account, so their next actions land there. A request with no Origin at
+		// all is a server or the packaged app, and the password is the proof for those.
+		const origin = c.req.header("Origin");
+		if (origin && !allowedOrigins().includes(origin)) {
+			return c.json({ error: "CSRF validation failed" }, 403);
+		}
+
 		const limited = await checkRate(
 			"auth-password-login",
 			clientIp(c.req.raw.headers),
