@@ -143,7 +143,7 @@ const PRIVACY: LegalDocument = {
 		"Some things about this service are worth a parent knowing, and they're set out in plain language on our [page for parents and guardians](/parents) rather than buried here.",
 
 		"## Security",
-		"Signing in is the password you chose for your Anthers identity, or your identity server's own authorization for one you brought; either way we keep the session that answers and not the password, so there is no copy of it here to steal. The codes we email you, for confirming an address or recovering an account, are stored hashed with argon2id and are dead ten minutes after they were mailed. Sessions are opaque tokens you can review and revoke. Purchased and gated media is stored privately and every link to it is generated per request, after re-checking that you're allowed to have it. Card details never reach our servers.",
+		"Signing in happens at your identity server: you type your handle, the server that holds it asks for your password, and it confirms who you are before Anthers is allowed in. What we keep is the session that answers, never the password, so there is no copy of it here to steal. The codes we email you, for confirming an address or recovering an account, are stored hashed with argon2id and are dead ten minutes after they were mailed. Sessions are opaque tokens you can review and revoke. Purchased and gated media is stored privately and every link to it is generated per request, after re-checking that you're allowed to have it. Card details never reach our servers.",
 		"No system is perfectly secure, and we will tell you promptly if something happens that affects you.",
 
 		"## Changes",
