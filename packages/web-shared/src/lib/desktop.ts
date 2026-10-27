@@ -112,41 +112,47 @@ export function takePendingCode(): Promise<string | null> {
 }
 
 /**
- * Who the emailed sign-in code is being asked for, in `/signin/start`'s own shape:
- * a typed address, or a hosted handle the API resolves to the account's mailbox.
- * The browser never learns the mailbox behind a handle — this object is forwarded
- * verbatim and the server does the resolving.
+ * The identity's own credential, typed in the app.
+ *
+ * `identifier` is whatever the person typed — a handle or the address on the account — because
+ * the identity server is the authority on both. `authFactorToken` is the emailed code the server
+ * asks for when the account has two-factor on: absent on the first attempt, sent back with the
+ * same password on the second.
  */
-export type EmailContact = { email: string } | { handle: string };
-
-/**
- * Open the in-app emailed-code sign-in: register the PKCE challenge with the API
- * and remember its verifier in the shell. No browser opens — the flow continues
- * with `emailSignInCode()` and `completeEmailSignIn()` in this window.
- */
-export function startEmailSignIn(label: string): Promise<void> {
-	return invoke<void>("start_email_sign_in", { label });
+export interface PasswordSignIn {
+	identifier: string;
+	password: string;
+	authFactorToken?: string;
 }
 
-/** Ask the API to email a sign-in code for this contact. */
-export function emailSignInCode(contact: EmailContact): Promise<void> {
-	return invoke<void>("send_email_sign_in_code", { contact });
+/** What a sign-in attempt answered. */
+export type PasswordSignInOutcome =
+	/** A session is in the keychain — or in memory only, which the shell reports honestly. */
+	| { status: "session"; token: string; persistence: Persistence }
+	/** The password was right and the server wants the emailed code as well. */
+	| { status: "two-factor" };
+
+/**
+ * Open the in-app password sign-in: register the PKCE challenge with the API and remember
+ * its verifier in the shell. No browser opens — the flow continues with
+ * `passwordSignIn()` in this window.
+ */
+export function startPasswordSignIn(label: string): Promise<void> {
+	return invoke<void>("start_password_sign_in", { label });
 }
 
 /**
- * Spend the emailed code inside the app: the shell verifies it against its pending
- * challenge and parks the resulting session in the keychain, exactly as the browser
- * handoff's redemption does. Returns the token it installed.
+ * Sign in with the identity's password. The shell sends it to the API in one request, redeems
+ * the resulting code itself, and parks the session in the keychain — exactly what the browser
+ * handoff's redemption does. The password is not stored anywhere.
  */
-export async function completeEmailSignIn(
-	contact: EmailContact,
-	code: string,
-): Promise<{ token: string; persistence: Persistence }> {
-	const result = await invoke<{ token: string; persistence: Persistence }>(
-		"verify_email_sign_in_code",
-		{ contact, code },
-	);
-	bridge()?.setToken(result.token);
+export async function passwordSignIn(credentials: PasswordSignIn): Promise<PasswordSignInOutcome> {
+	const result = await invoke<PasswordSignInOutcome>("password_sign_in", {
+		identifier: credentials.identifier,
+		password: credentials.password,
+		authFactorToken: credentials.authFactorToken ?? null,
+	});
+	if (result.status === "session") bridge()?.setToken(result.token);
 	return result;
 }
 

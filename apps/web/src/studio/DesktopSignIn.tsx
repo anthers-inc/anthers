@@ -2,53 +2,43 @@
 /**
  * The desktop app's sign-in screen.
  *
- * The default method is the app's own: the person types their email address (or an
- * Anthers handle) and the code their mailbox receives — the same ceremony the site's
- * login page runs, with no browser round trip. The browser handoff stays for the one
- * path that cannot happen in here: Bluesky OAuth runs at bsky.social in a real
- * browser and cannot complete inside this webview. See `apps/api/middleware/bearer.ts`.
+ * The default method is the app's own: the person types the handle or address on their identity
+ * and the password they chose for it. ⭐ **That is the same first-party door the website's login
+ * page is**, expressed as a PKCE enrollment rather than a cookie — Anthers hosts the identity, so
+ * it is the client of its own server and asks for the password it is entitled to. The shell
+ * sends it in one request, redeems the code itself and keeps the session; the password is never
+ * stored.
+ *
+ * ⚠️ **A Bluesky identity comes through the browser handoff instead**, below. Anthers is a
+ * third-party client of that server, so it must not ask for the password; the browser goes to
+ * that identity's own authorization page and a code comes back over `anthers://`.
  *
  * Browser builds never render this; `StudioAuthGate` bounces to the consumer login.
  */
 import { useAuth } from "@anthers/web-shared/auth";
 import {
 	beginSignIn,
-	completeEmailSignIn,
 	completeSignIn,
 	deviceLabel,
-	type EmailContact,
-	emailSignInCode,
 	onAuthCode,
+	type PasswordSignInOutcome,
 	type Persistence,
-	startEmailSignIn,
+	passwordSignIn,
+	startPasswordSignIn,
 	takePendingCode,
 } from "@anthers/web-shared/desktop";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useRef, useState } from "react";
 
-type Phase = "idle" | "waiting" | "code-sent" | "completing" | "error";
-
-/** Route the typed text to the shape the API resolves: an address, or a hosted handle. */
-function contactOf(raw: string): EmailContact | null {
-	const typed = raw.trim();
-	if (!typed) return null;
-	if (typed.includes("@")) {
-		return { email: typed.toLowerCase() };
-	}
-	// No "@": a handle the API resolves to the account's own mailbox. A handle that is
-	// not Anthers' resolves to nothing, and the send route says so the way /signin/start
-	// always has — with silence — so this screen tells the reader up front that Bluesky
-	// identities sign in through the browser below.
-	return { handle: typed };
-}
+type Phase = "idle" | "waiting" | "completing" | "two-factor" | "error";
 
 export default function DesktopSignIn() {
 	const { refreshUser } = useAuth();
 	const [phase, setPhase] = useState<Phase>("idle");
 	const [error, setError] = useState<string | null>(null);
-	const [contact, setContact] = useState<EmailContact | null>(null);
-	const [typedAddress, setTypedAddress] = useState("");
-	const [typedCode, setTypedCode] = useState("");
+	const [identifier, setIdentifier] = useState("");
+	const [password, setPassword] = useState("");
+	const [factorCode, setFactorCode] = useState("");
 	const [openedUrl, setOpenedUrl] = useState<string | null>(null);
 	const [persistence, setPersistence] = useState<Persistence | null>(null);
 	// Guards against a code arriving twice (cold-start pull racing the live event) —
@@ -85,41 +75,37 @@ export default function DesktopSignIn() {
 		return onAuthCode(redeem);
 	}, [refreshUser]);
 
-	const askForCode = async () => {
-		const parsed = contactOf(typedAddress);
-		if (!parsed) return;
+	/**
+	 * Sign in, or ask the server for the emailed code it wants as a second factor.
+	 *
+	 * ⚠️ **The password stays in this component's state and never leaves for anywhere but the
+	 * API**, which sends it to the identity server and keeps only the session that answers.
+	 */
+	const signIn = async (withFactor: boolean) => {
+		if (!identifier.trim() || !password) return;
 		setError(null);
 		setPhase("completing");
 		try {
-			await startEmailSignIn(deviceLabel());
-			await emailSignInCode(parsed);
-			setContact(parsed);
-			setPhase("code-sent");
-		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
-			setPhase("error");
-		}
-	};
-
-	const spendCode = async () => {
-		if (!contact) return;
-		setPhase("completing");
-		try {
-			const result = await completeEmailSignIn(contact, typedCode.trim());
-			setPersistence(result.persistence);
+			// The enrollment is minted once per attempt; a second-factor retry reuses it, because
+			// replacing it would orphan the challenge the code was issued against.
+			if (!withFactor) await startPasswordSignIn(deviceLabel());
+			const outcome: PasswordSignInOutcome = await passwordSignIn({
+				identifier: identifier.trim(),
+				password,
+				...(withFactor && factorCode.trim() ? { authFactorToken: factorCode.trim() } : {}),
+			});
+			if (outcome.status === "two-factor") {
+				setPhase("two-factor");
+				return;
+			}
+			setPersistence(outcome.persistence);
 			await refreshUser();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : String(err));
-			setPhase("code-sent");
+			// A refused second factor keeps its field on screen; a refused first attempt does not.
+			setPhase(withFactor ? "two-factor" : "error");
 		}
 	};
-
-	// Computed before JSX, where the union narrows cleanly.
-	const sentTo = contact
-		? "email" in contact
-			? `the inbox at ${contact.email}`
-			: `the mailbox for ${contact.handle}`
-		: null;
 
 	const openBrowser = async () => {
 		setPhase("waiting");
@@ -154,27 +140,30 @@ export default function DesktopSignIn() {
 				</div>
 			)}
 
-			{phase === "code-sent" ? (
+			{phase === "two-factor" ? (
 				<>
 					<p className="text-sm text-base-content/60">
-						We sent a sign-in code to {sentTo}. Type it here.
+						That password was right, and this account asks for a code as well. Type the one that
+						arrives by email.
 					</p>
 					<div className="card-actions mt-4 gap-2">
 						<input
 							type="text"
+							inputMode="numeric"
+							autoComplete="one-time-code"
 							className="input input-sm font-mono tracking-widest uppercase"
-							placeholder="Sign-in code"
-							value={typedCode}
-							onChange={(e) => setTypedCode(e.target.value)}
+							placeholder="Email code"
+							value={factorCode}
+							onChange={(e) => setFactorCode(e.target.value)}
 							onKeyDown={(e) => {
-								if (e.key === "Enter" && typedCode.trim()) void spendCode();
+								if (e.key === "Enter" && factorCode.trim()) void signIn(true);
 							}}
 						/>
 						<button
 							type="button"
 							className="btn btn-primary btn-sm"
-							onClick={() => void spendCode()}
-							disabled={!typedCode.trim()}
+							onClick={() => void signIn(true)}
+							disabled={!factorCode.trim()}
 						>
 							Sign in
 						</button>
@@ -184,45 +173,52 @@ export default function DesktopSignIn() {
 						className="btn btn-ghost btn-xs mt-3"
 						onClick={() => {
 							setPhase("idle");
-							setContact(null);
-							setTypedCode("");
+							setFactorCode("");
 						}}
 					>
-						Wrong address? Start over
+						Start over
 					</button>
 				</>
 			) : (
 				<>
 					<p className="text-sm text-base-content/60">
-						Sign in with the code your email receives — no password anywhere on Anthers. This device
-						can be revoked any time from Settings → Devices on anthers.org.
+						Sign in with the password you chose for your Anthers identity. This device can be
+						revoked any time from Settings → Devices on anthers.org.
 					</p>
 
 					<div className="card-actions mt-4 gap-2">
 						<input
 							type="text"
-							className="input input-sm"
-							placeholder="Email address, or your Anthers handle"
-							value={typedAddress}
-							onChange={(e) => setTypedAddress(e.target.value)}
+							autoComplete="username"
+							className="input input-sm w-full"
+							placeholder="Anthers handle or email"
+							value={identifier}
+							onChange={(e) => setIdentifier(e.target.value)}
+						/>
+						<input
+							type="password"
+							autoComplete="current-password"
+							className="input input-sm w-full"
+							placeholder="Password"
+							value={password}
+							onChange={(e) => setPassword(e.target.value)}
 							onKeyDown={(e) => {
-								if (e.key === "Enter" && typedAddress.trim()) void askForCode();
+								if (e.key === "Enter" && password) void signIn(false);
 							}}
 						/>
 						<button
 							type="button"
-							className="btn btn-primary btn-sm"
-							onClick={() => void askForCode()}
-							disabled={!typedAddress.trim()}
+							className="btn btn-primary btn-sm w-full"
+							onClick={() => void signIn(false)}
+							disabled={!identifier.trim() || !password}
 						>
-							Email me a sign-in code
+							Sign in
 						</button>
 					</div>
 
 					{phase === "idle" && (
 						<p className="text-xs text-base-content/50 mt-2">
-							An Anthers handle codes to the mailbox your account was issued with; a Bluesky
-							identity signs in through your browser instead.
+							A Bluesky identity signs in through your browser instead, at the server that holds it.
 						</p>
 					)}
 
@@ -250,7 +246,7 @@ export default function DesktopSignIn() {
 						onClick={() => void openBrowser()}
 						disabled={phase === "waiting"}
 					>
-						Sign in through your browser instead (Bluesky, or an anthers.org session)
+						Sign in through your browser instead (Bluesky)
 					</button>
 				</>
 			)}

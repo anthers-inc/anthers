@@ -44,7 +44,7 @@ import {
 	normalizeHandleName,
 	signinAddressForHostedHandle,
 } from "../services/hosted-accounts.js";
-import { loginHostedAccount } from "../services/hosted-login.js";
+import { type HostedLoginResult, loginHostedAccount } from "../services/hosted-login.js";
 import {
 	chooseHostedHandle,
 	clearPendingSignup,
@@ -297,6 +297,19 @@ const desktopStartSchema = z.object({
 
 const desktopAuthorizeSchema = z.object({
 	challenge: hexToken,
+});
+
+/**
+ * The desktop app's in-app password sign-in: an enrollment plus the identity's own credential.
+ *
+ * Same shape as `/login`'s, with `challenge` in place of the cookie the browser gets: this caller
+ * is not a browser and has no cookie jar, so success answers a PKCE code it redeems itself.
+ */
+const desktopPasswordSchema = z.object({
+	challenge: hexToken,
+	identifier: z.string().trim().min(1).max(253),
+	password: z.string().min(1).max(256),
+	authFactorToken: z.string().trim().min(1).max(64).optional(),
 });
 
 const desktopExchangeSchema = z.object({
@@ -579,6 +592,40 @@ async function mintFromProvedAddress(
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
+/**
+ * The one refusal shape the password door answers, wherever it is asked from.
+ *
+ * 🚨 **One voice for a wrong password, an unknown identifier and a deactivated account**, which
+ * is the node's own silence: telling them apart would turn the form into a directory of who has
+ * an account. The three answers that differ are the three the caller can act on — a suspended
+ * account is told truthfully, an unreachable node is worth retrying, and an identity with no
+ * Anthers account is sent to sign up.
+ *
+ * ⚠️ **`two-factor` is not a failure**: the password was right and the node wants the emailed
+ * code as well. It answers 401 because nothing is signed in yet, with `twoFactor` so the caller
+ * shows a code field rather than a generic error.
+ */
+function passwordLoginRefusal(
+	c: Context,
+	result: Exclude<HostedLoginResult, { status: "ok" }>,
+): Response {
+	if (result.status === "two-factor") {
+		return c.json({ twoFactor: true, error: "Enter the code sent to your email." }, 401);
+	}
+	if (result.reason === "suspended") {
+		return c.json(
+			{
+				error: result.message,
+				reason: "account_suspended",
+				suspendedUntil: result.suspendedUntil?.toISOString() ?? null,
+			},
+			403,
+		);
+	}
+	const status = result.reason === "unreachable" ? 503 : result.reason === "no_account" ? 404 : 401;
+	return c.json({ error: result.message, reason: result.reason }, status);
+}
+
 const authRoutes = new Hono()
 	// ── Signing in with the identity's own password ───────────────────────────
 	//
@@ -622,24 +669,7 @@ const authRoutes = new Hono()
 		if (!targeted.ok) return limitResponse(targeted);
 
 		const result = await loginHostedAccount(identifier, password, { authFactorToken });
-		if (result.status === "two-factor") {
-			return c.json({ twoFactor: true, error: "Enter the code sent to your email." }, 401);
-		}
-		if (result.status === "refused") {
-			if (result.reason === "suspended") {
-				return c.json(
-					{
-						error: result.message,
-						reason: "account_suspended",
-						suspendedUntil: result.suspendedUntil?.toISOString() ?? null,
-					},
-					403,
-				);
-			}
-			const status =
-				result.reason === "unreachable" ? 503 : result.reason === "no_account" ? 404 : 401;
-			return c.json({ error: result.message, reason: result.reason }, status);
-		}
+		if (result.status !== "ok") return passwordLoginRefusal(c, result);
 
 		const token = await createSession(
 			result.user.id,
@@ -1175,6 +1205,65 @@ const authRoutes = new Hono()
 			return c.json({ code });
 		},
 	)
+
+	// Step 3, in-app — the password method. The packaged app sends no Origin and has no cookie
+	// jar, so this is `/login`'s credential expressed as an enrollment: the person types the
+	// password they chose for an identity Anthers hosts, the server sends it to the node in one
+	// request, and the session that answers becomes the challenge's authorization. Success is the
+	// browser confirm's own function, so steps 1 and 4 and everything downstream are shared.
+	//
+	// ⚠️ **A handle on another server does not come through here.** That identity signs in
+	// through the SYSTEM browser (`/desktop/authorize`), because Anthers is a third-party client
+	// of that server and should not be holding its holder's password.
+	//
+	// 🚨 **The same two budgets as `/login`.** A password door with no guess limit is a password
+	// door with no password: per-IP and per-identifier, because spreading guesses across
+	// addresses should not spend only one of them.
+	.post("/desktop/password", zValidator("json", desktopPasswordSchema, invalidBody), async (c) => {
+		const typed = c.req.valid("json");
+
+		// Origin: present-but-foreign refused, absent admitted. The packaged app sends none,
+		// and a cross-site forgery through a victim's browser always does.
+		const origin = c.req.header("Origin");
+		if (origin && !allowedOrigins().includes(origin)) {
+			return c.json({ error: "CSRF validation failed" }, 403);
+		}
+
+		const limited = await checkRate(
+			"auth-password-login",
+			clientIp(c.req.raw.headers),
+			10,
+			15 * 60,
+		);
+		if (!limited.ok) return limitResponse(limited);
+		const targeted = await checkRate(
+			"auth-password-login-id",
+			typed.identifier.toLowerCase(),
+			10,
+			15 * 60,
+		);
+		if (!targeted.ok) return limitResponse(targeted);
+
+		// Checked before the credential is spent: an enrollment the app did not mint this minute
+		// is worth restarting rather than logging in for.
+		const pending = await getPendingDesktopAuth(typed.challenge);
+		if (!pending) return c.json({ error: "This sign-in request has expired" }, 404);
+
+		const result = await loginHostedAccount(typed.identifier, typed.password, {
+			authFactorToken: typed.authFactorToken,
+		});
+		if (result.status !== "ok") return passwordLoginRefusal(c, result);
+
+		const code = await authorizeDesktopAuth(
+			typed.challenge,
+			result.user.id,
+			c.req.header("X-Forwarded-For") ?? c.req.header("CF-Connecting-IP") ?? null,
+			c.req.header("User-Agent") ?? null,
+		);
+		if (!code) return c.json({ error: "This sign-in request has expired" }, 404);
+
+		return c.json({ code });
+	})
 
 	// Steps 3, in-app — the emailed-code method, added 2026-10-16 (Parker): sign in
 	// without leaving the app. Each route below is the emailed-code ceremony wearing another
