@@ -62,6 +62,7 @@ import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { createTransferReversal, issueRefund, paymentsConfigured } from "../lib/processor.js";
 import { oweAccessReceipt } from "./access-receipts.js";
 import { recordNettingForRefund } from "./netting.js";
+import { settleSaleCreditOnRefund } from "./purchase-split.js";
 
 type Purchase = typeof purchases.$inferSelect;
 
@@ -141,12 +142,21 @@ export function refundShortfall(purchase: Purchase): Decimal {
  * netting for the same reason. The idempotency key is the purchase id, so a webhook
  * redelivery of a refund our own route already clawed back cannot reverse a second cent.
  */
-export async function reverseCreatorShare(purchase: Purchase): Promise<{
+export async function reverseCreatorShare(
+	purchase: Purchase,
+	opts: { saleCreditReleased?: boolean } = {},
+): Promise<{
 	/** Whether the reversal recovered the share at Stripe. */
 	reversed: boolean;
 	/** Whether the creator's share ever reached them — false on a never-transferred row. */
 	creatorWasPaid: boolean;
 }> {
+	// A physical sale's share never rides `purchases.stripe_transfer_id`: it is held in
+	// `creator_credits` and moved by the transfer job, whose coverage tables record it. A
+	// released credit therefore counts as paid — there is no transfer on this row to reverse,
+	// so recovery is the netting ledger's, exactly as for a support credit. A credit still
+	// held was removed by `settleSaleCreditOnRefund` before this ran, and owes nothing.
+	if (opts.saleCreditReleased) return { reversed: false, creatorWasPaid: true };
 	if (purchase.stripeTransferId == null) return { reversed: false, creatorWasPaid: false };
 	try {
 		const reversal = await createTransferReversal(
@@ -277,7 +287,13 @@ export async function refundPurchase(
 		// and no netting, because that share never left. A reversal that cannot be
 		// funded (the paid-out creator) is the netting ledger's case, not an error
 		// here — the refund itself succeeded.
-		const clawback = await reverseCreatorShare(purchase);
+		// The sale's hold is settled before the clawback: a held credit is taken away (the
+		// creator never received it), and a released one tells the reversal that the money
+		// has left and recovery is netting's. See `settleSaleCreditOnRefund`.
+		const saleCredit = await settleSaleCreditOnRefund(purchase.id);
+		const clawback = await reverseCreatorShare(purchase, {
+			saleCreditReleased: saleCredit === "released",
+		});
 		transferReversed = clawback.reversed;
 		creatorWasPaid = clawback.creatorWasPaid;
 	} catch (err) {

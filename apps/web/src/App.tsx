@@ -47,6 +47,8 @@ const WorkEditPage = lazy(() => import("./studio/WorkEditPage"));
 // const ImportPage = lazy(() => import("@anthers/web-shared/ImportPage"));
 const StudioSettingsPage = lazy(() => import("@anthers/web-shared/StudioSettingsPage"));
 const StudioPaymentsPage = lazy(() => import("@anthers/web-shared/StudioPaymentsPage"));
+const OrdersPage = lazy(() => import("@anthers/web-shared/OrdersPage"));
+const OrderPage = lazy(() => import("@anthers/web-shared/OrderPage"));
 
 /**
  * The creator gate and a suspense boundary, wrapped once for every /studio route. The Studio's
@@ -141,6 +143,15 @@ const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
  * treats `:param` as dynamic where the colon follows a slash, so `path="/@:handle"` compiles
  * to a literal and matches nothing at all. See `@anthers/web-shared/profile`.
  */
+/** `/orders/:id` — the id read off the URL, because the page takes it as a prop. */
+function OrderRoute() {
+	const { id } = useParams();
+	const orderId = Number(id);
+	if (!Number.isInteger(orderId) || orderId <= 0)
+		return <Navigate to="/settings?tab=purchases" replace />;
+	return <OrderPage orderId={orderId} />;
+}
+
 function HandleRoute() {
 	const { handle } = useParams<{ handle: string }>();
 	return handleFromParam(handle) ? <Outlet /> : <NotFoundPage />;
@@ -392,6 +403,16 @@ export default function App() {
 					<Route path="/badges" element={<Navigate to="/settings?tab=purchases" replace />} />
 					<Route path="/subscription" element={<Navigate to="/settings?tab=purchases" replace />} />
 					<Route path="/purchases" element={<Navigate to="/settings?tab=purchases" replace />} />
+					{/* One physical order. Guarded, because an order is somebody's purchase: the API
+					    answers 404 to anybody else, and the page shows the same nothing. */}
+					<Route
+						path="/orders/:id"
+						element={
+							<ProtectedRoute>
+								<OrderRoute />
+							</ProtectedRoute>
+						}
+					/>
 					<Route
 						path="/notifications"
 						element={
@@ -483,6 +504,7 @@ export default function App() {
 					    games as draft Projects. */}
 						{/* <Route path="import" element={<ImportPage />} /> */}
 						<Route path="settings" element={<StudioSettingsPage />} />
+						<Route path="orders" element={<OrdersPage />} />
 						<Route path="payments" element={<StudioPaymentsPage />} />
 					</Route>
 

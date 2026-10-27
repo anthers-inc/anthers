@@ -91,11 +91,12 @@ import {
 	users,
 } from "@anthers/db/schema";
 import Decimal from "decimal.js";
-import { and, eq, lt, notInArray } from "drizzle-orm";
+import { and, eq, lt, ne, notInArray, or } from "drizzle-orm";
 import { createTransfer, paymentsConfigured } from "../lib/processor.js";
 import { applyNettingPlan, nettingPlanFor } from "../services/netting.js";
 import { payoutStanding } from "../services/payouts.js";
 import { sendPayoutReceipt } from "../services/receipts.js";
+import { releasableOrders } from "../services/shipments.js";
 
 export interface TransferHeldCreditsData {
 	/**
@@ -141,21 +142,43 @@ export async function transferHeldCredits(
 	const covered = db
 		.selectDistinct({ creditId: creatorTransferCredits.creditId })
 		.from(creatorTransferCredits);
-	const held = await db
+	const candidates = await db
 		.select({
 			id: creatorCredits.id,
 			creatorId: creatorCredits.creatorId,
 			amount: creatorCredits.amount,
+			kind: creatorCredits.kind,
+			purchaseId: creatorCredits.purchaseId,
 		})
 		.from(creatorCredits)
 		.where(
 			and(
-				lt(creatorCredits.settledAt, cutoff),
+				// A sale credit is not held by a date at all — its eligibility is the parcel's,
+				// decided below — so the age test applies only to the support classes. The row
+				// is still fetched here because `settledAt` on a sale is when it was credited
+				// and says nothing about whether the money may move.
+				or(
+					and(ne(creatorCredits.kind, "sale"), lt(creatorCredits.settledAt, cutoff)),
+					eq(creatorCredits.kind, "sale"),
+				),
 				data.creatorId == null ? undefined : eq(creatorCredits.creatorId, data.creatorId),
 				notInArray(creatorCredits.id, covered),
 			),
 		)
 		.orderBy(creatorCredits.id);
+
+	/**
+	 * Which sale credits may move now: the parcel landed, the complaint window closed, and
+	 * nothing is open on the order. Asked once for the whole run rather than per credit —
+	 * one query for the shipments and one for the complaints, however many goods are held.
+	 */
+	const salePurchaseIds = candidates
+		.filter((row) => row.kind === "sale" && row.purchaseId != null)
+		.map((row) => row.purchaseId as number);
+	const releasable = await releasableOrders(salePurchaseIds, now);
+	const held = candidates.filter(
+		(row) => row.kind !== "sale" || (row.purchaseId != null && releasable.has(row.purchaseId)),
+	);
 
 	// Group by creator, preserving each credit's own id — the coverage set is the
 	// idempotency key, so the order the ids appear in is normalized (sorted) when the

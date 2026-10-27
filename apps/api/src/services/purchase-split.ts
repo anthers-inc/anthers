@@ -35,9 +35,15 @@
  * reasoning for its own keys.
  */
 import { db } from "@anthers/db/client";
-import { purchases, stripeAccounts } from "@anthers/db/schema";
+import {
+	creatorCredits,
+	creatorTransferCredits,
+	purchases,
+	stripeAccounts,
+} from "@anthers/db/schema";
+import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import Decimal from "decimal.js";
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import { createTransfer, paymentsConfigured } from "../lib/processor.js";
 
 type Purchase = typeof purchases.$inferSelect;
@@ -139,18 +145,65 @@ async function transferCreatorShare(
  * grouping skips rows with no creator (merch is Anthers' own goods and pays no transfer)
  * and leaves every failure to the retry path. Rows that share a creator share one
  * transfer; that is the point of the column being per-row.
+ *
+ * 🚨 **A physical good does not transfer here.** Its share is credited to
+ * `creator_credits` instead, and moves when the parcel lands and the complaint window
+ * closes — the support cycle's own mechanism with a different trigger
+ * (`jobs/transfer-held-credits.ts`). A good that has not shipped must not have paid out,
+ * and the transfer job already owns every property a hold needs: idempotency across a
+ * crash, netting before the money leaves, payout standing, and a suspended creator's money
+ * waiting. Building a second hold would mean a second set of those decisions to keep in
+ * step with the first.
  */
 export async function splitChargeToCreators(charge: ChargeRef, rows: Purchase[]): Promise<void> {
 	if (!paymentsConfigured()) return;
 	const byCreator = new Map<number, Purchase[]>();
+	const goods: Purchase[] = [];
 	for (const row of rows) {
 		if (row.creatorId == null) continue;
+		if (row.type === "physical") {
+			goods.push(row);
+			continue;
+		}
 		const group = byCreator.get(row.creatorId);
 		if (group) group.push(row);
 		else byCreator.set(row.creatorId, [row]);
 	}
 	for (const [creatorId, group] of byCreator) {
 		await transferCreatorShare(charge, creatorId, group);
+	}
+	await creditGoodsSales(goods);
+}
+
+/**
+ * Write the credit a physical sale is owed — the money, parked where the release clock can
+ * find it.
+ *
+ * One credit per purchase rather than one per charge: the release question is asked per
+ * order (did *this* parcel land, and is *this* buyer's complaint open), and a creator's two
+ * mugs on one charge have two parcels and two windows.
+ *
+ * ⚠️ **Idempotent on the purchase**, because completion can be redelivered: a credit whose
+ * `purchase_id` already exists is left alone, so a replay cannot double the money.
+ */
+async function creditGoodsSales(rows: Purchase[]): Promise<void> {
+	for (const row of rows) {
+		if (row.creatorId == null) continue;
+		const amount = new Decimal(row.creatorEarnings);
+		if (amount.lte(0)) continue;
+		await db
+			.insert(creatorCredits)
+			.values({
+				creatorId: row.creatorId,
+				subscriberId: row.buyerId,
+				billingCycle: currentCycleKey(),
+				kind: "sale",
+				fundedBy: "buyer",
+				amount: amount.toFixed(2),
+				settledAt: new Date(),
+				purchaseId: row.id,
+			})
+			.onConflictDoNothing();
 	}
 }
 
@@ -179,6 +232,12 @@ export async function retryFailedTransfers(): Promise<number> {
 				eq(purchases.status, "completed"),
 				isNotNull(purchases.creatorId),
 				isNull(purchases.stripeTransferId),
+				// 🚨 A physical good's share is never this job's to send: it is held in
+				// `creator_credits` until the parcel lands, and the credit is what the transfer
+				// job moves. Without this exclusion the retry path would pay the creator at once
+				// — the exact defect the hold exists to prevent — and then the credit would pay
+				// them again after delivery.
+				ne(purchases.type, "physical"),
 			),
 		);
 	if (rows.length === 0) return 0;
@@ -216,4 +275,40 @@ export async function retryFailedTransfers(): Promise<number> {
 		await transferCreatorShare({ id: intentId, latestCharge }, creatorId, group);
 	}
 	return attempted;
+}
+
+/** What happened to a physical sale's credit when its purchase was refunded. */
+export type SaleCreditRefundState = "none" | "held" | "released";
+
+/**
+ * Settle a sale's hold at the moment its purchase is refunded.
+ *
+ * 🚨 **Two different facts, and the refund path needs both.** A sale credit that has not
+ * been covered by a transfer is money the creator never received: the refund takes the
+ * credit away, and nothing else has to happen. A credit that HAS been transferred is money
+ * that already reached them, so the refund has to recover it like any other paid-out share —
+ * the netting ledger's job, exactly as it is for a support credit.
+ *
+ * Returns which of the three cases applied so the caller can pass `creatorWasPaid` honestly.
+ * A purchase with no credit at all (`none`) is a row from before the hold existed, and the
+ * caller's own transfer-id check still governs it.
+ */
+export async function settleSaleCreditOnRefund(purchaseId: number): Promise<SaleCreditRefundState> {
+	const [credit] = await db
+		.select({ id: creatorCredits.id })
+		.from(creatorCredits)
+		.where(eq(creatorCredits.purchaseId, purchaseId))
+		.limit(1);
+	if (!credit) return "none";
+
+	const [coverage] = await db
+		.select({ transferId: creatorTransferCredits.transferId })
+		.from(creatorTransferCredits)
+		.where(eq(creatorTransferCredits.creditId, credit.id))
+		.limit(1);
+	if (coverage) return "released";
+
+	// Never transferred: the credit goes, and the money that would have moved never does.
+	await db.delete(creatorCredits).where(eq(creatorCredits.id, credit.id));
+	return "held";
 }
