@@ -97,6 +97,7 @@ export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 			"The signed-in header's account menu is gone; its destinations sit in the sidebar and the account pages' footer, and the theme choice is a card under the account card on the Account tab.",
 			"Edit Work Access is one panel rather than two halves, its take-home is a line per row with the deductions behind an (i), and a row that admits nobody greys its price instead of showing what it would have paid.",
 			"The copy says a Work is released and a Post or a Project is published, in the Creator Terms, the Privacy Policy, the credits tab, a block notice, a creator's profile empty states, and the Studio's own controls.",
+			"Stepping through Discovery's recipes with the keyboard chords moves one chip per press now, rather than dropping a step when two presses come quickly.",
 		],
 	},
 	{
