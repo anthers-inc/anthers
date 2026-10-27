@@ -121,13 +121,17 @@ test.describe("one signup door", () => {
 		expect(new URL(page.url()).pathname).toBe("/signup");
 	});
 
-	test("no page in the logged-out surface offers a password, or a second account form", async ({
-		page,
-	}) => {
-		// No password field ANYWHERE is the structural tell, on both of the failure shapes
-		// this guards: a Create Account card grown back (the signup door duplicating), and
-		// the password sign-in retired on 2026-09-20 returning as a field that posts to a
-		// route that no longer exists.
+	test("no page in the logged-out surface offers a second account form", async ({ page }) => {
+		// 🚨 **`/signup` is where the guard lives: a Create Account card grown back is a second
+		// signup door, and the password that used to be the structural tell moved.** The
+		// ceremony asks for the new identity's password at `/finish`, where that identity is
+		// actually being created, so `/signup` carrying no password field is the shape that
+		// says the ceremony still has one door.
+		//
+		// ⚠️ **`/login` is checked at rest only.** An Anthers identity signs in there with the
+		// password its holder chose, so a password field appears once what was typed is one
+		// Anthers hosts — `login-password.e2e.ts` owns that. What must not be there at rest is
+		// a signup form, and what must never be anywhere is a second box asking to confirm it.
 		//
 		// ⚠️ The first draft of this test asserted `getByLabel(/confirm password/i)` had
 		// count 0, which is a TAUTOLOGY: `FormField` renders its label as a *sibling* of
@@ -139,7 +143,7 @@ test.describe("one signup door", () => {
 			await expect(page.locator("h1").first()).toBeVisible();
 			await expect(
 				page.locator('input[type="password"]'),
-				`${path} asks for a password — there is no password anywhere any more`,
+				`${path} asks for a password before it knows what was typed — a signup form is back`,
 			).toHaveCount(0);
 			await expect(
 				page.getByText(/confirm password/i),
