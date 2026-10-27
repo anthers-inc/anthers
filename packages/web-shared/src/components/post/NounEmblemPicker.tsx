@@ -279,14 +279,17 @@ export function NounEmblemPicker({
 						Searching…
 					</p>
 				) : results && results.length > 0 ? (
-					<div className="grid grid-cols-6 gap-2">
+					/* ⭐ Five across with tight gaps, and a bigger emblem in each cell (Parker,
+					   2026-10-27): six across with `gap-2` spent the pane's width on air and kept
+					   every icon at 24px. */
+					<div className="grid grid-cols-5 gap-1">
 						{results.map((icon) => {
 							const selected = selection?.nounIcon.id === icon.id;
 							return (
 								<div key={icon.id} className="flex flex-col items-center gap-0.5">
 									<button
 										type="button"
-										className={`btn btn-sm btn-square ${selected ? "btn-primary" : "btn-ghost"}`}
+										className={`btn btn-square h-11 min-h-11 w-11 ${selected ? "btn-primary" : "btn-ghost"}`}
 										title={`${icon.term} by ${icon.artistName}`}
 										aria-label={`${icon.term} by ${icon.artistName}`}
 										aria-pressed={selected}
@@ -307,7 +310,7 @@ export function NounEmblemPicker({
 										<Thumb
 											icon={icon}
 											color={selected ? emblemColor : "currentColor"}
-											className={`h-6 w-6 ${selected ? "" : "text-base-content/70"}`}
+											className={`h-7 w-7 ${selected ? "" : "text-base-content/70"}`}
 										/>
 									</button>
 									<button
