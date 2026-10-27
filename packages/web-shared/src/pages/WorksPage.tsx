@@ -173,7 +173,7 @@ export default function WorksPage() {
 		);
 
 	/**
-	 * One release act from a row — publish now, schedule, clear a schedule, unrelease —
+	 * One release act from a row — release now, schedule, clear a schedule, unrelease —
 	 * the same PATCH the Release field on the Work's own page sends.
 	 *
 	 * The server owns the preconditions — media finished encoding, at least one delivery

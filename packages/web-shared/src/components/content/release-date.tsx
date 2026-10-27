@@ -5,7 +5,7 @@
  * Work page's own Release field (which carries the same acts, with a Now button, and whose
  * explainer lives beside this).
  *
- * The acts are the server's own: publish now (`visibility: "released"`, which supersedes any
+ * The acts are the server's own: release now (`visibility: "released"`, which supersedes any
  * schedule), schedule (`visibility: "private"` plus a future `scheduledReleaseAt`), clear a
  * schedule, and unrelease. The table's cell commits each act as it is taken; a Work's page
  * keeps its InlineField model around the same acts.
