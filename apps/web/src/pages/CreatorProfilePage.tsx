@@ -1001,7 +1001,7 @@ export default function CreatorProfilePage() {
 						<ul className="list-disc py-3 pl-5 text-sm text-base-content/70 space-y-1">
 							<li>Neither of you will see the other's profile, comments or reviews.</li>
 							<li>Any follows between you are removed, in both directions.</li>
-							<li>Their published work stays where it is — blocking isn't a content filter.</li>
+							<li>Their released work stays where it is — blocking isn't a content filter.</li>
 							<li>You can undo this from Settings.</li>
 						</ul>
 						<div className="modal-action">

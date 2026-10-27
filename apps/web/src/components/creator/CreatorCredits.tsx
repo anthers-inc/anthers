@@ -90,8 +90,8 @@ export default function CreatorCredits({
 				title="No credits yet"
 				description={
 					isOwner
-						? "You aren't credited on any published Work yet."
-						: `${creatorName} isn't credited on any published Work yet.`
+						? "You aren't credited on any released Work yet."
+						: `${creatorName} isn't credited on any released Work yet.`
 				}
 			/>
 		);
