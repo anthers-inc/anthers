@@ -462,7 +462,7 @@ function refusalOf(error: string | undefined, message: string | undefined): Host
  * — so there is no link step here and no moment at which the account exists without its
  * identity.
  *
- * ⚠️ **The row is written with the session the creation answered with, and with no password.**
+ * ⚠️ **The row is written with the session the creation answered with, and nothing else.**
  * That is the whole custody rule in one insert: there is no window in which the hub holds the
  * person's password, and no second login to open the first credential. The watch row follows.
  */
@@ -478,10 +478,8 @@ export async function recordHostedIdentity(userId: number, account: HostedAccoun
 			did: account.did,
 			userId,
 			handle: account.handle,
-			// 🚨 **Empty means the row holds no password, which is the normal state.** The
-			// person's password went to the node and was never written here; the session below
-			// is what Anthers keeps. See `sealed_password`'s own note in the schema.
-			sealedPassword: "",
+			// 🚨 **The person's password went to the node and was never written here.** The
+			// session below is what Anthers keeps; see `sealed_session` in the schema.
 			sealedSession: sealedSessionValue(account.session),
 		})
 		.onConflictDoNothing()
@@ -533,13 +531,13 @@ export async function isHostedIdentity(did: string): Promise<boolean> {
 // ─── Changing the name on one ────────────────────────────────────────────────
 
 /**
- * Whether Anthers holds any credential at all for a hosted identity.
+ * Whether Anthers holds a session for a hosted identity.
  *
  * 🚨 **This answers a question the database can answer on its own, and nothing else may be read
- * into it.** `false` is unambiguous: with no session and no password there is no way into the
- * account, so a write will fail and a listing will never appear. `true` means a credential is on
- * file, not that the node will still accept it — a session the owner's own password reset revoked
- * looks exactly like a live one until the node answers.
+ * into it.** `false` is unambiguous: with no session there is no way into the account, so a write
+ * will fail and a listing will never appear. `true` means a session is on file, not that the node
+ * will still accept it — one the owner's own password reset revoked looks exactly like a live one
+ * until the node answers.
  *
  * ⭐ **Why it is worth a function: the person-facing surfaces had no way to tell.** Every publish
  * and every listing that failed this way failed at the write, logged `authorization_lost`, and
@@ -548,16 +546,12 @@ export async function isHostedIdentity(did: string): Promise<boolean> {
  */
 export async function hostedCredentialOnFile(did: string): Promise<boolean> {
 	const [row] = await db
-		.select({
-			sealedSession: hostedAccounts.sealedSession,
-			sealedPassword: hostedAccounts.sealedPassword,
-		})
+		.select({ sealedSession: hostedAccounts.sealedSession })
 		.from(hostedAccounts)
 		.where(eq(hostedAccounts.did, did))
 		.limit(1);
 	// No row at all is not a hosted identity — the caller has already asked that separately.
-	if (!row) return false;
-	return row.sealedSession !== null || row.sealedPassword !== "";
+	return row?.sealedSession != null;
 }
 
 /**
@@ -651,10 +645,9 @@ export async function swapHostedHandle(
 		return {
 			status: "refused",
 			fault: "operational",
-			message:
-				session.authorizationLost || session.credentialUnopenable
-					? "That identity needs to authorize Anthers again before its name can change."
-					: "Anthers couldn't reach the identity server. Try again in a little while.",
+			message: session.authorizationLost
+				? "That identity needs to authorize Anthers again before its name can change."
+				: "Anthers couldn't reach the identity server. Try again in a little while.",
 		};
 	}
 	const token = session.token;
@@ -857,7 +850,7 @@ export async function purgeHostedIdentity(
 		// A lost authorization, or a credential this deployment cannot open, is the account's
 		// answer and not the node's weather: retrying tomorrow will produce the same one, so it
 		// is reported as unusable rather than unreachable.
-		if (opened.authorizationLost || opened.credentialUnopenable) {
+		if (opened.authorizationLost) {
 			return { status: "unusable", reason: opened.error };
 		}
 		return { status: "unreachable", reason: opened.error };

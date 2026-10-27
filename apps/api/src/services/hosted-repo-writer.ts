@@ -47,12 +47,11 @@ import { clearHostedSession, sessionForHostedAccount } from "./hosted-session-st
 export type NoWriterReason =
 	/** This account's identity lives on a server other than Anthers' node — ordinary, and not a problem. */
 	| "not_hosted"
-	/** The credential exists and this deployment's key cannot open it. */
-	| "credential_unopenable"
 	/**
-	 * The session was revoked and there is no password on file to log in again with. This is
-	 * what an owner's password reset produces, and it is NOT an outage: it needs the account to
-	 * authorize Anthers again, and it must not be reported as a node that did not answer.
+	 * The stored session is gone, revoked, or unreadable, and there is nothing else to present.
+	 * This is what an owner's password reset or deactivation produces, and it is NOT an outage:
+	 * it needs the account to sign in again so the hub holds a fresh session, and it must not be
+	 * reported as a node that did not answer.
 	 */
 	| "authorization_lost"
 	/** The node did not answer, or refused the session. Worth retrying. */
@@ -127,10 +126,6 @@ export async function hostedTokenFor(
 	// happens only when there is no session or the node refused the refresh.
 	const session = await sessionForHostedAccount(row.did, { fetchImpl: doFetch });
 	if (session.token === null) {
-		if (session.credentialUnopenable) {
-			console.error(`[repo-writer] cannot open the credential for ${row.did}`);
-			return { ok: false, reason: "credential_unopenable" };
-		}
 		return {
 			ok: false,
 			reason: session.authorizationLost ? "authorization_lost" : "node_unreachable",

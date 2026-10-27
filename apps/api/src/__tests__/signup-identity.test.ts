@@ -282,7 +282,6 @@ describe("an account is created only with its identity", () => {
 			.where(eq(hostedAccounts.did, did("made")));
 		expect(credential?.userId).toBe(user.id);
 		expect(credential?.sealedSession).toBeTruthy();
-		expect(credential?.sealedPassword, "the password is dropped once the session lands").toBe("");
 
 		expect(await readPendingSignup(token), "the signup is spent").toBeUndefined();
 		expect(await rowsHolding(name("made"))).toHaveLength(0);

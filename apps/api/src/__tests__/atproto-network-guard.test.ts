@@ -206,6 +206,15 @@ describe("the identity server Anthers hosts", () => {
 			if (dids.length) await db.delete(hostedAccounts).where(inArray(hostedAccounts.did, dids));
 		});
 
+		/** The DID of the account a case just made, for the row it has to seed. */
+		async function didOf(userId: number): Promise<string> {
+			const [row] = await db
+				.select({ did: users.atprotoDid })
+				.from(users)
+				.where(eq(users.id, userId));
+			return row.did;
+		}
+
 		async function hostedCreator(tag: string): Promise<number> {
 			const account = await createAccount(`${RUN}${tag}`);
 			const [user] = await db
@@ -213,12 +222,10 @@ describe("the identity server Anthers hosts", () => {
 				.from(users)
 				.where(eq(users.id, account.userId));
 			dids.push(user.did);
-			// The legacy shape: a password on file and no session, which is the state that makes the
-			// writer ask the node for one. The password is resealed under this suite's key, so the
-			// refusal under test is about the server rather than the seal.
+			// No session on file, which is the state where the hub holds no way in at all.
 			await db
 				.update(hostedAccounts)
-				.set({ sealedPassword: seal("EXAMPLE-not-a-real-password"), sealedSession: null })
+				.set({ sealedSession: null })
 				.where(eq(hostedAccounts.did, user.did));
 			return account.userId;
 		}
@@ -237,10 +244,24 @@ describe("the identity server Anthers hosts", () => {
 			expect(spy.calls).toEqual([]);
 		});
 
-		it("asks a local server for a session, so the refusal above is about the server", async () => {
+		it("asks a local server to renew a session, so the refusal above is about the server", async () => {
 			runAs(LOCAL);
 			process.env.HOSTED_PDS_URL = "https://node.invalid";
 			const userId = await hostedCreator("hl");
+			// An expired pair is what makes the store go and ask for anything now: the write path
+			// holds no password, so a refresh is the only call it can make.
+			await db
+				.update(hostedAccounts)
+				.set({
+					sealedSession: seal(
+						JSON.stringify({
+							accessJwt: "EXAMPLE-expired-access-token",
+							refreshJwt: "EXAMPLE-expired-refresh-token",
+							expiresAt: Date.now() - 60_000,
+						}),
+					),
+				})
+				.where(eq(hostedAccounts.did, await didOf(userId)));
 			const spy = spyFetch();
 
 			const opened = await writerForAccount(userId, {
@@ -248,7 +269,7 @@ describe("the identity server Anthers hosts", () => {
 				fetchImpl: spy.fetch,
 			});
 			expect(opened).toEqual({ writer: null, reason: "node_unreachable" });
-			expect(spy.calls).toEqual(["https://node.invalid/xrpc/com.atproto.server.createSession"]);
+			expect(spy.calls).toEqual(["https://node.invalid/xrpc/com.atproto.server.refreshSession"]);
 		});
 	});
 });

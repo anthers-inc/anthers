@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Remembering a hosted account's session so the writer does not log in again for every write.
+ * Remembering a hosted account's session, so the writer never needs a password to write.
  *
- * ⭐ **Why this module exists.** The reference PDS limits `com.atproto.server.createSession`
- * to thirty in five minutes and three hundred a day per account, and a busy user's pooled
- * writes (votes, comments, follows, posts) each opened a fresh login before this column
- * existed — a user could exhaust their OWN login budget doing nothing unusual. The writes
- * themselves carry an access token and are not the limited call, so the fix is to keep the
- * first session's `accessJwt`/`refreshJwt` and renew it with
- * `com.atproto.server.refreshSession`, which is likewise unlimited. A fresh `createSession`
- * now happens only when there is no session on file or the node has refused the refresh.
+ * ⭐ **Why this module exists.** The reference PDS limits `com.atproto.server.createSession` to
+ * thirty in five minutes and three hundred a day per account, and a busy user's pooled writes
+ * (votes, comments, follows, posts) each opened a fresh login before this column existed — a user
+ * could exhaust their OWN login budget doing nothing unusual. The writes themselves carry an
+ * access token and are not the limited call, so the fix is to keep the session's
+ * `accessJwt`/`refreshJwt` and renew it with `com.atproto.server.refreshSession`, which is
+ * likewise unlimited.
+ *
+ * 🚨 **There is no login here any more, and that is the point of the design.** A hosted identity
+ * gets its session when it is created and gets a new one when its holder signs in through the
+ * identity server — so the store only ever reads, renews or clears what somebody else obtained.
+ * When a refresh is refused there is nothing behind it, and the answer is `authorization_lost`:
+ * the person signs in again. Nothing in the write path can open a session with a password, because
+ * no password is stored.
  *
  * 🚨 **This module owns every value `hosted_accounts.sealed_session` holds after creation.** The
  * one write that does not pass through the store's own persist path is the insert in
@@ -75,19 +81,17 @@ export type HostedSessionResult =
 	| { token: string }
 	/**
 	 * `authorizationLost` is the difference between "the node is down" and "the node said this
-	 * account cannot be reached with what we have". The second happens when the owner resets their
-	 * password (which revokes every password-derived refresh token), when there is no session on
-	 * file and no password behind it, or when the node refuses the login itself. A caller must
-	 * report it as an authorization problem rather than as an outage, or the failure reads as a
-	 * retry that never succeeds.
+	 * account cannot be reached with what we have". The second happens when the owner resets
+	 * their password (which revokes every password-derived refresh token) or deactivates the
+	 * account, and when there is no session on file at all. A caller must report it as an
+	 * authorization problem rather than as an outage, or the failure reads as a retry that never
+	 * succeeds.
 	 *
-	 * ⚠️ **`credentialUnopenable` is its own answer, because retrying never fixes it.** A sealed
-	 * value this deployment's key cannot open is a real state — `signup-probe.anthers.social` was
-	 * sealed under a key production did not have — and the answer is a person rather than a retry
-	 * or a re-login. A caller reports it as something for an operator to look at, never as "try
-	 * again later".
+	 * ⚠️ **A sealed value this deployment's key cannot open reports the same thing**, because
+	 * there is nothing else it could be told apart from once the password fallback is gone: the
+	 * row may no longer be opened and a person has to act. The identity card is where they do.
 	 */
-	| { token: null; error: string; authorizationLost?: true; credentialUnopenable?: true };
+	| { token: null; error: string; authorizationLost?: true };
 
 /**
  * The opens currently in flight, by DID, so concurrent callers share one login.
@@ -104,17 +108,15 @@ const opensInFlight = new Map<string, Promise<HostedSessionResult>>();
  * A usable access token for a hosted identity, spending no login unless one is owed.
  *
  * ⭐ **This is the only place in the hub that opens a hosted account's stored credential, and it
- * never hands one back.** A caller asks for a token and gets one or a reason; the sealed session,
- * and the legacy sealed password a row may still carry, stay inside this module. Before this, four
- * callers each selected `sealed_password`, decoded it themselves and passed the plaintext in —
- * which meant four places where a password existed in memory for no reason a writer needed.
+ * never hands one back.** A caller asks for a token and gets one or a reason; the sealed session
+ * stays inside this module.
  *
- * Order of preference: the stored access token while it has life left (zero calls to the
- * node), then a refresh (zero logins), then one `createSession`. A refresh the node REFUSED —
- * its considered 4xx — falls through to the login, because the stored pair is dead and a
- * fresh session is the only door left. A refresh that could not be ANSWERED (retryable: the
- * node is down) is reported as a failure rather than silently logged in around, because
- * around it is the budget this exists to protect.
+ * Order of preference: the stored access token while it has life left (zero calls to the node),
+ * then a refresh (zero logins). A refresh the node REFUSED — its considered 4xx — means the pair
+ * is dead, and there is nothing behind it: the account was reset or deactivated at its server, or
+ * the hub's authorization was withdrawn, and the person has to sign in again for the hub to hold
+ * a session. A refresh that could not be ANSWERED (retryable: the node is down) is reported as a
+ * failure rather than treated as a dead credential.
  */
 export async function sessionForHostedAccount(
 	did: string,
@@ -136,71 +138,38 @@ export async function clearHostedSession(did: string): Promise<void> {
 	await db.update(hostedAccounts).set({ sealedSession: null }).where(eq(hostedAccounts.did, did));
 }
 
-/** What one row holds: a session that may still work, and the legacy password behind it. */
-interface StoredCredential {
-	stored: StoredSession | null;
-	/** The plaintext of a legacy sealed password, when the row carries one this key can open. */
-	password: string | null;
-	/** The row carries a sealed password this deployment's key cannot open. */
-	passwordUnopenable: boolean;
-}
-
 /**
- * Read the row's credential once and open what is sealed in it.
+ * Read the row's session and open what is sealed in it.
  *
- * One query rather than two, because a row's session and its legacy password are read together
- * and neither is useful without the other: a session with life left wins, and the password is
- * only consulted when there is none.
- *
- * ⚠️ **An unopenable session and an unopenable password are different.** A session sealed under
- * another key is treated as absent, because the login below replaces it and one bad value costs
- * exactly one login. A password sealed under another key is the thing that cannot be recovered
- * at all, so it is reported rather than swallowed.
+ * ⚠️ **A value this deployment's key cannot open reads as absent**, and that is deliberate: it is
+ * the same state as a session the node revoked, the next write cannot tell them apart, and the
+ * repair for both is the same — the person signs in again and the hub holds a fresh one. What
+ * would be worse is a value that opens into something this module did not write, which the
+ * parser below refuses by shape.
  */
-async function readCredential(did: string): Promise<StoredCredential> {
+async function readSession(did: string): Promise<StoredSession | null> {
 	const [row] = await db
-		.select({
-			sealedSession: hostedAccounts.sealedSession,
-			sealedPassword: hostedAccounts.sealedPassword,
-		})
+		.select({ sealedSession: hostedAccounts.sealedSession })
 		.from(hostedAccounts)
 		.where(eq(hostedAccounts.did, did))
 		.limit(1);
-
-	let stored: StoredSession | null = null;
-	if (row?.sealedSession) {
-		try {
-			const parsed = JSON.parse(open(row.sealedSession)) as Partial<StoredSession>;
-			if (typeof parsed.accessJwt === "string") {
-				stored = {
-					accessJwt: parsed.accessJwt,
-					refreshJwt: typeof parsed.refreshJwt === "string" ? parsed.refreshJwt : "",
-					expiresAt: typeof parsed.expiresAt === "number" ? parsed.expiresAt : 0,
-				};
-			}
-		} catch {
-			// Sealed under another key, or a value this module never wrote — treat as absent. The
-			// login below replaces it, so one bad value costs exactly one login.
-		}
+	if (!row?.sealedSession) return null;
+	try {
+		const parsed = JSON.parse(open(row.sealedSession)) as Partial<StoredSession>;
+		if (typeof parsed.accessJwt !== "string") return null;
+		return {
+			accessJwt: parsed.accessJwt,
+			refreshJwt: typeof parsed.refreshJwt === "string" ? parsed.refreshJwt : "",
+			expiresAt: typeof parsed.expiresAt === "number" ? parsed.expiresAt : 0,
+		};
+	} catch {
+		return null;
 	}
-
-	let password: string | null = null;
-	let passwordUnopenable = false;
-	if (row?.sealedPassword) {
-		try {
-			password = open(row.sealedPassword);
-		} catch {
-			passwordUnopenable = true;
-		}
-	}
-
-	return { stored, password, passwordUnopenable };
 }
 
 /** The body of one open; runs under the per-DID mutex above. */
 async function obtainSession(did: string, doFetch: typeof fetch): Promise<HostedSessionResult> {
-	const credential = await readCredential(did);
-	const stored = credential.stored;
+	const stored = await readSession(did);
 
 	// 1. A live access token costs nothing at all.
 	if (stored?.accessJwt && stored.expiresAt - Date.now() > REUSE_MARGIN_MS) {
@@ -231,42 +200,10 @@ async function obtainSession(did: string, doFetch: typeof fetch): Promise<Hosted
 		await clearHostedSession(did).catch(() => {});
 	}
 
-	// 3. A password on file is a legacy fallback, and only a fallback: the session is the
-	// credential, and nothing has written a password since signup started taking the person's
-	// own. With none on file there is nothing left to present, which is the state a password
-	// reset creates — and the state a person ends by signing in again.
-	const password = credential.password;
-	if (password === null) {
-		if (credential.passwordUnopenable) {
-			return {
-				token: null,
-				error: "the sealed credential cannot be opened by this deployment",
-				credentialUnopenable: true,
-			};
-		}
-		return { token: null, error: "authorization_lost", authorizationLost: true };
-	}
-
-	// 4. No session on file, or a dead one, and a password still on file: the one login left.
-	const session = await nodeCall(
-		"/xrpc/com.atproto.server.createSession",
-		{ method: "POST", body: JSON.stringify({ identifier: did, password }) },
-		doFetch,
-	);
-	if (!session.ok) {
-		// A 4xx is the node's considered answer about this credential: the password is wrong,
-		// the account is deactivated, or it is gone. That is `authorizationLost` rather than an
-		// outage, and callers must not invite a retry that will produce the same answer. A 5xx
-		// or a 429 is the node having a bad day and stays an ordinary failure.
-		return {
-			token: null,
-			error: `createSession: ${session.error}`,
-			...(session.retryable ? {} : { authorizationLost: true as const }),
-		};
-	}
-	const persisted = await persist(did, session.body);
-	if (persisted) return persisted;
-	return { token: null, error: "createSession answered with no access token" };
+	// 3. Nothing was on file, or the node refused the pair: there is no second credential to
+	// present. The session is the whole of what the hub holds, so this is the state a reset or a
+	// deactivation at the server creates, and the state a person ends by signing in again.
+	return { token: null, error: "authorization_lost", authorizationLost: true };
 }
 
 /**

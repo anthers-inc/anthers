@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Session arithmetic for the hosted repository writer: how many logins a burst of writes costs.
+ * Session arithmetic for the hosted repository writer: how many session calls a burst of writes
+ * costs, and what a dead one reports.
  *
- * 🚨 **The numbers are the subject.** The reference PDS limits `createSession` to thirty in
- * five minutes and three hundred a day per account, and before `sealed_session` existed every
- * write opened one — a busy user's pooled writes exhausted their OWN login budget, after
- * which everything they did failed `node_unreachable`. Each case below asserts how many times
- * a spy fetch was asked for a session endpoint, over a fake node that answers them, using the
- * real database the same way the other suites do.
+ * 🚨 **The numbers are the subject.** The reference PDS limits `createSession` to thirty in five
+ * minutes and three hundred a day per account, and before `sealed_session` existed every write
+ * opened one — a busy user's pooled writes exhausted their OWN login budget, after which
+ * everything they did failed. ⭐ **Since the password fallback went, the write path spends no
+ * `createSession` at all**: the session comes from sign-up or from a sign-in, and the store only
+ * reads, renews or clears it. So each case below asserts how many times a spy fetch was asked for
+ * a session endpoint, over a fake node that answers them, using the real database the same way
+ * the other suites do.
  *
  * ⭐ **Tokens are minted here as `header.payload.signature` strings.** The store only decodes
  * the payload's `exp` claim and never verifies a signature — that is the node's job on the
@@ -27,7 +30,6 @@ purgeAccountsCreatedHere();
 
 const RUN = `hs${Date.now().toString(36)}`;
 const PDS_URL = "https://node.invalid";
-const PASSWORD = "EXAMPLE-not-a-real-password";
 
 const TOUCHED = ["FRONTEND_URL", "HOSTED_PDS_URL", "HOSTED_ACCOUNT_KEY"] as const;
 const saved = new Map<string, string | undefined>();
@@ -145,7 +147,7 @@ async function hostedCreator(tag: string): Promise<{ userId: number; did: string
 	dids.push(account.did);
 	await db
 		.update(hostedAccounts)
-		.set({ sealedPassword: seal(PASSWORD), sealedSession: null })
+		.set({ sealedSession: null })
 		.where(eq(hostedAccounts.did, account.did));
 	return { userId: account.userId, did: account.did };
 }
@@ -184,12 +186,14 @@ async function storedSession(
 }
 
 describe("the hosted session store", () => {
-	// 🚨 The case the whole change exists for: a busy user's writes must share one login.
-	it("spends ONE createSession on a burst of opens for one account", async () => {
-		const { userId } = await hostedCreator("burst");
-		const pair = freshPair("burst");
+	// 🚨 The case the whole module exists for: a busy user's writes must not each spend a login.
+	// ⭐ Since the password fallback went, they spend *none at all* — the session is written when
+	// the identity is created and replaced when the person signs in, and nothing in the write path
+	// can open a new one.
+	it("spends no session call at all on a burst of opens for one account", async () => {
+		const { userId, did } = await hostedCreator("burst");
+		await seedSession(did, freshPair("burst"), Date.now() + 3_600_000);
 		const node = nodeFetch({
-			"com.atproto.server.createSession": () => ({ body: { ...pair } }),
 			"com.atproto.repo.putRecord": () => ({
 				body: { uri: "at://did/x/y", cid: "bafy" },
 			}),
@@ -203,9 +207,7 @@ describe("the hosted session store", () => {
 				await opened.writer.putRecord("org.anthers.post", `r${i}`, {});
 			}
 		}
-		expect(sessionCalls(node.calls)).toEqual([
-			expect.objectContaining({ method: "com.atproto.server.createSession" }),
-		]);
+		expect(sessionCalls(node.calls)).toEqual([]);
 	});
 
 	it("asks the node for NOTHING when a live access token is on file", async () => {
@@ -249,55 +251,56 @@ describe("the hosted session store", () => {
 		});
 	});
 
-	it("falls back to exactly ONE login when the node refuses the refresh", async () => {
+	// 🚨 **A refused refresh is final now.** The node's considered 4xx means the pair is dead, and
+	// with no stored password there is nothing to log in with — so this reports a lost
+	// authorization rather than spending a call that could only fail.
+	it("reports a refused refresh as a lost authorization, and spends no login", async () => {
 		const { did } = await hostedCreator("refused");
 		const old = expiredPair("refused");
-		const fresh = freshPair("refused-new");
 		await seedSession(did, old, Date.now() - 60_000);
 		const node = nodeFetch({
 			"com.atproto.server.refreshSession": () => ({
 				status: 401,
 				body: { error: "ExpiredToken", message: "refresh revoked" },
 			}),
-			"com.atproto.server.createSession": () => ({ body: { ...fresh } }),
 		});
 		const result = await sessionForHostedAccount(did, { fetchImpl: node.impl });
-		expect(result).toEqual({ token: fresh.accessJwt });
+		expect(result).toEqual({ token: null, error: "authorization_lost", authorizationLost: true });
 		expect(sessionCalls(node.calls)).toEqual([
 			expect.objectContaining({ method: "com.atproto.server.refreshSession" }),
-			expect.objectContaining({ method: "com.atproto.server.createSession" }),
 		]);
-		const stored = await storedSession(did);
-		expect(stored).toMatchObject({ accessJwt: fresh.accessJwt });
+		// And the dead pair is gone rather than left to be retried.
+		expect(await storedSession(did)).toBeNull();
 	});
 
-	it("does NOT log in around an unreachable refresher — the budget is the point", async () => {
+	// ⚠️ **An outage is not a lost authorization**, and the difference decides whether a job
+	// retries: a node that could not answer is worth trying again, and the session stays on file.
+	it("reports an unreachable refresher as an outage, keeping the pair", async () => {
 		const { did } = await hostedCreator("down");
 		await seedSession(did, expiredPair("down"), Date.now() - 60_000);
 		const node = nodeFetch({
 			"com.atproto.server.refreshSession": () => {
 				throw new Error("connection refused");
 			},
-			// No createSession route: if the store silently logged in, this throws.
 		});
 		const result = await sessionForHostedAccount(did, { fetchImpl: node.impl });
 		expect(result.token).toBeNull();
 		expect(result.token === null && result.error).toContain("refreshSession");
-		expect(sessionCalls(node.calls)).toEqual([
-			expect.objectContaining({ method: "com.atproto.server.refreshSession" }),
-		]);
+		expect(result.token === null && result.authorizationLost).toBeUndefined();
+		expect(await storedSession(did), "an outage must not discard the pair").not.toBeNull();
 	});
 
-	it("runs two concurrent opens through ONE login (the per-DID mutex)", async () => {
+	it("runs two concurrent opens through ONE refresh (the per-DID mutex)", async () => {
 		const { did } = await hostedCreator("race");
 		const pair = freshPair("race");
-		let loginResolver: (() => void) | null = null;
+		await seedSession(did, expiredPair("race-old"), Date.now() - 60_000);
+		let renewResolver: (() => void) | null = null;
 		const node = nodeFetch({
-			"com.atproto.server.createSession": () => {
+			"com.atproto.server.refreshSession": () => {
 				// Hold the gate until BOTH opens have arrived at the store; without the mutex the
 				// second open would block on this route too — and the test would hang, not count.
 				return new Promise<{ body: object }>((resolve) => {
-					loginResolver = () => resolve({ body: { ...pair } });
+					renewResolver = () => resolve({ body: { ...pair } });
 				});
 			},
 		});
@@ -305,16 +308,16 @@ describe("the hosted session store", () => {
 		const second = sessionForHostedAccount(did, { fetchImpl: node.impl });
 		// Let both callers reach the store before the node answers.
 		await new Promise((r) => setTimeout(r, 50));
-		loginResolver!();
+		renewResolver!();
 		const [a, b] = await Promise.all([first, second]);
 		expect(a).toEqual({ token: pair.accessJwt });
 		expect(b).toEqual({ token: pair.accessJwt });
 		expect(sessionCalls(node.calls)).toEqual([
-			expect.objectContaining({ method: "com.atproto.server.createSession" }),
+			expect.objectContaining({ method: "com.atproto.server.refreshSession" }),
 		]);
 	});
 
-	it("clears the stored session on a mid-session 401 so the next open logs in once", async () => {
+	it("clears the stored session on a mid-session 401, and the next open says what it is", async () => {
 		const { userId, did } = await hostedCreator("mid401");
 		const dead = freshPair("mid401-dead");
 		const fresh = freshPair("mid401-new");
@@ -340,41 +343,24 @@ describe("the hosted session store", () => {
 		// ... but the dead session is gone from the store.
 		expect(await storedSession(did)).toBeNull();
 
-		// The NEXT open pays exactly one login and writes cleanly.
+		// 🚨 **The NEXT open reports a lost authorization rather than logging in.** There is no
+		// second credential to present, so the honest answer is that the person has to sign in
+		// again — not a silent `createSession` that would fail against the same dead account.
 		const reopened = await hostedWriterFor(userId, { fetchImpl: node.impl });
-		expect(reopened).toHaveProperty("writer.did");
-		if (reopened.writer) {
-			await reopened.writer.putRecord("org.anthers.post", "r", {});
-		}
-		expect(sessionCalls(node.calls)).toEqual([
-			expect.objectContaining({ method: "com.atproto.server.createSession" }),
-		]);
+		expect(reopened).toEqual({ writer: null, reason: "authorization_lost" });
+		expect(sessionCalls(node.calls)).toEqual([]);
 	});
 
-	it("keeps a failed login's failure shape the store's own (for the writer to map)", async () => {
-		const { did } = await hostedCreator("loginfail");
-		const node = nodeFetch({
-			"com.atproto.server.createSession": () => ({
-				status: 500,
-				body: { error: "InternalServerError" },
-			}),
-		});
+	it("maps a row with no session onto the writer's own reason", async () => {
+		const { userId, did } = await hostedCreator("nosession");
+		// ⚠️ No fetch route at all: a row with nothing sealed must not reach the network.
+		const node = nodeFetch({});
 		const result = await sessionForHostedAccount(did, { fetchImpl: node.impl });
-		expect(result.token).toBeNull();
-		expect(result.token === null && result.error).toContain("createSession");
+		expect(result).toEqual({ token: null, error: "authorization_lost", authorizationLost: true });
 
-		// The writer maps it onto its existing reason, unchanged.
-		const opened = await hostedWriterFor(
-			(
-				await db
-					.select({ userId: hostedAccounts.userId })
-					.from(hostedAccounts)
-					.where(eq(hostedAccounts.did, did))
-					.limit(1)
-			)[0]!.userId!,
-			{ fetchImpl: node.impl },
-		);
-		expect(opened).toEqual({ writer: null, reason: "node_unreachable" });
+		const opened = await hostedWriterFor(userId, { fetchImpl: node.impl });
+		expect(opened).toEqual({ writer: null, reason: "authorization_lost" });
+		expect(node.calls).toEqual([]);
 	});
 });
 

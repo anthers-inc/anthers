@@ -47,7 +47,6 @@ describe("a hosted fixture account", () => {
 		const [row] = await db
 			.select({
 				sealedSession: hostedAccounts.sealedSession,
-				sealedPassword: hostedAccounts.sealedPassword,
 			})
 			.from(hostedAccounts)
 			.where(eq(hostedAccounts.did, account.did));
@@ -55,7 +54,6 @@ describe("a hosted fixture account", () => {
 		// 🚨 The password is written at creation only so a failed first login cannot strand the
 		// identity, and it is cleared the moment a session lands. A fixture row still carrying
 		// one means the session step did not run.
-		expect(row?.sealedPassword).toBe("");
 
 		const { refreshJwt } = JSON.parse(open(row?.sealedSession ?? "")) as { refreshJwt: string };
 		// No body: `refreshSession` is a procedure with no input, and the node refuses one.
