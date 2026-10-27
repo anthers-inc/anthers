@@ -15,9 +15,9 @@
  *     would be asking twice for the same thing.
  *   • The address has an account → it is **signed in**.
  *
- * That second outcome is not a convenience bolted on. `/login` reaches it directly through
- * `issueSignInCode` below, which is the same proof narrowed to addresses that already have
- * an account — and it is the only way in at all, since no account holds a password.
+ * That second outcome is not a convenience bolted on. It is the door an unfinished signup
+ * comes back through, and the proof a recovery rests on; signing in is the identity's own
+ * password (`/login`) or its server's OAuth, so nothing here grants a session on its own.
  * It is also not a new grant of power: whoever reads an account's mailbox can
  * already take it over through any emailed recovery, and this is that authority with a
  * short fuse and an attempt cap.

@@ -5,9 +5,10 @@
  *
  * Every session starts from an empty database (`scripts/session.ts`), so this creates rather than
  * reconciles: the account matching your production username and email, pre-verified, with
- * the creator and admin flags `.env` asks for. Sign-in is the emailed code, read from the
- * session's mail catcher (make dev: http://localhost:8025) — no account holds a password, so
- * there is nothing to put in `.env` for it.
+ * the creator and admin flags `.env` asks for. Sign-in is the identity's own password, and
+ * every local fixture account is created with `LOCAL_ACCOUNT_PASSWORD` from
+ * `@anthers/db/local-fixtures` — that is the value to type, and `LOCAL_ACCOUNT_PASSWORD` in
+ * `.env` overrides it for a session that wants a different one.
  *
  * ⚠️ **Its handle is not your username when the server would refuse that name.** A handle may not
  * carry an underscore, and a few names are reserved outright (`parkerhdavis` among them), so the

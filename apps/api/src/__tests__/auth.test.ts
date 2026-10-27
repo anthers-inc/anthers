@@ -39,8 +39,9 @@ describe("Auth System", () => {
 
 	describe("sign-up", () => {
 		it("has no password sign-up route", async () => {
-			// Signing up is the emailed-code ceremony (`/signup/*`). A route that made an account
-			// and a session from a password skipped the code, so it is gone rather than hidden.
+			// Signing up is the emailed-code ceremony (`/signup/*`, finished at `/finish` with the
+			// password the new identity will carry). A route that made an account and a session
+			// from a password ALONE skipped the code, so it is gone rather than hidden.
 			const res = await jsonPost("/api/auth/sign-up", {
 				username: `nosignup_${testId}`,
 				email: `nosignup_${testId}@example.com`,
@@ -65,7 +66,12 @@ describe("Auth System", () => {
 	// ── Sign In ──────────────────────────────────────────────────────────────
 
 	describe("sign-in", () => {
-		it("has no password sign-in route — the emailed code is the only way in", async () => {
+		// ⚠️ **The legacy password FORM is not the password DOOR.** `/api/auth/sign-in` took a
+		// `login` and a password and was retired when the emailed code became the only way in;
+		// signing in is now the identity's own password at `/api/auth/login`, which takes an
+		// identifier and has its own suite (`login.test.ts`, `hosted-login.test.ts`). What this
+		// pins is that the retired route has not come back.
+		it("has no legacy password sign-in route", async () => {
 			for (const body of [
 				{ login: name, password: "securepass123" },
 				{ login: email, password: "securepass123" },
