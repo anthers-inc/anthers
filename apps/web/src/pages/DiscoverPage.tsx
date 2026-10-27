@@ -671,22 +671,32 @@ export default function DiscoverPage() {
 	 */
 	const shortcuts = useKeyboardShortcuts();
 	const apple = isApplePlatform();
+	/**
+	 * 🚨 **The handler reads the cycle through a ref rather than capturing it.** The active
+	 * chip follows the URL, so `cycleRecipe` changes identity on every chord; an effect that
+	 * re-binds on that identity leaves a window where the next chord is handled by the
+	 * previous function, which cycles from the chip that is no longer active and reads as a
+	 * lost keystroke. The ref keeps the listener stable and the state current, which is what
+	 * makes two chords in quick succession step two chips.
+	 */
+	const cycleRef = useRef(cycleRecipe);
+	cycleRef.current = cycleRecipe;
 	useEffect(() => {
 		const handler = (event: globalThis.KeyboardEvent) => {
 			if (dialogRef.current?.open) return;
 			if (matchesChord(event, shortcuts.nextRecipe, apple)) {
 				event.preventDefault();
-				cycleRecipe(1);
+				cycleRef.current(1);
 				return;
 			}
 			if (matchesChord(event, shortcuts.previousRecipe, apple)) {
 				event.preventDefault();
-				cycleRecipe(-1);
+				cycleRef.current(-1);
 			}
 		};
 		document.addEventListener("keydown", handler);
 		return () => document.removeEventListener("keydown", handler);
-	}, [shortcuts.nextRecipe, shortcuts.previousRecipe, apple, cycleRecipe]);
+	}, [shortcuts.nextRecipe, shortcuts.previousRecipe, apple]);
 
 	// The stream: the feed's own, over the candidate set the recipe names. `recipeQuery`
 	// is the one place the candidate stage turns into the route's `scope` and
