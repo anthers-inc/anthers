@@ -126,11 +126,13 @@ test("the Studio has its own chrome, and keeps it where neither mode owns the pa
 	await expect(page).toHaveURL(/\/@[^/]+$/);
 	// Keep the address for the user-mode leg below, where no profile row exists to click.
 	const profileHref = page.url();
-	// ⚠️ **Wait for the Dashboard to be gone before asking about the sidebar.** The URL changes
+	// ⚠️ **Wait for the profile's own tab row before asking about the sidebar.** The URL changes
 	// before React renders the new page, so asking straight away read the Studio's sidebar off
-	// the page being left, and passed with the mode broken. Its heading leaving is the proof the
-	// profile has rendered, and the sidebar renders in the same pass.
-	await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toHaveCount(0);
+	// the page being left, and passed with the mode broken. "All Content" exists only in that
+	// row — the Dashboard heading is no proof any more, since the creator's own profile now
+	// defaults to it and the Studio was already showing it — and the sidebar renders in the
+	// same pass.
+	await expect(page.getByRole("button", { name: "All Content", exact: true })).toBeVisible();
 	await expect(studioSidebar).toBeVisible();
 	await expect(userSidebar).toHaveCount(0);
 

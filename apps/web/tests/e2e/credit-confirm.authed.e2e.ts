@@ -303,14 +303,19 @@ test("a creator credits a person by DID, the person confirms, and the credit res
 
 	// ── The person's own Credits tab ─────────────────────────────────────────────
 	// The attribution also sits in the person's profile, which is the one place to review
-	// every credit naming them. The tab's placement is part of the ask: to the right of
-	// Badges, with the tab row's divider between them.
+	// every credit naming them. ⭐ **Badges and Credits are one group** (Parker, 2026-10-27):
+	// the profile's own surfaces, with nothing dividing them, and the tab row's rule falling
+	// after Credits to set that group apart from the content views.
 	await userPage.goto(`/@${userHandle}?tab=credits`);
 	const creditsTab = userPage.getByRole("button", { name: "Credits", exact: true });
 	await expect(creditsTab).toBeVisible();
 	expect(
-		await creditsTab.evaluate((el) => el.previousElementSibling?.getAttribute("aria-hidden")),
-		"the Credits tab is not separated from Badges by the tab row's divider",
+		await creditsTab.evaluate((el) => el.previousElementSibling?.textContent),
+		"Credits is no longer beside Badges in the tab row",
+	).toBe("Badges");
+	expect(
+		await creditsTab.evaluate((el) => el.nextElementSibling?.getAttribute("aria-hidden")),
+		"the Credits tab is not divided from the content views",
 	).toBe("true");
 
 	const pendingHeading = userPage.getByRole("heading", { name: /Awaiting your confirmation/ });
