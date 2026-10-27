@@ -17,10 +17,9 @@
  * content: the lens rows, the dial, and the graying.
  */
 import { fileURLToPath } from "node:url";
-import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { MEDIA_FIXTURE_PROJECT, mediaFixtureWork } from "@anthers/db/media-fixture";
 import type { Page } from "@playwright/test";
-import { API_URL, expect, leashedExecFileSync, test, WEB_ORIGIN } from "./fixtures";
+import { API_URL, expect, leashedExecFileSync, mintSession, test, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 
@@ -409,7 +408,7 @@ test("the Bookshelf lens stands the saved comic up as a spine", async ({ page })
 	// seeded device keys are the only position the account carries.
 	const account = makeRailAccount(`spine_${Date.now().toString(36)}`);
 	try {
-		await signInThroughUi(page, account.email);
+		await signInThroughCallback(page, account.id);
 		const comic = await saveFixtureWork(page, "comic");
 		const pageCount = comic.pageCount ?? 0;
 		expect(
@@ -491,15 +490,32 @@ async function purgeRailAccount(id: number): Promise<void> {
 	await purgeAccountIds([id]);
 }
 
-/** Sign in through the real /login UI — the throwaway account's own ceremony. */
-async function signInThroughUi(page: Page, email: string): Promise<void> {
-	await page.goto("/login");
-	await page.locator('input[autocomplete="username"]').fill(email);
-	await page.locator('input[autocomplete="current-password"]').fill(LOCAL_ACCOUNT_PASSWORD);
-	await page.getByRole("button", { name: /^sign in$/i }).click();
+/**
+ * Sign the browser in as the throwaway account, through the landing a real sign-in returns to.
+ *
+ * 🚨 **Sign-in is OAuth at the identity's own server, so there is no form to drive.** The cookie
+ * is minted the way the callback mints it, and the browser then lands on
+ * `/auth/atproto/callback?success=login` — the same page a real round trip comes back to, which
+ * is what refreshes the auth context before the walk goes on.
+ */
+async function signInThroughCallback(page: Page, userId: number): Promise<void> {
+	const token = await mintSession(userId, "anthers e2e library lens");
+	await page.context().addCookies([
+		{
+			name: "session",
+			value: token,
+			domain: "localhost",
+			path: "/",
+			expires: Math.floor(Date.now() / 1000) + 3600,
+			httpOnly: true,
+			secure: false,
+			sameSite: "Lax" as const,
+		},
+	]);
+	await page.goto("/auth/atproto/callback?success=login");
 	await expect
-		.poll(() => page.url(), { message: `sign-in as ${email} never landed`, timeout: 15_000 })
-		.not.toContain("/login");
+		.poll(() => page.url(), { message: "the callback landing never moved on", timeout: 15_000 })
+		.not.toContain("/auth/atproto/callback");
 }
 
 test("the continue-reading rail stands the unfinished readings up, newest first", async ({
@@ -507,7 +523,7 @@ test("the continue-reading rail stands the unfinished readings up, newest first"
 }) => {
 	const account = makeRailAccount(`rail_${Date.now().toString(36)}`);
 	try {
-		await signInThroughUi(page, account.email);
+		await signInThroughCallback(page, account.id);
 
 		const comic = await saveFixtureWork(page, "comic");
 		const ebook = await saveFixtureWork(page, "ebook");

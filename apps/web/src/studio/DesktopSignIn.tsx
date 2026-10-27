@@ -2,16 +2,17 @@
 /**
  * The desktop app's sign-in screen.
  *
- * The default method is the app's own: the person types the handle or address on their identity
- * and the password they chose for it. ⭐ **That is the same first-party door the website's login
- * page is**, expressed as a PKCE enrollment rather than a cookie — Anthers hosts the identity, so
- * it is the client of its own server and asks for the password it is entitled to. The shell
- * sends it in one request, redeems the code itself and keeps the session; the password is never
- * stored.
+ * 🚨 **Signing in happens in the person's browser, for every identity.** The shell mints a PKCE
+ * challenge, opens the authorize page in the system browser, and a one-time code comes back over
+ * the `anthers://` scheme. That is the same OAuth flow the website runs, and it is the shape the
+ * packaged app needs: the credential is typed at the server that holds it, and a webview is
+ * never the thing asking for it.
  *
- * ⚠️ **A Bluesky identity comes through the browser handoff instead**, below. Anthers is a
- * third-party client of that server, so it must not ask for the password; the browser goes to
- * that identity's own authorization page and a code comes back over `anthers://`.
+ * ⚠️ **There is deliberately no in-app method.** One existed from 2026-10-16 until 2026-10-27 —
+ * an emailed code typed into the window — because Anthers accounts had a password door of their
+ * own. When every sign-in became OAuth that door went, and an in-app method would have meant
+ * either a second credential path or an authorization page inside the webview, which is exactly
+ * what the handoff exists to avoid.
  *
  * Browser builds never render this; `StudioAuthGate` bounces to the consumer login.
  */
@@ -21,32 +22,26 @@ import {
 	completeSignIn,
 	deviceLabel,
 	onAuthCode,
-	type PasswordSignInOutcome,
 	type Persistence,
-	passwordSignIn,
-	startPasswordSignIn,
 	takePendingCode,
 } from "@anthers/web-shared/desktop";
 import LoadingSpinner from "@anthers/web-shared/ui/LoadingSpinner";
 import { useEffect, useRef, useState } from "react";
 
-type Phase = "idle" | "waiting" | "completing" | "two-factor" | "error";
+type Phase = "idle" | "waiting" | "completing" | "error";
 
 export default function DesktopSignIn() {
 	const { refreshUser } = useAuth();
 	const [phase, setPhase] = useState<Phase>("idle");
 	const [error, setError] = useState<string | null>(null);
-	const [identifier, setIdentifier] = useState("");
-	const [password, setPassword] = useState("");
-	const [factorCode, setFactorCode] = useState("");
 	const [openedUrl, setOpenedUrl] = useState<string | null>(null);
 	const [persistence, setPersistence] = useState<Persistence | null>(null);
 	// Guards against a code arriving twice (cold-start pull racing the live event) —
 	// the second redemption would fail, since codes are strictly single-use.
 	const redeeming = useRef(false);
 
-	// The browser-handoff redemption. Live only while this screen is up: a Bluesky
-	// sign-in's code comes back here over the anthers:// scheme.
+	// The redemption. Live only while this screen is up: the sign-in's code comes back
+	// here over the anthers:// scheme.
 	useEffect(() => {
 		const redeem = async (code: string) => {
 			if (redeeming.current) return;
@@ -74,38 +69,6 @@ export default function DesktopSignIn() {
 			.catch(() => {});
 		return onAuthCode(redeem);
 	}, [refreshUser]);
-
-	/**
-	 * Sign in, or ask the server for the emailed code it wants as a second factor.
-	 *
-	 * ⚠️ **The password stays in this component's state and never leaves for anywhere but the
-	 * API**, which sends it to the identity server and keeps only the session that answers.
-	 */
-	const signIn = async (withFactor: boolean) => {
-		if (!identifier.trim() || !password) return;
-		setError(null);
-		setPhase("completing");
-		try {
-			// The enrollment is minted once per attempt; a second-factor retry reuses it, because
-			// replacing it would orphan the challenge the code was issued against.
-			if (!withFactor) await startPasswordSignIn(deviceLabel());
-			const outcome: PasswordSignInOutcome = await passwordSignIn({
-				identifier: identifier.trim(),
-				password,
-				...(withFactor && factorCode.trim() ? { authFactorToken: factorCode.trim() } : {}),
-			});
-			if (outcome.status === "two-factor") {
-				setPhase("two-factor");
-				return;
-			}
-			setPersistence(outcome.persistence);
-			await refreshUser();
-		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
-			// A refused second factor keeps its field on screen; a refused first attempt does not.
-			setPhase(withFactor ? "two-factor" : "error");
-		}
-	};
 
 	const openBrowser = async () => {
 		setPhase("waiting");
@@ -140,115 +103,44 @@ export default function DesktopSignIn() {
 				</div>
 			)}
 
-			{phase === "two-factor" ? (
+			<p className="text-sm text-base-content/60">
+				Sign in through your browser, at the server that holds your identity. This device can be
+				revoked any time from Settings → Devices on anthers.org.
+			</p>
+
+			{phase === "waiting" ? (
 				<>
-					<p className="text-sm text-base-content/60">
-						That password was right, and this account asks for a code as well. Type the one that
-						arrives by email.
+					<p className="text-sm text-base-content/60 mt-4">
+						Finish signing in in your browser{openedUrl ? "" : " — waiting…"}
 					</p>
-					<div className="card-actions mt-4 gap-2">
-						<input
-							type="text"
-							inputMode="numeric"
-							autoComplete="one-time-code"
-							className="input input-sm font-mono tracking-widest uppercase"
-							placeholder="Email code"
-							value={factorCode}
-							onChange={(e) => setFactorCode(e.target.value)}
-							onKeyDown={(e) => {
-								if (e.key === "Enter" && factorCode.trim()) void signIn(true);
-							}}
-						/>
-						<button
-							type="button"
-							className="btn btn-primary btn-sm"
-							onClick={() => void signIn(true)}
-							disabled={!factorCode.trim()}
-						>
-							Sign in
-						</button>
-					</div>
-					<button
-						type="button"
-						className="btn btn-ghost btn-xs mt-3"
-						onClick={() => {
-							setPhase("idle");
-							setFactorCode("");
-						}}
-					>
-						Start over
-					</button>
-				</>
-			) : (
-				<>
-					<p className="text-sm text-base-content/60">
-						Sign in with the password you chose for your Anthers identity. This device can be
-						revoked any time from Settings → Devices on anthers.org.
-					</p>
-
-					<div className="card-actions mt-4 gap-2">
-						<input
-							type="text"
-							autoComplete="username"
-							className="input input-sm w-full"
-							placeholder="Anthers handle or email"
-							value={identifier}
-							onChange={(e) => setIdentifier(e.target.value)}
-						/>
-						<input
-							type="password"
-							autoComplete="current-password"
-							className="input input-sm w-full"
-							placeholder="Password"
-							value={password}
-							onChange={(e) => setPassword(e.target.value)}
-							onKeyDown={(e) => {
-								if (e.key === "Enter" && password) void signIn(false);
-							}}
-						/>
-						<button
-							type="button"
-							className="btn btn-primary btn-sm w-full"
-							onClick={() => void signIn(false)}
-							disabled={!identifier.trim() || !password}
-						>
-							Sign in
-						</button>
-					</div>
-
-					{phase === "idle" && (
-						<p className="text-xs text-base-content/50 mt-2">
-							A Bluesky identity signs in through your browser instead, at the server that holds it.
-						</p>
-					)}
-
-					{phase === "waiting" && (
-						<>
-							<p className="text-sm text-base-content/60 mt-4">
-								Confirm sign-in in your browser{openedUrl ? "" : " — waiting…"}
+					{openedUrl && (
+						<div className="mt-2">
+							<p className="text-xs text-base-content/50">
+								Browser didn't open? Paste this in yourself:
 							</p>
-							{openedUrl && (
-								<div className="mt-2">
-									<p className="text-xs text-base-content/50">
-										Browser didn't open? Paste this in yourself:
-									</p>
-									<code className="text-xs break-all select-all block mt-1 p-2 rounded bg-base-300">
-										{openedUrl}
-									</code>
-								</div>
-							)}
-						</>
+							<code className="text-xs break-all select-all block mt-1 p-2 rounded bg-base-300">
+								{openedUrl}
+							</code>
+						</div>
 					)}
-
 					<button
 						type="button"
 						className="btn btn-ghost btn-xs mt-3"
 						onClick={() => void openBrowser()}
-						disabled={phase === "waiting"}
 					>
-						Sign in through your browser instead (Bluesky)
+						Open it again
 					</button>
 				</>
+			) : (
+				<div className="card-actions mt-4">
+					<button
+						type="button"
+						className="btn btn-primary btn-sm w-full"
+						onClick={() => void openBrowser()}
+					>
+						Sign in with your identity server
+					</button>
+				</div>
 			)}
 		</Shell>
 	);

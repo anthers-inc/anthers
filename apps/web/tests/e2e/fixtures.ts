@@ -6,11 +6,14 @@ import {
 	execFileSync,
 } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { db } from "@anthers/db/client";
 import { GAUNTLET_CREATOR_EMAIL, GAUNTLET_WALKER_EMAIL } from "@anthers/db/gauntlet";
-import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { MEDIA_FIXTURE_EMAIL } from "@anthers/db/media-fixture";
+import { users } from "@anthers/db/schema";
 import { defaultDelivery } from "@anthers/shared/content";
 import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { eq } from "drizzle-orm";
+import { createSession } from "../../../api/src/services/auth";
 
 /**
  * The static preview the browser loads (playwright.config.ts webServer #1), on the port the
@@ -79,37 +82,45 @@ export function trackErrorsStrict(page: Page, allow: RegExp[] = []): string[] {
 }
 
 /**
- * Sign an account in and put the session on `context`.
+ * Put a signed-in session on `context` for the account at `email`.
  *
- * By the password every local fixture account is created with (`LOCAL_ACCOUNT_PASSWORD`), because
- * that is the first-party door now: the fixture's address is posted to `/api/auth/login`, and the
- * API answers with the same Set-Cookie a person's sign-in does. Plain `fetch` plus an explicit
- * cookie, deliberately not `page.request.post`, whose Playwright cookie parser throws on this
- * route's Set-Cookie under Bun.
+ * 🚨 **Minted, not posted.** Sign-in is OAuth at the identity's own server now, and there is no
+ * login route a harness could call: the real flow leaves for `anthers.social` (or Bluesky), gets
+ * the person's authorization, and comes back with a grant. A spec about a basket or a library has
+ * no business driving that, so this calls the same `createSession` the OAuth callback calls and
+ * puts the token where the cookie would be — exactly what `account-fixture.ts` does for the API
+ * suite.
+ *
+ * ⚠️ **The account must already exist**; every caller here is a seeded fixture or a spec's own
+ * `db:local-account`.
  *
  * Returns the raw token so a test can call the API as that account (cleanup, mostly) without
  * driving the browser.
  */
-async function signInAs(context: BrowserContext, email: string): Promise<string> {
-	const res = await fetch(`${API_URL}/api/auth/login`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN }, // CSRF checks Origin
-		body: JSON.stringify({ identifier: email, password: LOCAL_ACCOUNT_PASSWORD }),
-	});
-	expect(
-		res.ok,
-		`sign-in as ${email} failed (${res.status}): ${await res
-			.clone()
-			.text()
-			.catch(() => "")}`,
-	).toBe(true);
+/**
+ * A session token for an account id, minted the way the OAuth callback mints one.
+ *
+ * Exported because several specs keep the account id from `db:local-account` and only need the
+ * cookie; routing them all through the email lookup would be a second query for the same row.
+ */
+export async function mintSession(userId: number, label = "anthers e2e"): Promise<string> {
+	return createSession(userId, null, label);
+}
 
-	const token = /(?:^|\s)session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
-	expect(token, "no session cookie returned").toBeTruthy();
+async function signInAs(context: BrowserContext, email: string): Promise<string> {
+	const [row] = await db
+		.select({ id: users.id })
+		.from(users)
+		.where(eq(users.email, email))
+		.limit(1);
+	if (!row) {
+		throw new Error(`no account for ${email} — the fixture this spec expects was not seeded`);
+	}
+	const token = await mintSession(row.id);
 	await context.addCookies([
 		{
 			name: "session",
-			value: token as string,
+			value: token,
 			domain: "localhost",
 			path: "/",
 			expires: Math.floor(Date.now() / 1000) + 3600,
@@ -118,7 +129,7 @@ async function signInAs(context: BrowserContext, email: string): Promise<string>
 			sameSite: "Lax" as const,
 		},
 	]);
-	return token as string;
+	return token;
 }
 
 /**

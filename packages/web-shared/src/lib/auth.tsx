@@ -138,7 +138,13 @@ interface AuthContextValue {
 	 * `next` is where to land afterwards. It rides in the OAuth flow's server-side state and
 	 * is sanitized at both ends; see `@anthers/shared/next-path`.
 	 */
-	signInWithBluesky: (handle: string, next?: string | null) => Promise<void>;
+	/**
+	 * Sign in by handing the browser to the identity's own server.
+	 *
+	 * Every identity goes this way, Anthers-hosted included: the server holds the credential, so
+	 * it is the one that authenticates and the one that shows what is being granted.
+	 */
+	signInWithIdentity: (handle: string, next?: string | null) => Promise<void>;
 	/**
 	 * Sign up with an ATProto identity.
 	 *
@@ -248,11 +254,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		[],
 	);
 
-	const signInWithBluesky = useCallback(
+	const signInWithIdentity = useCallback(
 		async (handle: string, next?: string | null) => {
 			await beginAtprotoAuth(
 				{ handle, intent: "login", ...(next ? { next } : {}) },
-				"Couldn't start Bluesky sign-in.",
+				"Couldn't reach your identity server.",
 			);
 		},
 		[beginAtprotoAuth],
@@ -291,7 +297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 				isLoading,
 				isAuthenticated: user !== null,
 				signOut,
-				signInWithBluesky,
+				signInWithIdentity,
 				signUpWithBluesky,
 				grantPublishing,
 				refreshUser,

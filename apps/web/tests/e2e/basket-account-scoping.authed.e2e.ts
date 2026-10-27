@@ -26,14 +26,13 @@
  */
 import { fileURLToPath } from "node:url";
 import { db } from "@anthers/db/client";
-import { LOCAL_ACCOUNT_PASSWORD } from "@anthers/db/local-fixtures";
 import { basketItems } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import type { Page } from "@playwright/test";
 import { inArray } from "drizzle-orm";
 import { enablePayoutsFor } from "../../../api/src/__tests__/payouts-fixture";
 import { purgeAccountIds, purgeWorkIds } from "../../../api/src/__tests__/purge";
-import { API_URL, expect, leashedExecFileSync, test, WEB_ORIGIN } from "./fixtures";
+import { API_URL, expect, leashedExecFileSync, mintSession, test, WEB_ORIGIN } from "./fixtures";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../..", import.meta.url));
 const TITLE_PREFIX = "Basket account scoping ";
@@ -66,23 +65,33 @@ function makeAccount(name: string, creator = false): { handle: string; email: st
 }
 
 /**
- * Sign IN through the real /login UI: the address, the emailed code, the six boxes. This
- * is what fires the basket merge, wired into the ceremony's completion — nothing about
- * this walk may bypass it, so the walk does not either.
+ * Sign the browser in as an account, through the landing a real sign-in returns to.
+ *
+ * 🚨 **The landing is the point, not the cookie.** Sign-in is OAuth at the identity's own
+ * server now, so there is no form here to drive — but `/auth/atproto/callback?success=login` is
+ * exactly where the round trip comes back to, and it is what folds an anonymous scratch basket
+ * into the account's. Minting the cookie and then landing there exercises the same code the
+ * handoff does; putting the cookie on and reloading would quietly skip the merge this spec
+ * exists to check.
  */
-async function signInThroughUi(page: Page, email: string): Promise<void> {
-	await page.goto("/login");
-	await page.locator('input[autocomplete="username"]').fill(email);
-	await page.locator('input[autocomplete="current-password"]').fill(LOCAL_ACCOUNT_PASSWORD);
-	await page.getByRole("button", { name: /^sign in$/i }).click();
-	// The verify lands a session, `refreshUser` tells the shell, and /login navigates —
-	// off the login page is the walk's own signal that the sign-in completed. Polling
-	// `/auth/me` from here instead would race the redirect AND read a different cookie
-	// jar than the page's (`page.request` carries the context's, the page carries its
-	// own — same jar, but the UI is the thing walking).
+async function signInThroughCallback(page: Page, userId: number): Promise<void> {
+	const token = await mintSession(userId, "anthers e2e basket scoping");
+	await page.context().addCookies([
+		{
+			name: "session",
+			value: token,
+			domain: "localhost",
+			path: "/",
+			expires: Math.floor(Date.now() / 1000) + 3600,
+			httpOnly: true,
+			secure: false,
+			sameSite: "Lax" as const,
+		},
+	]);
+	await page.goto("/auth/atproto/callback?success=login");
 	await expect
-		.poll(() => page.url(), { message: `sign-in as ${email} never landed`, timeout: 15_000 })
-		.not.toContain("/login");
+		.poll(() => page.url(), { message: "the callback landing never moved on", timeout: 15_000 })
+		.not.toContain("/auth/atproto/callback");
 }
 
 async function signOutThroughUi(page: Page): Promise<void> {
@@ -106,16 +115,11 @@ async function serverBasket(cookie: string): Promise<{ count: number; workIds: n
 	return { count: body.count, workIds: body.items.map((i) => i.workId) };
 }
 
-/** Sign the account in by API (fixtures' own fetch path) and return the session cookie. */
-async function apiSession(email: string): Promise<string> {
-	const res = await fetch(`${API_URL}/api/auth/login`, {
-		method: "POST",
-		headers: { "Content-Type": "application/json", Origin: WEB_ORIGIN },
-		body: JSON.stringify({ identifier: email, password: LOCAL_ACCOUNT_PASSWORD }),
-	});
-	const token = /(?:^|\s)session=([^;]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1];
-	expect(token, "no session cookie in the verify answer").toBeTruthy();
-	return token as string;
+/** A session for the account, minted rather than posted — sign-in is OAuth at its own server. */
+async function apiSession(userId: number): Promise<string> {
+	const token = await mintSession(userId, "anthers e2e basket scoping");
+	expect(token, "no session was minted").toBeTruthy();
+	return token;
 }
 
 test.describe.configure({ mode: "serial" });
@@ -124,8 +128,7 @@ test.describe.configure({ mode: "serial" });
 
 let sellerCookie = "";
 let buyerACookie = "";
-let buyerAEmail = "";
-let buyerBEmail = "";
+let buyerBId = 0;
 let buyerACreatedId = 0;
 let buyerBCreatedId = 0;
 let sellerCreatedId = 0;
@@ -179,14 +182,13 @@ test.beforeAll(async () => {
 	const s = stamp();
 	const seller = makeAccount(`bsk-${s}-seller`, true);
 	sellerCreatedId = seller.id;
-	sellerCookie = await apiSession(seller.email);
+	sellerCookie = await apiSession(seller.id);
 	const buyerA = makeAccount(`bsk-${s}-a`);
 	buyerACreatedId = buyerA.id;
-	buyerAEmail = buyerA.email;
-	buyerACookie = await apiSession(buyerA.email);
+	buyerACookie = await apiSession(buyerA.id);
 	const buyerB = makeAccount(`bsk-${s}-b`);
 	buyerBCreatedId = buyerB.id;
-	buyerBEmail = buyerB.email;
+	buyerBId = buyerB.id;
 
 	// Release refuses a Work whose creator has not finished payout setup
 	// (`payouts_required`) — the seller is a fixture, so its Connect row is written
@@ -216,7 +218,7 @@ test("account A's basket stays account A's, and account B starts empty", async (
 	// A signs in through the real door and puts X in their basket — through the Work
 	// page's own door, the way an item actually enters a basket.
 	if (!workX) throw new Error("the walk Work was not created");
-	await signInThroughUi(page, buyerAEmail);
+	await signInThroughCallback(page, buyerACreatedId);
 	// The Work page accepts a bare id and settles to its canonical slug-publicId form;
 	// waiting on the pricing card is the sync point either side of that settling.
 	await page.goto(`/works/${workX.id}`);
@@ -232,14 +234,14 @@ test("account A's basket stays account A's, and account B starts empty", async (
 	expect((await serverBasket(buyerACookie)).workIds).toContain(workX.id);
 
 	// B signs in on the SAME browser: the badge must read nothing.
-	await signInThroughUi(page, buyerBEmail);
+	await signInThroughCallback(page, buyerBId);
 	await page.goto("/discovery");
 	await expect(
 		page.getByRole("banner").getByRole("link", { name: /Basket/ }),
 		"B's header offered a basket their account never built",
 	).toHaveCount(0);
 	// And the server half agrees — B's account basket is empty.
-	const bCookie = await apiSession(buyerBEmail);
+	const bCookie = await apiSession(buyerBId);
 	expect((await serverBasket(bCookie)).count).toBe(0);
 });
 
@@ -273,7 +275,7 @@ test("an anonymous scratch basket survives sign-in — the merge, then the scrat
 	expect(scratch, "the scratch basket never landed in the browser").toBeTruthy();
 
 	// Sign in — the merge is the ceremony's own act, and the badge is what proves it.
-	await signInThroughUi(scratchPage, buyerAEmail);
+	await signInThroughCallback(scratchPage, buyerACreatedId);
 	await scratchPage.goto("/discovery");
 	await expect(
 		scratchPage.getByRole("banner").getByRole("link", { name: /Basket \(1 item\)/ }),
@@ -325,7 +327,7 @@ test("a mixed-creator sign-in merge keeps both the account's and the scratch's i
 	// A second creator's Work: made by a throwaway creator, added by an anonymous
 	// visitor through the front door.
 	const other = makeAccount(`bsk-${stamp()}-other`, true);
-	const otherCookie = await apiSession(other.email);
+	const otherCookie = await apiSession(other.id);
 	// The second creator releases too, so payouts go with it (same reasoning as the
 	// seller's in `beforeAll`).
 	await enablePayoutsFor(other.id);
@@ -375,7 +377,7 @@ test("a mixed-creator sign-in merge keeps both the account's and the scratch's i
 	// the other creator's Work: the merge is additive — a basket carries any number of
 	// creators (2026-10-15), so both intents land and the account ends with X and Y.
 	// The banner says so before the server read does.
-	await signInThroughUi(scratchPage, buyerAEmail);
+	await signInThroughCallback(scratchPage, buyerACreatedId);
 	await scratchPage.goto("/discovery");
 	await expect(
 		scratchPage.getByRole("banner").getByRole("link", { name: /Basket \(2 items\)/ }),
