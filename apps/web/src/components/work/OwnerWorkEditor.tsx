@@ -2159,11 +2159,25 @@ function OwnerAccessChipEditor({
 			{open && (
 				<dialog ref={dialog} className="modal" onClose={() => setOpen(false)}>
 					<div className="modal-box max-w-2xl">
-						<h3 className="text-lg font-semibold">Who Can Open This Work</h3>
-						<p className="mt-1 text-xs text-base-content/60">
-							The Access table decides who pays what. The chip above answers from these rows: Public
-							Access is Everyone at $0.
-						</p>
+						<h3 className="text-lg font-semibold">Edit Work Access</h3>
+						<div className="mt-1 flex flex-col gap-2 text-xs text-base-content/60">
+							{/* The one place this is explained. The table used to carry the same
+							    explanation again, split from this half by a component boundary, and
+							    a creator read it twice before reaching a single field. */}
+							<p>
+								Choose which Badges have access to this work, and at what price. By default,
+								everyone can access your work for free. This is what we call Public Access.
+								Streaming works in Public Access still pay, but through users' Time Pool rather than
+								direct purchase or subscription to you.
+							</p>
+							<p>
+								To gate access behind Badge subscriptions so only users with those Badges can access
+								it, uncheck Everyone and check the specific Badge level(s) that users should be
+								required to have to access the work. To set a direct purchase price for the work,
+								add a value to the Price column. You can set different prices for different Badge
+								levels to offer discounts to users with those Badges.
+							</p>
+						</div>
 						<div className="mt-4 flex flex-col gap-4">
 							<AccessTables rows={draft} onRowsChange={setDraft} />
 							{/* The release section's warning, live here while the rows are being
