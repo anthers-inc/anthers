@@ -17,9 +17,10 @@
  * no `--all`, deliberately: a row's absence is a claim that nobody is watching that identity any
  * more, and that claim should cost a person reading the handle first.
  *
- * ⚠️ **`--credential` also drops the hub's sealed password for the same DID**, and is only for an
- * identity that no longer exists on the node. On a live one that column is the only way back into
- * the account.
+ * ⚠️ **`--credential` also drops the hub's sealed credential for the same DID**, and is only for
+ * an identity that no longer exists on the node. On a live one that session is how Anthers writes
+ * to the account at all. Rows that still hold a pre-session password are retired by
+ * `hosted:credentials convert`, not by hand.
  *
  *   bun run hosted:identities list
  *   bun run hosted:identities forget --did did:plc:… --yes
@@ -129,7 +130,7 @@ async function forget(argv: string[]): Promise<void> {
 		`${row.handle ?? "(no handle)"}  ${row.did}  ${row.pdsEndpoint ?? "(no endpoint)"}  ` +
 			`last listed ${format(row.lastListedAt)}`,
 	);
-	if (held) console.log("  the hub holds this identity's sealed password");
+	if (held) console.log("  the hub holds a credential row for this identity");
 
 	if (!yes) {
 		console.log("\nNothing removed. Re-run with --yes to stop watching this identity.");
