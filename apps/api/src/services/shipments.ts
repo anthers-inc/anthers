@@ -29,7 +29,7 @@
  * one (`this`). Keeping them apart is what lets the hold change without touching a clock.
  */
 import { db } from "@anthers/db/client";
-import { shipments } from "@anthers/db/schema";
+import { shipmentComplaints, shipments } from "@anthers/db/schema";
 import {
 	SHIPMENT_COMPLAINT_WINDOW_DAYS,
 	SHIPMENT_DELIVERY_FALLBACK_DAYS,
@@ -37,7 +37,7 @@ import {
 	SHIPMENT_HANDLING_DAYS_MAX,
 	SHIPMENT_HANDLING_DAYS_MIN,
 } from "@anthers/shared/constants";
-import { and, eq, isNull, lte, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 
 type Shipment = typeof shipments.$inferSelect;
 
@@ -316,3 +316,45 @@ export function isReleaseEligible(row: Shipment | null, now: Date = new Date()):
 
 /** The raw SQL a surface may want for "shipped, not delivered" without loading every row. */
 export const pendingDeliveryPredicate = sql`${shipments.shippedAt} is not null and ${shipments.deliveredAt} is null`;
+
+/**
+ * Which of a set of orders are releasable at `now` — the batch form of `isReleaseEligible`,
+ * for the transfer job, which asks once per creator rather than once per credit.
+ *
+ * 🚨 **An open complaint freezes the release**, which is the whole point of the complaint
+ * record: a buyer who says the mug arrived cracked has stopped the money leaving until
+ * somebody answers them. The rule is one sentence — delivered, the window has closed, and
+ * nothing is open — and it lives here so the transfer job and any surface that shows a
+ * creator their money read the same one.
+ */
+export async function releasableOrders(
+	purchaseIds: number[],
+	now: Date = new Date(),
+): Promise<Set<number>> {
+	if (purchaseIds.length === 0) return new Set();
+	const rows = await db
+		.select({
+			purchaseId: shipments.purchaseId,
+			deliveredAt: shipments.deliveredAt,
+			complaintWindowEndsAt: shipments.complaintWindowEndsAt,
+		})
+		.from(shipments)
+		.where(inArray(shipments.purchaseId, purchaseIds));
+	const open = await db
+		.select({ purchaseId: shipmentComplaints.purchaseId })
+		.from(shipmentComplaints)
+		.where(
+			and(
+				inArray(shipmentComplaints.purchaseId, purchaseIds),
+				eq(shipmentComplaints.status, "open"),
+			),
+		);
+	const frozen = new Set(open.map((row) => row.purchaseId));
+	const releasable = new Set<number>();
+	for (const row of rows) {
+		if (row.purchaseId == null || frozen.has(row.purchaseId)) continue;
+		if (!row.deliveredAt || !row.complaintWindowEndsAt) continue;
+		if (row.complaintWindowEndsAt.getTime() <= now.getTime()) releasable.add(row.purchaseId);
+	}
+	return releasable;
+}
