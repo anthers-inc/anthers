@@ -26,6 +26,7 @@
 
 import { db } from "@anthers/db/client";
 import { sql } from "drizzle-orm";
+import { type MemoryReading, readMemory } from "./memory.js";
 import { rowsOf } from "./rows.js";
 
 /** The three states a component answers in. A page is honest with three; five is theater. */
@@ -63,6 +64,13 @@ export interface HealthReport {
 	components: Record<string, ComponentHealth>;
 	/** Queue depth counts, for the alerts and the Admin console. Present only when the queue answered. */
 	queueDepths?: QueueDepth[];
+	/**
+	 * This process's resident memory against its container's ceiling. A reading, not a
+	 * component: the process being large is a fact for the operator and the alarm, never a
+	 * reason to tell DigitalOcean to restart it. `services/memory.ts` carries the threshold
+	 * and the five-minute watch.
+	 */
+	memory: MemoryReading;
 	/** Server-side, when the answer was made. */
 	checkedAt: string;
 }
@@ -163,6 +171,7 @@ export async function healthReport(): Promise<HealthReport> {
 	return {
 		state,
 		components: { database, jobQueue },
+		memory: readMemory(),
 		checkedAt: new Date().toISOString(),
 	};
 }

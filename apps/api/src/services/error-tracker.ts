@@ -31,8 +31,8 @@ import { APP_VERSION } from "@anthers/shared/version";
 import { eq, sql } from "drizzle-orm";
 import { sendOperationalAlert } from "./email.js";
 
-/** Where an error was caught. Browser events arrive through the beacon route, API events through onError. */
-export type ErrorSource = "api" | "browser";
+/** Where an error was caught. Browser events arrive through the beacon route, API events through onError, and worker sweeps report their own conditions. */
+export type ErrorSource = "api" | "browser" | "worker";
 
 /** One stack frame as stored — raw, capped, never symbolicated at write time. */
 export interface ErrorFrame {
