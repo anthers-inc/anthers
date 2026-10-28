@@ -35,22 +35,32 @@ import {
 } from "@anthers/shared/moderation";
 import { Link } from "@anthers/web-shared/router";
 import { client } from "@anthers/web-shared/rpc";
-import { useState } from "react";
+import Modal from "@anthers/web-shared/ui/Modal";
+import { useEffect, useRef, useState } from "react";
+
+/** What is being reported, named in the reporter's words ("this comment", "@ada"). */
+export interface ReportSubject {
+	type: ModerationSubjectType;
+	id: number;
+	label: string;
+}
 
 interface ReportDialogProps {
-	subjectType: ModerationSubjectType;
-	subjectId: number;
-	/** What the user is reporting, named in their words ("this comment", "@ada"). */
-	label: string;
+	/**
+	 * Kept mounted while this is false so the shared wrapper can play the exit. The parent
+	 * passes null once the report is dismissed, so the last subject is held here — otherwise
+	 * the box would empty itself on the way out.
+	 */
+	subject: ReportSubject | null;
 	onClose: () => void;
 }
 
-export default function ReportDialog({
-	subjectType,
-	subjectId,
-	label,
-	onClose,
-}: ReportDialogProps) {
+export default function ReportDialog({ subject, onClose }: ReportDialogProps) {
+	const open = subject !== null;
+	const lastSubject = useRef<ReportSubject | null>(subject);
+	if (subject) lastSubject.current = subject;
+	const shown = subject ?? lastSubject.current;
+
 	const [reason, setReason] = useState<string>("");
 	/** The reason whose confirmation is on screen — nothing else is reachable until it is answered. */
 	const [confirming, setConfirming] = useState<string | null>(null);
@@ -58,6 +68,22 @@ export default function ReportDialog({
 	const [submitting, setSubmitting] = useState(false);
 	const [sent, setSent] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+
+	// A wrapper that keeps the dialog mounted also keeps its answers, so a second report
+	// would open on the first one's "thanks" screen. Every open starts a fresh report.
+	useEffect(() => {
+		if (!open) return;
+		setReason("");
+		setConfirming(null);
+		setDetails("");
+		setSubmitting(false);
+		setSent(false);
+		setError(null);
+	}, [open]);
+
+	const subjectType = shown?.type ?? "comment";
+	const subjectId = shown?.id ?? 0;
+	const label = shown?.label ?? "";
 
 	// Reporting a PERSON has to say where to look. A comment is its own evidence — an
 	// operator opens it and sees what the reporter saw — while "harassment" against an
@@ -106,7 +132,7 @@ export default function ReportDialog({
 	};
 
 	return (
-		<div className="modal modal-open">
+		<Modal open={open}>
 			<div className="modal-box max-h-[85vh] overflow-y-auto">
 				{sent ? (
 					<>
@@ -255,6 +281,6 @@ export default function ReportDialog({
 				)}
 			</div>
 			<button type="button" className="modal-backdrop" onClick={onClose} aria-label="Close" />
-		</div>
+		</Modal>
 	);
 }

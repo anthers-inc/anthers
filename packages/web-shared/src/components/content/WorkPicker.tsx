@@ -23,9 +23,12 @@ import { useEffect, useState } from "react";
 import { client } from "../../lib/rpc";
 import type { UploadableWorkType, Work } from "../../lib/types";
 import LoadingSpinner from "../ui/LoadingSpinner";
+import Modal from "../ui/Modal";
 import { itemPreviewUrl, LIBRARY_TYPE_OPTIONS, ProcessingBadge, TypeIcon } from "./works";
 
 interface WorkPickerProps {
+	/** Kept mounted while this is false so the shared wrapper can play the exit. */
+	open: boolean;
 	/** Everything selected, in the order it was ticked — the order the adds are sent in. */
 	onSelect: (works: Work[]) => void;
 	onClose: () => void;
@@ -33,24 +36,40 @@ interface WorkPickerProps {
 	excludeIds?: number[];
 }
 
-export default function WorkPicker({ onSelect, onClose, excludeIds = [] }: WorkPickerProps) {
+export default function WorkPicker({ open, onSelect, onClose, excludeIds = [] }: WorkPickerProps) {
 	const [items, setItems] = useState<Work[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [typeFilter, setTypeFilter] = useState<"all" | UploadableWorkType>("all");
 	/** The selection, as a set for O(1) row toggles and a list for the confirm's order. */
 	const [picked, setPicked] = useState<number[]>([]);
 
+	// Each open starts a fresh pick: the catalog is fetched again (a Work made since the
+	// last open belongs here) and nothing is still ticked from the previous pass.
 	useEffect(() => {
+		if (!open) return;
+		let live = true;
+		setLoading(true);
+		setPicked([]);
+		setTypeFilter("all");
 		client.api.content.works
 			.$get()
 			.then(async (res) => {
 				if (!res.ok) return { works: [] as Work[] };
 				return (await res.json()) as unknown as { works: Work[] };
 			})
-			.then((data) => setItems(data.works))
-			.catch(() => setItems([]))
-			.finally(() => setLoading(false));
-	}, []);
+			.then((data) => {
+				if (live) setItems(data.works);
+			})
+			.catch(() => {
+				if (live) setItems([]);
+			})
+			.finally(() => {
+				if (live) setLoading(false);
+			});
+		return () => {
+			live = false;
+		};
+	}, [open]);
 
 	const catalog = items.filter((i) => !excludeIds.includes(i.id));
 	const filtered = typeFilter === "all" ? catalog : catalog.filter((i) => i.type === typeFilter);
@@ -67,7 +86,7 @@ export default function WorkPicker({ onSelect, onClose, excludeIds = [] }: WorkP
 	const pickedSet = new Set(picked);
 
 	return (
-		<div className="modal modal-open" role="dialog">
+		<Modal open={open} label="Add Works">
 			<div className="modal-box max-w-4xl max-h-[90vh] flex flex-col gap-4">
 				<div className="flex items-center justify-between">
 					<h2 className="text-lg font-bold">Add Works</h2>
@@ -250,6 +269,6 @@ export default function WorkPicker({ onSelect, onClose, excludeIds = [] }: WorkP
 			<button type="button" className="modal-backdrop" onClick={onClose} aria-label="Close">
 				close
 			</button>
-		</div>
+		</Modal>
 	);
 }

@@ -60,6 +60,7 @@ import {
 	RESCHEDULE_ON_RETIRE,
 	RETIRED_QUEUES,
 } from "./queue.js";
+import { runQueueFailureReport } from "./queue-health.js";
 import { reconcileListings } from "./reconcile-listings.js";
 import { releaseScheduled } from "./release-scheduled.js";
 import { type RemoveAtprotoRecordData, removeAtprotoRecordJob } from "./remove-atproto-record.js";
@@ -572,6 +573,20 @@ async function start() {
 				console.warn(`[deadline-reminders] job ${job.id}: ${refused}`);
 			} else if (sent + skipped > 0) {
 				console.log(`[deadline-reminders] job ${job.id}: sent ${sent}, already sent ${skipped}`);
+			}
+		}
+	});
+
+	// The queue's own failures, read from pgboss every five minutes. Its alarm is the one the
+	// 2026-10-19 incident did not have; it records to the error tracker and never re-runs a
+	// job. A quiet run logs nothing.
+	await queue.work(QUEUES.QUEUE_FAILURES, async (jobs) => {
+		for (const job of jobs) {
+			const { ok, alarming, sent, error } = await runQueueFailureReport();
+			if (!ok && error) {
+				console.error(`[queue-failures] job ${job.id}: ${error}`);
+			} else if (sent > 0) {
+				console.log(`[queue-failures] job ${job.id}: alerted on ${alarming.length} queue(s)`);
 			}
 		}
 	});

@@ -205,6 +205,8 @@ export default function FinishSignupPage() {
 		badgeName: string;
 		preview: SubscriptionPreview;
 	} | null>(null);
+	/** Whether the confirmation dialog is showing. Its payload outlives it so the exit can play. */
+	const [chargeOpen, setChargeOpen] = useState(false);
 
 	/**
 	 * What the account that just came into existence still owes, and where it was headed.
@@ -408,6 +410,7 @@ export default function FinishSignupPage() {
 				return;
 			}
 			const preview = (await res.json()) as { isCancel: false } & SubscriptionPreview;
+			setChargeOpen(true);
 			setCharge({
 				anthersSupport: chosenAnthers,
 				directed: chosenDirected,
@@ -908,19 +911,20 @@ export default function FinishSignupPage() {
 
 			{charge && (
 				<SubscriptionPaymentModal
+					open={chargeOpen}
 					anthersSupport={charge.anthersSupport}
 					directed={charge.directed}
 					badgeName={charge.badgeName}
 					preview={charge.preview}
 					onComplete={() => {
-						setCharge(null);
+						setChargeOpen(false);
 						// A brand-new account gets the first-run state before anything else,
 						// including before the page that would show off the support it just
 						// bought — see FirstRun.tsx for why.
 						void leave(withNextPath("/welcome", destination.current));
 					}}
 					onClose={() => {
-						setCharge(null);
+						setChargeOpen(false);
 						// The card was declined or dismissed — but the account exists and is signed
 						// in, because confirming the address made it. That is the correct outcome
 						// and takes no unwinding: they have a free account, and support can be

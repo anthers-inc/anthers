@@ -332,13 +332,12 @@ export default function ProjectPosts({ projectSlug }: { projectSlug: string }) {
 				this list never deletes it.
 			</p>
 
-			{picking && (
-				<PostPicker
-					excludeIds={posts.map((p) => p.id)}
-					onSelect={add}
-					onClose={() => setPicking(false)}
-				/>
-			)}
+			<PostPicker
+				open={picking}
+				excludeIds={posts.map((p) => p.id)}
+				onSelect={add}
+				onClose={() => setPicking(false)}
+			/>
 		</div>
 	);
 }

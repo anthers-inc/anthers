@@ -1079,14 +1079,12 @@ export default function CreatorProfilePage() {
 				onSave={(crop) => void saveFramed(crop)}
 			/>
 
-			{reporting && (
-				<ReportDialog
-					subjectType="user"
-					subjectId={creator.id}
-					label={displayHandle(creator.handle)}
-					onClose={() => setReporting(false)}
-				/>
-			)}
+			<ReportDialog
+				subject={
+					reporting ? { type: "user", id: creator.id, label: displayHandle(creator.handle) } : null
+				}
+				onClose={() => setReporting(false)}
+			/>
 		</div>
 	);
 }

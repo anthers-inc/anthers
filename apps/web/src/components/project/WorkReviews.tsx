@@ -527,14 +527,14 @@ export default function WorkReviews({ workId }: { workId: number }) {
 				</>
 			)}
 
-			{reportingReview !== null && (
-				<ReportDialog
-					subjectType="review"
-					subjectId={reportingReview}
-					label="this review"
-					onClose={() => setReportingReview(null)}
-				/>
-			)}
+			<ReportDialog
+				subject={
+					reportingReview !== null
+						? { type: "review", id: reportingReview, label: "this review" }
+						: null
+				}
+				onClose={() => setReportingReview(null)}
+			/>
 		</div>
 	);
 }

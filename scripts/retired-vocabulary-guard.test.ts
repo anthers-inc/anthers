@@ -99,7 +99,7 @@ const BUDGET: Record<string, number> = {
 	"apps/web/src/components/calculators/video-model.ts": 2,
 	"apps/api/src/__tests__/unlock-offer.test.ts": 1,
 	"apps/api/src/__tests__/support-split.test.ts": 1,
-	"apps/api/src/routes/content.ts": 1,
+	"apps/api/src/routes/content/posts.ts": 1,
 	"apps/api/src/jobs/distribute-pool.ts": 1,
 	"apps/web/src/content/faq.tsx": 1,
 	"apps/web/src/pages/ForCreatorsPage.tsx": 1,
