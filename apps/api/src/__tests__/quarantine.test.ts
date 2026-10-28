@@ -349,7 +349,6 @@ describe("The record and the hold", () => {
 				reporterId: buyerId,
 				reason: "spam",
 				details: "fixture report",
-				escalatedAt: new Date(),
 			})
 			.returning({ id: moderationReports.id });
 
@@ -416,7 +415,6 @@ describe("The record and the hold", () => {
 				reporterId: buyerId,
 				reason: "spam",
 				details: "fixture report 2",
-				escalatedAt: new Date(),
 			})
 			.returning({ id: moderationReports.id });
 

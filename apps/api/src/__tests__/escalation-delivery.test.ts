@@ -27,6 +27,7 @@ import {
 } from "../services/delivery-events.js";
 import { sendEmail } from "../services/email.js";
 import { SKIP_ABUSE_TESTS } from "./abuse-optin.js";
+import { markEscalated } from "./escalation-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 describe.skipIf(SKIP_ABUSE_TESTS)("Reading a stored event", () => {
@@ -100,11 +101,10 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Recording what the provider tells us", () => 
 				url: "https://anthers.org/works/delivery-fixture",
 				reason: "illegal",
 				details: "delivery lookup fixture",
-				escalatedAt: new Date(),
-				escalationMessageId: ABUSE_MSG,
 			})
 			.returning({ id: abuseReports.id });
 		abuseId = a.id;
+		await markEscalated("abuse", abuseId, { messageId: ABUSE_MSG });
 
 		const [r] = await db
 			.insert(moderationReports)
@@ -113,11 +113,10 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Recording what the provider tells us", () => 
 				subjectId: 909_001,
 				reason: "csam",
 				details: "delivery lookup fixture",
-				escalatedAt: new Date(),
-				escalationMessageId: REPORT_MSG,
 			})
 			.returning({ id: moderationReports.id });
 		reportId = r.id;
+		await markEscalated("moderation", reportId, { messageId: REPORT_MSG });
 	}, DB_SETUP_TIMEOUT);
 
 	it("records a delivery against the right intake, which are separate tables", async () => {

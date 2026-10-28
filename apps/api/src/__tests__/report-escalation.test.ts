@@ -19,7 +19,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { comments, moderationReports } from "@anthers/db/schema";
+import { comments, moderationReports, outboundEmails } from "@anthers/db/schema";
 import { isLegalReason, LEGAL_MODERATION_REASONS } from "@anthers/shared/moderation";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import app from "../index";
@@ -28,6 +28,7 @@ import { SKIP_ABUSE_TESTS } from "./abuse-optin.js";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
 import { purgeFixtureAccounts } from "./cleanup.js";
+import { clearEscalation, markEscalated } from "./escalation-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -130,11 +131,11 @@ async function fixtureReport(reason: string, commentId: number): Promise<{ id: n
 
 async function escalatedAt(reportId: number): Promise<Date | null> {
 	const [row] = await db
-		.select({ escalatedAt: moderationReports.escalatedAt })
-		.from(moderationReports)
-		.where(eq(moderationReports.id, reportId))
+		.select({ sentAt: outboundEmails.sentAt })
+		.from(outboundEmails)
+		.where(eq(outboundEmails.dedupeKey, `moderation-escalation:${reportId}`))
 		.limit(1);
-	return row?.escalatedAt ?? null;
+	return row?.sentAt ?? null;
 }
 
 describe.skipIf(SKIP_ABUSE_TESTS)("The legal taxonomy", () => {
@@ -201,10 +202,7 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Filing a legal report", () => {
 
 	it("stops selecting a report once somebody has actually been told", async () => {
 		const row = await fixtureReport("violence", commentIds[2]);
-		await db
-			.update(moderationReports)
-			.set({ escalatedAt: new Date() })
-			.where(eq(moderationReports.id, row.id));
+		await markEscalated("moderation", row.id);
 
 		expect(await pendingEscalations()).not.toContain(row.id);
 	});
@@ -227,21 +225,18 @@ describe.skipIf(SKIP_ABUSE_TESTS)("What the console can see", () => {
 
 	it("says a legal report has not reached a human, and then that it has", async () => {
 		const target = commentIds[0]; // the `illegal` report
-		await db
-			.update(moderationReports)
-			.set({ escalatedAt: null })
+		const [report] = await db
+			.select({ id: moderationReports.id })
+			.from(moderationReports)
 			.where(
 				and(eq(moderationReports.subjectType, "comment"), eq(moderationReports.subjectId, target)),
-			);
+			)
+			.limit(1);
+		await clearEscalation("moderation", report.id);
 		expect((await itemFor(target))?.legalAlerted).toBe(false);
 
 		const when = new Date();
-		await db
-			.update(moderationReports)
-			.set({ escalatedAt: when })
-			.where(
-				and(eq(moderationReports.subjectType, "comment"), eq(moderationReports.subjectId, target)),
-			);
+		await markEscalated("moderation", report.id, { sentAt: when });
 		const after = await itemFor(target);
 		expect(after?.legalAlerted).toBe(true);
 		expect(after?.lastEscalatedAt).toBe(when.toISOString());

@@ -33,6 +33,7 @@ import { SKIP_ABUSE_TESTS } from "./abuse-optin.js";
 import { createAccount } from "./account-fixture";
 import { createAdminFixture } from "./admin-fixture";
 import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
+import { markEscalated } from "./escalation-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 import { insertWork } from "./work-fixtures.js";
 
@@ -260,10 +261,7 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Which reports are owed an alert", () => {
 		// "never selected" — which is what a broken floor list would look like.
 		expect(await pendingAbuseEscalations()).toContain(reportId);
 
-		await db
-			.update(abuseReports)
-			.set({ escalatedAt: new Date() })
-			.where(eq(abuseReports.id, reportId));
+		await markEscalated("abuse", reportId);
 
 		expect(await pendingAbuseEscalations()).not.toContain(reportId);
 	});
@@ -363,7 +361,6 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Retention", () => {
 				status: "dismissed",
 				resolvedAt: settled,
 				createdAt: settled,
-				escalatedAt: new Date(),
 			})
 			.returning({ id: abuseReports.id });
 		const [held] = await db
@@ -376,7 +373,6 @@ describe.skipIf(SKIP_ABUSE_TESTS)("Retention", () => {
 				status: "dismissed",
 				resolvedAt: settled,
 				createdAt: settled,
-				escalatedAt: new Date(),
 			})
 			.returning({ id: abuseReports.id });
 		await placeHold({

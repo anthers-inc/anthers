@@ -35,6 +35,7 @@ import { redactClosedModerationReports } from "../services/retention.js";
 import { createAccount } from "./account-fixture";
 import { createAdminFixture } from "./admin-fixture";
 import { purgeAccountsCreatedHere, purgeAdminAccountsCreatedHere } from "./cleanup";
+import { markEscalated } from "./escalation-fixture.js";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure.
@@ -128,11 +129,11 @@ async function seedRedactableReport(reporterId: number, subjectId: number): Prom
 			status: "dismissed",
 			resolvedAt: longAgo(),
 			createdAt: longAgo(),
-			// Already escalated, so the floor sweep leaves it alone and this test is
-			// measuring redaction rather than racing an alert.
-			escalatedAt: new Date(),
 		})
 		.returning({ id: moderationReports.id });
+	// Already escalated, so the floor sweep leaves it alone and this test is measuring
+	// redaction rather than racing an alert.
+	await markEscalated("moderation", row.id);
 	return row.id;
 }
 
