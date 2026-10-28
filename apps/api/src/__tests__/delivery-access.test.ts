@@ -24,7 +24,13 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, purchases, transcodingJobs, users, workSourceFiles } from "@anthers/db/schema";
+import {
+	purchases,
+	users,
+	workAssets,
+	workSourceFiles,
+	workTranscodingJobs,
+} from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { downloadAsset } from "./access-fixture";
@@ -113,7 +119,7 @@ describe("Delivery-layer access", () => {
 			...LOCKED,
 		});
 		audioItemId = audio.id;
-		await db.insert(transcodingJobs).values({
+		await db.insert(workTranscodingJobs).values({
 			workId: audioItemId,
 			mediaType: "audio",
 			status: "completed",
@@ -128,7 +134,7 @@ describe("Delivery-layer access", () => {
 			...LOCKED,
 		});
 		videoItemId = video.id;
-		await db.insert(transcodingJobs).values({
+		await db.insert(workTranscodingJobs).values({
 			workId: videoItemId,
 			mediaType: "video",
 			status: "completed",
@@ -143,7 +149,7 @@ describe("Delivery-layer access", () => {
 			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		freeAudioId = freeAudio.id;
-		await db.insert(transcodingJobs).values({
+		await db.insert(workTranscodingJobs).values({
 			workId: freeAudioId,
 			mediaType: "audio",
 			status: "completed",
@@ -159,7 +165,7 @@ describe("Delivery-layer access", () => {
 		});
 		freeWorkId = game.id;
 		const [gameAsset] = await db
-			.insert(assets)
+			.insert(workAssets)
 			.values({
 				workId: freeWorkId,
 				file: "creators/x/games/open-game.zip",
@@ -174,7 +180,7 @@ describe("Delivery-layer access", () => {
 	}, DB_SETUP_TIMEOUT);
 
 	// The usernames carry a per-run suffix, so without this each run's rows stay in the
-	// shared dev database forever — including the simulated transcoding_jobs above, which
+	// shared dev database forever — including the simulated work_transcoding_jobs above, which
 	// the worker's boot-time resume sweep used to re-send as real jobs on every `make dev`.
 	// Works and posts must go first and by creator_id: both are ON DELETE SET NULL (a Work
 	// outlives its creator's account), so deleting the users alone orphans them instead.

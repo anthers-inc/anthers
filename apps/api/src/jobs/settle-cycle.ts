@@ -37,7 +37,6 @@
 
 import { db } from "@anthers/db";
 import {
-	accountCycles,
 	badgeCharges,
 	creatorCredits,
 	crfLedger,
@@ -45,6 +44,7 @@ import {
 	invoices,
 	monthSettlements,
 	poolDistributions,
+	userCycles,
 	users,
 } from "@anthers/db/schema";
 import {
@@ -504,10 +504,10 @@ async function settleSupporterMonth(
 			foundation: inflow.toFixed(2),
 		};
 		await tx
-			.insert(accountCycles)
+			.insert(userCycles)
 			.values({ userId, billingCycle: month, ...snapshot })
 			.onConflictDoUpdate({
-				target: [accountCycles.userId, accountCycles.billingCycle],
+				target: [userCycles.userId, userCycles.billingCycle],
 				set: { ...snapshot, updatedAt: now },
 			});
 

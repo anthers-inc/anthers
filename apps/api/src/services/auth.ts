@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 import { db } from "@anthers/db/client";
-import { desktopAuthRequests, sessions, users } from "@anthers/db/schema";
+import { desktopAuthRequests, userSessions, users } from "@anthers/db/schema";
 import { and, desc, eq, gt, isNull, lt, notInArray } from "drizzle-orm";
 import { allHeldSubjectIds } from "./legal-hold.js";
 
 const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-/** How stale `sessions.last_used_at` may get before a request refreshes it. */
+/** How stale `user_sessions.last_used_at` may get before a request refreshes it. */
 const LAST_USED_THROTTLE_MS = 60 * 60 * 1000; // 1 hour
 /** Enrollment window — long enough to read the authorize page, short enough to matter. */
 const DESKTOP_AUTH_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
-/** How a session is carried. See `sessions.kind`. */
+/** How a session is carried. See `user_sessions.kind`. */
 export type SessionKind = "web" | "desktop";
 
 // ─── Token Generation ────────────────────────────────────────────────────────
@@ -49,7 +49,7 @@ export async function createSession(
 	const token = generateToken();
 	const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_MS);
 
-	await db.insert(sessions).values({
+	await db.insert(userSessions).values({
 		token,
 		userId,
 		ipAddress: ipAddress ?? null,
@@ -66,15 +66,15 @@ export async function createSession(
 export async function validateSession(token: string) {
 	const result = await db
 		.select({
-			session: sessions,
+			session: userSessions,
 			user: users,
 		})
-		.from(sessions)
-		.innerJoin(users, eq(sessions.userId, users.id))
+		.from(userSessions)
+		.innerJoin(users, eq(userSessions.userId, users.id))
 		.where(
 			and(
-				eq(sessions.token, token),
-				gt(sessions.expiresAt, new Date()),
+				eq(userSessions.token, token),
+				gt(userSessions.expiresAt, new Date()),
 				// A suspended account is gone as far as its holder is concerned: no session
 				// of it may authenticate, however fresh. `suspendAccount` deletes the rows
 				// outright, so this predicate is the backstop rather than the mechanism —
@@ -97,7 +97,7 @@ export async function validateSession(token: string) {
 
 /** Delete a session (sign out) */
 export async function deleteSession(token: string): Promise<void> {
-	await db.delete(sessions).where(eq(sessions.token, token));
+	await db.delete(userSessions).where(eq(userSessions.token, token));
 }
 
 /**
@@ -115,9 +115,9 @@ export async function touchSession(session: {
 	const now = Date.now();
 	if (session.lastUsedAt && now - session.lastUsedAt.getTime() < LAST_USED_THROTTLE_MS) return;
 	await db
-		.update(sessions)
+		.update(userSessions)
 		.set({ lastUsedAt: new Date(now) })
-		.where(eq(sessions.id, session.id));
+		.where(eq(userSessions.id, session.id));
 }
 
 /**
@@ -127,18 +127,18 @@ export async function touchSession(session: {
 export async function listUserSessions(userId: number) {
 	return db
 		.select({
-			id: sessions.id,
-			kind: sessions.kind,
-			label: sessions.label,
-			ipAddress: sessions.ipAddress,
-			userAgent: sessions.userAgent,
-			lastUsedAt: sessions.lastUsedAt,
-			createdAt: sessions.createdAt,
-			expiresAt: sessions.expiresAt,
+			id: userSessions.id,
+			kind: userSessions.kind,
+			label: userSessions.label,
+			ipAddress: userSessions.ipAddress,
+			userAgent: userSessions.userAgent,
+			lastUsedAt: userSessions.lastUsedAt,
+			createdAt: userSessions.createdAt,
+			expiresAt: userSessions.expiresAt,
 		})
-		.from(sessions)
-		.where(and(eq(sessions.userId, userId), gt(sessions.expiresAt, new Date())))
-		.orderBy(desc(sessions.createdAt));
+		.from(userSessions)
+		.where(and(eq(userSessions.userId, userId), gt(userSessions.expiresAt, new Date())))
+		.orderBy(desc(userSessions.createdAt));
 }
 
 /**
@@ -148,9 +148,9 @@ export async function listUserSessions(userId: number) {
  */
 export async function revokeUserSession(userId: number, sessionId: number): Promise<boolean> {
 	const deleted = await db
-		.delete(sessions)
-		.where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)))
-		.returning({ id: sessions.id });
+		.delete(userSessions)
+		.where(and(eq(userSessions.id, sessionId), eq(userSessions.userId, userId)))
+		.returning({ id: userSessions.id });
 	return deleted.length > 0;
 }
 
@@ -281,12 +281,12 @@ export async function deleteExpiredSessions(): Promise<number> {
 	// row and preserves the address.
 	const held = await allHeldSubjectIds("user");
 	const gone = await db
-		.delete(sessions)
+		.delete(userSessions)
 		.where(
 			held.length > 0
-				? and(lt(sessions.expiresAt, new Date()), notInArray(sessions.userId, held))
-				: lt(sessions.expiresAt, new Date()),
+				? and(lt(userSessions.expiresAt, new Date()), notInArray(userSessions.userId, held))
+				: lt(userSessions.expiresAt, new Date()),
 		)
-		.returning({ id: sessions.id });
+		.returning({ id: userSessions.id });
 	return gone.length;
 }

@@ -24,7 +24,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
-import { transcodingJobs, works } from "@anthers/db/schema";
+import { works, workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import {
 	API_URL,
@@ -437,7 +437,7 @@ test("a Work's page and the Dashboard follow its processing", async ({ page, con
 		.update(works)
 		.set({ sourceKey: `creators/0/video/upload-walk-${work.id}.mp4` })
 		.where(eq(works.id, work.id));
-	await db.insert(transcodingJobs).values({
+	await db.insert(workTranscodingJobs).values({
 		workId: work.id,
 		mediaType: "video",
 		status: "processing",
@@ -472,16 +472,16 @@ test("a Work's page and the Dashboard follow its processing", async ({ page, con
 	// The page re-reads the job on its own. An audio or ebook job has no estimate, and the page
 	// says nothing about one rather than an empty "left".
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({ progress: 80, etaSeconds: null })
-		.where(eq(transcodingJobs.workId, work.id));
+		.where(eq(workTranscodingJobs.workId, work.id));
 	await expect(page.getByText("80%", { exact: true })).toBeVisible({ timeout: 15_000 });
 	await expect(page.getByText(/ left$/)).toHaveCount(0);
 
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({ status: "completed", progress: 100, updatedAt: new Date() })
-		.where(eq(transcodingJobs.workId, work.id));
+		.where(eq(workTranscodingJobs.workId, work.id));
 	await expect(page.getByText("Processing…")).toHaveCount(0, { timeout: 15_000 });
 
 	// And the Dashboard keeps it for the day, as ready. It is a tab on the creator's own

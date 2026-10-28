@@ -18,7 +18,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { physicalListings, works } from "@anthers/db/schema";
+import { workPhysicalListings, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
 import { createAccount, type FixtureAccount } from "./account-fixture";
@@ -147,8 +147,8 @@ describe("a physical Work's listing", () => {
 		expect(res.status).toBe(200);
 		const rows = await db
 			.select()
-			.from(physicalListings)
-			.where(eq(physicalListings.workId, physicalWork));
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, physicalWork));
 		expect(rows).toHaveLength(1);
 		expect(rows[0].options).toEqual([]);
 		expect(rows[0].shippingPrice).toBe("0.00");
@@ -182,8 +182,8 @@ describe("a physical Work's listing", () => {
 	it("reports every problem at once and leaves the saved row alone", async () => {
 		const before = await db
 			.select()
-			.from(physicalListings)
-			.where(eq(physicalListings.workId, physicalWork));
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, physicalWork));
 
 		const res = await call("PUT", `/api/content/works/${physicalWork}/physical`, creator.cookie, {
 			shippingPrice: "four",
@@ -197,8 +197,8 @@ describe("a physical Work's listing", () => {
 
 		const after = await db
 			.select()
-			.from(physicalListings)
-			.where(eq(physicalListings.workId, physicalWork));
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, physicalWork));
 		expect(after).toEqual(before);
 	});
 
@@ -210,8 +210,8 @@ describe("a physical Work's listing", () => {
 	it("keeps the listing one-to-one with the Work", async () => {
 		const rows = await db
 			.select()
-			.from(physicalListings)
-			.where(eq(physicalListings.workId, physicalWork));
+			.from(workPhysicalListings)
+			.where(eq(workPhysicalListings.workId, physicalWork));
 		expect(rows).toHaveLength(1);
 		// The Work itself is untouched by any of this — the price and the art stay its own.
 		const [work] = await db.select().from(works).where(eq(works.id, physicalWork));

@@ -13,7 +13,7 @@
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accountCycles, userPreferences } from "@anthers/db/schema";
+import { userCycles, userPreferences } from "@anthers/db/schema";
 import app from "../index";
 import { createAccount } from "./account-fixture";
 import { purgeAccountsCreatedHere } from "./cleanup";
@@ -51,7 +51,7 @@ async function supporter(tag: string, perCycle: number, cycles: number, listed =
 			set: { listedAsSupporter: listed },
 		});
 	for (let i = 0; i < cycles; i++) {
-		await db.insert(accountCycles).values({
+		await db.insert(userCycles).values({
 			userId,
 			billingCycle: `2029-${String(i + 1).padStart(2, "0")}-01`,
 			anthersSupport: perCycle.toFixed(2),

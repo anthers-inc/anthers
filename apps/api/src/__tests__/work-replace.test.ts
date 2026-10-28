@@ -21,12 +21,12 @@
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	transcodingJobs,
 	users,
-	webBuilds,
+	workBuilds,
 	workMediaVersions,
 	workSourceFiles,
 	works,
+	workTranscodingJobs,
 } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import app from "../index";
@@ -95,8 +95,10 @@ describe("replace-in-place retires the old version", () => {
 		// Works first (creator_id is SET NULL — removing the user would orphan content).
 		if (createdWorkIds.length > 0) {
 			await db.delete(workSourceFiles).where(inArray(workSourceFiles.workId, createdWorkIds));
-			await db.delete(transcodingJobs).where(inArray(transcodingJobs.workId, createdWorkIds));
-			await db.delete(webBuilds).where(inArray(webBuilds.workId, createdWorkIds));
+			await db
+				.delete(workTranscodingJobs)
+				.where(inArray(workTranscodingJobs.workId, createdWorkIds));
+			await db.delete(workBuilds).where(inArray(workBuilds.workId, createdWorkIds));
 			await db.delete(works).where(inArray(works.id, createdWorkIds));
 		}
 		await db.delete(users).where(eq(users.id, creatorId));
@@ -156,7 +158,7 @@ describe("replace-in-place retires the old version", () => {
 					versionAddedAt: uploadedAt,
 				})
 				.where(eq(works.id, work.id));
-			await db.insert(transcodingJobs).values([
+			await db.insert(workTranscodingJobs).values([
 				{
 					workId: work.id,
 					mediaType: "video",
@@ -203,8 +205,8 @@ describe("replace-in-place retires the old version", () => {
 				// replacement, which the release gate and the status badge both read.
 				const rows = await db
 					.select()
-					.from(transcodingJobs)
-					.where(eq(transcodingJobs.workId, work.id));
+					.from(workTranscodingJobs)
+					.where(eq(workTranscodingJobs.workId, work.id));
 				expect(rows).toHaveLength(1);
 				expect(rows[0].status).toBe("pending");
 				expect(rows[0].mediaType).toBe("video");

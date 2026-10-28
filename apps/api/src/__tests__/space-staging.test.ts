@@ -21,7 +21,7 @@
 
 import { afterAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { libraryItems, userSpaces } from "@anthers/db/schema";
+import { userLibraryItems, userSpaces } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { SpaceClient } from "../services/atproto-space.js";
 import { drainSpaceOutbox, enqueueLibraryItem } from "../services/space-outbox.js";
@@ -156,8 +156,8 @@ staged("the user-space outbox against a staging PDS", () => {
 
 		const [library] = await db
 			.select()
-			.from(libraryItems)
-			.where(and(eq(libraryItems.userId, userId), eq(libraryItems.workId, workId)));
+			.from(userLibraryItems)
+			.where(and(eq(userLibraryItems.userId, userId), eq(userLibraryItems.workId, workId)));
 		expect(library).toBeTruthy();
 	});
 
@@ -214,7 +214,7 @@ staged("the user-space outbox against a staging PDS", () => {
 
 	it("08: rebuilds the Library from the space alone", async () => {
 		await setUp();
-		await db.delete(libraryItems).where(eq(libraryItems.userId, userId));
+		await db.delete(userLibraryItems).where(eq(userLibraryItems.userId, userId));
 		const rebuilt = await rebuildLibraryProjection(userId, { resolveSession });
 		if ("reason" in rebuilt) throw new Error(`rebuild failed: ${rebuilt.reason}`);
 		expect(rebuilt.inserted).toBe(1);

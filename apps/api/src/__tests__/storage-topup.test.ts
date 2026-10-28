@@ -19,7 +19,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accountCycles, badges, billingAccounts, userBadges, users } from "@anthers/db/schema";
+import { badges, billingAccounts, userBadges, userCycles, users } from "@anthers/db/schema";
 import { currentCycleKey, previousCycleKey } from "@anthers/shared/billing-cycle";
 import { STORAGE_LADDER_GIB, STORAGE_PER_GIB_MONTH } from "@anthers/shared/constants";
 import { and, eq } from "drizzle-orm";
@@ -129,14 +129,14 @@ function cycleStartFor(key: string): Date {
 	return new Date(Date.UTC(y, m - 1, 1));
 }
 
-/** One `account_cycles` row holding `gib` GiB, for the named cycle. */
+/** One `user_cycles` row holding `gib` GiB, for the named cycle. */
 async function meterBytes(gib: number, cycle: string) {
 	const bytes = Math.round(gib * 1024 ** 3);
 	await db
-		.insert(accountCycles)
+		.insert(userCycles)
 		.values({ userId, billingCycle: cycle, bytes, purposes: { catalog: bytes } })
 		.onConflictDoUpdate({
-			target: [accountCycles.userId, accountCycles.billingCycle],
+			target: [userCycles.userId, userCycles.billingCycle],
 			set: { bytes, purposes: { catalog: bytes } },
 		});
 }

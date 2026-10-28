@@ -43,7 +43,7 @@
  * public's behalf would be charging them for the program.
  */
 
-import { assets, db, webBuildFiles, webBuilds, workMediaVersions, works } from "@anthers/db";
+import { db, workAssets, workBuildFiles, workBuilds, workMediaVersions, works } from "@anthers/db";
 import type { WorkVersionMedia } from "@anthers/db/schema";
 import { and, eq, exists, isNull, ne, or, type SQL, sql } from "drizzle-orm";
 
@@ -133,15 +133,15 @@ export async function preservationInventory(): Promise<{ works: number; bytes: n
 		.where(or(eq(works.preserved, true), hasPreservedVersion));
 	// The current version's counted media, where the current version is the one preserved.
 	const [assetTotal] = await db
-		.select({ total: sql<string>`COALESCE(SUM(${assets.fileSize}), 0)` })
-		.from(assets)
-		.innerJoin(works, eq(assets.workId, works.id))
+		.select({ total: sql<string>`COALESCE(SUM(${workAssets.fileSize}), 0)` })
+		.from(workAssets)
+		.innerJoin(works, eq(workAssets.workId, works.id))
 		.where(eq(works.preserved, true));
 	const [buildTotal] = await db
-		.select({ total: sql<string>`COALESCE(SUM(${webBuildFiles.fileSize}), 0)` })
-		.from(webBuildFiles)
-		.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
-		.innerJoin(works, eq(webBuilds.workId, works.id))
+		.select({ total: sql<string>`COALESCE(SUM(${workBuildFiles.fileSize}), 0)` })
+		.from(workBuildFiles)
+		.innerJoin(workBuilds, eq(workBuildFiles.buildId, workBuilds.id))
+		.innerJoin(works, eq(workBuilds.workId, works.id))
 		.where(eq(works.preserved, true));
 	// And the preserved archived versions, whose manifests carry their own sizes.
 	const archived = await db

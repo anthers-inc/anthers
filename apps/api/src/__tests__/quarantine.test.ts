@@ -25,12 +25,12 @@
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	assets,
 	mediaQuarantine,
 	moderationActions,
 	moderationReports,
 	purchases,
 	users,
+	workAssets,
 	works,
 } from "@anthers/db/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -111,7 +111,7 @@ async function seedSoldWork(title: string) {
 	const key = `creators/${creatorId}/assets/${work.publicId}-build.zip`;
 	await storage.upload(key, Buffer.from("pretend build bytes"), "application/zip");
 	const [asset] = await db
-		.insert(assets)
+		.insert(workAssets)
 		.values({ workId: work.id, file: key, filename: "build.zip", fileSize: 19 })
 		.returning();
 
@@ -711,7 +711,10 @@ afterAll(async () => {
 		.from(works)
 		.where(eq(works.creatorId, creatorId));
 	for (const w of workRows) {
-		const [a] = await db.select({ file: assets.file }).from(assets).where(eq(assets.workId, w.id));
+		const [a] = await db
+			.select({ file: workAssets.file })
+			.from(workAssets)
+			.where(eq(workAssets.workId, w.id));
 		if (a?.file) await storage.delete(a.file).catch(() => {});
 	}
 

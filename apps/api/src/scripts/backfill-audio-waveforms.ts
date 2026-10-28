@@ -27,7 +27,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { transcodingJobs, works } from "@anthers/db/schema";
+import { works, workTranscodingJobs } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { generateWaveform } from "../jobs/process-audio.js";
 import { storage } from "../services/storage/index.js";
@@ -65,20 +65,20 @@ async function main() {
 	// rows only, because a pending or failed one has nothing stored to replace.
 	const jobRows = await db
 		.select({
-			id: transcodingJobs.id,
-			workId: transcodingJobs.workId,
-			timings: transcodingJobs.timings,
+			id: workTranscodingJobs.id,
+			workId: workTranscodingJobs.workId,
+			timings: workTranscodingJobs.timings,
 		})
-		.from(transcodingJobs)
+		.from(workTranscodingJobs)
 		.where(
 			and(
-				eq(transcodingJobs.mediaType, "audio"),
-				eq(transcodingJobs.status, "completed"),
-				isNotNull(transcodingJobs.waveformData),
-				...(args.workId != null ? [eq(transcodingJobs.workId, args.workId)] : []),
+				eq(workTranscodingJobs.mediaType, "audio"),
+				eq(workTranscodingJobs.status, "completed"),
+				isNotNull(workTranscodingJobs.waveformData),
+				...(args.workId != null ? [eq(workTranscodingJobs.workId, args.workId)] : []),
 			),
 		)
-		.orderBy(transcodingJobs.id);
+		.orderBy(workTranscodingJobs.id);
 
 	if (jobRows.length === 0) {
 		console.log("No completed audio jobs carry a waveform — nothing to do.");
@@ -139,9 +139,9 @@ async function main() {
 			}
 			for (const job of jobs) {
 				await db
-					.update(transcodingJobs)
+					.update(workTranscodingJobs)
 					.set({ waveformData: waveform })
-					.where(eq(transcodingJobs.id, job.id));
+					.where(eq(workTranscodingJobs.id, job.id));
 			}
 			changed++;
 			console.log(`  recomputed ${label} (${spread})`);

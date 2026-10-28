@@ -30,7 +30,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { transcodingJobs, workPages, works } from "@anthers/db/schema";
+import { workPages, works, workTranscodingJobs } from "@anthers/db/schema";
 import { and, desc, eq, gt } from "drizzle-orm";
 import sharp from "sharp";
 import { isEpubSource } from "../lib/paged-ingest.js";
@@ -101,9 +101,9 @@ async function pageCount(path: string): Promise<number> {
 
 async function updateProgress(jobId: number, progress: number) {
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({ progress, updatedAt: new Date() })
-		.where(eq(transcodingJobs.id, jobId));
+		.where(eq(workTranscodingJobs.id, jobId));
 }
 
 /**
@@ -114,9 +114,9 @@ async function updateProgress(jobId: number, progress: number) {
  */
 async function stillProcessing(jobId: number): Promise<boolean> {
 	const [row] = await db
-		.select({ status: transcodingJobs.status })
-		.from(transcodingJobs)
-		.where(eq(transcodingJobs.id, jobId))
+		.select({ status: workTranscodingJobs.status })
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.id, jobId))
 		.limit(1);
 	return row?.status === "processing";
 }
@@ -154,9 +154,9 @@ export async function renderPaged(data: RenderPagedData) {
 	const { jobId } = data;
 
 	const [claimed] = await db
-		.select({ workId: transcodingJobs.workId })
-		.from(transcodingJobs)
-		.where(eq(transcodingJobs.id, jobId))
+		.select({ workId: workTranscodingJobs.workId })
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.id, jobId))
 		.limit(1);
 	if (!claimed) throw new Error(`TranscodingJob ${jobId} not found`);
 
@@ -166,8 +166,8 @@ export async function renderPaged(data: RenderPagedData) {
 async function runPagedRender(jobId: number) {
 	const [job] = await db
 		.select()
-		.from(transcodingJobs)
-		.where(eq(transcodingJobs.id, jobId))
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.id, jobId))
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 	// Idempotency: a late pg-boss retry of a job already finished (e.g. by the worker's
@@ -198,16 +198,16 @@ async function runPagedRender(jobId: number) {
 	// chance left and runs. A newest job that is `canceled` carries the creator's stop
 	// forward, so this one settles canceled rather than resurrecting the work.
 	const [newest] = await db
-		.select({ id: transcodingJobs.id, status: transcodingJobs.status })
-		.from(transcodingJobs)
+		.select({ id: workTranscodingJobs.id, status: workTranscodingJobs.status })
+		.from(workTranscodingJobs)
 		.where(
 			and(
-				eq(transcodingJobs.workId, job.workId),
-				eq(transcodingJobs.mediaType, "ebook"),
-				gt(transcodingJobs.id, jobId),
+				eq(workTranscodingJobs.workId, job.workId),
+				eq(workTranscodingJobs.mediaType, "ebook"),
+				gt(workTranscodingJobs.id, jobId),
 			),
 		)
-		.orderBy(desc(transcodingJobs.id))
+		.orderBy(desc(workTranscodingJobs.id))
 		.limit(1);
 	if (newest && newest.status !== "failed") {
 		const settled = newest.status === "canceled" ? "canceled" : "completed";
@@ -216,12 +216,12 @@ async function runPagedRender(jobId: number) {
 		);
 		if (settled === "canceled") {
 			await db
-				.update(transcodingJobs)
+				.update(workTranscodingJobs)
 				.set({ status: "canceled", etaSeconds: null, errorMessage: "", updatedAt: new Date() })
-				.where(eq(transcodingJobs.id, jobId));
+				.where(eq(workTranscodingJobs.id, jobId));
 		} else {
 			await db
-				.update(transcodingJobs)
+				.update(workTranscodingJobs)
 				.set({
 					status: "completed",
 					progress: 100,
@@ -229,7 +229,7 @@ async function runPagedRender(jobId: number) {
 					errorMessage: "",
 					updatedAt: new Date(),
 				})
-				.where(eq(transcodingJobs.id, jobId));
+				.where(eq(workTranscodingJobs.id, jobId));
 		}
 		return;
 	}
@@ -238,9 +238,9 @@ async function runPagedRender(jobId: number) {
 	// reaching the row has consumed the excuse, so whatever kills THIS run says for
 	// itself.
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({ status: "processing", progress: 0, interruptedGracefully: false, updatedAt: new Date() })
-		.where(eq(transcodingJobs.id, jobId));
+		.where(eq(workTranscodingJobs.id, jobId));
 
 	const [work] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
 	if (!work) throw new Error(`Work ${job.workId} not found`);
@@ -466,7 +466,7 @@ async function runPagedRender(jobId: number) {
 		}
 
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({
 				status: "completed",
 				progress: 100,
@@ -476,16 +476,16 @@ async function runPagedRender(jobId: number) {
 				errorMessage: "",
 				updatedAt: new Date(),
 			})
-			.where(eq(transcodingJobs.id, jobId));
+			.where(eq(workTranscodingJobs.id, jobId));
 		console.log(
 			`[render-paged] work ${work.id} → ${flat.length} page(s) from ${sources.length} file(s)`,
 		);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "failed", errorMessage: message, updatedAt: new Date() })
-			.where(eq(transcodingJobs.id, jobId));
+			.where(eq(workTranscodingJobs.id, jobId));
 		throw error;
 	} finally {
 		// Rendered sources were emptied at each pass's end; a failure before that still

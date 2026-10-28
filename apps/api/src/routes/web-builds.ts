@@ -26,7 +26,7 @@
  * list is whole. Nothing guesses when an export is finished.
  */
 
-import { assets, db, webBuildFiles, webBuilds, works } from "@anthers/db";
+import { db, workAssets, workBuildFiles, workBuilds, works } from "@anthers/db";
 import { zValidator } from "@hono/zod-validator";
 import { and, count, eq, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -109,7 +109,7 @@ const webBuildRoutes = new Hono()
 		if (problem) return c.json({ error: problem }, 400);
 
 		const [build] = await db
-			.insert(webBuilds)
+			.insert(workBuilds)
 			.values({ workId, label, entryPath, requiresIsolation })
 			.returning();
 		return c.json({ build }, 201);
@@ -125,9 +125,9 @@ const webBuildRoutes = new Hono()
 			return c.json({ error: "Only a game or software Work carries a browser build." }, 400);
 		}
 		const [build] = await db
-			.select({ id: webBuilds.id })
-			.from(webBuilds)
-			.where(and(eq(webBuilds.id, buildId), eq(webBuilds.workId, workId)))
+			.select({ id: workBuilds.id })
+			.from(workBuilds)
+			.where(and(eq(workBuilds.id, buildId), eq(workBuilds.workId, workId)))
 			.limit(1);
 		if (!build) return c.json({ error: "Build not found" }, 404);
 
@@ -141,7 +141,7 @@ const webBuildRoutes = new Hono()
 		}
 
 		const inserted = await db
-			.insert(webBuildFiles)
+			.insert(workBuildFiles)
 			.values(
 				files.map((f) => ({
 					buildId,
@@ -152,7 +152,7 @@ const webBuildRoutes = new Hono()
 				})),
 			)
 			.onConflictDoUpdate({
-				target: [webBuildFiles.buildId, webBuildFiles.path],
+				target: [workBuildFiles.buildId, workBuildFiles.path],
 				set: {
 					storageKey: sql`excluded.storage_key`,
 					fileSize: sql`excluded.file_size`,
@@ -173,9 +173,9 @@ const webBuildRoutes = new Hono()
 			return c.json({ error: "Only a game or software Work carries a browser build." }, 400);
 		}
 		const [build] = await db
-			.select({ id: webBuilds.id, entryPath: webBuilds.entryPath })
-			.from(webBuilds)
-			.where(and(eq(webBuilds.id, buildId), eq(webBuilds.workId, workId)))
+			.select({ id: workBuilds.id, entryPath: workBuilds.entryPath })
+			.from(workBuilds)
+			.where(and(eq(workBuilds.id, buildId), eq(workBuilds.workId, workId)))
 			.limit(1);
 		if (!build) return c.json({ error: "Build not found" }, 404);
 
@@ -186,15 +186,15 @@ const webBuildRoutes = new Hono()
 
 		const [fileCount] = await db
 			.select({ count: count() })
-			.from(webBuildFiles)
-			.where(eq(webBuildFiles.buildId, buildId));
+			.from(workBuildFiles)
+			.where(eq(workBuildFiles.buildId, buildId));
 		if (!fileCount || fileCount.count === 0) {
 			return c.json({ error: "A build completes with at least one file." }, 400);
 		}
 		const [entry] = await db
-			.select({ id: webBuildFiles.id })
-			.from(webBuildFiles)
-			.where(and(eq(webBuildFiles.buildId, buildId), eq(webBuildFiles.path, entryPath)))
+			.select({ id: workBuildFiles.id })
+			.from(workBuildFiles)
+			.where(and(eq(workBuildFiles.buildId, buildId), eq(workBuildFiles.path, entryPath)))
 			.limit(1);
 		if (!entry) {
 			return c.json(
@@ -207,9 +207,9 @@ const webBuildRoutes = new Hono()
 		// completed on this Work becomes its primary unless the creator asked for something
 		// else, and any explicit true promotes it.
 		const [primary] = await db
-			.select({ id: webBuilds.id })
-			.from(webBuilds)
-			.where(and(eq(webBuilds.workId, workId), eq(webBuilds.isPrimary, true)))
+			.select({ id: workBuilds.id })
+			.from(workBuilds)
+			.where(and(eq(workBuilds.workId, workId), eq(workBuilds.isPrimary, true)))
 			.limit(1);
 		const wantPrimary = data.isPrimary ?? !primary;
 		// This completion is what makes the build primary — the first build ever, or a
@@ -223,19 +223,19 @@ const webBuildRoutes = new Hono()
 			// and files are the NEXT version, so they are excluded from the snapshot.
 			const [updated] = await db.transaction(async (tx) => {
 				await archiveCurrentMedia(work, tx, { excludeWebBuildId: buildId });
-				await tx.delete(assets).where(eq(assets.workId, workId));
+				await tx.delete(workAssets).where(eq(workAssets.workId, workId));
 				await tx
-					.delete(webBuilds)
-					.where(and(eq(webBuilds.workId, workId), ne(webBuilds.id, buildId)));
+					.delete(workBuilds)
+					.where(and(eq(workBuilds.workId, workId), ne(workBuilds.id, buildId)));
 				const [row] = await tx
-					.update(webBuilds)
+					.update(workBuilds)
 					.set({
 						entryPath,
 						label: data.label ?? undefined,
 						isPrimary: true,
 						updatedAt: new Date(),
 					})
-					.where(eq(webBuilds.id, buildId))
+					.where(eq(workBuilds.id, buildId))
 					.returning();
 				await tx
 					.update(works)
@@ -247,14 +247,14 @@ const webBuildRoutes = new Hono()
 		}
 
 		const [updated] = await db
-			.update(webBuilds)
+			.update(workBuilds)
 			.set({
 				entryPath,
 				label: data.label ?? undefined,
 				isPrimary: wantPrimary || undefined,
 				updatedAt: new Date(),
 			})
-			.where(eq(webBuilds.id, buildId))
+			.where(eq(workBuilds.id, buildId))
 			.returning();
 		// The first build to complete is the Work's media arriving, so its date is the
 		// current version's.
@@ -290,9 +290,9 @@ const webBuildRoutes = new Hono()
 				return c.json({ error: "Only a game or software Work carries a browser build." }, 400);
 			}
 			const [build] = await db
-				.select({ id: webBuilds.id })
-				.from(webBuilds)
-				.where(and(eq(webBuilds.id, buildId), eq(webBuilds.workId, workId)))
+				.select({ id: workBuilds.id })
+				.from(workBuilds)
+				.where(and(eq(workBuilds.id, buildId), eq(workBuilds.workId, workId)))
 				.limit(1);
 			if (!build) return c.json({ error: "Build not found" }, 404);
 
@@ -334,9 +334,9 @@ const webBuildRoutes = new Hono()
 			return c.json({ error: "Only a game or software Work carries a browser build." }, 400);
 		}
 		const [build] = await db
-			.select({ id: webBuilds.id })
-			.from(webBuilds)
-			.where(and(eq(webBuilds.id, buildId), eq(webBuilds.workId, workId)))
+			.select({ id: workBuilds.id })
+			.from(workBuilds)
+			.where(and(eq(workBuilds.id, buildId), eq(workBuilds.workId, workId)))
 			.limit(1);
 		if (!build) return c.json({ error: "Build not found" }, 404);
 
@@ -367,9 +367,9 @@ const webBuildRoutes = new Hono()
 			return c.json({ error: "Only a game or software Work carries a browser build." }, 400);
 		}
 		const [build] = await db
-			.select({ id: webBuilds.id })
-			.from(webBuilds)
-			.where(and(eq(webBuilds.id, buildId), eq(webBuilds.workId, workId)))
+			.select({ id: workBuilds.id })
+			.from(workBuilds)
+			.where(and(eq(workBuilds.id, buildId), eq(workBuilds.workId, workId)))
 			.limit(1);
 		if (!build) return c.json({ error: "Build not found" }, 404);
 
@@ -381,7 +381,7 @@ const webBuildRoutes = new Hono()
 		} catch (err) {
 			console.error(`[web-build] deletePrefix failed for build ${buildId}:`, err);
 		}
-		await db.delete(webBuilds).where(eq(webBuilds.id, buildId));
+		await db.delete(workBuilds).where(eq(workBuilds.id, buildId));
 		return c.body(null, 204);
 	});
 

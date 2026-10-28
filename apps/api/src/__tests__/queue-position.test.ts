@@ -11,7 +11,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db";
-import { transcodingJobs } from "@anthers/db/schema";
+import { workTranscodingJobs } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { refreshQueuePositions } from "../jobs/queue-position.js";
 import { createAccount } from "./account-fixture.js";
@@ -34,7 +34,7 @@ beforeAll(async () => {
 	workIds.push(outside.id);
 
 	const made = await db
-		.insert(transcodingJobs)
+		.insert(workTranscodingJobs)
 		.values([
 			// created_at ties broken by id: same source, so ordering is total either way.
 			{ workId: workIds[0], mediaType: "video", status: "pending" },
@@ -42,21 +42,21 @@ beforeAll(async () => {
 			{ workId: workIds[2], mediaType: "video", status: "pending" },
 			{ workId: workIds[3], mediaType: "ebook", status: "pending" },
 		])
-		.returning({ id: transcodingJobs.id });
+		.returning({ id: workTranscodingJobs.id });
 	for (const r of made) rowIds.push(r.id);
 });
 
 afterAll(async () => {
 	// The rows cascade with their works; delete the works, then the account sweep above.
 	if (workIds.length > 0)
-		await db.delete(transcodingJobs).where(inArray(transcodingJobs.workId, workIds));
+		await db.delete(workTranscodingJobs).where(inArray(workTranscodingJobs.workId, workIds));
 });
 
 const positionOf = async (rowId: number): Promise<number | null> => {
 	const [row] = await db
-		.select({ queuePosition: transcodingJobs.queuePosition })
-		.from(transcodingJobs)
-		.where(eq(transcodingJobs.id, rowId));
+		.select({ queuePosition: workTranscodingJobs.queuePosition })
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.id, rowId));
 	return row?.queuePosition ?? null;
 };
 
@@ -77,9 +77,9 @@ describe("refreshQueuePositions", () => {
 
 	it("clears a claimed row's spot and pulls the rest forward", async () => {
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "processing", progress: 10 })
-			.where(eq(transcodingJobs.id, rowIds[0]));
+			.where(eq(workTranscodingJobs.id, rowIds[0]));
 		await refreshQueuePositions();
 		expect(await positionOf(rowIds[0])).toBeNull();
 		expect(await positionOf(rowIds[1])).toBe(1); // the audio lane was never behind it
@@ -88,9 +88,9 @@ describe("refreshQueuePositions", () => {
 
 	it("clears a canceled row the same way — a cancel does not leave a hole in the queue", async () => {
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "canceled" })
-			.where(eq(transcodingJobs.id, rowIds[1]));
+			.where(eq(workTranscodingJobs.id, rowIds[1]));
 		await refreshQueuePositions();
 		expect(await positionOf(rowIds[1])).toBeNull();
 		expect(await positionOf(rowIds[2])).toBe(1);
@@ -98,9 +98,9 @@ describe("refreshQueuePositions", () => {
 
 	it("holds the queue's counts across a settled row", async () => {
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "completed", progress: 100 })
-			.where(eq(transcodingJobs.id, rowIds[0]));
+			.where(eq(workTranscodingJobs.id, rowIds[0]));
 		await refreshQueuePositions();
 		// The completed row keeps no spot (the Dashboard reads "recently finished" from its
 		// updatedAt, not from a queue number).
@@ -113,7 +113,7 @@ describe("refreshQueuePositions", () => {
 		// `transcode-video`/`process-audio` write — so history, not the fallback constants,
 		// prices the pending rows.
 		const [donor] = await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({
 				workId: workIds[3],
 				mediaType: "video",
@@ -121,28 +121,28 @@ describe("refreshQueuePositions", () => {
 				progress: 100,
 				timings: { totalMs: 600_000 },
 			})
-			.returning({ id: transcodingJobs.id });
+			.returning({ id: workTranscodingJobs.id });
 		try {
 			await db
-				.update(transcodingJobs)
+				.update(workTranscodingJobs)
 				.set({ status: "pending" })
-				.where(inArray(transcodingJobs.id, rowIds.slice(0, 3)));
+				.where(inArray(workTranscodingJobs.id, rowIds.slice(0, 3)));
 			await refreshQueuePositions();
 			// The lane's front is seconds away when nothing runs: the first pending row's
 			// front figure is 0 and its total is exactly the history's cost.
 			expect(await positionOf(rowIds[0])).toBe(1);
 			const [rowA] = await db
 				.select()
-				.from(transcodingJobs)
-				.where(eq(transcodingJobs.id, rowIds[0]));
+				.from(workTranscodingJobs)
+				.where(eq(workTranscodingJobs.id, rowIds[0]));
 			expect(rowA.queueEtaSeconds).toBe(0);
 			expect(rowA.etaSeconds).toBe(600);
 			// The video lane's second row waits behind the first's cost (history-priced,
 			// 600) and adds its own — its type's fallback — so its total exceeds its front.
 			const [rowB] = await db
 				.select()
-				.from(transcodingJobs)
-				.where(eq(transcodingJobs.id, rowIds[2]));
+				.from(workTranscodingJobs)
+				.where(eq(workTranscodingJobs.id, rowIds[2]));
 			expect(rowB.queueEtaSeconds).toBe(600);
 			expect(rowB.etaSeconds!).toBeGreaterThan(rowB.queueEtaSeconds!);
 			// 🔒 The cross-type guarantee the per-type lanes exist to make: the AUDIO row's
@@ -151,12 +151,12 @@ describe("refreshQueuePositions", () => {
 			// spend (the 2026-10-18 report's "about 30 minutes left", again).
 			const [rowC] = await db
 				.select()
-				.from(transcodingJobs)
-				.where(eq(transcodingJobs.id, rowIds[1]));
+				.from(workTranscodingJobs)
+				.where(eq(workTranscodingJobs.id, rowIds[1]));
 			expect(rowC.queueEtaSeconds).toBe(0);
 			expect(rowC.etaSeconds!).toBeLessThan(rowC.queueEtaSeconds! + 601);
 		} finally {
-			await db.delete(transcodingJobs).where(eq(transcodingJobs.id, donor.id));
+			await db.delete(workTranscodingJobs).where(eq(workTranscodingJobs.id, donor.id));
 		}
 	});
 
@@ -165,20 +165,20 @@ describe("refreshQueuePositions", () => {
 		// video's front figure must stay 0 (its lane runs nothing), and the audio's
 		// pending row (none here, so the audio row itself is the debt) shows the isolation.
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "processing", progress: 50, etaSeconds: 100 })
-			.where(eq(transcodingJobs.id, rowIds[2]));
+			.where(eq(workTranscodingJobs.id, rowIds[2]));
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "pending" })
-			.where(eq(transcodingJobs.id, rowIds[0]));
+			.where(eq(workTranscodingJobs.id, rowIds[0]));
 		await refreshQueuePositions();
 		// The video pending row's lane (video) has no RUNNING row — rowIds[2] is audio? No:
 		// rowIds[2] is video and IS running, so the video pending row waits behind 100.
 		const [videoPending] = await db
 			.select()
-			.from(transcodingJobs)
-			.where(eq(transcodingJobs.id, rowIds[0]));
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.id, rowIds[0]));
 		expect(await positionOf(rowIds[0])).toBe(1);
 		expect(videoPending.queueEtaSeconds).toBe(100);
 		// And the audio row (not on the video lane) carries no spot while running.

@@ -2,7 +2,7 @@
 /**
  * The storage ladder's meter — snapshot what each account holds against its allowance.
  *
- * One row per (account, cycle) in `account_cycles`, recomputed daily and idempotent per
+ * One row per (account, cycle) in `user_cycles`, recomputed daily and idempotent per
  * cycle: the upsert is keyed on (userId, billingCycle), so a repeated run rewrites the
  * in-flight month's row in place and never duplicates. The cycle's last snapshot is the
  * figure billing reads — a running estimate that solidifies at settlement, the same
@@ -10,14 +10,14 @@
  * number).
  *
  * 🚨 **Bytes are counted from the database rows, never from walking the bucket's
- * `creators/{id}/` prefix.** The schema doc on `account_cycles` carries the full
+ * `creators/{id}/` prefix.** The schema doc on `user_cycles` carries the full
  * reasoning: the DB is the authority billing reads, a bucket walk would
  * sweep avatars and display chrome the ladder never prices, and a paginated
  * `ListObjectsV2` per account per night is an API bill paid to measure figures grouped
  * queries answer. The surfaces and how each is reached:
  *
- * - **Assets and build files carry their own sizes** — `assets.file_size` and
- *   `web_build_files.file_size`, summed per account in grouped queries; the same
+ * - **Assets and build files carry their own sizes** — `work_assets.file_size` and
+ *   `work_build_files.file_size`, summed per account in grouped queries; the same
  *   authority the top-up line prices from, so the invoice and this meter cannot
  *   disagree about a creator's catalog.
  * - **The Work record's own media** — `works.source_key`, `works.source_original_key`
@@ -54,17 +54,17 @@
 
 import { db } from "@anthers/db/client";
 import {
-	accountCycles,
-	assets,
 	inlineImages,
-	transcodingJobs,
-	webBuildFiles,
-	webBuilds,
+	userCycles,
+	workAssets,
+	workBuildFiles,
+	workBuilds,
 	workMediaVersions,
 	workPreviewMedia,
 	workSaves,
 	workSourceFiles,
 	works,
+	workTranscodingJobs,
 } from "@anthers/db/schema";
 import { currentCycleKey } from "@anthers/shared/billing-cycle";
 import { STORAGE_USE_KINDS, type StorageUseKind } from "@anthers/shared/constants";
@@ -162,10 +162,10 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 	const assetRows = await db
 		.select({
 			creatorId: works.creatorId,
-			total: sql<string>`COALESCE(SUM(${assets.fileSize}), 0)`,
+			total: sql<string>`COALESCE(SUM(${workAssets.fileSize}), 0)`,
 		})
-		.from(assets)
-		.innerJoin(works, eq(assets.workId, works.id))
+		.from(workAssets)
+		.innerJoin(works, eq(workAssets.workId, works.id))
 		.where(and(sql`${works.creatorId} IS NOT NULL`, eq(works.preserved, false)))
 		.groupBy(works.creatorId);
 	for (const row of assetRows) {
@@ -177,11 +177,11 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 	const buildRows = await db
 		.select({
 			creatorId: works.creatorId,
-			total: sql<string>`COALESCE(SUM(${webBuildFiles.fileSize}), 0)`,
+			total: sql<string>`COALESCE(SUM(${workBuildFiles.fileSize}), 0)`,
 		})
-		.from(webBuildFiles)
-		.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
-		.innerJoin(works, eq(webBuilds.workId, works.id))
+		.from(workBuildFiles)
+		.innerJoin(workBuilds, eq(workBuildFiles.buildId, workBuilds.id))
+		.innerJoin(works, eq(workBuilds.workId, works.id))
 		.where(and(sql`${works.creatorId} IS NOT NULL`, eq(works.preserved, false)))
 		.groupBy(works.creatorId);
 	for (const row of buildRows) {
@@ -191,12 +191,12 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 
 	// ── HLS output, one prefix read per transcoding job with a manifest ──────────
 	const hlsRows = await db
-		.select({ creatorId: works.creatorId, manifestKey: transcodingJobs.hlsManifestUrl })
-		.from(transcodingJobs)
-		.innerJoin(works, eq(transcodingJobs.workId, works.id))
+		.select({ creatorId: works.creatorId, manifestKey: workTranscodingJobs.hlsManifestUrl })
+		.from(workTranscodingJobs)
+		.innerJoin(works, eq(workTranscodingJobs.workId, works.id))
 		.where(
 			and(
-				sql`${works.creatorId} IS NOT NULL AND ${transcodingJobs.hlsManifestUrl} <> ''`,
+				sql`${works.creatorId} IS NOT NULL AND ${workTranscodingJobs.hlsManifestUrl} <> ''`,
 				eq(works.preserved, false),
 			),
 		);
@@ -374,7 +374,7 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 		const total = STORAGE_USE_KINDS.reduce((sum, k) => sum + entry.purposes[k], 0);
 		if (total === 0) continue;
 		await db
-			.insert(accountCycles)
+			.insert(userCycles)
 			.values({
 				userId,
 				billingCycle: cycle,
@@ -386,7 +386,7 @@ export async function runStorageUsageSweep(now = new Date()): Promise<number> {
 				sampledAt: new Date(),
 			})
 			.onConflictDoUpdate({
-				target: [accountCycles.userId, accountCycles.billingCycle],
+				target: [userCycles.userId, userCycles.billingCycle],
 				set: {
 					bytes: sql`excluded.bytes`,
 					purposes: sql`excluded.purposes`,

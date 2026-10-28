@@ -318,8 +318,8 @@ export const notifications = pgTable(
 // node — a live auth credential. Identity is node-canonical, and a session
 // is how that identity authenticates. The org holds a copy to verify requests, but the
 // relationship is node-owned (a creator can revoke their own sessions).
-export const sessions = pgTable(
-	"sessions",
+export const userSessions = pgTable(
+	"user_sessions",
 	{
 		id: serial("id").primaryKey(),
 		token: text("token").notNull().unique(),
@@ -348,7 +348,7 @@ export const sessions = pgTable(
 	// Revoking every session for a user (Settings → Devices, and the cascade when an
 	// account is deleted) filters on user_id, which had no index of its own — `token`
 	// is unique and covers lookup-by-token only.
-	(table) => [index("idx_sessions_user").on(table.userId)],
+	(table) => [index("idx_user_sessions_user").on(table.userId)],
 );
 
 /**
@@ -365,7 +365,7 @@ export const sessions = pgTable(
  * carry no secret, since `sessionToken` is cleared on redemption.
  */
 // node — a desktop enrollment is node auth (PKCE flow for the Studio app). Same
-// reasoning as `sessions`: the credential belongs to the identity, which is node.
+// reasoning as `userSessions`: the credential belongs to the identity, which is node.
 export const desktopAuthRequests = pgTable(
 	"desktop_auth_requests",
 	{

@@ -38,7 +38,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { transcodingJobs, workSectionAssets, workSections, works } from "@anthers/db/schema";
+import { workSectionAssets, workSections, works, workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { unzipSync } from "fflate";
 import { looksLikeEpub, parseEpub } from "../lib/epub.js";
@@ -76,9 +76,9 @@ const MAX_SECTIONS = 2000;
 /** Progress updates, as the other jobs update them. */
 async function updateProgress(jobId: number, progress: number) {
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({ progress, updatedAt: new Date() })
-		.where(eq(transcodingJobs.id, jobId));
+		.where(eq(workTranscodingJobs.id, jobId));
 }
 
 /**
@@ -138,8 +138,8 @@ export async function ingestEbook(data: IngestEbookData) {
 
 	const [job] = await db
 		.select()
-		.from(transcodingJobs)
-		.where(eq(transcodingJobs.id, jobId))
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.id, jobId))
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 	// Idempotency, exactly as renderPaged treats it: a late pg-boss retry of a job already
@@ -156,9 +156,9 @@ export async function ingestEbook(data: IngestEbookData) {
 	}
 
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({ status: "processing", progress: 0, updatedAt: new Date() })
-		.where(eq(transcodingJobs.id, jobId));
+		.where(eq(workTranscodingJobs.id, jobId));
 
 	const [work] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
 	if (!work) throw new Error(`Work ${job.workId} not found`);
@@ -327,18 +327,18 @@ export async function ingestEbook(data: IngestEbookData) {
 		}
 
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "completed", progress: 100, etaSeconds: null, updatedAt: new Date() })
-			.where(eq(transcodingJobs.id, jobId));
+			.where(eq(workTranscodingJobs.id, jobId));
 		console.log(
 			`[ingest-ebook] work ${work.id} → ${allSections.length} section(s), ${assets.size} asset(s) from ${sources.length} EPUB file(s)`,
 		);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "failed", errorMessage: message, updatedAt: new Date() })
-			.where(eq(transcodingJobs.id, jobId));
+			.where(eq(workTranscodingJobs.id, jobId));
 		throw error;
 	} finally {
 		// Containers were emptied at each pass's end; a failure before that still leaves

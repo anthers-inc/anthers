@@ -21,7 +21,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
-import { mediaScans, transcodingJobs, works } from "@anthers/db/schema";
+import { mediaScans, works, workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { QUEUES, queue } from "../jobs/queue.js";
 import { transcodeVideo } from "../jobs/transcode-video.js";
@@ -100,7 +100,7 @@ describe("a video transcode's ingest three-way", () => {
 			.insert(mediaScans)
 			.values({ storageKey: sourceKey, workId, determination: "clean", scannedAt: new Date() });
 		const [job] = await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({ workId, mediaType: "video", status: "pending" })
 			.returning();
 		return { workId, jobId: job.id };
@@ -129,7 +129,10 @@ describe("a video transcode's ingest three-way", () => {
 		await transcodeVideo({ jobId });
 
 		// The ladder completed — the encode ran against the copy, not the MKV.
-		const [job] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, jobId));
+		const [job] = await db
+			.select()
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.id, jobId));
 		expect(job.status).toBe("completed");
 		expect(job.hlsManifestUrl).toMatch(/master\.m3u8$/);
 
@@ -167,7 +170,10 @@ describe("a video transcode's ingest three-way", () => {
 		// retry re-runs the answer — and the row is failed with the creator-facing copy.
 		await transcodeVideo({ jobId });
 
-		const [job] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, jobId));
+		const [job] = await db
+			.select()
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.id, jobId));
 		expect(job.status).toBe("failed");
 		expect(job.errorMessage).toContain("The accepted set is");
 		expect(job.errorMessage).toContain("H.264");
@@ -189,7 +195,10 @@ describe("a video transcode's ingest three-way", () => {
 		// No scan was queued: attaching this source recorded its answer; the Work's own
 		// objects were not changed by a pass that never touched storage.
 		expect(sent.filter((s) => s.name === QUEUES.SCAN_MEDIA)).toEqual([]);
-		const [job] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, jobId));
+		const [job] = await db
+			.select()
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.id, jobId));
 		expect(job.status).toBe("completed");
 	}, 60_000);
 });

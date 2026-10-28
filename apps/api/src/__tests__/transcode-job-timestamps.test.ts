@@ -3,14 +3,14 @@
  * Every change to a processing job's status also says when it happened.
  *
  * The Studio Dashboard's processing panel keeps a Work for a day after it finishes, and it reads
- * "when it finished" from `transcoding_jobs.updated_at`. That column has no trigger and no
+ * "when it finished" from `work_transcoding_jobs.updated_at`. That column has no trigger and no
  * `$onUpdate`, so it moves only when a writer sets it — and the video and audio jobs did not,
  * which left every finished encode dated to when it was queued. **The failure is an empty
  * panel**, which is also what a creator with nothing recent is supposed to see, so nothing
  * would ever report it.
  *
  * The jobs themselves need ffmpeg and storage and have no suite that runs them to completion,
- * so this reads their source: each `.update(transcodingJobs).set({ … })` that names a `status`
+ * so this reads their source: each `.update(workTranscodingJobs).set({ … })` that names a `status`
  * must name `updatedAt` too.
  */
 import { describe, expect, it } from "bun:test";
@@ -21,7 +21,7 @@ const JOBS = join(import.meta.dir, "../jobs");
 /** The object literal of each status-setting write to `transcodingJobs` in `source`. */
 export function statusWrites(source: string): string[] {
 	const writes: string[] = [];
-	const pattern = /\.update\(transcodingJobs\)\s*\.set\(\{([\s\S]*?)\}\)/g;
+	const pattern = /\.update\(workTranscodingJobs\)\s*\.set\(\{([\s\S]*?)\}\)/g;
 	for (const match of source.matchAll(pattern)) {
 		if (/\bstatus\s*:/.test(match[1])) writes.push(match[1]);
 	}

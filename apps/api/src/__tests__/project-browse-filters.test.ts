@@ -138,7 +138,7 @@ describe("project browse filters", () => {
 			}
 			if (c.label === "game") {
 				await db.execute(
-					sql`INSERT INTO assets (work_id, file, filename, platform)
+					sql`INSERT INTO work_assets (work_id, file, filename, platform)
 						VALUES (${workId}, ${`gauntlet/${workId}.zip`}, 'build.zip', 'linux')`,
 				);
 			}

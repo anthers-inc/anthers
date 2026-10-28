@@ -24,13 +24,13 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	assets,
 	attentionEvents,
 	badges,
 	purchases,
-	transcodingJobs,
 	userBadges,
 	users,
+	workAssets,
+	workTranscodingJobs,
 } from "@anthers/db/schema";
 import { cycleKeyFor, cycleStart } from "@anthers/shared/billing-cycle";
 import { PUBLIC_ACCESS_PRICE } from "@anthers/shared/constants";
@@ -316,7 +316,7 @@ beforeAll(async () => {
 		access: PUBLIC_ACCESS,
 	});
 	downloadableWorkId = withFile.id;
-	await db.insert(assets).values({
+	await db.insert(workAssets).values({
 		workId: withFile.id,
 		file: ASSET_KEY,
 		filename: "build.zip",
@@ -326,7 +326,7 @@ beforeAll(async () => {
 	// A completed job on each, so delivery has something to reach for and a 402 can be
 	// distinguished from a 404.
 	for (const workId of [paWorkId, gatedWorkId, boughtWorkId]) {
-		await db.insert(transcodingJobs).values({
+		await db.insert(workTranscodingJobs).values({
 			workId,
 			mediaType: "video",
 			status: "completed",
@@ -712,7 +712,7 @@ describe("media with no player of their own", () => {
 		 * it invisibly: the key would simply be missing and the download button would do
 		 * nothing.
 		 *
-		 * Found by sabotage — switching `assets` from `canAccess` to `deliverable` broke
+		 * Found by sabotage — switching `work_assets` from `canAccess` to `deliverable` broke
 		 * no test in the entire suite before this one existed.
 		 */
 		await setSupport(userId, 0);

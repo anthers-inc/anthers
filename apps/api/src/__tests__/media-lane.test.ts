@@ -15,7 +15,7 @@
 import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { transcodingJobs, works } from "@anthers/db/schema";
+import { works, workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { DISPATCH, runMediaJob } from "../jobs/media-lane.js";
 import { JOB_OPTIONS, QUEUES } from "../jobs/queue.js";
@@ -73,21 +73,24 @@ describe("runMediaJob's dispatch", () => {
 			sourceKey: `creators/${creatorId}/audio/originals/media-lane-test-source`,
 		});
 		const [job] = await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({ workId: work.id, mediaType: "holographic", status: "pending" })
 			.returning();
 		// The row that maps to nothing must not throw: a thrown run spends the queue's
 		// retry budget re-reading a row that can never process. It fails once, with the
 		// reason on the row.
 		await runMediaJob(job.id);
-		const [row] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, job.id));
+		const [row] = await db
+			.select()
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.id, job.id));
 		expect(row.status).toBe("failed");
 		expect(row.errorMessage).toContain("holographic");
 		// The work row itself is untouched by a failed dispatch.
 		const [w] = await db.select().from(works).where(eq(works.id, work.id));
 		expect(w.sourceKey ?? "").not.toBe("");
 		// The fixture must not leak into another suite.
-		await db.delete(transcodingJobs).where(eq(transcodingJobs.id, job.id));
+		await db.delete(workTranscodingJobs).where(eq(workTranscodingJobs.id, job.id));
 		await db.delete(works).where(eq(works.id, work.id));
 	});
 });

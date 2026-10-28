@@ -5,7 +5,7 @@
  *
  * 🚨 **Both sources end in the same shape.** A build is a list of relative paths and the
  * HTML entry the browser loads first; a zip cannot become one object, because delivery
- * resolves every request against `web_build_files` and serves the file the path names.
+ * resolves every request against `work_build_files` and serves the file the path names.
  * So a zip is unpacked here, in the browser, into the same `path` + bytes pairs a
  * directory pick produces, and the same presign/register/complete ceremony carries it.
  * The archive itself is never uploaded.

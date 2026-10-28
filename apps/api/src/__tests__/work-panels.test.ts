@@ -13,7 +13,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
-import { transcodingJobs, users, workPages, works } from "@anthers/db/schema";
+import { users, workPages, works, workTranscodingJobs } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq } from "drizzle-orm";
 import app from "../index";
@@ -124,7 +124,7 @@ describe("/works/:id/panels", () => {
 			})
 			.where(eq(works.id, workId));
 		const [job] = await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({
 				workId,
 				mediaType: "ebook",
@@ -133,7 +133,7 @@ describe("/works/:id/panels", () => {
 				// A fresh render of a row whose earlier attempt failed must clear this.
 				errorMessage: "an earlier attempt failed",
 			})
-			.returning({ id: transcodingJobs.id });
+			.returning({ id: workTranscodingJobs.id });
 		await renderPaged({ jobId: job.id });
 	}, DB_SETUP_TIMEOUT);
 
@@ -322,9 +322,12 @@ describe("/works/:id/panels", () => {
 		// The row was seeded with an error, the shape a pg-boss retry leaves behind. A
 		// finished row must not keep telling the Studio that it failed.
 		const [row] = await db
-			.select({ status: transcodingJobs.status, errorMessage: transcodingJobs.errorMessage })
-			.from(transcodingJobs)
-			.where(eq(transcodingJobs.workId, workId));
+			.select({
+				status: workTranscodingJobs.status,
+				errorMessage: workTranscodingJobs.errorMessage,
+			})
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.workId, workId));
 		expect(row.status).toBe("completed");
 		expect(row.errorMessage).toBe("");
 	});

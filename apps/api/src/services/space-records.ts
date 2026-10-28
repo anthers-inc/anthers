@@ -35,7 +35,7 @@ export type LibrarySubjectKind = "work" | "project" | "post";
 
 export interface LibrarySubject {
 	kind: LibrarySubjectKind;
-	/** Anthers' id for the subject, as `library_items` holds it. */
+	/** Anthers' id for the subject, as `user_library_items` holds it. */
 	id: number;
 	/** The subject's canonical record address, when it has one. */
 	uri: string | null;
@@ -60,7 +60,7 @@ export type LibraryItemRecord = {
 	savedAt: string;
 } & Record<string, unknown>;
 
-/** The fields the record is built from — `library_items`' own columns, minus the row id. */
+/** The fields the record is built from — `user_library_items`' own columns, minus the row id. */
 export interface LibraryItemState {
 	subject: LibrarySubject;
 	hidden: boolean;
@@ -72,7 +72,7 @@ export interface LibraryItemState {
  * The record key for a Library entry, derived from the subject so a re-save lands on the same
  * record rather than creating a second one.
  *
- * ⚠️ **The row id is deliberately not the key.** `library_items.id` changes if the Library is
+ * ⚠️ **The row id is deliberately not the key.** `user_library_items.id` changes if the Library is
  * ever rebuilt from the space, which would make every rebuilt entry a new record; the subject
  * is the stable identity, and a reader keeps one entry per subject.
  */
@@ -144,7 +144,7 @@ export function parseLibraryItemRecord(value: unknown): ParsedLibraryItem {
 /**
  * The reading-position record: where a reader stopped in one Work.
  *
- * 🚨 **No floating point crosses into the record.** `reading_positions.progress` is a SQL
+ * 🚨 **No floating point crosses into the record.** `user_reading_positions.progress` is a SQL
  * `real`, and the protocol's data model has integers and strings, not floats. The position is
  * stored as basis points in `progressBps`, an integer from 0 to 10,000, which is the same
  * quarter-percent precision the rail draws and compares without a binary-float surprise on

@@ -10,7 +10,7 @@
 import "../dev-spec-env.js";
 
 import { db } from "@anthers/db";
-import { transcodingJobs } from "@anthers/db/schema";
+import { workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { runAbuseEscalationSweep } from "../services/abuse-reports.js";
 import { runDueDeletions } from "../services/account-deletion.js";
@@ -594,9 +594,9 @@ async function start() {
 			const stranded = await queue.findQueuedJobs<{ jobId: number }>(retiredName);
 			for (const job of stranded) {
 				const [row] = await db
-					.select({ mediaType: transcodingJobs.mediaType })
-					.from(transcodingJobs)
-					.where(eq(transcodingJobs.id, job.data.jobId))
+					.select({ mediaType: workTranscodingJobs.mediaType })
+					.from(workTranscodingJobs)
+					.where(eq(workTranscodingJobs.id, job.data.jobId))
 					.limit(1);
 				const target = row ? QUEUE_BY_MEDIA_TYPE[row.mediaType] : undefined;
 				if (!target) {

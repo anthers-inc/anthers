@@ -22,7 +22,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	assets,
 	comments,
 	dmcaNotices,
 	legalHolds,
@@ -31,6 +30,7 @@ import {
 	posts,
 	reviews,
 	stickers,
+	workAssets,
 } from "@anthers/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { restoreWork, takeDownWork } from "../services/dmca.js";
@@ -120,7 +120,7 @@ async function aWork(title: string) {
 	await storage.upload(key, Buffer.from("pretend build bytes"), "application/zip");
 	storedKeys.push(key);
 	await db
-		.insert(assets)
+		.insert(workAssets)
 		.values({ workId: work.id, file: key, filename: "build.zip", fileSize: 19 });
 	return work.id;
 }

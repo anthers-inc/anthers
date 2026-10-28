@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Library projection: `library_items` rebuilt from the reader's space.
+ * The Library projection: `user_library_items` rebuilt from the reader's space.
  *
  * 🚨 **The space is the record and this table is the read model.** That is why a rebuild can
  * delete a local row: if the Library does not contain the entry, the reader's own space — the
@@ -14,7 +14,7 @@
  * report names it so a sweep can retract the record once the deletion flow owns that job.
  */
 import { db } from "@anthers/db";
-import { libraryItems, posts, projects, works } from "@anthers/db/schema";
+import { posts, projects, userLibraryItems, works } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import { preserveCurrentVersion } from "./preservation.js";
 import {
@@ -44,9 +44,9 @@ export interface ProjectionOptions {
 
 /** The column a subject's id lives in. A map, so a fourth kind is a compile error. */
 const SUBJECT_COLUMNS = {
-	work: libraryItems.workId,
-	project: libraryItems.projectId,
-	post: libraryItems.postId,
+	work: userLibraryItems.workId,
+	project: userLibraryItems.projectId,
+	post: userLibraryItems.postId,
 } as const;
 
 /** The table a subject lives in, for the existence check and the rebuild's skip report. */
@@ -75,9 +75,13 @@ export async function projectLibraryItem(
 	if (item.subject.kind === "work") await preserveCurrentVersion(item.subject.id, userId);
 
 	const [existing] = await db
-		.select({ id: libraryItems.id, hidden: libraryItems.hidden, sortOrder: libraryItems.sortOrder })
-		.from(libraryItems)
-		.where(and(eq(libraryItems.userId, userId), eq(column, item.subject.id)))
+		.select({
+			id: userLibraryItems.id,
+			hidden: userLibraryItems.hidden,
+			sortOrder: userLibraryItems.sortOrder,
+		})
+		.from(userLibraryItems)
+		.where(and(eq(userLibraryItems.userId, userId), eq(column, item.subject.id)))
 		.limit(1);
 
 	if (existing) {
@@ -85,13 +89,13 @@ export async function projectLibraryItem(
 			return "unchanged";
 		}
 		await db
-			.update(libraryItems)
+			.update(userLibraryItems)
 			.set({ hidden: item.hidden, sortOrder: item.sortOrder })
-			.where(eq(libraryItems.id, existing.id));
+			.where(eq(userLibraryItems.id, existing.id));
 		return "updated";
 	}
 
-	await db.insert(libraryItems).values({
+	await db.insert(userLibraryItems).values({
 		userId,
 		...subjectColumnValue(item.subject),
 		hidden: item.hidden,
@@ -107,7 +111,9 @@ export async function removeProjectedLibraryItem(
 	subject: Pick<LibrarySubject, "kind" | "id">,
 ): Promise<void> {
 	const column = SUBJECT_COLUMNS[subject.kind];
-	await db.delete(libraryItems).where(and(eq(libraryItems.userId, userId), eq(column, subject.id)));
+	await db
+		.delete(userLibraryItems)
+		.where(and(eq(userLibraryItems.userId, userId), eq(column, subject.id)));
 }
 
 /**
@@ -164,15 +170,15 @@ export async function rebuildLibraryProjection(
 
 	const existing = await db
 		.select({
-			id: libraryItems.id,
-			workId: libraryItems.workId,
-			projectId: libraryItems.projectId,
-			postId: libraryItems.postId,
-			hidden: libraryItems.hidden,
-			sortOrder: libraryItems.sortOrder,
+			id: userLibraryItems.id,
+			workId: userLibraryItems.workId,
+			projectId: userLibraryItems.projectId,
+			postId: userLibraryItems.postId,
+			hidden: userLibraryItems.hidden,
+			sortOrder: userLibraryItems.sortOrder,
 		})
-		.from(libraryItems)
-		.where(eq(libraryItems.userId, userId));
+		.from(userLibraryItems)
+		.where(eq(userLibraryItems.userId, userId));
 
 	await db.transaction(async (tx) => {
 		for (const { key, item } of parsed) {
@@ -182,7 +188,7 @@ export async function rebuildLibraryProjection(
 			}
 			const current = existing.find((entry) => subjectIdOf(entry) === key);
 			if (!current) {
-				await tx.insert(libraryItems).values({
+				await tx.insert(userLibraryItems).values({
 					userId,
 					...subjectColumnValue(item.subject),
 					hidden: item.hidden,
@@ -197,15 +203,15 @@ export async function rebuildLibraryProjection(
 				continue;
 			}
 			await tx
-				.update(libraryItems)
+				.update(userLibraryItems)
 				.set({ hidden: item.hidden, sortOrder: item.sortOrder })
-				.where(eq(libraryItems.id, current.id));
+				.where(eq(userLibraryItems.id, current.id));
 			report.updated++;
 		}
 
 		for (const entry of existing) {
 			if (present.has(subjectIdOf(entry))) continue;
-			await tx.delete(libraryItems).where(eq(libraryItems.id, entry.id));
+			await tx.delete(userLibraryItems).where(eq(userLibraryItems.id, entry.id));
 			report.removed++;
 		}
 	});

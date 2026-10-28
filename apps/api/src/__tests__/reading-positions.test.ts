@@ -20,7 +20,7 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { readingPositions } from "@anthers/db/schema";
+import { userReadingPositions } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { and, eq, sql } from "drizzle-orm";
 import app from "../index";
@@ -184,8 +184,10 @@ describe("reading positions", () => {
 		// exactly one row for the pair.
 		const stored = await db
 			.select()
-			.from(readingPositions)
-			.where(and(eq(readingPositions.userId, userAId), eq(readingPositions.workId, freeWorkId)));
+			.from(userReadingPositions)
+			.where(
+				and(eq(userReadingPositions.userId, userAId), eq(userReadingPositions.workId, freeWorkId)),
+			);
 		expect(stored).toHaveLength(1);
 	});
 

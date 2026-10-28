@@ -55,14 +55,14 @@ beforeAll(async () => {
 		FROM generate_series(1, ${LIBRARY_LIMIT + 1}) AS n
 	`);
 	await db.execute(sql`
-		INSERT INTO library_items (user_id, project_id, sort_order)
+		INSERT INTO user_library_items (user_id, project_id, sort_order)
 		SELECT ${userId}, p.id, split_part(p.slug, '-', 3)::int
 		FROM projects p WHERE p.slug LIKE ${`library-${id}-%`}
 	`);
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
-	await db.execute(sql`DELETE FROM library_items WHERE user_id = ${userId}`);
+	await db.execute(sql`DELETE FROM user_library_items WHERE user_id = ${userId}`);
 	await db.execute(sql`DELETE FROM projects WHERE slug LIKE ${`library-${id}-%`}`);
 });
 
@@ -79,7 +79,7 @@ describe("a Library past the limit", () => {
 
 	it("says nothing was cut once the Library fits", async () => {
 		await db.execute(
-			sql`DELETE FROM library_items WHERE user_id = ${userId} AND sort_order = ${LIBRARY_LIMIT + 1}`,
+			sql`DELETE FROM user_library_items WHERE user_id = ${userId} AND sort_order = ${LIBRARY_LIMIT + 1}`,
 		);
 		const { items, truncated } = await library();
 		expect(truncated).toBe(false);

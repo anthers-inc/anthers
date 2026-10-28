@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The Library — the only writer of `library_items`.
+ * The Library — the only writer of `user_library_items`.
  *
  * Single-writer for the same reason `services/moderation.ts` and `services/refunds.ts`
  * are: two doors reach this table (a person pressing Save, and a purchase completing) and
@@ -13,7 +13,7 @@
  * on the table itself in `packages/db/src/schema/content.ts`.
  */
 
-import { db, libraryItems, posts, purchases, works } from "@anthers/db";
+import { db, posts, purchases, userLibraryItems, works } from "@anthers/db";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { preserveCurrentVersion } from "./preservation.js";
 
@@ -85,10 +85,10 @@ export async function saveWork(
 	}
 
 	const [row] = await db
-		.insert(libraryItems)
+		.insert(userLibraryItems)
 		.values({ userId, workId, sortOrder: await nextSortOrder(userId) })
 		.onConflictDoNothing()
-		.returning({ id: libraryItems.id });
+		.returning({ id: userLibraryItems.id });
 	if (row) {
 		// ⭐ **Saving a Work is what puts it in the preservation program** — see
 		// `services/preservation.ts`. Deliberately on the save, not on the purchase:
@@ -102,10 +102,10 @@ export async function saveWork(
 	// Already there. Return the existing row rather than an error — and un-hide it, since
 	// pressing Save on something you had tidied away plainly means "put it back".
 	const [existing] = await db
-		.update(libraryItems)
+		.update(userLibraryItems)
 		.set({ hidden: false })
-		.where(and(eq(libraryItems.userId, userId), eq(libraryItems.workId, workId)))
-		.returning({ id: libraryItems.id });
+		.where(and(eq(userLibraryItems.userId, userId), eq(userLibraryItems.workId, workId)))
+		.returning({ id: userLibraryItems.id });
 	if (existing) await preserveCurrentVersion(workId, userId);
 	return existing ? { ok: true, id: existing.id } : { ok: false, reason: "not_found" };
 }
@@ -116,17 +116,17 @@ export async function saveProject(
 	projectId: number,
 ): Promise<{ ok: true; id: number } | { ok: false; reason: SaveRefusal }> {
 	const [row] = await db
-		.insert(libraryItems)
+		.insert(userLibraryItems)
 		.values({ userId, projectId, sortOrder: await nextSortOrder(userId) })
 		.onConflictDoNothing()
-		.returning({ id: libraryItems.id });
+		.returning({ id: userLibraryItems.id });
 	if (row) return { ok: true, id: row.id };
 
 	const [existing] = await db
-		.update(libraryItems)
+		.update(userLibraryItems)
 		.set({ hidden: false })
-		.where(and(eq(libraryItems.userId, userId), eq(libraryItems.projectId, projectId)))
-		.returning({ id: libraryItems.id });
+		.where(and(eq(userLibraryItems.userId, userId), eq(userLibraryItems.projectId, projectId)))
+		.returning({ id: userLibraryItems.id });
 	return existing ? { ok: true, id: existing.id } : { ok: false, reason: "not_found" };
 }
 
@@ -136,7 +136,7 @@ export async function saveProject(
  * ⭐ **A keep is a keep** (Parker, 2026-10-11): Save is the one action that puts something
  * in your Library, and "bookmarked" retired as a second verb and a second store. A post is
  * an announcement rather than a Work, but a person who wants to keep one is doing exactly
- * what a Library is for, so it rides `library_items` beside Works and Projects.
+ * what a Library is for, so it rides `user_library_items` beside Works and Projects.
  *
  * It grants nothing, like every other save — a post has no gate of its own to grant.
  */
@@ -148,17 +148,17 @@ export async function savePost(
 	if (!post) return { ok: false, reason: "not_found" };
 
 	const [row] = await db
-		.insert(libraryItems)
+		.insert(userLibraryItems)
 		.values({ userId, postId, sortOrder: await nextSortOrder(userId) })
 		.onConflictDoNothing()
-		.returning({ id: libraryItems.id });
+		.returning({ id: userLibraryItems.id });
 	if (row) return { ok: true, id: row.id };
 
 	const [existing] = await db
-		.update(libraryItems)
+		.update(userLibraryItems)
 		.set({ hidden: false })
-		.where(and(eq(libraryItems.userId, userId), eq(libraryItems.postId, postId)))
-		.returning({ id: libraryItems.id });
+		.where(and(eq(userLibraryItems.userId, userId), eq(userLibraryItems.postId, postId)))
+		.returning({ id: userLibraryItems.id });
 	return existing ? { ok: true, id: existing.id } : { ok: false, reason: "not_found" };
 }
 
@@ -178,7 +178,7 @@ export async function saveOnPurchase(purchase: {
 	// Both are ordinary.
 	if (purchase.buyerId == null || purchase.workId == null) return;
 	await db
-		.insert(libraryItems)
+		.insert(userLibraryItems)
 		.values({ userId: purchase.buyerId, workId: purchase.workId })
 		.onConflictDoNothing();
 	// A purchase saves itself to the Library, so **every sold Work is in the preservation
@@ -206,8 +206,8 @@ export async function removeItem(
 > {
 	const [item] = await db
 		.select()
-		.from(libraryItems)
-		.where(and(eq(libraryItems.id, itemId), eq(libraryItems.userId, userId)))
+		.from(userLibraryItems)
+		.where(and(eq(userLibraryItems.id, itemId), eq(userLibraryItems.userId, userId)))
 		.limit(1);
 	if (!item) return { ok: false, reason: "not_found" };
 
@@ -222,17 +222,17 @@ export async function removeItem(
 				? { kind: "project" as const, id: item.projectId }
 				: { kind: "post" as const, id: item.postId as number };
 
-	await db.delete(libraryItems).where(eq(libraryItems.id, itemId));
+	await db.delete(userLibraryItems).where(eq(userLibraryItems.id, itemId));
 	return { ok: true, subject };
 }
 
 /** Tidy an entry out of the Library, or bring it back. Never loses anything. */
 export async function setHidden(userId: number, itemId: number, hidden: boolean): Promise<boolean> {
 	const [row] = await db
-		.update(libraryItems)
+		.update(userLibraryItems)
 		.set({ hidden })
-		.where(and(eq(libraryItems.id, itemId), eq(libraryItems.userId, userId)))
-		.returning({ id: libraryItems.id });
+		.where(and(eq(userLibraryItems.id, itemId), eq(userLibraryItems.userId, userId)))
+		.returning({ id: userLibraryItems.id });
 	return !!row;
 }
 
@@ -248,8 +248,8 @@ export const LIBRARY_LIMIT = 500;
 /** Next position in the Library — newest last, matching the order things were saved. */
 async function nextSortOrder(userId: number): Promise<number> {
 	const [row] = await db
-		.select({ next: sql<number>`coalesce(max(${libraryItems.sortOrder}), 0) + 1` })
-		.from(libraryItems)
-		.where(eq(libraryItems.userId, userId));
+		.select({ next: sql<number>`coalesce(max(${userLibraryItems.sortOrder}), 0) + 1` })
+		.from(userLibraryItems)
+		.where(eq(userLibraryItems.userId, userId));
 	return row?.next ?? 0;
 }

@@ -16,7 +16,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { transcodingJobs } from "@anthers/db/schema";
+import { workTranscodingJobs } from "@anthers/db/schema";
 import app from "../index";
 import { storage } from "../services/storage/index.js";
 import { createAccount } from "./account-fixture";
@@ -87,7 +87,7 @@ describe("a shared video, signed out", () => {
 			access: [{ threshold: 0, allow: true, price: "0" }],
 		});
 		workId = work.id;
-		await db.insert(transcodingJobs).values({
+		await db.insert(workTranscodingJobs).values({
 			workId,
 			mediaType: "video",
 			status: "completed",

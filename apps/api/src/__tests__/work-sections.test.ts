@@ -25,11 +25,11 @@
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	transcodingJobs,
 	workSectionAssets,
 	workSections,
 	workSourceFiles,
 	works,
+	workTranscodingJobs,
 } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { type Zippable, zipSync } from "fflate";
@@ -150,14 +150,17 @@ async function setSourceRows(
 /** A pending `ebook` transcoding row for `workId`, as the enqueue sites create it. */
 async function pendingIngest(workId: number): Promise<number> {
 	const [job] = await db
-		.insert(transcodingJobs)
+		.insert(workTranscodingJobs)
 		.values({ workId, mediaType: "ebook", status: "pending" })
-		.returning({ id: transcodingJobs.id });
+		.returning({ id: workTranscodingJobs.id });
 	return job.id;
 }
 
 async function jobOf(jobId: number) {
-	const [job] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, jobId));
+	const [job] = await db
+		.select()
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.id, jobId));
 	return job;
 }
 

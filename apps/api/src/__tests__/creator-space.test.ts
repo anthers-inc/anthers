@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, works } from "@anthers/db/schema";
+import { workAssets, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import {
 	gatedSpaceUri,
@@ -121,7 +121,7 @@ describe("creator spaces", () => {
 			access: [{ threshold: 0, allow: true, price: "5.00" }],
 			sourceKey: `creators/${ctx.userId}/media/nightjar.zip`,
 		});
-		await db.insert(assets).values({
+		await db.insert(workAssets).values({
 			workId: row.id,
 			file: `creators/${ctx.userId}/builds/nightjar-linux.tar.gz`,
 			filename: "nightjar-linux.tar.gz",

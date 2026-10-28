@@ -14,7 +14,7 @@
  * the panel's button calls. What the button itself does is the API test's subject.
  */
 import { db } from "@anthers/db/client";
-import { physicalListings, works } from "@anthers/db/schema";
+import { workPhysicalListings, works } from "@anthers/db/schema";
 import { type BrowserContext, eq } from "drizzle-orm";
 import {
 	API_URL,
@@ -72,7 +72,7 @@ test.beforeAll(async ({ browser }: { browser: { newContext: () => Promise<Browse
 	publicId = Number(body.work.publicId);
 	slug = body.work.slug;
 
-	await db.insert(physicalListings).values({
+	await db.insert(workPhysicalListings).values({
 		workId,
 		shippingPrice: "6.50",
 		handlingBusinessDays: 4,

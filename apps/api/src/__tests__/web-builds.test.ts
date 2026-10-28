@@ -22,7 +22,7 @@
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { webBuildFiles, webBuilds, works } from "@anthers/db/schema";
+import { workBuildFiles, workBuilds, works } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import app from "../index";
 import { queue } from "../jobs/queue";
@@ -239,7 +239,7 @@ describe("web build upload surface", () => {
 		expect(res.status).toBe(400);
 		expect(((await res.json()) as { code?: string }).code).toBe("foreign_file");
 		// The refusal is atomic: nothing from the refused batch was registered.
-		const rows = await db.select().from(webBuildFiles).where(eq(webBuildFiles.buildId, build.id));
+		const rows = await db.select().from(workBuildFiles).where(eq(workBuildFiles.buildId, build.id));
 		expect(rows).toEqual([]);
 	});
 
@@ -283,7 +283,7 @@ describe("web build upload surface", () => {
 		const first = await createBuildWithFiles(workId, creator.cookie, ["index.html"], "index.html");
 		const second = await createBuildWithFiles(workId, creator.cookie, ["b.html"], "b.html");
 
-		const rows = await db.select().from(webBuilds).where(eq(webBuilds.workId, workId));
+		const rows = await db.select().from(workBuilds).where(eq(workBuilds.workId, workId));
 		expect(rows).toHaveLength(2);
 		const primaryRows = rows.filter((r) => r.isPrimary);
 		expect(primaryRows).toHaveLength(1);
@@ -299,12 +299,12 @@ describe("web build upload surface", () => {
 			{ isPrimary: true },
 		);
 		expect(promote.status).toBe(200);
-		const after = await db.select().from(webBuilds).where(eq(webBuilds.workId, workId));
+		const after = await db.select().from(workBuilds).where(eq(workBuilds.workId, workId));
 		expect(after.filter((r) => r.isPrimary).map((r) => r.id)).toEqual([second]);
 
 		// The partial unique index backs the same rule against a writer that skips the flip.
 		const [third] = await db
-			.insert(webBuilds)
+			.insert(workBuilds)
 			.values({ workId, entryPath: "c.html", isPrimary: true })
 			.returning()
 			.catch(() => []);
@@ -321,10 +321,10 @@ describe("web build upload surface", () => {
 			"index.html",
 		);
 
-		const [build] = await db.select().from(webBuilds).where(eq(webBuilds.id, buildId));
+		const [build] = await db.select().from(workBuilds).where(eq(workBuilds.id, buildId));
 		if (!build.isPrimary) console.log("BUILDROW", JSON.stringify(build));
 		expect(build.isPrimary).toBe(true);
-		const files = await db.select().from(webBuildFiles).where(eq(webBuildFiles.buildId, buildId));
+		const files = await db.select().from(workBuildFiles).where(eq(workBuildFiles.buildId, buildId));
 		expect(files).toHaveLength(5);
 		// Every key sits under the build's prefix — the property the delivery route resolves against.
 		for (const f of files) {
@@ -346,7 +346,7 @@ describe("web build upload surface", () => {
 			},
 		);
 		expect(again.status).toBe(201);
-		const after = await db.select().from(webBuildFiles).where(eq(webBuildFiles.buildId, buildId));
+		const after = await db.select().from(workBuildFiles).where(eq(workBuildFiles.buildId, buildId));
 		expect(after).toHaveLength(5);
 		expect(after.find((f) => f.path === "game.pck")!.fileSize).toBe(99);
 	});
@@ -384,7 +384,7 @@ describe("web build upload surface", () => {
 			"index.html",
 		);
 
-		const files = await db.select().from(webBuildFiles).where(eq(webBuildFiles.buildId, buildId));
+		const files = await db.select().from(workBuildFiles).where(eq(workBuildFiles.buildId, buildId));
 		for (const f of files) {
 			expect(await storage.exists(f.storageKey)).toBe(true);
 		}
@@ -404,7 +404,7 @@ describe("web build upload surface", () => {
 			["index.html"],
 			"index.html",
 		);
-		const files = await db.select().from(webBuildFiles).where(eq(webBuildFiles.buildId, buildId));
+		const files = await db.select().from(workBuildFiles).where(eq(workBuildFiles.buildId, buildId));
 		expect(files.length).toBeGreaterThan(0);
 
 		const res = await call(
@@ -416,7 +416,7 @@ describe("web build upload surface", () => {
 		for (const f of files) {
 			expect(await storage.exists(f.storageKey)).toBe(false);
 		}
-		const rows = await db.select().from(webBuildFiles).where(eq(webBuildFiles.buildId, buildId));
+		const rows = await db.select().from(workBuildFiles).where(eq(workBuildFiles.buildId, buildId));
 		expect(rows).toEqual([]);
 	});
 

@@ -67,7 +67,7 @@ export function processingStatusText(job: Work["transcoding"]): string | null {
 }
 
 /**
- * The waiting sentence, from the position record (`transcoding_jobs.queue_position`,
+ * The waiting sentence, from the position record (`work_transcoding_jobs.queue_position`,
  * written by `queue-position.ts`): `Waiting to process` alone stays the shape when the
  * lane has not numbered this row (older rows, ebooks), `Waiting to process · next up`
  * when the creator's file is the one the lane reaches next, and `Waiting to process · 2
@@ -189,7 +189,7 @@ export function processingQueue(
 
 function rank(work: Work): number {
 	// The running row first, then the waiting ones **in the lane's own order** — the
-	// position record (`transcoding_jobs.queue_position`) is what the queue's truth
+	// position record (`work_transcoding_jobs.queue_position`) is what the queue's truth
 	// looks like from here, and a panel that listed the waiting rows in any other
 	// order would contradict the badge each row already carries. A row the lane has
 	// not numbered sorts last (stable within itself).

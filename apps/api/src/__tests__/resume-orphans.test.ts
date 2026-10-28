@@ -5,7 +5,7 @@
  * 🚨 **This sweep ran uncovered from the day its guard shipped, and that was measured
  * rather than assumed:** sabotaging the `sourceKey` guard to a no-op left all 41 tests in
  * `post-lifecycle` + `delivery-access` green. The prediction had been that at least one
- * would fail; being wrong was the finding. Those suites insert `transcoding_jobs` rows to
+ * would fail; being wrong was the finding. Those suites insert `work_transcoding_jobs` rows to
  * simulate an encode in flight, which looks like coverage of this code and is not — they
  * exercise the *release gate* that reads the rows, never the sweep that rewrites them.
  * Same family as the DMCA restore cron, whose selector was broken on every run since it
@@ -42,7 +42,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { transcodingJobs, works } from "@anthers/db/schema";
+import { works, workTranscodingJobs } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { QUEUES } from "../jobs/queue";
@@ -77,7 +77,7 @@ async function signUp(username: string): Promise<string> {
 }
 
 /**
- * A Work plus a `transcoding_jobs` row in the state the sweep will find.
+ * A Work plus a `work_transcoding_jobs` row in the state the sweep will find.
  *
  * `sourced` is the whole point of the fixture: `works.source_key` defaults to `""`, which
  * is falsy, so a Work created through the API and never uploaded to is exactly the
@@ -93,7 +93,7 @@ async function makeJob(opts: {
 		method: "POST",
 		headers: { "Content-Type": "application/json", Origin: ORIGIN, Cookie: owner },
 		// `game` so creating it queues nothing of its own — the media type under test is
-		// the one on the transcoding_jobs row, which is what the sweep actually reads.
+		// the one on the work_transcoding_jobs row, which is what the sweep actually reads.
 		body: JSON.stringify({ type: "game", title: opts.title }),
 	});
 	expect(res.status).toBe(201);
@@ -107,27 +107,27 @@ async function makeJob(opts: {
 	}
 
 	const [row] = await db
-		.insert(transcodingJobs)
+		.insert(workTranscodingJobs)
 		.values({
 			workId,
 			mediaType: opts.mediaType,
 			status: opts.status ?? "pending",
 			progress: 0,
 		})
-		.returning({ id: transcodingJobs.id });
+		.returning({ id: workTranscodingJobs.id });
 	return { workId, jobId: row.id };
 }
 
 function statusOf(jobId: number) {
 	return db
 		.select({
-			status: transcodingJobs.status,
-			error: transcodingJobs.errorMessage,
-			resumeCount: transcodingJobs.resumeCount,
-			flag: transcodingJobs.interruptedGracefully,
+			status: workTranscodingJobs.status,
+			error: workTranscodingJobs.errorMessage,
+			resumeCount: workTranscodingJobs.resumeCount,
+			flag: workTranscodingJobs.interruptedGracefully,
 		})
-		.from(transcodingJobs)
-		.where(eq(transcodingJobs.id, jobId))
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.id, jobId))
 		.then((r) => r[0]);
 }
 
@@ -183,34 +183,34 @@ beforeAll(async () => {
 	// where the file keeps taking the worker down and this boot is one past the bound.
 	exhausted = await makeJob({ title: "orphan-exhausted", mediaType: "video", sourced: true });
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({ resumeCount: MAX_TRANSCODE_RESUMES })
-		.where(eq(transcodingJobs.id, exhausted.jobId));
+		.where(eq(workTranscodingJobs.id, exhausted.jobId));
 	// One below the bound, so the same pass proves an ordinary retry still resumes and
 	// that resuming is what the count measures.
 	onceResumed = await makeJob({ title: "orphan-once-resumed", mediaType: "video", sourced: true });
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({ resumeCount: MAX_TRANSCODE_RESUMES - 1 })
-		.where(eq(transcodingJobs.id, onceResumed.jobId));
+		.where(eq(workTranscodingJobs.id, onceResumed.jobId));
 	// The benign fixtures: rows carrying `interruptedGracefully`, the flag a graceful
 	// (SIGTERM) stop leaves. A flagged row is resumed WITHOUT spending a ceiling slot —
 	// its `resumeCount` passes through untouched — and one past the bound is resumed
 	// all the same, because the bound counts crash-resumes and a deploy is not a crash.
 	benign = await makeJob({ title: "orphan-benign", mediaType: "video", sourced: true });
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({ interruptedGracefully: true })
-		.where(eq(transcodingJobs.id, benign.jobId));
+		.where(eq(workTranscodingJobs.id, benign.jobId));
 	benignPastBound = await makeJob({
 		title: "orphan-benign-past-bound",
 		mediaType: "video",
 		sourced: true,
 	});
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({ resumeCount: MAX_TRANSCODE_RESUMES, interruptedGracefully: true })
-		.where(eq(transcodingJobs.id, benignPastBound.jobId));
+		.where(eq(workTranscodingJobs.id, benignPastBound.jobId));
 	// The real-error fixture: a row past the bound that also carries the error its one
 	// reached-handler attempt wrote. The canned "kept interrupting" message must not
 	// overwrite it — the real reason is the one thing the creator can act on.
@@ -220,12 +220,12 @@ beforeAll(async () => {
 		sourced: true,
 	});
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({
 			resumeCount: MAX_TRANSCODE_RESUMES,
 			errorMessage: "ffmpeg HLS failed for 1080p: sample refusal from the reached attempt",
 		})
-		.where(eq(transcodingJobs.id, exhaustedWithError.jobId));
+		.where(eq(workTranscodingJobs.id, exhaustedWithError.jobId));
 
 	// The queued pg-boss jobs the retire pass examines: one for a real fixture row
 	// (kept), one for a row that exists NOWHERE in this table (deleted), and one whose
@@ -243,7 +243,7 @@ beforeAll(async () => {
 }, DB_SETUP_TIMEOUT);
 
 // Works go first and by creator_id: `works.creator_id` is ON DELETE SET NULL, so deleting
-// the user alone orphans the Works rather than removing them — and the transcoding_jobs
+// the user alone orphans the Works rather than removing them — and the work_transcoding_jobs
 // that cascade off works would survive with them, which is precisely the litter this sweep
 // exists to stop replaying on every `make dev`.
 afterAll(async () => {

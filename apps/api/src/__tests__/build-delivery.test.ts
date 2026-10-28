@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Browser-build delivery: the serve half of the hosting task — a Work's primary build
- * answering through the play-token ceremony, resolved against `web_build_files`.
+ * answering through the play-token ceremony, resolved against `work_build_files`.
  *
  * 🚨 **The properties under test are the ones the privacy policy and *How a File
  * Reaches You* both promise.**
@@ -26,7 +26,7 @@
 
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import { webBuildFiles, works } from "@anthers/db/schema";
+import { workBuildFiles, works } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import app from "../index";
 import { queue } from "../jobs/queue";
@@ -208,8 +208,8 @@ describe("browser-build delivery", () => {
 		// the rows are the allowlist, not the prefix. This is the case a prefix-based
 		// delivery would leak.
 		const [anyFile] = await db
-			.select({ storageKey: webBuildFiles.storageKey })
-			.from(webBuildFiles)
+			.select({ storageKey: workBuildFiles.storageKey })
+			.from(workBuildFiles)
 			.limit(1);
 		const unregisteredKey = anyFile.storageKey.replace(/[^/]+$/, "secret.pck");
 		await storage.upload(

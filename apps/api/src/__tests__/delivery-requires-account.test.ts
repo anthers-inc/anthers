@@ -32,7 +32,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { assets, transcodingJobs, users } from "@anthers/db/schema";
+import { users, workAssets, workTranscodingJobs } from "@anthers/db/schema";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
 import { downloadAsset } from "./access-fixture";
@@ -99,7 +99,7 @@ describe("Consuming a Work requires an account", () => {
 			...PUBLIC_ACCESS,
 		});
 		audioId = audio.id;
-		await db.insert(transcodingJobs).values({
+		await db.insert(workTranscodingJobs).values({
 			workId: audioId,
 			mediaType: "audio",
 			status: "completed",
@@ -114,7 +114,7 @@ describe("Consuming a Work requires an account", () => {
 			...PUBLIC_ACCESS,
 		});
 		videoId = video.id;
-		await db.insert(transcodingJobs).values({
+		await db.insert(workTranscodingJobs).values({
 			workId: videoId,
 			mediaType: "video",
 			status: "completed",
@@ -143,7 +143,7 @@ describe("Consuming a Work requires an account", () => {
 		});
 		downloadId = downloadable.id;
 		const [asset] = await db
-			.insert(assets)
+			.insert(workAssets)
 			.values({
 				workId: downloadId,
 				file: "creators/x/assets/build.zip",

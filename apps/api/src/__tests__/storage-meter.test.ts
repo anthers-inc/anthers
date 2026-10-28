@@ -16,7 +16,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { accountCycles, assets, workMediaVersions, workSaves, works } from "@anthers/db/schema";
+import { userCycles, workAssets, workMediaVersions, workSaves, works } from "@anthers/db/schema";
 import { STORAGE_LADDER_GIB, STORAGE_USE_KINDS } from "@anthers/shared/constants";
 import { and, eq, inArray } from "drizzle-orm";
 import app from "../index";
@@ -52,9 +52,9 @@ async function store(key: string, bytes: number): Promise<string> {
 /** The creator's catalog line in the latest snapshot, zero before the first one. */
 async function catalogFor(userId: number): Promise<number> {
 	const [row] = await db
-		.select({ purposes: accountCycles.purposes })
-		.from(accountCycles)
-		.where(eq(accountCycles.userId, userId))
+		.select({ purposes: userCycles.purposes })
+		.from(userCycles)
+		.where(eq(userCycles.userId, userId))
 		.limit(1);
 	return ((row?.purposes as Record<string, number> | undefined)?.catalog ?? 0) as number;
 }
@@ -74,7 +74,7 @@ beforeAll(async () => {
 }, DB_SETUP_TIMEOUT);
 
 afterAll(async () => {
-	// account_cycles rows cascade with the account; works, assets, builds and saves
+	// user_cycles rows cascade with the account; works, assets, builds and saves
 	// cascade too. The objects stored behind the rows do not — named and removed.
 	if (workIds.length > 0) await db.delete(works).where(inArray(works.id, workIds));
 	for (const key of storedKeys) await storageDelete(key).catch(() => {});
@@ -90,7 +90,7 @@ describe("the storage meter", () => {
 		const work = await insertWork({ creatorId, type: "game" });
 		workIds.push(work.id);
 		const assetKey = await store(`creators/${creatorId}/assets/${work.id}/game.zip`, 3000);
-		await db.insert(assets).values({
+		await db.insert(workAssets).values({
 			workId: work.id,
 			file: assetKey,
 			filename: "game.zip",
@@ -103,8 +103,8 @@ describe("the storage meter", () => {
 
 		const [creatorRow] = await db
 			.select()
-			.from(accountCycles)
-			.where(eq(accountCycles.userId, creatorId))
+			.from(userCycles)
+			.where(eq(userCycles.userId, creatorId))
 			.limit(1);
 		expect(creatorRow).toBeDefined();
 		expect(creatorRow!.purposes.catalog).toBe(3000);
@@ -126,16 +126,16 @@ describe("the storage meter", () => {
 
 		const [playerRow] = await db
 			.select()
-			.from(accountCycles)
-			.where(eq(accountCycles.userId, playerId))
+			.from(userCycles)
+			.where(eq(userCycles.userId, playerId))
 			.limit(1);
 		// The save blob's byteSize is the *bytes* figure; the base64 string's length is
 		// 1600 — the attribution is the point, and so is which figure was recorded.
 		expect(playerRow!.purposes["cloud-saves"]).toBe(1200);
 		const [creatorRow] = await db
 			.select()
-			.from(accountCycles)
-			.where(eq(accountCycles.userId, creatorId))
+			.from(userCycles)
+			.where(eq(userCycles.userId, creatorId))
 			.limit(1);
 		expect(creatorRow!.purposes["cloud-saves"]).toBe(0);
 	});
@@ -147,7 +147,7 @@ describe("the storage meter", () => {
 		const work = await insertWork({ creatorId, type: "game" });
 		workIds.push(work.id);
 		const assetKey = await store(`creators/${creatorId}/assets/${work.id}/kept.zip`, 5000);
-		await db.insert(assets).values({
+		await db.insert(workAssets).values({
 			workId: work.id,
 			file: assetKey,
 			filename: "kept.zip",
@@ -157,9 +157,9 @@ describe("the storage meter", () => {
 
 		await runStorageUsageSweep();
 		const [before] = await db
-			.select({ catalog: accountCycles.purposes })
-			.from(accountCycles)
-			.where(eq(accountCycles.userId, creatorId))
+			.select({ catalog: userCycles.purposes })
+			.from(userCycles)
+			.where(eq(userCycles.userId, creatorId))
 			.limit(1);
 		const catalogBefore = (before!.catalog as Record<string, number>).catalog;
 
@@ -167,9 +167,9 @@ describe("the storage meter", () => {
 		await runStorageUsageSweep();
 
 		const [after] = await db
-			.select({ purposes: accountCycles.purposes })
-			.from(accountCycles)
-			.where(eq(accountCycles.userId, creatorId))
+			.select({ purposes: userCycles.purposes })
+			.from(userCycles)
+			.where(eq(userCycles.userId, creatorId))
 			.limit(1);
 		expect((after!.purposes as Record<string, number>).catalog).toBe(catalogBefore - 5000);
 	});
@@ -232,18 +232,18 @@ describe("the storage meter", () => {
 		const first = await runStorageUsageSweep();
 		expect(first).toBeGreaterThan(0);
 		const [before] = await db
-			.select({ id: accountCycles.id, bytes: accountCycles.bytes })
-			.from(accountCycles)
-			.where(eq(accountCycles.userId, creatorId))
+			.select({ id: userCycles.id, bytes: userCycles.bytes })
+			.from(userCycles)
+			.where(eq(userCycles.userId, creatorId))
 			.limit(1);
 
 		const second = await runStorageUsageSweep();
 		expect(second).toBe(first); // same population, no new accounts
 
 		const [after] = await db
-			.select({ id: accountCycles.id, bytes: accountCycles.bytes })
-			.from(accountCycles)
-			.where(eq(accountCycles.userId, creatorId))
+			.select({ id: userCycles.id, bytes: userCycles.bytes })
+			.from(userCycles)
+			.where(eq(userCycles.userId, creatorId))
 			.limit(1);
 		expect(after!.id).toBe(before!.id);
 		expect(after!.bytes).toBe(before!.bytes);
@@ -261,8 +261,8 @@ describe("the storage meter", () => {
 		await runStorageUsageSweep();
 		const [row] = await db
 			.select()
-			.from(accountCycles)
-			.where(eq(accountCycles.userId, creatorId))
+			.from(userCycles)
+			.where(eq(userCycles.userId, creatorId))
 			.limit(1);
 		expect(Object.keys(row!.purposes).sort()).toEqual([...STORAGE_USE_KINDS].sort());
 		// 3000 assets + 900 inline = the catalog line.
@@ -306,7 +306,7 @@ describe("the reading — allowance, drawn bytes and the at-cost estimate", () =
 			expect(reading.sampledAt).toBeNull();
 			expect(reading.allowanceGiB).toBe(STORAGE_LADDER_GIB.free);
 		} finally {
-			await db.delete(accountCycles).where(eq(accountCycles.userId, fresh.userId));
+			await db.delete(userCycles).where(eq(userCycles.userId, fresh.userId));
 		}
 	});
 });

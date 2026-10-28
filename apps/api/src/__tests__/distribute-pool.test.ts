@@ -387,7 +387,7 @@ describe("distributePool — the Time Pool pays for Public Access only", () => {
 
 		// Nobody is paid, rather than the gated creator being paid twice. What happens to
 		// a Time Pool with nowhere to go is a model question this job does not answer —
-		// `account_cycles.time_pool` still records the budget either way.
+		// `user_cycles.time_pool` still records the budget either way.
 		expect((await poolPaid(userId)).size).toBe(0);
 	});
 

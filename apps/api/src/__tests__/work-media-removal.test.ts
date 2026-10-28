@@ -16,12 +16,12 @@
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	transcodingJobs,
 	users,
-	webBuilds,
+	workBuilds,
 	workPages,
 	workSourceFiles,
 	works,
+	workTranscodingJobs,
 } from "@anthers/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import app from "../index";
@@ -88,8 +88,10 @@ describe("remove an unpublished Work's media", () => {
 		if (createdWorkIds.length > 0) {
 			await db.delete(workPages).where(inArray(workPages.workId, createdWorkIds));
 			await db.delete(workSourceFiles).where(inArray(workSourceFiles.workId, createdWorkIds));
-			await db.delete(transcodingJobs).where(inArray(transcodingJobs.workId, createdWorkIds));
-			await db.delete(webBuilds).where(inArray(webBuilds.workId, createdWorkIds));
+			await db
+				.delete(workTranscodingJobs)
+				.where(inArray(workTranscodingJobs.workId, createdWorkIds));
+			await db.delete(workBuilds).where(inArray(workBuilds.workId, createdWorkIds));
 			await db.delete(works).where(inArray(works.id, createdWorkIds));
 		}
 		await db.delete(users).where(eq(users.id, creatorId));
@@ -112,7 +114,7 @@ describe("remove an unpublished Work's media", () => {
 					scheduledReleaseAt: new Date(Date.now() + 3_600_000),
 				})
 				.where(eq(works.id, work.id));
-			await db.insert(transcodingJobs).values({
+			await db.insert(workTranscodingJobs).values({
 				workId: work.id,
 				mediaType: "video",
 				status: "failed",
@@ -139,8 +141,8 @@ describe("remove an unpublished Work's media", () => {
 
 				const jobs = await db
 					.select()
-					.from(transcodingJobs)
-					.where(eq(transcodingJobs.workId, work.id));
+					.from(workTranscodingJobs)
+					.where(eq(workTranscodingJobs.workId, work.id));
 				expect(jobs).toHaveLength(0);
 
 				expect(deleted).toContain(source);

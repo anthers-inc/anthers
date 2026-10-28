@@ -23,11 +23,11 @@
  */
 import { db } from "@anthers/db/client";
 import {
-	accountCycles,
 	badges,
 	billingAccounts,
 	invoices,
 	userBadges,
+	userCycles,
 	works,
 } from "@anthers/db/schema";
 import { mostTaxablePerkKind } from "@anthers/shared/badge-art";
@@ -71,10 +71,10 @@ async function snapshotCycle(
 		foundation: Decimal.max(0, bd.foundation).toFixed(2),
 	};
 	await db
-		.insert(accountCycles)
+		.insert(userCycles)
 		.values({ userId, billingCycle: currentCycleKey(), ...values })
 		.onConflictDoUpdate({
-			target: [accountCycles.userId, accountCycles.billingCycle],
+			target: [userCycles.userId, userCycles.billingCycle],
 			set: { ...values, updatedAt: new Date() },
 		});
 }

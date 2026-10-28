@@ -57,7 +57,7 @@ import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
-import { transcodingJobs, works } from "@anthers/db/schema";
+import { works, workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { FFMPEG_THREADS, ffmpegCommand } from "../lib/ffmpeg.js";
 import {
@@ -554,7 +554,7 @@ async function generateMasterPlaylist(
 	);
 }
 async function updateJobProgress(jobId: number, progress: number) {
-	await db.update(transcodingJobs).set({ progress }).where(eq(transcodingJobs.id, jobId));
+	await db.update(workTranscodingJobs).set({ progress }).where(eq(workTranscodingJobs.id, jobId));
 }
 
 /**
@@ -565,9 +565,9 @@ async function updateJobProgress(jobId: number, progress: number) {
  */
 export async function isTranscodeSettled(jobId: number): Promise<boolean> {
 	const [row] = await db
-		.select({ status: transcodingJobs.status })
-		.from(transcodingJobs)
-		.where(eq(transcodingJobs.id, jobId))
+		.select({ status: workTranscodingJobs.status })
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.id, jobId))
 		.limit(1);
 	return row?.status === "completed" || row?.status === "canceled";
 }
@@ -596,8 +596,8 @@ async function runTranscode(
 
 	const [job] = await db
 		.select()
-		.from(transcodingJobs)
-		.where(eq(transcodingJobs.id, jobId))
+		.from(workTranscodingJobs)
+		.where(eq(workTranscodingJobs.id, jobId))
 		.limit(1);
 	if (!job) throw new Error(`TranscodingJob ${jobId} not found`);
 	// Idempotency: a late pg-boss retry of a job already finished (e.g. by the
@@ -632,7 +632,7 @@ async function runTranscode(
 	// flag is spent here as well: a run reaching the row has consumed the excuse its
 	// previous stop left, so whatever kills THIS run says for itself.
 	await db
-		.update(transcodingJobs)
+		.update(workTranscodingJobs)
 		.set({
 			status: "processing",
 			progress: 0,
@@ -640,7 +640,7 @@ async function runTranscode(
 			interruptedGracefully: false,
 			updatedAt: new Date(),
 		})
-		.where(eq(transcodingJobs.id, jobId));
+		.where(eq(workTranscodingJobs.id, jobId));
 
 	const [item] = await db.select().from(works).where(eq(works.id, job.workId)).limit(1);
 	if (!item) throw new Error(`Content item ${job.workId} not found`);
@@ -729,9 +729,9 @@ async function runTranscode(
 			// re-runs a decision that cannot change. The boot sweep re-sends only
 			// pending/processing rows, so a row failed here is done deciding.
 			await db
-				.update(transcodingJobs)
+				.update(workTranscodingJobs)
 				.set({ status: "failed", updatedAt: new Date(), errorMessage: verdict.refusal })
-				.where(eq(transcodingJobs.id, jobId));
+				.where(eq(workTranscodingJobs.id, jobId));
 			console.log(
 				`[transcode-video] job ${jobId}: the source's codec pair is outside the accepted set; refused`,
 			);
@@ -872,9 +872,9 @@ async function runTranscode(
 						lastWriteMs = now;
 						// Fire-and-forget so the progress stream isn't blocked on the DB write.
 						lastWrite = db
-							.update(transcodingJobs)
+							.update(workTranscodingJobs)
 							.set({ progress: pct, etaSeconds: eta })
-							.where(eq(transcodingJobs.id, jobId))
+							.where(eq(workTranscodingJobs.id, jobId))
 							.execute()
 							.catch(() => {});
 					}
@@ -935,9 +935,9 @@ async function runTranscode(
 		// finisher's as much as any other.
 		const firstManifestUrl = await storage.getUrl(masterKey);
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ playableAt: new Date(), hlsManifestUrl: firstManifestUrl })
-			.where(eq(transcodingJobs.id, jobId));
+			.where(eq(workTranscodingJobs.id, jobId));
 
 		if (superseded) return;
 
@@ -1024,9 +1024,9 @@ async function runTranscode(
 			totalMs: Math.round(Date.now() - marks.start),
 		};
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ progress: 80, etaSeconds: null, timings })
-			.where(eq(transcodingJobs.id, jobId));
+			.where(eq(workTranscodingJobs.id, jobId));
 
 		// 5. The master, uploaded last — after every variant and rendition file it names
 		// is already in storage, which is the order a player expecting a playable tree
@@ -1043,7 +1043,7 @@ async function runTranscode(
 		// the write a zombie run used to make, planting its manifest over the finisher's.
 		if (!(await ensureStillOurs())) return;
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({
 				status: "completed",
 				// When it finished, which is what "recently finished" on the Dashboard reads.
@@ -1052,17 +1052,17 @@ async function runTranscode(
 				etaSeconds: null,
 				hlsManifestUrl: manifestUrl,
 			})
-			.where(eq(transcodingJobs.id, jobId));
+			.where(eq(workTranscodingJobs.id, jobId));
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({
 				status: "failed",
 				updatedAt: new Date(),
 				errorMessage: message.slice(0, 1000),
 			})
-			.where(eq(transcodingJobs.id, jobId));
+			.where(eq(workTranscodingJobs.id, jobId));
 		throw error;
 	} finally {
 		// Clean up temp files (only files under tmpdir) — no source copy exists to

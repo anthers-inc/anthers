@@ -393,9 +393,9 @@ describe("what 'deleted' means, table by table", () => {
 		// The counterpart to every "the artifact survives" assertion above: the things
 		// that were purely theirs really are gone.
 		for (const [table, column] of [
-			["sessions", "user_id"],
+			["user_sessions", "user_id"],
 			["follows", "follower_id"],
-			["library_items", "user_id"],
+			["user_library_items", "user_id"],
 			["attention_events", "user_id"],
 			["billing_accounts", "user_id"],
 			["user_preferences", "user_id"],

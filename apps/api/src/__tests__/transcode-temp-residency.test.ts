@@ -19,7 +19,7 @@ import { readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db/client";
-import { mediaScans, transcodingJobs, works } from "@anthers/db/schema";
+import { mediaScans, works, workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import { transcodeVideo } from "../jobs/transcode-video.js";
 import { storage } from "../services/storage/index.js";
@@ -103,9 +103,9 @@ describe("a transcode's temp residency", () => {
 			// progress can be read against the running job are recorded.
 			if (jobId != null) {
 				const [row] = await db
-					.select({ progress: transcodingJobs.progress })
-					.from(transcodingJobs)
-					.where(eq(transcodingJobs.id, jobId));
+					.select({ progress: workTranscodingJobs.progress })
+					.from(workTranscodingJobs)
+					.where(eq(workTranscodingJobs.id, jobId));
 				uploads.push({ key, progress: row?.progress ?? null });
 			}
 			return originalUpload(key, body, contentType, acl);
@@ -125,7 +125,7 @@ describe("a transcode's temp residency", () => {
 			.insert(mediaScans)
 			.values({ storageKey: sourceKey, workId, determination: "clean", scannedAt: new Date() });
 		const [job] = await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({ workId, mediaType: "video", status: "pending" })
 			.returning();
 		jobId = job.id;
@@ -153,7 +153,10 @@ describe("a transcode's temp residency", () => {
 		}
 		strayTemps = straysAfterRun;
 
-		const [job] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, jobId!));
+		const [job] = await db
+			.select()
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.id, jobId!));
 		expect(job.status).toBe("completed");
 		expect(job.hlsManifestUrl).toContain("master.m3u8");
 

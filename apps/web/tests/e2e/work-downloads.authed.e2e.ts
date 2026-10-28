@@ -9,7 +9,7 @@
  * player sees: one title, one Downloads table, and one row per platform.
  */
 import { db } from "@anthers/db/client";
-import { assets, works } from "@anthers/db/schema";
+import { workAssets, works } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import {
 	API_URL,
@@ -40,7 +40,7 @@ test("a game with three platform builds is one Work with three downloads", async
 	];
 
 	try {
-		await db.insert(assets).values(
+		await db.insert(workAssets).values(
 			builds.map((build) => ({
 				workId: draft.id,
 				file: `creators/${owner}/assets/${build.platform}-walk.zip`,

@@ -40,7 +40,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
-	assets,
 	attentionEvents,
 	badges,
 	comments,
@@ -52,6 +51,7 @@ import {
 	stripeAccounts,
 	userBadges,
 	users,
+	workAssets,
 	works,
 } from "@anthers/db";
 import { localContentRoot } from "@anthers/db/content-root";
@@ -460,7 +460,7 @@ async function createPost(creatorId: number, spec: GauntletPost): Promise<number
 		// route needs a real key to sign — so a downloadable Work needs an asset.
 		const item = work;
 		const fileKey = `creators/${creatorId}/assets/${spec.slug}.zip`;
-		await db.insert(assets).values({
+		await db.insert(workAssets).values({
 			workId: item.id,
 			file: fileKey,
 			filename: `${spec.slug}.zip`,

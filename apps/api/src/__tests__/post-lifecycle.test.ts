@@ -7,13 +7,13 @@
  * opt-in orphaned-media purge, the unpublish action + permalink 404 for non-owners, and
  * the scheduled-publish sweep (publishes due drafts whose media is ready, defers the rest).
  *
- * Transcode state is simulated by inserting transcoding_jobs rows directly, so nothing
+ * Transcode state is simulated by inserting work_transcoding_jobs rows directly, so nothing
  * touches real ffmpeg or pg-boss.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { db } from "@anthers/db/client";
-import { transcodingJobs, works } from "@anthers/db/schema";
+import { works, workTranscodingJobs } from "@anthers/db/schema";
 import { rowsRatedAs } from "@anthers/shared/content-rating-fixtures";
 import { eq, sql } from "drizzle-orm";
 import app from "../index";
@@ -106,13 +106,13 @@ beforeAll(async () => {
 
 // These suites run against the shared dev database and the usernames carry a per-run
 // suffix, so without this every run's rows stay forever. It matters more here than the
-// count suggests: the transcoding_jobs rows below are inserted at `pending` to simulate an
+// count suggests: the work_transcoding_jobs rows below are inserted at `pending` to simulate an
 // encode in flight, and the worker's boot-time resume sweep re-sent every such row as a
 // real job on each `make dev`.
 //
 // Works and posts must go FIRST and by creator_id: both carry ON DELETE SET NULL (a Work
 // outlives its creator's account), so deleting the users alone orphans them rather than
-// removing them — and the transcoding_jobs that cascade off works would survive with them.
+// removing them — and the work_transcoding_jobs that cascade off works would survive with them.
 afterAll(async () => {
 	const owners = sql`SELECT id FROM users WHERE email IN (${sql.join([sql`${`${ownerName}@example.com`}`, sql`${`${strangerName}@example.com`}`], sql`, `)})`;
 	await db.execute(sql`DELETE FROM works WHERE creator_id IN (${owners})`);
@@ -137,7 +137,7 @@ describe("Release-readiness gate", () => {
 		workPublicId = work.publicId;
 		await giveWorkAFile(workId);
 		await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({ workId, mediaType: "video", status: "pending", progress: 0 });
 
 		const res = await req(`/api/content/works/${workId}`, {
@@ -167,9 +167,9 @@ describe("Release-readiness gate", () => {
 
 	it("releases once the transcode completes", async () => {
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "completed", progress: 100 })
-			.where(eq(transcodingJobs.workId, workId));
+			.where(eq(workTranscodingJobs.workId, workId));
 
 		const res = await req(`/api/content/works/${workId}`, {
 			method: "PATCH",
@@ -598,7 +598,7 @@ describe("Gaps the suite looked like it covered", () => {
 		const slug = (await create.json()).post.slug;
 
 		await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({ workId, mediaType: "video", status: "processing", progress: 10 });
 
 		const res = await req(`/api/content/posts/${slug}`, {

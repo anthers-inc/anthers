@@ -37,7 +37,7 @@ export interface PhysicalOption {
 
 // org — a listing is the platform's selling machinery for one creator's good; the carrier
 // and the stock are the creator's facts, held here to run a sale.
-export const physicalListings = pgTable("physical_listings", {
+export const workPhysicalListings = pgTable("work_physical_listings", {
 	id: serial("id").primaryKey(),
 	/** The Work being sold. One listing per Work, and a re-save replaces it. */
 	workId: integer("work_id")

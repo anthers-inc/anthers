@@ -245,7 +245,7 @@ export function isBookshelf(type: string): boolean {
 }
 
 /**
- * Which processing a Work's uploaded file goes through, as `transcoding_jobs.media_type`
+ * Which processing a Work's uploaded file goes through, as `work_transcoding_jobs.media_type`
  * names it, or null for a type whose file is used as it was uploaded. The pipeline is a
  * property of the medium rather than the type, which is why `music` and `audio` share one.
  */

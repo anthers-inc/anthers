@@ -19,7 +19,7 @@
 
 import { beforeAll, describe, expect, it } from "bun:test";
 import { client, db } from "@anthers/db/client";
-import { transcodingJobs } from "@anthers/db/schema";
+import { workTranscodingJobs } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import app from "../index";
 import { MAX_TRANSCODE_RESUMES } from "../jobs/resume-orphans";
@@ -34,7 +34,7 @@ import { purgeAccountsCreatedHere } from "./cleanup";
 import { DB_SETUP_TIMEOUT } from "./setup-timeouts.js";
 
 // Every account this suite creates is taken back afterward, on success or failure; the
-// Works and their transcoding_jobs rows cascade with them (purgeContentByIds).
+// Works and their work_transcoding_jobs rows cascade with them (purgeContentByIds).
 purgeAccountsCreatedHere();
 
 const testFetch = app.fetch;
@@ -51,7 +51,7 @@ beforeAll(async () => {
 }, DB_SETUP_TIMEOUT);
 
 /**
- * A Work plus a `transcoding_jobs` row, the FK target the lock key is derived from.
+ * A Work plus a `work_transcoding_jobs` row, the FK target the lock key is derived from.
  * `type: "game"` so creating it queues nothing of its own — the row under test is the
  * kind the suites insert directly, per `resume-orphans.test.ts`'s reasoning.
  */
@@ -65,9 +65,9 @@ async function makeJob(status: string, title: string): Promise<number> {
 	const workId = (await res.json()).work.id as number;
 
 	const [row] = await db
-		.insert(transcodingJobs)
+		.insert(workTranscodingJobs)
 		.values({ workId, mediaType: "video", status, progress: 0 })
-		.returning({ id: transcodingJobs.id });
+		.returning({ id: workTranscodingJobs.id });
 	return row.id;
 }
 
@@ -152,9 +152,9 @@ describe("the re-delivery's claim re-check", () => {
 			await transcodeVideo({ jobId });
 
 			const [row] = await db
-				.select({ status: transcodingJobs.status })
-				.from(transcodingJobs)
-				.where(eq(transcodingJobs.id, jobId));
+				.select({ status: workTranscodingJobs.status })
+				.from(workTranscodingJobs)
+				.where(eq(workTranscodingJobs.id, jobId));
 			expect(row.status).toBe("completed");
 		},
 		DB_SETUP_TIMEOUT,
@@ -171,16 +171,19 @@ describe("the re-delivery's claim re-check", () => {
 			// may touch the failed row's state.
 			const jobId = await makeJob("failed", "entry-exhausted-skip");
 			await db
-				.update(transcodingJobs)
+				.update(workTranscodingJobs)
 				.set({ resumeCount: MAX_TRANSCODE_RESUMES })
-				.where(eq(transcodingJobs.id, jobId));
+				.where(eq(workTranscodingJobs.id, jobId));
 
 			await transcodeVideo({ jobId });
 
 			const [row] = await db
-				.select({ status: transcodingJobs.status, resumeCount: transcodingJobs.resumeCount })
-				.from(transcodingJobs)
-				.where(eq(transcodingJobs.id, jobId));
+				.select({
+					status: workTranscodingJobs.status,
+					resumeCount: workTranscodingJobs.resumeCount,
+				})
+				.from(workTranscodingJobs)
+				.where(eq(workTranscodingJobs.id, jobId));
 			expect(row.status).toBe("failed");
 			expect(row.resumeCount).toBe(MAX_TRANSCODE_RESUMES);
 		},

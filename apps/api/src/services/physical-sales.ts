@@ -20,7 +20,7 @@
  * charged twice for one.
  */
 import { db } from "@anthers/db/client";
-import { type PhysicalOption, physicalListings, works } from "@anthers/db/schema";
+import { type PhysicalOption, workPhysicalListings, works } from "@anthers/db/schema";
 import {
 	isPhysicalTaxCategory,
 	PHYSICAL_TAX_CATEGORIES,
@@ -55,8 +55,8 @@ const DEFAULT_LISTING: BuyerListing = {
 export async function buyerListingFor(workId: number): Promise<BuyerListing> {
 	const [row] = await db
 		.select()
-		.from(physicalListings)
-		.where(eq(physicalListings.workId, workId))
+		.from(workPhysicalListings)
+		.where(eq(workPhysicalListings.workId, workId))
 		.limit(1);
 	if (!row) return { ...DEFAULT_LISTING, options: [] };
 	const options: PhysicalOption[] = row.options ?? [];

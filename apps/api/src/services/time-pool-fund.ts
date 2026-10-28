@@ -32,11 +32,11 @@
  */
 import { db } from "@anthers/db/client";
 import {
-	accountCycles,
 	attentionEvents,
 	badges,
 	timePoolFundLedger,
 	userBadges,
+	userCycles,
 } from "@anthers/db/schema";
 import type { CycleKey } from "@anthers/shared/billing-cycle";
 import { currentCycleKey, cycleEnd, cycleStart, nextCycleKey } from "@anthers/shared/billing-cycle";
@@ -72,7 +72,7 @@ type FundSettings = { adminBudgetShare: number; freeAccessShare: number };
 /**
  * The cycle's booked charitable revenue, on the basis the books record.
  *
- * - **A cycle the settlement books (`account_cycles` rows exist)** — the settled
+ * - **A cycle the settlement books (`user_cycles` rows exist)** — the settled
  *   basis: the sum of each supporter's remainder, which the row carries as
  *   `foundation` less `time_pool_undistributed` (the dust a pool returns is the
  *   pool's money, not revenue). A late-paying invoice restates this upward, and the
@@ -89,10 +89,10 @@ type FundSettings = { adminBudgetShare: number; freeAccessShare: number };
 export async function charitableRevenueForCycle(cycle: CycleKey): Promise<Decimal> {
 	const settled = await db
 		.select({
-			total: sql<string>`COALESCE(SUM(${accountCycles.foundation} - ${accountCycles.timePoolUndistributed}), 0)`,
+			total: sql<string>`COALESCE(SUM(${userCycles.foundation} - ${userCycles.timePoolUndistributed}), 0)`,
 		})
-		.from(accountCycles)
-		.where(eq(accountCycles.billingCycle, cycle));
+		.from(userCycles)
+		.where(eq(userCycles.billingCycle, cycle));
 	const booked = new Decimal(settled[0]?.total ?? "0.00");
 	if (settled.length > 0 && booked.greaterThan(0))
 		return booked.toDecimalPlaces(2, Decimal.ROUND_DOWN);
@@ -255,12 +255,12 @@ export async function publishFundLedger(now: Date = new Date()): Promise<number>
 	const after = nextCycleKey(next);
 
 	// Every cycle the settled books name, actualized from its own holdings — a $0
-	// month included, since every settlement writes one `account_cycles` row per
+	// month included, since every settlement writes one `user_cycles` row per
 	// supporter and the ledger publishes every cycle since the mechanism deployed.
 	const settledCycles = await db
-		.selectDistinct({ cycle: accountCycles.billingCycle })
-		.from(accountCycles)
-		.where(sql`${accountCycles.billingCycle} < ${current}`);
+		.selectDistinct({ cycle: userCycles.billingCycle })
+		.from(userCycles)
+		.where(sql`${userCycles.billingCycle} < ${current}`);
 	let published = 0;
 	for (const row of settledCycles) {
 		await actualizeCycle(row.cycle as CycleKey, now);

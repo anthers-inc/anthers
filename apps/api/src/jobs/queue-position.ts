@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * The media lanes' positions, written as records (`transcoding_jobs.queue_position`).
+ * The media lanes' positions, written as records (`work_transcoding_jobs.queue_position`).
  *
  * The media pipeline runs as two per-type queues — `transcode-video` single-file,
  * `process-audio` two at a time (measured 2026-10-18: an x264 ladder saturates both of
@@ -29,7 +29,7 @@
  */
 
 import { db } from "@anthers/db";
-import { transcodingJobs, works } from "@anthers/db/schema";
+import { works, workTranscodingJobs } from "@anthers/db/schema";
 import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
 
 /** Assign every pending media row its 1-based spot, and every settled row no spot. */
@@ -38,7 +38,7 @@ export async function refreshQueuePositions(): Promise<void> {
 	// One statement, no per-row round trips; the WHERE keeps it a no-op for the common
 	// case (rows never touched the field, so nothing rewrites).
 	await db.execute(
-		sql`UPDATE transcoding_jobs SET queue_position = NULL
+		sql`UPDATE work_transcoding_jobs SET queue_position = NULL
 			WHERE queue_position IS NOT NULL
 			  AND (status != 'pending' OR media_type NOT IN ('video', 'audio'))`,
 	);
@@ -49,13 +49,13 @@ export async function refreshQueuePositions(): Promise<void> {
 	await db.execute(
 		sql`WITH ranked AS (
 				SELECT id, ROW_NUMBER() OVER (PARTITION BY media_type ORDER BY created_at, id) AS pos
-				FROM transcoding_jobs
+				FROM work_transcoding_jobs
 				WHERE status = 'pending' AND media_type IN ('video', 'audio')
 			)
-			UPDATE transcoding_jobs SET queue_position = ranked.pos
+			UPDATE work_transcoding_jobs SET queue_position = ranked.pos
 			FROM ranked
-			WHERE transcoding_jobs.id = ranked.id
-			  AND transcoding_jobs.queue_position IS DISTINCT FROM ranked.pos`,
+			WHERE work_transcoding_jobs.id = ranked.id
+			  AND work_transcoding_jobs.queue_position IS DISTINCT FROM ranked.pos`,
 	);
 
 	// The lanes' seconds figures, written beside the positions (a screen that showed
@@ -86,7 +86,7 @@ export async function refreshQueuePositions(): Promise<void> {
 	const recentCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 	const history = await db
 		.select({
-			mediaType: transcodingJobs.mediaType,
+			mediaType: workTranscodingJobs.mediaType,
 			medianMs: sql<
 				number | null
 			>`percentile_cont(0.5) within group (order by ((timings->>'totalMs')::numeric))`,
@@ -100,15 +100,15 @@ export async function refreshQueuePositions(): Promise<void> {
 				number | null
 			>`percentile_cont(0.5) within group (order by ((timings->>'totalMs')::numeric / NULLIF((timings->>'durationSeconds')::numeric, 0)))`,
 		})
-		.from(transcodingJobs)
+		.from(workTranscodingJobs)
 		.where(
 			and(
-				eq(transcodingJobs.status, "completed"),
-				isNotNull(transcodingJobs.timings),
-				gt(transcodingJobs.createdAt, recentCutoff),
+				eq(workTranscodingJobs.status, "completed"),
+				isNotNull(workTranscodingJobs.timings),
+				gt(workTranscodingJobs.createdAt, recentCutoff),
 			),
 		)
-		.groupBy(transcodingJobs.mediaType);
+		.groupBy(workTranscodingJobs.mediaType);
 	const costOf = (mediaType: string, durationSeconds?: number | null): number | null => {
 		const row = history.find((h) => h.mediaType === mediaType);
 		const rateMs = Number(row?.medianRateMs);
@@ -124,14 +124,17 @@ export async function refreshQueuePositions(): Promise<void> {
 	for (const mediaType of ["video", "audio"] as const) {
 		const [running] = await db
 			.select({
-				etaSeconds: transcodingJobs.etaSeconds,
-				progress: transcodingJobs.progress,
+				etaSeconds: workTranscodingJobs.etaSeconds,
+				progress: workTranscodingJobs.progress,
 			})
-			.from(transcodingJobs)
+			.from(workTranscodingJobs)
 			.where(
-				and(eq(transcodingJobs.status, "processing"), eq(transcodingJobs.mediaType, mediaType)),
+				and(
+					eq(workTranscodingJobs.status, "processing"),
+					eq(workTranscodingJobs.mediaType, mediaType),
+				),
 			)
-			.orderBy(transcodingJobs.createdAt)
+			.orderBy(workTranscodingJobs.createdAt)
 			.limit(1);
 		let ahead =
 			running == null
@@ -141,16 +144,21 @@ export async function refreshQueuePositions(): Promise<void> {
 
 		const pending = await db
 			.select({
-				id: transcodingJobs.id,
+				id: workTranscodingJobs.id,
 				// The row hasn't run its own probe yet, but its Work may carry a duration
 				// from an earlier pass over the same source — the rate median prices by it
 				// when present, and the flat median prices the ones without.
 				durationSeconds: works.durationSeconds,
 			})
-			.from(transcodingJobs)
-			.innerJoin(works, eq(works.id, transcodingJobs.workId))
-			.where(and(eq(transcodingJobs.status, "pending"), eq(transcodingJobs.mediaType, mediaType)))
-			.orderBy(transcodingJobs.createdAt, transcodingJobs.id);
+			.from(workTranscodingJobs)
+			.innerJoin(works, eq(works.id, workTranscodingJobs.workId))
+			.where(
+				and(
+					eq(workTranscodingJobs.status, "pending"),
+					eq(workTranscodingJobs.mediaType, mediaType),
+				),
+			)
+			.orderBy(workTranscodingJobs.createdAt, workTranscodingJobs.id);
 
 		// The lane serializes its slot(s), so a pending row's front figure is the debt
 		// plus the cost of every pending row before it in this same order; with two
@@ -161,9 +169,9 @@ export async function refreshQueuePositions(): Promise<void> {
 			const front = Math.round(ahead);
 			const total = own == null ? (front > 0 ? front : null) : front + Math.round(own);
 			await db
-				.update(transcodingJobs)
+				.update(workTranscodingJobs)
 				.set({ queueEtaSeconds: front, etaSeconds: total })
-				.where(eq(transcodingJobs.id, row.id));
+				.where(eq(workTranscodingJobs.id, row.id));
 			ahead = total ?? ahead;
 		}
 	}

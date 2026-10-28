@@ -311,7 +311,7 @@ export const legalHoldsRelations = relations(legalHolds, ({ one }) => ({
  * operator list does.
  *
  * `original_key` is what the rest of the database still points at — `works.source_key`,
- * `assets.file`, a transcode's output URL — and is deliberately NOT rewritten when the
+ * `work_assets.file`, a transcode's output URL — and is deliberately NOT rewritten when the
  * object moves. Rewriting them would scatter the knowledge that something is quarantined
  * across four tables, where `quarantine_status` and this row now hold it in two.
  */

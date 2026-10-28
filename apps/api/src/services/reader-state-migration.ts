@@ -22,9 +22,9 @@
  */
 import { db } from "@anthers/db";
 import {
-	libraryItems,
-	readingPositions,
 	spaceOutbox,
+	userLibraryItems,
+	userReadingPositions,
 	users,
 	workSaves,
 	works,
@@ -94,8 +94,8 @@ export async function migrateReaderState(
 	}
 
 	const [library, positions, saves] = await Promise.all([
-		db.select().from(libraryItems).where(eq(libraryItems.userId, userId)),
-		db.select().from(readingPositions).where(eq(readingPositions.userId, userId)),
+		db.select().from(userLibraryItems).where(eq(userLibraryItems.userId, userId)),
+		db.select().from(userReadingPositions).where(eq(userReadingPositions.userId, userId)),
 		db.select().from(workSaves).where(eq(workSaves.userId, userId)),
 	]);
 
@@ -213,8 +213,8 @@ export async function queueLibraryEntry(userId: number, itemId: number): Promise
 	if ((await readerStateHome(userId)) !== "space") return;
 	const [row] = await db
 		.select()
-		.from(libraryItems)
-		.where(and(eq(libraryItems.id, itemId), eq(libraryItems.userId, userId)))
+		.from(userLibraryItems)
+		.where(and(eq(userLibraryItems.id, itemId), eq(userLibraryItems.userId, userId)))
 		.limit(1);
 	if (!row) return;
 	const subject = librarySubject(row);
@@ -243,8 +243,8 @@ export async function queuePosition(userId: number, workId: number): Promise<voi
 	const space = await registeredSpace(userId);
 	const [row] = await db
 		.select()
-		.from(readingPositions)
-		.where(and(eq(readingPositions.userId, userId), eq(readingPositions.workId, workId)))
+		.from(userReadingPositions)
+		.where(and(eq(userReadingPositions.userId, userId), eq(userReadingPositions.workId, workId)))
 		.limit(1);
 	if (!space || !row) return;
 	const uris = await workUris([workId]);
@@ -311,8 +311,8 @@ export async function queueWorkSaveRemoval(userId: number, workId: number): Prom
 	});
 }
 
-/** The subject a `library_items` row names, or null when the row names none. */
-function librarySubject(row: typeof libraryItems.$inferSelect): {
+/** The subject a `user_library_items` row names, or null when the row names none. */
+function librarySubject(row: typeof userLibraryItems.$inferSelect): {
 	kind: "work" | "project" | "post";
 	id: number;
 } | null {

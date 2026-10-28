@@ -203,7 +203,7 @@ export async function purgeAccountIds(ids: number[]): Promise<void> {
 /**
  * Delete Works by id, with the rows that would otherwise orphan pointing at them.
  *
- * A Work's own variants (`assets`, `media_scans`, `transcoding_jobs`, `library_items`,
+ * A Work's own variants (`work_assets`, `media_scans`, `work_transcoding_jobs`, `user_library_items`,
  * `work_pages`, share links) cascade. What does not is the dependency-order pass every
  * other sweep in this file already follows: a purchase (outlives the Work in production,
  * not in a fixture), the ledger rows that name it (`SET NULL` would strand them), the

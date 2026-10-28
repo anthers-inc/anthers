@@ -11,7 +11,7 @@
  *
  * ## The two stores and who wins
  *
- * **The local keys are the device store; the server row (`reading_positions`) is the
+ * **The local keys are the device store; the server row (`user_reading_positions`) is the
  * user's.** Every write lands locally first and is pushed behind it, throttled, as an
  * upsert — **newest-write-wins**, so the row says where the reader most recently
  * actually was, never the furthest they once got (a high-water rule would refuse a
@@ -81,7 +81,7 @@ export const SCROLL_OPEN_FLOOR = 0.01;
 
 // ── The server row ───────────────────────────────────────────────────────────
 
-/** One `reading_positions` row, in the shape the API returns. */
+/** One `user_reading_positions` row, in the shape the API returns. */
 export interface ServerPosition {
 	workId: number;
 	progress: number;

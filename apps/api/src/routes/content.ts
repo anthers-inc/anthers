@@ -4,7 +4,7 @@
  *
  * A **Work** (`works`) is the unit of published creative work: a game, a video, a track,
  * an image, an essay, software, a physical good, a service. It OWNS its source media,
- * downloadable variants (`assets`) and transcodes (`transcoding_jobs`), and it carries its
+ * downloadable variants (`work_assets`) and transcodes (`work_transcoding_jobs`), and it carries its
  * own visibility, dates, delivery switches and access gates. Processing runs once on
  * upload to the Catalog, before the Work is released or referenced anywhere. A Work can be
  * released, gated, purchased and consumed with **no Post ever existing**.
@@ -25,11 +25,9 @@
 
 import { db } from "@anthers/db/client";
 import {
-	assets,
 	badges,
 	comments,
 	inlineImages,
-	libraryItems,
 	postEdits,
 	posts,
 	projectItems,
@@ -37,11 +35,12 @@ import {
 	projects,
 	purchases,
 	reviews,
-	transcodingJobs,
+	userLibraryItems,
 	users,
 	votes,
-	webBuildFiles,
-	webBuilds,
+	workAssets,
+	workBuildFiles,
+	workBuilds,
 	workCaptionTracks,
 	workPages,
 	workSaves,
@@ -49,6 +48,7 @@ import {
 	workSections,
 	workSourceFiles,
 	works,
+	workTranscodingJobs,
 } from "@anthers/db/schema";
 import {
 	badgeFor,
@@ -850,9 +850,9 @@ export async function findWorkRow(param: string): Promise<typeof works.$inferSel
  */
 export async function buildFlagsForWork(workId: number): Promise<[boolean, boolean]> {
 	const [row] = await db
-		.select({ id: webBuilds.id, requiresIsolation: webBuilds.requiresIsolation })
-		.from(webBuilds)
-		.where(and(eq(webBuilds.workId, workId), eq(webBuilds.isPrimary, true)))
+		.select({ id: workBuilds.id, requiresIsolation: workBuilds.requiresIsolation })
+		.from(workBuilds)
+		.where(and(eq(workBuilds.workId, workId), eq(workBuilds.isPrimary, true)))
 		.limit(1);
 	return row != null ? [true, row.requiresIsolation] : [false, false];
 }
@@ -1358,10 +1358,10 @@ const addPostToProjectSchema = z.object({
 const projectsId = sql`${sql.identifier("projects")}.${sql.identifier("id")}`;
 
 type WorkRow = typeof works.$inferSelect;
-type AssetRow = typeof assets.$inferSelect;
-type TranscodingJobRow = typeof transcodingJobs.$inferSelect;
-type WebBuildRow = typeof webBuilds.$inferSelect;
-type WebBuildFileRow = typeof webBuildFiles.$inferSelect;
+type AssetRow = typeof workAssets.$inferSelect;
+type TranscodingJobRow = typeof workTranscodingJobs.$inferSelect;
+type WebBuildRow = typeof workBuilds.$inferSelect;
+type WebBuildFileRow = typeof workBuildFiles.$inferSelect;
 /** One browser build plus its files, the shape the owner-facing serializer carries. */
 type WebBuildWithFiles = WebBuildRow & { files: WebBuildFileRow[] };
 
@@ -1388,7 +1388,7 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 	const processing = processingFor(item.type);
 	if (processing === "video" && item.sourceKey) {
 		const [job] = await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({ workId: item.id, mediaType: "video", status: "pending" })
 			.returning();
 		// The lane's own queue resolves by the row's media type (`QUEUE_BY_MEDIA_TYPE`), and
@@ -1406,7 +1406,7 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 		// routes nowhere is recorded failed, legibly, rather than thrown out of a create
 		// the creator is mid-way through.
 		const [job] = await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({ workId: item.id, mediaType: "ebook", status: "pending" })
 			.returning();
 		try {
@@ -1416,16 +1416,16 @@ async function queueTranscodeForWork(item: WorkRow): Promise<TranscodingJobRow |
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			await db
-				.update(transcodingJobs)
+				.update(workTranscodingJobs)
 				.set({ status: "failed", errorMessage: message, updatedAt: new Date() })
-				.where(eq(transcodingJobs.id, job.id));
+				.where(eq(workTranscodingJobs.id, job.id));
 			return { ...job, status: "failed", errorMessage: message };
 		}
 		return job;
 	}
 	if (processing === "audio" && item.sourceKey) {
 		const [job] = await db
-			.insert(transcodingJobs)
+			.insert(workTranscodingJobs)
 			.values({ workId: item.id, mediaType: "audio", status: "pending" })
 			.returning();
 		const mediaQueue = QUEUE_BY_MEDIA_TYPE.audio;
@@ -2843,12 +2843,12 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 		captionRows,
 	] = await Promise.all([
 		db.select().from(works).where(inArray(works.id, workIds)),
-		db.select().from(assets).where(inArray(assets.workId, workIds)),
+		db.select().from(workAssets).where(inArray(workAssets.workId, workIds)),
 		db
 			.select()
-			.from(transcodingJobs)
-			.where(inArray(transcodingJobs.workId, workIds))
-			.orderBy(desc(transcodingJobs.createdAt)),
+			.from(workTranscodingJobs)
+			.where(inArray(workTranscodingJobs.workId, workIds))
+			.orderBy(desc(workTranscodingJobs.createdAt)),
 		db
 			.select({ workId: workPages.workId, count: sql<number>`count(*)::int` })
 			.from(workPages)
@@ -2859,12 +2859,12 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 			.from(workSections)
 			.where(inArray(workSections.workId, workIds))
 			.groupBy(workSections.workId),
-		db.select().from(webBuilds).where(inArray(webBuilds.workId, workIds)),
+		db.select().from(workBuilds).where(inArray(workBuilds.workId, workIds)),
 		db
-			.select({ file: webBuildFiles, workId: webBuilds.workId })
-			.from(webBuildFiles)
-			.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
-			.where(inArray(webBuilds.workId, workIds)),
+			.select({ file: workBuildFiles, workId: workBuilds.workId })
+			.from(workBuildFiles)
+			.innerJoin(workBuilds, eq(workBuildFiles.buildId, workBuilds.id))
+			.where(inArray(workBuilds.workId, workIds)),
 		db.select().from(workCaptionTracks).where(inArray(workCaptionTracks.workId, workIds)),
 	]);
 	for (const p of pageRows) pagesByWork.set(p.workId, p.count);
@@ -2886,7 +2886,7 @@ async function loadWorkBundles(workIds: number[]): Promise<{
 		list.push(t);
 		captionsByWork.set(t.workId, list);
 	}
-	const filesByBuild = new Map<number, (typeof webBuildFiles.$inferSelect)[]>();
+	const filesByBuild = new Map<number, (typeof workBuildFiles.$inferSelect)[]>();
 	for (const { file } of buildFileRows) {
 		const list = filesByBuild.get(file.buildId) ?? [];
 		list.push(file);
@@ -4376,9 +4376,9 @@ const contentRoutes = new Hono()
 		}
 
 		const [asset] = await db
-			.select({ file: assets.file })
-			.from(assets)
-			.where(and(eq(assets.id, c.req.valid("json").assetId), eq(assets.workId, work.id)))
+			.select({ file: workAssets.file })
+			.from(workAssets)
+			.where(and(eq(workAssets.id, c.req.valid("json").assetId), eq(workAssets.workId, work.id)))
 			.limit(1);
 		if (!asset) return c.json({ error: "Asset not found" }, 404);
 
@@ -4438,8 +4438,8 @@ const contentRoutes = new Hono()
 
 		const [asset] = await db
 			.select()
-			.from(assets)
-			.where(and(eq(assets.id, Number(c.req.param("assetId"))), eq(assets.workId, work.id)))
+			.from(workAssets)
+			.where(and(eq(workAssets.id, Number(c.req.param("assetId"))), eq(workAssets.workId, work.id)))
 			.limit(1);
 		if (!asset) return c.json({ error: "Asset not found" }, 404);
 
@@ -4584,9 +4584,9 @@ const contentRoutes = new Hono()
 
 		const jobs = await db
 			.select()
-			.from(transcodingJobs)
-			.where(eq(transcodingJobs.workId, work.id))
-			.orderBy(desc(transcodingJobs.createdAt));
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.workId, work.id))
+			.orderBy(desc(workTranscodingJobs.createdAt));
 
 		// Serialized exactly as Work detail does — same helper, same rule. That matters:
 		// this route is a second way to reach the same rows, so anything Work detail
@@ -4629,8 +4629,8 @@ const contentRoutes = new Hono()
 
 		const [job] = await db
 			.select()
-			.from(transcodingJobs)
-			.where(and(eq(transcodingJobs.id, jobId), eq(transcodingJobs.workId, work.id)))
+			.from(workTranscodingJobs)
+			.where(and(eq(workTranscodingJobs.id, jobId), eq(workTranscodingJobs.workId, work.id)))
 			.limit(1);
 		if (!job) return c.json({ error: "Job not found" }, 404);
 		if (job.status === "completed") {
@@ -4644,13 +4644,16 @@ const contentRoutes = new Hono()
 		}
 
 		await db
-			.update(transcodingJobs)
+			.update(workTranscodingJobs)
 			.set({ status: "canceled", etaSeconds: null, updatedAt: new Date() })
-			.where(eq(transcodingJobs.id, jobId));
+			.where(eq(workTranscodingJobs.id, jobId));
 		// The canceled row leaves the queue; the ones behind it move up.
 		await refreshQueuePositions();
 
-		const [jobRow] = await db.select().from(transcodingJobs).where(eq(transcodingJobs.id, jobId));
+		const [jobRow] = await db
+			.select()
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.id, jobId));
 		return c.json(
 			{ work: await serializeWork(work, [], jobRow, [], deliveryCtx()), job: jobRow },
 			200,
@@ -4695,13 +4698,13 @@ const contentRoutes = new Hono()
 		const collected = await collectWorkMedia([work.id]);
 
 		await db.transaction(async (tx) => {
-			await tx.delete(webBuilds).where(eq(webBuilds.workId, work.id));
-			await tx.delete(assets).where(eq(assets.workId, work.id));
+			await tx.delete(workBuilds).where(eq(workBuilds.workId, work.id));
+			await tx.delete(workAssets).where(eq(workAssets.workId, work.id));
 			await tx.delete(workSections).where(eq(workSections.workId, work.id));
 			await tx.delete(workSectionAssets).where(eq(workSectionAssets.workId, work.id));
 			await tx.delete(workPages).where(eq(workPages.workId, work.id));
 			await tx.delete(workSourceFiles).where(eq(workSourceFiles.workId, work.id));
-			await tx.delete(transcodingJobs).where(eq(transcodingJobs.workId, work.id));
+			await tx.delete(workTranscodingJobs).where(eq(workTranscodingJobs.workId, work.id));
 			await tx
 				.update(works)
 				.set({
@@ -4746,9 +4749,9 @@ const contentRoutes = new Hono()
 
 		const [job] = await db
 			.select()
-			.from(transcodingJobs)
-			.where(eq(transcodingJobs.workId, work.id))
-			.orderBy(desc(transcodingJobs.createdAt))
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.workId, work.id))
+			.orderBy(desc(workTranscodingJobs.createdAt))
 			.limit(1);
 		if (!job?.outputFileUrl) return c.json({ error: "Not found" }, 404);
 
@@ -4993,9 +4996,9 @@ const contentRoutes = new Hono()
 		// The primary build is what "play" means; a non-primary variant is registered
 		// storage, not the Work's playable state.
 		const [build] = await db
-			.select({ id: webBuilds.id, entryPath: webBuilds.entryPath })
-			.from(webBuilds)
-			.where(and(eq(webBuilds.workId, work.id), eq(webBuilds.isPrimary, true)))
+			.select({ id: workBuilds.id, entryPath: workBuilds.entryPath })
+			.from(workBuilds)
+			.where(and(eq(workBuilds.workId, work.id), eq(workBuilds.isPrimary, true)))
 			.limit(1);
 		if (!build) return c.json({ error: "This Work has no hosted build." }, 404);
 
@@ -5298,9 +5301,9 @@ const contentRoutes = new Hono()
 		const workId = work.id;
 		const [job] = await db
 			.select()
-			.from(transcodingJobs)
-			.where(eq(transcodingJobs.workId, workId))
-			.orderBy(desc(transcodingJobs.createdAt))
+			.from(workTranscodingJobs)
+			.where(eq(workTranscodingJobs.workId, workId))
+			.orderBy(desc(workTranscodingJobs.createdAt))
 			.limit(1);
 		const manifestUrl = job?.hlsManifestUrl;
 		if (!manifestUrl) return c.json({ error: "Not found" }, 404);
@@ -5536,18 +5539,18 @@ const contentRoutes = new Hono()
 
 		const ids = items.map((i) => i.id);
 		const [assetRows, jobRows, buildRows, buildFileRows, reviewRows] = await Promise.all([
-			db.select().from(assets).where(inArray(assets.workId, ids)),
+			db.select().from(workAssets).where(inArray(workAssets.workId, ids)),
 			db
 				.select()
-				.from(transcodingJobs)
-				.where(inArray(transcodingJobs.workId, ids))
-				.orderBy(desc(transcodingJobs.createdAt)),
-			db.select().from(webBuilds).where(inArray(webBuilds.workId, ids)),
+				.from(workTranscodingJobs)
+				.where(inArray(workTranscodingJobs.workId, ids))
+				.orderBy(desc(workTranscodingJobs.createdAt)),
+			db.select().from(workBuilds).where(inArray(workBuilds.workId, ids)),
 			db
-				.select({ file: webBuildFiles })
-				.from(webBuildFiles)
-				.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
-				.where(inArray(webBuilds.workId, ids)),
+				.select({ file: workBuildFiles })
+				.from(workBuildFiles)
+				.innerJoin(workBuilds, eq(workBuildFiles.buildId, workBuilds.id))
+				.where(inArray(workBuilds.workId, ids)),
 			// The Reviews column's counts, in one grouped read rather than per row. The
 			// filters are the public aggregate's own — a hidden review, a suspended
 			// reviewer's and the automated-test account's all stop counting there, so a
@@ -5771,19 +5774,19 @@ const contentRoutes = new Hono()
 		if ("refusal" in reach) return reach.refusal;
 		const { userId, isOwner } = reach;
 
-		const [workAssets, jobRows, buildRows, buildFileRows] = await Promise.all([
-			db.select().from(assets).where(eq(assets.workId, work.id)),
+		const [assetRows, jobRows, buildRows, buildFileRows] = await Promise.all([
+			db.select().from(workAssets).where(eq(workAssets.workId, work.id)),
 			db
 				.select()
-				.from(transcodingJobs)
-				.where(eq(transcodingJobs.workId, work.id))
-				.orderBy(desc(transcodingJobs.createdAt)),
-			db.select().from(webBuilds).where(eq(webBuilds.workId, work.id)),
+				.from(workTranscodingJobs)
+				.where(eq(workTranscodingJobs.workId, work.id))
+				.orderBy(desc(workTranscodingJobs.createdAt)),
+			db.select().from(workBuilds).where(eq(workBuilds.workId, work.id)),
 			db
-				.select({ file: webBuildFiles })
-				.from(webBuildFiles)
-				.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
-				.where(eq(webBuilds.workId, work.id)),
+				.select({ file: workBuildFiles })
+				.from(workBuildFiles)
+				.innerJoin(workBuilds, eq(workBuildFiles.buildId, workBuilds.id))
+				.where(eq(workBuilds.workId, work.id)),
 		]);
 		const filesByBuild = new Map<number, WebBuildFileRow[]>();
 		for (const { file } of buildFileRows) {
@@ -5863,7 +5866,7 @@ const contentRoutes = new Hono()
 				work: {
 					...(await serializeWork(
 						work,
-						workAssets,
+						assetRows,
 						playableJob,
 						webBuildsList,
 						deliveryCtx(),
@@ -5944,7 +5947,7 @@ const contentRoutes = new Hono()
 			work: {
 				...(await serializeWorkForUser(
 					work,
-					workAssets,
+					assetRows,
 					jobRows[0] ?? null,
 					resolveAccessSync(
 						work as AccessibleWork,
@@ -6813,13 +6816,13 @@ const contentRoutes = new Hono()
 		if (sourceChanged && updated.sourceKey) {
 			const priorJobs = await db
 				.select()
-				.from(transcodingJobs)
-				.where(eq(transcodingJobs.workId, id));
+				.from(workTranscodingJobs)
+				.where(eq(workTranscodingJobs.workId, id));
 			if (hasSourceSet(updated.type)) {
 				// The old set's files become the version's originals; only the processing
 				// rows retire here. `syncFromSourceKey` owns the set rows.
 				if (priorJobs.length > 0) {
-					await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, id));
+					await db.delete(workTranscodingJobs).where(eq(workTranscodingJobs.workId, id));
 				}
 				await syncFromSourceKey(updated, work);
 			} else {
@@ -6830,7 +6833,7 @@ const contentRoutes = new Hono()
 						archivedKeeps ? { keep: archivedKeeps } : undefined,
 					);
 					if (priorJobs.length > 0) {
-						await db.delete(transcodingJobs).where(eq(transcodingJobs.workId, id));
+						await db.delete(workTranscodingJobs).where(eq(workTranscodingJobs.workId, id));
 					}
 				}
 				await queueTranscodeForWork(updated);
@@ -6838,19 +6841,19 @@ const contentRoutes = new Hono()
 		}
 		if (sourceChanged || thumbnailChanged) await queueScansForWork(updated);
 
-		const [workAssets, jobRows, buildRows, buildFileRows] = await Promise.all([
-			db.select().from(assets).where(eq(assets.workId, id)),
+		const [assetRows, jobRows, buildRows, buildFileRows] = await Promise.all([
+			db.select().from(workAssets).where(eq(workAssets.workId, id)),
 			db
 				.select()
-				.from(transcodingJobs)
-				.where(eq(transcodingJobs.workId, id))
-				.orderBy(desc(transcodingJobs.createdAt)),
-			db.select().from(webBuilds).where(eq(webBuilds.workId, id)),
+				.from(workTranscodingJobs)
+				.where(eq(workTranscodingJobs.workId, id))
+				.orderBy(desc(workTranscodingJobs.createdAt)),
+			db.select().from(workBuilds).where(eq(workBuilds.workId, id)),
 			db
-				.select({ file: webBuildFiles })
-				.from(webBuildFiles)
-				.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
-				.where(eq(webBuilds.workId, id)),
+				.select({ file: workBuildFiles })
+				.from(workBuildFiles)
+				.innerJoin(workBuilds, eq(workBuildFiles.buildId, workBuilds.id))
+				.where(eq(workBuilds.workId, id)),
 		]);
 		const filesByBuild = new Map<number, WebBuildFileRow[]>();
 		for (const { file } of buildFileRows) {
@@ -6869,7 +6872,7 @@ const contentRoutes = new Hono()
 		return c.json({
 			work: await serializeWork(
 				updated,
-				workAssets,
+				assetRows,
 				playableJob,
 				buildRows.map((b) => ({ ...b, files: filesByBuild.get(b.id) ?? [] })),
 				deliveryCtx(),
@@ -7029,21 +7032,21 @@ const contentRoutes = new Hono()
 					.returning();
 				await queueScansForWork(updated);
 
-				const [workAssets, jobRows] = await Promise.all([
-					db.select().from(assets).where(eq(assets.workId, id)),
+				const [assetRows, jobRows] = await Promise.all([
+					db.select().from(workAssets).where(eq(workAssets.workId, id)),
 					db
 						.select()
-						.from(transcodingJobs)
-						.where(eq(transcodingJobs.workId, id))
-						.orderBy(desc(transcodingJobs.createdAt)),
+						.from(workTranscodingJobs)
+						.where(eq(workTranscodingJobs.workId, id))
+						.orderBy(desc(workTranscodingJobs.createdAt)),
 				]);
 				const [buildRows, buildFileRows] = await Promise.all([
-					db.select().from(webBuilds).where(eq(webBuilds.workId, id)),
+					db.select().from(workBuilds).where(eq(workBuilds.workId, id)),
 					db
-						.select({ file: webBuildFiles })
-						.from(webBuildFiles)
-						.innerJoin(webBuilds, eq(webBuildFiles.buildId, webBuilds.id))
-						.where(eq(webBuilds.workId, id)),
+						.select({ file: workBuildFiles })
+						.from(workBuildFiles)
+						.innerJoin(workBuilds, eq(workBuildFiles.buildId, workBuilds.id))
+						.where(eq(workBuilds.workId, id)),
 				]);
 				const filesByBuild = new Map<number, WebBuildFileRow[]>();
 				for (const { file } of buildFileRows) {
@@ -7057,7 +7060,7 @@ const contentRoutes = new Hono()
 				return c.json({
 					work: await serializeWork(
 						updated,
-						workAssets,
+						assetRows,
 						playableJob,
 						buildRows.map((b) => ({ ...b, files: filesByBuild.get(b.id) ?? [] })),
 						deliveryCtx(),
@@ -7255,11 +7258,11 @@ const contentRoutes = new Hono()
 			return c.json({ withdrawn: true, purchaseCount: soldCount }, 200);
 		}
 
-		const [workAssets, jobRows] = await Promise.all([
-			db.select().from(assets).where(eq(assets.workId, id)),
-			db.select().from(transcodingJobs).where(eq(transcodingJobs.workId, id)),
+		const [assetRows, jobRows] = await Promise.all([
+			db.select().from(workAssets).where(eq(workAssets.workId, id)),
+			db.select().from(workTranscodingJobs).where(eq(workTranscodingJobs.workId, id)),
 		]);
-		await purgeWorkMedia(item, workAssets, jobRows);
+		await purgeWorkMedia(item, assetRows, jobRows);
 
 		// The creator's own records go before the row that names them. A gated space for a Work
 		// nobody kept has no audience left, so it is deleted with the Work; a studio space
@@ -7297,11 +7300,11 @@ const contentRoutes = new Hono()
 		if (!(await isOwnStorageRef(data.file, user.id))) return c.json(FOREIGN_FILE_REFUSAL, 400);
 
 		const [existingAssets, existingPrimaryWeb] = await Promise.all([
-			db.select().from(assets).where(eq(assets.workId, id)),
+			db.select().from(workAssets).where(eq(workAssets.workId, id)),
 			db
-				.select({ id: webBuilds.id })
-				.from(webBuilds)
-				.where(and(eq(webBuilds.workId, id), eq(webBuilds.isPrimary, true))),
+				.select({ id: workBuilds.id })
+				.from(workBuilds)
+				.where(and(eq(workBuilds.workId, id), eq(workBuilds.isPrimary, true))),
 		]);
 		const replacesPrimary =
 			data.isPrimary &&
@@ -7314,10 +7317,10 @@ const contentRoutes = new Hono()
 			// version owns them — so nothing is swept here.
 			const asset = await db.transaction(async (tx) => {
 				await archiveCurrentMedia(work, tx);
-				await tx.delete(assets).where(eq(assets.workId, id));
-				await tx.delete(webBuilds).where(eq(webBuilds.workId, id));
+				await tx.delete(workAssets).where(eq(workAssets.workId, id));
+				await tx.delete(workBuilds).where(eq(workBuilds.workId, id));
 				const [created] = await tx
-					.insert(assets)
+					.insert(workAssets)
 					.values({ workId: id, ...data })
 					.returning();
 				await tx
@@ -7330,7 +7333,7 @@ const contentRoutes = new Hono()
 		}
 
 		const [asset] = await db
-			.insert(assets)
+			.insert(workAssets)
 			.values({ workId: id, ...data })
 			.returning();
 		if (firstBuild) {
@@ -7353,9 +7356,9 @@ const contentRoutes = new Hono()
 		if (!item) return c.json({ error: "Not found" }, 404);
 
 		const deleted = await db
-			.delete(assets)
-			.where(and(eq(assets.id, Number(c.req.param("assetId"))), eq(assets.workId, id)))
-			.returning({ id: assets.id });
+			.delete(workAssets)
+			.where(and(eq(workAssets.id, Number(c.req.param("assetId"))), eq(workAssets.workId, id)))
+			.returning({ id: workAssets.id });
 
 		if (deleted.length === 0) return c.json({ error: "Not found" }, 404);
 		return c.body(null, 204);
@@ -7756,7 +7759,7 @@ const contentRoutes = new Hono()
 		if (platform) {
 			conditions.push(
 				containsWork(
-					sql`EXISTS (SELECT 1 FROM assets a WHERE a.work_id = w.id AND a.platform = ${platform})`,
+					sql`EXISTS (SELECT 1 FROM work_assets a WHERE a.work_id = w.id AND a.platform = ${platform})`,
 				),
 			);
 		}
@@ -9103,16 +9106,16 @@ const contentRoutes = new Hono()
 		const user = c.get("user");
 		const includeHidden = c.req.query("hidden") === "1";
 
-		const conditions: SQL[] = [eq(libraryItems.userId, user.id)];
-		if (!includeHidden) conditions.push(eq(libraryItems.hidden, false));
+		const conditions: SQL[] = [eq(userLibraryItems.userId, user.id)];
+		if (!includeHidden) conditions.push(eq(userLibraryItems.hidden, false));
 
 		// Newest first to choose which entries fit, one extra to learn whether any did not, then
 		// back into saved order for the Library.
 		const newest = await db
 			.select()
-			.from(libraryItems)
+			.from(userLibraryItems)
 			.where(and(...conditions))
-			.orderBy(desc(libraryItems.sortOrder))
+			.orderBy(desc(userLibraryItems.sortOrder))
 			.limit(LIBRARY_LIMIT + 1);
 		const truncated = newest.length > LIBRARY_LIMIT;
 		const rows = newest.slice(0, LIBRARY_LIMIT).reverse();
@@ -9124,7 +9127,7 @@ const contentRoutes = new Hono()
 		// 🚨 A Library is a listing like any other, so a Work the user may not see is absent from
 		// it rather than present and locked — including one they saved or bought before it was
 		// corrected into Adult, or before a guardian blocked it. The entry itself survives in
-		// `library_items` and comes back if they opt in or the block lifts.
+		// `user_library_items` and comes back if they opt in or the block lifts.
 		const [{ hidden: adultHidden }, { hidden: parentalHidden }] = await Promise.all([
 			adultVisibility(user.id),
 			parentalVisibility(user.id),
@@ -9449,7 +9452,7 @@ const contentRoutes = new Hono()
 	//
 	// Where the caller got to in each Work — the Bookshelf rail's data and the
 	// readers' cross-device resume, one row per account and Work. The access and
-	// privacy reasoning is on the table itself (`reading_positions` in
+	// privacy reasoning is on the table itself (`user_reading_positions` in
 	// `packages/db/src/schema/content.ts`) and in `services/reading-positions.ts`,
 	// the one writer. Two doors, both the user's own rows:
 	//
