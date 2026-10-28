@@ -9,7 +9,7 @@
  * allowance is charged nothing — within-limits is the whole rule, and there is no
  * between-rungs case.
  *
- * 🚨 **The one stripe-shaped consumer of `storage_usage`, reading the cycle the overflow
+ * 🚨 **The one stripe-shaped consumer of `account_cycles`, reading the cycle the overflow
  * belongs to, not the cycle it is noticed in.** A renewal invoice composed on the 1st
  * names, in its *lines' periods*, the month it pays FOR — which is the month whose bytes
  * were just held. The overflow metered during that month is what the top-up prices;
@@ -34,12 +34,12 @@
  * `subscription_item` id, so it is credited to Anthers (that function's documented
  * fallback for an unmapped line), which is right for an at-cost pass-through: the money
  * is Anthers' own reimbursement of its own vendor cost, never a creator's earnings.
- * What the overflow was measured FROM stays readable from the `storage_usage` snapshot
+ * What the overflow was measured FROM stays readable from the `account_cycles` snapshot
  * the line's metadata names (`meteredCycle`).
  */
 
 import { db } from "@anthers/db/client";
-import { badges, billingAccounts, storageUsage, userBadges, users } from "@anthers/db/schema";
+import { accountCycles, badges, billingAccounts, userBadges, users } from "@anthers/db/schema";
 import { previousCycleKey } from "@anthers/shared/billing-cycle";
 import {
 	STORAGE_LADDER_GIB,
@@ -59,7 +59,7 @@ export const TOPUP_STAMP = "storage-topup";
 
 /**
  * The overflow, in GiB and dollars, a metered snapshot names — the billing-shaped read of
- * a `storage_usage` row.
+ * a `account_cycles` row.
  *
  * Nothing here re-reads the upstream tables: the meter is the figure's author and this is
  * a reader, on the same one-writer rule the account-facing reading takes. The eligibility
@@ -136,9 +136,9 @@ export async function addTopUpToInvoice(invoice: Stripe.Invoice): Promise<number
 	const cycle = cycleInvoicePaysFor(invoice);
 	const meteredCycle = previousCycleKey(cycle);
 	const [snapshot] = await db
-		.select({ bytes: storageUsage.bytes })
-		.from(storageUsage)
-		.where(and(eq(storageUsage.userId, acct.userId), eq(storageUsage.billingCycle, meteredCycle)))
+		.select({ bytes: accountCycles.bytes })
+		.from(accountCycles)
+		.where(and(eq(accountCycles.userId, acct.userId), eq(accountCycles.billingCycle, meteredCycle)))
 		.limit(1);
 
 	// The allowance resolves from the HELD Badge for the cycle being paid for — the rung

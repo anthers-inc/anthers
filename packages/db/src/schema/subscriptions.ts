@@ -14,6 +14,7 @@
  */
 import { sql } from "drizzle-orm";
 import {
+	bigint,
 	boolean,
 	index,
 	integer,
@@ -95,8 +96,8 @@ export const billingAccounts = pgTable("billing_accounts", {
  * never paid, and that trap dies with the table it lived in.
  *
  * The user's theme and activity-email preferences moved here from `users`
- * (2026-10-03) — the `studioPreferences` precedent: org-served behavior and org-only
- * UI state do not sit on a `node`-tagged identity row.
+ * (2026-10-03) — the Studio Dashboard layout set that precedent: org-served behavior and
+ * org-only UI state do not sit on a `node`-tagged identity row.
  */
 // org — a user's settings are opinions about org-served behavior (which rungs to meet,
 // whether to appear on the supporters page, light or dark), which is org-side in the
@@ -180,12 +181,28 @@ export const userPreferences = pgTable("user_preferences", {
 	 * UI light/dark preference ("light" | "dark"); null = no account-level choice, so
 	 * the client falls back to the device (localStorage) setting / default.
 	 *
-	 * Moved here from `users` (2026-10-03) — the `studioPreferences` precedent: which way
-	 * the org's own UI paints is not part of a person's portable identity, it means nothing
-	 * on another PDS and travels with no repository, so it does not sit on a `node`-tagged
-	 * identity row.
+	 * Moved here from `users` (2026-10-03) — the Studio Dashboard layout set the precedent:
+	 * which way the org's own UI paints is not part of a person's portable identity, it
+	 * means nothing on another PDS and travels with no repository, so it does not sit on
+	 * a `node`-tagged identity row.
 	 */
 	themePreference: text("theme_preference"),
+
+	/**
+	 * The panels on the Studio Dashboard, in the creator's own order. Visibility and order
+	 * in one value: a panel that is off is simply absent.
+	 *
+	 * ⭐ **Null means "never arranged" and is NOT the same as `[]`.** An empty array is a
+	 * creator who hid everything, which is a thing they may do; null is a creator who has
+	 * never opened the control and should get the defaults. `resolveStudioPanels` in
+	 * `@anthers/shared/studio-panels` owns that distinction and is the only thing that
+	 * should read this column raw.
+	 *
+	 * 🚨 **Nothing that warns is ever stored here.** The Dashboard's worklist is composed by
+	 * the system and cannot be hidden, because payout setup blocks every release and a
+	 * released-but-locked Work is invisible from its creator's own side.
+	 */
+	studioPanels: jsonb("studio_panels").$type<string[]>(),
 
 	/**
 	 * How each kind of notification reaches this person, per delivery group.
@@ -354,7 +371,8 @@ export const userPreferences = pgTable("user_preferences", {
 /**
  * Per-cycle economic snapshot — one row per (user, cycle) — kept for spend and
  * consumption history/analytics. Records the amount given to Anthers and what flowed:
- * Time Pool (to creators), the remainder, and stream consumption.
+ * Time Pool (to creators), the remainder, and the account's storage meter for the same
+ * month.
  */
 // org — a per-cycle economic snapshot, kept for org-side spend/consumption analytics.
 // Money record; org-only.
@@ -402,6 +420,30 @@ export const accountCycles = pgTable(
 		 */
 		timePoolUndistributed: numeric("time_pool_undistributed").notNull().default("0.00"),
 		foundation: numeric("foundation").notNull().default("0.00"), // remainder this cycle, incl. any undistributed pool
+		// ── The storage meter, in the same row ───────────────────────────────
+		/**
+		 * Total bytes this account held against its allowance in the cycle — the figure the
+		 * allowance binds, and the one `estimateStorageCost` prices the at-cost overflow
+		 * from. The meter is a reading, never a charge.
+		 *
+		 * 🚨 **Bytes come from the database, not from listing the bucket.** `assets.file_size`,
+		 * `web_build_files.file_size`, `work_saves.byte_size` and the Works table's own media
+		 * columns are the same authority the top-up line prices from, so a bucket walk would
+		 * sweep display chrome the ladder never prices and cost one paginated listing per
+		 * account per night to answer what one grouped query already holds.
+		 *
+		 * ⚠️ **A row can exist from either side.** Settlement creates one for a month of
+		 * money; the daily meter creates one for an account with bytes and no money yet, and
+		 * `sampled_at` null says the meter never read that row.
+		 */
+		bytes: bigint("bytes", { mode: "number" }).notNull().default(0),
+		/** Per-purpose lines, `{ [kind]: bytes }` over the closed `STORAGE_USE_KINDS` set. */
+		purposes: jsonb("purposes").$type<Record<string, number>>().notNull().default({}),
+		/**
+		 * When the meter last read this row. Null means the money side wrote it and no
+		 * storage sweep has run for the cycle — the two halves settle independently.
+		 */
+		sampledAt: timestamp("sampled_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},

@@ -66,7 +66,7 @@ import {
 import { eq } from "drizzle-orm";
 
 /** Bump when the shape changes in a way a consumer would notice. */
-export const EXPORT_FORMAT_VERSION = 3;
+export const EXPORT_FORMAT_VERSION = 4;
 
 export interface AccountExport {
 	format: string;

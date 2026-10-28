@@ -20,7 +20,7 @@
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
 import {
-	storageUsage,
+	accountCycles,
 	users,
 	workPreviewCaptionTracks,
 	workPreviewMedia,
@@ -590,8 +590,8 @@ describe("storage accounting and deletion", () => {
 		await runStorageUsageSweep();
 		const [row] = await db
 			.select()
-			.from(storageUsage)
-			.where(eq(storageUsage.userId, creator.userId))
+			.from(accountCycles)
+			.where(eq(accountCycles.userId, creator.userId))
 			.limit(1);
 		expect(row).toBeDefined();
 		expect(row.purposes.catalog ?? 0).toBeGreaterThan(0);

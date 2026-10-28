@@ -512,7 +512,7 @@ export function stickerBudgetFor(anthersDollars: number): number {
  * ladder carries the bundle and the bytes beyond it are never a reason to climb.
  *
  * 🚨 **Built (2026-10-09, PRs #409/#412/#414)**: the meter snapshots what each account
- * holds against these allowances (`storage_usage`, the daily sweep), the renewal carries
+ * holds against these allowances (`account_cycles`, the daily sweep), the renewal carries
  * an at-cost line past the held allowance from Root onward, and the keeping election +
  * the claim-aware sweep make kept files real; cloud saves shipped earlier (#381). What
  * these amounts ARE is ruled policy; what they now DO is bill.
@@ -584,7 +584,7 @@ export function supportLineFor(
 }
 
 /**
- * The closed set of purposes bytes can be held for — the keys `storage_usage.purposes`
+ * The closed set of purposes bytes can be held for — the keys `account_cycles.purposes`
  * carries. A new storage surface adds its kind here and edits the snapshot job; nothing
  * reads a kind not listed here, so a typo'd kind would be counted in `bytes` and in
  * nothing else, which the reading surface would surface on its next run.

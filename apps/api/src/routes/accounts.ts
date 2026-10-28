@@ -54,7 +54,6 @@ import {
 	posts,
 	purchases,
 	rightsRequests,
-	studioPreferences,
 	userBadges,
 	userPreferences,
 	users,
@@ -2186,9 +2185,9 @@ const accountRoutes = new Hono()
 	.get("/me/studio-panels", requireAuth, async (c) => {
 		const sessionUser = c.get("user");
 		const [row] = await db
-			.select({ panels: studioPreferences.panels })
-			.from(studioPreferences)
-			.where(eq(studioPreferences.userId, sessionUser.id))
+			.select({ panels: userPreferences.studioPanels })
+			.from(userPreferences)
+			.where(eq(userPreferences.userId, sessionUser.id))
 			.limit(1);
 		// No row and a null column mean the same thing — never arranged — and
 		// `resolveStudioPanels` turns both into the defaults.
@@ -2266,11 +2265,11 @@ const accountRoutes = new Hono()
 			const clean = resolveStudioPanels(panels);
 
 			await db
-				.insert(studioPreferences)
-				.values({ userId: sessionUser.id, panels: clean })
+				.insert(userPreferences)
+				.values({ userId: sessionUser.id, studioPanels: clean })
 				.onConflictDoUpdate({
-					target: studioPreferences.userId,
-					set: { panels: clean, updatedAt: new Date() },
+					target: userPreferences.userId,
+					set: { studioPanels: clean, updatedAt: new Date() },
 				});
 
 			return c.json({ panels: clean });
