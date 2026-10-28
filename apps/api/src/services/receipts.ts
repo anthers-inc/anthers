@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Receipts — the one writer of `receipt_sends` rows, and the only caller of the
+ * Receipts — the one writer of `outbound_emails` receipt rows, and the only caller of the
  * receipt senders in `services/email.ts`.
  *
  * Every transaction a person is on either side of earns an email: the buyer's receipt
@@ -14,7 +14,7 @@
  *
  *   • **The insert precedes the send, and its conflict clause is the latch.** A
  *     `dedupeKey` built from the transaction's own Stripe identity is unique on
- *     `receipt_sends`; a redelivered webhook, a route call, and the Stripe event that
+ *     `outbound_emails`; a redelivered webhook, a route call, and the Stripe event that
  *     route's own action provokes all build the same key, and only the first inserts.
  *     Sending first and recording after would re-mail on every redelivery — the exact
  *     failure `notify()`'s design note describes, which this module inherits rather
@@ -22,9 +22,9 @@
  *
  *   • **A failed send is recorded as failed, never swallowed or retried.** The row
  *     exists either way — the record that we told someone is the deliverable, the same
- *     reasoning `notifications.emailSentAt` carries — so the row's `sent` flag is the
- *     honest state. A receipt worth re-sending is worth a person looking at why it
- *     failed; nothing retries it behind their back.
+ *     reasoning `notifications.emailSentAt` carries — so a null `sentAt` is the honest
+ *     state. A receipt worth re-sending is worth a person looking at why it failed;
+ *     nothing retries it behind their back.
  *
  * The figures a receipt shows come off the rows the completion webhook stamped, which
  * are the transaction as it happened: a receipt records the snapshot, never the
@@ -36,8 +36,8 @@ import { db } from "@anthers/db/client";
 import {
 	invoiceLines,
 	type invoices,
+	outboundEmails,
 	type purchases,
-	receiptSends,
 	userPreferences,
 	users,
 } from "@anthers/db/schema";
@@ -98,29 +98,31 @@ async function sendOnce(
 	send: () => Promise<SendResult>,
 ): Promise<boolean> {
 	const [row] = await db
-		.insert(receiptSends)
+		.insert(outboundEmails)
 		.values({
 			dedupeKey: args.dedupeKey,
-			kind: args.kind,
+			kind: "receipt",
+			recipient: args.email,
 			userId: args.userId,
-			role: args.role,
-			email: args.email,
+			detail: { receiptKind: args.kind, role: args.role },
 		})
 		// Already sent. Not an error: the webhook is retried by design, and a route call
 		// racing the Stripe event its own action provokes lands here rather than
 		// double-mailing.
-		.onConflictDoNothing({ target: receiptSends.dedupeKey })
-		.returning({ id: receiptSends.id });
+		.onConflictDoNothing({ target: outboundEmails.dedupeKey })
+		.returning({ id: outboundEmails.id });
 	if (!row) return false;
 
 	const { sent, messageId } = await send();
-	await db
-		.update(receiptSends)
-		.set(sent ? { sent: true, messageId } : { sent: false })
-		.where(eq(receiptSends.id, row.id));
+	if (sent) {
+		await db
+			.update(outboundEmails)
+			.set({ sentAt: new Date(), messageId })
+			.where(eq(outboundEmails.id, row.id));
+	}
 	if (!sent) {
 		console.error(
-			`[receipts] a ${args.kind} receipt for ${args.email} did not send — the receipt_sends row records it`,
+			`[receipts] a ${args.kind} receipt for ${args.email} did not send — the outbound_emails row records it`,
 		);
 	}
 	return true;

@@ -352,7 +352,7 @@ export const QUEUES = {
 	// only arrangement where the alarm survives the compromise it describes.
 	WATCH_IDENTITIES: "watch-identities",
 	// Email the operator when a deadline item arrives and again before it is due — the worker
-	// half of the 2026-09-14 decision. Deduped per item+kind through `deadline_reminders`, so
+	// half of the 2026-09-14 decision. Deduped per item+kind through `outbound_emails`, so
 	// a daily re-gather of the same rows never mails twice.
 	DEADLINE_REMINDERS: "deadline-reminders",
 	// Take back the video HLS run prefixes no transcode row points at — the partial

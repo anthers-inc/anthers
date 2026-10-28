@@ -18,8 +18,8 @@
  *   • **The creator's preference is read where it is defined.** On means mailed, off
  *     means not, and null (the stored default) means on.
  *
- * `sendEmail` refuses under the test runner by design, so every send records
- * `sent: false` and no message goes anywhere — which is the honest test surface: the
+ * `sendEmail` refuses under the test runner by design, so every send records no `sentAt`
+ * and no message goes anywhere — which is the honest test surface: the
  * latch, the row, and the figures are all checkable without mail. The copy itself is
  * pinned where the copy lives, in the senders' module.
  */
@@ -28,8 +28,8 @@ import { db } from "@anthers/db/client";
 import {
 	invoiceLines,
 	invoices,
+	outboundEmails,
 	purchases,
-	receiptSends,
 	stripeAccounts,
 	userPreferences,
 	works,
@@ -95,7 +95,7 @@ async function completedPurchase(opts: {
 }
 
 async function receiptRows(dedupeKey: string) {
-	return db.select().from(receiptSends).where(eq(receiptSends.dedupeKey, dedupeKey));
+	return db.select().from(outboundEmails).where(eq(outboundEmails.dedupeKey, dedupeKey));
 }
 
 /** The rows a webhook would complete, read back by intent id. */
@@ -130,7 +130,7 @@ afterAll(async () => {
 	// Receipt rows first (they point at users with set null), then the works — the
 	// purchases rows are set-null on both and are claimed by the account purge.
 	for (const id of createdWorkIds) await db.delete(works).where(eq(works.id, id));
-	await db.delete(receiptSends);
+	await db.delete(outboundEmails);
 	await db.delete(invoiceLines);
 	await db.delete(invoices);
 });
@@ -143,19 +143,20 @@ describe("Receipts: purchases", () => {
 		await sendPurchaseReceipts(await rowsFor(intentId));
 
 		// The buyer's receipt: latched on the intent, recorded even though the send
-		// itself no-ops under the test runner (the row's `sent: false` is the honest
-		// state — see the module header).
+		// itself no-ops under the test runner (no `sentAt` is the honest state — see
+		// the module header).
 		const buyerRows = await receiptRows(`purchase:${intentId}:buyer:${buyerId}`);
 		expect(buyerRows).toHaveLength(1);
-		expect(buyerRows[0].kind).toBe("purchase");
-		expect(buyerRows[0].role).toBe("buyer");
-		expect(buyerRows[0].email).toBe(buyerEmailAddress);
+		expect(buyerRows[0].kind).toBe("receipt");
+		expect(buyerRows[0].detail?.receiptKind).toBe("purchase");
+		expect(buyerRows[0].detail?.role).toBe("buyer");
+		expect(buyerRows[0].recipient).toBe(buyerEmailAddress);
 
 		// The creator's copy: a second row with its own key. A redelivered event must
 		// find both rows standing and mail neither again.
 		const creatorRows = await receiptRows(`purchase:${intentId}:creator:${creatorId}`);
 		expect(creatorRows).toHaveLength(1);
-		expect(creatorRows[0].role).toBe("creator");
+		expect(creatorRows[0].detail?.role).toBe("creator");
 	});
 
 	it("redelivery is a no-op — one row per recipient, however many times the event arrives", async () => {
@@ -260,7 +261,8 @@ describe("Receipts: refunds", () => {
 
 		const buyerRows = await receiptRows(`refund:${refundId}:buyer:${buyerId}`);
 		expect(buyerRows).toHaveLength(1);
-		expect(buyerRows[0].kind).toBe("refund");
+		expect(buyerRows[0].kind).toBe("receipt");
+		expect(buyerRows[0].detail?.receiptKind).toBe("refund");
 		expect(await receiptRows(`refund:${refundId}:creator:${creatorId}`)).toHaveLength(1);
 	});
 
@@ -316,7 +318,8 @@ describe("Receipts: monthly support", () => {
 
 		const rows = await receiptRows(`invoice:in_rcp_${run}:buyer:${buyerId}`);
 		expect(rows).toHaveLength(1);
-		expect(rows[0].kind).toBe("invoice");
+		expect(rows[0].kind).toBe("receipt");
+		expect(rows[0].detail?.receiptKind).toBe("invoice");
 	});
 
 	it("a detached invoice (its buyer deleted) is receipted by nobody", async () => {

@@ -33,7 +33,7 @@
  *
  * **Dedupe is load-bearing.** The sweep re-evaluates the same rows every day, and the decision
  * asks for an email when an item arrives and before it is due — not every day in between. Each
- * (item, kind) pair is claimed with an insert into `deadline_reminders` guarded by the unique
+ * (item, kind) pair is claimed with an insert into `outbound_emails` guarded by the unique
  * `dedupeKey` (`ON CONFLICT DO NOTHING`), so a second sweep for the same pair inserts nothing and
  * sends nothing, and a reminder can never be mailed twice however often the sweep runs or
  * retries. The row is written before the email goes out, so the failure direction is a lost
@@ -47,7 +47,7 @@
  */
 
 import { db } from "@anthers/db/client";
-import { deadlineReminders } from "@anthers/db/schema";
+import { outboundEmails } from "@anthers/db/schema";
 import { eq } from "drizzle-orm";
 import {
 	DEFERRED_DEADLINE_SOURCES,
@@ -216,7 +216,7 @@ export function renderDeadlineReminderEmail(
 
 /**
  * One daily sweep: gather every deadline, send each reminder that is due and has never been sent,
- * and record each send in `deadline_reminders`.
+ * and record each send in `outbound_emails`.
  *
  * Returns what it did, so the worker's log line and the tests can both assert on the same facts.
  */
@@ -245,16 +245,16 @@ export async function runDeadlineReminderSweep(now: Date = new Date()): Promise<
 		// harmless, and claiming before sending fails toward a visible lost reminder
 		// (`sent_at` null) rather than a duplicate email.
 		const [claimed] = await db
-			.insert(deadlineReminders)
+			.insert(outboundEmails)
 			.values({
 				dedupeKey: dedupeKeyFor(item, kind),
-				source: item.source,
-				title: item.title,
-				kind,
+				kind: "deadline",
 				recipient: to,
+				subject: item.title,
+				detail: { source: item.source, reminderKind: kind },
 			})
-			.onConflictDoNothing({ target: deadlineReminders.dedupeKey })
-			.returning({ id: deadlineReminders.id });
+			.onConflictDoNothing({ target: outboundEmails.dedupeKey })
+			.returning({ id: outboundEmails.id });
 		if (!claimed) {
 			skipped++;
 			continue;
@@ -267,10 +267,7 @@ export async function runDeadlineReminderSweep(now: Date = new Date()): Promise<
 		});
 		if (went) {
 			sent++;
-			await db
-				.update(deadlineReminders)
-				.set({ sentAt: now })
-				.where(eq(deadlineReminders.id, claimed.id));
+			await db.update(outboundEmails).set({ sentAt: now }).where(eq(outboundEmails.id, claimed.id));
 		} else {
 			// The row stays with `sentAt` null — visible evidence that the reminder was decided
 			// on and never reached anybody, rather than a silent gap.
