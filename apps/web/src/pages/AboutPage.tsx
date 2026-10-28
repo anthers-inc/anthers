@@ -351,7 +351,7 @@ export default function AboutPage() {
 			<Section>
 				<Reveal>
 					<Eyebrow>Who we are</Eyebrow>
-					<H2>Meet Parker</H2>
+					<H2>Our Team</H2>
 					<Lede>
 						Anthers is a growing organization, and we have lots of amazing friends and family and
 						other folks helping us get off the ground. But for now, the Anthers team is just Parker
