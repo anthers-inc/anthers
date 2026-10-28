@@ -71,6 +71,15 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.37",
+		date: "2026-10-28",
+		lede: "A video's quality rungs carry less data at the same quality or better, and a dialog closes the way it opened.",
+		entries: [
+			"A video's quality rungs are encoded for each picture's own complexity now, at a constant quality under the rate the rung already carried. The smallest holds its quality in fewer bytes, the two above it measure slightly better, and the whole set is lighter. The master playlist advertises the rate each rung measured rather than the one the ladder aimed at, so a player chooses from what a rung needs.",
+			"The subscription confirmation, the report dialog, the Work and post pickers, and the Studio's frame and thumbnail pickers close with the motion they opened with now, rather than vanishing the moment they are dismissed, and each opens on a fresh state rather than the answers from the last visit.",
+		],
+	},
+	{
 		version: "2026.10.36",
 		date: "2026-10-28",
 		lede: "The About page's team section runs on Parker's portrait, and the tables underneath every page were reorganized, with nothing else on the surface changing.",
