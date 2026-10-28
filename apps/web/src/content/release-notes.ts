@@ -71,6 +71,15 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.35",
+		date: "2026-10-27",
+		lede: "Anthers holds a session for an identity it hosts and no password behind it, and the identity card links an identity on another server to where that server manages it.",
+		entries: [
+			"Anthers holds a session for an identity it hosts and no password behind it now. A session the identity's server refuses to renew ends rather than being reopened with a stored credential; the person signs in again, and the identity card's reset installs a fresh one.",
+			"The identity card links an identity on a server Anthers does not run to where it is managed: a Bluesky identity goes to Bluesky's settings, where its password, handle, and signed-in apps live, and any other server keeps its host name and a sentence saying that server holds the credential rather than Anthers.",
+		],
+	},
+	{
 		version: "2026.10.34",
 		date: "2026-10-27",
 		lede: "Signing in leaves Anthers for the server that holds the identity, a shared creator profile unfurls with a card of its own, and the creator page's tabs are grouped by what they show.",
