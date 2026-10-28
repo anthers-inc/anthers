@@ -396,9 +396,9 @@ async function writeCrops(out: string, arms: string[], at: number) {
 		}
 		files.push(crop);
 	}
-	const labelled: string[] = [];
+	const labeled: string[] = [];
 	for (const [i, file] of files.entries()) {
-		const labelledPath = join(cropsDir, `labelled-${i}.png`);
+		const labeledPath = join(cropsDir, `labeled-${i}.png`);
 		const proc = Bun.spawn(
 			[
 				"convert",
@@ -416,20 +416,20 @@ async function writeCrops(out: string, arms: string[], at: number) {
 				"-annotate",
 				"+10+6",
 				`720p ${arms[i]} — t=${at}s, 1:1 crop`,
-				labelledPath,
+				labeledPath,
 			],
 			{ stdout: "ignore", stderr: "pipe" },
 		);
-		if ((await proc.exited) !== 0) throw new Error("labelling a crop failed");
-		labelled.push(labelledPath);
+		if ((await proc.exited) !== 0) throw new Error("labeling a crop failed");
+		labeled.push(labeledPath);
 	}
 	const stacked = join(cropsDir, `720p-${arms.join("-vs-")}.png`);
-	const proc = Bun.spawn(["convert", ...labelled, "-append", stacked], {
+	const proc = Bun.spawn(["convert", ...labeled, "-append", stacked], {
 		stdout: "ignore",
 		stderr: "pipe",
 	});
 	if ((await proc.exited) !== 0) throw new Error("stacking the crops failed");
-	await Promise.all(labelled.map((f) => rm(f).catch(() => {})));
+	await Promise.all(labeled.map((f) => rm(f).catch(() => {})));
 	console.log(`crops: ${stacked}`);
 }
 

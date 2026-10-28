@@ -207,7 +207,7 @@ describe("a transcode's temp residency", () => {
 				const duration = Number.parseFloat(line.match(/^#EXTINF:([\d.]+)/)?.[1] ?? "0");
 				const segment = lines[i + 1];
 				if (!(duration > 0) || !segment || segment.startsWith("#")) continue;
-				const size = await storage.size(`${prefix}/${segment}`);
+				const size = (await storage.size(`${prefix}/${segment}`)) ?? 0;
 				peak = Math.max(peak, (size * 8) / duration);
 			}
 			expect(rung.bandwidth).toBe(Math.ceil(peak / 1000) * 1000);
