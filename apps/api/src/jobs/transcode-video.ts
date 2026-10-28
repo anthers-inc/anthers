@@ -15,9 +15,16 @@
  *    moment it finishes: the smallest rung alone (the publish-early gate opens on it),
  *    then every taller rung plus the audio-only rendition sharing one decode
  *    (`ffmpegSharedHls`). A one-rung source keeps the rendition in a pass of its own.
- * 4. Generate master playlist
+ * 4. Generate master playlist — each rung's BANDWIDTH is its own measured rate
  * 5. Upload the master playlist (the rest is uploaded per step 3)
  * 6. Update TranscodingJob status throughout
+ *
+ * ⭐ **Each rung is encoded at a CRF under a VBV ceiling, and the ceiling is the bitrate
+ * target it used to be** (`LADDER_CRF`, `rateControlArgs`): the quality is the target and the
+ * old number bounds the worst case, so a rung can come out smaller than the ladder used to
+ * make it and cannot come out larger. That makes the master's advertised BANDWIDTH a
+ * measured quantity rather than a constant — `measurePassBandwidths` reads each rung's own
+ * peak segment rate off the files a pass just wrote, before the upload frees them.
  *
  * ⭐ **The tall rungs share one decode, and that is what makes the ladder cheaper**
  * (measured 2026-10-19 on the same real 1080p source as the preset benchmark: 480p 59 s,
@@ -53,7 +60,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { db } from "@anthers/db";
@@ -128,9 +135,63 @@ const SOURCE_URL_TTL_SECONDS = 60 * 60;
 interface Variant {
 	name: string;
 	height: number;
-	bitrate: string;
+	/** The rung's ceiling in kbps — the VBV maxrate, and the BANDWIDTH before measurement. */
+	maxrateKbps: number;
+	/**
+	 * The master playlist's advertised BANDWIDTH for this rung, in bits per second.
+	 * Planned as the rung's ceiling and **replaced by the encode's own measured peak segment
+	 * rate** the moment the pass finishes (`measurePassBandwidths`).
+	 */
 	bandwidth: number;
 	width: number;
+}
+
+/**
+ * The ladder's quality target, as x264's CRF, with each rung's own VBV ceiling holding it
+ * under what the rung used to cost.
+ *
+ * ⭐ **CRF rather than a bitrate target, and the ceilings are the old targets** (measured
+ * 2026-10-28 on the 2026-10-11 protocol: the real 1080p `Curtains.mp4` source, the job's
+ * flags, `-threads 2` pinned to two cores, PSNR/SSIM per rung against the source scaled to
+ * that rung). One-pass ABR — the `-b:v 2500k` this replaces — has to guess one complexity
+ * spread for the whole file, so it spends bits where the average demanded and cannot tell
+ * that a scene is cheap; CRF spends what each scene needs and the ceiling stops a complex
+ * passage from running away. Against today's ABR at the same ceilings, this value lands at
+ * PSNR 44.17/44.14/43.23 where ABR read 44.27/44.08/43.14 (480p/720p/1080p, plane average,
+ * the figure the earlier benchmarks record) for 38.2/93.5/181.2 MB where ABR took
+ * 42.7/98.1/190.6 MB — equal at the smallest rung within a tenth of a decibel, better at
+ * both tall ones, and 6% fewer bytes overall. The task note that chose it, with the whole
+ * curve, is in the wiki under `00-09 Metafiles/01 Tasks/`.
+ *
+ * ⚠️ **The tall rungs are ceiling-bound at every CRF from 18 to 21**, so what bounds their
+ * size is the ceiling and the CRF only decides how the bits are spent inside it. That is
+ * the point rather than a shortcoming: the ceiling is a promise about the worst case, and
+ * the CRF is what keeps a simple passage from spending its share of today's target.
+ *
+ * ⚠️ **The ceiling stays the old ABR target rather than becoming a new number**: under CRF
+ * it is a bound rather than a target, so a rung cannot come out larger than the ladder
+ * already made it.
+ */
+export const LADDER_CRF = 19;
+
+/**
+ * The rung's rate-control arguments: CRF for quality, the VBV pair for the ceiling.
+ *
+ * ⚠️ **`-maxrate` without `-b:v`** is what keeps x264 in constrained-CRF mode; naming a
+ * bitrate as well would turn it into two-pass-style ABR with a quality hint, which is the
+ * thing this replaced.
+ */
+function rateControlArgs(v: Variant): string[] {
+	return [
+		"-crf",
+		String(LADDER_CRF),
+		"-maxrate",
+		`${v.maxrateKbps}k`,
+		// Two seconds of VBV buffer: room for a short complex passage to borrow against the
+		// ceiling without letting it sit at the ceiling for long.
+		"-bufsize",
+		`${v.maxrateKbps * 2}k`,
+	];
 }
 
 /**
@@ -153,7 +214,7 @@ export function planLadderFor(sourceHeight: number, sourceWidth: number): Varian
 		variants.push({
 			name: "1080p",
 			height: 1080,
-			bitrate: "5000k",
+			maxrateKbps: 5000,
 			bandwidth: 5000000,
 			width: 1920,
 		});
@@ -162,7 +223,7 @@ export function planLadderFor(sourceHeight: number, sourceWidth: number): Varian
 		variants.push({
 			name: "720p",
 			height: 720,
-			bitrate: "2500k",
+			maxrateKbps: 2500,
 			bandwidth: 2500000,
 			width: 1280,
 		});
@@ -170,7 +231,7 @@ export function planLadderFor(sourceHeight: number, sourceWidth: number): Varian
 	variants.push({
 		name: "480p",
 		height: 480,
-		bitrate: "1000k",
+		maxrateKbps: 1000,
 		bandwidth: 1000000,
 		width: 854,
 	});
@@ -252,6 +313,41 @@ function streamFfmpegProgress(
 }
 
 /**
+ * A single rung's HLS output arguments — the ladder's per-rung half, pure so a test can read
+ * the command the job would run.
+ */
+export function singlePassOutputs(variant: Variant, outputDir: string): string[] {
+	return [
+		"-vf",
+		`scale=-2:${variant.height}`,
+		"-c:v",
+		"libx264",
+		// veryfast, not fast: on the benchmark file (a real 1080p source at the job's own
+		// bitrates) it runs the tall rungs 2.5–3× faster for PSNR 43.51 → 43.14 and SSIM
+		// 0.9836 → 0.9826, visually indistinguishable in matched 1:1 crops; the low rungs
+		// are decode-bound and save almost nothing (57 s → 54 s), which is fine — the
+		// wall time lives in the tall ones. Parker's verdict, 2026-10-11, after
+		// comparing the 720p pair by eye.
+		"-preset",
+		"veryfast",
+		...rateControlArgs(variant),
+		"-c:a",
+		"aac",
+		"-b:a",
+		"128k",
+		"-hls_time",
+		"6",
+		"-hls_list_size",
+		"0",
+		"-hls_segment_filename",
+		join(outputDir, `${variant.name}_%03d.ts`),
+		"-f",
+		"hls",
+		join(outputDir, `${variant.name}.m3u8`),
+	];
+}
+
+/**
  * Transcode to a single HLS variant. `onTick(outTimeSec, speed)` fires as ffmpeg
  * reports progress (encoded position in seconds + speed as a ×realtime factor),
  * parsed from `-progress pipe:1`. `-nostats` keeps the stderr buffer small so a
@@ -260,43 +356,14 @@ function streamFfmpegProgress(
 async function ffmpegHls(
 	inputPath: string,
 	outputDir: string,
-	height: number,
-	bitrate: string,
-	name: string,
+	variant: Variant,
 	onTick?: (outTimeSec: number, speed: number) => void,
 ) {
-	const playlist = join(outputDir, `${name}.m3u8`);
-	const segmentPattern = join(outputDir, `${name}_%03d.ts`);
+	const playlist = join(outputDir, `${variant.name}.m3u8`);
 
 	const proc = Bun.spawn(
 		ffmpegCommand(inputPath, [
-			"-vf",
-			`scale=-2:${height}`,
-			"-c:v",
-			"libx264",
-			// veryfast, not fast: on the benchmark file (a real 1080p source at the job's own
-			// bitrates) it runs the tall rungs 2.5–3× faster for PSNR 43.51 → 43.14 and SSIM
-			// 0.9836 → 0.9826, visually indistinguishable in matched 1:1 crops; the low rungs
-			// are decode-bound and save almost nothing (57 s → 54 s), which is fine — the
-			// wall time lives in the tall ones. Parker's verdict, 2026-10-11, after
-			// comparing the 720p pair by eye.
-			"-preset",
-			"veryfast",
-			"-b:v",
-			bitrate,
-			"-c:a",
-			"aac",
-			"-b:a",
-			"128k",
-			"-hls_time",
-			"6",
-			"-hls_list_size",
-			"0",
-			"-hls_segment_filename",
-			segmentPattern,
-			"-f",
-			"hls",
-			playlist,
+			...singlePassOutputs(variant, outputDir),
 			"-progress",
 			"pipe:1",
 			"-nostats",
@@ -310,7 +377,7 @@ async function ffmpegHls(
 	const exitCode = await proc.exited;
 	if (exitCode !== 0) {
 		const stderr = await new Response(proc.stderr).text();
-		throw new Error(`ffmpeg HLS failed for ${name}: ${stderr.slice(0, 500)}`);
+		throw new Error(`ffmpeg HLS failed for ${variant.name}: ${stderr.slice(0, 500)}`);
 	}
 	return playlist;
 }
@@ -357,8 +424,7 @@ export function sharedPassOutputs(
 			"libx264",
 			"-preset",
 			"veryfast",
-			"-b:v",
-			v.bitrate,
+			...rateControlArgs(v),
 			"-c:a",
 			"aac",
 			"-b:a",
@@ -502,6 +568,57 @@ async function ffmpegAudioHls(inputPath: string, outputDir: string) {
 		throw new Error(`ffmpeg audio-only HLS failed: ${stderr.slice(0, 500)}`);
 	}
 	return playlist;
+}
+
+/**
+ * Write each rung's realized rate onto its variant, measured from the files the pass just
+ * produced — the master playlist's BANDWIDTH, under CRF, is a property of the content rather
+ * than a constant somebody chose.
+ *
+ * ⭐ **The measure is the peak segment's own rate**, which is what RFC 8216 defines BANDWIDTH
+ * to be and what a player's ABR needs: a player has one segment's duration to fetch one
+ * segment, so a variant advertising its average can stall on a segment that ran hot. On the
+ * benchmark source the swing is large — its opening scenes are dark and cheap, its stage
+ * scenes reach the ceiling — so the peak is genuinely the number that keeps playback honest.
+ * The realized bytes still fall under CRF, which is the saving; the advertised rate simply
+ * stops overstating what each rung costs on average.
+ *
+ * ⚠️ **A rung whose playlist or segments are not there keeps its planned ceiling**, which is
+ * an upper bound and therefore still honest. Nothing here can fail the job: a measurement is
+ * a nicety beside the deliverable.
+ */
+export async function measurePassBandwidths(dir: string, variants: Variant[]): Promise<void> {
+	for (const v of variants) {
+		let playlist: string;
+		try {
+			playlist = await readFile(join(dir, `${v.name}.m3u8`), "utf8");
+		} catch {
+			continue;
+		}
+		let peak = 0;
+		let pending: number | null = null;
+		for (const line of playlist.split("\n")) {
+			const trimmed = line.trim();
+			const extinf = trimmed.match(/^#EXTINF:([\d.]+)/);
+			if (extinf) {
+				pending = Number.parseFloat(extinf[1]);
+				continue;
+			}
+			if (!trimmed || trimmed.startsWith("#") || pending == null) continue;
+			const duration = pending;
+			pending = null;
+			if (!(duration > 0)) continue;
+			try {
+				const size = (await stat(join(dir, trimmed))).size;
+				peak = Math.max(peak, (size * 8) / duration);
+			} catch {
+				// A missing segment leaves the figure where it is; the ceiling remains.
+			}
+		}
+		// Round UP to a whole kbps: an advertised rate that rounds down is a rate the player
+		// can be short of.
+		if (peak > 0) v.bandwidth = Math.ceil(peak / 1000) * 1000;
+	}
 }
 
 /**
@@ -902,13 +1019,13 @@ async function runTranscode(
 		await ffmpegHls(
 			await storage.readableInput(storageKey, { expiresIn: SOURCE_URL_TTL_SECONDS }),
 			outputDir,
-			first.height,
-			first.bitrate,
-			first.name,
+			first,
 			firstTicks.tick,
 		);
 		firstTicks.stop();
 		timing.mark(`v${first.height}End`);
+		// The rung's BANDWIDTH is its own measured rate, read before the upload frees the files.
+		await measurePassBandwidths(outputDir, [first]);
 		await updateJobProgress(jobId, Math.round(spanStart + perRung));
 		await uploadAndFree(outputDir);
 
@@ -968,6 +1085,8 @@ async function runTranscode(
 			}
 			audioShared = hasAudio;
 			timing.mark("sharedEnd");
+			// Every tall rung's BANDWIDTH, from the segments this pass just wrote.
+			await measurePassBandwidths(outputDir, shared);
 			await updateJobProgress(jobId, spanEnd);
 			await uploadAndFree(outputDir);
 		} else if (hasAudio) {
