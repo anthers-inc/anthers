@@ -165,7 +165,53 @@ describe("a transcode's temp residency", () => {
 		const prefix = urlToKey(job.hlsManifestUrl ?? "").replace(/\/[^/]+$/, "");
 		const master = await storage.read(`${prefix}/master.m3u8`);
 		expect(master).not.toBeNull();
-		expect(new TextDecoder().decode(master ?? new Uint8Array())).toContain("#EXTM3U");
+		const masterText = new TextDecoder().decode(master ?? new Uint8Array());
+		expect(masterText).toContain("#EXTM3U");
+		// 🚨 Every rung advertises its own MEASURED rate, and the VBV ceiling is what bounds
+		// it. The ABR ladder advertised a constant while its segments peaked at four times it
+		// (5 Mbps declared, 20.4 Mbps measured at 1080p on the real benchmark source,
+		// 2026-10-28), which is a player stalling on the level it was told it could afford.
+		const ceilings: Record<string, number> = {
+			"854x480": 1_000_000,
+			"1280x720": 2_500_000,
+			"1920x1080": 5_000_000,
+		};
+		/** The master's rungs, as the player reads them: the STREAM-INF line and its playlist. */
+		const masterLines = masterText.split("\n").map((line) => line.trim());
+		const rungs: Array<{ bandwidth: number; resolution: string; playlist: string }> = [];
+		for (const [i, line] of masterLines.entries()) {
+			const info = line.match(/#EXT-X-STREAM-INF:BANDWIDTH=(\d+),RESOLUTION=(\d+x\d+)/);
+			if (info?.[1] && info[2]) {
+				rungs.push({
+					bandwidth: Number(info[1]),
+					resolution: info[2],
+					playlist: masterLines[i + 1] ?? "",
+				});
+			}
+		}
+		expect(rungs.map((r) => r.resolution)).toEqual(["854x480", "1280x720", "1920x1080"]);
+		for (const rung of rungs) {
+			const ceiling = ceilings[rung.resolution];
+			expect(ceiling).toBeDefined();
+			// A capped encode can overshoot its ceiling by its audio track and the container's
+			// overhead; it cannot overshoot it by the multiples an uncapped one did.
+			expect(rung.bandwidth).toBeLessThanOrEqual((ceiling ?? 0) * 1.25);
+			// ⭐ The advertised figure IS the measurement: recomputed here from the segments
+			// the job actually stored, it is their peak rate rounded up to a whole kbps.
+			const variant = new TextDecoder().decode(
+				(await storage.read(`${prefix}/${rung.playlist}`)) ?? new Uint8Array(),
+			);
+			const lines = variant.split("\n").map((line) => line.trim());
+			let peak = 0;
+			for (const [i, line] of lines.entries()) {
+				const duration = Number.parseFloat(line.match(/^#EXTINF:([\d.]+)/)?.[1] ?? "0");
+				const segment = lines[i + 1];
+				if (!(duration > 0) || !segment || segment.startsWith("#")) continue;
+				const size = (await storage.size(`${prefix}/${segment}`)) ?? 0;
+				peak = Math.max(peak, (size * 8) / duration);
+			}
+			expect(rung.bandwidth).toBe(Math.ceil(peak / 1000) * 1000);
+		}
 		expect(await storage.exists(`${prefix}/audio.m3u8`)).toBe(true);
 		expect(await storage.exists(`${prefix}/audio-000.ts`)).toBe(true);
 		expect(await storage.exists(`${prefix}/720p.m3u8`)).toBe(true);
