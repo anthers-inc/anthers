@@ -22,7 +22,7 @@ import { db } from "@anthers/db/client";
 import {
 	accountCycles,
 	users,
-	workPreviewCaptionTracks,
+	workCaptionTracks,
 	workPreviewMedia,
 	works,
 } from "@anthers/db/schema";
@@ -514,8 +514,8 @@ describe("trailer captions", () => {
 		// Exactly one row survives the replacement, and the locked viewer reaches its text.
 		const [current] = await db
 			.select()
-			.from(workPreviewCaptionTracks)
-			.where(eq(workPreviewCaptionTracks.previewId, previewId));
+			.from(workCaptionTracks)
+			.where(eq(workCaptionTracks.previewId, previewId));
 		expect(current).toBeDefined();
 		expect(current.id).not.toBe(caption.id);
 		const served = await call(
@@ -610,7 +610,7 @@ describe("storage accounting and deletion", () => {
 			.values({ workId: w.id, kind: "image", file: imageKey, alt: "", position: 0 })
 			.returning();
 		const vttKey = await putPreviewVtt(preview.id, "sweep.vtt");
-		await db.insert(workPreviewCaptionTracks).values({
+		await db.insert(workCaptionTracks).values({
 			previewId: preview.id,
 			language: "en",
 			label: "English",
