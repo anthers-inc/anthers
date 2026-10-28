@@ -71,6 +71,15 @@ export interface ReleaseNotesEntry {
  */
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
 	{
+		version: "2026.10.36",
+		date: "2026-10-28",
+		lede: "The About page's team section runs on Parker's portrait, and the tables underneath every page were reorganized, with nothing else on the surface changing.",
+		entries: [
+			"The About page's team section is laid out around Parker's portrait now: his name and role above the opening of the bio, a landscape photograph beside those first paragraphs, and the rest of the passage running the full measure below them. The Rilke quotation closes the section behind a hairline.",
+			"The tables underneath the site were reorganized: ones that had grown into each other were merged into the rows they belong to, tables nothing wrote to any more were removed, and the rest were renamed so that a name says what its table holds. Every row was carried across rather than recreated, and nothing a visitor or creator does changed, down to the shape of the file an account can export.",
+		],
+	},
+	{
 		version: "2026.10.35",
 		date: "2026-10-27",
 		lede: "Anthers holds a session for an identity it hosts and no password behind it, and the identity card links an identity on another server to where that server manages it.",
