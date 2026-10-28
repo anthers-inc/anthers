@@ -84,6 +84,47 @@ export function toBossSendOptions(options?: SendOptions): Record<string, unknown
 	return out;
 }
 
+// ── Retention ────────────────────────────────────────────────────────────────
+
+/**
+ * How long a finished job's row stays in `pgboss`.
+ *
+ * 🚨 **pg-boss is a transport, not a record, so its rows are dead weight the moment a job
+ * is done.** The work a job does already leaves its own row behind — `work_transcoding_jobs`
+ * for a lane, `purchase_receipts` for a receipt write, `outbound_emails` for a send — and the
+ * sweeps that matter re-derive from those tables rather than from the queue. What the queue
+ * row adds is the operator's answer to "did that run last night, and did it fail", which a
+ * day covers.
+ *
+ * The default is a week, and for this workload that was 76,654 completed rows and 28 MB in
+ * production's `pgboss.job_common` on 2026-10-28 — eight days of history at roughly 9.5k
+ * jobs a day, in the same database that serves the site. A day keeps the inspection window
+ * and holds the same table near a day's traffic.
+ *
+ * ⚠️ **A job that never ran is not covered here.** `retentionSeconds` (14 days by default)
+ * governs the created and retry states, counted from the job's `startAfter` — deliberately
+ * left alone, because shrinking it would delete work that a long outage queued rather than
+ * stale history. Only the finished side is tightened.
+ */
+export const FINISHED_JOB_RETENTION = { deleteAfterSeconds: 24 * 60 * 60 } as const;
+
+/**
+ * Create every queue this code uses, and move each one onto the retention above.
+ *
+ * Two calls rather than one because they answer different questions: `createQueue` makes a
+ * queue that does not exist yet, and `updateQueue` is the only one that can change a queue
+ * that does. Exported so the pairing can be tested without a live pg-boss, since the failure
+ * mode of dropping the second call is invisible until somebody looks at the table size.
+ */
+export async function ensureQueues(
+	boss: Pick<PgBoss, "createQueue" | "updateQueue">,
+): Promise<void> {
+	for (const name of Object.values(QUEUES)) {
+		await boss.createQueue(name, FINISHED_JOB_RETENTION);
+		await boss.updateQueue(name, FINISHED_JOB_RETENTION);
+	}
+}
+
 // ── Queue implementation ─────────────────────────────────────────────────────
 
 class JobQueue {
@@ -113,11 +154,7 @@ class JobQueue {
 
 	async start(): Promise<void> {
 		await this.boss.start();
-		// createQueue is idempotent (INSERT ... ON CONFLICT DO NOTHING); a queue
-		// must exist before send/work/schedule can target it.
-		for (const name of Object.values(QUEUES)) {
-			await this.boss.createQueue(name);
-		}
+		await ensureQueues(this.boss);
 		this.started = true;
 	}
 
