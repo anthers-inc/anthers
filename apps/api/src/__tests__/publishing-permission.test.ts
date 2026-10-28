@@ -14,11 +14,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, spyOn } from "bu
 import { db } from "@anthers/db/client";
 import {
 	atprotoSessions,
-	creditAcceptances,
 	follows,
 	notifications,
 	posts,
 	users,
+	workCreditDecisions,
 	works,
 } from "@anthers/db/schema";
 import { TokenRevokedError } from "@atproto/oauth-client";
@@ -310,12 +310,12 @@ describe("every way of publishing", () => {
 		expect((await res.json()).code).toBe("interaction_permission_required");
 
 		const rows = await db
-			.select({ id: creditAcceptances.id })
-			.from(creditAcceptances)
+			.select({ id: workCreditDecisions.id })
+			.from(workCreditDecisions)
 			.where(
 				and(
-					eq(creditAcceptances.workId, work.id),
-					eq(creditAcceptances.contributorDid, brought.did),
+					eq(workCreditDecisions.workId, work.id),
+					eq(workCreditDecisions.contributorDid, brought.did),
 				),
 			);
 		expect(rows).toHaveLength(0);

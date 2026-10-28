@@ -22,14 +22,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { db } from "@anthers/db/client";
-import {
-	creditAcceptances,
-	notifications,
-	userBlocks,
-	users,
-	type WorkCredit,
-	works,
-} from "@anthers/db/schema";
+import { notifications, userBlocks, users, type WorkCredit, works } from "@anthers/db/schema";
 import { and, eq } from "drizzle-orm";
 import app from "../index.js";
 import { queue } from "../jobs/queue.js";
@@ -799,7 +792,6 @@ describe("notifyCreditedAccounts (service)", () => {
 	});
 });
 
-// The credit_acceptances rows this suite wrote are removed with their Works (cascade on
+// The work_credit_decisions rows this suite wrote are removed with their Works (cascade on
 // work_id); the works themselves by the purge above. The notifications rows cascade with
 // the fixture accounts, which `purgeAccountsCreatedHere` removes.
-void creditAcceptances;

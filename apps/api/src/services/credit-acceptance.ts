@@ -17,13 +17,7 @@
  * decide nothing.
  */
 import { db } from "@anthers/db/client";
-import {
-	creditAcceptances,
-	creditRejections,
-	users,
-	type WorkCredit,
-	works,
-} from "@anthers/db/schema";
+import { users, type WorkCredit, workCreditDecisions, works } from "@anthers/db/schema";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
 	CREDIT_ACCEPTANCE_COLLECTION,
@@ -98,41 +92,32 @@ export async function acceptCredit(opts: {
 	const match = findDidCredit(work.credits, opts.callerDid, opts.role);
 	if (!match) return { ok: false, code: "not_credited" };
 
-	const [rejected] = await db
-		.select({ id: creditRejections.id })
-		.from(creditRejections)
-		.where(
-			and(
-				eq(creditRejections.workId, opts.workId),
-				eq(creditRejections.contributorDid, opts.callerDid),
-				eq(creditRejections.role, opts.role),
-			),
-		)
-		.limit(1);
-	if (rejected) return { ok: false, code: "rejected" };
-
-	const [alreadyAccepted] = await db
+	const [existing] = await db
 		.select({
-			id: creditAcceptances.id,
-			atprotoUri: creditAcceptances.atprotoUri,
-			acceptedAt: creditAcceptances.acceptedAt,
+			id: workCreditDecisions.id,
+			decision: workCreditDecisions.decision,
+			atprotoUri: workCreditDecisions.atprotoUri,
+			decidedAt: workCreditDecisions.decidedAt,
 		})
-		.from(creditAcceptances)
+		.from(workCreditDecisions)
 		.where(
 			and(
-				eq(creditAcceptances.workId, opts.workId),
-				eq(creditAcceptances.contributorDid, opts.callerDid),
-				eq(creditAcceptances.role, opts.role),
+				eq(workCreditDecisions.workId, opts.workId),
+				eq(workCreditDecisions.contributorDid, opts.callerDid),
+				eq(workCreditDecisions.role, opts.role),
 			),
 		)
 		.limit(1);
+	if (existing?.decision === "rejected") return { ok: false, code: "rejected" };
 	// A row that already has an address already has its record; there is nothing left to do.
 	// A row WITHOUT one is an acceptance whose record never landed, and accepting again is how
 	// it gets written — see the ordering note below.
-	if (alreadyAccepted?.atprotoUri) return { ok: false, code: "already_accepted" };
+	if (existing?.decision === "accepted" && existing.atprotoUri) {
+		return { ok: false, code: "already_accepted" };
+	}
 
 	// ⭐ The repair keeps the moment the person said yes, not the moment the record caught up.
-	const acceptedAt = alreadyAccepted?.acceptedAt ?? new Date();
+	const acceptedAt = existing?.decision === "accepted" ? existing.decidedAt : new Date();
 
 	// 🚨 **The writer is opened BEFORE the acceptance row is written, and that order is the
 	// rule.** An acceptance is a published record — the contributor saying "yes, I did this" in
@@ -166,33 +151,32 @@ export async function acceptCredit(opts: {
 	// Now the row, carrying the address the write returned. The unique index on
 	// (workId, contributorDid, role) makes a concurrent second accept land on the same row;
 	// a repair updates the row it found rather than restamping when the person said yes.
-	if (alreadyAccepted) {
+	if (existing) {
 		await db
-			.update(creditAcceptances)
+			.update(workCreditDecisions)
 			.set({ atprotoUri: outcome.uri })
-			.where(
-				and(eq(creditAcceptances.id, alreadyAccepted.id), isNull(creditAcceptances.atprotoUri)),
-			);
+			.where(and(eq(workCreditDecisions.id, existing.id), isNull(workCreditDecisions.atprotoUri)));
 	} else {
 		await db
-			.insert(creditAcceptances)
+			.insert(workCreditDecisions)
 			.values({
 				workId: opts.workId,
 				contributorDid: opts.callerDid,
 				role: opts.role,
-				acceptedAt,
+				decision: "accepted",
+				decidedAt: acceptedAt,
 				atprotoUri: outcome.uri,
 			})
 			.onConflictDoUpdate({
 				target: [
-					creditAcceptances.workId,
-					creditAcceptances.contributorDid,
-					creditAcceptances.role,
+					workCreditDecisions.workId,
+					workCreditDecisions.contributorDid,
+					workCreditDecisions.role,
 				],
 				// A concurrent accept that already stored an address keeps it; overwriting would
 				// abandon the record it names for one nobody can find.
-				set: { atprotoUri: outcome.uri },
-				setWhere: isNull(creditAcceptances.atprotoUri),
+				set: { decision: "accepted", atprotoUri: outcome.uri, decidedAt: acceptedAt },
+				setWhere: isNull(workCreditDecisions.atprotoUri),
 			});
 	}
 
@@ -226,28 +210,42 @@ export async function rejectCredit(opts: {
 	const match = findDidCredit(work.credits, opts.callerDid, opts.role);
 	if (!match) return { ok: false, code: "not_credited" };
 
-	const [alreadyRejected] = await db
-		.select({ id: creditRejections.id })
-		.from(creditRejections)
+	const [existing] = await db
+		.select({ decision: workCreditDecisions.decision })
+		.from(workCreditDecisions)
 		.where(
 			and(
-				eq(creditRejections.workId, opts.workId),
-				eq(creditRejections.contributorDid, opts.callerDid),
-				eq(creditRejections.role, opts.role),
+				eq(workCreditDecisions.workId, opts.workId),
+				eq(workCreditDecisions.contributorDid, opts.callerDid),
+				eq(workCreditDecisions.role, opts.role),
 			),
 		)
 		.limit(1);
-	if (alreadyRejected) return { ok: false, code: "already_rejected" };
+	if (existing?.decision === "rejected") return { ok: false, code: "already_rejected" };
 
 	const remaining = (work.credits ?? []).filter((_, i) => i !== match.index);
 
 	await db.transaction(async (tx) => {
 		await tx.update(works).set({ credits: remaining }).where(eq(works.id, opts.workId));
-		await tx.insert(creditRejections).values({
-			workId: opts.workId,
-			contributorDid: opts.callerDid,
-			role: opts.role,
-		});
+		await tx
+			.insert(workCreditDecisions)
+			.values({
+				workId: opts.workId,
+				contributorDid: opts.callerDid,
+				role: opts.role,
+				decision: "rejected",
+			})
+			.onConflictDoUpdate({
+				target: [
+					workCreditDecisions.workId,
+					workCreditDecisions.contributorDid,
+					workCreditDecisions.role,
+				],
+				// A rejection after an acceptance keeps the record's address as history: the
+				// published record still exists, and losing the pointer would only make it harder
+				// to find.
+				set: { decision: "rejected", decidedAt: new Date() },
+			});
 	});
 
 	await queueWorkListingSync(opts.workId);
@@ -266,13 +264,14 @@ export async function isCreditRejected(
 	role: string,
 ): Promise<boolean> {
 	const [row] = await db
-		.select({ id: creditRejections.id })
-		.from(creditRejections)
+		.select({ id: workCreditDecisions.id })
+		.from(workCreditDecisions)
 		.where(
 			and(
-				eq(creditRejections.workId, workId),
-				eq(creditRejections.contributorDid, contributorDid),
-				eq(creditRejections.role, role),
+				eq(workCreditDecisions.workId, workId),
+				eq(workCreditDecisions.contributorDid, contributorDid),
+				eq(workCreditDecisions.role, role),
+				eq(workCreditDecisions.decision, "rejected"),
 			),
 		)
 		.limit(1);
@@ -294,15 +293,16 @@ export async function findRejectedCredit(
 	if (didCredits.length === 0) return null;
 
 	const rows = await db
-		.select({ contributorDid: creditRejections.contributorDid, role: creditRejections.role })
-		.from(creditRejections)
+		.select({ contributorDid: workCreditDecisions.contributorDid, role: workCreditDecisions.role })
+		.from(workCreditDecisions)
 		.where(
 			and(
-				eq(creditRejections.workId, workId),
+				eq(workCreditDecisions.workId, workId),
 				inArray(
-					creditRejections.contributorDid,
+					workCreditDecisions.contributorDid,
 					didCredits.map((c) => c.contributor),
 				),
+				eq(workCreditDecisions.decision, "rejected"),
 			),
 		);
 	const rejected = new Set(rows.map((r) => `${r.contributorDid}|${r.role}`));
@@ -318,9 +318,9 @@ export async function findRejectedCredit(
  * A credit naming the Work's own creator is affirmed by the act of asserting it.
  *
  * There is no third party to ask: the creator wrote the row, so waiting for their own
- * confirmation is a question with no one to answer it. Recording an ordinary
- * `credit_acceptances` row here — rather than teaching each reader a second rule — keeps
- * one source of truth for what has been accepted: `creditsForOwner`, `creditsForUser` and
+ * confirmation is a question with no one to answer it. Recording an ordinary accepted
+ * decision here — rather than teaching each reader a second rule — keeps one source of
+ * truth for what has been accepted: `creditsForOwner`, `creditsForUser` and
  * `loadConfirmedCredits` all consult that table and need no self case of their own.
  *
  * ⚠️ **No repository record is written.** `acceptCredit` writes `org.anthers.creditAcceptance`
@@ -329,7 +329,7 @@ export async function findRejectedCredit(
  * contribution beside their name. The local row is the whole of what the readers need.
  *
  * Idempotent: the unique index on (work, contributor, role) makes a re-save an update of
- * `acceptedAt`, never a second row. It is called on every Work write rather than only when
+ * `decidedAt`, never a second row. It is called on every Work write rather than only when
  * the credits change, so a self-credit written before this rule existed is healed by the
  * next edit.
  */
@@ -354,11 +354,23 @@ export async function affirmSelfCredits(opts: {
 
 	const acceptedAt = new Date();
 	await db
-		.insert(creditAcceptances)
-		.values(roles.map((role) => ({ workId: opts.workId, contributorDid: did, role, acceptedAt })))
+		.insert(workCreditDecisions)
+		.values(
+			roles.map((role) => ({
+				workId: opts.workId,
+				contributorDid: did,
+				role,
+				decision: "accepted",
+				decidedAt: acceptedAt,
+			})),
+		)
 		.onConflictDoUpdate({
-			target: [creditAcceptances.workId, creditAcceptances.contributorDid, creditAcceptances.role],
-			set: { acceptedAt },
+			target: [
+				workCreditDecisions.workId,
+				workCreditDecisions.contributorDid,
+				workCreditDecisions.role,
+			],
+			set: { decision: "accepted", decidedAt: acceptedAt },
 		});
 }
 
@@ -445,10 +457,17 @@ export async function creditsForUser(
 	// whole credits array — a Work naming five identities still pays two queries.
 	const [acceptedRows, accountRows, userRows] = await Promise.all([
 		db
-			.select({ contributorDid: creditAcceptances.contributorDid, role: creditAcceptances.role })
-			.from(creditAcceptances)
+			.select({
+				contributorDid: workCreditDecisions.contributorDid,
+				role: workCreditDecisions.role,
+				decision: workCreditDecisions.decision,
+			})
+			.from(workCreditDecisions)
 			.where(
-				and(eq(creditAcceptances.workId, work.id), inArray(creditAcceptances.contributorDid, dids)),
+				and(
+					eq(workCreditDecisions.workId, work.id),
+					inArray(workCreditDecisions.contributorDid, dids),
+				),
 			),
 		db
 			.select({
@@ -465,7 +484,11 @@ export async function creditsForUser(
 			? db.select({ atprotoDid: users.atprotoDid }).from(users).where(eq(users.id, userId)).limit(1)
 			: Promise.resolve([] as { atprotoDid: string }[]),
 	]);
-	const accepted = new Set(acceptedRows.map((r) => `${r.contributorDid}|${r.role}`));
+	const accepted = new Set(
+		acceptedRows
+			.filter((r) => r.decision === "accepted")
+			.map((r) => `${r.contributorDid}|${r.role}`),
+	);
 	const nameForDid = new Map(
 		accountRows.map((r) => [r.atprotoDid, r.displayName?.trim() || r.handle]),
 	);
@@ -545,18 +568,18 @@ export async function creditsForOwner(work: OverlayWork): Promise<UserWorkCredit
 
 	const didCredits = credits.filter((c) => creditContributorIsDid(c.contributor));
 	const dids = [...new Set(didCredits.map((c) => c.contributor))];
-	const [acceptedRows, rejectedRows, accountRows] = await Promise.all([
+	const [decisionRows, accountRows] = await Promise.all([
 		db
-			.select({ contributorDid: creditAcceptances.contributorDid, role: creditAcceptances.role })
-			.from(creditAcceptances)
+			.select({
+				contributorDid: workCreditDecisions.contributorDid,
+				role: workCreditDecisions.role,
+			})
+			.from(workCreditDecisions)
 			.where(
-				and(eq(creditAcceptances.workId, work.id), inArray(creditAcceptances.contributorDid, dids)),
-			),
-		db
-			.select({ contributorDid: creditRejections.contributorDid, role: creditRejections.role })
-			.from(creditRejections)
-			.where(
-				and(eq(creditRejections.workId, work.id), inArray(creditRejections.contributorDid, dids)),
+				and(
+					eq(workCreditDecisions.workId, work.id),
+					inArray(workCreditDecisions.contributorDid, dids),
+				),
 			),
 		// The account card a credit presents with: name, profile page and avatar. The
 		// stored contributor still round-trips verbatim — see the docblock above — and
@@ -572,9 +595,7 @@ export async function creditsForOwner(work: OverlayWork): Promise<UserWorkCredit
 			.from(users)
 			.where(inArray(users.atprotoDid, dids)),
 	]);
-	const decided = new Set(
-		[...acceptedRows, ...rejectedRows].map((r) => `${r.contributorDid}|${r.role}`),
-	);
+	const decided = new Set(decisionRows.map((r) => `${r.contributorDid}|${r.role}`));
 	const profileForDid = new Map(
 		accountRows.map((r) => [
 			r.atprotoDid,
@@ -649,15 +670,21 @@ export async function creditAttributionsForContributor(
 	if (workIds.length === 0) return { accepted: [], pending: [] };
 
 	const acceptedRows = await db
-		.select({ workId: creditAcceptances.workId, role: creditAcceptances.role })
-		.from(creditAcceptances)
+		.select({
+			workId: workCreditDecisions.workId,
+			role: workCreditDecisions.role,
+			decision: workCreditDecisions.decision,
+		})
+		.from(workCreditDecisions)
 		.where(
 			and(
-				inArray(creditAcceptances.workId, workIds),
-				eq(creditAcceptances.contributorDid, contributorDid),
+				inArray(workCreditDecisions.workId, workIds),
+				eq(workCreditDecisions.contributorDid, contributorDid),
 			),
 		);
-	const accepted = new Set(acceptedRows.map((r) => `${r.workId}|${r.role}`));
+	const accepted = new Set(
+		acceptedRows.filter((r) => r.decision === "accepted").map((r) => `${r.workId}|${r.role}`),
+	);
 
 	const acceptedList: CreditAttribution[] = [];
 	const pendingList: CreditAttribution[] = [];
@@ -723,30 +750,28 @@ export async function notifyCreditedAccounts(
 	if (didCredits.length === 0) return;
 
 	const dids = [...new Set(didCredits.map((c) => c.contributor))];
-	const [accountRows, acceptedRows, rejectedRows] = await Promise.all([
+	const [accountRows, decisionRows] = await Promise.all([
 		db
 			.select({ id: users.id, atprotoDid: users.atprotoDid })
 			.from(users)
 			.where(inArray(users.atprotoDid, dids)),
 		db
-			.select({ contributorDid: creditAcceptances.contributorDid, role: creditAcceptances.role })
-			.from(creditAcceptances)
+			.select({
+				contributorDid: workCreditDecisions.contributorDid,
+				role: workCreditDecisions.role,
+			})
+			.from(workCreditDecisions)
 			.where(
-				and(eq(creditAcceptances.workId, work.id), inArray(creditAcceptances.contributorDid, dids)),
-			),
-		db
-			.select({ contributorDid: creditRejections.contributorDid, role: creditRejections.role })
-			.from(creditRejections)
-			.where(
-				and(eq(creditRejections.workId, work.id), inArray(creditRejections.contributorDid, dids)),
+				and(
+					eq(workCreditDecisions.workId, work.id),
+					inArray(workCreditDecisions.contributorDid, dids),
+				),
 			),
 	]);
 	// The creator's own DID is skipped by comparing ids, not DIDs, so a NULL or odd DID on the
 	// creator's row cannot make a self-credit look like somebody else's.
 	const creatorAccount = accountRows.find((a) => a.id === creatorUserId);
-	const decided = new Set(
-		[...acceptedRows, ...rejectedRows].map((r) => `${r.contributorDid}|${r.role}`),
-	);
+	const decided = new Set(decisionRows.map((r) => `${r.contributorDid}|${r.role}`));
 	const accounts = new Map(accountRows.map((a) => [a.atprotoDid, a.id]));
 
 	for (const credit of didCredits) {

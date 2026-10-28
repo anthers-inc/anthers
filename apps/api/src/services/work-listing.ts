@@ -30,7 +30,7 @@
  * already been told.
  */
 import { db } from "@anthers/db";
-import { creditAcceptances, users, type WorkCredit, works } from "@anthers/db/schema";
+import { users, type WorkCredit, workCreditDecisions, works } from "@anthers/db/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { recordGrantedScope, revokeAtprotoGrant } from "./atproto-client.js";
 import { workBaseUrl } from "./atproto-records.js";
@@ -212,10 +212,14 @@ async function loadConfirmedCredits(
 	if (dids.length === 0) return new Set<string>();
 
 	const rows = await db
-		.select({ contributorDid: creditAcceptances.contributorDid, role: creditAcceptances.role })
-		.from(creditAcceptances)
+		.select({ contributorDid: workCreditDecisions.contributorDid, role: workCreditDecisions.role })
+		.from(workCreditDecisions)
 		.where(
-			and(eq(creditAcceptances.workId, workId), inArray(creditAcceptances.contributorDid, dids)),
+			and(
+				eq(workCreditDecisions.workId, workId),
+				inArray(workCreditDecisions.contributorDid, dids),
+				eq(workCreditDecisions.decision, "accepted"),
+			),
 		);
 	return new Set(rows.map((r) => `${r.contributorDid}|${r.role}`));
 }
