@@ -271,7 +271,14 @@ describe("the sweep", () => {
 		const fresh = await issueSignupChallenge();
 		const stale = await issueSignupChallenge(new Date(Date.now() - 10 * 60 * 1000));
 
-		const gone = await sweepSignupChallenges();
+		// 🚨 The sweep's clock is handed a second of grace rather than read live: a consumed
+		// row is swept on `consumed_at < now`, and both sides are JavaScript `Date`s with
+		// millisecond resolution, so a sweep that lands in the same millisecond as the spend
+		// finds `consumed_at == now` and keeps the row. That is the correct behavior (the
+		// window exists so a replay in flight still reads as a replay) and the cron runs
+		// minutes later, but a test that trusts sub-millisecond timing fails about one run in
+		// two on a warm pool. Found twice on pushes, 2026-10-28.
+		const gone = await sweepSignupChallenges(new Date(Date.now() + 1000));
 		expect(gone).toBeGreaterThanOrEqual(2);
 		// The fresh, unconsumed row survives — the sweep is housekeeping, never the gate.
 		const [row] = await db

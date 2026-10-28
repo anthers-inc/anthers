@@ -18,6 +18,14 @@ describe("retired queues", () => {
 		expect(RETIRED_QUEUES).toContain("fetch-metrics");
 	});
 
+	// Both were removed from the code months before this list was written, so their queue rows
+	// sat in production holding nothing while the audit counted them as live. Named here so
+	// dropping the entry fails a test rather than silently restoring the leftovers.
+	it("names the browser-side jobs removed before the list existed", () => {
+		expect(RETIRED_QUEUES).toContain("build-p2p-manifest");
+		expect(RETIRED_QUEUES).toContain("package-video");
+	});
+
 	it("🚨 never retires a queue the code still runs or schedules", () => {
 		const live = new Set<string>(Object.values(QUEUES));
 		const scheduled = new Set<string>(CRON_SCHEDULES.map(([name]) => name));

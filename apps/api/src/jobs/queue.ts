@@ -643,6 +643,14 @@ export const RETIRED_QUEUES: readonly string[] = [
 	// from the code on 2026-09-13.
 	"cross-publish",
 	"fetch-metrics",
+	// The two browser-side jobs that were removed before this list existed, so no entry was
+	// ever written and their queue rows outlived their handlers by two months:
+	// `build-p2p-manifest` went with the P2P delivery architecture on 2026-08-11 (a swarm
+	// shows downloaders' and seeders' IP addresses to each other, which the privacy policy
+	// could not describe honestly), and `package-video` went with on-device video encoding on
+	// 2026-08-17, when uploads began always processing on the server.
+	"build-p2p-manifest",
+	"package-video",
 	// The paged renderer's old name, retired on 2026-10-11: the job stopped being an
 	// ebook job when the paged kinds' ingest became its own pipeline ("render-paged") —
 	// the EPUB era's "ebook" ingest is a different job on a different table, so the old
